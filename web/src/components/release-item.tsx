@@ -190,14 +190,23 @@ export function ReleaseListItem({
     return () => observer.disconnect();
   }, []);
 
+  const titleId = release.id ? `rel-${release.id}-title` : undefined;
+  const headingClasses = "font-semibold text-[15px] text-stone-900 dark:text-stone-100 m-0";
+
   return (
-    <div className="group/item flex gap-0 relative">
+    <article
+      className="group/item flex gap-0 relative"
+      {...(titleId ? { "aria-labelledby": titleId } : {})}
+    >
       {/* Left rail: date + timeline */}
       <div className="w-[100px] shrink-0 relative flex flex-col items-end pr-5 pt-5">
         {!hideDate && (
-          <span className="text-[12px] text-stone-400 dark:text-stone-500 whitespace-nowrap tabular-nums">
+          <time
+            dateTime={release.publishedAt ?? undefined}
+            className="text-[12px] text-stone-400 dark:text-stone-500 whitespace-nowrap tabular-nums"
+          >
             {formatDate(release.publishedAt)}
-          </span>
+          </time>
         )}
         {/* Dot on timeline */}
         <div className="absolute right-0 top-[22px] w-[7px] h-[7px] rounded-full bg-stone-300 dark:bg-stone-600 translate-x-[3px] z-10" />
@@ -207,20 +216,20 @@ export function ReleaseListItem({
       {/* Content */}
       <div className="flex-1 min-w-0 border-b border-stone-200 dark:border-stone-800 last:border-b-0 py-4 pl-5">
         <div className="flex items-baseline gap-1.5 mb-1">
-          {release.id ? (
-            <ViewTransition name={`rel-${release.id}`} default="none">
-              <Link
-                href={`/release/${release.id}`}
-                className="font-semibold text-[15px] text-stone-900 dark:text-stone-100 hover:underline underline-offset-2"
-              >
-                {heading}
-              </Link>
-            </ViewTransition>
-          ) : (
-            <span className="font-semibold text-[15px] text-stone-900 dark:text-stone-100">
-              {heading}
-            </span>
-          )}
+          <h2 id={titleId} className={headingClasses}>
+            {release.id ? (
+              <ViewTransition name={`rel-${release.id}`} default="none">
+                <Link
+                  href={`/release/${release.id}`}
+                  className="hover:underline underline-offset-2"
+                >
+                  {heading}
+                </Link>
+              </ViewTransition>
+            ) : (
+              heading
+            )}
+          </h2>
           {release.url && (
             <a
               href={release.url}
@@ -338,6 +347,6 @@ export function ReleaseListItem({
         </div>
       </div>
       {preview && <Lightbox src={preview.src} alt={preview.alt} onClose={() => setPreview(null)} />}
-    </div>
+    </article>
   );
 }

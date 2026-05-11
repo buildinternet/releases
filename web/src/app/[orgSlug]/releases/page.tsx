@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { api, ApiSetupError, ApiNotFoundError, type OrgReleasesResponse } from "@/lib/api";
 import { OrgReleaseList } from "@/components/org-release-list";
 import { JsonLd } from "@/components/json-ld";
+import { lastModifiedAt } from "@/lib/schema-org";
 import { getOrg } from "../_lib/org-data";
 
 export async function generateMetadata({
@@ -13,10 +14,15 @@ export async function generateMetadata({
   const { orgSlug } = await params;
   try {
     const org = await getOrg(orgSlug);
+    const modifiedTime = lastModifiedAt(org);
     return {
       title: `${org.name} Releases & Changelog`,
       description: `Complete release feed and changelog for ${org.name} — every version, every product, every source.`,
-      openGraph: { type: "website", url: `/${orgSlug}/releases` },
+      openGraph: {
+        type: "website",
+        url: `/${orgSlug}/releases`,
+        ...(modifiedTime ? { modifiedTime } : {}),
+      },
       alternates: {
         canonical: `/${orgSlug}/releases`,
         types: {
@@ -48,6 +54,7 @@ export default async function OrgReleasesPage({
 
   const orgUrl = `https://releases.sh/${orgSlug}`;
   const pageUrl = `${orgUrl}/releases`;
+  const dateModified = lastModifiedAt(org);
   const jsonLd = {
     "@context": "https://schema.org",
     "@graph": [
@@ -55,6 +62,7 @@ export default async function OrgReleasesPage({
         "@type": "CollectionPage",
         name: `${org.name} Releases`,
         url: pageUrl,
+        ...(dateModified ? { dateModified } : {}),
         about: {
           "@type": "Organization",
           name: org.name,
