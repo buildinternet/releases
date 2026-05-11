@@ -58,7 +58,7 @@ function footnoteLabel(pageId: string, n: number): string {
  * fall back to a hostname-shaped label so the Sources footer never reads
  * "[undefined](https://…)".
  */
-function definitionLabel(c: OverviewCitation): string {
+export function definitionLabel(c: OverviewCitation): string {
   if (c.title && c.title.trim()) return c.title.trim();
   if (!URL.canParse(c.sourceUrl)) return c.sourceUrl;
   const u = new URL(c.sourceUrl);
