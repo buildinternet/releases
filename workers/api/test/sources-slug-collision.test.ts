@@ -63,7 +63,7 @@ describe("POST /v1/sources — slug auto-suffix on collision", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: "Changelog",
+          name: "Release Notes",
           url: "https://acme-x.test/changelog",
           orgSlug: "acme-x",
         }),
@@ -72,7 +72,7 @@ describe("POST /v1/sources — slug auto-suffix on collision", () => {
 
     expect(res.status).toBe(201);
     const body = (await res.json()) as { slug: string };
-    expect(body.slug).toBe("changelog");
+    expect(body.slug).toBe("release-notes");
   });
 
   it("auto-suffixes to base-2 when base slug is taken within the same org", async () => {
@@ -93,7 +93,7 @@ describe("POST /v1/sources — slug auto-suffix on collision", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: "Changelog",
+          name: "Release Notes",
           url: "https://org-a.test/changelog",
           orgSlug: "org-a",
         }),
@@ -101,15 +101,15 @@ describe("POST /v1/sources — slug auto-suffix on collision", () => {
     );
     expect(res1.status).toBe(201);
     const body1 = (await res1.json()) as { slug: string };
-    expect(body1.slug).toBe("changelog");
+    expect(body1.slug).toBe("release-notes");
 
-    // Same name in the *same* org — must get "changelog-2".
+    // Same name in the *same* org — must get "release-notes-2".
     const res2 = await fetch(
       new Request("https://x.test/v1/sources", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: "Changelog",
+          name: "Release Notes",
           url: "https://org-a.test/v2/changelog",
           orgSlug: "org-a",
         }),
@@ -117,7 +117,7 @@ describe("POST /v1/sources — slug auto-suffix on collision", () => {
     );
     expect(res2.status).toBe(201);
     const body2 = (await res2.json()) as { slug: string };
-    expect(body2.slug).toBe("changelog-2");
+    expect(body2.slug).toBe("release-notes-2");
     expect(body1.slug).not.toBe(body2.slug);
   });
 
@@ -134,28 +134,28 @@ describe("POST /v1/sources — slug auto-suffix on collision", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: "Changelog",
+          name: "Release Notes",
           url: "https://org-a.test/changelog",
           orgSlug: "org-a",
         }),
       }),
     );
     expect(res1.status).toBe(201);
-    expect(((await res1.json()) as { slug: string }).slug).toBe("changelog");
+    expect(((await res1.json()) as { slug: string }).slug).toBe("release-notes");
 
     const res2 = await fetch(
       new Request("https://x.test/v1/sources", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: "Changelog",
+          name: "Release Notes",
           url: "https://org-b.test/changelog",
           orgSlug: "org-b",
         }),
       }),
     );
     expect(res2.status).toBe(201);
-    expect(((await res2.json()) as { slug: string }).slug).toBe("changelog");
+    expect(((await res2.json()) as { slug: string }).slug).toBe("release-notes");
   });
 
   it("continues suffixing when multiple prior entries in the same org occupy the base and -2", async () => {
@@ -174,7 +174,7 @@ describe("POST /v1/sources — slug auto-suffix on collision", () => {
         new Request("https://x.test/v1/sources", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name: "Changelog", url, orgSlug: "org-c" }),
+          body: JSON.stringify({ name: "Release Notes", url, orgSlug: "org-c" }),
         }),
       );
       expect(r.status).toBe(201);
@@ -185,7 +185,7 @@ describe("POST /v1/sources — slug auto-suffix on collision", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: "Changelog",
+          name: "Release Notes",
           url: "https://c.test/v3/changelog",
           orgSlug: "org-c",
         }),
@@ -193,6 +193,6 @@ describe("POST /v1/sources — slug auto-suffix on collision", () => {
     );
     expect(res3.status).toBe(201);
     const body3 = (await res3.json()) as { slug: string };
-    expect(body3.slug).toBe("changelog-3");
+    expect(body3.slug).toBe("release-notes-3");
   });
 });

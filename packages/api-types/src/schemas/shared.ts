@@ -47,6 +47,12 @@ export const ReleaseItemSchema = z.object({
   summary: z.string(),
   content: z.string().optional(),
   publishedAt: z.string().nullable(),
+  // ISO timestamp of when the row was fetched/inserted — used by the feed
+  // cursor's tie-break (publishedAt|fetchedAt|id) so that same-`publishedAt`
+  // rows stay stably ordered across paginated requests. `.optional()` because
+  // not every endpoint that returns a ReleaseItem populates it (notably
+  // single-release reads).
+  fetchedAt: z.string().optional(),
   url: z.string().nullable(),
   media: z.array(MediaItemSchema).optional(),
   // `.optional()` — older API responses (mid-deploy or pinned old workers)

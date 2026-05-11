@@ -280,6 +280,14 @@ const NESTED_RESERVED = [
   "stream",
   "opengraph-image",
   "sitemap",
+  // Org sub-tabs at `/{org}/{slug}` — added in #875 when org tabs moved to
+  // path segments. A source/product slug matching these would shadow the
+  // route via Next.js static-over-dynamic precedence.
+  "releases",
+  "sources",
+  // Source sub-tabs at `/{org}/{src}/{slug}` — added in #875.
+  "highlights",
+  "changelog",
 ] as const;
 
 export const RESERVED_ROOT_SLUGS: ReadonlySet<string> = new Set(ROOT_RESERVED);

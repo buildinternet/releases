@@ -220,6 +220,11 @@ export type SourceReleaseRow = {
   title_short: string | null;
   content: string;
   published_at: string | null;
+  // Needed so the source-detail SSR cursor can be built in the
+  // `publishedAt|fetchedAt|id` shape that `buildFeedCursor` / `parseFeedCursor`
+  // expect — without it the SSR falls back to the legacy 2-part cursor and
+  // same-`publishedAt` rows lose tie-break ordering on first "Load more".
+  fetched_at: string;
   url: string | null;
   media: string | null;
 };
@@ -234,7 +239,7 @@ export async function getSourceReleasesPaginated(
   const releasesTable = opts.includeCoverage ? "releases" : "releases_visible";
   return db.all<SourceReleaseRow>(sql`
     SELECT id, version, type, title, summary, title_generated, title_short,
-           content, published_at, url, media
+           content, published_at, fetched_at, url, media
     FROM ${sql.raw(releasesTable)}
     WHERE source_id = ${sourceId}
       AND (suppressed IS NULL OR suppressed = 0)

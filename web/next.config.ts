@@ -48,7 +48,28 @@ const nextConfig: NextConfig = {
     return config;
   },
   async redirects() {
-    return [{ source: "/mcp", destination: "/docs/api/mcp", statusCode: 302 }];
+    // #875: org/source tabs moved from `?tab=X` query params to path
+    // segments. Permanent redirects from the old shapes preserve any
+    // inbound link equity and keep search deep-links (`?tab=changelog&
+    // offset=N#chunk`) working — browsers re-append the original `#chunk`
+    // fragment when the Location header has none.
+    const orgTabRedirects = ["releases", "sources", "playbook", "fetch-log"].map((tab) => ({
+      source: "/:orgSlug",
+      has: [{ type: "query" as const, key: "tab", value: tab }],
+      destination: `/:orgSlug/${tab}`,
+      permanent: true,
+    }));
+    const sourceTabRedirects = ["highlights", "changelog"].map((tab) => ({
+      source: "/:orgSlug/:sourceSlug",
+      has: [{ type: "query" as const, key: "tab", value: tab }],
+      destination: `/:orgSlug/:sourceSlug/${tab}`,
+      permanent: true,
+    }));
+    return [
+      { source: "/mcp", destination: "/docs/api/mcp", statusCode: 302 },
+      ...orgTabRedirects,
+      ...sourceTabRedirects,
+    ];
   },
   async rewrites() {
     // `/docs/*.md` and Accept-based markdown negotiation are handled by the

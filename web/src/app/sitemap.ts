@@ -56,12 +56,32 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   try {
     const data = await api.sitemap();
 
-    const orgEntries: MetadataRoute.Sitemap = data.orgs.map((org) => ({
-      url: `${BASE_URL}/${org.slug}`,
-      lastModified: org.lastActivity ? new Date(org.lastActivity) : now,
-      changeFrequency: "daily",
-      priority: 0.8,
-    }));
+    // Each org emits the bare URL (Overview) plus the path-based tab routes
+    // added in #875. Without these, Google indexes only the lightweight
+    // Overview content and misses the releases feed entirely.
+    const orgEntries: MetadataRoute.Sitemap = data.orgs.flatMap((org) => {
+      const lastModified = org.lastActivity ? new Date(org.lastActivity) : now;
+      return [
+        {
+          url: `${BASE_URL}/${org.slug}`,
+          lastModified,
+          changeFrequency: "daily" as const,
+          priority: 0.8,
+        },
+        {
+          url: `${BASE_URL}/${org.slug}/releases`,
+          lastModified,
+          changeFrequency: "daily" as const,
+          priority: 0.8,
+        },
+        {
+          url: `${BASE_URL}/${org.slug}/sources`,
+          lastModified,
+          changeFrequency: "weekly" as const,
+          priority: 0.6,
+        },
+      ];
+    });
 
     const productEntries: MetadataRoute.Sitemap = data.products.map((p) => ({
       url: `${BASE_URL}/${p.orgSlug}/product/${p.slug}`,
@@ -70,12 +90,34 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.7,
     }));
 
-    const sourceEntries: MetadataRoute.Sitemap = data.sources.map((s) => ({
-      url: `${BASE_URL}/${s.orgSlug}/${s.slug}`,
-      lastModified: s.latestDate ? new Date(s.latestDate) : now,
-      changeFrequency: "daily",
-      priority: 0.7,
-    }));
+    const sourceEntries: MetadataRoute.Sitemap = data.sources.flatMap((s) => {
+      const lastModified = s.latestDate ? new Date(s.latestDate) : now;
+      const entries: MetadataRoute.Sitemap = [
+        {
+          url: `${BASE_URL}/${s.orgSlug}/${s.slug}`,
+          lastModified,
+          changeFrequency: "daily" as const,
+          priority: 0.7,
+        },
+      ];
+      if (s.hasHighlights) {
+        entries.push({
+          url: `${BASE_URL}/${s.orgSlug}/${s.slug}/highlights`,
+          lastModified,
+          changeFrequency: "weekly" as const,
+          priority: 0.6,
+        });
+      }
+      if (s.hasChangelog) {
+        entries.push({
+          url: `${BASE_URL}/${s.orgSlug}/${s.slug}/changelog`,
+          lastModified,
+          changeFrequency: "weekly" as const,
+          priority: 0.6,
+        });
+      }
+      return entries;
+    });
 
     const collectionEntries: MetadataRoute.Sitemap = (data.collections ?? []).map((co) => ({
       url: `${BASE_URL}/collections/${co.slug}`,

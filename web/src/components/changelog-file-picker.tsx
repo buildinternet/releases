@@ -12,7 +12,7 @@ interface ChangelogFilePickerProps {
 /**
  * URL-backed file picker for monorepo CHANGELOGs. Pushes the selected
  * `path` onto the current URL with `{ scroll: false }` so deep-linking
- * works (`?tab=changelog&path=packages/next/CHANGELOG.md`) without yanking
+ * works (`/changelog?path=packages/next/CHANGELOG.md`) without yanking
  * the user back to the top of the page on change.
  */
 export function ChangelogFilePicker({ files, activePath }: ChangelogFilePickerProps) {
@@ -24,7 +24,6 @@ export function ChangelogFilePicker({ files, activePath }: ChangelogFilePickerPr
     (event: React.ChangeEvent<HTMLSelectElement>) => {
       const path = event.target.value;
       const params = new URLSearchParams(searchParams.toString());
-      params.set("tab", "changelog");
       params.set("path", path);
       startTransition(() => {
         router.push(`?${params.toString()}`, { scroll: false });

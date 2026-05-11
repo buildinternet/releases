@@ -7,7 +7,9 @@ import { SetupMessage } from "@/components/setup-message";
 import { SourceCard } from "@/components/source-card";
 import { Sidebar } from "@/components/sidebar";
 import { CliCommand } from "@/components/cli-command";
+import { JsonLd } from "@/components/json-ld";
 import { taxonomySidebarSections } from "@/components/taxonomy-chips";
+import { getOrg } from "../../_lib/org-data";
 import Link from "next/link";
 
 const getProduct = cache((orgSlug: string, productSlug: string) =>
@@ -24,7 +26,7 @@ export async function generateMetadata({
     const product = await getProduct(orgSlug, productSlug);
     return {
       title: product.name,
-      description: product.description ?? `${product.name} changelog sources`,
+      description: product.description ?? `Release feed and changelog sources for ${product.name}.`,
       openGraph: { type: "website", url: `/${orgSlug}/product/${productSlug}` },
       alternates: { canonical: `/${orgSlug}/product/${productSlug}` },
     };
@@ -41,8 +43,12 @@ export default async function ProductPage({
   const { orgSlug, productSlug } = await params;
 
   let product: ProductDetail;
+  let org;
   try {
-    product = await getProduct(orgSlug, productSlug);
+    [product, org] = await Promise.all([
+      getProduct(orgSlug, productSlug),
+      getOrg(orgSlug).catch(() => null),
+    ]);
   } catch (err) {
     if (err instanceof ApiSetupError) {
       return (
@@ -54,6 +60,7 @@ export default async function ProductPage({
     }
     notFound();
   }
+  const orgName = org?.name ?? orgSlug;
 
   const sidebarSections = [
     {
@@ -79,7 +86,7 @@ export default async function ProductPage({
           {
             "@type": "ListItem",
             position: 2,
-            name: orgSlug,
+            name: orgName,
             item: `https://releases.sh/${orgSlug}`,
           },
           { "@type": "ListItem", position: 3, name: product.name, item: productUrl },
@@ -90,10 +97,7 @@ export default async function ProductPage({
 
   return (
     <div className="min-h-screen">
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
-      />
+      <JsonLd data={jsonLd} />
       <Header />
       <div className="max-w-4xl mx-auto px-6">
         <div className="pt-5 text-[13px] text-stone-400 dark:text-stone-500">
@@ -102,7 +106,7 @@ export default async function ProductPage({
           </Link>
           <span className="mx-1.5">/</span>
           <Link href={`/${orgSlug}`} className="hover:text-stone-600 dark:hover:text-stone-300">
-            {orgSlug}
+            {orgName}
           </Link>
           <span className="mx-1.5">/</span>
           <span className="text-stone-600 dark:text-stone-300 font-medium">{product.name}</span>

@@ -1435,6 +1435,7 @@ const getSourceDetailHandler = async (c: import("hono").Context<Env>) => {
     titleShort: r.title_short,
     content: hydrateMediaUrls(r.content, mediaOrigin),
     publishedAt: r.published_at,
+    fetchedAt: r.fetched_at,
     url: r.url,
     media: parseReleaseMedia(r.media, mediaOrigin),
   }));
@@ -1603,6 +1604,7 @@ const getSourceReleasesFeedHandler = async (c: import("hono").Context<Env>) => {
     titleShort: r.title_short,
     content: hydrateMediaUrls(r.content, mediaOrigin),
     publishedAt: r.published_at,
+    fetchedAt: r.fetched_at,
     url: r.url,
     media: parseReleaseMedia(r.media, mediaOrigin),
     prerelease: r.prerelease === 1,

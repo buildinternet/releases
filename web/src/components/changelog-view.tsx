@@ -43,7 +43,7 @@ export async function ChangelogView({
   path?: string;
   /**
    * Byte offset into the file where the initial slice should start.
-   * Used by search deep-links (`?tab=changelog&offset=N#chunk`) to jump
+   * Used by search deep-links (`/changelog?offset=N#chunk`) to jump
    * directly to a matched chunk. The range API snaps forward to the next
    * heading, so a mid-section offset still lands the user on a clean
    * section header. Defaults to 0 (full-file start).
@@ -131,7 +131,7 @@ export async function ChangelogView({
           // Build a path back to the top of the changelog so users who land
           // via a chunk deep-link can rewind to the preamble. Preserves the
           // active file path for multi-file sources.
-          const topQs = new URLSearchParams({ tab: "changelog" });
+          const topQs = new URLSearchParams();
           if (file.path) topQs.set("path", file.path);
           return (
             <div className="mb-3 flex items-center justify-between gap-2 rounded border border-stone-200 dark:border-stone-800 bg-stone-50 dark:bg-stone-900/60 px-3 py-2 text-[12px] text-stone-600 dark:text-stone-400">
