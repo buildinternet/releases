@@ -1,5 +1,16 @@
 import type { SourceType } from "@buildinternet/releases-core/source-enums";
 
+/** Most recent activity timestamp for an org or source row. Falls back from
+ *  the successful-fetch timestamp to the most-recent-poll timestamp so we
+ *  still emit a `dateModified` even when polling hasn't produced new content
+ *  in a while. */
+export function lastModifiedAt(entity: {
+  lastFetchedAt?: string | null;
+  lastPolledAt?: string | null;
+}): string | undefined {
+  return entity.lastFetchedAt ?? entity.lastPolledAt ?? undefined;
+}
+
 /**
  * Maps a source's `type` field to the most appropriate schema.org `@type`.
  *
@@ -41,7 +52,7 @@ export function buildSourceEntityJsonLd(
   sourceUrl: string,
 ): Record<string, unknown> {
   const type = sourceJsonLdType(source.type);
-  const lastModified = source.lastFetchedAt ?? source.lastPolledAt ?? undefined;
+  const lastModified = lastModifiedAt(source);
 
   return {
     "@type": type,

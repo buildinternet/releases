@@ -6,6 +6,7 @@ import { tryFetch } from "@/lib/ssr-fetch";
 import { ReleaseTimeline } from "@/components/release-timeline";
 import { OverviewView } from "@/components/overview-view";
 import { JsonLd } from "@/components/json-ld";
+import { lastModifiedAt } from "@/lib/schema-org";
 import { getOrg } from "./_lib/org-data";
 
 export async function generateMetadata({
@@ -16,7 +17,7 @@ export async function generateMetadata({
   const { orgSlug } = await params;
   try {
     const org = await getOrg(orgSlug);
-    const lastModified = org.lastFetchedAt ?? org.lastPolledAt ?? undefined;
+    const lastModified = lastModifiedAt(org);
     return {
       title: org.name,
       description: `Release activity, summary, and tracked sources for ${org.name}.`,
@@ -70,7 +71,7 @@ export default async function OrgOverviewPage({
   const heatmap: OrgHeatmap | null = heatmapResult.data;
 
   const orgUrl = `https://releases.sh/${orgSlug}`;
-  const lastModified = org.lastFetchedAt ?? org.lastPolledAt ?? undefined;
+  const lastModified = lastModifiedAt(org);
   const jsonLd = {
     "@context": "https://schema.org",
     "@graph": [

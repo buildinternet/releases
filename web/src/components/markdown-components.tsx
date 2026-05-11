@@ -5,21 +5,47 @@ import { FallbackPlainImage } from "./fallback-image";
 interface MarkdownComponentOptions {
   imgClass?: string;
   videoClass?: string;
+  /** When true, demote markdown headings by 2 levels (h1→h3, h2→h4, …, capped at
+   *  h6). Use inside release cards so changelog headings sit below the card's
+   *  own h2 in the page outline rather than colliding with page-level headings.
+   *  HTML5's sectioning-content "scoped outline" is not implemented by any
+   *  browser or crawler, so explicit demotion is the only fix. */
+  demoteHeadings?: boolean;
 }
 
 const defaults: Required<MarkdownComponentOptions> = {
   imgClass: "my-2 max-h-80 object-contain",
   videoClass: "my-3 max-w-lg",
+  demoteHeadings: false,
 };
+
+const HEADING_DEMOTION_MAP: Record<string, "h3" | "h4" | "h5" | "h6"> = {
+  h1: "h3",
+  h2: "h4",
+  h3: "h5",
+  h4: "h6",
+  h5: "h6",
+  h6: "h6",
+};
+
+function buildHeadingDemotions(): Record<string, any> {
+  const demoted: Record<string, any> = {};
+  for (const [from, to] of Object.entries(HEADING_DEMOTION_MAP)) {
+    const Tag = to;
+    demoted[from] = ({ children, node: _node, ...rest }: any) => <Tag {...rest}>{children}</Tag>;
+  }
+  return demoted;
+}
 
 /**
  * Build markdown component overrides for ReactMarkdown.
  * Handles safe image rendering and YouTube/Vimeo/Loom video embeds.
  */
 export function createMarkdownComponents(opts: MarkdownComponentOptions = {}): Record<string, any> {
-  const { imgClass, videoClass } = { ...defaults, ...opts };
+  const { imgClass, videoClass, demoteHeadings } = { ...defaults, ...opts };
 
   return {
+    ...(demoteHeadings ? buildHeadingDemotions() : {}),
     img: (props: any) => {
       const src = props.src as string | undefined;
       if (!isSafeImgSrc(src)) return null;
@@ -104,8 +130,9 @@ export function createMarkdownComponents(opts: MarkdownComponentOptions = {}): R
   };
 }
 
-/** Default components for list/card views (compact embeds). */
-export const markdownComponents = createMarkdownComponents();
+/** Default components for list/card views (compact embeds). Demotes headings
+ *  so the release card's own h2 stays the highest level in its subtree. */
+export const markdownComponents = createMarkdownComponents({ demoteHeadings: true });
 
 /** Detail page components (larger embeds). */
 export const detailMarkdownComponents = createMarkdownComponents({
@@ -118,6 +145,7 @@ export const detailMarkdownComponents = createMarkdownComponents({
  * Used for truncated/preview views.
  */
 export const collapsedMarkdownComponents: Record<string, any> = {
+  ...createMarkdownComponents({ demoteHeadings: true }),
   img: () => null,
   a: (props: any) => {
     const href = props.href as string | undefined;
