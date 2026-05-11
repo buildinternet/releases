@@ -2,6 +2,7 @@ export const CATEGORIES = [
   "ai",
   "cloud",
   "commerce",
+  "crm",
   "database",
   "design",
   "developer-tools",
@@ -65,6 +66,7 @@ export function parseCategoryAliases(raw: string | null | undefined): string[] {
 
 const CATEGORY_DISPLAY_OVERRIDES: Record<string, string> = {
   ai: "AI",
+  crm: "CRM",
   devops: "DevOps",
 };
 
