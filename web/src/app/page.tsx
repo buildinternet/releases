@@ -22,7 +22,7 @@ export default async function HomePage() {
   let latest: TickerItem[] = [];
   try {
     const [tickerResult, fetchedStats, fetchedOrgs] = await Promise.all([
-      tryFetch(graphqlRequest(HomepageTickerDocument, { limit: 20, exclude: ["github"] }), {
+      tryFetch(graphqlRequest(HomepageTickerDocument, { limit: 40, exclude: ["github"] }), {
         route: "/",
         event: "homepage-ticker-fetch-failed",
       }),

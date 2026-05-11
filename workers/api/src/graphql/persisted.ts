@@ -213,10 +213,10 @@ export async function storeIfCacheable(
  *
  * The KV API has no prefix-delete, so we either need a list-and-delete walk
  * (extra reads) or well-known variable shapes per op. The homepage ticker
- * pins `{ limit: 20, exclude: ["github"] }`, so one key covers the only
+ * pins `{ limit: 40, exclude: ["github"] }`, so one key covers the only
  * writer today. Keep in sync with web/src/app/page.tsx.
  */
-export const HOMEPAGE_TICKER_VARS = { exclude: ["github"], limit: 20 };
+export const HOMEPAGE_TICKER_VARS = { exclude: ["github"], limit: 40 };
 
 export function purgeKeysForHomepageTicker(): string[] {
   const hash = HASH_BY_OP_NAME.get("HomepageTicker");

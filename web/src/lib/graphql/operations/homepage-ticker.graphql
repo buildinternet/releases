@@ -4,25 +4,16 @@ query HomepageTicker($limit: Int!, $exclude: [SourceType!]!) {
       id
       title
       version
-      type
-      url
       publishedAt
-      summary
       titleGenerated
       titleShort
-      media {
-        type
-        url
-        alt
-        r2Url
-      }
       source {
-        slug
-        name
-        type
         org {
           slug
           name
+        }
+        product {
+          slug
         }
       }
     }

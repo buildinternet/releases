@@ -6,9 +6,17 @@ import type { HomepageTickerQuery } from "@/lib/graphql/__generated__/graphql";
 import { formatRelativeDate } from "@/lib/formatters";
 
 export type TickerRelease = HomepageTickerQuery["latestReleases"]["items"][number];
-type Slide = { release: TickerRelease; relative: string | null };
+type Slide = { release: TickerRelease; relative: string | null; extraCount: number };
 
 const MAX_ITEMS = 20;
+
+// Dedup key: one slot per (org, product). Source-level orgs without a
+// product collapse to a single slot per org, so a busy changelog can't
+// crowd out the rest of the lineup. Multi-product orgs (Vercel → Next.js,
+// Turborepo) keep one slot per product.
+function dedupKey(r: TickerRelease): string {
+  return `${r.source.org.slug}::${r.source.product?.slug ?? ""}`;
+}
 
 /**
  * Title-quality filter applied on top of the server's `?exclude=github`
@@ -58,7 +66,7 @@ function ActivityIcon() {
 }
 
 function Card({ slide }: { slide: Slide }) {
-  const { release, relative } = slide;
+  const { release, relative, extraCount } = slide;
   return (
     <Link
       href={`/release/${release.id}`}
@@ -78,11 +86,21 @@ function Card({ slide }: { slide: Slide }) {
       <p className="text-[13px] text-stone-700 dark:text-stone-300 line-clamp-2 leading-5 min-h-[2.5rem]">
         {pickLabel(release)}
       </p>
-      {release.version && (
-        <span className="font-mono text-[11px] text-stone-500 dark:text-stone-400 bg-stone-100 dark:bg-stone-800 px-1.5 py-0.5 rounded self-start whitespace-nowrap max-w-full truncate">
-          {release.version}
-        </span>
-      )}
+      <div className="flex items-center gap-2 min-w-0">
+        {release.version && (
+          <span className="font-mono text-[11px] text-stone-500 dark:text-stone-400 bg-stone-100 dark:bg-stone-800 px-1.5 py-0.5 rounded whitespace-nowrap max-w-full truncate">
+            {release.version}
+          </span>
+        )}
+        {extraCount > 0 && (
+          <span
+            className="text-[11px] text-stone-500 dark:text-stone-400 whitespace-nowrap ml-auto"
+            title={`${extraCount} more recent release${extraCount === 1 ? "" : "s"} from ${release.source.org.name}`}
+          >
+            +{extraCount} more
+          </span>
+        )}
+      </div>
     </Link>
   );
 }
@@ -106,17 +124,23 @@ function ChevronIcon({ direction }: { direction: "left" | "right" }) {
 }
 
 export function ShippingNowTicker({ releases }: { releases: TickerRelease[] }) {
-  const items = useMemo<Slide[]>(
-    () =>
-      releases
-        .filter(isMeaningfulRelease)
-        .slice(0, MAX_ITEMS)
-        .map((release) => ({
+  const items = useMemo<Slide[]>(() => {
+    const slots = new Map<string, Slide>();
+    for (const release of releases) {
+      if (!isMeaningfulRelease(release)) continue;
+      const existing = slots.get(dedupKey(release));
+      if (existing) {
+        existing.extraCount += 1;
+      } else {
+        slots.set(dedupKey(release), {
           release,
+          extraCount: 0,
           relative: release.publishedAt ? formatRelativeDate(release.publishedAt) : null,
-        })),
-    [releases],
-  );
+        });
+      }
+    }
+    return Array.from(slots.values()).slice(0, MAX_ITEMS);
+  }, [releases]);
 
   const scrollerRef = useRef<HTMLDivElement>(null);
   const [canPrev, setCanPrev] = useState(false);
