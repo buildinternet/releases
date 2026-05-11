@@ -25,6 +25,8 @@ type Seed = Pick<DocEntry, "slug" | "section" | "label">;
 // Authoritative, ordered list of every docs page. Public + admin are both here;
 // callers filter via `includeAdmin`. Order matches the sidebar at `docs-nav.tsx`.
 const ENTRIES: readonly Seed[] = [
+  { slug: "why", section: "Introduction", label: "Why" },
+
   { slug: "index", section: "Getting Started", label: "Overview" },
   { slug: "installation", section: "Getting Started", label: "Installation" },
   { slug: "skills", section: "Getting Started", label: "Skills" },
