@@ -4,6 +4,7 @@ import { Suspense } from "react";
 import { ApiSetupError } from "@/lib/api";
 import { JsonLd } from "@/components/json-ld";
 import { ChangelogView, ChangelogSkeleton } from "@/components/changelog-view";
+import { buildSourceEntityJsonLd } from "@/lib/schema-org";
 import { getSource, sourceBreadcrumbItems } from "../_lib/source-data";
 
 export async function generateMetadata({
@@ -74,12 +75,7 @@ export default async function SourceChangelogPage({
         "@type": "WebPage",
         name: `${source.name} CHANGELOG`,
         url: pageUrl,
-        about: {
-          "@type": "SoftwareApplication",
-          name: source.name,
-          url: sourceUrl,
-          ...(source.org ? { publisher: { "@type": "Organization", name: source.org.name } } : {}),
-        },
+        about: buildSourceEntityJsonLd(source, sourceUrl),
       },
       {
         "@type": "BreadcrumbList",
