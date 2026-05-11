@@ -1,8 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { Database } from "bun:sqlite";
-import { drizzle } from "drizzle-orm/bun-sqlite";
 import { eq } from "drizzle-orm";
-import { applyMigrations } from "../../../tests/db-helper";
 import {
   organizations,
   sources,
@@ -10,28 +7,10 @@ import {
   collections,
   collectionMembers,
 } from "@buildinternet/releases-core/schema";
-import { Hono } from "hono";
 import { collectionRoutes } from "../src/routes/collections.js";
+import { createTestDb as mkDb, createTestApp } from "./setup";
 
-function mkDb() {
-  const sqlite = new Database(":memory:");
-  const db = drizzle(sqlite);
-  applyMigrations(sqlite);
-  return db;
-}
-
-function mkApp(db: ReturnType<typeof mkDb>) {
-  const fakeEnv = { DB: db };
-  const fakeCtx = {
-    waitUntil: () => {},
-    passThroughOnException: () => {},
-  } as unknown as ExecutionContext;
-  const app = new Hono();
-  const v1 = new Hono();
-  v1.route("/", collectionRoutes);
-  app.route("/v1", v1);
-  return (req: Request) => app.fetch(req, fakeEnv, fakeCtx);
-}
+const mkApp = (db: ReturnType<typeof mkDb>) => createTestApp(db, collectionRoutes);
 
 async function seed(db: ReturnType<typeof mkDb>) {
   await db.insert(organizations).values([

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { api, ApiSetupError, type CollectionListItem, type CollectionMemberOrg } from "@/lib/api";
 import { Header } from "@/components/header";
 import { OrgAvatar } from "@/components/org-avatar";
+import { PageHeader } from "@/components/page-header";
 import { SetupMessage } from "@/components/setup-message";
 
 const TITLE = "Collections";
@@ -44,17 +45,11 @@ export default async function CollectionsListPage() {
     <div className="min-h-screen">
       <Header />
       <div className="max-w-3xl mx-auto px-6 pt-8 pb-12">
-        <div className="text-[13px] text-stone-400 dark:text-stone-500 mb-4">
-          <Link href="/" className="hover:text-stone-600 dark:hover:text-stone-300">
-            Home
-          </Link>
-          <span className="mx-1.5">/</span>
-          <span className="text-stone-600 dark:text-stone-300 font-medium">Collections</span>
-        </div>
-        <h1 className="text-xl font-bold tracking-tight text-stone-900 dark:text-stone-100 mb-2">
-          {TITLE}
-        </h1>
-        <p className="text-sm text-stone-600 dark:text-stone-400 mb-8">{DESCRIPTION}</p>
+        <PageHeader
+          breadcrumb={[{ label: "Home", href: "/" }, { label: TITLE }]}
+          title={TITLE}
+          description={DESCRIPTION}
+        />
 
         {collections.length === 0 ? (
           <div className="text-sm text-stone-500 dark:text-stone-400">

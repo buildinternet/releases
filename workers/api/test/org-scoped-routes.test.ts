@@ -10,15 +10,12 @@
  * endpoint returns the unified browse view used by the web frontend and CLI.
  */
 import { describe, it, expect } from "bun:test";
-import { Database } from "bun:sqlite";
-import { drizzle } from "drizzle-orm/bun-sqlite";
-import { applyMigrations } from "../../../tests/db-helper";
 import { organizations, sources, products } from "@buildinternet/releases-core/schema";
-import { Hono } from "hono";
 import { sourceRoutes } from "../src/routes/sources.js";
 import { productRoutes } from "../src/routes/products.js";
 import { orgRoutes } from "../src/routes/orgs.js";
 import { BareSlugRejected } from "../src/utils.js";
+import { createTestDb as mkDb, createTestApp } from "./setup";
 
 const statusHubStub = {
   idFromName: () => "stub-id",
@@ -27,37 +24,23 @@ const statusHubStub = {
   }),
 };
 
-function mkDb() {
-  const sqlite = new Database(":memory:");
-  const db = drizzle(sqlite);
-  applyMigrations(sqlite);
-  return db;
-}
-
-function mkApp(db: ReturnType<typeof mkDb>) {
-  const fakeEnv = { DB: db, STATUS_HUB: statusHubStub };
-  const fakeCtx = {
-    waitUntil: () => {},
-    passThroughOnException: () => {},
-  } as unknown as ExecutionContext;
-  const app = new Hono();
-  // Mirror the real app's onError so BareSlugRejected (#698) translates to a
-  // 400 in tests. Without this, a thrown error would surface as Hono's default
-  // 500 response and the bare-slug rejection assertions wouldn't be honest.
-  app.onError((err, c) => {
-    if (err instanceof BareSlugRejected) {
-      return c.json({ error: "bare_slug_rejected", entity: err.entity, message: err.message }, 400);
-    }
-    const message = err instanceof Error ? err.message : String(err);
-    return c.json({ error: "internal_error", message }, 500);
+// Mirror the real app's onError so BareSlugRejected (#698) translates to a
+// 400 in tests. Without this, a thrown error would surface as Hono's default
+// 500 response and the bare-slug rejection assertions wouldn't be honest.
+const mkApp = (db: ReturnType<typeof mkDb>) =>
+  createTestApp(db, [orgRoutes, sourceRoutes, productRoutes], {
+    env: { STATUS_HUB: statusHubStub },
+    onError: (err, c) => {
+      if (err instanceof BareSlugRejected) {
+        return c.json(
+          { error: "bare_slug_rejected", entity: err.entity, message: err.message },
+          400,
+        );
+      }
+      const message = err instanceof Error ? err.message : String(err);
+      return c.json({ error: "internal_error", message }, 500);
+    },
   });
-  const v1 = new Hono();
-  v1.route("/", orgRoutes);
-  v1.route("/", sourceRoutes);
-  v1.route("/", productRoutes);
-  app.route("/v1", v1);
-  return (req: Request) => app.fetch(req, fakeEnv, fakeCtx);
-}
 
 async function seed(db: ReturnType<typeof mkDb>) {
   await db.insert(organizations).values([

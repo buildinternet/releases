@@ -6,12 +6,9 @@
  * distinct resolved slugs.
  */
 import { describe, it, expect } from "bun:test";
-import { Database } from "bun:sqlite";
-import { drizzle } from "drizzle-orm/bun-sqlite";
-import { applyMigrations } from "../../../tests/db-helper";
 import { organizations } from "@buildinternet/releases-core/schema";
-import { Hono } from "hono";
 import { sourceRoutes } from "../src/routes/sources.js";
+import { createTestDb as mkDb, createTestApp } from "./setup";
 
 // Embed + playbook-regen side effects in POST /sources are fire-and-forget via
 // c.executionCtx.waitUntil. The no-op waitUntil stub below never runs them, so
@@ -27,25 +24,8 @@ const statusHubStub = {
   }),
 };
 
-function mkDb() {
-  const sqlite = new Database(":memory:");
-  const db = drizzle(sqlite);
-  applyMigrations(sqlite);
-  return db;
-}
-
-function mkApp(db: ReturnType<typeof mkDb>) {
-  const fakeEnv = { DB: db, STATUS_HUB: statusHubStub };
-  const fakeCtx = {
-    waitUntil: () => {},
-    passThroughOnException: () => {},
-  } as unknown as ExecutionContext;
-  const app = new Hono();
-  const v1 = new Hono();
-  v1.route("/", sourceRoutes);
-  app.route("/v1", v1);
-  return (req: Request) => app.fetch(req, fakeEnv, fakeCtx);
-}
+const mkApp = (db: ReturnType<typeof mkDb>) =>
+  createTestApp(db, sourceRoutes, { env: { STATUS_HUB: statusHubStub } });
 
 describe("POST /v1/sources — slug auto-suffix on collision", () => {
   it("creates first source with the base slug", async () => {

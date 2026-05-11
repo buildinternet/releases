@@ -1,31 +1,10 @@
 import { describe, it, expect } from "bun:test";
-import { Database } from "bun:sqlite";
-import { drizzle } from "drizzle-orm/bun-sqlite";
-import { applyMigrations } from "../../../tests/db-helper";
 import { organizations, products } from "@buildinternet/releases-core/schema";
 import { CATEGORIES } from "@buildinternet/releases-core/categories";
-import { Hono } from "hono";
 import { taxonomyRoutes } from "../src/routes/taxonomy.js";
+import { createTestDb as mkDb, createTestApp } from "./setup";
 
-function mkDb() {
-  const sqlite = new Database(":memory:");
-  const db = drizzle(sqlite);
-  applyMigrations(sqlite);
-  return db;
-}
-
-function mkApp(db: ReturnType<typeof mkDb>) {
-  const fakeEnv = { DB: db };
-  const fakeCtx = {
-    waitUntil: () => {},
-    passThroughOnException: () => {},
-  } as unknown as ExecutionContext;
-  const app = new Hono();
-  const v1 = new Hono();
-  v1.route("/", taxonomyRoutes);
-  app.route("/v1", v1);
-  return (req: Request) => app.fetch(req, fakeEnv, fakeCtx);
-}
+const mkApp = (db: ReturnType<typeof mkDb>) => createTestApp(db, taxonomyRoutes);
 
 describe("GET /v1/categories", () => {
   it("returns every category in the taxonomy with org and product counts", async () => {
