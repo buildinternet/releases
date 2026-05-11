@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { daysAgoIso } from "@buildinternet/releases-core/dates";
 import { ApiSetupError } from "@/lib/api";
+import { tryFetch } from "@/lib/ssr-fetch";
 import { ViewTransition } from "react";
 import { Header } from "@/components/header";
 import { SetupMessage } from "@/components/setup-message";
@@ -32,13 +33,19 @@ export default async function SourceLayout({
   const activityFrom = daysAgoIso(365 * 2).slice(0, 10);
 
   let source;
-  let activity;
-  let heatmap;
+  let activityResult;
+  let heatmapResult;
   try {
-    [source, activity, heatmap] = await Promise.all([
+    [source, activityResult, heatmapResult] = await Promise.all([
       getSource(orgSlug, sourceSlug),
-      api.sourceActivity({ orgSlug, sourceSlug }, activityFrom).catch(() => null),
-      api.sourceHeatmap({ orgSlug, sourceSlug }).catch(() => null),
+      tryFetch(api.sourceActivity({ orgSlug, sourceSlug }, activityFrom), {
+        route: `/${orgSlug}/${sourceSlug}`,
+        event: "source-activity-fetch-failed",
+      }),
+      tryFetch(api.sourceHeatmap({ orgSlug, sourceSlug }), {
+        route: `/${orgSlug}/${sourceSlug}`,
+        event: "source-heatmap-fetch-failed",
+      }),
     ]);
   } catch (err) {
     if (err instanceof ApiSetupError) {
@@ -51,6 +58,9 @@ export default async function SourceLayout({
     }
     notFound();
   }
+
+  const activity = activityResult.data;
+  const heatmap = heatmapResult.data;
 
   if (source.org && source.org.slug !== orgSlug) {
     redirect(`/${source.org.slug}/${source.slug}`);

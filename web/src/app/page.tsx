@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { api, ApiSetupError } from "@/lib/api";
+import { tryFetch } from "@/lib/ssr-fetch";
 import { graphqlRequest } from "@/lib/graphql/client";
 import { HomepageTickerDocument } from "@/lib/graphql/__generated__/graphql";
 import type { HomepageTickerQuery } from "@/lib/graphql/__generated__/graphql";
@@ -20,13 +21,17 @@ export default async function HomePage() {
   let stats, orgs;
   let latest: TickerItem[] = [];
   try {
-    let ticker: HomepageTickerQuery | null;
-    [stats, orgs, ticker] = await Promise.all([
+    const [tickerResult, fetchedStats, fetchedOrgs] = await Promise.all([
+      tryFetch(graphqlRequest(HomepageTickerDocument, { limit: 20, exclude: ["github"] }), {
+        route: "/",
+        event: "homepage-ticker-fetch-failed",
+      }),
       api.stats(),
       api.orgs(),
-      graphqlRequest(HomepageTickerDocument, { limit: 20, exclude: ["github"] }).catch(() => null),
     ]);
-    latest = ticker?.latestReleases.items ?? [];
+    stats = fetchedStats;
+    orgs = fetchedOrgs;
+    latest = tickerResult.data?.latestReleases.items ?? [];
   } catch (err) {
     if (err instanceof ApiSetupError) {
       return (

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { daysAgoIso } from "@buildinternet/releases-core/dates";
 import { api, ApiSetupError, type OrgHeatmap } from "@/lib/api";
+import { tryFetch } from "@/lib/ssr-fetch";
 import { ReleaseTimeline } from "@/components/release-timeline";
 import { OverviewView } from "@/components/overview-view";
 import { JsonLd } from "@/components/json-ld";
@@ -46,18 +47,27 @@ export default async function OrgOverviewPage({
   const activityFrom = daysAgoIso(365 * 2).slice(0, 10);
 
   let org;
-  let activity;
-  let heatmap: OrgHeatmap | null = null;
+  let activityResult;
+  let heatmapResult;
   try {
-    [org, activity, heatmap] = await Promise.all([
+    [org, activityResult, heatmapResult] = await Promise.all([
       getOrg(orgSlug),
-      api.orgActivity(orgSlug, activityFrom).catch(() => null),
-      api.orgHeatmap(orgSlug).catch(() => null),
+      tryFetch(api.orgActivity(orgSlug, activityFrom), {
+        route: `/${orgSlug}`,
+        event: "org-activity-fetch-failed",
+      }),
+      tryFetch(api.orgHeatmap(orgSlug), {
+        route: `/${orgSlug}`,
+        event: "org-heatmap-fetch-failed",
+      }),
     ]);
   } catch (err) {
     if (err instanceof ApiSetupError) throw err;
     notFound();
   }
+
+  const activity = activityResult.data;
+  const heatmap: OrgHeatmap | null = heatmapResult.data;
 
   const orgUrl = `https://releases.sh/${orgSlug}`;
   const lastModified = org.lastFetchedAt ?? org.lastPolledAt ?? undefined;
@@ -97,6 +107,11 @@ export default async function OrgOverviewPage({
         />
       )}
       {!activity && org.overview && <OverviewView page={org.overview} />}
+      {!activity && !org.overview && activityResult.error && (
+        <p className="text-sm text-stone-400 dark:text-stone-500 py-4">
+          Couldn&apos;t load release activity. Try refreshing.
+        </p>
+      )}
     </>
   );
 }

@@ -115,6 +115,13 @@ export class ApiSetupError extends Error {
   }
 }
 
+export class ApiNotFoundError extends Error {
+  constructor(path: string) {
+    super(`API 404: ${path}`);
+    this.name = "ApiNotFoundError";
+  }
+}
+
 export type FetchCacheInit = { cache?: RequestCache; next?: { revalidate?: number | false } };
 
 /**
@@ -158,6 +165,7 @@ async function fetchApi<T>(path: string, init?: FetchCacheInit): Promise<T> {
     }
   }
 
+  if (res.status === 404) throw new ApiNotFoundError(path);
   if (!res.ok) throw new Error(`API error: ${res.status} ${res.statusText}`);
   return res.json();
 }

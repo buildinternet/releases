@@ -254,6 +254,7 @@ export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
   const [dateRange, setDateRange] = useState<DateRange>("week");
   const [sessions, setSessions] = useState<SessionState[]>([]);
   const [usage, setUsage] = useState<UsageEntry[]>([]);
+  const [hydrateError, setHydrateError] = useState(false);
   const [connected, setConnected] = useState(false);
   const [expandedSessions, setExpandedSessions] = useState<Set<string>>(new Set());
   const [sessionLogs, setSessionLogs] = useState<Record<string, string[]>>({});
@@ -286,11 +287,20 @@ export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
     return Promise.all([safeFetch(`/api/proxy/sessions`), safeFetch(`/api/proxy/status/usage`)])
       .then(([s, u]) => {
         const sessionItems = unwrapList<SessionState>(s);
-        if (sessionItems) setSessions(sessionItems);
+        if (sessionItems) {
+          setSessions(sessionItems);
+          setHydrateError(false);
+        } else if (s === null) {
+          // null means the request failed or returned non-ok
+          setHydrateError(true);
+        }
         if (u) setUsage(u as UsageEntry[]);
         return sessionItems;
       })
-      .catch(() => null);
+      .catch(() => {
+        setHydrateError(true);
+        return null;
+      });
   }, []);
 
   useEffect(() => {
@@ -595,7 +605,12 @@ export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
       </div>
 
       {/* Tab content */}
-      {tab === "sessions" && (
+      {tab === "sessions" && hydrateError && (
+        <div className="text-sm text-red-500 py-8 text-center">
+          Failed to load sessions — API may be unreachable.
+        </div>
+      )}
+      {tab === "sessions" && !hydrateError && (
         <SessionsTable
           sessions={filteredSessions}
           now={now}

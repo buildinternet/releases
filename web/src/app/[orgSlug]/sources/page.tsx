@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { api, ApiSetupError } from "@/lib/api";
+import { tryFetch } from "@/lib/ssr-fetch";
 import { SourceTable } from "@/components/source-table";
 import { JsonLd } from "@/components/json-ld";
 import { getOrg } from "../_lib/org-data";
@@ -28,16 +29,21 @@ export default async function OrgSourcesPage({ params }: { params: Promise<{ org
   const { orgSlug } = await params;
 
   let org;
-  let sparklines: { sources: { slug: string; name: string; sparkline: number[] }[] } | null = null;
+  let sparklinesResult;
   try {
-    [org, sparklines] = await Promise.all([
+    [org, sparklinesResult] = await Promise.all([
       getOrg(orgSlug),
-      api.orgSparklines(orgSlug).catch(() => null),
+      tryFetch(api.orgSparklines(orgSlug), {
+        route: `/${orgSlug}/sources`,
+        event: "org-sparklines-fetch-failed",
+      }),
     ]);
   } catch (err) {
     if (err instanceof ApiSetupError) throw err;
     notFound();
   }
+
+  const sparklines = sparklinesResult.data;
 
   const sourceSparklines = (() => {
     const map: Record<string, number[]> = {};
