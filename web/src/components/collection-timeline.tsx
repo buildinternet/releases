@@ -13,7 +13,18 @@ import { type CollectionMemberOrg, type CollectionReleaseItem } from "@/lib/api"
 import { tabButtonClass } from "@/lib/styles";
 
 interface CollectionTimelineProps {
-  collectionSlug: string;
+  /**
+   * Internal Next.js API route that returns the same JSON shape as
+   * `/v1/collections/:slug/releases` — supports `cursor` and
+   * `include_prereleases` query params. Used by the prerelease toggle and
+   * the "Load more" pager.
+   */
+  fetchEndpoint: string;
+  /**
+   * Path the format-suffix links append `.json` / `.md` / `.atom` to
+   * (e.g. `/collections/frontier-ai-labs`, `/categories/ai`).
+   */
+  formatPath: string;
   initialReleases: CollectionReleaseItem[];
   initialCursor: string | null;
   orgs: CollectionMemberOrg[];
@@ -61,7 +72,8 @@ function pluralReleases(n: number): string {
 }
 
 export function CollectionTimeline({
-  collectionSlug,
+  fetchEndpoint,
+  formatPath,
   initialReleases,
   initialCursor,
   orgs,
@@ -100,7 +112,7 @@ export function CollectionTimeline({
     loadMoreAbortRef.current = controller;
     setLoading(true);
     setFetchError(null);
-    fetch(`/api/collection-releases/${collectionSlug}?${buildQuery()}`, {
+    fetch(`${fetchEndpoint}?${buildQuery()}`, {
       signal: controller.signal,
     })
       .then((res) => (res.ok ? res.json() : Promise.reject(new Error(`HTTP ${res.status}`))))
@@ -116,7 +128,7 @@ export function CollectionTimeline({
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [collectionSlug, buildQuery, pristine]);
+  }, [fetchEndpoint, buildQuery, pristine]);
 
   const loadMore = useCallback(async () => {
     if (!cursor) return;
@@ -126,7 +138,7 @@ export function CollectionTimeline({
     setLoading(true);
     setFetchError(null);
     try {
-      const res = await fetch(`/api/collection-releases/${collectionSlug}?${buildQuery(cursor)}`, {
+      const res = await fetch(`${fetchEndpoint}?${buildQuery(cursor)}`, {
         signal: controller.signal,
       });
       if (!res.ok) {
@@ -143,7 +155,7 @@ export function CollectionTimeline({
     } finally {
       if (!controller.signal.aborted) setLoading(false);
     }
-  }, [cursor, collectionSlug, buildQuery]);
+  }, [cursor, fetchEndpoint, buildQuery]);
 
   const toggleOrg = (slug: string) => {
     setActiveOrgs((prev) => {
@@ -167,7 +179,6 @@ export function CollectionTimeline({
   }, [releases, activeOrgs, typeFilter]);
 
   const days = useMemo(() => groupByDay(filtered), [filtered]);
-  const formatPath = `/collections/${collectionSlug}`;
 
   return (
     <div>

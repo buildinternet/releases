@@ -11,12 +11,11 @@ import { newCollectionId } from "@buildinternet/releases-core/id";
 import { toSlug } from "@buildinternet/releases-core/slug";
 import {
   buildFeedCursor,
+  formatAggregateReleaseRow,
   parseLimitParam,
   parseBoolParam,
-  parseReleaseMedia,
   isConflictError,
   orgWhere,
-  hydrateMediaUrls,
 } from "../utils.js";
 import { getCollectionReleasesFeed } from "../queries/orgs.js";
 import { wantsMarkdown, markdownResponse } from "../middleware/content-negotiation.js";
@@ -285,24 +284,9 @@ collectionRoutes.get("/collections/:slug/releases", async (c) => {
   }
 
   const mediaOrigin = c.env.MEDIA_ORIGIN ?? "";
-  const releasesFormatted: CollectionReleaseItem[] = pageRows.map((r) => ({
-    id: r.id,
-    version: r.version,
-    type: r.type,
-    title: r.title,
-    summary: r.summary ?? (r.content.length > 150 ? r.content.slice(0, 150) + "..." : r.content),
-    titleGenerated: r.title_generated,
-    titleShort: r.title_short,
-    content: hydrateMediaUrls(r.content, mediaOrigin),
-    publishedAt: r.published_at,
-    url: r.url,
-    media: parseReleaseMedia(r.media, mediaOrigin),
-    prerelease: r.prerelease === 1,
-    source: { slug: r.source_slug, name: r.source_name, type: r.source_type },
-    org: { slug: r.org_slug, name: r.org_name },
-    product:
-      r.product_slug && r.product_name ? { slug: r.product_slug, name: r.product_name } : null,
-  }));
+  const releasesFormatted: CollectionReleaseItem[] = pageRows.map((r) =>
+    formatAggregateReleaseRow(r, mediaOrigin),
+  );
 
   const pagination = { nextCursor, limit };
 

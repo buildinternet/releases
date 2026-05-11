@@ -88,7 +88,8 @@ export default async function CollectionPage({ params }: { params: Promise<{ slu
         <div className="mt-7 pb-10">
           <CollectionTimeline
             key={slug}
-            collectionSlug={slug}
+            fetchEndpoint={`/api/collection-releases/${slug}`}
+            formatPath={`/collections/${slug}`}
             initialReleases={releases.releases}
             initialCursor={releases.pagination.nextCursor}
             orgs={detail.orgs}

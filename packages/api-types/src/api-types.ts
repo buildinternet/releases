@@ -701,6 +701,18 @@ export interface CategoryDetail {
   products: TaxonomyProduct[];
 }
 
+/**
+ * Aggregated release feed row for a category rollup — same wire shape as
+ * `CollectionReleaseItem` (both surfaces aggregate releases across multiple
+ * orgs). Aliased rather than duplicated so renderers can treat them as one.
+ */
+export type CategoryReleaseItem = CollectionReleaseItem;
+
+export interface CategoryReleasesResponse {
+  releases: CategoryReleaseItem[];
+  pagination: { nextCursor: string | null; limit: number };
+}
+
 export interface TagDetail {
   slug: string;
   name: string;

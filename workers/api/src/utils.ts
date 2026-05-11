@@ -7,10 +7,41 @@ import {
   domainAliases,
 } from "@buildinternet/releases-core/schema";
 import { toSlug } from "@buildinternet/releases-core/slug";
-import { resolveR2Url } from "@releases/rendering/media-url.js";
-import type { MediaItem } from "@buildinternet/releases-api-types";
+import { hydrateMediaUrls, resolveR2Url } from "@releases/rendering/media-url.js";
+import type { CollectionReleaseItem, MediaItem } from "@buildinternet/releases-api-types";
+import type { AggregateReleaseRow } from "@releases/core-internal/feed-cursor";
 import type { createDb } from "./db.js";
 export { hydrateMediaUrls, resolveR2Url } from "@releases/rendering/media-url.js";
+
+/**
+ * Shape a cross-org feed row into the wire-format `CollectionReleaseItem`
+ * (also satisfies `CategoryReleaseItem`, which is a structural alias).
+ * Centralized so collection and category routes never drift on field
+ * truncation / media hydration / source-type narrowing.
+ */
+export function formatAggregateReleaseRow(
+  r: AggregateReleaseRow,
+  mediaOrigin: string,
+): CollectionReleaseItem {
+  return {
+    id: r.id,
+    version: r.version,
+    type: r.type,
+    title: r.title,
+    summary: r.summary ?? (r.content.length > 150 ? r.content.slice(0, 150) + "..." : r.content),
+    titleGenerated: r.title_generated,
+    titleShort: r.title_short,
+    content: hydrateMediaUrls(r.content, mediaOrigin),
+    publishedAt: r.published_at,
+    url: r.url,
+    media: parseReleaseMedia(r.media, mediaOrigin),
+    prerelease: r.prerelease === 1,
+    source: { slug: r.source_slug, name: r.source_name, type: r.source_type },
+    org: { slug: r.org_slug, name: r.org_name },
+    product:
+      r.product_slug && r.product_name ? { slug: r.product_slug, name: r.product_name } : null,
+  };
+}
 
 type RawMediaRow = MediaItem & { r2Key?: string | null };
 

@@ -19,6 +19,8 @@ import type {
   ReleaseCoverageRow,
   ReleaseCoverageResponse,
   CategoryDetail,
+  CategoryReleaseItem,
+  CategoryReleasesResponse,
   TagDetail,
   ListResponse,
   MediaItem,
@@ -67,6 +69,8 @@ export type {
   ReleaseCoverageRow,
   ReleaseCoverageResponse,
   CategoryDetail,
+  CategoryReleaseItem,
+  CategoryReleasesResponse,
   TagDetail,
   CollectionListItem,
   CollectionDetail,
@@ -309,6 +313,20 @@ export const api = {
   productDetail: (ref: { orgSlug: string; productSlug: string }) =>
     fetchApi<ProductDetail>(`/v1/orgs/${ref.orgSlug}/products/${ref.productSlug}`),
   categoryDetail: (slug: string) => fetchApi<CategoryDetail>(`/v1/categories/${slug}`),
+  categoryReleases: (
+    slug: string,
+    opts: { cursor?: string; limit?: number; includePrereleases?: boolean } = {},
+  ) => {
+    const { cursor, limit = 20, includePrereleases } = opts;
+    const params = new URLSearchParams();
+    if (cursor) params.set("cursor", cursor);
+    if (limit !== 20) params.set("limit", String(limit));
+    if (includePrereleases) params.set("include_prereleases", "true");
+    const qs = params.toString();
+    return fetchApi<CategoryReleasesResponse>(
+      `/v1/categories/${slug}/releases${qs ? `?${qs}` : ""}`,
+    );
+  },
   tagDetail: (slug: string) => fetchApi<TagDetail>(`/v1/tags/${slug}`),
   collections: () => fetchApi<CollectionListItem[]>("/v1/collections"),
   orgCollections: (slug: string) => fetchApi<CollectionListItem[]>(`/v1/orgs/${slug}/collections`),
