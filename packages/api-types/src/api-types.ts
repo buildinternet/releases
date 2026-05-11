@@ -697,6 +697,21 @@ export interface TaxonomyProduct {
 
 export interface CategoryDetail {
   slug: string;
+  /**
+   * Display name — operator override from the `categories` table if present,
+   * otherwise `categoryDisplayName(slug)` from `@buildinternet/releases-core`.
+   */
+  name: string;
+  /**
+   * Operator-authored byline shown on the web category page. Null when no
+   * description has been set; clients render their own fallback copy.
+   */
+  description: string | null;
+  /**
+   * Alternative slugs that redirect to this canonical category. Empty when
+   * no aliases have been configured.
+   */
+  aliases: string[];
   orgs: TaxonomyOrg[];
   products: TaxonomyProduct[];
 }
@@ -708,13 +723,31 @@ export interface CategoryDetail {
  * `orgCount` counts orgs whose `category` matches; `productCount` counts
  * products whose own `category` matches (overriding any parent-org category).
  * Both counts pass through `organizations_public`, so on_demand and
- * soft-deleted orgs are excluded.
+ * soft-deleted orgs are excluded. `description` comes from the optional
+ * `categories` metadata overlay; null when no override has been set.
  */
 export interface CategoryListItem {
   slug: string;
   name: string;
+  description: string | null;
+  aliases: string[];
   orgCount: number;
   productCount: number;
+}
+
+/**
+ * PATCH /v1/categories/:slug request body. All fields are optional. `name`
+ * and `description` accept `null` to clear the override; `aliases` replaces
+ * the full set when provided (pass `[]` to clear). The row is upserted —
+ * a category that has never been customized has no row in the table.
+ *
+ * Each alias must be a kebab-case slug not already in `CATEGORIES` and not
+ * claimed by another category row.
+ */
+export interface UpdateCategoryRequest {
+  name?: string | null;
+  description?: string | null;
+  aliases?: string[];
 }
 
 /**

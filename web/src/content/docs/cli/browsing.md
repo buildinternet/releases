@@ -104,6 +104,8 @@ Organizations and products are tagged with a category. List valid values with:
 releases categories
 ```
 
+Each category accepts a configurable byline (display name + description) and optional aliases that redirect to the canonical slug. For example, `releases.sh/categories/e-commerce` 301s to `/categories/commerce`. Alias resolution is also applied on write paths, so `--category e-commerce` resolves to `commerce` before it lands in the database.
+
 ## Stats
 
 Get a quick count of organizations, sources, releases, and products in the database:

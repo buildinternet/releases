@@ -48,6 +48,23 @@ AI-generated knowledge pages (`knowledge_pages` table, scope `org`) summarize re
 
 **Planning manifest (#715).** `GET /v1/admin/overviews` (admin-only) returns a paginated, sortable list of every org with the freshness signals an orchestrator needs to plan a maintenance sweep — `overviewUpdatedAt`, `lastContributingReleaseAt`, `orgLastActivity`, and crucially `releasesSinceOverview` (the count of releases shipped since the overview was generated). Each row carries a `staleness` of `missing | behind | fresh`. Filters: `staleDays=N` (include `behind` rows whose overview is at least N days old), `missing=true` (include rows with no overview at all), `hasActivity=true` (drop orgs with zero recent releases). With `format=plan`, each row also gets `action` (`missing | refresh | skip`) and `needsFetch` (true when active sources exist but ingest is lagging — the threshold is 7 days without a release). The `?check=true` query on `/v1/orgs/:slug/overview/inputs` returns a lightweight pre-flight payload (`{orgSlug, selected, totalAvailable, hasExistingContent, wouldRegenerate, windowDays}`) so an orchestrator can decide whether to dispatch without paying for the full release-content + media hydration.
 
+## Category metadata overlay
+
+The fixed `CATEGORIES` taxonomy (`packages/core/src/categories.ts`) stays the source of truth for valid slugs — adding one is still a code change. The optional `categories` table (`packages/core/src/schema.ts`, migration `20260511000000_categories_metadata.sql`) overlays editable presentation on top: per-slug `name` override (else `categoryDisplayName(slug)` runs the title-casing), `description` (the byline on `/categories/<slug>` and `/categories` list), and `aliases` (JSON string array of alternative slugs that redirect to the canonical row). A category with no customization has no row in the table.
+
+Read surface:
+
+- `GET /v1/categories` — every canonical slug, with `aliases`, `description`, counts. Missing rows fall through to defaults.
+- `GET /v1/categories/:slug` — canonical only renders detail; alias input returns `301 Moved Permanently` to the canonical URL. `GET /v1/categories/:slug/releases` resolves alias internally (no redirect on the feed endpoint to avoid breaking cursor pagination).
+
+Write surface (admin-only, gated by `publicReadRoutes` → `publicReadAuthMiddleware`'s SAFE_METHODS check):
+
+- `PATCH /v1/categories/:slug` — upserts `name`, `description`, and/or `aliases`. Each alias is validated against `CATEGORY_ALIAS_RE`, can't shadow a canonical slug, and can't already be claimed by another row (cross-row uniqueness is enforced in the handler; SQL stores aliases as JSON so there's no unique index).
+
+Write-path alias resolution: `POST/PATCH /v1/orgs` and `POST/PATCH /v1/products` call `resolveCategoryInput()` (in `workers/api/src/lib/category-alias.ts`) on the body's `category` field, so `"e-commerce"` lands in `organizations.category` / `products.category` as `"commerce"`. The helper composes `loadAliasMap()` (one `SELECT slug, aliases FROM categories`) with the pure `resolveCategorySlug()` core helper.
+
+Web: `/categories/[slug]/page.tsx` re-bounces the browser when the API's response `slug` differs from the URL slug — fetch follows the API's 301 transparently, so an alias landing surfaces as `detail.slug !== slug` and the handler calls Next's `redirect()`.
+
 ## Collections
 
 Curated, named groups of orgs that drive a "playlist" page (e.g. `/collections/frontier-ai-labs`). Independent of the fixed `category` taxonomy, so a collection can mix orgs across categories or surface a tighter subset than any category covers. Schema is two tables: `collections` (slug-keyed) and `collection_members` (`collection_id`, `org_id`, `position`).

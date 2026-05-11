@@ -26,7 +26,7 @@ import {
   collectionMembers,
 } from "@buildinternet/releases-core/schema";
 import { daysAgoIso } from "@buildinternet/releases-core/dates";
-import { isValidCategory } from "@buildinternet/releases-core/categories";
+import { resolveCategoryInput } from "../lib/category-alias.js";
 import { parseSourceTypesLenient } from "../lib/source-types.js";
 import { toSlug } from "@buildinternet/releases-core/slug";
 import { isReservedSlug } from "@buildinternet/releases-core/reserved-slugs";
@@ -411,8 +411,17 @@ orgRoutes.post(
     if (!body.name)
       return c.json({ error: "bad_request", message: "Missing required field: name" }, 400);
 
-    if (body.category && !isValidCategory(body.category)) {
-      return c.json({ error: "bad_request", message: `Invalid category: "${body.category}"` }, 400);
+    // Resolve through the alias overlay so "e-commerce" → "commerce" before
+    // it lands in `organizations.category`. Canonical slugs pass through.
+    if (body.category) {
+      const resolved = await resolveCategoryInput(db, body.category);
+      if (!resolved.ok) {
+        return c.json(
+          { error: "bad_request", message: `Invalid category: "${body.category}"` },
+          400,
+        );
+      }
+      body.category = resolved.slug;
     }
 
     const slug = body.slug ?? toSlug(body.name);
@@ -502,8 +511,15 @@ orgRoutes.patch(
       aliases?: string[];
     }>();
 
-    if (body.category !== undefined && body.category !== null && !isValidCategory(body.category)) {
-      return c.json({ error: "bad_request", message: `Invalid category: "${body.category}"` }, 400);
+    if (body.category !== undefined && body.category !== null) {
+      const resolved = await resolveCategoryInput(db, body.category);
+      if (!resolved.ok) {
+        return c.json(
+          { error: "bad_request", message: `Invalid category: "${body.category}"` },
+          400,
+        );
+      }
+      body.category = resolved.slug;
     }
 
     const [org] = await db.select().from(organizations).where(orgWhere(slug));

@@ -231,6 +231,28 @@ export const collectionMembers = sqliteTable(
   ],
 );
 
+// Optional editable metadata overlay for the fixed `CATEGORIES` taxonomy in
+// `@buildinternet/releases-core/categories`. The slug is still the canonical
+// reference everywhere (`organizations.category`, `products.category`,
+// validation via `isValidCategory`); a row here only exists when an operator
+// has customized the byline. `name` overrides the auto-titlecased display
+// (e.g. "Developer Tools"); when null the API falls back to
+// `categoryDisplayName(slug)`. `description` powers the web byline.
+// `aliases` is a JSON array of alternative slugs that redirect to this
+// canonical category (e.g. "e-commerce" → "commerce"). Stored as JSON rather
+// than a separate table because the alias surface is small and always loaded
+// in bulk for cross-category resolution. Uniqueness across rows is enforced
+// at the API layer, not in SQL.
+export const categories = sqliteTable("categories", {
+  slug: text("slug").primaryKey(),
+  name: text("name"),
+  description: text("description"),
+  aliases: text("aliases").notNull().default("[]"),
+  updatedAt: text("updated_at")
+    .notNull()
+    .$defaultFn(() => new Date().toISOString()),
+});
+
 export const sources = sqliteTable(
   "sources",
   {

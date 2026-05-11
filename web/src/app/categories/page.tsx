@@ -62,8 +62,12 @@ export default async function CategoriesListPage() {
                     {c.name}
                   </div>
                   <div className="mt-0.5 text-sm text-stone-500 dark:text-stone-400">
-                    Releases from orgs and products bucketed as{" "}
-                    <span className="font-medium">{c.name}</span>.
+                    {c.description ?? (
+                      <>
+                        Releases from orgs and products bucketed as{" "}
+                        <span className="font-medium">{c.name}</span>.
+                      </>
+                    )}
                   </div>
                 </div>
                 <CountBadges orgCount={c.orgCount} productCount={c.productCount} />
