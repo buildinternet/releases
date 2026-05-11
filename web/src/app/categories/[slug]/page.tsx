@@ -112,7 +112,9 @@ export default async function CategoryPage({ params }: { params: Promise<{ slug:
             Home
           </Link>
           <span className="mx-1.5">/</span>
-          <span className="text-stone-400 dark:text-stone-500">Categories</span>
+          <Link href="/categories" className="hover:text-stone-600 dark:hover:text-stone-300">
+            Categories
+          </Link>
           <span className="mx-1.5">/</span>
           <span className="text-stone-600 dark:text-stone-300 font-medium">{title}</span>
         </div>
