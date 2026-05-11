@@ -6,6 +6,8 @@ import {
   sourcesActive,
   productsActive,
   releases,
+  releaseSummaries,
+  sourceChangelogFiles,
   collections,
 } from "@buildinternet/releases-core/schema";
 import type { Env } from "../index.js";
@@ -47,7 +49,13 @@ sitemapRoutes.get("/sitemap", async (c) => {
     orgIdChunks.push(orgIds.slice(i, i + ORG_ID_CHUNK));
   }
 
-  const [sourceRowsByChunk, productRowsByChunk, latestReleaseRowsByChunk] = await Promise.all([
+  const [
+    sourceRowsByChunk,
+    productRowsByChunk,
+    latestReleaseRowsByChunk,
+    summarySourceIdsByChunk,
+    changelogSourceIdsByChunk,
+  ] = await Promise.all([
     Promise.all(
       orgIdChunks.map((chunk) =>
         db
@@ -85,11 +93,31 @@ sitemapRoutes.get("/sitemap", async (c) => {
           .groupBy(releases.sourceId),
       ),
     ),
+    Promise.all(
+      orgIdChunks.map((chunk) =>
+        db
+          .selectDistinct({ sourceId: releaseSummaries.sourceId })
+          .from(releaseSummaries)
+          .innerJoin(sourcesActive, eq(releaseSummaries.sourceId, sourcesActive.id))
+          .where(inArray(sourcesActive.orgId, chunk)),
+      ),
+    ),
+    Promise.all(
+      orgIdChunks.map((chunk) =>
+        db
+          .selectDistinct({ sourceId: sourceChangelogFiles.sourceId })
+          .from(sourceChangelogFiles)
+          .innerJoin(sourcesActive, eq(sourceChangelogFiles.sourceId, sourcesActive.id))
+          .where(inArray(sourcesActive.orgId, chunk)),
+      ),
+    ),
   ]);
 
   const sourceRows = sourceRowsByChunk.flat();
   const productRows = productRowsByChunk.flat();
   const latestReleaseRows = latestReleaseRowsByChunk.flat();
+  const sourcesWithSummaries = new Set(summarySourceIdsByChunk.flat().map((r) => r.sourceId));
+  const sourcesWithChangelog = new Set(changelogSourceIdsByChunk.flat().map((r) => r.sourceId));
 
   const latestBySource = new Map<string, string>();
   for (const row of latestReleaseRows) {
@@ -113,6 +141,8 @@ sitemapRoutes.get("/sitemap", async (c) => {
             orgSlug: orgIdToSlug.get(s.orgId)!,
             slug: s.slug,
             latestDate: latestBySource.get(s.id) ?? null,
+            hasChangelog: sourcesWithChangelog.has(s.id),
+            hasHighlights: sourcesWithSummaries.has(s.id),
           },
         ],
   );

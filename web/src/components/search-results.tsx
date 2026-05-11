@@ -102,7 +102,7 @@ function chunkDeepLink(hit: SearchChunkHit): string {
   // nearest `##` heading, so this URL lands the user on the correct
   // section even if `offset` points mid-paragraph.
   const base = sourceHref(hit.orgSlug, hit.sourceSlug);
-  return `${base}?tab=changelog&offset=${hit.offset}#chunk`;
+  return `${base}/changelog?offset=${hit.offset}#chunk`;
 }
 
 function formatHeading(raw: string | null): string {

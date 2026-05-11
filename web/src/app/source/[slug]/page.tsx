@@ -27,10 +27,12 @@ export default async function LegacySourceRedirect({
   const resolved = await api.sourceLegacyResolve(slug);
   if (!resolved) notFound();
 
+  // Resolve the legacy `?tab=` shape to the new path-based tabs in one hop so
+  // bookmarks don't bounce through two redirects (#875).
+  const subpath = tab === "highlights" ? "/highlights" : tab === "changelog" ? "/changelog" : "";
   const forward = new URLSearchParams();
-  if (tab) forward.set("tab", tab);
   if (path) forward.set("path", path);
   if (offset) forward.set("offset", offset);
   const qs = forward.toString();
-  redirect(`/${resolved.orgSlug}/${resolved.sourceSlug}${qs ? `?${qs}` : ""}`);
+  redirect(`/${resolved.orgSlug}/${resolved.sourceSlug}${subpath}${qs ? `?${qs}` : ""}`);
 }

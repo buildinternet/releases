@@ -133,7 +133,23 @@ export type ErrorResponse = z.infer<typeof ErrorResponseSchema>;
 
 export interface SitemapPayload {
   orgs: Array<{ slug: string; lastActivity: string | null }>;
-  sources: Array<{ orgSlug: string; slug: string; latestDate: string | null }>;
+  sources: Array<{
+    orgSlug: string;
+    slug: string;
+    latestDate: string | null;
+    /**
+     * Whether this source has a stored GitHub CHANGELOG file. Used by the web
+     * sitemap to emit `/{org}/{src}/changelog` URLs only for sources where the
+     * route resolves (#875). Optional for backwards compatibility — older
+     * clients ignore it.
+     */
+    hasChangelog?: boolean;
+    /**
+     * Whether this source has any rolling or monthly highlight summaries.
+     * Drives `/{org}/{src}/highlights` sitemap emission (#875).
+     */
+    hasHighlights?: boolean;
+  }>;
   products: Array<{ orgSlug: string; slug: string }>;
   collections: Array<{ slug: string; updatedAt: string }>;
 }

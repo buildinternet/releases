@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { api, ApiSetupError } from "@/lib/api";
 import { graphqlRequest } from "@/lib/graphql/client";
 import { HomepageTickerDocument } from "@/lib/graphql/__generated__/graphql";
@@ -10,6 +11,10 @@ import { InstallStepsInline, InstallStepsSidebar } from "@/components/install-st
 import { ShippingNowTicker } from "@/components/shipping-now-ticker";
 
 type TickerItem = HomepageTickerQuery["latestReleases"]["items"][number];
+
+export const metadata: Metadata = {
+  alternates: { canonical: "/" },
+};
 
 export default async function HomePage() {
   let stats, orgs;

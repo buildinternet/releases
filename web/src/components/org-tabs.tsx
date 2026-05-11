@@ -1,6 +1,7 @@
 "use client";
 
-import { useSearchParams, useRouter, usePathname } from "next/navigation";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { tabButtonClass } from "@/lib/styles";
 
 function CodeBrackets() {
@@ -20,66 +21,71 @@ function CodeBrackets() {
   );
 }
 
+type OrgTab = "overview" | "releases" | "sources" | "playbook" | "fetch-log";
+
+function resolveActiveTab(pathname: string, orgSlug: string): OrgTab {
+  const base = `/${orgSlug}`;
+  if (pathname === base) return "overview";
+  if (pathname === `${base}/releases`) return "releases";
+  if (pathname === `${base}/sources`) return "sources";
+  if (pathname === `${base}/playbook`) return "playbook";
+  if (pathname === `${base}/fetch-log`) return "fetch-log";
+  return "overview";
+}
+
 export function OrgTabs({
+  orgSlug,
   hasPlaybook,
   hasFetchLog,
 }: {
+  orgSlug: string;
   hasPlaybook?: boolean;
   hasFetchLog?: boolean;
 }) {
-  const searchParams = useSearchParams();
-  const router = useRouter();
-  const pathname = usePathname();
-
-  const activeTab = searchParams.get("tab") ?? "overview";
-
-  function setTab(tab: string) {
-    const params = new URLSearchParams(searchParams.toString());
-    if (tab === "overview") {
-      params.delete("tab");
-    } else {
-      params.set("tab", tab);
-    }
-    const qs = params.toString();
-    router.push(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
-  }
+  const pathname = usePathname() ?? "";
+  const activeTab = resolveActiveTab(pathname, orgSlug);
+  const base = `/${orgSlug}`;
 
   return (
     <div className="flex gap-5 border-b border-stone-200 dark:border-stone-800 mt-5">
-      <button
-        onClick={() => setTab("overview")}
-        className={tabButtonClass(activeTab === "overview")}
-      >
+      <Link href={base} className={tabButtonClass(activeTab === "overview")} scroll={false}>
         Overview
-      </button>
-      <button
-        onClick={() => setTab("releases")}
+      </Link>
+      <Link
+        href={`${base}/releases`}
         className={tabButtonClass(activeTab === "releases")}
+        scroll={false}
       >
         Releases
-      </button>
-      <button onClick={() => setTab("sources")} className={tabButtonClass(activeTab === "sources")}>
+      </Link>
+      <Link
+        href={`${base}/sources`}
+        className={tabButtonClass(activeTab === "sources")}
+        scroll={false}
+      >
         Sources
-      </button>
+      </Link>
       {(hasFetchLog || hasPlaybook) && (
         <div className="flex gap-5 ml-auto">
           {hasFetchLog && (
-            <button
-              onClick={() => setTab("fetch-log")}
+            <Link
+              href={`${base}/fetch-log`}
               className={tabButtonClass(activeTab === "fetch-log")}
+              scroll={false}
             >
               <CodeBrackets />
               Fetch Log
-            </button>
+            </Link>
           )}
           {hasPlaybook && (
-            <button
-              onClick={() => setTab("playbook")}
+            <Link
+              href={`${base}/playbook`}
               className={tabButtonClass(activeTab === "playbook")}
+              scroll={false}
             >
               {!hasFetchLog && <CodeBrackets />}
               Playbook
-            </button>
+            </Link>
           )}
         </div>
       )}

@@ -1,58 +1,60 @@
 "use client";
 
-import { useSearchParams, useRouter, usePathname } from "next/navigation";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { tabButtonClass } from "@/lib/styles";
 
 interface SourceTabsProps {
+  orgSlug: string;
+  sourceSlug: string;
   hasHighlights: boolean;
   hasChangelog?: boolean;
 }
 
-export function SourceTabs({ hasHighlights, hasChangelog = false }: SourceTabsProps) {
-  const searchParams = useSearchParams();
-  const router = useRouter();
-  const pathname = usePathname();
+type SourceTab = "releases" | "highlights" | "changelog";
+
+function resolveActiveTab(pathname: string, base: string): SourceTab {
+  if (pathname === `${base}/highlights`) return "highlights";
+  if (pathname === `${base}/changelog`) return "changelog";
+  return "releases";
+}
+
+export function SourceTabs({
+  orgSlug,
+  sourceSlug,
+  hasHighlights,
+  hasChangelog = false,
+}: SourceTabsProps) {
+  const pathname = usePathname() ?? "";
+  const base = `/${orgSlug}/${sourceSlug}`;
+  const activeTab = resolveActiveTab(pathname, base);
 
   // TODO: revisit default tab once Highlights has a regular publishing rhythm —
-  // for now, All Releases is the default even when Highlights exists.
-  const activeTab = searchParams.get("tab") ?? "releases";
-
-  function setTab(tab: string) {
-    const params = new URLSearchParams(searchParams.toString());
-    if (tab === "releases") {
-      params.delete("tab");
-      params.delete("page");
-    } else {
-      params.set("tab", tab);
-      params.delete("page");
-    }
-    const qs = params.toString();
-    router.push(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
-  }
+  // for now, All Releases (the bare URL) is the default even when Highlights
+  // exists.
 
   return (
     <div className="flex gap-5 border-b border-stone-200 dark:border-stone-800 mt-5">
       {hasHighlights && (
-        <button
-          onClick={() => setTab("highlights")}
+        <Link
+          href={`${base}/highlights`}
           className={tabButtonClass(activeTab === "highlights")}
+          scroll={false}
         >
           Highlights
-        </button>
+        </Link>
       )}
-      <button
-        onClick={() => setTab("releases")}
-        className={tabButtonClass(activeTab === "releases")}
-      >
+      <Link href={base} className={tabButtonClass(activeTab === "releases")} scroll={false}>
         All Releases
-      </button>
+      </Link>
       {hasChangelog && (
-        <button
-          onClick={() => setTab("changelog")}
+        <Link
+          href={`${base}/changelog`}
           className={tabButtonClass(activeTab === "changelog")}
+          scroll={false}
         >
           Changelog
-        </button>
+        </Link>
       )}
     </div>
   );

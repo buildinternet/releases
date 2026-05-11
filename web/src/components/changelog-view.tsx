@@ -43,7 +43,7 @@ export async function ChangelogView({
   path?: string;
   /**
    * Byte offset into the file where the initial slice should start.
-   * Used by search deep-links (`?tab=changelog&offset=N#chunk`) to jump
+   * Used by search deep-links (`/changelog?offset=N#chunk`) to jump
    * directly to a matched chunk. The range API snaps forward to the next
    * heading, so a mid-section offset still lands the user on a clean
    * section header. Defaults to 0 (full-file start).

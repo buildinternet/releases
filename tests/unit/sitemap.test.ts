@@ -20,7 +20,13 @@ let app: Hono;
 
 type SitemapResponse = {
   orgs: { slug: string; lastActivity: string | null }[];
-  sources: { orgSlug: string; slug: string; latestDate: string | null }[];
+  sources: {
+    orgSlug: string;
+    slug: string;
+    latestDate: string | null;
+    hasChangelog?: boolean;
+    hasHighlights?: boolean;
+  }[];
   products: { orgSlug: string; slug: string }[];
   collections: { slug: string; updatedAt: string }[];
 };
@@ -140,6 +146,8 @@ describe("GET /sitemap", () => {
       orgSlug: "acme",
       slug: "acme-cli",
       latestDate: "2026-03-15T00:00:00Z",
+      hasChangelog: false,
+      hasHighlights: false,
     });
   });
 
