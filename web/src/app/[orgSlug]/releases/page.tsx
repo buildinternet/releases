@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { api, ApiSetupError, type OrgReleasesResponse } from "@/lib/api";
+import { api, ApiSetupError, ApiNotFoundError, type OrgReleasesResponse } from "@/lib/api";
 import { OrgReleaseList } from "@/components/org-release-list";
 import { JsonLd } from "@/components/json-ld";
 import { getOrg } from "../_lib/org-data";
@@ -37,15 +37,13 @@ export default async function OrgReleasesPage({
   const { orgSlug } = await params;
 
   let org;
-  let initialReleases: OrgReleasesResponse | null = null;
+  let initialReleases: OrgReleasesResponse;
   try {
-    [org, initialReleases] = await Promise.all([
-      getOrg(orgSlug),
-      api.orgReleases(orgSlug).catch(() => null),
-    ]);
+    [org, initialReleases] = await Promise.all([getOrg(orgSlug), api.orgReleases(orgSlug)]);
   } catch (err) {
     if (err instanceof ApiSetupError) throw err;
-    notFound();
+    if (err instanceof ApiNotFoundError) notFound();
+    throw err;
   }
 
   const orgUrl = `https://releases.sh/${orgSlug}`;
@@ -78,19 +76,13 @@ export default async function OrgReleasesPage({
   return (
     <>
       <JsonLd data={jsonLd} />
-      {initialReleases ? (
-        <OrgReleaseList
-          orgSlug={orgSlug}
-          initialReleases={initialReleases.releases}
-          initialCursor={initialReleases.pagination.nextCursor}
-          multipleSourcesExist={org.sources.length > 1}
-          availableSourceTypes={Array.from(new Set(org.sources.map((s) => s.type)))}
-        />
-      ) : (
-        <div className="text-center py-12 text-stone-400 dark:text-stone-500 text-sm">
-          No releases yet.
-        </div>
-      )}
+      <OrgReleaseList
+        orgSlug={orgSlug}
+        initialReleases={initialReleases.releases}
+        initialCursor={initialReleases.pagination.nextCursor}
+        multipleSourcesExist={org.sources.length > 1}
+        availableSourceTypes={Array.from(new Set(org.sources.map((s) => s.type)))}
+      />
     </>
   );
 }

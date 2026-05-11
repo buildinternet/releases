@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
-import { ApiSetupError } from "@/lib/api";
+import { ApiSetupError, ApiNotFoundError } from "@/lib/api";
 import { JsonLd } from "@/components/json-ld";
 import { SourceReleaseList } from "@/components/source-release-list";
 import { RelatedRail } from "@/components/related-rail";
@@ -93,7 +93,8 @@ export default async function SourceReleasesPage({
     source = await getSource(orgSlug, sourceSlug);
   } catch (err) {
     if (err instanceof ApiSetupError) throw err;
-    notFound();
+    if (err instanceof ApiNotFoundError) notFound();
+    throw err;
   }
 
   // Hand the client component a cursor so its "Load more" can continue from

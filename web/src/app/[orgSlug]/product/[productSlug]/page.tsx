@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { cache } from "react";
 import { notFound } from "next/navigation";
-import { api, ApiSetupError, type ProductDetail } from "@/lib/api";
+import { api, ApiSetupError, ApiNotFoundError, type ProductDetail } from "@/lib/api";
 import { Header } from "@/components/header";
 import { SetupMessage } from "@/components/setup-message";
 import { SourceCard } from "@/components/source-card";
@@ -45,10 +45,7 @@ export default async function ProductPage({
   let product: ProductDetail;
   let org;
   try {
-    [product, org] = await Promise.all([
-      getProduct(orgSlug, productSlug),
-      getOrg(orgSlug).catch(() => null),
-    ]);
+    [product, org] = await Promise.all([getProduct(orgSlug, productSlug), getOrg(orgSlug)]);
   } catch (err) {
     if (err instanceof ApiSetupError) {
       return (
@@ -58,9 +55,10 @@ export default async function ProductPage({
         </div>
       );
     }
-    notFound();
+    if (err instanceof ApiNotFoundError) notFound();
+    throw err;
   }
-  const orgName = org?.name ?? orgSlug;
+  const orgName = org.name;
 
   const sidebarSections = [
     {
