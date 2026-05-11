@@ -1,6 +1,6 @@
 {
   "name": "@buildinternet/releases-api-types",
-  "version": "0.14.0",
+  "version": "0.15.0",
   "description": "Wire protocol — request/response types for the Releases registry API. Shared by web, workers, and clients.",
   "type": "module",
   "license": "MIT",
@@ -17,7 +17,7 @@
     "README.md"
   ],
   "dependencies": {
-    "@buildinternet/releases-core": "^0.19.0",
+    "@buildinternet/releases-core": "^0.20.0",
     "zod": "^4.3.6"
   },
   "publishConfig": {

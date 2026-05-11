@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { cache } from "react";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { categoryDisplayName, isValidCategory } from "@buildinternet/releases-core/categories";
 import {
@@ -24,10 +24,20 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  if (!isValidCategory(slug)) return { title: "Category" };
-  const title = categoryDisplayName(slug);
-  const description = `Recent releases from organizations and products in the ${title} category.`;
-  const url = `/categories/${slug}`;
+  let detail: CategoryDetail | null = null;
+  try {
+    detail = await getCategory(slug);
+  } catch {
+    detail = null;
+  }
+  // Aliased URL: metadata sits on the canonical, not on the alias.
+  if (!detail || !isValidCategory(detail.slug)) return { title: "Category" };
+  const canonicalSlug = detail.slug;
+  const title = detail.name ?? categoryDisplayName(canonicalSlug);
+  const description =
+    detail.description ??
+    `Recent releases from organizations and products in the ${title} category.`;
+  const url = `/categories/${canonicalSlug}`;
   return {
     title,
     description,
@@ -52,7 +62,6 @@ export async function generateMetadata({
 
 export default async function CategoryPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  if (!isValidCategory(slug)) notFound();
 
   let detail: CategoryDetail;
   let releases: CategoryReleasesResponse;
@@ -70,7 +79,17 @@ export default async function CategoryPage({ params }: { params: Promise<{ slug:
     notFound();
   }
 
-  const title = categoryDisplayName(detail.slug);
+  // Alias redirect: the API 301s `/v1/categories/<alias>` to its canonical
+  // sibling, and fetch() follows transparently — so a mismatch between the
+  // path slug and the response slug means the user landed on an alias URL.
+  // Bounce the browser to the canonical path so URL bars and shares stay
+  // consistent.
+  if (detail.slug !== slug) {
+    redirect(`/categories/${detail.slug}`);
+  }
+  if (!isValidCategory(detail.slug)) notFound();
+
+  const title = detail.name ?? categoryDisplayName(detail.slug);
   // The collections feed expects `CollectionMemberOrg` for chip rendering;
   // category detail returns the narrower `TaxonomyOrg` (no githubHandle /
   // description). Shim missing fields to `null` — OrgAvatar falls back to
@@ -102,8 +121,12 @@ export default async function CategoryPage({ params }: { params: Promise<{ slug:
           {title}
         </h1>
         <p className="text-[15px] text-stone-500 dark:text-stone-400 mt-1">
-          Recent releases from organizations and products in the{" "}
-          <span className="font-medium">{title}</span> category.
+          {detail.description ?? (
+            <>
+              Recent releases from organizations and products in the{" "}
+              <span className="font-medium">{title}</span> category.
+            </>
+          )}
         </p>
 
         <div className="mt-7 pb-10">

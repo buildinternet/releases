@@ -5,7 +5,7 @@ Pure helpers shared by the Releases registry and the [Releases CLI](https://gith
 ## Exports
 
 - `@buildinternet/releases-core/schema` — Drizzle ORM table definitions (source of truth for the Releases D1 database).
-- `@buildinternet/releases-core/categories` — canonical category list + validation.
+- `@buildinternet/releases-core/categories` — canonical category list, validation, and alias resolution (`resolveCategorySlug`, `parseCategoryAliases`).
 - `@buildinternet/releases-core/dates` — date cutoffs and helpers.
 - `@buildinternet/releases-core/changelog-range` — pure range parsing.
 - `@buildinternet/releases-core/changelog-slice` — token-aware CHANGELOG slicing.

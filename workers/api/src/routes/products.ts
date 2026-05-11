@@ -15,7 +15,7 @@ import {
 } from "@buildinternet/releases-core/schema";
 import { toSlug } from "@buildinternet/releases-core/slug";
 import { isReservedSlug } from "@buildinternet/releases-core/reserved-slugs";
-import { isValidCategory } from "@buildinternet/releases-core/categories";
+import { resolveCategoryInput } from "../lib/category-alias.js";
 import {
   ProductListResponseSchema,
   ProductDetailSchema,
@@ -438,8 +438,15 @@ productRoutes.post(
     const [org] = await db.select().from(organizations).where(orgCond);
     if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
 
-    if (body.category && !isValidCategory(body.category)) {
-      return c.json({ error: "bad_request", message: `Invalid category: "${body.category}"` }, 400);
+    if (body.category) {
+      const resolved = await resolveCategoryInput(db, body.category);
+      if (!resolved.ok) {
+        return c.json(
+          { error: "bad_request", message: `Invalid category: "${body.category}"` },
+          400,
+        );
+      }
+      body.category = resolved.slug;
     }
 
     const slug = body.slug ?? toSlug(body.name);
@@ -509,8 +516,12 @@ const patchProductHandler = async (c: import("hono").Context<Env>) => {
   if (body.url !== undefined) updates.url = body.url;
   if (body.description !== undefined) updates.description = body.description;
 
-  if (body.category !== undefined && body.category !== null && !isValidCategory(body.category)) {
-    return c.json({ error: "bad_request", message: `Invalid category: "${body.category}"` }, 400);
+  if (body.category !== undefined && body.category !== null) {
+    const resolved = await resolveCategoryInput(db, body.category);
+    if (!resolved.ok) {
+      return c.json({ error: "bad_request", message: `Invalid category: "${body.category}"` }, 400);
+    }
+    body.category = resolved.slug;
   }
   if (body.category !== undefined) updates.category = body.category;
 
