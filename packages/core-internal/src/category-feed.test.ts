@@ -201,6 +201,49 @@ describe("getCategoryReleasesFeed", () => {
     expect(withPre.map((r) => r.id).toSorted()).toEqual(["rel_ai_1", "rel_ai_2", "rel_ai_3"]);
   });
 
+  it("falls back to org category when a product row exists but its category is NULL", async () => {
+    // Distinct from "source has no product" — here the source IS attached to a
+    // product, but that product's own category is NULL. COALESCE-style
+    // semantics: fall through to the org's category. Pins down the
+    // `p.category IS NULL` half of the OR rewrite.
+    await tdb.db.insert(organizations).values({
+      id: "org_ds2",
+      name: "Design Org 2",
+      slug: "design-org-2",
+      category: "design",
+      discovery: "curated",
+    });
+    await tdb.db.insert(products).values({
+      id: "prod_nocat",
+      name: "Uncategorized Product",
+      slug: "uncategorized",
+      orgId: "org_ds2",
+      // category intentionally omitted (NULL)
+    });
+    await tdb.db.insert(sources).values({
+      id: "src_ds2_nocat",
+      name: "Design Src 2",
+      slug: "design-src-2",
+      type: "github",
+      url: "https://github.com/example/ds2",
+      orgId: "org_ds2",
+      productId: "prod_nocat",
+      discovery: "curated",
+    });
+    await tdb.db.insert(releases).values({
+      id: "rel_ds2_1",
+      sourceId: "src_ds2_nocat",
+      title: "Design Fallback",
+      content: "",
+      type: "feature",
+      publishedAt: "2026-02-01T00:00:00Z",
+      fetchedAt: "2026-02-01T00:00:00Z",
+    });
+
+    const rows = await getCategoryReleasesFeed(asD1(tdb.db), "design", null, 50);
+    expect(rows.map((r) => r.id)).toEqual(["rel_ds2_1"]);
+  });
+
   it("paginates stably via buildFeedCursor across pages", async () => {
     await seed();
     const page1 = await getCategoryReleasesFeed(asD1(tdb.db), "ai", null, 1, {

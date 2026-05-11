@@ -11,6 +11,14 @@ export type CategoryReleaseRow = AggregateReleaseRow;
  * category overrides its parent org's, so a multi-product org can distribute
  * its sources across categories — e.g. Vercel (cloud) → Next.js (framework).
  *
+ * The predicate is expanded into `(p.category = ? OR (p.category IS NULL AND
+ * o.category = ?))` rather than `COALESCE(p.category, o.category) = ?` so each
+ * branch references a single indexed column, letting SQLite consider
+ * `idx_products_category` / `idx_organizations_category` for sparse-category
+ * lookups. `p.category IS NULL` correctly covers both "source has no product"
+ * (LEFT JOIN null-pad) and "product row exists with NULL category" — the same
+ * two cases COALESCE falls through.
+ *
  * `category` is typed as `Category` so callers must narrow via
  * `isValidCategory` (or the `CATEGORIES` literal union) before invoking. The
  * route handler does this at its entry, eliminating the need for a runtime
@@ -39,7 +47,7 @@ export async function getCategoryReleasesFeed(
     INNER JOIN sources_active s ON s.id = r.source_id
     INNER JOIN organizations_public o ON o.id = s.org_id
     LEFT JOIN products_active p ON p.id = s.product_id
-    WHERE COALESCE(p.category, o.category) = ${category}
+    WHERE (p.category = ${category} OR (p.category IS NULL AND o.category = ${category}))
       AND (r.suppressed IS NULL OR r.suppressed = 0)
       ${prereleaseWhere}
       ${cursor}
