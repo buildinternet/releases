@@ -24,7 +24,6 @@ export function ChangelogFilePicker({ files, activePath }: ChangelogFilePickerPr
     (event: React.ChangeEvent<HTMLSelectElement>) => {
       const path = event.target.value;
       const params = new URLSearchParams(searchParams.toString());
-      params.set("tab", "changelog");
       params.set("path", path);
       startTransition(() => {
         router.push(`?${params.toString()}`, { scroll: false });

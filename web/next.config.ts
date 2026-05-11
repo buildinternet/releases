@@ -48,49 +48,27 @@ const nextConfig: NextConfig = {
     return config;
   },
   async redirects() {
+    // #875: org/source tabs moved from `?tab=X` query params to path
+    // segments. Permanent redirects from the old shapes preserve any
+    // inbound link equity and keep search deep-links (`?tab=changelog&
+    // offset=N#chunk`) working — browsers re-append the original `#chunk`
+    // fragment when the Location header has none.
+    const orgTabRedirects = ["releases", "sources", "playbook", "fetch-log"].map((tab) => ({
+      source: "/:orgSlug",
+      has: [{ type: "query" as const, key: "tab", value: tab }],
+      destination: `/:orgSlug/${tab}`,
+      permanent: true,
+    }));
+    const sourceTabRedirects = ["highlights", "changelog"].map((tab) => ({
+      source: "/:orgSlug/:sourceSlug",
+      has: [{ type: "query" as const, key: "tab", value: tab }],
+      destination: `/:orgSlug/:sourceSlug/${tab}`,
+      permanent: true,
+    }));
     return [
       { source: "/mcp", destination: "/docs/api/mcp", statusCode: 302 },
-      // #875: org/source tabs moved from `?tab=X` query params to path
-      // segments. Permanent redirects from the old shapes preserve any
-      // inbound link equity and keep search deep-links (`?tab=changelog&
-      // offset=N#chunk`) working — browsers re-append the original `#chunk`
-      // fragment when the Location header has none.
-      {
-        source: "/:orgSlug",
-        has: [{ type: "query", key: "tab", value: "releases" }],
-        destination: "/:orgSlug/releases",
-        permanent: true,
-      },
-      {
-        source: "/:orgSlug",
-        has: [{ type: "query", key: "tab", value: "sources" }],
-        destination: "/:orgSlug/sources",
-        permanent: true,
-      },
-      {
-        source: "/:orgSlug",
-        has: [{ type: "query", key: "tab", value: "playbook" }],
-        destination: "/:orgSlug/playbook",
-        permanent: true,
-      },
-      {
-        source: "/:orgSlug",
-        has: [{ type: "query", key: "tab", value: "fetch-log" }],
-        destination: "/:orgSlug/fetch-log",
-        permanent: true,
-      },
-      {
-        source: "/:orgSlug/:sourceSlug",
-        has: [{ type: "query", key: "tab", value: "highlights" }],
-        destination: "/:orgSlug/:sourceSlug/highlights",
-        permanent: true,
-      },
-      {
-        source: "/:orgSlug/:sourceSlug",
-        has: [{ type: "query", key: "tab", value: "changelog" }],
-        destination: "/:orgSlug/:sourceSlug/changelog",
-        permanent: true,
-      },
+      ...orgTabRedirects,
+      ...sourceTabRedirects,
     ];
   },
   async rewrites() {

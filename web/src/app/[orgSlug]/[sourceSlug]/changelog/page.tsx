@@ -4,7 +4,7 @@ import { Suspense } from "react";
 import { ApiSetupError } from "@/lib/api";
 import { JsonLd } from "@/components/json-ld";
 import { ChangelogView, ChangelogSkeleton } from "@/components/changelog-view";
-import { getSource } from "../_lib/source-data";
+import { getSource, sourceBreadcrumbItems } from "../_lib/source-data";
 
 export async function generateMetadata({
   params,
@@ -72,24 +72,7 @@ export default async function SourceChangelogPage({
       },
       {
         "@type": "BreadcrumbList",
-        itemListElement: [
-          { "@type": "ListItem", position: 1, name: "Home", item: "https://releases.sh" },
-          ...(source.org
-            ? [
-                {
-                  "@type": "ListItem",
-                  position: 2,
-                  name: source.org.name,
-                  item: `https://releases.sh/${source.org.slug}`,
-                },
-                { "@type": "ListItem", position: 3, name: source.name, item: sourceUrl },
-                { "@type": "ListItem", position: 4, name: "Changelog", item: pageUrl },
-              ]
-            : [
-                { "@type": "ListItem", position: 2, name: source.name, item: sourceUrl },
-                { "@type": "ListItem", position: 3, name: "Changelog", item: pageUrl },
-              ]),
-        ],
+        itemListElement: sourceBreadcrumbItems(source, sourceUrl, "Changelog", pageUrl),
       },
     ],
   };
