@@ -19,6 +19,7 @@ import type {
   ReleaseCoverageRow,
   ReleaseCoverageResponse,
   CategoryDetail,
+  CategoryListItem,
   CategoryReleaseItem,
   CategoryReleasesResponse,
   TagDetail,
@@ -69,6 +70,7 @@ export type {
   ReleaseCoverageRow,
   ReleaseCoverageResponse,
   CategoryDetail,
+  CategoryListItem,
   CategoryReleaseItem,
   CategoryReleasesResponse,
   TagDetail,
@@ -312,6 +314,7 @@ export const api = {
     ),
   productDetail: (ref: { orgSlug: string; productSlug: string }) =>
     fetchApi<ProductDetail>(`/v1/orgs/${ref.orgSlug}/products/${ref.productSlug}`),
+  categories: () => fetchApi<CategoryListItem[]>("/v1/categories"),
   categoryDetail: (slug: string) => fetchApi<CategoryDetail>(`/v1/categories/${slug}`),
   categoryReleases: (
     slug: string,
