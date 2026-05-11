@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { api, ApiSetupError, type CategoryListItem } from "@/lib/api";
 import { Header } from "@/components/header";
+import { PageHeader } from "@/components/page-header";
 import { SetupMessage } from "@/components/setup-message";
 
 const TITLE = "Categories";
@@ -43,17 +44,11 @@ export default async function CategoriesListPage() {
     <div className="min-h-screen">
       <Header />
       <div className="max-w-3xl mx-auto px-6 pt-8 pb-12">
-        <div className="text-[13px] text-stone-400 dark:text-stone-500 mb-4">
-          <Link href="/" className="hover:text-stone-600 dark:hover:text-stone-300">
-            Home
-          </Link>
-          <span className="mx-1.5">/</span>
-          <span className="text-stone-600 dark:text-stone-300 font-medium">Categories</span>
-        </div>
-        <h1 className="text-xl font-bold tracking-tight text-stone-900 dark:text-stone-100 mb-2">
-          {TITLE}
-        </h1>
-        <p className="text-sm text-stone-600 dark:text-stone-400 mb-8">{DESCRIPTION}</p>
+        <PageHeader
+          breadcrumb={[{ label: "Home", href: "/" }, { label: TITLE }]}
+          title={TITLE}
+          description={DESCRIPTION}
+        />
 
         <ul className="divide-y divide-stone-200 dark:divide-stone-800">
           {categories.map((c) => (
