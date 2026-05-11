@@ -18,7 +18,7 @@ export async function generateMetadata({
     const lastModified = org.lastFetchedAt ?? org.lastPolledAt ?? undefined;
     return {
       title: org.name,
-      description: `${org.name} changelog releases on Releases`,
+      description: `Release activity, summary, and tracked sources for ${org.name}.`,
       openGraph: {
         type: "website",
         url: `/${orgSlug}`,

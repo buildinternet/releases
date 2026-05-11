@@ -16,8 +16,8 @@ export async function generateMetadata({
     const source = await getSource(orgSlug, sourceSlug);
     const orgName = source.org?.name ?? orgSlug;
     return {
-      title: `${source.name} CHANGELOG — ${orgName}`,
-      description: `Browse the CHANGELOG.md file for ${source.name} by ${orgName}, version by version.`,
+      title: `${source.name} Changelog File — ${orgName}`,
+      description: `Read the CHANGELOG.md file from the ${source.name} repository by ${orgName}.`,
       openGraph: { type: "website", url: `/${orgSlug}/${sourceSlug}/changelog` },
       alternates: { canonical: `/${orgSlug}/${sourceSlug}/changelog` },
     };

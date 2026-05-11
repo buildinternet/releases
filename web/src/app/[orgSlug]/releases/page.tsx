@@ -15,7 +15,7 @@ export async function generateMetadata({
     const org = await getOrg(orgSlug);
     return {
       title: `${org.name} Releases & Changelog`,
-      description: `Complete release feed and changelog for ${org.name} — every version, every product, in one place.`,
+      description: `Complete release feed and changelog for ${org.name} — every version, every product, every source.`,
       openGraph: { type: "website", url: `/${orgSlug}/releases` },
       alternates: {
         canonical: `/${orgSlug}/releases`,
