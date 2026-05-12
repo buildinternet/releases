@@ -3,7 +3,11 @@ import Script from "next/script";
 import { getLoadedDoc } from "@/lib/docs-manifest";
 
 const SLUG = "api/rest";
-const OPENAPI_URL = "https://api.releases.sh/v1/openapi.json";
+// `NEXT_PUBLIC_OPENAPI_URL` lets a developer iterating on spec annotations in
+// `workers/api/` point Scalar at a local or staging spec instead of the prod
+// host. Baked in at build time. Falls back to prod.
+const OPENAPI_URL =
+  process.env.NEXT_PUBLIC_OPENAPI_URL ?? "https://api.releases.sh/v1/openapi.json";
 const SCALAR_CONFIG = JSON.stringify({ theme: "default", hideClientButton: true });
 
 export function generateMetadata(): Metadata {
