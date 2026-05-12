@@ -75,15 +75,6 @@ const ALLOWLIST = new Set<string>([
   "POST /orgs/:orgSlug/sources/:sourceSlug/releases/batch",
   "PATCH /orgs/:orgSlug/sources/:sourceSlug/changelog/tokens",
   "PATCH /orgs/:orgSlug/sources/:sourceSlug/metadata",
-
-  // ── workers/api/src/routes/releases.ts: sub-routes #896 left
-  // undocumented. ──
-  "GET /releases/:id",
-  "PATCH /releases/:id",
-  "DELETE /releases/:id",
-  "GET /releases/stream",
-  "POST /releases/:id/suppress",
-  "POST /releases/:id/unsuppress",
 ]);
 
 const HTTP_METHODS = new Set(["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"]);
