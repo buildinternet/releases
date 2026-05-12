@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { describeRoute, resolver } from "hono-openapi";
+import { hideInProduction } from "../openapi.js";
 import { eq, and, sql } from "drizzle-orm";
 import { createDb } from "../db.js";
 import {
@@ -99,6 +100,7 @@ app.get(
 app.post(
   "/orgs/:slug/overview",
   describeRoute({
+    hide: hideInProduction,
     tags: ["Overviews"],
     summary: "Upsert org overview",
     description:

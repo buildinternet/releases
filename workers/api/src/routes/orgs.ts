@@ -400,6 +400,7 @@ orgRoutes.get(
 orgRoutes.post(
   "/orgs",
   describeRoute({
+    hide: hideInProduction,
     tags: ["Orgs"],
     summary: "Create organization",
     description:
@@ -495,6 +496,7 @@ orgRoutes.post(
 orgRoutes.patch(
   "/orgs/:slug",
   describeRoute({
+    hide: hideInProduction,
     tags: ["Orgs"],
     summary: "Update organization",
     description:
@@ -613,6 +615,7 @@ orgRoutes.patch(
 orgRoutes.delete(
   "/orgs/:slug",
   describeRoute({
+    hide: hideInProduction,
     tags: ["Orgs"],
     summary: "Delete organization",
     description:
@@ -714,6 +717,7 @@ const CATALOG_KINDS = new Set(["source", "product"]);
 orgRoutes.get(
   "/orgs/:slug/catalog",
   describeRoute({
+    hide: hideInProduction,
     tags: ["Orgs"],
     summary: "Org catalog (sources + products)",
     description:
@@ -952,6 +956,7 @@ orgRoutes.get(
 orgRoutes.delete(
   "/orgs/:slug/accounts/:platform/:handle",
   describeRoute({
+    hide: hideInProduction,
     tags: ["Orgs"],
     summary: "Delete org account",
     description:
@@ -1066,6 +1071,7 @@ orgRoutes.get(
 orgRoutes.put(
   "/orgs/:slug/tags",
   describeRoute({
+    hide: hideInProduction,
     tags: ["Orgs"],
     summary: "Add tags to org",
     description:
@@ -1109,6 +1115,7 @@ orgRoutes.put(
 orgRoutes.delete(
   "/orgs/:slug/tags",
   describeRoute({
+    hide: hideInProduction,
     tags: ["Orgs"],
     summary: "Remove tags from org",
     description:
@@ -1153,6 +1160,7 @@ orgRoutes.delete(
 orgRoutes.post(
   "/tags",
   describeRoute({
+    hide: hideInProduction,
     tags: ["Orgs"],
     summary: "Get or create a global tag",
     description:
@@ -1808,6 +1816,7 @@ orgRoutes.get(
 orgRoutes.post(
   "/orgs/:slug/accounts",
   describeRoute({
+    hide: hideInProduction,
     tags: ["Orgs"],
     summary: "Add a platform account to an org",
     description:

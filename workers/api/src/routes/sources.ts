@@ -523,6 +523,7 @@ sourceRoutes.get("/sources/changes", getChangedSourcesRoute, async (c) => {
 // ── Trigger fetch for a single source ──
 
 const postSourceFetchRoute = describeRoute({
+  hide: hideInProduction,
   tags: ["Sources"],
   summary: "Trigger a source fetch",
   description:
@@ -836,6 +837,7 @@ const postReleasesBatchHandler = async (c: import("hono").Context<Env>) => {
   }
 };
 const postReleasesBatchRoute = describeRoute({
+  hide: hideInProduction,
   tags: ["Sources"],
   summary: "Batch insert releases",
   description:
@@ -870,6 +872,7 @@ sourceRoutes.post(
 // ── Delete all releases for a source (for --force re-fetch) ──
 
 const deleteSourceReleasesRoute = describeRoute({
+  hide: hideInProduction,
   tags: ["Sources"],
   summary: "Delete all releases for a source",
   description:
@@ -959,6 +962,7 @@ const postContentHashHandler = async (c: import("hono").Context<Env>) => {
   return c.json({ unchanged: false });
 };
 const postContentHashRoute = describeRoute({
+  hide: hideInProduction,
   tags: ["Sources"],
   summary: "Check or update content hash",
   description:
@@ -1063,6 +1067,7 @@ const patchMetadataHandler = async (c: import("hono").Context<Env>) => {
   return c.json({ metadata: merged });
 };
 const patchMetadataRoute = describeRoute({
+  hide: hideInProduction,
   tags: ["Sources"],
   summary: "Merge source metadata",
   description:
@@ -1568,6 +1573,7 @@ const patchChangelogTokensHandler = async (c: import("hono").Context<Env>) => {
   return c.json({ path: selected.path, oldTokens, tokens: newTokens });
 };
 const patchChangelogTokensRoute = describeRoute({
+  hide: hideInProduction,
   tags: ["Sources"],
   summary: "Write exact token count for a changelog file",
   description:
@@ -1719,6 +1725,7 @@ async function classifyRepoStatus(
   };
 }
 const probeChangelogsRoute = describeRoute({
+  hide: hideInProduction,
   tags: ["Sources"],
   summary: "Probe changelog paths for a GitHub source",
   description:
@@ -2070,6 +2077,7 @@ sourceRoutes.get(
 sourceRoutes.post(
   "/sources",
   describeRoute({
+    hide: hideInProduction,
     tags: ["Sources"],
     summary: "Create source",
     description:
@@ -2398,6 +2406,7 @@ const patchSourceHandler = async (c: import("hono").Context<Env>) => {
   return c.json(enriched);
 };
 const patchSourceRoute = describeRoute({
+  hide: hideInProduction,
   tags: ["Sources"],
   summary: "Update source",
   description:
@@ -2426,6 +2435,7 @@ sourceRoutes.patch("/sources/:slug", patchSourceRoute, patchSourceHandler);
 sourceRoutes.patch("/orgs/:orgSlug/sources/:sourceSlug", patchSourceRoute, patchSourceHandler);
 
 const deleteSourceRoute = describeRoute({
+  hide: hideInProduction,
   tags: ["Sources"],
   summary: "Delete a source",
   description:
@@ -2479,6 +2489,7 @@ sourceRoutes.delete("/sources/:slug", deleteSourceRoute, async (c) => {
 
 // Bulk release insert for data seeding
 const postReleaseRoute = describeRoute({
+  hide: hideInProduction,
   tags: ["Sources"],
   summary: "Insert a single release",
   description:
@@ -2649,6 +2660,7 @@ sourceRoutes.get(
 sourceRoutes.delete(
   "/releases/:id",
   describeRoute({
+    hide: hideInProduction,
     tags: ["Releases"],
     summary: "Delete a release",
     description:
@@ -2683,6 +2695,7 @@ sourceRoutes.delete(
 sourceRoutes.patch(
   "/releases/:id",
   describeRoute({
+    hide: hideInProduction,
     tags: ["Releases"],
     summary: "Update a release",
     description:
@@ -2775,6 +2788,7 @@ sourceRoutes.patch(
 sourceRoutes.post(
   "/releases/:id/suppress",
   describeRoute({
+    hide: hideInProduction,
     tags: ["Releases"],
     summary: "Suppress a release",
     description:
@@ -2811,6 +2825,7 @@ sourceRoutes.post(
 sourceRoutes.post(
   "/releases/:id/unsuppress",
   describeRoute({
+    hide: hideInProduction,
     tags: ["Releases"],
     summary: "Unsuppress a release",
     description:

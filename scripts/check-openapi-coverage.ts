@@ -49,6 +49,68 @@ const ALLOWLIST = new Set<string>([
   "GET /orgs/:orgSlug/sources/:sourceSlug/activity",
   "GET /orgs/:orgSlug/sources/:sourceSlug/heatmap",
   "GET /orgs/:orgSlug/sources/:sourceSlug/changelog",
+  // Admin/internal GET routes hidden from production spec (Phase 2 extension):
+  "GET /orgs/:slug/catalog", // web-frontend aggregation payload, not shaped for general API consumers
+  "GET /orgs/:slug/ignored-urls", // operator-facing ignore-list management
+  "GET /releases", // internal media-backfill CLI helper (?hasMedia=true only)
+  "GET /orgs/:slug/playbook", // editorial-internal; admin Bearer required even for GET
+  "GET /sources/:slug/summaries", // AI-generated content storage; agent-pipeline internal
+  "GET /orgs/:slug/overview/inputs", // AI-pipeline input; admin-only orchestration endpoint
+  "GET /releases/stream", // experimental WebSocket; not a stable REST surface
+  // Write mutations hidden from production spec (same hideInProduction pattern).
+  // These are registered under publicReadRoutes prefixes (auth is handled by
+  // publicReadAuthMiddleware's SAFE_METHODS check) so the gate sees them as
+  // registered routes even though they require Bearer auth at runtime.
+  "POST /orgs",
+  "PATCH /orgs/:slug",
+  "DELETE /orgs/:slug",
+  "DELETE /orgs/:slug/accounts/:platform/:handle",
+  "POST /orgs/:slug/accounts",
+  "PUT /orgs/:slug/tags",
+  "DELETE /orgs/:slug/tags",
+  "POST /tags",
+  "POST /orgs/:slug/ignored-urls",
+  "DELETE /orgs/:slug/ignored-urls/:url",
+  "POST /orgs/:slug/overview",
+  "POST /sources",
+  "PATCH /sources/:slug",
+  "PATCH /orgs/:orgSlug/sources/:sourceSlug",
+  "DELETE /sources/:slug",
+  "POST /sources/:slug/fetch",
+  "POST /sources/:slug/releases/batch",
+  "POST /orgs/:orgSlug/sources/:sourceSlug/releases/batch",
+  "DELETE /sources/:slug/releases",
+  "POST /sources/:slug/content-hash",
+  "POST /orgs/:orgSlug/sources/:sourceSlug/content-hash",
+  "PATCH /sources/:slug/metadata",
+  "PATCH /orgs/:orgSlug/sources/:sourceSlug/metadata",
+  "PATCH /sources/:slug/changelog/tokens",
+  "PATCH /orgs/:orgSlug/sources/:sourceSlug/changelog/tokens",
+  "POST /sources/:slug/changelog/probe",
+  "POST /orgs/:orgSlug/sources/:sourceSlug/changelog/probe",
+  "POST /sources/:slug/releases",
+  "POST /sources/:slug/summaries",
+  "PATCH /orgs/:slug/playbook/notes",
+  "POST /releases/:id/coverage",
+  "DELETE /releases/:id/coverage",
+  "DELETE /releases/:id",
+  "PATCH /releases/:id",
+  "POST /releases/:id/suppress",
+  "POST /releases/:id/unsuppress",
+  "POST /products",
+  "POST /products/adopt",
+  "PATCH /products/:slug",
+  "PATCH /orgs/:orgSlug/products/:productSlug",
+  "DELETE /products/:identifier",
+  "PUT /products/:identifier/tags",
+  "DELETE /products/:identifier/tags",
+  "PATCH /categories/:slug",
+  "POST /collections",
+  "PATCH /collections/:slug",
+  "DELETE /collections/:slug",
+  "PUT /collections/:slug/members",
+  "POST /collections/:slug/members",
+  "DELETE /collections/:slug/members/:org",
 ]);
 
 const HTTP_METHODS = new Set(["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"]);

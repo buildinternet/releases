@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { describeRoute, resolver } from "hono-openapi";
+import { hideInProduction } from "../openapi.js";
 import { eq, count, isNotNull, inArray } from "drizzle-orm";
 import { createDb } from "../db.js";
 import {
@@ -253,6 +254,7 @@ taxonomyRoutes.get(
 taxonomyRoutes.patch(
   "/categories/:slug",
   describeRoute({
+    hide: hideInProduction,
     tags: ["Taxonomy"],
     summary: "Update the category metadata overlay",
     description:
