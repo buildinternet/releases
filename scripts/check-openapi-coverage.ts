@@ -181,11 +181,11 @@ if (holes.length > 0) {
   console.error("file, or add an explicit ALLOWLIST entry in");
   console.error("scripts/check-openapi-coverage.ts with a rationale comment.");
   console.error("");
-  for (const h of holes.toSorted()) console.error(`  - ${h}`);
+  for (const h of [...holes].sort()) console.error(`  - ${h}`);
   if (staleAllowlist.length > 0) {
     console.error("");
     console.error("(Also: ALLOWLIST has stale entries that match no registered route.)");
-    for (const s of staleAllowlist.toSorted()) console.error(`  - ${s}`);
+    for (const s of [...staleAllowlist].sort()) console.error(`  - ${s}`);
   }
   process.exit(1);
 }
@@ -198,5 +198,5 @@ if (staleAllowlist.length > 0) {
   console.warn("");
   console.warn(`Warning: ${staleAllowlist.length} stale ALLOWLIST entries (no matching route).`);
   console.warn("Clean these up in scripts/check-openapi-coverage.ts:");
-  for (const s of staleAllowlist.toSorted()) console.warn(`  - ${s}`);
+  for (const s of [...staleAllowlist].sort()) console.warn(`  - ${s}`);
 }
