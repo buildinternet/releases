@@ -1,9 +1,22 @@
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { describeRoute, resolver } from "hono-openapi";
 import {
   OrgListResponseSchema,
   OrgDetailSchema,
   ErrorResponseSchema,
+  OrgAccountsResponseSchema,
+  OrgAccountItemSchema,
+  OrgTagsResponseSchema,
+  OrgTagsMutationResponseSchema,
+  OrgCatalogResponseSchema,
+  OrgCollectionsResponseSchema,
+  OrgActivityResponseSchema,
+  OrgHeatmapResponseSchema,
+  OrgSparklinesResponseSchema,
+  OrgReleasesFeedResponseSchema,
+  OrgRecentReleasesResponseSchema,
+  TagRowSchema,
+  DeleteOrgAccountResponseSchema,
   type CollectionListItem,
 } from "@buildinternet/releases-api-types";
 import { eq, count, max, min, and, sql, inArray, gte, desc } from "drizzle-orm";
@@ -64,6 +77,38 @@ import { embedAndUpsertEntities, type EntityKind } from "@releases/search/embed-
 import { buildEmbedConfig } from "../lib/embed-config.js";
 import { logEvent } from "@releases/lib/log-event";
 import { buildListResponse, parseListPagination } from "../lib/pagination.js";
+
+// Shared body validation for PUT/DELETE /orgs/:slug/tags. Catches JSON parse
+// failures (which would 500 through the global onError) and validates that
+// `tags` is an array of strings.
+async function parseOrgTagsBody(
+  c: Context<Env>,
+): Promise<{ ok: true; tags: string[] } | { ok: false; response: Response }> {
+  let body: unknown;
+  try {
+    body = await c.req.json();
+  } catch {
+    return {
+      ok: false,
+      response: c.json({ error: "bad_request", message: "Invalid JSON body" }, 400),
+    };
+  }
+  if (
+    typeof body !== "object" ||
+    body === null ||
+    !Array.isArray((body as { tags?: unknown }).tags) ||
+    !(body as { tags: unknown[] }).tags.every((t) => typeof t === "string")
+  ) {
+    return {
+      ok: false,
+      response: c.json(
+        { error: "bad_request", message: "`tags` must be an array of strings" },
+        400,
+      ),
+    };
+  }
+  return { ok: true, tags: (body as { tags: string[] }).tags };
+}
 
 export const orgRoutes = new Hono<Env>();
 
@@ -692,620 +737,987 @@ orgRoutes.delete(
 // rollups when #693 ships them. `?kind=source|product` narrows the response;
 // `?limit=N` is per-kind (capped [1, 500]); unknown `kind` returns 400.
 const CATALOG_KINDS = new Set(["source", "product"]);
-orgRoutes.get("/orgs/:slug/catalog", async (c) => {
-  const db = createDb(c.env.DB);
-  const slug = c.req.param("slug");
-  const kindParam = c.req.query("kind");
-  if (kindParam !== undefined && !CATALOG_KINDS.has(kindParam)) {
-    return c.json(
-      { error: "bad_request", message: `Unknown kind '${kindParam}'. Expected source or product.` },
-      400,
-    );
-  }
-  const limitRaw = parseInt(c.req.query("limit") ?? "100", 10);
-  const limit = Math.min(Math.max(Number.isFinite(limitRaw) ? limitRaw : 100, 1), 500);
+orgRoutes.get(
+  "/orgs/:slug/catalog",
+  describeRoute({
+    tags: ["Orgs"],
+    summary: "Org catalog (sources + products)",
+    description:
+      "Returns the org's sources and products as a unified list keyed by `kind`. Accepts optional `?kind=source|product` to filter to one kind; `?limit=N` caps results per kind (capped [1, 500]). Intended for org-detail UI sidebar — avoids a round-trip to `/v1/sources` + `/v1/products`.",
+    parameters: [
+      {
+        name: "kind",
+        in: "query",
+        required: false,
+        schema: { type: "string", enum: ["source", "product"] },
+        description: "Narrow results to one kind. Omit to return both.",
+      },
+      {
+        name: "limit",
+        in: "query",
+        required: false,
+        schema: { type: "integer", minimum: 1, maximum: 500, default: 100 },
+        description: "Max results per kind. Defaults to 100.",
+      },
+    ],
+    responses: {
+      200: {
+        description: "Org catalog",
+        content: { "application/json": { schema: resolver(OrgCatalogResponseSchema) } },
+      },
+      400: {
+        description: "Unknown kind value",
+        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      },
+      404: {
+        description: "Organization not found",
+        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      },
+    },
+  }),
+  async (c) => {
+    const db = createDb(c.env.DB);
+    const slug = c.req.param("slug");
+    const kindParam = c.req.query("kind");
+    if (kindParam !== undefined && !CATALOG_KINDS.has(kindParam)) {
+      return c.json(
+        {
+          error: "bad_request",
+          message: `Unknown kind '${kindParam}'. Expected source or product.`,
+        },
+        400,
+      );
+    }
+    const limitRaw = parseInt(c.req.query("limit") ?? "100", 10);
+    const limit = Math.min(Math.max(Number.isFinite(limitRaw) ? limitRaw : 100, 1), 500);
 
-  const [org] = await db.select().from(organizations).where(orgWhere(slug));
-  if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
+    const [org] = await db.select().from(organizations).where(orgWhere(slug));
+    if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
 
-  const wantSources = !kindParam || kindParam === "source";
-  const wantProducts = !kindParam || kindParam === "product";
+    const wantSources = !kindParam || kindParam === "source";
+    const wantProducts = !kindParam || kindParam === "product";
 
-  const [productRows, sourceRows] = await Promise.all([
-    wantProducts
-      ? db
-          .select({
-            id: productsActive.id,
-            slug: productsActive.slug,
-            name: productsActive.name,
-            url: productsActive.url,
-            description: productsActive.description,
-            category: productsActive.category,
-          })
-          .from(productsActive)
-          .where(eq(productsActive.orgId, org.id))
-          .orderBy(productsActive.name)
-          .limit(limit)
-      : Promise.resolve([]),
-    wantSources
-      ? db
-          .select({
-            id: sourcesVisible.id,
-            slug: sourcesVisible.slug,
-            name: sourcesVisible.name,
-            type: sourcesVisible.type,
-            url: sourcesVisible.url,
-            productId: sourcesVisible.productId,
-          })
-          .from(sourcesVisible)
-          .where(eq(sourcesVisible.orgId, org.id))
-          .orderBy(sourcesVisible.name)
-          .limit(limit)
-      : Promise.resolve([]),
-  ]);
+    const [productRows, sourceRows] = await Promise.all([
+      wantProducts
+        ? db
+            .select({
+              id: productsActive.id,
+              slug: productsActive.slug,
+              name: productsActive.name,
+              url: productsActive.url,
+              description: productsActive.description,
+              category: productsActive.category,
+            })
+            .from(productsActive)
+            .where(eq(productsActive.orgId, org.id))
+            .orderBy(productsActive.name)
+            .limit(limit)
+        : Promise.resolve([]),
+      wantSources
+        ? db
+            .select({
+              id: sourcesVisible.id,
+              slug: sourcesVisible.slug,
+              name: sourcesVisible.name,
+              type: sourcesVisible.type,
+              url: sourcesVisible.url,
+              productId: sourcesVisible.productId,
+            })
+            .from(sourcesVisible)
+            .where(eq(sourcesVisible.orgId, org.id))
+            .orderBy(sourcesVisible.name)
+            .limit(limit)
+        : Promise.resolve([]),
+    ]);
 
-  const items = [
-    ...productRows.map((p) => ({
-      kind: "product" as const,
-      id: p.id,
-      slug: p.slug,
-      name: p.name,
-      url: p.url,
-      description: p.description,
-      category: p.category,
-    })),
-    ...sourceRows.map((s) => ({
-      kind: "source" as const,
-      id: s.id,
-      slug: s.slug,
-      name: s.name,
-      type: s.type,
-      url: s.url,
-      productId: s.productId,
-    })),
-  ];
+    const items = [
+      ...productRows.map((p) => ({
+        kind: "product" as const,
+        id: p.id,
+        slug: p.slug,
+        name: p.name,
+        url: p.url,
+        description: p.description,
+        category: p.category,
+      })),
+      ...sourceRows.map((s) => ({
+        kind: "source" as const,
+        id: s.id,
+        slug: s.slug,
+        name: s.name,
+        type: s.type,
+        url: s.url,
+        productId: s.productId,
+      })),
+    ];
 
-  return c.json({
-    org: { id: org.id, slug: org.slug, name: org.name },
-    items,
-  });
-});
+    return c.json({
+      org: { id: org.id, slug: org.slug, name: org.name },
+      items,
+    });
+  },
+);
 
 // Collections this org is a member of, ordered by collection name.
-orgRoutes.get("/orgs/:slug/collections", async (c) => {
-  const db = createDb(c.env.DB);
-  const slug = c.req.param("slug");
+orgRoutes.get(
+  "/orgs/:slug/collections",
+  describeRoute({
+    tags: ["Orgs"],
+    summary: "Collections this org belongs to",
+    description:
+      "Returns the curated collections that include this organization, ordered alphabetically by collection name. Each item includes `memberCount` (visible public orgs only). Use `GET /v1/collections/:slug` for the full collection detail.",
+    responses: {
+      200: {
+        description: "Collection membership list",
+        content: { "application/json": { schema: resolver(OrgCollectionsResponseSchema) } },
+      },
+      404: {
+        description: "Organization not found",
+        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      },
+    },
+  }),
+  async (c) => {
+    const db = createDb(c.env.DB);
+    const slug = c.req.param("slug");
 
-  const [org] = await db.select({ id: organizations.id }).from(organizations).where(orgWhere(slug));
-  if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
+    const [org] = await db
+      .select({ id: organizations.id })
+      .from(organizations)
+      .where(orgWhere(slug));
+    if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
 
-  const rows = await db
-    .select({
-      slug: collections.slug,
-      name: collections.name,
-      description: collections.description,
-      // Count visible members only — joining through organizations_public
-      // matches /v1/collections so the count and the rendered list agree.
-      memberCount: sql<number>`(
+    const rows = await db
+      .select({
+        slug: collections.slug,
+        name: collections.name,
+        description: collections.description,
+        // Count visible members only — joining through organizations_public
+        // matches /v1/collections so the count and the rendered list agree.
+        memberCount: sql<number>`(
         SELECT COUNT(*) FROM ${collectionMembers} cm
         INNER JOIN organizations_public op ON op.id = cm.org_id
         WHERE cm.collection_id = ${collections.id}
       )`,
-    })
-    .from(collections)
-    .innerJoin(collectionMembers, eq(collectionMembers.collectionId, collections.id))
-    .where(eq(collectionMembers.orgId, org.id))
-    .orderBy(collections.name);
-
-  const body: CollectionListItem[] = rows.map((r) => ({
-    slug: r.slug,
-    name: r.name,
-    description: r.description,
-    memberCount: Number(r.memberCount),
-  }));
-  return c.json(body);
-});
-
-orgRoutes.get("/orgs/:slug/accounts", async (c) => {
-  const db = createDb(c.env.DB);
-  const slug = c.req.param("slug");
-  const platform = c.req.query("platform");
-
-  const [org] = await db.select().from(organizations).where(orgWhere(slug));
-  if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
-
-  if (platform) {
-    const [account] = await db
-      .select()
-      .from(orgAccounts)
-      .where(and(eq(orgAccounts.orgId, org.id), eq(orgAccounts.platform, platform)));
-    return c.json(account ?? null);
-  }
-
-  const pagination = parseListPagination(new URL(c.req.url).searchParams);
-  const [accounts, totalRow] = await Promise.all([
-    db
-      .select()
-      .from(orgAccounts)
-      .where(eq(orgAccounts.orgId, org.id))
-      .orderBy(orgAccounts.platform, orgAccounts.handle)
-      .limit(pagination.pageSize)
-      .offset(pagination.offset),
-    db.select({ n: count() }).from(orgAccounts).where(eq(orgAccounts.orgId, org.id)),
-  ]);
-  return c.json(buildListResponse(accounts, pagination, Number(totalRow[0]?.n ?? 0)));
-});
-
-orgRoutes.delete("/orgs/:slug/accounts/:platform/:handle", async (c) => {
-  const db = createDb(c.env.DB);
-  const slug = c.req.param("slug");
-  const platform = c.req.param("platform");
-  const handle = decodeURIComponent(c.req.param("handle"));
-
-  const [org] = await db.select().from(organizations).where(orgWhere(slug));
-  if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
-
-  const deleted = await db
-    .delete(orgAccounts)
-    .where(
-      and(
-        eq(orgAccounts.orgId, org.id),
-        eq(orgAccounts.platform, platform),
-        eq(orgAccounts.handle, handle),
-      ),
-    )
-    .returning();
-
-  if (deleted.length === 0) {
-    return c.json({ error: "not_found", message: "Account not found" }, 404);
-  }
-
-  await db
-    .update(organizations)
-    .set({ updatedAt: new Date().toISOString() })
-    .where(eq(organizations.id, org.id));
-
-  return c.json({ deleted: true });
-});
-
-orgRoutes.get("/orgs/:slug/tags", async (c) => {
-  const db = createDb(c.env.DB);
-  const slug = c.req.param("slug");
-  const [org] = await db.select().from(organizations).where(orgWhere(slug));
-  if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
-
-  const pagination = parseListPagination(new URL(c.req.url).searchParams);
-  const [rows, totalRow] = await Promise.all([
-    db
-      .select({ name: tags.name })
-      .from(orgTags)
-      .innerJoin(tags, eq(orgTags.tagId, tags.id))
-      .where(eq(orgTags.orgId, org.id))
-      .orderBy(tags.name)
-      .limit(pagination.pageSize)
-      .offset(pagination.offset),
-    db
-      .select({ n: count() })
-      .from(orgTags)
-      .innerJoin(tags, eq(orgTags.tagId, tags.id))
-      .where(eq(orgTags.orgId, org.id)),
-  ]);
-  return c.json(
-    buildListResponse(
-      rows.map((r) => r.name),
-      pagination,
-      Number(totalRow[0]?.n ?? 0),
-    ),
-  );
-});
-
-orgRoutes.put("/orgs/:slug/tags", async (c) => {
-  const db = createDb(c.env.DB);
-  const slug = c.req.param("slug");
-  const body = await c.req.json<{ tags: string[] }>();
-  const [org] = await db.select().from(organizations).where(orgWhere(slug));
-  if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
-
-  if (body.tags.length > 0) {
-    const tagRows = await getOrCreateTagsD1(db, body.tags);
-    const now = new Date().toISOString();
-    await db
-      .insert(orgTags)
-      .values(tagRows.map((t) => ({ orgId: org.id, tagId: t.id, createdAt: now })))
-      .onConflictDoNothing();
-  }
-  return c.json({ ok: true });
-});
-
-orgRoutes.delete("/orgs/:slug/tags", async (c) => {
-  const db = createDb(c.env.DB);
-  const slug = c.req.param("slug");
-  const body = await c.req.json<{ tags: string[] }>();
-  const [org] = await db.select().from(organizations).where(orgWhere(slug));
-  if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
-
-  for (const tagName of body.tags) {
-    const tagSlug = toSlug(tagName);
-    // oxlint-disable-next-line no-await-in-loop -- sequential: tag lookup result feeds the delete
-    const [tag] = await db.select().from(tags).where(eq(tags.slug, tagSlug));
-    if (tag) {
-      // oxlint-disable-next-line no-await-in-loop -- sequential per-tag delete; ordering matters for partial success
-      await db.delete(orgTags).where(and(eq(orgTags.orgId, org.id), eq(orgTags.tagId, tag.id)));
-    }
-  }
-  return c.json({ ok: true });
-});
-
-orgRoutes.post("/tags", async (c) => {
-  const db = createDb(c.env.DB);
-  const body = await c.req.json<{ name: string }>();
-  if (!body.name)
-    return c.json({ error: "bad_request", message: "Missing required field: name" }, 400);
-
-  const tagSlug = toSlug(body.name);
-  const [existing] = await db.select().from(tags).where(eq(tags.slug, tagSlug));
-  if (existing) return c.json(existing);
-
-  const [created] = await db
-    .insert(tags)
-    .values({ name: body.name, slug: tagSlug, createdAt: new Date().toISOString() })
-    .returning();
-  return c.json(created, 201);
-});
-
-// Weekly release activity for timeline visualization
-orgRoutes.get("/orgs/:slug/activity", async (c) => {
-  const db = createDb(c.env.DB);
-  const slug = c.req.param("slug");
-
-  const [org] = await db.select().from(organizations).where(orgWhere(slug));
-  if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
-
-  // Validate date params
-  const dateRe = /^\d{4}-\d{2}-\d{2}$/;
-  const fromParam = c.req.query("from");
-  const toParam = c.req.query("to");
-
-  if (fromParam && !dateRe.test(fromParam)) {
-    return c.json(
-      { error: "bad_request", message: "Invalid date format for 'from'. Use YYYY-MM-DD." },
-      400,
-    );
-  }
-  if (toParam && !dateRe.test(toParam)) {
-    return c.json(
-      { error: "bad_request", message: "Invalid date format for 'to'. Use YYYY-MM-DD." },
-      400,
-    );
-  }
-  if (fromParam && toParam && fromParam > toParam) {
-    return c.json({ error: "bad_request", message: "'from' must be before 'to'." }, 400);
-  }
-
-  // Fetch all sources for this org
-  const orgSources = await db
-    .select({ id: sources.id, slug: sources.slug, name: sources.name })
-    .from(sources)
-    .where(eq(sources.orgId, org.id))
-    .orderBy(sources.name);
-
-  if (orgSources.length === 0) {
-    const today = new Date().toISOString().slice(0, 10);
-    return c.json({
-      org: { slug: org.slug, name: org.name },
-      range: { from: fromParam ?? today, to: toParam ?? today },
-      sources: [],
-      aggregateWeekly: [],
-    });
-  }
-
-  const sourceIds = orgSources.map((s) => s.id);
-
-  // Default range: oldest to newest release across all org sources
-  let from = fromParam;
-  let to = toParam;
-  if (!from || !to) {
-    const [bounds] = await db
-      .select({
-        oldest: min(releasesVisible.publishedAt),
-        newest: max(releasesVisible.publishedAt),
       })
-      .from(releasesVisible)
+      .from(collections)
+      .innerJoin(collectionMembers, eq(collectionMembers.collectionId, collections.id))
+      .where(eq(collectionMembers.orgId, org.id))
+      .orderBy(collections.name);
+
+    const body: CollectionListItem[] = rows.map((r) => ({
+      slug: r.slug,
+      name: r.name,
+      description: r.description,
+      memberCount: Number(r.memberCount),
+    }));
+    return c.json(body);
+  },
+);
+
+orgRoutes.get(
+  "/orgs/:slug/accounts",
+  describeRoute({
+    tags: ["Orgs"],
+    summary: "List org social/platform accounts",
+    description:
+      "Returns the org's registered accounts (GitHub, Twitter, LinkedIn, etc.) as a paginated list. Pass `?platform=<name>` to fetch a single account by platform — returns the account object or `null` when not set. The 200 schema is a union of the paginated list (default) or a single `OrgAccountItem`/`null` (single-mode) — the OSS CLI depends on the single-row return shape.",
+    parameters: [
+      {
+        name: "platform",
+        in: "query",
+        required: false,
+        schema: { type: "string" },
+        description:
+          "When provided, returns a single `OrgAccountItem` for the given platform (or `null`). When absent, returns the full paginated list.",
+      },
+    ],
+    responses: {
+      200: {
+        description:
+          "Paginated org accounts (default), or a single `OrgAccountItem`/`null` when `?platform=` is supplied",
+        content: { "application/json": { schema: resolver(OrgAccountsResponseSchema) } },
+      },
+      404: {
+        description: "Organization not found",
+        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      },
+    },
+  }),
+  async (c) => {
+    const db = createDb(c.env.DB);
+    const slug = c.req.param("slug");
+    const platform = c.req.query("platform");
+
+    const [org] = await db.select().from(organizations).where(orgWhere(slug));
+    if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
+
+    if (platform) {
+      const [account] = await db
+        .select({ platform: orgAccounts.platform, handle: orgAccounts.handle })
+        .from(orgAccounts)
+        .where(and(eq(orgAccounts.orgId, org.id), eq(orgAccounts.platform, platform)));
+      return c.json(account ?? null);
+    }
+
+    const pagination = parseListPagination(new URL(c.req.url).searchParams);
+    const [accounts, totalRow] = await Promise.all([
+      db
+        .select({ platform: orgAccounts.platform, handle: orgAccounts.handle })
+        .from(orgAccounts)
+        .where(eq(orgAccounts.orgId, org.id))
+        .orderBy(orgAccounts.platform, orgAccounts.handle)
+        .limit(pagination.pageSize)
+        .offset(pagination.offset),
+      db.select({ n: count() }).from(orgAccounts).where(eq(orgAccounts.orgId, org.id)),
+    ]);
+    return c.json(buildListResponse(accounts, pagination, Number(totalRow[0]?.n ?? 0)));
+  },
+);
+
+orgRoutes.delete(
+  "/orgs/:slug/accounts/:platform/:handle",
+  describeRoute({
+    tags: ["Orgs"],
+    summary: "Delete org account",
+    description:
+      "Removes one platform/handle pair from the org. Handles that contain special characters must be URL-encoded in the path. Auth is inherited from `publicReadAuthMiddleware`'s non-SAFE_METHODS branch.",
+    security: [{ bearerAuth: [] }],
+    responses: {
+      200: {
+        description: "Account deleted",
+        content: { "application/json": { schema: resolver(DeleteOrgAccountResponseSchema) } },
+      },
+      400: {
+        description: "Malformed `:handle` path segment",
+        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      },
+      404: {
+        description: "Organization or account not found",
+        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      },
+    },
+  }),
+  async (c) => {
+    const db = createDb(c.env.DB);
+    const slug = c.req.param("slug");
+    const platform = c.req.param("platform");
+    let handle: string;
+    try {
+      handle = decodeURIComponent(c.req.param("handle"));
+    } catch {
+      return c.json(
+        { error: "bad_request", message: "Malformed URL-encoded `:handle` path segment" },
+        400,
+      );
+    }
+
+    const [org] = await db.select().from(organizations).where(orgWhere(slug));
+    if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
+
+    const deleted = await db
+      .delete(orgAccounts)
       .where(
         and(
-          inArray(releasesVisible.sourceId, sourceIds),
-          sql`${releasesVisible.publishedAt} IS NOT NULL`,
+          eq(orgAccounts.orgId, org.id),
+          eq(orgAccounts.platform, platform),
+          eq(orgAccounts.handle, handle),
         ),
-      );
-    const today = new Date().toISOString().slice(0, 10);
-    if (!from) from = bounds.oldest?.slice(0, 10) ?? today;
-    if (!to) to = bounds.newest?.slice(0, 10) ?? today;
-  }
+      )
+      .returning();
 
-  // Compute exclusive upper bound for inclusive to-date
-  const toDate = new Date(to + "T00:00:00Z");
-  toDate.setUTCDate(toDate.getUTCDate() + 1);
-  const toExclusive = toDate.toISOString().slice(0, 10);
-
-  const {
-    bucketRows,
-    statsRows,
-    latestVersionRows: versionRows,
-    earliestVersionRows,
-  } = await getOrgActivityData(db, org.id, sourceIds, from, toExclusive);
-
-  const latestVersionBySource = new Map<string, string | null>();
-  for (const row of versionRows) {
-    latestVersionBySource.set(row.source_id, row.version);
-  }
-
-  const earliestVersionBySource = new Map<string, string | null>();
-  for (const row of earliestVersionRows) {
-    earliestVersionBySource.set(row.source_id, row.version);
-  }
-
-  // Index stats and buckets by source ID
-  const statsMap = new Map(statsRows.map((r) => [r.source_id, r]));
-  const bucketMap = new Map<
-    string,
-    {
-      weekStart: string;
-      count: number;
-      earliestVersion: string | null;
-      latestVersion: string | null;
-    }[]
-  >();
-  for (const row of bucketRows) {
-    let arr = bucketMap.get(row.source_id);
-    if (!arr) {
-      arr = [];
-      bucketMap.set(row.source_id, arr);
+    if (deleted.length === 0) {
+      return c.json({ error: "not_found", message: "Account not found" }, 404);
     }
-    arr.push({
-      weekStart: row.week_start,
-      count: row.cnt,
-      earliestVersion: row.earliest_version ?? null,
-      latestVersion: row.latest_version ?? null,
-    });
-  }
 
-  // Assemble per-source response
-  const sourcesOut = orgSources.map((src) => {
-    const stats = statsMap.get(src.id);
-    const total = stats?.total ?? 0;
-    const oldest = stats?.oldest ?? null;
-    const latestDate = stats?.latest_date ?? null;
+    await db
+      .update(organizations)
+      .set({ updatedAt: new Date().toISOString() })
+      .where(eq(organizations.id, org.id));
 
-    return {
-      slug: src.slug,
-      name: src.name,
-      releaseCount: total,
-      avgReleasesPerWeek: computeAvgPerWeek(total, oldest),
-      earliestVersion: earliestVersionBySource.get(src.id) ?? null,
-      latestVersion: latestVersionBySource.get(src.id) ?? null,
-      latestDate,
-      weeklyBuckets: bucketMap.get(src.id) ?? [],
-    };
-  });
+    return c.json({ deleted: true });
+  },
+);
 
-  // Aggregate weekly buckets across all sources
-  const aggMap = new Map<string, number>();
-  for (const row of bucketRows) {
-    aggMap.set(row.week_start, (aggMap.get(row.week_start) ?? 0) + row.cnt);
-  }
-  const aggregateWeekly = Array.from(aggMap.entries())
-    .toSorted(([a], [b]) => a.localeCompare(b))
-    .map(([weekStart, releaseCount]) => ({ weekStart, count: releaseCount }));
+orgRoutes.get(
+  "/orgs/:slug/tags",
+  describeRoute({
+    tags: ["Orgs"],
+    summary: "List org tags",
+    description:
+      "Returns the org's tag names as a paginated list, sorted alphabetically. Returns an empty list (not 404) when the org has no tags.",
+    responses: {
+      200: {
+        description: "Paginated tag name list",
+        content: { "application/json": { schema: resolver(OrgTagsResponseSchema) } },
+      },
+      404: {
+        description: "Organization not found",
+        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      },
+    },
+  }),
+  async (c) => {
+    const db = createDb(c.env.DB);
+    const slug = c.req.param("slug");
+    const [org] = await db.select().from(organizations).where(orgWhere(slug));
+    if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
 
-  return c.json({
-    org: { slug: org.slug, name: org.name },
-    range: { from, to },
-    sources: sourcesOut,
-    aggregateWeekly,
-  });
-});
+    const pagination = parseListPagination(new URL(c.req.url).searchParams);
+    const [rows, totalRow] = await Promise.all([
+      db
+        .select({ name: tags.name })
+        .from(orgTags)
+        .innerJoin(tags, eq(orgTags.tagId, tags.id))
+        .where(eq(orgTags.orgId, org.id))
+        .orderBy(tags.name)
+        .limit(pagination.pageSize)
+        .offset(pagination.offset),
+      db
+        .select({ n: count() })
+        .from(orgTags)
+        .innerJoin(tags, eq(orgTags.tagId, tags.id))
+        .where(eq(orgTags.orgId, org.id)),
+    ]);
+    return c.json(
+      buildListResponse(
+        rows.map((r) => r.name),
+        pagination,
+        Number(totalRow[0]?.n ?? 0),
+      ),
+    );
+  },
+);
 
-// Daily release heatmap for contribution-graph visualization
-orgRoutes.get("/orgs/:slug/heatmap", async (c) => {
-  const db = createDb(c.env.DB);
-  const slug = c.req.param("slug");
+orgRoutes.put(
+  "/orgs/:slug/tags",
+  describeRoute({
+    tags: ["Orgs"],
+    summary: "Add tags to org",
+    description:
+      "Adds the supplied tag names to the org (idempotent — existing tags are not duplicated). Body: `{ tags: string[] }`. Formal request-body validation via validator middleware is deferred to Phase 2 of #894.",
+    security: [{ bearerAuth: [] }],
+    responses: {
+      200: {
+        description: "Tags added",
+        content: { "application/json": { schema: resolver(OrgTagsMutationResponseSchema) } },
+      },
+      400: {
+        description: "Invalid or malformed request body",
+        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      },
+      404: {
+        description: "Organization not found",
+        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      },
+    },
+  }),
+  async (c) => {
+    const db = createDb(c.env.DB);
+    const slug = c.req.param("slug");
+    const parsed = await parseOrgTagsBody(c);
+    if (!parsed.ok) return parsed.response;
+    const [org] = await db.select().from(organizations).where(orgWhere(slug));
+    if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
 
-  const [org] = await db.select().from(organizations).where(orgWhere(slug));
-  if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
+    if (parsed.tags.length > 0) {
+      const tagRows = await getOrCreateTagsD1(db, parsed.tags);
+      const now = new Date().toISOString();
+      await db
+        .insert(orgTags)
+        .values(tagRows.map((t) => ({ orgId: org.id, tagId: t.id, createdAt: now })))
+        .onConflictDoNothing();
+    }
+    return c.json({ ok: true });
+  },
+);
 
-  const { from, to, toExclusive } = heatmapDateRange();
-  const { rows, total } = await getOrgHeatmapData(db, org.id, from, toExclusive);
+orgRoutes.delete(
+  "/orgs/:slug/tags",
+  describeRoute({
+    tags: ["Orgs"],
+    summary: "Remove tags from org",
+    description:
+      "Removes the supplied tag names from the org. Tags not currently associated with the org are silently skipped. Body: `{ tags: string[] }`. Formal request-body validation via validator middleware is deferred to Phase 2 of #894.",
+    security: [{ bearerAuth: [] }],
+    responses: {
+      200: {
+        description: "Tags removed",
+        content: { "application/json": { schema: resolver(OrgTagsMutationResponseSchema) } },
+      },
+      400: {
+        description: "Invalid or malformed request body",
+        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      },
+      404: {
+        description: "Organization not found",
+        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      },
+    },
+  }),
+  async (c) => {
+    const db = createDb(c.env.DB);
+    const slug = c.req.param("slug");
+    const parsed = await parseOrgTagsBody(c);
+    if (!parsed.ok) return parsed.response;
+    const [org] = await db.select().from(organizations).where(orgWhere(slug));
+    if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
 
-  return c.json({
-    org: { slug: org.slug, name: org.name },
-    range: { from, to },
-    dailyCounts: rows.map((r) => ({ date: r.date, count: r.cnt })),
-    total,
-  });
-});
+    for (const tagName of parsed.tags) {
+      const tagSlug = toSlug(tagName);
+      // oxlint-disable-next-line no-await-in-loop -- sequential: tag lookup result feeds the delete
+      const [tag] = await db.select().from(tags).where(eq(tags.slug, tagSlug));
+      if (tag) {
+        // oxlint-disable-next-line no-await-in-loop -- sequential per-tag delete; ordering matters for partial success
+        await db.delete(orgTags).where(and(eq(orgTags.orgId, org.id), eq(orgTags.tagId, tag.id)));
+      }
+    }
+    return c.json({ ok: true });
+  },
+);
 
-// Per-source and per-product sparklines (30-day daily release counts)
-orgRoutes.get("/orgs/:slug/sparklines", async (c) => {
-  const db = createDb(c.env.DB);
-  const slug = c.req.param("slug");
+orgRoutes.post(
+  "/tags",
+  describeRoute({
+    tags: ["Orgs"],
+    summary: "Get or create a global tag",
+    description:
+      "Looks up a tag by its slugified name. If it already exists, returns the existing row (200). If not, creates it and returns the new row (201). Body: `{ name: string }`. This endpoint is historically co-located in `orgs.ts`; the global tag registry is shared across all orgs and products.",
+    security: [{ bearerAuth: [] }],
+    responses: {
+      200: {
+        description: "Tag already existed — existing row returned",
+        content: { "application/json": { schema: resolver(TagRowSchema) } },
+      },
+      201: {
+        description: "Tag created",
+        content: { "application/json": { schema: resolver(TagRowSchema) } },
+      },
+      400: {
+        description: "Missing required field: name",
+        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      },
+    },
+  }),
+  async (c) => {
+    const db = createDb(c.env.DB);
+    let body: { name: string };
+    try {
+      body = await c.req.json<{ name: string }>();
+    } catch {
+      return c.json({ error: "bad_request", message: "Malformed JSON body" }, 400);
+    }
+    if (typeof body.name !== "string" || body.name.length === 0)
+      return c.json({ error: "bad_request", message: "`name` must be a non-empty string" }, 400);
 
-  let [org] = await db.select().from(organizations).where(orgWhere(slug));
-  if (!org) {
-    const [alias] = await db
-      .select({ org: organizations })
-      .from(domainAliases)
-      .innerJoin(organizations, eq(domainAliases.orgId, organizations.id))
-      .where(eq(domainAliases.domain, slug));
-    if (alias) org = alias.org;
-  }
-  if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
+    const tagSlug = toSlug(body.name);
+    const [existing] = await db.select().from(tags).where(eq(tags.slug, tagSlug));
+    if (existing) return c.json(existing);
 
-  const cutoff30d = daysAgoIso(30);
-  const today = new Date(new Date().toISOString().slice(0, 10) + "T00:00:00Z");
-  const fromDate = new Date(today);
-  fromDate.setUTCDate(fromDate.getUTCDate() - 29);
-  const from = fromDate.toISOString().slice(0, 10);
-  const to = today.toISOString().slice(0, 10);
+    const [created] = await db
+      .insert(tags)
+      .values({ name: body.name, slug: tagSlug, createdAt: new Date().toISOString() })
+      .returning();
+    return c.json(created, 201);
+  },
+);
 
-  const [sparklineRows, orgSources, productRows] = await Promise.all([
-    getOrgSourceSparklines(db, org.id, cutoff30d),
-    db
-      .select({
-        id: sources.id,
-        slug: sources.slug,
-        name: sources.name,
-        productId: sources.productId,
-      })
+// Weekly release activity for timeline visualization
+orgRoutes.get(
+  "/orgs/:slug/activity",
+  describeRoute({
+    tags: ["Orgs"],
+    summary: "Org release activity (weekly buckets)",
+    description:
+      "Returns per-source weekly release buckets across the org, plus an aggregate rollup. Used for timeline / chart visualization. Accepts optional `?from=YYYY-MM-DD` and `?to=YYYY-MM-DD` date bounds — defaults to the earliest/latest release across all sources when omitted.",
+    parameters: [
+      {
+        name: "from",
+        in: "query",
+        required: false,
+        schema: { type: "string", format: "date" },
+        description: "Start date (inclusive, YYYY-MM-DD). Defaults to oldest release date.",
+      },
+      {
+        name: "to",
+        in: "query",
+        required: false,
+        schema: { type: "string", format: "date" },
+        description: "End date (inclusive, YYYY-MM-DD). Defaults to newest release date.",
+      },
+    ],
+    responses: {
+      200: {
+        description: "Activity data",
+        content: { "application/json": { schema: resolver(OrgActivityResponseSchema) } },
+      },
+      400: {
+        description: "Invalid date format or range",
+        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      },
+      404: {
+        description: "Organization not found",
+        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      },
+    },
+  }),
+  async (c) => {
+    const db = createDb(c.env.DB);
+    const slug = c.req.param("slug");
+
+    const [org] = await db.select().from(organizations).where(orgWhere(slug));
+    if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
+
+    // Validate date params
+    const dateRe = /^\d{4}-\d{2}-\d{2}$/;
+    const fromParam = c.req.query("from");
+    const toParam = c.req.query("to");
+
+    if (fromParam && !dateRe.test(fromParam)) {
+      return c.json(
+        { error: "bad_request", message: "Invalid date format for 'from'. Use YYYY-MM-DD." },
+        400,
+      );
+    }
+    if (toParam && !dateRe.test(toParam)) {
+      return c.json(
+        { error: "bad_request", message: "Invalid date format for 'to'. Use YYYY-MM-DD." },
+        400,
+      );
+    }
+    if (fromParam && toParam && fromParam > toParam) {
+      return c.json({ error: "bad_request", message: "'from' must be before 'to'." }, 400);
+    }
+
+    // Fetch all sources for this org
+    const orgSources = await db
+      .select({ id: sources.id, slug: sources.slug, name: sources.name })
       .from(sources)
       .where(eq(sources.orgId, org.id))
-      .orderBy(sources.name),
-    db
-      .select({ id: products.id, slug: products.slug, name: products.name })
-      .from(products)
-      .where(eq(products.orgId, org.id))
-      .orderBy(products.name),
-  ]);
+      .orderBy(sources.name);
 
-  // Build per-source sparkline arrays (30 entries, index 0 = 30d ago)
-  const sourceSparklineMap = new Map<string, number[]>();
-  for (const src of orgSources) {
-    sourceSparklineMap.set(
-      src.id,
-      Array.from({ length: 30 }, () => 0),
-    );
-  }
-  for (const row of sparklineRows) {
-    let arr = sourceSparklineMap.get(row.source_id);
-    if (!arr) {
-      arr = Array.from({ length: 30 }, () => 0);
-      sourceSparklineMap.set(row.source_id, arr);
+    if (orgSources.length === 0) {
+      const today = new Date().toISOString().slice(0, 10);
+      return c.json({
+        org: { slug: org.slug, name: org.name },
+        range: { from: fromParam ?? today, to: toParam ?? today },
+        sources: [],
+        aggregateWeekly: [],
+      });
     }
-    const dayDate = new Date(row.date + "T00:00:00Z");
-    const daysAgo = Math.floor((today.getTime() - dayDate.getTime()) / (1000 * 60 * 60 * 24));
-    const idx = 29 - daysAgo;
-    if (idx >= 0 && idx < 30) {
-      arr[idx] = row.cnt;
+
+    const sourceIds = orgSources.map((s) => s.id);
+
+    // Default range: oldest to newest release across all org sources
+    let from = fromParam;
+    let to = toParam;
+    if (!from || !to) {
+      const [bounds] = await db
+        .select({
+          oldest: min(releasesVisible.publishedAt),
+          newest: max(releasesVisible.publishedAt),
+        })
+        .from(releasesVisible)
+        .where(
+          and(
+            inArray(releasesVisible.sourceId, sourceIds),
+            sql`${releasesVisible.publishedAt} IS NOT NULL`,
+          ),
+        );
+      const today = new Date().toISOString().slice(0, 10);
+      if (!from) from = bounds.oldest?.slice(0, 10) ?? today;
+      if (!to) to = bounds.newest?.slice(0, 10) ?? today;
     }
-  }
 
-  // Assemble per-source output
-  const sourcesOut = orgSources.map((src) => ({
-    slug: src.slug,
-    name: src.name,
-    sparkline: sourceSparklineMap.get(src.id) ?? Array.from({ length: 30 }, () => 0),
-  }));
+    // Compute exclusive upper bound for inclusive to-date
+    const toDate = new Date(to + "T00:00:00Z");
+    toDate.setUTCDate(toDate.getUTCDate() + 1);
+    const toExclusive = toDate.toISOString().slice(0, 10);
 
-  // Aggregate per-product by summing source sparklines
-  const productSourceMap = new Map<string, string[]>();
-  for (const src of orgSources) {
-    if (src.productId) {
-      let arr = productSourceMap.get(src.productId);
+    const {
+      bucketRows,
+      statsRows,
+      latestVersionRows: versionRows,
+      earliestVersionRows,
+    } = await getOrgActivityData(db, org.id, sourceIds, from, toExclusive);
+
+    const latestVersionBySource = new Map<string, string | null>();
+    for (const row of versionRows) {
+      latestVersionBySource.set(row.source_id, row.version);
+    }
+
+    const earliestVersionBySource = new Map<string, string | null>();
+    for (const row of earliestVersionRows) {
+      earliestVersionBySource.set(row.source_id, row.version);
+    }
+
+    // Index stats and buckets by source ID
+    const statsMap = new Map(statsRows.map((r) => [r.source_id, r]));
+    const bucketMap = new Map<
+      string,
+      {
+        weekStart: string;
+        count: number;
+        earliestVersion: string | null;
+        latestVersion: string | null;
+      }[]
+    >();
+    for (const row of bucketRows) {
+      let arr = bucketMap.get(row.source_id);
       if (!arr) {
         arr = [];
-        productSourceMap.set(src.productId, arr);
+        bucketMap.set(row.source_id, arr);
       }
-      arr.push(src.id);
+      arr.push({
+        weekStart: row.week_start,
+        count: row.cnt,
+        earliestVersion: row.earliest_version ?? null,
+        latestVersion: row.latest_version ?? null,
+      });
     }
-  }
 
-  const productsOut = productRows.map((prod) => {
-    const sourceIds = productSourceMap.get(prod.id) ?? [];
-    const sparkline = Array.from({ length: 30 }, () => 0);
-    for (const srcId of sourceIds) {
-      const srcSparkline = sourceSparklineMap.get(srcId);
+    // Assemble per-source response
+    const sourcesOut = orgSources.map((src) => {
+      const stats = statsMap.get(src.id);
+      const total = stats?.total ?? 0;
+      const oldest = stats?.oldest ?? null;
+      const latestDate = stats?.latest_date ?? null;
+
+      return {
+        slug: src.slug,
+        name: src.name,
+        releaseCount: total,
+        avgReleasesPerWeek: computeAvgPerWeek(total, oldest),
+        earliestVersion: earliestVersionBySource.get(src.id) ?? null,
+        latestVersion: latestVersionBySource.get(src.id) ?? null,
+        latestDate,
+        weeklyBuckets: bucketMap.get(src.id) ?? [],
+      };
+    });
+
+    // Aggregate weekly buckets across all sources
+    const aggMap = new Map<string, number>();
+    for (const row of bucketRows) {
+      aggMap.set(row.week_start, (aggMap.get(row.week_start) ?? 0) + row.cnt);
+    }
+    const aggregateWeekly = Array.from(aggMap.entries())
+      .toSorted(([a], [b]) => a.localeCompare(b))
+      .map(([weekStart, releaseCount]) => ({ weekStart, count: releaseCount }));
+
+    return c.json({
+      org: { slug: org.slug, name: org.name },
+      range: { from, to },
+      sources: sourcesOut,
+      aggregateWeekly,
+    });
+  },
+);
+
+// Daily release heatmap for contribution-graph visualization
+orgRoutes.get(
+  "/orgs/:slug/heatmap",
+  describeRoute({
+    tags: ["Orgs"],
+    summary: "Org release heatmap (daily counts)",
+    description:
+      "Returns daily release counts for the trailing 365 days — used for the contribution-graph visualization on the org detail page. Range is fixed server-side; no date parameters accepted.",
+    responses: {
+      200: {
+        description: "Heatmap data",
+        content: { "application/json": { schema: resolver(OrgHeatmapResponseSchema) } },
+      },
+      404: {
+        description: "Organization not found",
+        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      },
+    },
+  }),
+  async (c) => {
+    const db = createDb(c.env.DB);
+    const slug = c.req.param("slug");
+
+    const [org] = await db.select().from(organizations).where(orgWhere(slug));
+    if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
+
+    const { from, to, toExclusive } = heatmapDateRange();
+    const { rows, total } = await getOrgHeatmapData(db, org.id, from, toExclusive);
+
+    return c.json({
+      org: { slug: org.slug, name: org.name },
+      range: { from, to },
+      dailyCounts: rows.map((r) => ({ date: r.date, count: r.cnt })),
+      total,
+    });
+  },
+);
+
+// Per-source and per-product sparklines (30-day daily release counts)
+orgRoutes.get(
+  "/orgs/:slug/sparklines",
+  describeRoute({
+    tags: ["Orgs"],
+    summary: "Org sparklines (30-day per-source breakdown)",
+    description:
+      "Returns 30-day daily release counts broken down per source and per product, plus an aggregate rollup. Used for the sparkline charts on the org detail page. Resolves domain aliases in addition to slugs and `org_…` IDs.",
+    responses: {
+      200: {
+        description: "Sparkline data",
+        content: { "application/json": { schema: resolver(OrgSparklinesResponseSchema) } },
+      },
+      404: {
+        description: "Organization not found",
+        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      },
+    },
+  }),
+  async (c) => {
+    const db = createDb(c.env.DB);
+    const slug = c.req.param("slug");
+
+    let [org] = await db.select().from(organizations).where(orgWhere(slug));
+    if (!org) {
+      const [alias] = await db
+        .select({ org: organizations })
+        .from(domainAliases)
+        .innerJoin(organizations, eq(domainAliases.orgId, organizations.id))
+        .where(eq(domainAliases.domain, slug));
+      if (alias) org = alias.org;
+    }
+    if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
+
+    const cutoff30d = daysAgoIso(30);
+    const today = new Date(new Date().toISOString().slice(0, 10) + "T00:00:00Z");
+    const fromDate = new Date(today);
+    fromDate.setUTCDate(fromDate.getUTCDate() - 29);
+    const from = fromDate.toISOString().slice(0, 10);
+    const to = today.toISOString().slice(0, 10);
+
+    const [sparklineRows, orgSources, productRows] = await Promise.all([
+      getOrgSourceSparklines(db, org.id, cutoff30d),
+      db
+        .select({
+          id: sources.id,
+          slug: sources.slug,
+          name: sources.name,
+          productId: sources.productId,
+        })
+        .from(sources)
+        .where(eq(sources.orgId, org.id))
+        .orderBy(sources.name),
+      db
+        .select({ id: products.id, slug: products.slug, name: products.name })
+        .from(products)
+        .where(eq(products.orgId, org.id))
+        .orderBy(products.name),
+    ]);
+
+    // Build per-source sparkline arrays (30 entries, index 0 = 30d ago)
+    const sourceSparklineMap = new Map<string, number[]>();
+    for (const src of orgSources) {
+      sourceSparklineMap.set(
+        src.id,
+        Array.from({ length: 30 }, () => 0),
+      );
+    }
+    for (const row of sparklineRows) {
+      let arr = sourceSparklineMap.get(row.source_id);
+      if (!arr) {
+        arr = Array.from({ length: 30 }, () => 0);
+        sourceSparklineMap.set(row.source_id, arr);
+      }
+      const dayDate = new Date(row.date + "T00:00:00Z");
+      const daysAgo = Math.floor((today.getTime() - dayDate.getTime()) / (1000 * 60 * 60 * 24));
+      const idx = 29 - daysAgo;
+      if (idx >= 0 && idx < 30) {
+        arr[idx] = row.cnt;
+      }
+    }
+
+    // Assemble per-source output
+    const sourcesOut = orgSources.map((src) => ({
+      slug: src.slug,
+      name: src.name,
+      sparkline: sourceSparklineMap.get(src.id) ?? Array.from({ length: 30 }, () => 0),
+    }));
+
+    // Aggregate per-product by summing source sparklines
+    const productSourceMap = new Map<string, string[]>();
+    for (const src of orgSources) {
+      if (src.productId) {
+        let arr = productSourceMap.get(src.productId);
+        if (!arr) {
+          arr = [];
+          productSourceMap.set(src.productId, arr);
+        }
+        arr.push(src.id);
+      }
+    }
+
+    const productsOut = productRows.map((prod) => {
+      const sourceIds = productSourceMap.get(prod.id) ?? [];
+      const sparkline = Array.from({ length: 30 }, () => 0);
+      for (const srcId of sourceIds) {
+        const srcSparkline = sourceSparklineMap.get(srcId);
+        if (srcSparkline) {
+          for (let i = 0; i < 30; i++) sparkline[i] += srcSparkline[i];
+        }
+      }
+      return { slug: prod.slug, name: prod.name, sparkline };
+    });
+
+    // Aggregate total across all sources
+    const aggregate = Array.from({ length: 30 }, () => 0);
+    for (const src of orgSources) {
+      const srcSparkline = sourceSparklineMap.get(src.id);
       if (srcSparkline) {
-        for (let i = 0; i < 30; i++) sparkline[i] += srcSparkline[i];
+        for (let i = 0; i < 30; i++) aggregate[i] += srcSparkline[i];
       }
     }
-    return { slug: prod.slug, name: prod.name, sparkline };
-  });
 
-  // Aggregate total across all sources
-  const aggregate = Array.from({ length: 30 }, () => 0);
-  for (const src of orgSources) {
-    const srcSparkline = sourceSparklineMap.get(src.id);
-    if (srcSparkline) {
-      for (let i = 0; i < 30; i++) aggregate[i] += srcSparkline[i];
-    }
-  }
-
-  return c.json({
-    org: { slug: org.slug, name: org.name },
-    range: { from, to },
-    aggregate,
-    sources: sourcesOut,
-    products: productsOut,
-  });
-});
+    return c.json({
+      org: { slug: org.slug, name: org.name },
+      range: { from, to },
+      aggregate,
+      sources: sourcesOut,
+      products: productsOut,
+    });
+  },
+);
 
 // Combined release feed for an org
-orgRoutes.get("/orgs/:slug/releases", async (c) => {
-  const slug = c.req.param("slug");
-  const cursorParam = c.req.query("cursor") ?? null;
-  const limit = parseLimitParam(c.req.query("limit"), 20, 100);
-  const includeCoverage = parseBoolParam(c.req.query("include_coverage"));
-  const includePrereleases = parseBoolParam(c.req.query("include_prereleases"));
-  const sourceTypes = parseSourceTypesLenient(c.req.query("source_type"));
-  const qRaw = c.req.query("q")?.trim() ?? "";
-  const ftsMatch = qRaw ? toFtsPrefixMatchQuery(qRaw) : undefined;
-
-  const db = createDb(c.env.DB);
-
-  // Resolve org
-  const org = await db
-    .select({ id: organizations.id })
-    .from(organizations)
-    .where(orgWhere(slug))
-    .get();
-
-  if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
-
-  const results = await getOrgReleasesFeed(
-    c.env.DB,
-    org.id,
-    parseFeedCursor(cursorParam),
-    limit + 1,
-    { includeCoverage, sourceTypes, includePrereleases, ftsMatch },
-  );
-
-  const hasMore = results.length > limit;
-  const pageRows = hasMore ? results.slice(0, limit) : results;
-
-  // Build next cursor from last item
-  let nextCursor: string | null = null;
-  if (hasMore && pageRows.length > 0) {
-    nextCursor = buildFeedCursor(pageRows[pageRows.length - 1]);
-  }
-
-  const mediaOrigin = c.env.MEDIA_ORIGIN ?? "";
-  const releasesFormatted = pageRows.map((r) => ({
-    id: r.id,
-    version: r.version,
-    type: r.type,
-    title: r.title,
-    summary: r.summary ?? (r.content.length > 150 ? r.content.slice(0, 150) + "..." : r.content),
-    titleGenerated: r.title_generated,
-    titleShort: r.title_short,
-    content: hydrateMediaUrls(r.content, mediaOrigin),
-    publishedAt: r.published_at,
-    url: r.url,
-    media: parseReleaseMedia(r.media, mediaOrigin),
-    prerelease: r.prerelease === 1,
-    source: {
-      slug: r.source_slug,
-      name: r.source_name,
-      type: r.source_type,
+orgRoutes.get(
+  "/orgs/:slug/releases",
+  describeRoute({
+    tags: ["Orgs"],
+    summary: "Org release feed (cursor-paginated)",
+    description:
+      "Returns the org's combined release feed across all sources, newest-first. Cursor-paginated — pass `nextCursor` from the previous response as `?cursor=` on the next request. Accepts `?source_type=`, `?include_coverage=true`, `?include_prereleases=true`, and `?q=` full-text search.",
+    parameters: [
+      {
+        name: "cursor",
+        in: "query",
+        required: false,
+        schema: { type: "string" },
+        description: "Opaque cursor from a previous response's `pagination.nextCursor`.",
+      },
+      {
+        name: "limit",
+        in: "query",
+        required: false,
+        schema: { type: "integer", minimum: 1, maximum: 100, default: 20 },
+        description: "Max releases to return. Defaults to 20, capped at 100.",
+      },
+      {
+        name: "source_type",
+        in: "query",
+        required: false,
+        schema: { type: "string" },
+        description: "Filter by source type (e.g. `github`, `feed`, `scrape`).",
+      },
+      {
+        name: "include_coverage",
+        in: "query",
+        required: false,
+        schema: { type: "boolean" },
+        description: "When true, include coverage-side rows (hidden by default).",
+      },
+      {
+        name: "include_prereleases",
+        in: "query",
+        required: false,
+        schema: { type: "boolean" },
+        description: "When true, include pre-release entries.",
+      },
+      {
+        name: "q",
+        in: "query",
+        required: false,
+        schema: { type: "string" },
+        description: "Full-text search query applied to release title and content.",
+      },
+    ],
+    responses: {
+      200: {
+        description: "Release feed",
+        content: {
+          "application/json": { schema: resolver(OrgReleasesFeedResponseSchema) },
+          "text/markdown": { schema: { type: "string" } },
+        },
+      },
+      404: {
+        description: "Organization not found",
+        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      },
     },
-  }));
+  }),
+  async (c) => {
+    const slug = c.req.param("slug");
+    const cursorParam = c.req.query("cursor") ?? null;
+    const limit = parseLimitParam(c.req.query("limit"), 20, 100);
+    const includeCoverage = parseBoolParam(c.req.query("include_coverage"));
+    const includePrereleases = parseBoolParam(c.req.query("include_prereleases"));
+    const sourceTypes = parseSourceTypesLenient(c.req.query("source_type"));
+    const qRaw = c.req.query("q")?.trim() ?? "";
+    const ftsMatch = qRaw ? toFtsPrefixMatchQuery(qRaw) : undefined;
 
-  const pagination = { nextCursor, limit };
+    const db = createDb(c.env.DB);
 
-  if (wantsMarkdown(c)) {
-    return markdownResponse(c, orgReleaseFeedToMarkdown(slug, releasesFormatted, pagination));
-  }
+    // Resolve org
+    const org = await db
+      .select({ id: organizations.id })
+      .from(organizations)
+      .where(orgWhere(slug))
+      .get();
 
-  return c.json({ releases: releasesFormatted, pagination });
-});
+    if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
+
+    const results = await getOrgReleasesFeed(
+      c.env.DB,
+      org.id,
+      parseFeedCursor(cursorParam),
+      limit + 1,
+      { includeCoverage, sourceTypes, includePrereleases, ftsMatch },
+    );
+
+    const hasMore = results.length > limit;
+    const pageRows = hasMore ? results.slice(0, limit) : results;
+
+    // Build next cursor from last item
+    let nextCursor: string | null = null;
+    if (hasMore && pageRows.length > 0) {
+      nextCursor = buildFeedCursor(pageRows[pageRows.length - 1]);
+    }
+
+    const mediaOrigin = c.env.MEDIA_ORIGIN ?? "";
+    const releasesFormatted = pageRows.map((r) => ({
+      id: r.id,
+      version: r.version,
+      type: r.type,
+      title: r.title,
+      summary: r.summary ?? (r.content.length > 150 ? r.content.slice(0, 150) + "..." : r.content),
+      titleGenerated: r.title_generated,
+      titleShort: r.title_short,
+      content: hydrateMediaUrls(r.content, mediaOrigin),
+      publishedAt: r.published_at,
+      url: r.url,
+      media: parseReleaseMedia(r.media, mediaOrigin),
+      prerelease: r.prerelease === 1,
+      source: {
+        slug: r.source_slug,
+        name: r.source_name,
+        type: r.source_type,
+      },
+    }));
+
+    const pagination = { nextCursor, limit };
+
+    if (wantsMarkdown(c)) {
+      return markdownResponse(c, orgReleaseFeedToMarkdown(slug, releasesFormatted, pagination));
+    }
+
+    return c.json({ releases: releasesFormatted, pagination });
+  },
+);
 
 // ---------------------------------------------------------------------------
 // GET /orgs/:slug/recent-releases?since=<iso>&limit=<n>
@@ -1315,91 +1727,190 @@ orgRoutes.get("/orgs/:slug/releases", async (c) => {
 // filtered to `publishedAt >= since` and skipping suppressed + disabled.
 // ---------------------------------------------------------------------------
 
-orgRoutes.get("/orgs/:slug/recent-releases", async (c) => {
-  const db = createDb(c.env.DB);
-  const slug = c.req.param("slug");
-  const since = c.req.query("since");
-  const limitParam = parseInt(c.req.query("limit") ?? "500", 10);
-  const limit = isNaN(limitParam) || limitParam < 1 ? 500 : Math.min(limitParam, 2000);
+orgRoutes.get(
+  "/orgs/:slug/recent-releases",
+  describeRoute({
+    tags: ["Orgs"],
+    summary: "Recent releases for an org (agent summarization)",
+    description:
+      "Returns the full release rows published since `?since=<ISO>` for all visible sources in the org. Intended for agent-driven summarization and grouping — includes `content`, `media`, and `metadata` fields that the public feed omits. Requires `since` (ISO date/datetime); `limit` defaults to 500, capped at 2000.",
+    parameters: [
+      {
+        name: "since",
+        in: "query",
+        required: true,
+        schema: { type: "string", format: "date-time" },
+        description: "Return releases published at or after this ISO date/datetime.",
+      },
+      {
+        name: "limit",
+        in: "query",
+        required: false,
+        schema: { type: "integer", minimum: 1, maximum: 2000, default: 500 },
+        description: "Max releases to return. Defaults to 500, capped at 2000.",
+      },
+    ],
+    responses: {
+      200: {
+        description: "Recent release rows",
+        content: { "application/json": { schema: resolver(OrgRecentReleasesResponseSchema) } },
+      },
+      400: {
+        description: "Missing required `since` parameter",
+        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      },
+      404: {
+        description: "Organization not found",
+        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      },
+    },
+  }),
+  async (c) => {
+    const db = createDb(c.env.DB);
+    const slug = c.req.param("slug");
+    const since = c.req.query("since");
+    const limitParam = parseInt(c.req.query("limit") ?? "500", 10);
+    const limit = isNaN(limitParam) || limitParam < 1 ? 500 : Math.min(limitParam, 2000);
 
-  if (!since) {
-    return c.json(
-      { error: "bad_request", message: "Missing required query param: since (ISO date)" },
-      400,
-    );
-  }
-
-  const [org] = await db.select({ id: organizations.id }).from(organizations).where(orgWhere(slug));
-  if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
-
-  const rows = await db
-    .select({
-      id: releasesVisible.id,
-      sourceId: releasesVisible.sourceId,
-      version: releasesVisible.version,
-      type: releasesVisible.type,
-      title: releasesVisible.title,
-      content: releasesVisible.content,
-      summary: releasesVisible.summary,
-      titleGenerated: releasesVisible.titleGenerated,
-      titleShort: releasesVisible.titleShort,
-      url: releasesVisible.url,
-      contentHash: releasesVisible.contentHash,
-      metadata: releasesVisible.metadata,
-      media: releasesVisible.media,
-      publishedAt: releasesVisible.publishedAt,
-      suppressed: releasesVisible.suppressed,
-      suppressedReason: releasesVisible.suppressedReason,
-      fetchedAt: releasesVisible.fetchedAt,
-      embeddedAt: releasesVisible.embeddedAt,
-      sourceName: sourcesVisible.name,
-      sourceSlug: sourcesVisible.slug,
-    })
-    .from(releasesVisible)
-    .innerJoin(sourcesVisible, eq(releasesVisible.sourceId, sourcesVisible.id))
-    .where(and(eq(sourcesVisible.orgId, org.id), gte(releasesVisible.publishedAt, since)))
-    .orderBy(desc(releasesVisible.publishedAt))
-    .limit(limit);
-
-  return c.json(rows);
-});
-
-orgRoutes.post("/orgs/:slug/accounts", async (c) => {
-  const db = createDb(c.env.DB);
-  const slug = c.req.param("slug");
-  const body = await c.req.json<{ platform: string; handle: string }>();
-
-  if (!body.platform || !body.handle) {
-    return c.json(
-      { error: "bad_request", message: "Missing required fields: platform, handle" },
-      400,
-    );
-  }
-
-  const [org] = await db.select().from(organizations).where(orgWhere(slug));
-  if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
-
-  try {
-    const [account] = await db
-      .insert(orgAccounts)
-      .values({
-        orgId: org.id,
-        platform: body.platform,
-        handle: body.handle,
-        createdAt: new Date().toISOString(),
-      })
-      .returning();
-    return c.json(account, 201);
-  } catch (err) {
-    if (isConflictError(err)) {
+    if (!since) {
       return c.json(
-        { error: "conflict", message: `Account ${body.platform}/${body.handle} already exists` },
-        409,
+        { error: "bad_request", message: "Missing required query param: since (ISO date)" },
+        400,
       );
     }
-    throw err;
-  }
-});
+    // Validate AND normalize ISO format — `since` is bound directly into a
+    // `gte` clause against `publishedAt` (string column). Date.parse accepts
+    // permissive shapes like `2024/01/01` that pass the NaN check but sort
+    // lexically against the ISO column. Convert to a canonical ISO string
+    // so the SQL comparison is always against a well-formed UTC timestamp.
+    const sinceDate = new Date(since);
+    if (Number.isNaN(sinceDate.getTime())) {
+      return c.json(
+        {
+          error: "bad_request",
+          message: "Invalid `since` query param — must be an ISO date or datetime",
+        },
+        400,
+      );
+    }
+    const sinceIso = sinceDate.toISOString();
+
+    const [org] = await db
+      .select({ id: organizations.id })
+      .from(organizations)
+      .where(orgWhere(slug));
+    if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
+
+    const rows = await db
+      .select({
+        id: releasesVisible.id,
+        sourceId: releasesVisible.sourceId,
+        version: releasesVisible.version,
+        type: releasesVisible.type,
+        title: releasesVisible.title,
+        content: releasesVisible.content,
+        summary: releasesVisible.summary,
+        titleGenerated: releasesVisible.titleGenerated,
+        titleShort: releasesVisible.titleShort,
+        url: releasesVisible.url,
+        contentHash: releasesVisible.contentHash,
+        metadata: releasesVisible.metadata,
+        media: releasesVisible.media,
+        publishedAt: releasesVisible.publishedAt,
+        suppressed: releasesVisible.suppressed,
+        suppressedReason: releasesVisible.suppressedReason,
+        fetchedAt: releasesVisible.fetchedAt,
+        embeddedAt: releasesVisible.embeddedAt,
+        sourceName: sourcesVisible.name,
+        sourceSlug: sourcesVisible.slug,
+      })
+      .from(releasesVisible)
+      .innerJoin(sourcesVisible, eq(releasesVisible.sourceId, sourcesVisible.id))
+      .where(and(eq(sourcesVisible.orgId, org.id), gte(releasesVisible.publishedAt, sinceIso)))
+      .orderBy(desc(releasesVisible.publishedAt))
+      .limit(limit);
+
+    return c.json(rows);
+  },
+);
+
+orgRoutes.post(
+  "/orgs/:slug/accounts",
+  describeRoute({
+    tags: ["Orgs"],
+    summary: "Add a platform account to an org",
+    description:
+      "Registers a new platform/handle pair for the org. Both `platform` and `handle` are required. Duplicate platform/handle pairs return 409. Body: `{ platform: string; handle: string }`. Formal request-body validation via validator middleware is deferred to Phase 2 of #894. Auth is inherited from `publicReadAuthMiddleware`'s non-SAFE_METHODS branch.",
+    security: [{ bearerAuth: [] }],
+    responses: {
+      201: {
+        description: "Account created",
+        content: { "application/json": { schema: resolver(OrgAccountItemSchema) } },
+      },
+      400: {
+        description: "Missing required fields",
+        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      },
+      404: {
+        description: "Organization not found",
+        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      },
+      409: {
+        description: "Account already exists for this platform/handle",
+        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      },
+    },
+  }),
+  async (c) => {
+    const db = createDb(c.env.DB);
+    const slug = c.req.param("slug");
+    let body: { platform: string; handle: string };
+    try {
+      body = await c.req.json<{ platform: string; handle: string }>();
+    } catch {
+      return c.json({ error: "bad_request", message: "Malformed JSON body" }, 400);
+    }
+
+    if (
+      typeof body.platform !== "string" ||
+      body.platform.length === 0 ||
+      typeof body.handle !== "string" ||
+      body.handle.length === 0
+    ) {
+      return c.json(
+        {
+          error: "bad_request",
+          message: "`platform` and `handle` must be non-empty strings",
+        },
+        400,
+      );
+    }
+
+    const [org] = await db.select().from(organizations).where(orgWhere(slug));
+    if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
+
+    try {
+      const [account] = await db
+        .insert(orgAccounts)
+        .values({
+          orgId: org.id,
+          platform: body.platform,
+          handle: body.handle,
+          createdAt: new Date().toISOString(),
+        })
+        .returning({ platform: orgAccounts.platform, handle: orgAccounts.handle });
+      return c.json(account, 201);
+    } catch (err) {
+      if (isConflictError(err)) {
+        return c.json(
+          { error: "conflict", message: `Account ${body.platform}/${body.handle} already exists` },
+          409,
+        );
+      }
+      throw err;
+    }
+  },
+);
 
 // ── Embed side effect ──
 
