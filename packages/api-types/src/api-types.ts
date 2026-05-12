@@ -58,6 +58,18 @@ import type {
   ProductAdoptResponseSchema,
   ProductDeleteResponseSchema,
 } from "./schemas/products.js";
+import type {
+  ReleaseLatestSourceSchema,
+  ReleaseLatestItemSchema,
+  ReleaseLatestResponseSchema,
+  ReleaseCoverageRowSchema,
+  ReleaseCoverageResponseSchema,
+  LinkReleaseCoverageBodySchema,
+  LinkReleaseCoverageResponseSchema,
+  UnlinkReleaseCoverageResponseSchema,
+  ReleaseWithMediaRowSchema,
+  ReleasesWithMediaResponseSchema,
+} from "./schemas/releases.js";
 
 export {
   MediaItemSchema,
@@ -109,6 +121,18 @@ export {
   ProductAdoptResponseSchema,
   ProductDeleteResponseSchema,
 } from "./schemas/products.js";
+export {
+  ReleaseLatestSourceSchema,
+  ReleaseLatestItemSchema,
+  ReleaseLatestResponseSchema,
+  ReleaseCoverageRowSchema,
+  ReleaseCoverageResponseSchema,
+  LinkReleaseCoverageBodySchema,
+  LinkReleaseCoverageResponseSchema,
+  UnlinkReleaseCoverageResponseSchema,
+  ReleaseWithMediaRowSchema,
+  ReleasesWithMediaResponseSchema,
+} from "./schemas/releases.js";
 
 // ── Media ──
 
@@ -247,18 +271,18 @@ export interface ReleaseDetail {
   type?: ReleaseType;
 }
 
-export interface ReleaseCoverageRow {
-  coverageId: string;
-  canonicalId: string;
-  reason: string | null;
-  decidedBy: string;
-  decidedAt: string;
-}
+export type ReleaseCoverageRow = z.infer<typeof ReleaseCoverageRowSchema>;
+export type ReleaseCoverageResponse = z.infer<typeof ReleaseCoverageResponseSchema>;
+export type LinkReleaseCoverageBody = z.infer<typeof LinkReleaseCoverageBodySchema>;
+export type LinkReleaseCoverageResponse = z.infer<typeof LinkReleaseCoverageResponseSchema>;
+export type UnlinkReleaseCoverageResponse = z.infer<typeof UnlinkReleaseCoverageResponseSchema>;
 
-export type ReleaseCoverageResponse =
-  | { role: "standalone"; canonical: null; covers: [] }
-  | { role: "coverage"; canonical: ReleaseCoverageRow; covers: [] }
-  | { role: "canonical"; canonical: null; covers: ReleaseCoverageRow[] };
+export type ReleaseLatestSource = z.infer<typeof ReleaseLatestSourceSchema>;
+export type ReleaseLatestItem = z.infer<typeof ReleaseLatestItemSchema>;
+export type ReleaseLatestResponse = z.infer<typeof ReleaseLatestResponseSchema>;
+
+export type ReleaseWithMediaRow = z.infer<typeof ReleaseWithMediaRowSchema>;
+export type ReleasesWithMediaResponse = z.infer<typeof ReleasesWithMediaResponseSchema>;
 
 export type ReleaseSummaryItem = z.infer<typeof ReleaseSummaryItemSchema>;
 
