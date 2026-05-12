@@ -224,7 +224,10 @@ function FeedApp() {
           setUnsupported(true);
         }
       };
-      created.onerror = console.error;
+      // oxlint-disable-next-line prefer-add-event-listener -- MCP Apps SDK uses on* property assignment, not EventTarget
+      created.onerror = (err) => {
+        console.error(err);
+      };
       created.onteardown = async () => ({});
     },
   });
