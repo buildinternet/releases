@@ -109,6 +109,13 @@ jobs:
             exit 1
           fi
 
+      - name: Verify OpenAPI spec covers public-read routes
+        # Diffs every method registered under a publicReadRoutes prefix
+        # against the generated /v1/openapi.json. Fails if any public-read
+        # route is missing describeRoute(...) and isn't on the script's
+        # ALLOWLIST. Sub-second pure-JS check; no network, D1, or Wrangler.
+        run: bun scripts/check-openapi-coverage.ts
+
       - name: Run tests
         run: bun run test
 

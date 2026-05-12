@@ -7,42 +7,9 @@ import { cacheControl } from "./middleware/cache.js";
 import { varyOnAccept } from "./middleware/content-negotiation.js";
 import { blockIndexing } from "./middleware/indexing.js";
 import { stagingAccessGate } from "./middleware/staging-access.js";
-import { statsRoutes } from "./routes/stats.js";
-import { orgRoutes } from "./routes/orgs.js";
-import { sitemapRoutes } from "./routes/sitemap.js";
-import { sourceRoutes } from "./routes/sources.js";
-import { searchRoutes } from "./routes/search.js";
-import { relatedRoutes } from "./routes/related.js";
-import { fetchLogRoutes } from "./routes/fetch-log.js";
-import { usageLogRoutes } from "./routes/usage-log.js";
-import { ignoreRoutes } from "./routes/ignore.js";
-import { lookupRoutes } from "./routes/lookups.js";
-import { statusRoutes } from "./routes/status.js";
-import { sessionRoutes } from "./routes/sessions.js";
-import { mediaRoutes } from "./routes/media.js";
-import { streamRoutes } from "./routes/stream.js";
-import { mountWebhooksReplay } from "./routes/webhooks-replay.js";
+import { mountV1Routes } from "./v1-routes.js";
+import { publicReadRoutes, adminRoutes } from "./route-namespaces.js";
 import { graphqlRoutes } from "./graphql/handler.js";
-import { releaseRoutes } from "./routes/releases.js";
-import summaries from "./routes/summaries.js";
-import overview from "./routes/overview.js";
-import overviewInputs from "./routes/overview-inputs.js";
-import playbook from "./routes/playbook.js";
-import { productRoutes } from "./routes/products.js";
-import { evaluateRoutes } from "./routes/evaluate.js";
-import { adminEmbedStatusRoutes } from "./routes/admin-embed-status.js";
-import { adminCronRunsRoutes } from "./routes/admin-cron-runs.js";
-import { adminSearchQueriesRoutes } from "./routes/admin-search-queries.js";
-import { adminOverviewsRoutes } from "./routes/admin-overviews.js";
-import { adminSourcesRoutes } from "./routes/admin-sources.js";
-import { adminOrgDependentsRoutes } from "./routes/admin-org-dependents.js";
-import { errataRoutes } from "./routes/errata.js";
-import { webhooksRoutes } from "./routes/webhooks.js";
-import { workflowsRoutes } from "./routes/workflows.js";
-import { telemetryRoutes } from "./routes/telemetry.js";
-import { taxonomyRoutes } from "./routes/taxonomy.js";
-import { collectionRoutes } from "./routes/collections.js";
-import { mountOpenApi } from "./openapi.js";
 import { BareSlugRejected } from "./utils.js";
 import { pollAndFetch, queryDueSources } from "./cron/poll-fetch.js";
 import { drizzle } from "drizzle-orm/d1";
@@ -226,54 +193,13 @@ app.use("*", async (c, next) => {
 
 const v1 = new Hono<Env>();
 
-// No-auth routes (status WebSocket, public media GET, public webhook replay)
-v1.route("/", statusRoutes);
-v1.route("/", mediaRoutes);
-v1.route("/", streamRoutes);
-mountWebhooksReplay(v1, (c) => c.env);
-
-// Public-read routes: GET is open, writes require auth
-const publicReadRoutes = [
-  "stats",
-  "orgs",
-  "sources",
-  "search",
-  "releases",
-  "products",
-  "tags",
-  "categories",
-  "collections",
-  "related",
-  "sitemap",
-  // /lookups: GETs (source-by-slug, product-by-slug, by-domain) are public
-  // resolution primitives. POST /v1/lookups (on-demand GitHub indexer) is
-  // gated as a write by publicReadAuthMiddleware's SAFE_METHODS check.
-  "lookups",
-];
+// `publicReadRoutes` and `adminRoutes` are defined in route-namespaces.ts so
+// the CI coverage gate (scripts/check-openapi-coverage.ts) can import them
+// without pulling in the worker's `cloudflare:workers` re-exports.
 for (const r of publicReadRoutes) {
   v1.use(`/${r}`, publicReadAuthMiddleware, publicRateLimitMiddleware, dbHealthCheck);
   v1.use(`/${r}/*`, publicReadAuthMiddleware, publicRateLimitMiddleware, dbHealthCheck);
 }
-
-// Admin-only routes: all methods require auth.
-const adminRoutes = [
-  "sessions",
-  "evaluate",
-  "status/fetch-log",
-  "status/usage",
-  "status/event",
-  "admin/blocklist",
-  "admin/embed/status",
-  "admin/cron-runs",
-  "admin/logs",
-  "admin/search-queries",
-  "admin/overviews",
-  "admin/orgs",
-  "admin/sources",
-  "errata",
-  "webhooks",
-  "workflows",
-];
 for (const r of adminRoutes) {
   v1.use(`/${r}`, authMiddleware, dbHealthCheck);
   v1.use(`/${r}/*`, authMiddleware, dbHealthCheck);
@@ -374,44 +300,11 @@ v1.use(
 );
 v1.use("/openapi.json", cacheControl(3600, { staleWhileRevalidate: 300, isPublic: true }));
 
-// Route modules — releaseRoutes is mounted before sourceRoutes so the static
-// `/releases/latest` handler (in releases.ts) wins over the parametric
-// `/releases/:id` handler (in sources.ts) regardless of router internals.
-v1.route("/", sessionRoutes);
-v1.route("/", statsRoutes);
-v1.route("/", orgRoutes);
-v1.route("/", sitemapRoutes);
-v1.route("/", productRoutes);
-v1.route("/", releaseRoutes);
-v1.route("/", sourceRoutes);
-v1.route("/", searchRoutes);
-v1.route("/", relatedRoutes);
-v1.route("/", fetchLogRoutes);
-v1.route("/", usageLogRoutes);
-v1.route("/", ignoreRoutes);
-v1.route("/", lookupRoutes);
-v1.route("/", summaries);
-v1.route("/", overview);
-v1.route("/", overviewInputs);
-v1.route("/", playbook);
-v1.route("/", evaluateRoutes);
-v1.route("/", adminEmbedStatusRoutes);
-v1.route("/", adminCronRunsRoutes);
-v1.route("/", adminSearchQueriesRoutes);
-v1.route("/", adminOverviewsRoutes);
-v1.route("/", adminSourcesRoutes);
-v1.route("/", adminOrgDependentsRoutes);
-v1.route("/", errataRoutes);
-v1.route("/", webhooksRoutes);
-v1.route("/", workflowsRoutes);
-v1.route("/", telemetryRoutes);
-v1.route("/", taxonomyRoutes);
-v1.route("/", collectionRoutes);
-
-// OpenAPI spec + Scalar reference UI. Mounted after all v1 routes so the
-// generator sees the complete route table. Public — no auth gate so external
-// consumers can fetch the spec for SDK generation.
-mountOpenApi(v1);
+// Route modules. Mount order is load-bearing (releaseRoutes before
+// sourceRoutes so /releases/latest wins over the parametric /releases/:id)
+// and is preserved in `mountV1Routes`. `mountOpenApi(v1)` runs at the tail
+// of that call so the generator sees the complete route table.
+mountV1Routes(v1);
 
 // GraphQL spike (#TBD). Sits inside v1 so it picks up the per-route public
 // middleware (rate limit, db health). publicReadAuthMiddleware is intentionally
