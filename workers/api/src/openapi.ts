@@ -82,6 +82,7 @@ const TAGS = [
     name: "Collections",
     description: "Curated, named org playlists independent of category.",
   },
+  { name: "Overviews", description: "AI-generated org and product summaries." },
   { name: "Admin", description: "Admin-only telemetry. Bearer required." },
   { name: "Workflows", description: "Job triggers. Bearer required." },
   { name: "Webhooks", description: "Webhook subscription management." },
@@ -145,6 +146,20 @@ export function mountOpenApi(v1: Hono<Env>) {
       },
       c,
     );
+
+    // Drop tag definitions that no visible operation references. Without this,
+    // Scalar renders empty sidebar sections for any tag declared in `TAGS`
+    // that has no operations under it — common in production where whole tag
+    // families (Webhooks, Sessions, Workflows, Admin, Sitemap) collapse to
+    // zero operations after `hide: hideInProduction` does its work.
+    const usedTags = new Set<string>();
+    for (const methods of Object.values(spec.paths ?? {})) {
+      for (const op of Object.values(methods as Record<string, { tags?: string[] }>)) {
+        for (const t of op?.tags ?? []) usedTags.add(t);
+      }
+    }
+    if (spec.tags) spec.tags = spec.tags.filter((t) => usedTags.has(t.name));
+
     return c.json(spec);
   });
 
