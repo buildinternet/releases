@@ -44,14 +44,14 @@ const body = {
       ],
       "service-doc": [
         {
-          href: SCALAR_DOCS_URL,
-          type: "text/html",
-          title: "Releases REST API — interactive reference (Scalar)",
-        },
-        {
           href: `${BASE_URL}/docs/api/rest`,
           type: "text/html",
-          title: "Releases REST API — overview",
+          title: "Releases REST API — interactive reference",
+        },
+        {
+          href: SCALAR_DOCS_URL,
+          type: "text/html",
+          title: "Releases REST API — interactive reference (direct, no marketing chrome)",
         },
       ],
     },
