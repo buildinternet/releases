@@ -190,6 +190,20 @@ describe("POST /v1/releases/:id/suppress (validateJson)", () => {
     expect(row?.suppressed).toBe(true);
   });
 
+  test("omitted body (no Content-Type, no payload) also sets suppressed=true", async () => {
+    // Distinct from the `{}` case: this exercises the path where Hono's
+    // validator falls through without parsing because Content-Type isn't
+    // application/json, leaving value={} for the schema to validate. Locks
+    // in the middleware-compat behavior that replaced the prior
+    // `.catch(() => ({}))` parse shim.
+    await seed();
+    const res = await callSrc("/releases/rel_canon/suppress", "POST");
+    expect(res.status).toBe(200);
+    const [row] = await testDb.db.select().from(releases).where(eq(releases.id, "rel_canon"));
+    expect(row?.suppressed).toBe(true);
+    expect(row?.suppressedReason).toBeNull();
+  });
+
   test("happy path with reason stores it", async () => {
     await seed();
     const res = await callSrc("/releases/rel_canon/suppress", "POST", { reason: "spam" });
