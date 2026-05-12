@@ -11,15 +11,38 @@ export const OrgOverviewResponseSchema = OverviewPageItemSchema.extend({
 }).nullable();
 
 /**
+ * Incoming citation row attached to `POST /v1/orgs/:slug/overview`. Slimmer
+ * than the read-side `OverviewCitationSchema` because the wire shape doesn't
+ * carry `releaseId` — that's resolved server-side from `sourceUrl`. Spans
+ * must be in-range (`endIndex > startIndex`); the cross-field
+ * `endIndex <= content.length` check stays in the handler.
+ */
+export const IncomingOverviewCitationSchema = z
+  .object({
+    startIndex: z.number().int().min(0),
+    endIndex: z.number().int().min(1),
+    sourceUrl: z.string().min(1),
+    title: z.string().nullable().optional(),
+    citedText: z.string().min(1),
+  })
+  .refine((c) => c.endIndex > c.startIndex, {
+    message: "endIndex must be > startIndex",
+  });
+
+/**
  * Body accepted by `POST /v1/orgs/:slug/overview` — the agent-authored
  * markdown content, the release count it was derived from, the timestamp of
  * the most-recent contributing release, and optional inline citations.
+ *
+ * `content` is non-empty. `releaseCount` is a finite non-negative integer.
+ * `citations` is an array of `IncomingOverviewCitation`; the handler still
+ * cross-checks `endIndex <= content.length` since that bound is content-aware.
  */
 export const RegenerateOverviewBodySchema = z.object({
-  content: z.string(),
+  content: z.string().min(1),
   releaseCount: z.number().int().min(0),
   lastContributingReleaseAt: z.string().nullable().optional(),
-  citations: z.array(z.unknown()).optional(),
+  citations: z.array(IncomingOverviewCitationSchema).optional(),
 });
 
 /** Response returned by `POST /v1/orgs/:slug/overview` on success. */

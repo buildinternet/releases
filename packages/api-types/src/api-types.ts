@@ -202,6 +202,7 @@ import type {
 } from "./schemas/collections.js";
 import type {
   OrgOverviewResponseSchema,
+  IncomingOverviewCitationSchema,
   RegenerateOverviewBodySchema,
   RegenerateOverviewResponseSchema,
   ProductOverviewResponseSchema,
@@ -408,6 +409,7 @@ export {
 } from "./schemas/collections.js";
 export {
   OrgOverviewResponseSchema,
+  IncomingOverviewCitationSchema,
   RegenerateOverviewBodySchema,
   RegenerateOverviewResponseSchema,
   ProductOverviewResponseSchema,
@@ -710,6 +712,7 @@ export type OverviewCitation = z.infer<typeof OverviewCitationSchema>;
 export type KnowledgePageItem = OverviewPageItem;
 
 export type OrgOverviewResponse = z.infer<typeof OrgOverviewResponseSchema>;
+export type IncomingOverviewCitation = z.infer<typeof IncomingOverviewCitationSchema>;
 export type RegenerateOverviewBody = z.infer<typeof RegenerateOverviewBodySchema>;
 export type RegenerateOverviewResponse = z.infer<typeof RegenerateOverviewResponseSchema>;
 export type ProductOverviewResponse = z.infer<typeof ProductOverviewResponseSchema>;
