@@ -57,6 +57,9 @@ import type {
   ProductAdoptDryRunSchema,
   ProductAdoptResponseSchema,
   ProductDeleteResponseSchema,
+  ProductTagsListResponseSchema,
+  ProductTagsBodySchema,
+  ProductTagsMutationResponseSchema,
 } from "./schemas/products.js";
 import type {
   ReleaseLatestSourceSchema,
@@ -191,6 +194,9 @@ export {
   ProductAdoptDryRunSchema,
   ProductAdoptResponseSchema,
   ProductDeleteResponseSchema,
+  ProductTagsListResponseSchema,
+  ProductTagsBodySchema,
+  ProductTagsMutationResponseSchema,
 } from "./schemas/products.js";
 export {
   LookupStatusSchema,
@@ -658,6 +664,9 @@ export type ProductAdoptResult = z.infer<typeof ProductAdoptResultSchema>;
 export type ProductAdoptDryRun = z.infer<typeof ProductAdoptDryRunSchema>;
 export type ProductAdoptResponse = z.infer<typeof ProductAdoptResponseSchema>;
 export type ProductDeleteResponse = z.infer<typeof ProductDeleteResponseSchema>;
+export type ProductTagsListResponse = z.infer<typeof ProductTagsListResponseSchema>;
+export type ProductTagsBody = z.infer<typeof ProductTagsBodySchema>;
+export type ProductTagsMutationResponse = z.infer<typeof ProductTagsMutationResponseSchema>;
 
 // ── Taxonomy (categories + tags) ──
 

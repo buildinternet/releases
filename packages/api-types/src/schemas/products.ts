@@ -144,3 +144,20 @@ export const ProductDeleteResponseSchema = z.object({
   hard: z.literal(true).optional(),
   deletedAt: z.string().optional(),
 });
+
+/**
+ * Tag list returned by `GET /v1/products/:identifier/tags`. Tag names are
+ * sorted alphabetically; the empty array is returned when the product has
+ * no tags rather than 404.
+ */
+export const ProductTagsListResponseSchema = z.array(z.string());
+
+/** Body accepted by `PUT` and `DELETE` `/v1/products/:identifier/tags`. */
+export const ProductTagsBodySchema = z.object({
+  tags: z.array(z.string()),
+});
+
+/** Response shape returned by `PUT` and `DELETE` `/v1/products/:identifier/tags`. */
+export const ProductTagsMutationResponseSchema = z.object({
+  ok: z.literal(true),
+});
