@@ -24,12 +24,6 @@ jobs:
         with:
           bun-version: latest
 
-      - uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
-        with:
-          path: ~/.bun/install/cache
-          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
-          restore-keys: ${{ runner.os }}-bun-
-
       - run: bun install --frozen-lockfile
 
       - name: Oxlint
@@ -50,12 +44,6 @@ jobs:
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: latest
-
-      - uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
-        with:
-          path: ~/.bun/install/cache
-          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
-          restore-keys: ${{ runner.os }}-bun-
 
       - run: bun install --frozen-lockfile
 
@@ -142,11 +130,6 @@ jobs:
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: latest
-      - uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
-        with:
-          path: ~/.bun/install/cache
-          key: ${{ runner.os }}-bun-workers-${{ hashFiles('workers/discovery/bun.lock', 'workers/mcp/bun.lock', 'workers/webhooks/bun.lock') }}
-          restore-keys: ${{ runner.os }}-bun-
       - name: Verify discovery
         working-directory: workers/discovery
         run: bun install --frozen-lockfile
