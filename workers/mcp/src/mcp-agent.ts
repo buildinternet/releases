@@ -26,7 +26,7 @@ import {
   type SearchToolReturn,
   type ToolResult,
 } from "./tools.js";
-import { registerResources } from "./resources.js";
+import { registerResources, RELEASE_FEED_UI_URI } from "./resources.js";
 import { registerPrompts } from "./prompts.js";
 import { logMcpSearch, deriveMcpClientKind, type McpSearchCommand } from "./lib/log-search.js";
 import { buildSearchMeta } from "./lib/pagination.js";
@@ -145,6 +145,21 @@ function titled(title: string, hints: typeof READ_ONLY_HINTS | typeof AI_READ_HI
   return { title, annotations: { title, ...hints } };
 }
 
+/**
+ * Build an `_meta` object that points at an MCP App UI resource. Sets both
+ * `_meta.ui.resourceUri` (current spec) AND the legacy flat `_meta["ui/resourceUri"]`
+ * key — `@modelcontextprotocol/ext-apps`'s `registerAppTool` does this same
+ * normalization. MCP Inspector (and some hosts) check for the legacy key when
+ * deciding which tools count as MCP Apps, so emitting both keeps the surface
+ * compatible across host versions.
+ */
+function uiMeta(resourceUri: string) {
+  return {
+    ui: { resourceUri },
+    "ui/resourceUri": resourceUri,
+  } as const;
+}
+
 // Shared `page` / `limit` zod fields for the four list_* tools. Defaults
 // (page=1, limit=50, max=200) match `parseMcpPagination` in
 // workers/mcp/src/lib/pagination.ts.
@@ -174,10 +189,23 @@ export interface CreateServerOptions {
 }
 
 export function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServerOptions) {
-  const server = new McpServer({
-    name: "releases",
-    version: "0.15.0",
-  });
+  const server = new McpServer(
+    {
+      name: "releases",
+      version: "0.15.0",
+    },
+    {
+      // Explicit capability advertisement. Some hosts (including older MCP
+      // Inspector builds) only attempt `resources/list` after they see
+      // `resources` in the initialize-response capabilities; declaring them
+      // up-front is cheaper than relying on the SDK's lazy-binding heuristic.
+      capabilities: {
+        tools: {},
+        resources: {},
+        prompts: {},
+      },
+    },
+  );
 
   const db = createDb(env.DB);
   const mediaOrigin = env.MEDIA_ORIGIN ?? "";
@@ -466,10 +494,14 @@ export function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServ
     {
       ...titled("Get latest releases", READ_ONLY_HINTS),
       description: [
-        "Get the most recent releases, optionally filtered by product or organization.",
+        "Get the most recent releases, optionally filtered by product or organization. Excludes prereleases (canaries / alphas / betas / RCs) by default — pass `include_prereleases: true` to include them.",
         "",
         "Cursor-paginated: pass `limit` for slice size (default 10), `cursor` to continue from a prior call. The result's `_meta.pagination` carries `kind: 'cursor'`, `hasMore`, and `nextCursor` when more rows exist; the response text echoes `nextCursor` so an LLM caller can chain without parsing `_meta`. Cursors are stable under inserts — a release added between calls won't shift the slice.",
       ].join("\n"),
+      // MCP App UI for hosts that support it (Claude Desktop). Pairs with the
+      // tool's `structuredContent` payload; non-UI hosts ignore the field and
+      // the model continues to read the rendered markdown in `content[0].text`.
+      _meta: uiMeta(RELEASE_FEED_UI_URI),
       inputSchema: {
         product: z
           .string()
@@ -507,6 +539,12 @@ export function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServ
           .optional()
           .describe(
             "Include releases grouped as coverage of another (e.g. marketing posts that re-announce a platform release). Defaults to false so each underlying launch appears once.",
+          ),
+        include_prereleases: z
+          .boolean()
+          .optional()
+          .describe(
+            "Include prerelease tags (alphas, betas, RCs, canaries). Defaults to false so the feed matches the public web view.",
           ),
       },
     },
@@ -695,6 +733,8 @@ export function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServ
         "",
         "Cursor-paginated: pass `limit` for slice size (default 20), `cursor` to continue from a prior call. The result's `_meta.pagination` carries `kind: 'cursor'`, `hasMore`, and `nextCursor` when more rows exist; the response text echoes `nextCursor` so an LLM caller can chain without parsing `_meta`. Cursors are stable under inserts.",
       ].join("\n"),
+      // Shares the release-feed UI with `get_latest_releases` — same payload shape.
+      _meta: uiMeta(RELEASE_FEED_UI_URI),
       inputSchema: {
         slug: z.string().describe("Collection slug (e.g. 'frontier-ai-labs')."),
         limit: z

@@ -872,6 +872,49 @@ describe("get_latest_releases (round-trippable source coordinates)", () => {
   });
 });
 
+describe("get_latest_releases prerelease filter", () => {
+  const fixture = useFixture(async (db) => {
+    const seeded = await seed(db);
+    await db.insert(releases).values([
+      {
+        id: newReleaseId(),
+        sourceId: seeded.nextjsSrcId,
+        title: "15.0.0-canary.42",
+        version: "15.0.0-canary.42",
+        url: "https://example.com/canary-42",
+        content: "canary body",
+        publishedAt: "2024-09-01T00:00:00Z",
+        prerelease: true,
+      },
+      {
+        id: newReleaseId(),
+        sourceId: seeded.nextjsSrcId,
+        title: "15.0.0",
+        version: "15.0.0",
+        url: "https://example.com/stable",
+        content: "stable body",
+        publishedAt: "2024-09-02T00:00:00Z",
+        prerelease: false,
+      },
+    ]);
+    return seeded;
+  });
+
+  it("excludes prereleases by default", async () => {
+    const text = resultText(await getLatestReleases(asD1(fixture.db), {}));
+    expect(text).toContain("15.0.0");
+    expect(text).not.toContain("canary.42");
+  });
+
+  it("includes prereleases when include_prereleases=true", async () => {
+    const text = resultText(
+      await getLatestReleases(asD1(fixture.db), { include_prereleases: true }),
+    );
+    expect(text).toContain("canary.42");
+    expect(text).toContain("15.0.0");
+  });
+});
+
 describe("get_latest_releases _meta.pagination (cursor)", () => {
   // Six spine releases on top of the two from `seed()` → cursor with limit=3
   // walks the feed deterministically.

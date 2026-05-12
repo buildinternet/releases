@@ -8,6 +8,18 @@ import {
   completeProductSlug,
   completeSourceSlug,
 } from "./slug-completion.js";
+import { releaseFeedHtml } from "./ui-bundles.js";
+
+/**
+ * MIME type the MCP Apps spec uses for bundled HTML UI resources. Matches
+ * `RESOURCE_MIME_TYPE` exported by `@modelcontextprotocol/ext-apps`; inlined
+ * here so the worker doesn't carry the wrapper package as a runtime dep.
+ * The `profile` parameter (not a `+suffix`) is what hosts pattern-match on.
+ */
+export const UI_RESOURCE_MIME_TYPE = "text/html;profile=mcp-app";
+
+/** Stable URIs paired with tool `_meta.ui.resourceUri` values. */
+export const RELEASE_FEED_UI_URI = "ui://releases/release-feed.html";
 
 /** Completion-only: `resources/list` is intentionally empty. See docs/architecture/mcp.md. */
 
@@ -107,5 +119,28 @@ export function registerResources(server: McpServer, db: D1Db, mediaOrigin: stri
       const slug = String(variables.sourceSlug);
       return toMarkdownContents(uri, await getCatalogEntry(db, { identifier: slug }), mediaOrigin);
     },
+  );
+
+  // ── MCP App UI resources ───────────────────────────────────────────────
+  // Tools advertise these via `_meta.ui.resourceUri`. Hosts that support
+  // MCP Apps fetch the HTML; everyone else falls back to the text content.
+  // See docs/architecture/mcp.md for the full pattern.
+  server.registerResource(
+    "release-feed-ui",
+    RELEASE_FEED_UI_URI,
+    {
+      description:
+        "Interactive feed UI for `get_latest_releases` and `get_collection_releases`. Renders the structured release list as cards with cursor-based 'load more'.",
+      mimeType: UI_RESOURCE_MIME_TYPE,
+    },
+    async () => ({
+      contents: [
+        {
+          uri: RELEASE_FEED_UI_URI,
+          mimeType: UI_RESOURCE_MIME_TYPE,
+          text: releaseFeedHtml,
+        },
+      ],
+    }),
   );
 }

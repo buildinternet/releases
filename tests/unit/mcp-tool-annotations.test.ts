@@ -75,6 +75,23 @@ describe("MCP tool annotations", () => {
     }
   });
 
+  it("advertises an MCP App UI for the release-feed tools", () => {
+    const expectedUri = "ui://releases/release-feed.html";
+    const feedTools = ["get_latest_releases", "get_collection_releases"];
+    for (const name of feedTools) {
+      const tool = tools.find((t) => t.name === name);
+      expect(tool, `expected ${name} in tools list`).toBeDefined();
+      // Set both the current nested key (`_meta.ui.resourceUri`) AND the
+      // legacy flat key (`_meta["ui/resourceUri"]`). MCP Inspector and some
+      // hosts only recognize the flat form — assert both to prevent regression.
+      const meta = tool!._meta as
+        | { ui?: { resourceUri?: string }; "ui/resourceUri"?: string }
+        | undefined;
+      expect(meta?.ui?.resourceUri).toBe(expectedUri);
+      expect(meta?.["ui/resourceUri"]).toBe(expectedUri);
+    }
+  });
+
   it("flips idempotentHint off for AI tools (LLM output varies)", async () => {
     const aiTools = await listTools(stubEnv({ ENABLE_AI_TOOLS: "true" }));
     const summarize = aiTools.find((t) => t.name === "summarize_changes");
