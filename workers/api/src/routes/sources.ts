@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { describeRoute, resolver } from "hono-openapi";
+import { hideInProduction } from "../openapi.js";
 import {
   eq,
   desc,
@@ -409,6 +410,7 @@ sourceRoutes.get(
 // ── Fetchable sources (must be before :slug route) ──
 
 const getFetchableSourcesRoute = describeRoute({
+  hide: hideInProduction,
   tags: ["Sources"],
   summary: "List fetchable sources",
   description:
@@ -468,6 +470,7 @@ sourceRoutes.get("/sources/fetchable", getFetchableSourcesRoute, async (c) => {
 // ── Feed and change-detection sources (must be before :slug route) ──
 
 const getFeedSourcesRoute = describeRoute({
+  hide: hideInProduction,
   tags: ["Sources"],
   summary: "List feed sources",
   description:
@@ -495,6 +498,7 @@ sourceRoutes.get("/sources/feeds", getFeedSourcesRoute, async (c) => {
 });
 
 const getChangedSourcesRoute = describeRoute({
+  hide: hideInProduction,
   tags: ["Sources"],
   summary: "List sources with pending changes",
   description:
@@ -1121,6 +1125,7 @@ const getRecentReleasesHandler = async (c: import("hono").Context<Env>) => {
   return c.json(rows);
 };
 const getRecentReleasesRoute = describeRoute({
+  hide: hideInProduction,
   tags: ["Sources"],
   summary: "List recent releases for a source",
   description:
@@ -1180,6 +1185,7 @@ const getKnownReleasesHandler = async (c: import("hono").Context<Env>) => {
   return c.json(rows);
 };
 const getKnownReleasesRoute = describeRoute({
+  hide: hideInProduction,
   tags: ["Sources"],
   summary: "List known releases for a source",
   description:
@@ -1206,6 +1212,7 @@ sourceRoutes.get(
 // ── Sessions involving a specific source slug ──
 
 const getSourceSessionsRoute = describeRoute({
+  hide: hideInProduction,
   tags: ["Sources"],
   summary: "Get active discovery sessions for a source",
   description:
@@ -1314,6 +1321,7 @@ const getSourceActivityHandler = async (c: import("hono").Context<Env>) => {
   });
 };
 const getSourceActivityRoute = describeRoute({
+  hide: hideInProduction,
   tags: ["Sources"],
   summary: "Get source release activity",
   description:
@@ -1359,6 +1367,7 @@ const getSourceHeatmapHandler = async (c: import("hono").Context<Env>) => {
   });
 };
 const getSourceHeatmapRoute = describeRoute({
+  hide: hideInProduction,
   tags: ["Sources"],
   summary: "Get source release heatmap",
   description:
@@ -1425,6 +1434,7 @@ const getSourceChangelogHandler = async (c: import("hono").Context<Env>) => {
   );
 };
 const getSourceChangelogRoute = describeRoute({
+  hide: hideInProduction,
   tags: ["Sources"],
   summary: "Get source changelog",
   description:
@@ -1457,6 +1467,7 @@ sourceRoutes.get(
   "/sources/changelog-files/oversized",
   authMiddleware,
   describeRoute({
+    hide: hideInProduction,
     tags: ["Sources"],
     summary: "List oversized changelog files",
     description:

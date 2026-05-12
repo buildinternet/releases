@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { describeRoute, resolver } from "hono-openapi";
+import { hideInProduction } from "../openapi.js";
 import {
   OrgListResponseSchema,
   OrgDetailSchema,
@@ -1192,6 +1193,7 @@ orgRoutes.post(
 orgRoutes.get(
   "/orgs/:slug/activity",
   describeRoute({
+    hide: hideInProduction,
     tags: ["Orgs"],
     summary: "Org release activity (weekly buckets)",
     description:
@@ -1383,6 +1385,7 @@ orgRoutes.get(
 orgRoutes.get(
   "/orgs/:slug/heatmap",
   describeRoute({
+    hide: hideInProduction,
     tags: ["Orgs"],
     summary: "Org release heatmap (daily counts)",
     description:
@@ -1421,6 +1424,7 @@ orgRoutes.get(
 orgRoutes.get(
   "/orgs/:slug/sparklines",
   describeRoute({
+    hide: hideInProduction,
     tags: ["Orgs"],
     summary: "Org sparklines (30-day per-source breakdown)",
     description:
@@ -1696,6 +1700,7 @@ orgRoutes.get(
 orgRoutes.get(
   "/orgs/:slug/recent-releases",
   describeRoute({
+    hide: hideInProduction,
     tags: ["Orgs"],
     summary: "Recent releases for an org (agent summarization)",
     description:

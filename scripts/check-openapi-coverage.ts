@@ -23,7 +23,32 @@ import type { Env } from "../workers/api/src/index.js";
  * `v1.routes[].path` returns.
  */
 const ALLOWLIST = new Set<string>([
-  // All Phase-1 long-tail buckets have been annotated. ALLOWLIST is empty.
+  // These routes are annotated with `hide: hideInProduction` — they exist in
+  // the spec on staging/local but are intentionally suppressed on production.
+  // The coverage script always generates the spec with ENVIRONMENT=production,
+  // so they appear as holes here even though they have describeRoute(). See
+  // workers/api/src/openapi.ts for the `hideInProduction` helper.
+  "GET /orgs/:slug/activity",
+  "GET /orgs/:slug/heatmap",
+  "GET /orgs/:slug/sparklines",
+  "GET /orgs/:slug/recent-releases",
+  "GET /sitemap",
+  "GET /sources/fetchable",
+  "GET /sources/feeds",
+  "GET /sources/changes",
+  "GET /sources/:slug/recent-releases",
+  "GET /sources/:slug/known-releases",
+  "GET /sources/:slug/sessions",
+  "GET /sources/:slug/activity",
+  "GET /sources/:slug/heatmap",
+  "GET /sources/:slug/changelog",
+  "GET /sources/changelog-files/oversized",
+  // Org-scoped aliases of the above source routes (same describeRoute, same hide):
+  "GET /orgs/:orgSlug/sources/:sourceSlug/recent-releases",
+  "GET /orgs/:orgSlug/sources/:sourceSlug/known-releases",
+  "GET /orgs/:orgSlug/sources/:sourceSlug/activity",
+  "GET /orgs/:orgSlug/sources/:sourceSlug/heatmap",
+  "GET /orgs/:orgSlug/sources/:sourceSlug/changelog",
 ]);
 
 const HTTP_METHODS = new Set(["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"]);

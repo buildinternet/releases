@@ -2,6 +2,19 @@ import { generateSpecs } from "hono-openapi";
 import type { Hono } from "hono";
 import type { Env } from "./index.js";
 
+// Hides the route from /v1/openapi.json on production. Staging and local
+// `wrangler dev` still expose it so our internal tooling can introspect the
+// full surface. The endpoint itself is unaffected — this only changes what
+// the spec advertises.
+//
+// hono-openapi's `hide` callback signature passes `c?: Context | undefined`,
+// so we type the env read defensively and treat any non-"production" value
+// (staging, undefined under `wrangler dev`) as "show".
+export const hideInProduction = (opts: { c?: { env?: unknown } }) => {
+  const env = (opts.c?.env ?? {}) as { ENVIRONMENT?: string };
+  return env.ENVIRONMENT === "production";
+};
+
 // Scalar pinned to a major version; jsdelivr resolves to the latest 1.x patch.
 // A breaking 2.x release won't silently swap in.
 //
