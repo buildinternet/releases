@@ -350,6 +350,40 @@ v1.route("/", graphqlRoutes);
 
 app.route("/v1", v1);
 
+// Bare-API JSON index. A human or agent hitting `https://api.releases.sh/` or
+// `/v1` gets a self-describing payload pointing at the OpenAPI spec, the
+// rendered reference, and the human docs — instead of Hono's default text 404.
+type IndexCtx = { req: { url: string } };
+const apiIndexPayload = (c: IndexCtx) => {
+  const origin = new URL(c.req.url).origin;
+  return {
+    name: "Releases API",
+    version: "v1",
+    description:
+      "REST API for the Releases changelog registry. See the OpenAPI spec or the rendered reference for endpoint details.",
+    links: {
+      openapi: `${origin}/v1/openapi.json`,
+      reference: `${origin}/v1/docs`,
+      docs: "https://releases.sh/docs/api/rest",
+      web: "https://releases.sh",
+    },
+  };
+};
+app.get("/", (c) => c.json(apiIndexPayload(c)));
+v1.get("/", (c) => c.json(apiIndexPayload(c)));
+
+// Catch-all JSON 404 — matches the envelope used by `onError` so unknown
+// paths look the same as path-known errors to clients.
+app.notFound((c) =>
+  c.json(
+    {
+      error: "not_found",
+      message: `No route for ${c.req.method} ${new URL(c.req.url).pathname}`,
+    },
+    404,
+  ),
+);
+
 export default {
   fetch: app.fetch,
   async scheduled(event: ScheduledEvent, env: Env["Bindings"], ctx: ExecutionContext) {

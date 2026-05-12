@@ -4,6 +4,36 @@ import type { Env } from "./index.js";
 
 // Scalar pinned to a major version; jsdelivr resolves to the latest 1.x patch.
 // A breaking 2.x release won't silently swap in.
+//
+// Config choices:
+// - `agent.disabled` removes the "Ask AI" chat affordance; we don't host an
+//   inference endpoint, so it would error or send queries to Scalar's hosted
+//   service we don't control.
+// - `mcp.disabled` removes the "Generate MCP" button; we ship our own remote
+//   MCP server at mcp.releases.sh and don't want a competing auto-generated
+//   wrapper offered here.
+// - `hideClientButton` hides the in-sidebar global client switcher (the
+//   per-endpoint client tabs still render).
+// - `customCss` hides the "Powered by Scalar" footer — no built-in toggle in
+//   Scalar 1.x. The "Back to docs" link lives in the OpenAPI `info.description`
+//   markdown instead, which Scalar renders as the intro panel.
+const SCALAR_CONFIG = {
+  theme: "default",
+  hideClientButton: true,
+  agent: { disabled: true },
+  mcp: { disabled: true },
+  metaData: {
+    title: "Releases API Reference",
+    ogTitle: "Releases API Reference",
+    description: "Interactive reference for the Releases changelog registry REST API.",
+  },
+  customCss:
+    [
+      ".scalar-footer",
+      '[class*="powered-by-scalar"]',
+      'a[href*="scalar.com"][class*="powered"]',
+    ].join(",\n") + " { display: none !important; }",
+};
 const SCALAR_HTML = `<!doctype html>
 <html lang="en">
   <head>
@@ -15,7 +45,7 @@ const SCALAR_HTML = `<!doctype html>
     <script
       id="api-reference"
       data-url="/v1/openapi.json"
-      data-configuration='{"theme":"default"}'
+      data-configuration='${JSON.stringify(SCALAR_CONFIG).replace(/'/g, "&#39;")}'
     ></script>
     <script src="https://cdn.jsdelivr.net/npm/@scalar/api-reference@1"></script>
   </body>
@@ -59,8 +89,15 @@ export function mountOpenApi(v1: Hono<Env>) {
           info: {
             title: "Releases API",
             version: "1.0.0",
-            description:
-              "REST API for the Releases changelog registry — orgs, products, sources, releases, and search. See https://releases.sh.",
+            // Markdown rendered by Scalar as the intro panel. Includes a
+            // back-link to the narrative docs since the sidebar doesn't have
+            // one (we hide Scalar's footer branding, which is where their
+            // tooling normally puts cross-links).
+            description: [
+              "REST API for the Releases changelog registry — orgs, products, sources, releases, and search.",
+              "",
+              "**Links:** [releases.sh](https://releases.sh) · [Narrative docs](https://releases.sh/docs/api/rest) · [MCP server](https://releases.sh/docs/api/mcp)",
+            ].join("\n"),
           },
           servers: isStaging
             ? [
