@@ -24,6 +24,7 @@ import {
 } from "@buildinternet/releases-core/schema";
 import { createDb } from "../db.js";
 import { sourceMatchByIdOrSlug, parseReleaseMedia } from "../utils.js";
+import { daysAgoIso } from "@buildinternet/releases-core/dates";
 import { logEvent } from "@releases/lib/log-event";
 import {
   RelatedReleasesResponseSchema,
@@ -487,7 +488,7 @@ relatedRoutes.get(
     // and the fields *of* the latest release (title, version) without a second
     // roundtrip. ROW_NUMBER lets us pick exactly one row per source.
     const visibleIds = [...visibleById.keys()];
-    const recentCutoffIso = new Date(Date.now() - 30 * 86_400_000).toISOString();
+    const recentCutoffIso = daysAgoIso(30);
     const statsRows: Array<{
       sourceId: string;
       n: number;

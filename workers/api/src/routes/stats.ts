@@ -45,7 +45,11 @@ statsRoutes.get(
   }),
   async (c) => {
     const db = createDb(c.env.DB);
-    const days = parseInt(c.req.query("days") ?? "30", 10);
+    // Bad input (negative, zero, NaN) falls back to the documented default of
+    // 30 rather than clamping silently to 1 — a typoed query string shouldn't
+    // change the lookback window from what an unspecified param would give.
+    const parsedDays = parseInt(c.req.query("days") ?? "30", 10);
+    const days = Number.isFinite(parsedDays) && parsedDays >= 1 ? parsedDays : 30;
     const cutoff = daysAgoIso(days);
 
     const [
