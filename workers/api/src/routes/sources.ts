@@ -131,6 +131,17 @@ import { logEvent } from "@releases/lib/log-event";
 export const sourceRoutes = new Hono<Env>();
 
 /**
+ * Narrow a parsed JSON body to a non-null, non-array object. `await c.req.json()`
+ * happily returns `null`, arrays, or primitives (all valid JSON), and the
+ * downstream `body.<field>` access on those values either throws (`null`) or
+ * silently returns `undefined` for fields like `body.title` (arrays/strings).
+ * Callers should `return c.json({ error: "bad_request", ... }, 400)` on `false`.
+ */
+function isJsonObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/**
  * Resolve `org { id, slug, name }` and `productSlug` for a source row, both
  * in a single batched read. Returned shape matches `SourceMutationResponse`
  * — see `packages/api-types/src/schemas/sources.ts` for the contract.
@@ -920,7 +931,11 @@ const postContentHashHandler = async (c: import("hono").Context<Env>) => {
 
   let body: { contentHash: string };
   try {
-    body = await c.req.json<{ contentHash: string }>();
+    const parsed = await c.req.json<unknown>();
+    if (!isJsonObject(parsed)) {
+      return c.json({ error: "bad_request", message: "Body must be a JSON object" }, 400);
+    }
+    body = parsed as { contentHash: string };
   } catch {
     return c.json({ error: "bad_request", message: "Invalid JSON body" }, 400);
   }
@@ -1007,11 +1022,12 @@ const patchMetadataHandler = async (c: import("hono").Context<Env>) => {
 
   let patch: Record<string, unknown>;
   try {
-    patch = await c.req.json<Record<string, unknown>>();
+    const parsed = await c.req.json<unknown>();
+    if (!isJsonObject(parsed)) {
+      return c.json({ error: "bad_request", message: "Body must be a JSON object" }, 400);
+    }
+    patch = parsed;
   } catch {
-    return c.json({ error: "bad_request", message: "Body must be a JSON object" }, 400);
-  }
-  if (!patch || typeof patch !== "object" || Array.isArray(patch)) {
     return c.json({ error: "bad_request", message: "Body must be a JSON object" }, 400);
   }
 
@@ -1493,7 +1509,11 @@ const patchChangelogTokensHandler = async (c: import("hono").Context<Env>) => {
   const db = createDb(c.env.DB);
   let body: { tokens: number; path?: string };
   try {
-    body = await c.req.json<{ tokens: number; path?: string }>();
+    const parsed = await c.req.json<unknown>();
+    if (!isJsonObject(parsed)) {
+      return c.json({ error: "bad_request", message: "Body must be a JSON object" }, 400);
+    }
+    body = parsed as { tokens: number; path?: string };
   } catch {
     return c.json({ error: "bad_request", message: "Invalid JSON body" }, 400);
   }
@@ -2522,7 +2542,11 @@ sourceRoutes.post("/sources/:slug/releases", postReleaseRoute, async (c) => {
     type?: ReleaseType;
   };
   try {
-    body = await c.req.json();
+    const parsed = await c.req.json<unknown>();
+    if (!isJsonObject(parsed)) {
+      return c.json({ error: "bad_request", message: "Body must be a JSON object" }, 400);
+    }
+    body = parsed as typeof body;
   } catch {
     return c.json({ error: "bad_request", message: "Invalid JSON body" }, 400);
   }

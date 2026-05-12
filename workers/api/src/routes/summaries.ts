@@ -84,31 +84,36 @@ function parseSummaryBody(body: unknown):
   if (typeof b.summary !== "string" || b.summary.length === 0) {
     return { ok: false, error: "summary must be a non-empty string" };
   }
-  if (
-    typeof b.releaseCount !== "number" ||
-    !Number.isFinite(b.releaseCount) ||
-    b.releaseCount < 0
-  ) {
-    return { ok: false, error: "releaseCount must be a non-negative number" };
+  if (!Number.isInteger(b.releaseCount) || (b.releaseCount as number) < 0) {
+    return { ok: false, error: "releaseCount must be a non-negative integer" };
+  }
+  // year / month / windowDays are optional + nullable; when defined and not
+  // null, they MUST be integers. Silently dropping wrong-typed values masks
+  // client bugs; reject explicitly. Bound-check month and windowDays where the
+  // bound is uncontroversial (calendar month, positive window). Skip a year
+  // range check — too arbitrary.
+  if (b.year !== undefined && b.year !== null && !Number.isInteger(b.year)) {
+    return { ok: false, error: "year must be an integer when provided" };
+  }
+  if (b.month !== undefined && b.month !== null) {
+    if (!Number.isInteger(b.month) || (b.month as number) < 1 || (b.month as number) > 12) {
+      return { ok: false, error: "month must be an integer 1..12 when provided" };
+    }
+  }
+  if (b.windowDays !== undefined && b.windowDays !== null) {
+    if (!Number.isInteger(b.windowDays) || (b.windowDays as number) < 1) {
+      return { ok: false, error: "windowDays must be a positive integer when provided" };
+    }
   }
   return {
     ok: true,
     data: {
       type: b.type,
-      year:
-        b.year == null || typeof b.year === "number"
-          ? (b.year as number | null | undefined)
-          : undefined,
-      month:
-        b.month == null || typeof b.month === "number"
-          ? (b.month as number | null | undefined)
-          : undefined,
-      windowDays:
-        b.windowDays == null || typeof b.windowDays === "number"
-          ? (b.windowDays as number | null | undefined)
-          : undefined,
+      year: b.year === undefined ? undefined : (b.year as number | null),
+      month: b.month === undefined ? undefined : (b.month as number | null),
+      windowDays: b.windowDays === undefined ? undefined : (b.windowDays as number | null),
       summary: b.summary,
-      releaseCount: b.releaseCount,
+      releaseCount: b.releaseCount as number,
     },
   };
 }
