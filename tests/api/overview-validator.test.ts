@@ -151,4 +151,18 @@ describe("POST /v1/orgs/:slug/overview (validateJson)", () => {
     });
     expect(res.status).toBe(404);
   });
+
+  it("400 bad_request even when org doesn't exist (validator runs before lookup)", async () => {
+    // Locks in the validation-order behavior shift documented in #912: the
+    // validator middleware runs before the org lookup, so a malformed body
+    // 400s before the handler has a chance to 404 on a missing slug.
+    const res = await app.request("/orgs/ghost/overview", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ releaseCount: 0 }), // missing content
+    });
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toBe("bad_request");
+  });
 });
