@@ -154,21 +154,26 @@ export const ReleaseDetailResponseSchema = z.object({
 
 /**
  * Body accepted by `PATCH /v1/releases/:id`. All fields are optional;
- * omitted fields are not updated. AI-generated fields (`summary`,
- * `titleGenerated`, `titleShort`) accept `null` to explicitly clear the
- * stored value.
+ * omitted fields are not updated. The nullable string columns (`version`,
+ * `url`, `publishedAt`, `contentHash`) accept a string or `null`. AI-generated
+ * fields (`summary`, `titleGenerated`, `titleShort`) accept `null` to
+ * explicitly clear the stored value. Non-whitelisted fields are rejected
+ * via `.strict()` — the handler also re-runs the field-set check after
+ * sanitization so an empty update payload still 400s.
  */
-export const UpdateReleaseBodySchema = z.object({
-  title: z.string().optional(),
-  version: z.string().optional(),
-  content: z.string().optional(),
-  url: z.string().optional(),
-  publishedAt: z.string().optional(),
-  contentHash: z.string().optional(),
-  summary: z.string().nullable().optional(),
-  titleGenerated: z.string().nullable().optional(),
-  titleShort: z.string().nullable().optional(),
-});
+export const UpdateReleaseBodySchema = z
+  .object({
+    title: z.string().optional(),
+    content: z.string().optional(),
+    version: z.string().nullable().optional(),
+    url: z.string().nullable().optional(),
+    publishedAt: z.string().nullable().optional(),
+    contentHash: z.string().nullable().optional(),
+    summary: z.string().nullable().optional(),
+    titleGenerated: z.string().nullable().optional(),
+    titleShort: z.string().nullable().optional(),
+  })
+  .strict();
 
 /**
  * Response returned by `PATCH /v1/releases/:id`. The handler returns the raw
