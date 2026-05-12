@@ -23,18 +23,6 @@ import type { Env } from "../workers/api/src/index.js";
  * `v1.routes[].path` returns.
  */
 const ALLOWLIST = new Set<string>([
-  // ── workers/api/src/routes/overview.ts (Phase 1 long-tail) ──
-  "GET /orgs/:slug/overview",
-  "POST /orgs/:slug/overview",
-  "GET /products/:slug/overview",
-
-  // ── workers/api/src/routes/overview-inputs.ts (Phase 1 long-tail) ──
-  "GET /orgs/:slug/overview/inputs",
-
-  // ── workers/api/src/routes/playbook.ts (Phase 1 long-tail) ──
-  "GET /orgs/:slug/playbook",
-  "PATCH /orgs/:slug/playbook/notes",
-
   // ── workers/api/src/routes/orgs.ts: nested resource sub-routes that
   // #750 left undocumented. Detail-level GETs + tag/account/ignored-url
   // writes. Annotate alongside the next pass over orgs.ts. ──
