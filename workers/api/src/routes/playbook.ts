@@ -85,15 +85,20 @@ app.patch(
     const db = createDb(c.env.DB);
     const slug = c.req.param("slug");
 
-    let body: { notes: string };
+    let raw: unknown;
     try {
-      body = await c.req.json();
+      raw = await c.req.json();
     } catch {
       return c.json({ error: "bad_request", message: "Invalid JSON body" }, 400);
     }
-
-    if (body.notes === undefined)
-      return c.json({ error: "bad_request", message: "notes field required" }, 400);
+    if (typeof raw !== "object" || raw === null) {
+      return c.json({ error: "bad_request", message: "Body must be a JSON object" }, 400);
+    }
+    const candidate = raw as Record<string, unknown>;
+    if (typeof candidate.notes !== "string") {
+      return c.json({ error: "bad_request", message: "`notes` must be a string" }, 400);
+    }
+    const body = { notes: candidate.notes };
 
     const [org] = await db
       .select({

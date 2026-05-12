@@ -81,6 +81,17 @@ export const OverviewInputsFullResponseSchema = z.object({
 });
 
 /**
+ * Union of the two shapes `GET /v1/orgs/:slug/overview/inputs` can return.
+ * The pre-flight (`?check=true`) variant skips content hydration; the full
+ * variant carries org metadata + sources + selected releases. Single response
+ * entry — Zod union so OpenAPI emits one schema with the variants inlined.
+ */
+export const OverviewInputsResponseSchema = z.union([
+  OverviewInputsCheckResponseSchema,
+  OverviewInputsFullResponseSchema,
+]);
+
+/**
  * Response returned by `GET /v1/orgs/:slug/playbook` — the playbook knowledge
  * page (scope `"playbook"`), or `null` when no playbook exists for the org.
  *
@@ -88,7 +99,7 @@ export const OverviewInputsFullResponseSchema = z.object({
  * by `generatePlaybookHeader()` from `@releases/ai-internal/playbook`.
  */
 export const PlaybookResponseSchema = OverviewPageItemSchema.extend({
-  scope: z.literal("playbook").or(z.string()),
+  scope: z.literal("playbook"),
   notes: z.string().nullable().optional(),
 }).nullable();
 

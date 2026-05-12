@@ -17,7 +17,7 @@ import {
 import { authMiddleware } from "../middleware/auth.js";
 import { hydrateMediaUrls, parseReleaseMedia } from "../utils.js";
 import {
-  OverviewInputsFullResponseSchema,
+  OverviewInputsResponseSchema,
   ErrorResponseSchema,
 } from "@buildinternet/releases-api-types";
 import type { Env } from "../index.js";
@@ -53,10 +53,10 @@ app.get(
     responses: {
       200: {
         description:
-          "Overview inputs payload (full) or pre-flight check payload (when `?check=true`)",
+          "Overview inputs payload (full) or pre-flight check payload (when `?check=true`). Modelled as a Zod `union([check, full])` so OpenAPI emits a single `200` entry whose schema enumerates both variants.",
         content: {
           "application/json": {
-            schema: resolver(OverviewInputsFullResponseSchema),
+            schema: resolver(OverviewInputsResponseSchema),
           },
         },
       },

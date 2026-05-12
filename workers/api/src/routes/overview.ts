@@ -180,23 +180,45 @@ app.post(
       .where(orgWhere(c.req.param("slug")));
     if (!org) return c.json({ error: "not_found" }, 404);
 
-    let body: {
-      content: string;
-      releaseCount: number;
-      lastContributingReleaseAt?: string | null;
-      citations?: unknown;
-    };
+    let raw: unknown;
     try {
-      body = await c.req.json();
+      raw = await c.req.json();
     } catch {
       return c.json({ error: "bad_request", message: "Invalid JSON body" }, 400);
     }
-    if (!body.content || body.releaseCount == null) {
+    if (typeof raw !== "object" || raw === null) {
+      return c.json({ error: "bad_request", message: "Body must be a JSON object" }, 400);
+    }
+    const candidate = raw as Record<string, unknown>;
+    if (typeof candidate.content !== "string" || candidate.content.length === 0) {
+      return c.json({ error: "bad_request", message: "`content` must be a non-empty string" }, 400);
+    }
+    if (typeof candidate.releaseCount !== "number" || !Number.isFinite(candidate.releaseCount)) {
       return c.json(
-        { error: "bad_request", message: "Missing required fields (content, releaseCount)" },
+        { error: "bad_request", message: "`releaseCount` must be a finite number" },
         400,
       );
     }
+    if (
+      candidate.lastContributingReleaseAt !== undefined &&
+      candidate.lastContributingReleaseAt !== null &&
+      typeof candidate.lastContributingReleaseAt !== "string"
+    ) {
+      return c.json(
+        {
+          error: "bad_request",
+          message: "`lastContributingReleaseAt` must be a string or null when provided",
+        },
+        400,
+      );
+    }
+    const body = {
+      content: candidate.content,
+      releaseCount: candidate.releaseCount,
+      lastContributingReleaseAt:
+        (candidate.lastContributingReleaseAt as string | null | undefined) ?? null,
+      citations: candidate.citations,
+    };
 
     const citationsResult = validateCitations(body.citations, body.content.length);
     if (!citationsResult.ok) {

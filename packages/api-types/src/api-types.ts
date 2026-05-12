@@ -151,6 +151,7 @@ import type {
   ProductOverviewResponseSchema,
   OverviewInputsCheckResponseSchema,
   OverviewInputsFullResponseSchema,
+  OverviewInputsResponseSchema,
   PlaybookResponseSchema,
   UpdatePlaybookNotesBodySchema,
   UpdatePlaybookNotesResponseSchema,
@@ -300,6 +301,7 @@ export {
   ProductOverviewResponseSchema,
   OverviewInputsCheckResponseSchema,
   OverviewInputsFullResponseSchema,
+  OverviewInputsResponseSchema,
   PlaybookResponseSchema,
   UpdatePlaybookNotesBodySchema,
   UpdatePlaybookNotesResponseSchema,
@@ -544,6 +546,7 @@ export type RegenerateOverviewResponse = z.infer<typeof RegenerateOverviewRespon
 export type ProductOverviewResponse = z.infer<typeof ProductOverviewResponseSchema>;
 export type OverviewInputsCheckResponse = z.infer<typeof OverviewInputsCheckResponseSchema>;
 export type OverviewInputsFullResponse = z.infer<typeof OverviewInputsFullResponseSchema>;
+export type OverviewInputsResponse = z.infer<typeof OverviewInputsResponseSchema>;
 export type PlaybookResponse = z.infer<typeof PlaybookResponseSchema>;
 export type UpdatePlaybookNotesBody = z.infer<typeof UpdatePlaybookNotesBodySchema>;
 export type UpdatePlaybookNotesResponse = z.infer<typeof UpdatePlaybookNotesResponseSchema>;
