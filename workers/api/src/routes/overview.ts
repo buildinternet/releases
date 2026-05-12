@@ -12,8 +12,10 @@ import {
 import { newKnowledgePageCitationId } from "@buildinternet/releases-core/id";
 import { newKnowledgePageId, orgWhere, productMatchByIdOrSlug } from "../utils.js";
 import { KNOWLEDGE_PAGE_CITATIONS_CHUNK_SIZE } from "../lib/d1-limits.js";
+import { validateJson } from "../lib/validate.js";
 import {
   OrgOverviewResponseSchema,
+  RegenerateOverviewBodySchema,
   RegenerateOverviewResponseSchema,
   ProductOverviewResponseSchema,
   ErrorResponseSchema,
@@ -24,61 +26,6 @@ const app = new Hono<Env>();
 
 function getDb(c: any): ReturnType<typeof createDb> {
   return c.get("db") ?? createDb(c.env.DB);
-}
-
-interface IncomingCitation {
-  startIndex: number;
-  endIndex: number;
-  sourceUrl: string;
-  title: string | null;
-  citedText: string;
-}
-
-/**
- * Validate the citations payload before any DB work. Bad spans (negative,
- * inverted, past content end) are an authoring bug — fail loud rather than
- * persist garbage.
- */
-function validateCitations(
-  raw: unknown,
-  contentLength: number,
-): { ok: true; value: IncomingCitation[] } | { ok: false; error: string } {
-  if (raw === undefined || raw === null) return { ok: true, value: [] };
-  if (!Array.isArray(raw)) return { ok: false, error: "citations must be an array" };
-  const out: IncomingCitation[] = [];
-  for (let i = 0; i < raw.length; i++) {
-    const c = raw[i] as Partial<IncomingCitation> | null;
-    if (!c || typeof c !== "object") {
-      return { ok: false, error: `citations[${i}] must be an object` };
-    }
-    if (typeof c.startIndex !== "number" || !Number.isInteger(c.startIndex) || c.startIndex < 0) {
-      return { ok: false, error: `citations[${i}].startIndex invalid` };
-    }
-    if (
-      typeof c.endIndex !== "number" ||
-      !Number.isInteger(c.endIndex) ||
-      c.endIndex <= c.startIndex
-    ) {
-      return { ok: false, error: `citations[${i}].endIndex must be > startIndex` };
-    }
-    if (c.endIndex > contentLength) {
-      return { ok: false, error: `citations[${i}].endIndex past content length` };
-    }
-    if (typeof c.sourceUrl !== "string" || !c.sourceUrl) {
-      return { ok: false, error: `citations[${i}].sourceUrl required` };
-    }
-    if (typeof c.citedText !== "string" || !c.citedText) {
-      return { ok: false, error: `citations[${i}].citedText required` };
-    }
-    out.push({
-      startIndex: c.startIndex,
-      endIndex: c.endIndex,
-      sourceUrl: c.sourceUrl,
-      title: c.title ?? null,
-      citedText: c.citedText,
-    });
-  }
-  return { ok: true, value: out };
 }
 
 /**
@@ -155,7 +102,7 @@ app.post(
     tags: ["Overviews"],
     summary: "Upsert org overview",
     description:
-      "Creates or replaces the org's AI-generated knowledge page. Accepts the markdown `content`, the `releaseCount` it was derived from, the ISO timestamp of the most-recent contributing release (`lastContributingReleaseAt`), and an optional `citations` array of character-span objects. Citations are replace-all — omitting the field clears any existing citations. Requires Bearer auth inherited from `publicReadAuthMiddleware`'s non-SAFE_METHODS branch. Formal request-body schema validation via middleware is deferred to Phase 2 of #894.",
+      "Creates or replaces the org's AI-generated knowledge page. Accepts the markdown `content`, the `releaseCount` it was derived from, the ISO timestamp of the most-recent contributing release (`lastContributingReleaseAt`), and an optional `citations` array of character-span objects. Citations are replace-all — omitting the field clears any existing citations. Requires Bearer auth inherited from `publicReadAuthMiddleware`'s non-SAFE_METHODS branch.",
     security: [{ bearerAuth: [] }],
     responses: {
       200: {
@@ -172,6 +119,7 @@ app.post(
       },
     },
   }),
+  validateJson(RegenerateOverviewBodySchema),
   async (c) => {
     const db = getDb(c);
     const [org] = await db
@@ -180,51 +128,23 @@ app.post(
       .where(orgWhere(c.req.param("slug")));
     if (!org) return c.json({ error: "not_found" }, 404);
 
-    let raw: unknown;
-    try {
-      raw = await c.req.json();
-    } catch {
-      return c.json({ error: "bad_request", message: "Invalid JSON body" }, 400);
-    }
-    if (typeof raw !== "object" || raw === null) {
-      return c.json({ error: "bad_request", message: "Body must be a JSON object" }, 400);
-    }
-    const candidate = raw as Record<string, unknown>;
-    if (typeof candidate.content !== "string" || candidate.content.length === 0) {
-      return c.json({ error: "bad_request", message: "`content` must be a non-empty string" }, 400);
-    }
-    if (typeof candidate.releaseCount !== "number" || !Number.isFinite(candidate.releaseCount)) {
-      return c.json(
-        { error: "bad_request", message: "`releaseCount` must be a finite number" },
-        400,
-      );
-    }
-    if (
-      candidate.lastContributingReleaseAt !== undefined &&
-      candidate.lastContributingReleaseAt !== null &&
-      typeof candidate.lastContributingReleaseAt !== "string"
-    ) {
-      return c.json(
-        {
-          error: "bad_request",
-          message: "`lastContributingReleaseAt` must be a string or null when provided",
-        },
-        400,
-      );
-    }
-    const body = {
-      content: candidate.content,
-      releaseCount: candidate.releaseCount,
-      lastContributingReleaseAt:
-        (candidate.lastContributingReleaseAt as string | null | undefined) ?? null,
-      citations: candidate.citations,
-    };
+    const body = c.req.valid("json");
+    const citations = body.citations ?? [];
 
-    const citationsResult = validateCitations(body.citations, body.content.length);
-    if (!citationsResult.ok) {
-      return c.json({ error: "bad_citations", message: citationsResult.error }, 400);
+    // Content-aware cross-field check that the schema can't express on its own.
+    // Bad spans (past the content end) are an authoring bug — fail loud rather
+    // than persist garbage.
+    for (let i = 0; i < citations.length; i++) {
+      if (citations[i].endIndex > body.content.length) {
+        return c.json(
+          {
+            error: "bad_citations",
+            message: `citations[${i}].endIndex past content length`,
+          },
+          400,
+        );
+      }
     }
-    const citations = citationsResult.value;
 
     const now = new Date().toISOString();
     const id = newKnowledgePageId();
@@ -259,7 +179,7 @@ app.post(
         startIndex: cit.startIndex,
         endIndex: cit.endIndex,
         sourceUrl: cit.sourceUrl,
-        title: cit.title,
+        title: cit.title ?? null,
         citedText: cit.citedText,
         releaseId: releaseIdByUrl.get(cit.sourceUrl.toLowerCase()) ?? null,
         createdAt: now,
