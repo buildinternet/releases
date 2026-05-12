@@ -180,9 +180,24 @@ app.onError((err, c) => {
   // of a 500 with stringified Hono internals.
   if (err instanceof HTTPException) {
     const status = err.status;
+    // Forward any headers the exception attached via `new HTTPException(s, { res })`.
+    // The malformed-JSON path doesn't set `res`, but middlewares that do (e.g.
+    // adding a `Retry-After` to a 429) would otherwise lose them when we
+    // re-shape the body into our envelope.
+    const headers: Record<string, string> = {};
+    if (err.res) {
+      err.res.headers.forEach((value, key) => {
+        // Skip content-type / content-length — `c.json` sets them itself.
+        const lower = key.toLowerCase();
+        if (lower !== "content-type" && lower !== "content-length") {
+          headers[key] = value;
+        }
+      });
+    }
     return c.json(
       { error: status === 400 ? "bad_request" : "http_error", message: err.message },
       status,
+      headers,
     );
   }
   const message = err instanceof Error ? err.message : String(err);
