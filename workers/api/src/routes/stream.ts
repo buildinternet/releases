@@ -17,9 +17,7 @@ export const streamRoutes = new Hono<Env>();
  * that don't pass `?since` still learn the current sequence for later resume.
  */
 streamRoutes.get("/releases/stream", async (c) => {
-  const upgrade = c.req.header("Upgrade");
-  const upgradeTokens = upgrade ? upgrade.split(",").map((t) => t.trim().toLowerCase()) : [];
-  if (!upgradeTokens.includes("websocket")) {
+  if (c.req.header("Upgrade") !== "websocket") {
     return c.text("Expected WebSocket upgrade", 426);
   }
   const url = new URL(c.req.raw.url);
