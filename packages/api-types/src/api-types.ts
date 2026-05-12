@@ -72,6 +72,14 @@ import type {
   UnlinkReleaseCoverageResponseSchema,
   ReleaseWithMediaRowSchema,
   ReleasesWithMediaResponseSchema,
+  ReleaseDetailOrgSchema,
+  ReleaseDetailResponseSchema,
+  UpdateReleaseBodySchema,
+  ReleaseDeleteResponseSchema,
+  ReleaseSuppressResponseSchema,
+  ReleaseUnsuppressResponseSchema,
+  ReleaseSuppressBodySchema,
+  ReleaseStreamMessageSchema,
 } from "./schemas/releases.js";
 import type {
   LookupStatusSchema,
@@ -235,6 +243,14 @@ export {
   UnlinkReleaseCoverageResponseSchema,
   ReleaseWithMediaRowSchema,
   ReleasesWithMediaResponseSchema,
+  ReleaseDetailOrgSchema,
+  ReleaseDetailResponseSchema,
+  UpdateReleaseBodySchema,
+  ReleaseDeleteResponseSchema,
+  ReleaseSuppressResponseSchema,
+  ReleaseUnsuppressResponseSchema,
+  ReleaseSuppressBodySchema,
+  ReleaseStreamMessageSchema,
 } from "./schemas/releases.js";
 export {
   SearchOrgHitSchema,
@@ -426,6 +442,15 @@ export type ReleaseLatestResponse = z.infer<typeof ReleaseLatestResponseSchema>;
 
 export type ReleaseWithMediaRow = z.infer<typeof ReleaseWithMediaRowSchema>;
 export type ReleasesWithMediaResponse = z.infer<typeof ReleasesWithMediaResponseSchema>;
+
+export type ReleaseDetailOrg = z.infer<typeof ReleaseDetailOrgSchema>;
+export type ReleaseDetailResponse = z.infer<typeof ReleaseDetailResponseSchema>;
+export type UpdateReleaseBody = z.infer<typeof UpdateReleaseBodySchema>;
+export type ReleaseDeleteResponse = z.infer<typeof ReleaseDeleteResponseSchema>;
+export type ReleaseSuppressResponse = z.infer<typeof ReleaseSuppressResponseSchema>;
+export type ReleaseUnsuppressResponse = z.infer<typeof ReleaseUnsuppressResponseSchema>;
+export type ReleaseSuppressBody = z.infer<typeof ReleaseSuppressBodySchema>;
+export type ReleaseStreamMessage = z.infer<typeof ReleaseStreamMessageSchema>;
 
 export type ReleaseSummaryItem = z.infer<typeof ReleaseSummaryItemSchema>;
 

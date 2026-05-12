@@ -110,3 +110,105 @@ export const ReleaseWithMediaRowSchema = z.object({
 });
 
 export const ReleasesWithMediaResponseSchema = z.array(ReleaseWithMediaRowSchema);
+
+/**
+ * Nested org context joined into the `GET /v1/releases/:id` response.
+ * Both fields are nullable — releases whose source has no org attached
+ * return `null` for this object entirely.
+ */
+export const ReleaseDetailOrgSchema = z.object({
+  slug: z.string(),
+  name: z.string(),
+});
+
+/**
+ * Full release detail returned by `GET /v1/releases/:id`. Joins source
+ * name/slug/type and a nullable org object; media is parsed from the raw
+ * JSON stored in D1 and typed URLs are rewritten to the CDN origin. The
+ * route only surfaces non-suppressed, non-coverage rows (filtered via the
+ * `releases_visible` view).
+ */
+export const ReleaseDetailResponseSchema = z.object({
+  id: z.string(),
+  sourceId: z.string(),
+  version: z.string().nullable(),
+  type: ReleaseTypeSchema,
+  title: z.string(),
+  content: z.string(),
+  summary: z.string().nullable(),
+  titleGenerated: z.string().nullable(),
+  titleShort: z.string().nullable(),
+  url: z.string().nullable(),
+  contentHash: z.string().nullable(),
+  media: z.array(MediaItemSchema),
+  publishedAt: z.string().nullable(),
+  suppressed: z.boolean().nullable(),
+  suppressedReason: z.string().nullable(),
+  prerelease: z.boolean().nullable(),
+  fetchedAt: z.string().nullable(),
+  sourceName: z.string().nullable(),
+  sourceSlug: z.string().nullable(),
+  sourceType: z.enum(SOURCE_TYPES).nullable(),
+  org: ReleaseDetailOrgSchema.nullable(),
+});
+
+/**
+ * Body accepted by `PATCH /v1/releases/:id`. All fields are optional;
+ * omitted fields are not updated. AI-generated fields (`summary`,
+ * `titleGenerated`, `titleShort`) accept `null` to explicitly clear the
+ * stored value.
+ */
+export const UpdateReleaseBodySchema = z.object({
+  title: z.string().optional(),
+  version: z.string().optional(),
+  content: z.string().optional(),
+  url: z.string().optional(),
+  publishedAt: z.string().optional(),
+  contentHash: z.string().optional(),
+  summary: z.string().nullable().optional(),
+  titleGenerated: z.string().nullable().optional(),
+  titleShort: z.string().nullable().optional(),
+});
+
+/** Response returned by `DELETE /v1/releases/:id`. */
+export const ReleaseDeleteResponseSchema = z.object({
+  deleted: z.literal(true),
+});
+
+/** Response returned by `POST /v1/releases/:id/suppress`. */
+export const ReleaseSuppressResponseSchema = z.object({
+  suppressed: z.literal(true),
+});
+
+/** Response returned by `POST /v1/releases/:id/unsuppress`. */
+export const ReleaseUnsuppressResponseSchema = z.object({
+  unsuppressed: z.literal(true),
+});
+
+/**
+ * Body accepted by `POST /v1/releases/:id/suppress`. The `reason` field
+ * is optional; when omitted the stored `suppressed_reason` is set to null.
+ */
+export const ReleaseSuppressBodySchema = z.object({
+  reason: z.string().optional(),
+});
+
+/**
+ * WebSocket message schema for the `GET /v1/releases/stream` endpoint.
+ * Each message is a JSON object with one of the following shapes:
+ * - `{ type: "ready", seq: number }` — sent on connect to give the caller
+ *   the current head sequence number for later resume.
+ * - `{ type: "release.created", seq: number, release: object }` — a new
+ *   release was indexed; `release` carries the full release row.
+ * - `{ type: "snapshot_gap" }` — the requested `since` sequence fell
+ *   behind the oldest buffered event; the client must REST-backfill.
+ */
+export const ReleaseStreamMessageSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("ready"), seq: z.number().int() }),
+  z.object({
+    type: z.literal("release.created"),
+    seq: z.number().int(),
+    release: z.record(z.string(), z.unknown()),
+  }),
+  z.object({ type: z.literal("snapshot_gap") }),
+]);
