@@ -47,21 +47,28 @@ export const OrgAccountsResponseSchema = z.union([
 ]);
 export const OrgTagsResponseSchema = ListResponseSchema(z.string());
 
+/**
+ * Body accepted by `POST /v1/orgs`. `category` is a free-form string at the
+ * wire boundary so callers can pass either a canonical slug or one of its
+ * configured aliases (resolved server-side via `resolveCategoryInput`).
+ * Responses always carry the canonical slug.
+ */
 export const CreateOrgBodySchema = z.object({
   name: z.string().min(1),
   slug: z.string().optional(),
   domain: z.string().optional(),
   description: z.string().optional(),
-  category: CategorySchema.optional(),
+  category: z.string().optional(),
   tags: z.array(z.string()).optional(),
 });
 
+/** Body accepted by `PATCH /v1/orgs/:slug`. Same lenient `category` rule. */
 export const UpdateOrgBodySchema = z.object({
   name: z.string().optional(),
   slug: z.string().optional(),
   domain: z.string().nullable().optional(),
   description: z.string().nullable().optional(),
-  category: CategorySchema.nullable().optional(),
+  category: z.string().nullable().optional(),
   tags: z.array(z.string()).optional(),
   aliases: z.array(z.string()).optional(),
 });
