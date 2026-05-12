@@ -921,7 +921,7 @@ orgRoutes.get(
     tags: ["Orgs"],
     summary: "List org social/platform accounts",
     description:
-      "Returns the org's registered accounts (GitHub, Twitter, LinkedIn, etc.) as a paginated list. Pass `?platform=<name>` to fetch a single account by platform — returns the account object or `null` when not set.",
+      "Returns the org's registered accounts (GitHub, Twitter, LinkedIn, etc.) as a paginated list. Pass `?platform=<name>` to fetch a single account by platform — returns the account object or `null` when not set. The 200 schema is a union of the paginated list (default) or a single `OrgAccountItem`/`null` (single-mode) — the OSS CLI depends on the single-row return shape.",
     parameters: [
       {
         name: "platform",
@@ -929,12 +929,13 @@ orgRoutes.get(
         required: false,
         schema: { type: "string" },
         description:
-          "When provided, returns a single account object for the given platform (or null). When absent, returns the full paginated list.",
+          "When provided, returns a single `OrgAccountItem` for the given platform (or `null`). When absent, returns the full paginated list.",
       },
     ],
     responses: {
       200: {
-        description: "Org accounts",
+        description:
+          "Paginated org accounts (default), or a single `OrgAccountItem`/`null` when `?platform=` is supplied",
         content: { "application/json": { schema: resolver(OrgAccountsResponseSchema) } },
       },
       404: {
@@ -953,7 +954,7 @@ orgRoutes.get(
 
     if (platform) {
       const [account] = await db
-        .select()
+        .select({ platform: orgAccounts.platform, handle: orgAccounts.handle })
         .from(orgAccounts)
         .where(and(eq(orgAccounts.orgId, org.id), eq(orgAccounts.platform, platform)));
       return c.json(account ?? null);
@@ -962,7 +963,7 @@ orgRoutes.get(
     const pagination = parseListPagination(new URL(c.req.url).searchParams);
     const [accounts, totalRow] = await Promise.all([
       db
-        .select()
+        .select({ platform: orgAccounts.platform, handle: orgAccounts.handle })
         .from(orgAccounts)
         .where(eq(orgAccounts.orgId, org.id))
         .orderBy(orgAccounts.platform, orgAccounts.handle)
@@ -987,6 +988,10 @@ orgRoutes.delete(
         description: "Account deleted",
         content: { "application/json": { schema: resolver(DeleteOrgAccountResponseSchema) } },
       },
+      400: {
+        description: "Malformed `:handle` path segment",
+        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      },
       404: {
         description: "Organization or account not found",
         content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
@@ -997,7 +1002,15 @@ orgRoutes.delete(
     const db = createDb(c.env.DB);
     const slug = c.req.param("slug");
     const platform = c.req.param("platform");
-    const handle = decodeURIComponent(c.req.param("handle"));
+    let handle: string;
+    try {
+      handle = decodeURIComponent(c.req.param("handle"));
+    } catch {
+      return c.json(
+        { error: "bad_request", message: "Malformed URL-encoded `:handle` path segment" },
+        400,
+      );
+    }
 
     const [org] = await db.select().from(organizations).where(orgWhere(slug));
     if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
@@ -1188,7 +1201,12 @@ orgRoutes.post(
   }),
   async (c) => {
     const db = createDb(c.env.DB);
-    const body = await c.req.json<{ name: string }>();
+    let body: { name: string };
+    try {
+      body = await c.req.json<{ name: string }>();
+    } catch {
+      return c.json({ error: "bad_request", message: "Malformed JSON body" }, 400);
+    }
     if (!body.name)
       return c.json({ error: "bad_request", message: "Missing required field: name" }, 400);
 
@@ -1760,6 +1778,19 @@ orgRoutes.get(
         400,
       );
     }
+    // Validate ISO format — `since` is bound directly into a `gte` clause
+    // against `publishedAt` (string column). Garbage in compares lexically
+    // and returns silently-empty rows; better to fail fast with 400.
+    const sinceDate = new Date(since);
+    if (Number.isNaN(sinceDate.getTime())) {
+      return c.json(
+        {
+          error: "bad_request",
+          message: "Invalid `since` query param — must be an ISO date or datetime",
+        },
+        400,
+      );
+    }
 
     const [org] = await db
       .select({ id: organizations.id })
@@ -1830,7 +1861,12 @@ orgRoutes.post(
   async (c) => {
     const db = createDb(c.env.DB);
     const slug = c.req.param("slug");
-    const body = await c.req.json<{ platform: string; handle: string }>();
+    let body: { platform: string; handle: string };
+    try {
+      body = await c.req.json<{ platform: string; handle: string }>();
+    } catch {
+      return c.json({ error: "bad_request", message: "Malformed JSON body" }, 400);
+    }
 
     if (!body.platform || !body.handle) {
       return c.json(
@@ -1851,7 +1887,7 @@ orgRoutes.post(
           handle: body.handle,
           createdAt: new Date().toISOString(),
         })
-        .returning();
+        .returning({ platform: orgAccounts.platform, handle: orgAccounts.handle });
       return c.json(account, 201);
     } catch (err) {
       if (isConflictError(err)) {

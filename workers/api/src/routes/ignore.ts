@@ -23,7 +23,7 @@ ignoreRoutes.get(
     tags: ["Orgs"],
     summary: "List org ignored URLs",
     description:
-      "Returns the org's ignored URL list as a paginated result set, ordered by `ignoredAt` descending. Pass `?url=<encoded>&single=1` to look up a single URL — returns the row or `null`. Ignored URLs are skipped during ingest so new releases from those pages are never stored.",
+      "Returns the org's ignored URL list as a paginated result set, ordered by `ignoredAt` descending. Pass `?url=<encoded>&single=1` to look up a single URL — returns the row or `null`. Ignored URLs are skipped during ingest so new releases from those pages are never stored. The 200 schema is a union of the paginated list (default), a single `IgnoredUrlItem` (single-mode hit), or `null` (single-mode miss).",
     parameters: [
       {
         name: "url",
@@ -42,8 +42,13 @@ ignoreRoutes.get(
     ],
     responses: {
       200: {
-        description: "Paginated ignored-URL list",
+        description:
+          "Paginated ignored-URL list (default), or a single `IgnoredUrlItem`/`null` when `?single=1` is supplied",
         content: { "application/json": { schema: resolver(OrgIgnoredUrlsResponseSchema) } },
+      },
+      400: {
+        description: "Malformed `url` query param",
+        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
       },
       404: {
         description: "Organization not found",
@@ -60,7 +65,15 @@ ignoreRoutes.get(
 
     const singleUrl = c.req.query("url");
     if (singleUrl && c.req.query("single")) {
-      const decoded = decodeURIComponent(singleUrl);
+      let decoded: string;
+      try {
+        decoded = decodeURIComponent(singleUrl);
+      } catch {
+        return c.json(
+          { error: "bad_request", message: "Malformed URL-encoded `url` query param" },
+          400,
+        );
+      }
       const [row] = await db
         .select()
         .from(ignoredUrls)
@@ -114,7 +127,12 @@ ignoreRoutes.post(
     const [org] = await db.select().from(organizations).where(orgWhere(slug));
     if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
 
-    const body = await c.req.json<{ url: string; reason?: string }>();
+    let body: { url: string; reason?: string };
+    try {
+      body = await c.req.json<{ url: string; reason?: string }>();
+    } catch {
+      return c.json({ error: "bad_request", message: "Malformed JSON body" }, 400);
+    }
     if (!body.url)
       return c.json({ error: "bad_request", message: "Missing required field: url" }, 400);
 
@@ -145,6 +163,10 @@ ignoreRoutes.delete(
         description: "URL removed (or was not present)",
         content: { "application/json": { schema: resolver(DeleteIgnoredUrlResponseSchema) } },
       },
+      400: {
+        description: "Malformed `:url` path segment",
+        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      },
       404: {
         description: "Organization not found",
         content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
@@ -154,7 +176,15 @@ ignoreRoutes.delete(
   async (c) => {
     const db = createDb(c.env.DB);
     const slug = c.req.param("slug");
-    const url = decodeURIComponent(c.req.param("url"));
+    let url: string;
+    try {
+      url = decodeURIComponent(c.req.param("url"));
+    } catch {
+      return c.json(
+        { error: "bad_request", message: "Malformed URL-encoded `:url` path segment" },
+        400,
+      );
+    }
 
     const [org] = await db.select().from(organizations).where(orgWhere(slug));
     if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);

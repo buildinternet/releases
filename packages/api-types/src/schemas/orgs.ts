@@ -32,7 +32,19 @@ export const OrgAccountItemSchema = z.object({
   handle: z.string(),
 });
 
-export const OrgAccountsResponseSchema = ListResponseSchema(OrgAccountItemSchema);
+export const OrgAccountsListResponseSchema = ListResponseSchema(OrgAccountItemSchema);
+
+/**
+ * Response shape for `GET /v1/orgs/:slug/accounts`. Returns the paginated list
+ * by default; with `?platform=<name>` returns a single matching account or
+ * `null` when no row matches. The dual shape is preserved for compatibility
+ * with the OSS CLI which calls `?platform=` and expects a single row.
+ */
+export const OrgAccountsResponseSchema = z.union([
+  OrgAccountsListResponseSchema,
+  OrgAccountItemSchema,
+  z.null(),
+]);
 export const OrgTagsResponseSchema = ListResponseSchema(z.string());
 
 export const CreateOrgBodySchema = z.object({
@@ -141,7 +153,18 @@ export const IgnoredUrlItemSchema = z.object({
   ignoredAt: z.string(),
 });
 
-export const OrgIgnoredUrlsResponseSchema = ListResponseSchema(IgnoredUrlItemSchema);
+export const OrgIgnoredUrlsListResponseSchema = ListResponseSchema(IgnoredUrlItemSchema);
+
+/**
+ * Response shape for `GET /v1/orgs/:slug/ignored-urls`. Returns the paginated
+ * list by default; with `?url=<encoded>&single=1` returns the matching single
+ * row or `null` when not present.
+ */
+export const OrgIgnoredUrlsResponseSchema = z.union([
+  OrgIgnoredUrlsListResponseSchema,
+  IgnoredUrlItemSchema,
+  z.null(),
+]);
 
 /**
  * Body accepted by `POST /v1/orgs/:slug/ignored-urls`.
