@@ -51,6 +51,24 @@ import {
   ReleaseDeleteResponseSchema,
   ReleaseSuppressResponseSchema,
   ReleaseUnsuppressResponseSchema,
+  SourceActivityResponseSchema,
+  SourceHeatmapResponseSchema,
+  SourceKnownReleasesResponseSchema,
+  SourceRecentReleasesResponseSchema,
+  SourceSessionsResponseSchema,
+  SourceFetchResponseSchema,
+  SourceContentHashResponseSchema,
+  ChangelogTokensResponseSchema,
+  SourceMetadataResponseSchema,
+  ChangelogProbeResponseSchema,
+  DeleteSourceResponseSchema,
+  DeleteSourceReleasesResponseSchema,
+  InsertReleaseResponseSchema,
+  BatchReleasesResponseSchema,
+  OversizedChangelogFilesResponseSchema,
+  FetchableSourcesResponseSchema,
+  FeedSourcesResponseSchema,
+  ChangedSourcesResponseSchema,
 } from "@buildinternet/releases-api-types";
 import {
   getStatusHub,
@@ -374,7 +392,20 @@ sourceRoutes.get(
 
 // ── Fetchable sources (must be before :slug route) ──
 
-sourceRoutes.get("/sources/fetchable", async (c) => {
+const getFetchableSourcesRoute = describeRoute({
+  tags: ["Sources"],
+  summary: "List fetchable sources",
+  description:
+    "Returns visible source rows that are eligible for a fetch pass. `?mode=unfetched` returns sources with no prior fetch; `?mode=stale` (requires `?staleHours=N`) returns sources whose last fetch is older than N hours and whose `nextFetchAfter` has passed; `?mode=retry_errors` returns sources whose most-recent fetch log entry has `status = 'error'`; `?mode=all` (default) returns all visible sources. Auth inherited from `publicReadAuthMiddleware`'s non-SAFE_METHODS branch — Bearer token required.",
+  security: [{ bearerAuth: [] }],
+  responses: {
+    200: {
+      description: "Fetchable source rows",
+      content: { "application/json": { schema: resolver(FetchableSourcesResponseSchema) } },
+    },
+  },
+});
+sourceRoutes.get("/sources/fetchable", getFetchableSourcesRoute, async (c) => {
   const db = createDb(c.env.DB);
   const mode = c.req.query("mode"); // "unfetched" | "stale" | "retry_errors" | "all"
   const staleHours = c.req.query("staleHours");
@@ -420,7 +451,20 @@ sourceRoutes.get("/sources/fetchable", async (c) => {
 
 // ── Feed and change-detection sources (must be before :slug route) ──
 
-sourceRoutes.get("/sources/feeds", async (c) => {
+const getFeedSourcesRoute = describeRoute({
+  tags: ["Sources"],
+  summary: "List feed sources",
+  description:
+    "Returns visible source rows where `metadata.feedUrl` is set and `fetchPriority != 'paused'`. Used by the poll-and-fetch cron to enumerate sources that can be fetched via RSS/Atom/JSON feed. Auth inherited from `publicReadAuthMiddleware`'s non-SAFE_METHODS branch — Bearer token required.",
+  security: [{ bearerAuth: [] }],
+  responses: {
+    200: {
+      description: "Sources with a discovered feed URL",
+      content: { "application/json": { schema: resolver(FeedSourcesResponseSchema) } },
+    },
+  },
+});
+sourceRoutes.get("/sources/feeds", getFeedSourcesRoute, async (c) => {
   const db = createDb(c.env.DB);
   const rows = await db
     .select()
@@ -434,7 +478,20 @@ sourceRoutes.get("/sources/feeds", async (c) => {
   return c.json(rows);
 });
 
-sourceRoutes.get("/sources/changes", async (c) => {
+const getChangedSourcesRoute = describeRoute({
+  tags: ["Sources"],
+  summary: "List sources with pending changes",
+  description:
+    "Returns visible source rows with a non-null `changeDetectedAt` — the set flagged for CLI pickup after a scrape or agent run detects new content. The CLI clears `changeDetectedAt` after fetching the source. Auth inherited from `publicReadAuthMiddleware`'s non-SAFE_METHODS branch — Bearer token required.",
+  security: [{ bearerAuth: [] }],
+  responses: {
+    200: {
+      description: "Sources pending a fetch",
+      content: { "application/json": { schema: resolver(ChangedSourcesResponseSchema) } },
+    },
+  },
+});
+sourceRoutes.get("/sources/changes", getChangedSourcesRoute, async (c) => {
   const db = createDb(c.env.DB);
   const rows = await db
     .select()
@@ -445,7 +502,28 @@ sourceRoutes.get("/sources/changes", async (c) => {
 
 // ── Trigger fetch for a single source ──
 
-sourceRoutes.post("/sources/:slug/fetch", async (c) => {
+const postSourceFetchRoute = describeRoute({
+  tags: ["Sources"],
+  summary: "Trigger a source fetch",
+  description:
+    "Triggers an immediate fetch for the source identified by slug or `src_…` ID. For feed/GitHub sources (or scrape sources with a discovered feedUrl) the server performs the fetch inline and returns the result. For scrape/agent sources without a feedUrl, the server sets `changeDetectedAt` to flag the source for CLI pickup and returns `{ queued: true }`. Optional query params: `?sessionId=` (associates the fetch with a discovery session), `?dryRun=true` (runs the parser but does not write to D1), `?max=N` (limits entries parsed). Auth inherited from `publicReadAuthMiddleware`'s non-SAFE_METHODS branch — Bearer token required.",
+  security: [{ bearerAuth: [] }],
+  responses: {
+    200: {
+      description: "Fetch result or queue confirmation",
+      content: { "application/json": { schema: resolver(SourceFetchResponseSchema) } },
+    },
+    400: {
+      description: "Invalid `max` parameter",
+      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+    },
+    404: {
+      description: "Source not found",
+      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+    },
+  },
+});
+sourceRoutes.post("/sources/:slug/fetch", postSourceFetchRoute, async (c) => {
   const db = createDb(c.env.DB);
   const src = await resolveSourceFromContext(c, db);
   if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
@@ -737,12 +815,58 @@ const postReleasesBatchHandler = async (c: import("hono").Context<Env>) => {
     return c.json({ error: "insert_failed", message }, 500);
   }
 };
-sourceRoutes.post("/sources/:slug/releases/batch", postReleasesBatchHandler);
-sourceRoutes.post("/orgs/:orgSlug/sources/:sourceSlug/releases/batch", postReleasesBatchHandler);
+const postReleasesBatchRoute = describeRoute({
+  tags: ["Sources"],
+  summary: "Batch insert releases",
+  description:
+    "Inserts or upserts a batch of release rows for the source identified by slug or `src_…` ID on the bare path, or by org-scoped slug pair. Body: `{ releases: Array<{ title, content, version?, url?, contentHash?, publishedAt?, media?, type?, prerelease? }> }`. Body documented in prose — formal `requestBody` modelling is deferred to the validator-middleware phase of #894. On URL collision (`UNIQUE(source_id, url)`), content is backfilled when the incoming value is non-empty and the existing value is empty. LLM-generated placeholder versions (`<UNKNOWN>`, `n/a`) are stripped server-side. Release vectors are embedded asynchronously via `waitUntil`. Emits real-time events to the `ReleaseHub` Durable Object. Auth inherited from `publicReadAuthMiddleware`'s non-SAFE_METHODS branch — Bearer token required.",
+  security: [{ bearerAuth: [] }],
+  responses: {
+    200: {
+      description: "Batch result: inserted count and updated source total",
+      content: { "application/json": { schema: resolver(BatchReleasesResponseSchema) } },
+    },
+    404: {
+      description: "Source not found",
+      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+    },
+    500: {
+      description: "D1 insert failed",
+      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+    },
+  },
+});
+sourceRoutes.post(
+  "/sources/:slug/releases/batch",
+  postReleasesBatchRoute,
+  postReleasesBatchHandler,
+);
+sourceRoutes.post(
+  "/orgs/:orgSlug/sources/:sourceSlug/releases/batch",
+  postReleasesBatchRoute,
+  postReleasesBatchHandler,
+);
 
 // ── Delete all releases for a source (for --force re-fetch) ──
 
-sourceRoutes.delete("/sources/:slug/releases", async (c) => {
+const deleteSourceReleasesRoute = describeRoute({
+  tags: ["Sources"],
+  summary: "Delete all releases for a source",
+  description:
+    "Soft-deletes all releases for the source by default (`?hard` absent): sets `suppressed = true` with `suppressedReason = 'force_refetch'`. A subsequent fetch upserts new rows on top of suppressed ones, preserving AI-extracted summaries until replaced. Pass `?hard=true` for a hard delete that removes rows and purges Vectorize vectors. Auth inherited from `publicReadAuthMiddleware`'s non-SAFE_METHODS branch — Bearer token required.",
+  security: [{ bearerAuth: [] }],
+  responses: {
+    200: {
+      description: "Soft suppression count or hard delete count",
+      content: { "application/json": { schema: resolver(DeleteSourceReleasesResponseSchema) } },
+    },
+    404: {
+      description: "Source not found",
+      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+    },
+  },
+});
+sourceRoutes.delete("/sources/:slug/releases", deleteSourceReleasesRoute, async (c) => {
   const db = createDb(c.env.DB);
   const hard = c.req.query("hard") === "true";
   const src = await resolveSourceFromContext(c, db);
@@ -793,7 +917,16 @@ sourceRoutes.delete("/sources/:slug/releases", async (c) => {
 const postContentHashHandler = async (c: import("hono").Context<Env>) => {
   const db = createDb(c.env.DB);
   const peek = c.req.query("peek") === "true";
-  const body = await c.req.json<{ contentHash: string }>();
+
+  let body: { contentHash: string };
+  try {
+    body = await c.req.json<{ contentHash: string }>();
+  } catch {
+    return c.json({ error: "bad_request", message: "Invalid JSON body" }, 400);
+  }
+  if (typeof body.contentHash !== "string" || body.contentHash.length === 0) {
+    return c.json({ error: "bad_request", message: "contentHash must be a non-empty string" }, 400);
+  }
 
   const src = await resolveSourceFromContext(c, db);
   if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
@@ -809,8 +942,33 @@ const postContentHashHandler = async (c: import("hono").Context<Env>) => {
   }
   return c.json({ unchanged: false });
 };
-sourceRoutes.post("/sources/:slug/content-hash", postContentHashHandler);
-sourceRoutes.post("/orgs/:orgSlug/sources/:sourceSlug/content-hash", postContentHashHandler);
+const postContentHashRoute = describeRoute({
+  tags: ["Sources"],
+  summary: "Check or update content hash",
+  description:
+    "Compares `contentHash` against the source's stored `lastContentHash`. Returns `{ unchanged: true }` when they match. When they differ, updates the stored hash (unless `?peek=true`) and returns `{ unchanged: false }`. Used by the fetch pipeline to skip unchanged scrape payloads without a full parse pass. Body: `{ contentHash: string }`. Body documented in prose — formal `requestBody` modelling is deferred to the validator-middleware phase of #894. Auth inherited from `publicReadAuthMiddleware`'s non-SAFE_METHODS branch — Bearer token required.",
+  security: [{ bearerAuth: [] }],
+  responses: {
+    200: {
+      description: "Hash comparison result",
+      content: { "application/json": { schema: resolver(SourceContentHashResponseSchema) } },
+    },
+    400: {
+      description: "Malformed JSON body or missing/wrong-typed contentHash field",
+      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+    },
+    404: {
+      description: "Source not found",
+      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+    },
+  },
+});
+sourceRoutes.post("/sources/:slug/content-hash", postContentHashRoute, postContentHashHandler);
+sourceRoutes.post(
+  "/orgs/:orgSlug/sources/:sourceSlug/content-hash",
+  postContentHashRoute,
+  postContentHashHandler,
+);
 
 /**
  * Shallow-merge `patch` into `existing` (parsed from its stored JSON string).
@@ -881,16 +1039,50 @@ const patchMetadataHandler = async (c: import("hono").Context<Env>) => {
   }
   return c.json({ metadata: merged });
 };
-sourceRoutes.patch("/sources/:slug/metadata", patchMetadataHandler);
-sourceRoutes.patch("/orgs/:orgSlug/sources/:sourceSlug/metadata", patchMetadataHandler);
+const patchMetadataRoute = describeRoute({
+  tags: ["Sources"],
+  summary: "Merge source metadata",
+  description:
+    "Atomically JSON-merges the request body into the source's `metadata` blob. Keys whose value is `null` are deleted from the stored metadata; all other keys are shallow-merged (existing keys not in the patch are preserved). Accepts any JSON object — keys are freeform. If `changelogPaths` is present it must be an array and its length must not exceed the CHANGELOG_MAX_FILES cap. Body documented in prose — formal `requestBody` modelling is deferred to the validator-middleware phase of #894. Auth inherited from `publicReadAuthMiddleware`'s non-SAFE_METHODS branch — Bearer token required.",
+  security: [{ bearerAuth: [] }],
+  responses: {
+    200: {
+      description: "Merged metadata object",
+      content: { "application/json": { schema: resolver(SourceMetadataResponseSchema) } },
+    },
+    400: {
+      description: "Malformed JSON body or changelogPaths length exceeded",
+      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+    },
+    404: {
+      description: "Source not found",
+      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+    },
+  },
+});
+sourceRoutes.patch("/sources/:slug/metadata", patchMetadataRoute, patchMetadataHandler);
+sourceRoutes.patch(
+  "/orgs/:orgSlug/sources/:sourceSlug/metadata",
+  patchMetadataRoute,
+  patchMetadataHandler,
+);
 
 // ── Recent releases (for summary generation) ──
 
 const getRecentReleasesHandler = async (c: import("hono").Context<Env>) => {
   const db = createDb(c.env.DB);
-  const cutoff = c.req.query("cutoff");
+  const cutoffRaw = c.req.query("cutoff");
 
-  if (!cutoff) return c.json({ error: "cutoff query param required" }, 400);
+  if (!cutoffRaw) return c.json({ error: "cutoff query param required" }, 400);
+
+  // Normalize the cutoff to a well-formed UTC ISO string before binding into
+  // `gte(publishedAt, …)`. The publishedAt column stores UTC ISO strings, so
+  // inputs like "2024/01/01" would parse as Date but compare lexically wrong.
+  const cutoffDate = new Date(cutoffRaw);
+  if (isNaN(cutoffDate.getTime())) {
+    return c.json({ error: "bad_request", message: "cutoff must be a valid ISO-8601 date" }, 400);
+  }
+  const cutoff = cutoffDate.toISOString();
 
   const src = await resolveSourceFromContext(c, db);
   if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
@@ -909,8 +1101,37 @@ const getRecentReleasesHandler = async (c: import("hono").Context<Env>) => {
 
   return c.json(rows);
 };
-sourceRoutes.get("/sources/:slug/recent-releases", getRecentReleasesHandler);
-sourceRoutes.get("/orgs/:orgSlug/sources/:sourceSlug/recent-releases", getRecentReleasesHandler);
+const getRecentReleasesRoute = describeRoute({
+  tags: ["Sources"],
+  summary: "List recent releases for a source",
+  description:
+    "Returns all non-suppressed releases for the source with `publishedAt` at or after `?cutoff=` (required, ISO-8601 date). Ordered by `publishedAt` descending. Used by the summarization agent to retrieve the release window it needs to summarize. Auth inherited from `publicReadAuthMiddleware`'s non-SAFE_METHODS branch — Bearer token required.",
+  security: [{ bearerAuth: [] }],
+  responses: {
+    200: {
+      description: "Recent release rows",
+      content: { "application/json": { schema: resolver(SourceRecentReleasesResponseSchema) } },
+    },
+    400: {
+      description: "Missing or invalid `cutoff` parameter",
+      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+    },
+    404: {
+      description: "Source not found",
+      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+    },
+  },
+});
+sourceRoutes.get(
+  "/sources/:slug/recent-releases",
+  getRecentReleasesRoute,
+  getRecentReleasesHandler,
+);
+sourceRoutes.get(
+  "/orgs/:orgSlug/sources/:sourceSlug/recent-releases",
+  getRecentReleasesRoute,
+  getRecentReleasesHandler,
+);
 
 // ── Known releases for incremental parsing ──
 
@@ -939,12 +1160,50 @@ const getKnownReleasesHandler = async (c: import("hono").Context<Env>) => {
 
   return c.json(rows);
 };
-sourceRoutes.get("/sources/:slug/known-releases", getKnownReleasesHandler);
-sourceRoutes.get("/orgs/:orgSlug/sources/:sourceSlug/known-releases", getKnownReleasesHandler);
+const getKnownReleasesRoute = describeRoute({
+  tags: ["Sources"],
+  summary: "List known releases for a source",
+  description:
+    "Returns the N most-recent non-suppressed releases (default N=10, max 500) with only `version`, `title`, and `publishedAt` — the minimal set used by the incremental parsing agent to skip already-known versions. Accepts `?limit=N` (clamped to 1–500). Auth inherited from `publicReadAuthMiddleware`'s non-SAFE_METHODS branch — Bearer token required.",
+  security: [{ bearerAuth: [] }],
+  responses: {
+    200: {
+      description: "Known release identifiers",
+      content: { "application/json": { schema: resolver(SourceKnownReleasesResponseSchema) } },
+    },
+    404: {
+      description: "Source not found",
+      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+    },
+  },
+});
+sourceRoutes.get("/sources/:slug/known-releases", getKnownReleasesRoute, getKnownReleasesHandler);
+sourceRoutes.get(
+  "/orgs/:orgSlug/sources/:sourceSlug/known-releases",
+  getKnownReleasesRoute,
+  getKnownReleasesHandler,
+);
 
 // ── Sessions involving a specific source slug ──
 
-sourceRoutes.get("/sources/:slug/sessions", async (c) => {
+const getSourceSessionsRoute = describeRoute({
+  tags: ["Sources"],
+  summary: "Get active discovery sessions for a source",
+  description:
+    "Returns the active discovery session (if any) currently processing this source, queried from the `StatusHub` Durable Object. Returns `{ sessions: [] }` when no active session references this source. The session object shape is the live DO state blob and may evolve. Auth inherited from `publicReadAuthMiddleware`'s non-SAFE_METHODS branch — Bearer token required.",
+  security: [{ bearerAuth: [] }],
+  responses: {
+    200: {
+      description: "Active sessions for this source (empty array when none)",
+      content: { "application/json": { schema: resolver(SourceSessionsResponseSchema) } },
+    },
+    404: {
+      description: "Source not found",
+      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+    },
+  },
+});
+sourceRoutes.get("/sources/:slug/sessions", getSourceSessionsRoute, async (c) => {
   const db = createDb(c.env.DB);
   const src = await resolveSourceFromContext(c, db);
   if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
@@ -1035,8 +1294,33 @@ const getSourceActivityHandler = async (c: import("hono").Context<Env>) => {
     })),
   });
 };
-sourceRoutes.get("/sources/:slug/activity", getSourceActivityHandler);
-sourceRoutes.get("/orgs/:orgSlug/sources/:sourceSlug/activity", getSourceActivityHandler);
+const getSourceActivityRoute = describeRoute({
+  tags: ["Sources"],
+  summary: "Get source release activity",
+  description:
+    "Returns week-bucketed release counts for the source's full tracking lifetime (or the range selected by optional `?from=YYYY-MM-DD` and `?to=YYYY-MM-DD`). Returns 400 when either date is not in `YYYY-MM-DD` format or `from > to`. Auth inherited from `publicReadAuthMiddleware`'s non-SAFE_METHODS branch — Bearer token required.",
+  security: [{ bearerAuth: [] }],
+  responses: {
+    200: {
+      description: "Weekly release buckets for the source",
+      content: { "application/json": { schema: resolver(SourceActivityResponseSchema) } },
+    },
+    400: {
+      description: "Invalid or inconsistent date range",
+      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+    },
+    404: {
+      description: "Source not found",
+      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+    },
+  },
+});
+sourceRoutes.get("/sources/:slug/activity", getSourceActivityRoute, getSourceActivityHandler);
+sourceRoutes.get(
+  "/orgs/:orgSlug/sources/:sourceSlug/activity",
+  getSourceActivityRoute,
+  getSourceActivityHandler,
+);
 
 // Daily release heatmap for source contribution-graph visualization
 const getSourceHeatmapHandler = async (c: import("hono").Context<Env>) => {
@@ -1055,8 +1339,29 @@ const getSourceHeatmapHandler = async (c: import("hono").Context<Env>) => {
     total,
   });
 };
-sourceRoutes.get("/sources/:slug/heatmap", getSourceHeatmapHandler);
-sourceRoutes.get("/orgs/:orgSlug/sources/:sourceSlug/heatmap", getSourceHeatmapHandler);
+const getSourceHeatmapRoute = describeRoute({
+  tags: ["Sources"],
+  summary: "Get source release heatmap",
+  description:
+    "Returns daily release counts for the trailing 365 days — contribution-graph visualization for the source detail page. Range is fixed server-side (trailing year); no query params. Auth inherited from `publicReadAuthMiddleware`'s non-SAFE_METHODS branch — Bearer token required.",
+  security: [{ bearerAuth: [] }],
+  responses: {
+    200: {
+      description: "Daily release counts for the trailing year",
+      content: { "application/json": { schema: resolver(SourceHeatmapResponseSchema) } },
+    },
+    404: {
+      description: "Source not found",
+      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+    },
+  },
+});
+sourceRoutes.get("/sources/:slug/heatmap", getSourceHeatmapRoute, getSourceHeatmapHandler);
+sourceRoutes.get(
+  "/orgs/:orgSlug/sources/:sourceSlug/heatmap",
+  getSourceHeatmapRoute,
+  getSourceHeatmapHandler,
+);
 
 const getSourceChangelogHandler = async (c: import("hono").Context<Env>) => {
   const db = createDb(c.env.DB);
@@ -1129,30 +1434,49 @@ sourceRoutes.get(
  * Used by scripts/backfill-changelog-tokens.ts to find rows whose
  * cached `tokens` value is an estimate rather than an exact count.
  */
-sourceRoutes.get("/sources/changelog-files/oversized", authMiddleware, async (c) => {
-  const db = createDb(c.env.DB);
-  const minBytes = parseInt(c.req.query("minBytes") ?? String(256 * 1024), 10);
-  // sourceId + orgSlug travel alongside the slug so the backfill script can
-  // PATCH via the org-scoped path (#698) without an extra resolution hop.
-  const rows = await db
-    .select({
-      sourceId: sources.id,
-      sourceSlug: sources.slug,
-      sourceName: sources.name,
-      orgSlug: organizations.slug,
-      path: sourceChangelogFiles.path,
-      filename: sourceChangelogFiles.filename,
-      bytes: sourceChangelogFiles.bytes,
-      tokens: sourceChangelogFiles.tokens,
-      fetchedAt: sourceChangelogFiles.fetchedAt,
-    })
-    .from(sourceChangelogFiles)
-    .innerJoin(sources, eq(sources.id, sourceChangelogFiles.sourceId))
-    .innerJoin(organizations, eq(organizations.id, sources.orgId))
-    .where(sql`length(${sourceChangelogFiles.content}) > ${minBytes}`)
-    .orderBy(organizations.slug, sources.slug, sourceChangelogFiles.path);
-  return c.json(rows);
-});
+sourceRoutes.get(
+  "/sources/changelog-files/oversized",
+  authMiddleware,
+  describeRoute({
+    tags: ["Sources"],
+    summary: "List oversized changelog files",
+    description:
+      "Returns changelog file rows whose content length exceeds `?minBytes=` (default 256 KB — the live-encode token-count cap). Each row includes `sourceId`, `sourceSlug`, `orgSlug`, `path`, `bytes`, and `tokens` so `scripts/backfill-changelog-tokens.ts` can PATCH via the org-scoped path without an extra resolution round-trip. Auth: Bearer token required (hard auth — not public-read gated).",
+    security: [{ bearerAuth: [] }],
+    responses: {
+      200: {
+        description: "Oversized changelog file rows",
+        content: {
+          "application/json": { schema: resolver(OversizedChangelogFilesResponseSchema) },
+        },
+      },
+    },
+  }),
+  async (c) => {
+    const db = createDb(c.env.DB);
+    const minBytes = parseInt(c.req.query("minBytes") ?? String(256 * 1024), 10);
+    // sourceId + orgSlug travel alongside the slug so the backfill script can
+    // PATCH via the org-scoped path (#698) without an extra resolution hop.
+    const rows = await db
+      .select({
+        sourceId: sources.id,
+        sourceSlug: sources.slug,
+        sourceName: sources.name,
+        orgSlug: organizations.slug,
+        path: sourceChangelogFiles.path,
+        filename: sourceChangelogFiles.filename,
+        bytes: sourceChangelogFiles.bytes,
+        tokens: sourceChangelogFiles.tokens,
+        fetchedAt: sourceChangelogFiles.fetchedAt,
+      })
+      .from(sourceChangelogFiles)
+      .innerJoin(sources, eq(sources.id, sourceChangelogFiles.sourceId))
+      .innerJoin(organizations, eq(organizations.id, sources.orgId))
+      .where(sql`length(${sourceChangelogFiles.content}) > ${minBytes}`)
+      .orderBy(organizations.slug, sources.slug, sourceChangelogFiles.path);
+    return c.json(rows);
+  },
+);
 
 /**
  * Admin-only: write an exact cached token count for a single changelog
@@ -1167,12 +1491,20 @@ sourceRoutes.get("/sources/changelog-files/oversized", authMiddleware, async (c)
  */
 const patchChangelogTokensHandler = async (c: import("hono").Context<Env>) => {
   const db = createDb(c.env.DB);
-  const body = await c.req.json<{ tokens: number; path?: string }>();
-  if (!Number.isFinite(body.tokens) || body.tokens < 0) {
+  let body: { tokens: number; path?: string };
+  try {
+    body = await c.req.json<{ tokens: number; path?: string }>();
+  } catch {
+    return c.json({ error: "bad_request", message: "Invalid JSON body" }, 400);
+  }
+  if (typeof body.tokens !== "number" || !Number.isFinite(body.tokens) || body.tokens < 0) {
     return c.json(
       { error: "invalid_tokens", message: "tokens must be a non-negative number" },
       400,
     );
+  }
+  if (body.path !== undefined && typeof body.path !== "string") {
+    return c.json({ error: "bad_request", message: "path must be a string when provided" }, 400);
   }
 
   const src = await resolveSourceFromContext(c, db);
@@ -1201,9 +1533,35 @@ const patchChangelogTokensHandler = async (c: import("hono").Context<Env>) => {
     .where(eq(sourceChangelogFiles.id, selected.id));
   return c.json({ path: selected.path, oldTokens, tokens: newTokens });
 };
-sourceRoutes.patch("/sources/:slug/changelog/tokens", patchChangelogTokensHandler);
+const patchChangelogTokensRoute = describeRoute({
+  tags: ["Sources"],
+  summary: "Write exact token count for a changelog file",
+  description:
+    "Writes a cached exact token count for a single changelog file identified by `path` (optional — defaults to the file selected by `selectChangelogFile` when omitted). Used by `scripts/backfill-changelog-tokens.ts` to replace the `chars/4` estimate on rows that exceed the live-encode cap. Body: `{ tokens: number, path?: string }`. Body documented in prose — formal `requestBody` modelling is deferred to the validator-middleware phase of #894. Auth inherited from `publicReadAuthMiddleware`'s non-SAFE_METHODS branch — Bearer token required.",
+  security: [{ bearerAuth: [] }],
+  responses: {
+    200: {
+      description: "Updated token count with old/new values",
+      content: { "application/json": { schema: resolver(ChangelogTokensResponseSchema) } },
+    },
+    400: {
+      description: "Invalid `tokens` value or wrong-typed `path`",
+      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+    },
+    404: {
+      description: "Source or changelog file not found",
+      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+    },
+  },
+});
+sourceRoutes.patch(
+  "/sources/:slug/changelog/tokens",
+  patchChangelogTokensRoute,
+  patchChangelogTokensHandler,
+);
 sourceRoutes.patch(
   "/orgs/:orgSlug/sources/:sourceSlug/changelog/tokens",
+  patchChangelogTokensRoute,
   patchChangelogTokensHandler,
 );
 
@@ -1326,8 +1684,41 @@ async function classifyRepoStatus(
     },
   };
 }
-sourceRoutes.post("/sources/:slug/changelog/probe", probeChangelogsHandler);
-sourceRoutes.post("/orgs/:orgSlug/sources/:sourceSlug/changelog/probe", probeChangelogsHandler);
+const probeChangelogsRoute = describeRoute({
+  tags: ["Sources"],
+  summary: "Probe changelog paths for a GitHub source",
+  description:
+    "Dry-runs the CHANGELOG path discovery logic for a GitHub source — same planner the cron fetch uses (root listing, workspace declarations, override resolution) — without fetching file bodies or writing to D1. Pre-checks `GET /repos/:owner/:repo` so a transient GitHub error (rate-limit, auth, 5xx) surfaces as 502/503 rather than an empty paths list. Only available for sources with `type = 'github'`. Auth inherited from `publicReadAuthMiddleware`'s non-SAFE_METHODS branch — Bearer token required.",
+  security: [{ bearerAuth: [] }],
+  responses: {
+    200: {
+      description: "Discovered changelog paths (empty array when none found)",
+      content: { "application/json": { schema: resolver(ChangelogProbeResponseSchema) } },
+    },
+    400: {
+      description: "Source type is not github, or URL cannot be parsed",
+      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+    },
+    404: {
+      description: "Source or GitHub repo not found",
+      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+    },
+    502: {
+      description: "GitHub auth error or upstream 5xx",
+      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+    },
+    503: {
+      description: "GitHub rate limit exceeded",
+      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+    },
+  },
+});
+sourceRoutes.post("/sources/:slug/changelog/probe", probeChangelogsRoute, probeChangelogsHandler);
+sourceRoutes.post(
+  "/orgs/:orgSlug/sources/:sourceSlug/changelog/probe",
+  probeChangelogsRoute,
+  probeChangelogsHandler,
+);
 
 // Registered at both `/sources/:slug` (id-or-slug, id preferred) and
 // `/orgs/:orgSlug/sources/:sourceSlug` (org-scoped, both segments id-or-slug).
@@ -2024,7 +2415,28 @@ const patchSourceRoute = describeRoute({
 sourceRoutes.patch("/sources/:slug", patchSourceRoute, patchSourceHandler);
 sourceRoutes.patch("/orgs/:orgSlug/sources/:sourceSlug", patchSourceRoute, patchSourceHandler);
 
-sourceRoutes.delete("/sources/:slug", async (c) => {
+const deleteSourceRoute = describeRoute({
+  tags: ["Sources"],
+  summary: "Delete a source",
+  description:
+    "Soft-deletes the source by default: sets `deletedAt` and mangles the slug to `<slug>--<id>` so the original slug can be reused. Releases stay attached for the cleanup cron's FK cascade. Pass `?hard=true` for a hard delete that also purges the row (tombstones are reachable by typed `src_…` ID when `?hard=true`). Auth inherited from `publicReadAuthMiddleware`'s non-SAFE_METHODS branch — Bearer token required. Bare-path slugs (non-ID) return 400 `bare_slug_rejected` per #698 — use the org-scoped variant or pass a `src_…` ID.",
+  security: [{ bearerAuth: [] }],
+  responses: {
+    200: {
+      description: "Soft deletion timestamp or hard delete confirmation",
+      content: { "application/json": { schema: resolver(DeleteSourceResponseSchema) } },
+    },
+    400: {
+      description: "Bare slug rejected on the bare path (use org-scoped path or typed ID)",
+      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+    },
+    404: {
+      description: "Source not found",
+      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+    },
+  },
+});
+sourceRoutes.delete("/sources/:slug", deleteSourceRoute, async (c) => {
   const db = createDb(c.env.DB);
   const hard = c.req.query("hard") === "true";
 
@@ -2056,13 +2468,42 @@ sourceRoutes.delete("/sources/:slug", async (c) => {
 });
 
 // Bulk release insert for data seeding
-sourceRoutes.post("/sources/:slug/releases", async (c) => {
+const postReleaseRoute = describeRoute({
+  tags: ["Sources"],
+  summary: "Insert a single release",
+  description:
+    "Inserts a single release for the source. Unlike the `/batch` endpoint this path is used for data seeding or manual inserts where the caller controls the `id`. On `UNIQUE(source_id, url)` conflict the insert is skipped (`onConflictDoNothing`) and the response is `{ skipped: true }` (200). A successful insert returns 201 with the inserted row. LLM-generated version placeholders (`<UNKNOWN>`, `n/a`) are stripped. Body fields: `title`, `content` (required); `id?`, `version?`, `summary?`, `titleGenerated?`, `titleShort?`, `url?`, `contentHash?`, `publishedAt?`, `fetchedAt?`, `type?`. Body documented in prose — formal `requestBody` modelling is deferred to the validator-middleware phase of #894. Auth inherited from `publicReadAuthMiddleware`'s non-SAFE_METHODS branch — Bearer token required. Bare-path slugs return 400 `bare_slug_rejected` per #698 — pass a `src_…` ID on the bare path.",
+  security: [{ bearerAuth: [] }],
+  responses: {
+    201: {
+      description: "Release inserted",
+      content: { "application/json": { schema: resolver(InsertReleaseResponseSchema) } },
+    },
+    200: {
+      description: "Insert skipped (URL conflict)",
+      content: { "application/json": { schema: resolver(InsertReleaseResponseSchema) } },
+    },
+    400: {
+      description: "Bare slug rejected on the bare path (use typed ID)",
+      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+    },
+    404: {
+      description: "Source not found",
+      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+    },
+    500: {
+      description: "Insert failed",
+      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+    },
+  },
+});
+sourceRoutes.post("/sources/:slug/releases", postReleaseRoute, async (c) => {
   const db = createDb(c.env.DB);
 
   const src = await resolveSourceFromContext(c, db);
   if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
 
-  const body = await c.req.json<{
+  let body: {
     id?: string;
     version?: string;
     title: string;
@@ -2079,7 +2520,18 @@ sourceRoutes.post("/sources/:slug/releases", async (c) => {
     publishedAt?: string;
     fetchedAt?: string;
     type?: ReleaseType;
-  }>();
+  };
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "bad_request", message: "Invalid JSON body" }, 400);
+  }
+  if (typeof body.title !== "string" || body.title.length === 0) {
+    return c.json({ error: "bad_request", message: "title must be a non-empty string" }, 400);
+  }
+  if (typeof body.content !== "string") {
+    return c.json({ error: "bad_request", message: "content must be a string" }, 400);
+  }
 
   // See batch handler: strip LLM placeholders ("<UNKNOWN>", "n/a") so
   // they don't leak into the version slot the web UI promotes. Type-guard
