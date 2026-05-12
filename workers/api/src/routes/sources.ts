@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { describeRoute, resolver } from "hono-openapi";
+import { hideInProduction } from "../openapi.js";
 import {
   eq,
   desc,
@@ -409,6 +410,7 @@ sourceRoutes.get(
 // ── Fetchable sources (must be before :slug route) ──
 
 const getFetchableSourcesRoute = describeRoute({
+  hide: hideInProduction,
   tags: ["Sources"],
   summary: "List fetchable sources",
   description:
@@ -468,6 +470,7 @@ sourceRoutes.get("/sources/fetchable", getFetchableSourcesRoute, async (c) => {
 // ── Feed and change-detection sources (must be before :slug route) ──
 
 const getFeedSourcesRoute = describeRoute({
+  hide: hideInProduction,
   tags: ["Sources"],
   summary: "List feed sources",
   description:
@@ -495,6 +498,7 @@ sourceRoutes.get("/sources/feeds", getFeedSourcesRoute, async (c) => {
 });
 
 const getChangedSourcesRoute = describeRoute({
+  hide: hideInProduction,
   tags: ["Sources"],
   summary: "List sources with pending changes",
   description:
@@ -519,6 +523,7 @@ sourceRoutes.get("/sources/changes", getChangedSourcesRoute, async (c) => {
 // ── Trigger fetch for a single source ──
 
 const postSourceFetchRoute = describeRoute({
+  hide: hideInProduction,
   tags: ["Sources"],
   summary: "Trigger a source fetch",
   description:
@@ -832,6 +837,7 @@ const postReleasesBatchHandler = async (c: import("hono").Context<Env>) => {
   }
 };
 const postReleasesBatchRoute = describeRoute({
+  hide: hideInProduction,
   tags: ["Sources"],
   summary: "Batch insert releases",
   description:
@@ -866,6 +872,7 @@ sourceRoutes.post(
 // ── Delete all releases for a source (for --force re-fetch) ──
 
 const deleteSourceReleasesRoute = describeRoute({
+  hide: hideInProduction,
   tags: ["Sources"],
   summary: "Delete all releases for a source",
   description:
@@ -955,6 +962,7 @@ const postContentHashHandler = async (c: import("hono").Context<Env>) => {
   return c.json({ unchanged: false });
 };
 const postContentHashRoute = describeRoute({
+  hide: hideInProduction,
   tags: ["Sources"],
   summary: "Check or update content hash",
   description:
@@ -1059,6 +1067,7 @@ const patchMetadataHandler = async (c: import("hono").Context<Env>) => {
   return c.json({ metadata: merged });
 };
 const patchMetadataRoute = describeRoute({
+  hide: hideInProduction,
   tags: ["Sources"],
   summary: "Merge source metadata",
   description:
@@ -1121,6 +1130,7 @@ const getRecentReleasesHandler = async (c: import("hono").Context<Env>) => {
   return c.json(rows);
 };
 const getRecentReleasesRoute = describeRoute({
+  hide: hideInProduction,
   tags: ["Sources"],
   summary: "List recent releases for a source",
   description:
@@ -1180,6 +1190,7 @@ const getKnownReleasesHandler = async (c: import("hono").Context<Env>) => {
   return c.json(rows);
 };
 const getKnownReleasesRoute = describeRoute({
+  hide: hideInProduction,
   tags: ["Sources"],
   summary: "List known releases for a source",
   description:
@@ -1206,6 +1217,7 @@ sourceRoutes.get(
 // ── Sessions involving a specific source slug ──
 
 const getSourceSessionsRoute = describeRoute({
+  hide: hideInProduction,
   tags: ["Sources"],
   summary: "Get active discovery sessions for a source",
   description:
@@ -1314,6 +1326,7 @@ const getSourceActivityHandler = async (c: import("hono").Context<Env>) => {
   });
 };
 const getSourceActivityRoute = describeRoute({
+  hide: hideInProduction,
   tags: ["Sources"],
   summary: "Get source release activity",
   description:
@@ -1359,6 +1372,7 @@ const getSourceHeatmapHandler = async (c: import("hono").Context<Env>) => {
   });
 };
 const getSourceHeatmapRoute = describeRoute({
+  hide: hideInProduction,
   tags: ["Sources"],
   summary: "Get source release heatmap",
   description:
@@ -1425,6 +1439,7 @@ const getSourceChangelogHandler = async (c: import("hono").Context<Env>) => {
   );
 };
 const getSourceChangelogRoute = describeRoute({
+  hide: hideInProduction,
   tags: ["Sources"],
   summary: "Get source changelog",
   description:
@@ -1457,6 +1472,7 @@ sourceRoutes.get(
   "/sources/changelog-files/oversized",
   authMiddleware,
   describeRoute({
+    hide: hideInProduction,
     tags: ["Sources"],
     summary: "List oversized changelog files",
     description:
@@ -1557,6 +1573,7 @@ const patchChangelogTokensHandler = async (c: import("hono").Context<Env>) => {
   return c.json({ path: selected.path, oldTokens, tokens: newTokens });
 };
 const patchChangelogTokensRoute = describeRoute({
+  hide: hideInProduction,
   tags: ["Sources"],
   summary: "Write exact token count for a changelog file",
   description:
@@ -1708,6 +1725,7 @@ async function classifyRepoStatus(
   };
 }
 const probeChangelogsRoute = describeRoute({
+  hide: hideInProduction,
   tags: ["Sources"],
   summary: "Probe changelog paths for a GitHub source",
   description:
@@ -2059,6 +2077,7 @@ sourceRoutes.get(
 sourceRoutes.post(
   "/sources",
   describeRoute({
+    hide: hideInProduction,
     tags: ["Sources"],
     summary: "Create source",
     description:
@@ -2387,6 +2406,7 @@ const patchSourceHandler = async (c: import("hono").Context<Env>) => {
   return c.json(enriched);
 };
 const patchSourceRoute = describeRoute({
+  hide: hideInProduction,
   tags: ["Sources"],
   summary: "Update source",
   description:
@@ -2415,6 +2435,7 @@ sourceRoutes.patch("/sources/:slug", patchSourceRoute, patchSourceHandler);
 sourceRoutes.patch("/orgs/:orgSlug/sources/:sourceSlug", patchSourceRoute, patchSourceHandler);
 
 const deleteSourceRoute = describeRoute({
+  hide: hideInProduction,
   tags: ["Sources"],
   summary: "Delete a source",
   description:
@@ -2468,6 +2489,7 @@ sourceRoutes.delete("/sources/:slug", deleteSourceRoute, async (c) => {
 
 // Bulk release insert for data seeding
 const postReleaseRoute = describeRoute({
+  hide: hideInProduction,
   tags: ["Sources"],
   summary: "Insert a single release",
   description:
@@ -2638,6 +2660,7 @@ sourceRoutes.get(
 sourceRoutes.delete(
   "/releases/:id",
   describeRoute({
+    hide: hideInProduction,
     tags: ["Releases"],
     summary: "Delete a release",
     description:
@@ -2672,6 +2695,7 @@ sourceRoutes.delete(
 sourceRoutes.patch(
   "/releases/:id",
   describeRoute({
+    hide: hideInProduction,
     tags: ["Releases"],
     summary: "Update a release",
     description:
@@ -2764,6 +2788,7 @@ sourceRoutes.patch(
 sourceRoutes.post(
   "/releases/:id/suppress",
   describeRoute({
+    hide: hideInProduction,
     tags: ["Releases"],
     summary: "Suppress a release",
     description:
@@ -2800,6 +2825,7 @@ sourceRoutes.post(
 sourceRoutes.post(
   "/releases/:id/unsuppress",
   describeRoute({
+    hide: hideInProduction,
     tags: ["Releases"],
     summary: "Unsuppress a release",
     description:

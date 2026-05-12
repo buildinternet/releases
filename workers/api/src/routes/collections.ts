@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { describeRoute, resolver } from "hono-openapi";
+import { hideInProduction } from "../openapi.js";
 import { eq, and, inArray, isNull, count, sql } from "drizzle-orm";
 import { createDb } from "../db.js";
 import {
@@ -411,6 +412,7 @@ collectionRoutes.get(
 collectionRoutes.post(
   "/collections",
   describeRoute({
+    hide: hideInProduction,
     tags: ["Collections"],
     summary: "Create a collection",
     description:
@@ -488,6 +490,7 @@ collectionRoutes.post(
 collectionRoutes.patch(
   "/collections/:slug",
   describeRoute({
+    hide: hideInProduction,
     tags: ["Collections"],
     summary: "Update a collection's name, slug, or description",
     description:
@@ -589,6 +592,7 @@ collectionRoutes.patch(
 collectionRoutes.delete(
   "/collections/:slug",
   describeRoute({
+    hide: hideInProduction,
     tags: ["Collections"],
     summary: "Delete a collection",
     description:
@@ -629,6 +633,7 @@ collectionRoutes.delete(
 collectionRoutes.put(
   "/collections/:slug/members",
   describeRoute({
+    hide: hideInProduction,
     tags: ["Collections"],
     summary: "Replace a collection's full membership atomically",
     description:
@@ -702,6 +707,7 @@ collectionRoutes.put(
 collectionRoutes.post(
   "/collections/:slug/members",
   describeRoute({
+    hide: hideInProduction,
     tags: ["Collections"],
     summary: "Add a single org to a collection",
     description:
@@ -782,6 +788,7 @@ collectionRoutes.post(
 collectionRoutes.delete(
   "/collections/:slug/members/:org",
   describeRoute({
+    hide: hideInProduction,
     tags: ["Collections"],
     summary: "Remove one org from a collection",
     description:

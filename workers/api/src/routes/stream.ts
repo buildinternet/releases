@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { describeRoute } from "hono-openapi";
+import { hideInProduction } from "../openapi.js";
 import type { Env } from "../index.js";
 import { getReleaseHub } from "../utils.js";
 
@@ -20,6 +21,7 @@ export const streamRoutes = new Hono<Env>();
 streamRoutes.get(
   "/releases/stream",
   describeRoute({
+    hide: hideInProduction,
     tags: ["Releases"],
     summary: "Stream release events (WebSocket)",
     description:

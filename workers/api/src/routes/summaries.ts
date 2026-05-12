@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { describeRoute, resolver } from "hono-openapi";
+import { hideInProduction } from "../openapi.js";
 import { eq, and, desc } from "drizzle-orm";
 import { createDb } from "../db.js";
 import { releaseSummaries, sources } from "@buildinternet/releases-core/schema";
@@ -18,6 +19,7 @@ const app = new Hono<Env>();
 app.get(
   "/sources/:slug/summaries",
   describeRoute({
+    hide: hideInProduction,
     tags: ["Sources"],
     summary: "List release summaries for a source",
     description:
@@ -65,6 +67,7 @@ app.get(
 app.post(
   "/sources/:slug/summaries",
   describeRoute({
+    hide: hideInProduction,
     tags: ["Sources"],
     summary: "Upsert a release summary",
     description:

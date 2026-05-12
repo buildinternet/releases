@@ -6,9 +6,11 @@ adminOnly: false
 
 # REST API
 
-Programmatic access to the Releases index over HTTP. Every public-read endpoint is documented in the live OpenAPI 3.1 spec at [`api.releases.sh/v1/openapi.json`](https://api.releases.sh/v1/openapi.json) and rendered as an interactive reference at [`/docs/api/rest`](/docs/api/rest) (this page) and [`api.releases.sh/v1/docs`](https://api.releases.sh/v1/docs).
+Programmatic access to the Releases index over HTTP. The notes below cover conventions that apply across endpoints; the per-endpoint reference is generated from the OpenAPI spec.
 
-The page you are reading is auto-generated from the OpenAPI spec, so it stays in sync with what the API worker actually serves. The notes below cover conventions that apply across endpoints.
+- **Interactive reference:** [`api.releases.sh/v1/docs`](https://api.releases.sh/v1/docs) — full Scalar reference with request/response shapes, examples, and client snippets.
+- **OpenAPI 3.1 spec:** [`api.releases.sh/v1/openapi.json`](https://api.releases.sh/v1/openapi.json) — source of truth, generated from the worker's route annotations.
+- **Base URL:** `https://api.releases.sh/v1`
 
 ## Authentication
 

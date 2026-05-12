@@ -13,6 +13,7 @@
  * don't accumulate after a route is renamed or removed.
  */
 import { Hono } from "hono";
+import { logger } from "@buildinternet/releases-lib/logger";
 import { publicReadRoutes } from "../workers/api/src/route-namespaces.js";
 import { mountV1Routes } from "../workers/api/src/v1-routes.js";
 import type { Env } from "../workers/api/src/index.js";
@@ -23,7 +24,94 @@ import type { Env } from "../workers/api/src/index.js";
  * `v1.routes[].path` returns.
  */
 const ALLOWLIST = new Set<string>([
-  // All Phase-1 long-tail buckets have been annotated. ALLOWLIST is empty.
+  // These routes are annotated with `hide: hideInProduction` — they exist in
+  // the spec on staging/local but are intentionally suppressed on production.
+  // The coverage script always generates the spec with ENVIRONMENT=production,
+  // so they appear as holes here even though they have describeRoute(). See
+  // workers/api/src/openapi.ts for the `hideInProduction` helper.
+  "GET /orgs/:slug/activity",
+  "GET /orgs/:slug/heatmap",
+  "GET /orgs/:slug/sparklines",
+  "GET /orgs/:slug/recent-releases",
+  "GET /sitemap",
+  "GET /sources/fetchable",
+  "GET /sources/feeds",
+  "GET /sources/changes",
+  "GET /sources/:slug/recent-releases",
+  "GET /sources/:slug/known-releases",
+  "GET /sources/:slug/sessions",
+  "GET /sources/:slug/activity",
+  "GET /sources/:slug/heatmap",
+  "GET /sources/:slug/changelog",
+  "GET /sources/changelog-files/oversized",
+  // Org-scoped aliases of the above source routes (same describeRoute, same hide):
+  "GET /orgs/:orgSlug/sources/:sourceSlug/recent-releases",
+  "GET /orgs/:orgSlug/sources/:sourceSlug/known-releases",
+  "GET /orgs/:orgSlug/sources/:sourceSlug/activity",
+  "GET /orgs/:orgSlug/sources/:sourceSlug/heatmap",
+  "GET /orgs/:orgSlug/sources/:sourceSlug/changelog",
+  // Admin/internal GET routes hidden from production spec (Phase 2 extension):
+  "GET /orgs/:slug/catalog", // web-frontend aggregation payload, not shaped for general API consumers
+  "GET /orgs/:slug/ignored-urls", // operator-facing ignore-list management
+  "GET /releases", // internal media-backfill CLI helper (?hasMedia=true only)
+  "GET /orgs/:slug/playbook", // editorial-internal; admin Bearer required even for GET
+  "GET /sources/:slug/summaries", // AI-generated content storage; agent-pipeline internal
+  "GET /orgs/:slug/overview/inputs", // AI-pipeline input; admin-only orchestration endpoint
+  "GET /releases/stream", // experimental WebSocket; not a stable REST surface
+  // Write mutations hidden from production spec (same hideInProduction pattern).
+  // These are registered under publicReadRoutes prefixes (auth is handled by
+  // publicReadAuthMiddleware's SAFE_METHODS check) so the gate sees them as
+  // registered routes even though they require Bearer auth at runtime.
+  "POST /orgs",
+  "PATCH /orgs/:slug",
+  "DELETE /orgs/:slug",
+  "DELETE /orgs/:slug/accounts/:platform/:handle",
+  "POST /orgs/:slug/accounts",
+  "PUT /orgs/:slug/tags",
+  "DELETE /orgs/:slug/tags",
+  "POST /tags",
+  "POST /orgs/:slug/ignored-urls",
+  "DELETE /orgs/:slug/ignored-urls/:url",
+  "POST /orgs/:slug/overview",
+  "POST /sources",
+  "PATCH /sources/:slug",
+  "PATCH /orgs/:orgSlug/sources/:sourceSlug",
+  "DELETE /sources/:slug",
+  "POST /sources/:slug/fetch",
+  "POST /sources/:slug/releases/batch",
+  "POST /orgs/:orgSlug/sources/:sourceSlug/releases/batch",
+  "DELETE /sources/:slug/releases",
+  "POST /sources/:slug/content-hash",
+  "POST /orgs/:orgSlug/sources/:sourceSlug/content-hash",
+  "PATCH /sources/:slug/metadata",
+  "PATCH /orgs/:orgSlug/sources/:sourceSlug/metadata",
+  "PATCH /sources/:slug/changelog/tokens",
+  "PATCH /orgs/:orgSlug/sources/:sourceSlug/changelog/tokens",
+  "POST /sources/:slug/changelog/probe",
+  "POST /orgs/:orgSlug/sources/:sourceSlug/changelog/probe",
+  "POST /sources/:slug/releases",
+  "POST /sources/:slug/summaries",
+  "PATCH /orgs/:slug/playbook/notes",
+  "POST /releases/:id/coverage",
+  "DELETE /releases/:id/coverage",
+  "DELETE /releases/:id",
+  "PATCH /releases/:id",
+  "POST /releases/:id/suppress",
+  "POST /releases/:id/unsuppress",
+  "POST /products",
+  "POST /products/adopt",
+  "PATCH /products/:slug",
+  "PATCH /orgs/:orgSlug/products/:productSlug",
+  "DELETE /products/:identifier",
+  "PUT /products/:identifier/tags",
+  "DELETE /products/:identifier/tags",
+  "PATCH /categories/:slug",
+  "POST /collections",
+  "PATCH /collections/:slug",
+  "DELETE /collections/:slug",
+  "PUT /collections/:slug/members",
+  "POST /collections/:slug/members",
+  "DELETE /collections/:slug/members/:org",
 ]);
 
 const HTTP_METHODS = new Set(["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"]);
@@ -47,7 +135,7 @@ app.route("/v1", v1);
 // validates against the public-facing spec.
 const res = await app.request("/v1/openapi.json", {}, { ENVIRONMENT: "production" });
 if (!res.ok) {
-  console.error(`Failed to generate OpenAPI spec: HTTP ${res.status}`);
+  logger.error(`Failed to generate OpenAPI spec: HTTP ${res.status}`);
   process.exit(2);
 }
 const spec = (await res.json()) as {
@@ -88,28 +176,28 @@ for (const { method, honoPath } of registered) {
 const staleAllowlist = [...ALLOWLIST].filter((entry) => !registeredKeys.has(entry));
 
 if (holes.length > 0) {
-  console.error(`OpenAPI coverage gate: ${holes.length} undocumented public-read route(s).`);
-  console.error("");
-  console.error("Either add describeRoute(...) in the corresponding workers/api/src/routes/");
-  console.error("file, or add an explicit ALLOWLIST entry in");
-  console.error("scripts/check-openapi-coverage.ts with a rationale comment.");
-  console.error("");
-  for (const h of holes.toSorted()) console.error(`  - ${h}`);
+  logger.error(`OpenAPI coverage gate: ${holes.length} undocumented public-read route(s).`);
+  logger.error("");
+  logger.error("Either add describeRoute(...) in the corresponding workers/api/src/routes/");
+  logger.error("file, or add an explicit ALLOWLIST entry in");
+  logger.error("scripts/check-openapi-coverage.ts with a rationale comment.");
+  logger.error("");
+  for (const h of [...holes].sort()) logger.error(`  - ${h}`);
   if (staleAllowlist.length > 0) {
-    console.error("");
-    console.error("(Also: ALLOWLIST has stale entries that match no registered route.)");
-    for (const s of staleAllowlist.toSorted()) console.error(`  - ${s}`);
+    logger.error("");
+    logger.error("(Also: ALLOWLIST has stale entries that match no registered route.)");
+    for (const s of [...staleAllowlist].sort()) logger.error(`  - ${s}`);
   }
   process.exit(1);
 }
 
 const documented = registered.length - allowedHit.length;
-console.log(
+logger.info(
   `OpenAPI coverage gate: OK — ${documented} documented, ${allowedHit.length} allowlisted, ${registered.length} total public-read routes.`,
 );
 if (staleAllowlist.length > 0) {
-  console.warn("");
-  console.warn(`Warning: ${staleAllowlist.length} stale ALLOWLIST entries (no matching route).`);
-  console.warn("Clean these up in scripts/check-openapi-coverage.ts:");
-  for (const s of staleAllowlist.toSorted()) console.warn(`  - ${s}`);
+  logger.warn("");
+  logger.warn(`Warning: ${staleAllowlist.length} stale ALLOWLIST entries (no matching route).`);
+  logger.warn("Clean these up in scripts/check-openapi-coverage.ts:");
+  for (const s of [...staleAllowlist].sort()) logger.warn(`  - ${s}`);
 }

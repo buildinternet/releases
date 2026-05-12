@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { describeRoute, resolver } from "hono-openapi";
+import { hideInProduction } from "../openapi.js";
 import { and, count, eq, sql } from "drizzle-orm";
 import { createDb } from "../db.js";
 import {
@@ -97,6 +98,7 @@ productRoutes.get(
 productRoutes.post(
   "/products/adopt",
   describeRoute({
+    hide: hideInProduction,
     tags: ["Products"],
     summary: "Adopt an org as a product",
     description:
@@ -384,6 +386,7 @@ productRoutes.get(
 productRoutes.post(
   "/products",
   describeRoute({
+    hide: hideInProduction,
     tags: ["Products"],
     summary: "Create product",
     description:
@@ -581,6 +584,7 @@ const patchProductHandler = async (c: import("hono").Context<Env>) => {
   return c.json(updated);
 };
 const patchProductRoute = describeRoute({
+  hide: hideInProduction,
   tags: ["Products"],
   summary: "Update product",
   description:
@@ -658,6 +662,7 @@ productRoutes.get(
 productRoutes.put(
   "/products/:identifier/tags",
   describeRoute({
+    hide: hideInProduction,
     tags: ["Products"],
     summary: "Add tags to a product",
     description:
@@ -700,6 +705,7 @@ productRoutes.put(
 productRoutes.delete(
   "/products/:identifier/tags",
   describeRoute({
+    hide: hideInProduction,
     tags: ["Products"],
     summary: "Remove tags from a product",
     description:
@@ -746,6 +752,7 @@ productRoutes.delete(
 productRoutes.delete(
   "/products/:identifier",
   describeRoute({
+    hide: hideInProduction,
     tags: ["Products"],
     summary: "Delete product",
     description:

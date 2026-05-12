@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { describeRoute, resolver } from "hono-openapi";
+import { hideInProduction } from "../openapi.js";
 import { eq, inArray, max, and, sql } from "drizzle-orm";
 import { createDb } from "../db.js";
 import {
@@ -19,6 +20,7 @@ export const sitemapRoutes = new Hono<Env>();
 sitemapRoutes.get(
   "/sitemap",
   describeRoute({
+    hide: hideInProduction,
     tags: ["Sitemap"],
     summary: "Bulk URL payload for the web sitemap generator",
     description:
