@@ -144,6 +144,17 @@ import type {
   ReplaceCollectionMembersResponseSchema,
   AddCollectionMemberResponseSchema,
 } from "./schemas/collections.js";
+import type {
+  OrgOverviewResponseSchema,
+  RegenerateOverviewBodySchema,
+  RegenerateOverviewResponseSchema,
+  ProductOverviewResponseSchema,
+  OverviewInputsCheckResponseSchema,
+  OverviewInputsFullResponseSchema,
+  PlaybookResponseSchema,
+  UpdatePlaybookNotesBodySchema,
+  UpdatePlaybookNotesResponseSchema,
+} from "./schemas/overviews.js";
 
 export {
   MediaItemSchema,
@@ -282,6 +293,17 @@ export {
   ReplaceCollectionMembersResponseSchema,
   AddCollectionMemberResponseSchema,
 } from "./schemas/collections.js";
+export {
+  OrgOverviewResponseSchema,
+  RegenerateOverviewBodySchema,
+  RegenerateOverviewResponseSchema,
+  ProductOverviewResponseSchema,
+  OverviewInputsCheckResponseSchema,
+  OverviewInputsFullResponseSchema,
+  PlaybookResponseSchema,
+  UpdatePlaybookNotesBodySchema,
+  UpdatePlaybookNotesResponseSchema,
+} from "./schemas/overviews.js";
 
 // ── Media ──
 
@@ -515,6 +537,16 @@ export type OverviewCitation = z.infer<typeof OverviewCitationSchema>;
 
 /** @deprecated Use OverviewPageItem */
 export type KnowledgePageItem = OverviewPageItem;
+
+export type OrgOverviewResponse = z.infer<typeof OrgOverviewResponseSchema>;
+export type RegenerateOverviewBody = z.infer<typeof RegenerateOverviewBodySchema>;
+export type RegenerateOverviewResponse = z.infer<typeof RegenerateOverviewResponseSchema>;
+export type ProductOverviewResponse = z.infer<typeof ProductOverviewResponseSchema>;
+export type OverviewInputsCheckResponse = z.infer<typeof OverviewInputsCheckResponseSchema>;
+export type OverviewInputsFullResponse = z.infer<typeof OverviewInputsFullResponseSchema>;
+export type PlaybookResponse = z.infer<typeof PlaybookResponseSchema>;
+export type UpdatePlaybookNotesBody = z.infer<typeof UpdatePlaybookNotesBodySchema>;
+export type UpdatePlaybookNotesResponse = z.infer<typeof UpdatePlaybookNotesResponseSchema>;
 
 // ── Overview Manifest (admin planning) ──
 
