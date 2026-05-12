@@ -66,7 +66,12 @@ export const ProductDetailSchema = ProductRowSchema.extend({
   aliases: z.array(z.string()),
 });
 
-/** Body accepted by `POST /v1/products`. */
+/**
+ * Body accepted by `POST /v1/products`. `category` is a free-form string at
+ * the wire boundary so callers can pass either a canonical slug or one of its
+ * configured aliases (resolved server-side via `resolveCategoryInput`).
+ * Responses always carry the canonical slug.
+ */
 export const CreateProductBodySchema = z.object({
   name: z.string().min(1),
   orgId: z.string().optional(),
@@ -74,16 +79,16 @@ export const CreateProductBodySchema = z.object({
   slug: z.string().optional(),
   url: z.string().optional(),
   description: z.string().optional(),
-  category: CategorySchema.optional(),
+  category: z.string().optional(),
   tags: z.array(z.string()).optional(),
 });
 
-/** Body accepted by `PATCH /v1/products/:slug`. */
+/** Body accepted by `PATCH /v1/products/:slug`. Same lenient `category` rule. */
 export const UpdateProductBodySchema = z.object({
   name: z.string().optional(),
   url: z.string().nullable().optional(),
   description: z.string().nullable().optional(),
-  category: CategorySchema.nullable().optional(),
+  category: z.string().nullable().optional(),
   tags: z.array(z.string()).optional(),
   aliases: z.array(z.string()).optional(),
 });
