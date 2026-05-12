@@ -23,16 +23,6 @@ import type { Env } from "../workers/api/src/index.js";
  * `v1.routes[].path` returns.
  */
 const ALLOWLIST = new Set<string>([
-  // ── workers/api/src/routes/stats.ts (Phase 1 long-tail) ──
-  "GET /stats",
-
-  // ── workers/api/src/routes/sitemap.ts (Phase 1 long-tail) ──
-  "GET /sitemap",
-
-  // ── workers/api/src/routes/related.ts (Phase 1 long-tail) ──
-  "GET /related/releases",
-  "GET /related/sources",
-
   // ── workers/api/src/routes/overview.ts (Phase 1 long-tail) ──
   "GET /orgs/:slug/overview",
   "POST /orgs/:slug/overview",

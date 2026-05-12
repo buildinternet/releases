@@ -30,6 +30,10 @@ const TAGS = [
   { name: "Lookups", description: "On-demand resolution helpers." },
   { name: "Stats", description: "Public registry statistics." },
   { name: "Sitemap", description: "Bulk URL emission for crawlers." },
+  {
+    name: "Related",
+    description: "Vectorize-backed similarity rails for releases and sources.",
+  },
   { name: "Taxonomy", description: "Categories and tags." },
   {
     name: "Collections",

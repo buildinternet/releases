@@ -105,6 +105,25 @@ import type {
   TagDetailSchema,
 } from "./schemas/taxonomy.js";
 import type {
+  StatsSourceActivitySchema,
+  StatsRecentActivitySchema,
+  StatsResponseSchema,
+} from "./schemas/stats.js";
+import type { SitemapSourceSchema, SitemapPayloadSchema } from "./schemas/sitemap.js";
+import type {
+  RelatedScopeSchema,
+  RelatedReleaseThumbnailSchema,
+  RelatedReleaseSourceSchema,
+  RelatedReleaseItemSchema,
+  RelatedSourceItemSchema,
+  RelatedReleasesOkResponseSchema,
+  RelatedReleasesDegradedResponseSchema,
+  RelatedReleasesResponseSchema,
+  RelatedSourcesOkResponseSchema,
+  RelatedSourcesDegradedResponseSchema,
+  RelatedSourcesResponseSchema,
+} from "./schemas/related.js";
+import type {
   CollectionMemberOrgSchema,
   CollectionListItemSchema,
   CollectionListResponseSchema,
@@ -221,6 +240,25 @@ export {
   UnifiedSearchResponseSchema,
 } from "./schemas/search.js";
 export {
+  StatsSourceActivitySchema,
+  StatsRecentActivitySchema,
+  StatsResponseSchema,
+} from "./schemas/stats.js";
+export { SitemapSourceSchema, SitemapPayloadSchema } from "./schemas/sitemap.js";
+export {
+  RelatedScopeSchema,
+  RelatedReleaseThumbnailSchema,
+  RelatedReleaseSourceSchema,
+  RelatedReleaseItemSchema,
+  RelatedSourceItemSchema,
+  RelatedReleasesOkResponseSchema,
+  RelatedReleasesDegradedResponseSchema,
+  RelatedReleasesResponseSchema,
+  RelatedSourcesOkResponseSchema,
+  RelatedSourcesDegradedResponseSchema,
+  RelatedSourcesResponseSchema,
+} from "./schemas/related.js";
+export {
   CollectionMemberOrgSchema,
   CollectionListItemSchema,
   CollectionListResponseSchema,
@@ -260,28 +298,22 @@ export type ErrorResponse = z.infer<typeof ErrorResponseSchema>;
 
 // ── Sitemap (bulk URL emission) ──
 
-export interface SitemapPayload {
-  orgs: Array<{ slug: string; lastActivity: string | null }>;
-  sources: Array<{
-    orgSlug: string;
-    slug: string;
-    latestDate: string | null;
-    /**
-     * Whether this source has a stored GitHub CHANGELOG file. Used by the web
-     * sitemap to emit `/{org}/{src}/changelog` URLs only for sources where the
-     * route resolves (#875). Optional for backwards compatibility — older
-     * clients ignore it.
-     */
-    hasChangelog?: boolean;
-    /**
-     * Whether this source has any rolling or monthly highlight summaries.
-     * Drives `/{org}/{src}/highlights` sitemap emission (#875).
-     */
-    hasHighlights?: boolean;
-  }>;
-  products: Array<{ orgSlug: string; slug: string }>;
-  collections: Array<{ slug: string; updatedAt: string }>;
-}
+export type SitemapSource = z.infer<typeof SitemapSourceSchema>;
+export type SitemapPayload = z.infer<typeof SitemapPayloadSchema>;
+
+// ── Related (Vectorize neighbors) ──
+
+export type RelatedScope = z.infer<typeof RelatedScopeSchema>;
+export type RelatedReleaseThumbnail = z.infer<typeof RelatedReleaseThumbnailSchema>;
+export type RelatedReleaseSource = z.infer<typeof RelatedReleaseSourceSchema>;
+export type RelatedReleaseItem = z.infer<typeof RelatedReleaseItemSchema>;
+export type RelatedSourceItem = z.infer<typeof RelatedSourceItemSchema>;
+export type RelatedReleasesOkResponse = z.infer<typeof RelatedReleasesOkResponseSchema>;
+export type RelatedReleasesDegradedResponse = z.infer<typeof RelatedReleasesDegradedResponseSchema>;
+export type RelatedReleasesResponse = z.infer<typeof RelatedReleasesResponseSchema>;
+export type RelatedSourcesOkResponse = z.infer<typeof RelatedSourcesOkResponseSchema>;
+export type RelatedSourcesDegradedResponse = z.infer<typeof RelatedSourcesDegradedResponseSchema>;
+export type RelatedSourcesResponse = z.infer<typeof RelatedSourcesResponseSchema>;
 
 // ── Organizations ──
 
@@ -715,42 +747,22 @@ export interface LatestRelease {
 }
 
 // ── Stats ──
+//
+// `Stats` (flat counts) lives near the top of this file alongside the other
+// shared schema-derived aliases. The richer summary shape is the combined
+// hybrid response served at `GET /v1/stats` — flat counts plus per-source
+// rollups.
 
-export interface StatsSummary {
-  period: { days: number; cutoff: string };
-  totals: {
-    organizations: number;
-    sources: number;
-    releases: number;
-    releasesInPeriod: number;
-  };
-  sourceHealth: {
-    upToDate: number;
-    stale: number;
-    neverFetched: number;
-  };
-  sourceActivity: Array<{
-    sourceName: string;
-    sourceSlug: string;
-    sourceType: string;
-    orgName: string | null;
-    lastFetchedAt: string | null;
-    totalReleases: number;
-    recentReleases: number;
-  }>;
-  recentActivity: Array<{
-    sourceName: string;
-    sourceSlug: string;
-    orgName: string | null;
-    releasesFound: number;
-    releasesInserted: number;
-    totalReleases: number;
-    status: string;
-    durationMs: number | null;
-    error: string | null;
-    createdAt: string;
-  }>;
-}
+export type StatsSourceActivity = z.infer<typeof StatsSourceActivitySchema>;
+export type StatsRecentActivity = z.infer<typeof StatsRecentActivitySchema>;
+export type StatsResponse = z.infer<typeof StatsResponseSchema>;
+/**
+ * The richer subset of the `GET /v1/stats` response — period + totals +
+ * sourceHealth + sourceActivity + recentActivity. The full wire shape
+ * (`StatsResponse`) merges these fields with the flat back-compat `Stats`
+ * counts.
+ */
+export type StatsSummary = Omit<StatsResponse, "orgs" | "sources" | "releases" | "products">;
 
 // ── Fetch log ──
 
