@@ -1207,8 +1207,8 @@ orgRoutes.post(
     } catch {
       return c.json({ error: "bad_request", message: "Malformed JSON body" }, 400);
     }
-    if (!body.name)
-      return c.json({ error: "bad_request", message: "Missing required field: name" }, 400);
+    if (typeof body.name !== "string" || body.name.length === 0)
+      return c.json({ error: "bad_request", message: "`name` must be a non-empty string" }, 400);
 
     const tagSlug = toSlug(body.name);
     const [existing] = await db.select().from(tags).where(eq(tags.slug, tagSlug));
@@ -1778,9 +1778,11 @@ orgRoutes.get(
         400,
       );
     }
-    // Validate ISO format — `since` is bound directly into a `gte` clause
-    // against `publishedAt` (string column). Garbage in compares lexically
-    // and returns silently-empty rows; better to fail fast with 400.
+    // Validate AND normalize ISO format — `since` is bound directly into a
+    // `gte` clause against `publishedAt` (string column). Date.parse accepts
+    // permissive shapes like `2024/01/01` that pass the NaN check but sort
+    // lexically against the ISO column. Convert to a canonical ISO string
+    // so the SQL comparison is always against a well-formed UTC timestamp.
     const sinceDate = new Date(since);
     if (Number.isNaN(sinceDate.getTime())) {
       return c.json(
@@ -1791,6 +1793,7 @@ orgRoutes.get(
         400,
       );
     }
+    const sinceIso = sinceDate.toISOString();
 
     const [org] = await db
       .select({ id: organizations.id })
@@ -1823,7 +1826,7 @@ orgRoutes.get(
       })
       .from(releasesVisible)
       .innerJoin(sourcesVisible, eq(releasesVisible.sourceId, sourcesVisible.id))
-      .where(and(eq(sourcesVisible.orgId, org.id), gte(releasesVisible.publishedAt, since)))
+      .where(and(eq(sourcesVisible.orgId, org.id), gte(releasesVisible.publishedAt, sinceIso)))
       .orderBy(desc(releasesVisible.publishedAt))
       .limit(limit);
 
@@ -1868,9 +1871,17 @@ orgRoutes.post(
       return c.json({ error: "bad_request", message: "Malformed JSON body" }, 400);
     }
 
-    if (!body.platform || !body.handle) {
+    if (
+      typeof body.platform !== "string" ||
+      body.platform.length === 0 ||
+      typeof body.handle !== "string" ||
+      body.handle.length === 0
+    ) {
       return c.json(
-        { error: "bad_request", message: "Missing required fields: platform, handle" },
+        {
+          error: "bad_request",
+          message: "`platform` and `handle` must be non-empty strings",
+        },
         400,
       );
     }
