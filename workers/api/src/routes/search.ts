@@ -26,7 +26,7 @@ import {
 import { runHybridSearch, type HybridMode } from "../lib/search-hybrid.js";
 import { logSearch } from "../lib/log-search.js";
 import { isValidBearerAuth } from "../middleware/auth.js";
-import { hydrateMediaUrls, resolveR2Url, parseBoolParam } from "../utils.js";
+import { hydrateMediaUrls, resolveR2Url, parseBoolParam, parseLimitParam } from "../utils.js";
 import {
   organizationsActive,
   sources,
@@ -164,7 +164,7 @@ searchRoutes.get(
     tags: ["Search"],
     summary: "Unified search across orgs, catalog, releases, and chunks",
     description:
-      'Returns orgs, catalog entries (products + standalone sources folded together), release hits, and — on hybrid/semantic modes — CHANGELOG.md chunk hits in a single response.\n\n`mode` selects the release-retrieval strategy: `lexical` (default, FTS5), `semantic` (vector-only), or `hybrid` (RRF fusion of FTS5 + vector). The handler echoes back the mode actually used, including `degraded: true` when a hybrid request fell back to lexical because Vectorize is unavailable.\n\n`?domain=` narrows the entire result set to one org (matched against `organizations.domain` and `domain_aliases.domain`). Invalid hostnames return 400; unknown hostnames return an empty envelope with `domainStatus: "not_found"` (distinct from "matched but no hits").\n\nWhen the query parses as a GitHub coordinate (`org/repo` or `github:org/repo`) and no orgs/catalog matched, the handler runs an on-demand lookup and embeds the result on `lookup`. Coordinate-shaped queries are not suppressed by tangential release/chunk hits.\n\nContent negotiation: `Accept: text/markdown` returns a Markdown-rendered version of the same payload.',
+      'Returns orgs, catalog entries (products + standalone sources folded together), release hits, and — on hybrid/semantic modes — CHANGELOG.md chunk hits in a single response.\n\n`mode` selects the release-retrieval strategy: `lexical` (FTS5), `semantic` (vector-only), or `hybrid` (RRF fusion of FTS5 + vector; default). The handler echoes back the mode actually used, including `degraded: true` when a hybrid request fell back to lexical because Vectorize is unavailable.\n\n`?domain=` narrows the entire result set to one org (matched against `organizations.domain` and `domain_aliases.domain`). Invalid hostnames return 400; unknown hostnames return an empty envelope with `domainStatus: "not_found"` (distinct from "matched but no hits").\n\nWhen the query parses as a GitHub coordinate (`org/repo` or `github:org/repo`) and no orgs/catalog matched, the handler runs an on-demand lookup and embeds the result on `lookup`. Coordinate-shaped queries are not suppressed by tangential release/chunk hits.\n\nContent negotiation: `Accept: text/markdown` returns a Markdown-rendered version of the same payload.',
     parameters: [
       {
         name: "q",
@@ -212,8 +212,12 @@ searchRoutes.get(
     ],
     responses: {
       200: {
-        description: "Unified search response (or Markdown when `Accept: text/markdown` is sent)",
-        content: { "application/json": { schema: resolver(UnifiedSearchResponseSchema) } },
+        description:
+          "Unified search response. JSON by default; Markdown when `Accept: text/markdown` is sent.",
+        content: {
+          "application/json": { schema: resolver(UnifiedSearchResponseSchema) },
+          "text/markdown": { schema: { type: "string" } },
+        },
       },
       400: {
         description: "Missing `q` or invalid `domain` hostname",
@@ -228,8 +232,13 @@ searchRoutes.get(
     }
 
     const startedAt = Date.now();
-    const limit = parseInt(c.req.query("limit") ?? "20", 10);
-    const offset = parseInt(c.req.query("offset") ?? "0", 10);
+    // Clamp limit to [1, 100] (matches the OpenAPI schema bounds); fall back
+    // to 20 on NaN / non-positive input rather than letting it flow into SQL.
+    const limit = parseLimitParam(c.req.query("limit"), 20, 100);
+    // Same defense for offset: parseInt("abc") returns NaN, which would land
+    // in `OFFSET NaN` and silently return zero rows.
+    const rawOffset = parseInt(c.req.query("offset") ?? "0", 10);
+    const offset = Number.isFinite(rawOffset) && rawOffset > 0 ? rawOffset : 0;
     const mode = parseMode(c.req.query("mode"));
     const includeCoverage = parseBoolParam(c.req.query("include_coverage"));
     const rawDomain = c.req.query("domain");
