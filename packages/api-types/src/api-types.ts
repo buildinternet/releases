@@ -94,6 +94,15 @@ import type {
   UnlinkReleaseCoverageResponseSchema,
   ReleaseWithMediaRowSchema,
   ReleasesWithMediaResponseSchema,
+  ReleaseDetailOrgSchema,
+  ReleaseDetailResponseSchema,
+  UpdateReleaseBodySchema,
+  ReleasePatchResponseSchema,
+  ReleaseDeleteResponseSchema,
+  ReleaseSuppressResponseSchema,
+  ReleaseUnsuppressResponseSchema,
+  ReleaseSuppressBodySchema,
+  ReleaseStreamMessageSchema,
 } from "./schemas/releases.js";
 import type {
   LookupStatusSchema,
@@ -166,6 +175,18 @@ import type {
   ReplaceCollectionMembersResponseSchema,
   AddCollectionMemberResponseSchema,
 } from "./schemas/collections.js";
+import type {
+  OrgOverviewResponseSchema,
+  RegenerateOverviewBodySchema,
+  RegenerateOverviewResponseSchema,
+  ProductOverviewResponseSchema,
+  OverviewInputsCheckResponseSchema,
+  OverviewInputsFullResponseSchema,
+  OverviewInputsResponseSchema,
+  PlaybookResponseSchema,
+  UpdatePlaybookNotesBodySchema,
+  UpdatePlaybookNotesResponseSchema,
+} from "./schemas/overviews.js";
 
 export {
   MediaItemSchema,
@@ -279,6 +300,15 @@ export {
   UnlinkReleaseCoverageResponseSchema,
   ReleaseWithMediaRowSchema,
   ReleasesWithMediaResponseSchema,
+  ReleaseDetailOrgSchema,
+  ReleaseDetailResponseSchema,
+  UpdateReleaseBodySchema,
+  ReleasePatchResponseSchema,
+  ReleaseDeleteResponseSchema,
+  ReleaseSuppressResponseSchema,
+  ReleaseUnsuppressResponseSchema,
+  ReleaseSuppressBodySchema,
+  ReleaseStreamMessageSchema,
 } from "./schemas/releases.js";
 export {
   SearchOrgHitSchema,
@@ -326,6 +356,18 @@ export {
   ReplaceCollectionMembersResponseSchema,
   AddCollectionMemberResponseSchema,
 } from "./schemas/collections.js";
+export {
+  OrgOverviewResponseSchema,
+  RegenerateOverviewBodySchema,
+  RegenerateOverviewResponseSchema,
+  ProductOverviewResponseSchema,
+  OverviewInputsCheckResponseSchema,
+  OverviewInputsFullResponseSchema,
+  OverviewInputsResponseSchema,
+  PlaybookResponseSchema,
+  UpdatePlaybookNotesBodySchema,
+  UpdatePlaybookNotesResponseSchema,
+} from "./schemas/overviews.js";
 
 // ── Media ──
 
@@ -493,6 +535,16 @@ export type ReleaseLatestResponse = z.infer<typeof ReleaseLatestResponseSchema>;
 export type ReleaseWithMediaRow = z.infer<typeof ReleaseWithMediaRowSchema>;
 export type ReleasesWithMediaResponse = z.infer<typeof ReleasesWithMediaResponseSchema>;
 
+export type ReleaseDetailOrg = z.infer<typeof ReleaseDetailOrgSchema>;
+export type ReleaseDetailResponse = z.infer<typeof ReleaseDetailResponseSchema>;
+export type UpdateReleaseBody = z.infer<typeof UpdateReleaseBodySchema>;
+export type ReleasePatchResponse = z.infer<typeof ReleasePatchResponseSchema>;
+export type ReleaseDeleteResponse = z.infer<typeof ReleaseDeleteResponseSchema>;
+export type ReleaseSuppressResponse = z.infer<typeof ReleaseSuppressResponseSchema>;
+export type ReleaseUnsuppressResponse = z.infer<typeof ReleaseUnsuppressResponseSchema>;
+export type ReleaseSuppressBody = z.infer<typeof ReleaseSuppressBodySchema>;
+export type ReleaseStreamMessage = z.infer<typeof ReleaseStreamMessageSchema>;
+
 export type ReleaseSummaryItem = z.infer<typeof ReleaseSummaryItemSchema>;
 
 // ── Search ──
@@ -581,6 +633,17 @@ export type OverviewCitation = z.infer<typeof OverviewCitationSchema>;
 
 /** @deprecated Use OverviewPageItem */
 export type KnowledgePageItem = OverviewPageItem;
+
+export type OrgOverviewResponse = z.infer<typeof OrgOverviewResponseSchema>;
+export type RegenerateOverviewBody = z.infer<typeof RegenerateOverviewBodySchema>;
+export type RegenerateOverviewResponse = z.infer<typeof RegenerateOverviewResponseSchema>;
+export type ProductOverviewResponse = z.infer<typeof ProductOverviewResponseSchema>;
+export type OverviewInputsCheckResponse = z.infer<typeof OverviewInputsCheckResponseSchema>;
+export type OverviewInputsFullResponse = z.infer<typeof OverviewInputsFullResponseSchema>;
+export type OverviewInputsResponse = z.infer<typeof OverviewInputsResponseSchema>;
+export type PlaybookResponse = z.infer<typeof PlaybookResponseSchema>;
+export type UpdatePlaybookNotesBody = z.infer<typeof UpdatePlaybookNotesBodySchema>;
+export type UpdatePlaybookNotesResponse = z.infer<typeof UpdatePlaybookNotesResponseSchema>;
 
 // ── Overview Manifest (admin planning) ──
 

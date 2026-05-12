@@ -23,18 +23,6 @@ import type { Env } from "../workers/api/src/index.js";
  * `v1.routes[].path` returns.
  */
 const ALLOWLIST = new Set<string>([
-  // ── workers/api/src/routes/overview.ts (Phase 1 long-tail) ──
-  "GET /orgs/:slug/overview",
-  "POST /orgs/:slug/overview",
-  "GET /products/:slug/overview",
-
-  // ── workers/api/src/routes/overview-inputs.ts (Phase 1 long-tail) ──
-  "GET /orgs/:slug/overview/inputs",
-
-  // ── workers/api/src/routes/playbook.ts (Phase 1 long-tail) ──
-  "GET /orgs/:slug/playbook",
-  "PATCH /orgs/:slug/playbook/notes",
-
   // ── workers/api/src/routes/sources.ts: sub-routes #752 left
   // undocumented. Bare and org-scoped variants both apply. ──
   "GET /sources/changelog-files/oversized",
@@ -66,15 +54,6 @@ const ALLOWLIST = new Set<string>([
   "POST /orgs/:orgSlug/sources/:sourceSlug/releases/batch",
   "PATCH /orgs/:orgSlug/sources/:sourceSlug/changelog/tokens",
   "PATCH /orgs/:orgSlug/sources/:sourceSlug/metadata",
-
-  // ── workers/api/src/routes/releases.ts: sub-routes #896 left
-  // undocumented. ──
-  "GET /releases/:id",
-  "PATCH /releases/:id",
-  "DELETE /releases/:id",
-  "GET /releases/stream",
-  "POST /releases/:id/suppress",
-  "POST /releases/:id/unsuppress",
 ]);
 
 const HTTP_METHODS = new Set(["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"]);

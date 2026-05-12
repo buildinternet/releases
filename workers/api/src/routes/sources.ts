@@ -46,6 +46,11 @@ import {
   SourceMutationResponseSchema,
   SourceChangelogResponseSchema,
   ErrorResponseSchema,
+  ReleaseDetailResponseSchema,
+  ReleasePatchResponseSchema,
+  ReleaseDeleteResponseSchema,
+  ReleaseSuppressResponseSchema,
+  ReleaseUnsuppressResponseSchema,
 } from "@buildinternet/releases-api-types";
 import {
   getStatusHub,
@@ -2112,173 +2117,320 @@ sourceRoutes.post("/sources/:slug/releases", async (c) => {
 
 // ── Release CRUD ──
 
-sourceRoutes.get("/releases/:id", async (c) => {
-  const db = createDb(c.env.DB);
-  const id = c.req.param("id");
+sourceRoutes.get(
+  "/releases/:id",
+  describeRoute({
+    tags: ["Releases"],
+    summary: "Get release by ID",
+    description:
+      "Returns a single release by its typed `rel_…` ID. Suppressed and coverage-side rows are excluded via the `releases_visible` view — they return 404. The `content` field has CDN-origin media URLs rewritten in-place; the `media` array is parsed from the raw D1 JSON. Accepts `Accept: text/markdown` to receive the release formatted as Markdown.",
+    responses: {
+      200: {
+        description: "Release detail",
+        content: { "application/json": { schema: resolver(ReleaseDetailResponseSchema) } },
+      },
+      404: {
+        description: "Release not found (or suppressed / coverage-only)",
+        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      },
+    },
+  }),
+  async (c) => {
+    const db = createDb(c.env.DB);
+    const id = c.req.param("id");
 
-  const rows = await db
-    .select({
-      release: releases,
-      sourceName: sourcesActive.name,
-      sourceSlug: sourcesActive.slug,
-      sourceType: sourcesActive.type,
-      orgSlug: organizationsActive.slug,
-      orgName: organizationsActive.name,
-    })
-    .from(releases)
-    .innerJoin(sourcesActive, eq(releases.sourceId, sourcesActive.id))
-    .leftJoin(organizationsActive, eq(sourcesActive.orgId, organizationsActive.id))
-    .where(and(eq(releases.id, id), sql`${releases.id} IN (SELECT id FROM releases_visible)`));
+    const rows = await db
+      .select({
+        release: releases,
+        sourceName: sourcesActive.name,
+        sourceSlug: sourcesActive.slug,
+        sourceType: sourcesActive.type,
+        orgSlug: organizationsActive.slug,
+        orgName: organizationsActive.name,
+      })
+      .from(releases)
+      .innerJoin(sourcesActive, eq(releases.sourceId, sourcesActive.id))
+      .leftJoin(organizationsActive, eq(sourcesActive.orgId, organizationsActive.id))
+      .where(and(eq(releases.id, id), sql`${releases.id} IN (SELECT id FROM releases_visible)`));
 
-  if (rows.length === 0) return c.json({ error: "not_found", message: "Release not found" }, 404);
+    if (rows.length === 0) return c.json({ error: "not_found", message: "Release not found" }, 404);
 
-  const { release, sourceName, sourceSlug, sourceType, orgSlug, orgName } = rows[0];
-  const org = orgSlug && orgName ? { slug: orgSlug, name: orgName } : null;
-  const mediaOrigin = c.env.MEDIA_ORIGIN ?? "";
+    const { release, sourceName, sourceSlug, sourceType, orgSlug, orgName } = rows[0];
+    const org = orgSlug && orgName ? { slug: orgSlug, name: orgName } : null;
+    const mediaOrigin = c.env.MEDIA_ORIGIN ?? "";
 
-  const media = parseReleaseMedia(release.media as string | null, mediaOrigin);
+    const media = parseReleaseMedia(release.media as string | null, mediaOrigin);
 
-  const hydratedContent = hydrateMediaUrls(release.content as string, mediaOrigin);
-  const result = {
-    ...release,
-    content: hydratedContent,
-    media,
-    sourceName,
-    sourceSlug,
-    sourceType,
-    org,
-  };
+    const hydratedContent = hydrateMediaUrls(release.content as string, mediaOrigin);
+    const result = {
+      ...release,
+      content: hydratedContent,
+      media,
+      sourceName,
+      sourceSlug,
+      sourceType,
+      org,
+    };
 
-  if (wantsMarkdown(c)) {
-    return markdownResponse(c, releaseToMarkdown(result as any));
-  }
+    if (wantsMarkdown(c)) {
+      return markdownResponse(c, releaseToMarkdown(result as any));
+    }
 
-  return c.json(result);
-});
+    return c.json(result);
+  },
+);
 
-sourceRoutes.delete("/releases/:id", async (c) => {
-  const db = createDb(c.env.DB);
-  const id = c.req.param("id");
+sourceRoutes.delete(
+  "/releases/:id",
+  describeRoute({
+    tags: ["Releases"],
+    summary: "Delete a release",
+    description:
+      "Hard-deletes the release row. This is a destructive operation — prefer suppression (`POST /v1/releases/:id/suppress`) to hide a release from read paths without losing the row.\n\nAuth inherited from `publicReadAuthMiddleware`'s non-SAFE_METHODS branch — Bearer token required.",
+    security: [{ bearerAuth: [] }],
+    responses: {
+      200: {
+        description: "Release deleted",
+        content: { "application/json": { schema: resolver(ReleaseDeleteResponseSchema) } },
+      },
+      404: {
+        description: "Release not found",
+        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      },
+    },
+  }),
+  async (c) => {
+    const db = createDb(c.env.DB);
+    const id = c.req.param("id");
 
-  const deleted = await db
-    .delete(releases)
-    .where(eq(releases.id, id))
-    .returning({ id: releases.id });
-  if (deleted.length === 0)
-    return c.json({ error: "not_found", message: "Release not found" }, 404);
+    const deleted = await db
+      .delete(releases)
+      .where(eq(releases.id, id))
+      .returning({ id: releases.id });
+    if (deleted.length === 0)
+      return c.json({ error: "not_found", message: "Release not found" }, 404);
 
-  return c.json({ deleted: true });
-});
+    return c.json({ deleted: true });
+  },
+);
 
-sourceRoutes.patch("/releases/:id", async (c) => {
-  const db = createDb(c.env.DB);
-  const id = c.req.param("id");
-  const body = await c.req.json<{
-    title?: string;
-    version?: string;
-    content?: string;
-    url?: string;
-    publishedAt?: string;
-    contentHash?: string;
-    /** AI-generated summary (#860). Pass null to clear. */
-    summary?: string | null;
-    /** AI-generated self-contained headline (#860). Pass null to clear. */
-    titleGenerated?: string | null;
-    /** AI-generated smart-brevity headline (#860). Pass null to clear. */
-    titleShort?: string | null;
-  }>();
+sourceRoutes.patch(
+  "/releases/:id",
+  describeRoute({
+    tags: ["Releases"],
+    summary: "Update a release",
+    description:
+      "Partially updates a release. All body fields are optional — only supplied fields are written. Required-non-null columns (`title`, `content`) must be strings when present; the nullable string columns (`version`, `url`, `publishedAt`, `contentHash`) accept a string or `null`. The three AI-generated fields (`summary`, `titleGenerated`, `titleShort`) accept `null` to explicitly clear the stored value. Any non-whitelisted field is rejected with `400`; a body whose sanitized whitelist is empty also returns `400`. When any of `content`, `title`, `summary`, `titleGenerated`, or `titleShort` is updated the release vector is re-embedded asynchronously. Response is the raw release row (no joined source / org metadata, no parsed `media`) — re-fetch via `GET /v1/releases/:id` for the augmented shape. Body documented in prose — formal `requestBody` modelling is deferred to the validator-middleware phase of #894.\n\nAuth inherited from `publicReadAuthMiddleware`'s non-SAFE_METHODS branch — Bearer token required.",
+    security: [{ bearerAuth: [] }],
+    responses: {
+      200: {
+        description: "Updated release (raw row)",
+        content: { "application/json": { schema: resolver(ReleasePatchResponseSchema) } },
+      },
+      400: {
+        description: "Malformed JSON body, unknown / wrong-typed field, or empty update set",
+        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      },
+      404: {
+        description: "Release not found",
+        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      },
+    },
+  }),
+  async (c) => {
+    const db = createDb(c.env.DB);
+    const id = c.req.param("id");
 
-  // Join sources so we have the source row available for the re-embed side
-  // effect without a second round-trip after the update.
-  const [row] = await db
-    .select({ release: releases, source: sources })
-    .from(releases)
-    .innerJoin(sources, eq(sources.id, releases.sourceId))
-    .where(eq(releases.id, id));
-  if (!row) return c.json({ error: "not_found", message: "Release not found" }, 404);
+    let body: Record<string, unknown>;
+    try {
+      body = await c.req.json<Record<string, unknown>>();
+    } catch {
+      return c.json({ error: "bad_request", message: "Invalid JSON body" }, 400);
+    }
 
-  const updates: Record<string, unknown> = {};
-  if (body.title !== undefined) updates.title = body.title;
-  if (body.version !== undefined) {
-    // Type-guard the JSON so a non-string (or null) payload coerces to null
-    // instead of throwing inside sanitizeVersion's .trim() call.
-    updates.version =
-      typeof body.version === "string" ? (sanitizeVersion(body.version) ?? null) : null;
-  }
-  if (body.content !== undefined) updates.content = body.content;
-  if (body.url !== undefined) updates.url = body.url;
-  if (body.publishedAt !== undefined) updates.publishedAt = body.publishedAt;
-  if (body.contentHash !== undefined) updates.contentHash = body.contentHash;
-  // The three AI-generated fields are nullable; treat `null` as an explicit
-  // clear and only skip the column when the caller omits it entirely.
-  if (body.summary !== undefined) updates.summary = body.summary;
-  if (body.titleGenerated !== undefined) updates.titleGenerated = body.titleGenerated;
-  if (body.titleShort !== undefined) updates.titleShort = body.titleShort;
+    // Whitelist: only these columns are writable via PATCH. Anything else is
+    // rejected so callers can't (e.g.) silently flip `suppressed` here instead
+    // of going through the dedicated suppress / unsuppress endpoints.
+    const NON_NULL_STRING_FIELDS = ["title", "content"] as const;
+    const NULLABLE_STRING_FIELDS = ["url", "publishedAt", "contentHash"] as const;
+    // Nullable AI-generated text columns; `null` is meaningful (explicit clear).
+    const NULLABLE_AI_FIELDS = ["summary", "titleGenerated", "titleShort"] as const;
+    const ALLOWED_FIELDS = new Set<string>([
+      ...NON_NULL_STRING_FIELDS,
+      ...NULLABLE_STRING_FIELDS,
+      ...NULLABLE_AI_FIELDS,
+      "version",
+    ]);
 
-  const [updated] = await db.update(releases).set(updates).where(eq(releases.id, id)).returning();
-  if (!updated) return c.json({ error: "not_found", message: "Release not found" }, 404);
+    for (const key of Object.keys(body)) {
+      if (!ALLOWED_FIELDS.has(key)) {
+        return c.json({ error: "bad_request", message: `Field '${key}' is not patchable` }, 400);
+      }
+    }
 
-  // Re-embed when any field that feeds the embedding text changes. Metadata-
-  // only edits (version, url, publishedAt, contentHash) do not affect the
-  // vector and are skipped to avoid wasting Voyage budget.
-  const embeddingRelevant =
-    body.content !== undefined ||
-    body.title !== undefined ||
-    body.summary !== undefined ||
-    body.titleGenerated !== undefined ||
-    body.titleShort !== undefined;
+    const updates: Record<string, unknown> = {};
 
-  if (embeddingRelevant) {
-    logEvent("info", {
-      component: "patch-release",
-      event: "reembed-triggered",
-      releaseId: id,
-      sourceId: row.source.id,
-    });
-    c.executionCtx.waitUntil(
-      embedReleasesForSource(db, row.source, [id], c.env, { throwOnError: false }),
-    );
-  }
+    for (const field of NON_NULL_STRING_FIELDS) {
+      if (body[field] === undefined) continue;
+      if (typeof body[field] !== "string") {
+        return c.json({ error: "bad_request", message: `Field '${field}' must be a string` }, 400);
+      }
+      updates[field] = body[field];
+    }
 
-  return c.json(updated);
-});
+    for (const field of NULLABLE_STRING_FIELDS) {
+      if (body[field] === undefined) continue;
+      if (body[field] !== null && typeof body[field] !== "string") {
+        return c.json(
+          { error: "bad_request", message: `Field '${field}' must be a string or null` },
+          400,
+        );
+      }
+      updates[field] = body[field];
+    }
+
+    for (const field of NULLABLE_AI_FIELDS) {
+      if (body[field] === undefined) continue;
+      if (body[field] !== null && typeof body[field] !== "string") {
+        return c.json(
+          { error: "bad_request", message: `Field '${field}' must be a string or null` },
+          400,
+        );
+      }
+      updates[field] = body[field];
+    }
+
+    if (body.version !== undefined) {
+      if (body.version !== null && typeof body.version !== "string") {
+        return c.json(
+          { error: "bad_request", message: "Field 'version' must be a string or null" },
+          400,
+        );
+      }
+      // Type-guard so a non-string payload coerces to null instead of throwing
+      // inside sanitizeVersion's .trim() call.
+      updates.version =
+        typeof body.version === "string" ? (sanitizeVersion(body.version) ?? null) : null;
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return c.json({ error: "bad_request", message: "No writable fields supplied" }, 400);
+    }
+
+    // Join sources so we have the source row available for the re-embed side
+    // effect without a second round-trip after the update.
+    const [row] = await db
+      .select({ release: releases, source: sources })
+      .from(releases)
+      .innerJoin(sources, eq(sources.id, releases.sourceId))
+      .where(eq(releases.id, id));
+    if (!row) return c.json({ error: "not_found", message: "Release not found" }, 404);
+
+    const [updated] = await db.update(releases).set(updates).where(eq(releases.id, id)).returning();
+    if (!updated) return c.json({ error: "not_found", message: "Release not found" }, 404);
+
+    // Re-embed when any field that feeds the embedding text changes. Metadata-
+    // only edits (version, url, publishedAt, contentHash) do not affect the
+    // vector and are skipped to avoid wasting Voyage budget.
+    const embeddingRelevant =
+      body.content !== undefined ||
+      body.title !== undefined ||
+      body.summary !== undefined ||
+      body.titleGenerated !== undefined ||
+      body.titleShort !== undefined;
+
+    if (embeddingRelevant) {
+      logEvent("info", {
+        component: "patch-release",
+        event: "reembed-triggered",
+        releaseId: id,
+        sourceId: row.source.id,
+      });
+      c.executionCtx.waitUntil(
+        embedReleasesForSource(db, row.source, [id], c.env, { throwOnError: false }),
+      );
+    }
+
+    return c.json(updated);
+  },
+);
 
 // ── Release suppression ──
 
-sourceRoutes.post("/releases/:id/suppress", async (c) => {
-  const db = createDb(c.env.DB);
-  const id = c.req.param("id");
-  const body = await c.req.json<{ reason?: string }>().catch(() => ({}));
+sourceRoutes.post(
+  "/releases/:id/suppress",
+  describeRoute({
+    tags: ["Releases"],
+    summary: "Suppress a release",
+    description:
+      "Marks the release as suppressed (`suppressed = true`), hiding it from all public read paths without hard-deleting the row. The optional `reason` field is stored in `suppressed_reason` for audit purposes. Body documented in prose — formal `requestBody` modelling is deferred to the validator-middleware phase of #894.\n\nAuth inherited from `publicReadAuthMiddleware`'s non-SAFE_METHODS branch — Bearer token required.",
+    security: [{ bearerAuth: [] }],
+    responses: {
+      200: {
+        description: "Release suppressed",
+        content: { "application/json": { schema: resolver(ReleaseSuppressResponseSchema) } },
+      },
+      404: {
+        description: "Release not found",
+        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      },
+    },
+  }),
+  async (c) => {
+    const db = createDb(c.env.DB);
+    const id = c.req.param("id");
+    const body = await c.req.json<{ reason?: string }>().catch(() => ({}));
 
-  const [updated] = await db
-    .update(releases)
-    .set({
-      suppressed: true,
-      suppressedReason: (body as { reason?: string }).reason ?? null,
-    })
-    .where(eq(releases.id, id))
-    .returning({ id: releases.id });
+    const [updated] = await db
+      .update(releases)
+      .set({
+        suppressed: true,
+        suppressedReason: (body as { reason?: string }).reason ?? null,
+      })
+      .where(eq(releases.id, id))
+      .returning({ id: releases.id });
 
-  if (!updated) return c.json({ error: "not_found", message: "Release not found" }, 404);
-  return c.json({ suppressed: true });
-});
+    if (!updated) return c.json({ error: "not_found", message: "Release not found" }, 404);
+    return c.json({ suppressed: true });
+  },
+);
 
-sourceRoutes.post("/releases/:id/unsuppress", async (c) => {
-  const db = createDb(c.env.DB);
-  const id = c.req.param("id");
+sourceRoutes.post(
+  "/releases/:id/unsuppress",
+  describeRoute({
+    tags: ["Releases"],
+    summary: "Unsuppress a release",
+    description:
+      "Clears the suppression flag (`suppressed = false`) and nulls out `suppressed_reason`, making the release visible on all read paths again.\n\nAuth inherited from `publicReadAuthMiddleware`'s non-SAFE_METHODS branch — Bearer token required.",
+    security: [{ bearerAuth: [] }],
+    responses: {
+      200: {
+        description: "Release unsuppressed",
+        content: { "application/json": { schema: resolver(ReleaseUnsuppressResponseSchema) } },
+      },
+      404: {
+        description: "Release not found",
+        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      },
+    },
+  }),
+  async (c) => {
+    const db = createDb(c.env.DB);
+    const id = c.req.param("id");
 
-  const [updated] = await db
-    .update(releases)
-    .set({
-      suppressed: false,
-      suppressedReason: null,
-    })
-    .where(eq(releases.id, id))
-    .returning({ id: releases.id });
+    const [updated] = await db
+      .update(releases)
+      .set({
+        suppressed: false,
+        suppressedReason: null,
+      })
+      .where(eq(releases.id, id))
+      .returning({ id: releases.id });
 
-  if (!updated) return c.json({ error: "not_found", message: "Release not found" }, 404);
-  return c.json({ unsuppressed: true });
-});
+    if (!updated) return c.json({ error: "not_found", message: "Release not found" }, 404);
+    return c.json({ unsuppressed: true });
+  },
+);
 
 // ── Embed side effect helpers ──
 //
