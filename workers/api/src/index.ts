@@ -348,11 +348,12 @@ mountV1Routes(v1);
 v1.use("/graphql", publicRateLimitMiddleware, dbHealthCheck);
 v1.route("/", graphqlRoutes);
 
-app.route("/v1", v1);
-
 // Bare-API JSON index. A human or agent hitting `https://api.releases.sh/` or
 // `/v1` gets a self-describing payload pointing at the OpenAPI spec, the
 // rendered reference, and the human docs — instead of Hono's default text 404.
+// `v1.get("/")` must be registered BEFORE `app.route("/v1", v1)` because
+// Hono's `route(path, app)` snapshots `app.routes` at mount time; routes added
+// to the sub-app after the mount are not picked up.
 type IndexCtx = { req: { url: string } };
 const apiIndexPayload = (c: IndexCtx) => {
   const origin = new URL(c.req.url).origin;
@@ -369,8 +370,11 @@ const apiIndexPayload = (c: IndexCtx) => {
     },
   };
 };
-app.get("/", (c) => c.json(apiIndexPayload(c)));
 v1.get("/", (c) => c.json(apiIndexPayload(c)));
+
+app.route("/v1", v1);
+
+app.get("/", (c) => c.json(apiIndexPayload(c)));
 
 // Catch-all JSON 404 — matches the envelope used by `onError` so unknown
 // paths look the same as path-known errors to clients.

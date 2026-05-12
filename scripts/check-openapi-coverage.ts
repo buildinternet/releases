@@ -13,6 +13,7 @@
  * don't accumulate after a route is renamed or removed.
  */
 import { Hono } from "hono";
+import { logger } from "@buildinternet/releases-lib/logger";
 import { publicReadRoutes } from "../workers/api/src/route-namespaces.js";
 import { mountV1Routes } from "../workers/api/src/v1-routes.js";
 import type { Env } from "../workers/api/src/index.js";
@@ -134,7 +135,7 @@ app.route("/v1", v1);
 // validates against the public-facing spec.
 const res = await app.request("/v1/openapi.json", {}, { ENVIRONMENT: "production" });
 if (!res.ok) {
-  console.error(`Failed to generate OpenAPI spec: HTTP ${res.status}`);
+  logger.error(`Failed to generate OpenAPI spec: HTTP ${res.status}`);
   process.exit(2);
 }
 const spec = (await res.json()) as {
@@ -175,28 +176,28 @@ for (const { method, honoPath } of registered) {
 const staleAllowlist = [...ALLOWLIST].filter((entry) => !registeredKeys.has(entry));
 
 if (holes.length > 0) {
-  console.error(`OpenAPI coverage gate: ${holes.length} undocumented public-read route(s).`);
-  console.error("");
-  console.error("Either add describeRoute(...) in the corresponding workers/api/src/routes/");
-  console.error("file, or add an explicit ALLOWLIST entry in");
-  console.error("scripts/check-openapi-coverage.ts with a rationale comment.");
-  console.error("");
-  for (const h of [...holes].sort()) console.error(`  - ${h}`);
+  logger.error(`OpenAPI coverage gate: ${holes.length} undocumented public-read route(s).`);
+  logger.error("");
+  logger.error("Either add describeRoute(...) in the corresponding workers/api/src/routes/");
+  logger.error("file, or add an explicit ALLOWLIST entry in");
+  logger.error("scripts/check-openapi-coverage.ts with a rationale comment.");
+  logger.error("");
+  for (const h of [...holes].sort()) logger.error(`  - ${h}`);
   if (staleAllowlist.length > 0) {
-    console.error("");
-    console.error("(Also: ALLOWLIST has stale entries that match no registered route.)");
-    for (const s of [...staleAllowlist].sort()) console.error(`  - ${s}`);
+    logger.error("");
+    logger.error("(Also: ALLOWLIST has stale entries that match no registered route.)");
+    for (const s of [...staleAllowlist].sort()) logger.error(`  - ${s}`);
   }
   process.exit(1);
 }
 
 const documented = registered.length - allowedHit.length;
-console.log(
+logger.info(
   `OpenAPI coverage gate: OK — ${documented} documented, ${allowedHit.length} allowlisted, ${registered.length} total public-read routes.`,
 );
 if (staleAllowlist.length > 0) {
-  console.warn("");
-  console.warn(`Warning: ${staleAllowlist.length} stale ALLOWLIST entries (no matching route).`);
-  console.warn("Clean these up in scripts/check-openapi-coverage.ts:");
-  for (const s of [...staleAllowlist].sort()) console.warn(`  - ${s}`);
+  logger.warn("");
+  logger.warn(`Warning: ${staleAllowlist.length} stale ALLOWLIST entries (no matching route).`);
+  logger.warn("Clean these up in scripts/check-openapi-coverage.ts:");
+  for (const s of [...staleAllowlist].sort()) logger.warn(`  - ${s}`);
 }
