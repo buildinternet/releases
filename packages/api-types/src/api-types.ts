@@ -104,6 +104,24 @@ import type {
   CategoryReleasesResponseSchema,
   TagDetailSchema,
 } from "./schemas/taxonomy.js";
+import type {
+  CollectionMemberOrgSchema,
+  CollectionListItemSchema,
+  CollectionListResponseSchema,
+  CollectionDetailSchema,
+  CollectionReleaseItemSchema,
+  CollectionFeedPaginationSchema,
+  CollectionReleasesResponseSchema,
+  CollectionRowSchema,
+  CreateCollectionRequestSchema,
+  UpdateCollectionRequestSchema,
+  CollectionMemberInputSchema,
+  AddCollectionMemberRequestSchema,
+  ReplaceCollectionMembersRequestSchema,
+  ResolvedCollectionMemberSchema,
+  ReplaceCollectionMembersResponseSchema,
+  AddCollectionMemberResponseSchema,
+} from "./schemas/collections.js";
 
 export {
   MediaItemSchema,
@@ -202,6 +220,24 @@ export {
   LookupResultPayloadSchema,
   UnifiedSearchResponseSchema,
 } from "./schemas/search.js";
+export {
+  CollectionMemberOrgSchema,
+  CollectionListItemSchema,
+  CollectionListResponseSchema,
+  CollectionDetailSchema,
+  CollectionReleaseItemSchema,
+  CollectionFeedPaginationSchema,
+  CollectionReleasesResponseSchema,
+  CollectionRowSchema,
+  CreateCollectionRequestSchema,
+  UpdateCollectionRequestSchema,
+  CollectionMemberInputSchema,
+  AddCollectionMemberRequestSchema,
+  ReplaceCollectionMembersRequestSchema,
+  ResolvedCollectionMemberSchema,
+  ReplaceCollectionMembersResponseSchema,
+  AddCollectionMemberResponseSchema,
+} from "./schemas/collections.js";
 
 // ── Media ──
 
@@ -606,10 +642,9 @@ export type TagDetail = z.infer<typeof TagDetailSchema>;
 
 /**
  * Aggregated release feed row for a category rollup — same wire shape as
- * `CollectionReleaseItem` (both surfaces aggregate releases across multiple
- * orgs). Aliased rather than duplicated so renderers can treat them as one.
- * The collections shape is the source of truth; the schema port for
- * collections will tighten this once it lands.
+ * `CollectionReleaseItem` (both surfaces use `formatAggregateReleaseRow` in
+ * `workers/api/src/utils.ts`). Aliased rather than duplicated so renderers
+ * can treat them as one.
  */
 export type CategoryReleaseItem = CollectionReleaseItem;
 
@@ -618,98 +653,24 @@ export type CategoryReleaseItem = CollectionReleaseItem;
 // Curated, named groups of orgs that drive a public "playlist" page (e.g.
 // /collections/frontier-ai-labs). Independent of the fixed `category` taxonomy.
 
-export interface CollectionMemberOrg {
-  slug: string;
-  name: string;
-  domain: string | null;
-  avatarUrl: string | null;
-  /** GitHub handle from org_accounts; lets the avatar fall back to github.com/<handle>.png. */
-  githubHandle: string | null;
-  description: string | null;
-}
-
-/** Item shape on GET /v1/collections (list) and GET /v1/orgs/:slug/collections. */
-export interface CollectionListItem {
-  slug: string;
-  name: string;
-  description: string | null;
-  memberCount: number;
-  /** First few members for inline preview on the list page (capped at 3). */
-  previewMembers?: CollectionMemberOrg[];
-}
-
-/** Detail shape on GET /v1/collections/:slug. */
-export interface CollectionDetail {
-  slug: string;
-  name: string;
-  description: string | null;
-  orgs: CollectionMemberOrg[];
-}
-
-/**
- * Cross-org release feed row. Same shape as `OrgReleaseItem` plus the origin
- * `org` block, so the web's release card can render it identically — full
- * `content` lets "Show more" expand to the body instead of the truncated
- * `summary`.
- */
-export interface CollectionReleaseItem extends OrgReleaseItem {
-  org: { slug: string; name: string };
-  /**
-   * Product the release belongs to, if the source is bound to one. Powers
-   * the timeline's same-product rollup ("3 earlier Claude Code releases
-   * today") on the collections view. `null` for orgs without products or
-   * standalone sources. Optional on the wire so older workers mid-rollout
-   * (and hand-constructed test fixtures) don't trip the typecheck — clients
-   * should treat missing and `null` identically.
-   */
-  product?: { slug: string; name: string } | null;
-}
-
-export interface CollectionReleasesResponse {
-  releases: CollectionReleaseItem[];
-  pagination: { nextCursor: string | null; limit: number };
-}
-
-/** Body for POST /v1/collections. `slug` derives from `name` via toSlug() if omitted. */
-export interface CreateCollectionRequest {
-  slug?: string;
-  name: string;
-  description?: string | null;
-}
-
-/** Body for PATCH /v1/collections/:slug. All fields optional; slug rename is allowed. */
-export interface UpdateCollectionRequest {
-  slug?: string;
-  name?: string;
-  description?: string | null;
-}
-
-/** A single member entry accepted by the member-write endpoints. */
-export interface CollectionMemberInput {
-  /** Either `orgId` (org_…) or `orgSlug` is required; if both are given, `orgId` wins. */
-  orgId?: string;
-  orgSlug?: string;
-  /** Authoring position (default 0). For PUT, omit to use array index. */
-  position?: number;
-}
-
-/** Body for POST /v1/collections/:slug/members. */
-export type AddCollectionMemberRequest = CollectionMemberInput;
-
-/** Body for PUT /v1/collections/:slug/members. Replaces the full membership atomically. */
-export interface ReplaceCollectionMembersRequest {
-  orgs: CollectionMemberInput[];
-}
-
-/** Bare row returned by POST/PATCH on /v1/collections. */
-export interface CollectionRow {
-  id: string;
-  slug: string;
-  name: string;
-  description: string | null;
-  createdAt: string;
-  updatedAt: string;
-}
+export type CollectionMemberOrg = z.infer<typeof CollectionMemberOrgSchema>;
+export type CollectionListItem = z.infer<typeof CollectionListItemSchema>;
+export type CollectionListResponse = z.infer<typeof CollectionListResponseSchema>;
+export type CollectionDetail = z.infer<typeof CollectionDetailSchema>;
+export type CollectionReleaseItem = z.infer<typeof CollectionReleaseItemSchema>;
+export type CollectionFeedPagination = z.infer<typeof CollectionFeedPaginationSchema>;
+export type CollectionReleasesResponse = z.infer<typeof CollectionReleasesResponseSchema>;
+export type CollectionRow = z.infer<typeof CollectionRowSchema>;
+export type CreateCollectionRequest = z.infer<typeof CreateCollectionRequestSchema>;
+export type UpdateCollectionRequest = z.infer<typeof UpdateCollectionRequestSchema>;
+export type CollectionMemberInput = z.infer<typeof CollectionMemberInputSchema>;
+export type AddCollectionMemberRequest = z.infer<typeof AddCollectionMemberRequestSchema>;
+export type ReplaceCollectionMembersRequest = z.infer<typeof ReplaceCollectionMembersRequestSchema>;
+export type ResolvedCollectionMember = z.infer<typeof ResolvedCollectionMemberSchema>;
+export type ReplaceCollectionMembersResponse = z.infer<
+  typeof ReplaceCollectionMembersResponseSchema
+>;
+export type AddCollectionMemberResponse = z.infer<typeof AddCollectionMemberResponseSchema>;
 
 // ── Releases (enriched) ──
 
