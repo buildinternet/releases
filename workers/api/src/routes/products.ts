@@ -1,4 +1,4 @@
-import { Hono, type Context } from "hono";
+import { Hono } from "hono";
 import { describeRoute, resolver } from "hono-openapi";
 import { and, count, eq, sql } from "drizzle-orm";
 import { createDb } from "../db.js";
@@ -16,13 +16,18 @@ import {
 import { toSlug } from "@buildinternet/releases-core/slug";
 import { isReservedSlug } from "@buildinternet/releases-core/reserved-slugs";
 import { resolveCategoryInput } from "../lib/category-alias.js";
+import { validateJson } from "../lib/validate.js";
 import {
   ProductListResponseSchema,
   ProductDetailSchema,
   ProductRowSchema,
+  CreateProductBodySchema,
+  UpdateProductBodySchema,
+  AdoptProductBodySchema,
   ProductAdoptResponseSchema,
   ProductDeleteResponseSchema,
   ProductTagsListResponseSchema,
+  ProductTagsBodySchema,
   ProductTagsMutationResponseSchema,
   ErrorResponseSchema,
 } from "@buildinternet/releases-api-types";
@@ -116,23 +121,10 @@ productRoutes.post(
       },
     },
   }),
+  validateJson(AdoptProductBodySchema),
   async (c) => {
     const db = createDb(c.env.DB);
-    const body = await c.req.json<{
-      sourceOrgSlug: string;
-      targetOrgSlug: string;
-      slug?: string;
-      url?: string;
-      mergeInto?: string;
-      dryRun?: boolean;
-    }>();
-
-    if (!body.sourceOrgSlug || !body.targetOrgSlug) {
-      return c.json(
-        { error: "bad_request", message: "Missing required fields: sourceOrgSlug, targetOrgSlug" },
-        400,
-      );
-    }
+    const body = c.req.valid("json");
 
     if (body.mergeInto && (body.slug || body.url)) {
       return c.json(
@@ -395,7 +387,7 @@ productRoutes.post(
     tags: ["Products"],
     summary: "Create product",
     description:
-      "Body fields: `name` (required), `orgId` or `orgSlug` (one required), `slug?`, `url?`, `description?`, `category?`, `tags?`. `category` is validated against the canonical list. Returns the raw product row (201).",
+      "Requires `orgId` or `orgSlug` (one must be set). Slug derived from `name` when omitted. `category` is resolved through the alias overlay before persisting. Returns the raw product row (201).",
     security: [{ bearerAuth: [] }],
     responses: {
       201: {
@@ -416,9 +408,10 @@ productRoutes.post(
       },
     },
   }),
+  validateJson(CreateProductBodySchema),
   async (c) => {
     const db = createDb(c.env.DB);
-    const body = await c.req.json<{
+    const body: {
       orgId?: string;
       orgSlug?: string;
       name: string;
@@ -427,11 +420,14 @@ productRoutes.post(
       description?: string;
       category?: string;
       tags?: string[];
-    }>();
+    } = { ...c.req.valid("json") };
 
-    if ((!body.orgId && !body.orgSlug) || !body.name) {
+    // Cross-field: at least one of orgId/orgSlug must be set. Can't express
+    // cleanly via `.refine` while keeping a useful per-field error path, so
+    // it stays in the handler.
+    if (!body.orgId && !body.orgSlug) {
       return c.json(
-        { error: "bad_request", message: "Missing required fields: orgId or orgSlug, name" },
+        { error: "bad_request", message: "Missing required fields: orgId or orgSlug" },
         400,
       );
     }
@@ -501,14 +497,20 @@ productRoutes.post(
 
 const patchProductHandler = async (c: import("hono").Context<Env>) => {
   const db = createDb(c.env.DB);
-  const body = await c.req.json<{
+  // The validator middleware (registered alongside this handler) parsed the
+  // body. Hono's static type for this standalone handler doesn't carry the
+  // schema, so reach for the parsed payload via the bodyCache through a
+  // narrow cast rather than `c.req.valid()`. Same shape at runtime.
+  const body: {
     name?: string;
     url?: string | null;
     description?: string | null;
     category?: string | null;
     tags?: string[];
     aliases?: string[];
-  }>();
+  } = {
+    ...(c.req as unknown as { valid: (target: "json") => Record<string, unknown> }).valid("json"),
+  };
 
   const product = await resolveProductFromContext(c, db);
   if (!product) return c.json({ error: "not_found", message: "Product not found" }, 404);
@@ -603,42 +605,18 @@ const patchProductRoute = describeRoute({
     },
   },
 });
-productRoutes.patch("/products/:slug", patchProductRoute, patchProductHandler);
-productRoutes.patch("/orgs/:orgSlug/products/:productSlug", patchProductRoute, patchProductHandler);
-
-// Shared body validation for PUT/DELETE /products/:identifier/tags. Raw
-// c.req.json() throws on malformed JSON (translated to 500 by the global
-// onError) and returns `{}` / arbitrary shapes for valid JSON that just
-// doesn't match — reading `body.tags.length` then explodes. Validate
-// once, in one place.
-async function parseTagsBody(
-  c: Context<Env>,
-): Promise<{ ok: true; tags: string[] } | { ok: false; response: Response }> {
-  let body: unknown;
-  try {
-    body = await c.req.json();
-  } catch {
-    return {
-      ok: false,
-      response: c.json({ error: "bad_request", message: "Invalid JSON body" }, 400),
-    };
-  }
-  if (
-    typeof body !== "object" ||
-    body === null ||
-    !Array.isArray((body as { tags?: unknown }).tags) ||
-    !(body as { tags: unknown[] }).tags.every((t) => typeof t === "string")
-  ) {
-    return {
-      ok: false,
-      response: c.json(
-        { error: "bad_request", message: "`tags` must be an array of strings" },
-        400,
-      ),
-    };
-  }
-  return { ok: true, tags: (body as { tags: string[] }).tags };
-}
+productRoutes.patch(
+  "/products/:slug",
+  patchProductRoute,
+  validateJson(UpdateProductBodySchema),
+  patchProductHandler,
+);
+productRoutes.patch(
+  "/orgs/:orgSlug/products/:productSlug",
+  patchProductRoute,
+  validateJson(UpdateProductBodySchema),
+  patchProductHandler,
+);
 
 productRoutes.get(
   "/products/:identifier/tags",
@@ -683,7 +661,7 @@ productRoutes.put(
     tags: ["Products"],
     summary: "Add tags to a product",
     description:
-      "Body shape `{ tags: string[] }`. Adds the named tags to the product (get-or-create — unknown names land a row in `tags`). Idempotent: tags already attached are no-ops via `ON CONFLICT DO NOTHING`. Body documented in prose — formal `requestBody` modelling is deferred to the validator-middleware phase of #894.\n\nAuth inherited from `publicReadAuthMiddleware`'s non-SAFE_METHODS branch — Bearer token required.",
+      "Adds the named tags to the product (get-or-create — unknown names land a row in `tags`). Idempotent: tags already attached are no-ops via `ON CONFLICT DO NOTHING`.\n\nAuth inherited from `publicReadAuthMiddleware`'s non-SAFE_METHODS branch — Bearer token required.",
     security: [{ bearerAuth: [] }],
     responses: {
       200: {
@@ -700,15 +678,15 @@ productRoutes.put(
       },
     },
   }),
+  validateJson(ProductTagsBodySchema),
   async (c) => {
     const db = createDb(c.env.DB);
-    const body = await parseTagsBody(c);
-    if (!body.ok) return body.response;
+    const { tags: tagNames } = c.req.valid("json");
     const product = await resolveProductFromContext(c, db);
     if (!product) return c.json({ error: "not_found", message: "Product not found" }, 404);
 
-    if (body.tags.length > 0) {
-      const tagRows = await getOrCreateTagsD1(db, body.tags);
+    if (tagNames.length > 0) {
+      const tagRows = await getOrCreateTagsD1(db, tagNames);
       const now = new Date().toISOString();
       await db
         .insert(productTags)
@@ -725,7 +703,7 @@ productRoutes.delete(
     tags: ["Products"],
     summary: "Remove tags from a product",
     description:
-      "Body shape `{ tags: string[] }`. Removes each named tag from the product — names are slugified via `toSlug()` before lookup, so display-cased input still matches. Unknown tag names are silently skipped (idempotent). Body documented in prose — formal `requestBody` modelling is deferred to the validator-middleware phase of #894.\n\nAuth inherited from `publicReadAuthMiddleware`'s non-SAFE_METHODS branch — Bearer token required.",
+      "Removes each named tag from the product — names are slugified via `toSlug()` before lookup, so display-cased input still matches. Unknown tag names are silently skipped (idempotent).\n\nAuth inherited from `publicReadAuthMiddleware`'s non-SAFE_METHODS branch — Bearer token required.",
     security: [{ bearerAuth: [] }],
     responses: {
       200: {
@@ -742,14 +720,14 @@ productRoutes.delete(
       },
     },
   }),
+  validateJson(ProductTagsBodySchema),
   async (c) => {
     const db = createDb(c.env.DB);
-    const body = await parseTagsBody(c);
-    if (!body.ok) return body.response;
+    const { tags: tagNames } = c.req.valid("json");
     const product = await resolveProductFromContext(c, db);
     if (!product) return c.json({ error: "not_found", message: "Product not found" }, 404);
 
-    for (const tagName of body.tags) {
+    for (const tagName of tagNames) {
       const tagSlug = toSlug(tagName);
       // oxlint-disable-next-line no-await-in-loop -- sequential: tag lookup result feeds the delete
       const [tag] = await db.select().from(tags).where(eq(tags.slug, tagSlug));
