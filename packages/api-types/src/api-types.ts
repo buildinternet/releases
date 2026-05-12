@@ -70,6 +70,19 @@ import type {
   ReleaseWithMediaRowSchema,
   ReleasesWithMediaResponseSchema,
 } from "./schemas/releases.js";
+import type {
+  LookupStatusSchema,
+  LookupBodySchema,
+  LookupSourceSchema,
+  LookupReleaseSchema,
+  LookupRelatedOrgSchema,
+  LookupResponseSchema,
+  LookupSourceBySlugResponseSchema,
+  LookupProductBySlugResponseSchema,
+  DomainLookupOrgSchema,
+  DomainLookupProductSchema,
+  DomainLookupResponseSchema,
+} from "./schemas/lookups.js";
 
 export {
   MediaItemSchema,
@@ -121,6 +134,19 @@ export {
   ProductAdoptResponseSchema,
   ProductDeleteResponseSchema,
 } from "./schemas/products.js";
+export {
+  LookupStatusSchema,
+  LookupBodySchema,
+  LookupSourceSchema,
+  LookupReleaseSchema,
+  LookupRelatedOrgSchema,
+  LookupResponseSchema,
+  LookupSourceBySlugResponseSchema,
+  LookupProductBySlugResponseSchema,
+  DomainLookupOrgSchema,
+  DomainLookupProductSchema,
+  DomainLookupResponseSchema,
+} from "./schemas/lookups.js";
 export {
   ReleaseLatestSourceSchema,
   ReleaseLatestItemSchema,
@@ -426,53 +452,19 @@ export interface SearchChunkHit {
   score: number;
 }
 
-// ── Lookup by domain (entity resolution) ──
+// ── Lookups ──
 
-/**
- * Returned by GET /v1/lookups/by-domain. Pure resolution: the server
- * normalizes the input domain, exact-matches against
- * `organizations.domain` (primary) and `domain_aliases.domain` (alias for
- * either an org or a product), and returns whatever it finds. Unknown
- * domains 404 — there is no on-demand probing for domains, unlike the
- * GitHub coordinate path.
- */
-export interface DomainLookupResponse {
-  /** Normalized domain that was matched (lowercased, no scheme/path/www). */
-  domain: string;
-  /**
-   * Owning organization, if one exists. `matchedVia` distinguishes a hit
-   * on `organizations.domain` (`"primary"`) from an alias hit
-   * (`"alias"`) so the UI can render the difference.
-   */
-  org: {
-    id: string;
-    slug: string;
-    name: string;
-    domain: string | null;
-    description: string | null;
-    category: string | null;
-    avatarUrl: string | null;
-    matchedVia: "primary" | "alias";
-  } | null;
-  /**
-   * Products whose alias points at this domain. Multiple are possible
-   * when an org owns several products that all set the same alias —
-   * unusual, but allowed.
-   */
-  products: Array<{
-    id: string;
-    slug: string;
-    name: string;
-    orgId: string;
-    orgSlug: string;
-    orgName: string;
-    category: string | null;
-  }>;
-}
-
-// ── Lookup (on-demand GitHub index) ──
-
-export type LookupStatus = "indexed" | "existing" | "empty" | "not_found" | "deferred";
+export type LookupStatus = z.infer<typeof LookupStatusSchema>;
+export type LookupBody = z.infer<typeof LookupBodySchema>;
+export type LookupSourceRow = z.infer<typeof LookupSourceSchema>;
+export type LookupReleaseRow = z.infer<typeof LookupReleaseSchema>;
+export type LookupRelatedOrg = z.infer<typeof LookupRelatedOrgSchema>;
+export type LookupResponse = z.infer<typeof LookupResponseSchema>;
+export type LookupSourceBySlugResponse = z.infer<typeof LookupSourceBySlugResponseSchema>;
+export type LookupProductBySlugResponse = z.infer<typeof LookupProductBySlugResponseSchema>;
+export type DomainLookupOrg = z.infer<typeof DomainLookupOrgSchema>;
+export type DomainLookupProduct = z.infer<typeof DomainLookupProductSchema>;
+export type DomainLookupResponse = z.infer<typeof DomainLookupResponseSchema>;
 
 /**
  * Slim wire payload embedded in a search response when the query is a GitHub
