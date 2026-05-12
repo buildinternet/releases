@@ -64,6 +64,10 @@ export function mountOpenApi(v1: Hono<Env>) {
           { name: "Stats", description: "Public registry statistics." },
           { name: "Sitemap", description: "Bulk URL emission for crawlers." },
           { name: "Taxonomy", description: "Categories and tags." },
+          {
+            name: "Collections",
+            description: "Curated, named org playlists independent of category.",
+          },
           { name: "Admin", description: "Admin-only telemetry. Bearer required." },
           { name: "Workflows", description: "Job triggers. Bearer required." },
           { name: "Webhooks", description: "Webhook subscription management." },

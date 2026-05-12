@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { CategorySchema } from "./shared.js";
+import { CollectionReleaseItemSchema } from "./collections.js";
 
 /**
  * Org rollup row shared by category and tag detail responses. Slim by
@@ -75,24 +76,13 @@ export const UpdateCategoryResponseSchema = z.object({
 });
 
 /**
- * Aggregated release row on `GET /v1/categories/:slug/releases`. Shape
- * matches `CollectionReleaseItem` (both surfaces aggregate across orgs);
- * modelled as a loose object here so the schema port can land
- * incrementally — the canonical release-item shape lives on the
- * `Collections` PR. Stable fields are typed; everything else rides along
- * unmodelled.
+ * Aggregated release row on `GET /v1/categories/:slug/releases`. Same wire
+ * shape as `CollectionReleaseItem` — both surfaces aggregate across orgs and
+ * use `formatAggregateReleaseRow` in `workers/api/src/utils.ts` for the
+ * formatting. Re-exported here so the two endpoints describe one schema
+ * instead of two drifting copies.
  */
-export const CategoryReleaseItemSchema = z.looseObject({
-  id: z.string().optional(),
-  version: z.string().nullable(),
-  title: z.string(),
-  summary: z.string(),
-  publishedAt: z.string().nullable(),
-  url: z.string().nullable(),
-  source: z.object({ slug: z.string(), name: z.string(), type: z.string() }),
-  org: z.object({ slug: z.string(), name: z.string() }),
-  product: z.object({ slug: z.string(), name: z.string() }).nullable().optional(),
-});
+export const CategoryReleaseItemSchema = CollectionReleaseItemSchema;
 
 export const CategoryFeedPaginationSchema = z.object({
   nextCursor: z.string().nullable(),
