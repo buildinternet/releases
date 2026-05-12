@@ -182,23 +182,29 @@ app.onError((err, c) => {
     const status = err.status;
     // Forward any headers the exception attached via `new HTTPException(s, { res })`.
     // The malformed-JSON path doesn't set `res`, but middlewares that do (e.g.
-    // adding a `Retry-After` to a 429) would otherwise lose them when we
-    // re-shape the body into our envelope.
-    const headers: Record<string, string> = {};
+    // adding a `Retry-After` to a 429, or a `Set-Cookie` rotation) would
+    // otherwise lose them when we re-shape the body into our envelope.
+    // Collect into a tuple list and `append` post-construction so multi-value
+    // headers (notably repeated `Set-Cookie`) are preserved — a plain
+    // `Record<string, string>` would collapse them.
+    const passthrough: Array<[string, string]> = [];
     if (err.res) {
       err.res.headers.forEach((value, key) => {
-        // Skip content-type / content-length — `c.json` sets them itself.
         const lower = key.toLowerCase();
+        // `c.json` sets content-type/content-length itself; let it.
         if (lower !== "content-type" && lower !== "content-length") {
-          headers[key] = value;
+          passthrough.push([key, value]);
         }
       });
     }
-    return c.json(
+    const res = c.json(
       { error: status === 400 ? "bad_request" : "http_error", message: err.message },
       status,
-      headers,
     );
+    for (const [key, value] of passthrough) {
+      res.headers.append(key, value);
+    }
+    return res;
   }
   const message = err instanceof Error ? err.message : String(err);
   return c.json({ error: "internal_error", message }, 500);
