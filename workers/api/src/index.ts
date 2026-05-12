@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import { HTTPException } from "hono/http-exception";
 import { authMiddleware, publicReadAuthMiddleware } from "./middleware/auth.js";
 import { publicRateLimitMiddleware } from "./middleware/rate-limit.js";
 import { dbHealthCheck } from "./middleware/db-health.js";
@@ -171,6 +172,39 @@ app.onError((err, c) => {
   // /v1/lookups/*-by-slug resolver).
   if (err instanceof BareSlugRejected) {
     return c.json({ error: "bare_slug_rejected", entity: err.entity, message: err.message }, 400);
+  }
+  // Hono's underlying validator throws `HTTPException(400)` for malformed JSON
+  // bodies (un-parseable bytes — schema-level validation goes through our
+  // `validateJson` hook). Surface it in the same envelope as schema failures
+  // so clients see `{ error: "bad_request", message }` consistently instead
+  // of a 500 with stringified Hono internals.
+  if (err instanceof HTTPException) {
+    const status = err.status;
+    // Forward any headers the exception attached via `new HTTPException(s, { res })`.
+    // The malformed-JSON path doesn't set `res`, but middlewares that do (e.g.
+    // adding a `Retry-After` to a 429, or a `Set-Cookie` rotation) would
+    // otherwise lose them when we re-shape the body into our envelope.
+    // Collect into a tuple list and `append` post-construction so multi-value
+    // headers (notably repeated `Set-Cookie`) are preserved — a plain
+    // `Record<string, string>` would collapse them.
+    const passthrough: Array<[string, string]> = [];
+    if (err.res) {
+      err.res.headers.forEach((value, key) => {
+        const lower = key.toLowerCase();
+        // `c.json` sets content-type/content-length itself; let it.
+        if (lower !== "content-type" && lower !== "content-length") {
+          passthrough.push([key, value]);
+        }
+      });
+    }
+    const res = c.json(
+      { error: status === 400 ? "bad_request" : "http_error", message: err.message },
+      status,
+    );
+    for (const [key, value] of passthrough) {
+      res.headers.append(key, value);
+    }
+    return res;
   }
   const message = err instanceof Error ? err.message : String(err);
   return c.json({ error: "internal_error", message }, 500);

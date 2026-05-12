@@ -381,12 +381,19 @@ export const SourceSummaryRowSchema = z.object({
 
 export const SourceSummariesResponseSchema = z.array(SourceSummaryRowSchema);
 
-/** Body accepted by `POST /v1/sources/:slug/summaries`. */
+/**
+ * Body accepted by `POST /v1/sources/:slug/summaries`.
+ *
+ * `month` is calendar-bounded (1..12) and `windowDays` must be a positive
+ * integer when present — silently dropping wrong-typed values masks client
+ * bugs, so the validator rejects them explicitly. `year` is not bound-checked
+ * (any cutoff would be arbitrary).
+ */
 export const CreateSourceSummaryBodySchema = z.object({
   type: z.enum(["rolling", "monthly"]),
   year: z.number().int().nullable().optional(),
-  month: z.number().int().nullable().optional(),
-  windowDays: z.number().int().nullable().optional(),
+  month: z.number().int().min(1).max(12).nullable().optional(),
+  windowDays: z.number().int().min(1).nullable().optional(),
   summary: z.string().min(1),
   releaseCount: z.number().int().min(0),
 });
