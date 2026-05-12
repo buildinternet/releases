@@ -47,6 +47,7 @@ import {
   SourceChangelogResponseSchema,
   ErrorResponseSchema,
   ReleaseDetailResponseSchema,
+  ReleasePatchResponseSchema,
   ReleaseDeleteResponseSchema,
   ReleaseSuppressResponseSchema,
   ReleaseUnsuppressResponseSchema,
@@ -2219,15 +2220,15 @@ sourceRoutes.patch(
     tags: ["Releases"],
     summary: "Update a release",
     description:
-      "Partially updates a release. All body fields are optional — only supplied fields are written. String fields (`title`, `version`, `content`, `url`, `publishedAt`, `contentHash`) must be strings when present. The three AI-generated fields (`summary`, `titleGenerated`, `titleShort`) accept `null` to explicitly clear the stored value. When any of `content`, `title`, `summary`, `titleGenerated`, or `titleShort` is updated the release vector is re-embedded asynchronously. Body documented in prose — formal `requestBody` modelling is deferred to the validator-middleware phase of #894.\n\nAuth inherited from `publicReadAuthMiddleware`'s non-SAFE_METHODS branch — Bearer token required.",
+      "Partially updates a release. All body fields are optional — only supplied fields are written. Required-non-null columns (`title`, `content`) must be strings when present; the nullable string columns (`version`, `url`, `publishedAt`, `contentHash`) accept a string or `null`. The three AI-generated fields (`summary`, `titleGenerated`, `titleShort`) accept `null` to explicitly clear the stored value. Any non-whitelisted field is rejected with `400`; a body whose sanitized whitelist is empty also returns `400`. When any of `content`, `title`, `summary`, `titleGenerated`, or `titleShort` is updated the release vector is re-embedded asynchronously. Response is the raw release row (no joined source / org metadata, no parsed `media`) — re-fetch via `GET /v1/releases/:id` for the augmented shape. Body documented in prose — formal `requestBody` modelling is deferred to the validator-middleware phase of #894.\n\nAuth inherited from `publicReadAuthMiddleware`'s non-SAFE_METHODS branch — Bearer token required.",
     security: [{ bearerAuth: [] }],
     responses: {
       200: {
-        description: "Updated release detail",
-        content: { "application/json": { schema: resolver(ReleaseDetailResponseSchema) } },
+        description: "Updated release (raw row)",
+        content: { "application/json": { schema: resolver(ReleasePatchResponseSchema) } },
       },
       400: {
-        description: "Malformed JSON body",
+        description: "Malformed JSON body, unknown / wrong-typed field, or empty update set",
         content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
       },
       404: {
@@ -2247,6 +2248,75 @@ sourceRoutes.patch(
       return c.json({ error: "bad_request", message: "Invalid JSON body" }, 400);
     }
 
+    // Whitelist: only these columns are writable via PATCH. Anything else is
+    // rejected so callers can't (e.g.) silently flip `suppressed` here instead
+    // of going through the dedicated suppress / unsuppress endpoints.
+    const NON_NULL_STRING_FIELDS = ["title", "content"] as const;
+    const NULLABLE_STRING_FIELDS = ["url", "publishedAt", "contentHash"] as const;
+    // Nullable AI-generated text columns; `null` is meaningful (explicit clear).
+    const NULLABLE_AI_FIELDS = ["summary", "titleGenerated", "titleShort"] as const;
+    const ALLOWED_FIELDS = new Set<string>([
+      ...NON_NULL_STRING_FIELDS,
+      ...NULLABLE_STRING_FIELDS,
+      ...NULLABLE_AI_FIELDS,
+      "version",
+    ]);
+
+    for (const key of Object.keys(body)) {
+      if (!ALLOWED_FIELDS.has(key)) {
+        return c.json({ error: "bad_request", message: `Field '${key}' is not patchable` }, 400);
+      }
+    }
+
+    const updates: Record<string, unknown> = {};
+
+    for (const field of NON_NULL_STRING_FIELDS) {
+      if (body[field] === undefined) continue;
+      if (typeof body[field] !== "string") {
+        return c.json({ error: "bad_request", message: `Field '${field}' must be a string` }, 400);
+      }
+      updates[field] = body[field];
+    }
+
+    for (const field of NULLABLE_STRING_FIELDS) {
+      if (body[field] === undefined) continue;
+      if (body[field] !== null && typeof body[field] !== "string") {
+        return c.json(
+          { error: "bad_request", message: `Field '${field}' must be a string or null` },
+          400,
+        );
+      }
+      updates[field] = body[field];
+    }
+
+    for (const field of NULLABLE_AI_FIELDS) {
+      if (body[field] === undefined) continue;
+      if (body[field] !== null && typeof body[field] !== "string") {
+        return c.json(
+          { error: "bad_request", message: `Field '${field}' must be a string or null` },
+          400,
+        );
+      }
+      updates[field] = body[field];
+    }
+
+    if (body.version !== undefined) {
+      if (body.version !== null && typeof body.version !== "string") {
+        return c.json(
+          { error: "bad_request", message: "Field 'version' must be a string or null" },
+          400,
+        );
+      }
+      // Type-guard so a non-string payload coerces to null instead of throwing
+      // inside sanitizeVersion's .trim() call.
+      updates.version =
+        typeof body.version === "string" ? (sanitizeVersion(body.version) ?? null) : null;
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return c.json({ error: "bad_request", message: "No writable fields supplied" }, 400);
+    }
+
     // Join sources so we have the source row available for the re-embed side
     // effect without a second round-trip after the update.
     const [row] = await db
@@ -2255,24 +2325,6 @@ sourceRoutes.patch(
       .innerJoin(sources, eq(sources.id, releases.sourceId))
       .where(eq(releases.id, id));
     if (!row) return c.json({ error: "not_found", message: "Release not found" }, 404);
-
-    const updates: Record<string, unknown> = {};
-    if (body.title !== undefined) updates.title = body.title;
-    if (body.version !== undefined) {
-      // Type-guard the JSON so a non-string (or null) payload coerces to null
-      // instead of throwing inside sanitizeVersion's .trim() call.
-      updates.version =
-        typeof body.version === "string" ? (sanitizeVersion(body.version) ?? null) : null;
-    }
-    if (body.content !== undefined) updates.content = body.content;
-    if (body.url !== undefined) updates.url = body.url;
-    if (body.publishedAt !== undefined) updates.publishedAt = body.publishedAt;
-    if (body.contentHash !== undefined) updates.contentHash = body.contentHash;
-    // The three AI-generated fields are nullable; treat `null` as an explicit
-    // clear and only skip the column when the caller omits it entirely.
-    if (body.summary !== undefined) updates.summary = body.summary;
-    if (body.titleGenerated !== undefined) updates.titleGenerated = body.titleGenerated;
-    if (body.titleShort !== undefined) updates.titleShort = body.titleShort;
 
     const [updated] = await db.update(releases).set(updates).where(eq(releases.id, id)).returning();
     if (!updated) return c.json({ error: "not_found", message: "Release not found" }, 404);

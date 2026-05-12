@@ -170,6 +170,36 @@ export const UpdateReleaseBodySchema = z.object({
   titleShort: z.string().nullable().optional(),
 });
 
+/**
+ * Response returned by `PATCH /v1/releases/:id`. The handler returns the raw
+ * Drizzle row from the `releases` table — distinct from the augmented
+ * `ReleaseDetailResponseSchema` shape served by `GET /v1/releases/:id`, which
+ * adds joined source/org metadata and parses `media` from raw JSON. Clients
+ * that need the augmented shape after an edit should re-fetch via GET.
+ */
+export const ReleasePatchResponseSchema = z.object({
+  id: z.string(),
+  sourceId: z.string(),
+  version: z.string().nullable(),
+  type: ReleaseTypeSchema,
+  title: z.string(),
+  content: z.string(),
+  summary: z.string().nullable(),
+  titleGenerated: z.string().nullable(),
+  titleShort: z.string().nullable(),
+  url: z.string().nullable(),
+  contentHash: z.string().nullable(),
+  metadata: z.string().nullable(),
+  // Raw JSON string of the media array — not parsed at this endpoint.
+  media: z.string().nullable(),
+  publishedAt: z.string().nullable(),
+  prerelease: z.boolean().nullable(),
+  suppressed: z.boolean().nullable(),
+  suppressedReason: z.string().nullable(),
+  fetchedAt: z.string().nullable(),
+  embeddedAt: z.string().nullable(),
+});
+
 /** Response returned by `DELETE /v1/releases/:id`. */
 export const ReleaseDeleteResponseSchema = z.object({
   deleted: z.literal(true),
