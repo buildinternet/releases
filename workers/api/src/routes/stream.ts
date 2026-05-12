@@ -35,11 +35,12 @@ streamRoutes.get(
     },
   }),
   async (c) => {
-    // RFC 6455 §4.2.1: the `Upgrade` token comparison is case-insensitive.
-    // Lower-case before comparing so clients that send `WebSocket` / `WEBSOCKET`
-    // aren't rejected with 426.
+    // RFC 7230 §6.7: `Upgrade` is a comma-separated token list (`"websocket, h2"`
+    // is valid). RFC 6455 §4.2.1: per-token comparison is case-insensitive.
+    // Split, trim, lowercase, then look for the websocket token specifically.
     const upgrade = c.req.header("Upgrade");
-    if (!upgrade || upgrade.toLowerCase() !== "websocket") {
+    const tokens = upgrade ? upgrade.split(",").map((t) => t.trim().toLowerCase()) : [];
+    if (!tokens.includes("websocket")) {
       return c.text("Expected WebSocket upgrade", 426);
     }
     const url = new URL(c.req.raw.url);
