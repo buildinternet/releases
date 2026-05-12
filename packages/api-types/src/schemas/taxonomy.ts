@@ -53,19 +53,26 @@ export const CategoryDetailSchema = z.object({
 });
 
 /**
- * Body accepted by `PATCH /v1/categories/:slug`. All fields are optional.
+ * Body accepted by `PATCH /v1/categories/:slug`. All fields are optional,
+ * but the body must set at least one of them — an empty body is rejected.
  * `name` and `description` accept `null` to clear the overlay value;
  * `aliases` replaces the full set (pass `[]` to clear). The row is
  * upserted — categories that have never been customized have no row.
  *
- * Each alias must be kebab-case, not a canonical slug, and not claimed
- * by another category row.
+ * `name` is bounded at 200 chars and `description` at 2000. Alias element
+ * shape (kebab-case, not a canonical slug, not claimed by another row) is
+ * enforced in the handler after the strings are trimmed + lowercased, since
+ * those checks depend on runtime state and case-folding.
  */
-export const UpdateCategoryRequestSchema = z.object({
-  name: z.string().nullable().optional(),
-  description: z.string().nullable().optional(),
-  aliases: z.array(z.string()).optional(),
-});
+export const UpdateCategoryRequestSchema = z
+  .object({
+    name: z.string().max(200).nullable().optional(),
+    description: z.string().max(2000).nullable().optional(),
+    aliases: z.array(z.string()).optional(),
+  })
+  .refine((b) => b.name !== undefined || b.description !== undefined || b.aliases !== undefined, {
+    message: "Body must set at least one of `name`, `description`, or `aliases`",
+  });
 
 /** Response from `PATCH /v1/categories/:slug` — the resolved overlay values. */
 export const UpdateCategoryResponseSchema = z.object({

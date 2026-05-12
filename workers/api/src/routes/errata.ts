@@ -6,7 +6,9 @@
 // target for observations that have proved stable across runs.
 
 import { Hono } from "hono";
+import { z } from "zod";
 import { buildAnthropicClient } from "@releases/lib/anthropic-client.js";
+import { validateJson } from "../lib/validate.js";
 import type { Env } from "../index.js";
 
 export const errataRoutes = new Hono<Env>();
@@ -14,33 +16,42 @@ export const errataRoutes = new Hono<Env>();
 const MAX_CONTENT_BYTES = 100_000;
 const BETA_HEADER = "managed-agents-2026-04-01";
 
-errataRoutes.put("/errata/:orgId", async (c) => {
+/**
+ * Body shape for `PUT /v1/errata/:orgId`. Admin-only, so kept local rather
+ * than published through `@buildinternet/releases-api-types`. The byte-cap
+ * lives in the handler because the schema constraint (`content.length`) is
+ * in UTF-16 code units, not the UTF-8 bytes the store charges against.
+ */
+const ErrataBodySchema = z.object({
+  content: z.string().min(1),
+});
+
+errataRoutes.put("/errata/:orgId", validateJson(ErrataBodySchema), async (c) => {
   const orgId = c.req.param("orgId");
   if (!orgId.startsWith("org_")) {
-    return c.json({ error: "orgId must be an org_... identifier" }, 400);
+    return c.json({ error: "bad_request", message: "orgId must be an org_... identifier" }, 400);
   }
 
   const storeId = c.env.MEMORY_STORE_ERRATA_ID;
   if (!storeId) {
-    return c.json({ error: "MEMORY_STORE_ERRATA_ID not configured" }, 500);
+    return c.json(
+      { error: "internal_error", message: "MEMORY_STORE_ERRATA_ID not configured" },
+      500,
+    );
   }
 
-  let body: { content?: unknown };
-  try {
-    body = await c.req.json();
-  } catch {
-    return c.json({ error: "invalid JSON body" }, 400);
-  }
-  const content = body.content;
-  if (typeof content !== "string" || content.length === 0) {
-    return c.json({ error: "content must be a non-empty string" }, 400);
-  }
+  const { content } = c.req.valid("json");
   if (new TextEncoder().encode(content).byteLength > MAX_CONTENT_BYTES) {
-    return c.json({ error: `content exceeds ${MAX_CONTENT_BYTES}-byte cap` }, 413);
+    return c.json(
+      { error: "payload_too_large", message: `content exceeds ${MAX_CONTENT_BYTES}-byte cap` },
+      413,
+    );
   }
 
   const apiKey = await c.env.ANTHROPIC_API_KEY?.get();
-  if (!apiKey) return c.json({ error: "ANTHROPIC_API_KEY not bound" }, 500);
+  if (!apiKey) {
+    return c.json({ error: "internal_error", message: "ANTHROPIC_API_KEY not bound" }, 500);
+  }
   // Memory-store CRUD isn't Messages-API inference, so skip the AI Gateway
   // (the SDK would otherwise auto-pick up `ANTHROPIC_BASE_URL` from env). The
   // gateway runs in authenticated mode and rejects non-Messages paths with 401
