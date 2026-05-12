@@ -92,6 +92,18 @@ import type {
   LookupResultPayloadSchema,
   UnifiedSearchResponseSchema,
 } from "./schemas/search.js";
+import type {
+  TaxonomyOrgSchema,
+  TaxonomyProductSchema,
+  CategoryListItemSchema,
+  CategoryListResponseSchema,
+  CategoryDetailSchema,
+  UpdateCategoryRequestSchema,
+  UpdateCategoryResponseSchema,
+  CategoryFeedPaginationSchema,
+  CategoryReleasesResponseSchema,
+  TagDetailSchema,
+} from "./schemas/taxonomy.js";
 
 export {
   MediaItemSchema,
@@ -156,6 +168,19 @@ export {
   DomainLookupProductSchema,
   DomainLookupResponseSchema,
 } from "./schemas/lookups.js";
+export {
+  TaxonomyOrgSchema,
+  TaxonomyProductSchema,
+  CategoryListItemSchema,
+  CategoryListResponseSchema,
+  CategoryDetailSchema,
+  UpdateCategoryRequestSchema,
+  UpdateCategoryResponseSchema,
+  CategoryReleaseItemSchema,
+  CategoryFeedPaginationSchema,
+  CategoryReleasesResponseSchema,
+  TagDetailSchema,
+} from "./schemas/taxonomy.js";
 export {
   ReleaseLatestSourceSchema,
   ReleaseLatestItemSchema,
@@ -568,94 +593,25 @@ export type ProductDeleteResponse = z.infer<typeof ProductDeleteResponseSchema>;
 
 // ── Taxonomy (categories + tags) ──
 
-export interface TaxonomyOrg {
-  slug: string;
-  name: string;
-  domain: string | null;
-  avatarUrl: string | null;
-}
-
-export interface TaxonomyProduct {
-  slug: string;
-  name: string;
-  description: string | null;
-  orgSlug: string;
-  orgName: string;
-}
-
-export interface CategoryDetail {
-  slug: string;
-  /**
-   * Display name — operator override from the `categories` table if present,
-   * otherwise `categoryDisplayName(slug)` from `@buildinternet/releases-core`.
-   */
-  name: string;
-  /**
-   * Operator-authored byline shown on the web category page. Null when no
-   * description has been set; clients render their own fallback copy.
-   */
-  description: string | null;
-  /**
-   * Alternative slugs that redirect to this canonical category. Empty when
-   * no aliases have been configured.
-   */
-  aliases: string[];
-  orgs: TaxonomyOrg[];
-  products: TaxonomyProduct[];
-}
-
-/**
- * Item shape on GET /v1/categories — the overview list. Categories are a
- * fixed taxonomy (`CATEGORIES` in `@buildinternet/releases-core/categories`),
- * so the API always returns every slug, including ones with zero members.
- * `orgCount` counts orgs whose `category` matches; `productCount` counts
- * products whose own `category` matches (overriding any parent-org category).
- * Both counts pass through `organizations_public`, so on_demand and
- * soft-deleted orgs are excluded. `description` comes from the optional
- * `categories` metadata overlay; null when no override has been set.
- */
-export interface CategoryListItem {
-  slug: string;
-  name: string;
-  description: string | null;
-  aliases: string[];
-  orgCount: number;
-  productCount: number;
-}
-
-/**
- * PATCH /v1/categories/:slug request body. All fields are optional. `name`
- * and `description` accept `null` to clear the override; `aliases` replaces
- * the full set when provided (pass `[]` to clear). The row is upserted —
- * a category that has never been customized has no row in the table.
- *
- * Each alias must be a kebab-case slug not already in `CATEGORIES` and not
- * claimed by another category row.
- */
-export interface UpdateCategoryRequest {
-  name?: string | null;
-  description?: string | null;
-  aliases?: string[];
-}
+export type TaxonomyOrg = z.infer<typeof TaxonomyOrgSchema>;
+export type TaxonomyProduct = z.infer<typeof TaxonomyProductSchema>;
+export type CategoryDetail = z.infer<typeof CategoryDetailSchema>;
+export type CategoryListItem = z.infer<typeof CategoryListItemSchema>;
+export type CategoryListResponse = z.infer<typeof CategoryListResponseSchema>;
+export type UpdateCategoryRequest = z.infer<typeof UpdateCategoryRequestSchema>;
+export type UpdateCategoryResponse = z.infer<typeof UpdateCategoryResponseSchema>;
+export type CategoryFeedPagination = z.infer<typeof CategoryFeedPaginationSchema>;
+export type CategoryReleasesResponse = z.infer<typeof CategoryReleasesResponseSchema>;
+export type TagDetail = z.infer<typeof TagDetailSchema>;
 
 /**
  * Aggregated release feed row for a category rollup — same wire shape as
  * `CollectionReleaseItem` (both surfaces aggregate releases across multiple
  * orgs). Aliased rather than duplicated so renderers can treat them as one.
+ * The collections shape is the source of truth; the schema port for
+ * collections will tighten this once it lands.
  */
 export type CategoryReleaseItem = CollectionReleaseItem;
-
-export interface CategoryReleasesResponse {
-  releases: CategoryReleaseItem[];
-  pagination: { nextCursor: string | null; limit: number };
-}
-
-export interface TagDetail {
-  slug: string;
-  name: string;
-  orgs: TaxonomyOrg[];
-  products: TaxonomyProduct[];
-}
 
 // ── Collections ──
 //
