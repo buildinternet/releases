@@ -265,3 +265,287 @@ export const SourceChangelogResponseSchema = z.object({
    */
   files: z.array(ChangelogFileSummarySchema),
 });
+
+// ── Source activity (/sources/:slug/activity, /orgs/:orgSlug/sources/:sourceSlug/activity) ──
+
+const SourceActivityWeeklyBucketSchema = z.object({
+  weekStart: z.string(),
+  count: z.number().int().min(0),
+  earliestVersion: z.string().nullable(),
+  latestVersion: z.string().nullable(),
+});
+
+/**
+ * Response shape for `GET /v1/sources/:slug/activity` and the org-scoped twin.
+ * Returns week-bucketed release counts for the full tracking lifetime of the source.
+ * Optional `?from=YYYY-MM-DD` and `?to=YYYY-MM-DD` narrow the range.
+ */
+export const SourceActivityResponseSchema = z.object({
+  source: z.object({
+    slug: z.string(),
+    name: z.string(),
+    orgSlug: z.string().nullable(),
+    orgName: z.string().nullable(),
+  }),
+  range: z.object({ from: z.string(), to: z.string() }),
+  weeklyBuckets: z.array(SourceActivityWeeklyBucketSchema),
+});
+
+// ── Source heatmap (/sources/:slug/heatmap, /orgs/:orgSlug/sources/:sourceSlug/heatmap) ──
+
+/**
+ * Response shape for `GET /v1/sources/:slug/heatmap` and the org-scoped twin.
+ * Returns daily release counts for the trailing 365 days — contribution-graph
+ * visualization for the source detail page.
+ */
+export const SourceHeatmapResponseSchema = z.object({
+  source: z.object({ slug: z.string(), name: z.string() }),
+  range: z.object({ from: z.string(), to: z.string() }),
+  dailyCounts: z.array(z.object({ date: z.string(), count: z.number().int().min(0) })),
+  total: z.number().int().min(0),
+});
+
+// ── Source known releases (/sources/:slug/known-releases, /orgs/:orgSlug/…) ──
+
+/**
+ * Single row returned inside `GET /v1/sources/:slug/known-releases`. Minimal
+ * identifier set used by the incremental parsing agent to skip already-known
+ * versions without fetching full content.
+ */
+export const SourceKnownReleaseItemSchema = z.object({
+  version: z.string().nullable(),
+  title: z.string(),
+  publishedAt: z.string().nullable(),
+});
+
+/**
+ * Response shape for `GET /v1/sources/:slug/known-releases`. Returns the
+ * N most-recent non-suppressed releases (default N=10, max 500), ordered
+ * by `publishedAt` descending. Accepts `?limit=N`.
+ */
+export const SourceKnownReleasesResponseSchema = z.array(SourceKnownReleaseItemSchema);
+
+// ── Source recent releases (/sources/:slug/recent-releases, /orgs/:orgSlug/…) ──
+
+/**
+ * Response shape for `GET /v1/sources/:slug/recent-releases`. Returns the
+ * full release rows (non-suppressed, published at or after `?cutoff=`) ordered
+ * by `publishedAt` descending. Used by the summarization agent to retrieve the
+ * release window it needs to summarize. `?cutoff=` is required (ISO-8601 date
+ * string); missing `?cutoff=` returns 400.
+ */
+export const SourceRecentReleasesResponseSchema = z.array(
+  z.looseObject({
+    id: z.string(),
+    sourceId: z.string(),
+    version: z.string().nullable(),
+    title: z.string(),
+    content: z.string(),
+    url: z.string().nullable(),
+    publishedAt: z.string().nullable(),
+    fetchedAt: z.string().optional(),
+  }),
+);
+
+// ── Source sessions (/sources/:slug/sessions) ──
+
+/**
+ * Response shape for `GET /v1/sources/:slug/sessions`. Returns the active
+ * discovery session (if any) touching this source. The session object is the
+ * live DO state blob from the `StatusHub` Durable Object. Returns `{ sessions:
+ * [] }` when no active session references this source.
+ */
+export const SourceSessionsResponseSchema = z.object({
+  sessions: z.array(z.record(z.string(), z.unknown())),
+});
+
+// ── Source summaries (/sources/:slug/summaries) ──
+
+/**
+ * Full summary row as stored in `release_summaries`, returned by
+ * `GET /v1/sources/:slug/summaries`. Filter by `?type=rolling|monthly`,
+ * `?year=`, `?month=`.
+ */
+export const SourceSummaryRowSchema = z.object({
+  id: z.string().optional(),
+  sourceId: z.string(),
+  orgId: z.string().nullable(),
+  type: z.enum(["rolling", "monthly"]),
+  year: z.number().int().nullable(),
+  month: z.number().int().nullable(),
+  windowDays: z.number().int().nullable(),
+  summary: z.string(),
+  releaseCount: z.number().int().min(0),
+  generatedAt: z.string(),
+});
+
+export const SourceSummariesResponseSchema = z.array(SourceSummaryRowSchema);
+
+/** Body accepted by `POST /v1/sources/:slug/summaries`. */
+export const CreateSourceSummaryBodySchema = z.object({
+  type: z.enum(["rolling", "monthly"]),
+  year: z.number().int().nullable().optional(),
+  month: z.number().int().nullable().optional(),
+  windowDays: z.number().int().nullable().optional(),
+  summary: z.string().min(1),
+  releaseCount: z.number().int().min(0),
+});
+
+/** Response for `POST /v1/sources/:slug/summaries` (upsert). */
+export const CreateSourceSummaryResponseSchema = z.object({
+  ok: z.literal(true),
+});
+
+// ── Source fetch trigger (POST /sources/:slug/fetch) ──
+
+/**
+ * Response shape for `POST /v1/sources/:slug/fetch`. Two branches:
+ *   - Feed/GitHub/scraped-with-feed sources: `{ fetched: true, releasesInserted, … }`
+ *   - Scrape/agent sources (flagged for CLI pickup): `{ queued: true, type: "flagged" }`
+ */
+export const SourceFetchResponseSchema = z.union([
+  z.looseObject({ fetched: z.literal(true) }),
+  z.object({ queued: z.literal(true), type: z.string() }),
+]);
+
+// ── Source content-hash check (POST /sources/:slug/content-hash) ──
+
+/** Response for `POST /v1/sources/:slug/content-hash`. */
+export const SourceContentHashResponseSchema = z.union([
+  z.object({ unchanged: z.literal(true) }),
+  z.object({ unchanged: z.literal(false) }),
+]);
+
+/** Body for `POST /v1/sources/:slug/content-hash`. */
+export const SourceContentHashBodySchema = z.object({
+  contentHash: z.string().min(1),
+});
+
+// ── Changelog token backfill (PATCH /sources/:slug/changelog/tokens) ──
+
+/** Response for `PATCH /v1/sources/:slug/changelog/tokens`. */
+export const ChangelogTokensResponseSchema = z.object({
+  path: z.string(),
+  oldTokens: z.number().int().nullable(),
+  tokens: z.number().int().min(0),
+});
+
+// ── Source metadata merge (PATCH /sources/:slug/metadata) ──
+
+/** Response for `PATCH /v1/sources/:slug/metadata`. Echoes the merged metadata object. */
+export const SourceMetadataResponseSchema = z.object({
+  metadata: z.record(z.string(), z.unknown()),
+});
+
+// ── Changelog probe (POST /sources/:slug/changelog/probe) ──
+
+/** Response for `POST /v1/sources/:slug/changelog/probe`. */
+export const ChangelogProbeResponseSchema = z.object({
+  sourceId: z.string(),
+  sourceSlug: z.string(),
+  url: z.string(),
+  paths: z.array(z.string()),
+});
+
+// ── Delete source (DELETE /sources/:slug) ──
+
+/**
+ * Response for `DELETE /v1/sources/:slug`. Two shapes:
+ *   - Soft delete: `{ deleted: true, deletedAt: "<iso>" }`
+ *   - Hard delete (`?hard=true`): `{ deleted: true, hard: true }`
+ */
+export const DeleteSourceResponseSchema = z.union([
+  z.object({ deleted: z.literal(true), deletedAt: z.string() }),
+  z.object({ deleted: z.literal(true), hard: z.literal(true) }),
+]);
+
+// ── Delete source releases (DELETE /sources/:slug/releases) ──
+
+/**
+ * Response for `DELETE /v1/sources/:slug/releases`. Two shapes:
+ *   - Soft (`?hard` absent): `{ suppressed: N }` — releases hidden, not deleted
+ *   - Hard (`?hard=true`): `{ deleted: N, hard: true }`
+ */
+export const DeleteSourceReleasesResponseSchema = z.union([
+  z.object({ suppressed: z.number().int().min(0) }),
+  z.object({ deleted: z.number().int().min(0), hard: z.literal(true) }),
+]);
+
+// ── Single release insert (POST /sources/:slug/releases) ──
+
+/**
+ * Response for `POST /v1/sources/:slug/releases`. Returns the inserted release
+ * row (201) or `{ skipped: true }` (200) on URL conflict.
+ */
+export const InsertReleaseResponseSchema = z.union([
+  z.looseObject({
+    id: z.string(),
+    sourceId: z.string(),
+    title: z.string(),
+  }),
+  z.object({ skipped: z.literal(true) }),
+]);
+
+// ── Batch release insert (POST /sources/:slug/releases/batch) ──
+
+/** Response for `POST /v1/sources/:slug/releases/batch`. */
+export const BatchReleasesResponseSchema = z.object({
+  inserted: z.number().int().min(0),
+  total: z.number().int().min(0),
+});
+
+// ── Oversized changelog files (GET /sources/changelog-files/oversized) ──
+
+/**
+ * Row returned by `GET /v1/sources/changelog-files/oversized`. Each row is a
+ * changelog file whose content length exceeds `?minBytes=` (default 256 KB).
+ * Used by `scripts/backfill-changelog-tokens.ts` to find rows with estimated
+ * (not exact) token counts.
+ */
+export const OversizedChangelogFileRowSchema = z.object({
+  sourceId: z.string(),
+  sourceSlug: z.string(),
+  sourceName: z.string(),
+  orgSlug: z.string(),
+  path: z.string(),
+  filename: z.string(),
+  bytes: z.number().int().min(0),
+  tokens: z.number().int().nullable(),
+  fetchedAt: z.string(),
+});
+
+export const OversizedChangelogFilesResponseSchema = z.array(OversizedChangelogFileRowSchema);
+
+// ── Fetchable sources (GET /sources/fetchable) ──
+
+/**
+ * Response for `GET /v1/sources/fetchable`. Returns raw source rows matching
+ * the requested fetch mode (`?mode=unfetched|stale|retry_errors|all`).
+ * Accepts `?staleHours=N` when `mode=stale`.
+ */
+export const FetchableSourcesResponseSchema = z.array(
+  z.looseObject({
+    id: z.string(),
+    slug: z.string(),
+    name: z.string(),
+    type: SourceTypeSchema,
+    url: z.string(),
+    metadata: z.string().nullable(),
+  }),
+);
+
+// ── Feed sources (GET /sources/feeds) ──
+
+/**
+ * Response for `GET /v1/sources/feeds`. Returns visible source rows where
+ * `metadata.feedUrl` is set and `fetchPriority != 'paused'`.
+ */
+export const FeedSourcesResponseSchema = FetchableSourcesResponseSchema;
+
+// ── Changed sources (GET /sources/changes) ──
+
+/**
+ * Response for `GET /v1/sources/changes`. Returns visible source rows that
+ * have a non-null `changeDetectedAt` — the set flagged for CLI pickup.
+ */
+export const ChangedSourcesResponseSchema = FetchableSourcesResponseSchema;

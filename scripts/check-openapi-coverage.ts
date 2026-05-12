@@ -23,37 +23,7 @@ import type { Env } from "../workers/api/src/index.js";
  * `v1.routes[].path` returns.
  */
 const ALLOWLIST = new Set<string>([
-  // ── workers/api/src/routes/sources.ts: sub-routes #752 left
-  // undocumented. Bare and org-scoped variants both apply. ──
-  "GET /sources/changelog-files/oversized",
-  "GET /sources/changes",
-  "GET /sources/feeds",
-  "GET /sources/fetchable",
-  "GET /sources/:slug/activity",
-  "GET /sources/:slug/heatmap",
-  "GET /sources/:slug/known-releases",
-  "GET /sources/:slug/recent-releases",
-  "GET /sources/:slug/sessions",
-  "GET /sources/:slug/summaries",
-  "POST /sources/:slug/changelog/probe",
-  "POST /sources/:slug/content-hash",
-  "POST /sources/:slug/fetch",
-  "POST /sources/:slug/releases",
-  "POST /sources/:slug/releases/batch",
-  "POST /sources/:slug/summaries",
-  "PATCH /sources/:slug/changelog/tokens",
-  "PATCH /sources/:slug/metadata",
-  "DELETE /sources/:slug",
-  "DELETE /sources/:slug/releases",
-  "GET /orgs/:orgSlug/sources/:sourceSlug/activity",
-  "GET /orgs/:orgSlug/sources/:sourceSlug/heatmap",
-  "GET /orgs/:orgSlug/sources/:sourceSlug/known-releases",
-  "GET /orgs/:orgSlug/sources/:sourceSlug/recent-releases",
-  "POST /orgs/:orgSlug/sources/:sourceSlug/changelog/probe",
-  "POST /orgs/:orgSlug/sources/:sourceSlug/content-hash",
-  "POST /orgs/:orgSlug/sources/:sourceSlug/releases/batch",
-  "PATCH /orgs/:orgSlug/sources/:sourceSlug/changelog/tokens",
-  "PATCH /orgs/:orgSlug/sources/:sourceSlug/metadata",
+  // All Phase-1 long-tail buckets have been annotated. ALLOWLIST is empty.
 ]);
 
 const HTTP_METHODS = new Set(["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"]);

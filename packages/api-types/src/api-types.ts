@@ -65,6 +65,31 @@ import type {
   CreateSourceBodySchema,
   ChangelogFileSummarySchema,
   SourceChangelogResponseSchema,
+  SourceActivityResponseSchema,
+  SourceHeatmapResponseSchema,
+  SourceKnownReleaseItemSchema,
+  SourceKnownReleasesResponseSchema,
+  SourceRecentReleasesResponseSchema,
+  SourceSessionsResponseSchema,
+  SourceSummaryRowSchema,
+  SourceSummariesResponseSchema,
+  CreateSourceSummaryBodySchema,
+  CreateSourceSummaryResponseSchema,
+  SourceFetchResponseSchema,
+  SourceContentHashResponseSchema,
+  SourceContentHashBodySchema,
+  ChangelogTokensResponseSchema,
+  SourceMetadataResponseSchema,
+  ChangelogProbeResponseSchema,
+  DeleteSourceResponseSchema,
+  DeleteSourceReleasesResponseSchema,
+  InsertReleaseResponseSchema,
+  BatchReleasesResponseSchema,
+  OversizedChangelogFileRowSchema,
+  OversizedChangelogFilesResponseSchema,
+  FetchableSourcesResponseSchema,
+  FeedSourcesResponseSchema,
+  ChangedSourcesResponseSchema,
 } from "./schemas/sources.js";
 import type {
   ProductRowSchema,
@@ -245,6 +270,31 @@ export {
   CreateSourceBodySchema,
   ChangelogFileSummarySchema,
   SourceChangelogResponseSchema,
+  SourceActivityResponseSchema,
+  SourceHeatmapResponseSchema,
+  SourceKnownReleaseItemSchema,
+  SourceKnownReleasesResponseSchema,
+  SourceRecentReleasesResponseSchema,
+  SourceSessionsResponseSchema,
+  SourceSummaryRowSchema,
+  SourceSummariesResponseSchema,
+  CreateSourceSummaryBodySchema,
+  CreateSourceSummaryResponseSchema,
+  SourceFetchResponseSchema,
+  SourceContentHashResponseSchema,
+  SourceContentHashBodySchema,
+  ChangelogTokensResponseSchema,
+  SourceMetadataResponseSchema,
+  ChangelogProbeResponseSchema,
+  DeleteSourceResponseSchema,
+  DeleteSourceReleasesResponseSchema,
+  InsertReleaseResponseSchema,
+  BatchReleasesResponseSchema,
+  OversizedChangelogFileRowSchema,
+  OversizedChangelogFilesResponseSchema,
+  FetchableSourcesResponseSchema,
+  FeedSourcesResponseSchema,
+  ChangedSourcesResponseSchema,
 } from "./schemas/sources.js";
 export {
   ProductRowSchema,
@@ -454,6 +504,31 @@ export type SourceChangelogResponse = z.infer<typeof SourceChangelogResponseSche
 export type SourceDetail = z.infer<typeof SourceDetailSchema>;
 export type SourceMutationResponse = z.infer<typeof SourceMutationResponseSchema>;
 export type SourceOrgRef = z.infer<typeof SourceOrgRefSchema>;
+export type SourceActivityResponse = z.infer<typeof SourceActivityResponseSchema>;
+export type SourceHeatmapResponse = z.infer<typeof SourceHeatmapResponseSchema>;
+export type SourceKnownReleaseItem = z.infer<typeof SourceKnownReleaseItemSchema>;
+export type SourceKnownReleasesResponse = z.infer<typeof SourceKnownReleasesResponseSchema>;
+export type SourceRecentReleasesResponse = z.infer<typeof SourceRecentReleasesResponseSchema>;
+export type SourceSessionsResponse = z.infer<typeof SourceSessionsResponseSchema>;
+export type SourceSummaryRow = z.infer<typeof SourceSummaryRowSchema>;
+export type SourceSummariesResponse = z.infer<typeof SourceSummariesResponseSchema>;
+export type CreateSourceSummaryBody = z.infer<typeof CreateSourceSummaryBodySchema>;
+export type CreateSourceSummaryResponse = z.infer<typeof CreateSourceSummaryResponseSchema>;
+export type SourceFetchResponse = z.infer<typeof SourceFetchResponseSchema>;
+export type SourceContentHashResponse = z.infer<typeof SourceContentHashResponseSchema>;
+export type SourceContentHashBody = z.infer<typeof SourceContentHashBodySchema>;
+export type ChangelogTokensResponse = z.infer<typeof ChangelogTokensResponseSchema>;
+export type SourceMetadataResponse = z.infer<typeof SourceMetadataResponseSchema>;
+export type ChangelogProbeResponse = z.infer<typeof ChangelogProbeResponseSchema>;
+export type DeleteSourceResponse = z.infer<typeof DeleteSourceResponseSchema>;
+export type DeleteSourceReleasesResponse = z.infer<typeof DeleteSourceReleasesResponseSchema>;
+export type InsertReleaseResponse = z.infer<typeof InsertReleaseResponseSchema>;
+export type BatchReleasesResponse = z.infer<typeof BatchReleasesResponseSchema>;
+export type OversizedChangelogFileRow = z.infer<typeof OversizedChangelogFileRowSchema>;
+export type OversizedChangelogFilesResponse = z.infer<typeof OversizedChangelogFilesResponseSchema>;
+export type FetchableSourcesResponse = z.infer<typeof FetchableSourcesResponseSchema>;
+export type FeedSourcesResponse = z.infer<typeof FeedSourcesResponseSchema>;
+export type ChangedSourcesResponse = z.infer<typeof ChangedSourcesResponseSchema>;
 
 // ── Admin telemetry: orgs rollup ──
 
@@ -707,11 +782,11 @@ export interface WeeklyBucket {
   latestVersion: string | null;
 }
 
-export interface SourceActivity {
-  source: { slug: string; name: string; orgSlug: string | null; orgName: string | null };
-  range: { from: string; to: string };
-  weeklyBuckets: WeeklyBucket[];
-}
+/**
+ * @deprecated Use SourceActivityResponse (Zod-derived).
+ * The hand-written interface is kept for callsite compatibility — shape is identical.
+ */
+export type SourceActivity = SourceActivityResponse;
 
 // ── Org Activity (Zod-derived aliases) ──
 // The old hand-written OrgActivitySource / OrgActivity / OrgSparklines /
@@ -736,13 +811,13 @@ export type OrgReleasesResponse = OrgReleasesFeedResponse;
 // (covered above)
 
 // ── Source Heatmap ──
+// (covered by SourceHeatmapResponse above)
 
-export interface SourceHeatmap {
-  source: { slug: string; name: string };
-  range: { from: string; to: string };
-  dailyCounts: Array<{ date: string; count: number }>;
-  total: number;
-}
+/**
+ * @deprecated Use SourceHeatmapResponse (Zod-derived).
+ * The hand-written interface is kept for callsite compatibility — shape is identical.
+ */
+export type SourceHeatmap = SourceHeatmapResponse;
 
 // ── Org Releases ──
 // (covered by OrgReleaseItem / OrgReleasesFeedResponse above)
