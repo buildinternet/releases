@@ -76,12 +76,16 @@ const COMMON_HEADERS = {
   Link: SELF_LINK_HEADER,
 };
 
+/** Serves the RFC 9727 api-catalog linkset describing Releases' published APIs. */
 export function GET() {
   return new NextResponse(SERIALIZED_BODY, { headers: COMMON_HEADERS });
 }
 
-// RFC 9727 §2: HEAD on the catalog SHALL return the Link relation header.
-// Next.js does not synthesize HEAD from a GET export, so it's defined here.
+/**
+ * Returns only the catalog response headers (including the `api-catalog`
+ * Link relation). RFC 9727 §2 SHALL clause — Next.js does not synthesize
+ * HEAD from a GET export, so it's defined here.
+ */
 export function HEAD() {
   return new NextResponse(null, { headers: COMMON_HEADERS });
 }
