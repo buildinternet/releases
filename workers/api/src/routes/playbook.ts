@@ -11,8 +11,10 @@ import {
 import { generatePlaybookHeader } from "@releases/ai-internal/playbook";
 import { authMiddleware } from "../middleware/auth.js";
 import { newKnowledgePageId, orgWhere } from "../utils.js";
+import { validateJson } from "../lib/validate.js";
 import {
   PlaybookResponseSchema,
+  UpdatePlaybookNotesBodySchema,
   UpdatePlaybookNotesResponseSchema,
   ErrorResponseSchema,
 } from "@buildinternet/releases-api-types";
@@ -64,7 +66,7 @@ app.patch(
     tags: ["Playbook"],
     summary: "Update playbook notes",
     description:
-      "Updates the `notes` field on the org's playbook knowledge page. Accepts a JSON body with a `notes` string; an empty string is stored as `null`. If no playbook row exists yet, one is bootstrapped with a generated header before the notes are applied. Requires Bearer auth inherited from `publicReadAuthMiddleware`'s non-SAFE_METHODS branch. Formal request-body schema validation via middleware is deferred to Phase 2 of #894.",
+      "Updates the `notes` field on the org's playbook knowledge page. Accepts a JSON body with a `notes` string; an empty string is stored as `null`. If no playbook row exists yet, one is bootstrapped with a generated header before the notes are applied. Requires Bearer auth inherited from `publicReadAuthMiddleware`'s non-SAFE_METHODS branch.",
     security: [{ bearerAuth: [] }],
     responses: {
       200: {
@@ -81,24 +83,11 @@ app.patch(
       },
     },
   }),
+  validateJson(UpdatePlaybookNotesBodySchema),
   async (c) => {
     const db = createDb(c.env.DB);
     const slug = c.req.param("slug");
-
-    let raw: unknown;
-    try {
-      raw = await c.req.json();
-    } catch {
-      return c.json({ error: "bad_request", message: "Invalid JSON body" }, 400);
-    }
-    if (typeof raw !== "object" || raw === null) {
-      return c.json({ error: "bad_request", message: "Body must be a JSON object" }, 400);
-    }
-    const candidate = raw as Record<string, unknown>;
-    if (typeof candidate.notes !== "string") {
-      return c.json({ error: "bad_request", message: "`notes` must be a string" }, 400);
-    }
-    const body = { notes: candidate.notes };
+    const body = c.req.valid("json");
 
     const [org] = await db
       .select({

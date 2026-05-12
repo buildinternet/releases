@@ -39,11 +39,13 @@ import type {
 import {
   CategoryListResponseSchema,
   CategoryDetailSchema,
+  UpdateCategoryRequestSchema,
   UpdateCategoryResponseSchema,
   CategoryReleasesResponseSchema,
   TagDetailSchema,
   ErrorResponseSchema,
 } from "@buildinternet/releases-api-types";
+import { validateJson } from "../lib/validate.js";
 
 export const taxonomyRoutes = new Hono<Env>();
 
@@ -275,55 +277,30 @@ taxonomyRoutes.patch(
       },
     },
   }),
+  validateJson(UpdateCategoryRequestSchema),
   async (c) => {
     const slug = c.req.param("slug");
     if (!isValidCategory(slug)) {
       return c.json({ error: "not_found", message: "Category not found" }, 404);
     }
-    const body = await c.req.json<UpdateCategoryRequest>().catch(() => null);
-    if (
-      !body ||
-      (body.name === undefined && body.description === undefined && body.aliases === undefined)
-    ) {
-      return c.json(
-        {
-          error: "bad_request",
-          message: "Body must set at least one of `name`, `description`, or `aliases`",
-        },
-        400,
-      );
-    }
+    // `validateJson` enforces the body shape (string types, length caps,
+    // at-least-one-field). The handler still owns the post-trim invariants
+    // and the runtime-state checks (canonical-slug shadowing, cross-row
+    // alias claim, intra-request dedup) below.
+    const body: UpdateCategoryRequest = { ...c.req.valid("json") };
     if (body.name != null) {
       const trimmed = body.name.trim();
-      if (trimmed.length === 0 || trimmed.length > 200) {
+      if (trimmed.length === 0) {
         return c.json({ error: "bad_request", message: "Name must be 1–200 characters" }, 400);
       }
       body.name = trimmed;
     }
-    if (body.description != null && body.description.length > 2000) {
-      return c.json(
-        { error: "bad_request", message: "Description must be 2000 characters or fewer" },
-        400,
-      );
-    }
 
-    // Validate aliases: shape + can't shadow a canonical slug + must be unique
-    // within this row. Cross-row claim conflict is checked after we load the
-    // alias map below.
     let normalizedAliases: string[] | undefined;
     if (body.aliases !== undefined) {
-      if (!Array.isArray(body.aliases)) {
-        return c.json(
-          { error: "bad_request", message: "`aliases` must be an array of strings" },
-          400,
-        );
-      }
       const seen = new Set<string>();
       normalizedAliases = [];
       for (const raw of body.aliases) {
-        if (typeof raw !== "string") {
-          return c.json({ error: "bad_request", message: "Each alias must be a string" }, 400);
-        }
         const alias = raw.trim().toLowerCase();
         if (!CATEGORY_ALIAS_RE.test(alias)) {
           return c.json(
