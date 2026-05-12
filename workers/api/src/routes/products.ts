@@ -1,4 +1,4 @@
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { describeRoute, resolver } from "hono-openapi";
 import { and, count, eq, sql } from "drizzle-orm";
 import { createDb } from "../db.js";
@@ -22,6 +22,8 @@ import {
   ProductRowSchema,
   ProductAdoptResponseSchema,
   ProductDeleteResponseSchema,
+  ProductTagsListResponseSchema,
+  ProductTagsMutationResponseSchema,
   ErrorResponseSchema,
 } from "@buildinternet/releases-api-types";
 import {
@@ -604,56 +606,163 @@ const patchProductRoute = describeRoute({
 productRoutes.patch("/products/:slug", patchProductRoute, patchProductHandler);
 productRoutes.patch("/orgs/:orgSlug/products/:productSlug", patchProductRoute, patchProductHandler);
 
-productRoutes.get("/products/:identifier/tags", async (c) => {
-  const db = createDb(c.env.DB);
-  const product = await resolveProductFromContext(c, db);
-  if (!product) return c.json({ error: "not_found", message: "Product not found" }, 404);
-
-  const rows = await db
-    .select({ name: tags.name })
-    .from(productTags)
-    .innerJoin(tags, eq(productTags.tagId, tags.id))
-    .where(eq(productTags.productId, product.id))
-    .orderBy(tags.name);
-  return c.json(rows.map((r) => r.name));
-});
-
-productRoutes.put("/products/:identifier/tags", async (c) => {
-  const db = createDb(c.env.DB);
-  const body = await c.req.json<{ tags: string[] }>();
-  const product = await resolveProductFromContext(c, db);
-  if (!product) return c.json({ error: "not_found", message: "Product not found" }, 404);
-
-  if (body.tags.length > 0) {
-    const tagRows = await getOrCreateTagsD1(db, body.tags);
-    const now = new Date().toISOString();
-    await db
-      .insert(productTags)
-      .values(tagRows.map((t) => ({ productId: product.id, tagId: t.id, createdAt: now })))
-      .onConflictDoNothing();
+// Shared body validation for PUT/DELETE /products/:identifier/tags. Raw
+// c.req.json() throws on malformed JSON (translated to 500 by the global
+// onError) and returns `{}` / arbitrary shapes for valid JSON that just
+// doesn't match — reading `body.tags.length` then explodes. Validate
+// once, in one place.
+async function parseTagsBody(
+  c: Context<Env>,
+): Promise<{ ok: true; tags: string[] } | { ok: false; response: Response }> {
+  let body: unknown;
+  try {
+    body = await c.req.json();
+  } catch {
+    return {
+      ok: false,
+      response: c.json({ error: "bad_request", message: "Invalid JSON body" }, 400),
+    };
   }
-  return c.json({ ok: true });
-});
+  if (
+    typeof body !== "object" ||
+    body === null ||
+    !Array.isArray((body as { tags?: unknown }).tags) ||
+    !(body as { tags: unknown[] }).tags.every((t) => typeof t === "string")
+  ) {
+    return {
+      ok: false,
+      response: c.json(
+        { error: "bad_request", message: "`tags` must be an array of strings" },
+        400,
+      ),
+    };
+  }
+  return { ok: true, tags: (body as { tags: string[] }).tags };
+}
 
-productRoutes.delete("/products/:identifier/tags", async (c) => {
-  const db = createDb(c.env.DB);
-  const body = await c.req.json<{ tags: string[] }>();
-  const product = await resolveProductFromContext(c, db);
-  if (!product) return c.json({ error: "not_found", message: "Product not found" }, 404);
+productRoutes.get(
+  "/products/:identifier/tags",
+  describeRoute({
+    tags: ["Products"],
+    summary: "List product tags",
+    description:
+      "Returns the product's tag names sorted alphabetically. Empty array when the product has no tags. Only a typed `prod_…` ID resolves on this path; bare slugs return 400 (#698). Slug-only callers should first resolve via `GET /v1/lookups/product-by-slug?slug=…` and re-hit this endpoint with the returned `productId`.",
+    responses: {
+      200: {
+        description: "Tag names",
+        content: { "application/json": { schema: resolver(ProductTagsListResponseSchema) } },
+      },
+      400: {
+        description: "Bare slug supplied on `/products/:identifier/tags`",
+        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      },
+      404: {
+        description: "Product not found",
+        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      },
+    },
+  }),
+  async (c) => {
+    const db = createDb(c.env.DB);
+    const product = await resolveProductFromContext(c, db);
+    if (!product) return c.json({ error: "not_found", message: "Product not found" }, 404);
 
-  for (const tagName of body.tags) {
-    const tagSlug = toSlug(tagName);
-    // oxlint-disable-next-line no-await-in-loop -- sequential: tag lookup result feeds the delete
-    const [tag] = await db.select().from(tags).where(eq(tags.slug, tagSlug));
-    if (tag) {
-      // oxlint-disable-next-line no-await-in-loop -- sequential per-tag delete; ordering matters for partial success
+    const rows = await db
+      .select({ name: tags.name })
+      .from(productTags)
+      .innerJoin(tags, eq(productTags.tagId, tags.id))
+      .where(eq(productTags.productId, product.id))
+      .orderBy(tags.name);
+    return c.json(rows.map((r) => r.name));
+  },
+);
+
+productRoutes.put(
+  "/products/:identifier/tags",
+  describeRoute({
+    tags: ["Products"],
+    summary: "Add tags to a product",
+    description:
+      "Body shape `{ tags: string[] }`. Adds the named tags to the product (get-or-create — unknown names land a row in `tags`). Idempotent: tags already attached are no-ops via `ON CONFLICT DO NOTHING`. Body documented in prose — formal `requestBody` modelling is deferred to the validator-middleware phase of #894.\n\nAuth inherited from `publicReadAuthMiddleware`'s non-SAFE_METHODS branch — Bearer token required.",
+    security: [{ bearerAuth: [] }],
+    responses: {
+      200: {
+        description: "Tags added",
+        content: { "application/json": { schema: resolver(ProductTagsMutationResponseSchema) } },
+      },
+      400: {
+        description: "Malformed body, or bare slug supplied on `/products/:identifier/tags`",
+        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      },
+      404: {
+        description: "Product not found",
+        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      },
+    },
+  }),
+  async (c) => {
+    const db = createDb(c.env.DB);
+    const body = await parseTagsBody(c);
+    if (!body.ok) return body.response;
+    const product = await resolveProductFromContext(c, db);
+    if (!product) return c.json({ error: "not_found", message: "Product not found" }, 404);
+
+    if (body.tags.length > 0) {
+      const tagRows = await getOrCreateTagsD1(db, body.tags);
+      const now = new Date().toISOString();
       await db
-        .delete(productTags)
-        .where(and(eq(productTags.productId, product.id), eq(productTags.tagId, tag.id)));
+        .insert(productTags)
+        .values(tagRows.map((t) => ({ productId: product.id, tagId: t.id, createdAt: now })))
+        .onConflictDoNothing();
     }
-  }
-  return c.json({ ok: true });
-});
+    return c.json({ ok: true });
+  },
+);
+
+productRoutes.delete(
+  "/products/:identifier/tags",
+  describeRoute({
+    tags: ["Products"],
+    summary: "Remove tags from a product",
+    description:
+      "Body shape `{ tags: string[] }`. Removes each named tag from the product — names are slugified via `toSlug()` before lookup, so display-cased input still matches. Unknown tag names are silently skipped (idempotent). Body documented in prose — formal `requestBody` modelling is deferred to the validator-middleware phase of #894.\n\nAuth inherited from `publicReadAuthMiddleware`'s non-SAFE_METHODS branch — Bearer token required.",
+    security: [{ bearerAuth: [] }],
+    responses: {
+      200: {
+        description: "Tags removed",
+        content: { "application/json": { schema: resolver(ProductTagsMutationResponseSchema) } },
+      },
+      400: {
+        description: "Malformed body, or bare slug supplied on `/products/:identifier/tags`",
+        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      },
+      404: {
+        description: "Product not found",
+        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      },
+    },
+  }),
+  async (c) => {
+    const db = createDb(c.env.DB);
+    const body = await parseTagsBody(c);
+    if (!body.ok) return body.response;
+    const product = await resolveProductFromContext(c, db);
+    if (!product) return c.json({ error: "not_found", message: "Product not found" }, 404);
+
+    for (const tagName of body.tags) {
+      const tagSlug = toSlug(tagName);
+      // oxlint-disable-next-line no-await-in-loop -- sequential: tag lookup result feeds the delete
+      const [tag] = await db.select().from(tags).where(eq(tags.slug, tagSlug));
+      if (tag) {
+        // oxlint-disable-next-line no-await-in-loop -- sequential per-tag delete; ordering matters for partial success
+        await db
+          .delete(productTags)
+          .where(and(eq(productTags.productId, product.id), eq(productTags.tagId, tag.id)));
+      }
+    }
+    return c.json({ ok: true });
+  },
+);
 
 // Delete product
 productRoutes.delete(

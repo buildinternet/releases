@@ -88,12 +88,6 @@ const ALLOWLIST = new Set<string>([
   "PATCH /orgs/:orgSlug/sources/:sourceSlug/changelog/tokens",
   "PATCH /orgs/:orgSlug/sources/:sourceSlug/metadata",
 
-  // ── workers/api/src/routes/products.ts: tag sub-routes #759 left
-  // undocumented. ──
-  "GET /products/:identifier/tags",
-  "PUT /products/:identifier/tags",
-  "DELETE /products/:identifier/tags",
-
   // ── workers/api/src/routes/releases.ts: sub-routes #896 left
   // undocumented. ──
   "GET /releases/:id",
