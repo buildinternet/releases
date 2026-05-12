@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { describeRoute, resolver } from "hono-openapi";
 import { asc, desc, eq, sql } from "drizzle-orm";
 import {
   domainAliases,
@@ -24,6 +25,13 @@ import { RELEASES_BATCH_CHUNK_SIZE } from "../lib/d1-limits.js";
 import { isConflictError } from "../utils.js";
 import { embedSourceSideEffect } from "./sources.js";
 import { logEvent } from "@releases/lib/log-event";
+import {
+  LookupResponseSchema,
+  LookupSourceBySlugResponseSchema,
+  LookupProductBySlugResponseSchema,
+  DomainLookupResponseSchema,
+  ErrorResponseSchema,
+} from "@buildinternet/releases-api-types";
 
 export const lookupRoutes = new Hono<Env>();
 
@@ -337,48 +345,68 @@ export async function runLookup(
   };
 }
 
-lookupRoutes.post("/lookups", async (c) => {
-  const body = (await c.req.json().catch(() => null)) as {
-    provider?: string;
-    coordinate?: string;
-  } | null;
-
-  if (!body) {
-    return c.json({ error: "E_LOOKUP_BAD_REQUEST", message: "JSON body required" }, 400);
-  }
-
-  if (body.provider !== "github") {
-    return c.json(
-      {
-        error: "E_LOOKUP_UNSUPPORTED_PROVIDER",
-        message: `provider must be "github" (v1)`,
+lookupRoutes.post(
+  "/lookups",
+  describeRoute({
+    tags: ["Lookups"],
+    summary: "On-demand GitHub source materialization",
+    description:
+      'Resolves a GitHub `org/repo` coordinate to a registry source. Idempotent — if the source already exists, returns it with `status: "existing"`; otherwise probes GitHub, inserts a hidden `on_demand` source row (and a new `on_demand` org when no curated org claims the segment), and ingests up to 100 releases.\n\nNegative results (`not_found`, `empty`) are cached in KV (24h and 6h respectively) so repeat probes don\'t re-hit GitHub. `deferred` outcomes (rate-limit, 5xx) are not cached and let the next cron pass retry.\n\nBody requires `provider: "github"` — other providers are explicitly rejected, not silently accepted. Coordinate must match `{org}/{repo}` (case-insensitive; URLs are deduped via `LOWER(sources.url)`).',
+    security: [{ bearerAuth: [] }],
+    responses: {
+      200: {
+        description: "Lookup result. Inspect `status` to disambiguate outcomes.",
+        content: { "application/json": { schema: resolver(LookupResponseSchema) } },
       },
-      400,
-    );
-  }
+      400: {
+        description: "Missing JSON body, unsupported provider, or malformed coordinate",
+        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      },
+    },
+  }),
+  async (c) => {
+    const body = (await c.req.json().catch(() => null)) as {
+      provider?: string;
+      coordinate?: string;
+    } | null;
 
-  const parsed = parseCoordinate(body.coordinate ?? "");
-  if (!parsed) {
-    return c.json(
-      { error: "E_LOOKUP_BAD_COORDINATE", message: "coordinate must match {org}/{repo}" },
-      400,
-    );
-  }
-
-  const db = createDb(c.env.DB);
-  const result = await runLookup(c.env, db, parsed);
-  // Embed any materialized source row (indexed, empty, existing-stub-refreshed).
-  // embedSourceSideEffect itself short-circuits when bindings are missing or the
-  // row is already embedded, so re-firing on the existing path is cheap.
-  if (result.source) {
-    try {
-      c.executionCtx.waitUntil(embedSourceSideEffect(c.env, db, result.source.id));
-    } catch {
-      // No ExecutionContext in test environments — embedding is best-effort.
+    if (!body) {
+      return c.json({ error: "E_LOOKUP_BAD_REQUEST", message: "JSON body required" }, 400);
     }
-  }
-  return c.json(result);
-});
+
+    if (body.provider !== "github") {
+      return c.json(
+        {
+          error: "E_LOOKUP_UNSUPPORTED_PROVIDER",
+          message: `provider must be "github" (v1)`,
+        },
+        400,
+      );
+    }
+
+    const parsed = parseCoordinate(body.coordinate ?? "");
+    if (!parsed) {
+      return c.json(
+        { error: "E_LOOKUP_BAD_COORDINATE", message: "coordinate must match {org}/{repo}" },
+        400,
+      );
+    }
+
+    const db = createDb(c.env.DB);
+    const result = await runLookup(c.env, db, parsed);
+    // Embed any materialized source row (indexed, empty, existing-stub-refreshed).
+    // embedSourceSideEffect itself short-circuits when bindings are missing or the
+    // row is already embedded, so re-firing on the existing path is cheap.
+    if (result.source) {
+      try {
+        c.executionCtx.waitUntil(embedSourceSideEffect(c.env, db, result.source.id));
+      } catch {
+        // No ExecutionContext in test environments — embedding is best-effort.
+      }
+    }
+    return c.json(result);
+  },
+);
 
 /**
  * Slug → canonical-home lookup for sources. Lets clients that hold a bare
@@ -395,58 +423,134 @@ lookupRoutes.post("/lookups", async (c) => {
  * gate-by-method (publicReadAuthMiddleware), so the POST below still
  * requires a Bearer.
  */
-lookupRoutes.get("/lookups/source-by-slug", async (c) => {
-  const slug = c.req.query("slug")?.trim();
-  if (!slug) {
-    return c.json({ error: "bad_request", message: "slug query param is required" }, 400);
-  }
-  const db = createDb(c.env.DB);
-  const [row] = await db
-    .select({
-      sourceId: sourcesActive.id,
-      sourceSlug: sourcesActive.slug,
-      orgSlug: organizationsActive.slug,
-    })
-    .from(sourcesActive)
-    .innerJoin(organizationsActive, eq(organizationsActive.id, sourcesActive.orgId))
-    .where(eq(sourcesActive.slug, slug))
-    .orderBy(asc(sourcesActive.createdAt), asc(sourcesActive.id))
-    .limit(1);
-  if (!row) {
-    return c.json({ error: "not_found", message: `No source matches slug "${slug}"` }, 404);
-  }
-  c.header("Sunset", "Sun, 01 Nov 2026 00:00:00 GMT");
-  return c.json(row);
-});
+lookupRoutes.get(
+  "/lookups/source-by-slug",
+  describeRoute({
+    tags: ["Lookups"],
+    summary: "Resolve a bare source slug to its canonical org-scoped home",
+    description:
+      "Translation aid for clients holding a bare source slug. Returns the org-scoped tuple `{ sourceId, sourceSlug, orgSlug }` so callers can rewrite to the canonical `/v1/orgs/:orgSlug/sources/:sourceSlug` path before the bare API path stops resolving slugs (#698 final piece).\n\nReturns the **oldest** match by `(createdAt, id)` so repeated calls land on the same row. Carries `Sunset: Sun, 01 Nov 2026 00:00:00 GMT` on success.",
+    parameters: [
+      {
+        name: "slug",
+        in: "query",
+        required: true,
+        schema: { type: "string" },
+        description: "Bare source slug to resolve.",
+      },
+    ],
+    responses: {
+      200: {
+        description: "Canonical home for the slug",
+        content: { "application/json": { schema: resolver(LookupSourceBySlugResponseSchema) } },
+        headers: {
+          Sunset: {
+            description: "RFC 8594 sunset date for this resolution shape",
+            schema: { type: "string" },
+          },
+        },
+      },
+      400: {
+        description: "Missing `slug` query parameter",
+        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      },
+      404: {
+        description: "No source matches the slug",
+        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      },
+    },
+  }),
+  async (c) => {
+    const slug = c.req.query("slug")?.trim();
+    if (!slug) {
+      return c.json({ error: "bad_request", message: "slug query param is required" }, 400);
+    }
+    const db = createDb(c.env.DB);
+    const [row] = await db
+      .select({
+        sourceId: sourcesActive.id,
+        sourceSlug: sourcesActive.slug,
+        orgSlug: organizationsActive.slug,
+      })
+      .from(sourcesActive)
+      .innerJoin(organizationsActive, eq(organizationsActive.id, sourcesActive.orgId))
+      .where(eq(sourcesActive.slug, slug))
+      .orderBy(asc(sourcesActive.createdAt), asc(sourcesActive.id))
+      .limit(1);
+    if (!row) {
+      return c.json({ error: "not_found", message: `No source matches slug "${slug}"` }, 404);
+    }
+    c.header("Sunset", "Sun, 01 Nov 2026 00:00:00 GMT");
+    return c.json(row);
+  },
+);
 
 /**
  * Slug → canonical-home lookup for products. Same semantics as
  * `/lookups/source-by-slug`. The OSS CLI's `findProduct(operatorInput)` is
  * the primary consumer.
  */
-lookupRoutes.get("/lookups/product-by-slug", async (c) => {
-  const slug = c.req.query("slug")?.trim();
-  if (!slug) {
-    return c.json({ error: "bad_request", message: "slug query param is required" }, 400);
-  }
-  const db = createDb(c.env.DB);
-  const [row] = await db
-    .select({
-      productId: productsActive.id,
-      productSlug: productsActive.slug,
-      orgSlug: organizationsActive.slug,
-    })
-    .from(productsActive)
-    .innerJoin(organizationsActive, eq(organizationsActive.id, productsActive.orgId))
-    .where(eq(productsActive.slug, slug))
-    .orderBy(asc(productsActive.createdAt), asc(productsActive.id))
-    .limit(1);
-  if (!row) {
-    return c.json({ error: "not_found", message: `No product matches slug "${slug}"` }, 404);
-  }
-  c.header("Sunset", "Sun, 01 Nov 2026 00:00:00 GMT");
-  return c.json(row);
-});
+lookupRoutes.get(
+  "/lookups/product-by-slug",
+  describeRoute({
+    tags: ["Lookups"],
+    summary: "Resolve a bare product slug to its canonical org-scoped home",
+    description:
+      "Same semantics as `/v1/lookups/source-by-slug` but for products. Returns `{ productId, productSlug, orgSlug }` so callers can rewrite to `/v1/orgs/:orgSlug/products/:productSlug` before the bare path stops resolving slugs. Oldest match by `(createdAt, id)`. Carries `Sunset: Sun, 01 Nov 2026 00:00:00 GMT` on success.",
+    parameters: [
+      {
+        name: "slug",
+        in: "query",
+        required: true,
+        schema: { type: "string" },
+        description: "Bare product slug to resolve.",
+      },
+    ],
+    responses: {
+      200: {
+        description: "Canonical home for the slug",
+        content: { "application/json": { schema: resolver(LookupProductBySlugResponseSchema) } },
+        headers: {
+          Sunset: {
+            description: "RFC 8594 sunset date for this resolution shape",
+            schema: { type: "string" },
+          },
+        },
+      },
+      400: {
+        description: "Missing `slug` query parameter",
+        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      },
+      404: {
+        description: "No product matches the slug",
+        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      },
+    },
+  }),
+  async (c) => {
+    const slug = c.req.query("slug")?.trim();
+    if (!slug) {
+      return c.json({ error: "bad_request", message: "slug query param is required" }, 400);
+    }
+    const db = createDb(c.env.DB);
+    const [row] = await db
+      .select({
+        productId: productsActive.id,
+        productSlug: productsActive.slug,
+        orgSlug: organizationsActive.slug,
+      })
+      .from(productsActive)
+      .innerJoin(organizationsActive, eq(organizationsActive.id, productsActive.orgId))
+      .where(eq(productsActive.slug, slug))
+      .orderBy(asc(productsActive.createdAt), asc(productsActive.id))
+      .limit(1);
+    if (!row) {
+      return c.json({ error: "not_found", message: `No product matches slug "${slug}"` }, 404);
+    }
+    c.header("Sunset", "Sun, 01 Nov 2026 00:00:00 GMT");
+    return c.json(row);
+  },
+);
 
 /**
  * Domain → canonical owner lookup. Pure resolution; unlike the GitHub
@@ -455,41 +559,73 @@ lookupRoutes.get("/lookups/product-by-slug", async (c) => {
  * separate because a domain alias can target a product directly; we
  * return both shapes so the caller doesn't round-trip again.
  */
-lookupRoutes.get("/lookups/by-domain", async (c) => {
-  const domain = normalizeDomain(c.req.query("domain") ?? "");
-  if (!domain) {
-    return c.json(
-      { error: "bad_request", message: "domain query param must be a valid hostname" },
-      400,
-    );
-  }
+lookupRoutes.get(
+  "/lookups/by-domain",
+  describeRoute({
+    tags: ["Lookups"],
+    summary: "Resolve a domain to its owning org and any matching products",
+    description:
+      "Pure resolution: normalizes the input domain (lowercased, no scheme/path/www), exact-matches against `organizations.domain` (primary) and `domain_aliases.domain` (alias for either an org or a product), and returns whatever it finds. Unknown domains return 404 — there is no on-demand probing for domains, unlike the GitHub coordinate path on `POST /v1/lookups`.\n\nProducts can be populated even when `org` is null — a product alias may point at a domain its parent org doesn't claim as primary.",
+    parameters: [
+      {
+        name: "domain",
+        in: "query",
+        required: true,
+        schema: { type: "string" },
+        description: "Hostname to resolve. Server normalizes (lowercases, strips scheme/path/www).",
+      },
+    ],
+    responses: {
+      200: {
+        description: "Resolved org and/or product matches",
+        content: { "application/json": { schema: resolver(DomainLookupResponseSchema) } },
+      },
+      400: {
+        description: "Missing or invalid `domain` query parameter",
+        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      },
+      404: {
+        description: "Domain doesn't match any registered org or product",
+        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      },
+    },
+  }),
+  async (c) => {
+    const domain = normalizeDomain(c.req.query("domain") ?? "");
+    if (!domain) {
+      return c.json(
+        { error: "bad_request", message: "domain query param must be a valid hostname" },
+        400,
+      );
+    }
 
-  const db = createDb(c.env.DB);
-  const [orgRow, productRows] = await Promise.all([
-    findOrgByDomain(db, domain),
-    db
-      .select({
-        id: productsActive.id,
-        slug: productsActive.slug,
-        name: productsActive.name,
-        orgId: productsActive.orgId,
-        orgSlug: organizationsActive.slug,
-        orgName: organizationsActive.name,
-        category: productsActive.category,
-      })
-      .from(productsActive)
-      .innerJoin(domainAliases, eq(domainAliases.productId, productsActive.id))
-      .innerJoin(organizationsActive, eq(organizationsActive.id, productsActive.orgId))
-      .where(eq(domainAliases.domain, domain))
-      .orderBy(asc(productsActive.name), asc(productsActive.id)),
-  ]);
+    const db = createDb(c.env.DB);
+    const [orgRow, productRows] = await Promise.all([
+      findOrgByDomain(db, domain),
+      db
+        .select({
+          id: productsActive.id,
+          slug: productsActive.slug,
+          name: productsActive.name,
+          orgId: productsActive.orgId,
+          orgSlug: organizationsActive.slug,
+          orgName: organizationsActive.name,
+          category: productsActive.category,
+        })
+        .from(productsActive)
+        .innerJoin(domainAliases, eq(domainAliases.productId, productsActive.id))
+        .innerJoin(organizationsActive, eq(organizationsActive.id, productsActive.orgId))
+        .where(eq(domainAliases.domain, domain))
+        .orderBy(asc(productsActive.name), asc(productsActive.id)),
+    ]);
 
-  if (!orgRow && productRows.length === 0) {
-    return c.json(
-      { error: "not_found", message: `No org or product owns domain "${domain}"` },
-      404,
-    );
-  }
+    if (!orgRow && productRows.length === 0) {
+      return c.json(
+        { error: "not_found", message: `No org or product owns domain "${domain}"` },
+        404,
+      );
+    }
 
-  return c.json({ domain, org: orgRow, products: productRows });
-});
+    return c.json({ domain, org: orgRow, products: productRows });
+  },
+);
