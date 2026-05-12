@@ -1,17 +1,32 @@
 import { Hono } from "hono";
 import { describeRoute, resolver } from "hono-openapi";
+import { z } from "zod";
 import { eq, and, or, count, desc } from "drizzle-orm";
 import { createDb } from "../db.js";
 import { ignoredUrls, blockedUrls, organizations } from "@buildinternet/releases-core/schema";
 import { orgWhere } from "../utils.js";
+import { validateJson } from "../lib/validate.js";
 import type { Env } from "../index.js";
 import { buildListResponse, parseListPagination } from "../lib/pagination.js";
 import {
   OrgIgnoredUrlsResponseSchema,
+  AddIgnoredUrlBodySchema,
   AddIgnoredUrlResponseSchema,
   DeleteIgnoredUrlResponseSchema,
   ErrorResponseSchema,
 } from "@buildinternet/releases-api-types";
+
+/**
+ * Body shape for `POST /v1/admin/blocklist`. Admin-only — kept inline
+ * instead of published through `@buildinternet/releases-api-types`. The
+ * blocklist itself is global (no per-org scope); a row matches either an
+ * exact URL or a parent domain.
+ */
+const AddBlockedUrlBodySchema = z.object({
+  pattern: z.string().min(1),
+  type: z.enum(["exact", "domain"]).optional(),
+  reason: z.string().optional(),
+});
 
 export const ignoreRoutes = new Hono<Env>();
 
@@ -103,7 +118,7 @@ ignoreRoutes.post(
     tags: ["Orgs"],
     summary: "Add a URL to the org ignore list",
     description:
-      "Adds a URL to the org's ignored list. Duplicate URLs are silently skipped (`onConflictDoNothing`). Body: `{ url: string; reason?: string }`. Formal request-body validation via validator middleware is deferred to Phase 2 of #894. Auth is inherited from `publicReadAuthMiddleware`'s non-SAFE_METHODS branch.",
+      "Adds a URL to the org's ignored list. Duplicate URLs are silently skipped (`onConflictDoNothing`). Auth is inherited from `publicReadAuthMiddleware`'s non-SAFE_METHODS branch.",
     security: [{ bearerAuth: [] }],
     responses: {
       201: {
@@ -120,6 +135,7 @@ ignoreRoutes.post(
       },
     },
   }),
+  validateJson(AddIgnoredUrlBodySchema),
   async (c) => {
     const db = createDb(c.env.DB);
     const slug = c.req.param("slug");
@@ -127,15 +143,7 @@ ignoreRoutes.post(
     const [org] = await db.select().from(organizations).where(orgWhere(slug));
     if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
 
-    let body: { url: string; reason?: string };
-    try {
-      body = await c.req.json<{ url: string; reason?: string }>();
-    } catch {
-      return c.json({ error: "bad_request", message: "Malformed JSON body" }, 400);
-    }
-    if (!body.url)
-      return c.json({ error: "bad_request", message: "Missing required field: url" }, 400);
-
+    const body = c.req.valid("json");
     await db
       .insert(ignoredUrls)
       .values({
@@ -237,12 +245,9 @@ ignoreRoutes.get("/admin/blocklist", async (c) => {
   return c.json(buildListResponse(rows, pagination, Number(totalRow[0]?.n ?? 0)));
 });
 
-ignoreRoutes.post("/admin/blocklist", async (c) => {
+ignoreRoutes.post("/admin/blocklist", validateJson(AddBlockedUrlBodySchema), async (c) => {
   const db = createDb(c.env.DB);
-  const body = await c.req.json<{ pattern: string; type?: "exact" | "domain"; reason?: string }>();
-
-  if (!body.pattern)
-    return c.json({ error: "bad_request", message: "Missing required field: pattern" }, 400);
+  const body = c.req.valid("json");
 
   await db
     .insert(blockedUrls)
