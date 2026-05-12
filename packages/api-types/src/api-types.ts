@@ -83,6 +83,15 @@ import type {
   DomainLookupProductSchema,
   DomainLookupResponseSchema,
 } from "./schemas/lookups.js";
+import type {
+  SearchOrgHitSchema,
+  SearchCatalogHitSchema,
+  SearchSourceHitSchema,
+  SearchReleaseHitSchema,
+  SearchChunkHitSchema,
+  LookupResultPayloadSchema,
+  UnifiedSearchResponseSchema,
+} from "./schemas/search.js";
 
 export {
   MediaItemSchema,
@@ -159,6 +168,15 @@ export {
   ReleaseWithMediaRowSchema,
   ReleasesWithMediaResponseSchema,
 } from "./schemas/releases.js";
+export {
+  SearchOrgHitSchema,
+  SearchCatalogHitSchema,
+  SearchSourceHitSchema,
+  SearchReleaseHitSchema,
+  SearchChunkHitSchema,
+  LookupResultPayloadSchema,
+  UnifiedSearchResponseSchema,
+} from "./schemas/search.js";
 
 // ── Media ──
 
@@ -314,43 +332,13 @@ export type ReleaseSummaryItem = z.infer<typeof ReleaseSummaryItemSchema>;
 
 // ── Search ──
 
-export interface SearchOrgHit {
-  slug: string;
-  name: string;
-  domain: string | null;
-  avatarUrl: string | null;
-  category: string | null;
-}
-
-/**
- * Unified catalog entry — either a product row or a standalone source
- * presented as product-shaped. `kind` routes clicks to the right URL but
- * the two forms are otherwise interchangeable for display. `kind` (not
- * `type`) because source rows already carry `type: github|scrape|feed|agent`
- * on the wire.
- */
-export interface SearchCatalogHit {
-  slug: string;
-  name: string;
-  orgSlug: string | null;
-  orgName: string | null;
-  category: string | null;
-  kind: "product" | "source";
-  sourceSlug?: string;
-  sourceType?: string;
-}
+export type SearchOrgHit = z.infer<typeof SearchOrgHitSchema>;
+export type SearchCatalogHit = z.infer<typeof SearchCatalogHitSchema>;
 
 /** @deprecated Use SearchCatalogHit. */
 export type SearchProductHit = SearchCatalogHit;
 
-export interface SearchSourceHit {
-  slug: string;
-  name: string;
-  type: string;
-  orgSlug: string | null;
-  orgName: string | null;
-  productSlug: string | null;
-}
+export type SearchSourceHit = z.infer<typeof SearchSourceHitSchema>;
 
 export interface RawSourceHit extends SearchSourceHit {
   productName?: string;
@@ -398,59 +386,8 @@ export function foldSourcesIntoCatalog(
 /** @deprecated Use foldSourcesIntoCatalog. */
 export const foldSourcesIntoProducts = foldSourcesIntoCatalog;
 
-export interface SearchReleaseHit {
-  id: string;
-  sourceSlug: string;
-  sourceName: string;
-  /** Source type (github, scrape, feed, agent) — drives the byline icon. */
-  sourceType?: string;
-  orgSlug: string | null;
-  /** Owning organization's display name — byline disambiguation. */
-  orgName?: string | null;
-  version: string | null;
-  title: string;
-  summary: string;
-  /** AI-generated headline (#852, renamed in #860). Optional + nullable: most rows are unpopulated. */
-  titleGenerated?: string | null;
-  /** AI-generated smart-brevity headline (#852, renamed in #860). Same caveat as titleGenerated. */
-  titleShort?: string | null;
-  /**
-   * Full release body, media URLs hydrated through the MEDIA_ORIGIN proxy.
-   * Present so the web can render the same markdown + thumbnail treatment
-   * as the org/source feeds instead of a plain summary snippet.
-   */
-  content?: string;
-  /** Release media with r2Url resolved. Undefined means "not hydrated". */
-  media?: MediaItem[];
-  publishedAt: string | null;
-  /**
-   * Hybrid fusion score. Present on hybrid/semantic responses (including
-   * degraded fallbacks); absent on the legacy lexical path. Clients can
-   * use this to interleave release and chunk hits into a single ranked list.
-   */
-  score?: number;
-  /** Release type. See {@link ReleaseType}. */
-  type?: ReleaseType;
-}
-
-/**
- * A heading-aware CHANGELOG.md slice returned by hybrid / semantic search.
- * Clients can deep-link to `/source/<sourceSlug>?tab=changelog&offset=<offset>`
- * to read the surrounding file content.
- */
-export interface SearchChunkHit {
-  sourceSlug: string;
-  sourceName: string;
-  orgSlug: string | null;
-  /** Owning organization's display name — byline disambiguation. */
-  orgName?: string | null;
-  filePath: string;
-  offset: number;
-  length: number;
-  heading: string | null;
-  snippet: string;
-  score: number;
-}
+export type SearchReleaseHit = z.infer<typeof SearchReleaseHitSchema>;
+export type SearchChunkHit = z.infer<typeof SearchChunkHitSchema>;
 
 // ── Lookups ──
 
@@ -466,76 +403,11 @@ export type DomainLookupOrg = z.infer<typeof DomainLookupOrgSchema>;
 export type DomainLookupProduct = z.infer<typeof DomainLookupProductSchema>;
 export type DomainLookupResponse = z.infer<typeof DomainLookupResponseSchema>;
 
-/**
- * Slim wire payload embedded in a search response when the query is a GitHub
- * coordinate (org/repo) and no existing entity matched. The server performs an
- * on-demand lookup and includes the result here so the client can surface a
- * "just indexed" or "not found" rail without a second round trip.
- */
-export interface LookupResultPayload {
-  status: LookupStatus;
-  source?: {
-    id: string;
-    slug: string;
-    name: string;
-    url: string;
-    discovery: "curated" | "agent" | "on_demand";
-  };
-  releases?: Array<{
-    id: string;
-    version: string | null;
-    title: string;
-    publishedAt: string | null;
-  }>;
-  /**
-   * Unambiguous "did you mean" rail: the curated org that owns GitHub repos
-   * under the same org segment, plus its top sources. Null when the org
-   * segment matches multiple curated orgs or none.
-   */
-  relatedOrg: {
-    org: { id: string; slug: string; name: string };
-    sources: Array<{ id: string; slug: string; name: string; url: string }>;
-  } | null;
-}
-
-export interface UnifiedSearchResponse {
-  query: string;
-  /**
-   * Normalized form of `?domain=` when the caller passed it. The server
-   * does the normalization once and echoes the canonical form back so
-   * clients don't have to re-normalize for analytics or display. Absent
-   * when no domain filter was applied.
-   */
-  domain?: string;
-  /**
-   * Outcome of the `?domain=` resolution step. `"matched"` means the
-   * domain resolved to a known org and results below are scoped to it.
-   * `"not_found"` means the domain didn't match anything; in that case
-   * orgs/catalog/releases will all be empty arrays — the caller can
-   * distinguish "no hits in scope" from "scope didn't exist."
-   */
-  domainStatus?: "matched" | "not_found";
-  orgs: SearchOrgHit[];
-  /** Products and standalone sources folded into a single list. */
-  catalog: SearchCatalogHit[];
-  /** @deprecated Use `catalog`. Kept as an alias populated with the same array. */
-  products: SearchCatalogHit[];
-  sources: SearchSourceHit[];
-  releases: SearchReleaseHit[];
-  /** Present on hybrid/semantic responses; omitted on pure lexical. */
-  chunks?: SearchChunkHit[];
-  /** Mode actually used by the server. Present for semantic/hybrid responses. */
-  mode?: "lexical" | "semantic" | "hybrid";
-  /** True when a hybrid/semantic request fell back to lexical. */
-  degraded?: boolean;
-  /** Human-readable reason for degradation (e.g., missing Vectorize binding). */
-  degradedReason?: string;
-  /**
-   * On-demand lookup result. Present when the query parsed as a GitHub
-   * `org/repo` coordinate and no existing entities matched. Null otherwise.
-   */
-  lookup?: LookupResultPayload | null;
-}
+// Slim wire payload embedded in a search response when the query is a GitHub
+// coordinate. `LookupResultPayload` is the search-embedded slim variant;
+// `LookupResponse` (above) is the thicker payload returned by POST /v1/lookups.
+export type LookupResultPayload = z.infer<typeof LookupResultPayloadSchema>;
+export type UnifiedSearchResponse = z.infer<typeof UnifiedSearchResponseSchema>;
 
 // ── Overview Pages ──
 
