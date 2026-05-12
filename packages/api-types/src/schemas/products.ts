@@ -67,10 +67,12 @@ export const ProductDetailSchema = ProductRowSchema.extend({
 });
 
 /**
- * Body accepted by `POST /v1/products`. `category` is a free-form string at
- * the wire boundary so callers can pass either a canonical slug or one of its
- * configured aliases (resolved server-side via `resolveCategoryInput`).
- * Responses always carry the canonical slug.
+ * Body accepted by `POST /v1/products`. `category` is a non-empty string at
+ * the wire boundary so callers can pass either a canonical slug or one of
+ * its configured aliases (resolved server-side via `resolveCategoryInput`).
+ * Responses always carry the canonical slug. Empty strings are rejected so
+ * the truthy-guard around `resolveCategoryInput` in the handler can't be
+ * bypassed into persisting an invalid `""` value.
  */
 export const CreateProductBodySchema = z.object({
   name: z.string().min(1),
@@ -79,16 +81,20 @@ export const CreateProductBodySchema = z.object({
   slug: z.string().optional(),
   url: z.string().optional(),
   description: z.string().optional(),
-  category: z.string().optional(),
+  category: z.string().min(1).optional(),
   tags: z.array(z.string()).optional(),
 });
 
-/** Body accepted by `PATCH /v1/products/:slug`. Same lenient `category` rule. */
+/**
+ * Body accepted by `PATCH /v1/products/:slug`. Same alias-allowed string rule
+ * as create, plus `null` to explicitly clear the overlay. Empty strings stay
+ * rejected so callers must pick between a slug/alias or `null`.
+ */
 export const UpdateProductBodySchema = z.object({
   name: z.string().optional(),
   url: z.string().nullable().optional(),
   description: z.string().nullable().optional(),
-  category: z.string().nullable().optional(),
+  category: z.string().min(1).nullable().optional(),
   tags: z.array(z.string()).optional(),
   aliases: z.array(z.string()).optional(),
 });
