@@ -1,4 +1,4 @@
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { describeRoute, resolver } from "hono-openapi";
 import { and, count, eq, sql } from "drizzle-orm";
 import { createDb } from "../db.js";
@@ -606,13 +606,47 @@ const patchProductRoute = describeRoute({
 productRoutes.patch("/products/:slug", patchProductRoute, patchProductHandler);
 productRoutes.patch("/orgs/:orgSlug/products/:productSlug", patchProductRoute, patchProductHandler);
 
+// Shared body validation for PUT/DELETE /products/:identifier/tags. Raw
+// c.req.json() throws on malformed JSON (translated to 500 by the global
+// onError) and returns `{}` / arbitrary shapes for valid JSON that just
+// doesn't match — reading `body.tags.length` then explodes. Validate
+// once, in one place.
+async function parseTagsBody(
+  c: Context<Env>,
+): Promise<{ ok: true; tags: string[] } | { ok: false; response: Response }> {
+  let body: unknown;
+  try {
+    body = await c.req.json();
+  } catch {
+    return {
+      ok: false,
+      response: c.json({ error: "bad_request", message: "Invalid JSON body" }, 400),
+    };
+  }
+  if (
+    typeof body !== "object" ||
+    body === null ||
+    !Array.isArray((body as { tags?: unknown }).tags) ||
+    !(body as { tags: unknown[] }).tags.every((t) => typeof t === "string")
+  ) {
+    return {
+      ok: false,
+      response: c.json(
+        { error: "bad_request", message: "`tags` must be an array of strings" },
+        400,
+      ),
+    };
+  }
+  return { ok: true, tags: (body as { tags: string[] }).tags };
+}
+
 productRoutes.get(
   "/products/:identifier/tags",
   describeRoute({
     tags: ["Products"],
     summary: "List product tags",
     description:
-      "Returns the product's tag names sorted alphabetically. Empty array when the product has no tags. Bare-path callers must pass a `prod_…` ID; bare slugs return 400 (#698) — slug-only callers should use the org-scoped variant or `/v1/lookups/product-by-slug`.",
+      "Returns the product's tag names sorted alphabetically. Empty array when the product has no tags. Only a typed `prod_…` ID resolves on this path; bare slugs return 400 (#698). Slug-only callers should first resolve via `GET /v1/lookups/product-by-slug?slug=…` and re-hit this endpoint with the returned `productId`.",
     responses: {
       200: {
         description: "Tag names",
@@ -657,7 +691,7 @@ productRoutes.put(
         content: { "application/json": { schema: resolver(ProductTagsMutationResponseSchema) } },
       },
       400: {
-        description: "Bare slug supplied on `/products/:identifier/tags`",
+        description: "Malformed body, or bare slug supplied on `/products/:identifier/tags`",
         content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
       },
       404: {
@@ -668,7 +702,8 @@ productRoutes.put(
   }),
   async (c) => {
     const db = createDb(c.env.DB);
-    const body = await c.req.json<{ tags: string[] }>();
+    const body = await parseTagsBody(c);
+    if (!body.ok) return body.response;
     const product = await resolveProductFromContext(c, db);
     if (!product) return c.json({ error: "not_found", message: "Product not found" }, 404);
 
@@ -698,7 +733,7 @@ productRoutes.delete(
         content: { "application/json": { schema: resolver(ProductTagsMutationResponseSchema) } },
       },
       400: {
-        description: "Bare slug supplied on `/products/:identifier/tags`",
+        description: "Malformed body, or bare slug supplied on `/products/:identifier/tags`",
         content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
       },
       404: {
@@ -709,7 +744,8 @@ productRoutes.delete(
   }),
   async (c) => {
     const db = createDb(c.env.DB);
-    const body = await c.req.json<{ tags: string[] }>();
+    const body = await parseTagsBody(c);
+    if (!body.ok) return body.response;
     const product = await resolveProductFromContext(c, db);
     if (!product) return c.json({ error: "not_found", message: "Product not found" }, 404);
 
