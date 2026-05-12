@@ -74,6 +74,16 @@ describe("POST /v1/orgs (validateJson)", () => {
     expect(body.error).toBe("bad_request");
   });
 
+  test("400 when category is the empty string (alias-normalization boundary)", async () => {
+    // Pre-tightening, the handler's truthy-guard around resolveCategoryInput
+    // would have skipped normalization for "" and persisted the blank as the
+    // category column. The schema's .min(1) now rejects it at the boundary.
+    const res = await call("/orgs", "POST", { name: "Acme", category: "" });
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toBe("bad_request");
+  });
+
   test("happy path creates the org", async () => {
     const res = await call("/orgs", "POST", { name: "Acme Co" });
     expect(res.status).toBe(201);
