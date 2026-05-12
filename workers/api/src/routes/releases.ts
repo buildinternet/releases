@@ -353,7 +353,10 @@ releaseRoutes.post(
       return c.json({ error: "bad_request", message: "Invalid JSON body" }, 400);
     }
 
-    const coverageIds = Array.isArray(body.coverageIds) ? body.coverageIds : [];
+    const rawCoverageIds = Array.isArray(body.coverageIds) ? body.coverageIds : [];
+    // Dedupe: duplicate IDs in the request would otherwise redundantly upsert
+    // the same row via ON CONFLICT DO UPDATE and inflate the `linked` count.
+    const coverageIds = [...new Set(rawCoverageIds)];
     if (coverageIds.length === 0) {
       return c.json(
         { error: "bad_request", message: "coverageIds must be a non-empty array" },
