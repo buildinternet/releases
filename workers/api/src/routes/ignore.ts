@@ -249,22 +249,34 @@ ignoreRoutes.get("/admin/blocklist", async (c) => {
   return c.json(buildListResponse(rows, pagination, Number(totalRow[0]?.n ?? 0)));
 });
 
-ignoreRoutes.post("/admin/blocklist", validateJson(AddBlockedUrlBodySchema), async (c) => {
-  const db = createDb(c.env.DB);
-  const body = c.req.valid("json");
+ignoreRoutes.post(
+  "/admin/blocklist",
+  describeRoute({
+    hide: hideInProduction,
+    tags: ["Admin"],
+    summary: "Add a URL or domain to the global blocklist",
+    description:
+      "Admin-only. Adds a pattern (exact URL or bare domain) to the global blocklist so the ingest pipeline never stores releases from matching pages. Duplicate patterns are silently skipped.",
+    security: [{ bearerAuth: [] }],
+  }),
+  validateJson(AddBlockedUrlBodySchema),
+  async (c) => {
+    const db = createDb(c.env.DB);
+    const body = c.req.valid("json");
 
-  await db
-    .insert(blockedUrls)
-    .values({
-      pattern: body.pattern,
-      type: body.type ?? "exact",
-      reason: body.reason ?? null,
-      createdAt: new Date().toISOString(),
-    })
-    .onConflictDoNothing();
+    await db
+      .insert(blockedUrls)
+      .values({
+        pattern: body.pattern,
+        type: body.type ?? "exact",
+        reason: body.reason ?? null,
+        createdAt: new Date().toISOString(),
+      })
+      .onConflictDoNothing();
 
-  return c.json({ blocked: true }, 201);
-});
+    return c.json({ blocked: true }, 201);
+  },
+);
 
 ignoreRoutes.delete("/admin/blocklist/:pattern", async (c) => {
   const db = createDb(c.env.DB);
