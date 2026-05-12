@@ -27,12 +27,12 @@ const SCALAR_CONFIG = {
     ogTitle: "Releases API Reference",
     description: "Interactive reference for the Releases changelog registry REST API.",
   },
+  // The "Powered by Scalar" link sits in the bottom row of the sidebar's
+  // `.darklight-reference` footer, in a flex-1 wrapper that's a sibling of the
+  // dark-mode toggle. Hiding the wrapper keeps the toggle visible. Selector
+  // verified against the rendered DOM in 1.x; revisit if Scalar restructures.
   customCss:
-    [
-      ".scalar-footer",
-      '[class*="powered-by-scalar"]',
-      'a[href*="scalar.com"][class*="powered"]',
-    ].join(",\n") + " { display: none !important; }",
+    "aside.t-doc__sidebar .darklight-reference .flex-1.text-sidebar-c-2 { display: none !important; }",
 };
 const SCALAR_HTML = `<!doctype html>
 <html lang="en">
