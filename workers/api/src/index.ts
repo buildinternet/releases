@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import { HTTPException } from "hono/http-exception";
 import { authMiddleware, publicReadAuthMiddleware } from "./middleware/auth.js";
 import { publicRateLimitMiddleware } from "./middleware/rate-limit.js";
 import { dbHealthCheck } from "./middleware/db-health.js";
@@ -171,6 +172,18 @@ app.onError((err, c) => {
   // /v1/lookups/*-by-slug resolver).
   if (err instanceof BareSlugRejected) {
     return c.json({ error: "bare_slug_rejected", entity: err.entity, message: err.message }, 400);
+  }
+  // Hono's underlying validator throws `HTTPException(400)` for malformed JSON
+  // bodies (un-parseable bytes — schema-level validation goes through our
+  // `validateJson` hook). Surface it in the same envelope as schema failures
+  // so clients see `{ error: "bad_request", message }` consistently instead
+  // of a 500 with stringified Hono internals.
+  if (err instanceof HTTPException) {
+    const status = err.status;
+    return c.json(
+      { error: status === 400 ? "bad_request" : "http_error", message: err.message },
+      status,
+    );
   }
   const message = err instanceof Error ? err.message : String(err);
   return c.json({ error: "internal_error", message }, 500);

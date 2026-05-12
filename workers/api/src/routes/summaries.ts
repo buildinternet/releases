@@ -4,10 +4,12 @@ import { eq, and, desc } from "drizzle-orm";
 import { createDb } from "../db.js";
 import { releaseSummaries, sources } from "@buildinternet/releases-core/schema";
 import { sourceMatchByIdOrSlug } from "../utils.js";
+import { validateJson } from "../lib/validate.js";
 import type { Env } from "../index.js";
 import {
   ErrorResponseSchema,
   SourceSummariesResponseSchema,
+  CreateSourceSummaryBodySchema,
   CreateSourceSummaryResponseSchema,
 } from "@buildinternet/releases-api-types";
 
@@ -60,71 +62,13 @@ app.get(
   },
 );
 
-/** Validate + extract the POST /summaries body. Returns 400 on parse/type failures. */
-function parseSummaryBody(body: unknown):
-  | {
-      ok: true;
-      data: {
-        type: "rolling" | "monthly";
-        year?: number | null;
-        month?: number | null;
-        windowDays?: number | null;
-        summary: string;
-        releaseCount: number;
-      };
-    }
-  | { ok: false; error: string } {
-  if (!body || typeof body !== "object" || Array.isArray(body)) {
-    return { ok: false, error: "Body must be a JSON object" };
-  }
-  const b = body as Record<string, unknown>;
-  if (b.type !== "rolling" && b.type !== "monthly") {
-    return { ok: false, error: "type must be 'rolling' or 'monthly'" };
-  }
-  if (typeof b.summary !== "string" || b.summary.length === 0) {
-    return { ok: false, error: "summary must be a non-empty string" };
-  }
-  if (!Number.isInteger(b.releaseCount) || (b.releaseCount as number) < 0) {
-    return { ok: false, error: "releaseCount must be a non-negative integer" };
-  }
-  // year / month / windowDays are optional + nullable; when defined and not
-  // null, they MUST be integers. Silently dropping wrong-typed values masks
-  // client bugs; reject explicitly. Bound-check month and windowDays where the
-  // bound is uncontroversial (calendar month, positive window). Skip a year
-  // range check — too arbitrary.
-  if (b.year !== undefined && b.year !== null && !Number.isInteger(b.year)) {
-    return { ok: false, error: "year must be an integer when provided" };
-  }
-  if (b.month !== undefined && b.month !== null) {
-    if (!Number.isInteger(b.month) || (b.month as number) < 1 || (b.month as number) > 12) {
-      return { ok: false, error: "month must be an integer 1..12 when provided" };
-    }
-  }
-  if (b.windowDays !== undefined && b.windowDays !== null) {
-    if (!Number.isInteger(b.windowDays) || (b.windowDays as number) < 1) {
-      return { ok: false, error: "windowDays must be a positive integer when provided" };
-    }
-  }
-  return {
-    ok: true,
-    data: {
-      type: b.type,
-      year: b.year === undefined ? undefined : (b.year as number | null),
-      month: b.month === undefined ? undefined : (b.month as number | null),
-      windowDays: b.windowDays === undefined ? undefined : (b.windowDays as number | null),
-      summary: b.summary,
-      releaseCount: b.releaseCount as number,
-    },
-  };
-}
-
 app.post(
   "/sources/:slug/summaries",
   describeRoute({
     tags: ["Sources"],
     summary: "Upsert a release summary",
     description:
-      "Upserts an AI-generated release summary for the source. On conflict (`UNIQUE(sourceId, orgId, type, year, month)`) updates `summary`, `releaseCount`, `windowDays`, and `generatedAt`. Body: `{ type, summary, releaseCount, year?, month?, windowDays? }`. Body documented in prose — formal `requestBody` modelling is deferred to the validator-middleware phase of #894. Auth inherited from `publicReadAuthMiddleware`'s non-SAFE_METHODS branch — Bearer token required.",
+      "Upserts an AI-generated release summary for the source. On conflict (`UNIQUE(sourceId, orgId, type, year, month)`) updates `summary`, `releaseCount`, `windowDays`, and `generatedAt`. Auth inherited from `publicReadAuthMiddleware`'s non-SAFE_METHODS branch — Bearer token required.",
     security: [{ bearerAuth: [] }],
     responses: {
       200: {
@@ -141,21 +85,11 @@ app.post(
       },
     },
   }),
+  validateJson(CreateSourceSummaryBodySchema),
   async (c) => {
     const db = createDb(c.env.DB);
     const slug = c.req.param("slug");
-
-    let rawBody: unknown;
-    try {
-      rawBody = await c.req.json();
-    } catch {
-      return c.json({ error: "bad_request", message: "Invalid JSON body" }, 400);
-    }
-    const parsed = parseSummaryBody(rawBody);
-    if (!parsed.ok) {
-      return c.json({ error: "bad_request", message: parsed.error }, 400);
-    }
-    const body = parsed.data;
+    const body = c.req.valid("json");
 
     const [source] = await db
       .select({ id: sources.id })
