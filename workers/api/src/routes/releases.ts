@@ -18,11 +18,13 @@ import {
 import {
   ReleaseLatestResponseSchema,
   ReleaseCoverageResponseSchema,
+  LinkReleaseCoverageBodySchema,
   LinkReleaseCoverageResponseSchema,
   UnlinkReleaseCoverageResponseSchema,
   ReleasesWithMediaResponseSchema,
   ErrorResponseSchema,
 } from "@buildinternet/releases-api-types";
+import { validateJson } from "../lib/validate.js";
 
 export const releaseRoutes = new Hono<Env>();
 
@@ -277,8 +279,6 @@ releaseRoutes.get(
 // admin key. That policy lives in the mount, not in this file.
 // ---------------------------------------------------------------------------
 
-const DECIDED_BY_PATTERN = /^(human:|agent:)/;
-
 releaseRoutes.get(
   "/releases/:id/coverage",
   describeRoute({
@@ -341,34 +341,15 @@ releaseRoutes.post(
       },
     },
   }),
+  validateJson(LinkReleaseCoverageBodySchema),
   async (c) => {
     const db = createDb(c.env.DB);
     const canonicalId = c.req.param("id");
+    const body = c.req.valid("json");
 
-    type Body = { coverageIds?: string[]; reason?: string | null; decidedBy?: string };
-    let body: Body;
-    try {
-      body = await c.req.json<Body>();
-    } catch {
-      return c.json({ error: "bad_request", message: "Invalid JSON body" }, 400);
-    }
-
-    const rawCoverageIds = Array.isArray(body.coverageIds) ? body.coverageIds : [];
     // Dedupe: duplicate IDs in the request would otherwise redundantly upsert
     // the same row via ON CONFLICT DO UPDATE and inflate the `linked` count.
-    const coverageIds = [...new Set(rawCoverageIds)];
-    if (coverageIds.length === 0) {
-      return c.json(
-        { error: "bad_request", message: "coverageIds must be a non-empty array" },
-        400,
-      );
-    }
-    if (!body.decidedBy || !DECIDED_BY_PATTERN.test(body.decidedBy)) {
-      return c.json(
-        { error: "bad_request", message: "decidedBy must be prefixed with 'human:' or 'agent:'" },
-        400,
-      );
-    }
+    const coverageIds = [...new Set(body.coverageIds)];
     if (coverageIds.includes(canonicalId)) {
       return c.json(
         { error: "bad_request", message: "a release cannot be coverage of itself" },
