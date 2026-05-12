@@ -45,6 +45,8 @@ import {
   SourceDetailSchema,
   SourceMutationResponseSchema,
   SourceChangelogResponseSchema,
+  CreateSourceBodySchema,
+  SourceContentHashBodySchema,
   ErrorResponseSchema,
   ReleaseDetailResponseSchema,
   ReleasePatchResponseSchema,
@@ -70,6 +72,7 @@ import {
   FeedSourcesResponseSchema,
   ChangedSourcesResponseSchema,
 } from "@buildinternet/releases-api-types";
+import { validateJson } from "../lib/validate.js";
 import {
   getStatusHub,
   orgWhere,
@@ -928,20 +931,12 @@ sourceRoutes.delete("/sources/:slug/releases", deleteSourceReleasesRoute, async 
 const postContentHashHandler = async (c: import("hono").Context<Env>) => {
   const db = createDb(c.env.DB);
   const peek = c.req.query("peek") === "true";
-
-  let body: { contentHash: string };
-  try {
-    const parsed = await c.req.json<unknown>();
-    if (!isJsonObject(parsed)) {
-      return c.json({ error: "bad_request", message: "Body must be a JSON object" }, 400);
-    }
-    body = parsed as { contentHash: string };
-  } catch {
-    return c.json({ error: "bad_request", message: "Invalid JSON body" }, 400);
-  }
-  if (typeof body.contentHash !== "string" || body.contentHash.length === 0) {
-    return c.json({ error: "bad_request", message: "contentHash must be a non-empty string" }, 400);
-  }
+  // Validator middleware (registered alongside this handler) parsed the body.
+  // Cast through the request because this standalone handler's type doesn't
+  // carry the schema info.
+  const body = (c.req as unknown as { valid: (target: "json") => { contentHash: string } }).valid(
+    "json",
+  );
 
   const src = await resolveSourceFromContext(c, db);
   if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
@@ -961,7 +956,7 @@ const postContentHashRoute = describeRoute({
   tags: ["Sources"],
   summary: "Check or update content hash",
   description:
-    "Compares `contentHash` against the source's stored `lastContentHash`. Returns `{ unchanged: true }` when they match. When they differ, updates the stored hash (unless `?peek=true`) and returns `{ unchanged: false }`. Used by the fetch pipeline to skip unchanged scrape payloads without a full parse pass. Body: `{ contentHash: string }`. Body documented in prose — formal `requestBody` modelling is deferred to the validator-middleware phase of #894. Auth inherited from `publicReadAuthMiddleware`'s non-SAFE_METHODS branch — Bearer token required.",
+    "Compares `contentHash` against the source's stored `lastContentHash`. Returns `{ unchanged: true }` when they match. When they differ, updates the stored hash (unless `?peek=true`) and returns `{ unchanged: false }`. Used by the fetch pipeline to skip unchanged scrape payloads without a full parse pass. Auth inherited from `publicReadAuthMiddleware`'s non-SAFE_METHODS branch — Bearer token required.",
   security: [{ bearerAuth: [] }],
   responses: {
     200: {
@@ -978,10 +973,16 @@ const postContentHashRoute = describeRoute({
     },
   },
 });
-sourceRoutes.post("/sources/:slug/content-hash", postContentHashRoute, postContentHashHandler);
+sourceRoutes.post(
+  "/sources/:slug/content-hash",
+  postContentHashRoute,
+  validateJson(SourceContentHashBodySchema),
+  postContentHashHandler,
+);
 sourceRoutes.post(
   "/orgs/:orgSlug/sources/:sourceSlug/content-hash",
   postContentHashRoute,
+  validateJson(SourceContentHashBodySchema),
   postContentHashHandler,
 );
 
@@ -2059,7 +2060,7 @@ sourceRoutes.post(
     tags: ["Sources"],
     summary: "Create source",
     description:
-      "Body fields: `name`, `url` (required); `type?`, `slug?`, `orgId?` / `orgSlug?` (one required), `productId?` / `productSlug?`, `metadata?`, `isPrimary?`. Slug auto-suffixes on collision (up to 20 attempts). Response carries the row plus a resolved `org { id, slug, name }` block and `productSlug`.",
+      "Slug auto-suffixes on collision (up to 20 attempts). Response carries the row plus a resolved `org { id, slug, name }` block and `productSlug`.",
     security: [{ bearerAuth: [] }],
     responses: {
       201: {
@@ -2076,24 +2077,10 @@ sourceRoutes.post(
       },
     },
   }),
+  validateJson(CreateSourceBodySchema),
   async (c) => {
     const db = createDb(c.env.DB);
-    const body = await c.req.json<{
-      name: string;
-      url: string;
-      type?: string;
-      slug?: string;
-      orgId?: string;
-      orgSlug?: string;
-      productId?: string;
-      productSlug?: string;
-      metadata?: string;
-      isPrimary?: boolean;
-    }>();
-
-    if (!body.name || !body.url) {
-      return c.json({ error: "bad_request", message: "Missing required fields: name, url" }, 400);
-    }
+    const body = c.req.valid("json");
 
     const baseSlug = body.slug ?? toSlug(body.name);
     if (isReservedSlug(baseSlug, "nested")) {
@@ -2107,20 +2094,10 @@ sourceRoutes.post(
       );
     }
 
-    // Reject unknown source types at the boundary — the typed cast in
-    // insertValues only narrows for TS; D1's text column has no enum CHECK,
-    // so an unvalidated body.type would persist as-is.
-    if (body.type !== undefined && !(SOURCE_TYPES as readonly string[]).includes(body.type)) {
-      return c.json(
-        {
-          error: "bad_request",
-          message: `Invalid source type "${body.type}". Allowed: ${SOURCE_TYPES.join(", ")}.`,
-        },
-        400,
-      );
-    }
+    // The schema's `SourceTypeSchema` enum already rejects unknown source
+    // types at the boundary, so the handler-side guard is gone.
     // Auto-detect feed type when metadata contains a feedUrl and no explicit type was provided
-    let type: SourceType = (body.type as SourceType | undefined) ?? "scrape";
+    let type: SourceType = body.type ?? "scrape";
     if (!body.type && body.metadata) {
       try {
         const meta = JSON.parse(body.metadata);
