@@ -1,12 +1,16 @@
-import { Hono, type Context } from "hono";
+import { Hono } from "hono";
 import { describeRoute, resolver } from "hono-openapi";
 import {
   OrgListResponseSchema,
   OrgDetailSchema,
+  CreateOrgBodySchema,
+  UpdateOrgBodySchema,
   ErrorResponseSchema,
   OrgAccountsResponseSchema,
   OrgAccountItemSchema,
+  AddOrgAccountBodySchema,
   OrgTagsResponseSchema,
+  OrgTagsBodySchema,
   OrgTagsMutationResponseSchema,
   OrgCatalogResponseSchema,
   OrgCollectionsResponseSchema,
@@ -15,10 +19,12 @@ import {
   OrgSparklinesResponseSchema,
   OrgReleasesFeedResponseSchema,
   OrgRecentReleasesResponseSchema,
+  CreateTagBodySchema,
   TagRowSchema,
   DeleteOrgAccountResponseSchema,
   type CollectionListItem,
 } from "@buildinternet/releases-api-types";
+import { validateJson } from "../lib/validate.js";
 import { eq, count, max, min, and, sql, inArray, gte, desc } from "drizzle-orm";
 import { createDb } from "../db.js";
 import {
@@ -77,38 +83,6 @@ import { embedAndUpsertEntities, type EntityKind } from "@releases/search/embed-
 import { buildEmbedConfig } from "../lib/embed-config.js";
 import { logEvent } from "@releases/lib/log-event";
 import { buildListResponse, parseListPagination } from "../lib/pagination.js";
-
-// Shared body validation for PUT/DELETE /orgs/:slug/tags. Catches JSON parse
-// failures (which would 500 through the global onError) and validates that
-// `tags` is an array of strings.
-async function parseOrgTagsBody(
-  c: Context<Env>,
-): Promise<{ ok: true; tags: string[] } | { ok: false; response: Response }> {
-  let body: unknown;
-  try {
-    body = await c.req.json();
-  } catch {
-    return {
-      ok: false,
-      response: c.json({ error: "bad_request", message: "Invalid JSON body" }, 400),
-    };
-  }
-  if (
-    typeof body !== "object" ||
-    body === null ||
-    !Array.isArray((body as { tags?: unknown }).tags) ||
-    !(body as { tags: unknown[] }).tags.every((t) => typeof t === "string")
-  ) {
-    return {
-      ok: false,
-      response: c.json(
-        { error: "bad_request", message: "`tags` must be an array of strings" },
-        400,
-      ),
-    };
-  }
-  return { ok: true, tags: (body as { tags: string[] }).tags };
-}
 
 export const orgRoutes = new Hono<Env>();
 
@@ -428,7 +402,7 @@ orgRoutes.post(
     tags: ["Orgs"],
     summary: "Create organization",
     description:
-      "Body fields: `name` (required), `slug?`, `domain?`, `description?`, `category?`, `tags?: string[]`. Slug derived from name when omitted.",
+      "Slug derived from `name` when omitted. `category` is resolved through the alias overlay (e.g. `e-commerce` → `commerce`) before persisting.",
     security: [{ bearerAuth: [] }],
     responses: {
       201: { description: "Organization created" },
@@ -442,19 +416,17 @@ orgRoutes.post(
       },
     },
   }),
+  validateJson(CreateOrgBodySchema),
   async (c) => {
     const db = createDb(c.env.DB);
-    const body = await c.req.json<{
+    const body: {
       name: string;
       slug?: string;
       domain?: string;
       description?: string;
       category?: string;
       tags?: string[];
-    }>();
-
-    if (!body.name)
-      return c.json({ error: "bad_request", message: "Missing required field: name" }, 400);
+    } = { ...c.req.valid("json") };
 
     // Resolve through the alias overlay so "e-commerce" → "commerce" before
     // it lands in `organizations.category`. Canonical slugs pass through.
@@ -543,10 +515,11 @@ orgRoutes.patch(
       },
     },
   }),
+  validateJson(UpdateOrgBodySchema),
   async (c) => {
     const db = createDb(c.env.DB);
     const slug = c.req.param("slug");
-    const body = await c.req.json<{
+    const body: {
       name?: string;
       slug?: string;
       domain?: string | null;
@@ -554,7 +527,7 @@ orgRoutes.patch(
       category?: string | null;
       tags?: string[];
       aliases?: string[];
-    }>();
+    } = { ...c.req.valid("json") };
 
     if (body.category !== undefined && body.category !== null) {
       const resolved = await resolveCategoryInput(db, body.category);
@@ -1095,7 +1068,7 @@ orgRoutes.put(
     tags: ["Orgs"],
     summary: "Add tags to org",
     description:
-      "Adds the supplied tag names to the org (idempotent — existing tags are not duplicated). Body: `{ tags: string[] }`. Formal request-body validation via validator middleware is deferred to Phase 2 of #894.",
+      "Adds the supplied tag names to the org (idempotent — existing tags are not duplicated).",
     security: [{ bearerAuth: [] }],
     responses: {
       200: {
@@ -1112,16 +1085,16 @@ orgRoutes.put(
       },
     },
   }),
+  validateJson(OrgTagsBodySchema),
   async (c) => {
     const db = createDb(c.env.DB);
     const slug = c.req.param("slug");
-    const parsed = await parseOrgTagsBody(c);
-    if (!parsed.ok) return parsed.response;
+    const { tags: tagNames } = c.req.valid("json");
     const [org] = await db.select().from(organizations).where(orgWhere(slug));
     if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
 
-    if (parsed.tags.length > 0) {
-      const tagRows = await getOrCreateTagsD1(db, parsed.tags);
+    if (tagNames.length > 0) {
+      const tagRows = await getOrCreateTagsD1(db, tagNames);
       const now = new Date().toISOString();
       await db
         .insert(orgTags)
@@ -1138,7 +1111,7 @@ orgRoutes.delete(
     tags: ["Orgs"],
     summary: "Remove tags from org",
     description:
-      "Removes the supplied tag names from the org. Tags not currently associated with the org are silently skipped. Body: `{ tags: string[] }`. Formal request-body validation via validator middleware is deferred to Phase 2 of #894.",
+      "Removes the supplied tag names from the org. Tags not currently associated with the org are silently skipped.",
     security: [{ bearerAuth: [] }],
     responses: {
       200: {
@@ -1155,15 +1128,15 @@ orgRoutes.delete(
       },
     },
   }),
+  validateJson(OrgTagsBodySchema),
   async (c) => {
     const db = createDb(c.env.DB);
     const slug = c.req.param("slug");
-    const parsed = await parseOrgTagsBody(c);
-    if (!parsed.ok) return parsed.response;
+    const { tags: tagNames } = c.req.valid("json");
     const [org] = await db.select().from(organizations).where(orgWhere(slug));
     if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
 
-    for (const tagName of parsed.tags) {
+    for (const tagName of tagNames) {
       const tagSlug = toSlug(tagName);
       // oxlint-disable-next-line no-await-in-loop -- sequential: tag lookup result feeds the delete
       const [tag] = await db.select().from(tags).where(eq(tags.slug, tagSlug));
@@ -1199,17 +1172,10 @@ orgRoutes.post(
       },
     },
   }),
+  validateJson(CreateTagBodySchema),
   async (c) => {
     const db = createDb(c.env.DB);
-    let body: { name: string };
-    try {
-      body = await c.req.json<{ name: string }>();
-    } catch {
-      return c.json({ error: "bad_request", message: "Malformed JSON body" }, 400);
-    }
-    if (typeof body.name !== "string" || body.name.length === 0)
-      return c.json({ error: "bad_request", message: "`name` must be a non-empty string" }, 400);
-
+    const body = c.req.valid("json");
     const tagSlug = toSlug(body.name);
     const [existing] = await db.select().from(tags).where(eq(tags.slug, tagSlug));
     if (existing) return c.json(existing);
@@ -1840,7 +1806,7 @@ orgRoutes.post(
     tags: ["Orgs"],
     summary: "Add a platform account to an org",
     description:
-      "Registers a new platform/handle pair for the org. Both `platform` and `handle` are required. Duplicate platform/handle pairs return 409. Body: `{ platform: string; handle: string }`. Formal request-body validation via validator middleware is deferred to Phase 2 of #894. Auth is inherited from `publicReadAuthMiddleware`'s non-SAFE_METHODS branch.",
+      "Registers a new platform/handle pair for the org. Both `platform` and `handle` are required. Duplicate platform/handle pairs return 409. Auth is inherited from `publicReadAuthMiddleware`'s non-SAFE_METHODS branch.",
     security: [{ bearerAuth: [] }],
     responses: {
       201: {
@@ -1861,30 +1827,11 @@ orgRoutes.post(
       },
     },
   }),
+  validateJson(AddOrgAccountBodySchema),
   async (c) => {
     const db = createDb(c.env.DB);
     const slug = c.req.param("slug");
-    let body: { platform: string; handle: string };
-    try {
-      body = await c.req.json<{ platform: string; handle: string }>();
-    } catch {
-      return c.json({ error: "bad_request", message: "Malformed JSON body" }, 400);
-    }
-
-    if (
-      typeof body.platform !== "string" ||
-      body.platform.length === 0 ||
-      typeof body.handle !== "string" ||
-      body.handle.length === 0
-    ) {
-      return c.json(
-        {
-          error: "bad_request",
-          message: "`platform` and `handle` must be non-empty strings",
-        },
-        400,
-      );
-    }
+    const body = c.req.valid("json");
 
     const [org] = await db.select().from(organizations).where(orgWhere(slug));
     if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
