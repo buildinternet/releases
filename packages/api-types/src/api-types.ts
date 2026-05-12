@@ -30,6 +30,28 @@ import type {
   CreateOrgBodySchema,
   UpdateOrgBodySchema,
   OrgDetailSchema,
+  OrgCatalogItemSchema,
+  OrgCatalogResponseSchema,
+  OrgCollectionsResponseSchema,
+  AddOrgAccountBodySchema,
+  IgnoredUrlItemSchema,
+  OrgIgnoredUrlsResponseSchema,
+  AddIgnoredUrlBodySchema,
+  AddIgnoredUrlResponseSchema,
+  DeleteIgnoredUrlResponseSchema,
+  OrgTagsBodySchema,
+  OrgTagsMutationResponseSchema,
+  CreateTagBodySchema,
+  TagRowSchema,
+  OrgActivityResponseSchema,
+  OrgHeatmapResponseSchema,
+  OrgSparklinesResponseSchema,
+  OrgReleaseItemSchema,
+  OrgFeedPaginationSchema,
+  OrgReleasesFeedResponseSchema,
+  OrgRecentReleaseItemSchema,
+  OrgRecentReleasesResponseSchema,
+  DeleteOrgAccountResponseSchema,
 } from "./schemas/orgs.js";
 import type {
   SourceListItemSchema,
@@ -167,6 +189,28 @@ export {
   CreateOrgBodySchema,
   UpdateOrgBodySchema,
   OrgDetailSchema,
+  OrgCatalogItemSchema,
+  OrgCatalogResponseSchema,
+  OrgCollectionsResponseSchema,
+  AddOrgAccountBodySchema,
+  IgnoredUrlItemSchema,
+  OrgIgnoredUrlsResponseSchema,
+  AddIgnoredUrlBodySchema,
+  AddIgnoredUrlResponseSchema,
+  DeleteIgnoredUrlResponseSchema,
+  OrgTagsBodySchema,
+  OrgTagsMutationResponseSchema,
+  CreateTagBodySchema,
+  TagRowSchema,
+  OrgActivityResponseSchema,
+  OrgHeatmapResponseSchema,
+  OrgSparklinesResponseSchema,
+  OrgReleaseItemSchema,
+  OrgFeedPaginationSchema,
+  OrgReleasesFeedResponseSchema,
+  OrgRecentReleaseItemSchema,
+  OrgRecentReleasesResponseSchema,
+  DeleteOrgAccountResponseSchema,
 } from "./schemas/orgs.js";
 export {
   SourceListItemSchema,
@@ -330,8 +374,30 @@ export type OrgAccountsResponse = z.infer<typeof OrgAccountsResponseSchema>;
 export type OrgTagsResponse = z.infer<typeof OrgTagsResponseSchema>;
 export type CreateOrgBody = z.infer<typeof CreateOrgBodySchema>;
 export type UpdateOrgBody = z.infer<typeof UpdateOrgBodySchema>;
-
 export type OrgDetail = z.infer<typeof OrgDetailSchema>;
+
+export type OrgCatalogItem = z.infer<typeof OrgCatalogItemSchema>;
+export type OrgCatalogResponse = z.infer<typeof OrgCatalogResponseSchema>;
+export type OrgCollectionsResponse = z.infer<typeof OrgCollectionsResponseSchema>;
+export type AddOrgAccountBody = z.infer<typeof AddOrgAccountBodySchema>;
+export type IgnoredUrlItem = z.infer<typeof IgnoredUrlItemSchema>;
+export type OrgIgnoredUrlsResponse = z.infer<typeof OrgIgnoredUrlsResponseSchema>;
+export type AddIgnoredUrlBody = z.infer<typeof AddIgnoredUrlBodySchema>;
+export type AddIgnoredUrlResponse = z.infer<typeof AddIgnoredUrlResponseSchema>;
+export type DeleteIgnoredUrlResponse = z.infer<typeof DeleteIgnoredUrlResponseSchema>;
+export type OrgTagsBody = z.infer<typeof OrgTagsBodySchema>;
+export type OrgTagsMutationResponse = z.infer<typeof OrgTagsMutationResponseSchema>;
+export type CreateTagBody = z.infer<typeof CreateTagBodySchema>;
+export type TagRow = z.infer<typeof TagRowSchema>;
+export type OrgActivityResponse = z.infer<typeof OrgActivityResponseSchema>;
+export type OrgHeatmapResponse = z.infer<typeof OrgHeatmapResponseSchema>;
+export type OrgSparklinesResponse = z.infer<typeof OrgSparklinesResponseSchema>;
+export type OrgReleaseItem = z.infer<typeof OrgReleaseItemSchema>;
+export type OrgFeedPagination = z.infer<typeof OrgFeedPaginationSchema>;
+export type OrgReleasesFeedResponse = z.infer<typeof OrgReleasesFeedResponseSchema>;
+export type OrgRecentReleaseItem = z.infer<typeof OrgRecentReleaseItemSchema>;
+export type OrgRecentReleasesResponse = z.infer<typeof OrgRecentReleasesResponseSchema>;
+export type DeleteOrgAccountResponse = z.infer<typeof DeleteOrgAccountResponseSchema>;
 
 // ── Sources ──
 
@@ -584,42 +650,27 @@ export interface SourceActivity {
   weeklyBuckets: WeeklyBucket[];
 }
 
-export interface OrgActivitySource {
-  slug: string;
-  name: string;
-  releaseCount: number;
-  avgReleasesPerWeek: number;
-  earliestVersion: string | null;
-  latestVersion: string | null;
-  latestDate: string | null;
-  weeklyBuckets: WeeklyBucket[];
-}
+// ── Org Activity (Zod-derived aliases) ──
+// The old hand-written OrgActivitySource / OrgActivity / OrgSparklines /
+// OrgHeatmap / OrgReleaseItem / OrgReleasesResponse interfaces have been
+// replaced by Zod-derived types in the Organizations section above. Keeping
+// the interface names as deprecated aliases so callsites don't need an
+// immediate churn.
 
-export interface OrgActivity {
-  org: { slug: string; name: string };
-  range: { from: string; to: string };
-  sources: OrgActivitySource[];
-  aggregateWeekly: Array<{ weekStart: string; count: number }>;
-}
+/** @deprecated Use OrgActivityResponse */
+export type OrgActivity = OrgActivityResponse;
+
+/** @deprecated Use OrgSparklinesResponse */
+export type OrgSparklines = OrgSparklinesResponse;
+
+/** @deprecated Use OrgHeatmapResponse */
+export type OrgHeatmap = OrgHeatmapResponse;
+
+/** @deprecated Use OrgReleasesFeedResponse */
+export type OrgReleasesResponse = OrgReleasesFeedResponse;
 
 // ── Org Sparklines (per-source/product breakdown) ──
-
-export interface OrgSparklines {
-  org: { slug: string; name: string };
-  range: { from: string; to: string };
-  aggregate: number[];
-  sources: Array<{ slug: string; name: string; sparkline: number[] }>;
-  products: Array<{ slug: string; name: string; sparkline: number[] }>;
-}
-
-// ── Org Heatmap ──
-
-export interface OrgHeatmap {
-  org: { slug: string; name: string };
-  range: { from: string; to: string };
-  dailyCounts: Array<{ date: string; count: number }>;
-  total: number;
-}
+// (covered above)
 
 // ── Source Heatmap ──
 
@@ -631,15 +682,7 @@ export interface SourceHeatmap {
 }
 
 // ── Org Releases ──
-
-export interface OrgReleaseItem extends ReleaseItem {
-  source: { slug: string; name: string; type: string };
-}
-
-export interface OrgReleasesResponse {
-  releases: OrgReleaseItem[];
-  pagination: { nextCursor: string | null; limit: number };
-}
+// (covered by OrgReleaseItem / OrgReleasesFeedResponse above)
 
 // Source-scoped release feed — the source identity is encoded in the URL, so
 // items omit the redundant `source` block carried by the org feed.
@@ -895,14 +938,10 @@ export interface Session {
 export type SessionListResponse = ListResponse<Session>;
 
 // ── Admin URL Lists ──
-
-export interface IgnoredUrlItem {
-  id: string;
-  url: string;
-  orgId: string;
-  reason: string | null;
-  ignoredAt: string;
-}
+// `IgnoredUrlItem` is now the Zod-derived type exported in the Organizations
+// section. The hand-written interface below is removed to avoid a duplicate
+// identifier; callsites that imported it from here continue to work because
+// the Zod-derived alias has the same shape.
 
 export interface BlockedUrlItem {
   id: string;

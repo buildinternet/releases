@@ -35,27 +35,6 @@ const ALLOWLIST = new Set<string>([
   "GET /orgs/:slug/playbook",
   "PATCH /orgs/:slug/playbook/notes",
 
-  // ── workers/api/src/routes/orgs.ts: nested resource sub-routes that
-  // #750 left undocumented. Detail-level GETs + tag/account/ignored-url
-  // writes. Annotate alongside the next pass over orgs.ts. ──
-  "GET /orgs/:slug/accounts",
-  "POST /orgs/:slug/accounts",
-  "DELETE /orgs/:slug/accounts/:platform/:handle",
-  "GET /orgs/:slug/activity",
-  "GET /orgs/:slug/catalog",
-  "GET /orgs/:slug/collections",
-  "GET /orgs/:slug/heatmap",
-  "GET /orgs/:slug/ignored-urls",
-  "POST /orgs/:slug/ignored-urls",
-  "DELETE /orgs/:slug/ignored-urls/:url",
-  "GET /orgs/:slug/recent-releases",
-  "GET /orgs/:slug/releases",
-  "GET /orgs/:slug/sparklines",
-  "GET /orgs/:slug/tags",
-  "PUT /orgs/:slug/tags",
-  "DELETE /orgs/:slug/tags",
-  "POST /tags",
-
   // ── workers/api/src/routes/sources.ts: sub-routes #752 left
   // undocumented. Bare and org-scoped variants both apply. ──
   "GET /sources/changelog-files/oversized",
