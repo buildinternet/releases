@@ -27,7 +27,11 @@ import {
   CollectionDetailSchema,
   CollectionReleasesResponseSchema,
   CollectionRowSchema,
+  CreateCollectionRequestSchema,
+  UpdateCollectionRequestSchema,
+  AddCollectionMemberRequestSchema,
   AddCollectionMemberResponseSchema,
+  ReplaceCollectionMembersRequestSchema,
   ReplaceCollectionMembersResponseSchema,
   ErrorResponseSchema,
 } from "@buildinternet/releases-api-types";
@@ -36,12 +40,9 @@ import type {
   CollectionListItem,
   CollectionReleaseItem,
   CollectionRow,
-  CreateCollectionRequest,
-  UpdateCollectionRequest,
-  AddCollectionMemberRequest,
-  ReplaceCollectionMembersRequest,
   CollectionMemberInput,
 } from "@buildinternet/releases-api-types";
+import { validateJson } from "../lib/validate.js";
 
 export const collectionRoutes = new Hono<Env>();
 
@@ -413,7 +414,7 @@ collectionRoutes.post(
     tags: ["Collections"],
     summary: "Create a collection",
     description:
-      "Body documented in prose — formal `requestBody` modelling is deferred to the validator-middleware phase of #894. The request shape is `CreateCollectionRequest`: `{ name: string; slug?: string; description?: string | null }`. Slug derives from `name` via `toSlug()` when omitted. Slug must match `^[a-z0-9][a-z0-9-]{1,63}$` (lowercased alnum + hyphens, alnum-start, 2–64 chars). Name max 200 chars; description max 2000 chars.\n\nAuth inherited from `publicReadAuthMiddleware`'s non-SAFE_METHODS branch — Bearer token required.",
+      "Slug derives from `name` via `toSlug()` when omitted. Slug must match `^[a-z0-9][a-z0-9-]{1,63}$` (lowercased alnum + hyphens, alnum-start, 2–64 chars). Name max 200 chars; description max 2000 chars.\n\nAuth inherited from `publicReadAuthMiddleware`'s non-SAFE_METHODS branch — Bearer token required.",
     security: [{ bearerAuth: [] }],
     responses: {
       201: {
@@ -430,14 +431,18 @@ collectionRoutes.post(
       },
     },
   }),
+  validateJson(CreateCollectionRequestSchema),
   async (c) => {
     const db = createDb(c.env.DB);
-    const body = await c.req.json<CreateCollectionRequest>();
+    const body = c.req.valid("json");
 
-    if (!body?.name || typeof body.name !== "string" || body.name.trim().length === 0) {
+    // Trim + post-trim length check stay in the handler — Zod's `.min(1)`
+    // doesn't catch all-whitespace strings, and the slug regex check
+    // happens after toSlug normalization.
+    const name = body.name.trim();
+    if (name.length === 0) {
       return c.json({ error: "bad_request", message: "Missing required field: name" }, 400);
     }
-    const name = body.name.trim();
     if (name.length > 200) {
       return c.json({ error: "bad_request", message: "Name must be 200 characters or fewer" }, 400);
     }
@@ -486,7 +491,7 @@ collectionRoutes.patch(
     tags: ["Collections"],
     summary: "Update a collection's name, slug, or description",
     description:
-      "Body documented in prose — `UpdateCollectionRequest`: `{ slug?: string; name?: string; description?: string | null }`. All fields optional; sending none returns the row unchanged. Slug renames are allowed and validated against the same `^[a-z0-9][a-z0-9-]{1,63}$` pattern.\n\nAuth inherited from `publicReadAuthMiddleware`'s non-SAFE_METHODS branch.",
+      "All fields optional; sending none returns the row unchanged. Slug renames are allowed and validated against the same `^[a-z0-9][a-z0-9-]{1,63}$` pattern.\n\nAuth inherited from `publicReadAuthMiddleware`'s non-SAFE_METHODS branch.",
     security: [{ bearerAuth: [] }],
     parameters: [
       {
@@ -516,10 +521,11 @@ collectionRoutes.patch(
       },
     },
   }),
+  validateJson(UpdateCollectionRequestSchema),
   async (c) => {
     const slug = c.req.param("slug");
     const db = createDb(c.env.DB);
-    const body = await c.req.json<UpdateCollectionRequest>();
+    const body = c.req.valid("json");
 
     const [existing] = await db.select().from(collections).where(eq(collections.slug, slug));
     if (!existing) return c.json({ error: "not_found", message: "Collection not found" }, 404);
@@ -626,7 +632,7 @@ collectionRoutes.put(
     tags: ["Collections"],
     summary: "Replace a collection's full membership atomically",
     description:
-      "Body documented in prose — `ReplaceCollectionMembersRequest`: `{ orgs: CollectionMemberInput[] }`, where each entry is `{ orgId?, orgSlug?, position? }`. Either `orgId` (`org_…`) or `orgSlug` is required per entry; when both are given, `orgId` wins. Position defaults to the array index, so callers can express ordering implicitly by ordering the array.\n\nAll members are resolved in at most two `IN`-queries (one for `org_…` ids, one for slugs) before the write. The replace is delete + insert without a D1 transaction; that's acceptable because membership writes are admin-only and low-frequency. Duplicate orgs in the input are rejected before the delete fires.\n\nAuth inherited from `publicReadAuthMiddleware`'s non-SAFE_METHODS branch.",
+      "Each entry in `orgs` is a `CollectionMemberInput`: `{ orgId?, orgSlug?, position? }`. Either `orgId` (`org_…`) or `orgSlug` is required per entry; when both are given, `orgId` wins. Position defaults to the array index, so callers can express ordering implicitly by ordering the array.\n\nAll members are resolved in at most two `IN`-queries (one for `org_…` ids, one for slugs) before the write. The replace is delete + insert without a D1 transaction; that's acceptable because membership writes are admin-only and low-frequency. Duplicate orgs in the input are rejected before the delete fires.\n\nAuth inherited from `publicReadAuthMiddleware`'s non-SAFE_METHODS branch.",
     security: [{ bearerAuth: [] }],
     parameters: [
       {
@@ -655,14 +661,11 @@ collectionRoutes.put(
       },
     },
   }),
+  validateJson(ReplaceCollectionMembersRequestSchema),
   async (c) => {
     const slug = c.req.param("slug");
     const db = createDb(c.env.DB);
-    const body = await c.req.json<ReplaceCollectionMembersRequest>();
-
-    if (!body || !Array.isArray(body.orgs)) {
-      return c.json({ error: "bad_request", message: "Body requires { orgs: [...] }" }, 400);
-    }
+    const body = c.req.valid("json");
 
     const existing = await findCollectionBySlug(db, slug);
     if (!existing) return c.json({ error: "not_found", message: "Collection not found" }, 404);
@@ -702,7 +705,7 @@ collectionRoutes.post(
     tags: ["Collections"],
     summary: "Add a single org to a collection",
     description:
-      "Body documented in prose — `AddCollectionMemberRequest` is one `CollectionMemberInput`: `{ orgId?, orgSlug?, position? }`. Either `orgId` (`org_…`) or `orgSlug` must be present; `orgId` wins when both are given. Position defaults to 0.\n\nIdempotent at the SQL level via `UNIQUE(collection_id, org_id)` — re-adding an existing member returns `409 conflict`. Use `PUT /collections/:slug/members` for the atomic replace path.\n\nAuth inherited from `publicReadAuthMiddleware`'s non-SAFE_METHODS branch.",
+      "`AddCollectionMemberRequest` is one `CollectionMemberInput`: `{ orgId?, orgSlug?, position? }`. Either `orgId` (`org_…`) or `orgSlug` must be present; `orgId` wins when both are given. Position defaults to 0.\n\nIdempotent at the SQL level via `UNIQUE(collection_id, org_id)` — re-adding an existing member returns `409 conflict`. Use `PUT /collections/:slug/members` for the atomic replace path.\n\nAuth inherited from `publicReadAuthMiddleware`'s non-SAFE_METHODS branch.",
     security: [{ bearerAuth: [] }],
     parameters: [
       {
@@ -732,10 +735,11 @@ collectionRoutes.post(
       },
     },
   }),
+  validateJson(AddCollectionMemberRequestSchema),
   async (c) => {
     const slug = c.req.param("slug");
     const db = createDb(c.env.DB);
-    const body = await c.req.json<AddCollectionMemberRequest>();
+    const body = c.req.valid("json");
 
     const existing = await findCollectionBySlug(db, slug);
     if (!existing) return c.json({ error: "not_found", message: "Collection not found" }, 404);
