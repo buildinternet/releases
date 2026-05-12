@@ -77,11 +77,87 @@ import {
 // ranking-bounded results aren't a slice of a stable list.
 export type ToolResult = {
   content: [{ type: "text"; text: string }];
+  /**
+   * Typed payload paired with the markdown `content[0].text` fallback. MCP App
+   * UIs (see `workers/mcp/ui/`) read this directly so they don't have to parse
+   * the rendered markdown. Hosts without UI support ignore the field and the
+   * model uses the text content as before.
+   */
+  structuredContent?: ReleaseFeedStructured;
   _meta?: {
     pagination?: McpPaginationMeta | McpCursorPaginationMeta;
     search?: McpSearchMeta;
   };
 };
+
+/**
+ * Row shape consumed by the release-feed MCP App UI. Both `getLatestReleases`
+ * and `getCollectionReleases` populate this from their respective DB rows so
+ * the UI has one stable contract.
+ */
+export interface ReleaseFeedRow {
+  id: string;
+  title: string | null;
+  titleShort: string | null;
+  titleGenerated: string | null;
+  version: string | null;
+  type: "feature" | "rollup";
+  summary: string | null;
+  /** First ~500 chars of the release body, ready to display under the title. */
+  contentPreview: string;
+  publishedAt: string | null;
+  url: string | null;
+  source: { name: string; coordinate: string };
+}
+
+// Explicit index signature makes this type structurally compatible with the
+// MCP SDK's `structuredContent: { [x: string]: unknown }` constraint while
+// keeping the known fields typed.
+export interface ReleaseFeedStructured {
+  [key: string]: unknown;
+  releases: ReleaseFeedRow[];
+  pagination: McpCursorPaginationMeta;
+  /** Echo of the call's inputs so the UI can re-call with the next cursor. */
+  inputs: Record<string, unknown>;
+  /** Which tool produced this payload — picked up by the UI to chain calls. */
+  toolName: "get_latest_releases" | "get_collection_releases";
+  /** Optional collection header used by `get_collection_releases`. */
+  context?: { collection?: { slug: string; name: string } };
+}
+
+/**
+ * Shared mapper for the release-feed UI. Callers normalize their column
+ * names to camelCase before calling; the `coordinate` is derived from the
+ * `org`/`source` slugs the caller resolves.
+ */
+function toReleaseFeedRow(r: {
+  id: string;
+  title: string | null;
+  titleShort: string | null;
+  titleGenerated: string | null;
+  version: string | null;
+  type: string;
+  summary: string | null;
+  content: string | null;
+  publishedAt: string | null;
+  url: string | null;
+  sourceName: string;
+  coordinate: string;
+}): ReleaseFeedRow {
+  return {
+    id: r.id,
+    title: r.title,
+    titleShort: r.titleShort,
+    titleGenerated: r.titleGenerated,
+    version: r.version,
+    type: r.type as "feature" | "rollup",
+    summary: r.summary,
+    contentPreview: (r.summary || r.content || "").slice(0, 500),
+    publishedAt: r.publishedAt,
+    url: r.url ?? null,
+    source: { name: r.sourceName, coordinate: r.coordinate },
+  };
+}
 
 /**
  * Per-section hit counts emitted by the search tools so `withSearchLog` in
@@ -682,6 +758,7 @@ export async function getLatestReleases(
     limit?: number;
     cursor?: string;
     include_coverage?: boolean;
+    include_prereleases?: boolean;
   },
 ): Promise<ToolResult> {
   const limit = parseFeedLimit(params.limit ?? 10);
@@ -728,6 +805,11 @@ export async function getLatestReleases(
   if (sourceFilter) conditions.push(eq(releasesTable.sourceId, sourceFilter));
   if (orgSourceIds) conditions.push(inArray(releasesTable.sourceId, orgSourceIds));
   if (params.type) conditions.push(eq(releasesTable.type, params.type));
+  // Default excludes prereleases (canaries / alphas / betas / RCs). Matches
+  // the web/API read paths and the `get_collection_releases` default.
+  if (!params.include_prereleases) {
+    conditions.push(sql`(${releasesTable.prerelease} IS NULL OR ${releasesTable.prerelease} = 0)`);
+  }
 
   // Cursor decode: silently ignore unparseable tokens rather than 400. The
   // feed is append-only and stable under cursor inserts, so a stale cursor
@@ -766,6 +848,7 @@ export async function getLatestReleases(
       sourceName: sources.name,
       sourceSlug: sources.slug,
       orgSlug: organizations.slug,
+      url: releasesTable.url,
     })
     .from(releasesTable)
     .innerJoin(sources, eq(releasesTable.sourceId, sources.id))
@@ -796,9 +879,22 @@ export async function getLatestReleases(
   if (pageRows.length === 0) {
     return {
       content: [{ type: "text" as const, text: "No releases found." }],
+      structuredContent: {
+        releases: [],
+        pagination: cursorMeta,
+        inputs: { ...params },
+        toolName: "get_latest_releases" as const,
+      },
       _meta: { pagination: cursorMeta },
     };
   }
+
+  const structuredRows = pageRows.map((r) =>
+    toReleaseFeedRow({
+      ...r,
+      coordinate: r.orgSlug ? `${r.orgSlug}/${r.sourceSlug}` : r.sourceSlug,
+    }),
+  );
 
   const body = pageRows
     .map((r) => {
@@ -820,6 +916,12 @@ export async function getLatestReleases(
 
   return {
     content: [{ type: "text" as const, text: body + footer }],
+    structuredContent: {
+      releases: structuredRows,
+      pagination: cursorMeta,
+      inputs: { ...params },
+      toolName: "get_latest_releases" as const,
+    },
     _meta: { pagination: cursorMeta },
   };
 }
@@ -2349,6 +2451,8 @@ export async function getCollectionReleases(
     nextCursor,
   });
 
+  const collectionContext = { collection: { slug, name: collection.name } };
+
   if (pageRows.length === 0) {
     return {
       content: [
@@ -2357,9 +2461,33 @@ export async function getCollectionReleases(
           text: `No releases yet in collection "${collection.name}".`,
         },
       ],
+      structuredContent: {
+        releases: [],
+        pagination: cursorMeta,
+        inputs: { ...params },
+        toolName: "get_collection_releases" as const,
+        context: collectionContext,
+      },
       _meta: { pagination: cursorMeta },
     };
   }
+
+  const structuredRows = pageRows.map((r) =>
+    toReleaseFeedRow({
+      id: r.id,
+      title: r.title,
+      titleShort: r.title_short,
+      titleGenerated: r.title_generated,
+      version: r.version,
+      type: r.type,
+      summary: r.summary,
+      content: r.content,
+      publishedAt: r.published_at,
+      url: r.url ?? null,
+      sourceName: r.source_name,
+      coordinate: `${r.org_slug}/${r.source_slug}`,
+    }),
+  );
 
   const body = pageRows
     .map((r) => {
@@ -2380,6 +2508,13 @@ export async function getCollectionReleases(
 
   return {
     content: [{ type: "text" as const, text: body + footer }],
+    structuredContent: {
+      releases: structuredRows,
+      pagination: cursorMeta,
+      inputs: { ...params },
+      toolName: "get_collection_releases" as const,
+      context: collectionContext,
+    },
     _meta: { pagination: cursorMeta },
   };
 }

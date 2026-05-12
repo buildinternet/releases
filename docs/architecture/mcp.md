@@ -14,6 +14,36 @@ The worker binds to the same D1 database as the API and discovery workers and ca
 
 Deploy: `bun run deploy:mcp`. Dev: `bun run dev:mcp`. Connect from Claude Desktop: `npx mcp-remote https://mcp.releases.sh/mcp`.
 
+## MCP App UIs (`workers/mcp/ui/`)
+
+Hosts that support the MCP Apps extension (Claude Desktop is the first) render a tool's response as an interactive UI when the tool advertises `_meta.ui.resourceUri`. Each UI is a single self-contained HTML resource registered alongside the existing entity resources. Hosts without UI support fall back to the markdown text in `content[0].text`, so every UI-enabled tool keeps its text rendering intact.
+
+**Live surfaces:**
+
+- `get_latest_releases`, `get_collection_releases` → `ui://releases/release-feed.html` (card timeline with cursor-based "Load more", "Open source", and "Ask about this").
+
+**Build pattern (Bun, no Vite):** Each app lives in its own folder under `workers/mcp/ui/` with an `app.tsx` entry and a `styles.css`. `workers/mcp/ui/build.ts` runs `Bun.build` over the entry, reads the sibling CSS, inlines both into a minimal HTML shell, and writes the bundled strings into `workers/mcp/src/ui-bundles.ts`. The worker imports those strings and serves them through `registerAppResource` in `workers/mcp/src/resources.ts`. The bundle file is committed so deploys never depend on a UI install; `deploy:mcp` regenerates it first as a safety net.
+
+**Adding a new UI:**
+
+1. `mkdir workers/mcp/ui/<name>` and drop in `app.tsx` (React entry) + `styles.css`.
+2. Add an entry to the `APPS` array in `workers/mcp/ui/build.ts`.
+3. Add an exported URI constant + `registerAppResource` call in `workers/mcp/src/resources.ts`.
+4. On the tool registration, add `_meta: { ui: { resourceUri: <CONST> } }`.
+5. Have the tool's handler also return `structuredContent` with the typed payload the UI reads (see `ReleaseFeedStructured` in `workers/mcp/src/tools.ts` for the shape).
+6. `bun run mcp:ui:build` to regenerate the bundle.
+
+**Aliases:**
+
+- `bun run mcp:ui:build` — production bundle, commits-clean
+- `bun run mcp:ui:build:dev` — inline source maps + unminified for debugging
+- `bun run mcp:ui:watch` — rebuild on save during UI iteration
+- `bun run mcp:ui:typecheck` — `tsc --noEmit` over the UI tree
+
+**Data contract:** UI-enabled tools attach `structuredContent` to their result. The UI consumes that field directly via `app.ontoolresult`; the model still reads the markdown `content[0].text`. Cursor pagination from the UI is wired through `app.callServerTool({ name, arguments: { ...inputs, cursor } })` — no host re-prompt needed to extend the feed.
+
+**Vite note:** the MCP Apps SDK's React template ships with Vite + `vite-plugin-singlefile`. We don't use Vite — Bun's bundler produces the same single-file output via a ~30-line build script. The `@modelcontextprotocol/ext-apps` package is consumed only by UI code (for `useApp` and types); the worker doesn't depend on it at runtime, so worker deploys stay lean.
+
 ## Spec utilities
 
 - **Ping (`ping`):** supported transparently. The SDK's base `Protocol` class registers a default handler that responds with `{}`, so every server instance ships it without code.

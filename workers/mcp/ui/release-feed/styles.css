@@ -1,0 +1,234 @@
+/*
+ * Release-feed UI styles. Uses CSS custom properties so the host (Claude
+ * Desktop, etc.) can override via `applyHostStyleVariables`. Fallbacks
+ * here match a sensible default for hosts that don't push any theming.
+ */
+
+:root {
+  color-scheme: light dark;
+  --rl-bg: var(--mcp-ui-color-background, #ffffff);
+  --rl-fg: var(--mcp-ui-color-foreground, #111111);
+  --rl-muted: var(--mcp-ui-color-foreground-muted, #6b7280);
+  --rl-border: var(--mcp-ui-color-border, #e5e7eb);
+  --rl-card-bg: var(--mcp-ui-color-surface, #ffffff);
+  --rl-accent: var(--mcp-ui-color-accent, #2563eb);
+  --rl-accent-fg: var(--mcp-ui-color-accent-foreground, #ffffff);
+  --rl-radius: 12px;
+  --rl-radius-sm: 6px;
+  --rl-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 1px 3px rgba(0, 0, 0, 0.06);
+  --rl-font: var(--mcp-ui-font-family, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif);
+  --rl-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --rl-bg: var(--mcp-ui-color-background, #0b0b0c);
+    --rl-fg: var(--mcp-ui-color-foreground, #e5e7eb);
+    --rl-muted: var(--mcp-ui-color-foreground-muted, #9ca3af);
+    --rl-border: var(--mcp-ui-color-border, #27272a);
+    --rl-card-bg: var(--mcp-ui-color-surface, #131316);
+    --rl-accent: var(--mcp-ui-color-accent, #60a5fa);
+    --rl-accent-fg: var(--mcp-ui-color-accent-foreground, #0b0b0c);
+    --rl-shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 1px 3px rgba(0, 0, 0, 0.3);
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--rl-bg);
+  color: var(--rl-fg);
+  font-family: var(--rl-font);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+.status {
+  padding: 24px;
+  color: var(--rl-muted);
+  font-size: 14px;
+}
+.status.error {
+  color: #b91c1c;
+}
+
+.feed {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 24px 20px 64px;
+}
+
+.feed-head {
+  margin-bottom: 20px;
+}
+.feed-sub {
+  margin: 0 0 4px;
+  color: var(--rl-muted);
+  font-size: 12px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.feed-title {
+  margin: 0 0 6px;
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.feed-count {
+  margin: 0;
+  color: var(--rl-muted);
+  font-size: 12px;
+}
+
+.feed-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.card {
+  background: var(--rl-card-bg);
+  border: 1px solid var(--rl-border);
+  border-radius: var(--rl-radius);
+  padding: 16px 18px;
+  box-shadow: var(--rl-shadow);
+}
+
+.card-head {
+  margin-bottom: 8px;
+}
+
+.card-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+  font-size: 12px;
+  color: var(--rl-muted);
+}
+
+.source {
+  font-family: var(--rl-mono);
+  font-size: 12px;
+  color: var(--rl-fg);
+}
+
+.date {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 500;
+  border-radius: 999px;
+  border: 1px solid var(--rl-border);
+  background: transparent;
+  color: var(--rl-fg);
+}
+
+.chip-version {
+  font-family: var(--rl-mono);
+  background: color-mix(in srgb, var(--rl-accent) 12%, transparent);
+  border-color: color-mix(in srgb, var(--rl-accent) 30%, transparent);
+  color: var(--rl-accent);
+}
+
+.chip-rollup {
+  background: color-mix(in srgb, var(--rl-muted) 12%, transparent);
+}
+
+.card-title {
+  margin: 0 0 6px;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.35;
+  letter-spacing: -0.005em;
+}
+
+.version {
+  margin-bottom: 6px;
+}
+
+.card-body {
+  margin: 6px 0 12px;
+  color: var(--rl-fg);
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  /* Clamp body to a reasonable height; users can "Ask about this" to dig in. */
+  display: -webkit-box;
+  -webkit-line-clamp: 6;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.card-foot {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.btn {
+  appearance: none;
+  border: 1px solid var(--rl-border);
+  background: transparent;
+  color: var(--rl-fg);
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: var(--rl-radius-sm);
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.1s ease;
+}
+.btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--rl-fg) 5%, transparent);
+}
+.btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.btn-primary {
+  background: var(--rl-accent);
+  color: var(--rl-accent-fg);
+  border-color: var(--rl-accent);
+}
+.btn-primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--rl-accent) 90%, black);
+}
+
+.feed-foot {
+  margin-top: 20px;
+  display: flex;
+  justify-content: center;
+}
+
+.error {
+  margin-top: 12px;
+  padding: 10px 14px;
+  border-radius: var(--rl-radius-sm);
+  background: color-mix(in srgb, #dc2626 8%, transparent);
+  color: #b91c1c;
+  font-size: 13px;
+}
+
+@media (prefers-color-scheme: dark) {
+  .error {
+    color: #fca5a5;
+  }
+}

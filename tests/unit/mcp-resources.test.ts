@@ -85,11 +85,37 @@ describe("MCP resources + completion", () => {
     }
   });
 
-  it("returns an empty resources/list — discovery is completion-only", async () => {
+  it("serves the release-feed UI bundle as a UI resource", async () => {
+    const link = await linkResources(fixture.db);
+    try {
+      const result = await link.client.readResource({
+        uri: "ui://releases/release-feed.html",
+      });
+      expect(result.contents).toHaveLength(1);
+      const first = result.contents[0];
+      expect(first.mimeType).toBe("text/html;profile=mcp-app");
+      if (!("text" in first)) throw new Error("expected text content, got blob");
+      expect(first.text).toContain("<!doctype html>");
+      // Smoke-check that the bundled JS made it in (root mount lives here).
+      expect(first.text).toContain('<div id="root">');
+    } finally {
+      await link.close();
+    }
+  });
+
+  it("lists only the MCP App UI resources — entity discovery is completion-only", async () => {
+    // The four entity resource templates (org / catalog / product / source) are
+    // intentionally absent from `resources/list` — the catalog scales beyond
+    // what a static list can carry, so callers reach them through completion.
+    // MCP App UI resources are different: there's exactly one per app, and
+    // hosts pre-resolve them at connect time, so they DO appear here.
     const link = await linkResources(fixture.db);
     try {
       const { resources } = await link.client.listResources();
-      expect(resources).toEqual([]);
+      const uiResources = resources.filter((r) => r.uri.startsWith("ui://"));
+      expect(uiResources.length).toBeGreaterThan(0);
+      const nonUi = resources.filter((r) => !r.uri.startsWith("ui://"));
+      expect(nonUi).toEqual([]);
     } finally {
       await link.close();
     }
