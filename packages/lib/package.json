@@ -13,6 +13,7 @@
     "./logger": "./src/logger.ts",
     "./ma-rate-limit": "./src/ma-rate-limit.ts",
     "./prompt-escape": "./src/prompt-escape.ts",
+    "./secrets": "./src/secrets.ts",
     "./source-edit": "./src/source-edit.ts"
   },
   "dependencies": {

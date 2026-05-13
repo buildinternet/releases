@@ -1,4 +1,5 @@
 import type { Context, MiddlewareHandler } from "hono";
+import { getSecret } from "@releases/lib/secrets";
 import type { Env } from "../index.js";
 
 export const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
@@ -14,7 +15,7 @@ export const PROXY_KEY_HEADER = "X-Releases-Proxy-Key";
 export async function isValidBearerAuth(c: Context<Env>): Promise<boolean> {
   const header = c.req.header("Authorization") ?? "";
   if (!header.startsWith("Bearer ")) return false;
-  const secret = await c.env.RELEASED_API_KEY?.get();
+  const secret = await getSecret(c.env.RELEASED_API_KEY);
   if (!secret) return false;
   return header.slice(7) === secret;
 }
@@ -28,7 +29,7 @@ export async function isValidBearerAuth(c: Context<Env>): Promise<boolean> {
 export async function isTrustedProxy(c: Context<Env>): Promise<boolean> {
   const header = c.req.header(PROXY_KEY_HEADER);
   if (!header) return false;
-  const secret = await c.env.RELEASES_PROXY_KEY?.get();
+  const secret = await getSecret(c.env.RELEASES_PROXY_KEY);
   if (!secret) return false;
   return header === secret;
 }
@@ -55,7 +56,7 @@ function createAuthMiddleware(opts: { allowPublicReads: boolean }): MiddlewareHa
     }
 
     // No secret configured — skip auth (local dev)
-    const secret = await c.env.RELEASED_API_KEY?.get();
+    const secret = await getSecret(c.env.RELEASED_API_KEY);
     if (!secret) {
       await next();
       return;

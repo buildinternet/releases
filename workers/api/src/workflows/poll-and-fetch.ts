@@ -15,6 +15,7 @@ import { organizations, products, releases, sources } from "@buildinternet/relea
 import type { Source } from "@buildinternet/releases-core/schema";
 import { SOURCE_DELETED_SENTINEL, recordWorkflowFailure } from "./_shared.js";
 import { logEvent } from "@releases/lib/log-event";
+import { getSecret } from "@releases/lib/secrets";
 import { summarizeRelease } from "@releases/ai-internal/release-content";
 import {
   fetchOne,
@@ -94,7 +95,7 @@ const RETRY_GENERATE = {
  * the returned object only flows through closures).
  */
 async function resolveFetchEnv(env: PollAndFetchWorkflowEnv): Promise<FetchOneEnv> {
-  const githubToken = await env.GITHUB_TOKEN?.get().catch(() => undefined);
+  const githubToken = (await getSecret(env.GITHUB_TOKEN).catch(() => null)) ?? undefined;
   return {
     GITHUB_TOKEN: githubToken,
     RELEASES_INDEX: env.RELEASES_INDEX,

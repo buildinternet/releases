@@ -21,6 +21,7 @@ import { fetchOne, embedReleasesForSource, type FetchOneEnv } from "../cron/poll
 import { getSourceMeta, isGitHubFetched } from "@releases/adapters/feed.js";
 import { invalidateLatestCache, type InvalidationEnv } from "../lib/latest-cache.js";
 import { logEvent } from "@releases/lib/log-event";
+import { getSecret } from "@releases/lib/secrets";
 
 export type OnboardSourceWorkflowEnv = InvalidationEnv & {
   DB: D1Database;
@@ -58,7 +59,7 @@ const RETRY_FETCH = {
 } satisfies WorkflowStepConfig;
 
 async function resolveFetchEnv(env: OnboardSourceWorkflowEnv): Promise<FetchOneEnv> {
-  const githubToken = await env.GITHUB_TOKEN?.get().catch(() => undefined);
+  const githubToken = (await getSecret(env.GITHUB_TOKEN).catch(() => null)) ?? undefined;
   return {
     GITHUB_TOKEN: githubToken,
     RELEASES_INDEX: env.RELEASES_INDEX,

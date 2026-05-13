@@ -1,4 +1,5 @@
 import type { MiddlewareHandler } from "hono";
+import { getSecret } from "@releases/lib/secrets";
 
 /** Custom header carrying the staging shared secret. */
 export const STAGING_KEY_HEADER = "X-Releases-Staging-Key";
@@ -20,7 +21,7 @@ export function stagingAccessGate(): MiddlewareHandler<{
       await next();
       return;
     }
-    const secret = await c.env.STAGING_ACCESS_KEY.get();
+    const secret = await getSecret(c.env.STAGING_ACCESS_KEY);
     if (!secret) {
       await next();
       return;

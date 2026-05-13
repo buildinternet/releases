@@ -22,6 +22,7 @@ import { sweepSearchQueries } from "./cron/sweep-search-queries.js";
 import { sweepTombstones } from "./cron/sweep-tombstones.js";
 import { sendAlert, type AlertEnv } from "./lib/send-alert.js";
 import { logEvent } from "@releases/lib/log-event";
+import { getSecret } from "@releases/lib/secrets";
 
 export { StatusHub } from "./status-hub.js";
 export { ReleaseHub } from "./release-hub.js";
@@ -487,7 +488,7 @@ export default {
         );
         return;
       }
-      const releasesApiKey = await env.RELEASED_API_KEY?.get();
+      const releasesApiKey = await getSecret(env.RELEASED_API_KEY);
       if (!releasesApiKey) {
         logEvent("warn", { component: "scrape-agent-cron", event: "api-key-missing" });
         return;
@@ -503,9 +504,10 @@ export default {
             FORCE_DRAIN_STALE_HOURS: env.FORCE_DRAIN_STALE_HOURS,
             DISCOVERY_WORKER: env.DISCOVERY_WORKER,
             RELEASED_API_KEY: releasesApiKey,
-            ANTHROPIC_API_KEY: await env.ANTHROPIC_API_KEY?.get(),
+            ANTHROPIC_API_KEY: (await getSecret(env.ANTHROPIC_API_KEY)) ?? undefined,
             ANTHROPIC_BASE_URL: env.ANTHROPIC_BASE_URL,
-            AI_GATEWAY_TOKEN: await env.AI_GATEWAY_TOKEN?.get().catch(() => undefined),
+            AI_GATEWAY_TOKEN:
+              (await getSecret(env.AI_GATEWAY_TOKEN).catch(() => null)) ?? undefined,
             SEND_EMAIL: env.SEND_EMAIL,
             EMAIL_NOTIFY_ENABLED: env.EMAIL_NOTIFY_ENABLED,
             EMAIL_NOTIFY_TO: env.EMAIL_NOTIFY_TO,
@@ -531,7 +533,7 @@ export default {
       );
       return;
     }
-    const githubToken = await env.GITHUB_TOKEN?.get();
+    const githubToken = (await getSecret(env.GITHUB_TOKEN)) ?? undefined;
     ctx.waitUntil(
       loggedDispatch(
         "poll-fetch-cron",

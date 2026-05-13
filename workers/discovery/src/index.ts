@@ -7,6 +7,7 @@ import type {
 } from "./types.js";
 import { discoveryIdentityHeaders } from "./identity.js";
 import { logEvent } from "@releases/lib/log-event.js";
+import { getSecret } from "@releases/lib/secrets";
 
 export { Sandbox } from "@cloudflare/sandbox";
 export { ManagedAgentsSession } from "./managed-agents-session.js";
@@ -50,7 +51,7 @@ function errorResponse(
 }
 
 async function checkAuth(request: Request, env: Env): Promise<Response | null> {
-  const apiKey = await env.RELEASED_API_KEY?.get();
+  const apiKey = await getSecret(env.RELEASED_API_KEY);
   if (!apiKey) return null;
   const header = request.headers.get("Authorization") ?? "";
   const token = header.startsWith("Bearer ") ? header.slice(7) : "";
@@ -74,7 +75,7 @@ async function startManagedSession(
     environmentId: string;
   }) => Record<string, unknown>,
 ): Promise<{ sessionId: string } | Response> {
-  const anthropicKey = await env.ANTHROPIC_API_KEY?.get();
+  const anthropicKey = await getSecret(env.ANTHROPIC_API_KEY);
   if (!anthropicKey) {
     return errorResponse("ANTHROPIC_API_KEY not configured", 500);
   }
@@ -128,8 +129,8 @@ export default {
       const DEDUP_WINDOW_MINUTES = 10;
       try {
         const guardPath = `/v1/sessions?type=onboard&recent_minutes=${DEDUP_WINDOW_MINUTES}`;
-        const apiKey = await env.RELEASED_API_KEY?.get();
-        const stagingKey = (await env.STAGING_ACCESS_KEY?.get().catch(() => "")) ?? "";
+        const apiKey = await getSecret(env.RELEASED_API_KEY);
+        const stagingKey = (await getSecret(env.STAGING_ACCESS_KEY).catch(() => null)) ?? "";
         const guardHeaders: Record<string, string> = {
           ...discoveryIdentityHeaders(),
           ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
