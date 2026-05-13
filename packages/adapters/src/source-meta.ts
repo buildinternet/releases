@@ -28,7 +28,22 @@ export interface SourceMetadata {
 
   // Crawl fields
   crawlEnabled?: boolean;
+  /**
+   * @deprecated Cloudflare's `includePatterns` matcher silently rejects every
+   * discovered URL regardless of pattern shape — see issue #929. Kept for
+   * back-compat; not passed to Cloudflare. Use `crawlExcludePatterns` instead.
+   */
   crawlPattern?: string;
+  /**
+   * URL globs to exclude from the crawl. Cloudflare's exclude matcher works as
+   * documented (unlike `includePatterns` — see #929). Use full-URL globs, e.g.
+   * `["https://example.com/humans/**", "https://example.com/login"]`.
+   * `excludePatterns` has strictly higher priority than `includePatterns` at
+   * Cloudflare's matcher.
+   */
+  crawlExcludePatterns?: string[];
+  /** Per-source override for the default `includeExternalLinks: false`. Set true to allow off-domain crawl discovery. Rare. */
+  crawlIncludeExternal?: boolean;
   lastCrawlJobId?: string;
   lastCrawlAt?: string;
   crawlMaxAge?: number; // seconds — Cloudflare R2 cache TTL (default 86400, max 604800)

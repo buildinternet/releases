@@ -231,7 +231,8 @@ export interface CrawlDeps {
   startCrawl: (
     url: string,
     options: {
-      includePatterns?: string[];
+      excludePatterns?: string[];
+      includeExternalLinks?: boolean;
       limit?: number;
       source?: "all" | "sitemaps" | "links";
       render?: boolean;
@@ -246,25 +247,30 @@ export async function acquireCrawlMarkdown(
   source: Source,
   meta: {
     crawlPattern?: string;
+    crawlExcludePatterns?: string[];
+    crawlIncludeExternal?: boolean;
     crawlSource?: "all" | "sitemaps" | "links";
     crawlRender?: boolean;
     crawlMaxAge?: number;
   },
   crawl: CrawlDeps,
 ): Promise<string | null> {
-  const includePatterns = resolveCrawlIncludePatterns(source.url, meta.crawlPattern);
+  const excludePatterns = meta.crawlExcludePatterns;
+  const includeExternalLinks = meta.crawlIncludeExternal;
 
   logEvent("info", {
     component: "scrape-fetch",
     event: "crawl-started",
     sourceSlug: source.slug,
-    includePatterns,
+    excludePatterns,
+    includeExternalLinks,
   });
 
   let jobId: string | undefined;
   try {
     jobId = await crawl.startCrawl(source.url, {
-      includePatterns: includePatterns.length > 0 ? includePatterns : undefined,
+      excludePatterns: excludePatterns?.length ? excludePatterns : undefined,
+      includeExternalLinks,
       limit: 30,
       source: meta.crawlSource ?? "links",
       render: meta.crawlRender ?? true,
