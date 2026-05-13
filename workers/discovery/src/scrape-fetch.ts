@@ -427,6 +427,7 @@ async function runScrapePath(
   const knownReleasesPromise = fetchKnownReleases(env, source);
 
   let markdown: string | null = null;
+  let cameFromCrawl = false;
   if (meta.markdownUrl) {
     markdown = await fetchMarkdownUrl(meta.markdownUrl);
   }
@@ -440,6 +441,9 @@ async function runScrapePath(
     });
     // markdown === null after a zero-page or thrown-error crawl — fall
     // through to fetchCloudflareMarkdown below.
+    if (markdown !== null) {
+      cameFromCrawl = true;
+    }
   }
 
   if (!markdown) {
@@ -479,7 +483,16 @@ async function runScrapePath(
 
   const result = await runIncrementalExtraction(
     source,
-    { markdown, knownReleases, guidance },
+    {
+      markdown,
+      knownReleases,
+      guidance,
+      // When markdown came from acquireCrawlMarkdown, per-post bodies live well
+      // past line 200. Pass Infinity so the full concatenated body reaches the
+      // model; the default 200-line cap is only appropriate for single-page
+      // changelogs where newest entries appear near the top.
+      lineCap: cameFromCrawl ? Number.POSITIVE_INFINITY : undefined,
+    },
     deps,
   );
 
