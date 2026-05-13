@@ -18,6 +18,7 @@
 
 import type { Source } from "@buildinternet/releases-core/schema";
 import { fetchCloudflareMarkdown } from "@releases/adapters/cloudflare";
+import { startCrawl, pollCrawlResults } from "@releases/adapters/crawl";
 import { getSourceMeta } from "@releases/adapters/source-meta";
 import {
   runDirectFetchExtraction,
@@ -27,6 +28,7 @@ import {
   type MappedEntry,
 } from "@releases/adapters/extract";
 import { RELEASES_BOT_UA } from "@releases/adapters/user-agent";
+import { logEvent } from "@releases/lib/log-event.js";
 import { buildWorkerExtractDeps } from "./extract-deps-worker.js";
 
 /**
@@ -179,6 +181,23 @@ async function writeFetchLog(
 
 // ── Content acquisition for scrape path ───────────────────────────
 
+/**
+ * Derive a sensible default crawl include-pattern from the source URL.
+ * For `https://resend.com/changelog` this returns `/changelog/**`.
+ * Returns undefined when the URL has no meaningful path (e.g. bare domain).
+ */
+export function deriveCrawlPattern(sourceUrl: string): string | undefined {
+  try {
+    const { pathname } = new URL(sourceUrl);
+    // Strip trailing slash, then require at least one path segment.
+    const path = pathname.replace(/\/+$/, "");
+    if (!path || path === "/") return undefined;
+    return `${path}/**`;
+  } catch {
+    return undefined;
+  }
+}
+
 async function fetchMarkdownUrl(url: string): Promise<string | null> {
   try {
     const res = await fetch(url, {
@@ -285,6 +304,81 @@ async function runScrapePath(
   if (meta.markdownUrl) {
     markdown = await fetchMarkdownUrl(meta.markdownUrl);
   }
+
+  if (!markdown && meta.crawlEnabled === true) {
+    // Derive include patterns: explicit crawlPattern takes priority; empty
+    // string means "no filter" (useful when per-post URLs don't share a
+    // prefix); undefined / absent falls back to a URL-derived default.
+    const includePatterns: string[] =
+      typeof meta.crawlPattern === "string"
+        ? meta.crawlPattern.length > 0
+          ? [meta.crawlPattern]
+          : []
+        : (() => {
+            const derived = deriveCrawlPattern(source.url);
+            return derived ? [derived] : [];
+          })();
+
+    logEvent("info", {
+      component: "scrape-fetch",
+      event: "crawl-started",
+      sourceSlug: source.slug,
+      includePatterns,
+    });
+
+    try {
+      const jobId = await startCrawl(source.url, {
+        includePatterns: includePatterns.length > 0 ? includePatterns : undefined,
+        limit: 30,
+        source: meta.crawlSource ?? "links",
+        render: meta.crawlRender ?? true,
+        maxAge: meta.crawlMaxAge,
+      });
+
+      const pages = await pollCrawlResults(jobId);
+
+      if (pages.length === 0) {
+        logEvent("warn", {
+          component: "scrape-fetch",
+          event: "crawl-fallback",
+          sourceSlug: source.slug,
+          jobId,
+          reason: "crawl returned zero pages",
+        });
+        // Fall through to fetchCloudflareMarkdown below.
+      } else {
+        logEvent("info", {
+          component: "scrape-fetch",
+          event: "crawl-completed",
+          sourceSlug: source.slug,
+          jobId,
+          pageCount: pages.length,
+        });
+
+        // Concatenate per-page markdown with a URL header so the extractor
+        // can attribute content to individual release pages.
+        markdown = pages.map((p) => `\n\n# ${p.url}\n\n${p.markdown}\n\n`).join("");
+
+        // Persist crawl job metadata — best-effort, don't block on failure.
+        deps.repo
+          .updateSourceMeta(source, {
+            lastCrawlJobId: jobId,
+            lastCrawlAt: new Date().toISOString(),
+          })
+          .catch(() => {});
+      }
+    } catch (err) {
+      logEvent("warn", {
+        component: "scrape-fetch",
+        event: "crawl-fallback",
+        sourceSlug: source.slug,
+        reason: "crawl threw an error",
+        err,
+      });
+      // Fall through to fetchCloudflareMarkdown below.
+    }
+  }
+
   if (!markdown) {
     markdown = await fetchCloudflareMarkdown(
       source.url,
