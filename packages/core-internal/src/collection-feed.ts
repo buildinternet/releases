@@ -17,12 +17,10 @@ function chunkArray<T>(arr: T[], size: number): T[][] {
 /**
  * D1 ceiling: 100 bound parameters per prepared statement. The collection
  * feed query binds up to 6 parameters for the cursor predicate, 1 for LIMIT,
- * and up to 4 for `sourceTypes` (the full enum). That leaves at least 89
- * slots for org IDs; we keep the chunk size at 90 because the filter-induced
- * org subset is always <= the full member list, and large collections cap at
- * a few dozen members in practice.
+ * and up to 4 for `sourceTypes` (the full SOURCE_TYPES enum). 100 − 11 = 89
+ * org-IN slots in the worst case.
  */
-const ORG_ID_CHUNK_SIZE = 90;
+const ORG_ID_CHUNK_SIZE = 89;
 
 function runFeedChunk(
   db: FeedQueryRunner,

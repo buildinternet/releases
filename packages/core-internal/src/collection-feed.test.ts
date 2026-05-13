@@ -242,6 +242,30 @@ describe("getCollectionReleasesFeed — large orgIds (>90, fixes #862)", () => {
       });
       expect(rows).toEqual([]);
     });
+
+    it("stays under D1's 100-bind cap at the chunk boundary with all source-type slots used", async () => {
+      // Worst-case bind count for a single chunk:
+      //   ORG_ID_CHUNK_SIZE org IDs (89) + full SOURCE_TYPES enum (4)
+      //   + cursor predicate (6) + LIMIT (1) = 100.
+      // Seed exactly that many orgs so we exercise the single-chunk path at
+      // its widest, with sourceTypes and a cursor both engaged. A regression
+      // that re-raises the chunk size (or adds bind slots without trimming)
+      // would tip this over D1's 100-variable ceiling.
+      const orgIds = await seedOrgs(tdb.db, 89);
+      // Drive a cursor predicate too (6 binds) so the bind count is at its
+      // documented worst case for this code path.
+      const firstPage = await getCollectionReleasesFeed(asD1(tdb.db), orgIds, null, 1, {
+        sourceTypes: ["github", "feed", "scrape", "agent"],
+      });
+      expect(firstPage.length).toBe(1);
+      const cursor = buildFeedCursor(firstPage[0]!);
+
+      const rows = await getCollectionReleasesFeed(asD1(tdb.db), orgIds, cursor, 200, {
+        sourceTypes: ["github", "feed", "scrape", "agent"],
+      });
+      // 88 remaining github releases (one per org, one consumed by page 1).
+      expect(rows.length).toBe(88);
+    });
   });
 
   it("cursor pagination is stable across pages with 150 orgs", async () => {
