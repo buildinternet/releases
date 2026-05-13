@@ -14,7 +14,7 @@
  * DI keeps these tests isolated.
  */
 
-import { describe, it, expect } from "bun:test";
+import { describe, it, expect, beforeAll, afterAll } from "bun:test";
 import type { Source } from "@buildinternet/releases-core/schema";
 import {
   acquireCrawlMarkdown,
@@ -333,6 +333,20 @@ function mockFetchForCrawl(returnJobId: string): {
 }
 
 describe("startCrawl body shape", () => {
+  // startCrawl calls crawlBaseUrl() which throws when CLOUDFLARE_ACCOUNT_ID is
+  // absent. Set dummy env vars so the function reaches the fetch() call, which
+  // we mock anyway.
+  const originalAccountId = process.env.CLOUDFLARE_ACCOUNT_ID;
+  const originalApiToken = process.env.CLOUDFLARE_API_TOKEN;
+  beforeAll(() => {
+    process.env.CLOUDFLARE_ACCOUNT_ID = "test_account";
+    process.env.CLOUDFLARE_API_TOKEN = "test_token";
+  });
+  afterAll(() => {
+    process.env.CLOUDFLARE_ACCOUNT_ID = originalAccountId;
+    process.env.CLOUDFLARE_API_TOKEN = originalApiToken;
+  });
+
   it("excludePatterns populated → body.options.excludePatterns is the array", async () => {
     const { restore, capturedBodies } = mockFetchForCrawl("job_1");
     try {
