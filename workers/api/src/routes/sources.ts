@@ -32,7 +32,7 @@ import {
 import { SOURCE_TYPES, type SourceType } from "@buildinternet/releases-core/source-enums";
 import { buildListResponse, parseListPagination } from "../lib/pagination.js";
 import { RELEASE_URL_UPSERT } from "@releases/core-internal/release-upsert";
-import { daysAgoIso } from "@buildinternet/releases-core/dates";
+import { daysAgoIso, inferMonthOnlyDate } from "@buildinternet/releases-core/dates";
 import { likeContains } from "@buildinternet/releases-core/sql-like";
 import { toSlug } from "@buildinternet/releases-core/slug";
 import { isReservedSlug } from "@buildinternet/releases-core/reserved-slugs";
@@ -667,7 +667,7 @@ const postReleasesBatchHandler = async (c: import("hono").Context<Env>) => {
           content: r.content,
           url: r.url ?? null,
           contentHash: r.contentHash ?? null,
-          publishedAt: r.publishedAt ?? null,
+          publishedAt: r.publishedAt ?? inferMonthOnlyDate(r.title) ?? null,
           prerelease: r.prerelease ?? isPrereleaseVersion(version),
           media: r.media ?? "[]",
         };
@@ -2580,7 +2580,7 @@ sourceRoutes.post("/sources/:slug/releases", postReleaseRoute, async (c) => {
         url: body.url ?? null,
         contentHash: body.contentHash ?? null,
         metadata: body.metadata ?? "{}",
-        publishedAt: body.publishedAt ?? null,
+        publishedAt: body.publishedAt ?? inferMonthOnlyDate(body.title) ?? null,
         prerelease: isPrereleaseVersion(version),
         fetchedAt: body.fetchedAt ?? new Date().toISOString(),
       })
