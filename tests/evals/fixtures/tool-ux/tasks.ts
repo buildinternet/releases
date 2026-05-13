@@ -114,7 +114,7 @@ export const TASKS: ToolUxTask[] = [
     label: "Change fetch priority on an existing source",
     prompt: "Pause fetching for the Vercel changelog source. Don't remove it, just pause it.",
     expected: {
-      old: ["list_sources", "edit_source"],
+      old: ["list_catalog", "edit_source"],
       new: ["find", "manage_source"],
     },
     dbCheck: {
@@ -132,7 +132,7 @@ export const TASKS: ToolUxTask[] = [
     prompt:
       "Remove the source with slug 'eval-cleanup-source' — it was added by mistake. If it doesn't exist, say so.",
     expected: {
-      old: ["list_sources", "remove_source"],
+      old: ["list_catalog", "remove_source"],
       new: ["find", "manage_source"],
     },
     // Driver should seed this source before the run.

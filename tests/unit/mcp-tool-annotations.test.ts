@@ -50,17 +50,12 @@ describe("MCP tool annotations", () => {
       "get_collection_releases",
       "get_latest_releases",
       "get_organization",
-      "get_product",
       "get_release",
       "list_catalog",
       "list_collections",
       "list_organizations",
-      "list_products",
-      "list_sources",
       "lookup_domain",
       "search",
-      "search_registry",
-      "search_releases",
     ]);
   });
 

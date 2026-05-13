@@ -5,16 +5,11 @@ import { createDb } from "./db.js";
 import { buildAnthropicClient } from "@releases/lib/anthropic-client.js";
 import { hydrateMediaUrls } from "@releases/rendering/media-url.js";
 import {
-  searchReleases,
-  searchRegistry,
   search,
   getLatestReleases,
-  listSources,
   listOrganizations,
   getOrganization,
   getRelease,
-  listProducts,
-  getProduct,
   listCatalog,
   getCatalogEntry,
   lookupDomain,
@@ -231,12 +226,8 @@ export function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServ
    * the `ToolResult` to satisfy the MCP SDK's tool signature. Logging is
    * fire-and-forget — never blocks the response, never propagates errors.
    */
-  // `search_registry` doesn't expose a `mode` input — it's semantic + lexical
-  // fallback — so report "semantic" unless the call degraded.
   const defaultModeFor: Record<McpSearchCommand, SearchMode> = {
     search: "hybrid",
-    search_releases: "hybrid",
-    search_registry: "semantic",
   };
 
   function withSearchLog<
@@ -422,74 +413,6 @@ export function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServ
   );
 
   server.registerTool(
-    "search_releases",
-    {
-      ...titled("Search releases (deprecated)", READ_ONLY_HINTS),
-      description:
-        "Deprecated — use `search` with `type: ['releases']` instead. Search indexed release notes with hybrid retrieval (FTS5 + semantic vectors fused via RRF). Results carry a `kind` discriminator so agents can branch on `release` vs `changelog_chunk` hits.",
-      inputSchema: {
-        query: z.string().describe("Search query"),
-        product: z
-          .string()
-          .optional()
-          .describe(
-            "Filter to a specific source. Accepts a src_ id or an org-scoped coordinate in the form orgSlug/sourceSlug (e.g. 'vercel/next-js'). Bare slugs without an org prefix are not accepted.",
-          ),
-        organization: z
-          .string()
-          .optional()
-          .describe(
-            "Filter to sources belonging to this organization. Accepts an org_ id, slug, or registered domain.",
-          ),
-        type: z
-          .enum(["feature", "rollup"])
-          .optional()
-          .describe(
-            "Filter by release type: 'feature' for individual releases, 'rollup' for seasonal/quarterly catch-all posts. Omit to include both.",
-          ),
-        limit: z.number().optional().describe("Max results to return (default 20)"),
-        mode: z
-          .enum(["lexical", "semantic", "hybrid"])
-          .optional()
-          .describe(
-            "Retrieval strategy. 'hybrid' (default) fuses FTS + vector results. 'lexical' is legacy FTS only. 'semantic' is vectors only. Falls back to lexical if vector infra is unavailable.",
-          ),
-        include_coverage: z
-          .boolean()
-          .optional()
-          .describe(
-            "Include releases grouped as coverage of another (e.g. marketing posts that re-announce a platform release). Defaults to false so each underlying launch appears once.",
-          ),
-      },
-    },
-    withSearchLog("search_releases", async (params) => {
-      const out = await searchReleases(db, params, env, ctx);
-      // No entity buckets to gate on, so always attempt the lookup;
-      // `maybeLookup` no-ops on non-coordinate input.
-      await maybeLookup(out, params.query);
-      return out;
-    }),
-  );
-
-  server.registerTool(
-    "search_registry",
-    {
-      ...titled("Search registry (deprecated)", READ_ONLY_HINTS),
-      description:
-        "Deprecated — use `search` with `type: ['orgs', 'catalog']` instead. Semantic search across the registry returning orgs, products, or sources that match the query by meaning, not just keyword. Falls back to LIKE-based lexical search when Vectorize is unavailable.",
-      inputSchema: {
-        query: z.string().describe("Natural-language search query"),
-        kind: z
-          .enum(["org", "product", "source"])
-          .optional()
-          .describe("Restrict results to one entity kind. Omit to include all three."),
-        limit: z.number().optional().describe("Max results to return (default 20)"),
-      },
-    },
-    withSearchLog("search_registry", async (params) => searchRegistry(db, params, env, ctx)),
-  );
-
-  server.registerTool(
     "get_latest_releases",
     {
       ...titled("Get latest releases", READ_ONLY_HINTS),
@@ -556,7 +479,7 @@ export function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServ
     {
       ...titled("List catalog", READ_ONLY_HINTS),
       description: [
-        "List catalog entries — products and standalone sources combined into one list with a `kind: 'product' | 'source'` discriminator per row. This replaces the need to call `list_products` and `list_sources` separately.",
+        "List catalog entries — products and standalone sources combined into one list with a `kind: 'product' | 'source'` discriminator per row.",
         "",
         "Orgs that group multiple sources under a product (e.g. Vercel → Next.js, Turborepo) surface those products; orgs with a single source that isn't part of a product surface it directly as a `kind: 'source'` entry. Either shape is a reasonable thing to pass to `search(entity: ...)`.",
         "",
@@ -617,24 +540,6 @@ export function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServ
       },
     },
     withMedia(async (params) => getCatalogEntry(db, params)),
-  );
-
-  server.registerTool(
-    "list_sources",
-    {
-      ...titled("List sources (deprecated)", READ_ONLY_HINTS),
-      description:
-        "Deprecated — use `list_catalog` instead. List all indexed changelog sources. Paginated: defaults to 50 entries per page; pass `page: 2` for the next slice.",
-      inputSchema: withPagination({
-        organization: z
-          .string()
-          .optional()
-          .describe(
-            "Filter to sources belonging to this organization. Accepts an org_ id, slug, or registered domain.",
-          ),
-      }),
-    },
-    async (params) => listSources(db, params),
   );
 
   server.registerTool(
@@ -766,47 +671,12 @@ export function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServ
     {
       ...titled("Get release", READ_ONLY_HINTS),
       description:
-        "Fetch the full content of a single release by id. Release ids are returned by search_releases / get_latest_releases — pass them here to read the whole entry (e.g. to quote a specific Next.js release note). Accepts the full rel_<nanoid> form or the bare 21-char nanoid.",
+        "Fetch the full content of a single release by id. Release ids are returned by search or get_latest_releases — pass them here to read the whole entry (e.g. to quote a specific Next.js release note). Accepts the full rel_<nanoid> form or the bare 21-char nanoid.",
       inputSchema: {
         id: z.string().describe("Release id — 'rel_<nanoid>' or a bare 21-char nanoid"),
       },
     },
     withMedia(async (params) => getRelease(db, params)),
-  );
-
-  server.registerTool(
-    "list_products",
-    {
-      ...titled("List products (deprecated)", READ_ONLY_HINTS),
-      description:
-        "Deprecated — use `list_catalog` instead. List products — the optional grouping layer between organizations and sources. Paginated: defaults to 50 entries per page; pass `page: 2` for the next slice.",
-      inputSchema: withPagination({
-        organization: z
-          .string()
-          .optional()
-          .describe(
-            "Organization to scope to. Accepts an org_ id, slug, domain, or name (e.g. 'vercel').",
-          ),
-      }),
-    },
-    async (params) => listProducts(db, params),
-  );
-
-  server.registerTool(
-    "get_product",
-    {
-      ...titled("Get product (deprecated)", READ_ONLY_HINTS),
-      description:
-        "Deprecated — use `get_catalog_entry` instead. Detail for a single product including its organization, category, tags, and the sources grouped under it.",
-      inputSchema: {
-        identifier: z
-          .string()
-          .describe(
-            "Product identifier: prod_ id or org-scoped coordinate orgSlug/productSlug (e.g. 'vercel/nextjs'). Bare slugs without an org prefix are not accepted.",
-          ),
-      },
-    },
-    async (params) => getProduct(db, params),
   );
 
   if (env.ENABLE_AI_TOOLS === "true") {

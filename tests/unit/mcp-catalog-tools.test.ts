@@ -23,9 +23,7 @@ import {
   getCatalogEntry,
   getOrganization,
   getLatestReleases,
-  listSources,
   listOrganizations,
-  listProducts,
   lookupDomain,
   search,
 } from "../../workers/mcp/src/tools.js";
@@ -622,33 +620,6 @@ describe("lookup_domain", () => {
   });
 });
 
-describe("list_sources (round-trippable slugs)", () => {
-  const fixture = useFixture(seed);
-
-  it("surfaces org-scoped slug coordinates instead of bare slugs", async () => {
-    const text = resultText(await listSources(asD1(fixture.db), {}));
-    expect(text).toContain("vercel/next-js");
-    expect(text).toContain("vercel/turborepo-src");
-    expect(text).toContain("anthropic/anthropic-releases");
-  });
-
-  it("still scopes correctly when filtered by org", async () => {
-    const text = resultText(await listSources(asD1(fixture.db), { organization: "vercel" }));
-    expect(text).toContain("vercel/next-js");
-    expect(text).not.toContain("anthropic");
-  });
-});
-
-describe("list_products (round-trippable slugs)", () => {
-  const fixture = useFixture(seed);
-
-  it("surfaces org-scoped slug coordinates instead of bare slugs", async () => {
-    const text = resultText(await listProducts(asD1(fixture.db), {}));
-    expect(text).toContain("vercel/nextjs");
-    expect(text).toContain("vercel/turborepo");
-  });
-});
-
 describe("get_organization (round-trippable entity coordinates)", () => {
   const fixture = useFixture(seed);
 
@@ -683,45 +654,6 @@ describe("list_* pagination", () => {
   // entries. Limits below the total are enough to exercise the footer + slice
   // logic across all four list_* tools without growing the fixture.
 
-  it("list_sources omits the footer when the page covers the total", async () => {
-    const text = resultText(await listSources(asD1(fixture.db), {}));
-    expect(text).not.toContain("Page ");
-    expect(text).toContain("vercel/next-js");
-    expect(text).toContain("anthropic/anthropic-releases");
-  });
-
-  it("list_sources renders a footer that echoes the active limit so paging is self-contained", async () => {
-    const text = resultText(await listSources(asD1(fixture.db), { limit: 2 }));
-    expect(text).toContain("Page 1 of 2 · Showing 2 of 3 sources.");
-    expect(text).toContain("Pass `page: 2, limit: 2` to continue.");
-  });
-
-  it("list_sources page=2 returns the tail and drops the next-page hint", async () => {
-    const text = resultText(await listSources(asD1(fixture.db), { limit: 2, page: 2 }));
-    expect(text).toContain("Page 2 of 2 · Showing 1 of 3 sources.");
-    expect(text).not.toContain("Pass `page: 3");
-  });
-
-  it("list_sources reports 'no sources on this page' beyond the last page", async () => {
-    const text = resultText(await listSources(asD1(fixture.db), { limit: 2, page: 99 }));
-    expect(text).toContain("No sources on this page.");
-    expect(text).toContain("Page 99 of 2 · Showing 0 of 3 sources.");
-  });
-
-  it("list_sources past-end on a single-page result still shows the footer for context", async () => {
-    // page=2 limit=50 against 3 rows: totalPages=1, but the caller asked for
-    // page 2 — we owe them context, not a bare "no entries on this page".
-    const text = resultText(await listSources(asD1(fixture.db), { page: 2 }));
-    expect(text).toContain("No sources on this page.");
-    expect(text).toContain("Page 2 of 1 · Showing 0 of 3 sources.");
-  });
-
-  it("list_products paginates products with a single-row limit", async () => {
-    const text = resultText(await listProducts(asD1(fixture.db), { limit: 1 }));
-    expect(text).toContain("Page 1 of 2 · Showing 1 of 2 products.");
-    expect(text).toContain("Pass `page: 2, limit: 1` to continue.");
-  });
-
   it("list_organizations paginates orgs with a single-row limit", async () => {
     const text = resultText(await listOrganizations(asD1(fixture.db), { limit: 1 }));
     expect(text).toContain("Page 1 of 2 · Showing 1 of 2 organizations.");
@@ -748,20 +680,14 @@ describe("list_* pagination", () => {
     expect(text).not.toContain("Page ");
     expect(text).toContain("anthropic/anthropic-releases");
   });
-
-  it("list_sources empty result still returns the no-content message", async () => {
-    clearAllTables(fixture.db);
-    const text = resultText(await listSources(asD1(fixture.db), {}));
-    expect(text).toBe("No sources indexed yet.");
-  });
 });
 
 describe("list_* _meta.pagination", () => {
   const fixture = useFixture(seed);
 
   it("populates _meta.pagination with hasMore + nextPage on a multi-page result", async () => {
-    // 3 sources, limit=2 → page 1 has more.
-    const result = await listSources(asD1(fixture.db), { limit: 2 });
+    // 3 catalog entries, limit=2 → page 1 has more.
+    const result = await listCatalog(asD1(fixture.db), { limit: 2 });
     expect(result._meta?.pagination).toEqual({
       kind: "page",
       page: 1,
@@ -775,7 +701,7 @@ describe("list_* _meta.pagination", () => {
   });
 
   it("omits nextPage on the last page", async () => {
-    const result = await listSources(asD1(fixture.db), { limit: 2, page: 2 });
+    const result = await listCatalog(asD1(fixture.db), { limit: 2, page: 2 });
     expect(result._meta?.pagination).toMatchObject({
       page: 2,
       pageSize: 2,
@@ -788,8 +714,8 @@ describe("list_* _meta.pagination", () => {
   });
 
   it("carries _meta on a single-page result with hasMore=false", async () => {
-    const result = await listSources(asD1(fixture.db), {});
-    expect(result._meta?.pagination).toEqual({
+    const result = await listCatalog(asD1(fixture.db), {});
+    expect(result._meta?.pagination).toMatchObject({
       kind: "page",
       page: 1,
       pageSize: 50,
@@ -801,7 +727,7 @@ describe("list_* _meta.pagination", () => {
   });
 
   it("carries _meta when paging past the end (returned=0, totalItems>0)", async () => {
-    const result = await listSources(asD1(fixture.db), { limit: 2, page: 99 });
+    const result = await listCatalog(asD1(fixture.db), { limit: 2, page: 99 });
     expect(result._meta?.pagination).toMatchObject({
       page: 99,
       pageSize: 2,
@@ -814,9 +740,8 @@ describe("list_* _meta.pagination", () => {
 
   it("carries _meta on the empty-table case (totalItems=0)", async () => {
     clearAllTables(fixture.db);
-    const result = await listSources(asD1(fixture.db), {});
-    expect(resultText(result)).toBe("No sources indexed yet.");
-    expect(result._meta?.pagination).toEqual({
+    const result = await listCatalog(asD1(fixture.db), {});
+    expect(result._meta?.pagination).toMatchObject({
       kind: "page",
       page: 1,
       pageSize: 50,
@@ -840,16 +765,7 @@ describe("list_* _meta.pagination", () => {
     });
   });
 
-  it("list_products and list_catalog also expose _meta.pagination", async () => {
-    const productsResult = await listProducts(asD1(fixture.db), { limit: 1 });
-    expect(productsResult._meta?.pagination).toMatchObject({
-      page: 1,
-      pageSize: 1,
-      totalItems: 2,
-      hasMore: true,
-      nextPage: 2,
-    });
-
+  it("list_catalog exposes _meta.pagination", async () => {
     const catalog = await listCatalog(asD1(fixture.db), { limit: 2 });
     expect(catalog._meta?.pagination).toMatchObject({
       page: 1,

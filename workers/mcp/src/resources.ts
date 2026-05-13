@@ -1,13 +1,8 @@
 import { ResourceTemplate, type McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { hydrateMediaUrls } from "@releases/rendering/media-url.js";
 import type { D1Db } from "./db.js";
-import { getCatalogEntry, getOrganization, getProduct, type ToolResult } from "./tools.js";
-import {
-  completeCatalogSlug,
-  completeOrgSlug,
-  completeProductSlug,
-  completeSourceSlug,
-} from "./slug-completion.js";
+import { getCatalogEntry, getOrganization, type ToolResult } from "./tools.js";
+import { completeCatalogSlug, completeOrgSlug, completeSourceSlug } from "./slug-completion.js";
 import { releaseFeedHtml } from "./ui-bundles.js";
 
 /**
@@ -76,27 +71,6 @@ export function registerResources(server: McpServer, db: D1Db, mediaOrigin: stri
     async (uri, variables) => {
       const identifier = String(variables.slug);
       return toMarkdownContents(uri, await getCatalogEntry(db, { identifier }), mediaOrigin);
-    },
-  );
-
-  const productTemplate = new ResourceTemplate("releases://product/{productSlug}", {
-    list: undefined,
-    complete: {
-      productSlug: (value) => completeProductSlug(db, value),
-    },
-  });
-
-  server.registerResource(
-    "product",
-    productTemplate,
-    {
-      description:
-        "(deprecated) Product detail. Prefer releases://catalog/{slug} — it resolves products and standalone sources via one URI. Kept for one release cycle.",
-      mimeType: "text/markdown",
-    },
-    async (uri, variables) => {
-      const slug = String(variables.productSlug);
-      return toMarkdownContents(uri, await getProduct(db, { identifier: slug }), mediaOrigin);
     },
   );
 

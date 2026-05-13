@@ -40,7 +40,6 @@ export type {
   SearchChunkHit,
   SearchOrgHit,
   SearchCatalogHit,
-  SearchProductHit,
   SearchSourceHit,
   OrgReleaseItem,
   OverviewPageItem,
