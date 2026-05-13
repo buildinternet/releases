@@ -3,6 +3,7 @@ import type { Adapter, RawRelease, FetchOptions, FetchResult } from "@releases/a
 import { config } from "@releases/lib/config";
 import { AdapterError } from "@releases/lib/errors";
 import { logger } from "@buildinternet/releases-lib/logger";
+import { logEvent } from "@releases/lib/log-event";
 import { sha256Hex } from "@releases/core-internal/hash";
 import { RELEASES_BOT_UA } from "@releases/adapters/user-agent";
 import {
@@ -11,6 +12,7 @@ import {
   discoverChangelogPaths as discoverChangelogPathsCore,
   parseOwnerRepo as parseOwnerRepoCore,
 } from "@releases/adapters/github-discovery";
+import { getSourceMeta } from "@releases/adapters/source-meta";
 import type {
   ChangelogPathOrigin,
   DiscoveredChangelogPath,
@@ -256,6 +258,38 @@ interface GitHubRelease {
   prerelease: boolean;
 }
 
+/**
+ * Returns `"deny"` if the tag should be skipped due to a deny-prefix match,
+ * `"allow"` if the tag passes an allow-pattern filter, `"no-filter"` if no
+ * filter is configured, or `"allow-miss"` when the tag fails the allow-pattern
+ * filter.
+ *
+ * Precedence rule: when `tagAllowPatterns` is non-empty it takes sole control;
+ * `tagDenyPrefixes` is ignored. When only `tagDenyPrefixes` is set, any
+ * prefix match causes the tag to be skipped. Neither set → no filtering.
+ */
+export function evaluateTagFilter(
+  tag: string,
+  denyPrefixes: string[] | undefined,
+  allowPatterns: string[] | undefined,
+): "no-filter" | "allow" | "deny" | "allow-miss" {
+  const hasAllow = Array.isArray(allowPatterns) && allowPatterns.length > 0;
+  const hasDeny = Array.isArray(denyPrefixes) && denyPrefixes.length > 0;
+
+  if (hasAllow) {
+    // Allow-patterns take sole control — deny-prefixes are ignored.
+    const matched = allowPatterns.some((pattern) => new RegExp(pattern).test(tag));
+    return matched ? "allow" : "allow-miss";
+  }
+
+  if (hasDeny) {
+    const matched = denyPrefixes.some((prefix) => tag.startsWith(prefix));
+    return matched ? "deny" : "no-filter";
+  }
+
+  return "no-filter";
+}
+
 // Re-fetch protection: The UNIQUE constraints on releases (source_id, url)
 // and (source_id, content_hash) already handle dedup at the DB level.
 // A lightweight optimization to skip fetching all pages when the latest
@@ -266,6 +300,8 @@ export const github: Adapter = {
     const token = config.githubToken();
     const since = options?.since;
     const maxEntries = options?.maxEntries;
+    const meta = getSourceMeta(source);
+    const { tagDenyPrefixes, tagAllowPatterns } = meta;
 
     const headers: Record<string, string> = {
       Accept: "application/vnd.github+json",
@@ -309,6 +345,21 @@ export const github: Adapter = {
         if (since && publishedAt && publishedAt < since) {
           hitDateCutoff = true;
           break;
+        }
+
+        // Tag filter: runs before any release-detail fetch or DB read so that
+        // noise tags are a cheap skip. allow-patterns take precedence over
+        // deny-prefixes when both are configured.
+        const filterResult = evaluateTagFilter(rel.tag_name, tagDenyPrefixes, tagAllowPatterns);
+        if (filterResult === "deny" || filterResult === "allow-miss") {
+          logEvent("info", {
+            component: "github-adapter",
+            event: "tag-filtered",
+            sourceSlug: source.slug,
+            tag: rel.tag_name,
+            reason: filterResult === "deny" ? "deny-prefix" : "allow-pattern-miss",
+          });
+          continue;
         }
 
         releases.push({

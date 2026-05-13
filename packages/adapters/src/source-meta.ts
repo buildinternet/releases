@@ -111,6 +111,30 @@ export interface SourceMetadata {
    * the body is small; omitted to use the default threshold-based gate.
    */
   extractStrategy?: "toolloop";
+
+  // GitHub tag filtering
+
+  /**
+   * GitHub-tag deny-list. Tag names whose prefix matches any entry in this
+   * array are skipped during ingestion. Case-sensitive — matches the upstream
+   * `tag_name` verbatim. Useful for excluding CI / internal sub-tool tags from
+   * a monorepo source (e.g. PostHog's `agent-skills-`, `hog-`, `phrocs-`).
+   *
+   * Ignored when `tagAllowPatterns` is non-empty — the allow-list takes
+   * precedence (see `tagAllowPatterns`).
+   */
+  tagDenyPrefixes?: string[];
+
+  /**
+   * GitHub-tag allow-list expressed as regex source strings. When set, only
+   * tags matching at least one expression are ingested; all others are skipped.
+   * Useful when a monorepo's signal is concentrated in one specific tag prefix
+   * (e.g. only ingest `^v\d+` version tags).
+   *
+   * Mutually exclusive with `tagDenyPrefixes`: when `tagAllowPatterns` is
+   * non-empty, deny-prefix filtering is bypassed entirely.
+   */
+  tagAllowPatterns?: string[];
 }
 
 /** Parse the JSON metadata blob from a source row. */
