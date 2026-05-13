@@ -142,6 +142,108 @@ describe("getCollectionReleasesFeed — large orgIds (>90, fixes #862)", () => {
     expect(hitNull).toBe(true);
   });
 
+  describe("sourceTypes filter", () => {
+    /**
+     * Seed two orgs, each with one github + one feed source + one release per
+     * source. Used by the source-type filter tests below.
+     */
+    async function seedMixedTypes() {
+      await tdb.db.insert(organizations).values([
+        { id: "org_a", name: "A", slug: "a", discovery: "curated" },
+        { id: "org_b", name: "B", slug: "b", discovery: "curated" },
+      ]);
+      await tdb.db.insert(sources).values([
+        {
+          id: "src_a_gh",
+          name: "A GH",
+          slug: "a-gh",
+          type: "github",
+          url: "https://github.com/example/a",
+          orgId: "org_a",
+          discovery: "curated",
+        },
+        {
+          id: "src_a_feed",
+          name: "A Feed",
+          slug: "a-feed",
+          type: "feed",
+          url: "https://a.example/feed",
+          orgId: "org_a",
+          discovery: "curated",
+        },
+        {
+          id: "src_b_gh",
+          name: "B GH",
+          slug: "b-gh",
+          type: "github",
+          url: "https://github.com/example/b",
+          orgId: "org_b",
+          discovery: "curated",
+        },
+      ]);
+      await tdb.db.insert(releases).values([
+        {
+          id: "rel_a_gh",
+          sourceId: "src_a_gh",
+          title: "A GH",
+          content: "",
+          type: "feature",
+          publishedAt: "2026-01-01T00:00:00Z",
+          fetchedAt: "2026-01-01T00:00:00Z",
+        },
+        {
+          id: "rel_a_feed",
+          sourceId: "src_a_feed",
+          title: "A Feed",
+          content: "",
+          type: "feature",
+          publishedAt: "2026-01-02T00:00:00Z",
+          fetchedAt: "2026-01-02T00:00:00Z",
+        },
+        {
+          id: "rel_b_gh",
+          sourceId: "src_b_gh",
+          title: "B GH",
+          content: "",
+          type: "feature",
+          publishedAt: "2026-01-03T00:00:00Z",
+          fetchedAt: "2026-01-03T00:00:00Z",
+        },
+      ]);
+    }
+
+    it("returns all rows when sourceTypes is omitted", async () => {
+      await seedMixedTypes();
+      const rows = await getCollectionReleasesFeed(asD1(tdb.db), ["org_a", "org_b"], null, 50);
+      expect(rows.map((r) => r.id).toSorted()).toEqual(["rel_a_feed", "rel_a_gh", "rel_b_gh"]);
+    });
+
+    it("narrows to the named source types", async () => {
+      await seedMixedTypes();
+      const onlyFeed = await getCollectionReleasesFeed(asD1(tdb.db), ["org_a", "org_b"], null, 50, {
+        sourceTypes: ["feed"],
+      });
+      expect(onlyFeed.map((r) => r.id)).toEqual(["rel_a_feed"]);
+
+      const onlyGithub = await getCollectionReleasesFeed(
+        asD1(tdb.db),
+        ["org_a", "org_b"],
+        null,
+        50,
+        { sourceTypes: ["github"] },
+      );
+      expect(onlyGithub.map((r) => r.id).toSorted()).toEqual(["rel_a_gh", "rel_b_gh"]);
+    });
+
+    it("returns nothing when sourceTypes is an empty array", async () => {
+      await seedMixedTypes();
+      const rows = await getCollectionReleasesFeed(asD1(tdb.db), ["org_a", "org_b"], null, 50, {
+        sourceTypes: [],
+      });
+      expect(rows).toEqual([]);
+    });
+  });
+
   it("cursor pagination is stable across pages with 150 orgs", async () => {
     const orgIds = await seedOrgs(tdb.db, 150);
 

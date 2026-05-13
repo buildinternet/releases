@@ -20,6 +20,7 @@ import {
   orgWhere,
 } from "../utils.js";
 import { getCollectionReleasesFeed } from "../queries/orgs.js";
+import { parseSourceTypesLenient } from "../lib/source-types.js";
 import { wantsMarkdown, markdownResponse } from "../middleware/content-negotiation.js";
 import { collectionReleaseFeedToMarkdown } from "@releases/rendering/formatters.js";
 import type { Env } from "../index.js";
@@ -334,6 +335,22 @@ collectionRoutes.get(
         schema: { type: "boolean" },
         description: "Include rows flagged as prereleases. Defaults to false.",
       },
+      {
+        name: "orgs",
+        in: "query",
+        required: false,
+        schema: { type: "string" },
+        description:
+          "Comma-separated org slugs to narrow the feed to a subset of the collection's members. Unknown slugs are silently dropped; passing an `orgs=` value that resolves to an empty set returns `releases: []`. Omit to include all member orgs.",
+      },
+      {
+        name: "source_type",
+        in: "query",
+        required: false,
+        schema: { type: "string" },
+        description:
+          "Comma-separated source types (`github`, `feed`, `scrape`, `agent`) to narrow the feed by ingest channel — typically used by the web UI to split GitHub tag drops from marketing posts. Unknown tokens are silently dropped. Omit to include all source types.",
+      },
     ],
     responses: {
       200: {
@@ -351,6 +368,25 @@ collectionRoutes.get(
     const cursorParam = c.req.query("cursor") ?? null;
     const limit = parseLimitParam(c.req.query("limit"), 20, 100);
     const includePrereleases = parseBoolParam(c.req.query("include_prereleases"));
+    // `source_type` accepts CSV or repeated query params; unknown values are
+    // dropped silently to match the org release-feed convention. `undefined`
+    // = no filter; an empty array = caller narrowed to nothing (return []).
+    const rawSourceType = c.req.query("source_type");
+    const sourceTypes =
+      rawSourceType === undefined ? undefined : parseSourceTypesLenient(rawSourceType);
+    const orgsParam = c.req.query("orgs");
+    // Parse `?orgs=` into a slug set; we don't error on unknowns because the
+    // intersect-with-members step below naturally drops anything that isn't
+    // a current collection member.
+    const requestedOrgSlugs =
+      orgsParam === undefined
+        ? null
+        : new Set(
+            orgsParam
+              .split(",")
+              .map((s) => s.trim().toLowerCase())
+              .filter((s) => s.length > 0),
+          );
 
     const db = createDb(c.env.DB);
 
@@ -365,17 +401,27 @@ collectionRoutes.get(
     // Resolve members through organizations_public so the feed and the detail
     // page agree on visible membership.
     const memberRows = await db
-      .select({ orgId: organizationsPublic.id })
+      .select({ orgId: organizationsPublic.id, slug: organizationsPublic.slug })
       .from(collectionMembers)
       .innerJoin(organizationsPublic, eq(organizationsPublic.id, collectionMembers.orgId))
       .where(eq(collectionMembers.collectionId, collection.id));
 
+    // Narrow to the requested org subset *before* hitting the feed helper so
+    // an empty intersection short-circuits to `releases: []` instead of
+    // running an unscoped query. `requestedOrgSlugs === null` means no
+    // `?orgs=` was passed — use the full member set.
+    const orgIds = (
+      requestedOrgSlugs === null
+        ? memberRows
+        : memberRows.filter((m) => requestedOrgSlugs.has(m.slug))
+    ).map((m) => m.orgId);
+
     // `getCollectionReleasesFeed` short-circuits on an empty orgIds list, so an
     // empty-membership collection flows through the same response path as a
     // populated one and honors `Accept: text/markdown` via wantsMarkdown below.
-    const orgIds = memberRows.map((m) => m.orgId);
     const results = await getCollectionReleasesFeed(db, orgIds, cursorParam, limit + 1, {
       includePrereleases,
+      sourceTypes,
     });
 
     const hasMore = results.length > limit;

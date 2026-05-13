@@ -29,12 +29,27 @@ export async function getCategoryReleasesFeed(
   category: Category,
   cursorParam: string | null,
   limit: number,
-  opts: { includePrereleases?: boolean } = {},
+  opts: { includePrereleases?: boolean; sourceTypes?: string[]; orgSlugs?: string[] } = {},
 ): Promise<CategoryReleaseRow[]> {
   const cursor = feedCursorSql(cursorParam);
   const prereleaseWhere = opts.includePrereleases
     ? sql``
     : sql`AND (r.prerelease IS NULL OR r.prerelease = 0)`;
+  // Empty arrays = caller narrowed the set to nothing; honor that rather than
+  // silently widening. The route layer rejects unknown values before we get
+  // here, so an empty array means "all values were filtered out as invalid."
+  const sourceTypeWhere =
+    opts.sourceTypes === undefined
+      ? sql``
+      : opts.sourceTypes.length === 0
+        ? sql`AND 1 = 0`
+        : sql`AND s.type IN ${opts.sourceTypes}`;
+  const orgWhere =
+    opts.orgSlugs === undefined
+      ? sql``
+      : opts.orgSlugs.length === 0
+        ? sql`AND 1 = 0`
+        : sql`AND o.slug IN ${opts.orgSlugs}`;
 
   return db.all<CategoryReleaseRow>(sql`
     SELECT r.id, r.version, r.title, r.content, r.summary,
@@ -50,6 +65,8 @@ export async function getCategoryReleasesFeed(
     WHERE (p.category = ${category} OR (p.category IS NULL AND o.category = ${category}))
       AND (r.suppressed IS NULL OR r.suppressed = 0)
       ${prereleaseWhere}
+      ${sourceTypeWhere}
+      ${orgWhere}
       ${cursor}
     ORDER BY
       CASE WHEN r.published_at IS NOT NULL THEN 0 ELSE 1 END,
