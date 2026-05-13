@@ -1,26 +1,95 @@
 /**
- * Tests for the crawl-enabled dispatch branch in `runScrapePath` and the
- * `deriveCrawlPattern` helper.
+ * Tests for the crawl-enabled dispatch helpers in `scrape-fetch.ts`:
  *
- * The dispatch tests use Bun's `mock.module` to intercept `startCrawl` /
- * `pollCrawlResults` calls and verify the branching logic without making real
- * HTTP requests.
+ *   - `deriveCrawlPattern`         — URL → include-pattern derivation
+ *   - `resolveCrawlIncludePatterns` — honors explicit / empty / absent crawlPattern
+ *   - `acquireCrawlMarkdown`        — dispatch with DI'd crawl primitives
  *
- * Coverage:
- *  1. deriveCrawlPattern — URL → include-pattern derivation
- *  2. crawlEnabled: true + crawl returns pages → uses crawl body, skips CF markdown
- *  3. crawlEnabled: true + crawl returns empty → falls back to fetchCloudflareMarkdown
- *  4. crawlEnabled: false (or absent) → no crawl call, existing path runs
+ * Crawl primitives are injected via the `CrawlDeps` parameter rather than
+ * being intercepted with `mock.module`. Bun's `mock.module` is process-global
+ * and leaks across test files (see `tests/mock-module.ts` and #615) — the
+ * earlier mock.module-based version of this file broke the
+ * scrape-agent-sweep-workflow and poll-and-fetch-workflow suites by replacing
+ * `@releases/adapters/extract` with a factory missing most of its exports.
+ * DI keeps these tests isolated.
  */
 
-import { describe, it, expect, mock, beforeAll, afterAll } from "bun:test";
+import { describe, it, expect } from "bun:test";
 import type { Source } from "@buildinternet/releases-core/schema";
-import type { CrawlPage } from "@releases/adapters/types";
+import {
+  acquireCrawlMarkdown,
+  deriveCrawlPattern,
+  resolveCrawlIncludePatterns,
+  type CrawlDeps,
+} from "../../workers/discovery/src/scrape-fetch";
+
+// ── Fixtures ────────────────────────────────────────────────────────
+
+function makeSource(): Source {
+  return {
+    id: "src_test",
+    slug: "resend-changelog",
+    name: "Resend Changelog",
+    type: "scrape",
+    url: "https://resend.com/changelog",
+    orgId: "org_resend",
+    productId: null,
+    metadata: null,
+    createdAt: new Date().toISOString(),
+    lastFetchedAt: null,
+    changeDetectedAt: null,
+    lastPolledAt: null,
+    fetchPriority: "normal",
+    consecutiveNoChange: 0,
+    consecutiveErrors: 0,
+    nextFetchAfter: null,
+    etag: null,
+    isHidden: 0,
+    isPrimary: 0,
+    discovery: "curated",
+    suppressed: 0,
+  } as unknown as Source;
+}
+
+interface DepsRecorder {
+  startCrawlCalls: Array<{ url: string; options: unknown }>;
+  pollCalls: string[];
+  metaPatches: Array<{ sourceId: string; patch: Record<string, unknown> }>;
+  deps: CrawlDeps;
+}
+
+function makeDeps(behavior: {
+  pages?: Array<{ url: string; markdown: string }>;
+  pollThrows?: Error;
+  startThrows?: Error;
+  jobId?: string;
+  metaThrows?: Error;
+}): DepsRecorder {
+  const recorder: DepsRecorder = {
+    startCrawlCalls: [],
+    pollCalls: [],
+    metaPatches: [],
+    deps: {
+      async startCrawl(url, options) {
+        recorder.startCrawlCalls.push({ url, options });
+        if (behavior.startThrows) throw behavior.startThrows;
+        return behavior.jobId ?? "job_test";
+      },
+      async pollCrawlResults(jobId) {
+        recorder.pollCalls.push(jobId);
+        if (behavior.pollThrows) throw behavior.pollThrows;
+        return behavior.pages ?? [];
+      },
+      async updateSourceMeta(source, patch) {
+        recorder.metaPatches.push({ sourceId: source.id, patch });
+        if (behavior.metaThrows) throw behavior.metaThrows;
+      },
+    },
+  };
+  return recorder;
+}
 
 // ── deriveCrawlPattern ─────────────────────────────────────────────
-
-// Import the pure helper directly — no mocking needed here.
-import { deriveCrawlPattern } from "../../workers/discovery/src/scrape-fetch";
 
 describe("deriveCrawlPattern", () => {
   it("returns /changelog/** for https://resend.com/changelog", () => {
@@ -48,212 +117,153 @@ describe("deriveCrawlPattern", () => {
   });
 });
 
-// ── Dispatch logic (mock.module) ────────────────────────────────────
+// ── resolveCrawlIncludePatterns ────────────────────────────────────
 
-// Mutable stubs — tests set these before calling scrapeFetch.
-let startCrawlStub: (url: string, opts: unknown) => Promise<string> = async () => "job_1";
-let pollCrawlResultsStub: (jobId: string) => Promise<CrawlPage[]> = async () => [];
-let fetchCloudflareMarkdownStub: (
-  url: string,
-  accountId: string,
-  apiToken: string,
-) => Promise<string | null> = async () => "# CF markdown";
+describe("resolveCrawlIncludePatterns", () => {
+  it("uses an explicit non-empty crawlPattern verbatim", () => {
+    expect(resolveCrawlIncludePatterns("https://resend.com/changelog", "/posts/**")).toEqual([
+      "/posts/**",
+    ]);
+  });
 
-// Mocks must be registered before the module under test is imported.
-// Bun resolves mock.module paths relative to the test file.
-beforeAll(async () => {
-  mock.module("@releases/adapters/crawl", () => ({
-    startCrawl: (url: string, opts: unknown) => startCrawlStub(url, opts),
-    pollCrawlResults: (jobId: string) => pollCrawlResultsStub(jobId),
-  }));
+  it("returns an empty array when crawlPattern is the empty string (no filter)", () => {
+    expect(resolveCrawlIncludePatterns("https://resend.com/changelog", "")).toEqual([]);
+  });
 
-  mock.module("@releases/adapters/cloudflare", () => ({
-    fetchCloudflareMarkdown: (url: string, accountId: string, apiToken: string) =>
-      fetchCloudflareMarkdownStub(url, accountId, apiToken),
-    CF_REJECT_RESOURCE_TYPES: ["font", "stylesheet"],
-    fetchCloudflareMarkdownFast: async () => null,
-  }));
+  it("derives a default from source.url when crawlPattern is undefined", () => {
+    expect(resolveCrawlIncludePatterns("https://resend.com/changelog", undefined)).toEqual([
+      "/changelog/**",
+    ]);
+  });
 
-  // Stub out heavy extraction paths — the dispatch tests only care about
-  // which content-acquisition branch ran; they don't need real AI responses.
-  mock.module("@releases/adapters/extract", () => ({
-    runIncrementalExtraction: async () => ({ releases: [] }),
-    runAgentExtraction: async () => ({ releases: [] }),
-    runDirectFetchExtraction: async () => ({ releases: [] }),
-  }));
-
-  // Stub the API fetcher dependencies used by buildWorkerExtractDeps.
-  mock.module("@releases/lib/anthropic-client.js", () => ({
-    buildAnthropicClient: () => ({}),
-  }));
+  it("returns an empty array when crawlPattern is undefined and the URL has no path", () => {
+    expect(resolveCrawlIncludePatterns("https://example.com", undefined)).toEqual([]);
+  });
 });
 
-afterAll(() => {
-  mock.restore();
-});
+// ── acquireCrawlMarkdown ───────────────────────────────────────────
 
-// ── Source fixture ──────────────────────────────────────────────────
+describe("acquireCrawlMarkdown", () => {
+  it("returns concatenated markdown with URL headers when crawl returns pages", async () => {
+    const source = makeSource();
+    const { deps, startCrawlCalls, pollCalls, metaPatches } = makeDeps({
+      jobId: "job_abc",
+      pages: [
+        { url: "https://resend.com/changelog/welcome", markdown: "# Welcome\n\nHello world" },
+        { url: "https://resend.com/changelog/v2", markdown: "# v2\n\nNew features" },
+      ],
+    });
 
-function makeSource(metaOverrides: Record<string, unknown> = {}): Source {
-  return {
-    id: "src_test",
-    slug: "resend-changelog",
-    name: "Resend Changelog",
-    type: "scrape",
-    url: "https://resend.com/changelog",
-    orgId: "org_resend",
-    productId: null,
-    metadata: JSON.stringify(metaOverrides),
-    createdAt: new Date().toISOString(),
-    lastFetchedAt: null,
-    changeDetectedAt: null,
-    lastPolledAt: null,
-    fetchPriority: "normal",
-    consecutiveNoChange: 0,
-    consecutiveErrors: 0,
-    nextFetchAfter: null,
-    etag: null,
-    isHidden: 0,
-    isPrimary: 0,
-    discovery: "curated",
-    suppressed: 0,
-  } as unknown as Source;
-}
+    const markdown = await acquireCrawlMarkdown(source, { crawlPattern: "/changelog/**" }, deps);
 
-// Minimal ScrapeEnv — the fetcher returns canned responses.
-function makeEnv(
-  sourceResponse: Source | null,
-  knownReleases: unknown[] = [{ title: "v1.0", version: "1.0", publishedAt: null }],
-) {
-  const fetcher = {
-    async fetch(input: RequestInfo | URL, _init?: RequestInit): Promise<Response> {
-      const url = new URL(typeof input === "string" ? input : input.toString());
-      const path = url.pathname;
+    expect(markdown).not.toBeNull();
+    expect(markdown).toContain("# https://resend.com/changelog/welcome");
+    expect(markdown).toContain("# https://resend.com/changelog/v2");
+    expect(markdown).toContain("Hello world");
+    expect(markdown).toContain("New features");
 
-      // Source lookup
-      if (path.includes("/sources/") && !path.includes("known-releases")) {
-        if (!sourceResponse) return new Response("not found", { status: 404 });
-        return new Response(JSON.stringify(sourceResponse), {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        });
-      }
-      // Known releases
-      if (path.includes("known-releases")) {
-        return new Response(JSON.stringify(knownReleases), {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        });
-      }
-      // Playbook
-      if (path.includes("/playbook")) {
-        return new Response(JSON.stringify({ content: null }), {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        });
-      }
-      // Fetch log, source PATCH, metadata PATCH — all best-effort, return 200
-      return new Response(JSON.stringify({ inserted: 0 }), {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      });
-    },
-  };
+    expect(startCrawlCalls).toHaveLength(1);
+    expect(startCrawlCalls[0].url).toBe("https://resend.com/changelog");
+    expect(pollCalls).toEqual(["job_abc"]);
 
-  return {
-    cloudflareAccountId: "acct_test",
-    cloudflareApiToken: "tok_test",
-    anthropicApiKey: "sk-test",
-    apiFetcher: fetcher,
-    apiKey: "api_test",
-  };
-}
-
-// ── Dispatch tests ──────────────────────────────────────────────────
-
-describe("scrape-path crawl dispatch", () => {
-  it("calls startCrawl and uses crawl body when crawlEnabled is true and crawl returns pages", async () => {
-    const pages: CrawlPage[] = [
-      { url: "https://resend.com/changelog/welcome", markdown: "# Welcome\n\nHello world" },
-      { url: "https://resend.com/changelog/v2", markdown: "# v2\n\nNew features" },
-    ];
-
-    let startCrawlCalled = false;
-    let cfMarkdownCalled = false;
-
-    startCrawlStub = async (_url, _opts) => {
-      startCrawlCalled = true;
-      return "job_abc";
-    };
-    pollCrawlResultsStub = async (_jobId) => pages;
-    fetchCloudflareMarkdownStub = async () => {
-      cfMarkdownCalled = true;
-      return "# CF fallback";
-    };
-
-    const source = makeSource({ crawlEnabled: true, crawlPattern: "/changelog/**" });
-    const env = makeEnv(source);
-
-    // Dynamically import after mocks are registered.
-    const { scrapeFetch } = await import("../../workers/discovery/src/scrape-fetch");
-    await scrapeFetch(env, "resend/resend-changelog");
-
-    expect(startCrawlCalled).toBe(true);
-    expect(cfMarkdownCalled).toBe(false);
+    // Best-effort metadata persistence after a successful crawl.
+    expect(metaPatches).toHaveLength(1);
+    expect(metaPatches[0].sourceId).toBe(source.id);
+    expect(metaPatches[0].patch.lastCrawlJobId).toBe("job_abc");
+    expect(typeof metaPatches[0].patch.lastCrawlAt).toBe("string");
   });
 
-  it("falls back to fetchCloudflareMarkdown when crawl returns zero pages", async () => {
-    let cfMarkdownCalled = false;
+  it("returns null and skips metadata persistence when crawl returns zero pages", async () => {
+    const source = makeSource();
+    const { deps, startCrawlCalls, metaPatches } = makeDeps({ jobId: "job_empty", pages: [] });
 
-    startCrawlStub = async () => "job_empty";
-    pollCrawlResultsStub = async () => [];
-    fetchCloudflareMarkdownStub = async () => {
-      cfMarkdownCalled = true;
-      return "# CF fallback";
-    };
+    const markdown = await acquireCrawlMarkdown(source, { crawlPattern: "/changelog/**" }, deps);
 
-    const source = makeSource({ crawlEnabled: true, crawlPattern: "/changelog/**" });
-    const env = makeEnv(source);
-
-    const { scrapeFetch } = await import("../../workers/discovery/src/scrape-fetch");
-    await scrapeFetch(env, "resend/resend-changelog");
-
-    expect(cfMarkdownCalled).toBe(true);
+    expect(markdown).toBeNull();
+    expect(startCrawlCalls).toHaveLength(1);
+    expect(metaPatches).toHaveLength(0);
   });
 
-  it("does not call startCrawl when crawlEnabled is false", async () => {
-    let startCrawlCalled = false;
+  it("returns null when startCrawl throws (degrades to caller's fallback)", async () => {
+    const source = makeSource();
+    const { deps, metaPatches } = makeDeps({ startThrows: new Error("crawl API down") });
 
-    startCrawlStub = async () => {
-      startCrawlCalled = true;
-      return "job_x";
-    };
-    fetchCloudflareMarkdownStub = async () => "# CF content";
+    const markdown = await acquireCrawlMarkdown(source, {}, deps);
 
-    const source = makeSource({ crawlEnabled: false });
-    const env = makeEnv(source);
-
-    const { scrapeFetch } = await import("../../workers/discovery/src/scrape-fetch");
-    await scrapeFetch(env, "resend/resend-changelog");
-
-    expect(startCrawlCalled).toBe(false);
+    expect(markdown).toBeNull();
+    expect(metaPatches).toHaveLength(0);
   });
 
-  it("does not call startCrawl when crawlEnabled is absent", async () => {
-    let startCrawlCalled = false;
+  it("returns null when pollCrawlResults throws", async () => {
+    const source = makeSource();
+    const { deps, metaPatches } = makeDeps({ pollThrows: new Error("poll 500") });
 
-    startCrawlStub = async () => {
-      startCrawlCalled = true;
-      return "job_x";
+    const markdown = await acquireCrawlMarkdown(source, {}, deps);
+
+    expect(markdown).toBeNull();
+    expect(metaPatches).toHaveLength(0);
+  });
+
+  it("uses an empty includePatterns when crawlPattern is empty string", async () => {
+    const source = makeSource();
+    const { deps, startCrawlCalls } = makeDeps({ pages: [] });
+
+    await acquireCrawlMarkdown(source, { crawlPattern: "" }, deps);
+
+    // crawlPattern === "" means "no filter"; startCrawl receives undefined
+    // for includePatterns so the Cloudflare crawl runs without an
+    // include-list restriction.
+    expect(startCrawlCalls).toHaveLength(1);
+    const opts = startCrawlCalls[0].options as { includePatterns?: string[] };
+    expect(opts.includePatterns).toBeUndefined();
+  });
+
+  it("passes the derived default pattern when crawlPattern is absent", async () => {
+    const source = makeSource();
+    const { deps, startCrawlCalls } = makeDeps({ pages: [] });
+
+    await acquireCrawlMarkdown(source, {}, deps);
+
+    expect(startCrawlCalls).toHaveLength(1);
+    const opts = startCrawlCalls[0].options as { includePatterns?: string[] };
+    expect(opts.includePatterns).toEqual(["/changelog/**"]);
+  });
+
+  it("forwards crawlSource and crawlRender overrides to startCrawl", async () => {
+    const source = makeSource();
+    const { deps, startCrawlCalls } = makeDeps({ pages: [] });
+
+    await acquireCrawlMarkdown(
+      source,
+      { crawlSource: "sitemaps", crawlRender: false, crawlMaxAge: 3600 },
+      deps,
+    );
+
+    const opts = startCrawlCalls[0].options as {
+      source?: string;
+      render?: boolean;
+      maxAge?: number;
     };
-    fetchCloudflareMarkdownStub = async () => "# CF content";
+    expect(opts.source).toBe("sitemaps");
+    expect(opts.render).toBe(false);
+    expect(opts.maxAge).toBe(3600);
+  });
 
-    const source = makeSource({});
-    const env = makeEnv(source);
+  it("does not throw when updateSourceMeta rejects (best-effort persistence)", async () => {
+    const source = makeSource();
+    const { deps } = makeDeps({
+      jobId: "job_ok",
+      pages: [{ url: "https://resend.com/changelog/post", markdown: "body" }],
+      metaThrows: new Error("api down"),
+    });
 
-    const { scrapeFetch } = await import("../../workers/discovery/src/scrape-fetch");
-    await scrapeFetch(env, "resend/resend-changelog");
+    // Should still return concatenated markdown — the .catch(() => {}) in
+    // acquireCrawlMarkdown swallows the rejection.
+    const markdown = await acquireCrawlMarkdown(source, {}, deps);
+    expect(markdown).toContain("body");
 
-    expect(startCrawlCalled).toBe(false);
+    // Give the swallowed rejection a tick to settle so an unhandled-rejection
+    // warning would surface here if the catch were missing.
+    await Promise.resolve();
   });
 });
