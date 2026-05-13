@@ -33,6 +33,7 @@ import {
   directApiFetcher,
 } from "./fetch-wrappers.js";
 import { logEvent } from "@releases/lib/log-event.js";
+import { getSecret } from "@releases/lib/secrets";
 
 // ── MA 429 rate-limit retry loop ─────────────────────────────────────────────
 //
@@ -113,7 +114,7 @@ export class ManagedAgentsSession extends DurableObject<Env> {
 
   private async getStagingKey(): Promise<string> {
     if (this.stagingKey !== null) return this.stagingKey;
-    this.stagingKey = (await this.env.STAGING_ACCESS_KEY?.get().catch(() => "")) ?? "";
+    this.stagingKey = (await getSecret(this.env.STAGING_ACCESS_KEY).catch(() => null)) ?? "";
     return this.stagingKey;
   }
 
@@ -395,7 +396,7 @@ export class ManagedAgentsSession extends DurableObject<Env> {
       // If anything below fails, fail() will update this session row to status=error
       // rather than silently dropping the notification (which happened previously
       // because StatusHub's session:error handler required an existing row).
-      const releasesApiKey = await this.env.RELEASED_API_KEY.get();
+      const releasesApiKey = (await getSecret(this.env.RELEASED_API_KEY)) ?? undefined;
       let statusHubAgentLabel: "haiku" | "sonnet" | "coordinator";
       switch (agentRole) {
         case "worker":
@@ -422,7 +423,7 @@ export class ManagedAgentsSession extends DurableObject<Env> {
         releasesApiKey,
       );
 
-      const anthropicApiKey = await this.env.ANTHROPIC_API_KEY.get();
+      const anthropicApiKey = (await getSecret(this.env.ANTHROPIC_API_KEY)) ?? undefined;
       if (!anthropicApiKey) {
         await this.fail(
           sessionId,
@@ -443,15 +444,19 @@ export class ManagedAgentsSession extends DurableObject<Env> {
         withStagingHeader(baseFetcher as Fetcher, await this.getStagingKey()),
       );
 
-      const executor = createTypedExecutor({ fetcher, apiKey: releasesApiKey, sessionId });
+      const executor = createTypedExecutor({ fetcher, apiKey: releasesApiKey ?? "", sessionId });
 
       // Resolve Cloudflare secrets for scrape fetch capability
       const [cfAccountId, cfApiToken] = await Promise.all([
-        this.env.CLOUDFLARE_ACCOUNT_ID?.get().catch(() => ""),
-        this.env.CLOUDFLARE_API_TOKEN?.get().catch(() => ""),
+        getSecret(this.env.CLOUDFLARE_ACCOUNT_ID)
+          .catch(() => null)
+          .then((v) => v ?? ""),
+        getSecret(this.env.CLOUDFLARE_API_TOKEN)
+          .catch(() => null)
+          .then((v) => v ?? ""),
       ]);
 
-      const gatewayToken = await this.env.AI_GATEWAY_TOKEN?.get().catch(() => "");
+      const gatewayToken = (await getSecret(this.env.AI_GATEWAY_TOKEN).catch(() => null)) ?? "";
       const anthropicBaseURL = this.env.ANTHROPIC_BASE_URL;
 
       const scrapeHandler =
@@ -465,7 +470,7 @@ export class ManagedAgentsSession extends DurableObject<Env> {
                   anthropicBaseURL,
                   aiGatewayToken: gatewayToken || undefined,
                   apiFetcher: fetcher,
-                  apiKey: releasesApiKey,
+                  apiKey: releasesApiKey ?? "",
                   sessionId,
                   extractToolLoopEnabled: this.env.EXTRACT_TOOLLOOP_ENABLED,
                 },
@@ -572,7 +577,11 @@ export class ManagedAgentsSession extends DurableObject<Env> {
         const idList = (params.sourceIdentifiers ?? [])
           .map((s) => `- ${escapeForPromptTag(s)}`)
           .join("\n");
-        const playbookBlock = await this.loadPlaybookBlock(fetcher, releasesApiKey, params.orgId);
+        const playbookBlock = await this.loadPlaybookBlock(
+          fetcher,
+          releasesApiKey ?? "",
+          params.orgId,
+        );
         prompt = `<task>
 Fetch release updates for the company described in <company>.
 Sources to fetch are listed in <sources>.
@@ -1182,7 +1191,7 @@ ${idList}
     cachedApiKey?: string,
   ): Promise<void> {
     try {
-      const apiKey = cachedApiKey ?? (await this.env.RELEASED_API_KEY.get());
+      const apiKey = cachedApiKey ?? (await getSecret(this.env.RELEASED_API_KEY)) ?? undefined;
       const stagingKey = await this.getStagingKey();
       const headers: Record<string, string> = {
         "Content-Type": "application/json",

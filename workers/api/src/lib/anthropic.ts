@@ -10,6 +10,7 @@
 
 import type Anthropic from "@anthropic-ai/sdk";
 import { buildAnthropicClient } from "@releases/lib/anthropic-client.js";
+import { getSecret } from "@releases/lib/secrets";
 
 const DEFAULT_TIMEOUT_MS = 90_000;
 
@@ -64,13 +65,13 @@ export interface AnthropicEnv {
 }
 
 export async function getAnthropicKey(env: AnthropicEnv): Promise<string | null> {
-  const key = await env.ANTHROPIC_API_KEY?.get();
+  const key = await getSecret(env.ANTHROPIC_API_KEY);
   return key && key.length > 0 ? key : null;
 }
 
 export async function resolveGatewayOpts(env: AnthropicEnv): Promise<GatewayOptions> {
   const baseURL = env.ANTHROPIC_BASE_URL?.trim();
-  const gatewayToken = (await env.AI_GATEWAY_TOKEN?.get().catch(() => ""))?.trim();
+  const gatewayToken = (await getSecret(env.AI_GATEWAY_TOKEN).catch(() => null))?.trim();
   return {
     ...(baseURL ? { baseURL } : {}),
     ...(gatewayToken ? { gatewayToken } : {}),

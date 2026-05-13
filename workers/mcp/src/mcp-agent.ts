@@ -28,6 +28,7 @@ import { buildSearchMeta } from "./lib/pagination.js";
 import type { SearchMode } from "@buildinternet/releases-core/schema";
 import { parseCoordinate } from "@buildinternet/releases-core/lookup-coordinate";
 import type { LookupResultPayload } from "@buildinternet/releases-api-types";
+import { getSecret } from "@releases/lib/secrets";
 
 /**
  * Render the lookup payload as a markdown rail appended to the tool's text
@@ -296,12 +297,12 @@ export function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServ
     try {
       const headers: Record<string, string> = { "content-type": "application/json" };
       // /v1/lookups is admin-gated — present a Bearer for the API auth middleware.
-      const apiKey = (await env.RELEASED_API_KEY?.get().catch(() => "")) ?? "";
+      const apiKey = (await getSecret(env.RELEASED_API_KEY).catch(() => null)) ?? "";
       if (apiKey) headers["Authorization"] = `Bearer ${apiKey}`;
       // Service-binding requests still flow through the API worker's middleware
       // pipeline, which includes the staging access gate. Attach the staging
       // key when bound (no-op in prod/local where the binding is absent).
-      const stagingKey = (await env.STAGING_ACCESS_KEY?.get().catch(() => "")) ?? "";
+      const stagingKey = (await getSecret(env.STAGING_ACCESS_KEY).catch(() => null)) ?? "";
       if (stagingKey) headers["X-Releases-Staging-Key"] = stagingKey;
       const res = await env.API.fetch(
         new Request("https://internal/v1/lookups", {
@@ -337,13 +338,13 @@ export function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServ
   async function getAnthropic(): Promise<ReturnType<typeof buildAnthropicClient>> {
     if (!anthropicClient) {
       const [apiKey, gatewayToken] = await Promise.all([
-        env.ANTHROPIC_API_KEY.get(),
-        env.AI_GATEWAY_TOKEN?.get().catch(() => ""),
+        getSecret(env.ANTHROPIC_API_KEY),
+        getSecret(env.AI_GATEWAY_TOKEN).catch(() => ""),
       ]);
       anthropicClient = buildAnthropicClient({
-        apiKey,
+        apiKey: apiKey ?? "",
         baseURL: env.ANTHROPIC_BASE_URL,
-        gatewayToken: gatewayToken || undefined,
+        gatewayToken: gatewayToken || undefined, // null and "" both falsy → undefined
       });
     }
     return anthropicClient;

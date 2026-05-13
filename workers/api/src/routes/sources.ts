@@ -133,6 +133,7 @@ import { invalidateLatestCache } from "../lib/latest-cache.js";
 import { notifyIndexNowForSource } from "../lib/indexnow.js";
 import { resolveOrgSlug, resolveProductSlug } from "../lib/slug-lookups.js";
 import { logEvent } from "@releases/lib/log-event";
+import { getSecret } from "@releases/lib/secrets";
 
 export const sourceRoutes = new Hono<Env>();
 
@@ -558,7 +559,7 @@ sourceRoutes.post("/sources/:slug/fetch", postSourceFetchRoute, async (c) => {
     (src.type === "scrape" && meta.feedUrl != null)
   ) {
     // Feed, GitHub, and scrape sources with a discovered feedUrl: fetch server-side
-    const githubToken = await c.env.GITHUB_TOKEN?.get();
+    const githubToken = (await getSecret(c.env.GITHUB_TOKEN)) ?? undefined;
     const sessionId = c.req.query("sessionId") ?? undefined;
     const dryRun = c.req.query("dryRun") === "true" || c.req.query("dryRun") === "1";
     const maxRaw = c.req.query("max");
@@ -1645,7 +1646,7 @@ const probeChangelogsHandler = async (c: import("hono").Context<Env>) => {
     );
   }
 
-  const token = await c.env.GITHUB_TOKEN?.get();
+  const token = (await getSecret(c.env.GITHUB_TOKEN)) ?? undefined;
   const headers = buildGitHubHeaders(token, RELEASES_BOT_UA);
 
   const repoStatus = await classifyRepoStatus(ownerRepo, headers.apiHeaders);

@@ -15,6 +15,7 @@ import {
 } from "../webhooks/queries.js";
 import { newEventId } from "../events/types.js";
 import type { DeliveryMessage } from "../webhooks/types.js";
+import { getSecret } from "@releases/lib/secrets";
 import type { Env } from "../index.js";
 
 /** AE SQL doesn't support bound parameters; this validates id before string interpolation. */
@@ -41,7 +42,7 @@ function getDb(c: any): any {
 
 /** Returns the master HMAC key, or a 503 Response when the binding is missing. */
 async function requireMasterKey(c: any): Promise<string | Response> {
-  const masterKey: string | undefined = await c.env.WEBHOOK_HMAC_MASTER?.get();
+  const masterKey = (await getSecret(c.env.WEBHOOK_HMAC_MASTER)) ?? undefined;
   if (!masterKey) {
     return c.json(
       { error: "webhook_unavailable", message: "WEBHOOK_HMAC_MASTER not configured" },
@@ -225,7 +226,7 @@ webhooksRoutes.post("/webhooks/:id/test", async (c) => {
 });
 
 webhooksRoutes.get("/webhooks/:id/deliveries", async (c) => {
-  const cfApiToken: string | undefined = await c.env.CF_API_TOKEN?.get();
+  const cfApiToken = (await getSecret(c.env.CF_API_TOKEN)) ?? undefined;
   const cfAccountId: string | undefined = c.env.CF_ACCOUNT_ID;
 
   if (!cfApiToken || !cfAccountId) {

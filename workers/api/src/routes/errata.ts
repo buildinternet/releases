@@ -9,6 +9,7 @@ import { Hono } from "hono";
 import { describeRoute } from "hono-openapi";
 import { z } from "zod";
 import { buildAnthropicClient } from "@releases/lib/anthropic-client.js";
+import { getSecret } from "@releases/lib/secrets";
 import { validateJson } from "../lib/validate.js";
 import { hideInProduction } from "../openapi.js";
 import type { Env } from "../index.js";
@@ -61,7 +62,7 @@ errataRoutes.put(
       );
     }
 
-    const apiKey = await c.env.ANTHROPIC_API_KEY?.get();
+    const apiKey = await getSecret(c.env.ANTHROPIC_API_KEY);
     if (!apiKey) {
       return c.json({ error: "internal_error", message: "ANTHROPIC_API_KEY not bound" }, 500);
     }

@@ -9,6 +9,7 @@ import { writeDeliveryAttempt, type DeliveryAttempt, type Outcome } from "./ae.j
 import type { DeliveryMessage } from "../../api/src/webhooks/types.js";
 import { sendWebhookAlert, type EmailEnv } from "./email.js";
 import { logEvent } from "@releases/lib/log-event";
+import { getSecret } from "@releases/lib/secrets";
 
 export const DLQ_QUEUE = "webhook-dlq";
 
@@ -109,7 +110,7 @@ export default {
     const db = createDb(env.DB);
     const timeoutMs = parseInt(env.DELIVERY_TIMEOUT_MS, 10) || 10000;
     const threshold = parseInt(env.AUTO_DISABLE_THRESHOLD, 10) || 50;
-    const masterKey = await env.WEBHOOK_HMAC_MASTER.get();
+    const masterKey = await getSecret(env.WEBHOOK_HMAC_MASTER);
     if (!masterKey) {
       // Without the master we can't sign; retry each message so the queue can
       // redeliver once the binding is fixed.

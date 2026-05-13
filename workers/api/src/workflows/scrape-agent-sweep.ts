@@ -45,6 +45,7 @@ import {
 } from "../lib/search-no-results.js";
 import { sendAlert, type AlertEnv } from "../lib/send-alert.js";
 import { logEvent } from "@releases/lib/log-event";
+import { getSecret } from "@releases/lib/secrets";
 
 /**
  * Workflow env. Secrets stay as SecretBinding here and are resolved inside
@@ -168,7 +169,7 @@ async function resolveDispatchEnv(env: ScrapeAgentSweepWorkflowEnv): Promise<Swe
   return {
     ...baseEnvFields(env),
     DISCOVERY_WORKER: env.DISCOVERY_WORKER,
-    RELEASED_API_KEY: (await env.RELEASED_API_KEY?.get()) ?? "",
+    RELEASED_API_KEY: (await getSecret(env.RELEASED_API_KEY)) ?? "",
   };
 }
 
@@ -227,12 +228,12 @@ export class ScrapeAgentSweepWorkflow extends WorkflowEntrypoint<
       "preflight",
       RETRY_PREFLIGHT,
       async (): Promise<PreflightAction> => {
-        const apiKey = await env.ANTHROPIC_API_KEY?.get();
+        const apiKey = await getSecret(env.ANTHROPIC_API_KEY);
         if (!apiKey) {
           logEvent("warn", { component: "scrape-agent-workflow", event: "anthropic-key-missing" });
           return { action: "proceed" };
         }
-        const gatewayToken = await env.AI_GATEWAY_TOKEN?.get().catch(() => undefined);
+        const gatewayToken = (await getSecret(env.AI_GATEWAY_TOKEN).catch(() => null)) ?? undefined;
         // Auth/credits failures are deterministic — surface them as "abort"
         // rather than burning retries. The workflow exits in the next step.
         return await runPreflight(apiKey, {

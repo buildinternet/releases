@@ -1,6 +1,7 @@
 import { createMcpHandler } from "agents/mcp";
 import { isHtmlRequest, renderLandingPage } from "./landing.js";
 import { createServer, type Env } from "./mcp-agent.js";
+import { getSecret } from "@releases/lib/secrets";
 
 /** Custom header carrying the staging shared secret. Mirrors workers/api. */
 const STAGING_KEY_HEADER = "X-Releases-Staging-Key";
@@ -21,7 +22,7 @@ const STAGING_KEY_HEADER = "X-Releases-Staging-Key";
 async function checkStagingKey(request: Request, env: Env): Promise<Response | null> {
   if (!env.STAGING_ACCESS_KEY) return null;
   if (request.method === "OPTIONS") return null;
-  const secret = await env.STAGING_ACCESS_KEY.get();
+  const secret = await getSecret(env.STAGING_ACCESS_KEY);
   if (!secret) return null;
   if (request.headers.get(STAGING_KEY_HEADER) === secret) return null;
   const auth = request.headers.get("Authorization") ?? "";

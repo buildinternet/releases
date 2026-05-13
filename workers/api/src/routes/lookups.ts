@@ -25,6 +25,7 @@ import { RELEASES_BATCH_CHUNK_SIZE } from "../lib/d1-limits.js";
 import { isConflictError } from "../utils.js";
 import { embedSourceSideEffect } from "./sources.js";
 import { logEvent } from "@releases/lib/log-event";
+import { getSecret } from "@releases/lib/secrets";
 import {
   LookupResponseSchema,
   LookupSourceBySlugResponseSchema,
@@ -123,7 +124,7 @@ export async function runLookup(
         sourcesActive.createdAt,
       )
       .limit(1);
-  const githubToken = await env.GITHUB_TOKEN?.get();
+  const githubToken = (await getSecret(env.GITHUB_TOKEN)) ?? undefined;
 
   // Check neg-cache before hitting DB or GitHub.
   const cached = env.LATEST_CACHE
