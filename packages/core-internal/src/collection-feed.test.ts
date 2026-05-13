@@ -142,6 +142,157 @@ describe("getCollectionReleasesFeed — large orgIds (>90, fixes #862)", () => {
     expect(hitNull).toBe(true);
   });
 
+  describe("sourceTypes filter", () => {
+    /**
+     * Seed two orgs, each with one github + one feed source + one release per
+     * source. Used by the source-type filter tests below.
+     */
+    async function seedMixedTypes() {
+      await tdb.db.insert(organizations).values([
+        { id: "org_a", name: "A", slug: "a", discovery: "curated" },
+        { id: "org_b", name: "B", slug: "b", discovery: "curated" },
+      ]);
+      await tdb.db.insert(sources).values([
+        {
+          id: "src_a_gh",
+          name: "A GH",
+          slug: "a-gh",
+          type: "github",
+          url: "https://github.com/example/a",
+          orgId: "org_a",
+          discovery: "curated",
+        },
+        {
+          id: "src_a_feed",
+          name: "A Feed",
+          slug: "a-feed",
+          type: "feed",
+          url: "https://a.example/feed",
+          orgId: "org_a",
+          discovery: "curated",
+        },
+        {
+          id: "src_b_gh",
+          name: "B GH",
+          slug: "b-gh",
+          type: "github",
+          url: "https://github.com/example/b",
+          orgId: "org_b",
+          discovery: "curated",
+        },
+      ]);
+      await tdb.db.insert(releases).values([
+        {
+          id: "rel_a_gh",
+          sourceId: "src_a_gh",
+          title: "A GH",
+          content: "",
+          type: "feature",
+          publishedAt: "2026-01-01T00:00:00Z",
+          fetchedAt: "2026-01-01T00:00:00Z",
+        },
+        {
+          id: "rel_a_feed",
+          sourceId: "src_a_feed",
+          title: "A Feed",
+          content: "",
+          type: "feature",
+          publishedAt: "2026-01-02T00:00:00Z",
+          fetchedAt: "2026-01-02T00:00:00Z",
+        },
+        {
+          id: "rel_b_gh",
+          sourceId: "src_b_gh",
+          title: "B GH",
+          content: "",
+          type: "feature",
+          publishedAt: "2026-01-03T00:00:00Z",
+          fetchedAt: "2026-01-03T00:00:00Z",
+        },
+      ]);
+    }
+
+    it("returns all rows when sourceTypes is omitted", async () => {
+      await seedMixedTypes();
+      const rows = await getCollectionReleasesFeed(asD1(tdb.db), ["org_a", "org_b"], null, 50);
+      expect(rows.map((r) => r.id).toSorted()).toEqual(["rel_a_feed", "rel_a_gh", "rel_b_gh"]);
+    });
+
+    it("narrows to the named source types", async () => {
+      await seedMixedTypes();
+      const onlyFeed = await getCollectionReleasesFeed(asD1(tdb.db), ["org_a", "org_b"], null, 50, {
+        sourceTypes: ["feed"],
+      });
+      expect(onlyFeed.map((r) => r.id)).toEqual(["rel_a_feed"]);
+
+      const onlyGithub = await getCollectionReleasesFeed(
+        asD1(tdb.db),
+        ["org_a", "org_b"],
+        null,
+        50,
+        { sourceTypes: ["github"] },
+      );
+      expect(onlyGithub.map((r) => r.id).toSorted()).toEqual(["rel_a_gh", "rel_b_gh"]);
+    });
+
+    it("returns nothing when sourceTypes is an empty array", async () => {
+      await seedMixedTypes();
+      const rows = await getCollectionReleasesFeed(asD1(tdb.db), ["org_a", "org_b"], null, 50, {
+        sourceTypes: [],
+      });
+      expect(rows).toEqual([]);
+    });
+
+    it("dedupes repeated sourceTypes so the bind-budget math holds", async () => {
+      // The bind-budget math (89 orgs + 4 sourceTypes + 6 cursor + 1 LIMIT
+      // = 100) assumes sourceTypes contributes at most SOURCE_TYPES.length.
+      // Callers that pass duplicates (URL parsing accidents, hand-written
+      // tests) must not blow past the cap. Pass 8 entries — 2× each enum
+      // value — and confirm the query both succeeds and returns the same
+      // rows as the deduped equivalent.
+      await seedMixedTypes();
+      const rowsWithDupes = await getCollectionReleasesFeed(
+        asD1(tdb.db),
+        ["org_a", "org_b"],
+        null,
+        50,
+        { sourceTypes: ["github", "github", "feed", "feed", "scrape", "scrape", "agent", "agent"] },
+      );
+      const rowsClean = await getCollectionReleasesFeed(
+        asD1(tdb.db),
+        ["org_a", "org_b"],
+        null,
+        50,
+        { sourceTypes: ["github", "feed", "scrape", "agent"] },
+      );
+      expect(rowsWithDupes.map((r) => r.id)).toEqual(rowsClean.map((r) => r.id));
+    });
+
+    it("stays under D1's 100-bind cap at the chunk boundary with all source-type slots used", async () => {
+      // Worst-case bind count for a single chunk:
+      //   ORG_ID_CHUNK_SIZE org IDs (89) + full SOURCE_TYPES enum (4)
+      //   + cursor predicate (6) + LIMIT (1) = 100.
+      // Seed exactly that many orgs so we exercise the single-chunk path at
+      // its widest, with sourceTypes and a cursor both engaged. A regression
+      // that re-raises the chunk size (or adds bind slots without trimming)
+      // would tip this over D1's 100-variable ceiling.
+      const orgIds = await seedOrgs(tdb.db, 89);
+      // Drive a cursor predicate too (6 binds) so the bind count is at its
+      // documented worst case for this code path.
+      const firstPage = await getCollectionReleasesFeed(asD1(tdb.db), orgIds, null, 1, {
+        sourceTypes: ["github", "feed", "scrape", "agent"],
+      });
+      expect(firstPage.length).toBe(1);
+      const cursor = buildFeedCursor(firstPage[0]!);
+
+      const rows = await getCollectionReleasesFeed(asD1(tdb.db), orgIds, cursor, 200, {
+        sourceTypes: ["github", "feed", "scrape", "agent"],
+      });
+      // 88 remaining github releases (one per org, one consumed by page 1).
+      expect(rows.length).toBe(88);
+    });
+  });
+
   it("cursor pagination is stable across pages with 150 orgs", async () => {
     const orgIds = await seedOrgs(tdb.db, 150);
 

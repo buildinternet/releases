@@ -16,16 +16,18 @@ function chunkArray<T>(arr: T[], size: number): T[][] {
 
 /**
  * D1 ceiling: 100 bound parameters per prepared statement. The collection
- * feed query binds up to 6 parameters for the cursor predicate and 1 for
- * LIMIT, leaving 93 slots. We use 90 to stay safely clear.
+ * feed query binds up to 6 parameters for the cursor predicate, 1 for LIMIT,
+ * and up to 4 for `sourceTypes` (the full SOURCE_TYPES enum). 100 − 11 = 89
+ * org-IN slots in the worst case.
  */
-const ORG_ID_CHUNK_SIZE = 90;
+const ORG_ID_CHUNK_SIZE = 89;
 
 function runFeedChunk(
   db: FeedQueryRunner,
   orgIdsChunk: string[],
   cursor: ReturnType<typeof feedCursorSql>,
   prereleaseWhere: ReturnType<typeof feedCursorSql>,
+  sourceTypeWhere: ReturnType<typeof feedCursorSql>,
   limit: number,
 ): Promise<CollectionReleaseRow[]> {
   return db.all<CollectionReleaseRow>(sql`
@@ -42,6 +44,7 @@ function runFeedChunk(
     WHERE s.org_id IN ${orgIdsChunk}
       AND (r.suppressed IS NULL OR r.suppressed = 0)
       ${prereleaseWhere}
+      ${sourceTypeWhere}
       ${cursor}
     ORDER BY
       CASE WHEN r.published_at IS NOT NULL THEN 0 ELSE 1 END,
@@ -71,22 +74,35 @@ export async function getCollectionReleasesFeed(
   orgIds: string[],
   cursorParam: string | null,
   limit: number,
-  opts: { includePrereleases?: boolean } = {},
+  opts: { includePrereleases?: boolean; sourceTypes?: string[] } = {},
 ): Promise<CollectionReleaseRow[]> {
   if (orgIds.length === 0) return [];
   const cursor = feedCursorSql(cursorParam);
   const prereleaseWhere = opts.includePrereleases
     ? sql``
     : sql`AND (r.prerelease IS NULL OR r.prerelease = 0)`;
+  // Dedupe before building the `IN` clause: the bind-budget math relies on
+  // sourceTypes contributing at most SOURCE_TYPES.length (4) binds, but
+  // nothing in the type signature prevents a caller from passing repeats.
+  // Set normalization is cheap (n ≤ 4) and keeps the 100-bind cap honest.
+  const sourceTypes = opts.sourceTypes === undefined ? undefined : [...new Set(opts.sourceTypes)];
+  // Empty `sourceTypes` array = caller asked to narrow but supplied no valid
+  // types; treat as "match nothing" rather than silently widening to everything.
+  const sourceTypeWhere =
+    sourceTypes === undefined
+      ? sql``
+      : sourceTypes.length === 0
+        ? sql`AND 1 = 0`
+        : sql`AND s.type IN ${sourceTypes}`;
 
   const chunks = chunkArray(orgIds, ORG_ID_CHUNK_SIZE);
 
   if (chunks.length === 1) {
-    return runFeedChunk(db, chunks[0]!, cursor, prereleaseWhere, limit);
+    return runFeedChunk(db, chunks[0]!, cursor, prereleaseWhere, sourceTypeWhere, limit);
   }
 
   const chunkResults = await Promise.all(
-    chunks.map((chunk) => runFeedChunk(db, chunk, cursor, prereleaseWhere, limit)),
+    chunks.map((chunk) => runFeedChunk(db, chunk, cursor, prereleaseWhere, sourceTypeWhere, limit)),
   );
 
   const merged = chunkResults.flat();

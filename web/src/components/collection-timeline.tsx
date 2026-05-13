@@ -33,9 +33,20 @@ interface CollectionTimelineProps {
 type TypeFilter = "all" | "tag" | "post";
 
 // GitHub releases are tag drops; everything else (RSS, scrape, agent, atom)
-// is treated as a marketing post and gets the richer hero treatment.
+// is treated as a marketing post and gets the richer hero treatment. The
+// server understands these as `source_type` values directly — see
+// `sourceTypesForFilter` below.
 function isTag(r: CollectionReleaseItem): boolean {
   return r.source.type === "github";
+}
+
+// Map the UI's tag/post toggle to the set of `source_type` values the server
+// accepts. Kept here so the renderer's tag/post split (everything-but-github
+// = post) stays in lockstep with the server-side narrowing.
+function sourceTypesForFilter(filter: TypeFilter): string | null {
+  if (filter === "tag") return "github";
+  if (filter === "post") return "feed,scrape,agent";
+  return null;
 }
 
 const dayKey = (iso: string | null) => (iso ? iso.slice(0, 10) : "unknown");
@@ -85,6 +96,8 @@ export function CollectionTimeline({
   const [activeOrgs, setActiveOrgs] = useState<Set<string>>(() => new Set(orgs.map((o) => o.slug)));
   const [loading, setLoading] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
+  // `pristine` guards the initial mount from refetching what the server
+  // already gave us. Any filter change clears it and the effect takes over.
   const [pristine, setPristine] = useState(true);
   const loadMoreAbortRef = useRef<AbortController | null>(null);
 
@@ -94,17 +107,32 @@ export function CollectionTimeline({
     return m;
   }, [orgs]);
 
+  // Stable sort so two equivalent filter sets produce the same query string —
+  // keeps the fetch effect from churning on Set/Array identity changes.
+  const orgsFilterValue = useMemo(() => {
+    const all = orgs.map((o) => o.slug);
+    // No filter applied when every member is active — match the unfiltered
+    // SSR shape so cursors line up.
+    if (activeOrgs.size === all.length && all.every((s) => activeOrgs.has(s))) return null;
+    return [...activeOrgs].toSorted().join(",");
+  }, [activeOrgs, orgs]);
+
+  const sourceTypeValue = sourceTypesForFilter(typeFilter);
+
   const buildQuery = useCallback(
     (cursorValue?: string) => {
       const params = new URLSearchParams();
       if (includePrereleases) params.set("include_prereleases", "true");
+      if (orgsFilterValue) params.set("orgs", orgsFilterValue);
+      if (sourceTypeValue) params.set("source_type", sourceTypeValue);
       if (cursorValue) params.set("cursor", cursorValue);
       return params.toString();
     },
-    [includePrereleases],
+    [includePrereleases, orgsFilterValue, sourceTypeValue],
   );
 
-  // Reset when prerelease toggle changes (server-side filter).
+  // Refetch whenever any server-side filter changes. `pristine` short-circuits
+  // the initial mount so we don't immediately re-request the SSR payload.
   useEffect(() => {
     if (pristine) return;
     loadMoreAbortRef.current?.abort();
@@ -158,6 +186,7 @@ export function CollectionTimeline({
   }, [cursor, fetchEndpoint, buildQuery]);
 
   const toggleOrg = (slug: string) => {
+    setPristine(false);
     setActiveOrgs((prev) => {
       const n = new Set(prev);
       if (n.has(slug)) n.delete(slug);
@@ -169,16 +198,7 @@ export function CollectionTimeline({
     });
   };
 
-  const filtered = useMemo(() => {
-    return releases.filter((r) => {
-      if (!activeOrgs.has(r.org.slug)) return false;
-      if (typeFilter === "tag" && !isTag(r)) return false;
-      if (typeFilter === "post" && isTag(r)) return false;
-      return true;
-    });
-  }, [releases, activeOrgs, typeFilter]);
-
-  const days = useMemo(() => groupByDay(filtered), [filtered]);
+  const days = useMemo(() => groupByDay(releases), [releases]);
 
   return (
     <div>
@@ -223,7 +243,10 @@ export function CollectionTimeline({
           <button
             key={t.id}
             type="button"
-            onClick={() => setTypeFilter(t.id)}
+            onClick={() => {
+              setPristine(false);
+              setTypeFilter(t.id);
+            }}
             className={tabButtonClass(typeFilter === t.id)}
           >
             {t.label}
@@ -263,7 +286,7 @@ export function CollectionTimeline({
         </div>
       )}
 
-      {filtered.length === 0 ? (
+      {releases.length === 0 ? (
         <div className="text-center py-16 text-stone-400 dark:text-stone-500 text-sm">
           {loading ? "Loading…" : (fetchError ?? "No releases match your filters.")}
         </div>

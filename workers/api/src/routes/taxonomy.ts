@@ -27,6 +27,7 @@ import {
   parseBoolParam,
   parseLimitParam,
 } from "../utils.js";
+import { parseSourceTypesLenient } from "../lib/source-types.js";
 import { wantsMarkdown, markdownResponse } from "../middleware/content-negotiation.js";
 import { categoryReleaseFeedToMarkdown } from "@releases/rendering/formatters.js";
 import type { Env } from "../index.js";
@@ -437,6 +438,22 @@ taxonomyRoutes.get(
         schema: { type: "boolean" },
         description: "Include alpha/beta/rc/preview/nightly releases. Default false.",
       },
+      {
+        name: "orgs",
+        in: "query",
+        required: false,
+        schema: { type: "string" },
+        description:
+          "Comma-separated org slugs to narrow the feed to a subset of the category's orgs. Unknown slugs are silently dropped; passing an `orgs=` value that resolves to nothing returns `releases: []`. Omit to include all orgs in the category.",
+      },
+      {
+        name: "source_type",
+        in: "query",
+        required: false,
+        schema: { type: "string" },
+        description:
+          "Comma-separated source types (`github`, `feed`, `scrape`, `agent`) to narrow the feed by ingest channel. Unknown tokens are silently dropped. Omit to include all source types.",
+      },
     ],
     responses: {
       200: {
@@ -467,9 +484,22 @@ taxonomyRoutes.get(
     const cursorParam = c.req.query("cursor") ?? null;
     const limit = parseLimitParam(c.req.query("limit"), 20, 100);
     const includePrereleases = parseBoolParam(c.req.query("include_prereleases"));
+    const rawSourceType = c.req.query("source_type");
+    const sourceTypes =
+      rawSourceType === undefined ? undefined : parseSourceTypesLenient(rawSourceType);
+    const orgsParam = c.req.query("orgs");
+    const orgSlugs =
+      orgsParam === undefined
+        ? undefined
+        : orgsParam
+            .split(",")
+            .map((s) => s.trim().toLowerCase())
+            .filter((s) => s.length > 0);
 
     const results = await getCategoryReleasesFeed(db, slug, cursorParam, limit + 1, {
       includePrereleases,
+      sourceTypes,
+      orgSlugs,
     });
 
     const hasMore = results.length > limit;

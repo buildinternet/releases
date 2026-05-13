@@ -244,6 +244,141 @@ describe("getCategoryReleasesFeed", () => {
     expect(rows.map((r) => r.id)).toEqual(["rel_ds2_1"]);
   });
 
+  describe("filter narrowing (sourceTypes, orgSlugs)", () => {
+    /**
+     * Same fixture as the parent describe block, but rewires one source to
+     * `type: "feed"` so the source-type filter has a heterogeneous mix to
+     * narrow. We keep the seed data shape otherwise identical so the other
+     * tests in this block can lean on the same id conventions.
+     */
+    async function seedMixed() {
+      await tdb.db.insert(organizations).values([
+        { id: "org_ai", name: "AI Org", slug: "ai-org", category: "ai", discovery: "curated" },
+        {
+          id: "org_ai2",
+          name: "AI Org 2",
+          slug: "ai-org-2",
+          category: "ai",
+          discovery: "curated",
+        },
+      ]);
+      await tdb.db.insert(sources).values([
+        {
+          id: "src_ai_gh",
+          name: "AI GH",
+          slug: "ai-gh",
+          type: "github",
+          url: "https://github.com/example/ai-gh",
+          orgId: "org_ai",
+          discovery: "curated",
+        },
+        {
+          id: "src_ai_feed",
+          name: "AI Feed",
+          slug: "ai-feed",
+          type: "feed",
+          url: "https://example.com/ai/feed",
+          orgId: "org_ai",
+          discovery: "curated",
+        },
+        {
+          id: "src_ai2_gh",
+          name: "AI2 GH",
+          slug: "ai2-gh",
+          type: "github",
+          url: "https://github.com/example/ai2",
+          orgId: "org_ai2",
+          discovery: "curated",
+        },
+      ]);
+      await tdb.db.insert(releases).values([
+        {
+          id: "rel_ai_gh",
+          sourceId: "src_ai_gh",
+          title: "AI GH",
+          content: "",
+          type: "feature",
+          publishedAt: "2026-01-01T00:00:00Z",
+          fetchedAt: "2026-01-01T00:00:00Z",
+        },
+        {
+          id: "rel_ai_feed",
+          sourceId: "src_ai_feed",
+          title: "AI Feed",
+          content: "",
+          type: "feature",
+          publishedAt: "2026-01-02T00:00:00Z",
+          fetchedAt: "2026-01-02T00:00:00Z",
+        },
+        {
+          id: "rel_ai2_gh",
+          sourceId: "src_ai2_gh",
+          title: "AI2 GH",
+          content: "",
+          type: "feature",
+          publishedAt: "2026-01-03T00:00:00Z",
+          fetchedAt: "2026-01-03T00:00:00Z",
+        },
+      ]);
+    }
+
+    it("narrows to a single source type when sourceTypes is set", async () => {
+      await seedMixed();
+      const onlyFeed = await getCategoryReleasesFeed(asD1(tdb.db), "ai", null, 50, {
+        sourceTypes: ["feed"],
+      });
+      expect(onlyFeed.map((r) => r.id)).toEqual(["rel_ai_feed"]);
+
+      const onlyGithub = await getCategoryReleasesFeed(asD1(tdb.db), "ai", null, 50, {
+        sourceTypes: ["github"],
+      });
+      expect(onlyGithub.map((r) => r.id).toSorted()).toEqual(["rel_ai2_gh", "rel_ai_gh"]);
+    });
+
+    it("accepts a multi-value sourceTypes list", async () => {
+      await seedMixed();
+      const both = await getCategoryReleasesFeed(asD1(tdb.db), "ai", null, 50, {
+        sourceTypes: ["feed", "github"],
+      });
+      expect(both.map((r) => r.id).toSorted()).toEqual(["rel_ai2_gh", "rel_ai_feed", "rel_ai_gh"]);
+    });
+
+    it("returns nothing when sourceTypes is an empty array (caller narrowed to nothing)", async () => {
+      await seedMixed();
+      const rows = await getCategoryReleasesFeed(asD1(tdb.db), "ai", null, 50, {
+        sourceTypes: [],
+      });
+      expect(rows).toEqual([]);
+    });
+
+    it("narrows to an org subset when orgSlugs is set", async () => {
+      await seedMixed();
+      const rows = await getCategoryReleasesFeed(asD1(tdb.db), "ai", null, 50, {
+        orgSlugs: ["ai-org-2"],
+      });
+      expect(rows.map((r) => r.id)).toEqual(["rel_ai2_gh"]);
+    });
+
+    it("returns nothing when orgSlugs is an empty array", async () => {
+      await seedMixed();
+      const rows = await getCategoryReleasesFeed(asD1(tdb.db), "ai", null, 50, {
+        orgSlugs: [],
+      });
+      expect(rows).toEqual([]);
+    });
+
+    it("combines sourceTypes + orgSlugs (AND semantics)", async () => {
+      await seedMixed();
+      // ai-org has both feed + github; narrowing further to type=feed picks
+      // exactly the one feed release.
+      const rows = await getCategoryReleasesFeed(asD1(tdb.db), "ai", null, 50, {
+        orgSlugs: ["ai-org"],
+        sourceTypes: ["feed"],
+      });
+      expect(rows.map((r) => r.id)).toEqual(["rel_ai_feed"]);
+    });
+  });
+
   it("paginates stably via buildFeedCursor across pages", async () => {
     await seed();
     const page1 = await getCategoryReleasesFeed(asD1(tdb.db), "ai", null, 1, {
