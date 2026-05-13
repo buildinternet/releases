@@ -1,5 +1,87 @@
 import { describe, it, expect } from "bun:test";
-import { daysAgoIso, timeAgo } from "@buildinternet/releases-core/dates";
+import { daysAgoIso, timeAgo, inferMonthOnlyDate } from "@buildinternet/releases-core/dates";
+
+describe("inferMonthOnlyDate", () => {
+  it("returns the first of the month for a standard title", () => {
+    expect(inferMonthOnlyDate("March 2026")).toBe("2026-03-01T00:00:00.000Z");
+  });
+
+  it("returns January correctly", () => {
+    expect(inferMonthOnlyDate("January 2025")).toBe("2025-01-01T00:00:00.000Z");
+  });
+
+  it("returns December correctly", () => {
+    expect(inferMonthOnlyDate("December 2025")).toBe("2025-12-01T00:00:00.000Z");
+  });
+
+  it("handles lowercase month names", () => {
+    expect(inferMonthOnlyDate("march 2026")).toBe("2026-03-01T00:00:00.000Z");
+  });
+
+  it("handles uppercase month names", () => {
+    expect(inferMonthOnlyDate("MARCH 2026")).toBe("2026-03-01T00:00:00.000Z");
+  });
+
+  it("handles mixed-case month names", () => {
+    expect(inferMonthOnlyDate("mArCh 2026")).toBe("2026-03-01T00:00:00.000Z");
+  });
+
+  it("trims leading/trailing whitespace before matching", () => {
+    expect(inferMonthOnlyDate("  April 2025  ")).toBe("2025-04-01T00:00:00.000Z");
+  });
+
+  it("returns null for a title with trailing punctuation", () => {
+    expect(inferMonthOnlyDate("March 2026.")).toBeNull();
+  });
+
+  it("returns null for a century-1900 year", () => {
+    expect(inferMonthOnlyDate("March 1999")).toBeNull();
+  });
+
+  it("returns null for a year before 2000", () => {
+    expect(inferMonthOnlyDate("January 1000")).toBeNull();
+  });
+
+  it("returns null for a title with extra words", () => {
+    expect(inferMonthOnlyDate("March 2026 update")).toBeNull();
+  });
+
+  it("returns null for a version-style title", () => {
+    expect(inferMonthOnlyDate("v1.2.3")).toBeNull();
+  });
+
+  it("returns null for an empty string", () => {
+    expect(inferMonthOnlyDate("")).toBeNull();
+  });
+
+  it("returns null for a non-month word", () => {
+    expect(inferMonthOnlyDate("Summer 2026")).toBeNull();
+  });
+
+  it("returns null for a date range title", () => {
+    expect(inferMonthOnlyDate("March-April 2026")).toBeNull();
+  });
+
+  it("handles all twelve months", () => {
+    const months = [
+      ["January", "01"],
+      ["February", "02"],
+      ["March", "03"],
+      ["April", "04"],
+      ["May", "05"],
+      ["June", "06"],
+      ["July", "07"],
+      ["August", "08"],
+      ["September", "09"],
+      ["October", "10"],
+      ["November", "11"],
+      ["December", "12"],
+    ] as const;
+    for (const [name, mm] of months) {
+      expect(inferMonthOnlyDate(`${name} 2024`)).toBe(`2024-${mm}-01T00:00:00.000Z`);
+    }
+  });
+});
 
 describe("daysAgoIso", () => {
   it("returns an ISO string", () => {
