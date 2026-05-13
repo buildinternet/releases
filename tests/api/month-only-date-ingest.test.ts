@@ -148,4 +148,60 @@ describe("batch ingest -- month-only title date inference", () => {
 
     expect(row?.publishedAt).toBeNull();
   });
+
+  it("tolerates a non-string title at the batch boundary without crashing", async () => {
+    // Batch payload is untyped at runtime — a caller posting `{ title: 123 }`
+    // should not 500 the whole batch. The type-guard at the call site means
+    // `inferMonthOnlyDate` is never invoked on the bad row; `publishedAt`
+    // falls back to null and the row goes through.
+    const res = await sourceRoutes.request(
+      `/sources/src_upstash1/releases/batch`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          releases: [
+            // oxlint-disable-next-line no-explicit-any -- intentional bad-shape payload
+            { title: 123, content: "bad title type", publishedAt: null } as any,
+          ],
+        }),
+      },
+      makeEnv(),
+      makeExecutionCtx(),
+    );
+    expect(res.status).toBe(200);
+
+    // The row should land with publishedAt=null since the helper was skipped.
+    const rows = testDb.db.select({ publishedAt: releases.publishedAt }).from(releases).all();
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.publishedAt).toBeNull();
+  });
+});
+
+describe("single-insert ingest -- month-only title date inference", () => {
+  it("infers the first-of-month date when publishedAt is omitted and title is a month-year", async () => {
+    const res = await sourceRoutes.request(
+      `/sources/src_upstash1/releases`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: "rel_single1",
+          title: "May 2026",
+          content: "Single-insert content",
+        }),
+      },
+      makeEnv(),
+      makeExecutionCtx(),
+    );
+    expect(res.status).toBe(201);
+
+    const [row] = testDb.db
+      .select({ publishedAt: releases.publishedAt })
+      .from(releases)
+      .where(eq(releases.id, "rel_single1"))
+      .all();
+
+    expect(row?.publishedAt).toBe("2026-05-01T00:00:00.000Z");
+  });
 });

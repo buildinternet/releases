@@ -659,6 +659,10 @@ const postReleasesBatchHandler = async (c: import("hono").Context<Env>) => {
         // throw on a number or object payload (the body type is the request
         // contract, not a runtime guarantee).
         const version = typeof r.version === "string" ? (sanitizeVersion(r.version) ?? null) : null;
+        // Mirror the version type-guard: the helper expects a string, and a
+        // non-string title would crash .match() and 500 the whole batch.
+        const inferredPublishedAt =
+          typeof r.title === "string" ? inferMonthOnlyDate(r.title) : null;
         return {
           sourceId: src.id,
           version,
@@ -667,7 +671,7 @@ const postReleasesBatchHandler = async (c: import("hono").Context<Env>) => {
           content: r.content,
           url: r.url ?? null,
           contentHash: r.contentHash ?? null,
-          publishedAt: r.publishedAt ?? inferMonthOnlyDate(r.title) ?? null,
+          publishedAt: r.publishedAt ?? inferredPublishedAt ?? null,
           prerelease: r.prerelease ?? isPrereleaseVersion(version),
           media: r.media ?? "[]",
         };

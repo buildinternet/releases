@@ -116,7 +116,8 @@ interface ReleaseItem {
 
 interface ReleasesResponse {
   releases: ReleaseItem[];
-  pagination: { hasMore: boolean; page: number; totalPages: number };
+  // The source releases feed is cursor-paginated — see AGENTS.md "Pagination shape".
+  pagination: { nextCursor: string | null; limit: number };
 }
 
 interface BackfillRow {
@@ -150,17 +151,18 @@ async function listSources(orgSlug?: string | null): Promise<SourceItem[]> {
 
 async function listReleases(orgSlug: string, sourceSlug: string): Promise<ReleaseItem[]> {
   const all: ReleaseItem[] = [];
-  let page = 1;
+  let cursor: string | null = null;
   // oxlint-disable-next-line no-constant-condition
   while (true) {
-    const qs = new URLSearchParams({ limit: "100", page: String(page) });
+    const qs = new URLSearchParams({ limit: "100" });
+    if (cursor) qs.set("cursor", cursor);
     // oxlint-disable-next-line no-await-in-loop -- sequential pagination
     const res = await apiGet<ReleasesResponse>(
       `/v1/orgs/${encodeURIComponent(orgSlug)}/sources/${encodeURIComponent(sourceSlug)}/releases?${qs}`,
     );
     all.push(...(res.releases ?? []));
-    if (!res.pagination?.hasMore) break;
-    page++;
+    cursor = res.pagination?.nextCursor ?? null;
+    if (!cursor) break;
   }
   return all;
 }
