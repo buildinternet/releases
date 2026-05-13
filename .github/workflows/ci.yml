@@ -13,8 +13,51 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # Cheap path-filter job so downstream jobs can skip on docs-only PRs and
+  # so the expensive codegen-drift steps only run when GraphQL inputs
+  # actually moved. Jobs that depend on this and evaluate `if:` to false
+  # are reported as "Skipped" — required status checks treat that as
+  # passing, so the workflow stays compatible with branch protection.
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+      schema_inputs: ${{ steps.filter.outputs.schema_inputs }}
+      codegen_inputs: ${{ steps.filter.outputs.codegen_inputs }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 2
+      - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
+        id: filter
+        with:
+          filters: |
+            # Anything that isn't pure docs/text. Negation patterns only fire
+            # when the positive '**' matches first, so this is "every changed
+            # file, minus docs". Workflow files intentionally stay in scope —
+            # changing CI on a docs-only commit should still run CI.
+            code:
+              - '**'
+              - '!**/*.md'
+              - '!docs/**'
+              - '!.context/**'
+              - '!LICENSE'
+            # GraphQL schema snapshot is generated from workers/api source.
+            # Skip the verify step when nothing here moved.
+            schema_inputs:
+              - 'workers/api/**'
+              - 'packages/core/**'
+              - 'packages/api-types/graphql/schema.graphql'
+            # web/codegen consumes the committed schema + web operations.
+            codegen_inputs:
+              - 'web/**'
+              - 'packages/api-types/graphql/schema.graphql'
+
   lint:
     name: Lint & Format
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
 
     steps:
@@ -34,6 +77,8 @@ jobs:
 
   test:
     name: Test & Type-check
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
 
     steps:
@@ -87,6 +132,7 @@ jobs:
           echo "$added" | sed 's/^/  /'
 
       - name: Verify GraphQL schema snapshot is up to date
+        if: needs.changes.outputs.schema_inputs == 'true'
         run: |
           bun workers/api/scripts/print-graphql-schema.ts
           if ! git diff --exit-code packages/api-types/graphql/schema.graphql; then
@@ -96,6 +142,7 @@ jobs:
           fi
 
       - name: Verify GraphQL operation codegen is up to date
+        if: needs.changes.outputs.codegen_inputs == 'true'
         # graphql-codegen emits single-quoted, unformatted output; the
         # committed copy is prettier-normalised by lint-staged on commit.
         # Mirror that here before diffing or every PR would fail.
