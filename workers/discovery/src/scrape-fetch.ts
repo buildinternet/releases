@@ -343,6 +343,64 @@ export async function acquireCrawlMarkdown(
   }
 }
 
+// ── Upstream status probe ─────────────────────────────────────────
+
+/**
+ * Lightweight HEAD/GET probe to check what HTTP status the source URL
+ * actually returns at the origin. Cloudflare Browser Rendering and crawl
+ * silently render error pages — a 404'd URL still yields a "successful"
+ * markdown response containing the error page HTML, which the AI extractor
+ * dutifully turns into a "Page not found" release row. See the cloudflare-blog
+ * incident triaged in #939 for the read-side cleanup that motivated this guard.
+ *
+ * Scoped narrowly to definitively-gone statuses (404 / 410). 401 / 403 may
+ * come back when bot UA detection blocks our probe but CF Browser Rendering's
+ * JS engine still gets through; 5xx is transient and worth a retry via the
+ * normal error-tier backoff. Only short-circuit when the origin is
+ * unambiguously saying "no page here."
+ *
+ * Falls back from HEAD → GET on 405 / 501 (some servers reject HEAD outright).
+ * Returns null on network errors / timeouts — let the existing CF rendering
+ * path handle those; we shouldn't suppress a fetch on transient transport
+ * failure of the probe itself.
+ */
+export async function probeUpstreamStatus(
+  url: string,
+  fetchFn: typeof fetch = fetch,
+): Promise<{ status: number } | null> {
+  const headers = { "User-Agent": RELEASES_BOT_UA, Accept: "text/html, */*;q=0.1" };
+  const timeoutMs = 10_000;
+  try {
+    const res = await fetchFn(url, {
+      method: "HEAD",
+      headers,
+      redirect: "follow",
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    if (res.status !== 405 && res.status !== 501) {
+      return { status: res.status };
+    }
+    // Some origins return 405 Method Not Allowed for HEAD even when GET works.
+    // Re-probe with GET; the response body is discarded — we only need the code.
+    const getRes = await fetchFn(url, {
+      method: "GET",
+      headers,
+      redirect: "follow",
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    // Cancel the body — we don't want to drain a large response.
+    getRes.body?.cancel().catch(() => {});
+    return { status: getRes.status };
+  } catch {
+    return null;
+  }
+}
+
+/** True when an upstream status means "no page here, don't try to extract". */
+export function isUpstreamGone(status: number): boolean {
+  return status === 404 || status === 410;
+}
+
 async function fetchMarkdownUrl(url: string): Promise<string | null> {
   try {
     const res = await fetch(url, {
@@ -443,6 +501,33 @@ async function runScrapePath(
   deps: ReturnType<typeof buildWorkerExtractDeps>,
   start: number,
 ): Promise<string> {
+  // Cloudflare Browser Rendering + crawl silently render origin error pages
+  // (the 404 HTML body comes back as "successful" markdown), and the AI
+  // extractor will obediently turn that into a "Page not found" release row.
+  // Probe the origin first and short-circuit on 404 / 410 so a dead source
+  // URL doesn't pollute the registry. Transient / blocked / non-HTTP probes
+  // (returns null) fall through — CF rendering may still succeed.
+  const probe = await probeUpstreamStatus(source.url);
+  if (probe && isUpstreamGone(probe.status)) {
+    const durationMs = Date.now() - start;
+    const errMsg = `Upstream returned ${probe.status} for ${source.url}; refusing to extract from rendered error page`;
+    await writeFetchLog(env, source.id, {
+      releasesFound: 0,
+      releasesInserted: 0,
+      durationMs,
+      status: "error",
+      error: errMsg,
+    });
+    logEvent("warn", {
+      component: "scrape-fetch",
+      event: "upstream-gone",
+      sourceSlug: source.slug,
+      sourceUrl: source.url,
+      status: probe.status,
+    });
+    return `Error: ${errMsg}`;
+  }
+
   const knownReleasesPromise = fetchKnownReleases(env, source);
 
   let markdown: string | null = null;
