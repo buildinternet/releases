@@ -135,12 +135,17 @@ export async function startCrawl(
 
   if (!res.ok) {
     const text = await res.text();
-    throw new AdapterError("crawl", `Failed to start crawl: ${res.status} ${text}`);
+    throw new AdapterError(
+      "crawl",
+      `Failed to start crawl: ${res.status} ${text}`,
+      undefined,
+      "infra",
+    );
   }
 
   const data = (await res.json()) as { success: boolean; result: string };
   if (!data.success || !data.result) {
-    throw new AdapterError("crawl", "Crawl API returned unexpected response");
+    throw new AdapterError("crawl", "Crawl API returned unexpected response", undefined, "infra");
   }
 
   return data.result;
@@ -172,7 +177,12 @@ export async function pollCrawlResults(jobId: string, auth?: CrawlAuth): Promise
     // oxlint-disable-next-line no-await-in-loop -- crawl polling loop; each iteration checks job status before next poll
     const res = await fetch(url, { headers: cfHeaders(auth) });
     if (!res.ok) {
-      throw new AdapterError("crawl", `Failed to poll crawl ${jobId}: ${res.status}`);
+      throw new AdapterError(
+        "crawl",
+        `Failed to poll crawl ${jobId}: ${res.status}`,
+        undefined,
+        "infra",
+      );
     }
 
     // oxlint-disable-next-line no-await-in-loop -- crawl polling loop; reading JSON body from same response

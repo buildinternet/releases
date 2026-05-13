@@ -1,8 +1,22 @@
+export type ErrorCategory = "infra" | "extraction" | "validation" | "model";
+
+export class CategorizedError extends Error {
+  constructor(
+    public readonly category: ErrorCategory,
+    message: string,
+    public readonly cause?: unknown,
+  ) {
+    super(message);
+    this.name = "CategorizedError";
+  }
+}
+
 export class AdapterError extends Error {
   constructor(
     public adapter: string,
     message: string,
     public cause?: Error,
+    public category: ErrorCategory = "extraction",
   ) {
     super(`[${adapter}] ${message}`);
     this.name = "AdapterError";
@@ -27,6 +41,7 @@ export class ConfigError extends Error {
 }
 
 export class CrawlTimeoutError extends Error {
+  readonly category: ErrorCategory = "infra";
   constructor(jobId: string, timeoutMs: number) {
     super(`Crawl job ${jobId} timed out after ${Math.round(timeoutMs / 1000)}s`);
     this.name = "CrawlTimeoutError";
@@ -34,6 +49,7 @@ export class CrawlTimeoutError extends Error {
 }
 
 export class CrawlJobError extends Error {
+  readonly category: ErrorCategory = "infra";
   constructor(
     jobId: string,
     public jobStatus: string,
