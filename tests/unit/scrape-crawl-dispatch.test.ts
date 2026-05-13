@@ -1,8 +1,8 @@
 /**
  * Tests for the crawl-enabled dispatch helpers in `scrape-fetch.ts`:
  *
- *   - `deriveCrawlPattern`         — URL → include-pattern derivation
- *   - `resolveCrawlIncludePatterns` — honors explicit / empty / absent crawlPattern
+ *   - `deriveCrawlPattern`         — URL → include-pattern derivation (kept for back-compat)
+ *   - `resolveCrawlIncludePatterns` — kept for back-compat, no longer wired to Cloudflare
  *   - `acquireCrawlMarkdown`        — dispatch with DI'd crawl primitives
  *
  * Crawl primitives are injected via the `CrawlDeps` parameter rather than
@@ -154,7 +154,7 @@ describe("acquireCrawlMarkdown", () => {
       ],
     });
 
-    const markdown = await acquireCrawlMarkdown(source, { crawlPattern: "/changelog/**" }, deps);
+    const markdown = await acquireCrawlMarkdown(source, { crawlExcludePatterns: [] }, deps);
 
     expect(markdown).not.toBeNull();
     expect(markdown).toContain("# https://resend.com/changelog/welcome");
@@ -177,7 +177,7 @@ describe("acquireCrawlMarkdown", () => {
     const source = makeSource();
     const { deps, startCrawlCalls, metaPatches } = makeDeps({ jobId: "job_empty", pages: [] });
 
-    const markdown = await acquireCrawlMarkdown(source, { crawlPattern: "/changelog/**" }, deps);
+    const markdown = await acquireCrawlMarkdown(source, {}, deps);
 
     expect(markdown).toBeNull();
     expect(startCrawlCalls).toHaveLength(1);
@@ -204,29 +204,66 @@ describe("acquireCrawlMarkdown", () => {
     expect(metaPatches).toHaveLength(0);
   });
 
-  it("uses an empty includePatterns when crawlPattern is empty string", async () => {
-    const source = makeSource();
-    const { deps, startCrawlCalls } = makeDeps({ pages: [] });
-
-    await acquireCrawlMarkdown(source, { crawlPattern: "" }, deps);
-
-    // crawlPattern === "" means "no filter"; startCrawl receives undefined
-    // for includePatterns so the Cloudflare crawl runs without an
-    // include-list restriction.
-    expect(startCrawlCalls).toHaveLength(1);
-    const opts = startCrawlCalls[0].options as { includePatterns?: string[] };
-    expect(opts.includePatterns).toBeUndefined();
-  });
-
-  it("passes the derived default pattern when crawlPattern is absent", async () => {
+  it("default behavior (no overrides) — startCrawl receives includeExternalLinks: false and no excludePatterns", async () => {
     const source = makeSource();
     const { deps, startCrawlCalls } = makeDeps({ pages: [] });
 
     await acquireCrawlMarkdown(source, {}, deps);
 
     expect(startCrawlCalls).toHaveLength(1);
-    const opts = startCrawlCalls[0].options as { includePatterns?: string[] };
-    expect(opts.includePatterns).toEqual(["/changelog/**"]);
+    const opts = startCrawlCalls[0].options as {
+      excludePatterns?: string[];
+      includeExternalLinks?: boolean;
+    };
+    expect(opts.excludePatterns).toBeUndefined();
+    expect(opts.includeExternalLinks).toBeUndefined();
+  });
+
+  it("crawlExcludePatterns set — startCrawl receives those patterns", async () => {
+    const source = makeSource();
+    const { deps, startCrawlCalls } = makeDeps({ pages: [] });
+
+    const excludePatterns = [
+      "https://resend.com/humans/**",
+      "https://resend.com/home",
+      "https://resend.com/pricing",
+      "https://resend.com/login",
+      "https://resend.com/signup",
+    ];
+
+    await acquireCrawlMarkdown(source, { crawlExcludePatterns: excludePatterns }, deps);
+
+    expect(startCrawlCalls).toHaveLength(1);
+    const opts = startCrawlCalls[0].options as { excludePatterns?: string[] };
+    expect(opts.excludePatterns).toEqual(excludePatterns);
+  });
+
+  it("crawlIncludeExternal: true — startCrawl receives includeExternalLinks: true", async () => {
+    const source = makeSource();
+    const { deps, startCrawlCalls } = makeDeps({ pages: [] });
+
+    await acquireCrawlMarkdown(source, { crawlIncludeExternal: true }, deps);
+
+    expect(startCrawlCalls).toHaveLength(1);
+    const opts = startCrawlCalls[0].options as { includeExternalLinks?: boolean };
+    expect(opts.includeExternalLinks).toBe(true);
+  });
+
+  it("legacy crawlPattern set but no crawlExcludePatterns — crawlPattern not passed to startCrawl", async () => {
+    const source = makeSource();
+    const { deps, startCrawlCalls } = makeDeps({ pages: [] });
+
+    // crawlPattern is deprecated; acquireCrawlMarkdown no longer wires it to
+    // Cloudflare's includePatterns (which is broken — see #929).
+    await acquireCrawlMarkdown(source, { crawlPattern: "/changelog/**" }, deps);
+
+    expect(startCrawlCalls).toHaveLength(1);
+    const opts = startCrawlCalls[0].options as {
+      includePatterns?: string[];
+      excludePatterns?: string[];
+    };
+    expect(opts.includePatterns).toBeUndefined();
+    expect(opts.excludePatterns).toBeUndefined();
   });
 
   it("forwards crawlSource and crawlRender overrides to startCrawl", async () => {
@@ -265,5 +302,103 @@ describe("acquireCrawlMarkdown", () => {
     // Give the swallowed rejection a tick to settle so an unhandled-rejection
     // warning would surface here if the catch were missing.
     await Promise.resolve();
+  });
+});
+
+// ── startCrawl body shape ─────────────────────────────────────────
+// Direct unit tests for startCrawl itself. We mock `fetch` via a simple
+// wrapper so we can inspect the request body without hitting Cloudflare.
+
+import { startCrawl } from "../../packages/adapters/src/crawl";
+
+function mockFetchForCrawl(returnJobId: string): {
+  restore: () => void;
+  capturedBodies: unknown[];
+} {
+  const capturedBodies: unknown[] = [];
+  const original = globalThis.fetch;
+
+  // @ts-expect-error — overriding globalThis.fetch for test isolation
+  globalThis.fetch = async (_url: unknown, init?: RequestInit) => {
+    capturedBodies.push(JSON.parse(init?.body as string));
+    return new Response(JSON.stringify({ success: true, result: returnJobId }), { status: 200 });
+  };
+
+  return {
+    restore: () => {
+      globalThis.fetch = original;
+    },
+    capturedBodies,
+  };
+}
+
+describe("startCrawl body shape", () => {
+  it("excludePatterns populated → body.options.excludePatterns is the array", async () => {
+    const { restore, capturedBodies } = mockFetchForCrawl("job_1");
+    try {
+      await startCrawl("https://example.com/changelog", {
+        excludePatterns: ["https://example.com/humans/**", "https://example.com/login"],
+      });
+    } finally {
+      restore();
+    }
+    const body = capturedBodies[0] as Record<string, unknown>;
+    const opts = body.options as Record<string, unknown> | undefined;
+    expect(opts?.excludePatterns).toEqual([
+      "https://example.com/humans/**",
+      "https://example.com/login",
+    ]);
+  });
+
+  it("no exclude patterns → no body.options.excludePatterns (or empty body.options)", async () => {
+    const { restore, capturedBodies } = mockFetchForCrawl("job_2");
+    try {
+      await startCrawl("https://example.com/changelog", {});
+    } finally {
+      restore();
+    }
+    const body = capturedBodies[0] as Record<string, unknown>;
+    const opts = body.options as Record<string, unknown> | undefined;
+    expect(opts?.excludePatterns).toBeUndefined();
+    // body.options itself should be absent when there's nothing to set
+    expect(body.options).toBeUndefined();
+  });
+
+  it("includeExternalLinks defaults false", async () => {
+    const { restore, capturedBodies } = mockFetchForCrawl("job_3");
+    try {
+      await startCrawl("https://example.com/changelog", {});
+    } finally {
+      restore();
+    }
+    const body = capturedBodies[0] as Record<string, unknown>;
+    expect(body.includeExternalLinks).toBe(false);
+  });
+
+  it("includeExternalLinks forwarded when set to true", async () => {
+    const { restore, capturedBodies } = mockFetchForCrawl("job_4");
+    try {
+      await startCrawl("https://example.com/changelog", { includeExternalLinks: true });
+    } finally {
+      restore();
+    }
+    const body = capturedBodies[0] as Record<string, unknown>;
+    expect(body.includeExternalLinks).toBe(true);
+  });
+
+  it("legacy includePatterns option ignored — not passed to Cloudflare", async () => {
+    const { restore, capturedBodies } = mockFetchForCrawl("job_5");
+    try {
+      await startCrawl("https://example.com/changelog", {
+        includePatterns: ["/changelog/**"],
+      });
+    } finally {
+      restore();
+    }
+    const body = capturedBodies[0] as Record<string, unknown>;
+    const opts = body.options as Record<string, unknown> | undefined;
+    expect(opts?.includePatterns).toBeUndefined();
+    // Ensure no top-level includePatterns either
+    expect((body as Record<string, unknown>).includePatterns).toBeUndefined();
   });
 });

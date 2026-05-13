@@ -11,7 +11,17 @@ const REJECT_RESOURCE_TYPES = ["font", "stylesheet"] as const;
 // See deferred items in the crawl integration spec.
 
 interface CrawlOptions {
+  /**
+   * @deprecated Cloudflare's `includePatterns` matcher silently rejects every
+   * discovered URL regardless of pattern shape — see issue #929. Field kept for
+   * interface back-compat; no longer passed to Cloudflare. Use
+   * `excludePatterns` instead.
+   */
   includePatterns?: string[];
+  /** URL globs to exclude from the crawl. Cloudflare's exclude matcher works as documented. */
+  excludePatterns?: string[];
+  /** When false (default), off-domain links discovered during the crawl are dropped. */
+  includeExternalLinks?: boolean;
   limit?: number;
   modifiedSince?: number; // unix timestamp
   maxAge?: number; // Cloudflare R2 cache TTL in seconds
@@ -80,9 +90,21 @@ export async function startCrawl(url: string, options: CrawlOptions): Promise<st
   // Per-source metadata can still override via `crawlSource`.
   body.source = options.source ?? "links";
 
-  if (options.includePatterns?.length) {
-    body.options = { includePatterns: options.includePatterns };
+  // Drop off-domain links (social, community, docs hosts) by default.
+  // Per-source override available via `meta.crawlIncludeExternal: true`.
+  body.includeExternalLinks = options.includeExternalLinks ?? false;
+
+  // NOTE: includePatterns is intentionally NOT passed — Cloudflare's matcher
+  // silently drops every discovered URL regardless of pattern shape (see #929).
+  // Use excludePatterns instead, which works as documented.
+  const crawlOptions: Record<string, unknown> = {};
+  if (options.excludePatterns?.length) {
+    crawlOptions.excludePatterns = options.excludePatterns;
   }
+  if (Object.keys(crawlOptions).length > 0) {
+    body.options = crawlOptions;
+  }
+
   body.limit = options.limit ?? 20; // Conservative default — JS rendering eats browser time fast
   body.depth = 2; // Follow links one level deep from the starting page
   if (options.modifiedSince) {
