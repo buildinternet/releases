@@ -24,6 +24,9 @@ import {
   runDirectFetchExtraction,
   runAgentExtraction,
   runIncrementalExtraction,
+  extractFromBody,
+  mapEntries,
+  CRAWL_SYSTEM_PROMPT,
   type KnownRelease,
   type MappedEntry,
 } from "@releases/adapters/extract";
@@ -484,23 +487,37 @@ async function runScrapePath(
 
   const knownReleases = await knownReleasesPromise;
 
+  // Crawl markdown is per-page concatenated output; each `# <url>` heading is
+  // one release's full body. Skip runAgentExtraction (which re-fetches
+  // source.url via Cloudflare and discards the multi-page markdown we already
+  // have) and call extractFromBody directly with a prompt tuned to preserve
+  // per-page bodies.
+  if (cameFromCrawl) {
+    deps.logger.info(
+      `Crawl markdown for ${source.slug} — calling extractFromBody directly (body-preserving prompt)`,
+    );
+    const result = await extractFromBody(
+      {
+        body: markdown,
+        systemPrompt: CRAWL_SYSTEM_PROMPT,
+        userMessage: `Extract every release from this crawled multi-page changelog (source URL: ${source.url}). Each "# <url>" heading delimits one release.`,
+        guidance,
+        sourceUrl: source.url,
+        fetchUrl: source.url,
+      },
+      deps,
+    );
+    return finalize(env, source, mapEntries(result.entries, { sourceUrl: source.url }), start);
+  }
+
   // Incremental extraction is designed for already-indexed sources. On a
   // brand-new source (zero known releases) it would bail immediately and
   // return an empty list — the caller would then emit status=no_change even
   // though nothing has been fetched yet. Fall through to full agent extraction
   // so the first fetch is treated as a seed run rather than a no-op.
-  //
-  // Additionally: when markdown came from a crawl, route through agent
-  // extraction regardless of isSeedRun. Incremental extraction deduplicates
-  // by title — crawled per-post pages share titles with existing fragment-URL
-  // rows, so the model reports zero new entries and no canonical-URL rows
-  // land. Agent extraction uses the full extract prompt and attributes
-  // canonical URLs per-entry without title-filtering.
-  if (shouldUseAgentExtraction(cameFromCrawl, knownReleases)) {
+  if (isSeedRun(knownReleases)) {
     deps.logger.info(
-      cameFromCrawl
-        ? `Crawl markdown for ${source.slug} — running full agent extraction (multi-page crawl)`
-        : `No known releases for ${source.slug} — running full agent extraction (seed run)`,
+      `No known releases for ${source.slug} — running full agent extraction (seed run)`,
     );
     const result = await runAgentExtraction(source, { guidance }, deps);
     return finalize(env, source, result.releases, start);

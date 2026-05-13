@@ -342,6 +342,24 @@ export const MAX_BODY_CHARS_TOOLLOOP = 2_000_000;
 export const MAX_ROUNDS = 8;
 export const MAX_TOTAL_TOOL_CHARS = 80_000;
 
+export const CRAWL_EXTRACTION_RULES = `Rules:
+- COMPLETENESS: Extract every "# <url>" section (except the index page itself).
+- URL: the URL is in the section heading; use it as the release's canonical URL.
+- CONTENT: preserve the full body markdown under each heading. Do not summarize. Strip site chrome (nav, footer, login/signup CTAs, share widgets, cookie banners).
+- Media: include screenshots, product images, diagrams, and videos that appear in the body as markdown image links. Exclude author avatars, navigation logos, footer icons, social badges, tracking pixels.
+- Dates: ISO 8601. For month-only dates (e.g. "April 2026"), use the first of the month: 2026-04-01.
+- Mark isBreaking only if the entry mentions breaking or backwards-incompatible changes.
+- Return entries newest first.
+- Always call the extract_releases tool with your results.`;
+
+export const CRAWL_SYSTEM_PROMPT = `You are a changelog parser. The user message contains multi-page markdown from a crawl: each "# <url>" heading marks one individual release/changelog post, and the content under that heading is the canonical body of that release.
+
+Extract one release per "# <url>" heading. Use the URL in the heading as the release's canonical URL. Preserve the full per-post markdown body — light cleanup of navigation chrome (header/footer nav, login links, share buttons, social embed widgets) only. Do NOT summarize: each per-page body is already one release's worth of content.
+
+If a "# <url>" section is the index page (e.g. ends in /changelog and contains many child links), skip it — its per-post children are already enumerated.
+
+${CRAWL_EXTRACTION_RULES}`;
+
 export const TOOLLOOP_SYSTEM_PROMPT = `You are a changelog parser operating in tool-use mode. The body of a URL is NOT included in this conversation — it is available through tools.
 
 Use \`query_json\` for JSONPath queries into structured content, or \`get_slice\` for byte-range reads (both JSON and HTML). Both return at most 20K chars per call; if a match set is larger, a remainder marker is included.
