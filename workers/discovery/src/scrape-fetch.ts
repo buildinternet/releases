@@ -40,6 +40,22 @@ export function isSeedRun(knownReleases: readonly KnownRelease[]): boolean {
   return knownReleases.length === 0;
 }
 
+/**
+ * True when the scrape path should route through full agent extraction rather
+ * than incremental. Two conditions trigger this:
+ *
+ *   1. Seed run (no known releases) — incremental bails on an empty list.
+ *   2. Crawl markdown — incremental deduplicates by title; per-post crawl
+ *      pages share titles with existing fragment-URL rows and would produce
+ *      zero new inserts. Agent extraction attributes canonical URLs per-entry.
+ */
+export function shouldUseAgentExtraction(
+  cameFromCrawl: boolean,
+  knownReleases: readonly KnownRelease[],
+): boolean {
+  return isSeedRun(knownReleases) || cameFromCrawl;
+}
+
 // ── Types ──────────────────────────────────────────────────────────
 
 export interface ScrapeEnv {
@@ -473,9 +489,18 @@ async function runScrapePath(
   // return an empty list — the caller would then emit status=no_change even
   // though nothing has been fetched yet. Fall through to full agent extraction
   // so the first fetch is treated as a seed run rather than a no-op.
-  if (isSeedRun(knownReleases)) {
+  //
+  // Additionally: when markdown came from a crawl, route through agent
+  // extraction regardless of isSeedRun. Incremental extraction deduplicates
+  // by title — crawled per-post pages share titles with existing fragment-URL
+  // rows, so the model reports zero new entries and no canonical-URL rows
+  // land. Agent extraction uses the full extract prompt and attributes
+  // canonical URLs per-entry without title-filtering.
+  if (shouldUseAgentExtraction(cameFromCrawl, knownReleases)) {
     deps.logger.info(
-      `No known releases for ${source.slug} — running full agent extraction (seed run)`,
+      cameFromCrawl
+        ? `Crawl markdown for ${source.slug} — running full agent extraction (multi-page crawl)`
+        : `No known releases for ${source.slug} — running full agent extraction (seed run)`,
     );
     const result = await runAgentExtraction(source, { guidance }, deps);
     return finalize(env, source, result.releases, start);
@@ -487,11 +512,6 @@ async function runScrapePath(
       markdown,
       knownReleases,
       guidance,
-      // When markdown came from acquireCrawlMarkdown, per-post bodies live well
-      // past line 200. Pass Infinity so the full concatenated body reaches the
-      // model; the default 200-line cap is only appropriate for single-page
-      // changelogs where newest entries appear near the top.
-      lineCap: cameFromCrawl ? Number.POSITIVE_INFINITY : undefined,
     },
     deps,
   );
