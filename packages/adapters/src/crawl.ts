@@ -40,23 +40,38 @@ const TERMINAL_STATUSES = new Set([
 const POLL_INTERVAL_MS = 2_000;
 const POLL_TIMEOUT_MS = 5 * 60 * 1_000; // 5 minutes
 
-function cfHeaders(): Record<string, string> {
+/** Explicit Cloudflare credentials. When omitted, both functions fall back to
+ * `config.cloudflareApiToken()` / `config.cloudflareAccountId()` so CLI /
+ * script callers continue to work without modification. Worker callers MUST
+ * pass this — workers bind credentials via secrets_store_secrets and do not
+ * populate `process.env`. */
+export interface CrawlAuth {
+  accountId: string;
+  apiToken: string;
+}
+
+function cfHeaders(auth?: CrawlAuth): Record<string, string> {
+  const token = auth?.apiToken ?? config.cloudflareApiToken();
   return {
-    Authorization: `Bearer ${config.cloudflareApiToken()}`,
+    Authorization: `Bearer ${token}`,
     "Content-Type": "application/json",
     "User-Agent": RELEASES_BOT_UA,
   };
 }
 
-function crawlBaseUrl(): string {
-  const accountId = config.cloudflareAccountId();
+function crawlBaseUrl(auth?: CrawlAuth): string {
+  const accountId = auth?.accountId ?? config.cloudflareAccountId();
   if (!accountId) {
     throw new AdapterError("crawl", "CLOUDFLARE_ACCOUNT_ID must be set");
   }
   return `https://api.cloudflare.com/client/v4/accounts/${accountId}/browser-rendering/crawl`;
 }
 
-export async function startCrawl(url: string, options: CrawlOptions): Promise<string> {
+export async function startCrawl(
+  url: string,
+  options: CrawlOptions,
+  auth?: CrawlAuth,
+): Promise<string> {
   const body: Record<string, unknown> = {
     url,
     formats: ["markdown"],
@@ -111,9 +126,9 @@ export async function startCrawl(url: string, options: CrawlOptions): Promise<st
     body.modifiedSince = options.modifiedSince;
   }
 
-  const res = await fetch(crawlBaseUrl(), {
+  const res = await fetch(crawlBaseUrl(auth), {
     method: "POST",
-    headers: cfHeaders(),
+    headers: cfHeaders(auth),
     body: JSON.stringify(body),
   });
 
@@ -143,18 +158,18 @@ function recordsToPages(records: CrawlRecord[]): CrawlPage[] {
     .map((r) => ({ url: r.url, markdown: r.markdown!, title: r.metadata?.title }));
 }
 
-export async function pollCrawlResults(jobId: string): Promise<CrawlPage[]> {
+export async function pollCrawlResults(jobId: string, auth?: CrawlAuth): Promise<CrawlPage[]> {
   // Request completed records explicitly. The default response mixes up to 50 records
   // of any status (completed, skipped, errored) with no cursor when the total fits in
   // one page — so a crawl with many skipped URLs can drop all but the first completed
   // page. Filtering to `status=completed` makes the records list contain only the pages
   // we actually want markdown for. Job-level status (`result.status`) is unaffected.
-  const url = `${crawlBaseUrl()}/${jobId}?status=completed`;
+  const url = `${crawlBaseUrl(auth)}/${jobId}?status=completed`;
   const deadline = Date.now() + POLL_TIMEOUT_MS;
 
   while (Date.now() < deadline) {
     // oxlint-disable-next-line no-await-in-loop -- crawl polling loop; each iteration checks job status before next poll
-    const res = await fetch(url, { headers: cfHeaders() });
+    const res = await fetch(url, { headers: cfHeaders(auth) });
     if (!res.ok) {
       throw new AdapterError("crawl", `Failed to poll crawl ${jobId}: ${res.status}`);
     }
@@ -191,7 +206,7 @@ export async function pollCrawlResults(jobId: string): Promise<CrawlPage[]> {
         while (cursor) {
           pageUrl.searchParams.set("cursor", cursor);
           // oxlint-disable-next-line no-await-in-loop -- crawl result pagination; next cursor comes from prior response
-          const pageRes = await fetch(pageUrl.toString(), { headers: cfHeaders() });
+          const pageRes = await fetch(pageUrl.toString(), { headers: cfHeaders(auth) });
           if (!pageRes.ok) break;
           // oxlint-disable-next-line no-await-in-loop -- crawl result pagination; reading JSON body from same paged response
           const pageData = (await pageRes.json()) as typeof data;
