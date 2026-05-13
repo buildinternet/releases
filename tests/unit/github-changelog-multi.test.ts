@@ -6,8 +6,10 @@ import {
   parsePnpmWorkspaces,
   pickChangelogInDir,
   truncateToByteCap,
+  evaluateTagFilter,
   CHANGELOG_MAX_BYTES,
 } from "@releases/adapters/github";
+import { github } from "@releases/adapters/github";
 import type { Source } from "@buildinternet/releases-core/schema";
 
 // Build a minimal Source that the adapter will accept.
@@ -471,5 +473,196 @@ describe("discoverChangelogPaths", () => {
     const paths = planned.map((p) => p.path).toSorted();
     expect(paths).toEqual(["apps/web/CHANGELOG.md", "packages/core/CHANGELOG.md"]);
     for (const p of planned) expect(p.origin).toBe("workspace");
+  });
+});
+
+describe("evaluateTagFilter", () => {
+  it("returns no-filter when neither denyPrefixes nor allowPatterns are set", () => {
+    expect(evaluateTagFilter("v1.0.0", undefined, undefined)).toBe("no-filter");
+  });
+
+  it("returns no-filter when both arrays are empty", () => {
+    expect(evaluateTagFilter("v1.0.0", [], [])).toBe("no-filter");
+  });
+
+  it("returns deny when tag matches a deny prefix", () => {
+    expect(evaluateTagFilter("agent-skills-v0.91.0", ["agent-skills-", "hog-"], undefined)).toBe(
+      "deny",
+    );
+  });
+
+  it("returns deny for hog- prefix", () => {
+    expect(evaluateTagFilter("hog-v1.2.3", ["agent-skills-", "hog-"], undefined)).toBe("deny");
+  });
+
+  it("returns no-filter when tag does not match any deny prefix", () => {
+    expect(evaluateTagFilter("v1.0.0", ["agent-skills-", "hog-"], undefined)).toBe("no-filter");
+  });
+
+  it("deny prefix match is case-sensitive", () => {
+    expect(evaluateTagFilter("Agent-Skills-v1.0", ["agent-skills-"], undefined)).toBe("no-filter");
+  });
+
+  it("returns allow when tag matches an allow pattern", () => {
+    expect(evaluateTagFilter("v1.2.3", undefined, ["^v\\d+"])).toBe("allow");
+  });
+
+  it("returns allow-miss when tag does not match any allow pattern", () => {
+    expect(evaluateTagFilter("agent-skills-v0.91.0", undefined, ["^v\\d+"])).toBe("allow-miss");
+  });
+
+  it("allow-patterns wins over deny-prefixes when both are set", () => {
+    // Even though "agent-skills-" is a deny prefix, allowPatterns takes sole
+    // control — the deny list is ignored entirely.
+    expect(evaluateTagFilter("agent-skills-v0.91.0", ["agent-skills-"], ["^agent-skills-"])).toBe(
+      "allow",
+    );
+  });
+
+  it("allow-miss fires even when tag would match a deny prefix (allow-patterns wins)", () => {
+    // "hog-v1.0" would be denied by the deny list, but allow-patterns is set
+    // and the tag doesn't match — so result is allow-miss, not deny.
+    expect(evaluateTagFilter("hog-v1.0", ["hog-"], ["^v\\d+"])).toBe("allow-miss");
+  });
+
+  it("treats an invalid regex pattern as non-matching and returns allow-miss (does not throw)", () => {
+    expect(() => evaluateTagFilter("v1.0.0", undefined, ["[unclosed"])).not.toThrow();
+    expect(evaluateTagFilter("v1.0.0", undefined, ["[unclosed"])).toBe("allow-miss");
+  });
+
+  it("with mixed valid + invalid patterns, a tag matching the valid one is allowed", () => {
+    expect(evaluateTagFilter("v1.2.3", undefined, ["[unclosed", "^v\\d+"])).toBe("allow");
+  });
+
+  it("with mixed valid + invalid patterns, a tag matching neither falls through to allow-miss", () => {
+    expect(evaluateTagFilter("agent-skills-v0.91.0", undefined, ["[unclosed", "^v\\d+"])).toBe(
+      "allow-miss",
+    );
+  });
+
+  it("invokes onInvalidPattern once per bad pattern with the offending string", () => {
+    const seen: Array<{ pattern: string; message: string }> = [];
+    const result = evaluateTagFilter("v1.0.0", undefined, ["[unclosed", "^v\\d+"], (pattern, err) =>
+      seen.push({
+        pattern,
+        message: err instanceof Error ? err.message : String(err),
+      }),
+    );
+    expect(result).toBe("allow");
+    expect(seen).toHaveLength(1);
+    expect(seen[0].pattern).toBe("[unclosed");
+    expect(seen[0].message.length).toBeGreaterThan(0);
+  });
+});
+
+describe("github.fetch tag filtering", () => {
+  afterEach(() => {
+    restoreFetch();
+  });
+
+  function makeGitHubRelease(tag: string, body = "content") {
+    return {
+      tag_name: tag,
+      name: tag,
+      body,
+      html_url: `https://github.com/owner/repo/releases/tag/${tag}`,
+      published_at: "2026-01-01T00:00:00Z",
+      prerelease: false,
+    };
+  }
+
+  it("passes all releases when no filter is configured", async () => {
+    installFetch((url) => {
+      if (url.includes("/repos/owner/repo/releases")) {
+        return json([makeGitHubRelease("v1.0.0"), makeGitHubRelease("v2.0.0")]);
+      }
+      return new Response("not found", { status: 404 });
+    });
+
+    const result = await github.fetch(mkSource());
+    expect(result.releases.map((r) => r.version)).toEqual(["v1.0.0", "v2.0.0"]);
+  });
+
+  it("skips tags matching a deny prefix", async () => {
+    installFetch((url) => {
+      if (url.includes("/repos/owner/repo/releases")) {
+        return json([
+          makeGitHubRelease("v1.0.0"),
+          makeGitHubRelease("agent-skills-v0.91.0"),
+          makeGitHubRelease("hog-v1.0"),
+          makeGitHubRelease("v2.0.0"),
+        ]);
+      }
+      return new Response("not found", { status: 404 });
+    });
+
+    const result = await github.fetch(
+      mkSource({ metadata: JSON.stringify({ tagDenyPrefixes: ["agent-skills-", "hog-"] }) }),
+    );
+    expect(result.releases.map((r) => r.version)).toEqual(["v1.0.0", "v2.0.0"]);
+  });
+
+  it("skips tags not matching any allow pattern", async () => {
+    installFetch((url) => {
+      if (url.includes("/repos/owner/repo/releases")) {
+        return json([
+          makeGitHubRelease("v1.0.0"),
+          makeGitHubRelease("agent-skills-v0.91.0"),
+          makeGitHubRelease("v2.0.0"),
+        ]);
+      }
+      return new Response("not found", { status: 404 });
+    });
+
+    const result = await github.fetch(
+      mkSource({ metadata: JSON.stringify({ tagAllowPatterns: ["^v\\d+"] }) }),
+    );
+    expect(result.releases.map((r) => r.version)).toEqual(["v1.0.0", "v2.0.0"]);
+  });
+
+  it("allow-patterns takes precedence over deny-prefixes when both are set", async () => {
+    installFetch((url) => {
+      if (url.includes("/repos/owner/repo/releases")) {
+        return json([makeGitHubRelease("v1.0.0"), makeGitHubRelease("agent-skills-v0.91.0")]);
+      }
+      return new Response("not found", { status: 404 });
+    });
+
+    // deny list would block "v1.0.0" (starts with "v"), but allow-patterns
+    // override means only the allow-pattern decides.
+    const result = await github.fetch(
+      mkSource({
+        metadata: JSON.stringify({
+          tagDenyPrefixes: ["agent-skills-"],
+          tagAllowPatterns: ["^agent-skills-"],
+        }),
+      }),
+    );
+    // allow-pattern matches agent-skills-* and misses v1.0.0
+    expect(result.releases.map((r) => r.version)).toEqual(["agent-skills-v0.91.0"]);
+  });
+
+  it("does not throw when allow-patterns contains an invalid regex; valid patterns still match", async () => {
+    installFetch((url) => {
+      if (url.includes("/repos/owner/repo/releases")) {
+        return json([
+          makeGitHubRelease("v1.0.0"),
+          makeGitHubRelease("v2.0.0"),
+          makeGitHubRelease("agent-skills-v0.91.0"),
+        ]);
+      }
+      return new Response("not found", { status: 404 });
+    });
+
+    // One bad pattern paired with a valid one: the fetch must complete and
+    // releases matching the valid pattern still get through.
+    const result = await github.fetch(
+      mkSource({
+        metadata: JSON.stringify({
+          tagAllowPatterns: ["[unclosed", "^v\\d+"],
+        }),
+      }),
+    );
+    expect(result.releases.map((r) => r.version)).toEqual(["v1.0.0", "v2.0.0"]);
   });
 });
