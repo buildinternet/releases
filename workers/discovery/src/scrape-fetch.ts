@@ -17,6 +17,8 @@
  */
 
 import type { Source } from "@buildinternet/releases-core/schema";
+import { CategorizedError, type ErrorCategory } from "@releases/lib/errors";
+import type { AdapterError } from "@releases/lib/errors";
 import { fetchCloudflareMarkdown } from "@releases/adapters/cloudflare";
 import { startCrawl, pollCrawlResults } from "@releases/adapters/crawl";
 import { getSourceMeta } from "@releases/adapters/source-meta";
@@ -144,7 +146,7 @@ async function insertReleases(
 
   if (!res.ok) {
     const body = await res.text().catch(() => "");
-    throw new Error(`Release insert failed (${res.status}): ${body}`);
+    throw new CategorizedError("infra", `Release insert failed (${res.status}): ${body}`);
   }
 
   const result = (await res.json()) as { inserted: number };
@@ -176,6 +178,7 @@ async function writeFetchLog(
     durationMs: number;
     status: string;
     error?: string;
+    errorCategory?: ErrorCategory;
   },
 ): Promise<void> {
   await env.apiFetcher
@@ -193,6 +196,7 @@ async function writeFetchLog(
         durationMs: result.durationMs,
         status: result.status,
         error: result.error ?? null,
+        errorCategory: result.errorCategory ?? null,
       }),
     })
     .catch(() => {}); // best-effort
@@ -452,14 +456,20 @@ export async function scrapeFetch(env: ScrapeEnv, sourceIdentifier: string): Pro
   } catch (err) {
     const durationMs = Date.now() - start;
     const message = err instanceof Error ? err.message : String(err);
+    const category: ErrorCategory | undefined =
+      err instanceof CategorizedError
+        ? err.category
+        : (err as { category?: ErrorCategory } | null)?.category;
+    const tag = category ?? "unknown";
     await writeFetchLog(env, source.id, {
       releasesFound: 0,
       releasesInserted: 0,
       durationMs,
       status: "error",
       error: message,
+      errorCategory: category,
     });
-    return `Error: ${message}`;
+    return `Error [${tag}]: ${message}`;
   }
 }
 
@@ -517,6 +527,7 @@ async function runScrapePath(
       durationMs,
       status: "error",
       error: errMsg,
+      errorCategory: "validation",
     });
     logEvent("warn", {
       component: "scrape-fetch",
@@ -525,7 +536,7 @@ async function runScrapePath(
       sourceUrl: source.url,
       status: probe.status,
     });
-    return `Error: ${errMsg}`;
+    return `Error [validation]: ${errMsg}`;
   }
 
   const knownReleasesPromise = fetchKnownReleases(env, source);
@@ -566,8 +577,9 @@ async function runScrapePath(
       durationMs,
       status: "error",
       error: "Cloudflare Browser Rendering returned no content",
+      errorCategory: "infra",
     });
-    return `Error: Cloudflare Browser Rendering returned no content for ${source.url}`;
+    return `Error [infra]: Cloudflare Browser Rendering returned no content for ${source.url}`;
   }
 
   const knownReleases = await knownReleasesPromise;
@@ -592,6 +604,12 @@ async function runScrapePath(
       },
       deps,
     );
+    if (result.hitMaxTokens) {
+      throw new CategorizedError(
+        "model",
+        `AI extraction hit max_tokens for ${source.url}; content hash will not be persisted`,
+      );
+    }
     return finalize(env, source, mapEntries(result.entries, { sourceUrl: source.url }), start);
   }
 

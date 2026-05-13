@@ -62,6 +62,16 @@ function truncate(text: string, maxLength: number): string {
   return text.slice(0, maxLength) + "…";
 }
 
+/**
+ * Extract the error category from a tool-result string produced by
+ * `scrapeFetch`. Returns the category string when the message matches
+ * `Error [<category>]: ...`, or null when absent / unrecognized.
+ */
+function extractToolErrorCategory(text: string): string | null {
+  const m = text.match(/^Error \[([a-z]+)\]:/);
+  return m ? m[1] : null;
+}
+
 export interface SessionParams {
   company: string;
   domain?: string;
@@ -607,6 +617,7 @@ ${idList}
       let done = false;
       let toolCallCount = 0;
       let toolErrors = 0;
+      let lastToolErrorCategory: string | null = null;
       let lastAgentMessage = "";
 
       // ── Pending custom-tool results, batched per turn ──────────────────
@@ -700,7 +711,11 @@ ${idList}
                     { id: toolUseId, name: toolEvent.name, input: toolEvent.input },
                     {
                       sendResult: async (id: string, text: string) => {
-                        resolveFn({ toolUseId: id, text, isError: text.startsWith("Error") });
+                        const isError = text.startsWith("Error");
+                        if (isError) {
+                          lastToolErrorCategory = extractToolErrorCategory(text);
+                        }
+                        resolveFn({ toolUseId: id, text, isError });
                       },
                       executor,
                       onScrapeFetch: scrapeHandler,
@@ -1029,7 +1044,23 @@ ${idList}
           const detail = lastAgentMessage
             ? `${reason}: ${truncate(lastAgentMessage, 120)}`
             : reason;
-          await this.fail(sessionId, params.company, detail, releasesApiKey, sessionUsage);
+          const toolErrorClassification: SessionErrorClassification | undefined =
+            lastToolErrorCategory
+              ? {
+                  errorSource: "us",
+                  errorType: lastToolErrorCategory,
+                  message: detail,
+                  severity: "fatal",
+                }
+              : undefined;
+          await this.fail(
+            sessionId,
+            params.company,
+            detail,
+            releasesApiKey,
+            sessionUsage,
+            toolErrorClassification,
+          );
           return;
         }
         await this.ctx.storage.put("status", "complete");

@@ -416,6 +416,7 @@ export const fetchLog = sqliteTable(
     durationMs: integer("duration_ms"),
     status: text("status", { enum: FETCH_LOG_STATUSES }).notNull(),
     error: text("error"),
+    errorCategory: text("error_category"),
     rawContent: text("raw_content"),
     createdAt: text("created_at")
       .notNull()
