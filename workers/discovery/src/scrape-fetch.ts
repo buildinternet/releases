@@ -18,6 +18,7 @@
 
 import type { Source } from "@buildinternet/releases-core/schema";
 import { fetchCloudflareMarkdown } from "@releases/adapters/cloudflare";
+import { startCrawl, pollCrawlResults } from "@releases/adapters/crawl";
 import { getSourceMeta } from "@releases/adapters/source-meta";
 import {
   runDirectFetchExtraction,
@@ -27,6 +28,7 @@ import {
   type MappedEntry,
 } from "@releases/adapters/extract";
 import { RELEASES_BOT_UA } from "@releases/adapters/user-agent";
+import { logEvent } from "@releases/lib/log-event.js";
 import { buildWorkerExtractDeps } from "./extract-deps-worker.js";
 
 /**
@@ -179,6 +181,143 @@ async function writeFetchLog(
 
 // ── Content acquisition for scrape path ───────────────────────────
 
+/**
+ * Derive a sensible default crawl include-pattern from the source URL.
+ * For `https://resend.com/changelog` this returns `/changelog/**`.
+ * Returns undefined when the URL has no meaningful path (e.g. bare domain).
+ */
+export function deriveCrawlPattern(sourceUrl: string): string | undefined {
+  try {
+    const { pathname } = new URL(sourceUrl);
+    // Strip trailing slash, then require at least one path segment.
+    const path = pathname.replace(/\/+$/, "");
+    if (!path || path === "/") return undefined;
+    return `${path}/**`;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Compute the include-patterns array passed to `startCrawl`. Honors three
+ * cases on `meta.crawlPattern`:
+ *  - non-empty string → use that pattern verbatim
+ *  - empty string     → no pattern filter (per-post URLs at unrelated paths)
+ *  - undefined/absent → derive a sensible default from `source.url`
+ */
+export function resolveCrawlIncludePatterns(
+  sourceUrl: string,
+  crawlPattern: string | undefined,
+): string[] {
+  if (typeof crawlPattern === "string") {
+    return crawlPattern.length > 0 ? [crawlPattern] : [];
+  }
+  const derived = deriveCrawlPattern(sourceUrl);
+  return derived ? [derived] : [];
+}
+
+/**
+ * Dependency-injected crawl helper. Runs `startCrawl` + `pollCrawlResults`,
+ * concatenates pages into a single markdown body (with per-page URL headers
+ * for attribution), persists `lastCrawlJobId` + `lastCrawlAt`, and logs the
+ * outcome. Returns `null` when the crawl returns zero pages or throws — the
+ * caller falls back to `fetchCloudflareMarkdown` in that case.
+ *
+ * Crawl primitives are passed in so unit tests can exercise the dispatch
+ * logic without registering a process-global `mock.module` (which leaks
+ * across files and breaks unrelated suites — see #615).
+ */
+export interface CrawlDeps {
+  startCrawl: (
+    url: string,
+    options: {
+      includePatterns?: string[];
+      limit?: number;
+      source?: "all" | "sitemaps" | "links";
+      render?: boolean;
+      maxAge?: number;
+    },
+  ) => Promise<string>;
+  pollCrawlResults: (jobId: string) => Promise<Array<{ url: string; markdown: string }>>;
+  updateSourceMeta: (source: Source, patch: Record<string, unknown>) => Promise<void>;
+}
+
+export async function acquireCrawlMarkdown(
+  source: Source,
+  meta: {
+    crawlPattern?: string;
+    crawlSource?: "all" | "sitemaps" | "links";
+    crawlRender?: boolean;
+    crawlMaxAge?: number;
+  },
+  crawl: CrawlDeps,
+): Promise<string | null> {
+  const includePatterns = resolveCrawlIncludePatterns(source.url, meta.crawlPattern);
+
+  logEvent("info", {
+    component: "scrape-fetch",
+    event: "crawl-started",
+    sourceSlug: source.slug,
+    includePatterns,
+  });
+
+  let jobId: string | undefined;
+  try {
+    jobId = await crawl.startCrawl(source.url, {
+      includePatterns: includePatterns.length > 0 ? includePatterns : undefined,
+      limit: 30,
+      source: meta.crawlSource ?? "links",
+      render: meta.crawlRender ?? true,
+      maxAge: meta.crawlMaxAge,
+    });
+
+    const pages = await crawl.pollCrawlResults(jobId);
+
+    if (pages.length === 0) {
+      logEvent("warn", {
+        component: "scrape-fetch",
+        event: "crawl-fallback",
+        sourceSlug: source.slug,
+        jobId,
+        reason: "crawl returned zero pages",
+      });
+      return null;
+    }
+
+    logEvent("info", {
+      component: "scrape-fetch",
+      event: "crawl-completed",
+      sourceSlug: source.slug,
+      jobId,
+      pageCount: pages.length,
+    });
+
+    // Concatenate per-page markdown with a URL header so the extractor can
+    // attribute content to individual release pages.
+    const markdown = pages.map((p) => `\n\n# ${p.url}\n\n${p.markdown}\n\n`).join("");
+
+    // Persist crawl job metadata — best-effort, don't block on failure.
+    crawl
+      .updateSourceMeta(source, {
+        lastCrawlJobId: jobId,
+        lastCrawlAt: new Date().toISOString(),
+      })
+      .catch(() => {});
+
+    return markdown;
+  } catch (err) {
+    logEvent("warn", {
+      component: "scrape-fetch",
+      event: "crawl-fallback",
+      sourceSlug: source.slug,
+      jobId,
+      reason: "crawl threw an error",
+      err,
+    });
+    return null;
+  }
+}
+
 async function fetchMarkdownUrl(url: string): Promise<string | null> {
   try {
     const res = await fetch(url, {
@@ -285,6 +424,17 @@ async function runScrapePath(
   if (meta.markdownUrl) {
     markdown = await fetchMarkdownUrl(meta.markdownUrl);
   }
+
+  if (!markdown && meta.crawlEnabled === true) {
+    markdown = await acquireCrawlMarkdown(source, meta, {
+      startCrawl,
+      pollCrawlResults,
+      updateSourceMeta: (s, patch) => deps.repo.updateSourceMeta(s, patch),
+    });
+    // markdown === null after a zero-page or thrown-error crawl — fall
+    // through to fetchCloudflareMarkdown below.
+  }
+
   if (!markdown) {
     markdown = await fetchCloudflareMarkdown(
       source.url,
