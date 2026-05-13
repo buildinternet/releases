@@ -267,18 +267,35 @@ interface GitHubRelease {
  * Precedence rule: when `tagAllowPatterns` is non-empty it takes sole control;
  * `tagDenyPrefixes` is ignored. When only `tagDenyPrefixes` is set, any
  * prefix match causes the tag to be skipped. Neither set → no filtering.
+ *
+ * Invalid regex patterns in `allowPatterns` are skipped (treated as
+ * non-matching) rather than thrown — a malformed entry in source metadata
+ * must not abort the whole fetch. Callers can pass `onInvalidPattern` to
+ * surface the error (e.g. via `logEvent`); they're responsible for
+ * deduping if the same source emits many tags.
  */
 export function evaluateTagFilter(
   tag: string,
   denyPrefixes: string[] | undefined,
   allowPatterns: string[] | undefined,
+  onInvalidPattern?: (pattern: string, err: unknown) => void,
 ): "no-filter" | "allow" | "deny" | "allow-miss" {
   const hasAllow = Array.isArray(allowPatterns) && allowPatterns.length > 0;
   const hasDeny = Array.isArray(denyPrefixes) && denyPrefixes.length > 0;
 
   if (hasAllow) {
     // Allow-patterns take sole control — deny-prefixes are ignored.
-    const matched = allowPatterns.some((pattern) => new RegExp(pattern).test(tag));
+    // Each pattern is compiled and tested independently; a malformed pattern
+    // is skipped (treated as non-matching) so one bad entry doesn't abort
+    // the entire fetch.
+    const matched = allowPatterns.some((pattern) => {
+      try {
+        return new RegExp(pattern).test(tag);
+      } catch (err) {
+        onInvalidPattern?.(pattern, err);
+        return false;
+      }
+    });
     return matched ? "allow" : "allow-miss";
   }
 
@@ -315,6 +332,21 @@ export const github: Adapter = {
     let url: string | null = `https://api.github.com/repos/${owner}/${repo}/releases?per_page=100`;
     let hitDateCutoff = false;
 
+    // Dedup the invalid-pattern warning per fetch: every tag would otherwise
+    // re-trigger the same compile failure and spam Workers Logs.
+    const loggedBadPatterns = new Set<string>();
+    const onInvalidPattern = (pattern: string, err: unknown): void => {
+      if (loggedBadPatterns.has(pattern)) return;
+      loggedBadPatterns.add(pattern);
+      logEvent("warn", {
+        component: "github-adapter",
+        event: "tag-pattern-invalid",
+        sourceSlug: source.slug,
+        pattern,
+        err: err instanceof Error ? err.message : String(err),
+      });
+    };
+
     while (url && !hitDateCutoff) {
       // oxlint-disable-next-line no-await-in-loop -- GitHub REST API pagination; next URL comes from prior response Link header
       const res: Response = await fetch(url, { headers });
@@ -349,8 +381,15 @@ export const github: Adapter = {
 
         // Tag filter: runs before any release-detail fetch or DB read so that
         // noise tags are a cheap skip. allow-patterns take precedence over
-        // deny-prefixes when both are configured.
-        const filterResult = evaluateTagFilter(rel.tag_name, tagDenyPrefixes, tagAllowPatterns);
+        // deny-prefixes when both are configured. Invalid allow-patterns are
+        // logged once per fetch (via `onInvalidPattern`) and skipped — never
+        // thrown — so one bad regex can't abort ingest.
+        const filterResult = evaluateTagFilter(
+          rel.tag_name,
+          tagDenyPrefixes,
+          tagAllowPatterns,
+          onInvalidPattern,
+        );
         if (filterResult === "deny" || filterResult === "allow-miss") {
           logEvent("info", {
             component: "github-adapter",
