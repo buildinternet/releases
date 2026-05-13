@@ -105,20 +105,21 @@ export async function startCrawl(
   // Per-source metadata can still override via `crawlSource`.
   body.source = options.source ?? "links";
 
-  // Drop off-domain links (social, community, docs hosts) by default.
-  // Per-source override available via `meta.crawlIncludeExternal: true`.
-  body.includeExternalLinks = options.includeExternalLinks ?? false;
-
+  // Cloudflare's crawl API requires includeExternalLinks (and excludePatterns)
+  // to live under `body.options`, not at the top level. Top-level placement is
+  // rejected with 400 `unrecognized_keys`.
+  const crawlOptions: Record<string, unknown> = {
+    // Drop off-domain links (social, community, docs hosts) by default.
+    // Per-source override available via `meta.crawlIncludeExternal: true`.
+    includeExternalLinks: options.includeExternalLinks ?? false,
+  };
   // NOTE: includePatterns is intentionally NOT passed — Cloudflare's matcher
   // silently drops every discovered URL regardless of pattern shape (see #929).
   // Use excludePatterns instead, which works as documented.
-  const crawlOptions: Record<string, unknown> = {};
   if (options.excludePatterns?.length) {
     crawlOptions.excludePatterns = options.excludePatterns;
   }
-  if (Object.keys(crawlOptions).length > 0) {
-    body.options = crawlOptions;
-  }
+  body.options = crawlOptions;
 
   body.limit = options.limit ?? 20; // Conservative default — JS rendering eats browser time fast
   body.depth = 2; // Follow links one level deep from the starting page

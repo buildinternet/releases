@@ -382,7 +382,7 @@ describe("startCrawl body shape", () => {
     ]);
   });
 
-  it("no exclude patterns → no body.options.excludePatterns (or empty body.options)", async () => {
+  it("no exclude patterns → no body.options.excludePatterns (body.options still carries includeExternalLinks default)", async () => {
     const { restore, capturedBodies } = mockFetchForCrawl("job_2");
     try {
       await startCrawl("https://example.com/changelog", {});
@@ -392,11 +392,11 @@ describe("startCrawl body shape", () => {
     const body = capturedBodies[0] as Record<string, unknown>;
     const opts = body.options as Record<string, unknown> | undefined;
     expect(opts?.excludePatterns).toBeUndefined();
-    // body.options itself should be absent when there's nothing to set
-    expect(body.options).toBeUndefined();
+    // body.options is always present because includeExternalLinks defaults are nested under it
+    expect(opts?.includeExternalLinks).toBe(false);
   });
 
-  it("includeExternalLinks defaults false", async () => {
+  it("includeExternalLinks defaults false under body.options", async () => {
     const { restore, capturedBodies } = mockFetchForCrawl("job_3");
     try {
       await startCrawl("https://example.com/changelog", {});
@@ -404,10 +404,13 @@ describe("startCrawl body shape", () => {
       restore();
     }
     const body = capturedBodies[0] as Record<string, unknown>;
-    expect(body.includeExternalLinks).toBe(false);
+    // Cloudflare requires this nested under options, not at top level
+    expect(body.includeExternalLinks).toBeUndefined();
+    const opts = body.options as Record<string, unknown> | undefined;
+    expect(opts?.includeExternalLinks).toBe(false);
   });
 
-  it("includeExternalLinks forwarded when set to true", async () => {
+  it("includeExternalLinks forwarded when set to true (nested under body.options)", async () => {
     const { restore, capturedBodies } = mockFetchForCrawl("job_4");
     try {
       await startCrawl("https://example.com/changelog", { includeExternalLinks: true });
@@ -415,7 +418,9 @@ describe("startCrawl body shape", () => {
       restore();
     }
     const body = capturedBodies[0] as Record<string, unknown>;
-    expect(body.includeExternalLinks).toBe(true);
+    expect(body.includeExternalLinks).toBeUndefined();
+    const opts = body.options as Record<string, unknown> | undefined;
+    expect(opts?.includeExternalLinks).toBe(true);
   });
 
   it("legacy includePatterns option ignored — not passed to Cloudflare", async () => {
