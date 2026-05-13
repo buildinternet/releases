@@ -72,14 +72,15 @@ describe("MCP resources + completion", () => {
     await seed(fixture.db);
   });
 
-  it("advertises org, product, and source templates with URI patterns", async () => {
+  it("advertises org, catalog, and source templates with URI patterns", async () => {
     const link = await linkResources(fixture.db);
     try {
       const { resourceTemplates } = await link.client.listResourceTemplates();
       const byName = new Map(resourceTemplates.map((t) => [t.name, t.uriTemplate]));
       expect(byName.get("organization")).toBe("releases://org/{orgSlug}");
-      expect(byName.get("product")).toBe("releases://product/{productSlug}");
+      expect(byName.get("catalog")).toBe("releases://catalog/{slug}");
       expect(byName.get("source")).toBe("releases://source/{sourceSlug}");
+      expect(byName.has("product")).toBe(false);
     } finally {
       await link.close();
     }
@@ -209,14 +210,17 @@ describe("MCP resources + completion", () => {
   });
 
   it("matches substrings anywhere, not just prefixes", async () => {
-    // "base" appears mid-slug for supabase-product and at-end for supabase.
+    // "base" appears in both the product slug "supabase-product" and the source slug "supabase-changelog".
     const link = await linkResources(fixture.db);
     try {
       const result = await link.client.complete({
-        ref: { type: "ref/resource", uri: "releases://product/{productSlug}" },
-        argument: { name: "productSlug", value: "base" },
+        ref: { type: "ref/resource", uri: "releases://catalog/{slug}" },
+        argument: { name: "slug", value: "base" },
       });
-      expect(result.completion.values.toSorted()).toEqual(["supabase/supabase-product"]);
+      expect(result.completion.values.toSorted()).toEqual([
+        "supabase/supabase-changelog",
+        "supabase/supabase-product",
+      ]);
     } finally {
       await link.close();
     }
@@ -227,8 +231,8 @@ describe("MCP resources + completion", () => {
     const link = await linkResources(fixture.db);
     try {
       const result = await link.client.complete({
-        ref: { type: "ref/resource", uri: "releases://product/{productSlug}" },
-        argument: { name: "productSlug", value: "turbo" },
+        ref: { type: "ref/resource", uri: "releases://catalog/{slug}" },
+        argument: { name: "slug", value: "turbo" },
       });
       expect(result.completion.values).toEqual(["vercel/turborepo", "vercel/alphaturbo"]);
     } finally {
@@ -237,15 +241,21 @@ describe("MCP resources + completion", () => {
   });
 
   it("narrows to one org when input is coordinate-form", async () => {
-    // "vercel/" without a slug needle returns every product under vercel.
+    // "vercel/" without a slug needle returns every catalog entry under vercel (products + sources).
     const link = await linkResources(fixture.db);
     try {
       const result = await link.client.complete({
-        ref: { type: "ref/resource", uri: "releases://product/{productSlug}" },
-        argument: { name: "productSlug", value: "vercel/" },
+        ref: { type: "ref/resource", uri: "releases://catalog/{slug}" },
+        argument: { name: "slug", value: "vercel/" },
       });
       const values = result.completion.values.toSorted();
-      expect(values).toEqual(["vercel/alphaturbo", "vercel/nextjs", "vercel/turborepo"]);
+      expect(values).toEqual([
+        "vercel/alphaturbo",
+        "vercel/nextjs",
+        "vercel/nextjs-canary",
+        "vercel/nextjs-releases",
+        "vercel/turborepo",
+      ]);
     } finally {
       await link.close();
     }
@@ -256,8 +266,8 @@ describe("MCP resources + completion", () => {
     const link = await linkResources(fixture.db);
     try {
       const result = await link.client.complete({
-        ref: { type: "ref/resource", uri: "releases://product/{productSlug}" },
-        argument: { name: "productSlug", value: "vercel/turbo" },
+        ref: { type: "ref/resource", uri: "releases://catalog/{slug}" },
+        argument: { name: "slug", value: "vercel/turbo" },
       });
       // Order: prefix match (turborepo) before substring match (alphaturbo).
       expect(result.completion.values).toEqual(["vercel/turborepo", "vercel/alphaturbo"]);

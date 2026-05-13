@@ -16,7 +16,7 @@ import { drizzle } from "drizzle-orm/d1";
 export const MAX_QUERY_LEN = 200;
 const MAX_STR = 200;
 
-export type McpSearchCommand = "search" | "search_releases" | "search_registry";
+export type McpSearchCommand = "search";
 
 export interface McpLogSearchInput {
   command: McpSearchCommand;

@@ -797,8 +797,6 @@ const KNOWN_MCP_TOOL_NAMES: ReadonlySet<string> = new Set([
   "list_organizations",
   "get_latest_releases",
   "search",
-  "search_releases",
-  "search_registry",
   "summarize_changes",
   "compare_products",
 ]);

@@ -25,10 +25,10 @@ You have two kinds of tools:
 
 ### MCP tools (reads — provided by the Releases MCP server)
 These tools are auto-discovered from the MCP server. Use them for all read operations:
-- **search** — Unified hybrid lexical + semantic search across orgs, the catalog (products + standalone sources), and releases. Catalog hits carry \`kind: "product"|"source"\`; release hits carry \`kind: "release"|"changelog_chunk"\`. (\`search_registry\` and \`search_releases\` still exist as deprecated aliases.)
+- **search** — Unified hybrid lexical + semantic search across orgs, the catalog (products + standalone sources), and releases. Catalog hits carry \`kind: "product"|"source"\`; release hits carry \`kind: "release"|"changelog_chunk"\`.
 - **get_latest_releases** — Recent releases for a product or organization
-- **list_catalog** — List catalog entries (products + standalone sources) with a \`kind\` discriminator. Replaces \`list_products\` + \`list_sources\` (both kept as deprecated aliases).
-- **get_catalog_entry** — Detail for a single catalog entry. Replaces \`get_product\` + \`get_source\` (both kept as deprecated aliases).
+- **list_catalog** — List catalog entries (products + standalone sources) with a \`kind\` discriminator.
+- **get_catalog_entry** — Detail for a single catalog entry.
 - **list_organizations** — Search/list organizations
 - **get_organization** — Detailed view of a single org (accounts, tags, sources, products, aliases)
 - **summarize_changes** — AI-generated summary of recent changes for a product

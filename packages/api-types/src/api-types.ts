@@ -629,9 +629,6 @@ export type ReleaseSummaryItem = z.infer<typeof ReleaseSummaryItemSchema>;
 export type SearchOrgHit = z.infer<typeof SearchOrgHitSchema>;
 export type SearchCatalogHit = z.infer<typeof SearchCatalogHitSchema>;
 
-/** @deprecated Use SearchCatalogHit. */
-export type SearchProductHit = SearchCatalogHit;
-
 export type SearchSourceHit = z.infer<typeof SearchSourceHitSchema>;
 
 export interface RawSourceHit extends SearchSourceHit {
@@ -676,9 +673,6 @@ export function foldSourcesIntoCatalog(
   }
   return result;
 }
-
-/** @deprecated Use foldSourcesIntoCatalog. */
-export const foldSourcesIntoProducts = foldSourcesIntoCatalog;
 
 export type SearchReleaseHit = z.infer<typeof SearchReleaseHitSchema>;
 export type SearchChunkHit = z.infer<typeof SearchChunkHitSchema>;

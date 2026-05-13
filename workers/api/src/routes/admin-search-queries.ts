@@ -1,7 +1,7 @@
 /**
  * Admin-only routes for inspecting `search_queries` — the per-call log of
- * what users actually typed into `/v1/search` and the MCP `search`/
- * `search_releases`/`search_registry` tools. Gated by `authMiddleware` via
+ * what users actually typed into `/v1/search` and the MCP `search` tool.
+ * Gated by `authMiddleware` via
  * the `admin/search-queries` entry in workers/api/src/index.ts.
  *
  * Two endpoints:

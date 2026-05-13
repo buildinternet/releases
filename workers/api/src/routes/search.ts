@@ -299,7 +299,6 @@ searchRoutes.get(
         domainStatus: "not_found" as const,
         orgs: [],
         catalog: [],
-        products: [],
         sources: [],
         releases: [],
         ...(mode !== "lexical" ? { chunks: [], mode, degraded: false } : {}),
@@ -325,9 +324,8 @@ searchRoutes.get(
       return c.json(result);
     }
 
-    // Entity lookups stay lexical — semantic lives behind /search_registry on
-    // MCP. The /search endpoint keeps its historical shape so orgs/products
-    // keep rendering the way the web UI expects.
+    // Entity lookups stay lexical — the /search endpoint keeps its historical
+    // shape so orgs/products keep rendering the way the web UI expects.
     //
     // When narrowing by domain, the resolved org is surfaced unconditionally
     // as the (only) org hit — the caller has named an entity, so confirming
@@ -412,7 +410,6 @@ searchRoutes.get(
           : {}),
         orgs,
         catalog,
-        products: catalog,
         sources: [],
         releases,
         lookup: toLookupPayload(lookup),
@@ -516,7 +513,6 @@ searchRoutes.get(
         : {}),
       orgs,
       catalog,
-      products: catalog,
       sources: [],
       releases,
       chunks,

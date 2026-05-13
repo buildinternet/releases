@@ -146,9 +146,6 @@ export const UnifiedSearchResponseSchema = z.object({
   domainStatus: z.enum(["matched", "not_found"]).optional(),
   orgs: z.array(SearchOrgHitSchema),
   catalog: z.array(SearchCatalogHitSchema),
-  // Legacy alias for `catalog` populated with the same array. Will be
-  // removed one minor version after web/CLI stop reading it.
-  products: z.array(SearchCatalogHitSchema),
   sources: z.array(SearchSourceHitSchema),
   releases: z.array(SearchReleaseHitSchema),
   chunks: z.array(SearchChunkHitSchema).optional(),

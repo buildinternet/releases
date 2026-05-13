@@ -30,11 +30,7 @@ function buildStubApi(calls: string[]): Env["API"] {
   } as unknown as Env["API"];
 }
 
-async function callSearchTool(
-  env: Env,
-  toolName: "search" | "search_releases",
-  query: string,
-): Promise<unknown> {
+async function callSearchTool(env: Env, toolName: "search", query: string): Promise<unknown> {
   const server = createServer(env);
   const [clientT, serverT] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: "test", version: "0.0.0" });
@@ -99,23 +95,6 @@ describe("MCP lookup gate", () => {
       const env = makeEnv([]);
       delete (env as Partial<Env>).API;
       await expect(callSearchTool(env, "search", "acme/some-sdk")).resolves.toBeDefined();
-    });
-  });
-
-  describe("search_releases tool", () => {
-    it("calls API.fetch and renders lookup rail when query is a coordinate and search returns no results", async () => {
-      const calls: string[] = [];
-      const result = await callSearchTool(makeEnv(calls), "search_releases", "acme/some-sdk");
-      expect(calls.length).toBe(1);
-      expect(calls[0]).toContain("/v1/lookups");
-      const text = firstText(result);
-      expect(text).toContain("On-demand lookup");
-    });
-
-    it("does NOT call API.fetch when query is not a coordinate", async () => {
-      const calls: string[] = [];
-      await callSearchTool(makeEnv(calls), "search_releases", "some plain query");
-      expect(calls.length).toBe(0);
     });
   });
 });
