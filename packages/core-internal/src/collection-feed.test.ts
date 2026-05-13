@@ -243,6 +243,31 @@ describe("getCollectionReleasesFeed — large orgIds (>90, fixes #862)", () => {
       expect(rows).toEqual([]);
     });
 
+    it("dedupes repeated sourceTypes so the bind-budget math holds", async () => {
+      // The bind-budget math (89 orgs + 4 sourceTypes + 6 cursor + 1 LIMIT
+      // = 100) assumes sourceTypes contributes at most SOURCE_TYPES.length.
+      // Callers that pass duplicates (URL parsing accidents, hand-written
+      // tests) must not blow past the cap. Pass 8 entries — 2× each enum
+      // value — and confirm the query both succeeds and returns the same
+      // rows as the deduped equivalent.
+      await seedMixedTypes();
+      const rowsWithDupes = await getCollectionReleasesFeed(
+        asD1(tdb.db),
+        ["org_a", "org_b"],
+        null,
+        50,
+        { sourceTypes: ["github", "github", "feed", "feed", "scrape", "scrape", "agent", "agent"] },
+      );
+      const rowsClean = await getCollectionReleasesFeed(
+        asD1(tdb.db),
+        ["org_a", "org_b"],
+        null,
+        50,
+        { sourceTypes: ["github", "feed", "scrape", "agent"] },
+      );
+      expect(rowsWithDupes.map((r) => r.id)).toEqual(rowsClean.map((r) => r.id));
+    });
+
     it("stays under D1's 100-bind cap at the chunk boundary with all source-type slots used", async () => {
       // Worst-case bind count for a single chunk:
       //   ORG_ID_CHUNK_SIZE org IDs (89) + full SOURCE_TYPES enum (4)

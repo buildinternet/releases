@@ -35,21 +35,26 @@ export async function getCategoryReleasesFeed(
   const prereleaseWhere = opts.includePrereleases
     ? sql``
     : sql`AND (r.prerelease IS NULL OR r.prerelease = 0)`;
+  // Dedupe both filter sets so the bind-budget math doesn't depend on
+  // whatever the caller hands in. SOURCE_TYPES caps at 4; org slug lists
+  // come from the URL and can realistically repeat by accident.
+  const sourceTypes = opts.sourceTypes === undefined ? undefined : [...new Set(opts.sourceTypes)];
+  const orgSlugs = opts.orgSlugs === undefined ? undefined : [...new Set(opts.orgSlugs)];
   // Empty arrays = caller narrowed the set to nothing; honor that rather than
   // silently widening. The route layer rejects unknown values before we get
   // here, so an empty array means "all values were filtered out as invalid."
   const sourceTypeWhere =
-    opts.sourceTypes === undefined
+    sourceTypes === undefined
       ? sql``
-      : opts.sourceTypes.length === 0
+      : sourceTypes.length === 0
         ? sql`AND 1 = 0`
-        : sql`AND s.type IN ${opts.sourceTypes}`;
+        : sql`AND s.type IN ${sourceTypes}`;
   const orgWhere =
-    opts.orgSlugs === undefined
+    orgSlugs === undefined
       ? sql``
-      : opts.orgSlugs.length === 0
+      : orgSlugs.length === 0
         ? sql`AND 1 = 0`
-        : sql`AND o.slug IN ${opts.orgSlugs}`;
+        : sql`AND o.slug IN ${orgSlugs}`;
 
   return db.all<CategoryReleaseRow>(sql`
     SELECT r.id, r.version, r.title, r.content, r.summary,

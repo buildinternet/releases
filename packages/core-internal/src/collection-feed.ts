@@ -81,14 +81,19 @@ export async function getCollectionReleasesFeed(
   const prereleaseWhere = opts.includePrereleases
     ? sql``
     : sql`AND (r.prerelease IS NULL OR r.prerelease = 0)`;
+  // Dedupe before building the `IN` clause: the bind-budget math relies on
+  // sourceTypes contributing at most SOURCE_TYPES.length (4) binds, but
+  // nothing in the type signature prevents a caller from passing repeats.
+  // Set normalization is cheap (n ≤ 4) and keeps the 100-bind cap honest.
+  const sourceTypes = opts.sourceTypes === undefined ? undefined : [...new Set(opts.sourceTypes)];
   // Empty `sourceTypes` array = caller asked to narrow but supplied no valid
   // types; treat as "match nothing" rather than silently widening to everything.
   const sourceTypeWhere =
-    opts.sourceTypes === undefined
+    sourceTypes === undefined
       ? sql``
-      : opts.sourceTypes.length === 0
+      : sourceTypes.length === 0
         ? sql`AND 1 = 0`
-        : sql`AND s.type IN ${opts.sourceTypes}`;
+        : sql`AND s.type IN ${sourceTypes}`;
 
   const chunks = chunkArray(orgIds, ORG_ID_CHUNK_SIZE);
 
