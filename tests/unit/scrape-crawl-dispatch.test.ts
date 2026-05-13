@@ -311,16 +311,33 @@ describe("acquireCrawlMarkdown", () => {
 
 import { startCrawl } from "../../packages/adapters/src/crawl";
 
+interface CapturedRequest {
+  url: string;
+  headers: Record<string, string>;
+  body: unknown;
+}
+
 function mockFetchForCrawl(returnJobId: string): {
   restore: () => void;
   capturedBodies: unknown[];
+  capturedRequests: CapturedRequest[];
 } {
   const capturedBodies: unknown[] = [];
+  const capturedRequests: CapturedRequest[] = [];
   const original = globalThis.fetch;
 
   // @ts-expect-error — overriding globalThis.fetch for test isolation
-  globalThis.fetch = async (_url: unknown, init?: RequestInit) => {
-    capturedBodies.push(JSON.parse(init?.body as string));
+  globalThis.fetch = async (url: unknown, init?: RequestInit) => {
+    const headers: Record<string, string> = {};
+    if (init?.headers) {
+      const h = init.headers as Record<string, string>;
+      Object.keys(h).forEach((k) => {
+        headers[k.toLowerCase()] = h[k];
+      });
+    }
+    const body = init?.body ? JSON.parse(init.body as string) : undefined;
+    capturedBodies.push(body);
+    capturedRequests.push({ url: String(url), headers, body });
     return new Response(JSON.stringify({ success: true, result: returnJobId }), { status: 200 });
   };
 
@@ -329,6 +346,7 @@ function mockFetchForCrawl(returnJobId: string): {
       globalThis.fetch = original;
     },
     capturedBodies,
+    capturedRequests,
   };
 }
 
@@ -414,5 +432,94 @@ describe("startCrawl body shape", () => {
     expect(opts?.includePatterns).toBeUndefined();
     // Ensure no top-level includePatterns either
     expect((body as Record<string, unknown>).includePatterns).toBeUndefined();
+  });
+});
+
+// ── startCrawl credential threading ──────────────────────────────
+// Verify that explicit CrawlAuth args take precedence over process.env, and
+// that the fallback to process.env still works when no auth is provided.
+
+describe("startCrawl credential threading", () => {
+  const originalAccountId = process.env.CLOUDFLARE_ACCOUNT_ID;
+  const originalApiToken = process.env.CLOUDFLARE_API_TOKEN;
+
+  afterAll(() => {
+    process.env.CLOUDFLARE_ACCOUNT_ID = originalAccountId;
+    process.env.CLOUDFLARE_API_TOKEN = originalApiToken;
+  });
+
+  it("explicit auth → request URL contains the supplied accountId", async () => {
+    // Clear env so we can prove the explicit arg is used, not process.env
+    process.env.CLOUDFLARE_ACCOUNT_ID = "";
+    process.env.CLOUDFLARE_API_TOKEN = "";
+
+    const { restore, capturedRequests } = mockFetchForCrawl("job_auth_1");
+    try {
+      await startCrawl(
+        "https://example.com/changelog",
+        {},
+        { accountId: "test-acct", apiToken: "test-tok" },
+      );
+    } finally {
+      restore();
+    }
+
+    expect(capturedRequests).toHaveLength(1);
+    expect(capturedRequests[0].url).toContain("/accounts/test-acct/");
+  });
+
+  it("explicit auth → Authorization header is 'Bearer test-tok'", async () => {
+    process.env.CLOUDFLARE_ACCOUNT_ID = "";
+    process.env.CLOUDFLARE_API_TOKEN = "";
+
+    const { restore, capturedRequests } = mockFetchForCrawl("job_auth_2");
+    try {
+      await startCrawl(
+        "https://example.com/changelog",
+        {},
+        { accountId: "test-acct", apiToken: "test-tok" },
+      );
+    } finally {
+      restore();
+    }
+
+    expect(capturedRequests[0].headers["authorization"]).toBe("Bearer test-tok");
+  });
+
+  it("no auth arg → falls back to process.env values", async () => {
+    process.env.CLOUDFLARE_ACCOUNT_ID = "env-account";
+    process.env.CLOUDFLARE_API_TOKEN = "env-token";
+
+    const { restore, capturedRequests } = mockFetchForCrawl("job_auth_3");
+    try {
+      await startCrawl("https://example.com/changelog", {});
+    } finally {
+      restore();
+    }
+
+    expect(capturedRequests[0].url).toContain("/accounts/env-account/");
+    expect(capturedRequests[0].headers["authorization"]).toBe("Bearer env-token");
+  });
+
+  it("explicit auth takes precedence over process.env when both are set", async () => {
+    process.env.CLOUDFLARE_ACCOUNT_ID = "env-account";
+    process.env.CLOUDFLARE_API_TOKEN = "env-token";
+
+    const { restore, capturedRequests } = mockFetchForCrawl("job_auth_4");
+    try {
+      await startCrawl(
+        "https://example.com/changelog",
+        {},
+        { accountId: "explicit-acct", apiToken: "explicit-tok" },
+      );
+    } finally {
+      restore();
+    }
+
+    expect(capturedRequests[0].url).toContain("/accounts/explicit-acct/");
+    expect(capturedRequests[0].headers["authorization"]).toBe("Bearer explicit-tok");
+    // Prove the env values were not used
+    expect(capturedRequests[0].url).not.toContain("env-account");
+    expect(capturedRequests[0].headers["authorization"]).not.toContain("env-token");
   });
 });

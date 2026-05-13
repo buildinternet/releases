@@ -432,9 +432,10 @@ async function runScrapePath(
   }
 
   if (!markdown && meta.crawlEnabled === true) {
+    const crawlAuth = { accountId: env.cloudflareAccountId, apiToken: env.cloudflareApiToken };
     markdown = await acquireCrawlMarkdown(source, meta, {
-      startCrawl,
-      pollCrawlResults,
+      startCrawl: (url, options) => startCrawl(url, options, crawlAuth),
+      pollCrawlResults: (jobId) => pollCrawlResults(jobId, crawlAuth),
       updateSourceMeta: (s, patch) => deps.repo.updateSourceMeta(s, patch),
     });
     // markdown === null after a zero-page or thrown-error crawl — fall
