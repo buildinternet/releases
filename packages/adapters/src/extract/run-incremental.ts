@@ -28,6 +28,14 @@ export interface IncrementalOptions {
   model?: string;
   /** Max output tokens. Defaults to 8192 (Haiku's comfortable range). */
   maxOutputTokens?: number;
+  /**
+   * Max preview lines passed to the model. Defaults to 200 — appropriate for
+   * single-page changelogs where the newest entries appear near the top.
+   * Pass `Number.POSITIVE_INFINITY` (or a large value) when the markdown is
+   * multi-page concatenated output from `acquireCrawlMarkdown`, where per-post
+   * bodies live well past line 200 and the default cap would drop them.
+   */
+  lineCap?: number;
 }
 
 const DEFAULT_INCREMENTAL_MODEL = "claude-haiku-4-5-20251001";
@@ -57,7 +65,7 @@ export async function runIncrementalExtraction(
 
   const lines = opts.markdown.split("\n");
   const contentStart = findContentStart(lines);
-  const previewCount = Math.min(200, lines.length - contentStart);
+  const previewCount = Math.min(opts.lineCap ?? 200, lines.length - contentStart);
   const previewSlice = lines.slice(contentStart, contentStart + previewCount);
   const preview = previewSlice.map((l, i) => `${contentStart + i + 1}: ${l}`).join("\n");
 
