@@ -180,6 +180,12 @@ export function clusterChangesets(batch: ClusterInput[]): ChangesetsCluster[] {
       if (m.id === canonical.id) continue;
       // Skip if already attached to a larger cluster.
       if (assignedHash.has(m.id)) continue;
+      // Don't demote a release that owns its own narrative — if it has
+      // substantive bullets for some *other* hash, it's a first-class
+      // release (e.g. `vercel@54.0.0` has its own Major-Changes `--follow`
+      // flag *plus* an Updated-dependencies tail). Sweeping it into a
+      // peer's cluster hides the substantive content from the feed.
+      if (m.substantiveHashes.size > 0 && !m.substantiveHashes.has(hash)) continue;
       coverageIds.add(m.id);
       assignedHash.set(m.id, hash);
     }

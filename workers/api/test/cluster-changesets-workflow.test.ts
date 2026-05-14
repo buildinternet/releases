@@ -127,6 +127,49 @@ describe("POST /v1/workflows/cluster-changesets", () => {
     expect(rows.every((r) => r.decidedBy === "system:changesets")).toBe(true);
   });
 
+  it("unlinkFirst clears prior system:changesets links and re-clusters from scratch", async () => {
+    const db = mkDb();
+    await seedCascade(db);
+    const fetch = mkApp(db);
+
+    // Run 1: writes 2 system:changesets coverage rows.
+    await fetch(
+      new Request("https://x.test/v1/workflows/cluster-changesets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sourceId: "src_ai_sdk" }),
+      }),
+    );
+    const beforeRows = await db.select().from(releaseCoverage);
+    expect(beforeRows).toHaveLength(2);
+
+    // Run 2 with unlinkFirst — should delete both system rows, then
+    // re-cluster and write them back. Net rows stays at 2 but the response
+    // reports the unlink count.
+    const res = await fetch(
+      new Request("https://x.test/v1/workflows/cluster-changesets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sourceId: "src_ai_sdk", unlinkFirst: true }),
+      }),
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      unlinkFirst: boolean;
+      unlinkedRows: number;
+      clusters: number;
+      coverage: number;
+    };
+    expect(body.unlinkFirst).toBe(true);
+    expect(body.unlinkedRows).toBe(2);
+    expect(body.clusters).toBe(1);
+    expect(body.coverage).toBe(2);
+
+    const finalRows = await db.select().from(releaseCoverage);
+    expect(finalRows).toHaveLength(2);
+    expect(finalRows.every((r) => r.decidedBy === "system:changesets")).toBe(true);
+  });
+
   it("is idempotent — re-running over already-clustered rows is a no-op", async () => {
     const db = mkDb();
     await seedCascade(db);

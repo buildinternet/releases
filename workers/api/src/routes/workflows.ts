@@ -36,9 +36,10 @@ import { buildEmbedConfig } from "../lib/embed-config.js";
 import { logEvent } from "@releases/lib/log-event";
 import type { VectorizeIndex } from "@releases/search/vector-search.js";
 import type { Env } from "../index.js";
-import { clusterAndPersistCascades } from "../lib/cluster-cascades.js";
+import { clusterAndPersistCascades, DECIDED_BY_CHANGESETS } from "../lib/cluster-cascades.js";
 import { clusterChangesets } from "@releases/core-internal/changesets-cluster";
 import { releaseCoverage } from "@releases/db/schema-coverage.js";
+import { IN_ARRAY_CHUNK_SIZE } from "../lib/d1-limits.js";
 
 export const workflowsRoutes = new Hono<Env>();
 
@@ -1080,6 +1081,13 @@ interface ClusterChangesetsBody {
   /** Max releases to load per call. Default 500, max 2000. */
   limit?: number;
   dryRun?: boolean;
+  /**
+   * Delete existing `system:changesets` coverage rows in scope before
+   * re-clustering. Use when refining the clusterer to recover releases
+   * that were previously demoted by older logic; manual coverage links
+   * (decided_by != system:changesets) are untouched.
+   */
+  unlinkFirst?: boolean;
 }
 
 const CLUSTER_CHANGESETS_LIMIT_DEFAULT = 500;
@@ -1119,6 +1127,55 @@ workflowsRoutes.post("/workflows/cluster-changesets", async (c) => {
   );
   const since = daysAgoIso(sinceDays);
   const dryRun = body.dryRun === true;
+  const unlinkFirst = body.unlinkFirst === true && !dryRun;
+
+  // Optional: clear prior `system:changesets` decisions in scope so the
+  // re-cluster pass operates on a clean slate. Used after clusterer logic
+  // changes to recover releases incorrectly demoted by older runs. Manual
+  // links (decided_by != system:changesets) are untouched.
+  let unlinkedRows = 0;
+  if (unlinkFirst) {
+    // Select the release IDs in scope, then delete system:changesets
+    // coverage rows that point at any of them. Two-step (vs. one DELETE
+    // with subquery) so the same code works against the bun:sqlite test
+    // shim, which only exercises basic drizzle ops.
+    const scopeConditions = [gte(releases.publishedAt, since)];
+    if (body.sourceId) scopeConditions.push(eq(releases.sourceId, body.sourceId));
+    const scopedIdRows = body.orgId
+      ? await db
+          .select({ id: releases.id })
+          .from(releases)
+          .leftJoin(sources, eq(releases.sourceId, sources.id))
+          .where(and(...scopeConditions, eq(sources.orgId, body.orgId)))
+      : await db
+          .select({ id: releases.id })
+          .from(releases)
+          .where(and(...scopeConditions));
+    const scopedIds = scopedIdRows.map((r) => r.id);
+    if (scopedIds.length > 0) {
+      for (let i = 0; i < scopedIds.length; i += IN_ARRAY_CHUNK_SIZE) {
+        const chunk = scopedIds.slice(i, i + IN_ARRAY_CHUNK_SIZE);
+        // oxlint-disable-next-line no-await-in-loop -- D1 bind-param chunked delete
+        const deleted = await db
+          .delete(releaseCoverage)
+          .where(
+            and(
+              eq(releaseCoverage.decidedBy, DECIDED_BY_CHANGESETS),
+              inArray(releaseCoverage.coverageId, chunk),
+            ),
+          )
+          .returning({ id: releaseCoverage.coverageId });
+        unlinkedRows += deleted.length;
+      }
+    }
+    logEvent("info", {
+      component: "workflows-cluster-changesets",
+      event: "unlinked-prior",
+      sourceId: body.sourceId,
+      orgId: body.orgId,
+      unlinkedRows,
+    });
+  }
 
   // Exclude releases already linked as coverage — their cluster decision
   // is settled. Canonical-side rows stay eligible so newly-arrived siblings
@@ -1185,6 +1242,8 @@ workflowsRoutes.post("/workflows/cluster-changesets", async (c) => {
     coverage,
     hashes: allHashes,
     dryRun,
+    unlinkFirst,
+    unlinkedRows,
     sinceDays,
   });
 });

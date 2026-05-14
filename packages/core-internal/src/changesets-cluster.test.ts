@@ -312,4 +312,40 @@ describe("clusterChangesets — edge cases", () => {
     expect(cl.canonicalId).toBe("root");
     expect(cl.coverageIds.toSorted()).toEqual(["a1", "a2", "solo"]);
   });
+
+  test("release with its own substantive hash isn't demoted by a peer's cluster", () => {
+    // Regression: `vercel@54.0.0` has Major Changes (`db207b1: --follow`)
+    // plus an `Updated dependencies [94a214c]` tail. `@vercel/python` is
+    // substantive for 94a214c. Without the protection, the 94a214c cluster
+    // (size 2: python + vercel-cli) would sweep vercel-cli in as coverage
+    // and hide its `--follow` Major change. Peer-launch protection keeps
+    // first-class releases standalone.
+    const clusters = clusterChangesets([
+      {
+        id: "vercel-cli",
+        version: "vercel@54.0.0",
+        content:
+          "### Major Changes\n\n-   db207b1: Add --follow flag to logs\n\n### Patch Changes\n\n-   Updated dependencies [94a214c]\n    -   @vercel/python@6.41.0\n",
+      },
+      {
+        id: "python",
+        version: "@vercel/python@6.41.0",
+        content: "### Patch Changes\n\n-   94a214c: Use copy link mode for cache dirs\n",
+      },
+      {
+        id: "node",
+        version: "@vercel/node@5.8.1",
+        content:
+          "### Patch Changes\n\n-   Updated dependencies [94a214c]\n    -   @vercel/python@6.41.0\n",
+      },
+    ]);
+
+    // 94a214c cluster forms — but only `node` (pure cascade) is coverage.
+    // `vercel-cli` stays standalone because db207b1 is substantively its.
+    expect(clusters).toHaveLength(1);
+    const [cl] = clusters;
+    expect(cl.hash).toBe("94a214c");
+    expect(cl.canonicalId).toBe("python");
+    expect(cl.coverageIds).toEqual(["node"]);
+  });
 });
