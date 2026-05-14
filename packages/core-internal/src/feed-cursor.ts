@@ -38,6 +38,8 @@ export type AggregateReleaseRow = {
   org_name: string;
   product_slug: string | null;
   product_name: string | null;
+  /** Number of demoted siblings rolling up via `release_coverage` (0 when standalone). */
+  coverage_count: number;
 };
 
 /**

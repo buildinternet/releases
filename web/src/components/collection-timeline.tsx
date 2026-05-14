@@ -7,6 +7,7 @@ import remarkGfm from "remark-gfm";
 import { rehypeShikiPlugin } from "@/lib/shiki";
 import { OrgAvatar } from "./org-avatar";
 import { SourceTypeIcon } from "./source-type-icon";
+import { ClusterChip } from "./cluster-chip";
 import { FallbackImage } from "./fallback-image";
 import { collapsedMarkdownComponents, markdownComponents } from "./markdown-components";
 import { type CollectionMemberOrg, type CollectionReleaseItem } from "@/lib/api";
@@ -586,6 +587,7 @@ function PostHero({ release }: { release: CollectionReleaseItem }) {
               pre
             </span>
           )}
+          <ClusterChip count={release.coverageCount} />
         </div>
       </div>
       {thumbnail && (
@@ -712,6 +714,7 @@ function CommitLogRow({ release }: { release: CollectionReleaseItem }) {
             pre
           </span>
         )}
+        <ClusterChip count={release.coverageCount} />
         <SourceTypeIcon type={release.source.type} size={12} />
         {release.url && (
           <a

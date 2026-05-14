@@ -77,6 +77,7 @@ export const SearchReleaseHitSchema = z.object({
   // Hybrid fusion score; absent on pure-lexical results.
   score: z.number().optional(),
   type: ReleaseTypeSchema.optional(),
+  coverageCount: z.number().int().min(0).optional(),
 });
 
 /**

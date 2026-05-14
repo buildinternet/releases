@@ -2,6 +2,7 @@ import { asc, eq, or, sql } from "drizzle-orm";
 import { domainAliases, organizationsActive } from "@buildinternet/releases-core/schema";
 import { toFtsMatchQuery } from "@buildinternet/releases-core/fts";
 import { likeContains } from "@buildinternet/releases-core/sql-like";
+import { COVERAGE_COUNT_EXPR } from "@releases/core-internal/release-coverage-sql";
 import type { D1Db } from "../db.js";
 import type {
   ReleaseType,
@@ -34,6 +35,8 @@ export interface RawSearchReleaseRow {
   type: ReleaseType;
   titleGenerated: string | null;
   titleShort: string | null;
+  /** Number of demoted siblings rolling up via `release_coverage` (0 when standalone). */
+  coverageCount: number;
 }
 
 /**
@@ -119,7 +122,8 @@ export async function searchReleasesFts(
            r.content as content,
            r.media as media,
            r.published_at as publishedAt,
-           r.type as type
+           r.type as type,
+           ${sql.raw(COVERAGE_COUNT_EXPR)} as coverageCount
     FROM releases_fts
     JOIN releases r ON r.rowid = releases_fts.rowid
     JOIN sources_active s ON s.id = r.source_id
@@ -167,7 +171,8 @@ export async function searchReleasesFromMatchedEntities(
            r.content as content,
            r.media as media,
            r.published_at as publishedAt,
-           r.type as type
+           r.type as type,
+           ${sql.raw(COVERAGE_COUNT_EXPR)} as coverageCount
     FROM ${opts.includeCoverage ? sql`releases` : sql`releases_visible`} r
     JOIN sources_active s ON s.id = r.source_id
     LEFT JOIN organizations_active o ON o.id = s.org_id

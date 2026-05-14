@@ -211,6 +211,7 @@ export interface LatestReleaseItem {
   url: string | null;
   media: MediaItem[];
   source: { slug: string; name: string; type: string; orgSlug: string | null };
+  coverageCount?: number;
 }
 
 export const api = {

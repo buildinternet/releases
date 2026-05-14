@@ -10,7 +10,8 @@
     "./collection-feed": "./src/collection-feed.ts",
     "./category-feed": "./src/category-feed.ts",
     "./feed-cursor": "./src/feed-cursor.ts",
-    "./changesets-cluster": "./src/changesets-cluster.ts"
+    "./changesets-cluster": "./src/changesets-cluster.ts",
+    "./release-coverage-sql": "./src/release-coverage-sql.ts"
   },
   "dependencies": {
     "@buildinternet/releases-core": "workspace:*",

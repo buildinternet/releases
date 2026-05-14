@@ -1905,6 +1905,7 @@ const getSourceDetailHandler = async (c: import("hono").Context<Env>) => {
     fetchedAt: r.fetched_at,
     url: r.url,
     media: parseReleaseMedia(r.media, mediaOrigin),
+    coverageCount: r.coverage_count,
   }));
 
   // Derive latest{Version,Date}. Page 1 uses already-fetched rows; page > 1 uses the parallel query above.
@@ -2075,6 +2076,7 @@ const getSourceReleasesFeedHandler = async (c: import("hono").Context<Env>) => {
     url: r.url,
     media: parseReleaseMedia(r.media, mediaOrigin),
     prerelease: r.prerelease === 1,
+    coverageCount: r.coverage_count,
   }));
 
   return c.json({ releases: releasesFormatted, pagination: { nextCursor, limit } });

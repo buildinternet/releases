@@ -31,6 +31,7 @@ export const ReleaseLatestItemSchema = z.object({
   url: z.string().nullable(),
   media: z.array(MediaItemSchema),
   source: ReleaseLatestSourceSchema,
+  coverageCount: z.number().int().min(0).optional(),
 });
 
 export const ReleaseLatestResponseSchema = z.object({

@@ -242,6 +242,7 @@ releaseRoutes.get(
           type: r.source_type,
           orgSlug: r.org_slug,
         },
+        coverageCount: r.coverage_count,
       }));
     };
 

@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import type { ReleaseType } from "@buildinternet/releases-api-types";
 import { nowIso } from "@buildinternet/releases-core/dates";
 import { likeContains } from "@buildinternet/releases-core/sql-like";
+import { COVERAGE_COUNT_EXPR } from "@releases/core-internal/release-coverage-sql";
 import type { D1Db } from "../db.js";
 import type { OrgListRow, SourceWithStats } from "./shared.js";
 
@@ -317,6 +318,7 @@ export type OrgReleaseRow = {
   source_name: string;
   source_type: string;
   type: ReleaseType;
+  coverage_count: number;
 };
 
 /** Uses raw D1 prepare/bind instead of Drizzle because cursor WHERE fragments are dynamic strings. */
@@ -364,7 +366,8 @@ export async function getOrgReleasesFeed(
     SELECT r.id, r.version, r.title, r.content, r.summary,
            r.title_generated, r.title_short, r.type,
            r.published_at, r.fetched_at, r.url, r.media, r.prerelease,
-           s.slug AS source_slug, s.name AS source_name, s.type AS source_type
+           s.slug AS source_slug, s.name AS source_name, s.type AS source_type,
+           ${COVERAGE_COUNT_EXPR} AS coverage_count
     FROM ${releasesTable} r
     INNER JOIN sources_active s ON s.id = r.source_id
     WHERE s.org_id = ?
