@@ -107,6 +107,7 @@ import {
 import { RELEASES_BOT_UA } from "@releases/adapters/user-agent";
 import { CHANGELOG_MAX_FILES } from "@releases/adapters/github";
 import { isPrereleaseVersion } from "@buildinternet/releases-core/prerelease";
+import { computeVersionSort } from "@buildinternet/releases-core/version-sort";
 import type { Env } from "../index.js";
 import {
   getSourcesWithStats,
@@ -672,6 +673,7 @@ const postReleasesBatchHandler = async (c: import("hono").Context<Env>) => {
         return {
           sourceId: src.id,
           version,
+          versionSort: computeVersionSort(version),
           type: r.type ?? "feature",
           title: r.title,
           content: r.content,
@@ -2619,6 +2621,7 @@ sourceRoutes.post("/sources/:slug/releases", postReleaseRoute, async (c) => {
         id: body.id,
         sourceId: src.id,
         version,
+        versionSort: computeVersionSort(version),
         type: body.type ?? "feature",
         title: body.title,
         content: body.content,

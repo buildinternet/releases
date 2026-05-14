@@ -327,6 +327,12 @@ export const releases = sqliteTable(
       .notNull()
       .references(() => sources.id, { onDelete: "cascade" }),
     version: text("version"),
+    // Lexicographically sortable representation of `version` — see
+    // `computeVersionSort()` in `@buildinternet/releases-core/version-sort`.
+    // Lets `MAX()` aggregates pick the semver-highest version even when a
+    // backport patch on an older line ships after a newer major release.
+    // Null when the version has no numeric content (or is missing).
+    versionSort: text("version_sort"),
     type: text("type", { enum: RELEASE_TYPES }).notNull().default("feature"),
     title: text("title").notNull(),
     content: text("content").notNull(),
@@ -361,6 +367,7 @@ export const releases = sqliteTable(
       table.publishedAt,
     ),
     index("idx_releases_fetched_at").on(table.fetchedAt),
+    index("idx_releases_source_version_sort").on(table.sourceId, table.versionSort),
   ],
 );
 
@@ -930,6 +937,7 @@ export const releasesVisible = sqliteView("releases_visible", {
   id: text("id").primaryKey(),
   sourceId: text("source_id").notNull(),
   version: text("version"),
+  versionSort: text("version_sort"),
   type: text("type", { enum: RELEASE_TYPES }).notNull(),
   title: text("title").notNull(),
   content: text("content").notNull(),

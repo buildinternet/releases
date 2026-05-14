@@ -194,12 +194,26 @@ export async function getSourcesWithStats(
         r.source_id,
         COUNT(*) AS release_count,
         MAX(r.published_at) AS latest_date,
-        NULLIF(
-          SUBSTR(
-            MAX(CASE WHEN r.published_at IS NOT NULL THEN r.published_at || '|' || COALESCE(r.version, '') END),
-            INSTR(MAX(CASE WHEN r.published_at IS NOT NULL THEN r.published_at || '|' || COALESCE(r.version, '') END), '|') + 1
+        -- Prefer the version with the highest semver-aware sort key so a
+        -- backported patch on an older line (e.g. Next.js v15.5.18 shipped
+        -- after v16.x) doesn't beat the actual current major. Fall back to
+        -- the row with the latest publish date when no rows have a parseable
+        -- version_sort (un-backfilled rows, calver-only sources, etc.).
+        COALESCE(
+          NULLIF(
+            SUBSTR(
+              MAX(CASE WHEN r.version_sort IS NOT NULL THEN r.version_sort || '|' || COALESCE(r.version, '') END),
+              INSTR(MAX(CASE WHEN r.version_sort IS NOT NULL THEN r.version_sort || '|' || COALESCE(r.version, '') END), '|') + 1
+            ),
+            ''
           ),
-          ''
+          NULLIF(
+            SUBSTR(
+              MAX(CASE WHEN r.published_at IS NOT NULL THEN r.published_at || '|' || COALESCE(r.version, '') END),
+              INSTR(MAX(CASE WHEN r.published_at IS NOT NULL THEN r.published_at || '|' || COALESCE(r.version, '') END), '|') + 1
+            ),
+            ''
+          )
         ) AS latest_version
       FROM releases_visible r
       GROUP BY r.source_id
@@ -341,15 +355,24 @@ export async function getSourceActivityBuckets(
   from: string,
   toExclusive: string,
 ): Promise<ActivityBucketRow[]> {
+  // Within each weekly bucket, pick the lowest- and highest-semver versions
+  // (via `version_sort`) so a backported patch on an older line doesn't show
+  // up as the bucket's "latest" just because it was published last. Falls
+  // back to date-ordered MIN/MAX for rows where version_sort is null —
+  // calver-only sources or rows pending backfill.
   return db.all<ActivityBucketRow>(sql`
     WITH bucketed AS (
       SELECT
         strftime('%Y-%m-%d', r.published_at, 'weekday 0', '-6 days') AS week_start,
         COUNT(*) AS cnt,
+        MIN(CASE WHEN r.version_sort IS NOT NULL AND (r.prerelease IS NULL OR r.prerelease = 0)
+                 THEN r.version_sort || '|' || r.version END) AS earliest_by_sort,
+        MAX(CASE WHEN r.version_sort IS NOT NULL AND (r.prerelease IS NULL OR r.prerelease = 0)
+                 THEN r.version_sort || '|' || r.version END) AS latest_by_sort,
         MIN(CASE WHEN r.version IS NOT NULL AND (r.prerelease IS NULL OR r.prerelease = 0)
-                 THEN r.published_at || '|' || r.version END) AS earliest_tagged,
+                 THEN r.published_at || '|' || r.version END) AS earliest_by_date,
         MAX(CASE WHEN r.version IS NOT NULL AND (r.prerelease IS NULL OR r.prerelease = 0)
-                 THEN r.published_at || '|' || r.version END) AS latest_tagged
+                 THEN r.published_at || '|' || r.version END) AS latest_by_date
       FROM releases_visible r
       WHERE
         r.source_id = ${sourceId}
@@ -359,11 +382,17 @@ export async function getSourceActivityBuckets(
       GROUP BY week_start
     )
     SELECT week_start, cnt,
-      CASE WHEN earliest_tagged IS NOT NULL
-        THEN SUBSTR(earliest_tagged, INSTR(earliest_tagged, '|') + 1)
+      CASE
+        WHEN earliest_by_sort IS NOT NULL
+          THEN SUBSTR(earliest_by_sort, INSTR(earliest_by_sort, '|') + 1)
+        WHEN earliest_by_date IS NOT NULL
+          THEN SUBSTR(earliest_by_date, INSTR(earliest_by_date, '|') + 1)
         ELSE NULL END AS earliest_version,
-      CASE WHEN latest_tagged IS NOT NULL
-        THEN SUBSTR(latest_tagged, INSTR(latest_tagged, '|') + 1)
+      CASE
+        WHEN latest_by_sort IS NOT NULL
+          THEN SUBSTR(latest_by_sort, INSTR(latest_by_sort, '|') + 1)
+        WHEN latest_by_date IS NOT NULL
+          THEN SUBSTR(latest_by_date, INSTR(latest_by_date, '|') + 1)
         ELSE NULL END AS latest_version
     FROM bucketed
     ORDER BY week_start
