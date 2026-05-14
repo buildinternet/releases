@@ -110,6 +110,13 @@ export interface ReleaseFeedRow {
   publishedAt: string | null;
   url: string | null;
   source: { name: string; coordinate: string };
+  /**
+   * Cached release-body size (`LENGTH(content)` and `countTokensSafe`).
+   * `null` for rows that pre-date the columns; the backfill script fills them
+   * in. See #958.
+   */
+  contentChars?: number | null;
+  contentTokens?: number | null;
 }
 
 // Explicit index signature makes this type structurally compatible with the
@@ -145,6 +152,8 @@ function toReleaseFeedRow(r: {
   url: string | null;
   sourceName: string;
   coordinate: string;
+  contentChars?: number | null;
+  contentTokens?: number | null;
 }): ReleaseFeedRow {
   return {
     id: r.id,
@@ -158,6 +167,8 @@ function toReleaseFeedRow(r: {
     publishedAt: r.publishedAt,
     url: r.url ?? null,
     source: { name: r.sourceName, coordinate: r.coordinate },
+    contentChars: r.contentChars ?? null,
+    contentTokens: r.contentTokens ?? null,
   };
 }
 
@@ -525,6 +536,8 @@ export async function getLatestReleases(
       sourceSlug: sources.slug,
       orgSlug: organizations.slug,
       url: releasesTable.url,
+      contentChars: releasesTable.contentChars,
+      contentTokens: releasesTable.contentTokens,
     })
     .from(releasesTable)
     .innerJoin(sources, eq(releasesTable.sourceId, sources.id))

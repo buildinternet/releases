@@ -7,10 +7,16 @@
 
 export const D1_MAX_BINDINGS = 100;
 
-// `releases` INSERT binds 14 placeholders per row: id, source_id, version,
-// type, title, content, url, content_hash, metadata, media, published_at,
-// prerelease, suppressed, fetched_at. 7 rows * 14 = 98 bindings.
-export const RELEASES_BATCH_CHUNK_SIZE = 7;
+// `releases` INSERT binds up to 17 placeholders per row when the caller
+// provides the full sources-batch payload. Drizzle binds everything that has
+// either an explicit value, a `$defaultFn`, or a plain `.default(...)`; only
+// nullable columns with no default land as inline `null`. For releases that's
+// 17 binds (id, source_id, version, version_sort, type, title, content, url,
+// content_hash, content_chars, content_tokens, metadata, media, published_at,
+// prerelease, suppressed, fetched_at). 5 rows * 17 = 85 binds. Lighter-payload
+// insert sites carry fewer binds per row but share this chunk size to keep
+// the budget guard rail uniform.
+export const RELEASES_BATCH_CHUNK_SIZE = 5;
 
 // IN-clause chunk for id lookups/updates on releases. An UPDATE adds one
 // SET binding, so 90 + 1 = 91 stays comfortably under the cap; a SELECT

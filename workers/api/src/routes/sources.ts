@@ -108,6 +108,7 @@ import { RELEASES_BOT_UA } from "@releases/adapters/user-agent";
 import { CHANGELOG_MAX_FILES } from "@releases/adapters/github";
 import { isPrereleaseVersion } from "@buildinternet/releases-core/prerelease";
 import { computeVersionSort } from "@buildinternet/releases-core/version-sort";
+import { computeContentSize } from "@buildinternet/releases-core/tokens";
 import type { Env } from "../index.js";
 import {
   getSourcesWithStats,
@@ -670,6 +671,7 @@ const postReleasesBatchHandler = async (c: import("hono").Context<Env>) => {
         // non-string title would crash .match() and 500 the whole batch.
         const inferredPublishedAt =
           typeof r.title === "string" ? inferMonthOnlyDate(r.title) : null;
+        const size = computeContentSize(r.content);
         return {
           sourceId: src.id,
           version,
@@ -679,6 +681,8 @@ const postReleasesBatchHandler = async (c: import("hono").Context<Env>) => {
           content: r.content,
           url: r.url ?? null,
           contentHash: r.contentHash ?? null,
+          contentChars: size.contentChars,
+          contentTokens: size.contentTokens,
           publishedAt: r.publishedAt ?? inferredPublishedAt ?? null,
           prerelease: r.prerelease ?? isPrereleaseVersion(version),
           media: r.media ?? "[]",
@@ -700,6 +704,8 @@ const postReleasesBatchHandler = async (c: import("hono").Context<Env>) => {
           publishedAt: releases.publishedAt,
           media: releases.media,
           content: releases.content,
+          contentChars: releases.contentChars,
+          contentTokens: releases.contentTokens,
         });
       inserted += rows.length;
       for (const r of rows) {
@@ -2614,6 +2620,7 @@ sourceRoutes.post("/sources/:slug/releases", postReleaseRoute, async (c) => {
   // to null instead of throwing.
   const version = typeof body.version === "string" ? (sanitizeVersion(body.version) ?? null) : null;
 
+  const size = computeContentSize(body.content);
   try {
     const [release] = await db
       .insert(releases)
@@ -2630,6 +2637,8 @@ sourceRoutes.post("/sources/:slug/releases", postReleaseRoute, async (c) => {
         titleShort: body.titleShort ?? null,
         url: body.url ?? null,
         contentHash: body.contentHash ?? null,
+        contentChars: size.contentChars,
+        contentTokens: size.contentTokens,
         metadata: body.metadata ?? "{}",
         publishedAt: body.publishedAt ?? inferMonthOnlyDate(body.title) ?? null,
         prerelease: isPrereleaseVersion(version),
@@ -2778,7 +2787,12 @@ sourceRoutes.patch(
     // sanitization that the schema can't express. Empty updates still 400.
     const updates: Record<string, unknown> = {};
     if (body.title !== undefined) updates.title = body.title;
-    if (body.content !== undefined) updates.content = body.content;
+    if (body.content !== undefined) {
+      updates.content = body.content;
+      const size = computeContentSize(body.content);
+      updates.contentChars = size.contentChars;
+      updates.contentTokens = size.contentTokens;
+    }
     if (body.url !== undefined) updates.url = body.url;
     if (body.publishedAt !== undefined) updates.publishedAt = body.publishedAt;
     if (body.contentHash !== undefined) updates.contentHash = body.contentHash;

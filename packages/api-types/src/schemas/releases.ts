@@ -32,6 +32,10 @@ export const ReleaseLatestItemSchema = z.object({
   media: z.array(MediaItemSchema),
   source: ReleaseLatestSourceSchema,
   coverageCount: z.number().int().min(0).optional(),
+  // Cached release-body size hint — see {@link ReleaseItemSchema} for the
+  // same fields on the org / collection feeds. #958.
+  contentChars: z.number().int().min(0).nullable().optional(),
+  contentTokens: z.number().int().min(0).nullable().optional(),
 });
 
 export const ReleaseLatestResponseSchema = z.object({

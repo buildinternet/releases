@@ -14,6 +14,7 @@ import { RELEASE_URL_UPSERT } from "@releases/core-internal/release-upsert";
 import { probeRepo, ProbeRateLimitError, ProbeServerError } from "@releases/adapters/github-probe";
 import { newOrgId, newSourceId, newReleaseId } from "@buildinternet/releases-core/id";
 import { computeVersionSort } from "@buildinternet/releases-core/version-sort";
+import { computeContentSize } from "@buildinternet/releases-core/tokens";
 import { parseCoordinate } from "@buildinternet/releases-core/lookup-coordinate";
 import { normalizeDomain } from "@buildinternet/releases-core/domain";
 import { findOrgByDomain } from "../queries/search.js";
@@ -310,18 +311,23 @@ export async function runLookup(
     if (rawReleases.length === 0 && probe.hasChangelog) {
       ingestStatus = "deferred";
     } else if (rawReleases.length > 0) {
-      const rows = rawReleases.map((r) => ({
-        id: newReleaseId(),
-        sourceId,
-        version: r.version,
-        versionSort: computeVersionSort(r.version),
-        title: r.title,
-        content: r.content,
-        url: r.url,
-        // publishedAt is text (ISO string) in the schema; RawRelease carries Date | undefined
-        publishedAt: r.publishedAt ? r.publishedAt.toISOString() : null,
-        prerelease: r.prerelease,
-      }));
+      const rows = rawReleases.map((r) => {
+        const size = computeContentSize(r.content);
+        return {
+          id: newReleaseId(),
+          sourceId,
+          version: r.version,
+          versionSort: computeVersionSort(r.version),
+          title: r.title,
+          content: r.content,
+          url: r.url,
+          contentChars: size.contentChars,
+          contentTokens: size.contentTokens,
+          // publishedAt is text (ISO string) in the schema; RawRelease carries Date | undefined
+          publishedAt: r.publishedAt ? r.publishedAt.toISOString() : null,
+          prerelease: r.prerelease,
+        };
+      });
       for (let i = 0; i < rows.length; i += RELEASES_BATCH_CHUNK_SIZE) {
         const chunk = rows.slice(i, i + RELEASES_BATCH_CHUNK_SIZE);
         // oxlint-disable-next-line no-await-in-loop -- D1 chunked insert

@@ -216,6 +216,8 @@ webhooksRoutes.post("/webhooks/:id/test", async (c) => {
         titleGenerated: null,
         titleShort: null,
         media: [],
+        contentChars: null,
+        contentTokens: null,
       },
     },
     attempt: 1,

@@ -990,6 +990,15 @@ export interface LatestRelease {
   /** AI-generated smart-brevity headline (#852, renamed in #860). */
   titleShort?: string | null;
   media: MediaItem[];
+  /**
+   * Cached release-body size — `LENGTH(content)` and `countTokensSafe(content)`
+   * snapshotted at ingest, so clients can advertise "this release is ~1.5K
+   * tokens" without round-tripping the body. Both fields are optional and
+   * nullable: pre-existing rows land null until the backfill script
+   * populates them. See #958.
+   */
+  contentChars?: number | null;
+  contentTokens?: number | null;
 }
 
 // ── Stats ──

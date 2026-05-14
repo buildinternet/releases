@@ -1,5 +1,10 @@
 import { describe, it, expect } from "bun:test";
-import { countTokens, countTokensSafe, estimateTokens } from "@buildinternet/releases-core/tokens";
+import {
+  countTokens,
+  countTokensSafe,
+  estimateTokens,
+  computeContentSize,
+} from "@buildinternet/releases-core/tokens";
 
 describe("countTokens", () => {
   it("returns 0 for the empty string", () => {
@@ -36,6 +41,21 @@ describe("countTokensSafe", () => {
     // the fast path.
     const body = "x".repeat(256 * 1024);
     expect(countTokensSafe(body)).toBe(estimateTokens(body));
+  });
+});
+
+describe("computeContentSize", () => {
+  it("returns zeros for empty / null / undefined content", () => {
+    expect(computeContentSize("")).toEqual({ contentChars: 0, contentTokens: 0 });
+    expect(computeContentSize(null)).toEqual({ contentChars: 0, contentTokens: 0 });
+    expect(computeContentSize(undefined)).toEqual({ contentChars: 0, contentTokens: 0 });
+  });
+
+  it("returns char length + token count for a short body", () => {
+    const body = "# Hello\n\nThis is a short paragraph.";
+    const { contentChars, contentTokens } = computeContentSize(body);
+    expect(contentChars).toBe(body.length);
+    expect(contentTokens).toBe(countTokensSafe(body));
   });
 });
 

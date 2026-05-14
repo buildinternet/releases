@@ -1686,6 +1686,8 @@ orgRoutes.get(
         type: r.source_type,
       },
       coverageCount: r.coverage_count,
+      contentChars: r.content_chars,
+      contentTokens: r.content_tokens,
     }));
 
     const pagination = { nextCursor, limit };

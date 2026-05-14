@@ -35,6 +35,8 @@ describe("buildReleaseEventPayloads", () => {
       titleGenerated: null,
       titleShort: null,
       media: [{ type: "image", url: "https://ex/1.png" }],
+      contentChars: null,
+      contentTokens: null,
     });
     expect(events[1].media).toEqual([]);
     expect(events[1].version).toBeNull();

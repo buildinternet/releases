@@ -9,7 +9,7 @@ import {
   sourceChangelogChunks,
   knowledgePages,
 } from "@buildinternet/releases-core/schema";
-import { countTokensSafe } from "@buildinternet/releases-core/tokens";
+import { countTokensSafe, computeContentSize } from "@buildinternet/releases-core/tokens";
 import type { Source } from "@buildinternet/releases-core/schema";
 import {
   headCheckUrl,
@@ -648,23 +648,28 @@ export async function fetchOne(
       };
     }
 
-    const rows = rawReleases.map((raw) => ({
-      sourceId: source.id,
-      version: raw.version ?? null,
-      versionSort: computeVersionSort(raw.version),
-      title: raw.title,
-      content: raw.content,
-      url: raw.url ?? null,
-      contentHash: contentHash(raw),
-      publishedAt: raw.publishedAt?.toISOString() ?? null,
-      prerelease: raw.prerelease ?? isPrereleaseVersion(raw.version),
-      // Unwrap Next.js/Vercel image optimizer URLs so downstream R2 upload
-      // and direct rendering both see the underlying CDN asset.
-      media: JSON.stringify(
-        // oxlint-disable-next-line no-map-spread -- copy-on-write required; m is an adapter-returned object
-        (raw.media ?? []).map((m) => ({ ...m, url: normalizeMediaUrl(m.url) })),
-      ),
-    }));
+    const rows = rawReleases.map((raw) => {
+      const size = computeContentSize(raw.content);
+      return {
+        sourceId: source.id,
+        version: raw.version ?? null,
+        versionSort: computeVersionSort(raw.version),
+        title: raw.title,
+        content: raw.content,
+        url: raw.url ?? null,
+        contentHash: contentHash(raw),
+        contentChars: size.contentChars,
+        contentTokens: size.contentTokens,
+        publishedAt: raw.publishedAt?.toISOString() ?? null,
+        prerelease: raw.prerelease ?? isPrereleaseVersion(raw.version),
+        // Unwrap Next.js/Vercel image optimizer URLs so downstream R2 upload
+        // and direct rendering both see the underlying CDN asset.
+        media: JSON.stringify(
+          // oxlint-disable-next-line no-map-spread -- copy-on-write required; m is an adapter-returned object
+          (raw.media ?? []).map((m) => ({ ...m, url: normalizeMediaUrl(m.url) })),
+        ),
+      };
+    });
 
     let inserted = 0;
     const publishRows: InsertedReleaseRow[] = [];
@@ -682,6 +687,8 @@ export async function fetchOne(
         publishedAt: releases.publishedAt,
         media: releases.media,
         content: releases.content,
+        contentChars: releases.contentChars,
+        contentTokens: releases.contentTokens,
       });
       inserted += result.length;
       for (const r of result) {

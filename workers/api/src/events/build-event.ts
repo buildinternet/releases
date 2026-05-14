@@ -9,6 +9,9 @@ export interface InsertedReleaseRow {
   publishedAt: string | null;
   /** JSON string as written to D1 (`releases.media`). May be null. */
   media: string | null;
+  /** Cached body size — see {@link ReleaseEventPayload}. Null when unset. */
+  contentChars?: number | null;
+  contentTokens?: number | null;
 }
 
 export interface BuildEventsInput {
@@ -40,5 +43,7 @@ export function buildReleaseEventPayloads(input: BuildEventsInput): ReleaseEvent
     titleGenerated: null,
     titleShort: null,
     media: parseMedia(r.media),
+    contentChars: r.contentChars ?? null,
+    contentTokens: r.contentTokens ?? null,
   }));
 }

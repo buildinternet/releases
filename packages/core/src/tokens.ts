@@ -38,3 +38,18 @@ export function estimateTokens(text: string): number {
   if (text.length === 0) return 0;
   return Math.ceil(text.length / 4);
 }
+
+/**
+ * Returns `{ contentChars, contentTokens }` for a release body. Used at every
+ * release insert/upsert site so the `releases.content_chars` / `content_tokens`
+ * columns stay in sync with `content`. Treat `null` / `undefined` content the
+ * same as empty — both produce zeros so callers can blindly spread the result
+ * into a row payload. #958.
+ */
+export function computeContentSize(content: string | null | undefined): {
+  contentChars: number;
+  contentTokens: number;
+} {
+  if (!content) return { contentChars: 0, contentTokens: 0 };
+  return { contentChars: content.length, contentTokens: countTokensSafe(content) };
+}
