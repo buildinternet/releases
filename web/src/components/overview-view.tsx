@@ -9,6 +9,7 @@ import type { OverviewPageItem } from "@/lib/api";
 import { rehypeShikiPlugin } from "@/lib/shiki";
 import { applyCitationMarkers, definitionLabel } from "@/lib/overview-citations";
 import { EXTERNAL_UGC_REL } from "@/lib/sanitize";
+import { AI_SUMMARY_DISCLAIMER } from "@/lib/copy";
 import { markdownComponents } from "./markdown-components";
 
 interface OverviewViewProps {
@@ -153,7 +154,7 @@ export function OverviewView({ page }: OverviewViewProps) {
         )}
         {!clamped && (
           <div className="mt-4 pt-3 border-t border-stone-200 dark:border-stone-800 text-[11px] text-stone-400 dark:text-stone-500">
-            AI-generated summaries may contain mistakes.
+            {AI_SUMMARY_DISCLAIMER}
           </div>
         )}
       </div>

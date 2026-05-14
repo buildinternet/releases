@@ -12,6 +12,11 @@ import { CliCommand } from "@/components/cli-command";
 import { AlsoCoveredBy } from "@/components/also-covered-by";
 import { RelatedRail } from "@/components/related-rail";
 import { ReleaseContent } from "./release-content";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import { rehypeShikiPlugin } from "@/lib/shiki";
+import { detailMarkdownComponents } from "@/components/markdown-components";
+import { AI_SUMMARY_DISCLAIMER } from "@/lib/copy";
 import { RollupBadge } from "@/components/rollup-badge";
 
 export async function generateMetadata({
@@ -86,6 +91,8 @@ export default async function ReleaseDetailPage({ params }: { params: Promise<{ 
 
   const heading = hasVersion ? release.version : release.title;
   const showSubtitle = hasVersion && release.title && !titleMatchesVersion;
+  const trimmedSummary = release.summary?.trim();
+  const hasBody = release.content?.trim();
 
   const releaseUrl = `https://releases.sh/release/${id}`;
   const sourceUrl = `https://releases.sh${sourcePath}`;
@@ -191,6 +198,25 @@ export default async function ReleaseDetailPage({ params }: { params: Promise<{ 
 
         {/* Content */}
         <div className="pb-12">
+          {trimmedSummary && hasBody && (
+            <aside className="bg-stone-50 dark:bg-stone-900/50 border border-stone-200 dark:border-stone-800 rounded-lg p-5 mb-6">
+              <div className="text-[11px] uppercase tracking-wide text-stone-400 dark:text-stone-500 font-medium mb-3">
+                Summary
+              </div>
+              <div className="prose prose-stone dark:prose-invert max-w-none text-[15px] leading-relaxed text-stone-700 dark:text-stone-200 [&_p]:my-0 [&_code]:text-sm [&_code]:bg-stone-100 dark:[&_code]:bg-stone-800 [&_code]:px-1 [&_code]:rounded [&_code::before]:content-none [&_code::after]:content-none [&_a]:text-stone-600 dark:[&_a]:text-stone-400">
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm]}
+                  rehypePlugins={[rehypeShikiPlugin]}
+                  components={detailMarkdownComponents}
+                >
+                  {trimmedSummary}
+                </ReactMarkdown>
+              </div>
+              <div className="mt-4 pt-3 border-t border-stone-200 dark:border-stone-800 text-[11px] text-stone-400 dark:text-stone-500">
+                {AI_SUMMARY_DISCLAIMER}
+              </div>
+            </aside>
+          )}
           <ReleaseContent content={release.content} title={release.title} media={media} />
           <Suspense fallback={null}>
             <AlsoCoveredBy anchorReleaseId={release.id} />

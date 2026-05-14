@@ -6,7 +6,7 @@ import { Sparkline } from "@/components/sparkline";
 const TYPE_LABELS: Record<string, string> = {
   github: "GitHub",
   feed: "Feed",
-  scrape: "Webpage",
+  scrape: "Website",
   agent: "Agent",
 };
 
