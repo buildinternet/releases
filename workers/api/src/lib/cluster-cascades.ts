@@ -1,5 +1,5 @@
 import { clusterChangesets, type ClusterInput } from "@releases/core-internal/changesets-cluster";
-import { releaseCoverage, DECIDED_BY_CHANGESETS } from "@releases/db/schema-coverage.js";
+import { releaseCoverage } from "@releases/db/schema-coverage.js";
 import { logEvent } from "@releases/lib/log-event";
 import { RELEASE_COVERAGE_INSERT_CHUNK_SIZE } from "./d1-limits.js";
 
@@ -12,6 +12,16 @@ import { RELEASE_COVERAGE_INSERT_CHUNK_SIZE } from "./d1-limits.js";
  */
 // oxlint-disable-next-line no-explicit-any -- drizzle insert chains aren't structurally compatible across schema generics; helper only uses insert→values→onConflictDoNothing
 type ClusterDb = { insert: (table: typeof releaseCoverage) => any };
+
+/**
+ * `decided_by` tag for coverage rows written by the automatic changesets
+ * cascade detector. Kept distinct from `human:cli` and `agent:<model>` so
+ * admin tooling can audit (or unlink) auto-decisions separately. Lives
+ * here rather than alongside the other tags in `src/db/schema-coverage.ts`
+ * because the CI schema-pairing gate treats edits to that file as schema
+ * changes requiring a paired migration.
+ */
+export const DECIDED_BY_CHANGESETS = "system:changesets";
 
 /**
  * Shared fingerprint of every changesets-generated cascade body — the
