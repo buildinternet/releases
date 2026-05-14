@@ -18,7 +18,6 @@
 
 import type { Source } from "@buildinternet/releases-core/schema";
 import { CategorizedError, type ErrorCategory } from "@releases/lib/errors";
-import type { AdapterError } from "@releases/lib/errors";
 import { fetchCloudflareMarkdown } from "@releases/adapters/cloudflare";
 import { startCrawl, pollCrawlResults } from "@releases/adapters/crawl";
 import { getSourceMeta } from "@releases/adapters/source-meta";

@@ -108,26 +108,26 @@ describe("cache key + manifest sanity", () => {
   });
 });
 
-describe("KV read-through", () => {
-  // Minimal KV stub. The handler / lookupCached / storeIfCacheable contract
-  // is the surface — Cloudflare's real KV behaves like this for our keys.
-  function makeKv(): GraphqlCacheBinding & { _store: Map<string, string> } {
-    const store = new Map<string, string>();
-    return {
-      _store: store,
-      async get(key, _type) {
-        const raw = store.get(key);
-        return raw === undefined ? null : (JSON.parse(raw) as unknown);
-      },
-      async put(key, value) {
-        store.set(key, value);
-      },
-      async delete(key) {
-        store.delete(key);
-      },
-    };
-  }
+// Minimal KV stub. The handler / lookupCached / storeIfCacheable contract
+// is the surface — Cloudflare's real KV behaves like this for our keys.
+function makeKv(): GraphqlCacheBinding & { _store: Map<string, string> } {
+  const store = new Map<string, string>();
+  return {
+    _store: store,
+    async get(key, _type) {
+      const raw = store.get(key);
+      return raw === undefined ? null : (JSON.parse(raw) as unknown);
+    },
+    async put(key, value) {
+      store.set(key, value);
+    },
+    async delete(key) {
+      store.delete(key);
+    },
+  };
+}
 
+describe("KV read-through", () => {
   let homepageHash: string;
   beforeEach(() => {
     homepageHash = [...CACHEABLE_HASHES][0]!;

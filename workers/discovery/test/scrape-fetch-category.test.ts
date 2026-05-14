@@ -7,7 +7,6 @@
  */
 
 import { describe, it, expect, mock, beforeEach } from "bun:test";
-import { CategorizedError } from "@releases/lib/errors";
 
 // ── minimal Source fixture ──────────────────────────────────────────
 const mockSource = {
@@ -98,11 +97,17 @@ function buildApiFetcher() {
  * Simulate the catch block logic from scrapeFetch to verify category tagging.
  * This mirrors the exact code path in workers/discovery/src/scrape-fetch.ts.
  */
+// Mirror the regex from managed-agents-session.ts
+function extract(text: string): string | null {
+  const m = text.match(/^Error \[([a-z]+)\]:/);
+  return m ? m[1] : null;
+}
+
 function formatErrorResult(err: unknown): {
   toolResult: string;
   errorCategory: string | undefined;
 } {
-  const { CategorizedError: CE, AdapterError: AE } = require("@releases/lib/errors");
+  const { CategorizedError: CE } = require("@releases/lib/errors");
   const message = err instanceof Error ? (err as Error).message : String(err);
   const category: string | undefined =
     err instanceof CE
@@ -175,11 +180,6 @@ describe("scrapeFetch error category tagging", () => {
   });
 
   it("extractToolErrorCategory regex parses bracketed category prefixes correctly", () => {
-    // Mirror the regex from managed-agents-session.ts
-    const extract = (text: string) => {
-      const m = text.match(/^Error \[([a-z]+)\]:/);
-      return m ? m[1] : null;
-    };
     expect(extract("Error [infra]: disk full")).toBe("infra");
     expect(extract("Error [model]: max_tokens")).toBe("model");
     expect(extract("Error [validation]: blocked url")).toBe("validation");

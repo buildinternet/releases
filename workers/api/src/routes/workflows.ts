@@ -1095,6 +1095,13 @@ const CLUSTER_CHANGESETS_LIMIT_MAX = 2000;
 const CLUSTER_CHANGESETS_SINCE_DEFAULT = 90;
 const CLUSTER_CHANGESETS_SINCE_MAX = 365;
 
+function coerceInt(value: unknown, fallback: number): number {
+  if (value === null || value === undefined) return fallback;
+  if (typeof value === "string" && value.trim() === "") return fallback;
+  const n = Number(value);
+  return Number.isFinite(n) ? Math.floor(n) : fallback;
+}
+
 workflowsRoutes.post("/workflows/cluster-changesets", async (c) => {
   const db = createDb(c.env.DB);
   const body = await c.req.json<ClusterChangesetsBody>().catch(() => ({}) as ClusterChangesetsBody);
@@ -1111,12 +1118,6 @@ workflowsRoutes.post("/workflows/cluster-changesets", async (c) => {
   // through to daysAgoIso(...) or .limit(...). Null/undefined and blank
   // strings count as "missing" and take the fallback rather than
   // coercing to 0 (which would otherwise clamp to the floor of 1).
-  const coerceInt = (value: unknown, fallback: number): number => {
-    if (value === null || value === undefined) return fallback;
-    if (typeof value === "string" && value.trim() === "") return fallback;
-    const n = Number(value);
-    return Number.isFinite(n) ? Math.floor(n) : fallback;
-  };
   const sinceDays = Math.min(
     Math.max(coerceInt(body.sinceDays, CLUSTER_CHANGESETS_SINCE_DEFAULT), 1),
     CLUSTER_CHANGESETS_SINCE_MAX,
