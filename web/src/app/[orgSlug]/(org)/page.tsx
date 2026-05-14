@@ -7,7 +7,7 @@ import { ReleaseTimeline } from "@/components/release-timeline";
 import { OverviewView } from "@/components/overview-view";
 import { JsonLd } from "@/components/json-ld";
 import { lastModifiedAt } from "@/lib/schema-org";
-import { getOrg } from "./_lib/org-data";
+import { getOrg } from "../_lib/org-data";
 
 export async function generateMetadata({
   params,

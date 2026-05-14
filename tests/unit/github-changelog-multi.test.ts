@@ -555,21 +555,21 @@ describe("evaluateTagFilter", () => {
   });
 });
 
+function makeGitHubRelease(tag: string, body = "content") {
+  return {
+    tag_name: tag,
+    name: tag,
+    body,
+    html_url: `https://github.com/owner/repo/releases/tag/${tag}`,
+    published_at: "2026-01-01T00:00:00Z",
+    prerelease: false,
+  };
+}
+
 describe("github.fetch tag filtering", () => {
   afterEach(() => {
     restoreFetch();
   });
-
-  function makeGitHubRelease(tag: string, body = "content") {
-    return {
-      tag_name: tag,
-      name: tag,
-      body,
-      html_url: `https://github.com/owner/repo/releases/tag/${tag}`,
-      published_at: "2026-01-01T00:00:00Z",
-      prerelease: false,
-    };
-  }
 
   it("passes all releases when no filter is configured", async () => {
     installFetch((url) => {
