@@ -62,15 +62,15 @@ describe("buildLatestCacheKey", () => {
       org: "",
       include_coverage: undefined,
     });
-    expect(k).toBe("latest:v1:count=10");
+    expect(k).toBe("latest:v2:count=10");
   });
 
-  it("uses the v1 prefix so a shape bump can flush the keyspace", () => {
-    expect(buildLatestCacheKey({ count: "10" })).toMatch(/^latest:v1:/);
+  it("uses the v2 prefix so a shape bump can flush the keyspace", () => {
+    expect(buildLatestCacheKey({ count: "10" })).toMatch(/^latest:v2:/);
   });
 
   it("returns the prefix alone when no params are present", () => {
-    expect(buildLatestCacheKey({})).toBe("latest:v1:");
+    expect(buildLatestCacheKey({})).toBe("latest:v2:");
   });
 });
 
@@ -143,7 +143,7 @@ describe("isCacheableLatestRequest", () => {
     // Simulate a high-value target being added to the allowlist without
     // mutating the real Set — the production allowlist stays empty so this
     // test only verifies the lookup wiring.
-    const allowlistedKey = "latest:v1:count=10&org=org_test_allowlist";
+    const allowlistedKey = "latest:v2:count=10&org=org_test_allowlist";
     const params = {
       count: DEFAULT_LATEST_COUNT,
       sourceId: undefined,
@@ -363,8 +363,8 @@ describe("invalidateLatestCache", () => {
       { LATEST_CACHE: kv, INVALIDATION_ENABLED: "true" },
       { nReleases: 5, sourceId: "src_abc" },
     );
-    expect(kv.delete).toHaveBeenCalledWith("latest:v1:count=10");
-    expect(kv.delete).toHaveBeenCalledWith("latest:v1:count=20&exclude=github");
+    expect(kv.delete).toHaveBeenCalledWith("latest:v2:count=10");
+    expect(kv.delete).toHaveBeenCalledWith("latest:v2:count=20&exclude=github");
     // 2 REST shapes + 1 GraphQL homepage hash (from purgeKeysForHomepageTicker
     // in workers/api/src/graphql/persisted.ts).
     expect(kv.delete).toHaveBeenCalledTimes(3);

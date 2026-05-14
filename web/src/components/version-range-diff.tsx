@@ -26,6 +26,7 @@ export function VersionRangeDiff({ from, to, collapsed = false }: VersionRangeDi
       <span aria-hidden="true" className="text-stone-400 dark:text-stone-500">
         →
       </span>
+      <span className="sr-only"> to </span>
       <span>
         {commonPrefix}
         {toSuffix && (
