@@ -73,4 +73,29 @@ describe("computeVersionSort", () => {
     const b = computeVersionSort("2025.01");
     expect(b! > a!).toBe(true);
   });
+
+  it("pads only the leading digit run in mixed segments", () => {
+    // Documents intentional behavior: the segment regex matches `^([^\d]*)(\d+)(.*)$`,
+    // so only the first numeric run gets padded. Embedded trailing digits stay raw,
+    // which means `alpha2beta10` vs `alpha2beta3` won't sort numerically on the
+    // second number — acceptable because real version strings don't look like this.
+    const a = computeVersionSort("alpha2beta3");
+    const b = computeVersionSort("alpha2beta10");
+    expect(a).not.toBeNull();
+    expect(b).not.toBeNull();
+    // Lex compare: "...beta10" < "...beta3" because '1' < '3'. Pinning the
+    // current behavior so a future fix is intentional, not silent.
+    expect(b! < a!).toBe(true);
+  });
+
+  it("handles build metadata after `+`", () => {
+    const release = computeVersionSort("1.0.0");
+    const withBuild = computeVersionSort("1.0.0+build123");
+    expect(release).not.toBeNull();
+    expect(withBuild).not.toBeNull();
+    // Same release prefix; build suffix sorts the metadata version higher
+    // under lex compare. Semver actually says build metadata is ignored for
+    // ordering — we don't follow that strictly, but the result is stable.
+    expect(withBuild! > release!).toBe(true);
+  });
 });
