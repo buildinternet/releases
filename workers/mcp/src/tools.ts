@@ -1532,7 +1532,13 @@ export async function search(
   const mode: SearchMode = params.mode ?? "hybrid";
   const includeCoverage = params.include_coverage === true;
   const q = params.query;
-  const empty: SearchCounts = { orgHits: 0, catalogHits: 0, releaseHits: 0, chunkHits: 0 };
+  const empty: SearchCounts = {
+    orgHits: 0,
+    catalogHits: 0,
+    releaseHits: 0,
+    chunkHits: 0,
+    collectionHits: 0,
+  };
 
   let orgScope: Awaited<ReturnType<typeof findOrg>> = null;
   if (params.organization) {
