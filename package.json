@@ -9,7 +9,7 @@
     "dev:api": "portless run --name api.${PORTLESS_NAME:-releases} sh -c 'wrangler dev --config workers/api/wrangler.jsonc --port $PORT --ip 127.0.0.1'",
     "dev:discovery": "portless run --name discovery.${PORTLESS_NAME:-releases} sh -c 'wrangler dev --config workers/discovery/wrangler.jsonc --port $PORT --ip 127.0.0.1'",
     "dev:mcp": "portless run --name mcp.${PORTLESS_NAME:-releases} sh -c 'wrangler dev --config workers/mcp/wrangler.jsonc --port $PORT --ip 127.0.0.1'",
-    "preview:web": "cd web && bun run dev -- --port 3000",
+    "preview:web": "cd web && RELEASED_API_URL=${RELEASED_API_URL:-http://localhost:8787} bun run dev -- --port 3000",
     "preview:api": "wrangler dev --config workers/api/wrangler.jsonc --port 8787 --ip 127.0.0.1",
     "preview:mcp": "wrangler dev --config workers/mcp/wrangler.jsonc --port 8788 --ip 127.0.0.1",
     "preview:discovery": "wrangler dev --config workers/discovery/wrangler.jsonc --port 8789 --ip 127.0.0.1",
