@@ -341,6 +341,14 @@ export const releases = sqliteTable(
     titleShort: text("title_short"),
     url: text("url"),
     contentHash: text("content_hash"),
+    // Cached size of `content` (in raw chars and cl100k_base tokens) so feed
+    // surfaces can advertise "this release is ~1.5K tokens" without round-
+    // tripping the body for every row. Computed on write via `withContentSize`
+    // and recomputed when content changes through the upsert path. Nullable
+    // because old rows pre-date the column; the backfill script populates them
+    // and the renderers degrade gracefully when null. #958.
+    contentChars: integer("content_chars"),
+    contentTokens: integer("content_tokens"),
     metadata: text("metadata").default("{}"),
     media: text("media").default("[]"),
     publishedAt: text("published_at"),
@@ -946,6 +954,8 @@ export const releasesVisible = sqliteView("releases_visible", {
   titleShort: text("title_short"),
   url: text("url"),
   contentHash: text("content_hash"),
+  contentChars: integer("content_chars"),
+  contentTokens: integer("content_tokens"),
   metadata: text("metadata"),
   media: text("media"),
   publishedAt: text("published_at"),

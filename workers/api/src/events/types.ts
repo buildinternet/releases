@@ -24,6 +24,14 @@ export interface ReleaseEventPayload {
   /** AI-generated smart-brevity headline (#852, renamed in #860). Same caveat as titleGenerated. */
   titleShort: string | null;
   media: MediaItem[];
+  /**
+   * Cached release-body size — `LENGTH(content)` and `countTokensSafe`. Lets
+   * websocket consumers render a "this release is ~1.5K tokens" hint without
+   * round-tripping. Nullable because pre-existing rows landed without the
+   * columns; populated for every row inserted post-#958.
+   */
+  contentChars: number | null;
+  contentTokens: number | null;
 }
 
 /** A stored event with DO-assigned sequence number and id. */

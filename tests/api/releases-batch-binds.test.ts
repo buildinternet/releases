@@ -27,14 +27,20 @@ import {
 
 const db = drizzle(new Database(":memory:"));
 
+// Mirrors the heaviest production payload (the sources batch path —
+// workers/api/src/routes/sources.ts) so the budget assertion tracks the
+// largest binding shape the chunk-size constant must cover.
 const mockRow = (i: number) => ({
   sourceId: "src_x",
   version: `v${i}`,
+  versionSort: `vs${i}`,
   type: "feature" as const,
   title: `t${i}`,
   content: "c",
   url: `https://example.invalid/${i}`,
   contentHash: "h",
+  contentChars: 1,
+  contentTokens: 1,
   publishedAt: "2026-01-01",
   prerelease: false,
   media: "[]",

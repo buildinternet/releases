@@ -74,6 +74,15 @@ export const ReleaseItemSchema = z.object({
   // detail-page round trip. `.optional()` — older API responses and pinned
   // workers omit the field; treat undefined as 0.
   coverageCount: z.number().int().min(0).optional(),
+  // Cached `LENGTH(content)` and `countTokensSafe(content)` for the release
+  // body — lets feed surfaces ("releases get <org>", `/v1/releases/latest`,
+  // MCP `get_latest_releases`) advertise "this release is ~1.5K tokens" so
+  // agents can decide whether to pull the full body. `.optional()` and
+  // nullable because pre-existing rows landed without the columns; the
+  // backfill script populates them and renderers degrade to "size unknown"
+  // when null. See #958.
+  contentChars: z.number().int().min(0).nullable().optional(),
+  contentTokens: z.number().int().min(0).nullable().optional(),
 });
 
 export const ReleaseSummaryItemSchema = z.object({

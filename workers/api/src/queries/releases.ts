@@ -16,6 +16,8 @@ export type LatestReleaseRow = {
   org_slug: string | null;
   type: string;
   coverage_count: number;
+  content_chars: number | null;
+  content_tokens: number | null;
 };
 
 export interface LatestReleasesFilter {
@@ -75,6 +77,7 @@ export async function getLatestReleasesAcross(
       `
     SELECT r.id, r.version, r.title, r.summary, r.title_generated, r.title_short, r.type,
            r.published_at, r.url, r.media,
+           r.content_chars, r.content_tokens,
            s.slug AS source_slug, s.name AS source_name, s.type AS source_type,
            o.slug AS org_slug,
            ${COVERAGE_COUNT_EXPR} AS coverage_count
