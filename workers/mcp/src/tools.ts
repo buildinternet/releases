@@ -1600,9 +1600,14 @@ export async function search(
     }
   }
 
-  const orgsP: Promise<
+  // Org-match is needed for member-rollup collections too, so we run it
+  // whenever either `orgs` or `collections` is requested. The "orgs" output
+  // section still respects `wanted.has("orgs")` — see the rendering block
+  // below where matchedOrgs is consumed.
+  const needsOrgMatch = wanted.has("orgs") || wanted.has("collections");
+  const matchedOrgsP: Promise<
     Array<{ slug: string; name: string; domain: string | null; category: string | null }>
-  > = wanted.has("orgs")
+  > = needsOrgMatch
     ? orgScope
       ? Promise.resolve([
           {
@@ -1800,17 +1805,27 @@ export async function search(
       })()
     : Promise.resolve(null);
 
-  const [orgs, catalog, releaseResult, collectionsDirect, collectionsSemantic] = await Promise.all([
-    orgsP,
-    catalogP,
-    releasesP,
-    collectionsDirectP,
-    collectionsSemanticP,
-  ]);
+  const [matchedOrgs, catalog, releaseResult, collectionsDirect, collectionsSemantic] =
+    await Promise.all([
+      matchedOrgsP,
+      catalogP,
+      releasesP,
+      collectionsDirectP,
+      collectionsSemanticP,
+    ]);
+
+  // `orgs` is what the response renders under "## Organizations" — gated by
+  // `wanted.has("orgs")`. `matchedOrgs` always carries the match set so the
+  // collection rollup below can run even when only "collections" was asked.
+  const orgs = wanted.has("orgs") ? matchedOrgs : [];
 
   // Member rollup runs after the orgs query so we have the slugs in hand.
+  // Don't pre-LIMIT the raw rows — one collection can produce many rows (one
+  // per matched org), and clipping there would drop valid collections and
+  // truncate `matchedOrgSlugs` lists. Dedupe by collection slug first, then
+  // apply `limit` to the deduped set.
   let memberRollups: SearchCollectionHit[] = [];
-  if (wanted.has("collections") && orgs.length > 0) {
+  if (wanted.has("collections") && matchedOrgs.length > 0) {
     type RawRow = {
       slug: string;
       name: string;
@@ -1818,7 +1833,7 @@ export async function search(
       memberCount: number;
       matchedOrgSlug: string;
     };
-    const orgSlugList = orgs.map((o) => o.slug);
+    const orgSlugList = matchedOrgs.map((o) => o.slug);
     const memberRows = await db.all<RawRow>(sql`
       SELECT c.slug, c.name, c.description,
              (SELECT COUNT(*) FROM collection_members cm2
@@ -1832,8 +1847,7 @@ export async function search(
         orgSlugList.map((s) => sql`${s}`),
         sql`, `,
       )})
-      ORDER BY c.name
-      LIMIT ${limit}
+      ORDER BY c.name, op.slug
     `);
     const byCollection = new Map<string, SearchCollectionHit>();
     for (const r of memberRows) {
@@ -1851,7 +1865,7 @@ export async function search(
         });
       }
     }
-    memberRollups = [...byCollection.values()];
+    memberRollups = [...byCollection.values()].slice(0, limit);
   }
 
   const collectionsHits = mergeCollectionHits(

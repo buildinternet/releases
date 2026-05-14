@@ -29,6 +29,7 @@ export interface McpLogSearchInput {
   catalogHits?: number | null;
   releaseHits?: number | null;
   chunkHits?: number | null;
+  collectionHits?: number | null;
   degraded?: boolean | null;
   durationMs?: number | null;
   sessionId?: string | null;
@@ -100,6 +101,7 @@ export function prepareMcpSearchLogRow(input: McpLogSearchInput): NewSearchQuery
     catalogHits: input.catalogHits ?? null,
     releaseHits: input.releaseHits ?? null,
     chunkHits: input.chunkHits ?? null,
+    collectionHits: input.collectionHits ?? null,
     degraded: input.degraded ?? null,
     durationMs: input.durationMs ?? null,
     anonId: null,

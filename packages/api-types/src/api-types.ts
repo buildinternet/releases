@@ -702,22 +702,28 @@ export function mergeCollectionHits(
   member: SearchCollectionHit[],
   limit: number,
 ): SearchCollectionHit[] {
+  // Pure: never mutate caller-owned objects. Always replace map entries with
+  // shallow copies so two callers (e.g. API and MCP merging from the same
+  // upstream list) can't see each other's writes.
   const bySlug = new Map<string, SearchCollectionHit>();
-  for (const c of direct) bySlug.set(c.slug, c);
+  for (const c of direct) bySlug.set(c.slug, { ...c });
   for (const c of semantic) {
     const existing = bySlug.get(c.slug);
     if (existing) {
       if (c.score !== undefined && (existing.score === undefined || c.score > existing.score)) {
-        existing.score = c.score;
+        bySlug.set(c.slug, { ...existing, score: c.score });
       }
     } else {
-      bySlug.set(c.slug, c);
+      bySlug.set(c.slug, { ...c });
     }
   }
   for (const c of member) {
     const existing = bySlug.get(c.slug);
-    if (existing) existing.matchedOrgSlugs = c.matchedOrgSlugs;
-    else bySlug.set(c.slug, c);
+    if (existing) {
+      bySlug.set(c.slug, { ...existing, matchedOrgSlugs: c.matchedOrgSlugs });
+    } else {
+      bySlug.set(c.slug, { ...c });
+    }
   }
   return [...bySlug.values()]
     .toSorted((a, b) => {

@@ -309,7 +309,7 @@ export async function findCollectionsByMemberOrgs(
       orgSlugs.map((s) => sql`${s}`),
       sql`, `,
     )})
-    ORDER BY ${collections.name}
+    ORDER BY ${collections.name}, ${organizationsPublic.slug}
   `);
   // SQLite has no array_agg; the row-by-row fold is cheap at our scale
   // (typical collection sizes are <10 orgs, total collections <100).

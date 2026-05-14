@@ -26,6 +26,7 @@ export interface LogSearchInput {
   catalogHits?: number | null;
   releaseHits?: number | null;
   chunkHits?: number | null;
+  collectionHits?: number | null;
   degraded?: boolean | null;
   durationMs?: number | null;
   anonId?: string | null;
@@ -79,6 +80,7 @@ export function prepareSearchLogRow(input: LogSearchInput): NewSearchQuery | nul
     catalogHits: input.catalogHits ?? null,
     releaseHits: input.releaseHits ?? null,
     chunkHits: input.chunkHits ?? null,
+    collectionHits: input.collectionHits ?? null,
     degraded: input.degraded ?? null,
     durationMs: input.durationMs ?? null,
     anonId: sanitizeString(input.anonId, 64),

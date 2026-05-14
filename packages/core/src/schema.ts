@@ -526,6 +526,7 @@ export const searchQueries = sqliteTable(
     catalogHits: integer("catalog_hits"),
     releaseHits: integer("release_hits"),
     chunkHits: integer("chunk_hits"),
+    collectionHits: integer("collection_hits"),
     degraded: integer("degraded", { mode: "boolean" }),
     durationMs: integer("duration_ms"),
     anonId: text("anon_id"),

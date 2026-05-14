@@ -273,6 +273,7 @@ export function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServ
           catalogHits: counts.catalogHits ?? null,
           releaseHits: counts.releaseHits ?? null,
           chunkHits: counts.chunkHits ?? null,
+          collectionHits: counts.collectionHits ?? null,
           degraded: counts.degraded ?? null,
           durationMs: Date.now() - startedAt,
           clientKind: requestClientKind,
