@@ -7,12 +7,15 @@ import type { CronReport, CronReportStatus } from "../lib/cron-report.js";
 import { createDb } from "../db.js";
 import {
   organizations,
+  organizationsPublic,
   products,
   releases,
   sources,
   sourcesVisible,
   sourceChangelogFiles,
   sourceChangelogChunks,
+  collections,
+  collectionMembers,
   usageLog,
 } from "@buildinternet/releases-core/schema";
 import { daysAgoIso } from "@buildinternet/releases-core/dates";
@@ -775,47 +778,101 @@ workflowsRoutes.post("/workflows/embed-entities", async (c) => {
       }
       return;
     }
-    const rows = await db
+    if (kind === "source") {
+      const rows = await db
+        .select()
+        .from(sources)
+        .where(sql`${sources.embeddedAt} IS NULL`)
+        .limit(n);
+      for (const r of rows) {
+        entities.push({
+          id: r.id,
+          kind,
+          name: r.name,
+          description: null,
+          category: null,
+          domain: urlHost(r.url),
+          orgId: r.orgId,
+        });
+      }
+      return;
+    }
+    // collection — include visible member-org names so the embedded text
+    // covers the topical coverage of the collection, not just its description.
+    const cols = await db
       .select()
-      .from(sources)
-      .where(sql`${sources.embeddedAt} IS NULL`)
+      .from(collections)
+      .where(sql`${collections.embeddedAt} IS NULL`)
       .limit(n);
-    for (const r of rows) {
+    if (cols.length === 0) return;
+    const colIds = cols.map((col) => col.id);
+    const memberRows = await db
+      .select({
+        collectionId: collectionMembers.collectionId,
+        name: organizationsPublic.name,
+        position: collectionMembers.position,
+      })
+      .from(collectionMembers)
+      .innerJoin(organizationsPublic, sql`${organizationsPublic.id} = ${collectionMembers.orgId}`)
+      .where(inArray(collectionMembers.collectionId, colIds));
+    const namesByCollection = new Map<string, string[]>();
+    // Sort each list by position so the embed input stays stable across runs.
+    const grouped = memberRows.toSorted((a, b) => a.position - b.position);
+    for (const m of grouped) {
+      const arr = namesByCollection.get(m.collectionId) ?? [];
+      arr.push(m.name);
+      namesByCollection.set(m.collectionId, arr);
+    }
+    for (const col of cols) {
       entities.push({
-        id: r.id,
-        kind,
-        name: r.name,
-        description: null,
-        category: null,
-        domain: urlHost(r.url),
-        orgId: r.orgId,
+        id: col.id,
+        kind: "collection",
+        name: col.name,
+        description: col.description,
+        memberOrgNames: namesByCollection.get(col.id) ?? [],
       });
     }
   }
 
   async function countUnembeddedKind(kind: EntityKind): Promise<number> {
-    const table = kind === "org" ? organizations : kind === "product" ? products : sources;
-    const col =
-      kind === "org"
-        ? organizations.embeddedAt
-        : kind === "product"
-          ? products.embeddedAt
-          : sources.embeddedAt;
+    if (kind === "org") {
+      const [{ n }] = await db
+        .select({ n: count() })
+        .from(organizations)
+        .where(sql`${organizations.embeddedAt} IS NULL`);
+      return n;
+    }
+    if (kind === "product") {
+      const [{ n }] = await db
+        .select({ n: count() })
+        .from(products)
+        .where(sql`${products.embeddedAt} IS NULL`);
+      return n;
+    }
+    if (kind === "source") {
+      const [{ n }] = await db
+        .select({ n: count() })
+        .from(sources)
+        .where(sql`${sources.embeddedAt} IS NULL`);
+      return n;
+    }
     const [{ n }] = await db
       .select({ n: count() })
-      .from(table)
-      .where(sql`${col} IS NULL`);
+      .from(collections)
+      .where(sql`${collections.embeddedAt} IS NULL`);
     return n;
   }
 
   if (kindFilter) {
     await fetchUnembedded(kindFilter, limit);
   } else {
-    // Round-robin-ish: give each kind up to limit/3, then refill from what's
-    // left. Keeps backfill balanced across tables.
-    const third = Math.max(1, Math.floor(limit / 3));
-    await fetchUnembedded("org", third);
-    await fetchUnembedded("product", third);
+    // Round-robin-ish: give each kind up to limit/4, then refill from what's
+    // left. Keeps backfill balanced across tables. Collections are typically
+    // tiny (<100 rows) so the quota mostly goes to org/product/source.
+    const quarter = Math.max(1, Math.floor(limit / 4));
+    await fetchUnembedded("org", quarter);
+    await fetchUnembedded("product", quarter);
+    await fetchUnembedded("collection", quarter);
     await fetchUnembedded("source", limit - entities.length);
   }
 
@@ -826,6 +883,7 @@ workflowsRoutes.post("/workflows/embed-entities", async (c) => {
           countUnembeddedKind("org"),
           countUnembeddedKind("product"),
           countUnembeddedKind("source"),
+          countUnembeddedKind("collection"),
         ])
       ).reduce((a, b) => a + b, 0);
 
@@ -858,7 +916,12 @@ workflowsRoutes.post("/workflows/embed-entities", async (c) => {
       // Partition ids by kind from the in-memory batch so we issue one
       // UPDATE per table rather than guessing from the id prefix.
       const kindById = new Map(entities.map((e) => [e.id, e.kind]));
-      const partitions: Record<EntityKind, string[]> = { org: [], product: [], source: [] };
+      const partitions: Record<EntityKind, string[]> = {
+        org: [],
+        product: [],
+        source: [],
+        collection: [],
+      };
       for (const id of ids) {
         const kind = kindById.get(id);
         if (kind) partitions[kind].push(id);
@@ -880,6 +943,12 @@ workflowsRoutes.post("/workflows/embed-entities", async (c) => {
           .update(sources)
           .set({ embeddedAt: now })
           .where(inArray(sources.id, partitions.source));
+      }
+      if (partitions.collection.length > 0) {
+        await db
+          .update(collections)
+          .set({ embeddedAt: now })
+          .where(inArray(collections.id, partitions.collection));
       }
     },
   });

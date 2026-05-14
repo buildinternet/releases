@@ -14,6 +14,9 @@ import {
   organizationsActive,
   productsActive,
   sourceChangelogFiles,
+  collections,
+  collectionMembers,
+  organizationsPublic,
 } from "@buildinternet/releases-core/schema";
 import {
   hybridSearch,
@@ -439,6 +442,105 @@ async function buildReleaseHits(
     });
   }
   return out;
+}
+
+// ── Collection semantic search ────────────────────────────────────────
+//
+// Mirror of `runCollectionsSemantic` in workers/api/src/lib/search-hybrid.ts.
+// Filters the entity vector index to `type=collection` hits, then hydrates
+// member counts from D1.
+
+export interface CollectionSemanticHit {
+  slug: string;
+  name: string;
+  description: string | null;
+  memberCount: number;
+  score: number;
+}
+
+export interface CollectionSemanticResponse {
+  degraded: boolean;
+  degradedReason?: string;
+  hits: CollectionSemanticHit[];
+}
+
+export async function runCollectionsSemantic(
+  env: HybridSearchEnv,
+  db: D1Db,
+  params: { query: string; limit?: number },
+  opts: HybridSearchOpts = {},
+): Promise<CollectionSemanticResponse> {
+  const limit = params.limit ?? 20;
+  const embedder = await buildEmbedder(env, opts.waitUntil);
+  if (!env.ENTITIES_INDEX || !embedder) {
+    return {
+      degraded: true,
+      degradedReason: !embedder
+        ? "embedding provider unavailable"
+        : "ENTITIES_INDEX binding missing",
+      hits: [],
+    };
+  }
+
+  let matches: Array<{ id: string; score: number }>;
+  try {
+    const vec = await embedder(params.query);
+    const res = await env.ENTITIES_INDEX.query(vec, {
+      topK: limit * 2,
+      returnMetadata: "none",
+      filter: { type: "collection" },
+    });
+    matches = res.matches.map((m) => ({ id: m.id, score: m.score }));
+  } catch (err) {
+    return {
+      degraded: true,
+      degradedReason: err instanceof Error ? err.message : String(err),
+      hits: [],
+    };
+  }
+  if (matches.length === 0) return { degraded: false, hits: [] };
+  const ids = matches.map((m) => m.id).filter((id) => id.startsWith("col_"));
+  if (ids.length === 0) return { degraded: false, hits: [] };
+
+  const memberCountSql = sql<number>`(
+    SELECT COUNT(*)
+    FROM ${collectionMembers} cm
+    INNER JOIN ${organizationsPublic} op ON op.id = cm.org_id
+    WHERE cm.collection_id = ${collections.id}
+  )`;
+  const rows = await db.all<{
+    id: string;
+    slug: string;
+    name: string;
+    description: string | null;
+    memberCount: number;
+  }>(sql`
+    SELECT ${collections.id} as id,
+           ${collections.slug} as slug,
+           ${collections.name} as name,
+           ${collections.description} as description,
+           ${memberCountSql} as memberCount
+    FROM ${collections}
+    WHERE ${collections.id} IN (${sql.join(
+      ids.map((id) => sql`${id}`),
+      sql`, `,
+    )})
+  `);
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  const hits: CollectionSemanticHit[] = [];
+  for (const m of matches) {
+    const row = byId.get(m.id);
+    if (!row) continue;
+    hits.push({
+      slug: row.slug,
+      name: row.name,
+      description: row.description,
+      memberCount: Number(row.memberCount),
+      score: m.score,
+    });
+    if (hits.length >= limit) break;
+  }
+  return { degraded: false, hits };
 }
 
 // ── Registry (entity) search ──────────────────────────────────────────

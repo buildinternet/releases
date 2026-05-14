@@ -1,9 +1,12 @@
 /**
- * Embed + upsert helper for entity rows (organizations, products, sources).
+ * Embed + upsert helper for entity rows (organizations, products, sources,
+ * collections).
  *
  * Entities share one Vectorize index (ENTITIES_INDEX). Vector ID = the row's
- * natural ID (e.g. `org_...`, `prod_...`, `src_...`), so re-embedding on
- * edit is idempotent — the upsert overwrites the previous vector in place.
+ * natural ID (e.g. `org_...`, `prod_...`, `src_...`, `col_...`), so
+ * re-embedding on edit is idempotent — the upsert overwrites the previous
+ * vector in place. Callers downstream dispatch on the ID prefix to hydrate
+ * back to the right table.
  *
  * Same "never fail the write" contract as embed-releases: all errors caught,
  * logged, and swallowed. If the embed fails, `embedded_at` is left NULL and
@@ -14,7 +17,7 @@ import { embedBatch, type EmbeddingConfig } from "./embeddings.js";
 import type { VectorizeIndex, VectorMetadataValue } from "./vector-search.js";
 import type { EmbedLogger } from "./embed-releases.js";
 
-export type EntityKind = "org" | "product" | "source";
+export type EntityKind = "org" | "product" | "source" | "collection";
 
 export interface EmbedEntityInput {
   id: string;
@@ -28,9 +31,18 @@ export interface EmbedEntityInput {
    * Parent org id for products and sources. Stored in Vectorize metadata so
    * downstream features (e.g. "related sources within the same org") can
    * filter by `orgId` without hitting D1. Organizations set this to their
-   * own id so the filter works uniformly.
+   * own id so the filter works uniformly. Collections are cross-org by design
+   * — they leave this unset.
    */
   orgId?: string | null;
+  /**
+   * Member-org names baked into the embedded text for collections. Lets a
+   * topical query ("database stuff") match a collection whose member orgs
+   * cover the topic even when the collection's name/description doesn't
+   * mention it. Ignored on org/product/source kinds — those embed name +
+   * description + category + domain and don't need a synthetic context line.
+   */
+  memberOrgNames?: string[];
 }
 
 export interface EmbedAndUpsertEntitiesOptions {
@@ -47,7 +59,13 @@ export interface EmbedAndUpsertEntitiesOptions {
 }
 
 function buildEntityText(e: EmbedEntityInput): string {
-  return [e.name, e.description ?? "", e.category ?? "", e.domain ?? ""]
+  // Cap at 32 names so very large collections don't overflow the embedder's
+  // effective input window.
+  const parts: string[] = [e.name, e.description ?? "", e.category ?? "", e.domain ?? ""];
+  if (e.kind === "collection" && e.memberOrgNames && e.memberOrgNames.length > 0) {
+    parts.push(`Members: ${e.memberOrgNames.slice(0, 32).join(", ")}`);
+  }
+  return parts
     .map((s) => s.trim())
     .filter((s) => s.length > 0)
     .join(" ");

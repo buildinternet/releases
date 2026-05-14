@@ -18,6 +18,9 @@ import {
   organizationsActive,
   productsActive,
   sourceChangelogFiles,
+  collections,
+  collectionMembers,
+  organizationsPublic,
 } from "@buildinternet/releases-core/schema";
 // sources/orgs/products are used for entity hydration (runRegistrySearch);
 // sourceChangelogFiles is used for batched chunk content reads.
@@ -504,6 +507,122 @@ async function buildReleaseHits(
     });
   }
   return out;
+}
+
+// ── Collection semantic search ────────────────────────────────────────
+//
+// Collections share ENTITIES_INDEX with orgs/products/sources, distinguished
+// by their `col_` ID prefix and the `type: "collection"` metadata tag. The
+// helper runs a topical vector query, filters server-side to collection
+// hits only, and hydrates them from D1 with member counts. Degrades the
+// same way `runRegistrySearch` does — missing binding or embed error
+// returns `degraded: true` with an empty hit list and the caller decides
+// whether to fall back to lexical.
+
+export interface CollectionSemanticHit {
+  slug: string;
+  name: string;
+  description: string | null;
+  memberCount: number;
+  score: number;
+}
+
+export interface CollectionSemanticResponse {
+  degraded: boolean;
+  degradedReason?: string;
+  hits: CollectionSemanticHit[];
+}
+
+export async function runCollectionsSemantic(
+  env: HybridSearchEnv,
+  db: D1Db,
+  params: { query: string; limit?: number },
+  opts: HybridSearchOpts = {},
+): Promise<CollectionSemanticResponse> {
+  const limit = params.limit ?? 20;
+
+  const embedder = await buildEmbedder(env, opts.waitUntil);
+  if (!env.ENTITIES_INDEX || !embedder) {
+    return {
+      degraded: true,
+      degradedReason: !embedder
+        ? "embedding provider unavailable"
+        : "ENTITIES_INDEX binding missing",
+      hits: [],
+    };
+  }
+
+  let matches: Array<{ id: string; score: number }>;
+  try {
+    const vec = await embedder(params.query);
+    // Server-side filter on the kind discriminator — the vectorize index is
+    // shared with orgs/products/sources, so we'd otherwise have to pull
+    // (limit * N) candidates and toss the non-collection ones.
+    const res = await env.ENTITIES_INDEX.query(vec, {
+      topK: limit * 2,
+      returnMetadata: "none",
+      filter: { type: "collection" },
+    });
+    matches = res.matches.map((m) => ({ id: m.id, score: m.score }));
+  } catch (err) {
+    return {
+      degraded: true,
+      degradedReason: err instanceof Error ? err.message : String(err),
+      hits: [],
+    };
+  }
+
+  if (matches.length === 0) return { degraded: false, hits: [] };
+
+  // Defense-in-depth: filter to `col_…` IDs in case the metadata filter
+  // doesn't fire (older bindings, mis-tagged vectors). Cheap.
+  const collectionIds = matches.map((m) => m.id).filter((id) => id.startsWith("col_"));
+  if (collectionIds.length === 0) return { degraded: false, hits: [] };
+
+  // Hydrate + compute memberCount in one query. Mirrors the
+  // `searchCollectionsDirect` helper but bound by an `IN (…)` list rather
+  // than a LIKE pattern.
+  const memberCountSql = sql<number>`(
+    SELECT COUNT(*)
+    FROM ${collectionMembers} cm
+    INNER JOIN ${organizationsPublic} op ON op.id = cm.org_id
+    WHERE cm.collection_id = ${collections.id}
+  )`;
+  const rows = await db.all<{
+    id: string;
+    slug: string;
+    name: string;
+    description: string | null;
+    memberCount: number;
+  }>(sql`
+    SELECT ${collections.id} as id,
+           ${collections.slug} as slug,
+           ${collections.name} as name,
+           ${collections.description} as description,
+           ${memberCountSql} as memberCount
+    FROM ${collections}
+    WHERE ${collections.id} IN (${sql.join(
+      collectionIds.map((id) => sql`${id}`),
+      sql`, `,
+    )})
+  `);
+
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  const hits: CollectionSemanticHit[] = [];
+  // Preserve Vectorize ranking order.
+  for (const m of matches) {
+    const row = byId.get(m.id);
+    if (!row) continue;
+    hits.push({
+      slug: row.slug,
+      name: row.name,
+      description: row.description,
+      memberCount: Number(row.memberCount),
+      score: m.score,
+    });
+    if (hits.length >= limit) break;
+  }
+  return { degraded: false, hits };
 }
 
 // ── Entity (registry) semantic search ─────────────────────────────────

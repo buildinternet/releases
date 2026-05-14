@@ -53,12 +53,13 @@ import { RollupBadge } from "./rollup-badge";
 import { Highlight, rehypeHighlightTokens, tokenizeQuery } from "./highlight";
 import { formatDate } from "@/lib/formatters";
 
-type SearchFilter = "all" | "orgs" | "products" | "releases";
+type SearchFilter = "all" | "orgs" | "products" | "collections" | "releases";
 
 const FILTERS: { value: SearchFilter; label: string }[] = [
   { value: "all", label: "All" },
   { value: "orgs", label: "Organizations" },
   { value: "products", label: "Products" },
+  { value: "collections", label: "Collections" },
   { value: "releases", label: "Releases" },
 ];
 
@@ -379,21 +380,29 @@ export function SearchResults({
 
   const lookup = results?.lookup ?? null;
 
+  // `collections` is optional on the wire (older API deployments mid-rollout
+  // omit the field). Treat missing and `[]` identically so the UI doesn't
+  // 500 before the feature lands in production.
+  const collectionsHits = results?.collections ?? [];
+
   const hasResults =
     results &&
     (results.orgs.length > 0 ||
       results.catalog.length > 0 ||
+      collectionsHits.length > 0 ||
       rankedHits.length > 0 ||
       lookup !== null);
 
   const showOrgs = filter === "all" || filter === "orgs";
   const showProducts = filter === "all" || filter === "products";
+  const showCollections = filter === "all" || filter === "collections";
   const showReleases = filter === "all" || filter === "releases";
 
   const filteredHasResults =
     results &&
     ((showOrgs && results.orgs.length > 0) ||
       (showProducts && results.catalog.length > 0) ||
+      (showCollections && collectionsHits.length > 0) ||
       (showReleases && rankedHits.length > 0));
 
   return (
@@ -495,6 +504,45 @@ export function SearchResults({
                     </Link>
                   );
                 })}
+              </div>
+            </section>
+          )}
+
+          {/* Collections — direct hits sort ahead of member rollups; member
+              rollups carry a list of result-set org slugs that triggered
+              the rollup so we can render an "includes X, Y" affordance. */}
+          {showCollections && collectionsHits.length > 0 && (
+            <section>
+              <h2 className="text-xs font-medium uppercase tracking-wider text-stone-400 mb-3">
+                Collections
+              </h2>
+              <div className="space-y-2">
+                {collectionsHits.map((c) => (
+                  <Link
+                    key={c.slug}
+                    href={`/collections/${c.slug}`}
+                    className="block p-3 rounded-lg border border-stone-200 dark:border-stone-800 hover:bg-stone-50 dark:hover:bg-stone-900 transition-colors"
+                  >
+                    <div className="flex items-baseline gap-2 flex-wrap">
+                      <span className="font-medium">
+                        <Highlight text={c.name} tokens={tokens} />
+                      </span>
+                      <span className="text-xs text-stone-400">
+                        {c.memberCount === 1 ? "1 member" : `${c.memberCount} members`}
+                      </span>
+                    </div>
+                    {c.description && (
+                      <p className="text-xs text-stone-500 dark:text-stone-400 mt-1">
+                        <Highlight text={c.description} tokens={tokens} />
+                      </p>
+                    )}
+                    {c.via === "member" && c.matchedOrgSlugs && c.matchedOrgSlugs.length > 0 && (
+                      <p className="text-[11px] text-stone-400 mt-1">
+                        Includes {c.matchedOrgSlugs.join(", ")}
+                      </p>
+                    )}
+                  </Link>
+                ))}
               </div>
             </section>
           )}

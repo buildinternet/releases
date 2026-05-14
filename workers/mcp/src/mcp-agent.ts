@@ -355,19 +355,21 @@ export function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServ
     {
       ...titled("Search", READ_ONLY_HINTS),
       description: [
-        "Unified search across the registry and release content. Returns up to three sections — organizations, catalog entries (products + standalone sources folded into one list), and releases with CHANGELOG chunks interleaved by relevance.",
+        "Unified search across the registry and release content. Returns up to four sections — organizations, catalog entries (products + standalone sources folded into one list), curated collections (cross-org playlists), and releases with CHANGELOG chunks interleaved by relevance.",
         "",
-        "Use `type` to narrow the surfaces you want and skip the expensive paths. For example, pass `type: ['catalog']` to look up a known entity by name (fast, registry-only); pass `type: ['releases']` when you only care about release content and want to avoid entity lookups. Omit `type` to search all three.",
+        "Use `type` to narrow the surfaces you want and skip the expensive paths. For example, pass `type: ['catalog']` to look up a known entity by name (fast, registry-only); pass `type: ['releases']` when you only care about release content and want to avoid entity lookups. Omit `type` to search all four.",
+        "",
+        'Collections surface via two paths: a direct match on the collection\'s name/description (lexical in every mode, plus a vector match in hybrid/semantic mode) and a member rollup that includes every collection containing one of the matched orgs. Member rollups carry a list of result-set org slugs that triggered the rollup so a UI can render an "includes X" hint.',
         "",
         "Use `entity` (product slug / prod_ id OR source slug / src_ id) to scope release results to one catalog entry. Product identifiers expand to every source under the product. Use `organization` to scope to a whole org. Release retrieval defaults to hybrid (FTS5 + semantic vectors fused via RRF); it silently degrades to lexical when vector infra is unavailable and flags the result.",
       ].join("\n"),
       inputSchema: {
         query: z.string().describe("Search query"),
         type: z
-          .array(z.enum(["orgs", "catalog", "releases"]))
+          .array(z.enum(["orgs", "catalog", "releases", "collections"]))
           .optional()
           .describe(
-            "Which sections to return. Omit to return all three. Use to skip expensive paths — e.g. ['catalog'] for registry-only lookups, ['releases'] for pure release search.",
+            "Which sections to return. Omit to return all four. Use to skip expensive paths — e.g. ['catalog'] for registry-only lookups, ['releases'] for pure release search, ['collections'] for a quick playlist lookup.",
           ),
         organization: z
           .string()

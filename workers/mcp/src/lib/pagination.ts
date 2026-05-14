@@ -186,6 +186,7 @@ export interface McpSearchHitCounts {
   catalogHits?: number;
   releaseHits?: number;
   chunkHits?: number;
+  collectionHits?: number;
 }
 
 export interface McpSearchMeta {
@@ -204,7 +205,13 @@ export function buildSearchMeta(opts: {
   degraded?: boolean;
 }): McpSearchMeta {
   const { mode, limit, counts } = opts;
-  const sections = [counts.orgHits, counts.catalogHits, counts.releaseHits, counts.chunkHits];
+  const sections = [
+    counts.orgHits,
+    counts.catalogHits,
+    counts.releaseHits,
+    counts.chunkHits,
+    counts.collectionHits,
+  ];
   const hitCounts: McpSearchHitCounts = {};
   let returned = 0;
   let hitCap = false;
@@ -212,7 +219,9 @@ export function buildSearchMeta(opts: {
     if (typeof n !== "number") continue;
     returned += n;
     if (limit > 0 && n >= limit) hitCap = true;
-    const key = (["orgHits", "catalogHits", "releaseHits", "chunkHits"] as const)[i];
+    const key = (["orgHits", "catalogHits", "releaseHits", "chunkHits", "collectionHits"] as const)[
+      i
+    ];
     hitCounts[key] = n;
   }
   const degraded = opts.degraded === true;

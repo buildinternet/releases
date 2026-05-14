@@ -44,7 +44,9 @@ import {
 } from "@buildinternet/releases-core/overview";
 import {
   foldSourcesIntoCatalog,
+  mergeCollectionHits,
   type SearchCatalogHit,
+  type SearchCollectionHit,
   type RawSourceHit,
 } from "@buildinternet/releases-api-types";
 import {
@@ -171,6 +173,7 @@ export type SearchCounts = {
   catalogHits?: number;
   releaseHits?: number;
   chunkHits?: number;
+  collectionHits?: number;
   degraded?: boolean;
 };
 
@@ -1498,7 +1501,7 @@ export async function getCatalogEntry(
 
 // ── search (unified) ─────────────────────────────────────────────────
 
-export type SearchType = "orgs" | "catalog" | "releases";
+export type SearchType = "orgs" | "catalog" | "releases" | "collections";
 
 /**
  * `type` here is the input-filter parameter (which sections to return).
@@ -1521,7 +1524,9 @@ export async function search(
   ctx?: ExecutionContext,
 ): Promise<SearchToolReturn> {
   const wanted = new Set<SearchType>(
-    params.type && params.type.length > 0 ? params.type : ["orgs", "catalog", "releases"],
+    params.type && params.type.length > 0
+      ? params.type
+      : ["orgs", "catalog", "releases", "collections"],
   );
   const limit = params.limit ?? 20;
   const mode: SearchMode = params.mode ?? "hybrid";
@@ -1665,6 +1670,73 @@ export async function search(
   };
   type ReleaseSection = HybridSection | { mode: "lexical"; rows: LexicalReleaseRow[] } | null;
 
+  // Collection hits — three paths: direct LIKE on name/slug/description
+  // (always), member rollup via collection_members (after org slugs are in
+  // hand), and direct vector match (hybrid/semantic only). Final assembly
+  // uses `mergeCollectionHits` from api-types so the MCP surface and
+  // `/v1/search` stay in lockstep.
+  type DirectRow = {
+    slug: string;
+    name: string;
+    description: string | null;
+    memberCount: number;
+  };
+  const memberCountSubquery = sql<number>`(
+    SELECT COUNT(*) FROM collection_members cm
+    INNER JOIN organizations_public op ON op.id = cm.org_id
+    WHERE cm.collection_id = c.id
+  )`;
+  const collectionsDirectP: Promise<SearchCollectionHit[]> = wanted.has("collections")
+    ? (async () => {
+        const rows = await db.all<DirectRow>(sql`
+          SELECT c.slug, c.name, c.description,
+                 ${memberCountSubquery} as memberCount
+          FROM collections c
+          WHERE ${likeContains(sql`c.name`, q)}
+             OR ${likeContains(sql`c.slug`, q)}
+             OR ${likeContains(sql`c.description`, q)}
+          ORDER BY c.name
+          LIMIT ${limit}
+        `);
+        return rows.map((r) => ({
+          slug: r.slug,
+          name: r.name,
+          description: r.description,
+          memberCount: Number(r.memberCount),
+          via: "direct" as const,
+        }));
+      })()
+    : Promise.resolve([]);
+
+  // Vector match shares ENTITIES_INDEX with orgs/products/sources; filtered
+  // server-side on `type=collection` so candidates aren't wasted on others.
+  // Degrades silently — collection-vector hits are a nice-to-have.
+  const collectionsSemanticP: Promise<SearchCollectionHit[]> =
+    wanted.has("collections") && mode !== "lexical" && searchEnv?.ENTITIES_INDEX
+      ? (async () => {
+          try {
+            const { runCollectionsSemantic } = await import("./lib/search-hybrid.js");
+            const r = await runCollectionsSemantic(
+              searchEnv,
+              db,
+              { query: params.query, limit },
+              ctx ? { waitUntil: ctx.waitUntil.bind(ctx) } : {},
+            );
+            if (r.degraded) return [];
+            return r.hits.map((h) => ({
+              slug: h.slug,
+              name: h.name,
+              description: h.description,
+              memberCount: h.memberCount,
+              via: "direct" as const,
+              score: h.score,
+            }));
+          } catch {
+            return [];
+          }
+        })()
+      : Promise.resolve([]);
+
   const releasesP: Promise<ReleaseSection> = wanted.has("releases")
     ? (async () => {
         // Entity filter narrows further than org filter; org filter expands
@@ -1728,7 +1800,66 @@ export async function search(
       })()
     : Promise.resolve(null);
 
-  const [orgs, catalog, releaseResult] = await Promise.all([orgsP, catalogP, releasesP]);
+  const [orgs, catalog, releaseResult, collectionsDirect, collectionsSemantic] = await Promise.all([
+    orgsP,
+    catalogP,
+    releasesP,
+    collectionsDirectP,
+    collectionsSemanticP,
+  ]);
+
+  // Member rollup runs after the orgs query so we have the slugs in hand.
+  let memberRollups: SearchCollectionHit[] = [];
+  if (wanted.has("collections") && orgs.length > 0) {
+    type RawRow = {
+      slug: string;
+      name: string;
+      description: string | null;
+      memberCount: number;
+      matchedOrgSlug: string;
+    };
+    const orgSlugList = orgs.map((o) => o.slug);
+    const memberRows = await db.all<RawRow>(sql`
+      SELECT c.slug, c.name, c.description,
+             (SELECT COUNT(*) FROM collection_members cm2
+              INNER JOIN organizations_public op2 ON op2.id = cm2.org_id
+              WHERE cm2.collection_id = c.id) as memberCount,
+             op.slug as matchedOrgSlug
+      FROM collections c
+      INNER JOIN collection_members cm ON cm.collection_id = c.id
+      INNER JOIN organizations_public op ON op.id = cm.org_id
+      WHERE op.slug IN (${sql.join(
+        orgSlugList.map((s) => sql`${s}`),
+        sql`, `,
+      )})
+      ORDER BY c.name
+      LIMIT ${limit}
+    `);
+    const byCollection = new Map<string, SearchCollectionHit>();
+    for (const r of memberRows) {
+      const existing = byCollection.get(r.slug);
+      if (existing) {
+        existing.matchedOrgSlugs!.push(r.matchedOrgSlug);
+      } else {
+        byCollection.set(r.slug, {
+          slug: r.slug,
+          name: r.name,
+          description: r.description,
+          memberCount: Number(r.memberCount),
+          via: "member",
+          matchedOrgSlugs: [r.matchedOrgSlug],
+        });
+      }
+    }
+    memberRollups = [...byCollection.values()];
+  }
+
+  const collectionsHits = mergeCollectionHits(
+    collectionsDirect,
+    collectionsSemantic,
+    memberRollups,
+    limit,
+  );
 
   const sections: string[] = [];
 
@@ -1755,6 +1886,20 @@ export async function search(
         return `- [${e.kind}] **${e.name}** (${coord})${orgLabel}`;
       }),
     ];
+    sections.push(lines.join("\n"));
+  }
+
+  if (collectionsHits.length > 0) {
+    const lines: string[] = ["## Collections"];
+    for (const c of collectionsHits) {
+      const count = c.memberCount === 1 ? "1 member" : `${c.memberCount} members`;
+      const viaHint =
+        c.via === "member" && c.matchedOrgSlugs && c.matchedOrgSlugs.length > 0
+          ? ` — includes ${c.matchedOrgSlugs.join(", ")}`
+          : "";
+      const descLine = c.description ? `\n  ${c.description}` : "";
+      lines.push(`- [collection] **${c.name}** (${c.slug}) — ${count}${viaHint}${descLine}`);
+    }
     sections.push(lines.join("\n"));
   }
 
@@ -1823,6 +1968,7 @@ export async function search(
     catalogHits: catalog.length,
     releaseHits,
     chunkHits,
+    collectionHits: collectionsHits.length,
     degraded: hadDegradeNotice,
   };
 

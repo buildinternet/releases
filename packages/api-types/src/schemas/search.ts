@@ -81,6 +81,34 @@ export const SearchReleaseHitSchema = z.object({
 });
 
 /**
+ * Collection hit on the unified `/v1/search` response. Two origins are folded
+ * into the same wire shape via the `via` discriminator:
+ *
+ * - `direct`  — the collection itself matched (name/description via LIKE in
+ *               every mode, plus vector match in hybrid/semantic mode).
+ * - `member`  — the collection was surfaced because one of the orgs that
+ *               *did* match the query is a member of it; `matchedOrgSlugs`
+ *               carries the subset of result-set org slugs that triggered
+ *               the rollup so the UI can render an "includes X, Y" hint.
+ *
+ * `direct` rows always sort ahead of `member` rows; ties break on
+ * `score` then `memberCount`. Slugs are unique across the array — a
+ * direct hit that's also a member rollup keeps only the `direct` row
+ * with `matchedOrgSlugs` carried over.
+ */
+export const SearchCollectionHitSchema = z.object({
+  slug: z.string(),
+  name: z.string(),
+  description: z.string().nullable(),
+  memberCount: z.number().int().min(0),
+  via: z.enum(["direct", "member"]),
+  /** Hybrid/semantic fusion score; absent on pure-lexical hits. */
+  score: z.number().optional(),
+  /** Result-set org slugs that triggered this rollup. Always present on `via=member`. */
+  matchedOrgSlugs: z.array(z.string()).optional(),
+});
+
+/**
  * Heading-aware CHANGELOG.md slice returned by hybrid / semantic search.
  * Clients can deep-link to
  * `/source/<sourceSlug>?tab=changelog&offset=<offset>` to read the
@@ -149,6 +177,13 @@ export const UnifiedSearchResponseSchema = z.object({
   catalog: z.array(SearchCatalogHitSchema),
   sources: z.array(SearchSourceHitSchema),
   releases: z.array(SearchReleaseHitSchema),
+  /**
+   * Curated collections matching the query, either directly (name/description
+   * match or vector hit) or via member rollup (one of the result orgs is in
+   * the collection). Optional on the wire so older workers mid-rollout don't
+   * trip the schema check; clients should treat missing and `[]` identically.
+   */
+  collections: z.array(SearchCollectionHitSchema).optional(),
   chunks: z.array(SearchChunkHitSchema).optional(),
   mode: z.enum(["lexical", "semantic", "hybrid"]).optional(),
   degraded: z.boolean().optional(),

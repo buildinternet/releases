@@ -1,5 +1,11 @@
 import { asc, eq, or, sql } from "drizzle-orm";
-import { domainAliases, organizationsActive } from "@buildinternet/releases-core/schema";
+import {
+  domainAliases,
+  organizationsActive,
+  organizationsPublic,
+  collections,
+  collectionMembers,
+} from "@buildinternet/releases-core/schema";
 import { toFtsMatchQuery } from "@buildinternet/releases-core/fts";
 import { likeContains } from "@buildinternet/releases-core/sql-like";
 import { COVERAGE_COUNT_EXPR } from "@releases/core-internal/release-coverage-sql";
@@ -9,6 +15,7 @@ import type {
   SearchOrgHit,
   SearchCatalogHit,
   RawSourceHit,
+  SearchCollectionHit,
 } from "@buildinternet/releases-api-types";
 
 /**
@@ -197,6 +204,132 @@ export interface OrgByDomainRow {
   category: string | null;
   avatarUrl: string | null;
   matchedVia: "primary" | "alias";
+}
+
+// ── Collection search helpers ─────────────────────────────────────────
+//
+// Two complementary paths surface collections on /v1/search:
+//
+//  - `searchCollectionsDirect`   — LIKE on the collection's own
+//                                  name/slug/description. Cheap. Runs in
+//                                  every mode so a user typing the
+//                                  collection's name doesn't need vectors.
+//  - `findCollectionsByMemberOrgs` — joins through `collection_members` so
+//                                  a collection containing a hit org rolls
+//                                  up automatically. Independent of the
+//                                  query string — driven entirely by the
+//                                  org-hit set the caller already
+//                                  computed.
+//
+// Both go through `organizationsPublic`/`collectionMembers`, so soft-deleted
+// and `on_demand` orgs never inflate `memberCount` or leak via a collection.
+
+/**
+ * LIKE-based collection match. `memberCount` is computed in the same query
+ * via a correlated subquery against `collectionMembers` ⋈ `organizationsPublic`
+ * so the wire row is final without a second round-trip.
+ */
+export async function searchCollectionsDirect(
+  db: D1Db,
+  query: string,
+  limit: number,
+): Promise<SearchCollectionHit[]> {
+  // Correlated subquery: count publicly visible members per collection.
+  // Sub-100µs at our scale (collections table is tiny); a window function
+  // would be overkill.
+  const memberCountSql = sql<number>`(
+    SELECT COUNT(*)
+    FROM ${collectionMembers} cm
+    INNER JOIN ${organizationsPublic} op ON op.id = cm.org_id
+    WHERE cm.collection_id = ${collections.id}
+  )`;
+  const rows = await db.all<{
+    slug: string;
+    name: string;
+    description: string | null;
+    memberCount: number;
+  }>(sql`
+    SELECT ${collections.slug} as slug,
+           ${collections.name} as name,
+           ${collections.description} as description,
+           ${memberCountSql} as memberCount
+    FROM ${collections}
+    WHERE ${likeContains(sql`${collections.name}`, query)}
+       OR ${likeContains(sql`${collections.slug}`, query)}
+       OR ${likeContains(sql`${collections.description}`, query)}
+    ORDER BY ${collections.name}
+    LIMIT ${limit}
+  `);
+  return rows.map((r) => ({
+    slug: r.slug,
+    name: r.name,
+    description: r.description,
+    memberCount: Number(r.memberCount),
+    via: "direct" as const,
+  }));
+}
+
+/**
+ * Roll up: given the org-hit set the caller already computed for this
+ * query, find every collection containing one of those orgs and return the
+ * collection plus the subset of org slugs that triggered the rollup. Lets
+ * the UI render "shown because Vercel is in this collection" without a
+ * second round-trip.
+ *
+ * Returns `[]` when `orgSlugs` is empty — callers should skip the SQL.
+ */
+export async function findCollectionsByMemberOrgs(
+  db: D1Db,
+  orgSlugs: string[],
+  limit: number,
+): Promise<SearchCollectionHit[]> {
+  if (orgSlugs.length === 0) return [];
+  const memberCountSql = sql<number>`(
+    SELECT COUNT(*)
+    FROM ${collectionMembers} cm2
+    INNER JOIN ${organizationsPublic} op2 ON op2.id = cm2.org_id
+    WHERE cm2.collection_id = ${collections.id}
+  )`;
+  const rows = await db.all<{
+    slug: string;
+    name: string;
+    description: string | null;
+    memberCount: number;
+    matchedOrgSlug: string;
+  }>(sql`
+    SELECT ${collections.slug} as slug,
+           ${collections.name} as name,
+           ${collections.description} as description,
+           ${memberCountSql} as memberCount,
+           ${organizationsPublic.slug} as matchedOrgSlug
+    FROM ${collections}
+    INNER JOIN ${collectionMembers} cm ON cm.collection_id = ${collections.id}
+    INNER JOIN ${organizationsPublic} ON ${organizationsPublic.id} = cm.org_id
+    WHERE ${organizationsPublic.slug} IN (${sql.join(
+      orgSlugs.map((s) => sql`${s}`),
+      sql`, `,
+    )})
+    ORDER BY ${collections.name}
+  `);
+  // SQLite has no array_agg; the row-by-row fold is cheap at our scale
+  // (typical collection sizes are <10 orgs, total collections <100).
+  const byCollection = new Map<string, SearchCollectionHit>();
+  for (const r of rows) {
+    const existing = byCollection.get(r.slug);
+    if (existing) {
+      existing.matchedOrgSlugs!.push(r.matchedOrgSlug);
+    } else {
+      byCollection.set(r.slug, {
+        slug: r.slug,
+        name: r.name,
+        description: r.description,
+        memberCount: Number(r.memberCount),
+        via: "member",
+        matchedOrgSlugs: [r.matchedOrgSlug],
+      });
+    }
+  }
+  return [...byCollection.values()].slice(0, limit);
 }
 
 /**
