@@ -3,7 +3,7 @@
 import { useState, useMemo } from "react";
 import Link from "next/link";
 import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import { remarkPlugins } from "@/lib/markdown-plugins";
 import { categoryDisplayName } from "@buildinternet/releases-core/categories";
 import type {
   UnifiedSearchResponse,
@@ -314,7 +314,7 @@ function ReleaseResultCard({ hit, tokens }: { hit: SearchReleaseHit; tokens: str
     >
       <div className={resultMarkdownClasses}>
         <ReactMarkdown
-          remarkPlugins={[remarkGfm]}
+          remarkPlugins={remarkPlugins}
           rehypePlugins={rehypePlugins}
           components={searchPreviewComponents}
         >
@@ -342,7 +342,7 @@ function ChunkResultCard({ hit, tokens }: { hit: SearchChunkHit; tokens: string[
     >
       <div className={resultMarkdownClasses}>
         <ReactMarkdown
-          remarkPlugins={[remarkGfm]}
+          remarkPlugins={remarkPlugins}
           rehypePlugins={rehypePlugins}
           components={searchPreviewComponents}
         >

@@ -1,5 +1,5 @@
 import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import { remarkPlugins } from "@/lib/markdown-plugins";
 import { rehypeShikiPlugin } from "@/lib/shiki";
 import { markdownComponents } from "./markdown-components";
 
@@ -31,7 +31,7 @@ export function PlaybookView({ playbook }: PlaybookViewProps) {
         </div>
         <div className={proseClasses}>
           <ReactMarkdown
-            remarkPlugins={[remarkGfm]}
+            remarkPlugins={remarkPlugins}
             rehypePlugins={[rehypeShikiPlugin]}
             components={markdownComponents}
           >

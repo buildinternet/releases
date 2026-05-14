@@ -1,5 +1,5 @@
 import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import { remarkPlugins } from "@/lib/markdown-plugins";
 import type { ReleaseSummaryItem } from "@/lib/api";
 import { rehypeShikiPlugin } from "@/lib/shiki";
 import { markdownComponents } from "./markdown-components";
@@ -51,7 +51,7 @@ export function HighlightsView({ rolling, monthly }: HighlightsViewProps) {
           </div>
           <div className={summaryClasses}>
             <ReactMarkdown
-              remarkPlugins={[remarkGfm]}
+              remarkPlugins={remarkPlugins}
               rehypePlugins={[rehypeShikiPlugin]}
               components={markdownComponents}
             >
@@ -95,7 +95,7 @@ export function HighlightsView({ rolling, monthly }: HighlightsViewProps) {
             </div>
             <div className={summaryClasses}>
               <ReactMarkdown
-                remarkPlugins={[remarkGfm]}
+                remarkPlugins={remarkPlugins}
                 rehypePlugins={[rehypeShikiPlugin]}
                 components={markdownComponents}
               >

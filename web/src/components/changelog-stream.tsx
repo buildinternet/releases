@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import { remarkPlugins } from "@/lib/markdown-plugins";
 import { rehypeShikiPlugin } from "@/lib/shiki";
 import { markdownComponents } from "./markdown-components";
 import type { SourceChangelogResponse } from "@/lib/api";
@@ -89,7 +89,7 @@ export function ChangelogStream({
       {chunks.map((chunk) => (
         <div key={chunk.id} className={markdownClassName}>
           <ReactMarkdown
-            remarkPlugins={[remarkGfm]}
+            remarkPlugins={remarkPlugins}
             rehypePlugins={[rehypeShikiPlugin]}
             components={markdownComponents}
           >

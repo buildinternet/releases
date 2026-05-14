@@ -3,7 +3,7 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import Link from "next/link";
 import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import { remarkPlugins } from "@/lib/markdown-plugins";
 import { rehypeShikiPlugin } from "@/lib/shiki";
 import { OrgAvatar } from "./org-avatar";
 import { SourceTypeIcon } from "./source-type-icon";
@@ -556,7 +556,7 @@ function PostHero({ release }: { release: CollectionReleaseItem }) {
         >
           <div className={markdownClasses}>
             <ReactMarkdown
-              remarkPlugins={[remarkGfm]}
+              remarkPlugins={remarkPlugins}
               rehypePlugins={[rehypeShikiPlugin]}
               components={expanded ? markdownComponents : collapsedMarkdownComponents}
             >
@@ -732,7 +732,7 @@ function CommitLogRow({ release }: { release: CollectionReleaseItem }) {
         <div className="col-span-4 px-1 pb-2 pt-1">
           <div className={markdownClasses}>
             <ReactMarkdown
-              remarkPlugins={[remarkGfm]}
+              remarkPlugins={remarkPlugins}
               rehypePlugins={[rehypeShikiPlugin]}
               components={markdownComponents}
             >
