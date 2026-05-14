@@ -24,6 +24,14 @@ import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { computeContentSize } from "@buildinternet/releases-core/tokens";
+import { logger } from "@buildinternet/releases-lib/logger";
+
+// Defensive bounds — argv-supplied counts are not trusted past these. Page
+// size caps at 10k because wrangler's stdout buffer holds the full result
+// set; chunk size caps at 1k so a single failing chunk still bounds blast
+// radius.
+const MAX_PAGE_SIZE = 10_000;
+const MAX_CHUNK_SIZE = 1_000;
 
 interface Args {
   apply: boolean;
@@ -67,7 +75,16 @@ function parseArgs(argv: string[]): Args {
       process.exit(0);
     }
   }
+  validateCount("--page", args.pageSize, MAX_PAGE_SIZE);
+  validateCount("--chunk", args.chunkSize, MAX_CHUNK_SIZE);
   return args;
+}
+
+function validateCount(flag: string, value: number, max: number): void {
+  if (!Number.isInteger(value) || value < 1 || value > max) {
+    logger.error(`${flag} must be an integer in [1, ${max}] (got ${value})`);
+    process.exit(1);
+  }
 }
 
 function wranglerExecute(db: string, remote: boolean, sql: string): string {
@@ -144,10 +161,10 @@ function fetchPage(
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
-  process.stderr.write(
+  logger.info(
     `Backfilling content_chars / content_tokens on ${args.db} (${args.remote ? "remote" : "local"})${
       args.apply ? "" : " — DRY RUN"
-    }\n`,
+    }`,
   );
 
   const tmp = mkdtempSync(join(tmpdir(), "content-sizes-"));
@@ -165,8 +182,13 @@ async function main() {
       const updates: string[] = [];
       for (const row of page) {
         const { contentChars, contentTokens } = computeContentSize(row.content);
+        // Guard against a concurrent ingest that already populated the
+        // columns between this script's SELECT and UPDATE — without the
+        // IS NULL clause we'd blank a fresh size cache with a stale value.
+        // The matching SELECT predicate uses the same condition, so a
+        // re-run picks up only rows that are still genuinely pending.
         updates.push(
-          `UPDATE releases SET content_chars = ${contentChars}, content_tokens = ${contentTokens} WHERE id = ${escapeSqlLiteral(row.id)};`,
+          `UPDATE releases SET content_chars = ${contentChars}, content_tokens = ${contentTokens} WHERE id = ${escapeSqlLiteral(row.id)} AND (content_chars IS NULL OR content_tokens IS NULL);`,
         );
       }
       updated += updates.length;
@@ -180,13 +202,13 @@ async function main() {
         }
       }
 
-      process.stderr.write(`  scanned=${scanned} would_update=${updated} cursor=${cursor}\n`);
+      logger.info(`  scanned=${scanned} would_update=${updated} cursor=${cursor}`);
     }
   } finally {
     rmSync(tmp, { recursive: true, force: true });
   }
 
-  process.stderr.write(`Done. scanned=${scanned} would_update=${updated} apply=${args.apply}\n`);
+  logger.info(`Done. scanned=${scanned} would_update=${updated} apply=${args.apply}`);
 }
 
 await main();
