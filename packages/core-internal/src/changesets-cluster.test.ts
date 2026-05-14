@@ -274,4 +274,42 @@ describe("clusterChangesets — edge cases", () => {
     expect(cl.canonicalId).toBe("c");
     expect(cl.coverageIds.toSorted()).toEqual(["a", "b"]);
   });
+
+  test("overlapping-hash batch: largest cluster wins, shared release is its canonical", () => {
+    // Release `root` is substantive for both hashes — aaa111 (3 members
+    // total) and bbb222 (2 members total). aaa111 is the bigger cluster
+    // so it claims `root` as canonical and bbb222 cannot form (root is
+    // already assigned). `solo` (the leftover bbb222 cascade) still gets
+    // attached to aaa111 via Pass 2's sibling-reference resolution
+    // because its sub-bullet points at `root@1.0.0`.
+    const clusters = clusterChangesets([
+      {
+        id: "root",
+        version: "root@1.0.0",
+        content:
+          "### Minor Changes\n\n-   aaa111: feature A in the root package\n-   bbb222: feature B in the root package\n",
+      },
+      {
+        id: "a1",
+        version: "@scope/a1@1.0.0",
+        content: "### Patch Changes\n\n-   Updated dependencies [aaa111]\n    -   root@1.0.0\n",
+      },
+      {
+        id: "a2",
+        version: "@scope/a2@1.0.0",
+        content: "### Patch Changes\n\n-   Updated dependencies [aaa111]\n    -   root@1.0.0\n",
+      },
+      {
+        id: "solo",
+        version: "@scope/solo@1.0.0",
+        content: "### Patch Changes\n\n-   Updated dependencies [bbb222]\n    -   root@1.0.0\n",
+      },
+    ]);
+
+    expect(clusters).toHaveLength(1);
+    const [cl] = clusters;
+    expect(cl.hash).toBe("aaa111");
+    expect(cl.canonicalId).toBe("root");
+    expect(cl.coverageIds.toSorted()).toEqual(["a1", "a2", "solo"]);
+  });
 });

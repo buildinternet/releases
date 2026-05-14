@@ -1098,12 +1098,23 @@ workflowsRoutes.post("/workflows/cluster-changesets", async (c) => {
     );
   }
 
+  // Body is untyped JSON — coerce numerics and fall back to defaults on
+  // missing or non-finite input so a malformed payload can't yield NaN
+  // through to daysAgoIso(...) or .limit(...). Null/undefined and blank
+  // strings count as "missing" and take the fallback rather than
+  // coercing to 0 (which would otherwise clamp to the floor of 1).
+  const coerceInt = (value: unknown, fallback: number): number => {
+    if (value === null || value === undefined) return fallback;
+    if (typeof value === "string" && value.trim() === "") return fallback;
+    const n = Number(value);
+    return Number.isFinite(n) ? Math.floor(n) : fallback;
+  };
   const sinceDays = Math.min(
-    Math.max(body.sinceDays ?? CLUSTER_CHANGESETS_SINCE_DEFAULT, 1),
+    Math.max(coerceInt(body.sinceDays, CLUSTER_CHANGESETS_SINCE_DEFAULT), 1),
     CLUSTER_CHANGESETS_SINCE_MAX,
   );
   const limit = Math.min(
-    Math.max(body.limit ?? CLUSTER_CHANGESETS_LIMIT_DEFAULT, 1),
+    Math.max(coerceInt(body.limit, CLUSTER_CHANGESETS_LIMIT_DEFAULT), 1),
     CLUSTER_CHANGESETS_LIMIT_MAX,
   );
   const since = daysAgoIso(sinceDays);

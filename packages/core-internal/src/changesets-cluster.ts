@@ -157,7 +157,15 @@ export function clusterChangesets(batch: ClusterInput[]): ChangesetsCluster[] {
     // substantive (rare — a hash with only Updated-deps refs).
     const substantive = members.filter((m) => m.substantiveHashes.has(hash));
     const pool = substantive.length > 0 ? substantive : members;
-    const canonical = pool.reduce((a, b) => {
+    // Exclude pool members already claimed by a larger cluster — picking
+    // such a member as canonical here would put it in two clusters at
+    // once (coverage of A, canonical of B), and the read paths don't
+    // model coverage chains.
+    const eligiblePool = pool.filter(
+      (m) => !assignedHash.has(m.id) || assignedHash.get(m.id) === hash,
+    );
+    if (eligiblePool.length === 0) continue;
+    const canonical = eligiblePool.reduce((a, b) => {
       // Primary: longest substantive (cascade-stripped) content. Tie-break
       // on raw length so the "all pure cascade" edge case still picks the
       // most informative row instead of the first one.
