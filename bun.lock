@@ -64,15 +64,15 @@
     },
     "packages/api-types": {
       "name": "@buildinternet/releases-api-types",
-      "version": "0.12.0",
+      "version": "0.18.0",
       "dependencies": {
-        "@buildinternet/releases-core": "^0.19.0",
+        "@buildinternet/releases-core": "^0.21.0",
         "zod": "^4.3.6",
       },
     },
     "packages/core": {
       "name": "@buildinternet/releases-core",
-      "version": "0.19.0",
+      "version": "0.21.0",
       "dependencies": {
         "drizzle-orm": "^0.45.2",
         "js-tiktoken": "^1.0.21",
@@ -125,6 +125,7 @@
         "react": "^19.2.6",
         "react-dom": "^19.2.6",
         "react-markdown": "^10.1.0",
+        "remark-gemoji": "^8.0.0",
         "remark-gfm": "^4.0.1",
         "server-only": "^0.0.1",
         "shiki": "^4.0.2",
@@ -135,6 +136,7 @@
         "@graphql-typed-document-node/core": "^3.2.0",
         "@tailwindcss/postcss": "^4.2.2",
         "@types/hast": "^3.0.4",
+        "@types/mdast": "^4.0.4",
         "@types/node": "^25.6.0",
         "@types/react": "^19.2.14",
         "@types/react-dom": "^19.2.3",
@@ -1214,6 +1216,8 @@
 
     "function-bind": ["function-bind@1.1.2", "", {}, "sha512-7XHNxH7qX9xG5mIwxkhumTox/MIRNcOgDrxWsMt2pAr23WHp6MrRlN7FBSFpCpr+oVO0F744iUgR82nJMfG2SA=="],
 
+    "gemoji": ["gemoji@8.1.0", "", {}, "sha512-HA4Gx59dw2+tn+UAa7XEV4ufUKI4fH1KgcbenVA9YKSj1QJTT0xh5Mwv5HMFNN3l2OtUe3ZIfuRwSyZS5pLIWw=="],
+
     "generic-pool": ["generic-pool@3.4.2", "", {}, "sha512-H7cUpwCQSiJmAHM4c/aFu6fUfrhWXW1ncyh8ftxEPMu6AiYkHw9K8br720TGPZJbk5eOH2bynjZD1yPvdDAmag=="],
 
     "gensync": ["gensync@1.0.0-beta.2", "", {}, "sha512-3hN7NaskYvMDLQY55gnW3NQ+mesEAepTqlg+VEbj7zzqEMBVNhzcGYYeqFo/TlYz6eQiFcp1HcsCZO+nGgS8zg=="],
@@ -1715,6 +1719,8 @@
     "releases-api": ["releases-api@workspace:workers/api"],
 
     "releases-web": ["releases-web@workspace:web"],
+
+    "remark-gemoji": ["remark-gemoji@8.0.0", "", { "dependencies": { "@types/mdast": "^4.0.0", "gemoji": "^8.0.0", "mdast-util-find-and-replace": "^3.0.0" } }, "sha512-/fL9rc72FYwFGtOKcT+QeQdx9Q9t5v4N6KLXSDOTEgaedzK85I9judBqB2eqz+g4b0ERMejlwSOuPK+wket6aA=="],
 
     "remark-gfm": ["remark-gfm@4.0.1", "", { "dependencies": { "@types/mdast": "^4.0.0", "mdast-util-gfm": "^3.0.0", "micromark-extension-gfm": "^3.0.0", "remark-parse": "^11.0.0", "remark-stringify": "^11.0.0", "unified": "^11.0.0" } }, "sha512-1quofZ2RQ9EWdeN34S79+KExV1764+wCUGop5CPL1WGdD0ocPpu91lzPGbwWMECpEpd42kJGQwzRfyov9j4yNg=="],
 

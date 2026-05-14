@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useMemo, ViewTransition } from "react";
 import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import { remarkPlugins } from "@/lib/markdown-plugins";
 import { rehypeShikiPlugin } from "@/lib/shiki";
 import Link from "next/link";
 import type { ReleaseItem } from "@/lib/api";
@@ -279,7 +279,7 @@ export function ReleaseListItem({
           {expanded ? (
             <div className={markdownClasses}>
               <ReactMarkdown
-                remarkPlugins={[remarkGfm]}
+                remarkPlugins={remarkPlugins}
                 rehypePlugins={[rehypeShikiPlugin]}
                 components={markdownComponents}
               >
@@ -302,7 +302,7 @@ export function ReleaseListItem({
                     className={`${markdownClasses} text-stone-500 dark:text-stone-400 [&_strong]:text-stone-500 dark:[&_strong]:text-stone-400`}
                   >
                     <ReactMarkdown
-                      remarkPlugins={[remarkGfm]}
+                      remarkPlugins={remarkPlugins}
                       rehypePlugins={[rehypeShikiPlugin]}
                       components={collapsedMarkdownComponents}
                     >

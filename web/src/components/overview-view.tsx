@@ -3,7 +3,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import { remarkPlugins } from "@/lib/markdown-plugins";
 import type { OverviewCitation } from "@buildinternet/releases-api-types";
 import type { OverviewPageItem } from "@/lib/api";
 import { rehypeShikiPlugin } from "@/lib/shiki";
@@ -127,7 +127,7 @@ export function OverviewView({ page }: OverviewViewProps) {
             style={clamped ? { maxHeight: `${CLAMP_HEIGHT_PX}px`, overflow: "hidden" } : undefined}
           >
             <ReactMarkdown
-              remarkPlugins={[remarkGfm]}
+              remarkPlugins={remarkPlugins}
               rehypePlugins={[rehypeShikiPlugin]}
               components={components}
             >

@@ -13,7 +13,8 @@ import { AlsoCoveredBy } from "@/components/also-covered-by";
 import { RelatedRail } from "@/components/related-rail";
 import { ReleaseContent } from "./release-content";
 import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import { createRemarkPlugins } from "@/lib/markdown-plugins";
+import { githubRepoUrlFor } from "@/lib/remark-github-refs";
 import { rehypeShikiPlugin } from "@/lib/shiki";
 import { detailMarkdownComponents } from "@/components/markdown-components";
 import { AI_SUMMARY_DISCLAIMER } from "@/lib/copy";
@@ -82,6 +83,9 @@ export default async function ReleaseDetailPage({ params }: { params: Promise<{ 
     : `/source/${release.sourceSlug}`;
 
   const media = release.media ?? [];
+
+  const repoUrl = release.sourceType === "github" ? githubRepoUrlFor(release.url) : null;
+  const detailRemarkPlugins = createRemarkPlugins({ repoUrl });
 
   const hasVersion = !!release.version;
   const titleMatchesVersion =
@@ -205,7 +209,7 @@ export default async function ReleaseDetailPage({ params }: { params: Promise<{ 
               </div>
               <div className="prose prose-stone dark:prose-invert max-w-none text-[15px] leading-relaxed text-stone-700 dark:text-stone-200 [&_p]:my-0 [&_code]:text-sm [&_code]:bg-stone-100 dark:[&_code]:bg-stone-800 [&_code]:px-1 [&_code]:rounded [&_code::before]:content-none [&_code::after]:content-none [&_a]:text-stone-600 dark:[&_a]:text-stone-400">
                 <ReactMarkdown
-                  remarkPlugins={[remarkGfm]}
+                  remarkPlugins={detailRemarkPlugins}
                   rehypePlugins={[rehypeShikiPlugin]}
                   components={detailMarkdownComponents}
                 >
@@ -217,7 +221,12 @@ export default async function ReleaseDetailPage({ params }: { params: Promise<{ 
               </div>
             </aside>
           )}
-          <ReleaseContent content={release.content} title={release.title} media={media} />
+          <ReleaseContent
+            content={release.content}
+            title={release.title}
+            media={media}
+            repoUrl={repoUrl}
+          />
           <Suspense fallback={null}>
             <AlsoCoveredBy anchorReleaseId={release.id} />
           </Suspense>
