@@ -26,6 +26,11 @@ function mkDb() {
   const sqlite = new Database(":memory:");
   const db = drizzle(sqlite);
   applyMigrations(sqlite);
+  // The migration set includes a seed (`20260507000003_seed_frontier_ai_labs`)
+  // that inserts one collection. These tests want a truly empty state to
+  // exercise the no-backlog path on /workflows/embed-entities, so clear the
+  // seed up front. `collection_members` cascades from collections.
+  sqlite.exec("DELETE FROM collections");
   return db;
 }
 

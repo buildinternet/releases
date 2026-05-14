@@ -148,6 +148,7 @@ import type {
   SearchSourceHitSchema,
   SearchReleaseHitSchema,
   SearchChunkHitSchema,
+  SearchCollectionHitSchema,
   LookupResultPayloadSchema,
   UnifiedSearchResponseSchema,
 } from "./schemas/search.js";
@@ -367,6 +368,7 @@ export {
   SearchSourceHitSchema,
   SearchReleaseHitSchema,
   SearchChunkHitSchema,
+  SearchCollectionHitSchema,
   LookupResultPayloadSchema,
   UnifiedSearchResponseSchema,
 } from "./schemas/search.js";
@@ -676,6 +678,63 @@ export function foldSourcesIntoCatalog(
 
 export type SearchReleaseHit = z.infer<typeof SearchReleaseHitSchema>;
 export type SearchChunkHit = z.infer<typeof SearchChunkHitSchema>;
+export type SearchCollectionHit = z.infer<typeof SearchCollectionHitSchema>;
+
+/**
+ * Merge collection hits from three independent sources into one ordered,
+ * deduped array on the wire:
+ *
+ *   1. Direct lexical matches   — name/slug/description LIKE.
+ *   2. Direct semantic matches  — vector hit (hybrid/semantic only).
+ *   3. Member rollups           — collections containing one of the result orgs.
+ *
+ * A direct row always wins for a given slug; member rollups attach their
+ * `matchedOrgSlugs` to a winning direct row so the UI keeps the "shown
+ * because" affordance. Within each `via` bucket, rows order by score desc
+ * (missing scores last) then by name.
+ *
+ * Pure: no DB, no Workers runtime. Used by both `/v1/search` and the MCP
+ * `search` tool so the merge stays in lockstep across surfaces.
+ */
+export function mergeCollectionHits(
+  direct: SearchCollectionHit[],
+  semantic: SearchCollectionHit[],
+  member: SearchCollectionHit[],
+  limit: number,
+): SearchCollectionHit[] {
+  // Pure: never mutate caller-owned objects. Always replace map entries with
+  // shallow copies so two callers (e.g. API and MCP merging from the same
+  // upstream list) can't see each other's writes.
+  const bySlug = new Map<string, SearchCollectionHit>();
+  for (const c of direct) bySlug.set(c.slug, { ...c });
+  for (const c of semantic) {
+    const existing = bySlug.get(c.slug);
+    if (existing) {
+      if (c.score !== undefined && (existing.score === undefined || c.score > existing.score)) {
+        bySlug.set(c.slug, { ...existing, score: c.score });
+      }
+    } else {
+      bySlug.set(c.slug, { ...c });
+    }
+  }
+  for (const c of member) {
+    const existing = bySlug.get(c.slug);
+    if (existing) {
+      bySlug.set(c.slug, { ...existing, matchedOrgSlugs: c.matchedOrgSlugs });
+    } else {
+      bySlug.set(c.slug, { ...c });
+    }
+  }
+  return [...bySlug.values()]
+    .toSorted((a, b) => {
+      if (a.via !== b.via) return a.via === "direct" ? -1 : 1;
+      const sa = a.score ?? -Infinity;
+      const sb = b.score ?? -Infinity;
+      if (sa !== sb) return sb - sa;
+      return a.name.localeCompare(b.name);
+    })
+    .slice(0, limit);
+}
 
 // ── Lookups ──
 

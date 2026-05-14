@@ -4,6 +4,7 @@ import { wantsMarkdown, markdownResponse } from "../middleware/content-negotiati
 import { searchToMarkdown } from "@releases/rendering/formatters.js";
 import {
   foldSourcesIntoCatalog,
+  mergeCollectionHits,
   UnifiedSearchResponseSchema,
   ErrorResponseSchema,
 } from "@buildinternet/releases-api-types";
@@ -21,9 +22,12 @@ import {
   searchSources,
   searchReleasesFts,
   searchReleasesFromMatchedEntities,
+  searchCollectionsDirect,
+  findCollectionsByMemberOrgs,
   type RawSearchReleaseRow,
 } from "../queries/search.js";
-import { runHybridSearch, type HybridMode } from "../lib/search-hybrid.js";
+import { runHybridSearch, runCollectionsSemantic, type HybridMode } from "../lib/search-hybrid.js";
+import type { SearchCollectionHit } from "@buildinternet/releases-api-types";
 import { logSearch } from "../lib/log-search.js";
 import { isValidBearerAuth } from "../middleware/auth.js";
 import { hydrateMediaUrls, resolveR2Url, parseBoolParam, parseLimitParam } from "../utils.js";
@@ -163,9 +167,9 @@ searchRoutes.get(
   "/search",
   describeRoute({
     tags: ["Search"],
-    summary: "Unified search across orgs, catalog, releases, and chunks",
+    summary: "Unified search across orgs, catalog, collections, releases, and chunks",
     description:
-      'Returns orgs, catalog entries (products + standalone sources folded together), release hits, and — on hybrid/semantic modes — CHANGELOG.md chunk hits in a single response.\n\n`mode` selects the release-retrieval strategy: `lexical` (FTS5), `semantic` (vector-only), or `hybrid` (RRF fusion of FTS5 + vector; default). The handler echoes back the mode actually used, including `degraded: true` when a hybrid request fell back to lexical because Vectorize is unavailable.\n\n`?domain=` narrows the entire result set to one org (matched against `organizations.domain` and `domain_aliases.domain`). Invalid hostnames return 400; unknown hostnames return an empty envelope with `domainStatus: "not_found"` (distinct from "matched but no hits").\n\nWhen the query parses as a GitHub coordinate (`org/repo` or `github:org/repo`) and no orgs/catalog matched, the handler runs an on-demand lookup and embeds the result on `lookup`. Coordinate-shaped queries are not suppressed by tangential release/chunk hits.\n\nContent negotiation: `Accept: text/markdown` returns a Markdown-rendered version of the same payload.',
+      'Returns orgs, catalog entries (products + standalone sources folded together), curated collections, release hits, and — on hybrid/semantic modes — CHANGELOG.md chunk hits in a single response.\n\n`mode` selects the release-retrieval strategy: `lexical` (FTS5), `semantic` (vector-only), or `hybrid` (RRF fusion of FTS5 + vector; default). The handler echoes back the mode actually used, including `degraded: true` when a hybrid request fell back to lexical because Vectorize is unavailable.\n\n`?domain=` narrows the entire result set to one org (matched against `organizations.domain` and `domain_aliases.domain`). Invalid hostnames return 400; unknown hostnames return an empty envelope with `domainStatus: "not_found"` (distinct from "matched but no hits").\n\nWhen the query parses as a GitHub coordinate (`org/repo` or `github:org/repo`) and no orgs/catalog matched, the handler runs an on-demand lookup and embeds the result on `lookup`. Coordinate-shaped queries are not suppressed by tangential release/chunk hits.\n\nCollections surface via two paths: a direct match on the collection\'s name/description (lexical in every mode, plus a vector match in hybrid/semantic mode) and a member rollup that includes every collection containing one of the matched orgs. Each row carries a `via` discriminator (`"direct"` vs `"member"`); `matchedOrgSlugs` on member rows names the result-set orgs that triggered the rollup so a UI can render an "includes X" hint.\n\nContent negotiation: `Accept: text/markdown` returns a Markdown-rendered version of the same payload.',
     parameters: [
       {
         name: "q",
@@ -302,6 +306,7 @@ searchRoutes.get(
         catalog: [],
         sources: [],
         releases: [],
+        collections: [],
         ...(mode !== "lexical" ? { chunks: [], mode, degraded: false } : {}),
         lookup: null,
       };
@@ -316,6 +321,7 @@ searchRoutes.get(
           catalogHits: 0,
           releaseHits: 0,
           chunkHits: 0,
+          collectionHits: 0,
           durationMs: Date.now() - startedAt,
           anonId,
           userAgent,
@@ -345,7 +351,7 @@ searchRoutes.get(
           .limit(1)
       : [];
 
-    const [orgs, rawProducts, rawSources] = await Promise.all([
+    const [orgs, rawProducts, rawSources, collectionsDirectLexical] = await Promise.all([
       scopedOrgRow
         ? Promise.resolve([
             {
@@ -359,8 +365,20 @@ searchRoutes.get(
         : searchOrgs(db, q, limit, { orgId: scopeOrgId }),
       searchProducts(db, q, limit, { orgId: scopeOrgId }),
       searchSources(db, q, limit, { orgId: scopeOrgId }),
+      // Direct LIKE match on collection name/slug/description — runs in
+      // every mode. Independent of `?domain=`: collections are cross-org
+      // by design, so a domain-scoped query still surfaces a relevant
+      // collection (e.g. searching within Vercel can return the "Frontier
+      // AI Labs" collection if Vercel is a member).
+      searchCollectionsDirect(db, q, limit),
     ]);
     const catalog = foldSourcesIntoCatalog(rawProducts, rawSources);
+
+    const collectionsMember = await findCollectionsByMemberOrgs(
+      db,
+      orgs.map((o) => o.slug),
+      limit,
+    );
 
     // Pre-compute the source-id list when narrowing — needed for the hybrid
     // path's `orgSourceIds` filter.
@@ -404,6 +422,12 @@ searchRoutes.get(
         maybeEmbed(lookup);
       }
 
+      const collectionsHits = mergeCollectionHits(
+        collectionsDirectLexical,
+        [],
+        collectionsMember,
+        limit,
+      );
       const result = {
         query: q,
         ...(domainResolution
@@ -413,6 +437,7 @@ searchRoutes.get(
         catalog,
         sources: [],
         releases,
+        collections: collectionsHits,
         lookup: toLookupPayload(lookup),
       };
       c.executionCtx.waitUntil(
@@ -425,6 +450,7 @@ searchRoutes.get(
           orgHits: orgs.length,
           catalogHits: catalog.length,
           releaseHits: releases.length,
+          collectionHits: collectionsHits.length,
           durationMs: Date.now() - startedAt,
           anonId,
           userAgent,
@@ -436,21 +462,32 @@ searchRoutes.get(
 
     // Semantic / hybrid modes — run the shared helper and flatten release
     // hits into the legacy `releases` field so existing consumers keep
-    // working. Chunk hits ride along on a new `chunks` field.
-    const hybrid = await runHybridSearch(
-      c.env,
-      db,
-      {
-        query: q,
-        topK: limit,
-        mode,
-        includeCoverage,
-        // Domain narrowing reaches into the hybrid layer via the existing
-        // `orgSourceIds` filter so vector + FTS results both stay scoped.
-        ...(scopeSourceIds && scopeSourceIds.length > 0 ? { orgSourceIds: scopeSourceIds } : {}),
-      },
-      { waitUntil: c.executionCtx.waitUntil.bind(c.executionCtx) },
-    );
+    // working. Chunk hits ride along on a new `chunks` field. Collection
+    // semantic search runs in parallel; degrades the same way as the
+    // release path (returns empty + reason) so a missing binding never
+    // 500s the whole response.
+    const [hybrid, collectionsSemantic] = await Promise.all([
+      runHybridSearch(
+        c.env,
+        db,
+        {
+          query: q,
+          topK: limit,
+          mode,
+          includeCoverage,
+          // Domain narrowing reaches into the hybrid layer via the existing
+          // `orgSourceIds` filter so vector + FTS results both stay scoped.
+          ...(scopeSourceIds && scopeSourceIds.length > 0 ? { orgSourceIds: scopeSourceIds } : {}),
+        },
+        { waitUntil: c.executionCtx.waitUntil.bind(c.executionCtx) },
+      ),
+      runCollectionsSemantic(
+        c.env,
+        db,
+        { query: q, limit },
+        { waitUntil: c.executionCtx.waitUntil.bind(c.executionCtx) },
+      ),
+    ]);
 
     const releases: SearchReleaseHit[] = hybrid.hits
       .filter((h): h is Extract<typeof h, { kind: "release" }> => h.kind === "release")
@@ -508,6 +545,21 @@ searchRoutes.get(
       maybeEmbed(lookup);
     }
 
+    const collectionsSemanticHits: SearchCollectionHit[] = collectionsSemantic.hits.map((h) => ({
+      slug: h.slug,
+      name: h.name,
+      description: h.description,
+      memberCount: h.memberCount,
+      via: "direct" as const,
+      score: h.score,
+    }));
+    const collectionsHits = mergeCollectionHits(
+      collectionsDirectLexical,
+      collectionsSemanticHits,
+      collectionsMember,
+      limit,
+    );
+
     const result = {
       query: q,
       ...(domainResolution
@@ -517,6 +569,7 @@ searchRoutes.get(
       catalog,
       sources: [],
       releases,
+      collections: collectionsHits,
       chunks,
       mode: hybrid.mode,
       degraded: hybrid.degraded,
@@ -535,6 +588,7 @@ searchRoutes.get(
         catalogHits: catalog.length,
         releaseHits: releases.length,
         chunkHits: chunks.length,
+        collectionHits: collectionsHits.length,
         degraded: hybrid.degraded === true,
         durationMs: Date.now() - startedAt,
         anonId,

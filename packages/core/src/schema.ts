@@ -207,6 +207,10 @@ export const collections = sqliteTable("collections", {
   updatedAt: text("updated_at")
     .notNull()
     .$defaultFn(() => new Date().toISOString()),
+  // ISO timestamp of the last successful upsert into ENTITIES_INDEX. NULL when
+  // the collection hasn't been embedded yet (e.g. seed rows pre-feature, or a
+  // transient embed failure). The backfill script sweeps NULL rows.
+  embeddedAt: text("embedded_at"),
 });
 
 export const collectionMembers = sqliteTable(
@@ -522,6 +526,7 @@ export const searchQueries = sqliteTable(
     catalogHits: integer("catalog_hits"),
     releaseHits: integer("release_hits"),
     chunkHits: integer("chunk_hits"),
+    collectionHits: integer("collection_hits"),
     degraded: integer("degraded", { mode: "boolean" }),
     durationMs: integer("duration_ms"),
     anonId: text("anon_id"),

@@ -653,7 +653,31 @@ export function searchToMarkdown(results: UnifiedSearchResponse, opts: FormatOpt
     lines.push("");
   }
 
-  if (results.orgs.length === 0 && results.catalog.length === 0 && results.releases.length === 0) {
+  if (results.collections && results.collections.length > 0) {
+    lines.push("## Collections");
+    lines.push("");
+    for (const c of results.collections) {
+      const url = opts.baseUrl ? ` — [view](${opts.baseUrl}/collections/${c.slug})` : "";
+      const count = c.memberCount === 1 ? "1 member" : `${c.memberCount} members`;
+      const viaHint =
+        c.via === "member" && c.matchedOrgSlugs && c.matchedOrgSlugs.length > 0
+          ? ` — includes ${c.matchedOrgSlugs.join(", ")}`
+          : "";
+      lines.push(`- **${c.name}** (\`${c.slug}\`) — ${count}${viaHint}${url}`);
+      if (c.description) {
+        lines.push(`  > ${c.description}`);
+      }
+    }
+    lines.push("");
+  }
+
+  const collectionsLen = results.collections?.length ?? 0;
+  if (
+    results.orgs.length === 0 &&
+    results.catalog.length === 0 &&
+    results.releases.length === 0 &&
+    collectionsLen === 0
+  ) {
     lines.push("No results found.");
     lines.push("");
   }

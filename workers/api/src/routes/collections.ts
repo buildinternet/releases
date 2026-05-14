@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { describeRoute, resolver } from "hono-openapi";
 import { hideInProduction } from "../openapi.js";
-import { eq, and, inArray, isNull, count, sql } from "drizzle-orm";
+import { eq, and, inArray, isNull, count, sql, asc } from "drizzle-orm";
 import { createDb } from "../db.js";
 import {
   collections,
@@ -9,6 +9,9 @@ import {
   organizations,
   organizationsPublic,
 } from "@buildinternet/releases-core/schema";
+import { embedAndUpsertEntities } from "@releases/search/embed-entities.js";
+import { buildEmbedConfig } from "../lib/embed-config.js";
+import { logEvent } from "@releases/lib/log-event";
 import { newCollectionId } from "@buildinternet/releases-core/id";
 import { toSlug } from "@buildinternet/releases-core/slug";
 import {
@@ -520,6 +523,7 @@ collectionRoutes.post(
           updatedAt: now,
         })
         .returning();
+      c.executionCtx.waitUntil(embedCollectionSideEffect(c.env, db, created.id));
       return c.json(rowToWire(created), 201);
     } catch (err) {
       if (isConflictError(err)) {
@@ -618,6 +622,12 @@ collectionRoutes.patch(
         .set(updates)
         .where(eq(collections.id, existing.id))
         .returning();
+      // Re-embed only when name or description changed — slug renames don't
+      // affect the embedded text. The check keeps slug-only renames from
+      // burning an embed call.
+      if (updates.name !== undefined || updates.description !== undefined) {
+        c.executionCtx.waitUntil(embedCollectionSideEffect(c.env, db, updated.id));
+      }
       return c.json(rowToWire(updated));
     } catch (err) {
       if (isConflictError(err)) {
@@ -746,6 +756,9 @@ collectionRoutes.put(
     }
     await db.update(collections).set({ updatedAt: now }).where(eq(collections.id, existing.id));
 
+    // Membership feeds the embedded "Members:" line — re-embed after replace.
+    c.executionCtx.waitUntil(embedCollectionSideEffect(c.env, db, existing.id));
+
     return c.json({ collectionSlug: slug, members: resolved });
   },
 );
@@ -814,6 +827,7 @@ collectionRoutes.post(
         createdAt: now,
       });
       await db.update(collections).set({ updatedAt: now }).where(eq(collections.id, existing.id));
+      c.executionCtx.waitUntil(embedCollectionSideEffect(c.env, db, existing.id));
       return c.json({ collectionSlug: slug, orgId: r.orgId, position }, 201);
     } catch (err) {
       if (isConflictError(err)) {
@@ -894,6 +908,76 @@ collectionRoutes.delete(
       .update(collections)
       .set({ updatedAt: new Date().toISOString() })
       .where(eq(collections.id, existing.id));
+    c.executionCtx.waitUntil(embedCollectionSideEffect(c.env, db, existing.id));
     return c.body(null, 204);
   },
 );
+
+// ── Embed side effect ─────────────────────────────────────────────────
+//
+// Collections embed cross-org by design — no `orgId` metadata. The text
+// payload includes member-org names so a topical query ("database stuff")
+// can find a collection whose member orgs cover the topic even when the
+// collection's own name/description doesn't mention it. Called via
+// `c.executionCtx.waitUntil` on every write that could change the
+// embedded text: create, update (name/description rename), member
+// add/replace/remove. Hard-delete leaves the vector orphaned; the next
+// hydration query won't resolve it and it'll fall out of results
+// naturally — same posture as the cluster cleanup path in #951.
+
+async function embedCollectionSideEffect(
+  env: Env["Bindings"],
+  db: ReturnType<typeof createDb>,
+  collectionId: string,
+  opts?: { throwOnError?: boolean },
+): Promise<void> {
+  try {
+    const embedConfig = await buildEmbedConfig(env);
+    if (!embedConfig) return;
+    if (!env.ENTITIES_INDEX) return;
+
+    const [col] = await db.select().from(collections).where(eq(collections.id, collectionId));
+    if (!col) return;
+
+    // Matches the cap inside `buildEntityText` so we don't fetch rows the
+    // embedder will throw away.
+    const memberRows = await db
+      .select({ name: organizationsPublic.name })
+      .from(collectionMembers)
+      .innerJoin(organizationsPublic, eq(organizationsPublic.id, collectionMembers.orgId))
+      .where(eq(collectionMembers.collectionId, col.id))
+      .orderBy(asc(collectionMembers.position), asc(organizationsPublic.name))
+      .limit(32);
+    const memberOrgNames = memberRows.map((r) => r.name);
+
+    await embedAndUpsertEntities({
+      entities: [
+        {
+          id: col.id,
+          kind: "collection",
+          name: col.name,
+          description: col.description,
+          memberOrgNames,
+        },
+      ],
+      // Same cast as orgs/products/sources — see embedSourceSideEffect.
+      vectorIndex:
+        env.ENTITIES_INDEX as unknown as import("@releases/search/vector-search.js").VectorizeIndex,
+      embedConfig,
+      onPersisted: async () => {
+        await db
+          .update(collections)
+          .set({ embeddedAt: new Date().toISOString() })
+          .where(eq(collections.id, col.id));
+      },
+      throwOnError: opts?.throwOnError,
+    });
+  } catch (err) {
+    if (opts?.throwOnError) throw err;
+    logEvent("warn", {
+      component: "collections",
+      event: "embed-side-effect-failed",
+      err: err instanceof Error ? err : String(err),
+    });
+  }
+}

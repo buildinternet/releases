@@ -141,6 +141,34 @@ describe("embedAndUpsertEntities", () => {
     expect(persisted).toEqual([["org_1", "org_2"]]);
   });
 
+  test("collection kind appends a Members: line built from member org names", async () => {
+    const { fetchImpl, calls } = fakeVoyageFetch();
+    const vec = fakeVectorize();
+    await embedAndUpsertEntities({
+      entities: [
+        {
+          id: "col_frontier",
+          kind: "collection",
+          name: "Frontier AI Labs",
+          description: "Top frontier model labs.",
+          memberOrgNames: ["Anthropic", "OpenAI", "Google DeepMind"],
+        },
+        {
+          id: "col_empty",
+          kind: "collection",
+          name: "Empty Collection",
+        },
+      ],
+      vectorIndex: vec.index,
+      embedConfig: { provider: "voyage", apiKey: "k", fetchImpl },
+    });
+    expect(calls[0].body.input).toEqual([
+      "Frontier AI Labs Top frontier model labs. Members: Anthropic, OpenAI, Google DeepMind",
+      "Empty Collection",
+    ]);
+    expect(vec.upserted[0].metadata).toEqual({ type: "collection" });
+  });
+
   // Embed/upsert/onPersisted error-branch coverage lives in
   // embed-changelog-pipeline.test.ts — the same swallow-and-log contract
   // applies across all three pipelines.
