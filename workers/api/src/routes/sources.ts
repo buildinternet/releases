@@ -131,6 +131,7 @@ import {
 } from "../lib/d1-limits.js";
 import { invalidateLatestCache } from "../lib/latest-cache.js";
 import { notifyIndexNowForSource } from "../lib/indexnow.js";
+import { clusterAndPersistCascades } from "../lib/cluster-cascades.js";
 import { resolveOrgSlug, resolveProductSlug } from "../lib/slug-lookups.js";
 import { logEvent } from "@releases/lib/log-event";
 import { getSecret } from "@releases/lib/secrets";
@@ -648,6 +649,10 @@ const postReleasesBatchHandler = async (c: import("hono").Context<Env>) => {
     // `../lib/d1-limits.ts` for the math behind the chunk size.
     let inserted = 0;
     const publishRows: InsertedReleaseRow[] = [];
+    // Parallel collection of fresh rows-with-content for changesets
+    // clustering. We can't run the clusterer off `publishRows` because
+    // those omit `content` (the publish payload doesn't need it).
+    const clusterRows: Array<{ id: string; version: string | null; content: string }> = [];
     for (let i = 0; i < body.releases.length; i += RELEASES_BATCH_CHUNK_SIZE) {
       const chunk = body.releases.slice(i, i + RELEASES_BATCH_CHUNK_SIZE).map((r) => {
         // LLM-driven agent fetches occasionally emit literal placeholders
@@ -692,11 +697,29 @@ const postReleasesBatchHandler = async (c: import("hono").Context<Env>) => {
           version: releases.version,
           publishedAt: releases.publishedAt,
           media: releases.media,
+          content: releases.content,
         });
       inserted += rows.length;
-      for (const r of rows) publishRows.push(r);
+      for (const r of rows) {
+        const { content, ...publishRow } = r;
+        publishRows.push(publishRow);
+        clusterRows.push({ id: r.id, version: r.version, content });
+      }
     }
     const insertedIds = publishRows.map((r) => r.id);
+
+    // Detect changesets cascade rows and demote them to coverage so they
+    // don't dominate the feed, broadcast on the live tail, or trigger an
+    // IndexNow ping per row. Synchronous — we want coverage state visible
+    // to the downstream waitUntils, not racing them.
+    const cascadeResult = await clusterAndPersistCascades(db, clusterRows, {
+      component: "sources-batch",
+      sourceId: src.id,
+    });
+    const visiblePublishRows =
+      cascadeResult.coverageIds.size > 0
+        ? publishRows.filter((r) => !cascadeResult.coverageIds.has(r.id))
+        : publishRows;
 
     const [{ n: total }] = await db
       .select({ n: count() })
@@ -705,17 +728,19 @@ const postReleasesBatchHandler = async (c: import("hono").Context<Env>) => {
 
     // Fire-and-forget publish to the ReleaseHub DO so subscribers (CLI
     // `tail -f`, the upcoming web live view, webhook delivery) see new
-    // releases in real time.
-    if (publishRows.length > 0) {
+    // releases in real time. Coverage-side rows are excluded — they're
+    // not shown in default feeds and shouldn't broadcast on the live tail
+    // either.
+    if (visiblePublishRows.length > 0) {
       c.executionCtx.waitUntil(
         publishReleaseEvents(c.env, {
           src: { name: src.name, slug: src.slug, orgId: src.orgId, sourceId: src.id },
-          inserted: publishRows,
+          inserted: visiblePublishRows,
         }),
       );
       c.executionCtx.waitUntil(
         invalidateLatestCache(c.env, {
-          nReleases: publishRows.length,
+          nReleases: visiblePublishRows.length,
           sourceId: src.id,
         }),
       );
@@ -733,7 +758,7 @@ const postReleasesBatchHandler = async (c: import("hono").Context<Env>) => {
             isHidden: src.isHidden,
             discovery: src.discovery,
           },
-          publishRows.length,
+          visiblePublishRows.length,
         ),
       );
     }

@@ -36,6 +36,9 @@ import { buildEmbedConfig } from "../lib/embed-config.js";
 import { logEvent } from "@releases/lib/log-event";
 import type { VectorizeIndex } from "@releases/search/vector-search.js";
 import type { Env } from "../index.js";
+import { clusterAndPersistCascades } from "../lib/cluster-cascades.js";
+import { clusterChangesets } from "@releases/core-internal/changesets-cluster";
+import { releaseCoverage } from "@releases/db/schema-coverage.js";
 
 export const workflowsRoutes = new Hono<Env>();
 
@@ -1061,6 +1064,130 @@ async function proxyToDiscovery(
     }),
   );
 }
+
+// ── POST /workflows/cluster-changesets ───────────────────────────────────────
+// Backfill changesets-cascade coverage links for releases that pre-date the
+// ingest-time clusterer or arrived split across batches. Scoped by source or
+// org to keep blast radius small; `dryRun` reports what *would* link without
+// writing. Releases already on the coverage side are excluded — auto-decisions
+// never overwrite an existing link (the writer uses onConflictDoNothing).
+
+interface ClusterChangesetsBody {
+  sourceId?: string;
+  orgId?: string;
+  /** Lookback window in days. Default 90, max 365. */
+  sinceDays?: number;
+  /** Max releases to load per call. Default 500, max 2000. */
+  limit?: number;
+  dryRun?: boolean;
+}
+
+const CLUSTER_CHANGESETS_LIMIT_DEFAULT = 500;
+const CLUSTER_CHANGESETS_LIMIT_MAX = 2000;
+const CLUSTER_CHANGESETS_SINCE_DEFAULT = 90;
+const CLUSTER_CHANGESETS_SINCE_MAX = 365;
+
+workflowsRoutes.post("/workflows/cluster-changesets", async (c) => {
+  const db = createDb(c.env.DB);
+  const body = await c.req.json<ClusterChangesetsBody>().catch(() => ({}) as ClusterChangesetsBody);
+
+  if (!body.sourceId && !body.orgId) {
+    return c.json(
+      { error: "bad_request", message: "Provide sourceId or orgId to scope the backfill" },
+      400,
+    );
+  }
+
+  // Body is untyped JSON — coerce numerics and fall back to defaults on
+  // missing or non-finite input so a malformed payload can't yield NaN
+  // through to daysAgoIso(...) or .limit(...). Null/undefined and blank
+  // strings count as "missing" and take the fallback rather than
+  // coercing to 0 (which would otherwise clamp to the floor of 1).
+  const coerceInt = (value: unknown, fallback: number): number => {
+    if (value === null || value === undefined) return fallback;
+    if (typeof value === "string" && value.trim() === "") return fallback;
+    const n = Number(value);
+    return Number.isFinite(n) ? Math.floor(n) : fallback;
+  };
+  const sinceDays = Math.min(
+    Math.max(coerceInt(body.sinceDays, CLUSTER_CHANGESETS_SINCE_DEFAULT), 1),
+    CLUSTER_CHANGESETS_SINCE_MAX,
+  );
+  const limit = Math.min(
+    Math.max(coerceInt(body.limit, CLUSTER_CHANGESETS_LIMIT_DEFAULT), 1),
+    CLUSTER_CHANGESETS_LIMIT_MAX,
+  );
+  const since = daysAgoIso(sinceDays);
+  const dryRun = body.dryRun === true;
+
+  // Exclude releases already linked as coverage — their cluster decision
+  // is settled. Canonical-side rows stay eligible so newly-arrived siblings
+  // can be attached to existing clusters. Anti-join via `LEFT JOIN ... IS
+  // NULL` because SQLite doesn't rewrite `NOT IN (subquery)` to an anti-join.
+  const conditions = [gte(releases.publishedAt, since), sql`${releaseCoverage.coverageId} IS NULL`];
+  if (body.sourceId) conditions.push(eq(releases.sourceId, body.sourceId));
+  if (body.orgId) conditions.push(eq(sources.orgId, body.orgId));
+
+  const rows = await db
+    .select({
+      id: releases.id,
+      sourceId: releases.sourceId,
+      version: releases.version,
+      content: releases.content,
+    })
+    .from(releases)
+    .leftJoin(sources, eq(releases.sourceId, sources.id))
+    .leftJoin(releaseCoverage, eq(releaseCoverage.coverageId, releases.id))
+    .where(and(...conditions))
+    .orderBy(desc(releases.publishedAt))
+    .limit(limit);
+
+  // Group by source — cascades are scoped to a single source.
+  const bySource = new Map<string, typeof rows>();
+  for (const r of rows) {
+    const list = bySource.get(r.sourceId) ?? [];
+    list.push(r);
+    bySource.set(r.sourceId, list);
+  }
+
+  let totalClusters = 0;
+  let coverage = 0;
+  const allHashes: string[] = [];
+
+  for (const [sourceId, sourceRows] of bySource) {
+    if (sourceRows.length < 2) continue;
+    if (dryRun) {
+      // Re-use the pure clusterer directly for dry-run accounting so we
+      // don't touch the table.
+      const clusters = clusterChangesets(
+        sourceRows.map((r) => ({ id: r.id, version: r.version, content: r.content })),
+      );
+      totalClusters += clusters.length;
+      coverage += clusters.reduce((n, cl) => n + cl.coverageIds.length, 0);
+      for (const cl of clusters) allHashes.push(cl.hash);
+      continue;
+    }
+    // oxlint-disable-next-line no-await-in-loop -- per-source serialization keeps memory bounded; cluster work is tiny per call
+    const result = await clusterAndPersistCascades(
+      db,
+      sourceRows.map((r) => ({ id: r.id, version: r.version, content: r.content })),
+      { component: "workflows-cluster-changesets", sourceId },
+    );
+    totalClusters += result.clusters;
+    coverage += result.coverageIds.size;
+    allHashes.push(...result.hashes);
+  }
+
+  return c.json({
+    processed: rows.length,
+    sources: bySource.size,
+    clusters: totalClusters,
+    coverage,
+    hashes: allHashes,
+    dryRun,
+    sinceDays,
+  });
+});
 
 workflowsRoutes.post("/workflows/discover", async (c) => {
   const body = await c.req.text();
