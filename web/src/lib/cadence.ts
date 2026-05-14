@@ -64,6 +64,16 @@ export function fmtVersion(v: string): string {
 }
 
 /**
+ * Gate for the source-card version byline: codename "versions" like
+ * `Sonnet 4.6` or `Opus 4.7` read as misleading version diffs, so we only
+ * surface a range when the string actually looks like semver/calver
+ * (optional `v` then digits, with at least one dotted numeric segment).
+ */
+export function isSemverShaped(v: string): boolean {
+  return /^v?\d+(?:\.\d+)+(?:[-+][0-9A-Za-z.-]+)?$/i.test(v);
+}
+
+/**
  * Split a version string into tokens at `.`, `-`, or `+` boundaries, keeping
  * the delimiters as their own tokens so a diff can rejoin them losslessly.
  * `"v2.1.38"` → `["v2", ".", "1", ".", "38"]`.

@@ -7,12 +7,12 @@ import {
   getCadenceInfo,
   getProductColor,
   fmtVersion,
+  isSemverShaped,
   DAY_MS,
   fmtWeek,
   FETCH_CAP,
 } from "@/lib/cadence";
 import { HoverCard } from "@/components/hover-card";
-import { VersionRangeDiff } from "@/components/version-range-diff";
 import type { SourceListItem } from "@/lib/api";
 
 export interface SourceCadenceData {
@@ -48,6 +48,23 @@ function shortUrl(url?: string) {
   } catch {
     return null;
   }
+}
+
+/**
+ * Codename-style "versions" (Sonnet 4.6 → Opus 4.7) read as a misleading
+ * diff, so the byline only renders for GitHub sources or semver/calver
+ * shapes; everything else falls through to an empty string.
+ */
+function renderVersionByline(source: SourceListItem, cadence: SourceCadenceData): string {
+  const { earliestVersion, latestVersion } = cadence;
+  if (!latestVersion) return "";
+  const isGithub = source.type === "github";
+  if (!isGithub && !isSemverShaped(latestVersion)) return "";
+  if (!earliestVersion || earliestVersion === latestVersion) return fmtVersion(latestVersion);
+  // Don't render a range like `Sonnet 4.6 → v4.7`: when the source isn't a
+  // GitHub repo, require both ends to look like semver before pairing them.
+  if (!isGithub && !isSemverShaped(earliestVersion)) return fmtVersion(latestVersion);
+  return `${fmtVersion(earliestVersion)} → ${fmtVersion(latestVersion)}`;
 }
 
 const badgeStyles: Record<CadenceKey, string> = {
@@ -204,20 +221,7 @@ export function SourceCard({
               : Math.round(cadence.avgReleasesPerWeek)}
             /week avg
           </span>
-          <span className="truncate ml-2">
-            {cadence.earliestVersion &&
-            cadence.latestVersion &&
-            cadence.earliestVersion !== cadence.latestVersion ? (
-              <VersionRangeDiff
-                from={fmtVersion(cadence.earliestVersion)}
-                to={fmtVersion(cadence.latestVersion)}
-              />
-            ) : cadence.latestVersion ? (
-              fmtVersion(cadence.latestVersion)
-            ) : (
-              ""
-            )}
-          </span>
+          <span className="truncate ml-2 tabular-nums">{renderVersionByline(source, cadence)}</span>
         </div>
       )}
     </Link>

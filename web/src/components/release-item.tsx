@@ -199,8 +199,8 @@ export function ReleaseListItem({
       className="group/item flex gap-0 relative"
       {...(titleId ? { "aria-labelledby": titleId } : {})}
     >
-      {/* Left rail: date + timeline */}
-      <div className="w-[100px] shrink-0 relative flex flex-col items-end pr-5 pt-5">
+      {/* Left rail: date + source byline + timeline */}
+      <div className="w-[100px] shrink-0 relative flex flex-col items-end pr-5 pt-5 gap-1">
         {!hideDate && (
           <time
             dateTime={release.publishedAt ?? undefined}
@@ -208,6 +208,22 @@ export function ReleaseListItem({
           >
             {formatDate(release.publishedAt)}
           </time>
+        )}
+        {sourceByline && (
+          <div className="text-[11px] text-stone-400 dark:text-stone-500 inline-flex items-center gap-1 text-right leading-tight">
+            {sourceByline.type && <SourceTypeIcon type={sourceByline.type} size={11} />}
+            {sourceByline.orgSlug ? (
+              <Link
+                href={`/${sourceByline.orgSlug}/${sourceByline.slug}`}
+                className="hover:text-stone-700 dark:hover:text-stone-300"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {sourceByline.name}
+              </Link>
+            ) : (
+              <span>{sourceByline.name}</span>
+            )}
+          </div>
         )}
         {/* Dot on timeline */}
         <div className="absolute right-0 top-[22px] w-[7px] h-[7px] rounded-full bg-stone-300 dark:bg-stone-600 translate-x-[3px] z-10" />
@@ -255,25 +271,6 @@ export function ReleaseListItem({
         </div>
         {subtitleText && (
           <div className="text-sm text-stone-600 dark:text-stone-400 mb-1">{subtitleText}</div>
-        )}
-        {sourceByline && (
-          <div className="text-[12px] text-stone-400 dark:text-stone-500 mb-1 flex items-center gap-1">
-            <span>via</span>
-            {sourceByline.type && <SourceTypeIcon type={sourceByline.type} size={12} />}
-            {sourceByline.orgSlug ? (
-              <Link
-                href={`/${sourceByline.orgSlug}/${sourceByline.slug}`}
-                className="text-stone-500 dark:text-stone-400 font-medium hover:text-stone-700 dark:hover:text-stone-300"
-                onClick={(e) => e.stopPropagation()}
-              >
-                {sourceByline.name}
-              </Link>
-            ) : (
-              <span className="text-stone-500 dark:text-stone-400 font-medium">
-                {sourceByline.name}
-              </span>
-            )}
-          </div>
         )}
         <div
           className={`group relative${isOverflowing ? " cursor-pointer" : ""}`}
