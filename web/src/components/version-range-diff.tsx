@@ -18,7 +18,7 @@ export function VersionRangeDiff({ from, to, collapsed = false }: VersionRangeDi
       <span>
         {commonPrefix}
         {fromSuffix && (
-          <span className="px-0.5 rounded-sm bg-red-100 text-red-700 line-through decoration-red-700/70 dark:bg-red-500/15 dark:text-red-300 dark:decoration-red-300/60">
+          <span className="px-0.5 rounded-sm bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300">
             {fromSuffix}
           </span>
         )}
