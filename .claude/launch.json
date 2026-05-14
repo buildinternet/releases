@@ -4,26 +4,40 @@
     {
       "name": "api",
       "runtimeExecutable": "bun",
-      "runtimeArgs": ["run", "dev:api"],
+      "runtimeArgs": ["run", "preview:api"],
       "port": 8787,
       "autoPort": false
     },
     {
       "name": "web",
       "runtimeExecutable": "bun",
-      "runtimeArgs": ["run", "dev:web"],
+      "runtimeArgs": ["run", "preview:web"],
       "port": 3000,
-      "autoPort": true,
+      "autoPort": false,
       "env": {
         "RELEASED_API_URL": "http://localhost:8787"
       }
     },
     {
+      "name": "mcp",
+      "runtimeExecutable": "bun",
+      "runtimeArgs": ["run", "preview:mcp"],
+      "port": 8788,
+      "autoPort": false
+    },
+    {
+      "name": "discovery",
+      "runtimeExecutable": "bun",
+      "runtimeArgs": ["run", "preview:discovery"],
+      "port": 8789,
+      "autoPort": false
+    },
+    {
       "name": "web-prod-api",
       "runtimeExecutable": "bun",
-      "runtimeArgs": ["run", "dev:web"],
+      "runtimeArgs": ["run", "preview:web"],
       "port": 3000,
-      "autoPort": true,
+      "autoPort": false,
       "env": {
         "RELEASED_API_URL": "https://api.releases.sh"
       }
