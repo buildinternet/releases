@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { feedCursorSql, type AggregateReleaseRow, type FeedQueryRunner } from "./feed-cursor.js";
+import { COVERAGE_COUNT_EXPR } from "./release-coverage-sql.js";
 
 export { buildFeedCursor } from "./feed-cursor.js";
 
@@ -36,7 +37,8 @@ function runFeedChunk(
            r.published_at, r.fetched_at, r.url, r.media, r.prerelease,
            s.slug AS source_slug, s.name AS source_name, s.type AS source_type,
            o.slug AS org_slug, o.name AS org_name,
-           p.slug AS product_slug, p.name AS product_name
+           p.slug AS product_slug, p.name AS product_name,
+           ${sql.raw(COVERAGE_COUNT_EXPR)} AS coverage_count
     FROM releases_visible r
     INNER JOIN sources_active s ON s.id = r.source_id
     INNER JOIN organizations_active o ON o.id = s.org_id

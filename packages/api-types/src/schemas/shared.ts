@@ -69,6 +69,11 @@ export const ReleaseItemSchema = z.object({
   // `.optional()` for the same mid-deploy / pinned-worker reason as `type`.
   titleGenerated: z.string().nullable().optional(),
   titleShort: z.string().nullable().optional(),
+  // Count of demoted siblings rolling up into this row via `release_coverage`
+  // (0 when standalone). Lets list views show a cluster indicator without a
+  // detail-page round trip. `.optional()` — older API responses and pinned
+  // workers omit the field; treat undefined as 0.
+  coverageCount: z.number().int().min(0).optional(),
 });
 
 export const ReleaseSummaryItemSchema = z.object({

@@ -1685,6 +1685,7 @@ orgRoutes.get(
         name: r.source_name,
         type: r.source_type,
       },
+      coverageCount: r.coverage_count,
     }));
 
     const pagination = { nextCursor, limit };

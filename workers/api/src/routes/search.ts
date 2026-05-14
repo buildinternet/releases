@@ -98,6 +98,7 @@ function hydrateReleaseHit(
     media,
     publishedAt: row.publishedAt,
     type: row.type,
+    coverageCount: row.coverageCount,
     ...(score !== undefined ? { score } : {}),
   };
 }
@@ -471,6 +472,7 @@ searchRoutes.get(
             media: h.release.media,
             publishedAt: h.release.publishedAt,
             type: h.release.type,
+            coverageCount: h.release.coverageCount,
           },
           mediaOrigin,
           // Emit the fusion score so clients can re-interleave release and

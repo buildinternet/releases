@@ -1,3 +1,5 @@
+import { COVERAGE_COUNT_EXPR } from "@releases/core-internal/release-coverage-sql";
+
 export type LatestReleaseRow = {
   id: string;
   version: string | null;
@@ -13,6 +15,7 @@ export type LatestReleaseRow = {
   source_type: string;
   org_slug: string | null;
   type: string;
+  coverage_count: number;
 };
 
 export interface LatestReleasesFilter {
@@ -65,7 +68,8 @@ export async function getLatestReleasesAcross(
     SELECT r.id, r.version, r.title, r.summary, r.title_generated, r.title_short, r.type,
            r.published_at, r.url, r.media,
            s.slug AS source_slug, s.name AS source_name, s.type AS source_type,
-           o.slug AS org_slug
+           o.slug AS org_slug,
+           ${COVERAGE_COUNT_EXPR} AS coverage_count
     FROM ${releasesTable} r
     INNER JOIN sources_active s ON s.id = r.source_id
     LEFT JOIN organizations o ON o.id = s.org_id

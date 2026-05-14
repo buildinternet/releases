@@ -13,6 +13,7 @@ import { SourceTypeIcon } from "./source-type-icon";
 import { markdownComponents, collapsedMarkdownComponents } from "./markdown-components";
 import { formatDate } from "@/lib/formatters";
 import { RollupBadge } from "./rollup-badge";
+import { ClusterChip } from "./cluster-chip";
 
 /** Strip a leading markdown heading that duplicates the release title,
  *  and empty artifacts left by HTML-to-markdown conversion. */
@@ -242,6 +243,7 @@ export function ReleaseListItem({
             </a>
           )}
           <RollupBadge type={release.type} />
+          <ClusterChip count={release.coverageCount} />
           {release.prerelease && (
             <span
               title="Pre-release (beta, rc, nightly, preview)"

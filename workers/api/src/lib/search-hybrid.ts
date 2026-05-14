@@ -30,6 +30,7 @@ import { withEmbedCache, type EmbedCacheBinding } from "@releases/search/embeddi
 import { searchReleasesFts } from "../queries/search.js";
 import { buildEmbedConfig } from "./embed-config.js";
 import { logEvent } from "@releases/lib/log-event";
+import { COVERAGE_COUNT_EXPR } from "@releases/core-internal/release-coverage-sql";
 import type { ReleaseType } from "@buildinternet/releases-api-types";
 import type { D1Db } from "../db.js";
 
@@ -98,6 +99,8 @@ export interface HybridReleaseHit {
     type: ReleaseType;
     titleGenerated: string | null;
     titleShort: string | null;
+    /** Number of demoted siblings rolling up via `release_coverage` (0 when standalone). */
+    coverageCount: number;
   };
 }
 
@@ -177,6 +180,8 @@ interface RawReleaseRow {
   type: ReleaseType;
   titleGenerated: string | null;
   titleShort: string | null;
+  /** Number of demoted siblings rolling up via `release_coverage` (0 when standalone). */
+  coverageCount: number;
 }
 
 async function hydrateReleases(
@@ -203,7 +208,8 @@ async function hydrateReleases(
            s.name as sourceName,
            s.type as sourceType,
            o.slug as orgSlug,
-           o.name as orgName
+           o.name as orgName,
+           ${sql.raw(COVERAGE_COUNT_EXPR)} as coverageCount
     FROM ${releasesTable} r
     JOIN sources_active s ON s.id = r.source_id
     LEFT JOIN organizations_active o ON o.id = s.org_id
@@ -493,6 +499,7 @@ async function buildReleaseHits(
         orgSlug: row.orgSlug,
         orgName: row.orgName,
         type: row.type,
+        coverageCount: row.coverageCount,
       },
     });
   }

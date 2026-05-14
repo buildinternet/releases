@@ -2,6 +2,7 @@ import { sql, type SQL } from "drizzle-orm";
 import type { ReleaseType } from "@buildinternet/releases-api-types";
 import { daysAgoIso, nowIso } from "@buildinternet/releases-core/dates";
 import { SOURCE_STALE_DAYS } from "@buildinternet/releases-core/sources";
+import { COVERAGE_COUNT_EXPR } from "@releases/core-internal/release-coverage-sql";
 import type {
   SourceType,
   SourceDiscovery,
@@ -227,6 +228,7 @@ export type SourceReleaseRow = {
   fetched_at: string;
   url: string | null;
   media: string | null;
+  coverage_count: number;
 };
 
 export async function getSourceReleasesPaginated(
@@ -238,14 +240,15 @@ export async function getSourceReleasesPaginated(
 ): Promise<SourceReleaseRow[]> {
   const releasesTable = opts.includeCoverage ? "releases" : "releases_visible";
   return db.all<SourceReleaseRow>(sql`
-    SELECT id, version, type, title, summary, title_generated, title_short,
-           content, published_at, fetched_at, url, media
-    FROM ${sql.raw(releasesTable)}
-    WHERE source_id = ${sourceId}
-      AND (suppressed IS NULL OR suppressed = 0)
+    SELECT r.id, r.version, r.type, r.title, r.summary, r.title_generated, r.title_short,
+           r.content, r.published_at, r.fetched_at, r.url, r.media,
+           ${sql.raw(COVERAGE_COUNT_EXPR)} AS coverage_count
+    FROM ${sql.raw(releasesTable)} r
+    WHERE r.source_id = ${sourceId}
+      AND (r.suppressed IS NULL OR r.suppressed = 0)
     ORDER BY
-      CASE WHEN published_at IS NOT NULL THEN 0 ELSE 1 END,
-      published_at DESC, fetched_at DESC
+      CASE WHEN r.published_at IS NOT NULL THEN 0 ELSE 1 END,
+      r.published_at DESC, r.fetched_at DESC
     LIMIT ${pageSize} OFFSET ${offset}
   `);
 }
@@ -294,7 +297,8 @@ export async function getSourceReleasesFeed(
       `
     SELECT r.id, r.version, r.type, r.title, r.summary, r.title_generated,
            r.title_short, r.content,
-           r.published_at, r.fetched_at, r.url, r.media, r.prerelease
+           r.published_at, r.fetched_at, r.url, r.media, r.prerelease,
+           ${COVERAGE_COUNT_EXPR} AS coverage_count
     FROM ${releasesTable} r
     WHERE r.source_id = ?
       AND (r.suppressed IS NULL OR r.suppressed = 0)
