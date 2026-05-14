@@ -56,6 +56,7 @@ import { invalidateLatestCache } from "../lib/latest-cache.js";
 import type { InvalidationEnv } from "../lib/latest-cache.js";
 import type { InsertedReleaseRow } from "../events/build-event.js";
 import { notifyIndexNowForSource, type IndexNowEnv } from "../lib/indexnow.js";
+import { clusterAndPersistCascades } from "../lib/cluster-cascades.js";
 import { resolveOrgSlug, resolveProductSlug } from "../lib/slug-lookups.js";
 import { logEvent } from "@releases/lib/log-event";
 
@@ -665,6 +666,7 @@ export async function fetchOne(
 
     let inserted = 0;
     const publishRows: InsertedReleaseRow[] = [];
+    const clusterRows: Array<{ id: string; version: string | null; content: string }> = [];
     for (let i = 0; i < rows.length; i += RELEASES_BATCH_CHUNK_SIZE) {
       const chunk = rows.slice(i, i + RELEASES_BATCH_CHUNK_SIZE);
       // Build publish rows from the RETURNING set (not zipped against
@@ -677,13 +679,31 @@ export async function fetchOne(
         version: releases.version,
         publishedAt: releases.publishedAt,
         media: releases.media,
+        content: releases.content,
       });
       inserted += result.length;
-      for (const r of result) publishRows.push(r);
+      for (const r of result) {
+        const { content, ...publishRow } = r;
+        publishRows.push(publishRow);
+        clusterRows.push({ id: r.id, version: r.version, content });
+      }
     }
     const insertedIds = publishRows.map((r) => r.id);
 
-    if (publishRows.length > 0 && env.RELEASE_HUB) {
+    // Detect changesets cascade rows and demote them to coverage so they
+    // stay out of the default feed, the live tail, and per-source IndexNow
+    // counts. Synchronous: coverage state must be visible to the publish
+    // path below.
+    const cascadeResult = await clusterAndPersistCascades(db, clusterRows, {
+      component: "poll-fetch",
+      sourceId: source.id,
+    });
+    const visiblePublishRows =
+      cascadeResult.coverageIds.size > 0
+        ? publishRows.filter((r) => !cascadeResult.coverageIds.has(r.id))
+        : publishRows;
+
+    if (visiblePublishRows.length > 0 && env.RELEASE_HUB) {
       await publishReleaseEvents(
         {
           RELEASE_HUB: env.RELEASE_HUB,
@@ -692,7 +712,7 @@ export async function fetchOne(
         },
         {
           src: { name: source.name, slug: source.slug, orgId: source.orgId, sourceId: source.id },
-          inserted: publishRows,
+          inserted: visiblePublishRows,
         },
       );
     }
@@ -701,7 +721,7 @@ export async function fetchOne(
     // lastmod just shifted. Skips itself when INDEXNOW_ENABLED is unset, so
     // staging and dev are no-ops by default. Per-release URLs are intentionally
     // out of scope — see https://github.com/buildinternet/releases/issues/649.
-    if (publishRows.length > 0) {
+    if (visiblePublishRows.length > 0) {
       await notifyIndexNowForSource(
         env,
         {
@@ -715,7 +735,7 @@ export async function fetchOne(
           isHidden: source.isHidden,
           discovery: source.discovery,
         },
-        publishRows.length,
+        visiblePublishRows.length,
       );
     }
 

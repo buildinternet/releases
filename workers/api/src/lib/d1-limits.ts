@@ -28,6 +28,10 @@ export const IN_ARRAY_CHUNK_SIZE = 90;
 // rarely produces more than ~30 citations, so this cap is mostly defensive.
 export const KNOWLEDGE_PAGE_CITATIONS_CHUNK_SIZE = 11;
 
+// `release_coverage` INSERT binds 5 placeholders per row: canonical_id,
+// coverage_id, reason, decided_by, decided_at. 20 rows * 5 = 100 bindings.
+export const RELEASE_COVERAGE_INSERT_CHUNK_SIZE = 20;
+
 // `source_changelog_chunks` INSERT binds 11 placeholders per row: the nine
 // listed columns (source_changelog_file_id, source_id, offset, length,
 // tokens, content_hash, heading, vector_id, embedded_at — vectorId and

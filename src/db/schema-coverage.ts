@@ -24,6 +24,7 @@ export type NewReleaseCoverage = typeof releaseCoverage.$inferInsert;
 
 /** Tags for the release_coverage.decided_by audit column. */
 export const DECIDED_BY_CLI = "human:cli";
+export const DECIDED_BY_CHANGESETS = "system:changesets";
 export function decidedByAgent(model: string): string {
   return `agent:${model}`;
 }

@@ -9,7 +9,8 @@
     "./webhook-sign": "./src/webhook-sign.ts",
     "./collection-feed": "./src/collection-feed.ts",
     "./category-feed": "./src/category-feed.ts",
-    "./feed-cursor": "./src/feed-cursor.ts"
+    "./feed-cursor": "./src/feed-cursor.ts",
+    "./changesets-cluster": "./src/changesets-cluster.ts"
   },
   "dependencies": {
     "@buildinternet/releases-core": "workspace:*",
