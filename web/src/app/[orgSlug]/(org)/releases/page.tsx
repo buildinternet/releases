@@ -4,7 +4,7 @@ import { api, ApiSetupError, ApiNotFoundError, type OrgReleasesResponse } from "
 import { OrgReleaseList } from "@/components/org-release-list";
 import { JsonLd } from "@/components/json-ld";
 import { lastModifiedAt } from "@/lib/schema-org";
-import { getOrg } from "../_lib/org-data";
+import { getOrg } from "../../_lib/org-data";
 
 export async function generateMetadata({
   params,

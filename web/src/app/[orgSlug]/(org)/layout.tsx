@@ -9,7 +9,7 @@ import { OrgAvatar } from "@/components/org-avatar";
 import { OrgTabs } from "@/components/org-tabs";
 import { CliCommand } from "@/components/cli-command";
 import { taxonomySidebarSections, TaxonomyChips } from "@/components/taxonomy-chips";
-import { getOrg, getOrgCollections } from "./_lib/org-data";
+import { getOrg, getOrgCollections } from "../_lib/org-data";
 
 export default async function OrgLayout({
   children,

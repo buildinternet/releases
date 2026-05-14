@@ -4,7 +4,7 @@ import { api, ApiSetupError } from "@/lib/api";
 import { tryFetch } from "@/lib/ssr-fetch";
 import { SourceTable } from "@/components/source-table";
 import { JsonLd } from "@/components/json-ld";
-import { getOrg } from "../_lib/org-data";
+import { getOrg } from "../../_lib/org-data";
 
 export async function generateMetadata({
   params,
