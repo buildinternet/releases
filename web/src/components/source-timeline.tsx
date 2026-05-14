@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useCallback } from "react";
 import { type SourceActivity } from "@/lib/api";
-import { DAY_MS, WEEK_MS, parseBuckets, fmtVersion } from "@/lib/cadence";
+import { DAY_MS, WEEK_MS, parseBuckets, fmtVersion, pickWindowVersionRange } from "@/lib/cadence";
 import { RangeNavigator } from "@/components/range-navigator";
 import { ReleaseHeatmap, type HeatmapData } from "@/components/release-heatmap";
 import { ViewModeToggle, type ViewMode } from "@/components/view-mode-toggle";
@@ -84,12 +84,8 @@ export function SourceTimeline({ activity, heatmap, trackingSince }: SourceTimel
     const avgPerWeek = totalReleases / weeks;
     const avgPerMonth = avgPerWeek * (30 / 7);
 
-    let windowEarliestVersion: string | null = null;
-    let windowLatestVersion: string | null = null;
-    for (const b of brushedBuckets) {
-      if (b.earliestVersion && !windowEarliestVersion) windowEarliestVersion = b.earliestVersion;
-      if (b.latestVersion) windowLatestVersion = b.latestVersion;
-    }
+    const { earliest: windowEarliestVersion, latest: windowLatestVersion } =
+      pickWindowVersionRange(brushedBuckets);
 
     let versionRange: {
       from: string;

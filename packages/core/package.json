@@ -28,7 +28,8 @@
     "./tokens": "./src/tokens.ts",
     "./prerelease": "./src/prerelease.ts",
     "./cli-contracts": "./src/cli-contracts.ts",
-    "./cursor": "./src/cursor.ts"
+    "./cursor": "./src/cursor.ts",
+    "./version-sort": "./src/version-sort.ts"
   },
   "files": [
     "src",

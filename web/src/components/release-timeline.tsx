@@ -9,7 +9,14 @@ import {
   type OrgDetail,
 } from "@/lib/api";
 import { OverviewView } from "@/components/overview-view";
-import { type WeeklyBucket, WEEK_MS, DAY_MS, parseBuckets, fmtInterval } from "@/lib/cadence";
+import {
+  type WeeklyBucket,
+  WEEK_MS,
+  DAY_MS,
+  parseBuckets,
+  fmtInterval,
+  pickWindowVersionRange,
+} from "@/lib/cadence";
 import { SourceCard, type SourceCadenceData } from "@/components/source-card";
 import { RangeNavigator, type SourceBucketEntry } from "@/components/range-navigator";
 import { ReleaseHeatmap } from "@/components/release-heatmap";
@@ -264,14 +271,9 @@ export function ReleaseTimeline({
         });
 
         let brushedCount = 0;
-        let windowEarliestVersion: string | null = null;
-        let windowLatestVersion: string | null = null;
-        for (const b of completeBuckets) {
-          brushedCount += b.count;
-          if (b.earliestVersion && !windowEarliestVersion)
-            windowEarliestVersion = b.earliestVersion;
-          if (b.latestVersion) windowLatestVersion = b.latestVersion;
-        }
+        for (const b of completeBuckets) brushedCount += b.count;
+        const { earliest: windowEarliestVersion, latest: windowLatestVersion } =
+          pickWindowVersionRange(completeBuckets);
 
         return {
           name: source.name,

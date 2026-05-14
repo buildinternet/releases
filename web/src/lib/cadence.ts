@@ -1,5 +1,7 @@
 /** Cadence classification and product color utilities for release timeline visualization. */
 
+import { computeVersionSort } from "@buildinternet/releases-core/version-sort";
+
 export const DAY_MS = 24 * 60 * 60 * 1000;
 export const WEEK_MS = 7 * DAY_MS;
 
@@ -119,6 +121,48 @@ export function parseBuckets(
     earliestVersion: b.earliestVersion ?? null,
     latestVersion: b.latestVersion ?? null,
   }));
+}
+
+/**
+ * Pick semver-min `earliestVersion` and semver-max `latestVersion` across a
+ * windowed set of weekly buckets — so a backported patch on an older line
+ * (e.g. v15.5.18 shipped after v16.x) doesn't anchor either end of the
+ * range just because of its publish date.
+ *
+ * Falls back to the last bucket's value when no bucket has a parseable
+ * semver, preserving the legacy "last wins" behavior for calver-only or
+ * codename-only sources.
+ */
+export function pickWindowVersionRange(buckets: readonly WeeklyBucket[]): {
+  earliest: string | null;
+  latest: string | null;
+} {
+  let earliestSemver: { v: string; s: string } | null = null;
+  let latestSemver: { v: string; s: string } | null = null;
+  let earliestFallback: string | null = null;
+  let latestFallback: string | null = null;
+
+  for (const b of buckets) {
+    if (b.earliestVersion) {
+      const s = computeVersionSort(b.earliestVersion);
+      if (s != null && (earliestSemver == null || s < earliestSemver.s)) {
+        earliestSemver = { v: b.earliestVersion, s };
+      }
+      if (earliestFallback == null) earliestFallback = b.earliestVersion;
+    }
+    if (b.latestVersion) {
+      const s = computeVersionSort(b.latestVersion);
+      if (s != null && (latestSemver == null || s > latestSemver.s)) {
+        latestSemver = { v: b.latestVersion, s };
+      }
+      latestFallback = b.latestVersion;
+    }
+  }
+
+  return {
+    earliest: earliestSemver?.v ?? earliestFallback,
+    latest: latestSemver?.v ?? latestFallback,
+  };
 }
 
 export function bucketByWeek(dates: Date[], rangeStart: Date, rangeEnd: Date): WeeklyBucket[] {

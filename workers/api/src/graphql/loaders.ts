@@ -153,6 +153,7 @@ export function createLoaders(db: D1Db) {
             id: releasesVisible.id,
             sourceId: releasesVisible.sourceId,
             version: releasesVisible.version,
+            versionSort: releasesVisible.versionSort,
             type: releasesVisible.type,
             title: releasesVisible.title,
             content: releasesVisible.content,

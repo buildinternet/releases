@@ -36,6 +36,7 @@ import {
 } from "@releases/adapters/github-discovery";
 import { CHANGELOG_MAX_FILES, truncateToByteCap } from "@releases/adapters/github";
 import { isPrereleaseVersion } from "@buildinternet/releases-core/prerelease";
+import { computeVersionSort } from "@buildinternet/releases-core/version-sort";
 import { normalizeMediaUrl } from "@releases/rendering/media-url.js";
 import {
   embedAndUpsertChangelogFile,
@@ -650,6 +651,7 @@ export async function fetchOne(
     const rows = rawReleases.map((raw) => ({
       sourceId: source.id,
       version: raw.version ?? null,
+      versionSort: computeVersionSort(raw.version),
       title: raw.title,
       content: raw.content,
       url: raw.url ?? null,

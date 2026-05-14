@@ -13,6 +13,7 @@ import {
 import { RELEASE_URL_UPSERT } from "@releases/core-internal/release-upsert";
 import { probeRepo, ProbeRateLimitError, ProbeServerError } from "@releases/adapters/github-probe";
 import { newOrgId, newSourceId, newReleaseId } from "@buildinternet/releases-core/id";
+import { computeVersionSort } from "@buildinternet/releases-core/version-sort";
 import { parseCoordinate } from "@buildinternet/releases-core/lookup-coordinate";
 import { normalizeDomain } from "@buildinternet/releases-core/domain";
 import { findOrgByDomain } from "../queries/search.js";
@@ -313,6 +314,7 @@ export async function runLookup(
         id: newReleaseId(),
         sourceId,
         version: r.version,
+        versionSort: computeVersionSort(r.version),
         title: r.title,
         content: r.content,
         url: r.url,
