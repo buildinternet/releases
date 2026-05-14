@@ -1798,6 +1798,7 @@ const getSourceDetailHandler = async (c: import("hono").Context<Env>) => {
   const page = parseInt(c.req.query("page") ?? "1", 10);
   const pageSize = parseInt(c.req.query("pageSize") ?? "20", 10);
   const includeCoverage = parseBoolParam(c.req.query("include_coverage"));
+  const includePrereleases = parseBoolParam(c.req.query("include_prereleases"));
   const db = createDb(c.env.DB);
 
   const src = await resolveSourceFromContext(c, db);
@@ -1839,6 +1840,9 @@ const getSourceDetailHandler = async (c: import("hono").Context<Env>) => {
             and(
               eq(releasesVisible.sourceId, src.id),
               sql`${releasesVisible.publishedAt} IS NOT NULL`,
+              includePrereleases
+                ? undefined
+                : sql`(${releasesVisible.prerelease} IS NULL OR ${releasesVisible.prerelease} = 0)`,
             ),
           )
           .orderBy(desc(releasesVisible.publishedAt))
@@ -1854,7 +1858,10 @@ const getSourceDetailHandler = async (c: import("hono").Context<Env>) => {
     changelogExistsRows,
     latestByDateRows,
   ] = await Promise.all([
-    getSourceReleasesPaginated(db, src.id, pageSize, offset, { includeCoverage }),
+    getSourceReleasesPaginated(db, src.id, pageSize, offset, {
+      includeCoverage,
+      includePrereleases,
+    }),
     orgQuery,
     productQuery,
     db

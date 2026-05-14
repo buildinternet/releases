@@ -1,5 +1,7 @@
 "use client";
 
+import type { ReactNode } from "react";
+
 export type RangePreset = "all" | "90d" | "30d";
 
 export function fmtCadence(avgPerWeek: number, avgPerMonth: number): string {
@@ -10,7 +12,7 @@ export function highlightDaysForPreset(preset: RangePreset): number | null {
   return preset === "30d" ? 30 : preset === "90d" ? 90 : null;
 }
 
-export function Stat({ label, value, title }: { label: string; value: string; title?: string }) {
+export function Stat({ label, value, title }: { label: string; value: ReactNode; title?: string }) {
   return (
     <span className="inline-flex items-baseline gap-1.5" title={title}>
       <span className="text-[11px] uppercase tracking-wider text-stone-400 dark:text-stone-500">

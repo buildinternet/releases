@@ -12,6 +12,7 @@ import {
   FETCH_CAP,
 } from "@/lib/cadence";
 import { HoverCard } from "@/components/hover-card";
+import { VersionRangeDiff } from "@/components/version-range-diff";
 import type { SourceListItem } from "@/lib/api";
 
 export interface SourceCadenceData {
@@ -206,11 +207,16 @@ export function SourceCard({
           <span className="truncate ml-2">
             {cadence.earliestVersion &&
             cadence.latestVersion &&
-            cadence.earliestVersion !== cadence.latestVersion
-              ? `${fmtVersion(cadence.earliestVersion)} → ${fmtVersion(cadence.latestVersion)}`
-              : cadence.latestVersion
-                ? fmtVersion(cadence.latestVersion)
-                : ""}
+            cadence.earliestVersion !== cadence.latestVersion ? (
+              <VersionRangeDiff
+                from={fmtVersion(cadence.earliestVersion)}
+                to={fmtVersion(cadence.latestVersion)}
+              />
+            ) : cadence.latestVersion ? (
+              fmtVersion(cadence.latestVersion)
+            ) : (
+              ""
+            )}
           </span>
         </div>
       )}

@@ -112,7 +112,7 @@
     { "binding": "CHANGELOG_CHUNKS_INDEX", "index_name": "changelog-chunks-v1" },
   ],
   // KV namespaces. LATEST_CACHE fronts GET /v1/releases/latest with a
-  // 300s TTL (keys: latest:v1:<sorted-qs>). Optional — `withLatestCache`
+  // 300s TTL (keys: latest:v2:<sorted-qs>). Optional — `withLatestCache`
   // degrades to pass-through when the binding is absent.
   // ALERT_DEDUP_KV stores 1h dedup keys for Tier-1 alert emails (keys:
   // alert:<subject>). Reuses the LATEST_CACHE namespace to avoid provisioning
