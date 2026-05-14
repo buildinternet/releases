@@ -70,7 +70,7 @@ export function fmtVersion(v: string): string {
  * (optional `v` then digits, with at least one dotted numeric segment).
  */
 export function isSemverShaped(v: string): boolean {
-  return /^v?\d+(?:\.\d+)+/i.test(v);
+  return /^v?\d+(?:\.\d+)+(?:[-+][0-9A-Za-z.-]+)?$/i.test(v);
 }
 
 /**

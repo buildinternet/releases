@@ -60,10 +60,11 @@ function renderVersionByline(source: SourceListItem, cadence: SourceCadenceData)
   if (!latestVersion) return "";
   const isGithub = source.type === "github";
   if (!isGithub && !isSemverShaped(latestVersion)) return "";
-  if (earliestVersion && earliestVersion !== latestVersion) {
-    return `${fmtVersion(earliestVersion)} → ${fmtVersion(latestVersion)}`;
-  }
-  return fmtVersion(latestVersion);
+  if (!earliestVersion || earliestVersion === latestVersion) return fmtVersion(latestVersion);
+  // Don't render a range like `Sonnet 4.6 → v4.7`: when the source isn't a
+  // GitHub repo, require both ends to look like semver before pairing them.
+  if (!isGithub && !isSemverShaped(earliestVersion)) return fmtVersion(latestVersion);
+  return `${fmtVersion(earliestVersion)} → ${fmtVersion(latestVersion)}`;
 }
 
 const badgeStyles: Record<CadenceKey, string> = {
