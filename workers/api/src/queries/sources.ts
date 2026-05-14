@@ -236,9 +236,16 @@ export async function getSourceReleasesPaginated(
   sourceId: string,
   pageSize: number,
   offset: number,
-  opts: { includeCoverage?: boolean } = {},
+  opts: { includeCoverage?: boolean; includePrereleases?: boolean } = {},
 ): Promise<SourceReleaseRow[]> {
   const releasesTable = opts.includeCoverage ? "releases" : "releases_visible";
+  // Matches the default in `getSourceReleasesFeed`: prereleases are hidden
+  // unless the caller asks for them. Keeps SSR (this query) and the cursor
+  // feed (used by the client-side filter UI) in sync — otherwise the first
+  // paint includes canaries that disappear the moment any filter is toggled.
+  const prereleaseWhere = opts.includePrereleases
+    ? sql``
+    : sql`AND (r.prerelease IS NULL OR r.prerelease = 0)`;
   return db.all<SourceReleaseRow>(sql`
     SELECT r.id, r.version, r.type, r.title, r.summary, r.title_generated, r.title_short,
            r.content, r.published_at, r.fetched_at, r.url, r.media,
@@ -246,6 +253,7 @@ export async function getSourceReleasesPaginated(
     FROM ${sql.raw(releasesTable)} r
     WHERE r.source_id = ${sourceId}
       AND (r.suppressed IS NULL OR r.suppressed = 0)
+      ${prereleaseWhere}
     ORDER BY
       CASE WHEN r.published_at IS NOT NULL THEN 0 ELSE 1 END,
       r.published_at DESC, r.fetched_at DESC
@@ -338,8 +346,10 @@ export async function getSourceActivityBuckets(
       SELECT
         strftime('%Y-%m-%d', r.published_at, 'weekday 0', '-6 days') AS week_start,
         COUNT(*) AS cnt,
-        MIN(CASE WHEN r.version IS NOT NULL THEN r.published_at || '|' || r.version END) AS earliest_tagged,
-        MAX(CASE WHEN r.version IS NOT NULL THEN r.published_at || '|' || r.version END) AS latest_tagged
+        MIN(CASE WHEN r.version IS NOT NULL AND (r.prerelease IS NULL OR r.prerelease = 0)
+                 THEN r.published_at || '|' || r.version END) AS earliest_tagged,
+        MAX(CASE WHEN r.version IS NOT NULL AND (r.prerelease IS NULL OR r.prerelease = 0)
+                 THEN r.published_at || '|' || r.version END) AS latest_tagged
       FROM releases_visible r
       WHERE
         r.source_id = ${sourceId}

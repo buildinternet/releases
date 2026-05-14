@@ -61,6 +61,41 @@ export function fmtVersion(v: string): string {
   return /^\d/.test(v) ? `v${v}` : v;
 }
 
+/**
+ * Split a version string into tokens at `.`, `-`, or `+` boundaries, keeping
+ * the delimiters as their own tokens so a diff can rejoin them losslessly.
+ * `"v2.1.38"` → `["v2", ".", "1", ".", "38"]`.
+ */
+function tokenizeVersion(v: string): string[] {
+  return v.split(/([.\-+])/).filter((s) => s !== "");
+}
+
+export interface VersionDiff {
+  commonPrefix: string;
+  fromSuffix: string;
+  toSuffix: string;
+}
+
+/**
+ * Compare two formatted version strings and return the longest shared prefix
+ * plus the differing tails. Token-aligned so we never split inside a numeric
+ * segment (`v1.2.10` vs `v1.2.18` diffs the `10`/`18`, not the trailing digit).
+ */
+export function diffVersions(from: string, to: string): VersionDiff {
+  if (from === to) return { commonPrefix: from, fromSuffix: "", toSuffix: "" };
+  const fromTokens = tokenizeVersion(from);
+  const toTokens = tokenizeVersion(to);
+  let i = 0;
+  while (i < fromTokens.length && i < toTokens.length && fromTokens[i] === toTokens[i]) {
+    i++;
+  }
+  return {
+    commonPrefix: fromTokens.slice(0, i).join(""),
+    fromSuffix: fromTokens.slice(i).join(""),
+    toSuffix: toTokens.slice(i).join(""),
+  };
+}
+
 /** Bucket release dates into weekly counts for sparklines and overview charts. */
 export interface WeeklyBucket {
   weekStart: Date;

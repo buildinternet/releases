@@ -174,8 +174,10 @@ export async function getOrgActivityData(
           s.slug AS source_slug,
           strftime('%Y-%m-%d', r.published_at, 'weekday 0', '-6 days') AS week_start,
           COUNT(*) AS cnt,
-          MIN(CASE WHEN r.version IS NOT NULL THEN r.published_at || '|' || r.version END) AS earliest_tagged,
-          MAX(CASE WHEN r.version IS NOT NULL THEN r.published_at || '|' || r.version END) AS latest_tagged
+          MIN(CASE WHEN r.version IS NOT NULL AND (r.prerelease IS NULL OR r.prerelease = 0)
+                   THEN r.published_at || '|' || r.version END) AS earliest_tagged,
+          MAX(CASE WHEN r.version IS NOT NULL AND (r.prerelease IS NULL OR r.prerelease = 0)
+                   THEN r.published_at || '|' || r.version END) AS latest_tagged
         FROM releases_visible r
         INNER JOIN sources_active s ON s.id = r.source_id
         WHERE
@@ -222,6 +224,7 @@ export async function getOrgActivityData(
           AND published_at IS NOT NULL
           AND published_at >= ${from}
           AND published_at < ${toExclusive}
+          AND (prerelease IS NULL OR prerelease = 0)
         GROUP BY source_id
       ) latest ON r.source_id = latest.source_id AND r.published_at = latest.max_date
     `),
@@ -236,6 +239,7 @@ export async function getOrgActivityData(
           AND published_at IS NOT NULL
           AND published_at >= ${from}
           AND published_at < ${toExclusive}
+          AND (prerelease IS NULL OR prerelease = 0)
         GROUP BY source_id
       ) earliest ON r.source_id = earliest.source_id AND r.published_at = earliest.min_date
     `),

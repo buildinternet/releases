@@ -25,6 +25,8 @@ export interface LatestReleasesFilter {
   orgId?: string;
   /** Include coverage-side rows (hidden by default) */
   includeCoverage?: boolean;
+  /** Include prereleases (hidden by default) */
+  includePrereleases?: boolean;
   /**
    * Exclude releases whose source.type is in this list. Validated upstream
    * against the canonical `["github","scrape","feed","agent"]` set; we trust
@@ -43,6 +45,12 @@ export async function getLatestReleasesAcross(
     "(s.is_hidden = 0 OR s.is_hidden IS NULL)",
     "(r.suppressed IS NULL OR r.suppressed = 0)",
   ];
+  // Matches the source-feed, org-feed, and MCP `get_latest_releases` defaults
+  // so every read surface returns the same canonical-only shape unless the
+  // caller opts in via `?include_prereleases=true`.
+  if (!f.includePrereleases) {
+    wheres.push("(r.prerelease IS NULL OR r.prerelease = 0)");
+  }
   const bindings: (string | number)[] = [];
 
   if (f.sourceId) {

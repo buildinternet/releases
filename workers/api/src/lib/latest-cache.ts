@@ -1,8 +1,9 @@
 /**
  * Read-through KV cache for GET /v1/releases/latest.
  *
- * Bump the `v1` segment in the key prefix if the stored response shape
- * changes so stale entries don't leak across deploys.
+ * Bump the `vN` segment in the key prefix if the stored response shape or
+ * default-filter semantics change so stale entries don't leak across deploys.
+ * v2: default response excludes prereleases (was previously unfiltered).
  */
 
 import { logEvent } from "@releases/lib/log-event";
@@ -19,7 +20,7 @@ export interface LatestCacheBinding {
 // See issue #333 for the cost model.
 export const LATEST_CACHE_TTL_SECONDS = 300;
 
-const KEY_PREFIX = "latest:v1";
+const KEY_PREFIX = "latest:v2";
 
 export const DEFAULT_LATEST_COUNT = 10;
 
@@ -64,7 +65,7 @@ export const CACHEABLE_DEFAULT_SHAPES: ReadonlyArray<{
 ];
 
 // Escape hatch for shapes that don't fit `CACHEABLE_DEFAULT_SHAPES` — e.g.
-// a single org-filtered key (`latest:v1:count=10&org=org_vercel_id`) where
+// a single org-filtered key (`latest:v2:count=10&org=org_vercel_id`) where
 // the org id is environment-specific and can't live in source. The shapes
 // table is the preferred extension point; reach for the allowlist only
 // when the cache key itself needs to encode runtime data. Empty by design —

@@ -1798,6 +1798,7 @@ const getSourceDetailHandler = async (c: import("hono").Context<Env>) => {
   const page = parseInt(c.req.query("page") ?? "1", 10);
   const pageSize = parseInt(c.req.query("pageSize") ?? "20", 10);
   const includeCoverage = parseBoolParam(c.req.query("include_coverage"));
+  const includePrereleases = parseBoolParam(c.req.query("include_prereleases"));
   const db = createDb(c.env.DB);
 
   const src = await resolveSourceFromContext(c, db);
@@ -1807,6 +1808,13 @@ const getSourceDetailHandler = async (c: import("hono").Context<Env>) => {
   const cutoff = daysAgoIso(30);
   const cutoff90d = daysAgoIso(90);
   const dateCol = sql`COALESCE(${releasesVisible.publishedAt}, ${releasesVisible.fetchedAt})`;
+  // Shared filter so the paginated rows, totals, derived stats, and fallback
+  // version lookup all see the same release set. Without this, hiding
+  // prereleases from the rows but leaving them in the count produces
+  // overcounted `totalPages` and stale derived metrics.
+  const prereleaseVisibleWhere = includePrereleases
+    ? undefined
+    : sql`(${releasesVisible.prerelease} IS NULL OR ${releasesVisible.prerelease} = 0)`;
 
   // Fire all independent reads in parallel — one D1 roundtrip wave instead of ~7 sequential ones.
   const orgQuery = src.orgId
@@ -1839,6 +1847,7 @@ const getSourceDetailHandler = async (c: import("hono").Context<Env>) => {
             and(
               eq(releasesVisible.sourceId, src.id),
               sql`${releasesVisible.publishedAt} IS NOT NULL`,
+              prereleaseVisibleWhere,
             ),
           )
           .orderBy(desc(releasesVisible.publishedAt))
@@ -1854,7 +1863,10 @@ const getSourceDetailHandler = async (c: import("hono").Context<Env>) => {
     changelogExistsRows,
     latestByDateRows,
   ] = await Promise.all([
-    getSourceReleasesPaginated(db, src.id, pageSize, offset, { includeCoverage }),
+    getSourceReleasesPaginated(db, src.id, pageSize, offset, {
+      includeCoverage,
+      includePrereleases,
+    }),
     orgQuery,
     productQuery,
     db
@@ -1865,12 +1877,16 @@ const getSourceDetailHandler = async (c: import("hono").Context<Env>) => {
         recent90d: sql<number>`COUNT(CASE WHEN ${dateCol} >= ${cutoff90d} THEN 1 END)`,
       })
       .from(releasesVisible)
-      .where(eq(releasesVisible.sourceId, src.id)),
+      .where(and(eq(releasesVisible.sourceId, src.id), prereleaseVisibleWhere)),
     db
       .select({ date: min(releasesVisible.publishedAt) })
       .from(releasesVisible)
       .where(
-        and(eq(releasesVisible.sourceId, src.id), sql`${releasesVisible.publishedAt} IS NOT NULL`),
+        and(
+          eq(releasesVisible.sourceId, src.id),
+          sql`${releasesVisible.publishedAt} IS NOT NULL`,
+          prereleaseVisibleWhere,
+        ),
       ),
     db
       .select()
@@ -1931,7 +1947,7 @@ const getSourceDetailHandler = async (c: import("hono").Context<Env>) => {
       const [fallback] = await db
         .select({ version: releasesVisible.version })
         .from(releasesVisible)
-        .where(eq(releasesVisible.sourceId, src.id))
+        .where(and(eq(releasesVisible.sourceId, src.id), prereleaseVisibleWhere))
         .orderBy(desc(releasesVisible.fetchedAt))
         .limit(1);
       latestVersion = fallback?.version ?? null;

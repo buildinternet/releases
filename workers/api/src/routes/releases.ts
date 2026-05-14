@@ -98,7 +98,7 @@ releaseRoutes.get(
     tags: ["Releases"],
     summary: "Latest releases (cross-source feed)",
     description:
-      "Cacheable cross-source feed ordered by `(publishedAt DESC, fetchedAt DESC, id DESC)`. `?source=` and `?org=` are mutually exclusive scopes. `?exclude=` strips releases by source type — comma-separated values from `github,scrape,feed,agent`. By default, coverage-side rows (releases that roll up into a canonical release) are hidden; pass `?include_coverage=true` to include them. The unfiltered homepage shape is served through KV (`X-Cache: HIT|MISS`); filtered requests bypass cache (`X-Cache: BYPASS`).",
+      "Cacheable cross-source feed ordered by `(publishedAt DESC, fetchedAt DESC, id DESC)`. `?source=` and `?org=` are mutually exclusive scopes. `?exclude=` strips releases by source type — comma-separated values from `github,scrape,feed,agent`. By default, coverage-side rows (releases that roll up into a canonical release) are hidden; pass `?include_coverage=true` to include them. Prereleases (canaries / alphas / betas / RCs) are also hidden by default — pass `?include_prereleases=true` to surface them, matching the source-feed and MCP defaults. The unfiltered homepage shape is served through KV (`X-Cache: HIT|MISS`); filtered requests bypass cache (`X-Cache: BYPASS`).",
     parameters: [
       {
         name: "count",
@@ -131,6 +131,14 @@ releaseRoutes.get(
         description: "Include coverage-side rows that normally roll up into a canonical release.",
       },
       {
+        name: "include_prereleases",
+        in: "query",
+        required: false,
+        schema: { type: "boolean" },
+        description:
+          "Include prereleases (canaries / alphas / betas / RCs). Hidden by default to match the source-feed and MCP defaults.",
+      },
+      {
         name: "exclude",
         in: "query",
         required: false,
@@ -160,6 +168,7 @@ releaseRoutes.get(
     const sourceParam = c.req.query("source");
     const orgParam = c.req.query("org");
     const includeCoverage = parseBoolParam(c.req.query("include_coverage"));
+    const includePrereleases = parseBoolParam(c.req.query("include_prereleases"));
 
     // Reject typos with a 400 — silent fallthrough would return unfiltered
     // releases AND cache-collide with the default homepage shape.
@@ -211,6 +220,7 @@ releaseRoutes.get(
       source: sourceId,
       org: orgId,
       include_coverage: includeCoverage ? "true" : undefined,
+      include_prereleases: includePrereleases ? "true" : undefined,
       exclude: excludeSourceTypes.length > 0 ? excludeSourceTypes.join(",") : undefined,
     });
 
@@ -222,6 +232,7 @@ releaseRoutes.get(
         sourceId,
         orgId,
         includeCoverage,
+        includePrereleases,
         excludeSourceTypes,
         limit: count,
       });

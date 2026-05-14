@@ -6,6 +6,7 @@ import { DAY_MS, WEEK_MS, parseBuckets, fmtVersion } from "@/lib/cadence";
 import { RangeNavigator } from "@/components/range-navigator";
 import { ReleaseHeatmap, type HeatmapData } from "@/components/release-heatmap";
 import { ViewModeToggle, type ViewMode } from "@/components/view-mode-toggle";
+import { VersionRangeDiff } from "@/components/version-range-diff";
 import {
   RangePills,
   Stat,
@@ -153,9 +154,11 @@ export function SourceTimeline({ activity, heatmap, trackingSince }: SourceTimel
               : `${summaryStats.versionRange.rawFrom} → ${summaryStats.versionRange.rawTo}`
           }
           value={
-            summaryStats.versionRange.collapsed
-              ? summaryStats.versionRange.to
-              : `${summaryStats.versionRange.from} → ${summaryStats.versionRange.to}`
+            <VersionRangeDiff
+              from={summaryStats.versionRange.from}
+              to={summaryStats.versionRange.to}
+              collapsed={summaryStats.versionRange.collapsed}
+            />
           }
         />
       )}
