@@ -201,7 +201,9 @@ logger.info(`found ${rows.length} release${rows.length === 1 ? "" : "s"}`);
 
 // Pre-flight cost estimate. Per-row ≈ system prompt (~4k tok) + body/4 chars
 // per token for input + ~300 output tokens. Pricing: $1/M input, $5/M output
-// (Haiku 4.5 list price; cache never activates today, see file header).
+// (Haiku 4.5 list price). This intentionally assumes worst-case no-cache
+// rates so the budget guard errs on the side of aborting — in practice the
+// ephemeral cache activates after the first call (~10× cheaper on reads).
 const estInputTokens = rows.reduce((sum, r) => sum + 4000 + Math.ceil(r.content.length / 4), 0);
 const estOutputTokens = rows.length * 300;
 const estCostUsd = (estInputTokens * 1) / 1_000_000 + (estOutputTokens * 5) / 1_000_000;
