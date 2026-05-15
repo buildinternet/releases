@@ -15,6 +15,18 @@ function getEncoder(): Tiktoken {
 }
 
 /**
+ * `allowedSpecial="all"` + `disallowedSpecial=[]` so literal special-token
+ * strings (e.g. `<|endoftext|>`, `<|fim_prefix|>`) in release bodies don't
+ * throw — js-tiktoken defaults to rejecting them, and they turn up legitimately
+ * in AI-model docs and changelog code blocks (mastra, llama-cpp, transformers,
+ * …). We only need a count here, so collapsing the literal into a single
+ * special-token id is fine.
+ */
+function encodeTokens(text: string): number[] {
+  return getEncoder().encode(text, "all", []);
+}
+
+/**
  * Safety cap for {@link countTokensSafe}. js-tiktoken's BPE merge is
  * worst-case O(n²) on pathologically repetitive input; anything at or
  * above this size falls back to the heuristic to keep request latency
@@ -24,14 +36,14 @@ const LIVE_ENCODE_MAX_CHARS = 256 * 1024;
 
 export function countTokens(text: string): number {
   if (text.length === 0) return 0;
-  return getEncoder().encode(text).length;
+  return encodeTokens(text).length;
 }
 
 /** Exact for inputs under 256KB, chars/4 heuristic above. */
 export function countTokensSafe(text: string): number {
   if (text.length === 0) return 0;
   if (text.length >= LIVE_ENCODE_MAX_CHARS) return estimateTokens(text);
-  return getEncoder().encode(text).length;
+  return encodeTokens(text).length;
 }
 
 export function estimateTokens(text: string): number {

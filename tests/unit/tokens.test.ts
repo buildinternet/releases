@@ -23,6 +23,15 @@ describe("countTokens", () => {
     const text = "## v1.0.0\n- first\n- second\n- third\n";
     expect(countTokens(text)).toBe(countTokens(text));
   });
+
+  // Mastra et al. ship release bodies that include literal `<|endoftext|>` /
+  // `<|fim_prefix|>` in model-output code blocks. js-tiktoken throws on these
+  // by default; we pass `disallowedSpecial=[]` so token counting tolerates them.
+  it("tolerates literal special-token strings in input", () => {
+    expect(() => countTokens("hello <|endoftext|> world")).not.toThrow();
+    expect(() => countTokens("<|fim_prefix|>foo<|fim_suffix|>bar")).not.toThrow();
+    expect(countTokens("<|endoftext|>")).toBeGreaterThan(0);
+  });
 });
 
 describe("countTokensSafe", () => {

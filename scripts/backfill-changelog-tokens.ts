@@ -83,7 +83,8 @@ export function exactTokensBySection(content: string): number {
   let total = 0;
   for (const section of sections) {
     if (section.length === 0) continue;
-    total += enc.encode(section).length;
+    // Matches tokens.ts: tolerate literal `<|endoftext|>` etc. in source bodies.
+    total += enc.encode(section, "all", []).length;
   }
   return total;
 }
