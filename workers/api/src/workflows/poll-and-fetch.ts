@@ -13,6 +13,7 @@ import { drizzle } from "drizzle-orm/d1";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { organizations, products, releases, sources } from "@buildinternet/releases-core/schema";
 import type { Source } from "@buildinternet/releases-core/schema";
+import { releaseCoverage } from "@releases/db/schema-coverage.js";
 import { SOURCE_DELETED_SENTINEL, recordWorkflowFailure } from "./_shared.js";
 import { logEvent } from "@releases/lib/log-event";
 import { getSecret } from "@releases/lib/secrets";
@@ -162,6 +163,10 @@ export async function generateContentForReleases(
   for (let i = 0; i < insertedIds.length; i += IN_ARRAY_CHUNK_SIZE) {
     const chunk = insertedIds.slice(i, i + IN_ARRAY_CHUNK_SIZE);
     // eslint-disable-next-line no-await-in-loop -- D1 chunked SELECT (100 bind param limit)
+    // Skip coverage-side rows: they're hidden from read paths by default, so
+    // summarizing them is a pure waste. The LEFT JOIN keeps canonical and
+    // unlinked rows; the IS NULL filter drops anything that's already linked
+    // as coverage to another release.
     const chunkRows: ContentRow[] = await db
       .select({
         id: releases.id,
@@ -177,7 +182,14 @@ export async function generateContentForReleases(
       .innerJoin(sources, eq(sources.id, releases.sourceId))
       .innerJoin(organizations, eq(organizations.id, sources.orgId))
       .leftJoin(products, eq(products.id, sources.productId))
-      .where(and(inArray(releases.id, chunk), eq(organizations.autoGenerateContent, true)));
+      .leftJoin(releaseCoverage, eq(releaseCoverage.coverageId, releases.id))
+      .where(
+        and(
+          inArray(releases.id, chunk),
+          eq(organizations.autoGenerateContent, true),
+          sql`${releaseCoverage.coverageId} IS NULL`,
+        ),
+      );
     rows.push(...chunkRows);
   }
 
