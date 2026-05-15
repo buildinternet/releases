@@ -4,6 +4,7 @@ import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import type { OrgListItem } from "@/lib/api";
 import { HoverCard } from "@/components/hover-card";
+import { OrgAvatar } from "@/components/org-avatar";
 import { Sparkline } from "@/components/sparkline";
 import { AbsoluteDateTooltip } from "@/components/date-tooltip";
 
@@ -186,7 +187,17 @@ export function OrgTable({ orgs }: { orgs: OrgListItem[] }) {
               <td className="px-4 py-2.5 font-medium text-stone-900 dark:text-stone-100">
                 <HoverCard.Root>
                   <HoverCard.Trigger>
-                    <span className="truncate">{org.name}</span>
+                    <span className="inline-flex items-center gap-2 min-w-0">
+                      {org.avatarUrl && (
+                        <OrgAvatar
+                          avatarUrl={org.avatarUrl}
+                          githubHandle={null}
+                          name={org.name}
+                          size={18}
+                        />
+                      )}
+                      <span className="truncate">{org.name}</span>
+                    </span>
                   </HoverCard.Trigger>
                   <HoverCard.Content side="bottom" align="start" sideOffset={4}>
                     <OrgHoverContent org={org} />
