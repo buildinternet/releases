@@ -14,12 +14,17 @@
  *   bun scripts/generate-release-content.ts --orgs=vercel         # one or more org slugs (comma-sep)
  *   bun scripts/generate-release-content.ts --orgs=all --since=30 # everything in past N days
  *   bun scripts/generate-release-content.ts --apply --since=1
+ *   bun scripts/generate-release-content.ts --apply --max-cost=25 # override $10 default ceiling
  *
  * Cost: ~$0.005/release at list price (Haiku 4.5; system prompt is the
  * dominant input at ~3,971 tokens). The Haiku 4.5 cache threshold is
  * 4,096 tokens, so this prompt sits just below the cutoff and ephemeral
  * caching never activates. See issue #851 for AI Gateway / alternate
  * model exploration.
+ *
+ * Budget guard: before any API calls, the script estimates total cost from
+ * candidate count + body sizes and aborts if the estimate exceeds
+ * `--max-cost` (default $10). Override per-run for deliberate larger backfills.
  */
 
 import Anthropic from "@anthropic-ai/sdk";
@@ -35,6 +40,7 @@ const argv = process.argv.slice(2);
 const apply = argv.includes("--apply");
 const orgsArg = argv.find((a) => a.startsWith("--orgs="))?.split("=")[1];
 const sinceArg = argv.find((a) => a.startsWith("--since="))?.split("=")[1];
+const maxCostArg = argv.find((a) => a.startsWith("--max-cost="))?.split("=")[1];
 
 const orgs = !orgsArg
   ? ["openai", "anthropic"]
@@ -55,6 +61,12 @@ if (Array.isArray(orgs) && orgs.length === 0) {
 
 if (sinceArg && Number.isNaN(sinceDays)) {
   logger.error("--since must be an integer number of days");
+  process.exit(1);
+}
+
+const maxCostUsd = maxCostArg ? Number.parseFloat(maxCostArg) : 10;
+if (maxCostArg && (Number.isNaN(maxCostUsd) || maxCostUsd <= 0)) {
+  logger.error("--max-cost must be a positive number (dollars)");
   process.exit(1);
 }
 
@@ -180,9 +192,26 @@ const client = new Anthropic({ apiKey });
 logger.info(`mode: ${apply ? "APPLY (writes to D1 prod)" : "DRY RUN"}`);
 logger.info(`orgs: ${orgs ? orgs.join(",") : "all"}`);
 logger.info(`since: past ${sinceDays} day${sinceDays === 1 ? "" : "s"} (cutoff ${cutoffIso})`);
+logger.info(`budget ceiling: $${maxCostUsd.toFixed(2)} (override with --max-cost=N)`);
 logger.info("fetching candidate releases…");
 const rows = await fetchReleases();
 logger.info(`found ${rows.length} release${rows.length === 1 ? "" : "s"}`);
+
+// Pre-flight cost estimate. Per-row ≈ system prompt (~4k tok) + body/4 chars
+// per token for input + ~300 output tokens. Pricing: $1/M input, $5/M output
+// (Haiku 4.5 list price; cache never activates today, see file header).
+const estInputTokens = rows.reduce((sum, r) => sum + 4000 + Math.ceil(r.content.length / 4), 0);
+const estOutputTokens = rows.length * 300;
+const estCostUsd = (estInputTokens * 1) / 1_000_000 + (estOutputTokens * 5) / 1_000_000;
+logger.info(
+  `estimated cost: $${estCostUsd.toFixed(4)} (${estInputTokens.toLocaleString()} input + ${estOutputTokens.toLocaleString()} output tokens)`,
+);
+if (estCostUsd > maxCostUsd) {
+  logger.error(
+    `estimated cost $${estCostUsd.toFixed(2)} exceeds --max-cost $${maxCostUsd.toFixed(2)}; re-run with a higher --max-cost or narrow --orgs/--since`,
+  );
+  process.exit(1);
+}
 
 let totalInput = 0;
 let totalOutput = 0;
