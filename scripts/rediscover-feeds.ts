@@ -28,6 +28,7 @@ import {
   discoverFeed,
   fetchAndParseFeed,
 } from "../packages/adapters/src/feed.js";
+import { logger } from "@buildinternet/releases-lib/logger";
 import { adminPatch } from "./lib/admin-client.js";
 
 type SourceRow = {
@@ -65,10 +66,6 @@ const slugFilter = (() => {
   const i = process.argv.indexOf("--slug");
   return i > -1 ? process.argv[i + 1] : null;
 })();
-
-function log(msg: string): void {
-  process.stderr.write(`${msg}\n`);
-}
 
 function parseMetadata(raw: string | null | undefined): Record<string, unknown> {
   try {
@@ -179,20 +176,20 @@ async function processOne(row: Candidate): Promise<Verdict> {
 
 async function main(): Promise<void> {
   const candidates = await listCandidates();
-  log(`Evaluating ${candidates.length} scrape-no-feed source(s) via ${API_URL}...`);
+  logger.info(`Evaluating ${candidates.length} scrape-no-feed source(s) via ${API_URL}...`);
 
   const verdicts: Verdict[] = [];
   for (const row of candidates) {
-    log(`  ${row.slug} ← ${row.url}`);
+    logger.info(`  ${row.slug} ← ${row.url}`);
     // oxlint-disable-next-line no-await-in-loop -- sequential: external HTTP probes per source; rate limit applies
     const v = await processOne(row);
     let statusLabel: string = v.status;
     if (v.status === "promoted") statusLabel = apply ? "promoted" : "would promote";
-    log(
+    logger.info(
       `    → ${statusLabel}${v.feedUrl ? `: ${v.feedUrl} (${v.feedType})` : ""}${v.error ? ` — ${v.error}` : ""}`,
     );
     if (v.sampleTitles?.length) {
-      for (const t of v.sampleTitles) log(`      • ${t}`);
+      for (const t of v.sampleTitles) logger.info(`      • ${t}`);
     }
     verdicts.push(v);
   }
@@ -202,10 +199,12 @@ async function main(): Promise<void> {
   const errors = verdicts.filter((v) => v.status === "error").length;
   const noFeed = verdicts.filter((v) => v.status === "no-feed").length;
 
-  log("");
-  log(`${promoted} would promote · ${empty} empty-feed · ${errors} errors · ${noFeed} no feed`);
+  logger.info("");
+  logger.info(
+    `${promoted} would promote · ${empty} empty-feed · ${errors} errors · ${noFeed} no feed`,
+  );
   if (!apply && promoted > 0) {
-    log("Re-run with --apply to write metadata.");
+    logger.info("Re-run with --apply to write metadata.");
   }
 
   if (jsonOut) {
@@ -215,6 +214,6 @@ async function main(): Promise<void> {
 }
 
 main().catch((err) => {
-  log(`FATAL: ${err instanceof Error ? err.message : err}`);
+  logger.error(`FATAL: ${err instanceof Error ? err.message : err}`);
   process.exit(1);
 });

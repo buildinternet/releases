@@ -252,7 +252,12 @@ async function runRealtime(rows: ReleaseRow[]): Promise<PerRow[]> {
 async function runBatch(
   rows: ReleaseRow[],
   opts: { estCostUsd: number },
-): Promise<{ perRow: PerRow[]; batchRunId: string | null }> {
+): Promise<{
+  perRow: PerRow[];
+  batchRunId: string | null;
+  finalExpired: number;
+  finalCanceled: number;
+}> {
   // Empty-body rows short-circuit on the local side: returning a `skipped`
   // result mirrors what `summarizeRelease` does on the real-time path, and
   // keeps us from paying for a batch slot on rows we'd skip anyway.
@@ -277,7 +282,8 @@ async function runBatch(
     eligible.push({ row, input });
   }
 
-  if (eligible.length === 0) return { perRow: out, batchRunId: null };
+  if (eligible.length === 0)
+    return { perRow: out, batchRunId: null, finalExpired: 0, finalCanceled: 0 };
 
   logger.info(`submitting batch of ${eligible.length} request${eligible.length === 1 ? "" : "s"}…`);
   const submitted = await submitBatch(
@@ -392,7 +398,12 @@ async function runBatch(
         break;
     }
   }
-  return { perRow: out, batchRunId };
+  return {
+    perRow: out,
+    batchRunId,
+    finalExpired: finalBatch.request_counts.expired,
+    finalCanceled: finalBatch.request_counts.canceled,
+  };
 }
 
 const client = new Anthropic({ apiKey });
@@ -436,6 +447,8 @@ if (!apply) {
 }
 
 let batchRunId: string | null = null;
+let batchFinalExpired = 0;
+let batchFinalCanceled = 0;
 let perRow: PerRow[];
 if (noBatch) {
   perRow = await runRealtime(rows);
@@ -443,6 +456,8 @@ if (noBatch) {
   const result = await runBatch(rows, { estCostUsd });
   perRow = result.perRow;
   batchRunId = result.batchRunId;
+  batchFinalExpired = result.finalExpired;
+  batchFinalCanceled = result.finalCanceled;
 }
 
 let totalInput = 0;
@@ -559,8 +574,8 @@ if (batchRunId) {
     endedAt: new Date().toISOString(),
     requestCountSucceeded: succeededCount,
     requestCountErrored: erroredEntries.length,
-    requestCountExpired: finalBatch.request_counts.expired,
-    requestCountCanceled: finalBatch.request_counts.canceled,
+    requestCountExpired: batchFinalExpired,
+    requestCountCanceled: batchFinalCanceled,
     actualCostUsd,
     errorSummary,
   });

@@ -26,6 +26,7 @@ import { logger } from "@buildinternet/releases-lib/logger";
 
 const BASE_URL = (process.env.RELEASED_API_URL ?? "https://api.releases.sh").replace(/\/$/, "");
 const API_KEY = process.env.RELEASED_API_KEY;
+const STAGING_KEY = process.env.STAGING_ACCESS_KEY;
 
 // ── Defaults ─────────────────────────────────────────────────────────────────
 
@@ -68,9 +69,13 @@ function errorMessage(err: unknown): string {
 function makeSignal(
   timeoutMs: number,
   external?: AbortSignal,
-): { signal: AbortSignal; cleanup: () => void } {
+): { signal: AbortSignal; cleanup: () => void; isTimeout: () => boolean } {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
 
   let onAbort: (() => void) | null = null;
   if (external) {
@@ -90,7 +95,7 @@ function makeSignal(
     }
   };
 
-  return { signal: controller.signal, cleanup };
+  return { signal: controller.signal, cleanup, isTimeout: () => timedOut };
 }
 
 async function request<T>(
@@ -109,12 +114,15 @@ async function request<T>(
   }
 
   const timeoutMs = resolveTimeout(opts);
-  const { signal, cleanup } = makeSignal(timeoutMs, opts?.signal);
+  const { signal, cleanup, isTimeout } = makeSignal(timeoutMs, opts?.signal);
 
   const headers: Record<string, string> = {
     Authorization: `Bearer ${API_KEY}`,
     Accept: "application/json",
   };
+  if (STAGING_KEY) {
+    headers["X-Releases-Staging-Key"] = STAGING_KEY;
+  }
   if (body !== undefined) {
     headers["Content-Type"] = "application/json";
   }
@@ -126,7 +134,6 @@ async function request<T>(
       body: body !== undefined ? JSON.stringify(body) : undefined,
       signal,
     });
-    cleanup();
 
     if (!res.ok) {
       const text = await res.text().catch(() => "");
@@ -144,8 +151,7 @@ async function request<T>(
     }
     return (await res.json()) as T;
   } catch (err) {
-    cleanup();
-    if (err instanceof Error && err.name === "AbortError") {
+    if (err instanceof Error && err.name === "AbortError" && isTimeout()) {
       if (required)
         throw new Error(`${method} /v1${path} timed out after ${timeoutMs}ms`, { cause: err });
       return null;
@@ -153,6 +159,8 @@ async function request<T>(
     if (required) throw err;
     logger.warn(`${method} /v1${path} failed: ${errorMessage(err)}`);
     return null;
+  } finally {
+    cleanup();
   }
 }
 
