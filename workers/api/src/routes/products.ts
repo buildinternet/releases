@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { describeRoute, resolver } from "hono-openapi";
 import { hideInProduction } from "../openapi.js";
-import { and, count, eq, sql } from "drizzle-orm";
+import { and, count, eq, inArray, sql } from "drizzle-orm";
 import { createDb } from "../db.js";
 import {
   products,
@@ -45,6 +45,7 @@ import { embedAndUpsertEntities, type EntityKind } from "@releases/search/embed-
 import { buildEmbedConfig } from "../lib/embed-config.js";
 import { logEvent } from "@releases/lib/log-event";
 import { buildListResponse, parseListPagination } from "../lib/pagination.js";
+import { IN_ARRAY_CHUNK_SIZE } from "../lib/d1-limits.js";
 
 export const productRoutes = new Hono<Env>();
 
@@ -733,16 +734,20 @@ productRoutes.delete(
     const product = await resolveProductFromContext(c, db);
     if (!product) return c.json({ error: "not_found", message: "Product not found" }, 404);
 
-    for (const tagName of tagNames) {
-      const tagSlug = toSlug(tagName);
-      // oxlint-disable-next-line no-await-in-loop -- sequential: tag lookup result feeds the delete
-      const [tag] = await db.select().from(tags).where(eq(tags.slug, tagSlug));
-      if (tag) {
-        // oxlint-disable-next-line no-await-in-loop -- sequential per-tag delete; ordering matters for partial success
-        await db
-          .delete(productTags)
-          .where(and(eq(productTags.productId, product.id), eq(productTags.tagId, tag.id)));
-      }
+    const slugs = Array.from(new Set(tagNames.map((t) => toSlug(t))));
+    if (slugs.length === 0) return c.json({ ok: true });
+    // Single DELETE per chunk via a tag-slug subquery — the per-name SELECT
+    // phase folds into the DELETE. For the typical request (<= IN_ARRAY_CHUNK_SIZE
+    // tags) this is one D1 round-trip total.
+    for (let i = 0; i < slugs.length; i += IN_ARRAY_CHUNK_SIZE) {
+      const chunk = slugs.slice(i, i + IN_ARRAY_CHUNK_SIZE);
+      const tagIdsForSlugs = db.select({ id: tags.id }).from(tags).where(inArray(tags.slug, chunk));
+      // oxlint-disable-next-line no-await-in-loop -- chunked DELETE
+      await db
+        .delete(productTags)
+        .where(
+          and(eq(productTags.productId, product.id), inArray(productTags.tagId, tagIdsForSlugs)),
+        );
     }
     return c.json({ ok: true });
   },

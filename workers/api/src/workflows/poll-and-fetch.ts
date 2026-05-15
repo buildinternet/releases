@@ -212,11 +212,22 @@ export async function generateContentForReleases(
   const startedAt = Date.now();
   const client = buildAnthropicClient({ apiKey, ...(await resolveGatewayOpts(env)) });
 
-  let generated = 0;
   let skippedEmpty = 0;
   let skippedTooLarge = 0;
   let failed = 0;
   let totalTokens = 0;
+
+  // Sequential LLM calls (cache warming + cost bounding depend on this), then
+  // a single batched UPDATE pass at the end. Each UPDATE binds 4 values
+  // (titleGenerated, titleShort, summary, id) → chunk at 25 to stay under
+  // D1's 100-bind per-statement cap. WHERE title_short IS NULL preserves
+  // idempotency against step retry.
+  const updates: {
+    id: string;
+    titleGenerated: string | null;
+    titleShort: string | null;
+    summary: string | null;
+  }[] = [];
 
   for (const row of rows) {
     if ((row.content?.length ?? 0) > MAX_AUTOGEN_BODY_CHARS) {
@@ -251,16 +262,12 @@ export async function generateContentForReleases(
         skippedEmpty++;
         continue;
       }
-      // eslint-disable-next-line no-await-in-loop -- per-row UPDATE; volume is negligible
-      await db
-        .update(releases)
-        .set({
-          titleGenerated: result.title,
-          titleShort: result.titleShort,
-          summary: result.summary,
-        })
-        .where(and(eq(releases.id, row.id), sql`${releases.titleShort} IS NULL`));
-      generated++;
+      updates.push({
+        id: row.id,
+        titleGenerated: result.title,
+        titleShort: result.titleShort,
+        summary: result.summary,
+      });
     } catch (err) {
       failed++;
       logEvent("warn", {
@@ -268,6 +275,32 @@ export async function generateContentForReleases(
         event: "generation-failed",
         releaseId: row.id,
         orgSlug: row.orgSlug,
+        err,
+      });
+    }
+  }
+
+  let generated = 0;
+  const UPDATE_CHUNK_SIZE = 25; // floor(100 / 4 binds per UPDATE)
+  for (let i = 0; i < updates.length; i += UPDATE_CHUNK_SIZE) {
+    const chunk = updates.slice(i, i + UPDATE_CHUNK_SIZE);
+    const statements = chunk.map((u) =>
+      db
+        .update(releases)
+        .set({ titleGenerated: u.titleGenerated, titleShort: u.titleShort, summary: u.summary })
+        .where(and(eq(releases.id, u.id), sql`${releases.titleShort} IS NULL`)),
+    );
+    try {
+      // eslint-disable-next-line no-await-in-loop -- chunked batch; parallelism would exceed D1 limits
+      await db.batch(statements as [(typeof statements)[number], ...typeof statements]);
+      generated += chunk.length;
+    } catch (err) {
+      failed += chunk.length;
+      logEvent("warn", {
+        component: "auto-generate-content",
+        event: "update-batch-failed",
+        chunkOffset: i,
+        chunkSize: chunk.length,
         err,
       });
     }

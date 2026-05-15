@@ -65,6 +65,7 @@ import {
   parseLimitParam,
   replaceAliases,
 } from "../utils.js";
+import { IN_ARRAY_CHUNK_SIZE } from "../lib/d1-limits.js";
 import { wantsMarkdown, markdownResponse } from "../middleware/content-negotiation.js";
 import { isValidBearerAuth } from "../middleware/auth.js";
 import { orgToMarkdown, orgReleaseFeedToMarkdown } from "@releases/rendering/formatters.js";
@@ -684,30 +685,18 @@ orgRoutes.delete(
         domain: org.domain ? `${org.domain}--${org.id}` : null,
       })
       .where(eq(organizations.id, org.id));
-    // Cascade-tombstone children. Slug/domain renaming on each child stays
-    // consistent: child id is unique so the suffix is unique.
-    const orgProducts = await db
-      .select({ id: products.id, slug: products.slug })
-      .from(products)
+    // Cascade-tombstone children. The slug-rename suffix uses each row's
+    // own id (`slug || '--' || id`), so the whole cascade for a child table
+    // collapses to a single bulk UPDATE — one statement per child table,
+    // regardless of how many rows the org has.
+    await db
+      .update(products)
+      .set({ deletedAt: now, slug: sql`${products.slug} || '--' || ${products.id}` })
       .where(eq(products.orgId, org.id));
-    for (const p of orgProducts) {
-      // oxlint-disable-next-line no-await-in-loop -- per-row rename to keep slug suffix tied to row id
-      await db
-        .update(products)
-        .set({ deletedAt: now, slug: `${p.slug}--${p.id}` })
-        .where(eq(products.id, p.id));
-    }
-    const orgSources = await db
-      .select({ id: sources.id, slug: sources.slug })
-      .from(sources)
+    await db
+      .update(sources)
+      .set({ deletedAt: now, slug: sql`${sources.slug} || '--' || ${sources.id}` })
       .where(eq(sources.orgId, org.id));
-    for (const s of orgSources) {
-      // oxlint-disable-next-line no-await-in-loop -- per-row rename to keep slug suffix tied to row id
-      await db
-        .update(sources)
-        .set({ deletedAt: now, slug: `${s.slug}--${s.id}` })
-        .where(eq(sources.id, s.id));
-    }
     return c.json({ deleted: true, deletedAt: now });
   },
 );
@@ -1146,14 +1135,18 @@ orgRoutes.delete(
     const [org] = await db.select().from(organizations).where(orgWhere(slug));
     if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
 
-    for (const tagName of tagNames) {
-      const tagSlug = toSlug(tagName);
-      // oxlint-disable-next-line no-await-in-loop -- sequential: tag lookup result feeds the delete
-      const [tag] = await db.select().from(tags).where(eq(tags.slug, tagSlug));
-      if (tag) {
-        // oxlint-disable-next-line no-await-in-loop -- sequential per-tag delete; ordering matters for partial success
-        await db.delete(orgTags).where(and(eq(orgTags.orgId, org.id), eq(orgTags.tagId, tag.id)));
-      }
+    const slugs = Array.from(new Set(tagNames.map((t) => toSlug(t))));
+    if (slugs.length === 0) return c.json({ ok: true });
+    // Single DELETE per chunk via a tag-slug subquery — the per-name SELECT
+    // phase folds into the DELETE. For the typical request (<= IN_ARRAY_CHUNK_SIZE
+    // tags) this is one D1 round-trip total.
+    for (let i = 0; i < slugs.length; i += IN_ARRAY_CHUNK_SIZE) {
+      const chunk = slugs.slice(i, i + IN_ARRAY_CHUNK_SIZE);
+      const tagIdsForSlugs = db.select({ id: tags.id }).from(tags).where(inArray(tags.slug, chunk));
+      // oxlint-disable-next-line no-await-in-loop -- chunked DELETE
+      await db
+        .delete(orgTags)
+        .where(and(eq(orgTags.orgId, org.id), inArray(orgTags.tagId, tagIdsForSlugs)));
     }
     return c.json({ ok: true });
   },
