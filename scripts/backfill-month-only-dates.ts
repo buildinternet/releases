@@ -24,9 +24,9 @@
 
 import { inferMonthOnlyDate } from "@buildinternet/releases-core/dates";
 import { logger } from "@buildinternet/releases-lib/logger";
+import { adminGet, adminPatch as adminPatchClient } from "./lib/admin-client.js";
 
 const API_URL = process.env.RELEASED_API_URL;
-const API_KEY = process.env.RELEASED_API_KEY;
 
 interface ParsedArgs {
   apply: boolean;
@@ -69,33 +69,21 @@ function parseArgs(argv: string[]): ParsedArgs {
 }
 
 // ── API helpers ────────────────────────────────────────────────────────────
+// Thin wrappers that strip the leading "/v1" prefix (the admin client adds it)
+// and enforce required semantics (throwOnError: true).
+
+const REQUIRED = { throwOnError: true as const };
 
 async function apiGet<T>(path: string): Promise<T> {
-  const res = await fetch(`${API_URL}${path}`, {
-    headers: { Accept: "application/json", Authorization: `Bearer ${API_KEY}` },
-  });
-  if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    throw new Error(`GET ${path} → ${res.status}: ${body}`);
-  }
-  return res.json() as Promise<T>;
+  // Strip the /v1 prefix — admin-client prepends it internally.
+  const result = await adminGet<T>(path.replace(/^\/v1/, ""), REQUIRED);
+  // With throwOnError: true, null only occurs on 204/empty-body responses,
+  // never for real data endpoints.
+  return result as T;
 }
 
-async function apiPatch<T>(path: string, body: unknown): Promise<T> {
-  const res = await fetch(`${API_URL}${path}`, {
-    method: "PATCH",
-    headers: {
-      "Content-Type": "application/json",
-      Accept: "application/json",
-      Authorization: `Bearer ${API_KEY}`,
-    },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`PATCH ${path} → ${res.status}: ${text}`);
-  }
-  return res.json() as Promise<T>;
+async function apiPatch(path: string, body: unknown): Promise<void> {
+  await adminPatchClient(path.replace(/^\/v1/, ""), body, REQUIRED);
 }
 
 interface SourceItem {
@@ -231,8 +219,8 @@ async function run(args: ParsedArgs): Promise<BackfillRow[]> {
 // ── Entry point ────────────────────────────────────────────────────────────
 
 async function main() {
-  if (!API_URL || !API_KEY) {
-    throw new Error("RELEASED_API_URL and RELEASED_API_KEY must be set");
+  if (!API_URL) {
+    throw new Error("RELEASED_API_URL must be set");
   }
   const args = parseArgs(process.argv.slice(2));
   logger.info(

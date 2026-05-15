@@ -28,6 +28,8 @@ import {
   discoverFeed,
   fetchAndParseFeed,
 } from "../packages/adapters/src/feed.js";
+import { logger } from "@buildinternet/releases-lib/logger";
+import { adminPatch } from "./lib/admin-client.js";
 
 type SourceRow = {
   id: string;
@@ -56,7 +58,6 @@ type Verdict = {
 };
 
 const API_URL = process.env.RELEASED_API_URL ?? "https://api.releases.sh";
-const API_KEY = process.env.RELEASED_API_KEY;
 
 const args = new Set(process.argv.slice(2));
 const apply = args.has("--apply");
@@ -65,10 +66,6 @@ const slugFilter = (() => {
   const i = process.argv.indexOf("--slug");
   return i > -1 ? process.argv[i + 1] : null;
 })();
-
-function log(msg: string): void {
-  process.stderr.write(`${msg}\n`);
-}
 
 function parseMetadata(raw: string | null | undefined): Record<string, unknown> {
   try {
@@ -111,7 +108,6 @@ async function patchSource(
   source: Pick<SourceRow, "id" | "slug" | "orgSlug">,
   patchedMetadata: Record<string, unknown>,
 ): Promise<void> {
-  if (!API_KEY) throw new Error("RELEASED_API_KEY required to --apply");
   // The schema enforces sources.orgId NOT NULL post-#690 Phase C, so
   // orgSlug should always populate in GET /v1/sources. If it ever doesn't
   // (stale staging API, mid-migration row, etc.), fail loudly with the
@@ -122,19 +118,8 @@ async function patchSource(
       `source ${source.slug} (${source.id}) is missing orgSlug — refusing to construct an org-scoped PATCH URL`,
     );
   }
-  const path = `/v1/orgs/${encodeURIComponent(source.orgSlug)}/sources/${encodeURIComponent(source.id)}`;
-  const res = await fetch(`${API_URL}${path}`, {
-    method: "PATCH",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${API_KEY}`,
-    },
-    body: JSON.stringify({ metadata: JSON.stringify(patchedMetadata) }),
-  });
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`PATCH failed: ${res.status} ${body.slice(0, 200)}`);
-  }
+  const path = `/orgs/${encodeURIComponent(source.orgSlug)}/sources/${encodeURIComponent(source.id)}`;
+  await adminPatch(path, { metadata: JSON.stringify(patchedMetadata) }, { throwOnError: true });
 }
 
 async function processOne(row: Candidate): Promise<Verdict> {
@@ -191,20 +176,20 @@ async function processOne(row: Candidate): Promise<Verdict> {
 
 async function main(): Promise<void> {
   const candidates = await listCandidates();
-  log(`Evaluating ${candidates.length} scrape-no-feed source(s) via ${API_URL}...`);
+  logger.info(`Evaluating ${candidates.length} scrape-no-feed source(s) via ${API_URL}...`);
 
   const verdicts: Verdict[] = [];
   for (const row of candidates) {
-    log(`  ${row.slug} ← ${row.url}`);
+    logger.info(`  ${row.slug} ← ${row.url}`);
     // oxlint-disable-next-line no-await-in-loop -- sequential: external HTTP probes per source; rate limit applies
     const v = await processOne(row);
     let statusLabel: string = v.status;
     if (v.status === "promoted") statusLabel = apply ? "promoted" : "would promote";
-    log(
+    logger.info(
       `    → ${statusLabel}${v.feedUrl ? `: ${v.feedUrl} (${v.feedType})` : ""}${v.error ? ` — ${v.error}` : ""}`,
     );
     if (v.sampleTitles?.length) {
-      for (const t of v.sampleTitles) log(`      • ${t}`);
+      for (const t of v.sampleTitles) logger.info(`      • ${t}`);
     }
     verdicts.push(v);
   }
@@ -214,10 +199,12 @@ async function main(): Promise<void> {
   const errors = verdicts.filter((v) => v.status === "error").length;
   const noFeed = verdicts.filter((v) => v.status === "no-feed").length;
 
-  log("");
-  log(`${promoted} would promote · ${empty} empty-feed · ${errors} errors · ${noFeed} no feed`);
+  logger.info("");
+  logger.info(
+    `${promoted} would promote · ${empty} empty-feed · ${errors} errors · ${noFeed} no feed`,
+  );
   if (!apply && promoted > 0) {
-    log("Re-run with --apply to write metadata.");
+    logger.info("Re-run with --apply to write metadata.");
   }
 
   if (jsonOut) {
@@ -227,6 +214,6 @@ async function main(): Promise<void> {
 }
 
 main().catch((err) => {
-  log(`FATAL: ${err instanceof Error ? err.message : err}`);
+  logger.error(`FATAL: ${err instanceof Error ? err.message : err}`);
   process.exit(1);
 });

@@ -50,6 +50,7 @@ import {
   type SummarizeReleaseResult,
 } from "@releases/ai-internal/release-content";
 import { collectResults, pollBatch, submitBatch } from "@releases/ai-internal/batch";
+import { adminPatch, adminPost } from "./lib/admin-client.js";
 
 const argv = process.argv.slice(2);
 const apply = argv.includes("--apply");
@@ -92,65 +93,9 @@ if (!apiKey) {
   process.exit(1);
 }
 
-// ── Admin API client (best-effort persistence) ───────────────────────────────
-// The script predates any API calls; this is the minimal setup needed for
-// batch_runs persistence. Writes are fire-and-forget — failure to persist
-// does NOT abort the generation run (observability is best-effort).
-const adminApiUrl = (process.env.RELEASED_API_URL ?? "https://api.releases.sh").replace(/\/$/, "");
-const adminApiKey = process.env.RELEASED_API_KEY;
-
-async function adminPost(path: string, body: unknown): Promise<unknown | null> {
-  if (!adminApiKey) return null;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 3_000);
-  try {
-    const res = await fetch(`${adminApiUrl}/v1${path}`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${adminApiKey}`,
-      },
-      body: JSON.stringify(body),
-      signal: controller.signal,
-    });
-    clearTimeout(timer);
-    if (!res.ok) {
-      logger.warn(`batch-runs persist: POST ${path} returned ${res.status}`);
-      return null;
-    }
-    return res.json();
-  } catch (err) {
-    clearTimeout(timer);
-    if (err instanceof Error && err.name === "AbortError") return null;
-    logger.warn(`batch-runs persist: POST ${path} failed: ${errorMessage(err)}`);
-    return null;
-  }
-}
-
-async function adminPatch(path: string, body: unknown): Promise<void> {
-  if (!adminApiKey) return;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 3_000);
-  try {
-    const res = await fetch(`${adminApiUrl}/v1${path}`, {
-      method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${adminApiKey}`,
-      },
-      body: JSON.stringify(body),
-      signal: controller.signal,
-    });
-    clearTimeout(timer);
-    if (!res.ok) {
-      logger.warn(`batch-runs persist: PATCH ${path} returned ${res.status}`);
-    }
-  } catch (err) {
-    clearTimeout(timer);
-    if (err instanceof Error && err.name === "AbortError") return;
-    logger.warn(`batch-runs persist: PATCH ${path} failed: ${errorMessage(err)}`);
-  }
-}
+// adminPost and adminPatch are imported from ./lib/admin-client.js.
+// Both use best-effort semantics (throwOnError defaults to false) with a 3s
+// timeout — writes are fire-and-forget; failure does NOT abort the run.
 
 const cutoffIso = daysAgoIso(sinceDays);
 
@@ -307,7 +252,12 @@ async function runRealtime(rows: ReleaseRow[]): Promise<PerRow[]> {
 async function runBatch(
   rows: ReleaseRow[],
   opts: { estCostUsd: number },
-): Promise<{ perRow: PerRow[]; batchRunId: string | null }> {
+): Promise<{
+  perRow: PerRow[];
+  batchRunId: string | null;
+  finalExpired: number;
+  finalCanceled: number;
+}> {
   // Empty-body rows short-circuit on the local side: returning a `skipped`
   // result mirrors what `summarizeRelease` does on the real-time path, and
   // keeps us from paying for a batch slot on rows we'd skip anyway.
@@ -332,7 +282,8 @@ async function runBatch(
     eligible.push({ row, input });
   }
 
-  if (eligible.length === 0) return { perRow: out, batchRunId: null };
+  if (eligible.length === 0)
+    return { perRow: out, batchRunId: null, finalExpired: 0, finalCanceled: 0 };
 
   logger.info(`submitting batch of ${eligible.length} request${eligible.length === 1 ? "" : "s"}…`);
   const submitted = await submitBatch(
@@ -447,7 +398,12 @@ async function runBatch(
         break;
     }
   }
-  return { perRow: out, batchRunId };
+  return {
+    perRow: out,
+    batchRunId,
+    finalExpired: finalBatch.request_counts.expired,
+    finalCanceled: finalBatch.request_counts.canceled,
+  };
 }
 
 const client = new Anthropic({ apiKey });
@@ -491,6 +447,8 @@ if (!apply) {
 }
 
 let batchRunId: string | null = null;
+let batchFinalExpired = 0;
+let batchFinalCanceled = 0;
 let perRow: PerRow[];
 if (noBatch) {
   perRow = await runRealtime(rows);
@@ -498,6 +456,8 @@ if (noBatch) {
   const result = await runBatch(rows, { estCostUsd });
   perRow = result.perRow;
   batchRunId = result.batchRunId;
+  batchFinalExpired = result.finalExpired;
+  batchFinalCanceled = result.finalCanceled;
 }
 
 let totalInput = 0;
@@ -614,8 +574,8 @@ if (batchRunId) {
     endedAt: new Date().toISOString(),
     requestCountSucceeded: succeededCount,
     requestCountErrored: erroredEntries.length,
-    requestCountExpired: finalBatch.request_counts.expired,
-    requestCountCanceled: finalBatch.request_counts.canceled,
+    requestCountExpired: batchFinalExpired,
+    requestCountCanceled: batchFinalCanceled,
     actualCostUsd,
     errorSummary,
   });

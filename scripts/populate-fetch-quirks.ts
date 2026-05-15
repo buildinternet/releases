@@ -31,6 +31,8 @@ import {
   type FetchQuirk,
   type PlaybookFrontmatter,
 } from "../packages/ai/src/playbook.js";
+import { logger } from "@buildinternet/releases-lib/logger";
+import { adminGet, adminPatch } from "./lib/admin-client.js";
 
 type DetectorClass = FetchQuirk["changeDetector"];
 
@@ -59,7 +61,6 @@ type OrgPlan = {
 
 const REPORT_PATH = ".context/515-change-detectors.md";
 const API_URL = process.env.RELEASED_API_URL ?? "https://api.releases.sh";
-const API_KEY = process.env.RELEASED_API_KEY;
 
 const argv = process.argv.slice(2);
 const args = new Set(argv);
@@ -71,10 +72,6 @@ for (let i = 0; i < argv.length; i++) {
     skipSet.add(argv[i + 1]);
     i++;
   }
-}
-
-function log(msg: string): void {
-  process.stderr.write(`${msg}\n`);
 }
 
 /** Parse the ".context/515-change-detectors.md" per-source table. */
@@ -143,31 +140,19 @@ async function listSources(): Promise<Map<string, SourceRow>> {
 }
 
 async function getPlaybookNotes(orgSlug: string): Promise<string | null> {
-  if (!API_KEY) throw new Error("RELEASED_API_KEY required to read playbooks");
-  const res = await fetch(`${API_URL}/v1/orgs/${encodeURIComponent(orgSlug)}/playbook`, {
-    headers: { Authorization: `Bearer ${API_KEY}` },
-  });
-  if (!res.ok) {
-    throw new Error(`GET playbook for ${orgSlug} failed: ${res.status}`);
-  }
-  const body = (await res.json()) as { notes?: string | null } | null;
+  const body = await adminGet<{ notes?: string | null } | null>(
+    `/orgs/${encodeURIComponent(orgSlug)}/playbook`,
+    { throwOnError: true },
+  );
   return body?.notes ?? null;
 }
 
 async function patchPlaybookNotes(orgSlug: string, notes: string): Promise<void> {
-  if (!API_KEY) throw new Error("RELEASED_API_KEY required to --apply");
-  const res = await fetch(`${API_URL}/v1/orgs/${encodeURIComponent(orgSlug)}/playbook/notes`, {
-    method: "PATCH",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${API_KEY}`,
-    },
-    body: JSON.stringify({ notes }),
-  });
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`PATCH playbook for ${orgSlug} failed: ${res.status} ${text.slice(0, 200)}`);
-  }
+  await adminPatch(
+    `/orgs/${encodeURIComponent(orgSlug)}/playbook/notes`,
+    { notes },
+    { throwOnError: true },
+  );
 }
 
 /** Planning phase — pure, no writes. */
@@ -250,44 +235,44 @@ async function main(): Promise<void> {
   const reportPath = resolve(process.cwd(), REPORT_PATH);
   const markdown = await readFile(reportPath, "utf-8");
   const report = parseReport(markdown);
-  log(`Parsed ${report.length} classifications from ${REPORT_PATH}`);
+  logger.info(`Parsed ${report.length} classifications from ${REPORT_PATH}`);
 
   const { plans, stranded, skipped } = await planUpdates(report);
 
   if (skipped.length > 0) {
-    log(`Skipping ${skipped.length}: ${skipped.map((s) => s.slug).join(", ")}`);
+    logger.info(`Skipping ${skipped.length}: ${skipped.map((s) => s.slug).join(", ")}`);
   }
   if (stranded.length > 0) {
-    log(`STRANDED (no org match, will NOT update):`);
-    for (const s of stranded) log(`  - ${s.slug}: ${s.reason}`);
+    logger.info(`STRANDED (no org match, will NOT update):`);
+    for (const s of stranded) logger.info(`  - ${s.slug}: ${s.reason}`);
   }
 
-  log("");
-  log(`Planning ${plans.length} org playbook update(s):`);
+  logger.info("");
+  logger.info(`Planning ${plans.length} org playbook update(s):`);
   for (const p of plans) {
     const addedEntries = p.entries.length;
     const changeSummary = p.changes.length === 0 ? "no changes" : `${p.changes.length} change(s)`;
-    log(
+    logger.info(
       `  ${p.orgSlug} (${p.orgName}) — ${addedEntries} entries, prior quirks: ${p.priorQuirkCount}, ${changeSummary}`,
     );
     for (const c of p.changes) {
-      log(`    · ${c.slug}: ${c.from ?? "<new>"} → ${c.to}`);
+      logger.info(`    · ${c.slug}: ${c.from ?? "<new>"} → ${c.to}`);
     }
   }
 
   const totalChanges = plans.reduce((acc, p) => acc + p.changes.length, 0);
-  log("");
+  logger.info("");
   if (totalChanges === 0) {
-    log("No changes required — every entry already matches.");
+    logger.info("No changes required — every entry already matches.");
   } else {
-    log(
+    logger.info(
       `Total quirk mutations: ${totalChanges} across ${plans.filter((p) => p.changes.length > 0).length} org(s).`,
     );
   }
 
   if (!apply) {
-    log("");
-    log("Dry run — pass --apply to write.");
+    logger.info("");
+    logger.info("Dry run — pass --apply to write.");
     if (jsonOut) {
       const out = {
         plans: plans.map((p) => ({
@@ -309,16 +294,16 @@ async function main(): Promise<void> {
   for (const p of plans) {
     if (p.changes.length === 0) continue;
     const notes = buildMergedNotes(p);
-    log(`  → PATCH ${p.orgSlug} (${p.changes.length} change(s))`);
+    logger.info(`  → PATCH ${p.orgSlug} (${p.changes.length} change(s))`);
     // oxlint-disable-next-line no-await-in-loop -- sequential: one PATCH per org, low volume
     await patchPlaybookNotes(p.orgSlug, notes);
     updated++;
   }
-  log("");
-  log(`Applied ${updated} playbook update(s).`);
+  logger.info("");
+  logger.info(`Applied ${updated} playbook update(s).`);
 }
 
 main().catch((err) => {
-  log(`FATAL: ${err instanceof Error ? err.message : err}`);
+  logger.error(`FATAL: ${err instanceof Error ? err.message : err}`);
   process.exit(1);
 });
