@@ -5,14 +5,14 @@
 CREATE TABLE IF NOT EXISTS batch_runs (
   id                       TEXT     PRIMARY KEY NOT NULL,
   anthropic_batch_id       TEXT     NOT NULL UNIQUE,
-  caller                   TEXT     NOT NULL,      -- 'script' | 'workflow' | 'admin'
+  caller                   TEXT     NOT NULL CHECK (caller IN ('script', 'workflow', 'admin')),
   model                    TEXT     NOT NULL,
-  status                   TEXT     NOT NULL,      -- 'submitted' | 'in_progress' | 'ended' | 'failed'
-  request_count_total      INTEGER  NOT NULL DEFAULT 0,
-  request_count_succeeded  INTEGER  NOT NULL DEFAULT 0,
-  request_count_errored    INTEGER  NOT NULL DEFAULT 0,
-  request_count_expired    INTEGER  NOT NULL DEFAULT 0,
-  request_count_canceled   INTEGER  NOT NULL DEFAULT 0,
+  status                   TEXT     NOT NULL CHECK (status IN ('submitted', 'in_progress', 'ended', 'failed')),
+  request_count_total      INTEGER  NOT NULL DEFAULT 0 CHECK (request_count_total >= 0),
+  request_count_succeeded  INTEGER  NOT NULL DEFAULT 0 CHECK (request_count_succeeded >= 0),
+  request_count_errored    INTEGER  NOT NULL DEFAULT 0 CHECK (request_count_errored >= 0),
+  request_count_expired    INTEGER  NOT NULL DEFAULT 0 CHECK (request_count_expired >= 0),
+  request_count_canceled   INTEGER  NOT NULL DEFAULT 0 CHECK (request_count_canceled >= 0),
   created_at               TEXT     NOT NULL,
   ended_at                 TEXT,
   est_cost_usd             REAL,

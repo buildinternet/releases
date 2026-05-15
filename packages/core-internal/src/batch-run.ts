@@ -15,7 +15,7 @@ import type { DrizzleD1Database } from "drizzle-orm/d1";
 // in both production (workers/api picks up packages/core via workspace) and in
 // bun test runs where the workspace symlink points to the main-branch
 // packages/core (which may not yet have the new exports from a worktree).
-import { batchRuns, type BatchRun } from "../../core/src/schema.js";
+import { batchRuns } from "../../core/src/schema.js";
 
 /** Minimal drizzle DB type accepted by all helpers. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- drizzle generic param isn't exposed uniformly across runtimes
@@ -23,11 +23,17 @@ type AnyDb = DrizzleD1Database<any>;
 
 // ── recordBatchSubmit ────────────────────────────────────────────────────────
 
+/** Values allowed in the batch_runs.caller column. */
+export type BatchCaller = "script" | "workflow" | "admin";
+
+/** Terminal status values for a batch run. */
+export type TerminalBatchStatus = "ended" | "failed";
+
 export interface BatchSubmitFields {
   /** Anthropic batch ID returned by submitBatch (e.g. "msgbatch_…"). */
   anthropicBatchId: string;
   /** Who is submitting: 'script' | 'workflow' | 'admin'. */
-  caller: string;
+  caller: BatchCaller;
   /** Model slug (e.g. "claude-haiku-4-5-20251001"). */
   model: string;
   /** Total number of requests in this batch. */
@@ -90,7 +96,7 @@ export async function recordBatchProgress(
 
 export interface BatchFinalizeFields {
   /** 'ended' for normal completion; 'failed' if the batch itself failed (not per-request errors). */
-  status: BatchRun["status"];
+  status: TerminalBatchStatus;
   /** ISO timestamp when the batch ended. */
   endedAt: string;
   /** Final per-request counts from the Anthropic batch object. */

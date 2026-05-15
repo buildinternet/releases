@@ -27,30 +27,31 @@ adminBatchRunsRoutes.get("/admin/batch-runs", async (c) => {
     maxPageSize: 100,
   });
 
-  const [totalRow] = await db.select({ n: count() }).from(batchRuns);
+  const [[totalRow], rows] = await Promise.all([
+    db.select({ n: count() }).from(batchRuns),
+    db
+      .select({
+        id: batchRuns.id,
+        anthropicBatchId: batchRuns.anthropicBatchId,
+        caller: batchRuns.caller,
+        model: batchRuns.model,
+        status: batchRuns.status,
+        requestCountTotal: batchRuns.requestCountTotal,
+        requestCountSucceeded: batchRuns.requestCountSucceeded,
+        requestCountErrored: batchRuns.requestCountErrored,
+        requestCountExpired: batchRuns.requestCountExpired,
+        requestCountCanceled: batchRuns.requestCountCanceled,
+        createdAt: batchRuns.createdAt,
+        endedAt: batchRuns.endedAt,
+        estCostUsd: batchRuns.estCostUsd,
+        actualCostUsd: batchRuns.actualCostUsd,
+      })
+      .from(batchRuns)
+      .orderBy(desc(batchRuns.createdAt))
+      .limit(p.pageSize)
+      .offset(p.offset),
+  ]);
   const totalItems = totalRow?.n ?? 0;
-
-  const rows = await db
-    .select({
-      id: batchRuns.id,
-      anthropicBatchId: batchRuns.anthropicBatchId,
-      caller: batchRuns.caller,
-      model: batchRuns.model,
-      status: batchRuns.status,
-      requestCountTotal: batchRuns.requestCountTotal,
-      requestCountSucceeded: batchRuns.requestCountSucceeded,
-      requestCountErrored: batchRuns.requestCountErrored,
-      requestCountExpired: batchRuns.requestCountExpired,
-      requestCountCanceled: batchRuns.requestCountCanceled,
-      createdAt: batchRuns.createdAt,
-      endedAt: batchRuns.endedAt,
-      estCostUsd: batchRuns.estCostUsd,
-      actualCostUsd: batchRuns.actualCostUsd,
-    })
-    .from(batchRuns)
-    .orderBy(desc(batchRuns.createdAt))
-    .limit(p.pageSize)
-    .offset(p.offset);
 
   return c.json(buildListResponse(rows, p, totalItems));
 });
@@ -89,13 +90,26 @@ adminBatchRunsRoutes.post("/admin/batch-runs", async (c) => {
   const caller = typeof body.caller === "string" ? body.caller : null;
   const model = typeof body.model === "string" ? body.model : null;
   const requestCountTotal =
-    typeof body.requestCountTotal === "number" ? body.requestCountTotal : null;
+    typeof body.requestCountTotal === "number" &&
+    Number.isFinite(body.requestCountTotal) &&
+    body.requestCountTotal >= 0
+      ? body.requestCountTotal
+      : null;
 
   if (!anthropicBatchId || !caller || !model || requestCountTotal === null) {
     return c.json({ error: "missing_required_fields" }, 400);
   }
 
-  const estCostUsd = typeof body.estCostUsd === "number" ? body.estCostUsd : null;
+  const estCostUsdRaw = body.estCostUsd;
+  if (
+    estCostUsdRaw !== undefined &&
+    estCostUsdRaw !== null &&
+    !(typeof estCostUsdRaw === "number" && Number.isFinite(estCostUsdRaw) && estCostUsdRaw >= 0)
+  ) {
+    return c.json({ error: "bad_request" }, 400);
+  }
+  const estCostUsd =
+    typeof estCostUsdRaw === "number" && Number.isFinite(estCostUsdRaw) ? estCostUsdRaw : null;
   const callerContext =
     body.callerContext && typeof body.callerContext === "object"
       ? JSON.stringify(body.callerContext)
@@ -143,13 +157,6 @@ adminBatchRunsRoutes.patch("/admin/batch-runs/:id", async (c) => {
     return c.json({ error: "invalid_json" }, 400);
   }
 
-  const db = createDb(c.env.DB);
-  const [existing] = await db
-    .select({ id: batchRuns.id })
-    .from(batchRuns)
-    .where(eq(batchRuns.id, id));
-  if (!existing) return c.json({ error: "not_found" }, 404);
-
   // Build the partial update from provided fields.
   const patch: Partial<typeof batchRuns.$inferInsert> = {};
 
@@ -157,17 +164,40 @@ adminBatchRunsRoutes.patch("/admin/batch-runs/:id", async (c) => {
     const s = body.status as (typeof batchRuns.$inferInsert)["status"];
     if (["submitted", "in_progress", "ended", "failed"].includes(s)) patch.status = s;
   }
-  if (typeof body.requestCountSucceeded === "number")
-    patch.requestCountSucceeded = body.requestCountSucceeded;
-  if (typeof body.requestCountErrored === "number")
-    patch.requestCountErrored = body.requestCountErrored;
-  if (typeof body.requestCountExpired === "number")
-    patch.requestCountExpired = body.requestCountExpired;
-  if (typeof body.requestCountCanceled === "number")
-    patch.requestCountCanceled = body.requestCountCanceled;
+
+  // Validate and assign non-negative finite integers for request counts.
+  const countFields = [
+    ["requestCountSucceeded", "requestCountSucceeded"],
+    ["requestCountErrored", "requestCountErrored"],
+    ["requestCountExpired", "requestCountExpired"],
+    ["requestCountCanceled", "requestCountCanceled"],
+  ] as const;
+  for (const [bodyKey, patchKey] of countFields) {
+    const v = body[bodyKey];
+    if (v !== undefined) {
+      if (!(typeof v === "number" && Number.isFinite(v) && v >= 0)) {
+        return c.json({ error: "bad_request" }, 400);
+      }
+      patch[patchKey] = v;
+    }
+  }
+
   if (typeof body.endedAt === "string") patch.endedAt = body.endedAt;
-  if (typeof body.actualCostUsd === "number") patch.actualCostUsd = body.actualCostUsd;
-  if (body.actualCostUsd === null) patch.actualCostUsd = null;
+
+  if (body.actualCostUsd !== undefined) {
+    if (body.actualCostUsd === null) {
+      patch.actualCostUsd = null;
+    } else if (
+      typeof body.actualCostUsd === "number" &&
+      Number.isFinite(body.actualCostUsd) &&
+      body.actualCostUsd >= 0
+    ) {
+      patch.actualCostUsd = body.actualCostUsd;
+    } else {
+      return c.json({ error: "bad_request" }, 400);
+    }
+  }
+
   if (body.errorSummary !== undefined) {
     patch.errorSummary =
       body.errorSummary && typeof body.errorSummary === "object"
@@ -179,8 +209,10 @@ adminBatchRunsRoutes.patch("/admin/batch-runs/:id", async (c) => {
     return c.json({ error: "no_fields_to_update" }, 400);
   }
 
+  const db = createDb(c.env.DB);
   try {
-    await db.update(batchRuns).set(patch).where(eq(batchRuns.id, id));
+    const result = await db.update(batchRuns).set(patch).where(eq(batchRuns.id, id));
+    if (result.meta.changes === 0) return c.json({ error: "not_found" }, 404);
     return c.json({ ok: true });
   } catch (err) {
     logEvent("error", {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { formatFetchDuration } from "@/components/fetch-log-shared";
+import { FetchStatusBadge, formatFetchDuration } from "@/components/fetch-log-shared";
 
 type BatchRun = {
   id: string;
@@ -58,15 +58,20 @@ function formatModelName(model: string): string {
   return model;
 }
 
-function StatusBadge({ status }: { status: BatchRun["status"] }) {
-  const map: Record<BatchRun["status"], { label: string; cls: string }> = {
-    submitted: { label: "Submitted", cls: "text-stone-400" },
-    in_progress: { label: "In progress", cls: "text-blue-500" },
-    ended: { label: "Ended", cls: "text-green-600" },
-    failed: { label: "Failed", cls: "text-red-500" },
-  };
-  const { label, cls } = map[status] ?? { label: status, cls: "text-stone-400" };
-  return <span className={cls}>{label}</span>;
+// Map batch_runs.status to FetchStatusBadge variants ("success"|"error"|"no_change"|"dry_run").
+// FetchStatusBadge has no "submitted"/"in_progress" variants; use neutral/dry_run for pending states.
+function mapBadge(status: BatchRun["status"]): "success" | "error" | "no_change" | "dry_run" {
+  switch (status) {
+    case "ended":
+      return "success";
+    case "failed":
+      return "error";
+    case "in_progress":
+      return "dry_run";
+    case "submitted":
+    default:
+      return "no_change";
+  }
 }
 
 function CallerChip({ caller }: { caller: string }) {
@@ -91,8 +96,9 @@ export function BatchRunsTab() {
   useEffect(() => {
     setRows(null);
     setErr(null);
+    const controller = new AbortController();
     const params = new URLSearchParams({ page: String(page), limit: "25" });
-    fetch(`/api/proxy/admin/batch-runs?${params}`)
+    fetch(`/api/proxy/admin/batch-runs?${params}`, { signal: controller.signal })
       .then(async (r) => {
         if (!r.ok) throw new Error(`${r.status}`);
         return r.json();
@@ -107,7 +113,11 @@ export function BatchRunsTab() {
           setTotalItems(data.pagination?.totalItems ?? null);
         },
       )
-      .catch((e) => setErr(e instanceof Error ? e.message : String(e)));
+      .catch((e) => {
+        if (e instanceof Error && e.name === "AbortError") return;
+        setErr(e instanceof Error ? e.message : String(e));
+      });
+    return () => controller.abort();
   }, [page]);
 
   if (err) return <div className="text-red-500 text-xs">Error loading batch runs: {err}</div>;
@@ -190,7 +200,7 @@ function BatchRunRow({ row }: { row: BatchRun }) {
         {formatUsd(row.actualCostUsd)}
       </div>
       <div>
-        <StatusBadge status={row.status} />
+        <FetchStatusBadge status={mapBadge(row.status)} />
       </div>
     </div>
   );

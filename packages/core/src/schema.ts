@@ -980,7 +980,7 @@ export const batchRuns = sqliteTable(
     id: text("id").primaryKey().$defaultFn(newBatchRunId),
     anthropicBatchId: text("anthropic_batch_id").notNull().unique(),
     /** Who submitted: 'script' | 'workflow' | 'admin' */
-    caller: text("caller").notNull(),
+    caller: text("caller", { enum: ["script", "workflow", "admin"] }).notNull(),
     model: text("model").notNull(),
     status: text("status", { enum: ["submitted", "in_progress", "ended", "failed"] }).notNull(),
     requestCountTotal: integer("request_count_total").notNull().default(0),

@@ -101,6 +101,8 @@ const adminApiKey = process.env.RELEASED_API_KEY;
 
 async function adminPost(path: string, body: unknown): Promise<unknown | null> {
   if (!adminApiKey) return null;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 3_000);
   try {
     const res = await fetch(`${adminApiUrl}/v1${path}`, {
       method: "POST",
@@ -109,13 +111,17 @@ async function adminPost(path: string, body: unknown): Promise<unknown | null> {
         Authorization: `Bearer ${adminApiKey}`,
       },
       body: JSON.stringify(body),
+      signal: controller.signal,
     });
+    clearTimeout(timer);
     if (!res.ok) {
       logger.warn(`batch-runs persist: POST ${path} returned ${res.status}`);
       return null;
     }
     return res.json();
   } catch (err) {
+    clearTimeout(timer);
+    if (err instanceof Error && err.name === "AbortError") return null;
     logger.warn(`batch-runs persist: POST ${path} failed: ${errorMessage(err)}`);
     return null;
   }
@@ -123,6 +129,8 @@ async function adminPost(path: string, body: unknown): Promise<unknown | null> {
 
 async function adminPatch(path: string, body: unknown): Promise<void> {
   if (!adminApiKey) return;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 3_000);
   try {
     const res = await fetch(`${adminApiUrl}/v1${path}`, {
       method: "PATCH",
@@ -131,11 +139,15 @@ async function adminPatch(path: string, body: unknown): Promise<void> {
         Authorization: `Bearer ${adminApiKey}`,
       },
       body: JSON.stringify(body),
+      signal: controller.signal,
     });
+    clearTimeout(timer);
     if (!res.ok) {
       logger.warn(`batch-runs persist: PATCH ${path} returned ${res.status}`);
     }
   } catch (err) {
+    clearTimeout(timer);
+    if (err instanceof Error && err.name === "AbortError") return;
     logger.warn(`batch-runs persist: PATCH ${path} failed: ${errorMessage(err)}`);
   }
 }
@@ -602,8 +614,8 @@ if (batchRunId) {
     endedAt: new Date().toISOString(),
     requestCountSucceeded: succeededCount,
     requestCountErrored: erroredEntries.length,
-    requestCountExpired: 0,
-    requestCountCanceled: 0,
+    requestCountExpired: finalBatch.request_counts.expired,
+    requestCountCanceled: finalBatch.request_counts.canceled,
     actualCostUsd,
     errorSummary,
   });
