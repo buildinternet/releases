@@ -29,6 +29,7 @@ import {
   newSearchQueryId,
   newWebhookSubscriptionId,
   newCollectionId,
+  newBatchRunId,
 } from "./id.js";
 
 export const RELEASE_TYPES = ["feature", "rollup"] as const;
@@ -965,3 +966,44 @@ export const releasesVisible = sqliteView("releases_visible", {
   fetchedAt: text("fetched_at").notNull(),
   embeddedAt: text("embedded_at"),
 }).existing();
+
+/**
+ * One row per Anthropic Message Batch submission. Written by the
+ * generate-release-content script (and future BatchSummarizeWorkflow).
+ * Lifecycle: submitted → in_progress → ended | failed.
+ * actual_cost_usd is the sum of usage from requests that succeeded; null
+ * only when zero requests ran (entire batch expired or canceled before work).
+ */
+export const batchRuns = sqliteTable(
+  "batch_runs",
+  {
+    id: text("id").primaryKey().$defaultFn(newBatchRunId),
+    anthropicBatchId: text("anthropic_batch_id").notNull().unique(),
+    /** Who submitted: 'script' | 'workflow' | 'admin' */
+    caller: text("caller").notNull(),
+    model: text("model").notNull(),
+    status: text("status", { enum: ["submitted", "in_progress", "ended", "failed"] }).notNull(),
+    requestCountTotal: integer("request_count_total").notNull().default(0),
+    requestCountSucceeded: integer("request_count_succeeded").notNull().default(0),
+    requestCountErrored: integer("request_count_errored").notNull().default(0),
+    requestCountExpired: integer("request_count_expired").notNull().default(0),
+    requestCountCanceled: integer("request_count_canceled").notNull().default(0),
+    createdAt: text("created_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
+    endedAt: text("ended_at"),
+    estCostUsd: real("est_cost_usd"),
+    actualCostUsd: real("actual_cost_usd"),
+    /** JSON — free-form payload (script: { orgs, since_days }; workflow: { instance_id, trigger }) */
+    callerContext: text("caller_context"),
+    /** JSON — error details when request_count_errored > 0 */
+    errorSummary: text("error_summary"),
+  },
+  (table) => [
+    index("idx_batch_runs_created_at").on(table.createdAt),
+    index("idx_batch_runs_anthropic_id").on(table.anthropicBatchId),
+  ],
+);
+
+export type BatchRun = typeof batchRuns.$inferSelect;
+export type NewBatchRun = typeof batchRuns.$inferInsert;

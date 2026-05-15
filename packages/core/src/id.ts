@@ -21,6 +21,7 @@ export const newCronRunId = () => `crun_${nanoid()}`;
 export const newTelemetryEventId = () => `tel_${nanoid()}`;
 export const newSearchQueryId = () => `sq_${nanoid()}`;
 export const newCollectionId = () => `col_${nanoid()}`;
+export const newBatchRunId = () => `bat_${nanoid()}`;
 export function newWebhookSubscriptionId(): string {
   return `whk_${nanoid(16)}`;
 }

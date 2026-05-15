@@ -17,6 +17,7 @@ import { describeCadence } from "./cadence-helpers";
 import { evaluateFetchPending } from "./source-fetch-status";
 import { CronRunsTab } from "./cron-runs-tab";
 import { SearchQueriesTab } from "./search-queries-tab";
+import { BatchRunsTab } from "./batch-runs-tab";
 import { ForceDrainTile } from "./force-drain-tile";
 import {
   formatSessionError,
@@ -115,7 +116,7 @@ interface FetchTriggerResult {
   type?: string;
 }
 
-type Tab = "sessions" | "fetch-log" | "sources" | "orgs" | "cron" | "searches";
+type Tab = "sessions" | "fetch-log" | "sources" | "orgs" | "cron" | "searches" | "batch";
 type DateRange = "today" | "week" | "month" | "all";
 
 type SourceSortField =
@@ -135,6 +136,7 @@ const TABS: { value: Tab; label: string }[] = [
   { value: "orgs", label: "Orgs" },
   { value: "cron", label: "Cron" },
   { value: "searches", label: "Searches" },
+  { value: "batch", label: "Batch Runs" },
 ];
 const DEFAULT_TAB: Tab = "sessions";
 
@@ -647,6 +649,7 @@ export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
       {tab === "orgs" && <OrgsTable />}
       {tab === "cron" && <CronRunsTab />}
       {tab === "searches" && <SearchQueriesTab />}
+      {tab === "batch" && <BatchRunsTab />}
     </div>
   );
 }
