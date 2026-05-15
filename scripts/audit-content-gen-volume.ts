@@ -13,6 +13,7 @@
  */
 
 import { spawn } from "node:child_process";
+import { daysAgoIso } from "@buildinternet/releases-core/dates";
 import { logger } from "@buildinternet/releases-lib/logger";
 
 const argv = process.argv.slice(2);
@@ -64,12 +65,17 @@ const candidateClause =
     ? `OR LOWER(o.slug) IN (${candidates.map((s) => `'${s.replace(/'/g, "''")}'`).join(",")})`
     : "";
 
+// `wrangler d1 execute --command` doesn't expose bind parameters, so the
+// cutoff is computed client-side via the shared helper and injected as a
+// SQL string literal — same pattern as scripts/generate-release-content.ts.
+const cutoffIso = daysAgoIso(windowDays);
+
 const sql = `
   WITH per_day AS (
     SELECT s.org_id, s.id AS source_id, DATE(r.published_at) AS d, COUNT(*) AS n
     FROM releases r
     JOIN sources s ON s.id = r.source_id
-    WHERE r.published_at >= datetime('now','-${windowDays} day') AND r.suppressed = 0
+    WHERE r.published_at >= '${cutoffIso}' AND r.suppressed = 0
     GROUP BY s.org_id, s.id, DATE(r.published_at)
   )
   SELECT
@@ -83,8 +89,11 @@ const sql = `
   FROM organizations o
   JOIN sources s ON s.org_id = o.id
   JOIN releases r ON r.source_id = s.id
-  LEFT JOIN per_day pd ON pd.source_id = s.id
-  WHERE r.published_at >= datetime('now','-${windowDays} day')
+  -- Match per_day on (source_id, day) so each release joins to exactly its
+  -- own day's row; without the date predicate the per_day rows for a source
+  -- cross-multiply with every release, inflating COUNT(r.id) and the AVG.
+  LEFT JOIN per_day pd ON pd.source_id = s.id AND pd.d = DATE(r.published_at)
+  WHERE r.published_at >= '${cutoffIso}'
     AND r.suppressed = 0
     AND (o.auto_generate_content = 1 ${candidateClause})
   GROUP BY o.id, o.slug, o.auto_generate_content
