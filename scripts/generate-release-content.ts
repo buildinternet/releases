@@ -16,11 +16,13 @@
  *   bun scripts/generate-release-content.ts --apply --since=1
  *   bun scripts/generate-release-content.ts --apply --max-cost=25 # override $10 default ceiling
  *
- * Cost: ~$0.005/release at list price (Haiku 4.5; system prompt is the
- * dominant input at ~3,971 tokens). The Haiku 4.5 cache threshold is
- * 4,096 tokens, so this prompt sits just below the cutoff and ephemeral
- * caching never activates. See issue #851 for AI Gateway / alternate
- * model exploration.
+ * Cost: ~$0.001/release at list price when cache is warm (Haiku 4.5;
+ * system prompt is ~4,539 tokens, above the 4,096 cache threshold so the
+ * ephemeral 5-min cache activates after the first call in a run).
+ * First-call cost is ~$0.006 (cache write 1.25×); subsequent calls drop
+ * to ~$0.0005 (cache read 0.1×). For a 10-call sustained run the
+ * effective per-release cost is roughly $0.001. See issue #851 for AI
+ * Gateway / alternate model exploration.
  *
  * Budget guard: before any API calls, the script estimates total cost from
  * candidate count + body sizes and aborts if the estimate exceeds
@@ -199,7 +201,9 @@ logger.info(`found ${rows.length} release${rows.length === 1 ? "" : "s"}`);
 
 // Pre-flight cost estimate. Per-row ≈ system prompt (~4k tok) + body/4 chars
 // per token for input + ~300 output tokens. Pricing: $1/M input, $5/M output
-// (Haiku 4.5 list price; cache never activates today, see file header).
+// (Haiku 4.5 list price). This intentionally assumes worst-case no-cache
+// rates so the budget guard errs on the side of aborting — in practice the
+// ephemeral cache activates after the first call (~10× cheaper on reads).
 const estInputTokens = rows.reduce((sum, r) => sum + 4000 + Math.ceil(r.content.length / 4), 0);
 const estOutputTokens = rows.length * 300;
 const estCostUsd = (estInputTokens * 1) / 1_000_000 + (estOutputTokens * 5) / 1_000_000;
