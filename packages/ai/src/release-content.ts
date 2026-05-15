@@ -275,6 +275,24 @@ This week's release brings exciting quality-of-life improvements across the app:
 <summary>Exciting quality-of-life improvements include powerful new keyboard shortcuts and various bug fixes (PR #4821).</summary>
 </bad_output>
 </example>
+
+<example>
+<input>Org: hugging-face
+Source: TRL
+Title: v1.4.0
+Version: v1.4.0
+Body: A new \`loss_type="chunked_nll"\` option for SFT drastically reduces peak activation memory by computing cross-entropy over tokens in checkpointed chunks instead of materializing the full \`[batch × seq × vocab]\` logits tensor, unlocking sequence lengths that previously caused out-of-memory errors. Also added OpenReward Standard environment adapter, length-normalized DPO sigmoid loss, training chat templates for Cohere, Cohere2, Gemma 3, Qwen3, and Qwen2.5.</input>
+<good_output>
+<title>TRL v1.4.0 unlocks longer SFT sequences with chunked cross-entropy loss</title>
+<title_short>Chunked cross-entropy unlocks longer SFT sequences</title_short>
+<summary>A new loss_type="chunked_nll" option for SFT computes cross-entropy over tokens in checkpointed chunks instead of materializing the full logits tensor, unlocking sequence lengths that previously caused out-of-memory errors. Also added OpenReward Standard environment adapter, length-normalized DPO sigmoid loss, and training chat templates for Cohere, Cohere2, Gemma 3, Qwen3, and Qwen2.5.</summary>
+</good_output>
+<bad_output reason="title_short led with the mechanism (chunked cross-entropy loss is the *how*) framed as an added option; for capacity/performance releases, the user-facing outcome (longer sequences now fit) is the headline">
+<title>TRL v1.4.0 adds chunked cross-entropy loss for SFT memory optimization</title>
+<title_short>Chunked NLL loss option added to SFT</title_short>
+<summary>A new loss_type="chunked_nll" option for SFT reduces peak activation memory. Also added OpenReward Standard environment adapter, length-normalized DPO sigmoid loss, and training chat templates.</summary>
+</bad_output>
+</example>
 </examples>`;
 
 export interface SummarizeReleaseInput {
