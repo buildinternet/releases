@@ -50,6 +50,7 @@ import {
   type SummarizeReleaseResult,
 } from "@releases/ai-internal/release-content";
 import { collectResults, pollBatch, submitBatch } from "@releases/ai-internal/batch";
+import { adminPatch, adminPost } from "./lib/admin-client.js";
 
 const argv = process.argv.slice(2);
 const apply = argv.includes("--apply");
@@ -92,65 +93,9 @@ if (!apiKey) {
   process.exit(1);
 }
 
-// ── Admin API client (best-effort persistence) ───────────────────────────────
-// The script predates any API calls; this is the minimal setup needed for
-// batch_runs persistence. Writes are fire-and-forget — failure to persist
-// does NOT abort the generation run (observability is best-effort).
-const adminApiUrl = (process.env.RELEASED_API_URL ?? "https://api.releases.sh").replace(/\/$/, "");
-const adminApiKey = process.env.RELEASED_API_KEY;
-
-async function adminPost(path: string, body: unknown): Promise<unknown | null> {
-  if (!adminApiKey) return null;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 3_000);
-  try {
-    const res = await fetch(`${adminApiUrl}/v1${path}`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${adminApiKey}`,
-      },
-      body: JSON.stringify(body),
-      signal: controller.signal,
-    });
-    clearTimeout(timer);
-    if (!res.ok) {
-      logger.warn(`batch-runs persist: POST ${path} returned ${res.status}`);
-      return null;
-    }
-    return res.json();
-  } catch (err) {
-    clearTimeout(timer);
-    if (err instanceof Error && err.name === "AbortError") return null;
-    logger.warn(`batch-runs persist: POST ${path} failed: ${errorMessage(err)}`);
-    return null;
-  }
-}
-
-async function adminPatch(path: string, body: unknown): Promise<void> {
-  if (!adminApiKey) return;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 3_000);
-  try {
-    const res = await fetch(`${adminApiUrl}/v1${path}`, {
-      method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${adminApiKey}`,
-      },
-      body: JSON.stringify(body),
-      signal: controller.signal,
-    });
-    clearTimeout(timer);
-    if (!res.ok) {
-      logger.warn(`batch-runs persist: PATCH ${path} returned ${res.status}`);
-    }
-  } catch (err) {
-    clearTimeout(timer);
-    if (err instanceof Error && err.name === "AbortError") return;
-    logger.warn(`batch-runs persist: PATCH ${path} failed: ${errorMessage(err)}`);
-  }
-}
+// adminPost and adminPatch are imported from ./lib/admin-client.js.
+// Both use best-effort semantics (throwOnError defaults to false) with a 3s
+// timeout — writes are fire-and-forget; failure does NOT abort the run.
 
 const cutoffIso = daysAgoIso(sinceDays);
 

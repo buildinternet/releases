@@ -31,6 +31,7 @@ import {
   type FetchQuirk,
   type PlaybookFrontmatter,
 } from "../packages/ai/src/playbook.js";
+import { adminGet, adminPatch } from "./lib/admin-client.js";
 
 type DetectorClass = FetchQuirk["changeDetector"];
 
@@ -59,7 +60,6 @@ type OrgPlan = {
 
 const REPORT_PATH = ".context/515-change-detectors.md";
 const API_URL = process.env.RELEASED_API_URL ?? "https://api.releases.sh";
-const API_KEY = process.env.RELEASED_API_KEY;
 
 const argv = process.argv.slice(2);
 const args = new Set(argv);
@@ -143,31 +143,19 @@ async function listSources(): Promise<Map<string, SourceRow>> {
 }
 
 async function getPlaybookNotes(orgSlug: string): Promise<string | null> {
-  if (!API_KEY) throw new Error("RELEASED_API_KEY required to read playbooks");
-  const res = await fetch(`${API_URL}/v1/orgs/${encodeURIComponent(orgSlug)}/playbook`, {
-    headers: { Authorization: `Bearer ${API_KEY}` },
-  });
-  if (!res.ok) {
-    throw new Error(`GET playbook for ${orgSlug} failed: ${res.status}`);
-  }
-  const body = (await res.json()) as { notes?: string | null } | null;
+  const body = await adminGet<{ notes?: string | null } | null>(
+    `/orgs/${encodeURIComponent(orgSlug)}/playbook`,
+    { throwOnError: true },
+  );
   return body?.notes ?? null;
 }
 
 async function patchPlaybookNotes(orgSlug: string, notes: string): Promise<void> {
-  if (!API_KEY) throw new Error("RELEASED_API_KEY required to --apply");
-  const res = await fetch(`${API_URL}/v1/orgs/${encodeURIComponent(orgSlug)}/playbook/notes`, {
-    method: "PATCH",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${API_KEY}`,
-    },
-    body: JSON.stringify({ notes }),
-  });
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`PATCH playbook for ${orgSlug} failed: ${res.status} ${text.slice(0, 200)}`);
-  }
+  await adminPatch(
+    `/orgs/${encodeURIComponent(orgSlug)}/playbook/notes`,
+    { notes },
+    { throwOnError: true },
+  );
 }
 
 /** Planning phase — pure, no writes. */

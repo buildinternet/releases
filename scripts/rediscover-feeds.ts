@@ -28,6 +28,7 @@ import {
   discoverFeed,
   fetchAndParseFeed,
 } from "../packages/adapters/src/feed.js";
+import { adminPatch } from "./lib/admin-client.js";
 
 type SourceRow = {
   id: string;
@@ -56,7 +57,6 @@ type Verdict = {
 };
 
 const API_URL = process.env.RELEASED_API_URL ?? "https://api.releases.sh";
-const API_KEY = process.env.RELEASED_API_KEY;
 
 const args = new Set(process.argv.slice(2));
 const apply = args.has("--apply");
@@ -111,7 +111,6 @@ async function patchSource(
   source: Pick<SourceRow, "id" | "slug" | "orgSlug">,
   patchedMetadata: Record<string, unknown>,
 ): Promise<void> {
-  if (!API_KEY) throw new Error("RELEASED_API_KEY required to --apply");
   // The schema enforces sources.orgId NOT NULL post-#690 Phase C, so
   // orgSlug should always populate in GET /v1/sources. If it ever doesn't
   // (stale staging API, mid-migration row, etc.), fail loudly with the
@@ -122,19 +121,8 @@ async function patchSource(
       `source ${source.slug} (${source.id}) is missing orgSlug — refusing to construct an org-scoped PATCH URL`,
     );
   }
-  const path = `/v1/orgs/${encodeURIComponent(source.orgSlug)}/sources/${encodeURIComponent(source.id)}`;
-  const res = await fetch(`${API_URL}${path}`, {
-    method: "PATCH",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${API_KEY}`,
-    },
-    body: JSON.stringify({ metadata: JSON.stringify(patchedMetadata) }),
-  });
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`PATCH failed: ${res.status} ${body.slice(0, 200)}`);
-  }
+  const path = `/orgs/${encodeURIComponent(source.orgSlug)}/sources/${encodeURIComponent(source.id)}`;
+  await adminPatch(path, { metadata: JSON.stringify(patchedMetadata) }, { throwOnError: true });
 }
 
 async function processOne(row: Candidate): Promise<Verdict> {
