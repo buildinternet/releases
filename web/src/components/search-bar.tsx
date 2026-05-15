@@ -79,7 +79,9 @@ export function SearchBar({
         <input
           ref={inputRef}
           name="q"
-          type="text"
+          type="search"
+          role="searchbox"
+          aria-label="Search organizations, products, and releases"
           defaultValue={defaultValue}
           onChange={(e) => updateUrl(e.target.value)}
           placeholder={placeholder}

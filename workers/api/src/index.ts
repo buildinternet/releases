@@ -371,11 +371,27 @@ const apiIndexPayload = (c: IndexCtx) => {
     },
   };
 };
-v1.get("/", (c) => c.json(apiIndexPayload(c)));
+// RFC 8288 Link header advertising the OpenAPI spec via rel="service-desc"
+// so agents that follow HTTP-level discovery (no body parse) find the schema.
+const serviceDescLink = (origin: string) =>
+  `<${origin}/v1/openapi.json>; rel="service-desc"; type="application/openapi+json"`;
+const setServiceDescLink = (c: {
+  req: { url: string };
+  header: (k: string, v: string) => void;
+}) => {
+  c.header("Link", serviceDescLink(new URL(c.req.url).origin));
+};
+v1.get("/", (c) => {
+  setServiceDescLink(c);
+  return c.json(apiIndexPayload(c));
+});
 
 app.route("/v1", v1);
 
-app.get("/", (c) => c.json(apiIndexPayload(c)));
+app.get("/", (c) => {
+  setServiceDescLink(c);
+  return c.json(apiIndexPayload(c));
+});
 
 // Catch-all JSON 404 — matches the envelope used by `onError` so unknown
 // paths look the same as path-known errors to clients.
