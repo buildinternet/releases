@@ -62,7 +62,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <ThemeProvider>
           <SearchHotkey />
           <ViewTransition default="auto">
-            <div className="flex-1 flex flex-col">{children}</div>
+            <main id="main" className="flex-1 flex flex-col">
+              {children}
+            </main>
           </ViewTransition>
           <Footer />
         </ThemeProvider>

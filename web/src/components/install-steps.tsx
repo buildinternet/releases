@@ -43,9 +43,11 @@ function CodeBlock({
       ? "bg-stone-100 dark:bg-stone-900 border border-stone-200 dark:border-stone-700"
       : "bg-white dark:bg-stone-950 border border-stone-200 dark:border-stone-800";
   return (
-    <div
+    <button
+      type="button"
       onClick={() => copy(command)}
-      className={`${surface} rounded px-3 py-2 flex items-center justify-between gap-2 cursor-pointer hover:border-stone-300 dark:hover:border-stone-700 transition-colors`}
+      aria-label={copied ? "Copied" : `Copy command: ${command}`}
+      className={`${surface} w-full text-left rounded px-3 py-2 flex items-center justify-between gap-2 cursor-pointer hover:border-stone-300 dark:hover:border-stone-700 transition-colors`}
     >
       <code className="text-[12px] font-mono text-stone-700 dark:text-stone-300 overflow-x-auto whitespace-nowrap pointer-events-none">
         {command}
@@ -53,7 +55,7 @@ function CodeBlock({
       <span className="shrink-0 text-stone-400 dark:text-stone-500">
         <CopyIcon copied={copied} size={14} />
       </span>
-    </div>
+    </button>
   );
 }
 

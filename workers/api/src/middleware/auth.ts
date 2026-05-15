@@ -65,6 +65,10 @@ function createAuthMiddleware(opts: { allowPublicReads: boolean }): MiddlewareHa
     const header = c.req.header("Authorization") ?? "";
     const token = header.startsWith("Bearer ") ? header.slice(7) : "";
     if (token !== secret) {
+      // RFC 7235: 401 responses MUST carry a WWW-Authenticate challenge so
+      // clients (incl. AI agents) can discover the required auth scheme
+      // without reading docs.
+      c.header("WWW-Authenticate", 'Bearer realm="releases-api"');
       return c.json({ error: "unauthorized", message: "Invalid or missing API key" }, 401);
     }
 

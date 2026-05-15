@@ -275,6 +275,20 @@ export function ReleaseListItem({
         <div
           className={`group relative${isOverflowing ? " cursor-pointer" : ""}`}
           onClick={() => isOverflowing && setExpanded(!expanded)}
+          {...(isOverflowing
+            ? {
+                role: "button",
+                tabIndex: 0,
+                "aria-expanded": expanded,
+                "aria-label": expanded ? "Collapse release notes" : "Expand release notes",
+                onKeyDown: (e: React.KeyboardEvent<HTMLDivElement>) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    setExpanded(!expanded);
+                  }
+                },
+              }
+            : {})}
         >
           {expanded ? (
             <div className={markdownClasses}>
