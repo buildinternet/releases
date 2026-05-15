@@ -111,6 +111,22 @@ describe("estimateCost", () => {
     });
   });
 
+  it("halves all four components when options.batch = true", () => {
+    const usage = {
+      inputTokens: 1_000_000,
+      cacheWriteTokens: 1_000_000,
+      cacheReadTokens: 1_000_000,
+      outputTokens: 1_000_000,
+    };
+    const live = estimateCost(usage, "claude-haiku-4-5")!;
+    const batch = estimateCost(usage, "claude-haiku-4-5", { batch: true })!;
+    expect(batch.inputUsd).toBeCloseTo(live.inputUsd / 2);
+    expect(batch.cacheWriteUsd).toBeCloseTo(live.cacheWriteUsd / 2);
+    expect(batch.cacheReadUsd).toBeCloseTo(live.cacheReadUsd / 2);
+    expect(batch.outputUsd).toBeCloseTo(live.outputUsd / 2);
+    expect(batch.totalUsd).toBeCloseTo(live.totalUsd / 2);
+  });
+
   it("normalizes dated model snapshots to their base alias", () => {
     // The Anthropic API returns dated snapshots like `claude-haiku-4-5-20251001`
     // even when a session was created against the alias. Both forms must price.

@@ -13,7 +13,9 @@
 
 import type Anthropic from "@anthropic-ai/sdk";
 
-const MODEL = "claude-haiku-4-5";
+/** Model id used by the live and batch release-content paths. Exported so the
+ *  backfill script can submit identical request shapes through the Batches API. */
+export const MODEL = "claude-haiku-4-5";
 
 /** Maximum characters of release body sent to the model (truncated at this length). */
 export const MAX_BODY_CHARS = 8000;
@@ -367,6 +369,37 @@ export function extractTagged(text: string, tag: string): string {
 }
 
 /**
+ * Pull title / title_short / summary out of a model response. Exported so the
+ * batch path (`scripts/generate-release-content.ts`) parses each batch line
+ * through the same logic as the live `summarizeRelease` call — byte-for-byte
+ * identical on the parsing side.
+ *
+ * Takes the joined text + stop_reason rather than the SDK's `Message` type so
+ * consumers of this module don't drag the full `@anthropic-ai/sdk` namespace
+ * through their own typecheck. The workspace has dupe-installs of the SDK
+ * (root + workers/api/packages resolve to different `.bun/` hashes for the
+ * same 0.95.0 version), and exporting an SDK-namespace type from this file
+ * surfaces a `#private`-field nominal mismatch on the `Anthropic` class
+ * downstream. Passing a string + nullable string sidesteps it entirely.
+ */
+export function parseReleaseContent(
+  raw: string,
+  stopReason: string | null,
+): Omit<SummarizeReleaseResult, "skipped" | "usage"> {
+  const summary = extractTagged(raw, "summary");
+  if (!summary) {
+    throw new Error(
+      `model output missing or empty <summary> tag (raw length ${raw.length}, stop_reason=${stopReason ?? "unknown"})`,
+    );
+  }
+  return {
+    title: extractTagged(raw, "title") || null,
+    titleShort: extractTagged(raw, "title_short") || null,
+    summary,
+  };
+}
+
+/**
  * Run a release body through Haiku 4.5 to produce title / short title /
  * summary. Returns all-null + `skipped: true` when the body has no real
  * content (read paths fall back to the raw release.title).
@@ -404,16 +437,8 @@ export async function summarizeRelease(
     .filter((block): block is Extract<typeof block, { type: "text" }> => block.type === "text")
     .map((block) => block.text)
     .join("");
-  const summary = extractTagged(raw, "summary");
-  if (!summary) {
-    throw new Error(
-      `model output missing or empty <summary> tag (raw length ${raw.length}, stop_reason=${res.stop_reason ?? "unknown"})`,
-    );
-  }
   return {
-    title: extractTagged(raw, "title") || null,
-    titleShort: extractTagged(raw, "title_short") || null,
-    summary,
+    ...parseReleaseContent(raw, res.stop_reason),
     usage: {
       input: res.usage.input_tokens,
       output: res.usage.output_tokens,
