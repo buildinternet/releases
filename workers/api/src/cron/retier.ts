@@ -59,11 +59,10 @@ export async function retierSources(env: { DB: D1Database; CRON_ENABLED?: string
 
   let retiered = 0;
   let withSignal = 0;
-  // Build one UPDATE per source and dispatch concurrently. Each statement
-  // binds at most 4 values (id, medianGapDays, lastRetieredAt, optional
-  // fetchPriority), well under D1's 100-bind per-statement cap — and
-  // Promise.all lets the round-trips pipeline instead of blocking the
-  // cron on ~200 × D1 RTTs.
+  // Build one UPDATE per source. Each statement binds at most 4 values
+  // (id, medianGapDays, lastRetieredAt, optional fetchPriority), under
+  // D1's 100-bind per-statement cap — chunk at 25 rows per db.batch() so
+  // each chunk's ~100 binds stays a single round-trip.
   const writes = allSources.map((src) => {
     const dates = datesBySource.get(src.id) ?? [];
     const medianGap = dates.length >= MIN_RELEASES_FOR_SIGNAL ? computeMedianGapDays(dates) : null;
@@ -97,7 +96,12 @@ export async function retierSources(env: { DB: D1Database; CRON_ENABLED?: string
 
     return db.update(sources).set(updates).where(eq(sources.id, src.id));
   });
-  await Promise.all(writes);
+  const RETIER_CHUNK_SIZE = 25; // floor(100 / 4 binds per UPDATE)
+  for (let i = 0; i < writes.length; i += RETIER_CHUNK_SIZE) {
+    const chunk = writes.slice(i, i + RETIER_CHUNK_SIZE);
+    // oxlint-disable-next-line no-await-in-loop -- chunked batch
+    await db.batch(chunk as [(typeof chunk)[number], ...typeof chunk]);
+  }
   logEvent("info", {
     component: "retier",
     event: "done",

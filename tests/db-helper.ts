@@ -79,10 +79,31 @@ function getMigratedSnapshot(): Uint8Array {
   return migratedSnapshot;
 }
 
+/**
+ * The bun-sqlite drizzle adapter doesn't expose .batch (only drizzle-orm/d1
+ * does). Patch it onto any drizzle handle that's missing it so prod code
+ * calling db.batch(...) doesn't blow up under tests. Sequential await mirrors
+ * D1's per-array ordering. Idempotent.
+ */
+export function ensureBatchShim<T>(db: T): T {
+  const handle = db as unknown as { batch?: unknown };
+  if (!handle.batch) {
+    handle.batch = async (ops: ReadonlyArray<Promise<unknown>>) => {
+      const out: unknown[] = [];
+      for (const op of ops) {
+        // oxlint-disable-next-line no-await-in-loop -- shim mirrors D1 batch ordering
+        out.push(await op);
+      }
+      return out;
+    };
+  }
+  return db;
+}
+
 export function createTestDb(): TestDatabase {
   const sqlite = Database.deserialize(getMigratedSnapshot());
   sqlite.run("PRAGMA foreign_keys=ON");
-  const db = drizzle(sqlite, { schema });
+  const db = ensureBatchShim(drizzle(sqlite, { schema }));
 
   return {
     db,

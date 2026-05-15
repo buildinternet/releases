@@ -9,7 +9,7 @@ import {
   fetchLog,
   knowledgePages,
 } from "@buildinternet/releases-core/schema";
-import { applyMigrations } from "../db-helper";
+import { applyMigrations, ensureBatchShim } from "../db-helper";
 import {
   PollAndFetchWorkflow,
   generateContentForReleases,
@@ -26,7 +26,7 @@ const CACHE_DELETES_PER_INVALIDATION =
 
 function mkDb() {
   const sqlite = new Database(":memory:");
-  const db = drizzle(sqlite);
+  const db = ensureBatchShim(drizzle(sqlite));
   applyMigrations(sqlite);
   db.insert(organizations)
     .values({ id: "org_a", name: "Acme", slug: "acme", category: "cloud" })
@@ -254,7 +254,7 @@ describe("PollAndFetchWorkflow", () => {
     // fail with "Missing feedUrl or feedType". The workflow must short-circuit
     // and let the scrape-agent sweep cron drain it via `changeDetectedAt`.
     const sqlite = new Database(":memory:");
-    const db = drizzle(sqlite);
+    const db = ensureBatchShim(drizzle(sqlite));
     applyMigrations(sqlite);
     db.insert(organizations)
       .values({ id: "org_a", name: "Acme", slug: "acme", category: "cloud" })
