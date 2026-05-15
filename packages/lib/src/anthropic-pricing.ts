@@ -73,23 +73,38 @@ function sanitizeTokenCount(value: number | undefined): number {
   return value;
 }
 
+export interface EstimateCostOptions {
+  /** Apply Anthropic's 50% Message Batches discount to all four cost components. */
+  batch?: boolean;
+}
+
+/** Message Batches API discount on input + output (incl. cache). */
+const BATCH_MULTIPLIER = 0.5;
+
 /**
  * Compute an estimated USD cost from token usage + model id. Returns `null`
  * if the model isn't in the pricing table — callers should fall back to
  * showing token counts only. Missing token fields default to 0, which is the
  * right answer for sessions where prompt-cache wasn't used.
  */
-export function estimateCost(usage: TokenUsage, model: string): CostEstimate | null {
+export function estimateCost(
+  usage: TokenUsage,
+  model: string,
+  options: EstimateCostOptions = {},
+): CostEstimate | null {
   const price = ANTHROPIC_PRICING[normalizeModelId(model)];
   if (!price) return null;
+  const multiplier = options.batch ? BATCH_MULTIPLIER : 1;
   const sanitizedInputTokens = sanitizeTokenCount(usage.inputTokens);
   const sanitizedCacheWriteTokens = sanitizeTokenCount(usage.cacheWriteTokens);
   const sanitizedCacheReadTokens = sanitizeTokenCount(usage.cacheReadTokens);
   const sanitizedOutputTokens = sanitizeTokenCount(usage.outputTokens);
-  const inputUsd = (sanitizedInputTokens * price.inputUsdPerMillion) / 1_000_000;
-  const cacheWriteUsd = (sanitizedCacheWriteTokens * price.cacheWrite5mUsdPerMillion) / 1_000_000;
-  const cacheReadUsd = (sanitizedCacheReadTokens * price.cacheReadUsdPerMillion) / 1_000_000;
-  const outputUsd = (sanitizedOutputTokens * price.outputUsdPerMillion) / 1_000_000;
+  const inputUsd = ((sanitizedInputTokens * price.inputUsdPerMillion) / 1_000_000) * multiplier;
+  const cacheWriteUsd =
+    ((sanitizedCacheWriteTokens * price.cacheWrite5mUsdPerMillion) / 1_000_000) * multiplier;
+  const cacheReadUsd =
+    ((sanitizedCacheReadTokens * price.cacheReadUsdPerMillion) / 1_000_000) * multiplier;
+  const outputUsd = ((sanitizedOutputTokens * price.outputUsdPerMillion) / 1_000_000) * multiplier;
   return {
     inputUsd,
     cacheWriteUsd,

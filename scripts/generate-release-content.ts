@@ -1,8 +1,8 @@
 #!/usr/bin/env bun
 /**
  * Manual release-content generator. Populates `title_generated`,
- * `title_short`, and `summary` on `releases` rows that
- * match a filter, via Anthropic Haiku 4.5 + a single tuned system prompt.
+ * `title_short`, and `summary` on `releases` rows that match a filter,
+ * via Anthropic Haiku 4.5 + a single tuned system prompt.
  *
  * This is an operational tool — run as needed, not on a cron. Ingest
  * paths do not call it today. Use it for backfills, ad-hoc patch-ups of
@@ -15,14 +15,14 @@
  *   bun scripts/generate-release-content.ts --orgs=all --since=30 # everything in past N days
  *   bun scripts/generate-release-content.ts --apply --since=1
  *   bun scripts/generate-release-content.ts --apply --max-cost=25 # override $10 default ceiling
+ *   bun scripts/generate-release-content.ts --apply --no-batch    # fall back to real-time path
  *
- * Cost: ~$0.001/release at list price when cache is warm (Haiku 4.5;
- * system prompt is ~4,539 tokens, above the 4,096 cache threshold so the
- * ephemeral 5-min cache activates after the first call in a run).
- * First-call cost is ~$0.006 (cache write 1.25×); subsequent calls drop
- * to ~$0.0005 (cache read 0.1×). For a 10-call sustained run the
- * effective per-release cost is roughly $0.001. See issue #851 for AI
- * Gateway / alternate model exploration.
+ * Cost: by default this routes through the Anthropic Message Batches API
+ * for a flat 50% discount on input + output (incl. cache). Trade-off is
+ * up to ~24h latency — acceptable for a backfill, never for a live feed.
+ * Pass `--no-batch` for fast iteration when comparing prompt revisions;
+ * that path uses real-time `messages.create` with a CONCURRENCY=5 pool
+ * (the historical behavior of this script). See issue #967.
  *
  * Budget guard: before any API calls, the script estimates total cost from
  * candidate count + body sizes and aborts if the estimate exceeds
@@ -33,13 +33,24 @@ import Anthropic from "@anthropic-ai/sdk";
 import { spawn } from "node:child_process";
 import { daysAgoIso } from "@buildinternet/releases-core/dates";
 import { logger } from "@buildinternet/releases-lib/logger";
+import { estimateCost } from "@releases/lib/anthropic-pricing";
 import {
+  buildReleaseBlock,
+  isEmptyContent,
+  MAX_OUTPUT_TOKENS,
+  MODEL,
+  parseReleaseContent,
   summarizeRelease,
+  SYSTEM_PROMPT,
+  type ReleaseContentUsage,
+  type SummarizeReleaseInput,
   type SummarizeReleaseResult,
 } from "@releases/ai-internal/release-content";
+import { collectResults, pollBatch, submitBatch } from "@releases/ai-internal/batch";
 
 const argv = process.argv.slice(2);
 const apply = argv.includes("--apply");
+const noBatch = argv.includes("--no-batch");
 const orgsArg = argv.find((a) => a.startsWith("--orgs="))?.split("=")[1];
 const sinceArg = argv.find((a) => a.startsWith("--since="))?.split("=")[1];
 const maxCostArg = argv.find((a) => a.startsWith("--max-cost="))?.split("=")[1];
@@ -91,6 +102,18 @@ interface ReleaseRow {
   org_slug: string;
   source_name: string;
   product_name: string | null;
+}
+
+function rowToSummarizeInput(row: ReleaseRow): SummarizeReleaseInput {
+  return {
+    orgSlug: row.org_slug,
+    sourceName: row.source_name,
+    productName: row.product_name,
+    title: row.title,
+    version: row.version,
+    url: row.url,
+    content: row.content,
+  };
 }
 
 function runWrangler(args: string[]): Promise<string> {
@@ -189,9 +212,156 @@ async function pool<T, R>(
   return results;
 }
 
+type PerRow =
+  | { row: ReleaseRow; kind: "ok"; result: SummarizeReleaseResult }
+  | { row: ReleaseRow; kind: "err"; error: string };
+
+function emptyUsage(): ReleaseContentUsage {
+  return { input: 0, output: 0, cacheCreate: 0, cacheRead: 0 };
+}
+
+function errorMessage(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (typeof err === "string") return err;
+  try {
+    return JSON.stringify(err);
+  } catch {
+    return String(err);
+  }
+}
+
+async function runRealtime(rows: ReleaseRow[]): Promise<PerRow[]> {
+  return pool(rows, CONCURRENCY, async (row): Promise<PerRow> => {
+    try {
+      const result = await summarizeRelease(client, rowToSummarizeInput(row));
+      return { row, kind: "ok", result };
+    } catch (err) {
+      return { row, kind: "err", error: errorMessage(err) };
+    }
+  });
+}
+
+async function runBatch(rows: ReleaseRow[]): Promise<PerRow[]> {
+  // Empty-body rows short-circuit on the local side: returning a `skipped`
+  // result mirrors what `summarizeRelease` does on the real-time path, and
+  // keeps us from paying for a batch slot on rows we'd skip anyway.
+  const out: PerRow[] = [];
+  const eligible: { row: ReleaseRow; input: SummarizeReleaseInput }[] = [];
+  for (const row of rows) {
+    const input = rowToSummarizeInput(row);
+    if (isEmptyContent(input.content)) {
+      out.push({
+        row,
+        kind: "ok",
+        result: {
+          title: null,
+          titleShort: null,
+          summary: null,
+          usage: emptyUsage(),
+          skipped: true,
+        },
+      });
+      continue;
+    }
+    eligible.push({ row, input });
+  }
+
+  if (eligible.length === 0) return out;
+
+  logger.info(`submitting batch of ${eligible.length} request${eligible.length === 1 ? "" : "s"}…`);
+  const submitted = await submitBatch(
+    client,
+    eligible.map(({ row, input }) => ({
+      custom_id: row.id,
+      params: {
+        model: MODEL,
+        max_tokens: MAX_OUTPUT_TOKENS,
+        system: [
+          {
+            type: "text" as const,
+            text: SYSTEM_PROMPT,
+            cache_control: { type: "ephemeral" as const },
+          },
+        ],
+        messages: [{ role: "user" as const, content: buildReleaseBlock(input) }],
+      },
+    })),
+  );
+  logger.info(`batch ${submitted.id} submitted (status: ${submitted.processing_status})`);
+
+  // Per-poll log throttle: skip when finished counts haven't moved. Counts
+  // only populate when processing_status === "ended", so most in-flight polls
+  // would be redundant heartbeats. The final "ended" state is logged once
+  // unconditionally below, so we don't need to re-emit it here.
+  let lastDone = -1;
+  const finalBatch = await pollBatch(client, submitted.id, {
+    onPoll: (b) => {
+      const done =
+        b.request_counts.succeeded +
+        b.request_counts.errored +
+        b.request_counts.canceled +
+        b.request_counts.expired;
+      if (done === lastDone) return;
+      lastDone = done;
+      logger.info(
+        `batch ${b.id}: ${b.processing_status} (succeeded=${b.request_counts.succeeded}, errored=${b.request_counts.errored}, processing=${b.request_counts.processing})`,
+      );
+    },
+  });
+
+  logger.info(
+    `batch ${finalBatch.id} ended: succeeded=${finalBatch.request_counts.succeeded}, errored=${finalBatch.request_counts.errored}, expired=${finalBatch.request_counts.expired}, canceled=${finalBatch.request_counts.canceled}`,
+  );
+
+  // Pass the SDK's `Message` to a local parse that extracts the text + usage.
+  // Wrapping the SDK type at the boundary keeps the parser exported from
+  // release-content.ts free of the wider Anthropic namespace (see comment on
+  // parseReleaseContent for the workspace dupe-install rationale).
+  const parsed = await collectResults(client, submitted.id, (message) => {
+    const raw = message.content
+      .filter((b): b is Extract<typeof b, { type: "text" }> => b.type === "text")
+      .map((b) => b.text)
+      .join("");
+    return {
+      ...parseReleaseContent(raw, message.stop_reason),
+      usage: {
+        input: message.usage.input_tokens,
+        output: message.usage.output_tokens,
+        cacheCreate: message.usage.cache_creation_input_tokens ?? 0,
+        cacheRead: message.usage.cache_read_input_tokens ?? 0,
+      },
+    };
+  });
+
+  for (const { row } of eligible) {
+    const outcome = parsed.get(row.id);
+    if (!outcome) {
+      out.push({ row, kind: "err", error: "no result line returned from batch" });
+      continue;
+    }
+    switch (outcome.kind) {
+      case "succeeded":
+        out.push({ row, kind: "ok", result: { ...outcome.value, skipped: false } });
+        break;
+      case "errored":
+        out.push({ row, kind: "err", error: errorMessage(outcome.error) });
+        break;
+      case "canceled":
+        out.push({ row, kind: "err", error: "request canceled" });
+        break;
+      case "expired":
+        out.push({ row, kind: "err", error: "request expired" });
+        break;
+    }
+  }
+  return out;
+}
+
 const client = new Anthropic({ apiKey });
 
-logger.info(`mode: ${apply ? "APPLY (writes to D1 prod)" : "DRY RUN"}`);
+const mode = `${apply ? "APPLY (writes to D1 prod)" : "DRY RUN"} (${noBatch ? "real-time" : "batched"})`;
+
+logger.info(`mode: ${mode}`);
 logger.info(`orgs: ${orgs ? orgs.join(",") : "all"}`);
 logger.info(`since: past ${sinceDays} day${sinceDays === 1 ? "" : "s"} (cutoff ${cutoffIso})`);
 logger.info(`budget ceiling: $${maxCostUsd.toFixed(2)} (override with --max-cost=N)`);
@@ -200,15 +370,20 @@ const rows = await fetchReleases();
 logger.info(`found ${rows.length} release${rows.length === 1 ? "" : "s"}`);
 
 // Pre-flight cost estimate. Per-row ≈ system prompt (~4k tok) + body/4 chars
-// per token for input + ~300 output tokens. Pricing: $1/M input, $5/M output
-// (Haiku 4.5 list price). This intentionally assumes worst-case no-cache
-// rates so the budget guard errs on the side of aborting — in practice the
-// ephemeral cache activates after the first call (~10× cheaper on reads).
+// per token for input + ~300 output tokens. Worst-case (no-cache) input rate
+// so the budget guard errs toward aborting; in practice the ephemeral cache
+// activates after the first real-time call (~10× cheaper on reads), and
+// requests inside one batch submission share the cached system prompt too.
 const estInputTokens = rows.reduce((sum, r) => sum + 4000 + Math.ceil(r.content.length / 4), 0);
 const estOutputTokens = rows.length * 300;
-const estCostUsd = (estInputTokens * 1) / 1_000_000 + (estOutputTokens * 5) / 1_000_000;
+const estCost = estimateCost(
+  { inputTokens: estInputTokens, outputTokens: estOutputTokens },
+  MODEL,
+  { batch: !noBatch },
+);
+const estCostUsd = estCost?.totalUsd ?? 0;
 logger.info(
-  `estimated cost: $${estCostUsd.toFixed(4)} (${estInputTokens.toLocaleString()} input + ${estOutputTokens.toLocaleString()} output tokens)`,
+  `estimated cost: $${estCostUsd.toFixed(4)} (${estInputTokens.toLocaleString()} input + ${estOutputTokens.toLocaleString()} output tokens${noBatch ? "" : ", batch -50%"})`,
 );
 if (estCostUsd > maxCostUsd) {
   logger.error(
@@ -217,12 +392,15 @@ if (estCostUsd > maxCostUsd) {
   process.exit(1);
 }
 
+const perRow: PerRow[] = noBatch ? await runRealtime(rows) : await runBatch(rows);
+
 let totalInput = 0;
 let totalOutput = 0;
 let totalCacheCreate = 0;
 let totalCacheRead = 0;
 let written = 0;
 let skippedEmpty = 0;
+let failed = 0;
 const samples: {
   org: string;
   sourceTitle: string;
@@ -232,63 +410,79 @@ const samples: {
   summary: string | null;
 }[] = [];
 
-await pool(rows, CONCURRENCY, async (row) => {
-  try {
-    const { title, titleShort, summary, usage, skipped }: SummarizeReleaseResult =
-      await summarizeRelease(client, {
-        orgSlug: row.org_slug,
-        sourceName: row.source_name,
-        productName: row.product_name,
-        title: row.title,
-        version: row.version,
-        url: row.url,
-        content: row.content,
-      });
-    totalInput += usage.input;
-    totalOutput += usage.output;
-    totalCacheCreate += usage.cacheCreate;
-    totalCacheRead += usage.cacheRead;
-    // Empty-body rows surface as `skipped: true` with all-null fields. Don't
-    // write them — leaving the columns NULL keeps the read path falling back
-    // to `release.title` instead of stamping a placeholder into the DB.
-    if (skipped) {
-      skippedEmpty++;
-    } else if (apply) {
-      await writeRow(row.id, summary, title, titleShort);
-      written++;
-    }
-    samples.push({
-      org: row.org_slug,
-      sourceTitle: row.title,
-      bodyLen: row.content.length,
-      title,
-      titleShort,
-      summary,
-    });
-  } catch (err) {
-    logger.error(`failed for ${row.org_slug}/${row.title}: ${(err as Error).message}`);
+interface WritePayload {
+  id: string;
+  summary: string | null;
+  title: string | null;
+  titleShort: string | null;
+}
+const pendingWrites: WritePayload[] = [];
+
+for (const entry of perRow) {
+  const { row } = entry;
+  if (entry.kind === "err") {
+    failed++;
+    logger.error(`failed for ${row.org_slug}/${row.title}: ${entry.error}`);
     samples.push({
       org: row.org_slug,
       sourceTitle: row.title,
       bodyLen: row.content.length,
       title: null,
       titleShort: null,
-      summary: `ERROR: ${(err as Error).message}`,
+      summary: `ERROR: ${entry.error}`,
+    });
+    continue;
+  }
+  const { result } = entry;
+  totalInput += result.usage.input;
+  totalOutput += result.usage.output;
+  totalCacheCreate += result.usage.cacheCreate;
+  totalCacheRead += result.usage.cacheRead;
+  if (result.skipped) {
+    skippedEmpty++;
+  } else if (apply) {
+    pendingWrites.push({
+      id: row.id,
+      summary: result.summary,
+      title: result.title,
+      titleShort: result.titleShort,
     });
   }
-});
+  samples.push({
+    org: row.org_slug,
+    sourceTitle: row.title,
+    bodyLen: row.content.length,
+    title: result.title,
+    titleShort: result.titleShort,
+    summary: result.summary,
+  });
+}
 
-// Pricing: Haiku 4.5 list — $1/M input, $5/M output. Ephemeral cache write 1.25x, read 0.1x.
-const inputCost = (totalInput * 1 + totalCacheCreate * 1.25 + totalCacheRead * 0.1) / 1_000_000;
-const outputCost = (totalOutput * 5) / 1_000_000;
+// Pooled to cap concurrent wrangler subprocesses; sequential `await` here
+// would dominate wall-clock on large batch runs.
+await pool(pendingWrites, CONCURRENCY, (w) => writeRow(w.id, w.summary, w.title, w.titleShort));
+written = pendingWrites.length;
+
+const finalCost = estimateCost(
+  {
+    inputTokens: totalInput,
+    cacheWriteTokens: totalCacheCreate,
+    cacheReadTokens: totalCacheRead,
+    outputTokens: totalOutput,
+  },
+  MODEL,
+  { batch: !noBatch },
+);
 
 logger.info(
-  `${apply ? "APPLIED" : "DRY RUN"}: processed ${rows.length} release${rows.length === 1 ? "" : "s"}${apply ? `, wrote ${written}` : ""}, skipped ${skippedEmpty} empty-body`,
+  `${apply ? "APPLIED" : "DRY RUN"}: processed ${rows.length} release${rows.length === 1 ? "" : "s"}${apply ? `, wrote ${written}` : ""}, skipped ${skippedEmpty} empty-body, failed ${failed}`,
 );
 logger.info(
   `tokens: ${totalInput} in (cache create ${totalCacheCreate}, cache read ${totalCacheRead}), ${totalOutput} out`,
 );
-logger.info(`est cost: $${(inputCost + outputCost).toFixed(4)} (Haiku 4.5 list price)`);
+logger.info(
+  `est cost: $${(finalCost?.totalUsd ?? 0).toFixed(4)} (Haiku 4.5${noBatch ? " list price" : " batch price = list × 0.5"})`,
+);
 
 samples.sort((a, b) => a.bodyLen - b.bodyLen);
 const report: string[] = ["", "## Samples (sorted by body length)", ""];

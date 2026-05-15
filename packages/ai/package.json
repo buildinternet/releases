@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./batch": "./src/batch.ts",
     "./evaluate": "./src/evaluate.ts",
     "./grader-prompt": "./src/grader-prompt.ts",
     "./playbook": "./src/playbook.ts",
