@@ -25,6 +25,7 @@ import {
   isIncidentResolved,
   type IncidentGroup,
 } from "./session-error-display";
+import { formatStatusTimestamp } from "./status-shared";
 
 interface SessionState {
   sessionId: string;
@@ -654,19 +655,8 @@ export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
   );
 }
 
-const timeFormatter = new Intl.DateTimeFormat("en-US", {
-  month: "short",
-  day: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
-  hour12: false,
-  timeZoneName: "short",
-});
-
 function formatTime(ts: number): string {
-  const parts = timeFormatter.formatToParts(new Date(ts));
-  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
-  return `${get("month")} ${get("day")}, ${get("hour")}:${get("minute")} ${get("timeZoneName")}`;
+  return formatStatusTimestamp(ts);
 }
 
 function SessionsTable({
@@ -1239,7 +1229,7 @@ function FetchLogTable({
       onLoadMore={loadMore}
       sort={sort}
       onSortChange={onSortChange}
-      formatTime={(iso) => formatTime(new Date(iso).getTime())}
+      formatTime={formatStatusTimestamp}
       showOrg
     />
   );

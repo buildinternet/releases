@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { FetchStatusBadge, formatFetchDuration } from "@/components/fetch-log-shared";
+import { formatStatusTimestamp } from "./status-shared";
 
 type BatchRun = {
   id: string;
@@ -20,19 +21,8 @@ type BatchRun = {
   actualCostUsd: number | null;
 };
 
-const timeFormatter = new Intl.DateTimeFormat("en-US", {
-  month: "short",
-  day: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
-  hour12: false,
-  timeZoneName: "short",
-});
-
 function formatCreatedAt(iso: string): string {
-  const parts = timeFormatter.formatToParts(new Date(iso));
-  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
-  return `${get("month")} ${get("day")}, ${get("hour")}:${get("minute")} ${get("timeZoneName")}`;
+  return formatStatusTimestamp(iso);
 }
 
 function formatDuration(createdAt: string, endedAt: string | null): string {

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { SortHeader, type SortState } from "@/components/sort-header";
+import { formatStatusTimestamp } from "./status-shared";
 
 // ---- Types ----------------------------------------------------------------
 
@@ -36,19 +37,8 @@ interface TopQuery {
 
 // ---- Formatting helpers ---------------------------------------------------
 
-const timeFormatter = new Intl.DateTimeFormat("en-US", {
-  month: "short",
-  day: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
-  hour12: false,
-  timeZoneName: "short",
-});
-
 function formatTimestamp(ts: number): string {
-  const parts = timeFormatter.formatToParts(new Date(ts));
-  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
-  return `${get("month")} ${get("day")}, ${get("hour")}:${get("minute")} ${get("timeZoneName")}`;
+  return formatStatusTimestamp(ts);
 }
 
 function formatDuration(ms: number | null): string {
