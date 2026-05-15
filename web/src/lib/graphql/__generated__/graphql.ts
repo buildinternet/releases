@@ -23,13 +23,16 @@ export type HomepageTickerQuery = {
       publishedAt: string | null;
       titleGenerated: string | null;
       titleShort: string | null;
-      source: { org: { slug: string; name: string }; product: { slug: string } | null };
+      source: {
+        org: { slug: string; name: string; avatarUrl: string | null };
+        product: { slug: string } | null;
+      };
     }>;
   };
 };
 
 export const HomepageTickerDocument = {
-  __meta__: { hash: "sha256:c438ca05071cdedd336e94ff20e11c79881e8a1a6efec690a0e4e6dd32881373" },
+  __meta__: { hash: "sha256:cf3093a1a676964141b246d500a724dde1cad18715150b46a1e2574913073b10" },
   kind: "Document",
   definitions: [
     {
@@ -107,6 +110,7 @@ export const HomepageTickerDocument = {
                                 selections: [
                                   { kind: "Field", name: { kind: "Name", value: "slug" } },
                                   { kind: "Field", name: { kind: "Name", value: "name" } },
+                                  { kind: "Field", name: { kind: "Name", value: "avatarUrl" } },
                                 ],
                               },
                             },
