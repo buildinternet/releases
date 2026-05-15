@@ -75,6 +75,7 @@ export const UpdateOrgBodySchema = z.object({
   domain: z.string().nullable().optional(),
   description: z.string().nullable().optional(),
   category: z.string().min(1).nullable().optional(),
+  avatarUrl: z.string().nullable().optional(),
   tags: z.array(z.string()).optional(),
   aliases: z.array(z.string()).optional(),
 });

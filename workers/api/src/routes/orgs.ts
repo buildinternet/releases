@@ -500,7 +500,7 @@ orgRoutes.patch(
     tags: ["Orgs"],
     summary: "Update organization",
     description:
-      "All body fields optional. `domain`, `description`, `category` accept `null` to clear. `tags` and `aliases` arrays replace the full set when provided.",
+      "All body fields optional. `domain`, `description`, `category`, `avatarUrl` accept `null` to clear. `tags` and `aliases` arrays replace the full set when provided.",
     security: [{ bearerAuth: [] }],
     responses: {
       200: { description: "Organization updated" },
@@ -528,6 +528,7 @@ orgRoutes.patch(
       domain?: string | null;
       description?: string | null;
       category?: string | null;
+      avatarUrl?: string | null;
       tags?: string[];
       aliases?: string[];
     } = { ...c.req.valid("json") };
@@ -578,6 +579,7 @@ orgRoutes.patch(
     if (body.domain !== undefined) updates.domain = body.domain;
     if (body.description !== undefined) updates.description = body.description;
     if (body.category !== undefined) updates.category = body.category;
+    if (body.avatarUrl !== undefined) updates.avatarUrl = body.avatarUrl;
 
     const [updated] = await db
       .update(organizations)
