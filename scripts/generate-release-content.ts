@@ -9,13 +9,16 @@
  * specific orgs, or to regenerate after a prompt change.
  *
  * Usage:
- *   bun scripts/generate-release-content.ts                       # dry run, openai+anthropic past 7d
- *   bun scripts/generate-release-content.ts --apply               # write to D1 prod
+ *   bun scripts/generate-release-content.ts                       # prints cost estimate and exits (no API calls)
+ *   bun scripts/generate-release-content.ts --apply               # submit batch to Anthropic, write to D1 prod
  *   bun scripts/generate-release-content.ts --orgs=vercel         # one or more org slugs (comma-sep)
  *   bun scripts/generate-release-content.ts --orgs=all --since=30 # everything in past N days
  *   bun scripts/generate-release-content.ts --apply --since=1
  *   bun scripts/generate-release-content.ts --apply --max-cost=25 # override $10 default ceiling
  *   bun scripts/generate-release-content.ts --apply --no-batch    # fall back to real-time path
+ *
+ * Without --apply, the script fetches the candidate list, prints the cost estimate, and exits
+ * without making any Anthropic API calls (neither batch nor real-time).
  *
  * Cost: by default this routes through the Anthropic Message Batches API
  * for a flat 50% discount on input + output (incl. cache). Trade-off is
@@ -390,6 +393,11 @@ if (estCostUsd > maxCostUsd) {
     `estimated cost $${estCostUsd.toFixed(2)} exceeds --max-cost $${maxCostUsd.toFixed(2)}; re-run with a higher --max-cost or narrow --orgs/--since`,
   );
   process.exit(1);
+}
+
+if (!apply) {
+  logger.info(`pass --apply to run (${noBatch ? "real-time" : "batch"} path); no API calls made`);
+  process.exit(0);
 }
 
 const perRow: PerRow[] = noBatch ? await runRealtime(rows) : await runBatch(rows);
