@@ -472,9 +472,17 @@ export default {
       return;
     }
     if (event.cron === "30 4 * * *") {
-      // Batch-summarize cron. Self-gates via BATCH_SUMMARIZE_ENABLED so a
-      // wrong var flip doesn't accidentally bill against Anthropic. The admin
+      // Batch-summarize cron. Gate check runs here before creating a Workflow
+      // instance so no instance is spawned when the feature is off. The admin
       // POST trigger bypasses the flag and runs unconditionally.
+      // The collect-eligible step also checks the flag as defense-in-depth.
+      if (env.BATCH_SUMMARIZE_ENABLED !== "true") {
+        logEvent("info", {
+          component: "batch-summarize-cron",
+          event: "disabled",
+        });
+        return;
+      }
       if (!env.BATCH_SUMMARIZE_WORKFLOW) {
         logEvent("warn", {
           component: "batch-summarize-cron",

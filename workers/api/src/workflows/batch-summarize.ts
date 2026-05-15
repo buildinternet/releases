@@ -36,11 +36,12 @@ import {
   parseReleaseContent,
   isEmptyContent,
 } from "@releases/ai-internal/release-content";
-import { submitBatch, collectResults } from "@releases/ai-internal/batch";
+import { submitBatch, collectResults, BATCH_ENDED_STATUS } from "@releases/ai-internal/batch";
 import {
   recordBatchSubmit,
   recordBatchProgress,
   recordBatchFinalize,
+  type TerminalBatchStatus,
 } from "@releases/core-internal/batch-run";
 import { fetchEligibleReleases } from "@releases/core-internal/eligibility";
 import { getAnthropicKey, resolveGatewayOpts, type AnthropicEnv } from "../lib/anthropic.js";
@@ -96,8 +97,9 @@ const MAX_ELIGIBLE_ROWS = 2_000;
  * Tokens per row for cost estimation: SYSTEM_PROMPT chars / 4 + per-row block.
  * We estimate 3.5 chars/token as a conservative approximation (Haiku 4.5 uses
  * ~4 chars/token on average; code-heavy content runs lower). The SYSTEM_PROMPT
- * is sent once per batch request — there is no batch-level caching in the
- * Batches API, so we count it for every request in the estimate.
+ * is counted for every request — this is conservative because the Batches API
+ * does honor cache_control (ephemeral), so cache hits will reduce the actual
+ * charge. The over-estimate is intentional for the budget guard.
  */
 const SYSTEM_PROMPT_TOKENS_ESTIMATE = Math.ceil(SYSTEM_PROMPT.length / 3.5);
 
@@ -110,12 +112,8 @@ const MAX_POLL_ITERATIONS = 360;
 
 // ── Retry policies ────────────────────────────────────────────────────────────
 
-const RETRY_COLLECT: WorkflowStepConfig = {
-  retries: { limit: 2, delay: "10 seconds", backoff: "exponential" },
-  timeout: "2 minutes",
-};
-
-const RETRY_SUBMIT: WorkflowStepConfig = {
+/** Shared retry policy for the short collect-eligible and submit steps. */
+const RETRY_SHORT: WorkflowStepConfig = {
   retries: { limit: 2, delay: "10 seconds", backoff: "exponential" },
   timeout: "2 minutes",
 };
@@ -143,7 +141,7 @@ export class BatchSummarizeWorkflow extends WorkflowEntrypoint<
 
     const collectResult = await step.do(
       "collect-eligible",
-      RETRY_COLLECT,
+      RETRY_SHORT,
       async (): Promise<{
         rows: Array<{
           id: string;
@@ -156,7 +154,6 @@ export class BatchSummarizeWorkflow extends WorkflowEntrypoint<
           productName: string | null;
         }>;
         estCostUsd: number;
-        eligibleCount: number;
         skippedEnabled: boolean;
       }> => {
         // Feature gate: cron fires check the env var; admin POST is always on.
@@ -166,7 +163,7 @@ export class BatchSummarizeWorkflow extends WorkflowEntrypoint<
             event: "disabled",
             trigger,
           });
-          return { rows: [], estCostUsd: 0, eligibleCount: 0, skippedEnabled: true };
+          return { rows: [], estCostUsd: 0, skippedEnabled: true };
         }
 
         const cutoffIso = daysAgoIso(sinceDays);
@@ -184,9 +181,12 @@ export class BatchSummarizeWorkflow extends WorkflowEntrypoint<
         });
 
         // Estimate cost without any API calls. Each request carries the full
-        // SYSTEM_PROMPT (no cross-request cache in the Batches API) plus a
-        // per-row user message. We estimate token counts from character counts
-        // and apply the 50% batch discount.
+        // SYSTEM_PROMPT plus a per-row user message. We estimate token counts
+        // from character counts and apply the 50% batch discount. This is a
+        // conservative estimate — actual cost will be lower because the Batches
+        // API does honor cache_control (ephemeral), so cache hits reduce input
+        // token charges. The over-estimate is intentional: it's the right side
+        // of the tradeoff for a budget guard.
         let totalEstInputTokens = 0;
         for (const row of rows) {
           const releaseBlock = buildReleaseBlock({
@@ -236,7 +236,7 @@ export class BatchSummarizeWorkflow extends WorkflowEntrypoint<
           maxCostUsd,
         });
 
-        return { rows, estCostUsd, eligibleCount: eligible.length, skippedEnabled: false };
+        return { rows, estCostUsd, skippedEnabled: false };
       },
     );
 
@@ -259,7 +259,7 @@ export class BatchSummarizeWorkflow extends WorkflowEntrypoint<
 
     const submitResult = await step.do(
       "submit",
-      RETRY_SUBMIT,
+      RETRY_SHORT,
       async (): Promise<{ batchRunId: string; anthropicBatchId: string }> => {
         const apiKey = await getAnthropicKey(env);
         if (!apiKey) {
@@ -347,6 +347,13 @@ export class BatchSummarizeWorkflow extends WorkflowEntrypoint<
         processing_status: string;
         request_counts: { succeeded: number; errored: number; expired: number; canceled: number };
       } | null = null;
+      // Track last-persisted counts so we only write when something changed.
+      let lastCounts: {
+        succeeded: number;
+        errored: number;
+        expired: number;
+        canceled: number;
+      } | null = null;
       for (let i = 0; i < MAX_POLL_ITERATIONS; i++) {
         // Always sleep first — Anthropic batches take minutes minimum.
         // oxlint-disable-next-line no-await-in-loop -- intentional poll loop inside a workflow step
@@ -355,24 +362,36 @@ export class BatchSummarizeWorkflow extends WorkflowEntrypoint<
         // oxlint-disable-next-line no-await-in-loop -- poll loop
         const cur = await client.messages.batches.retrieve(anthropicBatchId);
 
-        // Best-effort progress update; don't let a DB write failure abort the loop.
+        // Best-effort progress update — only when counts changed so we don't
+        // hammer D1 every 60s when the batch is idle.
         // oxlint-disable-next-line no-await-in-loop -- sequential update
-        await recordBatchProgress(db, anthropicBatchId, {
-          succeeded: cur.request_counts.succeeded,
-          errored: cur.request_counts.errored,
-          expired: cur.request_counts.expired,
-          canceled: cur.request_counts.canceled,
-        }).catch((err) => {
-          logEvent("warn", {
-            component: "batch-summarize",
-            event: "progress-update-failed",
-            batchRunId,
-            anthropicBatchId,
-            err,
+        const rc = cur.request_counts;
+        const countsChanged =
+          lastCounts === null ||
+          rc.succeeded !== lastCounts.succeeded ||
+          rc.errored !== lastCounts.errored ||
+          rc.expired !== lastCounts.expired ||
+          rc.canceled !== lastCounts.canceled;
+        if (countsChanged) {
+          lastCounts = { ...rc };
+          // oxlint-disable-next-line no-await-in-loop -- delta-guarded progress update inside poll loop
+          await recordBatchProgress(db, anthropicBatchId, {
+            succeeded: rc.succeeded,
+            errored: rc.errored,
+            expired: rc.expired,
+            canceled: rc.canceled,
+          }).catch((err) => {
+            logEvent("warn", {
+              component: "batch-summarize",
+              event: "progress-update-failed",
+              batchRunId,
+              anthropicBatchId,
+              err,
+            });
           });
-        });
+        }
 
-        if (cur.processing_status === "ended") {
+        if (cur.processing_status === BATCH_ENDED_STATUS) {
           finalBatch = cur;
           break;
         }
@@ -383,12 +402,14 @@ export class BatchSummarizeWorkflow extends WorkflowEntrypoint<
           batchRunId,
           anthropicBatchId,
           iteration: i,
-          requestCounts: cur.request_counts,
+          requestCounts: rc,
         });
       }
 
       if (!finalBatch) {
-        // Exhausted MAX_POLL_ITERATIONS without ending. Record as failed.
+        // Exhausted MAX_POLL_ITERATIONS without ending. Record as failed and
+        // throw NonRetryableError so Cloudflare Workflows does not re-enter
+        // the 6h poll step on a batch that's already been finalized.
         await recordBatchFinalize(db, anthropicBatchId, {
           status: "failed",
           endedAt: new Date().toISOString(),
@@ -396,7 +417,7 @@ export class BatchSummarizeWorkflow extends WorkflowEntrypoint<
           actualCostUsd: null,
           errorSummary: { reason: "poll-timeout", maxIterations: MAX_POLL_ITERATIONS },
         }).catch(() => undefined);
-        throw new Error(
+        throw new NonRetryableError(
           `batch-summarize: poll timed out after ${MAX_POLL_ITERATIONS} iterations for ${anthropicBatchId}`,
         );
       }
@@ -424,28 +445,25 @@ export class BatchSummarizeWorkflow extends WorkflowEntrypoint<
       let actualCostUsd = 0;
       const errorSampleIds: string[] = [];
 
+      // Collect successful rows first so we can batch the D1 UPDATEs instead
+      // of issuing one round-trip per row (up to MAX_ELIGIBLE_ROWS = 2,000).
+      type UpdateTuple = {
+        id: string;
+        titleGenerated: string | null;
+        titleShort: string | null;
+        summary: string | null;
+      };
+      const updateRows: UpdateTuple[] = [];
+
       for (const [customId, outcome] of outcomes) {
         if (outcome.kind === "succeeded") {
           const { parsed, usage } = outcome.value;
-          // Idempotent: only write when title_short is still NULL so a step
-          // retry doesn't overwrite a row that succeeded on a prior attempt.
-          // oxlint-disable-next-line no-await-in-loop -- per-row UPDATE inside collect loop
-          await db
-            .update(releases)
-            .set({
-              titleGenerated: parsed.title,
-              titleShort: parsed.titleShort,
-              summary: parsed.summary,
-            })
-            .where(and(eq(releases.id, customId), sql`${releases.titleShort} IS NULL`))
-            .catch((err: unknown) => {
-              logEvent("warn", {
-                component: "batch-summarize",
-                event: "upsert-failed",
-                releaseId: customId,
-                err,
-              });
-            });
+          updateRows.push({
+            id: customId,
+            titleGenerated: parsed.title,
+            titleShort: parsed.titleShort,
+            summary: parsed.summary,
+          });
 
           // Accumulate actual cost from per-request usage.
           const rowCost = estimateCost(
@@ -471,7 +489,36 @@ export class BatchSummarizeWorkflow extends WorkflowEntrypoint<
         }
       }
 
-      const finalStatus = succeeded > 0 ? "ended" : "failed";
+      // Batch UPDATEs: each UPDATE binds 4 values (titleGenerated, titleShort,
+      // summary, id) → D1 hard cap of 100 params → chunk at 25 rows per batch.
+      // Idempotent: WHERE title_short IS NULL guards against double-writes on
+      // step retry.
+      const CHUNK_SIZE = 25; // floor(100 / 4 binds per UPDATE)
+      for (let offset = 0; offset < updateRows.length; offset += CHUNK_SIZE) {
+        const chunk = updateRows.slice(offset, offset + CHUNK_SIZE);
+        const statements = chunk.map((row) =>
+          db
+            .update(releases)
+            .set({
+              titleGenerated: row.titleGenerated,
+              titleShort: row.titleShort,
+              summary: row.summary,
+            })
+            .where(and(eq(releases.id, row.id), sql`${releases.titleShort} IS NULL`)),
+        );
+        // oxlint-disable-next-line no-await-in-loop -- chunked batch; parallelism would exceed D1 limits
+        await db.batch(statements).catch((err: unknown) => {
+          logEvent("warn", {
+            component: "batch-summarize",
+            event: "upsert-batch-failed",
+            offset,
+            chunkSize: chunk.length,
+            err,
+          });
+        });
+      }
+
+      const finalStatus: TerminalBatchStatus = succeeded > 0 ? BATCH_ENDED_STATUS : "failed";
       const errorSummary =
         failed > 0
           ? {

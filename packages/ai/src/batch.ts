@@ -34,6 +34,9 @@ type BatchCreateParams = Anthropic.Messages.Batches.BatchCreateParams;
 type MessageBatch = Anthropic.Messages.Batches.MessageBatch;
 type MessageBatchIndividualResponse = Anthropic.Messages.Batches.MessageBatchIndividualResponse;
 
+/** Anthropic's terminal sentinel for `processing_status`. */
+export const BATCH_ENDED_STATUS = "ended" as const;
+
 const DEFAULT_INITIAL_DELAY_MS = 5_000;
 const DEFAULT_MAX_DELAY_MS = 60_000;
 const DEFAULT_BACKOFF_FACTOR = 2;
@@ -94,7 +97,7 @@ export async function pollBatch(
     // eslint-disable-next-line no-await-in-loop -- poll loop
     const cur = await client.messages.batches.retrieve(batchId);
     onPoll?.(cur);
-    if (cur.processing_status === "ended") return cur;
+    if (cur.processing_status === BATCH_ENDED_STATUS) return cur;
     if (Date.now() - startedAt > timeoutMs) {
       throw new Error(
         `pollBatch: timed out after ${timeoutMs}ms waiting for ${batchId} (last status: ${cur.processing_status})`,
