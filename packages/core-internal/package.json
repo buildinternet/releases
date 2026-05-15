@@ -12,7 +12,8 @@
     "./feed-cursor": "./src/feed-cursor.ts",
     "./changesets-cluster": "./src/changesets-cluster.ts",
     "./release-coverage-sql": "./src/release-coverage-sql.ts",
-    "./batch-run": "./src/batch-run.ts"
+    "./batch-run": "./src/batch-run.ts",
+    "./eligibility": "./src/eligibility.ts"
   },
   "dependencies": {
     "@buildinternet/releases-core": "workspace:*",

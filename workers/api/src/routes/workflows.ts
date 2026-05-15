@@ -1318,6 +1318,62 @@ workflowsRoutes.post("/workflows/cluster-changesets", async (c) => {
   });
 });
 
+// ── POST /workflows/batch-summarize ──────────────────────────────────────────
+//
+// Admin trigger for the BatchSummarizeWorkflow. Runs unconditionally (caller
+// made a deliberate decision); the cron path self-gates via BATCH_SUMMARIZE_ENABLED.
+//
+// Body: { sinceDays?, orgs?, maxCostUsd? }  (all optional)
+// Returns: { instanceId, statusUrl }
+
+interface BatchSummarizeBody {
+  sinceDays?: number;
+  orgs?: string[];
+  maxCostUsd?: number;
+}
+
+workflowsRoutes.post("/workflows/batch-summarize", async (c) => {
+  const body = await c.req.json<BatchSummarizeBody>().catch(() => ({}) as BatchSummarizeBody);
+
+  if (!c.env.BATCH_SUMMARIZE_WORKFLOW) {
+    return c.json(
+      { error: "service_unavailable", message: "BATCH_SUMMARIZE_WORKFLOW binding not configured" },
+      503,
+    );
+  }
+
+  const scheduledTime = Date.now();
+  const params = {
+    scheduledTime,
+    trigger: "admin" as const,
+    sinceDays: typeof body.sinceDays === "number" && body.sinceDays > 0 ? body.sinceDays : 1,
+    orgs: Array.isArray(body.orgs) && body.orgs.length > 0 ? body.orgs : undefined,
+    maxCostUsd:
+      typeof body.maxCostUsd === "number" && body.maxCostUsd > 0 ? body.maxCostUsd : undefined,
+  };
+
+  const instance = await c.env.BATCH_SUMMARIZE_WORKFLOW.create({
+    id: `batch-summarize-admin-${scheduledTime}`,
+    params,
+  });
+
+  const instanceId: string = (instance as unknown as { id: string }).id;
+
+  logEvent("info", {
+    component: "batch-summarize",
+    event: "admin-trigger",
+    instanceId,
+    sinceDays: params.sinceDays,
+    orgs: params.orgs,
+    maxCostUsd: params.maxCostUsd,
+  });
+
+  return c.json({
+    instanceId,
+    statusUrl: `${c.env.ADMIN_BASE_URL ?? ""}/v1/workflows/batch-summarize/status/${instanceId}`,
+  });
+});
+
 workflowsRoutes.post("/workflows/discover", async (c) => {
   const body = await c.req.text();
   const res = await proxyToDiscovery(c, "/onboard", body);
