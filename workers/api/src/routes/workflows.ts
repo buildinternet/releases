@@ -1374,6 +1374,36 @@ workflowsRoutes.post("/workflows/batch-summarize", async (c) => {
   });
 });
 
+// ── GET /workflows/batch-summarize/status/:instanceId ────────────────────────
+//
+// Resolves the `statusUrl` returned by the POST trigger above. Thin pass-through
+// to Cloudflare's `WorkflowInstance.status()` so operators can poll workflow
+// state without dashboard access.
+
+workflowsRoutes.get("/workflows/batch-summarize/status/:instanceId", async (c) => {
+  const binding = c.env.BATCH_SUMMARIZE_WORKFLOW;
+  if (!binding) {
+    return c.json(
+      { error: "service_unavailable", message: "BATCH_SUMMARIZE_WORKFLOW binding not configured" },
+      503,
+    );
+  }
+  const instanceId = c.req.param("instanceId");
+  try {
+    const instance = await binding.get(instanceId);
+    const status = await instance.status();
+    return c.json({ instanceId, ...status });
+  } catch (err) {
+    return c.json(
+      {
+        error: "instance_not_found",
+        message: err instanceof Error ? err.message : String(err),
+      },
+      404,
+    );
+  }
+});
+
 workflowsRoutes.post("/workflows/discover", async (c) => {
   const body = await c.req.text();
   const res = await proxyToDiscovery(c, "/onboard", body);
