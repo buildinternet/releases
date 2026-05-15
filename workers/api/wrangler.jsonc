@@ -87,6 +87,15 @@
     // See docs/architecture/ai-gateway.md. Gateway runs in authenticated
     // mode — the AI_GATEWAY_TOKEN secret below must be bound.
     "ANTHROPIC_BASE_URL": "https://gateway.ai.cloudflare.com/v1/b082600d280d44fd5da3501bc1bffe2f/releases/anthropic",
+    // Batch summarization workflow (issue #971). Off by default — set to "true"
+    // to enable the daily 04:30 UTC cron. The admin POST trigger
+    // (POST /v1/workflows/batch-summarize) runs unconditionally regardless of
+    // this flag.
+    "BATCH_SUMMARIZE_ENABLED": "false",
+    // Per-run cost ceiling in USD. Pre-submission cost estimate (from body
+    // token counts + batch discount) must stay under this value or the workflow
+    // aborts with NonRetryableError before submitting anything to Anthropic.
+    "BATCH_SUMMARIZE_MAX_COST_USD": "10",
     // Public web origin used to build canonical URLs for IndexNow pings (#649).
     "WEB_BASE_URL": "https://releases.sh",
     // IndexNow ingest pings (#649). On in prod; staging stays off. The
@@ -187,6 +196,13 @@
       "binding": "ONBOARD_SOURCE_WORKFLOW",
       "class_name": "OnboardSourceWorkflow",
     },
+    {
+      // Daily batch summarization. Cron fires daily at 04:30 UTC; self-gates via
+      // BATCH_SUMMARIZE_ENABLED. Admin POST trigger runs unconditionally. See #971.
+      "name": "batch-summarize",
+      "binding": "BATCH_SUMMARIZE_WORKFLOW",
+      "class_name": "BatchSummarizeWorkflow",
+    },
   ],
   "routes": [{ "pattern": "api.releases.sh", "custom_domain": true }],
   "triggers": {
@@ -194,9 +210,18 @@
     // Daily at 01:00 UTC: drain scrape-no-feed sources via managed-agents.
     // Daily at 03:00 UTC: recompute fetchPriority tiers based on cadence.
     // Daily at 04:00 UTC: force-drain stranded scrape/agent sources (#518).
+    // Daily at 04:30 UTC: batch summarization (self-gates via BATCH_SUMMARIZE_ENABLED). See #971.
     // Daily at 05:00 UTC: delete search_queries rows older than SEARCH_QUERY_RETENTION_DAYS (#575).
     // Daily at 05:30 UTC: hard-purge tombstoned orgs/sources/products older than TOMBSTONE_RETENTION_DAYS (#666).
-    "crons": ["0 * * * *", "0 1 * * *", "0 3 * * *", "0 4 * * *", "0 5 * * *", "30 5 * * *"],
+    "crons": [
+      "0 * * * *",
+      "0 1 * * *",
+      "0 3 * * *",
+      "0 4 * * *",
+      "30 4 * * *",
+      "0 5 * * *",
+      "30 5 * * *",
+    ],
   },
   // State is per-colo, not global. `period` must be 10 or 60 (CF constraint).
   "unsafe": {
@@ -310,6 +335,9 @@
         // Route Anthropic SDK calls through Cloudflare AI Gateway.
         // See docs/architecture/ai-gateway.md. Flip on prod after staging burn-in.
         "ANTHROPIC_BASE_URL": "https://gateway.ai.cloudflare.com/v1/b082600d280d44fd5da3501bc1bffe2f/releases-staging/anthropic",
+        // Mirrors prod flag; not read in staging (CRON_ENABLED=false). See #971.
+        "BATCH_SUMMARIZE_ENABLED": "false",
+        "BATCH_SUMMARIZE_MAX_COST_USD": "10",
         // Mirrors prod default; the helper also short-circuits on
         // INDEXING_DISABLED=true, so even if this is flipped on, staging
         // never fires. See workers/api/src/lib/indexnow.ts.
@@ -378,6 +406,11 @@
           "name": "onboard-source-staging",
           "binding": "ONBOARD_SOURCE_WORKFLOW",
           "class_name": "OnboardSourceWorkflow",
+        },
+        {
+          "name": "batch-summarize-staging",
+          "binding": "BATCH_SUMMARIZE_WORKFLOW",
+          "class_name": "BatchSummarizeWorkflow",
         },
       ],
       // Empty cron list. Without this override, Wrangler inherits the

@@ -30,6 +30,7 @@ export { ScrapeAgentSweepWorkflow } from "./workflows/scrape-agent-sweep.js";
 export { PollAndFetchWorkflow } from "./workflows/poll-and-fetch.js";
 export { PollFetchSummaryWorkflow } from "./workflows/poll-fetch-summary.js";
 export { OnboardSourceWorkflow } from "./workflows/onboard-source.js";
+export { BatchSummarizeWorkflow } from "./workflows/batch-summarize.js";
 
 /** Cloudflare Secrets Store binding — call .get() to retrieve the secret value. */
 type SecretBinding = { get(): Promise<string> };
@@ -71,6 +72,11 @@ export type Env = {
     // tail instead of riding `c.executionCtx.waitUntil(...)`. See issue #493.
     ONBOARD_USE_WORKFLOW?: string;
     ONBOARD_SOURCE_WORKFLOW?: Workflow;
+    // Batch summarization workflow (issue #971). Cron at 04:30 UTC; self-gates
+    // via BATCH_SUMMARIZE_ENABLED. Admin POST trigger runs unconditionally.
+    BATCH_SUMMARIZE_ENABLED?: string;
+    BATCH_SUMMARIZE_MAX_COST_USD?: string;
+    BATCH_SUMMARIZE_WORKFLOW?: Workflow;
     // Feature flag: when "true", poll-and-fetch widens its candidate set to
     // include scrape/agent sources with no feedUrl and routes them through
     // change-detector branches defined in the org playbook's `fetchQuirks`
@@ -459,6 +465,41 @@ export default {
             FORCE_DRAIN_CRON_ENABLED: env.FORCE_DRAIN_CRON_ENABLED,
             FORCE_DRAIN_STALE_HOURS: env.FORCE_DRAIN_STALE_HOURS,
             FORCE_SWEEP_MAX_SESSIONS: env.FORCE_SWEEP_MAX_SESSIONS,
+          }),
+          alertEnv,
+        ),
+      );
+      return;
+    }
+    if (event.cron === "30 4 * * *") {
+      // Batch-summarize cron. Gate check runs here before creating a Workflow
+      // instance so no instance is spawned when the feature is off. The admin
+      // POST trigger bypasses the flag and runs unconditionally.
+      // The collect-eligible step also checks the flag as defense-in-depth.
+      if (env.BATCH_SUMMARIZE_ENABLED !== "true") {
+        logEvent("info", {
+          component: "batch-summarize-cron",
+          event: "disabled",
+        });
+        return;
+      }
+      if (!env.BATCH_SUMMARIZE_WORKFLOW) {
+        logEvent("warn", {
+          component: "batch-summarize-cron",
+          event: "workflow-binding-missing",
+        });
+        return;
+      }
+      ctx.waitUntil(
+        loggedDispatch(
+          "batch-summarize-cron",
+          env.BATCH_SUMMARIZE_WORKFLOW.create({
+            id: `batch-summarize-${event.scheduledTime}`,
+            params: {
+              scheduledTime: event.scheduledTime,
+              trigger: "cron",
+              sinceDays: 1,
+            },
           }),
           alertEnv,
         ),
