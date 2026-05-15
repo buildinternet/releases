@@ -13,6 +13,7 @@ import { drizzle } from "drizzle-orm/d1";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { organizations, products, releases, sources } from "@buildinternet/releases-core/schema";
 import type { Source } from "@buildinternet/releases-core/schema";
+import { releaseCoverage } from "@releases/db/schema-coverage.js";
 import { SOURCE_DELETED_SENTINEL, recordWorkflowFailure } from "./_shared.js";
 import { logEvent } from "@releases/lib/log-event";
 import { getSecret } from "@releases/lib/secrets";
@@ -110,6 +111,21 @@ async function resolveFetchEnv(env: PollAndFetchWorkflowEnv): Promise<FetchOneEn
 }
 
 /**
+ * Per-fire row cap. A typical fire is 0–3 rows; anything larger is almost
+ * always a monorepo dump or first-onboard backfill, neither of which is a
+ * useful target for the per-row LLM call. Bail loudly and let a deliberate
+ * `scripts/generate-release-content.ts` invocation mop up if wanted.
+ */
+const MAX_AUTOGEN_ROWS_PER_FIRE = 20;
+
+/**
+ * Per-row body cap (chars). Haiku 4.5 input is $1/M tokens (~4 chars/token),
+ * so 50k chars ≈ 12.5k tokens ≈ $0.013 per call before output. Above that we
+ * skip the row — outlier bodies don't summarize well and they dominate cost.
+ */
+const MAX_AUTOGEN_BODY_CHARS = 50_000;
+
+/**
  * Per-org opt-in: when the source's org has `auto_generate_content = true`
  * and the source isn't hidden, run freshly-inserted releases through Haiku
  * 4.5 to populate `title_generated` / `title_short` / `summary`.
@@ -147,6 +163,10 @@ export async function generateContentForReleases(
   for (let i = 0; i < insertedIds.length; i += IN_ARRAY_CHUNK_SIZE) {
     const chunk = insertedIds.slice(i, i + IN_ARRAY_CHUNK_SIZE);
     // eslint-disable-next-line no-await-in-loop -- D1 chunked SELECT (100 bind param limit)
+    // Skip coverage-side rows: they're hidden from read paths by default, so
+    // summarizing them is a pure waste. The LEFT JOIN keeps canonical and
+    // unlinked rows; the IS NULL filter drops anything that's already linked
+    // as coverage to another release.
     const chunkRows: ContentRow[] = await db
       .select({
         id: releases.id,
@@ -162,11 +182,29 @@ export async function generateContentForReleases(
       .innerJoin(sources, eq(sources.id, releases.sourceId))
       .innerJoin(organizations, eq(organizations.id, sources.orgId))
       .leftJoin(products, eq(products.id, sources.productId))
-      .where(and(inArray(releases.id, chunk), eq(organizations.autoGenerateContent, true)));
+      .leftJoin(releaseCoverage, eq(releaseCoverage.coverageId, releases.id))
+      .where(
+        and(
+          inArray(releases.id, chunk),
+          eq(organizations.autoGenerateContent, true),
+          sql`${releaseCoverage.coverageId} IS NULL`,
+        ),
+      );
     rows.push(...chunkRows);
   }
 
   if (rows.length === 0) return;
+
+  if (rows.length > MAX_AUTOGEN_ROWS_PER_FIRE) {
+    logEvent("warn", {
+      component: "auto-generate-content",
+      event: "row-cap-tripped",
+      sourceSlug: source.slug,
+      candidateCount: rows.length,
+      cap: MAX_AUTOGEN_ROWS_PER_FIRE,
+    });
+    return;
+  }
 
   const apiKey = await getAnthropicKey(env);
   if (!apiKey) return;
@@ -176,10 +214,23 @@ export async function generateContentForReleases(
 
   let generated = 0;
   let skippedEmpty = 0;
+  let skippedTooLarge = 0;
   let failed = 0;
   let totalTokens = 0;
 
   for (const row of rows) {
+    if ((row.content?.length ?? 0) > MAX_AUTOGEN_BODY_CHARS) {
+      skippedTooLarge++;
+      logEvent("warn", {
+        component: "auto-generate-content",
+        event: "body-cap-skip",
+        releaseId: row.id,
+        orgSlug: row.orgSlug,
+        bodyChars: row.content.length,
+        cap: MAX_AUTOGEN_BODY_CHARS,
+      });
+      continue;
+    }
     try {
       // eslint-disable-next-line no-await-in-loop -- sequential per-row keeps cost bounded; typical fire is 0–3 rows
       const result = await summarizeRelease(client, {
@@ -229,6 +280,7 @@ export async function generateContentForReleases(
     candidateCount: rows.length,
     generated,
     skippedEmpty,
+    skippedTooLarge,
     failed,
     totalTokens,
     durationMs: Date.now() - startedAt,

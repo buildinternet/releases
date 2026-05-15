@@ -450,6 +450,29 @@ export async function bodyHashCheck(
  * `parseAtom` is an alias kept so callers can self-document which format they
  * have. The library doesn't parse JSON Feed — that path is `parseJsonFeed`.
  */
+/**
+ * Pick a stable URL for the release row. Prefer the RSS `<link>` / Atom
+ * `<link href>` (`item.url`). When that's missing — auth0's changelog, for
+ * example, ships only `<guid>` fragment-hashes — fall back to `item.id` if
+ * it parses as a URL. Without this fallback, `releases.url` ends up NULL and
+ * the `UNIQUE(source_id, url)` dedup constraint never fires (SQLite treats
+ * each NULL as distinct), so every poll re-inserts the same items.
+ */
+function feedItemUrl(item: { url?: string | null; id?: string | null }): string | undefined {
+  if (item.url) return item.url;
+  if (item.id) {
+    try {
+      new URL(item.id);
+      return item.id;
+    } catch {
+      // item.id is a tag URI or opaque token — leaving url undefined is the
+      // existing behavior; downstream is the right place to add a more
+      // permissive dedup key if a real source needs it.
+    }
+  }
+  return undefined;
+}
+
 export function parseRss(xml: string): RawRelease[] {
   const releases: RawRelease[] = [];
   for (const item of libParseFeed(xml).items) {
@@ -462,7 +485,7 @@ export function parseRss(xml: string): RawRelease[] {
     releases.push({
       title: item.title,
       content: htmlToMarkdown(decodeHtmlEntities(body)),
-      url: item.url ?? undefined,
+      url: feedItemUrl(item),
       publishedAt: dateRaw ? new Date(dateRaw) : undefined,
       version: extractVersionFromTitle(item.title),
       isBreaking: detectBreaking(item.title, body),

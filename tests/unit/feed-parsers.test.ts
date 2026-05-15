@@ -129,6 +129,37 @@ describe("parseRss", () => {
     expect(releases[0].media![0].url).toBe("https://acme.com/img/dashboard.png");
     expect(releases[0].media![0].alt).toBe("New dashboard");
   });
+
+  it("falls back to <guid> when <link> is absent (auth0 changelog shape)", () => {
+    // Auth0's RSS feed ships only <guid> fragment-hashes — no <link> element.
+    // Without the fallback, releases.url is NULL on every item and the
+    // UNIQUE(source_id, url) dedup constraint never fires (SQLite treats each
+    // NULL as distinct), causing every poll to re-insert the full feed.
+    const xml = `<?xml version="1.0"?>
+<rss><channel>
+  <item>
+    <title>Non-Unique Emails is Now Generally Available</title>
+    <description>Multiple accounts can share one email address</description>
+    <pubDate>Tue, 13 May 2026 00:00:00 GMT</pubDate>
+    <guid>https://auth0.com/changelog#aGVRGJTYvJA0AG9vcs3gu</guid>
+  </item>
+  <item>
+    <title>Opaque-id item</title>
+    <description>guid is a tag URI; still a stable dedup key</description>
+    <guid isPermaLink="false">tag:example.com,2024:post-1</guid>
+  </item>
+  <item>
+    <title>Non-URL guid item</title>
+    <description>a raw opaque token can't be used as a URL</description>
+    <guid isPermaLink="false">deadbeef</guid>
+  </item>
+</channel></rss>`;
+    const releases = parseRss(xml);
+    expect(releases).toHaveLength(3);
+    expect(releases[0].url).toBe("https://auth0.com/changelog#aGVRGJTYvJA0AG9vcs3gu");
+    expect(releases[1].url).toBe("tag:example.com,2024:post-1");
+    expect(releases[2].url).toBeUndefined();
+  });
 });
 
 // ── Atom parsing ───────────────────────────────────────────────────
