@@ -112,10 +112,10 @@ export async function fetchEligibleReleases(
   }
 
   // Org-filter path: chunk at 90 to stay under D1's 100 bind-param cap.
-  // Each chunk is queried without a per-chunk LIMIT so that globally-newer
-  // rows from a later chunk are not unfairly excluded by an earlier chunk
-  // consuming the cap. All chunks are merged, deduped, globally sorted, then
-  // sliced to safeMax.
+  // Each chunk is sorted by publishedAt DESC and capped at safeMax. This is
+  // safe because the global top-N is always a subset of ⋃(chunk_i_top_N):
+  // any row in the final slice must be in at least one chunk's top-safeMax.
+  // All chunks are merged, deduped, globally sorted, then sliced to safeMax.
   //
   // publishedAt is fetched for sorting only and is stripped from the output.
   type ChunkRow = EligibleRow & { publishedAt: string | null };
@@ -153,7 +153,9 @@ export async function fetchEligibleReleases(
           sql`${releaseCoverage.coverageId} IS NULL`,
           inArray(sql`LOWER(${organizations.slug})`, chunk),
         ),
-      );
+      )
+      .orderBy(desc(releases.publishedAt))
+      .limit(safeMax);
 
     for (const row of chunkRows) {
       if (!seen.has(row.id)) {

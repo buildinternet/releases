@@ -367,15 +367,18 @@ describe("fetchEligibleReleases — global-newest across chunks (>90 orgs)", () 
     });
 
     expect(rows.length).toBe(5);
-    // The globally newest release (org 91, second chunk) must be present.
-    expect(rows[0]!.id).toBe("rel_chunk_091");
-    // All returned rows must be in descending publishedAt order.
-    for (let j = 1; j < rows.length; j++) {
-      // Confirm ordering by checking the org index embedded in the id.
-      const prev = rows[j - 1]!.id;
-      const cur = rows[j]!.id;
-      expect(prev >= cur).toBe(true);
-    }
+    // Assert the exact top-5 IDs in publishedAt-DESC order.
+    // Org 91 (second chunk): "2026-05-15T12:00:00Z" — globally newest.
+    // Orgs 90→87 (first chunk): "2026-04-90" … "2026-04-87" — next by string sort.
+    // This is derived from the fixture's publishedAt values, not from ID
+    // lexicographic order, so a future ID-format change won't mask a sort bug.
+    expect([rows[0]!.id, rows[1]!.id, rows[2]!.id, rows[3]!.id, rows[4]!.id]).toEqual([
+      "rel_chunk_091", // newest publishedAt: 2026-05-15T12:00:00Z
+      "rel_chunk_090", // 2026-04-90T00:00:00Z
+      "rel_chunk_089", // 2026-04-89T00:00:00Z
+      "rel_chunk_088", // 2026-04-88T00:00:00Z
+      "rel_chunk_087", // 2026-04-87T00:00:00Z
+    ]);
   });
 });
 
