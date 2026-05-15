@@ -1,3 +1,3 @@
 {
-  "sha256:c438ca05071cdedd336e94ff20e11c79881e8a1a6efec690a0e4e6dd32881373": "query HomepageTicker($exclude: [SourceType!]!, $limit: Int!) { latestReleases(limit: $limit, excludeSourceTypes: $exclude) { items { id publishedAt source { org { name slug } product { slug } } title titleGenerated titleShort version } } }"
+  "sha256:cf3093a1a676964141b246d500a724dde1cad18715150b46a1e2574913073b10": "query HomepageTicker($exclude: [SourceType!]!, $limit: Int!) { latestReleases(limit: $limit, excludeSourceTypes: $exclude) { items { id publishedAt source { org { avatarUrl name slug } product { slug } } title titleGenerated titleShort version } } }"
 }

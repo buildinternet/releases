@@ -63,7 +63,7 @@ export function MobileNav() {
             className="absolute left-0 right-0 top-full z-40 border-b border-stone-200 bg-white shadow-lg dark:border-stone-800 dark:bg-stone-950"
           >
             <nav className="flex flex-col px-6 py-4 text-sm text-stone-700 dark:text-stone-300">
-              {visibleNavItems().map((item) => (
+              {visibleNavItems({ mobile: true }).map((item) => (
                 <Link
                   key={item.href}
                   href={item.href}

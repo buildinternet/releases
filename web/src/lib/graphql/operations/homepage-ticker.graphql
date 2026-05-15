@@ -11,6 +11,7 @@ query HomepageTicker($limit: Int!, $exclude: [SourceType!]!) {
         org {
           slug
           name
+          avatarUrl
         }
         product {
           slug

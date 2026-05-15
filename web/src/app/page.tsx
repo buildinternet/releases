@@ -5,7 +5,6 @@ import { graphqlRequest } from "@/lib/graphql/client";
 import { HomepageTickerDocument } from "@/lib/graphql/__generated__/graphql";
 import type { HomepageTickerQuery } from "@/lib/graphql/__generated__/graphql";
 import { Header } from "@/components/header";
-import { SearchBar } from "@/components/search-bar";
 import { SetupMessage } from "@/components/setup-message";
 import { OrgTable } from "@/components/org-table";
 import { InstallStepsInline, InstallStepsSidebar } from "@/components/install-steps";
@@ -75,8 +74,7 @@ export default async function HomePage() {
         <p className="text-[15px] text-stone-500 dark:text-stone-400 mb-6">
           A unified registry of product releases, available via CLI, API, or MCP.
         </p>
-        <SearchBar className="max-w-[480px] mx-auto" />
-        <div className="flex justify-center gap-8 mt-5 text-[13px] text-stone-400 dark:text-stone-500">
+        <div className="flex justify-center gap-8 text-[13px] text-stone-400 dark:text-stone-500">
           <span>
             <strong className="text-stone-600 dark:text-stone-300">{stats.orgs}</strong> orgs
           </span>

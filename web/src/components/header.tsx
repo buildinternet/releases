@@ -1,12 +1,14 @@
 import Link from "next/link";
 import { ThemeToggle } from "./theme-toggle";
 import { MobileNav } from "./mobile-nav";
+import { SearchBar } from "./search-bar";
+import { SearchTrigger } from "./search-trigger";
 import { GITHUB_REPO_URL, visibleNavItems } from "./nav-items";
 
 export function Header() {
   return (
     <header
-      className="relative border-b border-stone-200 dark:border-stone-800 px-6 py-4 flex items-center justify-between"
+      className="relative border-b border-stone-200 dark:border-stone-800 px-6 py-4 flex items-center justify-between gap-6"
       style={{ viewTransitionName: "site-header" }}
     >
       <Link
@@ -44,6 +46,10 @@ export function Header() {
           preview
         </span>
       </Link>
+      <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-[420px] px-6 [&>*]:pointer-events-auto">
+        <SearchBar className="hidden lg:block w-full" autoFocus={false} />
+        <SearchTrigger className="hidden sm:flex lg:hidden mx-auto w-fit" />
+      </div>
       <MobileNav />
       <nav className="hidden sm:flex items-center gap-5 text-sm text-stone-500 dark:text-stone-400">
         {visibleNavItems().map((item) => (
