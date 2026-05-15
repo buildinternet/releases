@@ -87,11 +87,12 @@
     // See docs/architecture/ai-gateway.md. Gateway runs in authenticated
     // mode — the AI_GATEWAY_TOKEN secret below must be bound.
     "ANTHROPIC_BASE_URL": "https://gateway.ai.cloudflare.com/v1/b082600d280d44fd5da3501bc1bffe2f/releases/anthropic",
-    // Batch summarization workflow (issue #971). Off by default — set to "true"
-    // to enable the daily 04:30 UTC cron. The admin POST trigger
+    // Batch summarization workflow (issue #971). Enabled — daily 04:30 UTC cron
+    // walks the past 24h of releases across orgs with auto_generate_content=true
+    // (~26 orgs as of enable). Admin POST trigger
     // (POST /v1/workflows/batch-summarize) runs unconditionally regardless of
     // this flag.
-    "BATCH_SUMMARIZE_ENABLED": "false",
+    "BATCH_SUMMARIZE_ENABLED": "true",
     // Per-run cost ceiling in USD. Pre-submission cost estimate (from body
     // token counts + batch discount) must stay under this value or the workflow
     // aborts with NonRetryableError before submitting anything to Anthropic.
