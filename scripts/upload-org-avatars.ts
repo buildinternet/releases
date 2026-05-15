@@ -40,6 +40,9 @@
 
 import { readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, extname, join, resolve } from "node:path";
+import { logger } from "@buildinternet/releases-lib/logger";
+
+type UploadStatus = "uploaded" | "dry_run" | "tombstoned" | "failed" | "skipped" | "missing";
 
 interface Args {
   manifest: string;
@@ -77,12 +80,12 @@ function parseArgs(argv: string[]): Args {
       );
       process.exit(0);
     } else if (a?.startsWith("--")) {
-      console.error(`Unknown flag: ${a}`);
+      logger.error(`Unknown flag: ${a}`);
       process.exit(1);
     }
   }
   if (!args.manifest) {
-    console.error("--manifest <path> is required (try --help)");
+    logger.error("--manifest <path> is required (try --help)");
     process.exit(1);
   }
   return args;
@@ -155,11 +158,11 @@ async function main(): Promise<void> {
 
   if (args.apply) {
     if (!apiUrl) {
-      console.error("RELEASED_API_URL is required when --apply is set");
+      logger.error("RELEASED_API_URL is required when --apply is set");
       process.exit(1);
     }
     if (!apiKey) {
-      console.error("RELEASED_API_KEY is required when --apply is set");
+      logger.error("RELEASED_API_KEY is required when --apply is set");
       process.exit(1);
     }
   }
@@ -167,7 +170,7 @@ async function main(): Promise<void> {
   const csv = readFileSync(manifestPath, "utf8");
   const rows = parseCsv(csv);
 
-  console.log(
+  logger.info(
     `Loaded ${rows.length} rows from ${manifestPath}` +
       `\n  raw dir:     ${rawDir}` +
       `\n  media origin: ${mediaOrigin}` +
@@ -178,21 +181,14 @@ async function main(): Promise<void> {
       "\n",
   );
 
-  // Per-row outcome tracked so we can write a manifest artifact at the end.
-  // `upload_status` values:
-  //   uploaded   PUT + PATCH both succeeded (avatar live in DB)
-  //   dry_run    --apply not passed; URL is the one we'd write
-  //   tombstoned PATCH returned 404 (org soft-deleted; R2 PUT still attempted)
-  //   failed     hard error on PUT or PATCH
-  //   skipped    manifest status != ok, 0-byte file, unknown extension, etc.
-  const outcomes = new Map<number, { uploadedUrl: string; uploadStatus: string }>();
+  const outcomes = new Map<number, { uploadedUrl: string; uploadStatus: UploadStatus }>();
 
   let ok = 0;
   let skipped = 0;
   let failed = 0;
   let tombstoned = 0;
 
-  const recordOutcome = (rowIdx: number, uploadStatus: string, uploadedUrl = ""): void => {
+  const recordOutcome = (rowIdx: number, uploadStatus: UploadStatus, uploadedUrl = ""): void => {
     outcomes.set(rowIdx, { uploadedUrl, uploadStatus });
   };
 
@@ -202,35 +198,31 @@ async function main(): Promise<void> {
     const filename = r.filename ?? "";
     const status = r.status ?? "";
     if (!slug || !filename) {
-      console.warn(`SKIP row=${r.row} (missing slug/filename)`);
+      logger.warn(`SKIP row=${r.row} (missing slug/filename)`);
       recordOutcome(i, "skipped");
       skipped++;
       continue;
     }
     if (status !== "ok") {
-      console.warn(`SKIP ${slug} (status=${status})`);
+      logger.warn(`SKIP ${slug} (status=${status})`);
       recordOutcome(i, "skipped");
       skipped++;
       continue;
     }
-    if (only && !only.has(slug)) {
-      // Filtered out — leave row's outcome untouched so artifact retains
-      // whatever was there before. (Empty string for first-time runs.)
-      continue;
-    }
+    if (only && !only.has(slug)) continue;
 
     const path = join(rawDir, filename);
     let size: number;
     try {
       size = statSync(path).size;
     } catch {
-      console.error(`MISS ${slug}: ${filename} not found at ${path}`);
+      logger.error(`MISS ${slug}: ${filename} not found at ${path}`);
       recordOutcome(i, "missing");
       failed++;
       continue;
     }
     if (size === 0) {
-      console.warn(`SKIP ${slug}: ${filename} is 0 bytes (vestige file)`);
+      logger.warn(`SKIP ${slug}: ${filename} is 0 bytes (vestige file)`);
       recordOutcome(i, "skipped");
       skipped++;
       continue;
@@ -239,7 +231,7 @@ async function main(): Promise<void> {
     const ext = extname(filename).slice(1).toLowerCase();
     const contentType = CONTENT_TYPES[ext];
     if (!contentType) {
-      console.error(`SKIP ${slug}: unsupported extension .${ext}`);
+      logger.error(`SKIP ${slug}: unsupported extension .${ext}`);
       recordOutcome(i, "skipped");
       skipped++;
       continue;
@@ -251,7 +243,7 @@ async function main(): Promise<void> {
     const avatarUrl = `${mediaOrigin}/${r2Key}`;
 
     if (!args.apply) {
-      console.log(`DRY  ${slug}  ${size}B ${contentType}  →  ${avatarUrl}`);
+      logger.info(`DRY  ${slug}  ${size}B ${contentType}  →  ${avatarUrl}`);
       recordOutcome(i, "dry_run", avatarUrl);
       ok++;
       continue;
@@ -271,7 +263,7 @@ async function main(): Promise<void> {
       body: new Uint8Array(body),
     });
     if (!putRes.ok) {
-      console.error(`FAIL ${slug}: PUT ${r2Key} → ${putRes.status} ${await putRes.text()}`);
+      logger.error(`FAIL ${slug}: PUT ${r2Key} → ${putRes.status} ${await putRes.text()}`);
       recordOutcome(i, "failed");
       failed++;
       continue;
@@ -283,34 +275,33 @@ async function main(): Promise<void> {
       body: JSON.stringify({ avatarUrl }),
     });
     if (!patchRes.ok) {
-      const errText = await patchRes.text();
-      // 404 on PATCH means the org row is soft-deleted (`--org_<id>` slugs
-      // are the mangled-rename pattern for tombstones). File is already
-      // uploaded to R2; we just can't link it from the DB.
+      // 404 means the org row is soft-deleted (`--org_<id>` mangled-rename
+      // pattern). R2 PUT already succeeded; the DB pointer just can't be set.
       if (patchRes.status === 404) {
-        console.warn(`TOMB ${slug}: org tombstoned, R2 file uploaded but avatar_url not set`);
+        patchRes.body?.cancel();
+        logger.warn(`TOMB ${slug}: org tombstoned, R2 file uploaded but avatar_url not set`);
         recordOutcome(i, "tombstoned", avatarUrl);
         tombstoned++;
         continue;
       }
-      console.error(`FAIL ${slug}: PATCH org → ${patchRes.status} ${errText}`);
+      logger.error(`FAIL ${slug}: PATCH org → ${patchRes.status} ${await patchRes.text()}`);
       recordOutcome(i, "failed");
       failed++;
       continue;
     }
     // oxlint-enable no-await-in-loop
 
-    console.log(`OK   ${slug}  ${size}B  →  ${avatarUrl}`);
+    logger.info(`OK   ${slug}  ${size}B  →  ${avatarUrl}`);
     recordOutcome(i, "uploaded", avatarUrl);
     ok++;
   }
 
   writeManifest(manifestPath, csv, rows, outcomes);
 
-  console.log(
+  logger.info(
     `\nSummary: ${ok} ok, ${skipped} skipped, ${tombstoned} tombstoned, ${failed} failed`,
   );
-  console.log(`Manifest updated in place: ${manifestPath}`);
+  logger.info(`Manifest updated in place: ${manifestPath}`);
   if (failed > 0) process.exit(1);
 }
 
@@ -322,7 +313,7 @@ function writeManifest(
   manifestPath: string,
   originalCsv: string,
   rows: Row[],
-  outcomes: Map<number, { uploadedUrl: string; uploadStatus: string }>,
+  outcomes: Map<number, { uploadedUrl: string; uploadStatus: UploadStatus }>,
 ): void {
   const originalLines = originalCsv.split(/\r?\n/);
   const trailingNewline = originalCsv.endsWith("\n") ? "\n" : "";
