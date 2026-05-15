@@ -38,6 +38,9 @@ function runWrangler(args: string[]): Promise<string> {
     const child = spawn("bunx", ["wrangler", ...args], {
       stdio: ["ignore", "pipe", "pipe"],
     });
+    // Without an "error" listener, spawn failures (ENOENT, EACCES, …) emit an
+    // uncaught error event and the promise never settles. Forward to reject.
+    child.on("error", (err) => reject(err));
     let stdout = "";
     let stderr = "";
     child.stdout.on("data", (b) => (stdout += b.toString()));
