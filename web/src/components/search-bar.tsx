@@ -22,9 +22,10 @@ export function SearchBar({
   const [isMac, setIsMac] = useState(false);
 
   useEffect(() => {
-    if (typeof navigator !== "undefined") {
-      setIsMac(/Mac|iPhone|iPad|iPod/.test(navigator.platform));
-    }
+    if (typeof navigator === "undefined") return;
+    const ua = navigator as Navigator & { userAgentData?: { platform?: string } };
+    const platform = ua.userAgentData?.platform ?? navigator.platform;
+    setIsMac(/mac|iphone|ipad|ipod/i.test(platform));
   }, []);
 
   useEffect(() => {
