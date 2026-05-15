@@ -72,6 +72,12 @@ export async function fetchEligibleReleases(
 ): Promise<EligibleRow[]> {
   const { cutoffIso, orgSlugs, maxRows = DEFAULT_MAX_ROWS } = options;
 
+  // Clamp maxRows: reject 0, negative, NaN, Infinity, or above the default cap.
+  const safeMax = Math.max(
+    1,
+    Math.min(DEFAULT_MAX_ROWS, Math.floor(Number(maxRows) || DEFAULT_MAX_ROWS)),
+  );
+
   // When orgSlugs is null (no filter), run a single query.
   if (!orgSlugs || orgSlugs.length === 0) {
     const rows: EligibleRow[] = await db
@@ -101,19 +107,26 @@ export async function fetchEligibleReleases(
         ),
       )
       .orderBy(desc(releases.publishedAt))
-      .limit(maxRows);
+      .limit(safeMax);
     return rows;
   }
 
   // Org-filter path: chunk at 90 to stay under D1's 100 bind-param cap.
+  // Each chunk is queried without a per-chunk LIMIT so that globally-newer
+  // rows from a later chunk are not unfairly excluded by an earlier chunk
+  // consuming the cap. All chunks are merged, deduped, globally sorted, then
+  // sliced to safeMax.
+  //
+  // publishedAt is fetched for sorting only and is stripped from the output.
+  type ChunkRow = EligibleRow & { publishedAt: string | null };
   const CHUNK_SIZE = 90;
   const seen = new Set<string>();
-  const out: EligibleRow[] = [];
+  const all: ChunkRow[] = [];
 
   for (let i = 0; i < orgSlugs.length; i += CHUNK_SIZE) {
     const chunk = orgSlugs.slice(i, i + CHUNK_SIZE).map((s) => s.toLowerCase());
     // eslint-disable-next-line no-await-in-loop -- D1 chunked SELECT (100 bind param limit)
-    const chunkRows: EligibleRow[] = await db
+    const chunkRows: ChunkRow[] = await db
       .select({
         id: releases.id,
         title: releases.title,
@@ -123,6 +136,7 @@ export async function fetchEligibleReleases(
         orgSlug: organizations.slug,
         sourceName: sources.name,
         productName: products.name,
+        publishedAt: releases.publishedAt,
       })
       .from(releases)
       .innerJoin(sources, eq(sources.id, releases.sourceId))
@@ -139,18 +153,23 @@ export async function fetchEligibleReleases(
           sql`${releaseCoverage.coverageId} IS NULL`,
           inArray(sql`LOWER(${organizations.slug})`, chunk),
         ),
-      )
-      .orderBy(desc(releases.publishedAt))
-      .limit(maxRows - out.length);
+      );
 
     for (const row of chunkRows) {
       if (!seen.has(row.id)) {
         seen.add(row.id);
-        out.push(row);
+        all.push(row);
       }
     }
-    if (out.length >= maxRows) break;
   }
 
-  return out;
+  // Global sort: newest publishedAt first, then id as tiebreaker.
+  all.sort((a, b) => {
+    const cmp = (b.publishedAt ?? "").localeCompare(a.publishedAt ?? "");
+    if (cmp !== 0) return cmp;
+    return a.id.localeCompare(b.id);
+  });
+
+  // Strip the ephemeral publishedAt field and slice to the requested cap.
+  return all.slice(0, safeMax).map(({ publishedAt: _pa, ...rest }) => rest);
 }

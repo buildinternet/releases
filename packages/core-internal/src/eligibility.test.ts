@@ -309,6 +309,76 @@ describe("fetchEligibleReleases — coverage-side exclusion", () => {
   });
 });
 
+describe("fetchEligibleReleases — global-newest across chunks (>90 orgs)", () => {
+  let tdb: TestDatabase;
+
+  beforeAll(() => {
+    tdb = createTestDb();
+  });
+
+  beforeEach(() => {
+    clearAllTables(tdb.db);
+  });
+
+  afterAll(() => {
+    tdb.cleanup();
+  });
+
+  it("returns the globally newest rows, not just newest per chunk", async () => {
+    // Seed 91 orgs so the IN-clause must span two chunks (chunk size = 90).
+    // The 91st org (last chunk) gets a release with the newest publishedAt;
+    // all chunk-1 orgs get older releases. With maxRows=5, the result must
+    // include org 91's release and not be dominated by chunk-1's newest rows.
+    const ORG_COUNT = 91;
+    const orgSlugs: string[] = [];
+
+    for (let i = 1; i <= ORG_COUNT; i++) {
+      const orgId = `org_chunk_${String(i).padStart(3, "0")}`;
+      const srcId = `src_chunk_${String(i).padStart(3, "0")}`;
+      const relId = `rel_chunk_${String(i).padStart(3, "0")}`;
+      const slug = `org-chunk-${String(i).padStart(3, "0")}`;
+      orgSlugs.push(slug);
+
+      tdb.db
+        .insert(organizations)
+        .values(makeOrg({ id: orgId, slug, autoGenerateContent: true }))
+        .run();
+      tdb.db
+        .insert(sources)
+        .values(makeSource({ id: srcId, slug: `src-chunk-${String(i).padStart(3, "0")}`, orgId }))
+        .run();
+
+      // Org 91 (in the second chunk) gets the newest date; all others get older dates.
+      const publishedAt =
+        i === ORG_COUNT
+          ? "2026-05-15T12:00:00Z" // newest — must appear in results
+          : `2026-04-${String(i).padStart(2, "0")}T00:00:00Z`;
+
+      tdb.db
+        .insert(releases)
+        .values(makeRelease({ id: relId, sourceId: srcId, publishedAt, fetchedAt: publishedAt }))
+        .run();
+    }
+
+    const rows = await fetchEligibleReleases(asDb(tdb.db), {
+      cutoffIso: "2026-04-01T00:00:00Z",
+      orgSlugs,
+      maxRows: 5,
+    });
+
+    expect(rows.length).toBe(5);
+    // The globally newest release (org 91, second chunk) must be present.
+    expect(rows[0]!.id).toBe("rel_chunk_091");
+    // All returned rows must be in descending publishedAt order.
+    for (let j = 1; j < rows.length; j++) {
+      // Confirm ordering by checking the org index embedded in the id.
+      const prev = rows[j - 1]!.id;
+      const cur = rows[j]!.id;
+      expect(prev >= cur).toBe(true);
+    }
+  });
+});
+
 describe("fetchEligibleReleases — suppressed exclusion", () => {
   let tdb: TestDatabase;
 

@@ -452,20 +452,13 @@ export class BatchSummarizeWorkflow extends WorkflowEntrypoint<
         titleGenerated: string | null;
         titleShort: string | null;
         summary: string | null;
+        costUsd: number;
       };
       const updateRows: UpdateTuple[] = [];
 
       for (const [customId, outcome] of outcomes) {
         if (outcome.kind === "succeeded") {
           const { parsed, usage } = outcome.value;
-          updateRows.push({
-            id: customId,
-            titleGenerated: parsed.title,
-            titleShort: parsed.titleShort,
-            summary: parsed.summary,
-          });
-
-          // Accumulate actual cost from per-request usage.
           const rowCost = estimateCost(
             {
               inputTokens: usage.input + usage.cacheRead,
@@ -475,8 +468,13 @@ export class BatchSummarizeWorkflow extends WorkflowEntrypoint<
             MODEL,
             { batch: true },
           );
-          if (rowCost) actualCostUsd += rowCost.totalUsd;
-          succeeded++;
+          updateRows.push({
+            id: customId,
+            titleGenerated: parsed.title,
+            titleShort: parsed.titleShort,
+            summary: parsed.summary,
+            costUsd: rowCost?.totalUsd ?? 0,
+          });
         } else {
           failed++;
           if (errorSampleIds.length < 20) errorSampleIds.push(customId);
@@ -493,6 +491,10 @@ export class BatchSummarizeWorkflow extends WorkflowEntrypoint<
       // summary, id) → D1 hard cap of 100 params → chunk at 25 rows per batch.
       // Idempotent: WHERE title_short IS NULL guards against double-writes on
       // step retry.
+      //
+      // D1's db.batch([...]) is atomic per array — all statements in one batch
+      // call commit or none do. succeeded and actualCostUsd are incremented only
+      // after each chunk commits so the counters reflect what actually landed.
       const CHUNK_SIZE = 25; // floor(100 / 4 binds per UPDATE)
       for (let offset = 0; offset < updateRows.length; offset += CHUNK_SIZE) {
         const chunk = updateRows.slice(offset, offset + CHUNK_SIZE);
@@ -506,8 +508,20 @@ export class BatchSummarizeWorkflow extends WorkflowEntrypoint<
             })
             .where(and(eq(releases.id, row.id), sql`${releases.titleShort} IS NULL`)),
         );
-        // oxlint-disable-next-line no-await-in-loop -- chunked batch; parallelism would exceed D1 limits
-        await db.batch(statements).catch((err: unknown) => {
+        try {
+          // oxlint-disable-next-line no-await-in-loop -- chunked batch; parallelism would exceed D1 limits
+          await db.batch(statements);
+          // Only credit rows that actually committed.
+          for (const row of chunk) {
+            succeeded++;
+            actualCostUsd += row.costUsd;
+          }
+        } catch (err: unknown) {
+          // All statements in this chunk rolled back — don't credit them.
+          failed += chunk.length;
+          for (const row of chunk) {
+            if (errorSampleIds.length < 20) errorSampleIds.push(row.id);
+          }
           logEvent("warn", {
             component: "batch-summarize",
             event: "upsert-batch-failed",
@@ -515,7 +529,7 @@ export class BatchSummarizeWorkflow extends WorkflowEntrypoint<
             chunkSize: chunk.length,
             err,
           });
-        });
+        }
       }
 
       const finalStatus: TerminalBatchStatus = succeeded > 0 ? BATCH_ENDED_STATUS : "failed";
