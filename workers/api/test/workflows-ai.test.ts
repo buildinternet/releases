@@ -551,4 +551,41 @@ describe("GET /v1/workflows/batch-summarize/status/:instanceId", () => {
     );
     expect(res.status).toBe(503);
   });
+
+  it("returns 500 when binding.get throws an unrelated error", async () => {
+    const fakeWorkflow = {
+      get: async () => {
+        throw new Error("network unreachable");
+      },
+    };
+    const fetch = mkAppWithWorkflow(fakeWorkflow);
+
+    const res = await fetch(
+      new Request("https://x.test/v1/workflows/batch-summarize/status/some-id"),
+    );
+    expect(res.status).toBe(500);
+    const body = (await res.json()) as { error: string; message: string };
+    expect(body.error).toBe("internal_error");
+    expect(body.message).toBe("network unreachable");
+  });
+
+  it("returns 500 when instance.status() throws", async () => {
+    const fakeWorkflow = {
+      get: async (id: string) => ({
+        id,
+        status: async () => {
+          throw new Error("status RPC failed");
+        },
+      }),
+    };
+    const fetch = mkAppWithWorkflow(fakeWorkflow);
+
+    const res = await fetch(
+      new Request("https://x.test/v1/workflows/batch-summarize/status/some-id"),
+    );
+    expect(res.status).toBe(500);
+    const body = (await res.json()) as { error: string; message: string };
+    expect(body.error).toBe("internal_error");
+    expect(body.message).toBe("status RPC failed");
+  });
 });
