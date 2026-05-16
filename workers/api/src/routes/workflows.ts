@@ -1380,6 +1380,12 @@ workflowsRoutes.post("/workflows/batch-summarize", async (c) => {
 // to Cloudflare's `WorkflowInstance.status()` so operators can poll workflow
 // state without dashboard access.
 
+// Cloudflare Workflows doesn't export a NotFoundError class; `binding.get()`
+// throws a generic Error with "not found" / "does not exist" in the message
+// when the instance ID is unknown. Anything else from `get()` or `status()`
+// (network blip, runtime failure) should surface as 500, not 404.
+const WORKFLOW_NOT_FOUND_RE = /not\s*found|does\s+not\s+exist/i;
+
 workflowsRoutes.get("/workflows/batch-summarize/status/:instanceId", async (c) => {
   const binding = c.env.BATCH_SUMMARIZE_WORKFLOW;
   if (!binding) {
@@ -1394,13 +1400,17 @@ workflowsRoutes.get("/workflows/batch-summarize/status/:instanceId", async (c) =
     const status = await instance.status();
     return c.json({ instanceId, ...status });
   } catch (err) {
-    return c.json(
-      {
-        error: "instance_not_found",
-        message: err instanceof Error ? err.message : String(err),
-      },
-      404,
-    );
+    const message = err instanceof Error ? err.message : String(err);
+    if (WORKFLOW_NOT_FOUND_RE.test(message)) {
+      return c.json({ error: "instance_not_found", message }, 404);
+    }
+    logEvent("error", {
+      component: "workflows-batch-summarize-status",
+      event: "lookup-failed",
+      instanceId,
+      err: err instanceof Error ? err : String(err),
+    });
+    return c.json({ error: "internal_error", message }, 500);
   }
 });
 
