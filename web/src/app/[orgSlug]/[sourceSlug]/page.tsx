@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
 import { Suspense } from "react";
 import { ApiSetupError, ApiNotFoundError } from "@/lib/api";
 import { JsonLd } from "@/components/json-ld";
@@ -7,6 +7,8 @@ import { SourceReleaseList } from "@/components/source-release-list";
 import { RelatedRail } from "@/components/related-rail";
 import { buildSourceEntityJsonLd } from "@/lib/schema-org";
 import { getSource } from "./_lib/source-data";
+
+const LEGACY_SOURCE_TABS = new Set(["highlights", "changelog"]);
 
 export async function generateMetadata({
   params,
@@ -84,10 +86,19 @@ function RelatedRails({
 
 export default async function SourceReleasesPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ orgSlug: string; sourceSlug: string }>;
+  searchParams: Promise<{ tab?: string | string[] }>;
 }) {
   const { orgSlug, sourceSlug } = await params;
+  const { tab } = await searchParams;
+  const tabValue = Array.isArray(tab) ? tab[0] : tab;
+
+  // See `(org)/page.tsx` — same `:orgSlug` greedy-match concern applies here.
+  if (tabValue && LEGACY_SOURCE_TABS.has(tabValue)) {
+    permanentRedirect(`/${orgSlug}/${sourceSlug}/${tabValue}`);
+  }
 
   let source;
   try {

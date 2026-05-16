@@ -9,7 +9,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { label: "Search", href: "/search", mobileOnly: true },
   { label: "Collections", href: "/collections" },
   { label: "Docs", href: "/docs" },
-  { label: "Status", href: "/status", devOnly: true },
+  { label: "Status", href: "/admin/status", devOnly: true },
 ] as const;
 
 export const GITHUB_REPO_URL = "https://github.com/buildinternet/releases-cli";

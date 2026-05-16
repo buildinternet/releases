@@ -38,6 +38,7 @@ export function routeMap(pathname: string): string | null {
 export const STATIC_PAGES = new Set(["privacy", "terms", "security", "search", "status"]);
 
 const RESERVED = new Set([
+  "admin",
   "api",
   "_next",
   ".well-known",

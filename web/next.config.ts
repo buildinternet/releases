@@ -48,27 +48,13 @@ const nextConfig: NextConfig = {
     return config;
   },
   async redirects() {
-    // #875: org/source tabs moved from `?tab=X` query params to path
-    // segments. Permanent redirects from the old shapes preserve any
-    // inbound link equity and keep search deep-links (`?tab=changelog&
-    // offset=N#chunk`) working — browsers re-append the original `#chunk`
-    // fragment when the Location header has none.
-    const orgTabRedirects = ["releases", "sources", "playbook", "fetch-log"].map((tab) => ({
-      source: "/:orgSlug",
-      has: [{ type: "query" as const, key: "tab", value: tab }],
-      destination: `/:orgSlug/${tab}`,
-      permanent: true,
-    }));
-    const sourceTabRedirects = ["highlights", "changelog"].map((tab) => ({
-      source: "/:orgSlug/:sourceSlug",
-      has: [{ type: "query" as const, key: "tab", value: tab }],
-      destination: `/:orgSlug/:sourceSlug/${tab}`,
-      permanent: true,
-    }));
+    // Legacy `?tab=` handling for org/source pages lives in the page
+    // components themselves — a config-level `:orgSlug` redirect would
+    // greedy-match top-level routes like /status or /docs and dead-end them.
     return [
       { source: "/mcp", destination: "/docs/api/mcp", statusCode: 302 },
-      ...orgTabRedirects,
-      ...sourceTabRedirects,
+      { source: "/status", destination: "/admin/status", permanent: true },
+      { source: "/status/:path*", destination: "/admin/status/:path*", permanent: true },
     ];
   },
   async rewrites() {
