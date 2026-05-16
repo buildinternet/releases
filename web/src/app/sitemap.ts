@@ -26,7 +26,9 @@ const ALWAYS_PUBLIC: StaticRoute[] = [
   { path: "/categories", changeFrequency: "weekly", priority: 0.5 },
 ];
 
-const STATUS_ROUTES: StaticRoute[] = [{ path: "/status", changeFrequency: "daily", priority: 0.4 }];
+const STATUS_ROUTES: StaticRoute[] = [
+  { path: "/admin/status", changeFrequency: "daily", priority: 0.4 },
+];
 
 function docsRoutes(): StaticRoute[] {
   // adminOnly pages stay gated by the same flag the HTML route honors.

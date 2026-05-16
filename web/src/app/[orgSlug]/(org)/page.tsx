@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
 import { daysAgoIso } from "@buildinternet/releases-core/dates";
 import { api, ApiSetupError, type OrgHeatmap } from "@/lib/api";
 import { tryFetch } from "@/lib/ssr-fetch";
@@ -8,6 +8,8 @@ import { OverviewView } from "@/components/overview-view";
 import { JsonLd } from "@/components/json-ld";
 import { lastModifiedAt } from "@/lib/schema-org";
 import { getOrg } from "../_lib/org-data";
+
+const LEGACY_ORG_TABS = new Set(["releases", "sources", "playbook", "fetch-log"]);
 
 export async function generateMetadata({
   params,
@@ -40,10 +42,19 @@ export async function generateMetadata({
 
 export default async function OrgOverviewPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ orgSlug: string }>;
+  searchParams: Promise<{ tab?: string }>;
 }) {
   const { orgSlug } = await params;
+  const { tab } = await searchParams;
+
+  // Handled here rather than in next.config.ts so `:orgSlug` can't greedy-match
+  // top-level routes like /status, /docs, etc.
+  if (tab && LEGACY_ORG_TABS.has(tab)) {
+    permanentRedirect(`/${orgSlug}/${tab}`);
+  }
 
   const activityFrom = daysAgoIso(365 * 2).slice(0, 10);
 

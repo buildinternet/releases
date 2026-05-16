@@ -4,7 +4,7 @@ import {
   parseForceDrainCounts,
   formatForceDrainAge,
   summarizeForceDrain,
-} from "../../web/src/app/status/force-drain-helpers";
+} from "../../web/src/app/admin/status/force-drain-helpers";
 
 /**
  * Covers the parsing + summarization the /status force-drain tile relies on.

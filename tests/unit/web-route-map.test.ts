@@ -25,6 +25,8 @@ describe("routeMap", () => {
   }
 
   const unsupported = [
+    "/admin/status",
+    "/admin/anything",
     "/api/anything",
     "/_next/static/x",
     "/.well-known/foo",
