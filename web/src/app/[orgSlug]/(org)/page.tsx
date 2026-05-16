@@ -45,15 +45,16 @@ export default async function OrgOverviewPage({
   searchParams,
 }: {
   params: Promise<{ orgSlug: string }>;
-  searchParams: Promise<{ tab?: string }>;
+  searchParams: Promise<{ tab?: string | string[] }>;
 }) {
   const { orgSlug } = await params;
   const { tab } = await searchParams;
+  const tabValue = Array.isArray(tab) ? tab[0] : tab;
 
   // Handled here rather than in next.config.ts so `:orgSlug` can't greedy-match
   // top-level routes like /status, /docs, etc.
-  if (tab && LEGACY_ORG_TABS.has(tab)) {
-    permanentRedirect(`/${orgSlug}/${tab}`);
+  if (tabValue && LEGACY_ORG_TABS.has(tabValue)) {
+    permanentRedirect(`/${orgSlug}/${tabValue}`);
   }
 
   const activityFrom = daysAgoIso(365 * 2).slice(0, 10);

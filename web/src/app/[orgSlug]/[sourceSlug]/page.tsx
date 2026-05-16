@@ -89,14 +89,15 @@ export default async function SourceReleasesPage({
   searchParams,
 }: {
   params: Promise<{ orgSlug: string; sourceSlug: string }>;
-  searchParams: Promise<{ tab?: string }>;
+  searchParams: Promise<{ tab?: string | string[] }>;
 }) {
   const { orgSlug, sourceSlug } = await params;
   const { tab } = await searchParams;
+  const tabValue = Array.isArray(tab) ? tab[0] : tab;
 
   // See `(org)/page.tsx` — same `:orgSlug` greedy-match concern applies here.
-  if (tab && LEGACY_SOURCE_TABS.has(tab)) {
-    permanentRedirect(`/${orgSlug}/${sourceSlug}/${tab}`);
+  if (tabValue && LEGACY_SOURCE_TABS.has(tabValue)) {
+    permanentRedirect(`/${orgSlug}/${sourceSlug}/${tabValue}`);
   }
 
   let source;
