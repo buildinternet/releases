@@ -8,6 +8,7 @@
     "./anthropic-errors": "./src/anthropic-errors.ts",
     "./anthropic-pricing": "./src/anthropic-pricing.ts",
     "./config": "./src/config.ts",
+    "./db-errors": "./src/db-errors.ts",
     "./errors": "./src/errors.ts",
     "./log-event": "./src/log-event.ts",
     "./logger": "./src/logger.ts",

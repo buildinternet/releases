@@ -60,6 +60,7 @@ import { notifyIndexNowForSource, type IndexNowEnv } from "../lib/indexnow.js";
 import { clusterAndPersistCascades } from "../lib/cluster-cascades.js";
 import { resolveOrgSlug, resolveProductSlug } from "../lib/slug-lookups.js";
 import { logEvent } from "@releases/lib/log-event";
+import { classifyDbError } from "@releases/lib/db-errors";
 
 // ── Tier intervals (hours) ──
 
@@ -818,11 +819,19 @@ export async function fetchOne(
       insertedIds,
     };
   } catch (err) {
+    const classified = classifyDbError(err);
     logEvent("error", {
       component: "cron-poll-fetch",
       event: "fetch-error",
       sourceSlug: source.slug,
       err: err instanceof Error ? err : String(err),
+      ...(classified
+        ? {
+            causeCode: classified.code,
+            causeMessage: classified.message,
+            causeTransient: classified.transient,
+          }
+        : {}),
     });
 
     await db
@@ -837,6 +846,21 @@ export async function fetchOne(
         error: err instanceof Error ? err.message : String(err),
       })
       .catch(() => {});
+
+    // Transient D1 failure (overload / network drop / storage reset). Don't
+    // bump consecutiveErrors — it's not a source-level problem, just an
+    // infra blip, and the exponential backoff would push a healthy source
+    // out by 1-72h for what's typically a one-tick issue. The fetch_log row
+    // above still records the failure for observability.
+    if (classified?.transient) {
+      return {
+        releasesFound: 0,
+        releasesInserted: 0,
+        durationMs: Date.now() - start,
+        status: "error" as const,
+        error: err instanceof Error ? err.message : String(err),
+      };
+    }
 
     // 4xx on the stored feedUrl: track it via feed4xxStreak rather than the
     // generic consecutiveErrors backoff. Backoff would push the next retry
