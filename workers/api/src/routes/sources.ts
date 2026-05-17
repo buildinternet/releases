@@ -33,6 +33,8 @@ import { SOURCE_TYPES, type SourceType } from "@buildinternet/releases-core/sour
 import { buildListResponse, parseListPagination } from "../lib/pagination.js";
 import { RELEASE_URL_UPSERT } from "@releases/core-internal/release-upsert";
 import { daysAgoIso, inferMonthOnlyDate } from "@buildinternet/releases-core/dates";
+import { parseCompositionFromMetadata } from "@buildinternet/releases-core/composition";
+import { buildCompositionMetadataSet } from "@releases/core-internal/composition-metadata";
 import { likeContains } from "@buildinternet/releases-core/sql-like";
 import { toSlug } from "@buildinternet/releases-core/slug";
 import { isReservedSlug } from "@buildinternet/releases-core/reserved-slugs";
@@ -2717,16 +2719,23 @@ sourceRoutes.get(
     const mediaOrigin = c.env.MEDIA_ORIGIN ?? "";
 
     const media = parseReleaseMedia(release.media as string | null, mediaOrigin);
+    const composition = parseCompositionFromMetadata(release.metadata as string | null);
 
+    // Strip the raw `metadata` blob from the spread — it's not in
+    // ReleaseDetailResponseSchema and would leak internal storage shape (and,
+    // post-composition extraction, would duplicate `composition` as a raw
+    // JSON string).
+    const { metadata: _metadata, ...releaseRest } = release;
     const hydratedContent = hydrateMediaUrls(release.content as string, mediaOrigin);
     const result = {
-      ...release,
+      ...releaseRest,
       content: hydratedContent,
       media,
       sourceName,
       sourceSlug,
       sourceType,
       org,
+      composition,
     };
 
     if (wantsMarkdown(c)) {
@@ -2779,7 +2788,7 @@ sourceRoutes.patch(
     tags: ["Releases"],
     summary: "Update a release",
     description:
-      "Partially updates a release. All body fields are optional — only supplied fields are written. Required-non-null columns (`title`, `content`) must be strings when present; the nullable string columns (`version`, `url`, `publishedAt`, `contentHash`) accept a string or `null`. The three AI-generated fields (`summary`, `titleGenerated`, `titleShort`) accept `null` to explicitly clear the stored value. Non-whitelisted fields are rejected by the schema's `.strict()` mode; a body whose sanitized whitelist is empty after `version` normalization also returns `400`. When any of `content`, `title`, `summary`, `titleGenerated`, or `titleShort` is updated the release vector is re-embedded asynchronously. Response is the raw release row (no joined source / org metadata, no parsed `media`) — re-fetch via `GET /v1/releases/:id` for the augmented shape.\n\nAuth inherited from `publicReadAuthMiddleware`'s non-SAFE_METHODS branch — Bearer token required.",
+      "Partially updates a release. All body fields are optional — only supplied fields are written. Required-non-null columns (`title`, `content`) must be strings when present; the nullable string columns (`version`, `url`, `publishedAt`, `contentHash`) accept a string or `null`. The three AI-generated fields (`summary`, `titleGenerated`, `titleShort`) accept `null` to explicitly clear the stored value. The `composition` field accepts a `{bugs, features, enhancements}` object to replace the stored counts, or `null` to clear them — neighbouring keys in `metadata` are preserved (JSON-merged via `json_set` / `json_remove`). Non-whitelisted fields are rejected by the schema's `.strict()` mode; a body whose sanitized whitelist is empty after `version` normalization also returns `400`. When any of `content`, `title`, `summary`, `titleGenerated`, or `titleShort` is updated the release vector is re-embedded asynchronously. Response is the raw release row (no joined source / org metadata, no parsed `media`) — re-fetch via `GET /v1/releases/:id` for the augmented shape.\n\nAuth inherited from `publicReadAuthMiddleware`'s non-SAFE_METHODS branch — Bearer token required.",
     security: [{ bearerAuth: [] }],
     responses: {
       200: {
@@ -2819,6 +2828,12 @@ sourceRoutes.patch(
     if (body.summary !== undefined) updates.summary = body.summary;
     if (body.titleGenerated !== undefined) updates.titleGenerated = body.titleGenerated;
     if (body.titleShort !== undefined) updates.titleShort = body.titleShort;
+    if (body.composition !== undefined) {
+      // null clears $.composition; an object replaces it. Either way the
+      // helper hands back a json_set / json_remove fragment that leaves the
+      // rest of metadata untouched.
+      updates.metadata = buildCompositionMetadataSet(body.composition);
+    }
     if (body.version !== undefined) {
       // sanitizeVersion trims and may coerce empty/whitespace to null; mirror
       // the historical behavior of clearing the column on a falsy input.

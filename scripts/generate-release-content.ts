@@ -181,14 +181,23 @@ function escapeSql(s: string): string {
   return s.replace(/'/g, "''");
 }
 
-async function writeRow(
-  id: string,
-  summary: string | null,
-  title: string | null,
-  titleShort: string | null,
-): Promise<void> {
+async function writeRow(w: WritePayload): Promise<void> {
   const lit = (v: string | null) => (v == null ? "NULL" : `'${escapeSql(v)}'`);
-  const sql = `UPDATE releases SET summary = ${lit(summary)}, title_generated = ${lit(title)}, title_short = ${lit(titleShort)} WHERE id = '${escapeSql(id)}';`;
+  const setParts = [
+    `summary = ${lit(w.summary)}`,
+    `title_generated = ${lit(w.title)}`,
+    `title_short = ${lit(w.titleShort)}`,
+  ];
+  // Mirror buildCompositionMetadataSet: skip the metadata write when the
+  // model didn't return counts so we don't churn the metadata column on
+  // boilerplate rows.
+  if (w.composition !== null) {
+    const compositionLit = `'${escapeSql(JSON.stringify(w.composition))}'`;
+    setParts.push(
+      `metadata = json_set(coalesce(metadata, '{}'), '$.composition', json(${compositionLit}))`,
+    );
+  }
+  const sql = `UPDATE releases SET ${setParts.join(", ")} WHERE id = '${escapeSql(w.id)}';`;
   await runWrangler([
     "d1",
     "execute",
@@ -273,6 +282,7 @@ async function runBatch(
           title: null,
           titleShort: null,
           summary: null,
+          composition: null,
           usage: emptyUsage(),
           skipped: true,
         },
@@ -481,6 +491,7 @@ interface WritePayload {
   summary: string | null;
   title: string | null;
   titleShort: string | null;
+  composition: { bugs: number; features: number; enhancements: number } | null;
 }
 const pendingWrites: WritePayload[] = [];
 
@@ -512,6 +523,7 @@ for (const entry of perRow) {
       summary: result.summary,
       title: result.title,
       titleShort: result.titleShort,
+      composition: result.composition,
     });
   }
   samples.push({
@@ -526,7 +538,7 @@ for (const entry of perRow) {
 
 // Pooled to cap concurrent wrangler subprocesses; sequential `await` here
 // would dominate wall-clock on large batch runs.
-await pool(pendingWrites, CONCURRENCY, (w) => writeRow(w.id, w.summary, w.title, w.titleShort));
+await pool(pendingWrites, CONCURRENCY, writeRow);
 written = pendingWrites.length;
 
 const finalCost = estimateCost(

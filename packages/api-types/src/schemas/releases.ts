@@ -1,6 +1,9 @@
 import { z } from "zod";
 import { SOURCE_TYPES } from "@buildinternet/releases-core/source-enums";
-import { MediaItemSchema, ReleaseTypeSchema } from "./shared.js";
+import { MediaItemSchema, ReleaseCompositionSchema, ReleaseTypeSchema } from "./shared.js";
+
+// ReleaseCompositionSchema lives in ./shared.js (single source of truth) — both
+// this file and ReleaseItemSchema reference it from there.
 
 /**
  * Per-row shape returned by `GET /v1/releases/latest`. Distinct from the
@@ -36,6 +39,7 @@ export const ReleaseLatestItemSchema = z.object({
   // same fields on the org / collection feeds. #958.
   contentChars: z.number().int().min(0).nullable().optional(),
   contentTokens: z.number().int().min(0).nullable().optional(),
+  composition: ReleaseCompositionSchema.nullable().optional(),
 });
 
 export const ReleaseLatestResponseSchema = z.object({
@@ -155,6 +159,7 @@ export const ReleaseDetailResponseSchema = z.object({
   sourceSlug: z.string().nullable(),
   sourceType: z.enum(SOURCE_TYPES).nullable(),
   org: ReleaseDetailOrgSchema.nullable(),
+  composition: ReleaseCompositionSchema.nullable(),
 });
 
 /**
@@ -177,6 +182,8 @@ export const UpdateReleaseBodySchema = z
     summary: z.string().nullable().optional(),
     titleGenerated: z.string().nullable().optional(),
     titleShort: z.string().nullable().optional(),
+    // `null` removes `$.composition` from metadata; an object replaces it.
+    composition: ReleaseCompositionSchema.nullable().optional(),
   })
   .strict();
 

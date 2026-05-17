@@ -13,7 +13,8 @@
     "./changesets-cluster": "./src/changesets-cluster.ts",
     "./release-coverage-sql": "./src/release-coverage-sql.ts",
     "./batch-run": "./src/batch-run.ts",
-    "./eligibility": "./src/eligibility.ts"
+    "./eligibility": "./src/eligibility.ts",
+    "./composition-metadata": "./src/composition-metadata.ts"
   },
   "dependencies": {
     "@buildinternet/releases-core": "workspace:*",

@@ -12,6 +12,9 @@
  */
 
 import type Anthropic from "@anthropic-ai/sdk";
+import type { ReleaseComposition } from "@buildinternet/releases-core/composition";
+
+export type { ReleaseComposition };
 
 /** Model id used by the live and batch release-content paths. Exported so the
  *  backfill script can submit identical request shapes through the Batches API. */
@@ -20,8 +23,10 @@ export const MODEL = "claude-haiku-4-5";
 /** Maximum characters of release body sent to the model (truncated at this length). */
 export const MAX_BODY_CHARS = 8000;
 
-/** Cap on the model's response. Sized for ~80-char title + ~70-char short + 1-2 sentence summary in tagged XML. */
-export const MAX_OUTPUT_TOKENS = 220;
+/** Cap on the model's response. Sized for ~80-char title + ~70-char short + 1-2 sentence summary
+ *  in tagged XML, with headroom for the trailing <composition> count tag (~25-30 tokens for
+ *  two-digit counts). 280 = 220 (pre-composition cap) + ~60 buffer. */
+export const MAX_OUTPUT_TOKENS = 280;
 
 // In-prompt sentinel emitted by the model when the body is boilerplate-only.
 // The empty-body short-circuit (isEmptyContent) is a separate path — those
@@ -75,7 +80,7 @@ export function isEmptyContent(raw: string): boolean {
 export const SYSTEM_PROMPT = `You write a title, a short title, and a summary for a release-notes entry, used in a developer-facing changelog index.
 
 <output_structure>
-Output exactly one <title>...</title> tag, then one <title_short>...</title_short> tag, then one <summary>...</summary> tag, in that order. Output nothing before, between, or after these tags.
+Output exactly one <title>...</title> tag, then one <title_short>...</title_short> tag, then one <summary>...</summary> tag, then one <composition>...</composition> tag, in that order. Output nothing before, between, or after these tags.
 </output_structure>
 
 <title_format>
@@ -162,6 +167,27 @@ Strip these from all three outputs:
 - Ticket numbers, PR numbers, commit hashes, internal codenames.
 </banned_phrasing>
 
+<composition_format>
+After the summary, output an integer count of how many distinct items in the body fall into each of three categories. This is a sanity check on your summary — if the body is 90% bug fixes you should not be leading the summary with a feature.
+
+Categories:
+
+- **bugs** — fixes for crashes, regressions, incorrect behavior, security or data-loss issues. Anything described as "fix", "fixed", "resolves", "no longer", "stops", a crash/freeze/leak being addressed, or a security/CVE patch.
+- **features** — new user-facing capabilities, new APIs, new commands, new components, new integrations. Anything described as "add", "added", "new", "introduce", "launch", "ship", "now supports", or the first appearance of a capability.
+- **enhancements** — improvements to existing capabilities that are not bug fixes: performance optimizations, expanded options on an existing API, better defaults, improved UX, refactors with observable user benefit, deprecation paths. Anything described as "improve", "improved", "faster", "now also", "expanded", "deprecated".
+
+Rules:
+
+- Count distinct items, not bullet points. One bullet listing three fixes counts as 3 bugs.
+- Group related items into one if the body itself groups them ("Various MCP fixes (sandbox, tokens, retry)") — count 1.
+- Skip internal/chore items (dependency bumps, CI changes, codegen runs, lint fixes) unless the body has no other items.
+- If the body is too vague to itemize ("Various improvements", "Internal release"), output 0/0/0.
+- If a body uses headed sections ("### Bug Fixes", "### Features", "### Enhancements"), count items under each section into its matching bucket. Items under "Breaking Changes" or "Deprecations" count as enhancements (the change shape is "modify existing"), not bugs.
+- Documentation pages, blog posts, marketing announcements — output 0/0/0 (these aren't itemized changes).
+
+Output format: \`<composition><bugs>N</bugs><features>N</features><enhancements>N</enhancements></composition>\` with N as a non-negative integer. Do not include explanations or other text inside the tag.
+</composition_format>
+
 <fallback>
 The summary text "${EMPTY_BODY_FALLBACK}" is used only when the body is empty, a single dependency-bump line, or pure pipeline boilerplate with no other content. Even in this case, still produce a meaningful formulaic title and short title — never put the fallback string in the title or title_short.
 
@@ -184,11 +210,13 @@ Body:
 <title>OpenAI Node SDK v0.10.0 adds quantity field to admin org usage</title>
 <title_short>Admin org usage gets quantity field; realtime translate launches</title_short>
 <summary>Admin organization usage responses now include a quantity field, and realtime translation is available. Fixed an imagegen size enum regression.</summary>
+<composition><bugs>1</bugs><features>2</features><enhancements>0</enhancements></composition>
 </good_output>
 <bad_output reason="title_short used 'Adds X and Y' instead of leading with the noun and outcome">
 <title>OpenAI Node SDK v0.10.0 adds quantity field to admin org usage</title>
 <title_short>Adds quantity field and launches realtime translate</title_short>
 <summary>Admin organization usage responses now include a quantity field, and realtime translation is available. Fixed an imagegen size enum regression.</summary>
+<composition><bugs>1</bugs><features>2</features><enhancements>0</enhancements></composition>
 </bad_output>
 </example>
 
@@ -201,11 +229,13 @@ Body: 35 bullets where #1-#3 are cosmetic ("/color picks random colors", model p
 <title>Claude Code 2.1.128 fixes worktree bug that dropped unpushed commits</title>
 <title_short>Worktree no longer drops unpushed commits</title_short>
 <summary>Fixed a worktree bug that was dropping unpushed commits and a crash loop when piping over 10 MB stdin to claude -p. Plus dozens of smaller fixes across MCP, vim mode, and terminal rendering.</summary>
+<composition><bugs>20</bugs><features>0</features><enhancements>3</enhancements></composition>
 </good_output>
 <bad_output reason="title_short led with 'Fixes' verb and described mechanism instead of outcome">
 <title>Claude Code 2.1.128 fixes worktree bug that dropped unpushed commits</title>
 <title_short>Fixes worktree bug dropping unpushed commits</title_short>
 <summary>Fixed a worktree bug that was dropping unpushed commits and a crash loop when piping over 10 MB stdin to claude -p. Plus dozens of smaller fixes across MCP, vim mode, and terminal rendering.</summary>
+<composition><bugs>20</bugs><features>0</features><enhancements>3</enhancements></composition>
 </bad_output>
 </example>
 
@@ -218,11 +248,13 @@ Body: 25 bullets. The first 4 are feature additions: "Added --plugin-url flag to
 <title>Claude Code 2.1.129 makes gateway model discovery opt-in and hardens OAuth refresh</title>
 <title_short>Gateway model discovery now opt-in; OAuth refresh hardened</title_short>
 <summary>Gateway /v1/models discovery for the /model picker is now opt-in via CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY=1, reverting the automatic behavior introduced in 2.1.126. Fixed an OAuth refresh race after wake-from-sleep that could log out all running sessions, and a 1-hour prompt cache TTL being silently downgraded to 5 minutes.</summary>
+<composition><bugs>15</bugs><features>4</features><enhancements>2</enhancements></composition>
 </good_output>
 <bad_output reason="led with #4 correctness fixes and missed the #1 default-behavior reversal buried at bullet #5; the gateway discovery change breaks users on 2.1.126-128">
 <title>Claude Code 2.1.129 fixes prompt cache TTL downgrade and adds plugin URL flag</title>
 <title_short>Prompt cache TTL no longer downgrades; OAuth refresh hardened</title_short>
 <summary>Fixed a 1-hour prompt cache TTL being silently downgraded to 5 minutes, and an OAuth refresh race after wake-from-sleep. Added --plugin-url flag to fetch plugins from URLs.</summary>
+<composition><bugs>15</bugs><features>4</features><enhancements>2</enhancements></composition>
 </bad_output>
 </example>
 
@@ -235,6 +267,7 @@ Body: Updated dependencies.</input>
 <title>Next.js v15.4.2 dependency update</title>
 <title_short>Dependency update</title_short>
 <summary>${EMPTY_BODY_FALLBACK}</summary>
+<composition><bugs>0</bugs><features>0</features><enhancements>0</enhancements></composition>
 </good_output>
 </example>
 
@@ -246,11 +279,13 @@ Body: Shows how to build live speech translation with the Realtime API.</input>
 <title>OpenAI publishes guide to building live speech translation with Realtime API</title>
 <title_short>Live speech translation guide for Realtime API</title_short>
 <summary>New guide covers building live speech translation with the Realtime API.</summary>
+<composition><bugs>0</bugs><features>0</features><enhancements>0</enhancements></composition>
 </good_output>
 <bad_output reason="title_short forced smart-brevity transformation onto guide content; smart brevity does not apply to documentation/announcement releases">
 <title>OpenAI publishes guide to building live speech translation with Realtime API</title>
 <title_short>Realtime API: live speech translation guide ships</title_short>
 <summary>New guide covers building live speech translation with the Realtime API.</summary>
+<composition><bugs>0</bugs><features>0</features><enhancements>0</enhancements></composition>
 </bad_output>
 </example>
 
@@ -270,11 +305,13 @@ This week's release brings exciting quality-of-life improvements across the app:
 <title>Linear 2026.18 fixes Cmd+K crash and inherits parent project on sub-issues</title>
 <title_short>Cmd+K palette crash fixed; sub-issues inherit parent project</title_short>
 <summary>Sub-issues now inherit the parent's project automatically, and a Cmd+K palette crash for users with more than 500 favorites is fixed.</summary>
+<composition><bugs>1</bugs><features>1</features><enhancements>2</enhancements></composition>
 </good_output>
 <bad_output reason="title and title_short kept marketing language and missed the real fixes buried below">
 <title>Linear 2026.18 brings exciting quality-of-life improvements</title>
 <title_short>Powerful new keyboard shortcuts and bug fixes</title_short>
 <summary>Exciting quality-of-life improvements include powerful new keyboard shortcuts and various bug fixes (PR #4821).</summary>
+<composition><bugs>1</bugs><features>1</features><enhancements>2</enhancements></composition>
 </bad_output>
 </example>
 
@@ -288,11 +325,13 @@ Body: A new \`loss_type="chunked_nll"\` option for SFT drastically reduces peak 
 <title>TRL v1.4.0 unlocks longer SFT sequences with chunked cross-entropy loss</title>
 <title_short>Chunked cross-entropy unlocks longer SFT sequences</title_short>
 <summary>A new loss_type="chunked_nll" option for SFT computes cross-entropy over tokens in checkpointed chunks instead of materializing the full logits tensor, unlocking sequence lengths that previously caused out-of-memory errors. Also added OpenReward Standard environment adapter, length-normalized DPO sigmoid loss, and training chat templates for Cohere, Cohere2, Gemma 3, Qwen3, and Qwen2.5.</summary>
+<composition><bugs>0</bugs><features>4</features><enhancements>0</enhancements></composition>
 </good_output>
 <bad_output reason="title_short led with the mechanism (chunked cross-entropy loss is the *how*) framed as an added option; for capacity/performance releases, the user-facing outcome (longer sequences now fit) is the headline">
 <title>TRL v1.4.0 adds chunked cross-entropy loss for SFT memory optimization</title>
 <title_short>Chunked NLL loss option added to SFT</title_short>
 <summary>A new loss_type="chunked_nll" option for SFT reduces peak activation memory. Also added OpenReward Standard environment adapter, length-normalized DPO sigmoid loss, and training chat templates.</summary>
+<composition><bugs>0</bugs><features>4</features><enhancements>0</enhancements></composition>
 </bad_output>
 </example>
 </examples>`;
@@ -318,10 +357,11 @@ export interface ReleaseContentUsage {
 }
 
 export interface SummarizeReleaseResult {
-  /** All three null when the body was empty — caller skips the write. */
+  /** All four null when the body was empty — caller skips the write. */
   title: string | null;
   titleShort: string | null;
   summary: string | null;
+  composition: ReleaseComposition | null;
   usage: ReleaseContentUsage;
   /** True when isEmptyContent short-circuited and no model call was made. */
   skipped: boolean;
@@ -369,10 +409,42 @@ export function extractTagged(text: string, tag: string): string {
 }
 
 /**
- * Pull title / title_short / summary out of a model response. Exported so the
- * batch path (`scripts/generate-release-content.ts`) parses each batch line
- * through the same logic as the live `summarizeRelease` call — byte-for-byte
- * identical on the parsing side.
+ * Pull the nested <composition><bugs>N</bugs>… block out of a model response
+ * and parse the three integer counts. Returns `null` when:
+ *
+ *   - the <composition> tag is absent (older response, output truncated),
+ *   - any sub-tag is missing,
+ *   - any sub-value fails to parse as a non-negative finite integer,
+ *   - all three counts are zero (boilerplate / docs / empty-body case — we
+ *     don't store an all-zero shape because it's noise on the wire and the
+ *     UI can't say anything useful from it).
+ *
+ * Exported so the batch path and any future provider eval parses identically.
+ */
+export function parseComposition(raw: string): ReleaseComposition | null {
+  const block = extractTagged(raw, "composition");
+  if (!block) return null;
+  const bugs = parseCount(block, "bugs");
+  const features = parseCount(block, "features");
+  const enhancements = parseCount(block, "enhancements");
+  if (bugs === null || features === null || enhancements === null) return null;
+  if (bugs === 0 && features === 0 && enhancements === 0) return null;
+  return { bugs, features, enhancements };
+}
+
+function parseCount(block: string, tag: string): number | null {
+  const inner = extractTagged(block, tag);
+  if (!inner) return null;
+  const n = Number(inner);
+  if (!Number.isFinite(n) || !Number.isInteger(n) || n < 0) return null;
+  return n;
+}
+
+/**
+ * Pull title / title_short / summary / composition out of a model response.
+ * Exported so the batch path (`scripts/generate-release-content.ts`) parses
+ * each batch line through the same logic as the live `summarizeRelease` call
+ * — byte-for-byte identical on the parsing side.
  *
  * Takes the joined text + stop_reason rather than the SDK's `Message` type so
  * consumers of this module don't drag the full `@anthropic-ai/sdk` namespace
@@ -396,6 +468,7 @@ export function parseReleaseContent(
     title: extractTagged(raw, "title") || null,
     titleShort: extractTagged(raw, "title_short") || null,
     summary,
+    composition: parseComposition(raw),
   };
 }
 
@@ -417,6 +490,7 @@ export async function summarizeRelease(
       title: null,
       titleShort: null,
       summary: null,
+      composition: null,
       usage: { input: 0, output: 0, cacheCreate: 0, cacheRead: 0 },
       skipped: true,
     };
