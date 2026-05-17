@@ -3,7 +3,7 @@ import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { Database } from "bun:sqlite";
 import { drizzle } from "drizzle-orm/bun-sqlite";
 import { sources, organizations, knowledgePages } from "@buildinternet/releases-core/schema";
-import { applyMigrations } from "../db-helper";
+import { applyMigrations, ensureBatchShim } from "../db-helper";
 import { workflowFailures } from "../../workers/api/src/db/schema-workflow-failures";
 import { OnboardSourceWorkflow } from "../../workers/api/src/workflows/onboard-source";
 import type { OnboardSourceWorkflowEnv } from "../../workers/api/src/workflows/onboard-source";
@@ -34,19 +34,7 @@ function mkDb(opts: { type?: "feed" | "scrape" | "agent"; feedUrl?: string } = {
       metadata: JSON.stringify(meta),
     })
     .run();
-  // bun-sqlite drizzle handles don't expose .batch (D1-only). Shim it so
-  // fetchOne's db.batch() call resolves statements sequentially in tests.
-  const db = rawDb as unknown as typeof rawDb & { batch?: unknown };
-  if (!db.batch) {
-    db.batch = async (ops: ReadonlyArray<Promise<unknown>>) => {
-      const out: unknown[] = [];
-      for (const op of ops) {
-        // oxlint-disable-next-line no-await-in-loop -- shim mirrors D1 batch ordering
-        out.push(await op);
-      }
-      return out;
-    };
-  }
+  const db = ensureBatchShim(rawDb);
   return { db, sqlite };
 }
 

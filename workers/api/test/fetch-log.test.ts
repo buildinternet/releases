@@ -1,7 +1,7 @@
 import { describe, it, expect, mock, beforeEach } from "bun:test";
 import { Database } from "bun:sqlite";
 import { drizzle } from "drizzle-orm/bun-sqlite";
-import { applyMigrations } from "../../../tests/db-helper";
+import { applyMigrations, ensureBatchShim } from "../../../tests/db-helper";
 import { eq, sql } from "drizzle-orm";
 import { organizations, sources, releases, fetchLog } from "@buildinternet/releases-core/schema";
 import type { RawRelease } from "@releases/adapters/types";
@@ -69,20 +69,7 @@ function mkDb() {
   const sqlite = new Database(":memory:");
   const rawDb = drizzle(sqlite);
   applyMigrations(sqlite);
-  // bun-sqlite drizzle handles don't expose .batch (D1-only). Shim it so
-  // fetchOne's db.batch() call resolves statements sequentially in tests.
-  const db = rawDb as unknown as typeof rawDb & { batch?: unknown };
-  if (!db.batch) {
-    db.batch = async (ops: ReadonlyArray<Promise<unknown>>) => {
-      const out: unknown[] = [];
-      for (const op of ops) {
-        // oxlint-disable-next-line no-await-in-loop -- shim mirrors D1 batch ordering
-        out.push(await op);
-      }
-      return out;
-    };
-  }
-  return db as typeof rawDb;
+  return ensureBatchShim(rawDb);
 }
 
 async function seed(
