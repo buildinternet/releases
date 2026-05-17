@@ -14,7 +14,7 @@ import { createDb } from "../db.js";
 import { batchRuns } from "@buildinternet/releases-core/schema";
 import { buildListResponse, parseListPagination } from "../lib/pagination.js";
 import { logEvent } from "@releases/lib/log-event";
-import { classifyDbError, dbErrorLogFields } from "@releases/lib/db-errors";
+import { classifyDbError } from "@releases/lib/db-errors";
 import type { Env } from "../index.js";
 
 export const adminBatchRunsRoutes = new Hono<Env>();
@@ -139,7 +139,13 @@ adminBatchRunsRoutes.post("/admin/batch-runs", async (c) => {
       event: "insert-failed",
       anthropicBatchId,
       err,
-      ...dbErrorLogFields(err),
+      ...(classified
+        ? {
+            causeCode: classified.code,
+            causeMessage: classified.message,
+            causeTransient: classified.transient,
+          }
+        : {}),
     });
     return c.json(
       { error: "insert_failed", ...(classified ? { errorCode: classified.code } : {}) },
@@ -227,7 +233,13 @@ adminBatchRunsRoutes.patch("/admin/batch-runs/:id", async (c) => {
       event: "update-failed",
       id,
       err,
-      ...dbErrorLogFields(err),
+      ...(classified
+        ? {
+            causeCode: classified.code,
+            causeMessage: classified.message,
+            causeTransient: classified.transient,
+          }
+        : {}),
     });
     return c.json(
       { error: "update_failed", ...(classified ? { errorCode: classified.code } : {}) },
