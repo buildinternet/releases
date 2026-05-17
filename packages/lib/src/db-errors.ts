@@ -39,6 +39,12 @@ export interface ClassifiedDbError {
   transient: boolean;
 }
 
+// Gate: the chain must carry one of these tokens before MATCHERS fires.
+// Without the gate, a non-D1 error (e.g. a Voyage `fetch()` failing with
+// "Network connection lost") would be misclassified as transient D1 and
+// silently skip the per-source consecutiveErrors bump.
+const D1_FOOTPRINT = /D1_ERROR|D1 DB|SQLITE_ERROR/i;
+
 interface Matcher {
   pattern: RegExp;
   code: DbErrorCode;
@@ -86,6 +92,8 @@ function walkCauseChain(err: unknown): Error[] {
  */
 export function classifyDbError(err: unknown): ClassifiedDbError | null {
   const chain = walkCauseChain(err);
+  const d1Frame = chain.find((e) => D1_FOOTPRINT.test(e.message ?? ""));
+  if (!d1Frame) return null;
   for (const e of chain) {
     const msg = e.message ?? "";
     const match = MATCHERS.find((m) => m.pattern.test(msg));
@@ -93,12 +101,7 @@ export function classifyDbError(err: unknown): ClassifiedDbError | null {
       return { code: match.code, message: msg, transient: match.transient };
     }
   }
-  // Unknown D1 error: chain contained "D1_ERROR" but no matcher hit. Fall
-  // through with the most-specific message so it surfaces in logs and we
-  // can add a matcher when it shows up.
-  const d1Frame = chain.find((e) => /D1_ERROR/i.test(e.message ?? ""));
-  if (d1Frame) {
-    return { code: "DB_UNKNOWN", message: d1Frame.message, transient: false };
-  }
-  return null;
+  // Chain carries a D1 footprint but no matcher hit — surface as DB_UNKNOWN
+  // so the unmapped message shows up in logs and a matcher can be added.
+  return { code: "DB_UNKNOWN", message: d1Frame.message, transient: false };
 }

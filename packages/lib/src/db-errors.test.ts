@@ -46,11 +46,24 @@ describe("classifyDbError", () => {
   });
 
   it("classifies the CF internal reference id pattern as DB_INTERNAL + transient", () => {
-    const result = classifyDbError(
-      new Error("internal error; reference = la49bgmb9rj1uvrqdjjj0ioe"),
-    );
+    // Production messages arrive wrapped — the inner cause is the raw CF
+    // string but the outer frame carries the D1_ERROR prefix. The classifier
+    // gate requires a D1 footprint somewhere in the chain.
+    const inner = new Error("internal error; reference = la49bgmb9rj1uvrqdjjj0ioe");
+    const outer = new Error("D1_ERROR: internal error; reference = la49bgmb9rj1uvrqdjjj0ioe", {
+      cause: inner,
+    });
+    const result = classifyDbError(outer);
     expect(result?.code).toBe("DB_INTERNAL");
     expect(result?.transient).toBe(true);
+  });
+
+  it("does not misclassify a bare 'Network connection lost' (no D1 footprint) — e.g. a Voyage fetch failure", () => {
+    expect(classifyDbError(new Error("Network connection lost."))).toBeNull();
+  });
+
+  it("does not misclassify a bare 'internal error; reference =' (no D1 footprint)", () => {
+    expect(classifyDbError(new Error("internal error; reference = abc123"))).toBeNull();
   });
 
   it("classifies 'too many SQL variables' as DB_TOO_MANY_VARIABLES + non-transient", () => {
