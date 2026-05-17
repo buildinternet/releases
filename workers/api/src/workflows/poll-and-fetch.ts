@@ -16,6 +16,7 @@ import type { Source } from "@buildinternet/releases-core/schema";
 import { releaseCoverage } from "@releases/db/schema-coverage.js";
 import { SOURCE_DELETED_SENTINEL, recordWorkflowFailure } from "./_shared.js";
 import { logEvent } from "@releases/lib/log-event";
+import { dbErrorLogFields } from "@releases/lib/db-errors";
 import { getSecret } from "@releases/lib/secrets";
 import { summarizeRelease } from "@releases/ai-internal/release-content";
 import {
@@ -332,6 +333,7 @@ export async function generateContentForReleases(
         chunkOffset: i,
         chunkSize: chunk.length,
         err,
+        ...dbErrorLogFields(err),
       });
     }
   }
@@ -537,6 +539,7 @@ export class PollAndFetchWorkflow extends WorkflowEntrypoint<
         sourceId,
         step: currentStep,
         err,
+        ...dbErrorLogFields(err),
       });
       await recordWorkflowFailure(db, {
         idPrefix: "wf-fail-",

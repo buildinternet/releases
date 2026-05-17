@@ -5,6 +5,7 @@
 
 import { workflowFailures } from "../db/schema-workflow-failures.js";
 import { logEvent } from "@releases/lib/log-event";
+import { dbErrorLogFields } from "@releases/lib/db-errors";
 
 /**
  * Sentinel for "source row was deleted between dispatch and workflow start".
@@ -60,6 +61,7 @@ export async function recordWorkflowFailure(
       component: args.logTag,
       event: "record-failure-row-failed",
       err: dbErr instanceof Error ? dbErr : String(dbErr),
+      ...dbErrorLogFields(dbErr),
     });
   }
 }

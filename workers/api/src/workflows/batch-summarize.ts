@@ -26,6 +26,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { releases } from "@buildinternet/releases-core/schema";
 import { daysAgoIso } from "@buildinternet/releases-core/dates";
 import { logEvent } from "@releases/lib/log-event";
+import { dbErrorLogFields } from "@releases/lib/db-errors";
 import { buildAnthropicClient } from "@releases/lib/anthropic-client.js";
 import { estimateCost } from "@releases/lib/anthropic-pricing.js";
 import {
@@ -387,6 +388,7 @@ export class BatchSummarizeWorkflow extends WorkflowEntrypoint<
               batchRunId,
               anthropicBatchId,
               err,
+              ...dbErrorLogFields(err),
             });
           });
         }
@@ -528,6 +530,7 @@ export class BatchSummarizeWorkflow extends WorkflowEntrypoint<
             offset,
             chunkSize: chunk.length,
             err,
+            ...dbErrorLogFields(err),
           });
         }
       }
@@ -559,6 +562,7 @@ export class BatchSummarizeWorkflow extends WorkflowEntrypoint<
           batchRunId,
           anthropicBatchId,
           err,
+          ...dbErrorLogFields(err),
         });
       });
 
