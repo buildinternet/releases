@@ -14,24 +14,24 @@
 // pick it up). `transient: false` means the call would fail the same way on
 // immediate retry — surfaces / counters should react.
 
-export const DB_ERROR_CODES = {
-  /** D1 storage backend rejected requests for being queued too long. */
-  DB_OVERLOADED: "DB_OVERLOADED",
-  /** Connection to D1 dropped mid-request. Almost always clears next tick. */
-  DB_NETWORK_LOST: "DB_NETWORK_LOST",
-  /** "Internal error in D1 DB storage caused object to be reset." */
-  DB_STORAGE_RESET: "DB_STORAGE_RESET",
-  /** "D1 DB storage operation exceeded timeout which caused object to be reset." */
-  DB_TIMEOUT: "DB_TIMEOUT",
-  /** Generic D1 internal error with a CF reference id. */
-  DB_INTERNAL: "DB_INTERNAL",
-  /** Statement exceeded D1's 100-bind cap. Not transient — caller chunk size is wrong. */
-  DB_TOO_MANY_VARIABLES: "DB_TOO_MANY_VARIABLES",
-  /** D1_ERROR with a message we don't recognize. Treat as non-transient until classified. */
-  DB_UNKNOWN: "DB_UNKNOWN",
-} as const;
+// - DB_OVERLOADED:         D1 storage rejected requests for being queued too long.
+// - DB_NETWORK_LOST:       Connection to D1 dropped mid-request. Almost always clears next tick.
+// - DB_STORAGE_RESET:      "Internal error in D1 DB storage caused object to be reset."
+// - DB_TIMEOUT:            "D1 DB storage operation exceeded timeout which caused object to be reset."
+// - DB_INTERNAL:           Generic D1 internal error with a CF reference id.
+// - DB_TOO_MANY_VARIABLES: Statement exceeded D1's 100-bind cap. Caller chunk size is wrong.
+// - DB_UNKNOWN:            D1_ERROR with an unrecognized message. Treat as non-transient until classified.
+export const DB_ERROR_CODES = [
+  "DB_OVERLOADED",
+  "DB_NETWORK_LOST",
+  "DB_STORAGE_RESET",
+  "DB_TIMEOUT",
+  "DB_INTERNAL",
+  "DB_TOO_MANY_VARIABLES",
+  "DB_UNKNOWN",
+] as const;
 
-export type DbErrorCode = (typeof DB_ERROR_CODES)[keyof typeof DB_ERROR_CODES];
+export type DbErrorCode = (typeof DB_ERROR_CODES)[number];
 
 export interface ClassifiedDbError {
   code: DbErrorCode;
@@ -88,10 +88,9 @@ export function classifyDbError(err: unknown): ClassifiedDbError | null {
   const chain = walkCauseChain(err);
   for (const e of chain) {
     const msg = e.message ?? "";
-    for (const m of MATCHERS) {
-      if (m.pattern.test(msg)) {
-        return { code: m.code, message: msg, transient: m.transient };
-      }
+    const match = MATCHERS.find((m) => m.pattern.test(msg));
+    if (match) {
+      return { code: match.code, message: msg, transient: match.transient };
     }
   }
   // Unknown D1 error: chain contained "D1_ERROR" but no matcher hit. Fall

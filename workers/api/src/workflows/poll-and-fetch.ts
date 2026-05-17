@@ -104,7 +104,8 @@ const RETRY_GENERATE = {
  */
 const FANOUT_JITTER_WINDOW_MS = 300_000;
 
-function hashStringToInt(s: string): number {
+// FNV-1a, 32-bit. Cheap, deterministic, no Web Crypto dependency.
+function fnv1a32(s: string): number {
   let h = 2166136261;
   for (let i = 0; i < s.length; i++) {
     h ^= s.charCodeAt(i);
@@ -115,7 +116,7 @@ function hashStringToInt(s: string): number {
 
 export function jitterMsForSource(sourceId: string, windowMs: number): number {
   if (windowMs <= 0) return 0;
-  return hashStringToInt(sourceId) % windowMs;
+  return fnv1a32(sourceId) % windowMs;
 }
 
 /**
@@ -365,10 +366,8 @@ export class PollAndFetchWorkflow extends WorkflowEntrypoint<
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const db: any = env._drizzleOverride ?? drizzle(env.DB);
 
-    // Smear the fan-out across ~5 minutes so 30-160 instances don't all hit
-    // D1 at the top of the hour. Hash on sourceId for a stable, replay-safe
-    // slot per source. Skipped under tests via _drizzleOverride so suites
-    // don't pay the sleep cost. See db-errors `DB_OVERLOADED` pattern.
+    // Skipped under tests via _drizzleOverride so suites don't pay the sleep
+    // cost; rationale for the smear itself lives on FANOUT_JITTER_WINDOW_MS.
     if (!env._drizzleOverride) {
       const jitterMs = jitterMsForSource(sourceId, FANOUT_JITTER_WINDOW_MS);
       if (jitterMs > 0) {
