@@ -24,6 +24,8 @@ import { NonRetryableError } from "cloudflare:workflows";
 import { drizzle } from "drizzle-orm/d1";
 import { and, eq, sql } from "drizzle-orm";
 import { releases } from "@buildinternet/releases-core/schema";
+import type { ReleaseComposition } from "@buildinternet/releases-core/composition";
+import { buildCompositionMetadataSet } from "@releases/core-internal/composition-metadata";
 import { daysAgoIso } from "@buildinternet/releases-core/dates";
 import { logEvent } from "@releases/lib/log-event";
 import { dbErrorLogFields } from "@releases/lib/db-errors";
@@ -449,11 +451,14 @@ export class BatchSummarizeWorkflow extends WorkflowEntrypoint<
 
       // Collect successful rows first so we can batch the D1 UPDATEs instead
       // of issuing one round-trip per row (up to MAX_ELIGIBLE_ROWS = 2,000).
+      // The metadata SET is conditional so boilerplate rows (composition=null)
+      // don't trigger a no-op D1 page write — see buildCompositionMetadataSet.
       type UpdateTuple = {
         id: string;
         titleGenerated: string | null;
         titleShort: string | null;
         summary: string | null;
+        composition: ReleaseComposition | null;
         costUsd: number;
       };
       const updateRows: UpdateTuple[] = [];
@@ -475,6 +480,7 @@ export class BatchSummarizeWorkflow extends WorkflowEntrypoint<
             titleGenerated: parsed.title,
             titleShort: parsed.titleShort,
             summary: parsed.summary,
+            composition: parsed.composition,
             costUsd: rowCost?.totalUsd ?? 0,
           });
         } else {
@@ -489,27 +495,29 @@ export class BatchSummarizeWorkflow extends WorkflowEntrypoint<
         }
       }
 
-      // Batch UPDATEs: each UPDATE binds 4 values (titleGenerated, titleShort,
-      // summary, id) → D1 hard cap of 100 params → chunk at 25 rows per batch.
-      // Idempotent: WHERE title_short IS NULL guards against double-writes on
-      // step retry.
+      // Batch UPDATEs: each UPDATE binds at most 5 values (titleGenerated,
+      // titleShort, summary, optional compositionJson, id) → D1 hard cap of 100
+      // params → chunk at 20 rows per batch. Idempotent: WHERE title_short
+      // IS NULL guards against double-writes on step retry.
       //
       // D1's db.batch([...]) is atomic per array — all statements in one batch
       // call commit or none do. succeeded and actualCostUsd are incremented only
       // after each chunk commits so the counters reflect what actually landed.
-      const CHUNK_SIZE = 25; // floor(100 / 4 binds per UPDATE)
+      const CHUNK_SIZE = 20; // floor(100 / 5 binds per UPDATE)
       for (let offset = 0; offset < updateRows.length; offset += CHUNK_SIZE) {
         const chunk = updateRows.slice(offset, offset + CHUNK_SIZE);
-        const statements = chunk.map((row) =>
-          db
+        const statements = chunk.map((row) => {
+          const metadataSet = buildCompositionMetadataSet(row.composition);
+          return db
             .update(releases)
             .set({
               titleGenerated: row.titleGenerated,
               titleShort: row.titleShort,
               summary: row.summary,
+              ...(metadataSet ? { metadata: metadataSet } : {}),
             })
-            .where(and(eq(releases.id, row.id), sql`${releases.titleShort} IS NULL`)),
-        );
+            .where(and(eq(releases.id, row.id), sql`${releases.titleShort} IS NULL`));
+        });
         try {
           // oxlint-disable-next-line no-await-in-loop -- chunked batch; parallelism would exceed D1 limits
           await db.batch(statements);

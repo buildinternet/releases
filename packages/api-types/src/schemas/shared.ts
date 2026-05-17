@@ -46,6 +46,19 @@ export const StatsSchema = z.object({
 
 export const ReleaseTypeSchema = z.enum(RELEASE_TYPES);
 
+/**
+ * Per-category item counts produced by the AI release-content pass and
+ * persisted on `releases.metadata.composition`. Surfaces as a chip on the
+ * release detail UI ("12 fixes · 3 features"); `null` when the row hasn't
+ * been through the AI pass yet, the body was empty/boilerplate, or all
+ * three counts came back zero (we filter that case out on the parse side).
+ */
+export const ReleaseCompositionSchema = z.object({
+  bugs: z.number().int().min(0),
+  features: z.number().int().min(0),
+  enhancements: z.number().int().min(0),
+});
+
 export const ReleaseItemSchema = z.object({
   id: z.string().optional(),
   version: z.string().nullable(),
@@ -89,6 +102,10 @@ export const ReleaseItemSchema = z.object({
   // when null. See #958.
   contentChars: z.number().int().min(0).nullable().optional(),
   contentTokens: z.number().int().min(0).nullable().optional(),
+  // Per-category item counts produced by the AI release-content pass and
+  // stored on `releases.metadata.composition`. `null`/`undefined` when the
+  // row hasn't been through the AI pass yet or the body was boilerplate.
+  composition: ReleaseCompositionSchema.nullable().optional(),
 });
 
 export const ReleaseSummaryItemSchema = z.object({

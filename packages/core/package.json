@@ -29,7 +29,8 @@
     "./prerelease": "./src/prerelease.ts",
     "./cli-contracts": "./src/cli-contracts.ts",
     "./cursor": "./src/cursor.ts",
-    "./version-sort": "./src/version-sort.ts"
+    "./version-sort": "./src/version-sort.ts",
+    "./composition": "./src/composition.ts"
   },
   "files": [
     "src",

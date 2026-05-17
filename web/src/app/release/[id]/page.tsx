@@ -19,6 +19,7 @@ import { rehypeShikiPlugin } from "@/lib/shiki";
 import { detailMarkdownComponents } from "@/components/markdown-components";
 import { AI_SUMMARY_DISCLAIMER } from "@/lib/copy";
 import { RollupBadge } from "@/components/rollup-badge";
+import { CompositionChip } from "@/components/composition-chip";
 
 export async function generateMetadata({
   params,
@@ -196,6 +197,7 @@ export default async function ReleaseDetailPage({ params }: { params: Promise<{ 
                 View original ↗
               </a>
             )}
+            <CompositionChip composition={release.composition} />
           </div>
           <CliCommand identifier={release.id} />
         </div>

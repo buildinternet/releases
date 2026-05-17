@@ -16,6 +16,7 @@ import type {
   StatsSchema,
   ErrorResponseSchema,
   ReleaseTypeSchema,
+  ReleaseCompositionSchema,
   ReleaseItemSchema,
   ReleaseSummaryItemSchema,
   OverviewPageItemSchema,
@@ -222,6 +223,7 @@ export {
   StatsSchema,
   ErrorResponseSchema,
   ReleaseTypeSchema,
+  ReleaseCompositionSchema,
   ReleaseItemSchema,
   ReleaseSummaryItemSchema,
   OverviewPageItemSchema,
@@ -571,6 +573,7 @@ export interface OrgsRollupResponse extends ListResponse<OrgsRollupRow> {
 export type ReleaseType = z.infer<typeof ReleaseTypeSchema>;
 
 export type ReleaseItem = z.infer<typeof ReleaseItemSchema>;
+export type ReleaseComposition = z.infer<typeof ReleaseCompositionSchema>;
 
 export interface ReleaseDetail {
   id: string;
@@ -599,6 +602,8 @@ export interface ReleaseDetail {
   org: { slug: string; name: string } | null;
   /** Release type. See {@link ReleaseType}. */
   type?: ReleaseType;
+  /** Per-category item counts from the AI release-content pass. See {@link ReleaseComposition}. */
+  composition?: ReleaseComposition | null;
 }
 
 export type ReleaseCoverageRow = z.infer<typeof ReleaseCoverageRowSchema>;

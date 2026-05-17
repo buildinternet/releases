@@ -13,6 +13,8 @@ import { drizzle } from "drizzle-orm/d1";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { organizations, products, releases, sources } from "@buildinternet/releases-core/schema";
 import type { Source } from "@buildinternet/releases-core/schema";
+import type { ReleaseComposition } from "@buildinternet/releases-core/composition";
+import { buildCompositionMetadataSet } from "@releases/core-internal/composition-metadata";
 import { releaseCoverage } from "@releases/db/schema-coverage.js";
 import { SOURCE_DELETED_SENTINEL, recordWorkflowFailure } from "./_shared.js";
 import { logEvent } from "@releases/lib/log-event";
@@ -257,15 +259,18 @@ export async function generateContentForReleases(
   let totalTokens = 0;
 
   // Sequential LLM calls (cache warming + cost bounding depend on this), then
-  // a single batched UPDATE pass at the end. Each UPDATE binds 4 values
-  // (titleGenerated, titleShort, summary, id) → chunk at 25 to stay under
-  // D1's 100-bind per-statement cap. WHERE title_short IS NULL preserves
-  // idempotency against step retry.
+  // a single batched UPDATE pass at the end. Each UPDATE binds at most 5 values
+  // (titleGenerated, titleShort, summary, optional compositionJson, id) →
+  // chunk at 20 to stay under D1's 100-bind per-statement cap. WHERE
+  // title_short IS NULL preserves idempotency against step retry. When
+  // composition is null we omit the metadata SET entirely so boilerplate
+  // rows don't trigger a no-op D1 page write.
   const updates: {
     id: string;
     titleGenerated: string | null;
     titleShort: string | null;
     summary: string | null;
+    composition: ReleaseComposition | null;
   }[] = [];
 
   for (const row of rows) {
@@ -306,6 +311,7 @@ export async function generateContentForReleases(
         titleGenerated: result.title,
         titleShort: result.titleShort,
         summary: result.summary,
+        composition: result.composition,
       });
     } catch (err) {
       failed++;
@@ -320,15 +326,21 @@ export async function generateContentForReleases(
   }
 
   let generated = 0;
-  const UPDATE_CHUNK_SIZE = 25; // floor(100 / 4 binds per UPDATE)
+  const UPDATE_CHUNK_SIZE = 20; // floor(100 / 5 binds per UPDATE)
   for (let i = 0; i < updates.length; i += UPDATE_CHUNK_SIZE) {
     const chunk = updates.slice(i, i + UPDATE_CHUNK_SIZE);
-    const statements = chunk.map((u) =>
-      db
+    const statements = chunk.map((u) => {
+      const metadataSet = buildCompositionMetadataSet(u.composition);
+      return db
         .update(releases)
-        .set({ titleGenerated: u.titleGenerated, titleShort: u.titleShort, summary: u.summary })
-        .where(and(eq(releases.id, u.id), sql`${releases.titleShort} IS NULL`)),
-    );
+        .set({
+          titleGenerated: u.titleGenerated,
+          titleShort: u.titleShort,
+          summary: u.summary,
+          ...(metadataSet ? { metadata: metadataSet } : {}),
+        })
+        .where(and(eq(releases.id, u.id), sql`${releases.titleShort} IS NULL`));
+    });
     try {
       // eslint-disable-next-line no-await-in-loop -- chunked batch; parallelism would exceed D1 limits
       await db.batch(statements as [(typeof statements)[number], ...typeof statements]);
