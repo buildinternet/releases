@@ -3,7 +3,7 @@ import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { Database } from "bun:sqlite";
 import { drizzle } from "drizzle-orm/bun-sqlite";
 import { sources, organizations, knowledgePages } from "@buildinternet/releases-core/schema";
-import { applyMigrations } from "../db-helper";
+import { applyMigrations, ensureBatchShim } from "../db-helper";
 import { workflowFailures } from "../../workers/api/src/db/schema-workflow-failures";
 import { OnboardSourceWorkflow } from "../../workers/api/src/workflows/onboard-source";
 import type { OnboardSourceWorkflowEnv } from "../../workers/api/src/workflows/onboard-source";
@@ -11,9 +11,10 @@ import { mkFakeStep, mkFetch, mkVectorize } from "./_workflow-test-helpers";
 
 function mkDb(opts: { type?: "feed" | "scrape" | "agent"; feedUrl?: string } = {}) {
   const sqlite = new Database(":memory:");
-  const db = drizzle(sqlite);
+  const rawDb = drizzle(sqlite);
   applyMigrations(sqlite);
-  db.insert(organizations)
+  rawDb
+    .insert(organizations)
     .values({ id: "org_a", name: "Acme", slug: "acme", category: "cloud" })
     .run();
   const meta: Record<string, unknown> = {};
@@ -21,7 +22,8 @@ function mkDb(opts: { type?: "feed" | "scrape" | "agent"; feedUrl?: string } = {
     meta.feedUrl = opts.feedUrl;
     meta.feedType = "atom";
   }
-  db.insert(sources)
+  rawDb
+    .insert(sources)
     .values({
       id: "src_a1",
       orgId: "org_a",
@@ -32,6 +34,7 @@ function mkDb(opts: { type?: "feed" | "scrape" | "agent"; feedUrl?: string } = {
       metadata: JSON.stringify(meta),
     })
     .run();
+  const db = ensureBatchShim(rawDb);
   return { db, sqlite };
 }
 

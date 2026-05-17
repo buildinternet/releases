@@ -11,7 +11,7 @@ import { describe, it, expect, afterEach } from "bun:test";
 import { Database } from "bun:sqlite";
 import { drizzle } from "drizzle-orm/bun-sqlite";
 import { eq } from "drizzle-orm";
-import { applyMigrations } from "../../../tests/db-helper";
+import { applyMigrations, ensureBatchShim } from "../../../tests/db-helper";
 import {
   organizations,
   sources,
@@ -56,9 +56,9 @@ function text(body: string, status = 200): Response {
 
 function mkDb() {
   const sqlite = new Database(":memory:");
-  const db = drizzle(sqlite);
+  const rawDb = drizzle(sqlite);
   applyMigrations(sqlite);
-  return db;
+  return ensureBatchShim(rawDb);
 }
 
 async function seedOverrideSource(

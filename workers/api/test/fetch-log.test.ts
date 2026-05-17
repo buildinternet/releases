@@ -1,7 +1,7 @@
 import { describe, it, expect, mock, beforeEach } from "bun:test";
 import { Database } from "bun:sqlite";
 import { drizzle } from "drizzle-orm/bun-sqlite";
-import { applyMigrations } from "../../../tests/db-helper";
+import { applyMigrations, ensureBatchShim } from "../../../tests/db-helper";
 import { eq, sql } from "drizzle-orm";
 import { organizations, sources, releases, fetchLog } from "@buildinternet/releases-core/schema";
 import type { RawRelease } from "@releases/adapters/types";
@@ -67,9 +67,9 @@ const statusHubStub = {
 
 function mkDb() {
   const sqlite = new Database(":memory:");
-  const db = drizzle(sqlite);
+  const rawDb = drizzle(sqlite);
   applyMigrations(sqlite);
-  return db;
+  return ensureBatchShim(rawDb);
 }
 
 async function seed(
