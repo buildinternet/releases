@@ -65,6 +65,13 @@ function yamlLine(key: string, value: string | number | null | undefined): strin
   return `${key}: ${value}`;
 }
 
+function yamlScalar(value: string): string {
+  // Always quote handles so YAML 1.1 parsers can't coerce values like
+  // "true", "123", or "null" to booleans, numbers, or null. Cheaper than
+  // enumerating every coercible token, and the cost is two extra chars.
+  return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+}
+
 // ── Source → Markdown ────────────────────────────────────────────────
 
 export function sourceToMarkdown(source: FormatSourceDetail, opts: FormatOptions = {}): string {
@@ -228,10 +235,20 @@ export function orgToMarkdown(org: FormatOrgDetail, opts: OrgMarkdownOptions = {
   }
 
   if (org.accounts.length > 0) {
-    lines.push("accounts:");
+    const byPlatform = new Map<string, string[]>();
     for (const acct of org.accounts) {
-      lines.push(`  - platform: ${acct.platform}`);
-      lines.push(`    handle: ${acct.handle}`);
+      const list = byPlatform.get(acct.platform);
+      if (list) list.push(acct.handle);
+      else byPlatform.set(acct.platform, [acct.handle]);
+    }
+    lines.push("accounts:");
+    for (const [platform, handles] of byPlatform) {
+      if (handles.length === 1) {
+        lines.push(`  ${platform}: ${yamlScalar(handles[0]!)}`);
+      } else {
+        lines.push(`  ${platform}:`);
+        for (const h of handles) lines.push(`    - ${yamlScalar(h)}`);
+      }
     }
   }
 

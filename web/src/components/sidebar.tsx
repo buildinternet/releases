@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { SourceTypeIcon } from "./source-type-icon";
+import { AccountLink } from "./account-link";
 import { InfoTooltip } from "./info-tooltip";
 import { formatDate, formatRelativeDate } from "@/lib/formatters";
 
@@ -125,13 +125,7 @@ export function Sidebar({
           </div>
           <div className="space-y-1.5">
             {accounts.map((acc, i) => (
-              <div
-                key={i}
-                className="flex items-center gap-1.5 text-[13px] text-stone-600 dark:text-stone-400"
-              >
-                <SourceTypeIcon type={acc.platform} size={13} />
-                <span>{acc.handle}</span>
-              </div>
+              <AccountLink key={i} platform={acc.platform} handle={acc.handle} />
             ))}
           </div>
         </div>
