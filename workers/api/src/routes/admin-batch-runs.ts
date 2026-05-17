@@ -14,7 +14,7 @@ import { createDb } from "../db.js";
 import { batchRuns } from "@buildinternet/releases-core/schema";
 import { buildListResponse, parseListPagination } from "../lib/pagination.js";
 import { logEvent } from "@releases/lib/log-event";
-import { dbErrorLogFields } from "@releases/lib/db-errors";
+import { classifyDbError, dbErrorLogFields } from "@releases/lib/db-errors";
 import type { Env } from "../index.js";
 
 export const adminBatchRunsRoutes = new Hono<Env>();
@@ -133,6 +133,7 @@ adminBatchRunsRoutes.post("/admin/batch-runs", async (c) => {
 
     return c.json({ id: inserted!.id }, 201);
   } catch (err) {
+    const classified = classifyDbError(err);
     logEvent("error", {
       component: "admin-batch-runs",
       event: "insert-failed",
@@ -140,7 +141,10 @@ adminBatchRunsRoutes.post("/admin/batch-runs", async (c) => {
       err,
       ...dbErrorLogFields(err),
     });
-    return c.json({ error: "insert_failed" }, 500);
+    return c.json(
+      { error: "insert_failed", ...(classified ? { errorCode: classified.code } : {}) },
+      500,
+    );
   }
 });
 
@@ -217,6 +221,7 @@ adminBatchRunsRoutes.patch("/admin/batch-runs/:id", async (c) => {
     if (result.meta.changes === 0) return c.json({ error: "not_found" }, 404);
     return c.json({ ok: true });
   } catch (err) {
+    const classified = classifyDbError(err);
     logEvent("error", {
       component: "admin-batch-runs",
       event: "update-failed",
@@ -224,6 +229,9 @@ adminBatchRunsRoutes.patch("/admin/batch-runs/:id", async (c) => {
       err,
       ...dbErrorLogFields(err),
     });
-    return c.json({ error: "update_failed" }, 500);
+    return c.json(
+      { error: "update_failed", ...(classified ? { errorCode: classified.code } : {}) },
+      500,
+    );
   }
 });

@@ -136,7 +136,7 @@ import { notifyIndexNowForSource } from "../lib/indexnow.js";
 import { clusterAndPersistCascades } from "../lib/cluster-cascades.js";
 import { resolveOrgSlug, resolveProductSlug } from "../lib/slug-lookups.js";
 import { logEvent } from "@releases/lib/log-event";
-import { dbErrorLogFields } from "@releases/lib/db-errors";
+import { classifyDbError, dbErrorLogFields } from "@releases/lib/db-errors";
 import { getSecret } from "@releases/lib/secrets";
 
 export const sourceRoutes = new Hono<Env>();
@@ -864,6 +864,7 @@ const postReleasesBatchHandler = async (c: import("hono").Context<Env>) => {
 
     return c.json({ inserted, total });
   } catch (err) {
+    const classified = classifyDbError(err);
     logEvent("error", {
       component: "sources-batch",
       event: "insert-failed",
@@ -873,7 +874,10 @@ const postReleasesBatchHandler = async (c: import("hono").Context<Env>) => {
       ...dbErrorLogFields(err),
     });
     const message = (err as Error).message ?? "Failed to insert releases";
-    return c.json({ error: "insert_failed", message }, 500);
+    return c.json(
+      { error: "insert_failed", message, ...(classified ? { errorCode: classified.code } : {}) },
+      500,
+    );
   }
 };
 const postReleasesBatchRoute = describeRoute({
@@ -2649,8 +2653,16 @@ sourceRoutes.post("/sources/:slug/releases", postReleaseRoute, async (c) => {
       .onConflictDoNothing()
       .returning();
     return c.json(release ?? { skipped: true }, release ? 201 : 200);
-  } catch {
-    return c.json({ error: "insert_failed", message: "Failed to insert release" }, 500);
+  } catch (err) {
+    const classified = classifyDbError(err);
+    return c.json(
+      {
+        error: "insert_failed",
+        message: "Failed to insert release",
+        ...(classified ? { errorCode: classified.code } : {}),
+      },
+      500,
+    );
   }
 });
 
