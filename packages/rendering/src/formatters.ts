@@ -66,11 +66,10 @@ function yamlLine(key: string, value: string | number | null | undefined): strin
 }
 
 function yamlScalar(value: string): string {
-  if (value === "") return '""';
-  if (/^[@`,[\]{}&*!|>'"%#]|[:#]\s/.test(value)) {
-    return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
-  }
-  return value;
+  // Always quote handles so YAML 1.1 parsers can't coerce values like
+  // "true", "123", or "null" to booleans, numbers, or null. Cheaper than
+  // enumerating every coercible token, and the cost is two extra chars.
+  return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
 }
 
 // ── Source → Markdown ────────────────────────────────────────────────

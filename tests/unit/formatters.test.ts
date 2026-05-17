@@ -1,4 +1,5 @@
 import { describe, it, expect } from "bun:test";
+import { parse as parseYaml } from "yaml";
 import {
   sourceToMarkdown,
   orgToMarkdown,
@@ -303,24 +304,36 @@ describe("orgToMarkdown", () => {
   it("contains accounts block as flat platform → handle map", () => {
     const md = orgToMarkdown(fullOrg);
     expect(md).toContain("accounts:");
-    expect(md).toContain("  github: vercel");
-    expect(md).toContain("  twitter: vercel");
+    expect(md).toContain('  github: "vercel"');
+    expect(md).toContain('  twitter: "vercel"');
     // The legacy verbose shape is gone.
     expect(md).not.toContain("- platform:");
     expect(md).not.toContain("handle:");
   });
 
-  it("quotes handles that start with YAML-reserved indicators", () => {
+  it("quotes handles that would otherwise coerce under YAML 1.1", () => {
     const org: FormatOrgDetail = {
       ...fullOrg,
       accounts: [
         { platform: "youtube", handle: "@vercel" },
-        { platform: "github", handle: "vercel" },
+        { platform: "github", handle: "true" },
+        { platform: "x", handle: "123" },
       ],
     };
     const md = orgToMarkdown(org);
+    // Without quoting, YAML 1.1 parsers turn "true"→true, "123"→123,
+    // and reject `@` as a reserved indicator.
     expect(md).toContain('  youtube: "@vercel"');
-    expect(md).toContain("  github: vercel");
+    expect(md).toContain('  github: "true"');
+    expect(md).toContain('  x: "123"');
+
+    // Round-trip via a real YAML parser: each handle must come back as
+    // the original string, not coerced to boolean/number/null.
+    const frontmatter = md.split("---")[1]!;
+    const parsed = parseYaml(frontmatter) as { accounts: Record<string, string> };
+    expect(parsed.accounts.github).toBe("true");
+    expect(parsed.accounts.x).toBe("123");
+    expect(parsed.accounts.youtube).toBe("@vercel");
   });
 
   it("collapses multiple handles on one platform to a YAML list", () => {
@@ -334,9 +347,9 @@ describe("orgToMarkdown", () => {
     };
     const md = orgToMarkdown(org);
     expect(md).toContain("  github:");
-    expect(md).toContain("    - vercel");
-    expect(md).toContain("    - vercel-labs");
-    expect(md).toContain("  twitter: vercel");
+    expect(md).toContain('    - "vercel"');
+    expect(md).toContain('    - "vercel-labs"');
+    expect(md).toContain('  twitter: "vercel"');
   });
 
   it("contains description when set", () => {
