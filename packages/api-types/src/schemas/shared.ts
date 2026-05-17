@@ -29,6 +29,12 @@ export const ListResponseSchema = <T extends z.ZodTypeAny>(item: T) =>
 export const ErrorResponseSchema = z.object({
   error: z.string(),
   message: z.string(),
+  // Stable D1 error classification from `classifyDbError()` in
+  // `@releases/lib/db-errors`. Set on 5xx responses that originate from a
+  // classified D1 failure so callers can branch on a stable code instead of
+  // substring-matching the upstream message. Absent on non-D1 errors and on
+  // routes that have not yet been wired. See DbErrorCode in packages/lib.
+  errorCode: z.string().optional(),
 });
 
 export const StatsSchema = z.object({

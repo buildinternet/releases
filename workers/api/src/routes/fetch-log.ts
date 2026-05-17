@@ -4,6 +4,7 @@ import { createDb } from "../db.js";
 import { fetchLog, sources } from "@buildinternet/releases-core/schema";
 import { buildBareLimitEnvelope } from "../lib/pagination.js";
 import { sourceMatchByIdOrSlug } from "../utils.js";
+import { classifyDbError } from "@releases/lib/db-errors";
 import type { Env } from "../index.js";
 
 export const fetchLogRoutes = new Hono<Env>();
@@ -44,8 +45,16 @@ fetchLogRoutes.post("/admin/logs/fetch", async (c) => {
   let inserted;
   try {
     [inserted] = await db.insert(fetchLog).values(body).returning();
-  } catch {
-    return c.json({ error: "insert_failed", message: "Failed to insert fetch log" }, 500);
+  } catch (err) {
+    const classified = classifyDbError(err);
+    return c.json(
+      {
+        error: "insert_failed",
+        message: "Failed to insert fetch log",
+        ...(classified ? { errorCode: classified.code } : {}),
+      },
+      500,
+    );
   }
 
   // Best-effort notify StatusHub for live dashboard
