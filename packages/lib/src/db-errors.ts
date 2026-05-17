@@ -105,3 +105,26 @@ export function classifyDbError(err: unknown): ClassifiedDbError | null {
   // so the unmapped message shows up in logs and a matcher can be added.
   return { code: "DB_UNKNOWN", message: d1Frame.message, transient: false };
 }
+
+export interface DbErrorLogFields {
+  causeCode: DbErrorCode;
+  causeMessage: string;
+  causeTransient: boolean;
+}
+
+/**
+ * Render the classifier output as a flat `{causeCode, causeMessage,
+ * causeTransient}` object suitable for spreading into a `logEvent` payload.
+ * Workers Logs indexes top-level keys of JSON-stringified `console.*` lines,
+ * so these three fields become filterable in Axiom. Returns an empty object
+ * when the thrown value didn't originate from D1, which is safe to spread.
+ */
+export function dbErrorLogFields(err: unknown): Partial<DbErrorLogFields> {
+  const classified = classifyDbError(err);
+  if (!classified) return {};
+  return {
+    causeCode: classified.code,
+    causeMessage: classified.message,
+    causeTransient: classified.transient,
+  };
+}

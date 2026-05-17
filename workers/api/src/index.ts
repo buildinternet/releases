@@ -22,6 +22,7 @@ import { sweepSearchQueries } from "./cron/sweep-search-queries.js";
 import { sweepTombstones } from "./cron/sweep-tombstones.js";
 import { sendAlert, type AlertEnv } from "./lib/send-alert.js";
 import { logEvent } from "@releases/lib/log-event";
+import { dbErrorLogFields } from "@releases/lib/db-errors";
 import { getSecret } from "@releases/lib/secrets";
 
 export { StatusHub } from "./status-hub.js";
@@ -666,6 +667,7 @@ async function fanOutPollAndFetch(env: Env["Bindings"], scheduledTime: number): 
       component: "poll-fetch-cron",
       event: "cron-run-insert-failed",
       err: err instanceof Error ? err : String(err),
+      ...dbErrorLogFields(err),
     });
     return null;
   });

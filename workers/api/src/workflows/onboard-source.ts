@@ -21,6 +21,7 @@ import { fetchOne, embedReleasesForSource, type FetchOneEnv } from "../cron/poll
 import { getSourceMeta, isGitHubFetched } from "@releases/adapters/feed.js";
 import { invalidateLatestCache, type InvalidationEnv } from "../lib/latest-cache.js";
 import { logEvent } from "@releases/lib/log-event";
+import { dbErrorLogFields } from "@releases/lib/db-errors";
 import { getSecret } from "@releases/lib/secrets";
 
 export type OnboardSourceWorkflowEnv = InvalidationEnv & {
@@ -187,6 +188,7 @@ export class OnboardSourceWorkflow extends WorkflowEntrypoint<
         sourceId,
         step: currentStep,
         err,
+        ...dbErrorLogFields(err),
       });
       await recordWorkflowFailure(db, {
         idPrefix: "wf-fail-onboard-",

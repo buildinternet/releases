@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { classifyDbError } from "./db-errors.js";
+import { classifyDbError, dbErrorLogFields } from "./db-errors.js";
 
 describe("classifyDbError", () => {
   it("returns null for non-Error values", () => {
@@ -102,5 +102,32 @@ describe("classifyDbError", () => {
     a.cause = b;
     b.cause = a;
     expect(() => classifyDbError(a)).not.toThrow();
+  });
+});
+
+describe("dbErrorLogFields", () => {
+  it("returns an empty object for non-D1 errors so the spread is a no-op", () => {
+    expect(dbErrorLogFields(new Error("ENOENT"))).toEqual({});
+    expect(dbErrorLogFields("plain string")).toEqual({});
+  });
+
+  it("returns the flat shape suitable for spreading into a logEvent payload", () => {
+    const fields = dbErrorLogFields(
+      new Error("D1_ERROR: D1 DB is overloaded. Requests queued for too long."),
+    );
+    expect(fields).toEqual({
+      causeCode: "DB_OVERLOADED",
+      causeMessage: "D1_ERROR: D1 DB is overloaded. Requests queued for too long.",
+      causeTransient: true,
+    });
+  });
+
+  it("marks DB_UNKNOWN as non-transient so unmapped messages don't silently skip retry penalties", () => {
+    const fields = dbErrorLogFields(new Error("D1_ERROR: something brand new"));
+    expect(fields).toEqual({
+      causeCode: "DB_UNKNOWN",
+      causeMessage: "D1_ERROR: something brand new",
+      causeTransient: false,
+    });
   });
 });

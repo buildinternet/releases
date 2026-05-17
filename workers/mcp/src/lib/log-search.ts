@@ -5,6 +5,7 @@
  * table on the shared D1.
  */
 import { logEvent } from "@releases/lib/log-event";
+import { dbErrorLogFields } from "@releases/lib/db-errors";
 import {
   searchQueries,
   SEARCH_MODES,
@@ -123,6 +124,11 @@ export async function logMcpSearch(env: McpLogSearchEnv, input: McpLogSearchInpu
     await db.insert(searchQueries).values(row);
   } catch (err) {
     // Never break a tool response on a logging failure.
-    logEvent("error", { component: "search-log", event: "insert-failed", err });
+    logEvent("error", {
+      component: "search-log",
+      event: "insert-failed",
+      err,
+      ...dbErrorLogFields(err),
+    });
   }
 }

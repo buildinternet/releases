@@ -60,7 +60,7 @@ import { notifyIndexNowForSource, type IndexNowEnv } from "../lib/indexnow.js";
 import { clusterAndPersistCascades } from "../lib/cluster-cascades.js";
 import { resolveOrgSlug, resolveProductSlug } from "../lib/slug-lookups.js";
 import { logEvent } from "@releases/lib/log-event";
-import { classifyDbError } from "@releases/lib/db-errors";
+import { classifyDbError, dbErrorLogFields } from "@releases/lib/db-errors";
 
 // ── Tier intervals (hours) ──
 
@@ -825,13 +825,7 @@ export async function fetchOne(
       event: "fetch-error",
       sourceSlug: source.slug,
       err: err instanceof Error ? err : String(err),
-      ...(classified
-        ? {
-            causeCode: classified.code,
-            causeMessage: classified.message,
-            causeTransient: classified.transient,
-          }
-        : {}),
+      ...dbErrorLogFields(err),
     });
 
     await db

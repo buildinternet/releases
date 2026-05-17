@@ -27,6 +27,7 @@ import { RELEASES_BATCH_CHUNK_SIZE } from "../lib/d1-limits.js";
 import { isConflictError } from "../utils.js";
 import { embedSourceSideEffect } from "./sources.js";
 import { logEvent } from "@releases/lib/log-event";
+import { dbErrorLogFields } from "@releases/lib/db-errors";
 import { getSecret } from "@releases/lib/secrets";
 import {
   LookupResponseSchema,
@@ -342,7 +343,12 @@ export async function runLookup(
     }
   } catch (err) {
     // Source row stays; cron picks it up later.
-    logEvent("error", { component: "lookups", event: "ingest-failed", err });
+    logEvent("error", {
+      component: "lookups",
+      event: "ingest-failed",
+      err,
+      ...dbErrorLogFields(err),
+    });
     ingestStatus = "deferred";
   }
 

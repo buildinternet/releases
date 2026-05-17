@@ -136,6 +136,7 @@ import { notifyIndexNowForSource } from "../lib/indexnow.js";
 import { clusterAndPersistCascades } from "../lib/cluster-cascades.js";
 import { resolveOrgSlug, resolveProductSlug } from "../lib/slug-lookups.js";
 import { logEvent } from "@releases/lib/log-event";
+import { dbErrorLogFields } from "@releases/lib/db-errors";
 import { getSecret } from "@releases/lib/secrets";
 
 export const sourceRoutes = new Hono<Env>();
@@ -869,6 +870,7 @@ const postReleasesBatchHandler = async (c: import("hono").Context<Env>) => {
       sourceId: src.id,
       slug: src.slug,
       err: err instanceof Error ? err : String(err),
+      ...dbErrorLogFields(err),
     });
     const message = (err as Error).message ?? "Failed to insert releases";
     return c.json({ error: "insert_failed", message }, 500);

@@ -84,6 +84,7 @@ import {
 import { embedAndUpsertEntities, type EntityKind } from "@releases/search/embed-entities.js";
 import { buildEmbedConfig } from "../lib/embed-config.js";
 import { logEvent } from "@releases/lib/log-event";
+import { dbErrorLogFields } from "@releases/lib/db-errors";
 import { buildListResponse, parseListPagination } from "../lib/pagination.js";
 
 export const orgRoutes = new Hono<Env>();
@@ -1916,6 +1917,7 @@ async function embedOrgSideEffect(
       component: "orgs",
       event: "embed-side-effect-failed",
       err: err instanceof Error ? err : String(err),
+      ...dbErrorLogFields(err),
     });
   }
 }
