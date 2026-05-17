@@ -52,6 +52,13 @@ export type PollAndFetchWorkflowEnv = InvalidationEnv &
     OPENAI_API_KEY?: { get(): Promise<string> };
     RELEASE_HUB?: DurableObjectNamespace;
     WEBHOOK_DELIVERY_QUEUE?: Queue<unknown>;
+    /**
+     * Runtime kill switch / tuning knob for the per-source jitter smear.
+     * Parsed as an integer, clamped to [0, 3_600_000]. Set to "0" to disable
+     * the smear entirely; default 300000ms = 5 min. Overrides the module-level
+     * FANOUT_JITTER_WINDOW_MS constant without a redeploy.
+     */
+    FANOUT_JITTER_WINDOW_MS?: string;
     /** TEST-ONLY: bypass drizzle(env.DB) and use the provided instance directly. */
     _drizzleOverride?: unknown;
   };
@@ -368,10 +375,16 @@ export class PollAndFetchWorkflow extends WorkflowEntrypoint<
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const db: any = env._drizzleOverride ?? drizzle(env.DB);
 
-    // Skipped under tests via _drizzleOverride so suites don't pay the sleep
-    // cost; rationale for the smear itself lives on FANOUT_JITTER_WINDOW_MS.
+    // Smear window: parsed from env so we can kill or tune it without a
+    // redeploy. Set FANOUT_JITTER_WINDOW_MS=0 to disable; default 300000ms =
+    // 5 min. Clamped to [0, 3_600_000] to guard against accidental misconfig.
+    // Skipped under tests via _drizzleOverride so suites don't pay the sleep cost.
     if (!env._drizzleOverride) {
-      const jitterMs = jitterMsForSource(sourceId, FANOUT_JITTER_WINDOW_MS);
+      const rawWindow = parseInt(env.FANOUT_JITTER_WINDOW_MS ?? "", 10);
+      const windowMs = Number.isNaN(rawWindow)
+        ? FANOUT_JITTER_WINDOW_MS
+        : Math.min(Math.max(rawWindow, 0), 3_600_000);
+      const jitterMs = jitterMsForSource(sourceId, windowMs);
       if (jitterMs > 0) {
         await step.sleep("jitter-smear-fanout", jitterMs);
       }
