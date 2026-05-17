@@ -54,9 +54,9 @@ export type PollAndFetchWorkflowEnv = InvalidationEnv &
     WEBHOOK_DELIVERY_QUEUE?: Queue<unknown>;
     /**
      * Runtime kill switch / tuning knob for the per-source jitter smear.
-     * Parsed as an integer, clamped to [0, 3_600_000]. Set to "0" to disable
-     * the smear entirely; default 300000ms = 5 min. Overrides the module-level
-     * FANOUT_JITTER_WINDOW_MS constant without a redeploy.
+     * Parsed as an integer, clamped to [0, FANOUT_JITTER_WINDOW_MAX_MS]. Set
+     * to "0" to disable the smear entirely; absent/invalid falls back to the
+     * module-level FANOUT_JITTER_WINDOW_MS default.
      */
     FANOUT_JITTER_WINDOW_MS?: string;
     /** TEST-ONLY: bypass drizzle(env.DB) and use the provided instance directly. */
@@ -111,6 +111,7 @@ const RETRY_GENERATE = {
  * over the day, not randomized into adjacent peaks).
  */
 const FANOUT_JITTER_WINDOW_MS = 300_000;
+const FANOUT_JITTER_WINDOW_MAX_MS = 3_600_000;
 
 // FNV-1a, 32-bit. Cheap, deterministic, no Web Crypto dependency.
 function fnv1a32(s: string): number {
@@ -375,15 +376,12 @@ export class PollAndFetchWorkflow extends WorkflowEntrypoint<
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const db: any = env._drizzleOverride ?? drizzle(env.DB);
 
-    // Smear window: parsed from env so we can kill or tune it without a
-    // redeploy. Set FANOUT_JITTER_WINDOW_MS=0 to disable; default 300000ms =
-    // 5 min. Clamped to [0, 3_600_000] to guard against accidental misconfig.
     // Skipped under tests via _drizzleOverride so suites don't pay the sleep cost.
     if (!env._drizzleOverride) {
       const rawWindow = parseInt(env.FANOUT_JITTER_WINDOW_MS ?? "", 10);
       const windowMs = Number.isNaN(rawWindow)
         ? FANOUT_JITTER_WINDOW_MS
-        : Math.min(Math.max(rawWindow, 0), 3_600_000);
+        : Math.min(Math.max(rawWindow, 0), FANOUT_JITTER_WINDOW_MAX_MS);
       const jitterMs = jitterMsForSource(sourceId, windowMs);
       if (jitterMs > 0) {
         await step.sleep("jitter-smear-fanout", jitterMs);
