@@ -41,6 +41,71 @@ function shiftAndClamp(
   return out;
 }
 
+// Closing markdown / punctuation we want to step past when deciding where a
+// sentence really ends, so a marker lands after `**bold.**` rather than
+// inside the bold span as `bold.[^1]**`.
+const TRAILING_FORMATTING = /[)\]"'`*_]/;
+const WHITESPACE = /\s/;
+const SENTENCE_TERMINATORS = new Set([".", "!", "?"]);
+
+/**
+ * True when the character at `pos` is a sentence terminator we want to snap
+ * to — i.e., a `.`, `!`, or `?` followed by whitespace, end of content, or
+ * closing markdown punctuation. This excludes mid-token periods like `v2.0`
+ * or `e.g.` (in `e.g.`, the first `.` is followed by `g`, not whitespace).
+ */
+function isSentenceTerminator(content: string, pos: number): boolean {
+  const ch = content[pos];
+  if (ch === undefined || !SENTENCE_TERMINATORS.has(ch)) return false;
+  const next = content[pos + 1];
+  if (next === undefined) return true;
+  return WHITESPACE.test(next) || TRAILING_FORMATTING.test(next);
+}
+
+/**
+ * True when `pos` already sits at a natural pause point in the prose —
+ * immediately after a sentence terminator (and any trailing markdown
+ * markers), or right at a line break. End-of-content counts. Position 0 and
+ * positions immediately following a `\n` (the start of a new line/paragraph)
+ * do NOT count: a marker there reads as belonging to the next sentence
+ * rather than ending the previous one.
+ */
+function isAtSentenceBoundary(content: string, pos: number): boolean {
+  if (pos >= content.length) return true;
+  if (pos === 0) return false;
+  // If the next char is a newline we're already sitting at end-of-line,
+  // which is a fine place to anchor.
+  if (content[pos] === "\n") return true;
+  // Otherwise look back past any closing markdown to find what came before.
+  let i = pos - 1;
+  while (i >= 0 && TRAILING_FORMATTING.test(content[i]!)) i--;
+  if (i < 0) return false;
+  return isSentenceTerminator(content, i);
+}
+
+/**
+ * Move `startAt` forward to the next natural pause point (end of sentence
+ * or end of line) so superscript markers never split words or appear at the
+ * start of a sentence. If `startAt` is already at a boundary the position
+ * is returned unchanged; if no terminator is found before end of content we
+ * fall back to the content length.
+ */
+function snapToSentenceEnd(content: string, startAt: number): number {
+  const len = content.length;
+  if (startAt >= len) return len;
+  if (isAtSentenceBoundary(content, startAt)) return startAt;
+  for (let i = startAt; i < len; i++) {
+    const ch = content[i]!;
+    if (ch === "\n") return i;
+    if (isSentenceTerminator(content, i)) {
+      let j = i + 1;
+      while (j < len && TRAILING_FORMATTING.test(content[j]!)) j++;
+      return j;
+    }
+  }
+  return len;
+}
+
 /**
  * Build a stable footnote label from a page id + 1-based citation number.
  * GFM footnote labels are visible in the rendered DOM ID
@@ -97,11 +162,15 @@ export function applyCitationMarkers(
     (a, b) => a.startIndex - b.startIndex || a.endIndex - b.endIndex,
   );
 
-  // Number them in reading order and stash the marker positions.
+  // Number in reading order and snap each marker forward to the next
+  // sentence end / line break so the superscript never lands mid-word or at
+  // the very start of a paragraph. Multiple citations that snap to the same
+  // pause point cluster as adjacent markers (e.g., `claim.[^1][^2]`).
   const numbered = shifted.map((c, i) => ({
     citation: c,
     number: i + 1,
     label: footnoteLabel(pageId, i + 1),
+    insertAt: snapToSentenceEnd(stripped.content, c.endIndex),
   }));
 
   // Every citation may have been dropped by the heading-strip clamp. In that
@@ -111,14 +180,15 @@ export function applyCitationMarkers(
     return { content: stripped.content, rendered: [] };
   }
 
-  // Insert markers from rightmost endIndex backwards so earlier offsets
-  // don't shift as we splice strings.
-  const byInsertOrder = numbered.toSorted((a, b) => b.citation.endIndex - a.citation.endIndex);
+  // Insert from rightmost position backwards so earlier offsets stay valid.
+  // For ties (citations that snap to the same position), insert higher
+  // numbers first so each splice pushes prior markers right, yielding the
+  // final reading order `[1][2][3]` rather than `[3][2][1]`.
+  const byInsertOrder = numbered.toSorted((a, b) => b.insertAt - a.insertAt || b.number - a.number);
 
   let body = stripped.content;
-  for (const { citation, label } of byInsertOrder) {
-    const at = citation.endIndex;
-    body = body.slice(0, at) + `[^${label}]` + body.slice(at);
+  for (const { insertAt, label } of byInsertOrder) {
+    body = body.slice(0, insertAt) + `[^${label}]` + body.slice(insertAt);
   }
 
   // Append definitions in display order. GFM accepts a [Label](URL) inside a

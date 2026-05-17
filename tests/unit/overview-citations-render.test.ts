@@ -46,20 +46,23 @@ describe("applyCitationMarkers", () => {
   });
 
   it("numbers citations left-to-right by startIndex", () => {
-    const content = "Alpha then beta then gamma.";
+    // Use separate sentences so each citation keeps a distinct anchor —
+    // markers within one sentence cluster at the sentence end, which is
+    // covered by the snap-to-sentence-end tests below.
+    const content = "Alpha shipped. Then beta shipped. Then gamma shipped.";
     const out = applyCitationMarkers(
       content,
       [
-        cite({ startIndex: 11, endIndex: 15, sourceUrl: "https://b.com" }),
-        cite({ startIndex: 0, endIndex: 5, sourceUrl: "https://a.com" }),
-        cite({ startIndex: 21, endIndex: 26, sourceUrl: "https://c.com" }),
+        cite({ startIndex: 20, endIndex: 24, sourceUrl: "https://b.com" }), // "beta"
+        cite({ startIndex: 0, endIndex: 5, sourceUrl: "https://a.com" }), // "Alpha"
+        cite({ startIndex: 39, endIndex: 44, sourceUrl: "https://c.com" }), // "gamma"
       ],
       PAGE_ID,
     );
-    // [^p1-1] should follow "Alpha"
-    expect(out.content).toMatch(/Alpha\[\^p1-1\]/);
-    expect(out.content).toMatch(/beta\[\^p1-2\]/);
-    expect(out.content).toMatch(/gamma\[\^p1-3\]/);
+    // Each marker snaps to the end of its sentence.
+    expect(out.content).toMatch(/Alpha shipped\.\[\^p1-1\]/);
+    expect(out.content).toMatch(/beta shipped\.\[\^p1-2\]/);
+    expect(out.content).toMatch(/gamma shipped\.\[\^p1-3\]/);
     // Definitions appear in display order
     const defs = out.content.split("\n").filter((l) => l.startsWith("[^"));
     expect(defs[0]).toContain("https://a.com");
@@ -152,6 +155,103 @@ describe("applyCitationMarkers", () => {
       PAGE_ID,
     );
     expect(out.content).toContain("[not-a-url](not-a-url)");
+  });
+
+  describe("snap-to-sentence-end", () => {
+    it("snaps a mid-word endIndex to the end of the enclosing sentence", () => {
+      // Mirrors the real bug: a citation whose endIndex lands inside
+      // "Distributed" should not split the word.
+      const content = "Distributed tracing now spans Worker-to-Worker calls automatically.";
+      const out = applyCitationMarkers(
+        content,
+        [cite({ startIndex: 0, endIndex: 4, sourceUrl: "https://a.com" })],
+        PAGE_ID,
+      );
+      expect(out.content).toMatch(/automatically\.\[\^p1-1\]/);
+      expect(out.content).not.toMatch(/Dist\[\^p1-1\]ributed/);
+    });
+
+    it("snaps a start-of-sentence endIndex forward past the sentence end", () => {
+      // Marker at position 2 (right after the leading "\n\n") would otherwise
+      // render at the *start* of the next paragraph as "[^1]Stream got...".
+      const content = "Prev sentence.\n\nStream got a Workers binding.";
+      const out = applyCitationMarkers(
+        content,
+        [cite({ startIndex: 16, endIndex: 16, sourceUrl: "https://a.com" })],
+        PAGE_ID,
+      );
+      expect(out.content).toMatch(/Stream got a Workers binding\.\[\^p1-1\]/);
+      expect(out.content).not.toMatch(/\n\[\^p1-1\]Stream/);
+    });
+
+    it("leaves an endIndex that is already at end of sentence untouched", () => {
+      const content = "Acme shipped v2. Also v3 dropped.";
+      const out = applyCitationMarkers(
+        content,
+        [
+          cite({ startIndex: 0, endIndex: 16, sourceUrl: "https://a.com/v2" }),
+          cite({ startIndex: 17, endIndex: 33, sourceUrl: "https://a.com/v3" }),
+        ],
+        PAGE_ID,
+      );
+      expect(out.content).toMatch(/Acme shipped v2\.\[\^p1-1\] Also v3 dropped\.\[\^p1-2\]/);
+    });
+
+    it("steps past closing markdown formatting after the terminator", () => {
+      // The terminator is `binding.` but it's wrapped in **…**. Snapping
+      // should land the marker *after* the closing `**`, not inside the
+      // bold span.
+      const content = "Lead-in **Stream got a Workers binding.** Then more.";
+      const out = applyCitationMarkers(
+        content,
+        [cite({ startIndex: 11, endIndex: 17, sourceUrl: "https://a.com" })],
+        PAGE_ID,
+      );
+      expect(out.content).toMatch(/\*\*Stream got a Workers binding\.\*\*\[\^p1-1\] Then more\./);
+    });
+
+    it("clusters multiple citations within one sentence at the sentence end", () => {
+      // Three cites point at different phrases inside one sentence; all
+      // three should land in a tight cluster at end-of-sentence.
+      const content = "Alpha then beta then gamma.";
+      const out = applyCitationMarkers(
+        content,
+        [
+          cite({ startIndex: 0, endIndex: 5, sourceUrl: "https://a.com" }),
+          cite({ startIndex: 11, endIndex: 15, sourceUrl: "https://b.com" }),
+          cite({ startIndex: 21, endIndex: 26, sourceUrl: "https://c.com" }),
+        ],
+        PAGE_ID,
+      );
+      expect(out.content).toMatch(/gamma\.\[\^p1-1\]\[\^p1-2\]\[\^p1-3\]/);
+    });
+
+    it("does not skip past a sentence-internal decimal like v2.0", () => {
+      // The `.` in `v2.0` is followed by a digit, so it isn't a real
+      // terminator — snap must keep walking to the real period.
+      const content = "We shipped v2.0 with major work last week.";
+      const out = applyCitationMarkers(
+        content,
+        [cite({ startIndex: 3, endIndex: 10, sourceUrl: "https://a.com" })],
+        PAGE_ID,
+      );
+      expect(out.content).toMatch(/last week\.\[\^p1-1\]/);
+      expect(out.content).not.toMatch(/v2\.\[\^p1-1\]0/);
+    });
+
+    it("falls back to a line break when no sentence terminator exists before EOL", () => {
+      // No period in the mid-document heading; the marker should snap to
+      // the line break rather than skipping into the next paragraph.
+      // Wrapped in an intro paragraph so the leading-heading strip doesn't
+      // consume the heading we want to test against.
+      const content = "Intro paragraph.\n\n## Mid heading without terminator\n\nNext.";
+      const out = applyCitationMarkers(
+        content,
+        [cite({ startIndex: 21, endIndex: 28, sourceUrl: "https://a.com" })],
+        PAGE_ID,
+      );
+      expect(out.content).toMatch(/## Mid heading without terminator\[\^p1-1\]\n/);
+    });
   });
 
   it("scopes footnote labels per pageId so two overviews don't collide", () => {
