@@ -87,6 +87,10 @@
     // See docs/architecture/ai-gateway.md. Gateway runs in authenticated
     // mode — the AI_GATEWAY_TOKEN secret below must be bound.
     "ANTHROPIC_BASE_URL": "https://gateway.ai.cloudflare.com/v1/b082600d280d44fd5da3501bc1bffe2f/releases/anthropic",
+    // Smear window for the per-source jitter at the head of PollAndFetchWorkflow.
+    // Set to "0" to disable; see FANOUT_JITTER_WINDOW_MAX_MS for the upper clamp.
+    // See workers/api/src/workflows/poll-and-fetch.ts.
+    "FANOUT_JITTER_WINDOW_MS": "300000",
     // Batch summarization workflow (issue #971). Enabled — daily 04:30 UTC cron
     // walks the past 24h of releases across orgs with auto_generate_content=true
     // (~26 orgs as of enable). Admin POST trigger
@@ -339,6 +343,9 @@
         // Mirrors prod flag; not read in staging (CRON_ENABLED=false). See #971.
         "BATCH_SUMMARIZE_ENABLED": "false",
         "BATCH_SUMMARIZE_MAX_COST_USD": "10",
+        // Mirrors prod default; not read in staging (CRON_ENABLED=false means no
+        // cron fires, so PollAndFetchWorkflow instances are never dispatched).
+        "FANOUT_JITTER_WINDOW_MS": "300000",
         // Mirrors prod default; the helper also short-circuits on
         // INDEXING_DISABLED=true, so even if this is flipped on, staging
         // never fires. See workers/api/src/lib/indexnow.ts.
