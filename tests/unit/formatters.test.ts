@@ -300,12 +300,43 @@ describe("orgToMarkdown", () => {
     expect(md).toContain("tracking_since: 2024-01-01");
   });
 
-  it("contains accounts block with platform/handle", () => {
+  it("contains accounts block as flat platform → handle map", () => {
     const md = orgToMarkdown(fullOrg);
     expect(md).toContain("accounts:");
-    expect(md).toContain("  - platform: github");
-    expect(md).toContain("    handle: vercel");
-    expect(md).toContain("  - platform: twitter");
+    expect(md).toContain("  github: vercel");
+    expect(md).toContain("  twitter: vercel");
+    // The legacy verbose shape is gone.
+    expect(md).not.toContain("- platform:");
+    expect(md).not.toContain("handle:");
+  });
+
+  it("quotes handles that start with YAML-reserved indicators", () => {
+    const org: FormatOrgDetail = {
+      ...fullOrg,
+      accounts: [
+        { platform: "youtube", handle: "@vercel" },
+        { platform: "github", handle: "vercel" },
+      ],
+    };
+    const md = orgToMarkdown(org);
+    expect(md).toContain('  youtube: "@vercel"');
+    expect(md).toContain("  github: vercel");
+  });
+
+  it("collapses multiple handles on one platform to a YAML list", () => {
+    const org: FormatOrgDetail = {
+      ...fullOrg,
+      accounts: [
+        { platform: "github", handle: "vercel" },
+        { platform: "github", handle: "vercel-labs" },
+        { platform: "twitter", handle: "vercel" },
+      ],
+    };
+    const md = orgToMarkdown(org);
+    expect(md).toContain("  github:");
+    expect(md).toContain("    - vercel");
+    expect(md).toContain("    - vercel-labs");
+    expect(md).toContain("  twitter: vercel");
   });
 
   it("contains description when set", () => {
