@@ -15,6 +15,7 @@ coverage
 logs
 _.log
 report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
+*.log
 
 # dotenv environment variable files
 .env
@@ -44,6 +45,8 @@ data/*.db-shm
 # Local development data
 .context
 .superpowers
+.codex/config.toml
+.codex/hooks.json
 
 # Session data
 data/sessions/
