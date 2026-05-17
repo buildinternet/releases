@@ -67,9 +67,22 @@ const statusHubStub = {
 
 function mkDb() {
   const sqlite = new Database(":memory:");
-  const db = drizzle(sqlite);
+  const rawDb = drizzle(sqlite);
   applyMigrations(sqlite);
-  return db;
+  // bun-sqlite drizzle handles don't expose .batch (D1-only). Shim it so
+  // fetchOne's db.batch() call resolves statements sequentially in tests.
+  const db = rawDb as unknown as typeof rawDb & { batch?: unknown };
+  if (!db.batch) {
+    db.batch = async (ops: ReadonlyArray<Promise<unknown>>) => {
+      const out: unknown[] = [];
+      for (const op of ops) {
+        // oxlint-disable-next-line no-await-in-loop -- shim mirrors D1 batch ordering
+        out.push(await op);
+      }
+      return out;
+    };
+  }
+  return db as typeof rawDb;
 }
 
 async function seed(

@@ -766,7 +766,12 @@ export async function fetchOne(
       }
     }
 
-    await Promise.all([
+    // Single D1 round-trip: insert fetch_log + update sources atomically.
+    // Promise.all would issue two separate RPCs and leave either half committed
+    // on a mid-flight failure. db.batch() is strictly better here — a wedged
+    // sources.nextFetchAfter (from a failed update) or a silent observability
+    // gap (from a failed insert) are both avoided.
+    const successOps = [
       db.insert(fetchLog).values({
         sourceId: source.id,
         sessionId,
@@ -785,7 +790,8 @@ export async function fetchOne(
           changeDetectedAt: null,
         })
         .where(eq(sources.id, source.id)),
-    ]);
+    ];
+    await db.batch(successOps as [(typeof successOps)[number], ...typeof successOps]);
 
     // Refresh canonical CHANGELOG file for GitHub sources (mirrors CLI fetch step
     // in src/cli/commands/fetch.ts). Never fail the outer fetch if this errors.

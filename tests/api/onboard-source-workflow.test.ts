@@ -11,9 +11,10 @@ import { mkFakeStep, mkFetch, mkVectorize } from "./_workflow-test-helpers";
 
 function mkDb(opts: { type?: "feed" | "scrape" | "agent"; feedUrl?: string } = {}) {
   const sqlite = new Database(":memory:");
-  const db = drizzle(sqlite);
+  const rawDb = drizzle(sqlite);
   applyMigrations(sqlite);
-  db.insert(organizations)
+  rawDb
+    .insert(organizations)
     .values({ id: "org_a", name: "Acme", slug: "acme", category: "cloud" })
     .run();
   const meta: Record<string, unknown> = {};
@@ -21,7 +22,8 @@ function mkDb(opts: { type?: "feed" | "scrape" | "agent"; feedUrl?: string } = {
     meta.feedUrl = opts.feedUrl;
     meta.feedType = "atom";
   }
-  db.insert(sources)
+  rawDb
+    .insert(sources)
     .values({
       id: "src_a1",
       orgId: "org_a",
@@ -32,6 +34,19 @@ function mkDb(opts: { type?: "feed" | "scrape" | "agent"; feedUrl?: string } = {
       metadata: JSON.stringify(meta),
     })
     .run();
+  // bun-sqlite drizzle handles don't expose .batch (D1-only). Shim it so
+  // fetchOne's db.batch() call resolves statements sequentially in tests.
+  const db = rawDb as unknown as typeof rawDb & { batch?: unknown };
+  if (!db.batch) {
+    db.batch = async (ops: ReadonlyArray<Promise<unknown>>) => {
+      const out: unknown[] = [];
+      for (const op of ops) {
+        // oxlint-disable-next-line no-await-in-loop -- shim mirrors D1 batch ordering
+        out.push(await op);
+      }
+      return out;
+    };
+  }
   return { db, sqlite };
 }
 

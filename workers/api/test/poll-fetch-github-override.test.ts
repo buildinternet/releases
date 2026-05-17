@@ -61,6 +61,25 @@ function mkDb() {
   return db;
 }
 
+// bun-sqlite drizzle handles don't expose .batch (D1-only). Shim it so
+// fetchOne's db.batch() call works in tests — runs statements sequentially,
+// which is equivalent for correctness purposes.
+function asD1(db: ReturnType<typeof mkDb>) {
+  const handle = db as unknown as ReturnType<typeof mkDb> & { batch?: unknown };
+  if (!handle.batch) {
+    handle.batch = async (ops: ReadonlyArray<Promise<unknown>>) => {
+      const out: unknown[] = [];
+      for (const op of ops) {
+        // oxlint-disable-next-line no-await-in-loop -- shim mirrors D1 batch ordering
+        out.push(await op);
+      }
+      return out;
+    };
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return handle as any;
+}
+
 async function seedOverrideSource(
   db: ReturnType<typeof mkDb>,
   metadata: Record<string, unknown> = {
@@ -136,7 +155,7 @@ describe("fetchOne — metadata.githubUrl override", () => {
     await seedOverrideSource(db);
     const [src] = await db.select().from(sources).where(eq(sources.id, "src_a"));
 
-    const result = await fetchOne(db as any, src, STUB_ENV);
+    const result = await fetchOne(asD1(db), src, STUB_ENV);
 
     expect(result.status).toBe("success");
     expect(result.releasesInserted).toBe(2);
@@ -204,7 +223,7 @@ describe("fetchOne — metadata.githubUrl override", () => {
     });
 
     const [src] = await db.select().from(sources).where(eq(sources.id, "src_a"));
-    const result = await fetchOne(db as any, src, STUB_ENV);
+    const result = await fetchOne(asD1(db), src, STUB_ENV);
 
     // onConflictDoNothing skips the duplicate URL; insertion count stays 0
     expect(result.releasesFound).toBe(1);
@@ -242,7 +261,7 @@ describe("fetchOne — metadata.githubUrl override", () => {
     });
     const [src] = await db.select().from(sources).where(eq(sources.id, "src_a"));
 
-    await fetchOne(db as any, src, STUB_ENV);
+    await fetchOne(asD1(db), src, STUB_ENV);
 
     const rows = await db.select().from(releases).where(eq(releases.sourceId, "src_a"));
     expect(rows.map((r) => r.url)).toEqual([
