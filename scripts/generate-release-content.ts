@@ -188,11 +188,17 @@ async function writeRow(w: WritePayload): Promise<void> {
     `title_generated = ${lit(w.title)}`,
     `title_short = ${lit(w.titleShort)}`,
   ];
-  // Mirror buildCompositionMetadataSet: skip the metadata write when the
-  // model didn't return counts so we don't churn the metadata column on
-  // boilerplate rows.
-  if (w.composition !== null) {
-    const compositionLit = `'${escapeSql(JSON.stringify(w.composition))}'`;
+  // Tri-state for composition:
+  //   - undefined → no-op (omit metadata from SET). WritePayload doesn't
+  //     currently emit undefined, but we keep the branch so widening the
+  //     type later doesn't silently lose this case.
+  //   - null     → write JSON null into $.composition. This records "AI was
+  //     run and produced no counts" in-place; distinct from the helper's
+  //     intent-to-clear semantics (which removes the key entirely).
+  //   - object   → set the composition object as the slot value.
+  if (w.composition !== undefined) {
+    const compositionLit =
+      w.composition === null ? "'null'" : `'${escapeSql(JSON.stringify(w.composition))}'`;
     setParts.push(
       `metadata = json_set(coalesce(metadata, '{}'), '$.composition', json(${compositionLit}))`,
     );

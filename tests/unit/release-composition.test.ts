@@ -145,9 +145,12 @@ describe("buildCompositionMetadataSet (write helper)", () => {
     expect(buildCompositionMetadataSet(undefined)).toBeNull();
   });
 
-  it("returns a json_remove fragment for null", () => {
+  it("returns a CASE+json_remove fragment for null that preserves NULL metadata", () => {
     const frag = buildCompositionMetadataSet(null);
     const text = chunkText(frag);
+    // NULL metadata stays NULL — only non-NULL rows get json_remove applied.
+    expect(text).toContain("CASE");
+    expect(text).toContain("IS NULL");
     expect(text).toContain("json_remove");
     expect(text).toContain("$.composition");
   });
