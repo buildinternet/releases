@@ -90,6 +90,35 @@ const RETRY_GENERATE = {
 } satisfies WorkflowStepConfig;
 
 /**
+ * Smearing window for the per-source jitter sleep at the workflow head. The
+ * cron fans out 30-160 instances per fire and every D1 overload in the last 7d
+ * landed within the first 7 minutes of the hour — pure thundering-herd. We
+ * spread the start of each instance across this window so the first wave of
+ * `load-source` SELECTs (and the much heavier insert/update batches that
+ * follow) staggers across ~5 minutes instead of seconds.
+ *
+ * Sleep is hash-keyed on `sourceId` so each source lands in a deterministic
+ * slot — replays of the same instance always pick the same delay, and the
+ * distribution is stable across fires (any given source's load is predictable
+ * over the day, not randomized into adjacent peaks).
+ */
+const FANOUT_JITTER_WINDOW_MS = 300_000;
+
+function hashStringToInt(s: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+export function jitterMsForSource(sourceId: string, windowMs: number): number {
+  if (windowMs <= 0) return 0;
+  return hashStringToInt(sourceId) % windowMs;
+}
+
+/**
  * Resolve the FetchOneEnv slice — embedding + GitHub + vector bindings — once
  * and cache it across steps. Secrets are fetched lazily inside steps that
  * need them (none of them here land in the workflow's persisted state because
@@ -335,6 +364,17 @@ export class PollAndFetchWorkflow extends WorkflowEntrypoint<
     const { sourceId, scheduledTime } = event.payload;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const db: any = env._drizzleOverride ?? drizzle(env.DB);
+
+    // Smear the fan-out across ~5 minutes so 30-160 instances don't all hit
+    // D1 at the top of the hour. Hash on sourceId for a stable, replay-safe
+    // slot per source. Skipped under tests via _drizzleOverride so suites
+    // don't pay the sleep cost. See db-errors `DB_OVERLOADED` pattern.
+    if (!env._drizzleOverride) {
+      const jitterMs = jitterMsForSource(sourceId, FANOUT_JITTER_WINDOW_MS);
+      if (jitterMs > 0) {
+        await step.sleep("jitter-smear-fanout", jitterMs);
+      }
+    }
 
     // Track the last step name so the failure row has useful context.
     let currentStep = "load-source";
