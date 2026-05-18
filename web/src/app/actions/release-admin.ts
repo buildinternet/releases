@@ -1,0 +1,80 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { webApiHeaders } from "@/lib/api";
+import { isLocalAdminEnabled } from "@/lib/local-admin-flag";
+
+type ActionResult = { ok: true; redirectTo?: string } | { ok: false; error: string };
+
+function adminEnv(): { apiUrl: string; apiSecret: string } | { error: string } {
+  if (!isLocalAdminEnabled()) {
+    return { error: "Admin actions are disabled in this environment." };
+  }
+  const apiUrl = process.env.RELEASED_API_URL ?? "http://localhost:3456";
+  const apiSecret = process.env.RELEASED_API_KEY;
+  if (!apiSecret) return { error: "RELEASED_API_KEY not configured." };
+  return { apiUrl, apiSecret };
+}
+
+export async function suppressReleaseAction(input: {
+  id: string;
+  reason?: string;
+  redirectTo?: string;
+}): Promise<ActionResult> {
+  const env = adminEnv();
+  if ("error" in env) return { ok: false, error: env.error };
+
+  let res: Response;
+  try {
+    res = await fetch(`${env.apiUrl}/v1/releases/${encodeURIComponent(input.id)}/suppress`, {
+      method: "POST",
+      headers: webApiHeaders({
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${env.apiSecret}`,
+      }),
+      body: JSON.stringify(input.reason?.trim() ? { reason: input.reason.trim() } : {}),
+      cache: "no-store",
+    });
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Network error" };
+  }
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    return { ok: false, error: `API ${res.status}: ${text || res.statusText}` };
+  }
+
+  revalidatePath(`/release/${input.id}`);
+  if (input.redirectTo) revalidatePath(input.redirectTo);
+  return { ok: true, redirectTo: input.redirectTo };
+}
+
+export async function deleteReleaseAction(input: {
+  id: string;
+  redirectTo?: string;
+}): Promise<ActionResult> {
+  const env = adminEnv();
+  if ("error" in env) return { ok: false, error: env.error };
+
+  let res: Response;
+  try {
+    res = await fetch(`${env.apiUrl}/v1/releases/${encodeURIComponent(input.id)}`, {
+      method: "DELETE",
+      headers: webApiHeaders({
+        Authorization: `Bearer ${env.apiSecret}`,
+      }),
+      cache: "no-store",
+    });
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Network error" };
+  }
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    return { ok: false, error: `API ${res.status}: ${text || res.statusText}` };
+  }
+
+  revalidatePath(`/release/${input.id}`);
+  if (input.redirectTo) revalidatePath(input.redirectTo);
+  return { ok: true, redirectTo: input.redirectTo };
+}
