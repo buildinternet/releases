@@ -155,7 +155,13 @@
       "preview_id": "832712867aff4c91bc11bb3cecd7da9e",
     },
   ],
-  "services": [{ "binding": "DISCOVERY_WORKER", "service": "releases-discovery" }],
+  "services": [
+    {
+      "binding": "DISCOVERY_WORKER",
+      "service": "releases-discovery",
+      "entrypoint": "DiscoveryEntrypoint",
+    },
+  ],
   "r2_buckets": [
     {
       "binding": "MEDIA",
@@ -453,7 +459,13 @@
       // itself is still pointless).
       "triggers": { "crons": [] },
       // No Vectorize bindings — search degrades to FTS (see search-hybrid.ts).
-      "services": [{ "binding": "DISCOVERY_WORKER", "service": "releases-discovery-staging" }],
+      "services": [
+        {
+          "binding": "DISCOVERY_WORKER",
+          "service": "releases-discovery-staging",
+          "entrypoint": "DiscoveryEntrypoint",
+        },
+      ],
       "secrets_store_secrets": [
         {
           "binding": "RELEASED_API_KEY",

@@ -61,10 +61,8 @@ export type PollAndFetchWorkflowEnv = InvalidationEnv &
      * module-level FANOUT_JITTER_WINDOW_MS default.
      */
     FANOUT_JITTER_WINDOW_MS?: string;
-    /** Service binding used to delegate summary-only feeds to discovery's crawl path. */
-    DISCOVERY_WORKER?: Fetcher;
-    /** Releases API key for authenticating delegation calls to the discovery worker. */
-    RELEASED_API_KEY?: { get(): Promise<string> };
+    /** Service binding used to delegate summary-only feeds to discovery's crawl path (RPC). */
+    DISCOVERY_WORKER?: import("../cron/poll-fetch.js").DiscoveryWorkerRpc;
     /** TEST-ONLY: bypass drizzle(env.DB) and use the provided instance directly. */
     _drizzleOverride?: unknown;
   };
@@ -153,7 +151,6 @@ async function resolveFetchEnv(env: PollAndFetchWorkflowEnv): Promise<FetchOneEn
     WEBHOOK_DELIVERY_QUEUE: env.WEBHOOK_DELIVERY_QUEUE,
     DB: env.DB,
     DISCOVERY_WORKER: env.DISCOVERY_WORKER,
-    RELEASED_API_KEY: env.RELEASED_API_KEY,
   };
 }
 

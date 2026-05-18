@@ -448,6 +448,26 @@ async function pollScrapeOrAgentByQuirk(
 
 // ── Fetch one source ──
 
+/**
+ * Typed RPC surface of the discovery worker's `DiscoveryEntrypoint`. Mirrors
+ * the return shape declared in `workers/discovery/src/index.ts`. Kept
+ * inline here so the API worker does not import directly from a separate
+ * wrangler project — the Cloudflare service binding runtime enforces the
+ * actual contract; this is purely for local type-checking.
+ */
+export interface DiscoveryWorkerRpc {
+  fetchSource(
+    sourceIdentifier: string,
+    sessionId?: string,
+  ): Promise<{
+    ok: boolean;
+    releasesFound: number;
+    releasesInserted: number;
+    errorCategory?: string;
+    error?: string;
+  }>;
+}
+
 export interface FetchOneResult {
   releasesFound: number;
   releasesInserted: number;
@@ -482,18 +502,17 @@ export interface FetchOneEnv extends IndexNowEnv {
   WEBHOOK_DELIVERY_QUEUE?: Queue<unknown>;
   DB?: D1Database;
   /**
-   * Service binding to the discovery worker. When present, summary-only feeds
-   * (items with only titles + links — no body) with `crawlEnabled: true` are
-   * delegated to discovery's `POST /sources/:id/fetch` endpoint so per-release
-   * pages can be crawled and extracted for content + media. See {@link shouldDelegateToCrawl}.
+   * Service binding to the discovery worker's `DiscoveryEntrypoint`. When
+   * present, summary-only feeds (items with only titles + links — no body)
+   * with `crawlEnabled: true` are delegated to discovery's `fetchSource` RPC
+   * method so per-release pages can be crawled and extracted for content +
+   * media. See {@link shouldDelegateToCrawl}.
+   *
+   * Typed as the narrow RPC interface rather than `Fetcher` so callers get
+   * the typed `fetchSource` method directly without HTTP ceremony. Auth is not
+   * required — RPC bypasses the discovery worker's HTTP auth middleware.
    */
-  DISCOVERY_WORKER?: Fetcher;
-  /**
-   * Releases API key — sent as `Authorization: Bearer` on delegation calls to
-   * the discovery worker, which gates every route on it. Only consulted when
-   * {@link shouldDelegateToCrawl} fires.
-   */
-  RELEASED_API_KEY?: { get(): Promise<string> };
+  DISCOVERY_WORKER?: DiscoveryWorkerRpc;
 }
 
 /**
@@ -514,7 +533,7 @@ export interface FetchOneEnv extends IndexNowEnv {
  * the change signal entirely.
  *
  * Pure and side-effect-free so we can unit-test the decision matrix without
- * spinning up a worker env.
+ * spinning up a worker environment.
  */
 export function shouldDelegateToCrawl(
   source: Source,
@@ -532,14 +551,14 @@ export function shouldDelegateToCrawl(
 }
 
 /**
- * Hand the source off to the discovery worker's `POST /sources/:id/fetch`
- * endpoint and map its response onto {@link FetchOneResult}. Discovery owns
- * its own `fetch_log` + source-counter bookkeeping for both success and error
- * paths, so this helper does not write to either — bumping `consecutiveErrors`
- * twice (once here, once in discovery's `updateSourceAfterFetch`) would
- * over-penalize the source. Network failures, on the other hand, mean
- * discovery never ran at all, so we throw and let the caller's catch block
- * record the error like any other transport failure.
+ * Hand the source off to the discovery worker's `fetchSource` RPC method and
+ * map its result onto {@link FetchOneResult}. Discovery owns its own
+ * `fetch_log` + source-counter bookkeeping for both success and error paths,
+ * so this helper does not write to either — bumping `consecutiveErrors` twice
+ * (once here, once in discovery's `updateSourceAfterFetch`) would
+ * over-penalize the source. Exceptions from the RPC call mean the discovery
+ * worker threw (e.g. secrets misconfigured) and are re-thrown so the caller's
+ * catch block records the error like any other transport failure.
  */
 async function delegateScrapeToDiscovery(
   source: Source,
@@ -547,58 +566,17 @@ async function delegateScrapeToDiscovery(
   sessionId: string | null,
 ): Promise<FetchOneResult> {
   const start = Date.now();
-  // Discovery rejects every route with 401 when no Bearer is sent, so a
-  // missing/broken API key means the call will round-trip just to fail.
-  // Short-circuit with an error result instead — the workflow's normal error
-  // backoff handles the retry cadence, and the log lets ops spot the
-  // misconfiguration without grepping for stray 401s.
-  const apiKey = await env.RELEASED_API_KEY?.get().catch(() => null);
-  if (!apiKey) {
-    logEvent("error", {
-      component: "cron-poll-fetch",
-      event: "missing-delegation-auth",
-      sourceSlug: source.slug,
-      reason: env.RELEASED_API_KEY
-        ? "RELEASED_API_KEY.get() threw or returned empty"
-        : "RELEASED_API_KEY binding missing",
-    });
-    return {
-      releasesFound: 0,
-      releasesInserted: 0,
-      durationMs: Date.now() - start,
-      status: "error" as const,
-      error: "Cannot delegate to discovery: RELEASED_API_KEY unavailable",
-    };
-  }
 
-  const res = await env.DISCOVERY_WORKER!.fetch(
-    `https://discovery/sources/${encodeURIComponent(source.id)}/fetch`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({ sessionId: sessionId ?? undefined }),
-    },
-  );
+  const result = await env.DISCOVERY_WORKER!.fetchSource(source.id, sessionId ?? undefined);
 
   const durationMs = Date.now() - start;
-  let body: { ok?: boolean; result?: string; errorCategory?: string } = {};
-  try {
-    body = (await res.json()) as typeof body;
-  } catch {
-    // Non-JSON response — fall through and use the status code below.
-  }
 
-  if (!res.ok || body.ok === false) {
-    const errorMessage = body.result ?? `Discovery /sources/:id/fetch returned HTTP ${res.status}`;
+  if (!result.ok) {
     logEvent("warn", {
       component: "cron-poll-fetch",
       event: "crawl-delegation-failed",
       sourceSlug: source.slug,
-      httpStatus: res.status,
-      errorCategory: body.errorCategory,
+      errorCategory: result.errorCategory,
       durationMs,
     });
     return {
@@ -606,39 +584,24 @@ async function delegateScrapeToDiscovery(
       releasesInserted: 0,
       durationMs,
       status: "error" as const,
-      error: errorMessage,
+      error: result.error ?? "Discovery fetchSource returned ok: false",
     };
-  }
-
-  // `result` is a JSON-stringified `{fetched, status, releasesFound, releasesInserted, source}`.
-  // Fall back to zeros if it's missing or unparseable rather than failing the whole pass.
-  let releasesFound = 0;
-  let releasesInserted = 0;
-  try {
-    const parsed = JSON.parse(body.result ?? "{}") as {
-      releasesFound?: number;
-      releasesInserted?: number;
-    };
-    releasesFound = parsed.releasesFound ?? 0;
-    releasesInserted = parsed.releasesInserted ?? 0;
-  } catch {
-    /* keep zeros */
   }
 
   logEvent("info", {
     component: "cron-poll-fetch",
     event: "crawl-delegation-success",
     sourceSlug: source.slug,
-    releasesFound,
-    releasesInserted,
+    releasesFound: result.releasesFound,
+    releasesInserted: result.releasesInserted,
     durationMs,
   });
 
   return {
-    releasesFound,
-    releasesInserted,
+    releasesFound: result.releasesFound,
+    releasesInserted: result.releasesInserted,
     durationMs,
-    status: releasesInserted > 0 ? ("success" as const) : ("no_change" as const),
+    status: result.releasesInserted > 0 ? ("success" as const) : ("no_change" as const),
   };
 }
 

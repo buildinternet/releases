@@ -10,9 +10,19 @@ import { directApiFetcher, withDiscoveryIdentity, withStagingHeader } from "./fe
 import { scrapeFetch, type ScrapeEnv } from "./scrape-fetch.js";
 import { logEvent } from "@releases/lib/log-event.js";
 import { getSecret } from "@releases/lib/secrets";
+import type { ErrorCategory } from "@releases/lib/errors";
+import { WorkerEntrypoint } from "cloudflare:workers";
 
 export { Sandbox } from "@cloudflare/sandbox";
 export { ManagedAgentsSession } from "./managed-agents-session.js";
+
+export interface FetchSourceResult {
+  ok: boolean;
+  releasesFound: number;
+  releasesInserted: number;
+  errorCategory?: ErrorCategory;
+  error?: string;
+}
 
 const MAX_UPDATE_SOURCES = 20;
 
@@ -148,6 +158,74 @@ async function buildScrapeEnv(
     sessionId,
     extractToolLoopEnabled: env.EXTRACT_TOOLLOOP_ENABLED,
   };
+}
+
+/**
+ * Named entrypoint for typed RPC calls from the API worker.
+ * Exposes `fetchSource` as a direct method — no HTTP serialization, no auth
+ * overhead. The `fetch` handler below stays in place for external HTTP callers
+ * (CLI, /onboard, /update, /onboard/:id/status).
+ *
+ * Binding declaration in the API worker's wrangler.jsonc must include
+ * `"entrypoint": "DiscoveryEntrypoint"` on the service binding object.
+ */
+export class DiscoveryEntrypoint extends WorkerEntrypoint<Env> {
+  /**
+   * Synchronously fetch and extract releases for one source, delegating to
+   * the discovery worker's crawl pipeline. Discovery owns its own `fetch_log`
+   * and source-counter bookkeeping — callers must NOT also bump those counters.
+   *
+   * Throws if the ScrapeEnv cannot be constructed (missing secrets), so the
+   * caller's workflow step can treat it as a retryable infrastructure error
+   * rather than a logic-level "scrape failed" result.
+   */
+  async fetchSource(sourceIdentifier: string, sessionId?: string): Promise<FetchSourceResult> {
+    const scrapeEnv = await buildScrapeEnv(this.env, sessionId);
+    if (scrapeEnv instanceof Response) {
+      // buildScrapeEnv returns a Response only when secrets are missing.
+      // Throw so the workflow step retries rather than treating it as a
+      // source-level failure.
+      let errBody: { error?: string } = {};
+      try {
+        errBody = (await scrapeEnv.clone().json()) as typeof errBody;
+      } catch {
+        /* ignore parse failure */
+      }
+      throw new Error(errBody.error ?? "Discovery: failed to build scrape environment");
+    }
+
+    const result = await scrapeFetch(scrapeEnv, sourceIdentifier);
+    const isError = result.startsWith("Error");
+    const categoryMatch = isError ? result.match(/^Error \[([a-z]+)\]:/) : null;
+    const errorCategory = categoryMatch ? (categoryMatch[1] as ErrorCategory) : undefined;
+
+    logEvent(isError ? "warn" : "info", {
+      component: "discovery",
+      event: "source-fetch-completed",
+      sourceIdentifier,
+      sessionId,
+      ok: !isError,
+      errorCategory,
+    });
+
+    if (isError) {
+      // Strip the `Error [<category>]: ` prefix to surface just the message.
+      const message = result.replace(/^Error \[[a-z]+\]:\s*/, "");
+      return { ok: false, releasesFound: 0, releasesInserted: 0, errorCategory, error: message };
+    }
+
+    let releasesFound = 0;
+    let releasesInserted = 0;
+    try {
+      const parsed = JSON.parse(result) as { releasesFound?: number; releasesInserted?: number };
+      releasesFound = parsed.releasesFound ?? 0;
+      releasesInserted = parsed.releasesInserted ?? 0;
+    } catch {
+      /* keep zeros on parse failure */
+    }
+
+    return { ok: true, releasesFound, releasesInserted };
+  }
 }
 
 export default {
@@ -331,57 +409,6 @@ export default {
       return jsonResponse(
         { sessionId: result.sessionId, status: "running", sourceIdentifiers: identifiers },
         202,
-      );
-    }
-
-    const fetchMatch = url.pathname.match(/^\/sources\/([^/]+)\/fetch$/);
-    if (request.method === "POST" && fetchMatch) {
-      // Unlike /update, this runs `scrapeFetch` synchronously instead of
-      // launching a managed-agents session. scrapeFetch writes its own
-      // fetchLog + source-counter updates, so the caller (the API worker's
-      // poll-fetch path) must NOT also bump those counters.
-      const sourceIdentifier = decodeURIComponent(fetchMatch[1]);
-
-      // Body is optional: empty or `{sessionId}`. `request.json()` throws on
-      // an empty body, so parse from text instead.
-      let sessionId: string | undefined;
-      const text = await request.text().catch(() => "");
-      if (text.length > 0) {
-        try {
-          const parsed = JSON.parse(text) as { sessionId?: string };
-          sessionId = parsed.sessionId;
-        } catch {
-          return errorResponse("Invalid JSON body", 400);
-        }
-      }
-
-      const scrapeEnv = await buildScrapeEnv(env, sessionId);
-      if (scrapeEnv instanceof Response) return scrapeEnv;
-
-      const result = await scrapeFetch(scrapeEnv, sourceIdentifier);
-      const isError = result.startsWith("Error");
-      const categoryMatch = isError ? result.match(/^Error \[([a-z]+)\]:/) : null;
-
-      logEvent(isError ? "warn" : "info", {
-        component: "discovery",
-        event: "source-fetch-completed",
-        sourceIdentifier,
-        sessionId,
-        ok: !isError,
-        errorCategory: categoryMatch ? categoryMatch[1] : undefined,
-      });
-
-      // Errors come back as `Error [<category>]: <message>` strings. Surface
-      // them as HTTP 502 (bad gateway — upstream scrape failed) so the API
-      // worker's workflow step can decide whether to retry. 200 means we did
-      // some work — even partial inserts count as success at the HTTP layer.
-      return jsonResponse(
-        {
-          ok: !isError,
-          result,
-          errorCategory: categoryMatch ? categoryMatch[1] : undefined,
-        },
-        isError ? 502 : 200,
       );
     }
 
