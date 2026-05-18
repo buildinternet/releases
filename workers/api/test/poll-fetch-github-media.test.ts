@@ -15,6 +15,7 @@ import { eq } from "drizzle-orm";
 import { applyMigrations, ensureBatchShim } from "../../../tests/db-helper";
 import { organizations, sources, releases } from "@buildinternet/releases-core/schema";
 import { extractMediaFromMarkdown } from "@releases/adapters/feed.js";
+import type { MediaRef } from "@releases/rendering/media.js";
 import { fetchOne } from "../src/cron/poll-fetch.js";
 
 // ── unit: extractMediaFromMarkdown ───────────────────────────────────────────
@@ -99,8 +100,8 @@ describe("extractMediaFromMarkdown", () => {
     const media = extractMediaFromMarkdown(body);
     // Only the https:// and http:// pass isSafeMediaUrl (it allows http too).
     // The relative URL ./local.png is filtered out.
-    expect(media.every((m) => m.url.startsWith("http"))).toBe(true);
-    expect(media.some((m) => m.url === "./local.png")).toBe(false);
+    expect(media.every((m: MediaRef) => m.url.startsWith("http"))).toBe(true);
+    expect(media.some((m: MediaRef) => m.url === "./local.png")).toBe(false);
   });
 
   it("preserves empty alt text as undefined", () => {
