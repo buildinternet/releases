@@ -35,6 +35,6 @@ export function isOptimizableImage(url: string): boolean {
     // handles like github.com/{user}.png). Other github.com URLs — notably
     // user-attachments embedded in GitHub's own changelog — must fall through
     // to `unoptimized` or next/image will reject them at render time.
-    /^https?:\/\/github\.com\/[^/]+\.png(?:$|\?)/i.test(url)
+    /^https:\/\/github\.com\/[^/]+\.png(?:$|\?)/.test(url)
   );
 }
