@@ -116,7 +116,7 @@ Batch size: 10 releases per sub-agent is a reasonable upper bound. Larger batche
 
 Prompt template (one agent, N releases):
 
-````
+````text
 Generate AI fields for {N} release rows from the Releases registry.
 
 Read these two files first:
