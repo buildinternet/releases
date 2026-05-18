@@ -620,24 +620,25 @@ const MARKETING_CLASSIFIER_MAX_PER_FIRE = 20;
 
 /**
  * Per-source marketing classification. Runs Haiku 4.5 sequentially over each
- * raw release; returns a map keyed by `url ?? title` (matching the row-build
- * key in the caller) containing only items classified as marketing. Callers
- * use this map to flip `suppressed=true` + `suppressedReason` on those rows
+ * raw release; returns a map keyed by raw-release array index (collision-free
+ * across title-only feed items) containing only entries classified as
+ * marketing. Callers flip `suppressed=true` + `suppressedReason` on those rows
  * before insert so they never enter the publish / embed paths.
  *
- * Fail-open: any error (missing API key, classifier throw, cap tripped) logs
- * a warn and returns an empty map. The trade-off is one or two marketing posts
- * may slip through on a model hiccup, vs. accidentally dropping real releases
- * on an outage. False negatives are recoverable (operators can suppress
- * post-hoc); false positives create user-visible churn.
+ * Fail-open: every error path (missing API key, classifier throw, cap tripped,
+ * client-construction throw) returns an empty map after logging, never lets an
+ * exception escape. False negatives are recoverable (operators can suppress
+ * post-hoc); false positives create user-visible churn. Sequential per-item
+ * (vs. parallel) is a cost/concurrency-budget choice; the prompt cache hit is
+ * isolate-wide, so it doesn't depend on call ordering.
  */
 async function classifyMarketingForReleases(
   source: Source,
   meta: SourceMetadata,
   rawReleases: readonly RawRelease[],
   env: FetchOneEnv,
-): Promise<Map<string, MarketingClassifierResult>> {
-  const result = new Map<string, MarketingClassifierResult>();
+): Promise<Map<number, MarketingClassifierResult>> {
+  const result = new Map<number, MarketingClassifierResult>();
   if (rawReleases.length === 0) return result;
 
   if (rawReleases.length > MARKETING_CLASSIFIER_MAX_PER_FIRE) {
@@ -651,50 +652,66 @@ async function classifyMarketingForReleases(
     return result;
   }
 
-  const apiKey = await getAnthropicKey(env);
-  if (!apiKey) {
-    logEvent("warn", {
-      component: "cron-poll-fetch",
-      event: "marketing-filter-no-api-key",
-      sourceSlug: source.slug,
-    });
-    return result;
-  }
-
-  const client = buildAnthropicClient({ apiKey, ...(await resolveGatewayOpts(env)) });
   let suppressedCount = 0;
   let failedCount = 0;
-  let totalInputTokens = 0;
-  let totalOutputTokens = 0;
+  let inputTokens = 0;
+  let cacheCreateTokens = 0;
+  let cacheReadTokens = 0;
+  let outputTokens = 0;
   const startedAt = Date.now();
 
-  for (const raw of rawReleases) {
-    try {
-      // eslint-disable-next-line no-await-in-loop -- sequential per-item keeps cost bounded and lets cache reads compound
-      const verdict = await classifyMarketing(client, {
-        sourceName: source.name,
-        title: raw.title,
-        content: raw.content,
-        url: raw.url ?? null,
-        hint: meta.marketingFilterHint ?? null,
-      });
-      totalInputTokens += verdict.usage.input + verdict.usage.cacheCreate + verdict.usage.cacheRead;
-      totalOutputTokens += verdict.usage.output;
-      if (verdict.isMarketing) {
-        const key = raw.url ?? raw.title;
-        result.set(key, verdict);
-        suppressedCount++;
-      }
-    } catch (err) {
-      failedCount++;
+  try {
+    const apiKey = await getAnthropicKey(env);
+    if (!apiKey) {
       logEvent("warn", {
         component: "cron-poll-fetch",
-        event: "marketing-filter-classify-failed",
+        event: "marketing-filter-no-api-key",
         sourceSlug: source.slug,
-        itemUrl: raw.url ?? null,
-        err,
       });
+      return result;
     }
+
+    const client = buildAnthropicClient({ apiKey, ...(await resolveGatewayOpts(env)) });
+
+    for (const [index, raw] of rawReleases.entries()) {
+      try {
+        // oxlint-disable-next-line no-await-in-loop -- sequential per-item bounds concurrent Anthropic load per cron fire; the prompt cache hit doesn't depend on ordering
+        const verdict = await classifyMarketing(client, {
+          sourceName: source.name,
+          title: raw.title,
+          content: raw.content,
+          url: raw.url ?? null,
+          hint: meta.marketingFilterHint ?? null,
+        });
+        inputTokens += verdict.usage.input;
+        cacheCreateTokens += verdict.usage.cacheCreate;
+        cacheReadTokens += verdict.usage.cacheRead;
+        outputTokens += verdict.usage.output;
+        if (verdict.isMarketing) {
+          result.set(index, verdict);
+          suppressedCount++;
+        }
+      } catch (err) {
+        failedCount++;
+        logEvent("warn", {
+          component: "cron-poll-fetch",
+          event: "marketing-filter-classify-failed",
+          sourceSlug: source.slug,
+          itemUrl: raw.url ?? null,
+          err,
+        });
+      }
+    }
+  } catch (err) {
+    // Catches API-key resolution + client construction throws. Per-item errors
+    // are caught above; reaching here means the classifier never ran at all.
+    logEvent("warn", {
+      component: "cron-poll-fetch",
+      event: "marketing-filter-bootstrap-failed",
+      sourceSlug: source.slug,
+      err,
+    });
+    return result;
   }
 
   logEvent("info", {
@@ -704,8 +721,10 @@ async function classifyMarketingForReleases(
     classified: rawReleases.length,
     suppressed: suppressedCount,
     failed: failedCount,
-    inputTokens: totalInputTokens,
-    outputTokens: totalOutputTokens,
+    inputTokens,
+    cacheCreateTokens,
+    cacheReadTokens,
+    outputTokens,
     durationMs: Date.now() - startedAt,
   });
 
@@ -897,21 +916,14 @@ export async function fetchOne(
       return await delegateScrapeToDiscovery(source, env, sessionId);
     }
 
-    // Per-source marketing classifier (#TBD). Vendor blogs that mix product
-    // news with case studies / newsletters / event recaps opt in via
-    // `metadata.marketingFilter = true`. Classified-marketing items still get
-    // inserted (audit trail, easy unsuppress) but with `suppressed=true` so
-    // they stay out of read paths, publish, and embed. Fail-open on any error:
-    // an empty map means everything inserts visibly.
     const marketingMap =
       meta.marketingFilter === true
         ? await classifyMarketingForReleases(source, meta, rawReleases, env)
-        : new Map<string, MarketingClassifierResult>();
+        : new Map<number, MarketingClassifierResult>();
 
-    const rows = rawReleases.map((raw) => {
+    const rows = rawReleases.map((raw, index) => {
       const size = computeContentSize(raw.content);
-      const marketingKey = raw.url ?? raw.title;
-      const verdict = marketingMap.get(marketingKey);
+      const verdict = marketingMap.get(index);
       return {
         sourceId: source.id,
         version: raw.version ?? null,
@@ -964,10 +976,6 @@ export async function fetchOne(
         clusterRows.push({ id: r.id, version: r.version, content });
       }
     }
-    // Suppressed-at-insert rows (marketing classifier) must stay out of publish
-    // (no webhook fire, no IndexNow ping, no realtime broadcast) and embed
-    // (no Vectorize cost on rows hidden from search). They remain in DB for
-    // audit, and `unsuppress` flips them back into the visible set.
     const insertedIds = publishRows.map((r) => r.id).filter((id) => !suppressedIds.has(id));
 
     // Detect changesets cascade rows and demote them to coverage so they
@@ -978,9 +986,6 @@ export async function fetchOne(
       component: "poll-fetch",
       sourceId: source.id,
     });
-    // visiblePublishRows = publish-eligible after excluding cascade coverage AND
-    // marketing-suppressed rows. The two hiding mechanisms are independent —
-    // a row can be cascade coverage OR suppressed OR both.
     const visiblePublishRows =
       cascadeResult.coverageIds.size > 0 || suppressedIds.size > 0
         ? publishRows.filter(

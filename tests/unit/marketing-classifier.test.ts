@@ -64,9 +64,18 @@ describe("parseMarketingVerdict", () => {
     expect(parseMarketingVerdict(raw)).toEqual({ isMarketing: true, reason: "unspecified" });
   });
 
-  it("returns isMarketing=false (and ignores reason content) on marketing=false", () => {
-    const raw = `<marketing>false</marketing><reason>not_marketing</reason>`;
-    expect(parseMarketingVerdict(raw)).toEqual({ isMarketing: false, reason: "unspecified" });
+  it("returns isMarketing=false (reason omitted, per the updated prompt contract)", () => {
+    expect(parseMarketingVerdict(`<marketing>false</marketing>`)).toEqual({
+      isMarketing: false,
+      reason: "unspecified",
+    });
+  });
+
+  it("still parses marketing=false when the model emits a stray reason tag", () => {
+    // Backwards-compatible with older prompt-contract output.
+    expect(
+      parseMarketingVerdict(`<marketing>false</marketing><reason>not_marketing</reason>`),
+    ).toEqual({ isMarketing: false, reason: "unspecified" });
   });
 
   it("treats case-insensitive boolean tokens", () => {
@@ -76,7 +85,9 @@ describe("parseMarketingVerdict", () => {
   });
 
   it("throws when the <marketing> tag is absent (fail-open signal for the caller)", () => {
-    expect(() => parseMarketingVerdict("no tags here at all")).toThrow(/missing <marketing>/);
+    expect(() => parseMarketingVerdict("no tags here at all")).toThrow(
+      /missing or malformed <marketing>/,
+    );
   });
 });
 
@@ -134,6 +145,8 @@ describe("classifyMarketing", () => {
 
   it("propagates parse failures so the caller can fail-open", async () => {
     const client = stubClient("malformed response with no tags");
-    expect(classifyMarketing(client, baseInput())).rejects.toThrow(/missing <marketing>/);
+    expect(classifyMarketing(client, baseInput())).rejects.toThrow(
+      /missing or malformed <marketing>/,
+    );
   });
 });

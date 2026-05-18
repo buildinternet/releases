@@ -18,6 +18,7 @@
  */
 
 import type Anthropic from "@anthropic-ai/sdk";
+import { extractTagged } from "./release-content";
 
 export const MODEL = "claude-haiku-4-5";
 
@@ -109,12 +110,18 @@ When unsure, return marketing=false. False negatives (a marketing post slipping 
 </bias>
 
 <output_structure>
-Output exactly:
+When marketing=true, output exactly:
 
 <marketing>true</marketing>
 <reason>SLUG</reason>
 
-where SLUG is one of: case_study, newsletter, event_recap, partner_announcement, positioning_piece, localized_marketing (when marketing=true) OR not_marketing (when marketing=false). Output nothing else — no prose, no explanation, no other tags.
+where SLUG is one of: case_study, newsletter, event_recap, partner_announcement, positioning_piece, localized_marketing.
+
+When marketing=false, output exactly:
+
+<marketing>false</marketing>
+
+Do NOT output a <reason> tag in the false case. Output nothing else — no prose, no explanation, no other tags, no surrounding markdown.
 </output_structure>`;
 
 /**
@@ -148,20 +155,14 @@ export function parseMarketingVerdict(raw: string): {
   isMarketing: boolean;
   reason: MarketingReason;
 } {
-  const marketingMatch = raw.match(/<marketing>\s*(true|false)\s*<\/marketing>/i);
-  if (!marketingMatch) {
-    throw new Error(`model output missing <marketing> tag (raw length ${raw.length})`);
+  const marketing = extractTagged(raw, "marketing").toLowerCase();
+  if (marketing !== "true" && marketing !== "false") {
+    throw new Error(`model output missing or malformed <marketing> tag (raw length ${raw.length})`);
   }
-  const isMarketing = marketingMatch[1].toLowerCase() === "true";
-
-  const reasonMatch = raw.match(/<reason>\s*([a-z_]+)\s*<\/reason>/i);
-  const rawReason = reasonMatch?.[1]?.toLowerCase() ?? "";
-
-  if (!isMarketing) {
-    // Reason slug doesn't matter on the keep path; callers don't store it.
+  if (marketing === "false") {
     return { isMarketing: false, reason: "unspecified" };
   }
-
+  const rawReason = extractTagged(raw, "reason").toLowerCase();
   const reason = (MARKETING_REASONS as readonly string[]).includes(rawReason)
     ? (rawReason as MarketingReason)
     : "unspecified";
