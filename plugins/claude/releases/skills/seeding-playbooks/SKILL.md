@@ -1,6 +1,6 @@
 ---
 name: seeding-playbooks
-description: Coordinate bulk playbook writing using parallel sub-agents — covers org discovery, prompt templates, model selection, batch dispatch, verification, and the parent-saves pattern for working around subagent permission limits. Local-only (Claude Code CLI) — managed agents do not yet support spawning sub-agents.
+description: Coordinate bulk playbook writing using parallel sub-agents — covers org discovery, prompt templates, model selection, batch dispatch, verification, and the parent-saves pattern for working around subagent permission limits. Currently wired up for Claude Code's Agent tool; the managed-agent fleet supports sub-agents too and the pattern can be adapted, but isn't wired up there yet.
 ---
 
 # Seeding Playbooks
@@ -15,7 +15,7 @@ Global skills teach general patterns; per-source `parseInstructions` teach sourc
 
 Write notes as instructions to an LLM, not as human documentation. Imperative voice ("Set version=null", "Parse `<h2>` as version boundaries"), concrete examples from real data, and only observations that change future fetch behavior.
 
-**Local-only**: This skill requires Claude Code's Agent tool to dispatch sub-agents. Managed agents (discovery worker, Haiku worker) cannot spawn sub-agents — that capability is behind a private beta and not yet available. When sub-agent support ships for managed agents, this skill can be adapted into a managed session mode.
+**Currently a local-Claude-Code skill.** The dispatch pattern below uses Claude Code's Agent tool — that's what's actually wired up. Managed agents (discovery worker, Haiku worker) _can_ spawn sub-agents in principle, but the harness, prompt scaffolding, and rate-limit accounting for managed sub-agent dispatch in this repo haven't been built yet. If/when that gets wired up, the prompts and dispatch shape in this skill port directly.
 
 ## When to Use
 
