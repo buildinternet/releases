@@ -488,6 +488,12 @@ export interface FetchOneEnv extends IndexNowEnv {
    * pages can be crawled and extracted for content + media. See {@link shouldDelegateToCrawl}.
    */
   DISCOVERY_WORKER?: Fetcher;
+  /**
+   * Releases API key — sent as `Authorization: Bearer` on delegation calls to
+   * the discovery worker, which gates every route on it. Only consulted when
+   * {@link shouldDelegateToCrawl} fires.
+   */
+  RELEASED_API_KEY?: { get(): Promise<string> };
 }
 
 /**
@@ -537,15 +543,18 @@ export function shouldDelegateToCrawl(
  */
 async function delegateScrapeToDiscovery(
   source: Source,
-  discoveryWorker: Fetcher,
+  env: FetchOneEnv,
   sessionId: string | null,
 ): Promise<FetchOneResult> {
   const start = Date.now();
-  const res = await discoveryWorker.fetch(
+  const apiKey = (await env.RELEASED_API_KEY?.get().catch(() => null)) ?? "";
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
+  const res = await env.DISCOVERY_WORKER!.fetch(
     `https://discovery/sources/${encodeURIComponent(source.id)}/fetch`,
     {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify({ sessionId: sessionId ?? undefined }),
     },
   );
@@ -791,7 +800,7 @@ export async function fetchOne(
           meta.feedContentDepth === "summary-only" ? "summary-only" : "all-items-empty-content",
         feedItemCount: rawReleases.length,
       });
-      return await delegateScrapeToDiscovery(source, env.DISCOVERY_WORKER, sessionId);
+      return await delegateScrapeToDiscovery(source, env, sessionId);
     }
 
     const rows = rawReleases.map((raw) => {
