@@ -12,6 +12,8 @@ import { FallbackImage } from "./fallback-image";
 import { collapsedMarkdownComponents, markdownComponents } from "./markdown-components";
 import { type CollectionMemberOrg, type CollectionReleaseItem } from "@/lib/api";
 import { tabButtonClass } from "@/lib/styles";
+import { useInfiniteScroll } from "@/hooks/use-infinite-scroll";
+import { InfiniteScrollTrigger } from "./infinite-scroll-trigger";
 
 interface CollectionTimelineProps {
   /**
@@ -186,6 +188,12 @@ export function CollectionTimeline({
     }
   }, [cursor, fetchEndpoint, buildQuery]);
 
+  const triggerRef = useInfiniteScroll<HTMLButtonElement>({
+    hasMore: cursor !== null && !fetchError,
+    loading,
+    onLoadMore: loadMore,
+  });
+
   const toggleOrg = (slug: string) => {
     setPristine(false);
     setActiveOrgs((prev) => {
@@ -300,16 +308,12 @@ export function CollectionTimeline({
       )}
 
       {cursor && (
-        <div className="text-center py-6">
-          <button
-            type="button"
-            onClick={loadMore}
-            disabled={loading}
-            className="px-5 py-2 text-[13px] font-medium text-stone-500 dark:text-stone-400 bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-md hover:border-stone-300 dark:hover:border-stone-600 transition-colors disabled:opacity-50"
-          >
-            {loading ? "Loading..." : "Load more"}
-          </button>
-        </div>
+        <InfiniteScrollTrigger
+          triggerRef={triggerRef}
+          loading={loading}
+          error={!!fetchError}
+          onClick={loadMore}
+        />
       )}
     </div>
   );

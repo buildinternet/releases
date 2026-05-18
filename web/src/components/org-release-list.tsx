@@ -5,6 +5,8 @@ import { ReleaseListItem } from "./release-item";
 import type { OrgReleaseItem } from "@/lib/api";
 import type { SourceType } from "@buildinternet/releases-core/source-enums";
 import { useDebounced } from "@/hooks/use-debounced";
+import { useInfiniteScroll } from "@/hooks/use-infinite-scroll";
+import { InfiniteScrollTrigger } from "./infinite-scroll-trigger";
 
 interface OrgReleaseListProps {
   orgSlug: string;
@@ -155,6 +157,12 @@ export function OrgReleaseList({
     }
   }, [cursor, orgSlug, buildQuery]);
 
+  const triggerRef = useInfiniteScroll<HTMLButtonElement>({
+    hasMore: cursor !== null && !fetchError,
+    loading,
+    onLoadMore: loadMore,
+  });
+
   // The prerelease checkbox is useful for any org that has at least one
   // tracked source — non-GitHub adapters fall back to the version-pattern
   // detector, so feed/scrape/agent orgs can also produce prerelease rows.
@@ -258,15 +266,12 @@ export function OrgReleaseList({
             />
           ))}
           {cursor && (
-            <div className="text-center py-6">
-              <button
-                onClick={loadMore}
-                disabled={loading}
-                className="px-5 py-2 text-[13px] font-medium text-stone-500 dark:text-stone-400 bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-md hover:border-stone-300 dark:hover:border-stone-600 transition-colors disabled:opacity-50"
-              >
-                {loading ? "Loading..." : "Load more"}
-              </button>
-            </div>
+            <InfiniteScrollTrigger
+              triggerRef={triggerRef}
+              loading={loading}
+              error={!!fetchError}
+              onClick={loadMore}
+            />
           )}
         </>
       )}
