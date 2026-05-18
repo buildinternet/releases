@@ -430,6 +430,67 @@ describe("htmlToMarkdown", () => {
     const html = "Hello&nbsp;World";
     expect(htmlToMarkdown(html)).toBe("Hello World");
   });
+
+  // Regression: rel_t9fAnizXt0rM0vPDC48ds. The previous regex-based converter
+  // pre-decoded entities, which let `<?php` / `<a>` / `=>` inside <pre> blocks
+  // look like real tags to the fallthrough `<[^>]+>` stripper. Whole code
+  // bodies got swallowed. A DOM parser keeps those characters as text nodes
+  // inside <pre>, so they never collide with tag-stripping passes.
+  it("preserves PHP code blocks with entity-encoded angle brackets", () => {
+    const html =
+      '<pre class="wp-block-code"><code class="">&lt;?php\nthe_author_link();\n// or\necho get_the_author_link();</code></pre>';
+    const result = htmlToMarkdown(html);
+    expect(result).toContain("<?php");
+    expect(result).toContain("the_author_link();");
+    expect(result).toContain("echo get_the_author_link();");
+  });
+
+  it("preserves code blocks that contain HTML examples inside docstrings", () => {
+    const html =
+      "<pre class=\"brush: php; title: ; notranslate\">\n&lt;?php\n/**\n * Edits text...\n * `&lt;a href=\"https://example.org/author/author/\" rel=\"author\"&gt;Posts by Author&lt;/a&gt;`\n */\nfunction wpdocs_author_posts_link( $link, $author = '', $title = '' ) {\n\t$link = str_replace(\n\t\t'&gt;' . $author . '&lt;/a&gt;',\n\t\t'&gt;' . esc_html( $title ) . '&lt;/a&gt;',\n\t\t$link\n\t);\n\treturn $link;\n}\n</pre>";
+    const result = htmlToMarkdown(html);
+    expect(result).toContain("<?php");
+    expect(result).toContain("function wpdocs_author_posts_link(");
+    expect(result).toContain("'>' . $author . '</a>'");
+    expect(result).toContain("'>' . esc_html( $title ) . '</a>'");
+  });
+
+  it("handles bare <pre> (WordPress syntaxhighlighter shortcode) as fenced code", () => {
+    const html = '<pre class="brush: php; notranslate">echo "hello";</pre>';
+    const result = htmlToMarkdown(html);
+    expect(result).toMatch(/^```\necho "hello";\n```$/);
+  });
+
+  it("drops WordPress glossary hidden tooltip content", () => {
+    const html =
+      "Authors list <span class='glossary-item-container'>HTML<span class='glossary-item-hidden-content'><span class='glossary-item-header'>HTML</span> <span class='glossary-item-description'>HyperText Markup Language. …</span></span></span>";
+    const result = htmlToMarkdown(html);
+    expect(result).toBe("Authors list HTML");
+  });
+});
+
+// ── Real WP dev-note fixture (rel_t9fAnizXt0rM0vPDC48ds regression) ───
+
+describe("parseRss with WP dev-note code blocks", () => {
+  const WP_FEED = readFixture("rss-wp-codeblocks.xml");
+
+  it("preserves every code block end-to-end", () => {
+    const items = parseRss(WP_FEED);
+    expect(items.length).toBe(1);
+    const content = items[0]!.content;
+    // Each of the four code blocks in the post must survive intact.
+    expect(content).toContain("the_author_link();");
+    expect(content).toContain("the_author_link( false );");
+    expect(content).toContain("the_author_posts_link();");
+    expect(content).toContain("wp_list_authors(");
+    expect(content).toContain("'html' => true // This is true by default.");
+    // The big str_replace example survives with its <a> string literals.
+    expect(content).toContain("function wpdocs_author_posts_link(");
+    expect(content).toContain("'>' . $author . '</a>'");
+    // The headings still render as ATX-style.
+    expect(content).toContain("## Author");
+    expect(content).toContain("## Authors list HTML");
+  });
 });
 
 // ── Version extraction ─────────────────────────────────────────────
