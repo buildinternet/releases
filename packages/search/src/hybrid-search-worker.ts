@@ -186,7 +186,13 @@ async function ftsReleaseIds(
       ORDER BY rank LIMIT ${limit}
     `);
     return rows.map((r) => r.id);
-  } catch {
+  } catch (err) {
+    logEvent("warn", {
+      component: "search-hybrid",
+      event: "fts-query-failed",
+      queryLen: query.length,
+      err: err instanceof Error ? err : String(err),
+    });
     return [];
   }
 }
