@@ -547,14 +547,38 @@ async function delegateScrapeToDiscovery(
   sessionId: string | null,
 ): Promise<FetchOneResult> {
   const start = Date.now();
-  const apiKey = (await env.RELEASED_API_KEY?.get().catch(() => null)) ?? "";
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
-  if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
+  // Discovery rejects every route with 401 when no Bearer is sent, so a
+  // missing/broken API key means the call will round-trip just to fail.
+  // Short-circuit with an error result instead — the workflow's normal error
+  // backoff handles the retry cadence, and the log lets ops spot the
+  // misconfiguration without grepping for stray 401s.
+  const apiKey = await env.RELEASED_API_KEY?.get().catch(() => null);
+  if (!apiKey) {
+    logEvent("error", {
+      component: "cron-poll-fetch",
+      event: "missing-delegation-auth",
+      sourceSlug: source.slug,
+      reason: env.RELEASED_API_KEY
+        ? "RELEASED_API_KEY.get() threw or returned empty"
+        : "RELEASED_API_KEY binding missing",
+    });
+    return {
+      releasesFound: 0,
+      releasesInserted: 0,
+      durationMs: Date.now() - start,
+      status: "error" as const,
+      error: "Cannot delegate to discovery: RELEASED_API_KEY unavailable",
+    };
+  }
+
   const res = await env.DISCOVERY_WORKER!.fetch(
     `https://discovery/sources/${encodeURIComponent(source.id)}/fetch`,
     {
       method: "POST",
-      headers,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
       body: JSON.stringify({ sessionId: sessionId ?? undefined }),
     },
   );
