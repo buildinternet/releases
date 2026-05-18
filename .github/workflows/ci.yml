@@ -92,7 +92,40 @@ jobs:
 
       - run: bun install --frozen-lockfile
 
-      - name: Type-check
+      # workers/discovery, workers/mcp, and workers/webhooks are excluded
+      # from the root workspace and carry their own bun.lock — the root
+      # install above doesn't populate their node_modules, so per-worker
+      # tsc + deploy both need a local install. These steps also catch
+      # stale per-worker lockfiles at PR time (previously a separate set
+      # of steps at the end of this job; folded in so we don't install
+      # twice).
+      - name: Install workers/discovery deps
+        working-directory: workers/discovery
+        run: bun install --frozen-lockfile
+      - name: Install workers/mcp deps
+        working-directory: workers/mcp
+        run: bun install --frozen-lockfile
+      - name: Install workers/webhooks deps
+        working-directory: workers/webhooks
+        run: bun install --frozen-lockfile
+
+      # Root tsconfig only includes ./src — each worker has its own
+      # tsconfig.json and isn't in the root's compile scope, so per-worker
+      # tsc steps catch worker-only type errors (e.g. binding/secret
+      # mismatches in workers/api) that the root check misses. See #947.
+      - name: Type-check (root)
+        run: npx tsc --noEmit
+      - name: Type-check (workers/api)
+        working-directory: workers/api
+        run: npx tsc --noEmit
+      - name: Type-check (workers/discovery)
+        working-directory: workers/discovery
+        run: npx tsc --noEmit
+      - name: Type-check (workers/mcp)
+        working-directory: workers/mcp
+        run: npx tsc --noEmit
+      - name: Type-check (workers/webhooks)
+        working-directory: workers/webhooks
         run: npx tsc --noEmit
 
       - name: Check migration filenames
@@ -165,24 +198,3 @@ jobs:
 
       - name: Run tests
         run: bun run test
-
-      # workers/discovery, workers/mcp, and workers/webhooks are excluded
-      # from the root workspace and carry their own bun.lock. The deploy
-      # job runs `bun install --frozen-lockfile` per worker, so a stale
-      # lockfile only surfaces post-merge as a deploy failure (e.g. PR #778
-      # bumped @anthropic-ai/sdk in package.json but didn't refresh
-      # workers/mcp/bun.lock). Catch that at PR time.
-      #
-      # Folded into this job (previously a separate parallel `worker-lockfiles`
-      # job) so we don't pay for a duplicate checkout + setup-bun on every
-      # push. Each frozen install only resolves a tiny per-worker manifest,
-      # so the cost added to this job is small.
-      - name: Verify workers/discovery lockfile
-        working-directory: workers/discovery
-        run: bun install --frozen-lockfile
-      - name: Verify workers/mcp lockfile
-        working-directory: workers/mcp
-        run: bun install --frozen-lockfile
-      - name: Verify workers/webhooks lockfile
-        working-directory: workers/webhooks
-        run: bun install --frozen-lockfile
