@@ -226,8 +226,18 @@ export async function hybridSearch(params: HybridSearchParams): Promise<HybridSe
     if (candidateIds.size > 0) {
       try {
         const ordered = await params.recencyRank(Array.from(candidateIds));
+        // Constrain to the candidate set and dedupe — a misbehaved callback
+        // could otherwise inflate scores via duplicate ranks or waste topK
+        // slots on ids that won't hydrate.
+        const seen = new Set<string>();
+        const orderedFiltered: string[] = [];
+        for (const id of ordered) {
+          if (!candidateIds.has(id) || seen.has(id)) continue;
+          seen.add(id);
+          orderedFiltered.push(id);
+        }
         lists.push(
-          ordered.map((id) => ({
+          orderedFiltered.map((id) => ({
             id,
             item: { source: "recency", kind: "release", fromVector: false },
           })),

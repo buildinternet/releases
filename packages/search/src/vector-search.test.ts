@@ -207,6 +207,24 @@ test("hybridSearch: recencyRank lifts a tied candidate above its peer", async ()
   expect(newer.appearances).toBe(3);
 });
 
+test("hybridSearch: recencyRank output is filtered to candidates and deduped", async () => {
+  // Misbehaved callback returns an unknown id and a duplicate. Orchestrator
+  // must drop both before they reach RRF — otherwise duplicates double-count
+  // toward the score and unknown ids waste topK slots at the cap.
+  const ftsHits: HybridFtsHit[] = [{ id: "rel_a" }, { id: "rel_b" }];
+  const releaseIndex = fakeIndex([{ id: "rel_a", score: 0.9 }]);
+  const result = await hybridSearch({
+    query: "q",
+    ftsSearch: async () => ftsHits,
+    vectorIndexes: [{ name: "releases-v1", kind: "release", index: releaseIndex }],
+    embed: async () => [0.1],
+    recencyRank: async () => ["rel_a", "rel_runaway", "rel_a", "rel_b"],
+  });
+  expect(result.map((r) => r.id).toSorted()).toEqual(["rel_a", "rel_b"]);
+  // rel_a appears in vector + fts + recency (once, not twice).
+  expect(result.find((r) => r.id === "rel_a")?.appearances).toBe(3);
+});
+
 test("hybridSearch: recencyRank throw is swallowed and base fusion stands", async () => {
   const ftsHits: HybridFtsHit[] = [{ id: "rel_a" }, { id: "rel_b" }];
   const releaseIndex = fakeIndex([{ id: "rel_a", score: 0.9 }]);
