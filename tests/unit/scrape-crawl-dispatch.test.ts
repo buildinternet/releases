@@ -19,6 +19,7 @@ import type { Source } from "@buildinternet/releases-core/schema";
 import {
   acquireCrawlMarkdown,
   deriveCrawlPattern,
+  pathMatchesIncludePrefix,
   resolveCrawlIncludePatterns,
   type CrawlDeps,
 } from "../../workers/discovery/src/scrape-fetch";
@@ -114,6 +115,47 @@ describe("deriveCrawlPattern", () => {
 
   it("returns undefined for an unparseable URL", () => {
     expect(deriveCrawlPattern("not-a-url")).toBeUndefined();
+  });
+});
+
+// ── pathMatchesIncludePrefix ───────────────────────────────────────
+
+describe("pathMatchesIncludePrefix", () => {
+  const source = "https://resend.com/changelog";
+
+  it("returns true when prefix is empty (filter disabled)", () => {
+    expect(pathMatchesIncludePrefix("https://resend.com/pricing", source, "")).toBe(true);
+  });
+
+  it("returns true when pathname starts with prefix", () => {
+    expect(pathMatchesIncludePrefix("https://resend.com/changelog/v2", source, "/changelog/")).toBe(
+      true,
+    );
+  });
+
+  it("returns false when pathname is outside the prefix", () => {
+    expect(pathMatchesIncludePrefix("https://resend.com/pricing", source, "/changelog/")).toBe(
+      false,
+    );
+  });
+
+  it("returns false for cross-origin URLs even when path would match", () => {
+    expect(pathMatchesIncludePrefix("https://other.com/changelog/x", source, "/changelog/")).toBe(
+      false,
+    );
+  });
+
+  it("treats trailing-slash prefix strictly — `/changelog` matches but `/changelog2` does not", () => {
+    expect(pathMatchesIncludePrefix("https://resend.com/changelog2", source, "/changelog/")).toBe(
+      false,
+    );
+    expect(pathMatchesIncludePrefix("https://resend.com/changelog/x", source, "/changelog/")).toBe(
+      true,
+    );
+  });
+
+  it("returns false on a malformed pageUrl rather than throwing", () => {
+    expect(pathMatchesIncludePrefix("not-a-url", source, "/changelog/")).toBe(false);
   });
 });
 
@@ -284,6 +326,75 @@ describe("acquireCrawlMarkdown", () => {
     expect(opts.source).toBe("sitemaps");
     expect(opts.render).toBe(false);
     expect(opts.maxAge).toBe(3600);
+  });
+
+  it("crawlIncludePathPrefix set — drops pages outside the prefix", async () => {
+    const source = makeSource();
+    const { deps, metaPatches } = makeDeps({
+      jobId: "job_filtered",
+      pages: [
+        { url: "https://resend.com/changelog/welcome", markdown: "kept body 1" },
+        { url: "https://resend.com/pricing", markdown: "filtered out" },
+        { url: "https://resend.com/changelog/v2", markdown: "kept body 2" },
+        { url: "https://resend.com/", markdown: "filtered out too" },
+      ],
+    });
+
+    const markdown = await acquireCrawlMarkdown(
+      source,
+      { crawlIncludePathPrefix: "/changelog/" },
+      deps,
+    );
+
+    expect(markdown).not.toBeNull();
+    expect(markdown).toContain("kept body 1");
+    expect(markdown).toContain("kept body 2");
+    expect(markdown).not.toContain("filtered out");
+    expect(markdown).toContain("# https://resend.com/changelog/welcome");
+    expect(markdown).toContain("# https://resend.com/changelog/v2");
+    expect(markdown).not.toContain("# https://resend.com/pricing");
+
+    // Metadata persistence still runs once kept pages survive the filter.
+    expect(metaPatches).toHaveLength(1);
+    expect(metaPatches[0].patch.lastCrawlJobId).toBe("job_filtered");
+  });
+
+  it("crawlIncludePathPrefix drops every page → returns null (caller falls back)", async () => {
+    const source = makeSource();
+    const { deps, metaPatches } = makeDeps({
+      jobId: "job_all_filtered",
+      pages: [
+        { url: "https://resend.com/pricing", markdown: "no" },
+        { url: "https://resend.com/login", markdown: "also no" },
+      ],
+    });
+
+    const markdown = await acquireCrawlMarkdown(
+      source,
+      { crawlIncludePathPrefix: "/changelog/" },
+      deps,
+    );
+
+    expect(markdown).toBeNull();
+    // No metadata persistence when the post-filter wipes out the page set —
+    // there's no successful crawl to anchor the lastCrawlJobId to.
+    expect(metaPatches).toHaveLength(0);
+  });
+
+  it("crawlIncludePathPrefix never passed — no filtering happens", async () => {
+    const source = makeSource();
+    const { deps } = makeDeps({
+      jobId: "job_no_filter",
+      pages: [
+        { url: "https://resend.com/changelog/post", markdown: "body" },
+        { url: "https://resend.com/pricing", markdown: "kept too" },
+      ],
+    });
+
+    const markdown = await acquireCrawlMarkdown(source, {}, deps);
+
+    expect(markdown).toContain("body");
+    expect(markdown).toContain("kept too");
   });
 
   it("does not throw when updateSourceMeta rejects (best-effort persistence)", async () => {

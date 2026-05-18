@@ -44,6 +44,20 @@ export interface SourceMetadata {
   crawlExcludePatterns?: string[];
   /** Per-source override for the default `includeExternalLinks: false`. Set true to allow off-domain crawl discovery. Rare. */
   crawlIncludeExternal?: boolean;
+  /**
+   * Pathname prefix the post-filter keeps after `pollCrawlResults`. Pages
+   * whose `new URL(page.url).pathname` does not start with this prefix are
+   * dropped from the markdown the extractor sees. The prefix is matched
+   * against the origin of `source.url`; cross-origin pages are always dropped.
+   *
+   * Does NOT reclaim Cloudflare's render-page budget — the crawler still
+   * fetches the dropped pages. The budget can still exhaust on unrelated nav
+   * links before reaching matching ones (#1009); combine with
+   * `crawlExcludePatterns` to fence the crawler off from unwanted paths up
+   * front. When the filter drops every page, the caller falls back to
+   * `fetchCloudflareMarkdown` on `source.url`.
+   */
+  crawlIncludePathPrefix?: string;
   lastCrawlJobId?: string;
   lastCrawlAt?: string;
   crawlMaxAge?: number; // seconds — Cloudflare R2 cache TTL (default 86400, max 604800)
