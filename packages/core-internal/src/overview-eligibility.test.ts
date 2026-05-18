@@ -13,6 +13,10 @@
  *     - existing overview, old, recentReleaseCount > minNewReleases → eligible
  *     - orgSlugs filter narrows results
  *     - maxCandidates caps + most-stale-first ordering
+ *     - explicit orgSlugs bypasses age threshold (fresh overview still returned)
+ *     - explicit orgSlugs bypasses minNewReleases threshold (1 release is enough)
+ *     - explicit orgSlugs still excludes orgs with recentReleaseCount=0
+ *     - explicit orgSlugs still restricts to listed orgs (IN-clause preserved)
  *
  *   fetchOverviewInputsForOrg
  *     - returns null for unknown org
@@ -291,6 +295,103 @@ describe("fetchOverviewCandidates", () => {
       ])
       .run();
 
+    const out = await fetchOverviewCandidates(asDb(tdb.db), { orgSlugs: ["alpha"] });
+    expect(out.length).toBe(1);
+    expect(out[0]!.orgSlug).toBe("alpha");
+  });
+
+  it("explicit orgSlugs bypasses age threshold — fresh overview (1 day old) is still returned", async () => {
+    tdb.db.insert(organizations).values(makeOrg()).run();
+    tdb.db.insert(sources).values(makeSource()).run();
+    // Overview updated 1 day ago — well within the default 14-day age threshold.
+    tdb.db
+      .insert(knowledgePages)
+      .values(makeOverview({ updatedAt: isoDaysAgo(1) }))
+      .run();
+    // Only 1 new release since the overview — below the default minNewReleases=20.
+    tdb.db
+      .insert(releases)
+      .values(makeRelease({ publishedAt: isoDaysAgo(0) }))
+      .run();
+
+    // Without orgSlugs the age + min-release thresholds would filter this org out.
+    const withoutOrgSlugs = await fetchOverviewCandidates(asDb(tdb.db));
+    expect(withoutOrgSlugs.length).toBe(0); // confirms the default predicate rejects it
+
+    // With an explicit allowlist both thresholds are bypassed.
+    const out = await fetchOverviewCandidates(asDb(tdb.db), {
+      orgSlugs: ["eligibility-org"],
+    });
+    expect(out.length).toBe(1);
+    expect(out[0]!.orgSlug).toBe("eligibility-org");
+  });
+
+  it("explicit orgSlugs bypasses minNewReleases — 1 new release is sufficient", async () => {
+    tdb.db.insert(organizations).values(makeOrg()).run();
+    tdb.db.insert(sources).values(makeSource()).run();
+    // Overview is 60 days old (well past the 14-day age threshold) but only
+    // 1 new release — below default minNewReleases=20.
+    tdb.db
+      .insert(knowledgePages)
+      .values(makeOverview({ updatedAt: isoDaysAgo(60) }))
+      .run();
+    tdb.db
+      .insert(releases)
+      .values(makeRelease({ publishedAt: isoDaysAgo(30) }))
+      .run();
+
+    const withoutOrgSlugs = await fetchOverviewCandidates(asDb(tdb.db));
+    expect(withoutOrgSlugs.length).toBe(0); // min-release threshold blocks it
+
+    const out = await fetchOverviewCandidates(asDb(tdb.db), {
+      orgSlugs: ["eligibility-org"],
+    });
+    expect(out.length).toBe(1);
+    expect(out[0]!.recentReleaseCount).toBe(1);
+  });
+
+  it("explicit orgSlugs still excludes orgs with recentReleaseCount=0", async () => {
+    tdb.db.insert(organizations).values(makeOrg()).run();
+    tdb.db.insert(sources).values(makeSource()).run();
+    // Overview updated today; no releases newer than the overview.
+    tdb.db
+      .insert(knowledgePages)
+      .values(makeOverview({ updatedAt: isoDaysAgo(0) }))
+      .run();
+    // All releases are older than the overview's updatedAt — recentReleaseCount=0.
+    tdb.db
+      .insert(releases)
+      .values(makeRelease({ publishedAt: isoDaysAgo(30) }))
+      .run();
+
+    const out = await fetchOverviewCandidates(asDb(tdb.db), {
+      orgSlugs: ["eligibility-org"],
+    });
+    expect(out.length).toBe(0);
+  });
+
+  it("explicit orgSlugs still restricts to listed orgs (IN-clause preserved)", async () => {
+    tdb.db
+      .insert(organizations)
+      .values([makeOrg({ id: "org_a", slug: "alpha" }), makeOrg({ id: "org_b", slug: "bravo" })])
+      .run();
+    tdb.db
+      .insert(sources)
+      .values([
+        makeSource({ id: "src_a", slug: "src-alpha", orgId: "org_a" }),
+        makeSource({ id: "src_b", slug: "src-bravo", orgId: "org_b" }),
+      ])
+      .run();
+    // Both orgs have 1 new release (would be blocked by minNewReleases without orgSlugs).
+    tdb.db
+      .insert(releases)
+      .values([
+        makeRelease({ id: "rel_a", sourceId: "src_a", publishedAt: isoDaysAgo(1) }),
+        makeRelease({ id: "rel_b", sourceId: "src_b", publishedAt: isoDaysAgo(1) }),
+      ])
+      .run();
+
+    // Only list "alpha" — "bravo" must not appear even though it would otherwise qualify.
     const out = await fetchOverviewCandidates(asDb(tdb.db), { orgSlugs: ["alpha"] });
     expect(out.length).toBe(1);
     expect(out[0]!.orgSlug).toBe("alpha");
