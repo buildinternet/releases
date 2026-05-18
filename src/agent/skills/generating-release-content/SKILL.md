@@ -92,7 +92,7 @@ Three modes, pick by candidate count:
 | 10–200 | **Parallel sub-agents**            | **Sonnet** | The agentic loop benefits from stronger reasoning around the long instruction-tuned prompt.              |
 | 200+   | **Delegate to the Batches script** | Haiku 4.5  | Same model as production; 50% Batches API discount; ~24h latency. `scripts/generate-release-content.ts`. |
 
-**Why Sonnet for sub-agents but Haiku for the other two modes:** the production ingest path is a single-shot Anthropic API call (`summarizeRelease()` in `packages/ai/src/release-content.ts`) — Haiku 4.5 is great at that. A Claude Code sub-agent is _not_ a single-shot call; it's an agent loop that loads the SYSTEM_PROMPT from a file, narrates, and applies the rules across multiple turns. In a 2 vs 5 row Sonnet/Haiku A/B run on production candidates, Sonnet sub-agents were 4/4 clean; Haiku sub-agents were 3/5 — the two failures were a forbidden `"Neon blog:"` title prefix and a wrongly-null composition. The model difference vanishes once you drop the agent loop and call the SDK directly (Mode A / Mode C), which is why those modes use Haiku.
+**Why Sonnet for sub-agents but Haiku for the other two modes:** the production ingest path is a single-shot Anthropic API call (`summarizeRelease()` in `packages/ai/src/release-content.ts`) — Haiku 4.5 is great at that. A Claude Code sub-agent is _not_ a single-shot call; it's an agent loop that loads the SYSTEM_PROMPT from a file, narrates, and applies the rules across multiple turns. In a 4 vs 5 row Sonnet/Haiku A/B run on production candidates, Sonnet sub-agents were 4/4 clean; Haiku sub-agents were 3/5 — the two failures were a forbidden `"Neon blog:"` title prefix and a wrongly-null composition. The model difference vanishes once you drop the agent loop and call the SDK directly (Mode A / Mode C), which is why those modes use Haiku.
 
 ### Mode A: Inline (1 release at a time)
 
@@ -225,11 +225,13 @@ Empty string clears the field (writes NULL). `--dry-run --json` returns the diff
 **Composition is API-only.** The CLI's `release update` doesn't accept `--composition` (the field stores into `metadata.$.composition` via `json_set`, which the CLI hasn't surfaced). When you need to write composition:
 
 ```bash
-curl -s -X PATCH "$RELEASED_API_URL/v1/releases/rel_…" \
+curl -fsS -X PATCH "$RELEASED_API_URL/v1/releases/rel_…" \
   -H "Authorization: Bearer $RELEASED_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"composition":{"bugs":2,"features":1,"enhancements":3}}'
 ```
+
+`-fsS` makes curl exit non-zero on 4xx/5xx and print the error body. Plain `-s` masks failures and lets a backfill loop look successful when every PATCH returned 500.
 
 Pass `"composition": null` to record "AI ran, produced no counts" (distinct from clearing the key). The PATCH route also re-embeds the release vector when any of `content`/`title`/`summary`/`titleGenerated`/`titleShort` changes — that's a feature, not a side effect to avoid.
 
