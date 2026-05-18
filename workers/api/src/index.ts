@@ -97,7 +97,16 @@ export type Env = {
     FORCE_DRAIN_CRON_ENABLED?: string;
     FORCE_DRAIN_STALE_HOURS?: string;
     FORCE_SWEEP_MAX_SESSIONS?: string;
-    DISCOVERY_WORKER?: Fetcher;
+    /**
+     * Service binding to the discovery worker. Typed as the RPC surface
+     * (`fetchSource`) plus the standard HTTP `fetch` method used by the
+     * scrape-agent sweep (`/update`). The `entrypoint: "DiscoveryEntrypoint"`
+     * annotation in wrangler.jsonc ensures the binding resolves to the named
+     * class, which makes `fetchSource` available at runtime.
+     */
+    DISCOVERY_WORKER?: import("./cron/poll-fetch.js").DiscoveryWorkerRpc & {
+      fetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+    };
     ANTHROPIC_API_KEY?: SecretBinding;
     // Optional Cloudflare AI Gateway passthrough. When set, all direct Anthropic
     // SDK calls from this worker route through the gateway for observability,
@@ -616,6 +625,7 @@ export default {
           WEBHOOK_DELIVERY_QUEUE: env.WEBHOOK_DELIVERY_QUEUE,
           LATEST_CACHE: env.LATEST_CACHE,
           INVALIDATION_ENABLED: env.INVALIDATION_ENABLED,
+          DISCOVERY_WORKER: env.DISCOVERY_WORKER,
         }),
         alertEnv,
       ),
