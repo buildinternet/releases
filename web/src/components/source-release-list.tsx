@@ -4,6 +4,8 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import { ReleaseListItem } from "./release-item";
 import type { ReleaseItem } from "@/lib/api";
 import { useDebounced } from "@/hooks/use-debounced";
+import { useInfiniteScroll } from "@/hooks/use-infinite-scroll";
+import { InfiniteScrollTrigger } from "./infinite-scroll-trigger";
 
 interface SourceReleaseListProps {
   orgSlug: string;
@@ -109,6 +111,12 @@ export function SourceReleaseList({
     }
   }, [cursor, orgSlug, sourceSlug, buildQuery]);
 
+  const triggerRef = useInfiniteScroll<HTMLButtonElement>({
+    hasMore: cursor !== null && !fetchError,
+    loading,
+    onLoadMore: loadMore,
+  });
+
   return (
     <div>
       <div className="mt-3 mb-3 space-y-2">
@@ -163,15 +171,12 @@ export function SourceReleaseList({
             />
           ))}
           {cursor && (
-            <div className="text-center py-6">
-              <button
-                onClick={loadMore}
-                disabled={loading}
-                className="px-5 py-2 text-[13px] font-medium text-stone-500 dark:text-stone-400 bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-md hover:border-stone-300 dark:hover:border-stone-600 transition-colors disabled:opacity-50"
-              >
-                {loading ? "Loading..." : "Load more"}
-              </button>
-            </div>
+            <InfiniteScrollTrigger
+              triggerRef={triggerRef}
+              loading={loading}
+              error={!!fetchError}
+              onClick={loadMore}
+            />
           )}
         </>
       )}
