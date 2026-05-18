@@ -586,6 +586,8 @@ sourceRoutes.post("/sources/:slug/fetch", postSourceFetchRoute, async (c) => {
         RELEASE_HUB: c.env.RELEASE_HUB,
         WEBHOOK_DELIVERY_QUEUE: c.env.WEBHOOK_DELIVERY_QUEUE,
         DB: c.env.DB,
+        DISCOVERY_WORKER: c.env.DISCOVERY_WORKER,
+        RELEASED_API_KEY: c.env.RELEASED_API_KEY,
       },
       { sessionId, dryRun, maxEntries: maxParsed ?? undefined },
     );

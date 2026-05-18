@@ -481,6 +481,165 @@ export interface FetchOneEnv extends IndexNowEnv {
   RELEASE_HUB?: DurableObjectNamespace;
   WEBHOOK_DELIVERY_QUEUE?: Queue<unknown>;
   DB?: D1Database;
+  /**
+   * Service binding to the discovery worker. When present, summary-only feeds
+   * (items with only titles + links — no body) with `crawlEnabled: true` are
+   * delegated to discovery's `POST /sources/:id/fetch` endpoint so per-release
+   * pages can be crawled and extracted for content + media. See {@link shouldDelegateToCrawl}.
+   */
+  DISCOVERY_WORKER?: Fetcher;
+  /**
+   * Releases API key — sent as `Authorization: Bearer` on delegation calls to
+   * the discovery worker, which gates every route on it. Only consulted when
+   * {@link shouldDelegateToCrawl} fires.
+   */
+  RELEASED_API_KEY?: { get(): Promise<string> };
+}
+
+/**
+ * True when this source should hand body-fetching off to the discovery
+ * worker's crawl pipeline instead of inserting the feed-parsed rows directly.
+ *
+ * The signal is "the feed gave us titles but no bodies." That's either an
+ * explicit `feedContentDepth: "summary-only"` tag on the source metadata, or
+ * the empirical reality that every parsed item came back with empty content.
+ * Either way, inserting those stubs would persist empty `content` + empty
+ * `media` rows under whatever URLs the feed handed us — exactly the bug that
+ * left Notion's recent releases empty after the upstream feed switched to a
+ * title-only format and we kept ingesting it as-is.
+ *
+ * Gated on `crawlEnabled` because the alternative is "do nothing useful" —
+ * if the operator hasn't opted into crawl-based enrichment we don't have a
+ * second path to try, and inserting the stubs is still better than dropping
+ * the change signal entirely.
+ *
+ * Pure and side-effect-free so we can unit-test the decision matrix without
+ * spinning up a worker env.
+ */
+export function shouldDelegateToCrawl(
+  source: Source,
+  meta: SourceMetadata,
+  rawReleases: readonly RawRelease[],
+): boolean {
+  if (source.type !== "scrape") return false;
+  if (meta.crawlEnabled !== true) return false;
+  if (rawReleases.length === 0) return false;
+  if (meta.feedContentDepth === "summary-only") return true;
+  // Treat an all-empty-content batch the same as an explicit summary-only
+  // tag: the feed didn't actually deliver bodies, regardless of what it
+  // self-described as. Whitespace-only counts as empty.
+  return rawReleases.every((r) => !r.content || r.content.trim() === "");
+}
+
+/**
+ * Hand the source off to the discovery worker's `POST /sources/:id/fetch`
+ * endpoint and map its response onto {@link FetchOneResult}. Discovery owns
+ * its own `fetch_log` + source-counter bookkeeping for both success and error
+ * paths, so this helper does not write to either — bumping `consecutiveErrors`
+ * twice (once here, once in discovery's `updateSourceAfterFetch`) would
+ * over-penalize the source. Network failures, on the other hand, mean
+ * discovery never ran at all, so we throw and let the caller's catch block
+ * record the error like any other transport failure.
+ */
+async function delegateScrapeToDiscovery(
+  source: Source,
+  env: FetchOneEnv,
+  sessionId: string | null,
+): Promise<FetchOneResult> {
+  const start = Date.now();
+  // Discovery rejects every route with 401 when no Bearer is sent, so a
+  // missing/broken API key means the call will round-trip just to fail.
+  // Short-circuit with an error result instead — the workflow's normal error
+  // backoff handles the retry cadence, and the log lets ops spot the
+  // misconfiguration without grepping for stray 401s.
+  const apiKey = await env.RELEASED_API_KEY?.get().catch(() => null);
+  if (!apiKey) {
+    logEvent("error", {
+      component: "cron-poll-fetch",
+      event: "missing-delegation-auth",
+      sourceSlug: source.slug,
+      reason: env.RELEASED_API_KEY
+        ? "RELEASED_API_KEY.get() threw or returned empty"
+        : "RELEASED_API_KEY binding missing",
+    });
+    return {
+      releasesFound: 0,
+      releasesInserted: 0,
+      durationMs: Date.now() - start,
+      status: "error" as const,
+      error: "Cannot delegate to discovery: RELEASED_API_KEY unavailable",
+    };
+  }
+
+  const res = await env.DISCOVERY_WORKER!.fetch(
+    `https://discovery/sources/${encodeURIComponent(source.id)}/fetch`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({ sessionId: sessionId ?? undefined }),
+    },
+  );
+
+  const durationMs = Date.now() - start;
+  let body: { ok?: boolean; result?: string; errorCategory?: string } = {};
+  try {
+    body = (await res.json()) as typeof body;
+  } catch {
+    // Non-JSON response — fall through and use the status code below.
+  }
+
+  if (!res.ok || body.ok === false) {
+    const errorMessage = body.result ?? `Discovery /sources/:id/fetch returned HTTP ${res.status}`;
+    logEvent("warn", {
+      component: "cron-poll-fetch",
+      event: "crawl-delegation-failed",
+      sourceSlug: source.slug,
+      httpStatus: res.status,
+      errorCategory: body.errorCategory,
+      durationMs,
+    });
+    return {
+      releasesFound: 0,
+      releasesInserted: 0,
+      durationMs,
+      status: "error" as const,
+      error: errorMessage,
+    };
+  }
+
+  // `result` is a JSON-stringified `{fetched, status, releasesFound, releasesInserted, source}`.
+  // Fall back to zeros if it's missing or unparseable rather than failing the whole pass.
+  let releasesFound = 0;
+  let releasesInserted = 0;
+  try {
+    const parsed = JSON.parse(body.result ?? "{}") as {
+      releasesFound?: number;
+      releasesInserted?: number;
+    };
+    releasesFound = parsed.releasesFound ?? 0;
+    releasesInserted = parsed.releasesInserted ?? 0;
+  } catch {
+    /* keep zeros */
+  }
+
+  logEvent("info", {
+    component: "cron-poll-fetch",
+    event: "crawl-delegation-success",
+    sourceSlug: source.slug,
+    releasesFound,
+    releasesInserted,
+    durationMs,
+  });
+
+  return {
+    releasesFound,
+    releasesInserted,
+    durationMs,
+    status: releasesInserted > 0 ? ("success" as const) : ("no_change" as const),
+  };
 }
 
 export async function fetchOne(
@@ -647,6 +806,25 @@ export async function fetchOne(
         durationMs: dur,
         status: "no_change" as const,
       };
+    }
+
+    // Summary-only feed (e.g. RSS that only carries `<title>` + `<link>`):
+    // inserting the parsed rows would persist empty-body releases under the
+    // feed's link URLs. When `crawlEnabled: true` is set, delegate to the
+    // discovery worker's crawl + extract pipeline instead so the per-release
+    // pages get fetched and bodies + media land in D1. The feed becomes a
+    // pure change detector. Dry-runs skip this branch — they're supposed to
+    // be cheap probes of the feed itself, not full crawls.
+    if (!dryRun && env.DISCOVERY_WORKER && shouldDelegateToCrawl(source, meta, rawReleases)) {
+      logEvent("info", {
+        component: "cron-poll-fetch",
+        event: "crawl-delegation-start",
+        sourceSlug: source.slug,
+        reason:
+          meta.feedContentDepth === "summary-only" ? "summary-only" : "all-items-empty-content",
+        feedItemCount: rawReleases.length,
+      });
+      return await delegateScrapeToDiscovery(source, env, sessionId);
     }
 
     const rows = rawReleases.map((raw) => {
