@@ -92,7 +92,23 @@ jobs:
 
       - run: bun install --frozen-lockfile
 
-      - name: Type-check
+      # Root tsconfig only includes ./src — each worker has its own
+      # tsconfig.json and isn't in the root's compile scope, so per-worker
+      # tsc steps catch worker-only type errors (e.g. binding/secret
+      # mismatches in workers/api) that the root check misses. See #947.
+      - name: Type-check (root)
+        run: npx tsc --noEmit
+      - name: Type-check (workers/api)
+        working-directory: workers/api
+        run: npx tsc --noEmit
+      - name: Type-check (workers/discovery)
+        working-directory: workers/discovery
+        run: npx tsc --noEmit
+      - name: Type-check (workers/mcp)
+        working-directory: workers/mcp
+        run: npx tsc --noEmit
+      - name: Type-check (workers/webhooks)
+        working-directory: workers/webhooks
         run: npx tsc --noEmit
 
       - name: Check migration filenames

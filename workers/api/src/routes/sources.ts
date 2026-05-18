@@ -2875,8 +2875,15 @@ sourceRoutes.patch(
         releaseId: id,
         sourceId: row.source.id,
       });
+      const githubToken = (await getSecret(c.env.GITHUB_TOKEN).catch(() => null)) ?? undefined;
       c.executionCtx.waitUntil(
-        embedReleasesForSource(db, row.source, [id], c.env, { throwOnError: false }),
+        embedReleasesForSource(
+          db,
+          row.source,
+          [id],
+          { ...c.env, GITHUB_TOKEN: githubToken },
+          { throwOnError: false },
+        ),
       );
     }
 

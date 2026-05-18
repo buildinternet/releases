@@ -88,7 +88,12 @@ adminBatchRunsRoutes.post("/admin/batch-runs", async (c) => {
   }
 
   const anthropicBatchId = typeof body.anthropicBatchId === "string" ? body.anthropicBatchId : null;
-  const caller = typeof body.caller === "string" ? body.caller : null;
+  const CALLERS = ["script", "workflow", "admin"] as const;
+  type Caller = (typeof CALLERS)[number];
+  const caller: Caller | null =
+    typeof body.caller === "string" && (CALLERS as readonly string[]).includes(body.caller)
+      ? (body.caller as Caller)
+      : null;
   const model = typeof body.model === "string" ? body.model : null;
   const requestCountTotal =
     typeof body.requestCountTotal === "number" &&

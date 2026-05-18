@@ -49,6 +49,7 @@ import {
   type SearchCollectionHit,
   type RawSourceHit,
 } from "@buildinternet/releases-api-types";
+import type { SourceType } from "@buildinternet/releases-core/source-enums";
 import {
   buildFeedCursor,
   getCollectionReleasesFeed,
@@ -1357,7 +1358,7 @@ export async function listCatalog(
     db.all<{
       slug: string;
       name: string;
-      type: string;
+      type: SourceType;
       url: string | null;
       lastFetchedAt: string | null;
       orgSlug: string | null;
