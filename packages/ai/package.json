@@ -7,6 +7,7 @@
     "./batch": "./src/batch.ts",
     "./evaluate": "./src/evaluate.ts",
     "./grader-prompt": "./src/grader-prompt.ts",
+    "./marketing-classifier": "./src/marketing-classifier.ts",
     "./playbook": "./src/playbook.ts",
     "./providers": "./src/providers.ts",
     "./release-content": "./src/release-content.ts",

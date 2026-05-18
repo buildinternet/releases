@@ -110,6 +110,26 @@ export interface SourceMetadata {
    */
   categoryAllow?: string[];
 
+  /**
+   * When true, run each newly-parsed item through a Haiku classifier before
+   * insert; items classified as marketing are inserted with `suppressed=true`
+   * and `suppressedReason="marketing_classifier:<slug>"` so they stay out of
+   * read paths, publish, and embed but remain queryable for audit and easy
+   * `unsuppress`. Opt-in only — flip on for vendor blogs that mix product
+   * news with case studies / newsletters / event recaps (ClickHouse blog,
+   * Snowflake blog, etc.). Default fail-open: classifier errors fall back to
+   * inserting visibly. See `@releases/ai-internal/marketing-classifier`.
+   */
+  marketingFilter?: boolean;
+
+  /**
+   * Free-form hint appended to the marketing-classifier system prompt. Use to
+   * give the model org-specific context the URL/title alone can't carry —
+   * e.g. "This blog also publishes monthly newsletters with slug
+   * `YYYYMM-newsletter`." Ignored when `marketingFilter` is false.
+   */
+  marketingFilterHint?: string;
+
   // Per-source AI guidance
   parseInstructions?: string; // freeform text appended to AI parsing prompts
 

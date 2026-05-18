@@ -61,6 +61,12 @@ import { clusterAndPersistCascades } from "../lib/cluster-cascades.js";
 import { resolveOrgSlug, resolveProductSlug } from "../lib/slug-lookups.js";
 import { logEvent } from "@releases/lib/log-event";
 import { classifyDbError, dbErrorLogFields } from "@releases/lib/db-errors";
+import {
+  classifyMarketing,
+  type MarketingClassifierResult,
+} from "@releases/ai-internal/marketing-classifier";
+import { getAnthropicKey, resolveGatewayOpts, type AnthropicEnv } from "../lib/anthropic.js";
+import { buildAnthropicClient } from "@releases/lib/anthropic-client.js";
 
 // ── Tier intervals (hours) ──
 
@@ -484,7 +490,7 @@ export interface FetchOneResult {
 
 export const DEFAULT_FETCH_MAX_ENTRIES = 200;
 
-export interface FetchOneEnv extends IndexNowEnv {
+export interface FetchOneEnv extends IndexNowEnv, AnthropicEnv {
   GITHUB_TOKEN?: string;
   /**
    * Optional Vectorize bindings for semantic-search side effects. Typed as
@@ -603,6 +609,126 @@ async function delegateScrapeToDiscovery(
     durationMs,
     status: result.releasesInserted > 0 ? ("success" as const) : ("no_change" as const),
   };
+}
+
+/**
+ * Per-fire cap on marketing-classifier calls. A normal feed delta is 0–5 items;
+ * a first-onboard backfill can be 50+. Above the cap we skip classification and
+ * insert visibly — operators can run a one-off backfill via the suppress API.
+ */
+const MARKETING_CLASSIFIER_MAX_PER_FIRE = 20;
+
+/**
+ * Per-source marketing classification. Runs Haiku 4.5 sequentially over each
+ * raw release; returns a map keyed by raw-release array index (collision-free
+ * across title-only feed items) containing only entries classified as
+ * marketing. Callers flip `suppressed=true` + `suppressedReason` on those rows
+ * before insert so they never enter the publish / embed paths.
+ *
+ * Fail-open: every error path (missing API key, classifier throw, cap tripped,
+ * client-construction throw) returns an empty map after logging, never lets an
+ * exception escape. False negatives are recoverable (operators can suppress
+ * post-hoc); false positives create user-visible churn. Sequential per-item
+ * (vs. parallel) is a cost/concurrency-budget choice; the prompt cache hit is
+ * isolate-wide, so it doesn't depend on call ordering.
+ */
+async function classifyMarketingForReleases(
+  source: Source,
+  meta: SourceMetadata,
+  rawReleases: readonly RawRelease[],
+  env: FetchOneEnv,
+): Promise<Map<number, MarketingClassifierResult>> {
+  const result = new Map<number, MarketingClassifierResult>();
+  if (rawReleases.length === 0) return result;
+
+  if (rawReleases.length > MARKETING_CLASSIFIER_MAX_PER_FIRE) {
+    logEvent("warn", {
+      component: "cron-poll-fetch",
+      event: "marketing-filter-cap-tripped",
+      sourceSlug: source.slug,
+      candidateCount: rawReleases.length,
+      cap: MARKETING_CLASSIFIER_MAX_PER_FIRE,
+    });
+    return result;
+  }
+
+  let suppressedCount = 0;
+  let failedCount = 0;
+  let inputTokens = 0;
+  let cacheCreateTokens = 0;
+  let cacheReadTokens = 0;
+  let outputTokens = 0;
+  const startedAt = Date.now();
+
+  try {
+    const apiKey = await getAnthropicKey(env);
+    if (!apiKey) {
+      logEvent("warn", {
+        component: "cron-poll-fetch",
+        event: "marketing-filter-no-api-key",
+        sourceSlug: source.slug,
+      });
+      return result;
+    }
+
+    const client = buildAnthropicClient({ apiKey, ...(await resolveGatewayOpts(env)) });
+
+    for (const [index, raw] of rawReleases.entries()) {
+      try {
+        // oxlint-disable-next-line no-await-in-loop -- sequential per-item bounds concurrent Anthropic load per cron fire; the prompt cache hit doesn't depend on ordering
+        const verdict = await classifyMarketing(client, {
+          sourceName: source.name,
+          title: raw.title,
+          content: raw.content,
+          url: raw.url ?? null,
+          hint: meta.marketingFilterHint ?? null,
+        });
+        inputTokens += verdict.usage.input;
+        cacheCreateTokens += verdict.usage.cacheCreate;
+        cacheReadTokens += verdict.usage.cacheRead;
+        outputTokens += verdict.usage.output;
+        if (verdict.isMarketing) {
+          result.set(index, verdict);
+          suppressedCount++;
+        }
+      } catch (err) {
+        failedCount++;
+        logEvent("warn", {
+          component: "cron-poll-fetch",
+          event: "marketing-filter-classify-failed",
+          sourceSlug: source.slug,
+          itemUrl: raw.url ?? null,
+          err,
+        });
+      }
+    }
+  } catch (err) {
+    // Catches API-key resolution + client construction throws. Per-item errors
+    // are caught above; reaching here means the classifier never ran at all.
+    logEvent("warn", {
+      component: "cron-poll-fetch",
+      event: "marketing-filter-bootstrap-failed",
+      sourceSlug: source.slug,
+      err,
+    });
+    return result;
+  }
+
+  logEvent("info", {
+    component: "cron-poll-fetch",
+    event: "marketing-filter-applied",
+    sourceSlug: source.slug,
+    classified: rawReleases.length,
+    suppressed: suppressedCount,
+    failed: failedCount,
+    inputTokens,
+    cacheCreateTokens,
+    cacheReadTokens,
+    outputTokens,
+    durationMs: Date.now() - startedAt,
+  });
+
+  return result;
 }
 
 export async function fetchOne(
@@ -790,8 +916,14 @@ export async function fetchOne(
       return await delegateScrapeToDiscovery(source, env, sessionId);
     }
 
-    const rows = rawReleases.map((raw) => {
+    const marketingMap =
+      meta.marketingFilter === true
+        ? await classifyMarketingForReleases(source, meta, rawReleases, env)
+        : new Map<number, MarketingClassifierResult>();
+
+    const rows = rawReleases.map((raw, index) => {
       const size = computeContentSize(raw.content);
+      const verdict = marketingMap.get(index);
       return {
         sourceId: source.id,
         version: raw.version ?? null,
@@ -810,12 +942,15 @@ export async function fetchOne(
           // oxlint-disable-next-line no-map-spread -- copy-on-write required; m is an adapter-returned object
           (raw.media ?? []).map((m) => ({ ...m, url: normalizeMediaUrl(m.url) })),
         ),
+        suppressed: verdict?.isMarketing === true,
+        suppressedReason: verdict?.isMarketing ? `marketing_classifier:${verdict.reason}` : null,
       };
     });
 
     let inserted = 0;
     const publishRows: InsertedReleaseRow[] = [];
     const clusterRows: Array<{ id: string; version: string | null; content: string }> = [];
+    const suppressedIds = new Set<string>();
     for (let i = 0; i < rows.length; i += RELEASES_BATCH_CHUNK_SIZE) {
       const chunk = rows.slice(i, i + RELEASES_BATCH_CHUNK_SIZE);
       // Build publish rows from the RETURNING set (not zipped against
@@ -831,15 +966,17 @@ export async function fetchOne(
         content: releases.content,
         contentChars: releases.contentChars,
         contentTokens: releases.contentTokens,
+        suppressed: releases.suppressed,
       });
       inserted += result.length;
       for (const r of result) {
-        const { content, ...publishRow } = r;
+        const { content, suppressed, ...publishRow } = r;
+        if (suppressed === true) suppressedIds.add(r.id);
         publishRows.push(publishRow);
         clusterRows.push({ id: r.id, version: r.version, content });
       }
     }
-    const insertedIds = publishRows.map((r) => r.id);
+    const insertedIds = publishRows.map((r) => r.id).filter((id) => !suppressedIds.has(id));
 
     // Detect changesets cascade rows and demote them to coverage so they
     // stay out of the default feed, the live tail, and per-source IndexNow
@@ -850,8 +987,10 @@ export async function fetchOne(
       sourceId: source.id,
     });
     const visiblePublishRows =
-      cascadeResult.coverageIds.size > 0
-        ? publishRows.filter((r) => !cascadeResult.coverageIds.has(r.id))
+      cascadeResult.coverageIds.size > 0 || suppressedIds.size > 0
+        ? publishRows.filter(
+            (r) => !cascadeResult.coverageIds.has(r.id) && !suppressedIds.has(r.id),
+          )
         : publishRows;
 
     if (visiblePublishRows.length > 0 && env.RELEASE_HUB) {
