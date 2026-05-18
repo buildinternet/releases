@@ -6,6 +6,8 @@ import type {
   UpdateRequest,
 } from "./types.js";
 import { discoveryIdentityHeaders } from "./identity.js";
+import { directApiFetcher, withDiscoveryIdentity, withStagingHeader } from "./fetch-wrappers.js";
+import { scrapeFetch, type ScrapeEnv } from "./scrape-fetch.js";
 import { logEvent } from "@releases/lib/log-event.js";
 import { getSecret } from "@releases/lib/secrets";
 
@@ -98,6 +100,54 @@ async function startManagedSession(
   }
 
   return { sessionId };
+}
+
+/**
+ * Build a {@link ScrapeEnv} for synchronous (non-managed-agent) scrape runs
+ * triggered by the poll-and-fetch workflow's "summary-only feed → crawl
+ * enrichment" path. Mirrors the construction in `managed-agents-session.ts`
+ * — same secrets, same fetcher wrappers — but does not require a live MA
+ * session. Returns an error Response when the Cloudflare browser-rendering
+ * credentials aren't configured (crawl is impossible without them).
+ */
+async function buildScrapeEnv(
+  env: Env,
+  sessionId: string | undefined,
+): Promise<ScrapeEnv | Response> {
+  const [anthropicApiKey, cfAccountId, cfApiToken, releasesApiKey, gatewayToken, stagingKey] =
+    await Promise.all([
+      getSecret(env.ANTHROPIC_API_KEY).catch(() => null),
+      getSecret(env.CLOUDFLARE_ACCOUNT_ID).catch(() => null),
+      getSecret(env.CLOUDFLARE_API_TOKEN).catch(() => null),
+      getSecret(env.RELEASED_API_KEY).catch(() => null),
+      getSecret(env.AI_GATEWAY_TOKEN).catch(() => null),
+      getSecret(env.STAGING_ACCESS_KEY).catch(() => null),
+    ]);
+
+  if (!anthropicApiKey) {
+    return errorResponse("ANTHROPIC_API_KEY not configured", 500);
+  }
+  if (!cfAccountId || !cfApiToken) {
+    return errorResponse(
+      "Cloudflare account/token not configured — crawl-based scrape is unavailable",
+      500,
+    );
+  }
+
+  const baseFetcher = env.API_WORKER ?? directApiFetcher(env.RELEASED_API_URL);
+  const fetcher = withDiscoveryIdentity(withStagingHeader(baseFetcher, stagingKey ?? ""));
+
+  return {
+    cloudflareAccountId: cfAccountId,
+    cloudflareApiToken: cfApiToken,
+    anthropicApiKey,
+    anthropicBaseURL: env.ANTHROPIC_BASE_URL,
+    aiGatewayToken: gatewayToken || undefined,
+    apiFetcher: fetcher,
+    apiKey: releasesApiKey ?? "",
+    sessionId,
+    extractToolLoopEnabled: env.EXTRACT_TOOLLOOP_ENABLED,
+  };
 }
 
 export default {
@@ -281,6 +331,57 @@ export default {
       return jsonResponse(
         { sessionId: result.sessionId, status: "running", sourceIdentifiers: identifiers },
         202,
+      );
+    }
+
+    const fetchMatch = url.pathname.match(/^\/sources\/([^/]+)\/fetch$/);
+    if (request.method === "POST" && fetchMatch) {
+      // Unlike /update, this runs `scrapeFetch` synchronously instead of
+      // launching a managed-agents session. scrapeFetch writes its own
+      // fetchLog + source-counter updates, so the caller (the API worker's
+      // poll-fetch path) must NOT also bump those counters.
+      const sourceIdentifier = decodeURIComponent(fetchMatch[1]);
+
+      // Body is optional: empty or `{sessionId}`. `request.json()` throws on
+      // an empty body, so parse from text instead.
+      let sessionId: string | undefined;
+      const text = await request.text().catch(() => "");
+      if (text.length > 0) {
+        try {
+          const parsed = JSON.parse(text) as { sessionId?: string };
+          sessionId = parsed.sessionId;
+        } catch {
+          return errorResponse("Invalid JSON body", 400);
+        }
+      }
+
+      const scrapeEnv = await buildScrapeEnv(env, sessionId);
+      if (scrapeEnv instanceof Response) return scrapeEnv;
+
+      const result = await scrapeFetch(scrapeEnv, sourceIdentifier);
+      const isError = result.startsWith("Error");
+      const categoryMatch = isError ? result.match(/^Error \[([a-z]+)\]:/) : null;
+
+      logEvent(isError ? "warn" : "info", {
+        component: "discovery",
+        event: "source-fetch-completed",
+        sourceIdentifier,
+        sessionId,
+        ok: !isError,
+        errorCategory: categoryMatch ? categoryMatch[1] : undefined,
+      });
+
+      // Errors come back as `Error [<category>]: <message>` strings. Surface
+      // them as HTTP 502 (bad gateway — upstream scrape failed) so the API
+      // worker's workflow step can decide whether to retry. 200 means we did
+      // some work — even partial inserts count as success at the HTTP layer.
+      return jsonResponse(
+        {
+          ok: !isError,
+          result,
+          errorCategory: categoryMatch ? categoryMatch[1] : undefined,
+        },
+        isError ? 502 : 200,
       );
     }
 
