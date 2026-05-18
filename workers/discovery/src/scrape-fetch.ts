@@ -280,10 +280,10 @@ export function pathMatchesIncludePrefix(
   prefix: string,
 ): boolean {
   if (!prefix) return true;
+  const sourceOrigin = new URL(sourceUrl).origin;
   try {
     const page = new URL(pageUrl);
-    const source = new URL(sourceUrl);
-    if (page.origin !== source.origin) return false;
+    if (page.origin !== sourceOrigin) return false;
     return page.pathname.startsWith(prefix);
   } catch {
     return false;
