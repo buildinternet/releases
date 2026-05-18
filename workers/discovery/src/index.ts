@@ -6,25 +6,36 @@ import type {
   UpdateRequest,
 } from "./types.js";
 import { discoveryIdentityHeaders } from "./identity.js";
-import { directApiFetcher, withDiscoveryIdentity, withStagingHeader } from "./fetch-wrappers.js";
-import { scrapeFetch, type ScrapeEnv } from "./scrape-fetch.js";
 import { logEvent } from "@releases/lib/log-event.js";
 import { getSecret } from "@releases/lib/secrets";
-import type { ErrorCategory } from "@releases/lib/errors";
 import { WorkerEntrypoint } from "cloudflare:workers";
 
 export { Sandbox } from "@cloudflare/sandbox";
 export { ManagedAgentsSession } from "./managed-agents-session.js";
 
-export interface FetchSourceResult {
-  ok: boolean;
-  releasesFound: number;
-  releasesInserted: number;
-  errorCategory?: ErrorCategory;
-  error?: string;
-}
-
 const MAX_UPDATE_SOURCES = 20;
+
+/**
+ * Shared shape validation for the two entrypoints that launch an update-mode
+ * MA session: the `/update` HTTP route (request body comes in as `unknown`)
+ * and the typed `startManagedFetchSession` RPC. Returns an error message
+ * string when something is wrong, or `null` when the inputs are valid. Keeps
+ * the source-cap error text identical across both surfaces so a change to
+ * `MAX_UPDATE_SOURCES` doesn't accidentally drift one wording and not the
+ * other.
+ */
+function validateUpdateParams(company: unknown, sourceIdentifiers: unknown): string | null {
+  if (!company || typeof company !== "string") {
+    return "Missing required field: company";
+  }
+  if (!Array.isArray(sourceIdentifiers) || sourceIdentifiers.length === 0) {
+    return "sourceIdentifiers must be a non-empty array";
+  }
+  if (sourceIdentifiers.length > MAX_UPDATE_SOURCES) {
+    return `Too many sources (${sourceIdentifiers.length}/${MAX_UPDATE_SOURCES} max). Split into multiple requests.`;
+  }
+  return null;
+}
 
 interface AnthropicConfig {
   agentId: string;
@@ -112,119 +123,92 @@ async function startManagedSession(
   return { sessionId };
 }
 
-/**
- * Build a {@link ScrapeEnv} for synchronous (non-managed-agent) scrape runs
- * triggered by the poll-and-fetch workflow's "summary-only feed → crawl
- * enrichment" path. Mirrors the construction in `managed-agents-session.ts`
- * — same secrets, same fetcher wrappers — but does not require a live MA
- * session. Returns an error Response when the Cloudflare browser-rendering
- * credentials aren't configured (crawl is impossible without them).
- */
-async function buildScrapeEnv(
-  env: Env,
-  sessionId: string | undefined,
-): Promise<ScrapeEnv | Response> {
-  const [anthropicApiKey, cfAccountId, cfApiToken, releasesApiKey, gatewayToken, stagingKey] =
-    await Promise.all([
-      getSecret(env.ANTHROPIC_API_KEY).catch(() => null),
-      getSecret(env.CLOUDFLARE_ACCOUNT_ID).catch(() => null),
-      getSecret(env.CLOUDFLARE_API_TOKEN).catch(() => null),
-      getSecret(env.RELEASED_API_KEY).catch(() => null),
-      getSecret(env.AI_GATEWAY_TOKEN).catch(() => null),
-      getSecret(env.STAGING_ACCESS_KEY).catch(() => null),
-    ]);
-
-  if (!anthropicApiKey) {
-    return errorResponse("ANTHROPIC_API_KEY not configured", 500);
-  }
-  if (!cfAccountId || !cfApiToken) {
-    return errorResponse(
-      "Cloudflare account/token not configured — crawl-based scrape is unavailable",
-      500,
-    );
-  }
-
-  const baseFetcher = env.API_WORKER ?? directApiFetcher(env.RELEASED_API_URL);
-  const fetcher = withDiscoveryIdentity(withStagingHeader(baseFetcher, stagingKey ?? ""));
-
-  return {
-    cloudflareAccountId: cfAccountId,
-    cloudflareApiToken: cfApiToken,
-    anthropicApiKey,
-    anthropicBaseURL: env.ANTHROPIC_BASE_URL,
-    aiGatewayToken: gatewayToken || undefined,
-    apiFetcher: fetcher,
-    apiKey: releasesApiKey ?? "",
-    sessionId,
-    extractToolLoopEnabled: env.EXTRACT_TOOLLOOP_ENABLED,
-  };
+export interface StartManagedFetchSessionParams {
+  /**
+   * Sources to hand to the MA worker session. Currently always single-source
+   * from the poll-fetch delegation path. Multi-source batching (one MA session
+   * per org with several sourceIdentifiers) is left for a future change once
+   * the caller learns to group by org.
+   */
+  sourceIds: string[];
+  /** Human-readable org name. Used as the MA session `company` key for dedup. */
+  company: string;
+  /** Optional org ID, mirrors the `/update` HTTP shape. */
+  orgId?: string;
+  /** Optional trace tag — surfaces in the Anthropic MA dashboard. */
+  correlationId?: string;
 }
+
+export type StartManagedFetchSessionResult =
+  | { ok: true; sessionId: string }
+  | { ok: false; error: string };
 
 /**
  * Named entrypoint for typed RPC calls from the API worker.
- * Exposes `fetchSource` as a direct method — no HTTP serialization, no auth
- * overhead. The `fetch` handler below stays in place for external HTTP callers
- * (CLI, /onboard, /update, /onboard/:id/status).
+ *
+ * Exposes `startManagedFetchSession` so the poll-and-fetch workflow can hand
+ * summary-only feeds with `crawlEnabled: true` off to the same MA worker
+ * pipeline used by `/update`. The MA session writes its own `fetch_log` rows
+ * and source-counter updates when it completes — callers must not double-bump
+ * those counters.
  *
  * Binding declaration in the API worker's wrangler.jsonc must include
  * `"entrypoint": "DiscoveryEntrypoint"` on the service binding object.
  */
 export class DiscoveryEntrypoint extends WorkerEntrypoint<Env> {
   /**
-   * Synchronously fetch and extract releases for one source, delegating to
-   * the discovery worker's crawl pipeline. Discovery owns its own `fetch_log`
-   * and source-counter bookkeeping — callers must NOT also bump those counters.
+   * Kick off a managed-agent update session for one or more sources and
+   * return immediately with the new sessionId. The session runs async on the
+   * MA platform; its completion writes `fetch_log` rows + source counters via
+   * the existing managed-agent bookkeeping.
    *
-   * Throws if the ScrapeEnv cannot be constructed (missing secrets), so the
-   * caller's workflow step can treat it as a retryable infrastructure error
-   * rather than a logic-level "scrape failed" result.
+   * Skips the StatusHub dedup pre-check that `/update`'s HTTP handler runs —
+   * fine for the internal poll-fetch caller (worst case: a redundant session
+   * that the MA platform deduplicates).
    */
-  async fetchSource(sourceIdentifier: string, sessionId?: string): Promise<FetchSourceResult> {
-    const scrapeEnv = await buildScrapeEnv(this.env, sessionId);
-    if (scrapeEnv instanceof Response) {
-      // buildScrapeEnv returns a Response only when secrets are missing.
-      // Throw so the workflow step retries rather than treating it as a
-      // source-level failure.
+  async startManagedFetchSession(
+    params: StartManagedFetchSessionParams,
+  ): Promise<StartManagedFetchSessionResult> {
+    const validationError = validateUpdateParams(params.company, params.sourceIds);
+    if (validationError) {
+      return { ok: false, error: validationError };
+    }
+
+    const result = await startManagedSession(
+      this.env,
+      "Failed to start managed fetch session",
+      (ctx) => ({
+        company: params.company,
+        mode: "update" as const,
+        sourceIdentifiers: params.sourceIds,
+        orgId: params.orgId,
+        correlationId: params.correlationId,
+        ...ctx,
+      }),
+    );
+    if (result instanceof Response) {
       let errBody: { error?: string } = {};
       try {
-        errBody = (await scrapeEnv.clone().json()) as typeof errBody;
+        errBody = (await result.clone().json()) as typeof errBody;
       } catch {
         /* ignore parse failure */
       }
-      throw new Error(errBody.error ?? "Discovery: failed to build scrape environment");
+      return {
+        ok: false,
+        error: errBody.error ?? `Discovery returned ${result.status}`,
+      };
     }
 
-    const result = await scrapeFetch(scrapeEnv, sourceIdentifier);
-    const isError = result.startsWith("Error");
-    const categoryMatch = isError ? result.match(/^Error \[([a-z]+)\]:/) : null;
-    const errorCategory = categoryMatch ? (categoryMatch[1] as ErrorCategory) : undefined;
-
-    logEvent(isError ? "warn" : "info", {
+    logEvent("info", {
       component: "discovery",
-      event: "source-fetch-completed",
-      sourceIdentifier,
-      sessionId,
-      ok: !isError,
-      errorCategory,
+      event: "managed-fetch-session-started",
+      sessionId: result.sessionId,
+      sourceIds: params.sourceIds,
+      company: params.company,
+      correlationId: params.correlationId,
     });
 
-    if (isError) {
-      // Strip the `Error [<category>]: ` prefix to surface just the message.
-      const message = result.replace(/^Error \[[a-z]+\]:\s*/, "");
-      return { ok: false, releasesFound: 0, releasesInserted: 0, errorCategory, error: message };
-    }
-
-    // `scrapeFetch` returns `Error [<category>]: …` on failure (handled above)
-    // or `JSON.stringify({ fetched, status, releasesFound, releasesInserted, … })`
-    // on success. A parse failure here means scrapeFetch is buggy — don't
-    // swallow it: let the throw propagate so the caller's catch records an
-    // error row instead of marking the fetch as a silent `no_change`.
-    const parsed = JSON.parse(result) as { releasesFound?: number; releasesInserted?: number };
-    return {
-      ok: true,
-      releasesFound: parsed.releasesFound ?? 0,
-      releasesInserted: parsed.releasesInserted ?? 0,
-    };
+    return { ok: true, sessionId: result.sessionId };
   }
 }
 
@@ -381,19 +365,11 @@ export default {
         return errorResponse("Invalid JSON body", 400);
       }
 
-      if (!body.company || typeof body.company !== "string") {
-        return errorResponse("Missing required field: company", 400);
-      }
       // Accept sourceIdentifiers (preferred) or legacy sourceSlugs
       const identifiers = body.sourceIdentifiers ?? body.sourceSlugs;
-      if (!Array.isArray(identifiers) || identifiers.length === 0) {
-        return errorResponse("sourceIdentifiers must be a non-empty array", 400);
-      }
-      if (identifiers.length > MAX_UPDATE_SOURCES) {
-        return errorResponse(
-          `Too many sources (${identifiers.length}/${MAX_UPDATE_SOURCES} max). Split into multiple requests.`,
-          400,
-        );
+      const validationError = validateUpdateParams(body.company, identifiers);
+      if (validationError) {
+        return errorResponse(validationError, 400);
       }
 
       const result = await startManagedSession(env, "Failed to start update session", (ctx) => ({
