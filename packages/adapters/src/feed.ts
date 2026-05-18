@@ -3,6 +3,8 @@ import { logger } from "@buildinternet/releases-lib/logger";
 import { FeedHttpError } from "@releases/lib/errors";
 import { RELEASES_BOT_UA } from "@releases/adapters/user-agent";
 import { parseFeed as libParseFeed } from "@rowanmanning/feed-parser";
+import { parseHTML } from "linkedom";
+import TurndownService from "turndown";
 
 // Re-export source-meta helpers so consumers can pull everything feed-related
 // from a single path.
@@ -484,7 +486,7 @@ export function parseRss(xml: string): RawRelease[] {
       .filter((c): c is string => Boolean(c));
     releases.push({
       title: item.title,
-      content: htmlToMarkdown(decodeHtmlEntities(body)),
+      content: htmlToMarkdown(body),
       url: feedItemUrl(item),
       publishedAt: dateRaw ? new Date(dateRaw) : undefined,
       version: extractVersionFromTitle(item.title),
@@ -619,57 +621,134 @@ export function iframeSrcToWatchUrl(src: string): string {
   return src.startsWith("//") ? `https:${src}` : src;
 }
 
-/** Convert HTML to markdown, preserving images, links, and basic formatting. */
+/**
+ * Re-encode angle brackets that appear as text inside `<code>` and bare
+ * `<pre>` blocks. `@rowanmanning/feed-parser` decodes the five XML entities
+ * (`&lt;`, `&gt;`, `&amp;`, `&quot;`, `&apos;`) inside CDATA on its way out,
+ * which leaves literal `<` characters in places where the original feed had
+ * `&lt;` — typically PHP snippets like `<?php` or inline HTML examples
+ * inside docstrings. The HTML5 parser (linkedom, browser DOMParser, our old
+ * regex stripper) all treat `<?` as a bogus comment that eats through the
+ * next `>`, which gobbles whole function bodies (see rel_t9fAnizXt0rM0vPDC48ds).
+ *
+ * Idempotent: properly-encoded input (e.g. JSON Feed content_html) parses
+ * unchanged, since `&lt;` matches the known-entity negative lookahead.
+ */
+function reencodeCodeText(html: string): string {
+  let out = html.replace(/(<code\b[^>]*>)([\s\S]*?)(<\/code>)/gi, (_, open, inner, close) => {
+    return `${open}${escapeForCode(inner)}${close}`;
+  });
+  out = out.replace(/<pre\b([^>]*)>([\s\S]*?)<\/pre>/gi, (match, attrs, inner) => {
+    if (/<code\b/i.test(inner)) return match; // already handled above
+    return `<pre${attrs}>${escapeForCode(inner)}</pre>`;
+  });
+  return out;
+}
+
+function escapeForCode(text: string): string {
+  return text
+    .replace(/&(?!#?[a-z0-9]+;)/gi, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+let turndownInstance: TurndownService | null = null;
+
+function getTurndown(): TurndownService {
+  if (turndownInstance) return turndownInstance;
+
+  const td = new TurndownService({
+    headingStyle: "atx",
+    codeBlockStyle: "fenced",
+    fence: "```",
+    bulletListMarker: "-",
+    emDelimiter: "*",
+    strongDelimiter: "**",
+    linkStyle: "inlined",
+    hr: "---",
+    br: "  ",
+  });
+
+  // Unsafe schemes (javascript:, data:, …) collapse to bare text so a feed
+  // can't smuggle a clickable XSS payload into stored markdown.
+  td.addRule("safeLink", {
+    filter: (node) => node.nodeName === "A" && node.getAttribute("href") !== null,
+    replacement: (content, node) => {
+      const href = (node as Element).getAttribute("href") ?? "";
+      if (!isSafeLinkHref(href)) return content;
+      return `[${content}](${href})`;
+    },
+  });
+
+  // Turndown's built-in fencedCodeBlock rule only fires on <pre><code>. WP's
+  // syntaxhighlighter shortcode (and older Tumblr exports) emit bare <pre>
+  // with the language on the class — fence those too.
+  td.addRule("preWithoutCode", {
+    filter: (node) => node.nodeName === "PRE" && !(node as Element).querySelector("code"),
+    replacement: (_content, node) => {
+      const text = (node as Element).textContent ?? "";
+      return `\n\n\`\`\`\n${text.replace(/^\n+|\n+$/g, "")}\n\`\`\`\n\n`;
+    },
+  });
+
+  td.addRule("iframeVideo", {
+    filter: "iframe",
+    replacement: (_content, node) => {
+      const src = (node as Element).getAttribute("src");
+      if (!src) return "";
+      // Validate the resolved URL — `iframeSrcToWatchUrl` only normalizes
+      // protocol-relative `//host/...` for known providers, so an iframe
+      // with `src="javascript:..."` would otherwise pass through verbatim.
+      const url = iframeSrcToWatchUrl(src);
+      if (!isSafeMediaUrl(url)) return "";
+      return `\n[Video](${url})\n`;
+    },
+  });
+
+  td.addRule("videoLink", {
+    filter: "video",
+    replacement: (_content, node) => {
+      const el = node as Element;
+      const src = el.getAttribute("src") ?? el.querySelector("source")?.getAttribute("src");
+      if (!src || !isSafeMediaUrl(src)) return "";
+      return `\n[Video](${src})\n`;
+    },
+  });
+
+  // WP glossary tooltips: the visible term lives in the outer span, the inner
+  // .glossary-item-hidden-content holds the full definition. Drop the hidden
+  // span so we don't inline the entire glossary entry into prose.
+  td.addRule("wpGlossaryHidden", {
+    filter: (node) => {
+      if (node.nodeName !== "SPAN") return false;
+      const cls = (node as Element).getAttribute("class") ?? "";
+      return cls.includes("glossary-item-hidden-content");
+    },
+    replacement: () => "",
+  });
+
+  turndownInstance = td;
+  return td;
+}
+
+/**
+ * Convert HTML to markdown via Turndown over a linkedom DOM. See
+ * `reencodeCodeText` for why the body is pre-processed before parsing.
+ */
 export function htmlToMarkdown(html: string): string {
-  let md = html;
-
-  md = md.replace(/ fve-[a-z0-9-]+="[^"]*"/g, "");
-
-  md = md.replace(/<img[^>]*src=["']([^"']+)["'][^>]*alt=["']([^"']*)["'][^>]*\/?>/gi, "![$2]($1)");
-  md = md.replace(/<img[^>]*alt=["']([^"']*)["'][^>]*src=["']([^"']+)["'][^>]*\/?>/gi, "![$1]($2)");
-  md = md.replace(/<img[^>]*src=["']([^"']+)["'][^>]*\/?>/gi, "![]($1)");
-
-  md = md.replace(/<a[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi, (_, href, text) => {
-    return isSafeLinkHref(href) ? `[${text}](${href})` : text;
-  });
-
-  md = md.replace(/<iframe[^>]*src=["']([^"']+)["'][^>]*>[\s\S]*?<\/iframe>/gi, (_, src) => {
-    const videoUrl = iframeSrcToWatchUrl(src);
-    return `\n[Video](${videoUrl})\n`;
-  });
-
-  md = md.replace(/<video[^>]*src=["']([^"']+)["'][^>]*>[\s\S]*?<\/video>/gi, "\n[Video]($1)\n");
-  md = md.replace(
-    /<video[^>]*>[\s\S]*?<source[^>]*src=["']([^"']+)["'][^>]*\/?>/gi,
-    "\n[Video]($1)\n",
-  );
-
-  md = md.replace(
-    /<pre[^>]*>\s*<code[^>]*>([\s\S]*?)<\/code>\s*<\/pre>/gi,
-    (_, code) => `\n\`\`\`\n${decodeHtmlEntities(code)}\n\`\`\`\n`,
-  );
-
-  md = md.replace(/<(?:strong|b)(?:\s[^>]*)?>|<\/(?:strong|b)>/gi, "**");
-  md = md.replace(/<(?:em|i)(?:\s[^>]*)?>|<\/(?:em|i)>/gi, "*");
-  md = md.replace(/<code(?:\s[^>]*)?>|<\/code>/gi, "`");
-
-  md = md.replace(/<h([1-6])[^>]*>([\s\S]*?)<\/h\1>/gi, (_, level, text) => {
-    return `\n\n${"#".repeat(Number(level))} ${text}\n\n`;
-  });
-
-  md = md.replace(/<li[^>]*>([\s\S]*?)<\/li>/gi, "\n- $1");
-
-  md = md.replace(/<\/(?:p|div|blockquote|ul|ol)>/gi, "\n\n");
-  md = md.replace(/<(?:p|div|blockquote|ul|ol)(?:\s[^>]*)?>/gi, "\n");
-  md = md.replace(/<br\s*\/?>/gi, "\n");
-  md = md.replace(/<hr\s*\/?>/gi, "\n---\n");
-
-  md = md.replace(/<[^>]+>/g, "");
-  md = md.replace(/&nbsp;/g, " ");
-
-  md = md.replace(/\n{3,}/g, "\n\n");
-
-  return md.trim();
+  if (!html || !html.trim()) return "";
+  const safe = reencodeCodeText(html);
+  const { document } = parseHTML(`<!doctype html><html><body>${safe}</body></html>`);
+  // linkedom's HTMLBodyElement is structurally compatible with the DOM
+  // HTMLElement @types/turndown expects but not nominally identical, so the
+  // double cast satisfies TS without lying about a single hop.
+  const md = getTurndown().turndown(document.body as unknown as HTMLElement);
+  return md
+    .replace(/ /g, " ") // nbsp→space
+    .replace(/^([-*+])   /gm, "$1 ") // collapse Turndown's 4-char list indent at root
+    .replace(/^(\d+)\.  /gm, "$1. ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 export function decodeHtmlEntities(text: string): string {

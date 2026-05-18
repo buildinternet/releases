@@ -1,0 +1,162 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"
+	xmlns:content="http://purl.org/rss/1.0/modules/content/"
+	xmlns:dc="http://purl.org/dc/elements/1.1/"
+	xmlns:wfw="http://wellformedweb.org/CommentAPI/"
+	xmlns:slash="http://purl.org/rss/1.0/modules/slash/">
+<channel>
+	<title>WordPress Core Dev Notes</title>
+	<link>https://make.wordpress.org/core/</link>
+	<description>Fixture: a single item from make.wordpress.org/core/feed/ used to lock in the PHP-code-block formatting regression fix (see release rel_t9fAnizXt0rM0vPDC48ds).</description>
+	<item>
+		<title>Removing title attributes in author link functions</title>
+		<link>https://make.wordpress.org/core/2026/05/14/removing-title-attributes-in-author-link-functions/</link>
+					<comments>https://make.wordpress.org/core/2026/05/14/removing-title-attributes-in-author-link-functions/#respond</comments>
+		
+		<dc:creator><![CDATA[Stephen Bernhardt]]></dc:creator>
+		<pubDate>Thu, 14 May 2026 15:00:00 +0000</pubDate>
+				<category><![CDATA[General]]></category>
+		<category><![CDATA[7-0]]></category>
+		<category><![CDATA[dev-notes]]></category>
+		<category><![CDATA[dev-notes-7-0]]></category>
+		<guid isPermaLink="false">https://make.wordpress.org/core/?p=123096</guid>
+
+					<description><![CDATA[WordPress 7.0 removes—or facilitates removing—title attributes from links relating to post authors in the following functions: get_the_author_link(), the_author_link(), get_the_author_posts_link(), the_author_posts_link(), and wp_list_authors().]]></description>
+										<content:encoded><![CDATA[<p class="wp-block-paragraph">WordPress 7.0 removes—or facilitates removing—<code>title</code> attributes from links relating to post authors.</p>
+
+
+
+<h2 class="wp-block-heading">Author’s Website link (from the user profile)</h2>
+
+
+
+<p class="wp-block-paragraph"><code>get_the_author_link()</code> and <code>the_author_link()</code> have a new <code>$use_title_attr</code> parameter, which can be set to <code>false</code> to remove the “Visit <i>Author</i>’s website” tooltip. By default, these functions continue to include a <code>title</code> attribute.</p>
+
+
+
+<pre class="wp-block-code" style="font-size:1em"><code class="">&lt;?php
+// either
+the_author_link();
+// or
+echo get_the_author_link();</code></pre>
+
+
+
+<p class="wp-block-paragraph">Default output is the same in 7.0 as in 6.9:<br><code>&lt;a href="https://author.example.com" title="Visit Author&amp;#8217;s website" rel="author external"&gt;Author&lt;/a&gt;</code></p>
+
+
+
+<pre class="wp-block-code" style="font-size:1em"><code class="">&lt;?php
+// either
+the_author_link( false );
+// or
+echo get_the_author_link( false );</code></pre>
+
+
+
+<p class="wp-block-paragraph">Output in 7.0:<br><code>&lt;a href="https://author.example.com" rel="author external"&gt;Author&lt;/a&gt;</code></p>
+
+
+
+<h2 class="wp-block-heading">Author’s posts archive link</h2>
+
+
+
+<p class="wp-block-paragraph">The “Posts by <i>Author</i>” <code>title</code> attribute is removed from the link by default. However, the <code>title</code> text is still available for use within the <code>the_author_posts_link</code> hook, along with the author’s display name.</p>
+
+
+
+<pre class="wp-block-code" style="font-size:1em"><code class="">&lt;?php
+// either
+the_author_posts_link();
+// or
+echo get_the_author_posts_link();</code></pre>
+
+
+
+<p class="wp-block-paragraph">Output in 6.9:<br><code>&lt;a href="https://example.org/author/author/" title="Posts by Author" rel="author"&gt;Author&lt;/a&gt;</code></p>
+
+
+
+<p class="wp-block-paragraph">Output in 7.0:<br><code>&lt;a href="https://example.org/author/author/" rel="author"&gt;Author&lt;/a&gt;</code></p>
+
+
+
+<h3 class="wp-block-heading">Editing the posts link text</h3>
+
+
+
+<p class="wp-block-paragraph">To replace the author name with the “Posts by <i>Author</i>” text, use multiple arguments in the <code>the_author_posts_link</code> filter.</p>
+
+
+<div class="wp-block-syntaxhighlighter-code "><pre class="brush: php; title: ; notranslate">
+&lt;?php
+/**
+ * Edits text for the link to the author page of the author of the current post.
+ *
+ * Add "Posts by" before the author's display name (or after the name in some translations):
+ * `&lt;a href="https://example.org/author/author/" rel="author"&gt;Posts by Author&lt;/a&gt;`
+ *
+ * @param string $link   HTML link.
+ * @param string $author Author's display name. Default empty string.
+ * @param string $title  Text originally used for a title attribute. Default empty string.
+ */
+function wpdocs_author_posts_link( $link, $author = '', $title = '' ) {
+	// In WordPress versions prior to 7.0, $author and $title would be empty.
+	if ( '' !== $title &amp;&amp; '' !== $author ) {
+		$link = str_replace(
+			'&gt;' . $author . '&lt;/a&gt;',
+			'&gt;' . esc_html( $title ) . '&lt;/a&gt;', 
+			$link
+		);
+	}
+
+	return $link;
+}
+add_filter( 'the_author_posts_link', 'wpdocs_author_posts_link', 10, 3 );
+</pre></div>
+
+
+<h2 class="wp-block-heading">Authors list HTML</h2>
+
+
+
+<p class="wp-block-paragraph"><code>wp_list_authors()</code> simply removes the “Posts by <i>Author</i>” tooltips.</p>
+
+
+
+<pre class="wp-block-code" style="font-size:1em"><code class="">&lt;?php
+wp_list_authors(
+	array(
+		'html' =&gt; true // This is true by default.
+	)
+);</code></pre>
+
+
+
+<p class="wp-block-paragraph">Output in 6.9:<br><code>&lt;li&gt;&lt;a href="https://example.org/author/author/" title="Posts by Author"&gt;Author&lt;/a&gt;&lt;/li&gt;&lt;li&gt;&lt;a href="https://example.org/author/editor/" title="Posts by Editor"&gt;Editor&lt;/a&gt;&lt;/li&gt;</code></p>
+
+
+
+<p class="wp-block-paragraph">Output in 7.0:<br><code>&lt;li&gt;&lt;a href="https://example.org/author/author/"&gt;Author&lt;/a&gt;&lt;/li&gt;&lt;li&gt;&lt;a href="https://example.org/author/editor/"&gt;Editor&lt;/a&gt;&lt;/li&gt;</code></p>
+
+
+
+<p class="wp-block-paragraph">For more information, refer to <a href="https://core.trac.wordpress.org/ticket/62835">#62835</a>.</p>
+
+
+
+<hr class="wp-block-separator has-alpha-channel-opacity">
+
+
+
+<p class="wp-block-paragraph">Props to <a href="https://profiles.wordpress.org/amykamala/" class="mention"><span class="mentions-prefix">@</span>amykamala</a> and <a href="https://profiles.wordpress.org/audrasjb/" class="mention"><span class="mentions-prefix">@</span>audrasjb</a> for review.</p>
+<p class="o2-appended-tags"><a href="https://make.wordpress.org/core/tag/7-0/" class="tag"><span class="tag-prefix">#</span>7-0</a>, <a href="https://make.wordpress.org/core/tag/dev-notes/" class="tag"><span class="tag-prefix">#</span>dev-notes</a>, <a href="https://make.wordpress.org/core/tag/dev-notes-7-0/" class="tag"><span class="tag-prefix">#</span>dev-notes-7-0</a></p>]]></content:encoded>
+					
+					<wfw:commentRss>https://make.wordpress.org/core/2026/05/14/removing-title-attributes-in-author-link-functions/feed/</wfw:commentRss>
+			<slash:comments>0</slash:comments>
+		
+		
+		<post-id xmlns="com-wordpress:feed-additions:1">123096</post-id>	</item>
+</channel>
+</rss>
