@@ -1416,6 +1416,111 @@ workflowsRoutes.get("/workflows/batch-summarize/status/:instanceId", async (c) =
   }
 });
 
+// ── POST /workflows/batch-overview ───────────────────────────────────────────
+//
+// Admin trigger for the BatchOverviewWorkflow. Runs unconditionally (caller
+// made a deliberate decision); the cron path (when wired) self-gates via
+// BATCH_OVERVIEW_ENABLED.
+//
+// Body: { minNewReleases?, minOverviewAgeDays?, maxCandidates?, orgs?, maxCostUsd? }
+// Returns: { instanceId, statusUrl }
+
+interface BatchOverviewBody {
+  minNewReleases?: number;
+  minOverviewAgeDays?: number;
+  maxCandidates?: number;
+  orgs?: string[];
+  maxCostUsd?: number;
+}
+
+workflowsRoutes.post("/workflows/batch-overview", async (c) => {
+  const body = await c.req.json<BatchOverviewBody>().catch(() => ({}) as BatchOverviewBody);
+
+  if (!c.env.BATCH_OVERVIEW_WORKFLOW) {
+    return c.json(
+      { error: "service_unavailable", message: "BATCH_OVERVIEW_WORKFLOW binding not configured" },
+      503,
+    );
+  }
+
+  const scheduledTime = Date.now();
+  const params = {
+    scheduledTime,
+    trigger: "admin" as const,
+    minNewReleases:
+      typeof body.minNewReleases === "number" && body.minNewReleases >= 0
+        ? body.minNewReleases
+        : undefined,
+    minOverviewAgeDays:
+      typeof body.minOverviewAgeDays === "number" && body.minOverviewAgeDays >= 0
+        ? body.minOverviewAgeDays
+        : undefined,
+    maxCandidates:
+      typeof body.maxCandidates === "number" && body.maxCandidates > 0
+        ? body.maxCandidates
+        : undefined,
+    orgs: Array.isArray(body.orgs) && body.orgs.length > 0 ? body.orgs : undefined,
+    maxCostUsd:
+      typeof body.maxCostUsd === "number" && body.maxCostUsd > 0 ? body.maxCostUsd : undefined,
+  };
+
+  const instance = await c.env.BATCH_OVERVIEW_WORKFLOW.create({
+    id: `batch-overview-admin-${scheduledTime}`,
+    params,
+  });
+
+  const instanceId: string = (instance as unknown as { id: string }).id;
+
+  logEvent("info", {
+    component: "batch-overview",
+    event: "admin-trigger",
+    instanceId,
+    minNewReleases: params.minNewReleases,
+    minOverviewAgeDays: params.minOverviewAgeDays,
+    maxCandidates: params.maxCandidates,
+    orgs: params.orgs,
+    maxCostUsd: params.maxCostUsd,
+  });
+
+  return c.json({
+    instanceId,
+    statusUrl: `${c.env.ADMIN_BASE_URL ?? ""}/v1/workflows/batch-overview/status/${instanceId}`,
+  });
+});
+
+// ── GET /workflows/batch-overview/status/:instanceId ─────────────────────────
+//
+// Thin pass-through to Cloudflare's `WorkflowInstance.status()` mirroring the
+// batch-summarize status endpoint exactly.
+
+workflowsRoutes.get("/workflows/batch-overview/status/:instanceId", async (c) => {
+  const binding = c.env.BATCH_OVERVIEW_WORKFLOW;
+  if (!binding) {
+    return c.json(
+      { error: "service_unavailable", message: "BATCH_OVERVIEW_WORKFLOW binding not configured" },
+      503,
+    );
+  }
+  const instanceId = c.req.param("instanceId");
+  try {
+    const instance = await binding.get(instanceId);
+    const status = await instance.status();
+    return c.json({ instanceId, ...status });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (WORKFLOW_NOT_FOUND_RE.test(message)) {
+      return c.json({ error: "instance_not_found", message }, 404);
+    }
+    logEvent("error", {
+      component: "workflows-batch-overview-status",
+      event: "lookup-failed",
+      instanceId,
+      err: err instanceof Error ? err : String(err),
+    });
+    return c.json({ error: "internal_error", message }, 500);
+  }
+});
+
 workflowsRoutes.post("/workflows/discover", async (c) => {
   const body = await c.req.text();
   const res = await proxyToDiscovery(c, "/onboard", body);
