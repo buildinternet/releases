@@ -1,22 +1,23 @@
 /**
- * Tests for resolveReleaseIdsByUrl — the citation source-URL → release_id
- * resolver used by upsertOrgOverview.
+ * Tests for overview-upsert.ts.
  *
  * Coverage:
- * 1. Exact case-insensitive match
- * 2. Empty input
- * 3. Citation has fragment, release stored with bare URL → fallback resolves
- * 4. Citation has fragment, release has matching fragment → exact match wins
- * 5. Citation has fragment, release has different fragment → still null
- *    (intentional: see overview-upsert.ts header comment, #1003)
- * 6. Mixed batch — exact + fallback in one call
- * 7. Duplicate input URLs are de-duplicated
+ * 1. resolveReleaseIdsByUrl — exact + fragment-strip fallback (#1003)
+ * 2. upsertOrgOverview — first-write insert, second-write update,
+ *    citations replace-all, releaseId resolution at write time
  */
 
 import { describe, it, expect, beforeAll, beforeEach, afterAll } from "bun:test";
+import { eq, and } from "drizzle-orm";
 import { createTestDb, clearAllTables, type TestDatabase } from "../../../tests/db-helper.js";
-import { organizations, sources, releases } from "@buildinternet/releases-core/schema";
-import { resolveReleaseIdsByUrl } from "./overview-upsert.js";
+import {
+  organizations,
+  sources,
+  releases,
+  knowledgePages,
+  knowledgePageCitations,
+} from "@buildinternet/releases-core/schema";
+import { resolveReleaseIdsByUrl, upsertOrgOverview } from "./overview-upsert.js";
 
 // Cast bun-sqlite TestDb to the DrizzleD1Database shape our helpers accept.
 const asDb = (db: TestDatabase["db"]): any => db as any;
@@ -183,5 +184,223 @@ describe("resolveReleaseIdsByUrl", () => {
     ]);
     expect(out.size).toBe(1);
     expect(out.get("https://example.com/changelog/dedup")).toBe("rel_dedup");
+  });
+});
+
+describe("upsertOrgOverview", () => {
+  let tdb: TestDatabase;
+
+  beforeAll(() => {
+    tdb = createTestDb();
+  });
+
+  beforeEach(() => {
+    clearAllTables(tdb.db);
+    seedOrg(tdb);
+    seedSource(tdb);
+  });
+
+  afterAll(() => {
+    tdb.cleanup();
+  });
+
+  it("inserts a knowledge_pages row on first write", async () => {
+    const result = await upsertOrgOverview(asDb(tdb.db), {
+      orgId: "org_cit_01",
+      content: "First overview.",
+      citations: [],
+      releaseCount: 5,
+      lastContributingReleaseAt: "2026-05-01T00:00:00Z",
+    });
+
+    expect(result.pageId).toMatch(/^kp_/);
+    expect(result.citationsWritten).toBe(0);
+
+    const [row] = await tdb.db
+      .select()
+      .from(knowledgePages)
+      .where(and(eq(knowledgePages.scope, "org"), eq(knowledgePages.orgId, "org_cit_01")));
+    expect(row?.content).toBe("First overview.");
+    expect(row?.releaseCount).toBe(5);
+    expect(row?.lastContributingReleaseAt).toBe("2026-05-01T00:00:00Z");
+    expect(row?.generatedAt).toBeTruthy();
+    expect(row?.updatedAt).toBeTruthy();
+  });
+
+  it("updates the existing row on the second write (last-write-wins)", async () => {
+    const first = await upsertOrgOverview(asDb(tdb.db), {
+      orgId: "org_cit_01",
+      content: "First overview.",
+      citations: [],
+      releaseCount: 5,
+      lastContributingReleaseAt: "2026-05-01T00:00:00Z",
+    });
+
+    const second = await upsertOrgOverview(asDb(tdb.db), {
+      orgId: "org_cit_01",
+      content: "Second overview.",
+      citations: [],
+      releaseCount: 12,
+      lastContributingReleaseAt: "2026-05-10T00:00:00Z",
+    });
+
+    // ON CONFLICT branch retains the original row id; the second call should
+    // return that same id rather than minting a new one.
+    expect(second.pageId).toBe(first.pageId);
+
+    const rows = await tdb.db
+      .select()
+      .from(knowledgePages)
+      .where(and(eq(knowledgePages.scope, "org"), eq(knowledgePages.orgId, "org_cit_01")));
+    expect(rows.length).toBe(1);
+    expect(rows[0]!.content).toBe("Second overview.");
+    expect(rows[0]!.releaseCount).toBe(12);
+    expect(rows[0]!.lastContributingReleaseAt).toBe("2026-05-10T00:00:00Z");
+  });
+
+  it("writes citation rows and resolves releaseId by URL match", async () => {
+    seedRelease(tdb, {
+      id: "rel_cited",
+      url: "https://example.com/changelog/feature-x",
+    });
+
+    const result = await upsertOrgOverview(asDb(tdb.db), {
+      orgId: "org_cit_01",
+      content: "Mentions feature X.",
+      citations: [
+        {
+          startIndex: 0,
+          endIndex: 9,
+          sourceUrl: "https://example.com/changelog/feature-x",
+          title: "Feature X",
+          citedText: "Feature X launched.",
+        },
+      ],
+      releaseCount: 1,
+      lastContributingReleaseAt: "2026-05-01T00:00:00Z",
+    });
+
+    expect(result.citationsWritten).toBe(1);
+
+    const citationRows = await tdb.db
+      .select()
+      .from(knowledgePageCitations)
+      .where(eq(knowledgePageCitations.knowledgePageId, result.pageId));
+    expect(citationRows.length).toBe(1);
+    expect(citationRows[0]!.sourceUrl).toBe("https://example.com/changelog/feature-x");
+    expect(citationRows[0]!.releaseId).toBe("rel_cited");
+  });
+
+  it("leaves releaseId null when no release matches the citation URL", async () => {
+    const result = await upsertOrgOverview(asDb(tdb.db), {
+      orgId: "org_cit_01",
+      content: "Mentions a missing release.",
+      citations: [
+        {
+          startIndex: 0,
+          endIndex: 9,
+          sourceUrl: "https://example.com/changelog/no-such-release",
+          title: null,
+          citedText: "Cited",
+        },
+      ],
+      releaseCount: 0,
+      lastContributingReleaseAt: null,
+    });
+
+    const [citation] = await tdb.db
+      .select()
+      .from(knowledgePageCitations)
+      .where(eq(knowledgePageCitations.knowledgePageId, result.pageId));
+    expect(citation?.releaseId).toBeNull();
+  });
+
+  it("replaces all citations on rewrite", async () => {
+    seedRelease(tdb, { id: "rel_a", url: "https://example.com/a" });
+    seedRelease(tdb, { id: "rel_b", url: "https://example.com/b" });
+
+    const first = await upsertOrgOverview(asDb(tdb.db), {
+      orgId: "org_cit_01",
+      content: "First.",
+      citations: [
+        {
+          startIndex: 0,
+          endIndex: 5,
+          sourceUrl: "https://example.com/a",
+          title: "A",
+          citedText: "cited",
+        },
+        {
+          startIndex: 0,
+          endIndex: 5,
+          sourceUrl: "https://example.com/a",
+          title: "A again",
+          citedText: "cited",
+        },
+      ],
+      releaseCount: 1,
+      lastContributingReleaseAt: "2026-05-01T00:00:00Z",
+    });
+    expect(first.citationsWritten).toBe(2);
+
+    const second = await upsertOrgOverview(asDb(tdb.db), {
+      orgId: "org_cit_01",
+      content: "Second.",
+      citations: [
+        {
+          startIndex: 0,
+          endIndex: 6,
+          sourceUrl: "https://example.com/b",
+          title: "B",
+          citedText: "cited",
+        },
+      ],
+      releaseCount: 2,
+      lastContributingReleaseAt: "2026-05-02T00:00:00Z",
+    });
+    expect(second.citationsWritten).toBe(1);
+
+    const citationRows = await tdb.db
+      .select()
+      .from(knowledgePageCitations)
+      .where(eq(knowledgePageCitations.knowledgePageId, second.pageId));
+    expect(citationRows.length).toBe(1);
+    expect(citationRows[0]!.sourceUrl).toBe("https://example.com/b");
+  });
+
+  it("clears prior citations when the new write has zero citations", async () => {
+    seedRelease(tdb, { id: "rel_a", url: "https://example.com/a" });
+
+    const first = await upsertOrgOverview(asDb(tdb.db), {
+      orgId: "org_cit_01",
+      content: "First.",
+      citations: [
+        {
+          startIndex: 0,
+          endIndex: 5,
+          sourceUrl: "https://example.com/a",
+          title: "A",
+          citedText: "cited",
+        },
+      ],
+      releaseCount: 1,
+      lastContributingReleaseAt: "2026-05-01T00:00:00Z",
+    });
+    expect(first.citationsWritten).toBe(1);
+
+    const second = await upsertOrgOverview(asDb(tdb.db), {
+      orgId: "org_cit_01",
+      content: "Second.",
+      citations: [],
+      releaseCount: 1,
+      lastContributingReleaseAt: "2026-05-02T00:00:00Z",
+    });
+    expect(second.citationsWritten).toBe(0);
+
+    const citationRows = await tdb.db
+      .select()
+      .from(knowledgePageCitations)
+      .where(eq(knowledgePageCitations.knowledgePageId, second.pageId));
+    expect(citationRows.length).toBe(0);
   });
 });
