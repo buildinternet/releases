@@ -96,6 +96,16 @@ const RETRY_SHORT: WorkflowStepConfig = {
   timeout: "5 minutes",
 };
 
+/**
+ * Single-shot config for steps that perform billed external work. A retry
+ * would re-submit the Anthropic batch and double-charge; better to fail the
+ * workflow loudly than to silently double-pay.
+ */
+const NO_RETRY: WorkflowStepConfig = {
+  retries: { limit: 0, delay: "0 seconds", backoff: "constant" },
+  timeout: "2 minutes",
+};
+
 const RETRY_POLL: WorkflowStepConfig = {
   retries: { limit: 1, delay: "30 seconds", backoff: "exponential" },
   timeout: "6 hours",
@@ -252,56 +262,57 @@ export class BatchOverviewWorkflow extends WorkflowEntrypoint<
 
     // ── Step 2: submit ─────────────────────────────────────────────────────
 
-    const submitResult = await step.do(
-      "submit",
-      RETRY_SHORT,
-      async (): Promise<{ batchRunId: string; anthropicBatchId: string }> => {
-        const apiKey = await getAnthropicKey(env);
-        if (!apiKey) {
-          throw new NonRetryableError("ANTHROPIC_API_KEY not configured");
-        }
+    // Submit is split from record-submit so a transient D1 failure on the
+    // recording side doesn't retry the paid Anthropic submission. submit-batch
+    // is single-shot (NO_RETRY); record-submit is idempotent on
+    // (anthropicBatchId) so it can safely retry.
+    const anthropicBatchId = await step.do("submit-batch", NO_RETRY, async (): Promise<string> => {
+      const apiKey = await getAnthropicKey(env);
+      if (!apiKey) {
+        throw new NonRetryableError("ANTHROPIC_API_KEY not configured");
+      }
 
-        const gatewayOpts = await resolveGatewayOpts(env);
-        const client = buildAnthropicClient({ apiKey, ...gatewayOpts });
+      const gatewayOpts = await resolveGatewayOpts(env);
+      const client = buildAnthropicClient({ apiKey, ...gatewayOpts });
 
-        // One batch request per org. `custom_id = orgId` so collectResults
-        // can look up the bundle on the way back.
-        const messageRequests = bundles.map((b) => ({
-          custom_id: b.orgId,
-          params: buildOverviewRequest(b.request),
-        }));
+      // One batch request per org. `custom_id = orgId` so collectResults
+      // can look up the bundle on the way back.
+      const messageRequests = bundles.map((b) => ({
+        custom_id: b.orgId,
+        params: buildOverviewRequest(b.request),
+      }));
 
-        const submitted = await submitBatch(client, messageRequests);
+      const submitted = await submitBatch(client, messageRequests);
+      return submitted.id;
+    });
 
-        const batchRunId = await recordBatchSubmit(db, {
-          anthropicBatchId: submitted.id,
-          caller: "workflow",
-          model: MODEL,
-          estCostUsd,
-          requestCountTotal: bundles.length,
-          callerContext: {
-            trigger,
-            kind: "overview",
-            orgs: orgs ?? null,
-            minNewReleases,
-            minOverviewAgeDays,
-          },
-        });
+    const batchRunId = await step.do("record-submit", RETRY_SHORT, async (): Promise<string> => {
+      const id = await recordBatchSubmit(db, {
+        anthropicBatchId,
+        caller: "workflow",
+        model: MODEL,
+        estCostUsd,
+        requestCountTotal: bundles.length,
+        callerContext: {
+          trigger,
+          kind: "overview",
+          orgs: orgs ?? null,
+          minNewReleases,
+          minOverviewAgeDays,
+        },
+      });
 
-        logEvent("info", {
-          component: "batch-overview",
-          event: "batch-submitted",
-          batchRunId,
-          anthropicBatchId: submitted.id,
-          requestCount: bundles.length,
-          estCostUsd,
-        });
+      logEvent("info", {
+        component: "batch-overview",
+        event: "batch-submitted",
+        batchRunId: id,
+        anthropicBatchId,
+        requestCount: bundles.length,
+        estCostUsd,
+      });
 
-        return { batchRunId, anthropicBatchId: submitted.id };
-      },
-    );
-
-    const { batchRunId, anthropicBatchId } = submitResult;
+      return id;
+    });
 
     // ── Step 3: poll-and-collect ───────────────────────────────────────────
 
@@ -437,6 +448,20 @@ export class BatchOverviewWorkflow extends WorkflowEntrypoint<
 
         const { body, citations, usage } = outcome.value;
 
+        // Cost is paid the moment Anthropic ran the request — count it before
+        // any persistence check so empty-body / upsert-failure rows still show
+        // up in actualCostUsd.
+        const rowCost = estimateCost(
+          {
+            inputTokens: usage.input + usage.cacheRead,
+            cacheWriteTokens: usage.cacheCreate,
+            outputTokens: usage.output,
+          },
+          MODEL,
+          { batch: true },
+        );
+        actualCostUsd += rowCost?.totalUsd ?? 0;
+
         if (!body.trim()) {
           failed++;
           if (errorSampleIds.length < 20) errorSampleIds.push(orgId);
@@ -459,16 +484,6 @@ export class BatchOverviewWorkflow extends WorkflowEntrypoint<
             lastContributingReleaseAt: bundle.lastContributingReleaseAt,
           });
 
-          const rowCost = estimateCost(
-            {
-              inputTokens: usage.input + usage.cacheRead,
-              cacheWriteTokens: usage.cacheCreate,
-              outputTokens: usage.output,
-            },
-            MODEL,
-            { batch: true },
-          );
-          actualCostUsd += rowCost?.totalUsd ?? 0;
           succeeded++;
         } catch (err: unknown) {
           failed++;
@@ -502,7 +517,7 @@ export class BatchOverviewWorkflow extends WorkflowEntrypoint<
           expired: finalBatch.request_counts.expired,
           canceled: finalBatch.request_counts.canceled,
         },
-        actualCostUsd: succeeded > 0 ? actualCostUsd : null,
+        actualCostUsd: actualCostUsd > 0 ? actualCostUsd : null,
         errorSummary,
       }).catch((err) => {
         logEvent("warn", {

@@ -71,6 +71,15 @@ const DEFAULT_MIN_NEW_RELEASES = 20;
 const DEFAULT_MIN_OVERVIEW_AGE_DAYS = 14;
 const DEFAULT_MAX_CANDIDATES = 100;
 
+/** Per-statement IN-clause cap. D1 limits prepared statements to 100 binds. */
+const IN_CLAUSE_CHUNK = 90;
+
+function chunk<T>(items: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  return out;
+}
+
 /**
  * Find orgs eligible for overview regeneration. Returns a light per-org shape
  * the workflow can chunk through before paying the cost of per-org input
@@ -116,7 +125,12 @@ export async function fetchOverviewCandidates(
   ];
   if (orgSlugs && orgSlugs.length > 0) {
     const lowered = orgSlugs.map((s) => s.toLowerCase());
-    conditions.push(sql`LOWER(${organizationsPublic.slug}) IN ${lowered}`);
+    // OR together IN-clause chunks so a long admin POST org list doesn't
+    // overflow D1's 100-bind limit on a single statement.
+    const chunks = chunk(lowered, IN_CLAUSE_CHUNK).map(
+      (c) => sql`LOWER(${organizationsPublic.slug}) IN ${c}`,
+    );
+    conditions.push(chunks.length === 1 ? chunks[0]! : or(...chunks)!);
   }
 
   const rows = await db
@@ -260,18 +274,18 @@ export async function fetchOverviewInputsForOrg(
 
   // One IN-bound SELECT instead of N per-source SELECTs. Up to ~20 sources per
   // org × 100 orgs = ~2,000 round-trips becomes ~100 — well under D1's per-
-  // request statement budget. Caller groups by sourceId locally.
+  // request statement budget. Caller groups by sourceId locally. The IN clause
+  // is OR-chunked at 90 binds to defend against the rare orgs that exceed
+  // D1's 100-bind cap on a single statement.
   const sourceIds = activeSources.map((s) => s.id);
+  const sourceIdChunks = chunk(sourceIds, IN_CLAUSE_CHUNK).map((c) =>
+    inArray(releases.sourceId, c),
+  );
+  const sourceCondition = sourceIdChunks.length === 1 ? sourceIdChunks[0]! : or(...sourceIdChunks)!;
   const allRows = await db
     .select()
     .from(releases)
-    .where(
-      and(
-        inArray(releases.sourceId, sourceIds),
-        gte(releases.publishedAt, cutoff),
-        eq(releases.suppressed, false),
-      ),
-    )
+    .where(and(sourceCondition, gte(releases.publishedAt, cutoff), eq(releases.suppressed, false)))
     .orderBy(desc(releases.publishedAt));
 
   const releasesBySource = new Map<string, Release[]>();

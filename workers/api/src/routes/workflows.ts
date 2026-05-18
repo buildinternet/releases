@@ -1443,6 +1443,25 @@ workflowsRoutes.post("/workflows/batch-overview", async (c) => {
     );
   }
 
+  // When `orgs` is explicitly supplied, validate it. Skips would let
+  // non-string entries through to `LOWER(s)` in the eligibility query.
+  let validOrgs: string[] | undefined;
+  if (body.orgs !== undefined) {
+    if (!Array.isArray(body.orgs)) {
+      return c.json({ error: "bad_request", message: "`orgs` must be an array of strings" }, 400);
+    }
+    validOrgs = body.orgs
+      .filter((s): s is string => typeof s === "string")
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+    if (validOrgs.length === 0) {
+      return c.json(
+        { error: "bad_request", message: "`orgs` must contain at least one non-empty string" },
+        400,
+      );
+    }
+  }
+
   const scheduledTime = Date.now();
   const params = {
     scheduledTime,
@@ -1459,7 +1478,7 @@ workflowsRoutes.post("/workflows/batch-overview", async (c) => {
       typeof body.maxCandidates === "number" && body.maxCandidates > 0
         ? body.maxCandidates
         : undefined,
-    orgs: Array.isArray(body.orgs) && body.orgs.length > 0 ? body.orgs : undefined,
+    orgs: validOrgs,
     maxCostUsd:
       typeof body.maxCostUsd === "number" && body.maxCostUsd > 0 ? body.maxCostUsd : undefined,
   };
