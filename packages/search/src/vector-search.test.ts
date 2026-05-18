@@ -172,6 +172,57 @@ test("hybridSearch: honors topK cap", async () => {
   expect(result.length).toBe(10);
 });
 
+test("hybridSearch: recencyRank lifts a tied candidate above its peer", async () => {
+  // rel_old leads vector but trails FTS; rel_new is the inverse. Their RRF
+  // scores are identical (1/61 + 1/62 each), so baseline ordering falls to
+  // the first-seen tiebreaker — vector list runs first, so rel_old wins.
+  // With recency favoring rel_new, the third RRF input breaks the tie.
+  const ftsHits: HybridFtsHit[] = [{ id: "rel_new" }, { id: "rel_old" }];
+  const releaseIndex = fakeIndex([
+    { id: "rel_old", score: 0.9 },
+    { id: "rel_new", score: 0.89 },
+  ]);
+
+  const baseline = await hybridSearch({
+    query: "tied",
+    ftsSearch: async () => ftsHits,
+    vectorIndexes: [{ name: "releases-v1", kind: "release", index: releaseIndex }],
+    embed: async () => [0.1],
+  });
+  expect(baseline.map((r) => r.id)).toEqual(["rel_old", "rel_new"]);
+
+  const boosted = await hybridSearch({
+    query: "tied",
+    ftsSearch: async () => ftsHits,
+    vectorIndexes: [{ name: "releases-v1", kind: "release", index: releaseIndex }],
+    embed: async () => [0.1],
+    // rel_new is the more recent of the two — should win after the boost.
+    recencyRank: async (ids) =>
+      [...ids].toSorted((a, b) => (a === "rel_new" ? -1 : b === "rel_new" ? 1 : 0)),
+  });
+  expect(boosted.map((r) => r.id)).toEqual(["rel_new", "rel_old"]);
+  // Recency only re-orders candidates already in the result; appearances
+  // for items in all three lists must be 3.
+  const newer = boosted.find((r) => r.id === "rel_new")!;
+  expect(newer.appearances).toBe(3);
+});
+
+test("hybridSearch: recencyRank throw is swallowed and base fusion stands", async () => {
+  const ftsHits: HybridFtsHit[] = [{ id: "rel_a" }, { id: "rel_b" }];
+  const releaseIndex = fakeIndex([{ id: "rel_a", score: 0.9 }]);
+  const result = await hybridSearch({
+    query: "q",
+    ftsSearch: async () => ftsHits,
+    vectorIndexes: [{ name: "releases-v1", kind: "release", index: releaseIndex }],
+    embed: async () => [0.1],
+    recencyRank: async () => {
+      throw new Error("D1 unavailable");
+    },
+  });
+  // Same shape as a recencyRank-less run.
+  expect(result.map((r) => r.id)).toEqual(["rel_a", "rel_b"]);
+});
+
 test("hybridSearch: empty query short-circuits and never builds a query vector", async () => {
   let embedCalls = 0;
   const ftsHits: HybridFtsHit[] = [{ id: "rel_1" }, { id: "rel_2" }];
