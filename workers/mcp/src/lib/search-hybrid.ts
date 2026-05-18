@@ -18,6 +18,7 @@ import {
   collectionMembers,
   organizationsPublic,
 } from "@buildinternet/releases-core/schema";
+import { getEntityType } from "@buildinternet/releases-core/id";
 import {
   hybridSearch,
   type VectorizeIndex as HybridVectorizeIndex,
@@ -359,6 +360,32 @@ export async function runHybridSearch(
           return ids.map((id) => ({ id }));
         };
 
+  // Mirrors workers/api/src/lib/search-hybrid.ts. Chunks intentionally
+  // skipped (file slices, not dated). Chunked at 90 ids per statement to
+  // stay under D1's 100-bind cap.
+  const recencyRank = async (ids: string[]): Promise<string[]> => {
+    const releaseIds = ids.filter((id) => getEntityType(id) === "release");
+    if (releaseIds.length === 0) return [];
+    const chunks: string[][] = [];
+    for (let i = 0; i < releaseIds.length; i += 90) chunks.push(releaseIds.slice(i, i + 90));
+    const results = await Promise.all(
+      chunks.map((chunk) =>
+        db.all<{ id: string; rankAt: string | null }>(sql`
+          SELECT id, COALESCE(published_at, created_at) as rankAt
+          FROM releases
+          WHERE id IN (${sql.join(
+            chunk.map((id) => sql`${id}`),
+            sql`, `,
+          )})
+        `),
+      ),
+    );
+    return results
+      .flat()
+      .toSorted((a, b) => (b.rankAt ?? "").localeCompare(a.rankAt ?? ""))
+      .map((r) => r.id);
+  };
+
   let fused: Awaited<ReturnType<typeof hybridSearch>>;
   try {
     fused = await hybridSearch({
@@ -367,6 +394,7 @@ export async function runHybridSearch(
       ftsSearch: ftsSearchFn,
       vectorIndexes,
       embed: embedder,
+      recencyRank,
     });
   } catch (err) {
     logEvent("warn", { component: "mcp-search-hybrid", event: "degraded-to-fts", err });

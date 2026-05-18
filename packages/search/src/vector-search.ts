@@ -123,6 +123,12 @@ export interface HybridSearchParams {
   vectorIndexes: HybridVectorIndex[];
   embed: (text: string) => Promise<number[]>;
   filter?: Record<string, unknown>;
+  /**
+   * Optional third RRF input — re-orders the union of FTS + vector IDs by
+   * recency. Positioned last so it never wins the first-seen kind/source
+   * tiebreaker; thrown errors are swallowed and the base fusion stands.
+   */
+  recencyRank?: (ids: string[]) => Promise<string[]>;
 }
 
 export interface HybridSearchResult {
@@ -212,6 +218,35 @@ export async function hybridSearch(params: HybridSearchParams): Promise<HybridSe
       item: { source: "fts", kind: "release", fromVector: false },
     })),
   );
+
+  if (params.recencyRank) {
+    const candidateIds = new Set<string>();
+    for (const vr of vectorResults) for (const m of vr.matches) candidateIds.add(m.id);
+    for (const h of ftsHits) candidateIds.add(h.id);
+    if (candidateIds.size > 0) {
+      try {
+        const ordered = await params.recencyRank(Array.from(candidateIds));
+        // Constrain to the candidate set and dedupe — a misbehaved callback
+        // could otherwise inflate scores via duplicate ranks or waste topK
+        // slots on ids that won't hydrate.
+        const seen = new Set<string>();
+        const orderedFiltered: string[] = [];
+        for (const id of ordered) {
+          if (!candidateIds.has(id) || seen.has(id)) continue;
+          seen.add(id);
+          orderedFiltered.push(id);
+        }
+        lists.push(
+          orderedFiltered.map((id) => ({
+            id,
+            item: { source: "recency", kind: "release", fromVector: false },
+          })),
+        );
+      } catch {
+        // Opportunistic boost — base fusion stands if the rank lookup fails.
+      }
+    }
+  }
 
   const fused = reciprocalRankFusion(lists);
 
