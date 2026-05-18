@@ -182,8 +182,7 @@ export async function fetchOverviewCandidates(
   // overview that would say nothing has changed.
   const isExplicitOrgList = Array.isArray(orgSlugs) && orgSlugs.length > 0;
   const eligible = rows.filter((r) => {
-    if (isExplicitOrgList) return r.recentReleaseCount > 0;
-    if (!r.overviewUpdatedAt) return r.recentReleaseCount > 0; // missing overview → eligible if any new activity
+    if (isExplicitOrgList || !r.overviewUpdatedAt) return r.recentReleaseCount > 0;
     if (r.overviewUpdatedAt > ageCutoffIso) return false; // overview too fresh
     return r.recentReleaseCount > minNewReleases;
   });
