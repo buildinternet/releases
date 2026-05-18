@@ -1,18 +1,16 @@
 import { Hono } from "hono";
 import { describeRoute, resolver } from "hono-openapi";
 import { hideInProduction } from "../openapi.js";
-import { eq, and, sql } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { createDb } from "../db.js";
 import {
   knowledgePages,
   knowledgePageCitations,
   organizations,
   products,
-  releases,
 } from "@buildinternet/releases-core/schema";
-import { newKnowledgePageCitationId } from "@buildinternet/releases-core/id";
-import { newKnowledgePageId, orgWhere, productMatchByIdOrSlug } from "../utils.js";
-import { KNOWLEDGE_PAGE_CITATIONS_CHUNK_SIZE } from "../lib/d1-limits.js";
+import { orgWhere, productMatchByIdOrSlug } from "../utils.js";
+import { upsertOrgOverview } from "@releases/core-internal/overview-upsert";
 import { validateJson } from "../lib/validate.js";
 import {
   OrgOverviewResponseSchema,
@@ -27,29 +25,6 @@ const app = new Hono<Env>();
 
 function getDb(c: any): ReturnType<typeof createDb> {
   return c.get("db") ?? createDb(c.env.DB);
-}
-
-/**
- * Resolve incoming citation source URLs to release IDs in one batched lookup.
- * Case-insensitive — releases.url is stored case-preserved so we LOWER() in
- * the predicate. Returns Map<lowercased URL, releaseId>; misses are absent.
- * With ~50 citations max per page the candidate set is small.
- */
-async function resolveReleaseIds(
-  db: ReturnType<typeof createDb>,
-  urls: string[],
-): Promise<Map<string, string>> {
-  const out = new Map<string, string>();
-  if (urls.length === 0) return out;
-  const lowered = Array.from(new Set(urls.map((u) => u.toLowerCase())));
-  const rows = await db
-    .select({ id: releases.id, urlLower: sql<string>`LOWER(${releases.url})` })
-    .from(releases)
-    .where(sql`LOWER(${releases.url}) IN ${lowered}`);
-  for (const r of rows) {
-    if (!out.has(r.urlLower)) out.set(r.urlLower, r.id);
-  }
-  return out;
 }
 
 app.get(
@@ -148,52 +123,21 @@ app.post(
       }
     }
 
-    const now = new Date().toISOString();
-    const id = newKnowledgePageId();
-    await db.run(sql`INSERT INTO knowledge_pages (id, scope, org_id, product_id, content, release_count, last_contributing_release_at, generated_at, updated_at)
-      VALUES (${id}, 'org', ${org.id}, NULL, ${body.content}, ${body.releaseCount}, ${body.lastContributingReleaseAt ?? null}, ${now}, ${now})
-      ON CONFLICT (scope, org_id) DO UPDATE SET content = ${body.content}, release_count = ${body.releaseCount}, last_contributing_release_at = ${body.lastContributingReleaseAt ?? null}, updated_at = ${now}`);
-
-    // Look up the canonical page id — the INSERT may have lost to ON CONFLICT
-    // and the existing row carries its own id. Citations cascade off it.
-    const [pageRow] = await db
-      .select({ id: knowledgePages.id })
-      .from(knowledgePages)
-      .where(and(eq(knowledgePages.scope, "org"), eq(knowledgePages.orgId, org.id)));
-    if (!pageRow) {
-      return c.json({ error: "internal" }, 500);
-    }
-
-    // Citations are replace-all on every write. Omitting the field on the
-    // wire == clearing them; explicit and predictable.
-    await db
-      .delete(knowledgePageCitations)
-      .where(eq(knowledgePageCitations.knowledgePageId, pageRow.id));
-
-    if (citations.length > 0) {
-      const releaseIdByUrl = await resolveReleaseIds(
-        db,
-        citations.map((cit) => cit.sourceUrl),
-      );
-      const rows = citations.map((cit) => ({
-        id: newKnowledgePageCitationId(),
-        knowledgePageId: pageRow.id,
+    const result = await upsertOrgOverview(db, {
+      orgId: org.id,
+      content: body.content,
+      citations: citations.map((cit) => ({
         startIndex: cit.startIndex,
         endIndex: cit.endIndex,
         sourceUrl: cit.sourceUrl,
         title: cit.title ?? null,
         citedText: cit.citedText,
-        releaseId: releaseIdByUrl.get(cit.sourceUrl.toLowerCase()) ?? null,
-        createdAt: now,
-      }));
-      for (let i = 0; i < rows.length; i += KNOWLEDGE_PAGE_CITATIONS_CHUNK_SIZE) {
-        const chunk = rows.slice(i, i + KNOWLEDGE_PAGE_CITATIONS_CHUNK_SIZE);
-        // oxlint-disable-next-line no-await-in-loop -- D1 chunked insert
-        await db.insert(knowledgePageCitations).values(chunk);
-      }
-    }
+      })),
+      releaseCount: body.releaseCount,
+      lastContributingReleaseAt: body.lastContributingReleaseAt ?? null,
+    });
 
-    return c.json({ ok: true, citations: citations.length });
+    return c.json({ ok: true, citations: result.citationsWritten });
   },
 );
 

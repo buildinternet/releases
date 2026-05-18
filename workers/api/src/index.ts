@@ -32,6 +32,7 @@ export { PollAndFetchWorkflow } from "./workflows/poll-and-fetch.js";
 export { PollFetchSummaryWorkflow } from "./workflows/poll-fetch-summary.js";
 export { OnboardSourceWorkflow } from "./workflows/onboard-source.js";
 export { BatchSummarizeWorkflow } from "./workflows/batch-summarize.js";
+export { BatchOverviewWorkflow } from "./workflows/batch-overview.js";
 
 /** Cloudflare Secrets Store binding — call .get() to retrieve the secret value. */
 type SecretBinding = { get(): Promise<string> };
@@ -78,6 +79,12 @@ export type Env = {
     BATCH_SUMMARIZE_ENABLED?: string;
     BATCH_SUMMARIZE_MAX_COST_USD?: string;
     BATCH_SUMMARIZE_WORKFLOW?: Workflow;
+    // Batch overview workflow. Admin POST trigger only for now (no cron entry
+    // until the path is proven against the existing weekly managed-agent
+    // routine). Self-gates via BATCH_OVERVIEW_ENABLED for any future cron path.
+    BATCH_OVERVIEW_ENABLED?: string;
+    BATCH_OVERVIEW_MAX_COST_USD?: string;
+    BATCH_OVERVIEW_WORKFLOW?: Workflow;
     // Feature flag: when "true", poll-and-fetch widens its candidate set to
     // include scrape/agent sources with no feedUrl and routes them through
     // change-detector branches defined in the org playbook's `fetchQuirks`

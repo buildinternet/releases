@@ -84,7 +84,7 @@ export function classifyOverviewStaleness(
  * headings, but the model occasionally emits one anyway and it ruins
  * previews.
  */
-function stripLeadingHeading(content: string): string {
+export function stripLeadingHeading(content: string): string {
   return content.replace(/^\s*#{1,6}\s+[^\n]+\n+/, "");
 }
 
