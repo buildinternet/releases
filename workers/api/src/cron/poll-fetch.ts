@@ -8,6 +8,7 @@ import {
   sourceChangelogFiles,
   sourceChangelogChunks,
   knowledgePages,
+  organizations,
 } from "@buildinternet/releases-core/schema";
 import { countTokensSafe, computeContentSize } from "@buildinternet/releases-core/tokens";
 import type { Source } from "@buildinternet/releases-core/schema";
@@ -456,22 +457,18 @@ async function pollScrapeOrAgentByQuirk(
 
 /**
  * Typed RPC surface of the discovery worker's `DiscoveryEntrypoint`. Mirrors
- * the return shape declared in `workers/discovery/src/index.ts`. Kept
- * inline here so the API worker does not import directly from a separate
- * wrangler project — the Cloudflare service binding runtime enforces the
- * actual contract; this is purely for local type-checking.
+ * the shape declared in `workers/discovery/src/index.ts`. Kept inline here so
+ * the API worker does not import directly from a separate wrangler project —
+ * the Cloudflare service binding runtime enforces the actual contract; this
+ * is purely for local type-checking.
  */
 export interface DiscoveryWorkerRpc {
-  fetchSource(
-    sourceIdentifier: string,
-    sessionId?: string,
-  ): Promise<{
-    ok: boolean;
-    releasesFound: number;
-    releasesInserted: number;
-    errorCategory?: string;
-    error?: string;
-  }>;
+  startManagedFetchSession(params: {
+    sourceIds: string[];
+    company: string;
+    orgId?: string;
+    correlationId?: string;
+  }): Promise<{ ok: true; sessionId: string } | { ok: false; error: string }>;
 }
 
 export interface FetchOneResult {
@@ -510,13 +507,15 @@ export interface FetchOneEnv extends IndexNowEnv, AnthropicEnv {
   /**
    * Service binding to the discovery worker's `DiscoveryEntrypoint`. When
    * present, summary-only feeds (items with only titles + links — no body)
-   * with `crawlEnabled: true` are delegated to discovery's `fetchSource` RPC
-   * method so per-release pages can be crawled and extracted for content +
-   * media. See {@link shouldDelegateToCrawl}.
+   * with `crawlEnabled: true` are delegated to a managed-agent worker session
+   * via `startManagedFetchSession` so per-release pages can be crawled and
+   * extracted for content + media on the cheaper Haiku 4-5 worker pipeline
+   * (instead of running Sonnet 4-6 inline; see #1022). See
+   * {@link shouldDelegateToCrawl}.
    *
    * Typed as the narrow RPC interface rather than `Fetcher` so callers get
-   * the typed `fetchSource` method directly without HTTP ceremony. Auth is not
-   * required — RPC bypasses the discovery worker's HTTP auth middleware.
+   * the typed method directly without HTTP ceremony. Auth is not required —
+   * RPC bypasses the discovery worker's HTTP auth middleware.
    */
   DISCOVERY_WORKER?: DiscoveryWorkerRpc;
 }
@@ -557,23 +556,73 @@ export function shouldDelegateToCrawl(
 }
 
 /**
- * Hand the source off to the discovery worker's `fetchSource` RPC method and
- * map its result onto {@link FetchOneResult}. Discovery owns its own
- * `fetch_log` + source-counter bookkeeping for both success and error paths,
- * so this helper does not write to either — bumping `consecutiveErrors` twice
- * (once here, once in discovery's `updateSourceAfterFetch`) would
- * over-penalize the source. Exceptions from the RPC call mean the discovery
- * worker threw (e.g. secrets misconfigured) and are re-thrown so the caller's
- * catch block records the error like any other transport failure.
+ * Hand the source off to a managed-agent worker session and return a no-rows
+ * result. The MA session runs async on the Anthropic platform — when it
+ * completes it writes its own `fetch_log` row and source-counter updates via
+ * the standard managed-agent bookkeeping. Returning a synthetic `no_change`
+ * keeps the workflow step from racing it (we don't yet know what changed) and
+ * avoids double-bumping counters.
+ *
+ * The MA session needs `company` (used for dedup keying), which means we
+ * have to look up the org name from `source.orgId`. Failing that lookup is
+ * surfaced as an error so the workflow step retries — an orphaned source is
+ * an upstream bug we'd rather see in logs than silently swallow.
  */
-async function delegateScrapeToDiscovery(
+export async function delegateScrapeToDiscovery(
+  db: ReturnType<typeof drizzle>,
   source: Source,
   env: FetchOneEnv,
-  sessionId: string | null,
 ): Promise<FetchOneResult> {
   const start = Date.now();
 
-  const result = await env.DISCOVERY_WORKER!.fetchSource(source.id, sessionId ?? undefined);
+  if (!env.DISCOVERY_WORKER) {
+    const durationMs = Date.now() - start;
+    logEvent("warn", {
+      component: "cron-poll-fetch",
+      event: "crawl-delegation-missing-discovery-worker",
+      sourceSlug: source.slug,
+      orgId: source.orgId,
+      durationMs,
+    });
+    return {
+      releasesFound: 0,
+      releasesInserted: 0,
+      durationMs,
+      status: "error" as const,
+      error: "Cannot delegate: DISCOVERY_WORKER binding not configured",
+    };
+  }
+
+  const [org] = await db
+    .select({ name: organizations.name })
+    .from(organizations)
+    .where(eq(organizations.id, source.orgId))
+    .limit(1);
+
+  if (!org) {
+    const durationMs = Date.now() - start;
+    logEvent("warn", {
+      component: "cron-poll-fetch",
+      event: "crawl-delegation-org-missing",
+      sourceSlug: source.slug,
+      orgId: source.orgId,
+      durationMs,
+    });
+    return {
+      releasesFound: 0,
+      releasesInserted: 0,
+      durationMs,
+      status: "error" as const,
+      error: `Cannot delegate: org ${source.orgId} not found`,
+    };
+  }
+
+  const result = await env.DISCOVERY_WORKER.startManagedFetchSession({
+    sourceIds: [source.id],
+    company: org.name,
+    orgId: source.orgId,
+    correlationId: `summary-only-delegation:${source.slug}`,
+  });
 
   const durationMs = Date.now() - start;
 
@@ -582,7 +631,7 @@ async function delegateScrapeToDiscovery(
       component: "cron-poll-fetch",
       event: "crawl-delegation-failed",
       sourceSlug: source.slug,
-      errorCategory: result.errorCategory,
+      error: result.error,
       durationMs,
     });
     return {
@@ -590,24 +639,23 @@ async function delegateScrapeToDiscovery(
       releasesInserted: 0,
       durationMs,
       status: "error" as const,
-      error: result.error ?? "Discovery fetchSource returned ok: false",
+      error: result.error,
     };
   }
 
   logEvent("info", {
     component: "cron-poll-fetch",
-    event: "crawl-delegation-success",
+    event: "crawl-delegation-handoff",
     sourceSlug: source.slug,
-    releasesFound: result.releasesFound,
-    releasesInserted: result.releasesInserted,
+    sessionId: result.sessionId,
     durationMs,
   });
 
   return {
-    releasesFound: result.releasesFound,
-    releasesInserted: result.releasesInserted,
+    releasesFound: 0,
+    releasesInserted: 0,
     durationMs,
-    status: result.releasesInserted > 0 ? ("success" as const) : ("no_change" as const),
+    status: "no_change" as const,
   };
 }
 
@@ -913,7 +961,7 @@ export async function fetchOne(
           meta.feedContentDepth === "summary-only" ? "summary-only" : "all-items-empty-content",
         feedItemCount: rawReleases.length,
       });
-      return await delegateScrapeToDiscovery(source, env, sessionId);
+      return await delegateScrapeToDiscovery(db, source, env);
     }
 
     const marketingMap =
