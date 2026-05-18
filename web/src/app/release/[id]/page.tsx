@@ -3,7 +3,8 @@ import { safeStringifyJsonLd } from "@/lib/json-ld";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { Suspense, ViewTransition } from "react";
-import { api, ApiSetupError } from "@/lib/api";
+import { api, API_URL, ApiSetupError } from "@/lib/api";
+import { isLocalAdminEnabled } from "@/lib/local-admin-flag";
 import { EXTERNAL_UGC_REL } from "@/lib/sanitize";
 import { Header } from "@/components/header";
 import { SetupMessage } from "@/components/setup-message";
@@ -20,6 +21,7 @@ import { detailMarkdownComponents } from "@/components/markdown-components";
 import { AI_SUMMARY_DISCLAIMER } from "@/lib/copy";
 import { RollupBadge } from "@/components/rollup-badge";
 import { CompositionChip } from "@/components/composition-chip";
+import { ReleaseAdminMenu } from "@/components/release-admin-menu";
 
 export async function generateMetadata({
   params,
@@ -98,6 +100,7 @@ export default async function ReleaseDetailPage({ params }: { params: Promise<{ 
   const showSubtitle = hasVersion && release.title && !titleMatchesVersion;
   const trimmedSummary = release.summary?.trim();
   const hasBody = release.content?.trim();
+  const adminEnabled = isLocalAdminEnabled();
 
   const releaseUrl = `https://releases.sh/release/${id}`;
   const sourceUrl = `https://releases.sh${sourcePath}`;
@@ -198,6 +201,15 @@ export default async function ReleaseDetailPage({ params }: { params: Promise<{ 
               </a>
             )}
             <CompositionChip composition={release.composition} />
+            {adminEnabled && (
+              <span className="ml-auto">
+                <ReleaseAdminMenu
+                  releaseId={release.id}
+                  redirectTo={sourcePath}
+                  rawJsonHref={`${API_URL}/v1/releases/${encodeURIComponent(release.id)}`}
+                />
+              </span>
+            )}
           </div>
           <CliCommand identifier={release.id} />
         </div>
