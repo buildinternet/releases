@@ -214,17 +214,17 @@ export class DiscoveryEntrypoint extends WorkerEntrypoint<Env> {
       return { ok: false, releasesFound: 0, releasesInserted: 0, errorCategory, error: message };
     }
 
-    let releasesFound = 0;
-    let releasesInserted = 0;
-    try {
-      const parsed = JSON.parse(result) as { releasesFound?: number; releasesInserted?: number };
-      releasesFound = parsed.releasesFound ?? 0;
-      releasesInserted = parsed.releasesInserted ?? 0;
-    } catch {
-      /* keep zeros on parse failure */
-    }
-
-    return { ok: true, releasesFound, releasesInserted };
+    // `scrapeFetch` returns `Error [<category>]: …` on failure (handled above)
+    // or `JSON.stringify({ fetched, status, releasesFound, releasesInserted, … })`
+    // on success. A parse failure here means scrapeFetch is buggy — don't
+    // swallow it: let the throw propagate so the caller's catch records an
+    // error row instead of marking the fetch as a silent `no_change`.
+    const parsed = JSON.parse(result) as { releasesFound?: number; releasesInserted?: number };
+    return {
+      ok: true,
+      releasesFound: parsed.releasesFound ?? 0,
+      releasesInserted: parsed.releasesInserted ?? 0,
+    };
   }
 }
 

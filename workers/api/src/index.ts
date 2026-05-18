@@ -625,6 +625,7 @@ export default {
           WEBHOOK_DELIVERY_QUEUE: env.WEBHOOK_DELIVERY_QUEUE,
           LATEST_CACHE: env.LATEST_CACHE,
           INVALIDATION_ENABLED: env.INVALIDATION_ENABLED,
+          DISCOVERY_WORKER: env.DISCOVERY_WORKER,
         }),
         alertEnv,
       ),
