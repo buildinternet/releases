@@ -120,12 +120,35 @@ export async function upsertOrgOverview(
 /**
  * Case-insensitive URL → releaseId lookup for citation source resolution.
  * Chunks at 90 binds per IN-clause to stay under D1's 100-bind cap.
+ *
+ * Two-pass resolution (#1003):
+ *
+ *   1. Exact case-insensitive match. Covers per-release-page sources whose
+ *      stored URLs match the citation URL byte-for-byte, and CHANGELOG-style
+ *      sources where the model's emitted fragment matches the ingest-time
+ *      fragment exactly.
+ *   2. Fragment-stripped fallback. For citation URLs that include a `#`
+ *      anchor but missed the exact pass, try matching against the bare URL.
+ *      Catches the per-release-page case where the citation gratuitously
+ *      gained a fragment the release row doesn't carry.
+ *
+ * The second pass intentionally does *not* fuzzy-match fragments against
+ * release titles. For CHANGELOG-anchored sources where every release shares
+ * a base URL with a per-release fragment, mismatched fragments still return
+ * null — title-slug matching was deferred (see #1003 thread).
+ *
+ * Keyed by the original (lowercased) citation URL so callers can do a
+ * direct `.get(citation.sourceUrl.toLowerCase())` without re-normalizing.
  */
-async function resolveReleaseIdsByUrl(db: AnyDb, urls: string[]): Promise<Map<string, string>> {
+export async function resolveReleaseIdsByUrl(
+  db: AnyDb,
+  urls: string[],
+): Promise<Map<string, string>> {
   const out = new Map<string, string>();
   if (urls.length === 0) return out;
   const lowered = Array.from(new Set(urls.map((u) => u.toLowerCase())));
 
+  // Pass 1: exact match.
   for (let i = 0; i < lowered.length; i += URL_LOOKUP_CHUNK_SIZE) {
     const chunk = lowered.slice(i, i + URL_LOOKUP_CHUNK_SIZE);
     // oxlint-disable-next-line no-await-in-loop -- D1 bind-chunked SELECT
@@ -136,6 +159,36 @@ async function resolveReleaseIdsByUrl(db: AnyDb, urls: string[]): Promise<Map<st
     for (const r of rows) {
       if (!out.has(r.urlLower)) out.set(r.urlLower, r.id);
     }
+  }
+
+  // Pass 2: fragment-stripped fallback. Only run for citations that missed
+  // the exact pass *and* carry a `#` anchor — bare-URL citations have
+  // nothing more to try.
+  const stripped: Array<{ original: string; base: string }> = [];
+  for (const u of lowered) {
+    if (out.has(u)) continue;
+    const hashIdx = u.indexOf("#");
+    if (hashIdx <= 0) continue;
+    stripped.push({ original: u, base: u.slice(0, hashIdx) });
+  }
+  if (stripped.length === 0) return out;
+
+  const bases = Array.from(new Set(stripped.map((s) => s.base)));
+  const baseToReleaseId = new Map<string, string>();
+  for (let i = 0; i < bases.length; i += URL_LOOKUP_CHUNK_SIZE) {
+    const chunk = bases.slice(i, i + URL_LOOKUP_CHUNK_SIZE);
+    // oxlint-disable-next-line no-await-in-loop -- D1 bind-chunked SELECT
+    const rows: Array<{ id: string; urlLower: string }> = await db
+      .select({ id: releases.id, urlLower: sql<string>`LOWER(${releases.url})` })
+      .from(releases)
+      .where(sql`LOWER(${releases.url}) IN ${chunk}`);
+    for (const r of rows) {
+      if (!baseToReleaseId.has(r.urlLower)) baseToReleaseId.set(r.urlLower, r.id);
+    }
+  }
+  for (const { original, base } of stripped) {
+    const id = baseToReleaseId.get(base);
+    if (id) out.set(original, id);
   }
 
   return out;
