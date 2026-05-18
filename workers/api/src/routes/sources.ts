@@ -2923,9 +2923,16 @@ sourceRoutes.post(
       .update(releases)
       .set({ suppressed: true, suppressedReason: body.reason ?? null })
       .where(eq(releases.id, id))
-      .returning({ id: releases.id });
+      .returning({ id: releases.id, sourceId: releases.sourceId });
 
     if (!updated) return c.json({ error: "not_found", message: "Release not found" }, 404);
+
+    // A row that was visible a moment ago is now hidden — purge the homepage
+    // reel caches so users don't click a stale card into a 404.
+    c.executionCtx.waitUntil(
+      invalidateLatestCache(c.env, { nReleases: 1, sourceId: updated.sourceId }),
+    );
+
     return c.json({ suppressed: true });
   },
 );
@@ -2961,9 +2968,15 @@ sourceRoutes.post(
         suppressedReason: null,
       })
       .where(eq(releases.id, id))
-      .returning({ id: releases.id });
+      .returning({ id: releases.id, sourceId: releases.sourceId });
 
     if (!updated) return c.json({ error: "not_found", message: "Release not found" }, 404);
+
+    // Newly-visible row should appear in the reel without waiting out the TTL.
+    c.executionCtx.waitUntil(
+      invalidateLatestCache(c.env, { nReleases: 1, sourceId: updated.sourceId }),
+    );
+
     return c.json({ unsuppressed: true });
   },
 );
