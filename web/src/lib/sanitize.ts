@@ -31,6 +31,10 @@ export function isOptimizableImage(url: string): boolean {
     url.includes("githubusercontent.com") ||
     url.includes("media.releases.sh") ||
     url.includes("/v1/media/") ||
-    url.includes("github.com/")
+    // remotePatterns only allows github.com paths matching `/*.png` (avatar
+    // handles like github.com/{user}.png). Other github.com URLs — notably
+    // user-attachments embedded in GitHub's own changelog — must fall through
+    // to `unoptimized` or next/image will reject them at render time.
+    /^https?:\/\/github\.com\/[^/]+\.png(?:$|\?)/i.test(url)
   );
 }
