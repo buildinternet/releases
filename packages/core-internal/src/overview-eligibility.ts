@@ -24,6 +24,13 @@
  *     overview.updated_at older than minOverviewAgeDays → eligible
  *
  * Both thresholds are options so admin POST can override per-run.
+ *
+ * When `orgSlugs` is an explicit non-empty list the default age and
+ * min-new-releases thresholds are bypassed entirely — the operator has
+ * already decided which orgs to regenerate. The only remaining guard in
+ * the explicit-org path is `recentReleaseCount > 0`: if an org genuinely
+ * has zero new activity since its last overview there is nothing to say,
+ * so re-running would produce an identical (or empty) result.
  */
 
 import { and, desc, eq, gte, inArray, isNull, ne, or, sql } from "drizzle-orm";
@@ -168,7 +175,14 @@ export async function fetchOverviewCandidates(
   // Could be pushed into SQL, but the predicate references the SELECT-projection
   // alias which SQLite only honors in HAVING/ORDER BY, and the candidate set is
   // already small enough that the in-process filter is negligible.
+  //
+  // When the caller supplied an explicit org allowlist the age and
+  // min-new-releases thresholds are skipped — the operator is the gate.
+  // We still require at least one new release so we don't regenerate an
+  // overview that would say nothing has changed.
+  const isExplicitOrgList = Array.isArray(orgSlugs) && orgSlugs.length > 0;
   const eligible = rows.filter((r) => {
+    if (isExplicitOrgList) return r.recentReleaseCount > 0;
     if (!r.overviewUpdatedAt) return r.recentReleaseCount > 0; // missing overview → eligible if any new activity
     if (r.overviewUpdatedAt > ageCutoffIso) return false; // overview too fresh
     return r.recentReleaseCount > minNewReleases;
