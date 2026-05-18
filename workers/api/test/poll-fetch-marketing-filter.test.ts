@@ -10,21 +10,103 @@
  *
  * When `marketingFilter` is unset, the classifier never runs (no Anthropic
  * call) and all rows insert visibly.
+ *
+ * Why we stub `@releases/adapters/feed.js` via `mock.module` instead of
+ * mocking `globalThis.fetch` at the test boundary: `workers/api/test/fetch-log.test.ts`
+ * already registers a process-global `mock.module` for the same path with a
+ * stub that returns `releases: []` by default. Bun applies that stub for every
+ * subsequently-evaluated test file in the same run, so any test below it that
+ * tries to drive `fetchAndParseFeed` through a real HTTP call gets an empty
+ * array regardless of what `globalThis.fetch` does. The fix is to register our
+ * own override at this file's module-load with a per-test state hook.
  */
-import { describe, it, expect, beforeEach, afterEach } from "bun:test";
+import { describe, it, expect, mock, beforeEach, afterEach } from "bun:test";
 import { Database } from "bun:sqlite";
 import { drizzle } from "drizzle-orm/bun-sqlite";
 import { eq } from "drizzle-orm";
 import { applyMigrations, ensureBatchShim } from "../../../tests/db-helper";
 import { organizations, sources, releases } from "@buildinternet/releases-core/schema";
-import { fetchOne } from "../src/cron/poll-fetch.js";
+import type { RawRelease } from "@releases/adapters/types";
 
-// ── fetch mock ──────────────────────────────────────────────────────────────
+// ── feed-adapter stub ───────────────────────────────────────────────────────
 //
-// Captured per-test (in beforeEach), not at module load, so a prior test
-// file's leaked mock can't end up as our "original" baseline. Required to keep
-// `restoreFetch` from re-installing another suite's stale handler on CI when
-// bun evaluates modules in a slightly different order than locally.
+// Per-test state for what `fetchAndParseFeed` should return. Reset in
+// beforeEach so a prior test can't leak data into the next.
+
+let nextFeedReleases: RawRelease[] = [];
+const feedFetchCalls: Array<{ feedUrl: string }> = [];
+
+// Bun's `mock.module` is process-global — once we register this stub it
+// applies to every later-evaluated test file. The branch helpers (isGitHubFetched,
+// effectiveGitHubUrl) and getSourceMeta therefore have to match production
+// behavior, not just whatever we'd write inline for the marketing tests, or
+// downstream tests like poll-fetch-github-override.test.ts break.
+
+type StubSource = { type?: string; url: string; metadata: string | null };
+type StubMeta = { feedUrl?: string; feedType?: string; githubUrl?: string };
+
+const parseMeta = (src: StubSource): StubMeta =>
+  src.metadata ? (JSON.parse(src.metadata) as StubMeta) : {};
+
+mock.module("@releases/adapters/feed.js", () => ({
+  FEED_4XX_INVALIDATE_THRESHOLD: 5,
+  CLEARED_FEED_FIELDS: {
+    feedUrl: undefined,
+    feedType: undefined,
+    feedEtag: undefined,
+    feedLastModified: undefined,
+  },
+  getSourceMeta: parseMeta,
+  // Change-detector helpers — not exercised by the marketing-filter tests but
+  // poll-fetch.ts imports them, so they have to resolve to functions.
+  headCheckUrl: async () => ({ status: "changed" as const }),
+  bodyHashCheck: async () => ({ status: "unchanged" as const, responseMs: 0 }),
+  isGitHubFetched: (src: StubSource, meta?: StubMeta) => {
+    if (src.type === "github") return true;
+    const m = meta ?? parseMeta(src);
+    return typeof m.githubUrl === "string" && m.githubUrl.length > 0;
+  },
+  effectiveGitHubUrl: (src: StubSource, meta?: StubMeta) => {
+    const m = meta ?? parseMeta(src);
+    return m.githubUrl ?? src.url;
+  },
+  filterByCategoryAllow: (items: RawRelease[]) => ({ kept: items, dropped: 0 }),
+  // The actual stub — returns canned RawRelease data from per-test state and
+  // captures the call shape for assertions.
+  fetchAndParseFeed: async (feedUrl: string) => {
+    feedFetchCalls.push({ feedUrl });
+    return {
+      releases: nextFeedReleases,
+      etag: undefined,
+      lastModified: undefined,
+      contentLength: undefined,
+    };
+  },
+  synthesizeReleaseUrl: (args: { sourceUrl: string; version: string; template?: string }) => {
+    if (!args.template) {
+      const stripped = args.version.replace(/^v/i, "");
+      return `${args.sourceUrl}#${stripped.replace(/\./g, "-")}`;
+    }
+    return args.template
+      .split("${sourceUrl}")
+      .join(args.sourceUrl)
+      .split("${versionDashed}")
+      .join(args.version.replace(/\./g, "-"))
+      .split("${version}")
+      .join(args.version);
+  },
+}));
+
+// fetchOne must be imported AFTER mock.module is registered so its
+// `@releases/adapters/feed.js` import resolves to the stub.
+const { fetchOne } = await import("../src/cron/poll-fetch.js");
+
+// ── Anthropic mock (globalThis.fetch) ───────────────────────────────────────
+//
+// The classifier issues real HTTP calls through the Anthropic SDK, which uses
+// `globalThis.fetch`. We intercept only the Anthropic origin to keep the test
+// hermetic — the feed origin never gets hit because the adapter is stubbed
+// above.
 
 type FetchHandler = (input: RequestInfo | URL, init?: RequestInit) => Response | Promise<Response>;
 let realFetch: typeof fetch | undefined;
@@ -53,15 +135,7 @@ function restoreFetch() {
   }
 }
 
-function text(body: string, status = 200, headers: Record<string, string> = {}): Response {
-  return new Response(body, {
-    status,
-    headers: { "Content-Type": "application/xml", ...headers },
-  });
-}
-
 function anthropicJson(verdict: { marketing: boolean; reason: string }): Response {
-  // Shape mirrors @anthropic-ai/sdk's MessageStream completion envelope.
   return new Response(
     JSON.stringify({
       id: "msg_test",
@@ -87,30 +161,30 @@ function anthropicJson(verdict: { marketing: boolean; reason: string }): Respons
   );
 }
 
-// Hand-rolled RSS payload with one obvious case study and one product release.
-// Kept inline so the test fully owns the feed-shape contract it tests against.
-const CLICKHOUSE_RSS = `<?xml version="1.0" encoding="utf-8"?>
-<rss version="2.0">
-  <channel>
-    <title>ClickHouse Blog</title>
-    <link>https://clickhouse.com/blog</link>
-    <description>Test feed</description>
-    <item>
-      <title><![CDATA[How TestCo migrated from Postgres to ClickHouse]]></title>
-      <link>https://clickhouse.com/blog/testco</link>
-      <guid>https://clickhouse.com/blog/testco</guid>
-      <pubDate>Mon, 18 May 2026 09:31:37 GMT</pubDate>
-      <description><![CDATA[How TestCo cut analytics query times by 100x with ClickHouse.]]></description>
-    </item>
-    <item>
-      <title><![CDATA[ClickHouse Release 26.4]]></title>
-      <link>https://clickhouse.com/blog/clickhouse-release-26-04</link>
-      <guid>https://clickhouse.com/blog/clickhouse-release-26-04</guid>
-      <pubDate>Sun, 17 May 2026 08:00:00 GMT</pubDate>
-      <description><![CDATA[Native AI functions, faster joins, Arrow Flight SQL.]]></description>
-    </item>
-  </channel>
-</rss>`;
+// ── canned feed items ───────────────────────────────────────────────────────
+//
+// One obvious case study and one product release. Shipped as RawRelease
+// objects directly because the upstream RSS parser is stubbed out.
+
+const ITEMS_FOR_CLASSIFICATION: RawRelease[] = [
+  {
+    title: "How TestCo migrated from Postgres to ClickHouse",
+    content: "How TestCo cut analytics query times by 100x with ClickHouse.",
+    url: "https://clickhouse.com/blog/testco",
+    publishedAt: new Date("2026-05-18T09:31:37.000Z"),
+    isBreaking: false,
+    media: [],
+  },
+  {
+    title: "ClickHouse Release 26.4",
+    content: "Native AI functions, faster joins, Arrow Flight SQL.",
+    url: "https://clickhouse.com/blog/clickhouse-release-26-04",
+    publishedAt: new Date("2026-05-17T08:00:00.000Z"),
+    version: "26.4",
+    isBreaking: false,
+    media: [],
+  },
+];
 
 // ── DB helpers ───────────────────────────────────────────────────────────────
 
@@ -154,6 +228,8 @@ function makeEnv(opts: { withAnthropic: boolean }): unknown {
 describe("fetchOne — metadata.marketingFilter", () => {
   beforeEach(() => {
     if (realFetch === undefined) realFetch = globalThis.fetch;
+    feedFetchCalls.length = 0;
+    nextFeedReleases = ITEMS_FOR_CLASSIFICATION;
   });
   afterEach(() => {
     restoreFetch();
@@ -163,7 +239,6 @@ describe("fetchOne — metadata.marketingFilter", () => {
     let anthropicCalls = 0;
     installFetch((input) => {
       const url = urlOf(input);
-      if (url === "https://clickhouse.com/rss.xml") return text(CLICKHOUSE_RSS);
       if (url.includes("api.anthropic.com")) {
         anthropicCalls++;
         return anthropicJson({ marketing: true, reason: "case_study" });
@@ -182,25 +257,20 @@ describe("fetchOne — metadata.marketingFilter", () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const result = await fetchOne(db as any, src, makeEnv({ withAnthropic: true }) as any);
 
-    // Sanity-check the fetch mock ran. If this fails on CI it points at a
-    // global-fetch ordering issue between test files, not at the classifier.
-    expect(requestedUrls).toContain("https://clickhouse.com/rss.xml");
+    expect(feedFetchCalls.length).toBe(1);
+    expect(feedFetchCalls[0].feedUrl).toBe("https://clickhouse.com/rss.xml");
     expect(result.status).toBe("success");
     expect(result.releasesInserted).toBe(2);
     expect(anthropicCalls).toBe(0);
 
     const rows = await db.select().from(releases).where(eq(releases.sourceId, "src_ch_blog"));
-    // Every row visible (none suppressed)
     expect(rows.every((r) => r.suppressed === false)).toBe(true);
   });
 
   it("suppresses marketing items at insert and lets product news through", async () => {
     installFetch((input, init) => {
       const url = urlOf(input);
-      if (url === "https://clickhouse.com/rss.xml") return text(CLICKHOUSE_RSS);
       if (url.includes("api.anthropic.com")) {
-        // Dispatch on the title carried in the user message so we can hold the
-        // canonical verdict per item without parsing JSON path expressions.
         const bodyText = init?.body as string | undefined;
         if (bodyText?.includes("How TestCo migrated")) {
           return anthropicJson({ marketing: true, reason: "case_study" });
@@ -223,8 +293,6 @@ describe("fetchOne — metadata.marketingFilter", () => {
 
     expect(result.status).toBe("success");
     expect(result.releasesInserted).toBe(2);
-    // Marketing-suppressed IDs are excluded from insertedIds so downstream
-    // publish + embed never touch them.
     expect(result.insertedIds?.length).toBe(1);
 
     const rows = await db.select().from(releases).where(eq(releases.sourceId, "src_ch_blog"));
@@ -238,14 +306,12 @@ describe("fetchOne — metadata.marketingFilter", () => {
     expect(productRow?.suppressed).toBe(false);
     expect(productRow?.suppressedReason).toBeNull();
 
-    // And the returned insertedIds points to the product release, not the case study.
     expect(result.insertedIds?.[0]).toBe(productRow?.id);
   });
 
   it("fails open when the classifier throws — inserts everything visibly", async () => {
     installFetch((input) => {
       const url = urlOf(input);
-      if (url === "https://clickhouse.com/rss.xml") return text(CLICKHOUSE_RSS);
       if (url.includes("api.anthropic.com")) {
         // Garbage response forces parseMarketingVerdict to throw.
         return new Response(
@@ -280,7 +346,6 @@ describe("fetchOne — metadata.marketingFilter", () => {
     expect(result.releasesInserted).toBe(2);
 
     const rows = await db.select().from(releases).where(eq(releases.sourceId, "src_ch_blog"));
-    // Fail-open: both items visible despite the classifier throwing on each.
     expect(rows.every((r) => r.suppressed === false)).toBe(true);
   });
 });
