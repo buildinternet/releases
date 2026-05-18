@@ -265,12 +265,38 @@ export interface CrawlDeps {
   updateSourceMeta: (source: Source, patch: Record<string, unknown>) => Promise<void>;
 }
 
+/**
+ * True when `pageUrl` shares an origin with `sourceUrl` and its pathname starts
+ * with `prefix`. Pages from a different origin are always rejected — the filter
+ * is meant to keep the crawl scoped to the source's own path tree even when
+ * `includeExternalLinks: true` lets the crawler discover off-domain URLs.
+ *
+ * Malformed `pageUrl` strings return `false` rather than throwing; the caller
+ * treats them like any other filtered-out page.
+ */
+export function pathMatchesIncludePrefix(
+  pageUrl: string,
+  sourceUrl: string,
+  prefix: string,
+): boolean {
+  if (!prefix) return true;
+  try {
+    const page = new URL(pageUrl);
+    const source = new URL(sourceUrl);
+    if (page.origin !== source.origin) return false;
+    return page.pathname.startsWith(prefix);
+  } catch {
+    return false;
+  }
+}
+
 export async function acquireCrawlMarkdown(
   source: Source,
   meta: {
     crawlPattern?: string;
     crawlExcludePatterns?: string[];
     crawlIncludeExternal?: boolean;
+    crawlIncludePathPrefix?: string;
     crawlSource?: "all" | "sitemaps" | "links";
     crawlRender?: boolean;
     crawlMaxAge?: number;
@@ -279,6 +305,7 @@ export async function acquireCrawlMarkdown(
 ): Promise<string | null> {
   const excludePatterns = meta.crawlExcludePatterns;
   const includeExternalLinks = meta.crawlIncludeExternal;
+  const includePathPrefix = meta.crawlIncludePathPrefix;
 
   logEvent("info", {
     component: "scrape-fetch",
@@ -286,6 +313,7 @@ export async function acquireCrawlMarkdown(
     sourceSlug: source.slug,
     excludePatterns,
     includeExternalLinks,
+    includePathPrefix,
   });
 
   let jobId: string | undefined;
@@ -299,7 +327,22 @@ export async function acquireCrawlMarkdown(
       maxAge: meta.crawlMaxAge,
     });
 
-    const pages = await crawl.pollCrawlResults(jobId);
+    const rawPages = await crawl.pollCrawlResults(jobId);
+    const pages = includePathPrefix
+      ? rawPages.filter((p) => pathMatchesIncludePrefix(p.url, source.url, includePathPrefix))
+      : rawPages;
+
+    if (includePathPrefix && pages.length !== rawPages.length) {
+      logEvent("info", {
+        component: "scrape-fetch",
+        event: "crawl-post-filter",
+        sourceSlug: source.slug,
+        jobId,
+        includePathPrefix,
+        before: rawPages.length,
+        after: pages.length,
+      });
+    }
 
     if (pages.length === 0) {
       logEvent("warn", {
@@ -307,7 +350,10 @@ export async function acquireCrawlMarkdown(
         event: "crawl-fallback",
         sourceSlug: source.slug,
         jobId,
-        reason: "crawl returned zero pages",
+        reason:
+          rawPages.length === 0
+            ? "crawl returned zero pages"
+            : "crawlIncludePathPrefix filtered out every page",
       });
       return null;
     }
