@@ -296,6 +296,33 @@ describe("fetchOverviewCandidates", () => {
     expect(out[0]!.orgSlug).toBe("alpha");
   });
 
+  it("orgSlugs filter handles >90 slugs via OR-merged IN-clause chunks", async () => {
+    // IN_CLAUSE_CHUNK = 90, so 91 forces the two-chunk OR-merge branch.
+    const N = 91;
+    const orgRows = Array.from({ length: N }, (_, i) =>
+      makeOrg({ id: `org_chunk_${i}`, slug: `slug-chunk-${i}` }),
+    );
+    const sourceRows = Array.from({ length: N }, (_, i) =>
+      makeSource({ id: `src_chunk_${i}`, slug: `src-chunk-${i}`, orgId: `org_chunk_${i}` }),
+    );
+    const releaseRows = Array.from({ length: N }, (_, i) =>
+      makeRelease({ id: `rel_chunk_${i}`, sourceId: `src_chunk_${i}`, publishedAt: isoDaysAgo(1) }),
+    );
+    tdb.db.insert(organizations).values(orgRows).run();
+    tdb.db.insert(sources).values(sourceRows).run();
+    tdb.db.insert(releases).values(releaseRows).run();
+
+    const slugs = orgRows.map((o) => o.slug);
+    const out = await fetchOverviewCandidates(asDb(tdb.db), {
+      orgSlugs: slugs,
+      maxCandidates: N,
+    });
+    expect(out.length).toBe(N);
+    const returned = out.map((c) => c.orgSlug);
+    expect(new Set(returned).size).toBe(N); // chunk merge produced no duplicates
+    for (const s of returned) expect(slugs).toContain(s);
+  });
+
   it("maxCandidates caps + sorts most-stale (highest recentReleaseCount) first", async () => {
     tdb.db
       .insert(organizations)
@@ -428,5 +455,37 @@ describe("fetchOverviewInputsForOrg", () => {
     const out = await fetchOverviewInputsForOrg(asDb(tdb.db), "org_elig_01");
     expect(out!.selected.length).toBe(1);
     expect(out!.selected[0]!.id).toBe("rel_visible");
+  });
+
+  it("returns all rows when source count exceeds the inArray chunk size", async () => {
+    // IN_CLAUSE_CHUNK = 90, so 100 sources/releases forces multi-chunk SELECT
+    // via the OR-merged inArray(...) branch in fetchOverviewInputsForOrg.
+    const N = 100;
+    tdb.db.insert(organizations).values(makeOrg()).run();
+    const sourceRows = Array.from({ length: N }, (_, i) =>
+      makeSource({ id: `src_chunk_${i}`, slug: `src-chunk-${i}` }),
+    );
+    tdb.db.insert(sources).values(sourceRows).run();
+    // Keep every release inside the 90-day window so totalAvailable can prove
+    // the chunked SELECT didn't drop rows. Spread within 1..30 days for
+    // deterministic ordering downstream.
+    const releaseRows = Array.from({ length: N }, (_, i) =>
+      makeRelease({
+        id: `rel_chunk_${i}`,
+        sourceId: `src_chunk_${i}`,
+        publishedAt: isoDaysAgo((i % 30) + 1),
+      }),
+    );
+    tdb.db.insert(releases).values(releaseRows).run();
+
+    const out = await fetchOverviewInputsForOrg(asDb(tdb.db), "org_elig_01");
+    expect(out).not.toBeNull();
+    expect(out!.sources.length).toBe(N);
+    // The chunked SELECT must surface every row; totalAvailable is the proof.
+    // (selected is post-budget capped by selectReleasesForOverview.)
+    expect(out!.totalAvailable).toBe(N);
+    expect(out!.selected.length).toBeGreaterThan(0);
+    const selectedIds = new Set(out!.selected.map((r) => r.id));
+    for (const id of selectedIds) expect(id.startsWith("rel_chunk_")).toBe(true);
   });
 });

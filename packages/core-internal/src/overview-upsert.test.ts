@@ -291,6 +291,50 @@ describe("upsertOrgOverview", () => {
     expect(citationRows[0]!.releaseId).toBe("rel_cited");
   });
 
+  it("resolves releaseIds across the 90-bind URL-lookup chunk boundary", async () => {
+    // URL_LOOKUP_CHUNK_SIZE = 90; 91 unique URLs forces a two-chunk SELECT in
+    // resolveReleaseIdsByUrl. CITATIONS_CHUNK_SIZE = 11 also forces multi-chunk
+    // citation inserts.
+    const N = 91;
+    const releaseRows = Array.from({ length: N }, (_, i) => ({
+      id: `rel_chunk_${i}`,
+      sourceId: "src_cit_01",
+      title: `R${i}`,
+      content: "body",
+      publishedAt: "2026-05-01T00:00:00Z",
+      fetchedAt: "2026-05-01T01:00:00Z",
+      url: `https://example.com/r/${i}`,
+    }));
+    tdb.db.insert(releases).values(releaseRows).run();
+
+    const citations = Array.from({ length: N }, (_, i) => ({
+      startIndex: 0,
+      endIndex: 5,
+      // Alternate case to exercise lowercase normalization through chunking.
+      sourceUrl: i % 2 === 0 ? `https://example.com/r/${i}` : `HTTPS://EXAMPLE.COM/r/${i}`,
+      title: `R${i}`,
+      citedText: "cited",
+    }));
+
+    const result = await upsertOrgOverview(asDb(tdb.db), {
+      orgId: "org_cit_01",
+      content: "Many citations.",
+      citations,
+      releaseCount: N,
+      lastContributingReleaseAt: "2026-05-01T00:00:00Z",
+    });
+    expect(result.citationsWritten).toBe(N);
+
+    const rows = await tdb.db
+      .select()
+      .from(knowledgePageCitations)
+      .where(eq(knowledgePageCitations.knowledgePageId, result.pageId));
+    expect(rows.length).toBe(N);
+    // Every citation must resolve a releaseId despite the chunked lookup.
+    const resolved = rows.filter((r) => r.releaseId !== null);
+    expect(resolved.length).toBe(N);
+  });
+
   it("leaves releaseId null when no release matches the citation URL", async () => {
     const result = await upsertOrgOverview(asDb(tdb.db), {
       orgId: "org_cit_01",
