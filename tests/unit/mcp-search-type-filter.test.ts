@@ -20,9 +20,7 @@ import { runHybridSearch } from "../../workers/mcp/src/lib/search-hybrid.js";
 import type { HybridSearchEnv } from "../../workers/mcp/src/lib/search-hybrid.js";
 
 /** Minimal env — no Vectorize or embedding provider, so hybrid/semantic degrade to lexical. */
-const minimalEnv: HybridSearchEnv = {
-  DB: {} as D1Database, // unused: the helper passes db directly
-};
+const minimalEnv: HybridSearchEnv = {};
 
 let testDb: TestDatabase;
 
