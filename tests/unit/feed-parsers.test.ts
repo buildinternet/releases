@@ -426,6 +426,34 @@ describe("htmlToMarkdown", () => {
     expect(result).toContain("[Video](https://example.com/video.mp4)");
   });
 
+  it("drops iframe with unsafe scheme (javascript:)", () => {
+    const html = '<iframe src="javascript:alert(1)" width="560"></iframe>';
+    const result = htmlToMarkdown(html);
+    expect(result).not.toContain("javascript:");
+    expect(result).not.toContain("[Video]");
+  });
+
+  it("drops iframe with unsafe scheme (data:)", () => {
+    const html = '<iframe src="data:text/html,<script>1</script>"></iframe>';
+    const result = htmlToMarkdown(html);
+    expect(result).not.toContain("data:");
+    expect(result).not.toContain("[Video]");
+  });
+
+  it("drops video with unsafe scheme (javascript:)", () => {
+    const html = '<video src="javascript:alert(1)"></video>';
+    const result = htmlToMarkdown(html);
+    expect(result).not.toContain("javascript:");
+    expect(result).not.toContain("[Video]");
+  });
+
+  it("drops video with unsafe <source> scheme (data:)", () => {
+    const html = '<video><source src="data:video/mp4;base64,AAAA" /></video>';
+    const result = htmlToMarkdown(html);
+    expect(result).not.toContain("data:");
+    expect(result).not.toContain("[Video]");
+  });
+
   it("replaces &nbsp; with spaces", () => {
     const html = "Hello&nbsp;World";
     expect(htmlToMarkdown(html)).toBe("Hello World");

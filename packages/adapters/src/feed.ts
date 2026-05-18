@@ -696,7 +696,12 @@ function getTurndown(): TurndownService {
     replacement: (_content, node) => {
       const src = (node as Element).getAttribute("src");
       if (!src) return "";
-      return `\n[Video](${iframeSrcToWatchUrl(src)})\n`;
+      // Validate the resolved URL — `iframeSrcToWatchUrl` only normalizes
+      // protocol-relative `//host/...` for known providers, so an iframe
+      // with `src="javascript:..."` would otherwise pass through verbatim.
+      const url = iframeSrcToWatchUrl(src);
+      if (!isSafeMediaUrl(url)) return "";
+      return `\n[Video](${url})\n`;
     },
   });
 
@@ -705,7 +710,7 @@ function getTurndown(): TurndownService {
     replacement: (_content, node) => {
       const el = node as Element;
       const src = el.getAttribute("src") ?? el.querySelector("source")?.getAttribute("src");
-      if (!src) return "";
+      if (!src || !isSafeMediaUrl(src)) return "";
       return `\n[Video](${src})\n`;
     },
   });
