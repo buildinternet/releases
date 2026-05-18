@@ -569,6 +569,24 @@ export async function delegateScrapeToDiscovery(
 ): Promise<FetchOneResult> {
   const start = Date.now();
 
+  if (!env.DISCOVERY_WORKER) {
+    const durationMs = Date.now() - start;
+    logEvent("warn", {
+      component: "cron-poll-fetch",
+      event: "crawl-delegation-missing-discovery-worker",
+      sourceSlug: source.slug,
+      orgId: source.orgId,
+      durationMs,
+    });
+    return {
+      releasesFound: 0,
+      releasesInserted: 0,
+      durationMs,
+      status: "error" as const,
+      error: "Cannot delegate: DISCOVERY_WORKER binding not configured",
+    };
+  }
+
   const [org] = await db
     .select({ name: organizations.name })
     .from(organizations)
@@ -593,7 +611,7 @@ export async function delegateScrapeToDiscovery(
     };
   }
 
-  const result = await env.DISCOVERY_WORKER!.startManagedFetchSession({
+  const result = await env.DISCOVERY_WORKER.startManagedFetchSession({
     sourceIds: [source.id],
     company: org.name,
     orgId: source.orgId,

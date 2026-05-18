@@ -75,8 +75,22 @@ async function seedOrgAndSource(
     url: "https://acme.example.com/changelog",
     createdAt: new Date().toISOString(),
   });
-  const [row] = await db.select().from(sources).limit(1);
-  return row as unknown as Source;
+  // delegateScrapeToDiscovery only reads source.id, source.orgId, and
+  // source.slug, so constructing the Source from the inserted values is both
+  // faster than a readback and explicit about which fields the test cares
+  // about. A WHERE-less SELECT here would also be ambiguous if seedOrg is
+  // ever called twice in one test.
+  return {
+    id: sourceId,
+    orgId,
+    slug: sourceSlug,
+    name: "Acme Changelog",
+    type: "scrape",
+    url: "https://acme.example.com/changelog",
+    productId: null,
+    metadata: null,
+    createdAt: new Date().toISOString(),
+  } as unknown as Source;
 }
 
 describe("delegateScrapeToDiscovery", () => {
@@ -150,6 +164,18 @@ describe("delegateScrapeToDiscovery", () => {
     expect(result.status).toBe("error");
     expect(result.error).toContain("org_ghost");
     expect(discovery.calls).toHaveLength(0);
+  });
+
+  it("returns error when DISCOVERY_WORKER binding is missing", async () => {
+    const source = await seedOrgAndSource(harness.db);
+    const result = await delegateScrapeToDiscovery(
+      harness.db as unknown as D1Drizzle,
+      source,
+      {} as unknown as FetchOneEnv,
+    );
+
+    expect(result.status).toBe("error");
+    expect(result.error).toContain("DISCOVERY_WORKER");
   });
 
   it("propagates discovery's ok:false error message to the caller", async () => {
