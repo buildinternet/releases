@@ -89,6 +89,19 @@ export interface HybridSearchEnv extends EmbedConfigEnv {
   CHANGELOG_CHUNKS_INDEX?: ReadOnlyVectorizeIndex;
   /** Optional KV binding caching one-shot query embeddings. Absent → no-op. */
   EMBED_CACHE?: EmbedCacheBinding;
+  /** Recency half-life in days. Default 120. Bounded [1, 3650] at parse time. */
+  SEARCH_RECENCY_HALFLIFE_DAYS?: string;
+}
+
+const DEFAULT_HALFLIFE_DAYS = 120;
+const MIN_HALFLIFE_DAYS = 1;
+const MAX_HALFLIFE_DAYS = 3650;
+
+function parseHalfLifeDays(raw: string | undefined): number {
+  if (!raw) return DEFAULT_HALFLIFE_DAYS;
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return DEFAULT_HALFLIFE_DAYS;
+  return Math.min(MAX_HALFLIFE_DAYS, Math.max(MIN_HALFLIFE_DAYS, n));
 }
 
 /**
@@ -469,11 +482,17 @@ async function runHybridSearchInternal(
           return ids.map((id) => ({ id }));
         };
 
-  // Chunks intentionally skipped — they anchor to file slices, not dated
-  // entries. Chunked at 90 ids per statement to stay under D1's 100-bind cap.
-  const recencyRank = async (ids: string[]): Promise<string[]> => {
+  // Exponential decay on (now - published_at): 0.5x weight at half-life,
+  // 0.25x at 2× half-life, etc. Chunks skipped — they anchor to file
+  // slices, not dated entries. SQL chunked at 90 ids/statement to stay
+  // under D1's 100-bind cap.
+  const halfLifeDays = parseHalfLifeDays(env.SEARCH_RECENCY_HALFLIFE_DAYS);
+  const halfLifeMs = halfLifeDays * 86_400_000;
+  const now = Date.now();
+  const scoreMultipliers = async (ids: string[]): Promise<Map<string, number>> => {
+    const map = new Map<string, number>();
     const releaseIds = ids.filter((id) => getEntityType(id) === "release");
-    if (releaseIds.length === 0) return [];
+    if (releaseIds.length === 0) return map;
     const chunks: string[][] = [];
     for (let i = 0; i < releaseIds.length; i += 90) chunks.push(releaseIds.slice(i, i + 90));
     const results = await Promise.all(
@@ -488,10 +507,14 @@ async function runHybridSearchInternal(
         `),
       ),
     );
-    return results
-      .flat()
-      .toSorted((a, b) => (b.rankAt ?? "").localeCompare(a.rankAt ?? ""))
-      .map((r) => r.id);
+    for (const row of results.flat()) {
+      if (!row.rankAt) continue;
+      const ageMs = now - new Date(row.rankAt).getTime();
+      // Reject malformed dates (Invalid Date → NaN) and future timestamps.
+      if (!Number.isFinite(ageMs) || ageMs <= 0) continue;
+      map.set(row.id, Math.pow(0.5, ageMs / halfLifeMs));
+    }
+    return map;
   };
 
   let fused: Awaited<ReturnType<typeof hybridSearch>>;
@@ -502,7 +525,7 @@ async function runHybridSearchInternal(
       ftsSearch: ftsSearchFn,
       vectorIndexes,
       embed: embedder,
-      recencyRank,
+      scoreMultipliers,
     });
   } catch (err) {
     logEvent("warn", {

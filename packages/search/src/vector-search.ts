@@ -124,11 +124,13 @@ export interface HybridSearchParams {
   embed: (text: string) => Promise<number[]>;
   filter?: Record<string, unknown>;
   /**
-   * Optional third RRF input — re-orders the union of FTS + vector IDs by
-   * recency. Positioned last so it never wins the first-seen kind/source
-   * tiebreaker; thrown errors are swallowed and the base fusion stands.
+   * Optional post-fusion score multipliers — applied after RRF, then the
+   * result is re-sorted by score DESC. Use for continuous boosts that
+   * don't fit RRF's rank shape (time-decay, popularity, quality). Missing
+   * ids default to 1.0 (pass-through). Throws are swallowed and the base
+   * fusion order stands.
    */
-  recencyRank?: (ids: string[]) => Promise<string[]>;
+  scoreMultipliers?: (ids: string[]) => Promise<Map<string, number>>;
 }
 
 export interface HybridSearchResult {
@@ -219,36 +221,23 @@ export async function hybridSearch(params: HybridSearchParams): Promise<HybridSe
     })),
   );
 
-  if (params.recencyRank) {
-    const candidateIds = new Set<string>();
-    for (const vr of vectorResults) for (const m of vr.matches) candidateIds.add(m.id);
-    for (const h of ftsHits) candidateIds.add(h.id);
-    if (candidateIds.size > 0) {
-      try {
-        const ordered = await params.recencyRank(Array.from(candidateIds));
-        // Constrain to the candidate set and dedupe — a misbehaved callback
-        // could otherwise inflate scores via duplicate ranks or waste topK
-        // slots on ids that won't hydrate.
-        const seen = new Set<string>();
-        const orderedFiltered: string[] = [];
-        for (const id of ordered) {
-          if (!candidateIds.has(id) || seen.has(id)) continue;
-          seen.add(id);
-          orderedFiltered.push(id);
-        }
-        lists.push(
-          orderedFiltered.map((id) => ({
-            id,
-            item: { source: "recency", kind: "release", fromVector: false },
-          })),
-        );
-      } catch {
-        // Opportunistic boost — base fusion stands if the rank lookup fails.
+  const fused = reciprocalRankFusion(lists);
+
+  if (params.scoreMultipliers && fused.length > 0) {
+    try {
+      const multipliers = await params.scoreMultipliers(fused.map((e) => e.id));
+      for (const entry of fused) {
+        const m = multipliers.get(entry.id);
+        // Treat anything not a finite, non-negative number as a no-op.
+        // Prevents NaN/Infinity/negative multipliers from corrupting the
+        // sort comparator below.
+        if (typeof m === "number" && Number.isFinite(m) && m >= 0) entry.score *= m;
       }
+      fused.sort((a, b) => b.score - a.score);
+    } catch {
+      // Opportunistic — base fusion stands if the multiplier lookup fails.
     }
   }
-
-  const fused = reciprocalRankFusion(lists);
 
   return fused.slice(0, topK).map((entry) => ({
     id: entry.id,

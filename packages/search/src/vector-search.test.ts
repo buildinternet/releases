@@ -172,19 +172,19 @@ test("hybridSearch: honors topK cap", async () => {
   expect(result.length).toBe(10);
 });
 
-test("hybridSearch: recencyRank lifts a tied candidate above its peer", async () => {
-  // rel_old leads vector but trails FTS; rel_new is the inverse. Their RRF
-  // scores are identical (1/61 + 1/62 each), so baseline ordering falls to
-  // the first-seen tiebreaker — vector list runs first, so rel_old wins.
-  // With recency favoring rel_new, the third RRF input breaks the tie.
-  const ftsHits: HybridFtsHit[] = [{ id: "rel_new" }, { id: "rel_old" }];
+test("hybridSearch: scoreMultipliers can flip ordering by a magnitude", async () => {
+  // rel_old leads on FTS+vector, but rel_new gets a 10x decay multiplier.
+  // With a continuous boost (unlike the previous rank-based attempt), a
+  // strong multiplier can overcome a clear FTS+vector lead — which is the
+  // whole point of moving to multiplicative decay.
+  const ftsHits: HybridFtsHit[] = [{ id: "rel_old" }, { id: "rel_new" }];
   const releaseIndex = fakeIndex([
     { id: "rel_old", score: 0.9 },
     { id: "rel_new", score: 0.89 },
   ]);
 
   const baseline = await hybridSearch({
-    query: "tied",
+    query: "q",
     ftsSearch: async () => ftsHits,
     vectorIndexes: [{ name: "releases-v1", kind: "release", index: releaseIndex }],
     embed: async () => [0.1],
@@ -192,40 +192,88 @@ test("hybridSearch: recencyRank lifts a tied candidate above its peer", async ()
   expect(baseline.map((r) => r.id)).toEqual(["rel_old", "rel_new"]);
 
   const boosted = await hybridSearch({
-    query: "tied",
+    query: "q",
     ftsSearch: async () => ftsHits,
     vectorIndexes: [{ name: "releases-v1", kind: "release", index: releaseIndex }],
     embed: async () => [0.1],
-    // rel_new is the more recent of the two — should win after the boost.
-    recencyRank: async (ids) =>
-      [...ids].toSorted((a, b) => (a === "rel_new" ? -1 : b === "rel_new" ? 1 : 0)),
+    scoreMultipliers: async () => new Map([["rel_new", 10]]),
   });
   expect(boosted.map((r) => r.id)).toEqual(["rel_new", "rel_old"]);
-  // Recency only re-orders candidates already in the result; appearances
-  // for items in all three lists must be 3.
-  const newer = boosted.find((r) => r.id === "rel_new")!;
-  expect(newer.appearances).toBe(3);
 });
 
-test("hybridSearch: recencyRank output is filtered to candidates and deduped", async () => {
-  // Misbehaved callback returns an unknown id and a duplicate. Orchestrator
-  // must drop both before they reach RRF — otherwise duplicates double-count
-  // toward the score and unknown ids waste topK slots at the cap.
-  const ftsHits: HybridFtsHit[] = [{ id: "rel_a" }, { id: "rel_b" }];
-  const releaseIndex = fakeIndex([{ id: "rel_a", score: 0.9 }]);
+test("hybridSearch: scoreMultipliers missing ids default to 1.0 (pass-through)", async () => {
+  const ftsHits: HybridFtsHit[] = [{ id: "rel_a" }, { id: "rel_b" }, { id: "rel_c" }];
   const result = await hybridSearch({
     query: "q",
     ftsSearch: async () => ftsHits,
-    vectorIndexes: [{ name: "releases-v1", kind: "release", index: releaseIndex }],
+    vectorIndexes: [],
     embed: async () => [0.1],
-    recencyRank: async () => ["rel_a", "rel_runaway", "rel_a", "rel_b"],
+    // Only rel_a gets a non-1 multiplier; rel_b and rel_c pass through.
+    scoreMultipliers: async () => new Map([["rel_a", 0.1]]),
   });
-  expect(result.map((r) => r.id).toSorted()).toEqual(["rel_a", "rel_b"]);
-  // rel_a appears in vector + fts + recency (once, not twice).
-  expect(result.find((r) => r.id === "rel_a")?.appearances).toBe(3);
+  // rel_a multiplied by 0.1 — drops below rel_b and rel_c which were at
+  // rank 2 and 3 with no decay.
+  expect(result.map((r) => r.id)).toEqual(["rel_b", "rel_c", "rel_a"]);
 });
 
-test("hybridSearch: recencyRank throw is swallowed and base fusion stands", async () => {
+test("hybridSearch: scoreMultipliers of 1.0 leaves ordering identical to baseline", async () => {
+  const ftsHits: HybridFtsHit[] = [{ id: "rel_a" }, { id: "rel_b" }, { id: "rel_c" }];
+  const noOp = await hybridSearch({
+    query: "q",
+    ftsSearch: async () => ftsHits,
+    vectorIndexes: [],
+    embed: async () => [0.1],
+    scoreMultipliers: async () =>
+      new Map([
+        ["rel_a", 1],
+        ["rel_b", 1],
+        ["rel_c", 1],
+      ]),
+  });
+  expect(noOp.map((r) => r.id)).toEqual(["rel_a", "rel_b", "rel_c"]);
+});
+
+test("hybridSearch: scoreMultipliers of 0 sinks an entry to the bottom", async () => {
+  const ftsHits: HybridFtsHit[] = [{ id: "rel_a" }, { id: "rel_b" }, { id: "rel_c" }];
+  const result = await hybridSearch({
+    query: "q",
+    ftsSearch: async () => ftsHits,
+    vectorIndexes: [],
+    embed: async () => [0.1],
+    scoreMultipliers: async () => new Map([["rel_a", 0]]),
+  });
+  // rel_a is zeroed; sort puts it last.
+  expect(result.map((r) => r.id)).toEqual(["rel_b", "rel_c", "rel_a"]);
+  expect(result.find((r) => r.id === "rel_a")?.score).toBe(0);
+});
+
+test("hybridSearch: scoreMultipliers rejects NaN/Infinity/negative values (no-op pass-through)", async () => {
+  // A buggy callback must not poison sort with NaN, or invert ordering with
+  // negatives, or shove an entry to the top with Infinity. Orchestrator
+  // validates each multiplier before applying.
+  const ftsHits: HybridFtsHit[] = [{ id: "rel_a" }, { id: "rel_b" }, { id: "rel_c" }];
+  const result = await hybridSearch({
+    query: "q",
+    ftsSearch: async () => ftsHits,
+    vectorIndexes: [],
+    embed: async () => [0.1],
+    scoreMultipliers: async () =>
+      new Map([
+        ["rel_a", Number.NaN],
+        ["rel_b", Number.POSITIVE_INFINITY],
+        ["rel_c", -2],
+      ]),
+  });
+  // All three multipliers rejected → ordering identical to baseline.
+  expect(result.map((r) => r.id)).toEqual(["rel_a", "rel_b", "rel_c"]);
+  // Scores must still be finite, non-negative numbers.
+  for (const r of result) {
+    expect(Number.isFinite(r.score)).toBe(true);
+    expect(r.score).toBeGreaterThanOrEqual(0);
+  }
+});
+
+test("hybridSearch: scoreMultipliers throw is swallowed and base fusion stands", async () => {
   const ftsHits: HybridFtsHit[] = [{ id: "rel_a" }, { id: "rel_b" }];
   const releaseIndex = fakeIndex([{ id: "rel_a", score: 0.9 }]);
   const result = await hybridSearch({
@@ -233,11 +281,10 @@ test("hybridSearch: recencyRank throw is swallowed and base fusion stands", asyn
     ftsSearch: async () => ftsHits,
     vectorIndexes: [{ name: "releases-v1", kind: "release", index: releaseIndex }],
     embed: async () => [0.1],
-    recencyRank: async () => {
+    scoreMultipliers: async () => {
       throw new Error("D1 unavailable");
     },
   });
-  // Same shape as a recencyRank-less run.
   expect(result.map((r) => r.id)).toEqual(["rel_a", "rel_b"]);
 });
 
