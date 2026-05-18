@@ -226,7 +226,13 @@ export async function hybridSearch(params: HybridSearchParams): Promise<HybridSe
   if (params.scoreMultipliers && fused.length > 0) {
     try {
       const multipliers = await params.scoreMultipliers(fused.map((e) => e.id));
-      for (const entry of fused) entry.score *= multipliers.get(entry.id) ?? 1;
+      for (const entry of fused) {
+        const m = multipliers.get(entry.id);
+        // Treat anything not a finite, non-negative number as a no-op.
+        // Prevents NaN/Infinity/negative multipliers from corrupting the
+        // sort comparator below.
+        if (typeof m === "number" && Number.isFinite(m) && m >= 0) entry.score *= m;
+      }
       fused.sort((a, b) => b.score - a.score);
     } catch {
       // Opportunistic — base fusion stands if the multiplier lookup fails.

@@ -247,6 +247,32 @@ test("hybridSearch: scoreMultipliers of 0 sinks an entry to the bottom", async (
   expect(result.find((r) => r.id === "rel_a")?.score).toBe(0);
 });
 
+test("hybridSearch: scoreMultipliers rejects NaN/Infinity/negative values (no-op pass-through)", async () => {
+  // A buggy callback must not poison sort with NaN, or invert ordering with
+  // negatives, or shove an entry to the top with Infinity. Orchestrator
+  // validates each multiplier before applying.
+  const ftsHits: HybridFtsHit[] = [{ id: "rel_a" }, { id: "rel_b" }, { id: "rel_c" }];
+  const result = await hybridSearch({
+    query: "q",
+    ftsSearch: async () => ftsHits,
+    vectorIndexes: [],
+    embed: async () => [0.1],
+    scoreMultipliers: async () =>
+      new Map([
+        ["rel_a", Number.NaN],
+        ["rel_b", Number.POSITIVE_INFINITY],
+        ["rel_c", -2],
+      ]),
+  });
+  // All three multipliers rejected → ordering identical to baseline.
+  expect(result.map((r) => r.id)).toEqual(["rel_a", "rel_b", "rel_c"]);
+  // Scores must still be finite, non-negative numbers.
+  for (const r of result) {
+    expect(Number.isFinite(r.score)).toBe(true);
+    expect(r.score).toBeGreaterThanOrEqual(0);
+  }
+});
+
 test("hybridSearch: scoreMultipliers throw is swallowed and base fusion stands", async () => {
   const ftsHits: HybridFtsHit[] = [{ id: "rel_a" }, { id: "rel_b" }];
   const releaseIndex = fakeIndex([{ id: "rel_a", score: 0.9 }]);
