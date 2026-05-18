@@ -11,7 +11,7 @@
  * When `marketingFilter` is unset, the classifier never runs (no Anthropic
  * call) and all rows insert visibly.
  */
-import { describe, it, expect, afterEach } from "bun:test";
+import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { Database } from "bun:sqlite";
 import { drizzle } from "drizzle-orm/bun-sqlite";
 import { eq } from "drizzle-orm";
@@ -20,10 +20,21 @@ import { organizations, sources, releases } from "@buildinternet/releases-core/s
 import { fetchOne } from "../src/cron/poll-fetch.js";
 
 // ── fetch mock ──────────────────────────────────────────────────────────────
+//
+// Captured per-test (in beforeEach), not at module load, so a prior test
+// file's leaked mock can't end up as our "original" baseline. Required to keep
+// `restoreFetch` from re-installing another suite's stale handler on CI when
+// bun evaluates modules in a slightly different order than locally.
 
 type FetchHandler = (input: RequestInfo | URL, init?: RequestInit) => Response | Promise<Response>;
-const originalFetch: typeof fetch = globalThis.fetch;
+let realFetch: typeof fetch | undefined;
 const requestedUrls: string[] = [];
+
+function urlOf(input: RequestInfo | URL): string {
+  if (typeof input === "string") return input;
+  if (input instanceof URL) return input.href;
+  return input.url;
+}
 
 function installFetch(handler: FetchHandler) {
   requestedUrls.length = 0;
@@ -31,14 +42,15 @@ function installFetch(handler: FetchHandler) {
     input: RequestInfo | URL,
     init?: RequestInit,
   ): Promise<Response> => {
-    const url = typeof input === "string" ? input : input.toString();
-    requestedUrls.push(url);
+    requestedUrls.push(urlOf(input));
     return await handler(input, init);
   }) as typeof fetch;
 }
 
 function restoreFetch() {
-  (globalThis as { fetch: typeof fetch }).fetch = originalFetch;
+  if (realFetch !== undefined) {
+    (globalThis as { fetch: typeof fetch }).fetch = realFetch;
+  }
 }
 
 function text(body: string, status = 200, headers: Record<string, string> = {}): Response {
@@ -140,6 +152,9 @@ function makeEnv(opts: { withAnthropic: boolean }): unknown {
 // ── tests ────────────────────────────────────────────────────────────────────
 
 describe("fetchOne — metadata.marketingFilter", () => {
+  beforeEach(() => {
+    if (realFetch === undefined) realFetch = globalThis.fetch;
+  });
   afterEach(() => {
     restoreFetch();
   });
@@ -147,7 +162,7 @@ describe("fetchOne — metadata.marketingFilter", () => {
   it("does not call the classifier when marketingFilter is unset", async () => {
     let anthropicCalls = 0;
     installFetch((input) => {
-      const url = typeof input === "string" ? input : input.toString();
+      const url = urlOf(input);
       if (url === "https://clickhouse.com/rss.xml") return text(CLICKHOUSE_RSS);
       if (url.includes("api.anthropic.com")) {
         anthropicCalls++;
@@ -167,6 +182,9 @@ describe("fetchOne — metadata.marketingFilter", () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const result = await fetchOne(db as any, src, makeEnv({ withAnthropic: true }) as any);
 
+    // Sanity-check the fetch mock ran. If this fails on CI it points at a
+    // global-fetch ordering issue between test files, not at the classifier.
+    expect(requestedUrls).toContain("https://clickhouse.com/rss.xml");
     expect(result.status).toBe("success");
     expect(result.releasesInserted).toBe(2);
     expect(anthropicCalls).toBe(0);
@@ -178,7 +196,7 @@ describe("fetchOne — metadata.marketingFilter", () => {
 
   it("suppresses marketing items at insert and lets product news through", async () => {
     installFetch((input, init) => {
-      const url = typeof input === "string" ? input : input.toString();
+      const url = urlOf(input);
       if (url === "https://clickhouse.com/rss.xml") return text(CLICKHOUSE_RSS);
       if (url.includes("api.anthropic.com")) {
         // Dispatch on the title carried in the user message so we can hold the
@@ -226,7 +244,7 @@ describe("fetchOne — metadata.marketingFilter", () => {
 
   it("fails open when the classifier throws — inserts everything visibly", async () => {
     installFetch((input) => {
-      const url = typeof input === "string" ? input : input.toString();
+      const url = urlOf(input);
       if (url === "https://clickhouse.com/rss.xml") return text(CLICKHOUSE_RSS);
       if (url.includes("api.anthropic.com")) {
         // Garbage response forces parseMarketingVerdict to throw.
