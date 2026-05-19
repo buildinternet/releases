@@ -3,6 +3,8 @@ name: seeding-playbooks
 description: Coordinate bulk playbook writing using parallel sub-agents — covers org discovery, prompt templates, model selection, batch dispatch, verification, and the parent-saves pattern for working around subagent permission limits. Currently wired up for Claude Code's Agent tool; the managed-agent fleet supports sub-agents too and the pattern can be adapted, but isn't wired up there yet.
 ---
 
+<!-- AUTO-GENERATED: Do not edit directly. Source of truth is src/agent/skills/. Changes here will be overwritten by scripts/sync-plugin-skills.ts -->
+
 # Seeding Playbooks
 
 Coordinate bulk creation or enrichment of playbook agent notes across many orgs using parallel sub-agents.

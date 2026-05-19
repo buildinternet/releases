@@ -7,6 +7,8 @@ description: >
   is the best entry point for the average reader and mark it canonical.
 ---
 
+<!-- AUTO-GENERATED: Do not edit directly. Source of truth is src/agent/skills/. Changes here will be overwritten by scripts/sync-plugin-skills.ts -->
+
 # Grouping Releases
 
 ## What this is for

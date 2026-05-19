@@ -1,6 +1,6 @@
 {
   "name": "releases",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Search changelogs, track releases, and manage changelog sources with the Releases.sh registry.",
   "author": {
     "name": "Build Internet"

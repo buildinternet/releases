@@ -6,6 +6,8 @@ description: >
   or as the regen step inside a maintaining-orgs run.
 ---
 
+<!-- AUTO-GENERATED: Do not edit directly. Source of truth is src/agent/skills/. Changes here will be overwritten by scripts/sync-plugin-skills.ts -->
+
 # Regenerating Overviews
 
 Org overviews are short knowledge pages summarizing what an org has shipped recently. Regeneration is **agent-driven**: this skill carries the prompt and structure rules; the API exposes a pure-data input builder and a dumb upsert.

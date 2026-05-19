@@ -10,6 +10,8 @@ description: >
   scaffolding for this skill just isn't wired up on that side yet.)
 ---
 
+<!-- AUTO-GENERATED: Do not edit directly. Source of truth is src/agent/skills/. Changes here will be overwritten by scripts/sync-plugin-skills.ts -->
+
 # Generating Release Content
 
 Populate the four AI-generated fields on a release:
