@@ -180,8 +180,7 @@ async function probeFeedPath(origin: string, path: string): Promise<DiscoveredFe
       redirect: "follow",
       headers: {
         "User-Agent": RELEASES_BOT_UA,
-        Accept:
-          "application/rss+xml, application/atom+xml, application/feed+json, application/xml, text/xml",
+        Accept: FEED_ACCEPT,
       },
     });
     if (!getRes.ok) return null;
@@ -236,6 +235,14 @@ export function detectFeedTypeFromContent(body: string): FeedType | null {
 
 // ── Feed fetching + parsing ─────────────────────────────────────────
 
+/**
+ * Feed-specific Accept header. Omits generic `application/xml` and `text/xml`
+ * because some CDN/WAF stacks (e.g. Render) return 406 when those types are
+ * present. Real feeds are always served under one of the feed-specific MIME
+ * types, so dropping the generic tail is safe.
+ */
+const FEED_ACCEPT = "application/rss+xml, application/atom+xml, application/feed+json";
+
 export async function fetchAndParseFeed(
   feedUrl: string,
   feedType: FeedType,
@@ -249,12 +256,19 @@ export async function fetchAndParseFeed(
 }> {
   const reqHeaders: Record<string, string> = {
     "User-Agent": RELEASES_BOT_UA,
-    Accept:
-      "application/rss+xml, application/atom+xml, application/feed+json, application/xml, text/xml",
+    Accept: FEED_ACCEPT,
     ...headers,
   };
 
-  const res = await fetch(feedUrl, { headers: reqHeaders, redirect: "follow" });
+  let res = await fetch(feedUrl, { headers: reqHeaders, redirect: "follow" });
+
+  // Belt-and-braces: if the server returns 406 (Not Acceptable) — some
+  // CDN/WAF stacks reject even feed-specific Accept types — retry once with
+  // Accept: */* before giving up. This is a single fallback, not a loop.
+  if (res.status === 406) {
+    const fallbackHeaders = { ...reqHeaders, Accept: "*/*" };
+    res = await fetch(feedUrl, { headers: fallbackHeaders, redirect: "follow" });
+  }
 
   if (res.status === 304) return { releases: [] };
 

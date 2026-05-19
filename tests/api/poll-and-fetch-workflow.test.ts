@@ -513,4 +513,62 @@ describe("PollAndFetchWorkflow", () => {
     expect(stepNames).not.toContain("invalidate-latest-cache");
     expect(invalidationCalls).toHaveLength(0);
   });
+
+  it("feed-broken-metadata: feed source with no feedType skips fetch without error row (#1073)", async () => {
+    // Repro for the 924-occurrence prod pattern: a feed-type source whose
+    // metadata lacks feedType (or feedUrl) reaches the workflow. Previously
+    // fetchOne was called and inserted a fetch_log error row on every run,
+    // driving up consecutiveErrors and backing the source off for weeks.
+    // The fix defers these sources the same way scrape-no-feed sources are
+    // deferred — skip fetch, log a warn, accumulate no error rows.
+    const sqlite = new Database(":memory:");
+    const db = ensureBatchShim(drizzle(sqlite));
+    applyMigrations(sqlite);
+    db.insert(organizations)
+      .values({ id: "org_b", name: "Broken Feed Co", slug: "broken-feed-co", category: "cloud" })
+      .run();
+    db.insert(sources)
+      .values({
+        id: "src_broken_feed",
+        orgId: "org_b",
+        slug: "broken-feed-co-changelog",
+        name: "Broken Feed Co Changelog",
+        url: "https://broken.test/changelog",
+        type: "feed",
+        // feedUrl is set but feedType is missing — the state that causes
+        // fetchOne to log a fetch_log error row and increment consecutiveErrors.
+        metadata: JSON.stringify({ feedUrl: "https://broken.test/changelog/rss" }),
+      })
+      .run();
+
+    // The poll HEAD check must return changed=true so we exercise the
+    // defer branch, not the no-change early exit.
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : String(input);
+      if (url.includes("broken.test") && (init?.method ?? "GET") === "HEAD") {
+        return new Response(null, { status: 200, headers: { ETag: '"v1"' } });
+      }
+      return new Response(`unexpected ${init?.method ?? "GET"} ${url}`, { status: 404 });
+    }) as unknown as typeof fetch;
+
+    const env = mkEnv({
+      _drizzleOverride: db,
+      LATEST_CACHE: mkCacheRecorder(),
+    });
+
+    const { records, thrown } = await runWorkflow(env, "src_broken_feed");
+    expect(thrown).toBeUndefined();
+
+    const stepNames = records.map((r) => r.name);
+    expect(stepNames).toContain("poll-head-check");
+    // Critical: must NOT call fetchOne — that would insert a fetch_log error row.
+    expect(stepNames).not.toContain("fetch-and-persist");
+    expect(stepNames).not.toContain("embed-releases");
+    expect(invalidationCalls).toHaveLength(0);
+
+    // No fetch_log error rows accumulated.
+    expect(db.select().from(fetchLog).all()).toHaveLength(0);
+    // No releases inserted.
+    expect(db.select().from(releases).all()).toHaveLength(0);
+  });
 });
