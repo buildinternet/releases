@@ -14,6 +14,18 @@ export function isValidKind(value: string): value is Kind {
   return (KIND_VALUES as readonly string[]).includes(value);
 }
 
+/**
+ * Parse a raw `?kind=` query-string value.
+ * - `undefined` (param absent) → `undefined`
+ * - valid enum member → `Kind`
+ * - any other string → `null` (caller should return 400)
+ */
+export function parseKindParam(raw: string | undefined): Kind | undefined | null {
+  if (raw === undefined) return undefined;
+  if (isValidKind(raw)) return raw;
+  return null;
+}
+
 type WithMaybeKind = { kind?: Kind | null | undefined };
 
 /**

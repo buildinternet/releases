@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { describeRoute, resolver } from "hono-openapi";
 import { hideInProduction } from "../openapi.js";
 import { and, count, eq, inArray, sql } from "drizzle-orm";
-import { isValidKind, KIND_VALUES, type Kind } from "@buildinternet/releases-core/kinds";
+import { parseKindParam, KIND_VALUES, type Kind } from "@buildinternet/releases-core/kinds";
 import { createDb } from "../db.js";
 import {
   products,
@@ -91,8 +91,8 @@ productRoutes.get(
     const orgId = c.req.query("orgId");
     const pagination = parseListPagination(new URL(c.req.url).searchParams);
 
-    const kindParam = c.req.query("kind");
-    if (kindParam !== undefined && !isValidKind(kindParam)) {
+    const kind = parseKindParam(c.req.query("kind"));
+    if (kind === null)
       return c.json(
         {
           error: "bad_request",
@@ -100,8 +100,6 @@ productRoutes.get(
         },
         400,
       );
-    }
-    const kind = kindParam as Kind | undefined;
 
     const conditions = [
       ...(orgId ? [eq(productsActive.orgId, orgId)] : []),

@@ -46,7 +46,7 @@ import {
   collectionMembers,
 } from "@buildinternet/releases-core/schema";
 import { daysAgoIso } from "@buildinternet/releases-core/dates";
-import { isValidKind, KIND_VALUES, type Kind } from "@buildinternet/releases-core/kinds";
+import { parseKindParam, KIND_VALUES, type Kind } from "@buildinternet/releases-core/kinds";
 import { resolveCategoryInput } from "../lib/category-alias.js";
 import { parseSourceTypesLenient } from "../lib/source-types.js";
 import { toSlug } from "@buildinternet/releases-core/slug";
@@ -812,8 +812,8 @@ orgRoutes.get(
         400,
       );
     }
-    const kindParam = c.req.query("kind");
-    if (kindParam !== undefined && !isValidKind(kindParam)) {
+    const entityKind = parseKindParam(c.req.query("kind"));
+    if (entityKind === null)
       return c.json(
         {
           error: "bad_request",
@@ -821,8 +821,6 @@ orgRoutes.get(
         },
         400,
       );
-    }
-    const entityKind = kindParam as Kind | undefined;
     const limitRaw = parseInt(c.req.query("limit") ?? "100", 10);
     const limit = Math.min(Math.max(Number.isFinite(limitRaw) ? limitRaw : 100, 1), 500);
 
@@ -1724,8 +1722,8 @@ orgRoutes.get(
     const qRaw = c.req.query("q")?.trim() ?? "";
     const ftsMatch = qRaw ? toFtsPrefixMatchQuery(qRaw) : undefined;
 
-    const kindParam = c.req.query("kind");
-    if (kindParam !== undefined && !isValidKind(kindParam)) {
+    const kind = parseKindParam(c.req.query("kind"));
+    if (kind === null)
       return c.json(
         {
           error: "bad_request",
@@ -1733,8 +1731,6 @@ orgRoutes.get(
         },
         400,
       );
-    }
-    const kind = kindParam as Kind | undefined;
 
     const db = createDb(c.env.DB);
 

@@ -14,7 +14,7 @@ import type {
   MediaItem,
   LookupResultPayload,
 } from "@buildinternet/releases-api-types";
-import { isValidKind, KIND_VALUES, type Kind } from "@buildinternet/releases-core/kinds";
+import { parseKindParam, KIND_VALUES, type Kind } from "@buildinternet/releases-core/kinds";
 import { createDb } from "../db.js";
 import {
   findOrgByDomain,
@@ -266,8 +266,8 @@ searchRoutes.get(
     const includeCoverage = parseBoolParam(c.req.query("include_coverage"));
     const includeEmpty = parseBoolParam(c.req.query("include_empty"));
     const rawDomain = c.req.query("domain");
-    const rawKind = c.req.query("kind");
-    if (rawKind !== undefined && !isValidKind(rawKind)) {
+    const kindFilter = parseKindParam(c.req.query("kind"));
+    if (kindFilter === null)
       return c.json(
         {
           error: "bad_request",
@@ -275,8 +275,6 @@ searchRoutes.get(
         },
         400,
       );
-    }
-    const kindFilter = rawKind as Kind | undefined;
     const db = createDb(c.env.DB);
     const mediaOrigin = c.env.MEDIA_ORIGIN ?? "";
 

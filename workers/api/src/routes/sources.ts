@@ -30,7 +30,7 @@ import {
   type ReleaseType,
 } from "@buildinternet/releases-core/schema";
 import { SOURCE_TYPES, type SourceType } from "@buildinternet/releases-core/source-enums";
-import { isValidKind, KIND_VALUES, type Kind } from "@buildinternet/releases-core/kinds";
+import { parseKindParam, KIND_VALUES, type Kind } from "@buildinternet/releases-core/kinds";
 import { buildListResponse, parseListPagination } from "../lib/pagination.js";
 import { RELEASE_URL_UPSERT } from "@releases/core-internal/release-upsert";
 import { daysAgoIso, inferMonthOnlyDate } from "@buildinternet/releases-core/dates";
@@ -234,8 +234,8 @@ sourceRoutes.get(
     const includeHidden = c.req.query("include_hidden") === "true";
     const categoryFilter = c.req.query("category");
 
-    const kindParam = c.req.query("kind");
-    if (kindParam !== undefined && !isValidKind(kindParam)) {
+    const kind = parseKindParam(c.req.query("kind"));
+    if (kind === null)
       return c.json(
         {
           error: "bad_request",
@@ -243,8 +243,6 @@ sourceRoutes.get(
         },
         400,
       );
-    }
-    const kind = kindParam as Kind | undefined;
 
     // Pagination: default limit 100, hard cap 500. `?offset=` is also accepted
     // and overrides `?page=` so callers that pre-compute offsets keep working.
@@ -424,7 +422,7 @@ sourceRoutes.get(
       isHidden: Boolean(src.is_hidden),
       discovery: src.discovery ?? "curated",
       metadata: src.metadata ?? null,
-      kind: src.kind && isValidKind(src.kind) ? src.kind : null,
+      kind: src.kind ?? null,
       releaseCount: src.release_count,
       latestVersion: src.latest_version ?? null,
       latestDate: src.latest_date ?? null,
@@ -2399,10 +2397,6 @@ const patchSourceHandler = async (c: import("hono").Context<Env>) => {
     return c.json({ error: "bad_request", message: parsed.error.message }, 400);
   }
   const body = parsed.data as SourcePatchInput;
-  // Preserve the "kind" in raw check semantics — zod parse strips undefined keys,
-  // so the "kind" in body discriminator below uses the validated `body` after
-  // re-attaching the original null/undefined intent.
-  if ("kind" in raw && !("kind" in body)) (body as Record<string, unknown>).kind = raw.kind;
 
   const src = await resolveSourceFromContext(c, db);
   if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
