@@ -476,10 +476,35 @@ export class PollAndFetchWorkflow extends WorkflowEntrypoint<
         // Surface fetch errors so the step retries. The inline path already
         // recorded fetch_log + source counter updates, so retry is safe.
         if (result.status === "error") {
-          throw new Error(`fetch ${source.slug}: ${result.error ?? "unknown"}`);
+          throw new Error(`fetch ${source.slug}: ${result.error}`);
         }
         return result;
       });
+
+      // Exhaustive switch on fetch result status. `"delegated"` means the
+      // source was handed off to the managed-agent worker — the MA session
+      // writes its own fetch_log row when it completes, so we exit early here
+      // rather than running the embed / cache-invalidation steps with zero rows.
+      // The `default` arm ensures a future addition to FetchOneResult is a
+      // compile-time error if this switch isn't updated.
+      switch (fetchResult.status) {
+        case "delegated":
+          logEvent("info", {
+            component: "poll-fetch-workflow",
+            event: "delegated",
+            sourceId,
+            sessionId: fetchResult.sessionId,
+          });
+          return;
+        case "no_change":
+        case "dry_run":
+        case "success":
+          break;
+        default: {
+          const _exhaustive: never = fetchResult;
+          throw new Error(`Unhandled FetchOneResult status: ${JSON.stringify(_exhaustive)}`);
+        }
+      }
 
       const insertedIds = fetchResult.insertedIds ?? [];
 

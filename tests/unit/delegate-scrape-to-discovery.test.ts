@@ -123,7 +123,7 @@ describe("delegateScrapeToDiscovery", () => {
     });
   });
 
-  it("returns synthetic no_change on successful hand-off (MA writes its own fetch_log later)", async () => {
+  it("returns delegated on successful hand-off, carrying the sessionId from discovery", async () => {
     const source = await seedOrgAndSource(harness.db);
     const discovery = makeDiscoveryStub({ ok: true, sessionId: "ma-xyz" });
 
@@ -133,10 +133,13 @@ describe("delegateScrapeToDiscovery", () => {
       makeEnv(discovery),
     );
 
-    expect(result.status).toBe("no_change");
+    expect(result.status).toBe("delegated");
     expect(result.releasesFound).toBe(0);
     expect(result.releasesInserted).toBe(0);
-    expect(result.error).toBeUndefined();
+    // Narrowing: TypeScript ensures sessionId is present on the delegated variant.
+    if (result.status === "delegated") {
+      expect(result.sessionId).toBe("ma-xyz");
+    }
   });
 
   it("returns error when the org row is missing (orphaned source)", async () => {
@@ -161,7 +164,7 @@ describe("delegateScrapeToDiscovery", () => {
       makeEnv(discovery),
     );
 
-    expect(result.status).toBe("error");
+    if (result.status !== "error") throw new Error(`expected status=error, got ${result.status}`);
     expect(result.error).toContain("org_ghost");
     expect(discovery.calls).toHaveLength(0);
   });
@@ -174,7 +177,7 @@ describe("delegateScrapeToDiscovery", () => {
       {} as unknown as FetchOneEnv,
     );
 
-    expect(result.status).toBe("error");
+    if (result.status !== "error") throw new Error(`expected status=error, got ${result.status}`);
     expect(result.error).toContain("DISCOVERY_WORKER");
   });
 
@@ -191,7 +194,7 @@ describe("delegateScrapeToDiscovery", () => {
       makeEnv(discovery),
     );
 
-    expect(result.status).toBe("error");
+    if (result.status !== "error") throw new Error(`expected status=error, got ${result.status}`);
     expect(result.error).toBe("ANTHROPIC_API_KEY not configured");
     expect(discovery.calls).toHaveLength(1);
   });

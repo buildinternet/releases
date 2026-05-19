@@ -134,10 +134,23 @@ export class OnboardSourceWorkflow extends WorkflowEntrypoint<
           const fetchResult = await step.do("backfill-fetch", RETRY_FETCH, async () => {
             const result = await fetchOne(db, source, fetchEnv, { skipSideEffects: true });
             if (result.status === "error") {
-              throw new Error(`backfill ${source.slug}: ${result.error ?? "unknown"}`);
+              throw new Error(`backfill ${source.slug}: ${result.error}`);
             }
             return result;
           });
+
+          // Delegation during onboard is an edge case (the source would need
+          // crawlEnabled + a summary-only feed on first scrape), but handle it
+          // cleanly — the MA session will write its own fetch_log row.
+          if (fetchResult.status === "delegated") {
+            logEvent("info", {
+              component: "onboard-workflow",
+              event: "delegated",
+              sourceSlug: source.slug,
+              sessionId: fetchResult.sessionId,
+            });
+            return;
+          }
 
           const insertedIds = fetchResult.insertedIds ?? [];
           if (insertedIds.length > 0 && env.RELEASES_INDEX) {
