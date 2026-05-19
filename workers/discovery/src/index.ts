@@ -156,14 +156,9 @@ export type StartManagedFetchSessionResult =
  * `"entrypoint": "DiscoveryEntrypoint"` on the service binding object.
  */
 export class DiscoveryEntrypoint extends WorkerEntrypoint<Env> {
-  /**
-   * Delegates to the default-export HTTP handler. Required because the API
-   * worker's service binding sets `entrypoint: "DiscoveryEntrypoint"`, which
-   * exposes only this class's named methods — without this shim, calls to
-   * `env.DISCOVERY_WORKER.fetch(...)` (the `/onboard` and `/update` proxy in
-   * `workers/api/src/routes/workflows.ts`) fail with "Handler does not export
-   * a fetch() function". See #1044.
-   */
+  // A service binding with `entrypoint: "DiscoveryEntrypoint"` only exposes
+  // this class's named methods, so the default-export `fetch` isn't reachable
+  // through the binding. This shim makes HTTP routing work alongside RPC.
   async fetch(request: Request): Promise<Response> {
     return httpHandler.fetch(request, this.env);
   }
