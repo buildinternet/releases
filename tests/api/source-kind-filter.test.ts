@@ -382,6 +382,11 @@ describe("kind filter on /v1/search", () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as { releases: Array<{ title: string }> };
     const titles = body.releases.map((r) => r.title);
+    // Positive: the fallback path produced the matching-kind release …
+    expect(titles).toContain("platform-only");
+    // … and excluded the other kind. Without the positive assertion an empty
+    // releases array would also satisfy `not.toContain`, hiding a regression
+    // where the fallback returned nothing instead of filtering correctly.
     expect(titles).not.toContain("sdk-only");
   });
 

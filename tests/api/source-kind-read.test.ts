@@ -107,7 +107,7 @@ describe("kind on product read responses", () => {
     const res = await callProduct("/orgs/acme/products/no-kind");
     expect(res.status).toBe(200);
     const body = (await res.json()) as Record<string, unknown>;
-    expect(body.kind === null || body.kind === undefined).toBe(true);
+    expect(body.kind).toBeNull();
   });
 });
 
@@ -146,7 +146,7 @@ describe("kind on source read responses", () => {
     const res = await callSource("/orgs/acme/sources/no-kind-src");
     expect(res.status).toBe(200);
     const body = (await res.json()) as Record<string, unknown>;
-    expect(body.kind === null || body.kind === undefined).toBe(true);
+    expect(body.kind).toBeNull();
   });
 });
 
@@ -203,6 +203,6 @@ describe("entryType + kind on org catalog", () => {
 
     const item = body.items.find((e) => e.slug === "no-kind-prod");
     expect(item?.entryType).toBe("product");
-    expect(item?.kind === null || item?.kind === undefined).toBe(true);
+    expect(item?.kind).toBeNull();
   });
 });
