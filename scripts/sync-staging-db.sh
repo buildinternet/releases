@@ -31,7 +31,10 @@ trap 'rm -rf "${WORK_DIR}"' EXIT
 
 # Tables to copy. Dependency-safe insert order (parents before children).
 # Keep in sync with packages/core/src/schema.ts + src/db/schema-coverage.ts.
+# d1_migrations leads because it has no FKs and we want it stamped before any
+# data INSERTs that depend on the post-migration schema.
 TABLES=(
+  d1_migrations
   organizations
   org_accounts
   products
@@ -57,7 +60,12 @@ TABLES=(
 #                                                         CHANGELOG.md files; the /v1/sources/:slug/changelog
 #                                                         endpoint just degrades on staging)
 #   webhook_subscriptions                                (per-user state; don't mirror)
-#   d1_migrations                                        (wrangler-managed)
+#
+# d1_migrations IS copied (above): mirroring prod's migration log keeps
+# staging's wrangler state aligned with the schema. Without this, ad-hoc DDL
+# applied to staging during dev (e.g. `wrangler d1 execute --file` instead of
+# `wrangler d1 migrations apply`) leaves staging's schema ahead of its log,
+# and the next CI deploy fails with `duplicate column`/`already exists`.
 
 echo "== releases staging DB sync =="
 echo "Prod DB:    released-db"
