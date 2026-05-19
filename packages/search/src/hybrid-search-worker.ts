@@ -124,20 +124,10 @@ function parseBoost(raw: string | undefined, fallback: number): number {
 }
 
 /**
- * Tiered recency boost stacked on top of the exponential decay. Option B
- * from #1045: flat peak for the first 30 days, linear taper between 30d
- * and 90d, then no-op (1.0) forever. The peak is `boost30d`; the taper
- * endpoint at 90d is `boost90d`. Setting `boost90d = 1.0` removes the
- * discontinuity at 90d entirely (the recommended config); leaving it at
- * the default 1.2 keeps a small cliff at 90d that operators can dial out
- * without a redeploy.
- *
- * The parse-time 1.0 floor on both env vars guarantees this multiplier
- * can never demote recent content — only lift it. Setting both boosts to
- * 1.0 disables tiered behavior cleanly; the caller falls back to pure
- * decay.
- *
- * Exported so unit tests can pin the curve without standing up a full
+ * Piecewise recency boost (see docs/architecture/semantic-search.md for the
+ * curve and the multiplier table). The `MIN_BOOST = 1.0` parse-time floor is
+ * load-bearing — this multiplier must never demote recent content, only lift
+ * it. Exported for unit tests so the curve can be pinned without a full
  * hybridSearch fixture.
  */
 export function recencyBoost(ageMs: number, boost30d: number, boost90d: number): number {
@@ -525,11 +515,8 @@ async function runHybridSearchInternal(
           return ids.map((id) => ({ id }));
         };
 
-  // Exponential decay on (now - published_at), stacked with a tiered
-  // recency boost (see `recencyBoost` for the curve). Net multiplier =
-  // decay × boost. Chunks skipped — they anchor to file slices, not dated
-  // entries. SQL chunked at 90 ids/statement to stay under D1's 100-bind
-  // cap.
+  // Chunks skipped — they anchor to file slices, not dated entries. SQL
+  // chunked at 90 ids/statement to stay under D1's 100-bind cap.
   const halfLifeDays = parseHalfLifeDays(env.SEARCH_RECENCY_HALFLIFE_DAYS);
   const halfLifeMs = halfLifeDays * 86_400_000;
   const boost30d = parseBoost(env.SEARCH_RECENCY_BOOST_30D, DEFAULT_BOOST_30D);
