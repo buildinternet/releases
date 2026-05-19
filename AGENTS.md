@@ -140,7 +140,9 @@ Refresh staging data from prod:
 # Or via GH Actions: run the "Sync staging DB" workflow with confirm="yes".
 ```
 
-The sync script copies a content subset — orgs, products, sources, releases, tags, media, knowledge pages, source changelog files, coverage — and skips observability/webhook/vectorize tables (see the TABLES list at the top of `scripts/sync-staging-db.sh`).
+The sync script copies a content subset — orgs, products, sources, releases, tags, media, knowledge pages, source changelog files, coverage — and skips observability/webhook/vectorize tables (see the TABLES list at the top of `scripts/sync-staging-db.sh`). It also copies `d1_migrations` so staging's wrangler log mirrors prod's; this self-heals the "schema is ahead of the migration log" drift that happens when DDL gets applied to staging out-of-band.
+
+When iterating on a new migration against staging, use `bunx wrangler d1 migrations apply DB --env staging --remote --config workers/api/wrangler.jsonc` — this applies the SQL and records the row in `d1_migrations`. Don't `wrangler d1 execute --env staging --file workers/api/migrations/...` to test a migration; that lands the schema but not the log row, and the next CI deploy fails with `duplicate column`/`already exists`.
 
 ## Legacy naming
 
