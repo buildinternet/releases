@@ -1714,7 +1714,7 @@ export async function search(
           db.all<SearchCatalogHit>(sql`
             SELECT DISTINCT p.slug, p.name, o.slug as orgSlug, o.name as orgName,
                    p.category, 'product' as entryType, p.kind
-            FROM products p
+            FROM products_active p
             LEFT JOIN organizations o ON o.id = p.org_id
             LEFT JOIN domain_aliases da ON da.product_id = p.id
             WHERE (${likeContains(sql`p.name`, q)} OR ${likeContains(sql`p.slug`, q)} OR ${likeContains(sql`da.domain`, q)})
@@ -1726,11 +1726,10 @@ export async function search(
             SELECT s.slug, s.name, s.type, o.slug as orgSlug, o.name as orgName,
                    p.slug as productSlug, p.name as productName, p.category as productCategory,
                    s.kind as entityKind
-            FROM sources s
-            LEFT JOIN products p ON p.id = s.product_id
+            FROM sources_visible s
+            LEFT JOIN products_active p ON p.id = s.product_id
             LEFT JOIN organizations o ON o.id = s.org_id
-            WHERE (s.is_hidden = 0 OR s.is_hidden IS NULL)
-              AND (${likeContains(sql`s.name`, q)} OR ${likeContains(sql`s.slug`, q)} OR ${likeContains(sql`s.url`, q)})
+            WHERE (${likeContains(sql`s.name`, q)} OR ${likeContains(sql`s.slug`, q)} OR ${likeContains(sql`s.url`, q)})
               ${orgScope ? sql`AND s.org_id = ${orgScope.id}` : sql``}
               ${params.kind ? sql`AND s.kind = ${params.kind}` : sql``}
             ORDER BY s.name LIMIT ${limit}

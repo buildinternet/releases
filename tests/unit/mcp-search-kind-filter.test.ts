@@ -190,4 +190,73 @@ describe("search — kind filter on releases section (lexical path)", () => {
     expect(text).toContain("quantum tool release");
     expect(text).not.toContain("quantum sdk release");
   });
+
+  it("inherits kind from parent product when source.kind is null", async () => {
+    // Releases-section spec: COALESCE(s.kind, p.kind). A source with null
+    // kind under a product with kind='sdk' should match `kind: 'sdk'`.
+    const orgId = newOrgId();
+    await testDb.db.insert(organizations).values({ id: orgId, name: "Beta", slug: "beta" });
+    const prodId = newProductId();
+    await testDb.db.insert(products).values({
+      id: prodId,
+      orgId,
+      name: "Beta SDK",
+      slug: "beta-sdk",
+      kind: "sdk",
+    });
+    const srcId = newSourceId();
+    await testDb.db.insert(sources).values({
+      id: srcId,
+      orgId,
+      productId: prodId,
+      name: "Beta SDK Python",
+      slug: "beta-sdk-py",
+      type: "github",
+      url: "https://github.com/beta/sdk-py",
+      discovery: "curated",
+      kind: null,
+    });
+    await testDb.db.insert(releases).values({
+      id: newReleaseId(),
+      sourceId: srcId,
+      title: "quark improvement",
+      content: "py SDK quark fix",
+      publishedAt: "2026-05-03T00:00:00Z",
+      type: "feature",
+    });
+
+    const db = asD1(testDb.db);
+    const out = await search(db, {
+      query: "quark",
+      type: ["releases"],
+      mode: "lexical",
+      kind: "sdk",
+    });
+    const text = out.result.content[0].text;
+    expect(text).toContain("quark improvement");
+  });
+});
+
+describe("search — catalog reads from active views (soft-delete leak guard)", () => {
+  it("soft-deleted product does not appear in kind-filtered catalog", async () => {
+    // Regression guard: the MCP catalog query previously joined raw
+    // `products` instead of `products_active`, which made soft-deleted
+    // rows visible to the kind filter. Active views now scope the read.
+    const { orgId } = await seedFixture(testDb.db);
+    // Soft-delete the sdk product
+    const deletedId = newProductId();
+    await testDb.db.insert(products).values({
+      id: deletedId,
+      orgId,
+      name: "Ghost SDK",
+      slug: "ghost-sdk",
+      kind: "sdk",
+      deletedAt: "2025-12-01T00:00:00Z",
+    });
+
+    const db = asD1(testDb.db);
+    const out = await search(db, { query: "ghost", type: ["catalog"], kind: "sdk" });
+    const text = out.result.content[0].text;
+    expect(text).not.toContain("ghost-sdk");
+  });
 });
