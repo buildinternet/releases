@@ -78,7 +78,6 @@ const searchResults: UnifiedSearchResponse = {
   query: "react",
   orgs: [{ slug: "meta", name: "Meta", domain: "meta.com", avatarUrl: null, category: "ai" }],
   catalog: searchCatalog,
-  products: searchCatalog,
   sources: [],
   releases: [
     {
@@ -285,7 +284,6 @@ describe("searchToMarkdown", () => {
       query: "nothing",
       orgs: [],
       catalog: [],
-      products: [],
       sources: [],
       releases: [],
     };
@@ -302,7 +300,6 @@ describe("searchToMarkdown", () => {
       query: "test",
       orgs: [],
       catalog: [],
-      products: [],
       sources: [],
       releases: [
         {
@@ -336,6 +333,9 @@ const fullProduct: ProductDetail = {
   description: "React framework for production",
   category: "framework",
   createdAt: "2024-01-01T00:00:00Z",
+  embeddedAt: null,
+  deletedAt: null,
+  aliases: [],
   sources: [
     {
       id: "src_001",
