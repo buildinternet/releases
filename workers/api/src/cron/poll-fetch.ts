@@ -659,7 +659,11 @@ export async function delegateScrapeToDiscovery(
   // `consecutiveNoChange` because the source isn't actually unchanged — we
   // just delegated; exponential backoff doesn't apply.
   const DELEGATION_COOLDOWN_MS = 60 * 60_000;
-  await Promise.all([
+  // db.batch is atomic — both writes commit together or neither does. A
+  // half-written state (cooldown set without the matching fetch_log entry,
+  // or vice versa) would either drop the source from observability or leave
+  // the loop window open.
+  const ops = [
     db.insert(fetchLog).values({
       sourceId: source.id,
       sessionId: result.sessionId,
@@ -675,7 +679,8 @@ export async function delegateScrapeToDiscovery(
         changeDetectedAt: null,
       })
       .where(eq(sources.id, source.id)),
-  ]);
+  ];
+  await db.batch(ops as [(typeof ops)[number], ...typeof ops]);
 
   logEvent("info", {
     component: "cron-poll-fetch",

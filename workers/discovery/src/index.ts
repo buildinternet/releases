@@ -89,8 +89,11 @@ function errorResponse(
 /**
  * Pre-flight dedup for update-mode sessions. Queries the StatusHub via the
  * API worker for any session (running or recently completed within the
- * window) whose `company` matches. Returns `null` when clear, or a
- * structured block result when a duplicate is found.
+ * window). Prefers `orgId` matching (stable identity) over `company`
+ * (free-form label) when the caller provides it — falls back to a
+ * case-insensitive company comparison only when orgId is unavailable, which
+ * keeps legacy callers working. Returns `null` when clear, or a structured
+ * block result when a duplicate is found.
  *
  * Mirrors the /onboard guard in the same file but for update-mode sessions.
  * Critical to call from BOTH /update HTTP route and `startManagedFetchSession`
@@ -105,6 +108,7 @@ function errorResponse(
 async function checkUpdateSessionDedup(
   env: Env,
   company: string,
+  orgId?: string,
 ): Promise<{
   existingSessionId: string;
   existingStatus: string;
@@ -129,24 +133,23 @@ async function checkUpdateSessionDedup(
           headers: guardHeaders,
         });
     if (!guardRes.ok) return null;
-    const sessionsBody = (await guardRes.json()) as
-      | {
-          sessionId: string;
-          company: string;
-          status: "running" | "complete" | "error" | "cancelled";
-          lastUpdatedAt?: number;
-        }[]
-      | {
-          items: {
-            sessionId: string;
-            company: string;
-            status: "running" | "complete" | "error" | "cancelled";
-            lastUpdatedAt?: number;
-          }[];
-        };
+    type SessionSummary = {
+      sessionId: string;
+      company: string;
+      orgId?: string;
+      status: "running" | "complete" | "error" | "cancelled";
+      lastUpdatedAt?: number;
+    };
+    const sessionsBody = (await guardRes.json()) as SessionSummary[] | { items: SessionSummary[] };
     const sessions = Array.isArray(sessionsBody) ? sessionsBody : sessionsBody.items;
     const companyLower = company.toLowerCase();
-    const existing = sessions.find((s) => s.company.toLowerCase() === companyLower);
+    // Prefer orgId match (stable identity) when both sides have it. Fall
+    // back to company-name match when either side is missing orgId — pre-
+    // existing sessions may not carry orgId until they restart under the
+    // new SessionState shape.
+    const existing = sessions.find((s) =>
+      orgId && s.orgId ? s.orgId === orgId : s.company.toLowerCase() === companyLower,
+    );
     if (!existing) return null;
 
     const dedupWindowMs = UPDATE_DEDUP_WINDOW_MINUTES * 60_000;
@@ -307,13 +310,14 @@ export class DiscoveryEntrypoint extends WorkerEntrypoint<Env> {
     // re-delegated every 2-3 seconds. Block at the gate so a future
     // upstream bug can't burn through Anthropic credits while a human
     // sleeps.
-    const blocked = await checkUpdateSessionDedup(this.env, params.company);
+    const blocked = await checkUpdateSessionDedup(this.env, params.company, params.orgId);
     if (blocked) {
       logEvent("info", {
         component: "discovery",
         event: "update-session-deduped",
         entry: "startManagedFetchSession",
         company: params.company,
+        orgId: params.orgId,
         existingSessionId: blocked.existingSessionId,
         existingStatus: blocked.existingStatus,
       });
@@ -537,9 +541,10 @@ const httpHandler = {
         return errorResponse(validationError, 400);
       }
 
-      // Dedup against running/recent update sessions for the same company —
-      // see comment on the matching call in `startManagedFetchSession` below.
-      const blocked = await checkUpdateSessionDedup(env, body.company);
+      // Dedup against running/recent update sessions for the same org (or
+      // company, when orgId is unavailable) — see comment on the matching
+      // call in `startManagedFetchSession` below.
+      const blocked = await checkUpdateSessionDedup(env, body.company, body.orgId);
       if (blocked) {
         logEvent("info", {
           component: "discovery",
