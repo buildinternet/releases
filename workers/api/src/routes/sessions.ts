@@ -1,6 +1,11 @@
 import { Hono } from "hono";
 import type { Env } from "../index.js";
+import { createDb } from "../db.js";
 import { getStatusHub } from "../utils.js";
+import {
+  applyFetchLogOverlay,
+  applyFetchLogOverlaySingle,
+} from "../lib/session-fetch-log-overlay.js";
 
 export const sessionRoutes = new Hono<Env>();
 
@@ -9,7 +14,16 @@ export const sessionRoutes = new Hono<Env>();
 sessionRoutes.get("/sessions", async (c) => {
   const query = new URL(c.req.url).search;
   const res = await getStatusHub(c.env).fetch(new Request(`https://do/sessions${query}`));
-  const sessions = await res.json();
+  const sessions = (await res.json()) as { items: unknown[]; [k: string]: unknown };
+  // Issue #948: the session DO's terminal state can disagree with fetch_log
+  // when a long fetch outlives its SSE subscriber. Overlay the persisted
+  // fetch outcome onto the response so `task list` shows the truth.
+  if (Array.isArray(sessions?.items)) {
+    await applyFetchLogOverlay(
+      createDb(c.env.DB),
+      sessions.items as Parameters<typeof applyFetchLogOverlay>[1],
+    );
+  }
   return c.json(sessions);
 });
 
@@ -27,7 +41,9 @@ sessionRoutes.get("/sessions/:sessionId", async (c) => {
   const sessionId = c.req.param("sessionId");
   const res = await getStatusHub(c.env).fetch(new Request(`https://do/sessions/${sessionId}`));
   if (res.status === 404) return c.json({ error: "not_found" }, 404);
-  const session = await res.json();
+  const session = (await res.json()) as Parameters<typeof applyFetchLogOverlaySingle>[1];
+  // See #948 — same overlay as the list endpoint, applied to a single row.
+  await applyFetchLogOverlaySingle(createDb(c.env.DB), session);
   return c.json(session);
 });
 
