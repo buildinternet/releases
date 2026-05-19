@@ -149,9 +149,7 @@
       ],
       // KV reuses the staging preview namespace — same IDs as api-staging.
       // Keeps kill-switch + dedup-lock testing self-contained in staging.
-      "kv_namespaces": [
-        { "binding": "LATEST_CACHE", "id": "832712867aff4c91bc11bb3cecd7da9e" },
-      ],
+      "kv_namespaces": [{ "binding": "LATEST_CACHE", "id": "832712867aff4c91bc11bb3cecd7da9e" }],
       "services": [{ "binding": "API_WORKER", "service": "releases-api-staging" }],
       "durable_objects": {
         "bindings": [

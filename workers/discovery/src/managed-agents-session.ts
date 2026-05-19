@@ -1121,22 +1121,24 @@ ${idList}
         }
       }
       // Release per-source dedup locks so the next run of the same source is
-      // not blocked. Wrapped in try/catch — a KV failure must never prevent
-      // the finally block from completing. If locks are not released here they
-      // expire automatically after 15 min via the TTL set at lock-acquire time.
-      if (
-        this.env.LATEST_CACHE &&
-        params.sourceIdentifiers &&
-        params.sourceIdentifiers.length > 0
-      ) {
+      // not blocked. Conditional delete: only remove the key when its stored
+      // value matches THIS sessionId. If our 15-min TTL expired mid-session
+      // and a newer session has since claimed the same source, deleting
+      // blindly would clobber the newer owner's mutex. On miss (TTL expired,
+      // no new owner) the key is already absent — the delete becomes a no-op.
+      // Wrapped in try/catch so a KV failure can't escape finally; TTL cleans
+      // up at most 15 min later.
+      const kv = this.env.LATEST_CACHE;
+      if (kv && params.sourceIdentifiers && params.sourceIdentifiers.length > 0) {
         try {
           await Promise.all(
-            params.sourceIdentifiers.map((id) =>
-              this.env.LATEST_CACHE!.delete(`ma:active:src:${id}`),
-            ),
+            params.sourceIdentifiers.map(async (id) => {
+              const key = `ma:active:src:${id}`;
+              const owner = await kv.get(key);
+              if (owner === sessionId) await kv.delete(key);
+            }),
           );
         } catch {
-          // Non-critical — TTL will clean up at most 15 min later.
           logEvent("warn", {
             component: "discovery",
             event: "ma-source-lock-release-failed",
@@ -1144,13 +1146,6 @@ ${idList}
             sourceIdentifiers: params.sourceIdentifiers,
           });
         }
-      }
-      // Persist session cost to the KV spend counters (global + per-org).
-      // Only written when the session incurred non-zero cost; zero-cost paths
-      // (cancelled before any LLM call) don't pollute the counter.
-      // Wrapped in try/catch — a KV blip must never propagate out of finally.
-      if (this.env.LATEST_CACHE && sessionUsage?.estimatedUsd) {
-        await recordSessionSpend(this.env.LATEST_CACHE, sessionUsage.estimatedUsd, params.orgId);
       }
     }
   }
