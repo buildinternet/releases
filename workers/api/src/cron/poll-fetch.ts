@@ -128,15 +128,44 @@ export async function pollAndFetch(
   // Fetch phase: fetch changed feed/github sources, plus scrape sources
   // that have a discovered feed (their fetchOne path prefers that feed over
   // crawl+AI, so cost is identical to a native feed source).
+  // Feed sources missing feedUrl or feedType are skipped here — calling
+  // fetchOne would log a fetch_log error row and drive backoff. They need
+  // metadata repair (re-discovery), not repeated error accumulation. Same
+  // approach as the scrape-without-feedUrl branch below.
   const fetchable = pollResults
     .filter((r) => r.changed)
     .map((r) => r.source)
-    .filter(
-      (s) =>
-        s.type === "feed" ||
-        s.type === "github" ||
-        (s.type === "scrape" && getSourceMeta(s).feedUrl != null),
-    );
+    .filter((s) => {
+      if (s.type === "feed") {
+        const m = getSourceMeta(s);
+        if (!m.feedUrl || !m.feedType) {
+          logEvent("warn", {
+            component: "cron-poll-fetch",
+            event: "skip-feed-broken-metadata",
+            sourceSlug: s.slug,
+          });
+          return false;
+        }
+        return true;
+      }
+      if (s.type === "scrape") {
+        const m = getSourceMeta(s);
+        if (!m.feedUrl || !m.feedType) {
+          if (m.feedUrl) {
+            // feedUrl present but feedType missing — same broken-metadata state
+            // as the feed branch above; skip rather than driving backoff.
+            logEvent("warn", {
+              component: "cron-poll-fetch",
+              event: "skip-feed-broken-metadata",
+              sourceSlug: s.slug,
+            });
+          }
+          return false;
+        }
+        return true;
+      }
+      return s.type === "github";
+    });
 
   // Aggregate insert count across the whole cron run so the latest-cache
   // invalidator fires once per cron invocation, not once per source.

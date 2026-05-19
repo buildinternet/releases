@@ -451,6 +451,11 @@ export class PollAndFetchWorkflow extends WorkflowEntrypoint<
       // feedUrl can't slip past either. See #486 / #517.
       // A scrape source carrying `metadata.githubUrl` is server-side fetchable
       // via the GitHub path even without a feedUrl, so it doesn't defer (#831).
+      //
+      // Feed-type sources with missing feedUrl or feedType also defer — calling
+      // fetchOne would log a fetch_log error row and drive backoff. They need
+      // metadata repair (re-discovery), not repeated error accumulation.
+      // See #1073.
       const sourceMeta = getSourceMeta(source);
       if (
         (source.type === "scrape" || source.type === "agent") &&
@@ -460,6 +465,32 @@ export class PollAndFetchWorkflow extends WorkflowEntrypoint<
         logEvent("info", {
           component: "poll-fetch-workflow",
           event: "defer-to-scrape-agent",
+          sourceSlug: source.slug,
+        });
+        return;
+      }
+
+      if (source.type === "feed" && (!sourceMeta.feedUrl || !sourceMeta.feedType)) {
+        logEvent("warn", {
+          component: "poll-fetch-workflow",
+          event: "skip-feed-broken-metadata",
+          sourceSlug: source.slug,
+        });
+        return;
+      }
+
+      // Scrape/agent sources that have a feedUrl but are missing feedType:
+      // they passed the no-feedUrl guard above (because feedUrl is truthy) but
+      // fetchOne would still fail with "Missing feedUrl or feedType" and write
+      // a fetch_log error row. Treat the same as the feed broken-metadata case.
+      if (
+        (source.type === "scrape" || source.type === "agent") &&
+        sourceMeta.feedUrl &&
+        !sourceMeta.feedType
+      ) {
+        logEvent("warn", {
+          component: "poll-fetch-workflow",
+          event: "skip-feed-broken-metadata",
           sourceSlug: source.slug,
         });
         return;

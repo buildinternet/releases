@@ -18,6 +18,8 @@ afterEach(() => {
   globalThis.fetch = realFetch;
 });
 
+const MINIMAL_ATOM = `<?xml version="1.0"?><feed xmlns="http://www.w3.org/2005/Atom"><id>t</id><title>T</title></feed>`;
+
 describe("fetchAndParseFeed error classification", () => {
   it("throws FeedHttpError on 4xx with status + URL preserved", async () => {
     stubFetch(404, "Not Found");
@@ -57,6 +59,56 @@ describe("fetchAndParseFeed error classification", () => {
     stubFetch(304);
     const result = await fetchAndParseFeed("https://example.com/feed.xml", "rss");
     expect(result.releases).toEqual([]);
+  });
+
+  it("406 retry: retries with Accept: */* and succeeds when fallback returns 200", async () => {
+    // Simulates Render's CDN: first request (with feed-specific Accept) returns
+    // 406; fallback request with Accept: */* returns a valid feed.
+    const calls: string[] = [];
+    globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const accept = (init?.headers as Record<string, string>)?.["Accept"] ?? "";
+      calls.push(accept);
+      if (accept.includes("rss+xml")) {
+        return new Response("Not Acceptable", { status: 406 });
+      }
+      return new Response(MINIMAL_ATOM, {
+        status: 200,
+        headers: { "Content-Type": "application/atom+xml" },
+      });
+    }) as unknown as typeof fetch;
+
+    const result = await fetchAndParseFeed("https://render.com/changelog/feed.rss", "atom");
+    expect(result.releases).toHaveLength(0); // feed has no entries — parse succeeded
+    expect(calls).toHaveLength(2);
+    expect(calls[0]).toContain("rss+xml"); // first attempt with specific Accept
+    expect(calls[1]).toBe("*/*"); // fallback
+  });
+
+  it("406 retry: throws FeedHttpError if fallback also returns 406", async () => {
+    // Both attempts return 406 — should not infinite-loop, must surface error.
+    globalThis.fetch = (async () =>
+      new Response("Not Acceptable", { status: 406 })) as unknown as typeof fetch;
+
+    await expect(fetchAndParseFeed("https://example.com/feed.rss", "rss")).rejects.toBeInstanceOf(
+      FeedHttpError,
+    );
+  });
+
+  it("Accept header omits application/xml and text/xml", async () => {
+    let capturedAccept = "";
+    globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+      capturedAccept = (init?.headers as Record<string, string>)?.["Accept"] ?? "";
+      return new Response(MINIMAL_ATOM, {
+        status: 200,
+        headers: { "Content-Type": "application/atom+xml" },
+      });
+    }) as unknown as typeof fetch;
+
+    await fetchAndParseFeed("https://example.com/feed.xml", "atom");
+
+    expect(capturedAccept).not.toContain("application/xml");
+    expect(capturedAccept).not.toContain("text/xml");
+    expect(capturedAccept).toContain("application/atom+xml");
   });
 });
 
