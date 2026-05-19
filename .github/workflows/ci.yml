@@ -197,10 +197,6 @@ jobs:
         run: bun scripts/check-openapi-coverage.ts
 
       - name: Verify Claude Code plugin skill mirror is in sync
-        # Regenerate plugins/claude/releases/skills/ from src/agent/skills/
-        # and fail if the working tree changes. Catches silent drift between
-        # the canonical agent skills and the mirrored Claude Code plugin
-        # tree. See issue #1083.
         run: |
           bun run sync:plugin-skills
           if ! git diff --exit-code plugins/claude/releases/skills/; then
