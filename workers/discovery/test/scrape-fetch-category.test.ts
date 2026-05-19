@@ -145,8 +145,9 @@ describe("scrapeFetch error category tagging", () => {
     // Both are acceptable; the important thing is a category tag is present.
     expect(result).toMatch(/^Error \[(infra|validation)\]:/);
     expect(capturedFetchLogPayloads.length).toBeGreaterThan(0);
-    const log = capturedFetchLogPayloads[capturedFetchLogPayloads.length - 1];
-    expect(["infra", "validation"]).toContain(log.errorCategory);
+    const log = capturedFetchLogPayloads[capturedFetchLogPayloads.length - 1]!;
+    expect(log.errorCategory).toBeDefined();
+    expect(["infra", "validation"]).toContain(log.errorCategory!);
   });
 
   it("CategorizedError infra category propagates correctly through the catch block", () => {
