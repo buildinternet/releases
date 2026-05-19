@@ -520,7 +520,10 @@ async function runHybridSearchInternal(
   const halfLifeDays = parseHalfLifeDays(env.SEARCH_RECENCY_HALFLIFE_DAYS);
   const halfLifeMs = halfLifeDays * 86_400_000;
   const boost30d = parseBoost(env.SEARCH_RECENCY_BOOST_30D, DEFAULT_BOOST_30D);
-  const boost90d = parseBoost(env.SEARCH_RECENCY_BOOST_90D, DEFAULT_BOOST_90D);
+  // Clamp so an operator setting boost90d > boost30d can't invert the
+  // taper (which would lift 60d-old content above 30d-old within the boost
+  // layer). Silent — fires per request; logging would spam.
+  const boost90d = Math.min(parseBoost(env.SEARCH_RECENCY_BOOST_90D, DEFAULT_BOOST_90D), boost30d);
   const now = Date.now();
   const scoreMultipliers = async (ids: string[]): Promise<Map<string, number>> => {
     const map = new Map<string, number>();

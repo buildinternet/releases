@@ -44,9 +44,9 @@ Hybrid release ranking multiplies the fused RRF score by `decay × boost`, both 
 
 Boost curve (Option B from #1045):
 
-```
+```text
 boost(age) = boost30d                                              if age ≤ 30d
-           = boost30d − (boost30d − boost90d) · (age − 30d) / 60d  if 30d < age ≤ 90d
+           = boost30d − (boost30d − boost90d) · (age − 30d) / 60d  if 30d < age < 90d
            = 1.0                                                    otherwise
 ```
 
@@ -72,7 +72,7 @@ Tuning knobs (bound to both `api` and `mcp` workers via the `HybridSearchEnv` en
 | `SEARCH_RECENCY_BOOST_30D`     | `1.5`   | `[1.0, 5.0]` | Peak boost applied to releases ≤ 30 days old.                |
 | `SEARCH_RECENCY_BOOST_90D`     | `1.2`   | `[1.0, 5.0]` | Boost at the 90-day knee. Set to `1.0` for a smooth landing. |
 
-The `[1.0, 5.0]` floor on both boost knobs is enforced at parse time so operators can never accidentally demote recent content with this lever — only lift it. Setting both boosts to `1.0` disables tiered behavior cleanly: the multiplier collapses to pure decay.
+The `[1.0, 5.0]` floor on both boost knobs is enforced at parse time so operators can never accidentally demote recent content with this lever — only lift it. The runtime additionally clamps `boost90d` to `min(boost90d, boost30d)` so the taper can't invert (an operator setting `boost90d > boost30d` would otherwise lift 60-day-old content above 30-day-old content within the boost layer). Setting both boosts to `1.0` disables tiered behavior cleanly: the multiplier collapses to pure decay.
 
 ## Query embedding cache
 
