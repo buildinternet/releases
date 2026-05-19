@@ -571,4 +571,65 @@ describe("PollAndFetchWorkflow", () => {
     // No releases inserted.
     expect(db.select().from(releases).all()).toHaveLength(0);
   });
+
+  it("scrape-broken-metadata: scrape source with feedUrl but no feedType skips fetch without error row", async () => {
+    // Mirror of the feed-broken-metadata test above, but for a scrape-type
+    // source. A scrape source that auto-discovered a feedUrl but did not store
+    // feedType passes the scrape-no-feed early-return guard (because feedUrl is
+    // truthy) yet fetchOne would still fail with "Missing feedUrl or feedType"
+    // and insert a fetch_log error row, driving up consecutiveErrors.
+    const sqlite = new Database(":memory:");
+    const db = ensureBatchShim(drizzle(sqlite));
+    applyMigrations(sqlite);
+    db.insert(organizations)
+      .values({
+        id: "org_c",
+        name: "Broken Scrape Co",
+        slug: "broken-scrape-co",
+        category: "cloud",
+      })
+      .run();
+    db.insert(sources)
+      .values({
+        id: "src_broken_scrape",
+        orgId: "org_c",
+        slug: "broken-scrape-co-changelog",
+        name: "Broken Scrape Co Changelog",
+        url: "https://scrape.test/changelog",
+        type: "scrape",
+        // feedUrl is set but feedType is missing — broken metadata state.
+        metadata: JSON.stringify({ feedUrl: "https://scrape.test/changelog/rss" }),
+      })
+      .run();
+
+    // HEAD check returns changed so we exercise the guard, not the no-change exit.
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : String(input);
+      if (url.includes("scrape.test") && (init?.method ?? "GET") === "HEAD") {
+        return new Response(null, { status: 200, headers: { ETag: '"v1"' } });
+      }
+      return new Response(`unexpected ${init?.method ?? "GET"} ${url}`, { status: 404 });
+    }) as unknown as typeof fetch;
+
+    const env = mkEnv({
+      _drizzleOverride: db,
+      SCRAPE_CHANGE_DETECT_ENABLED: "true",
+      LATEST_CACHE: mkCacheRecorder(),
+    });
+
+    const { records, thrown } = await runWorkflow(env, "src_broken_scrape");
+    expect(thrown).toBeUndefined();
+
+    const stepNames = records.map((r) => r.name);
+    expect(stepNames).toContain("poll-head-check");
+    // Must NOT call fetchOne — that would insert a fetch_log error row.
+    expect(stepNames).not.toContain("fetch-and-persist");
+    expect(stepNames).not.toContain("embed-releases");
+    expect(invalidationCalls).toHaveLength(0);
+
+    // No fetch_log error rows accumulated.
+    expect(db.select().from(fetchLog).all()).toHaveLength(0);
+    // No releases inserted.
+    expect(db.select().from(releases).all()).toHaveLength(0);
+  });
 });

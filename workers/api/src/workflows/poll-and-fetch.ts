@@ -479,6 +479,23 @@ export class PollAndFetchWorkflow extends WorkflowEntrypoint<
         return;
       }
 
+      // Scrape/agent sources that have a feedUrl but are missing feedType:
+      // they passed the no-feedUrl guard above (because feedUrl is truthy) but
+      // fetchOne would still fail with "Missing feedUrl or feedType" and write
+      // a fetch_log error row. Treat the same as the feed broken-metadata case.
+      if (
+        (source.type === "scrape" || source.type === "agent") &&
+        sourceMeta.feedUrl &&
+        !sourceMeta.feedType
+      ) {
+        logEvent("warn", {
+          component: "poll-fetch-workflow",
+          event: "skip-feed-broken-metadata",
+          sourceSlug: source.slug,
+        });
+        return;
+      }
+
       // Fetch + parse + insert + bookkeeping. `skipSideEffects` suppresses the
       // inline embed + CHANGELOG refresh so each runs as its own retriable
       // step below. fetchOne still handles FeedHttpError / consecutiveErrors

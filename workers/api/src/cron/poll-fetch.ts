@@ -148,7 +148,23 @@ export async function pollAndFetch(
         }
         return true;
       }
-      return s.type === "github" || (s.type === "scrape" && getSourceMeta(s).feedUrl != null);
+      if (s.type === "scrape") {
+        const m = getSourceMeta(s);
+        if (!m.feedUrl || !m.feedType) {
+          if (m.feedUrl) {
+            // feedUrl present but feedType missing — same broken-metadata state
+            // as the feed branch above; skip rather than driving backoff.
+            logEvent("warn", {
+              component: "cron-poll-fetch",
+              event: "skip-feed-broken-metadata",
+              sourceSlug: s.slug,
+            });
+          }
+          return false;
+        }
+        return true;
+      }
+      return s.type === "github";
     });
 
   // Aggregate insert count across the whole cron run so the latest-cache
