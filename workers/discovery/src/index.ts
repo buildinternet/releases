@@ -15,6 +15,13 @@ export { ManagedAgentsSession } from "./managed-agents-session.js";
 
 const MAX_UPDATE_SOURCES = 20;
 
+// EMERGENCY KILL SWITCH (2026-05-19): Notion source ran away spawning ~25
+// MA sessions/min via a tool-call loop. Blocks all new MA session creation
+// (both /update HTTP and the typed startManagedFetchSession RPC) until the
+// root cause is fixed and this flag is removed. In-flight sessions drain
+// naturally.
+const MA_SESSIONS_KILLED = true;
+
 /**
  * Shared shape validation for the two entrypoints that launch an update-mode
  * MA session: the `/update` HTTP route (request body comes in as `unknown`)
@@ -176,6 +183,16 @@ export class DiscoveryEntrypoint extends WorkerEntrypoint<Env> {
   async startManagedFetchSession(
     params: StartManagedFetchSessionParams,
   ): Promise<StartManagedFetchSessionResult> {
+    if (MA_SESSIONS_KILLED) {
+      logEvent("warn", {
+        component: "discovery",
+        event: "ma-session-blocked-kill-switch",
+        entry: "startManagedFetchSession",
+        company: params.company,
+        sourceIds: params.sourceIds,
+      });
+      return { ok: false, error: "Managed-agent sessions temporarily disabled (kill switch)" };
+    }
     const validationError = validateUpdateParams(params.company, params.sourceIds);
     if (validationError) {
       return { ok: false, error: validationError };
@@ -227,6 +244,14 @@ const httpHandler = {
     if (authError) return authError;
 
     if (request.method === "POST" && url.pathname === "/onboard") {
+      if (MA_SESSIONS_KILLED) {
+        logEvent("warn", {
+          component: "discovery",
+          event: "ma-session-blocked-kill-switch",
+          entry: "/onboard",
+        });
+        return errorResponse("Managed-agent sessions temporarily disabled (kill switch)", 503);
+      }
       let body: OnboardRequest;
       try {
         body = await request.json();
@@ -365,6 +390,14 @@ const httpHandler = {
     }
 
     if (request.method === "POST" && url.pathname === "/update") {
+      if (MA_SESSIONS_KILLED) {
+        logEvent("warn", {
+          component: "discovery",
+          event: "ma-session-blocked-kill-switch",
+          entry: "/update",
+        });
+        return errorResponse("Managed-agent sessions temporarily disabled (kill switch)", 503);
+      }
       let body: UpdateRequest;
       try {
         body = await request.json();
