@@ -2,12 +2,15 @@
  * Tests for Task 6: kind filter on list endpoints.
  * /v1/sources?kind=, /v1/products?kind=, /v1/orgs/:slug/releases?kind=,
  * and /v1/orgs/:slug/catalog?kind= (entity kind — distinct from ?entryType=).
+ *
+ * Task 7 tests appended below: kind filter on /v1/search.
  */
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { organizations, products, sources, releases } from "@buildinternet/releases-core/schema";
 import { productRoutes } from "../../workers/api/src/routes/products.js";
 import { sourceRoutes } from "../../workers/api/src/routes/sources.js";
 import { orgRoutes } from "../../workers/api/src/routes/orgs.js";
+import { searchRoutes } from "../../workers/api/src/routes/search.js";
 import { createTestDb, type TestDatabase } from "../db-helper.js";
 
 let testDb: TestDatabase;
@@ -299,6 +302,70 @@ describe("GET /v1/orgs/:slug/catalog?kind= filter", () => {
   it("?entryType= returns 400 on unknown entry type value", async () => {
     await seedOrg("acme");
     const res = await callOrg("/orgs/acme/catalog?entryType=unknown");
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toBe("bad_request");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// /v1/search?kind= (Task 7)
+// ---------------------------------------------------------------------------
+
+function makeSearchEnv() {
+  return {
+    DB: testDb.db as unknown as never,
+    MEDIA_ORIGIN: "",
+    // Vectorize is absent so hybrid/semantic mode degrades to lexical — fine
+    // for these tests which focus on kind filtering, not vector ranking.
+  };
+}
+
+const searchCtx = {
+  waitUntil: (_p: Promise<unknown>) => {},
+  passThroughOnException: () => {},
+} as never;
+
+async function callSearch(path: string): Promise<Response> {
+  return searchRoutes.request(
+    path,
+    { method: "GET" },
+    makeSearchEnv(),
+    searchCtx as unknown as Parameters<typeof searchRoutes.request>[3],
+  );
+}
+
+describe("kind filter on /v1/search", () => {
+  it("lexical mode filters release hits by kind", async () => {
+    await seedOrg("acme");
+    await seedSource({ id: "src_sdk2", slug: "sdk-search-src", kind: "sdk" });
+    await seedSource({ id: "src_docs2", slug: "docs-search-src", kind: "docs" });
+    await seedRelease({ id: "rel_sdk2", sourceId: "src_sdk2", title: "sdk search release" });
+    await seedRelease({ id: "rel_docs2", sourceId: "src_docs2", title: "docs search release" });
+
+    const res = await callSearch("/search?q=search+release&mode=lexical&kind=sdk");
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { releases: Array<{ title: string }> };
+    const titles = body.releases.map((r) => r.title);
+    expect(titles).toContain("sdk search release");
+    expect(titles).not.toContain("docs search release");
+  });
+
+  it("catalog hits filter by the row's own kind (no inheritance)", async () => {
+    await seedOrg("acme");
+    await seedProduct({ id: "prod_search1", slug: "search-sdk-prod", kind: "sdk" });
+    await seedProduct({ id: "prod_search2", slug: "search-docs-prod", kind: "docs" });
+
+    const res = await callSearch("/search?q=search&mode=lexical&kind=sdk");
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { catalog: Array<{ slug: string }> };
+    const slugs = body.catalog.map((c) => c.slug);
+    expect(slugs).toContain("search-sdk-prod");
+    expect(slugs).not.toContain("search-docs-prod");
+  });
+
+  it("returns 400 on unknown kind value", async () => {
+    const res = await callSearch("/search?q=anything&kind=framework");
     expect(res.status).toBe(400);
     const body = (await res.json()) as { error: string };
     expect(body.error).toBe("bad_request");

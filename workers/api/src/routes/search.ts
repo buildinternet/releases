@@ -14,6 +14,7 @@ import type {
   MediaItem,
   LookupResultPayload,
 } from "@buildinternet/releases-api-types";
+import { isValidKind, KIND_VALUES } from "@buildinternet/releases-core/kinds";
 import { createDb } from "../db.js";
 import {
   findOrgByDomain,
@@ -223,6 +224,14 @@ searchRoutes.get(
         description:
           "Include orgs with zero indexed releases in the `orgs` section. Default false — empty orgs are stubs and surface as noise. `?domain=` short-circuits this and always returns the resolved org.",
       },
+      {
+        name: "kind",
+        in: "query",
+        required: false,
+        schema: { type: "string", enum: KIND_VALUES as unknown as string[] },
+        description:
+          "Filter to a specific source/product kind. Release hits resolve through `source.kind ?? product.kind`; catalog hits filter on the row's own kind. The orgs section is unaffected by this filter.",
+      },
     ],
     responses: {
       200: {
@@ -234,7 +243,7 @@ searchRoutes.get(
         },
       },
       400: {
-        description: "Missing `q` or invalid `domain` hostname",
+        description: "Missing `q`, invalid `domain` hostname, or unknown `kind` value",
         content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
       },
     },
@@ -257,6 +266,17 @@ searchRoutes.get(
     const includeCoverage = parseBoolParam(c.req.query("include_coverage"));
     const includeEmpty = parseBoolParam(c.req.query("include_empty"));
     const rawDomain = c.req.query("domain");
+    const rawKind = c.req.query("kind");
+    if (rawKind !== undefined && !isValidKind(rawKind)) {
+      return c.json(
+        {
+          error: "bad_request",
+          message: `Invalid kind. Expected one of: ${KIND_VALUES.join(", ")}`,
+        },
+        400,
+      );
+    }
+    const kindFilter = rawKind as string | undefined;
     const db = createDb(c.env.DB);
     const mediaOrigin = c.env.MEDIA_ORIGIN ?? "";
 
@@ -373,8 +393,8 @@ searchRoutes.get(
             },
           ])
         : searchOrgs(db, q, limit, { orgId: scopeOrgId, includeEmpty }),
-      searchProducts(db, q, limit, { orgId: scopeOrgId }),
-      searchSources(db, q, limit, { orgId: scopeOrgId }),
+      searchProducts(db, q, limit, { orgId: scopeOrgId, kind: kindFilter }),
+      searchSources(db, q, limit, { orgId: scopeOrgId, kind: kindFilter }),
       // Direct LIKE match on collection name/slug/description — runs in
       // every mode. Independent of `?domain=`: collections are cross-org
       // by design, so a domain-scoped query still surfaces a relevant
@@ -408,6 +428,7 @@ searchRoutes.get(
       const ftsRows = await searchReleasesFts(db, q, limit, offset, {
         includeCoverage,
         orgId: scopeOrgId,
+        kind: kindFilter,
       }).catch(() => [] as RawSearchReleaseRow[]);
       let rawReleases = ftsRows;
       if (rawReleases.length === 0 && (orgs.length > 0 || catalog.length > 0)) {
@@ -494,6 +515,7 @@ searchRoutes.get(
           // Domain narrowing reaches into the hybrid layer via the existing
           // `orgSourceIds` filter so vector + FTS results both stay scoped.
           ...(scopeSourceIds && scopeSourceIds.length > 0 ? { orgSourceIds: scopeSourceIds } : {}),
+          ...(kindFilter ? { kind: kindFilter } : {}),
         },
         sharedOpts,
       ),

@@ -233,7 +233,7 @@ async function ftsReleaseIds(
   db: WorkerD1Db,
   query: string,
   limit: number,
-  opts: { includeCoverage?: boolean } = {},
+  opts: { includeCoverage?: boolean; kind?: string } = {},
 ): Promise<string[]> {
   try {
     const rows = await db.all<{ id: string }>(sql`
@@ -241,10 +241,12 @@ async function ftsReleaseIds(
       FROM releases_fts
       JOIN releases r ON r.rowid = releases_fts.rowid
       JOIN sources_active s ON s.id = r.source_id
+      LEFT JOIN products_active p ON p.id = s.product_id
       WHERE releases_fts MATCH ${toFtsMatchQuery(query)}
         AND (s.is_hidden = 0 OR s.is_hidden IS NULL)
         AND (r.suppressed IS NULL OR r.suppressed = 0)
         ${opts.includeCoverage ? sql`` : sql`AND r.id IN (SELECT id FROM releases_visible)`}
+        ${opts.kind ? sql`AND COALESCE(s.kind, p.kind) = ${opts.kind}` : sql``}
       ORDER BY rank LIMIT ${limit}
     `);
     return rows.map((r) => r.id);
@@ -302,6 +304,10 @@ interface RawReleaseRow {
   sourceSlug: string;
   sourceName: string;
   sourceType: string;
+  /** Source's own kind — used for COALESCE(sourceKind, productKind) filtering. */
+  sourceKind: string | null;
+  /** Parent product's kind — fallback when sourceKind is null. */
+  productKind: string | null;
   orgSlug: string | null;
   orgName: string | null;
   /** Release type — "feature" (default) or "rollup". */
@@ -338,11 +344,14 @@ async function hydrateReleases(
                s.slug as sourceSlug,
                s.name as sourceName,
                s.type as sourceType,
+               s.kind as sourceKind,
+               p.kind as productKind,
                o.slug as orgSlug,
                o.name as orgName,
                ${sql.raw(COVERAGE_COUNT_EXPR)} as coverageCount
         FROM ${releasesTable} r
         JOIN sources_active s ON s.id = r.source_id
+        LEFT JOIN products_active p ON p.id = s.product_id
         LEFT JOIN organizations_active o ON o.id = s.org_id
         WHERE r.id IN (${sql.join(
           batch.map((id) => sql`${id}`),
@@ -470,6 +479,13 @@ export interface RunHybridSearchParams {
   orgSourceIds?: string[];
   type?: "feature" | "rollup";
   includeCoverage?: boolean;
+  /**
+   * Filter by resolved entity kind: COALESCE(source.kind, product.kind).
+   * Release hits where neither the source nor the parent product match are
+   * excluded. Catalog hits on /v1/search filter on the row's own kind — no
+   * inheritance — but that path lives in the route, not here.
+   */
+  kind?: string;
 }
 
 /**
@@ -495,6 +511,7 @@ async function runHybridSearchInternal(
   async function lexicalResponse(degradedReason?: string): Promise<HybridSearchResponse> {
     const ids = await ftsReleaseIds(db, params.query, topK * 3, {
       includeCoverage: params.includeCoverage,
+      kind: params.kind,
     });
     const hits = await buildReleaseHits(
       db,
@@ -544,6 +561,7 @@ async function runHybridSearchInternal(
       : async (q: string, limit: number) => {
           const ids = await ftsReleaseIds(db, q, limit, {
             includeCoverage: params.includeCoverage,
+            kind: params.kind,
           });
           return ids.map((id) => ({ id }));
         };
@@ -659,6 +677,8 @@ async function buildReleaseHits(
     if (params.sourceId && row.sourceId !== params.sourceId) continue;
     if (params.orgSourceIds && !params.orgSourceIds.includes(row.sourceId)) continue;
     if (params.type && row.type !== params.type) continue;
+    // COALESCE(source.kind, product.kind) must match the requested kind.
+    if (params.kind && (row.sourceKind ?? row.productKind) !== params.kind) continue;
     out.push({
       kind: "release",
       score: entry.score,
