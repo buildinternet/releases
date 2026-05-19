@@ -10,7 +10,11 @@ import { SourceTypeIcon } from "./source-type-icon";
 import { ClusterChip } from "./cluster-chip";
 import { FallbackImage } from "./fallback-image";
 import { collapsedMarkdownComponents, markdownComponents } from "./markdown-components";
-import { type CollectionMemberOrg, type CollectionReleaseItem } from "@/lib/api";
+import {
+  type CollectionMember,
+  type CollectionMemberOrg,
+  type CollectionReleaseItem,
+} from "@/lib/api";
 import { tabButtonClass } from "@/lib/styles";
 import { useInfiniteScroll } from "@/hooks/use-infinite-scroll";
 import { InfiniteScrollTrigger } from "./infinite-scroll-trigger";
@@ -30,7 +34,25 @@ interface CollectionTimelineProps {
   formatPath: string;
   initialReleases: CollectionReleaseItem[];
   initialCursor: string | null;
-  orgs: CollectionMemberOrg[];
+  /**
+   * Mixed-kind member list driving the filter chips. Org-only surfaces
+   * (like the category page) pass an array of `kind: "org"` entries.
+   */
+  members: CollectionMember[];
+}
+
+/**
+ * `kind:slug` keeps an org and a product that share a slug from colliding in
+ * the active-filter set. Exported so list / detail pages key chips the same way.
+ */
+export function memberKey(m: CollectionMember): string {
+  return `${m.kind}:${m.slug}`;
+}
+
+function memberAvatar(m: CollectionMember) {
+  return m.kind === "org"
+    ? { avatarUrl: m.avatarUrl, githubHandle: m.githubHandle, name: m.name }
+    : { avatarUrl: m.org.avatarUrl, githubHandle: m.org.githubHandle, name: m.org.name };
 }
 
 type TypeFilter = "all" | "tag" | "post";
@@ -90,13 +112,16 @@ export function CollectionTimeline({
   formatPath,
   initialReleases,
   initialCursor,
-  orgs,
+  members,
 }: CollectionTimelineProps) {
   const [releases, setReleases] = useState(initialReleases);
   const [cursor, setCursor] = useState(initialCursor);
   const [includePrereleases, setIncludePrereleases] = useState(false);
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
-  const [activeOrgs, setActiveOrgs] = useState<Set<string>>(() => new Set(orgs.map((o) => o.slug)));
+  // Active filter keyed by `kind:slug` (memberKey) so org/product slug
+  // collisions can't conflate the two when toggling chips.
+  const allMemberKeys = useMemo(() => members.map(memberKey), [members]);
+  const [activeMembers, setActiveMembers] = useState<Set<string>>(() => new Set(allMemberKeys));
   const [loading, setLoading] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
   // `pristine` guards the initial mount from refetching what the server
@@ -104,21 +129,47 @@ export function CollectionTimeline({
   const [pristine, setPristine] = useState(true);
   const loadMoreAbortRef = useRef<AbortController | null>(null);
 
+  // Release rows resolve avatars by org slug; for product members, surface
+  // the parent org so product-sourced releases get a chip avatar lookup hit.
   const orgsBySlug = useMemo(() => {
     const m = new Map<string, CollectionMemberOrg>();
-    for (const o of orgs) m.set(o.slug, o);
+    for (const member of members) {
+      if (member.kind === "org") {
+        const { kind: _k, ...orgOnly } = member;
+        m.set(member.slug, orgOnly);
+      } else if (!m.has(member.org.slug)) {
+        m.set(member.org.slug, {
+          slug: member.org.slug,
+          name: member.org.name,
+          domain: member.org.domain,
+          avatarUrl: member.org.avatarUrl,
+          githubHandle: member.org.githubHandle,
+          description: null,
+        });
+      }
+    }
     return m;
-  }, [orgs]);
+  }, [members]);
 
-  // Stable sort so two equivalent filter sets produce the same query string —
-  // keeps the fetch effect from churning on Set/Array identity changes.
-  const orgsFilterValue = useMemo(() => {
-    const all = orgs.map((o) => o.slug);
-    // No filter applied when every member is active — match the unfiltered
-    // SSR shape so cursors line up.
-    if (activeOrgs.size === all.length && all.every((s) => activeOrgs.has(s))) return null;
-    return [...activeOrgs].toSorted().join(",");
-  }, [activeOrgs, orgs]);
+  // Sorted slug lists so two equivalent filter sets produce the same query
+  // string — without this the fetch effect churns on Set/Array identity.
+  const { orgsFilterValue, productsFilterValue } = useMemo(() => {
+    const allActive =
+      activeMembers.size === allMemberKeys.length &&
+      allMemberKeys.every((k) => activeMembers.has(k));
+    if (allActive) return { orgsFilterValue: null, productsFilterValue: null };
+    const orgs: string[] = [];
+    const productsList: string[] = [];
+    for (const m of members) {
+      if (!activeMembers.has(memberKey(m))) continue;
+      if (m.kind === "org") orgs.push(m.slug);
+      else productsList.push(m.slug);
+    }
+    return {
+      orgsFilterValue: orgs.length > 0 ? orgs.toSorted().join(",") : null,
+      productsFilterValue: productsList.length > 0 ? productsList.toSorted().join(",") : null,
+    };
+  }, [activeMembers, members, allMemberKeys]);
 
   const sourceTypeValue = sourceTypesForFilter(typeFilter);
 
@@ -127,11 +178,12 @@ export function CollectionTimeline({
       const params = new URLSearchParams();
       if (includePrereleases) params.set("include_prereleases", "true");
       if (orgsFilterValue) params.set("orgs", orgsFilterValue);
+      if (productsFilterValue) params.set("products", productsFilterValue);
       if (sourceTypeValue) params.set("source_type", sourceTypeValue);
       if (cursorValue) params.set("cursor", cursorValue);
       return params.toString();
     },
-    [includePrereleases, orgsFilterValue, sourceTypeValue],
+    [includePrereleases, orgsFilterValue, productsFilterValue, sourceTypeValue],
   );
 
   // Refetch whenever any server-side filter changes. `pristine` short-circuits
@@ -194,15 +246,15 @@ export function CollectionTimeline({
     onLoadMore: loadMore,
   });
 
-  const toggleOrg = (slug: string) => {
+  const toggleMember = (key: string) => {
     setPristine(false);
-    setActiveOrgs((prev) => {
+    setActiveMembers((prev) => {
       const n = new Set(prev);
-      if (n.has(slug)) n.delete(slug);
-      else n.add(slug);
-      // Toggling off the last org re-selects all so the feed never
-      // collapses to an empty state from a single click.
-      if (n.size === 0) return new Set(orgs.map((o) => o.slug));
+      if (n.has(key)) n.delete(key);
+      else n.add(key);
+      // Re-select all when the last chip toggles off so the feed never
+      // collapses to empty from a single click.
+      if (n.size === 0) return new Set(allMemberKeys);
       return n;
     });
   };
@@ -211,16 +263,17 @@ export function CollectionTimeline({
 
   return (
     <div>
-      {/* Org filter chips */}
-      {orgs.length > 1 && (
+      {members.length > 1 && (
         <div className="mb-4 flex flex-wrap gap-2">
-          {orgs.map((o) => {
-            const active = activeOrgs.has(o.slug);
+          {members.map((m) => {
+            const key = memberKey(m);
+            const active = activeMembers.has(key);
+            const avatar = memberAvatar(m);
             return (
               <button
-                key={o.slug}
+                key={key}
                 type="button"
-                onClick={() => toggleOrg(o.slug)}
+                onClick={() => toggleMember(key)}
                 className={`inline-flex items-center gap-2 pl-1 pr-3 py-1 rounded-full border text-[13px] font-medium transition-colors ${
                   active
                     ? "border-stone-300 dark:border-stone-600 bg-white dark:bg-stone-900 text-stone-800 dark:text-stone-100"
@@ -228,12 +281,17 @@ export function CollectionTimeline({
                 }`}
               >
                 <OrgAvatar
-                  avatarUrl={o.avatarUrl}
-                  githubHandle={o.githubHandle}
-                  name={o.name}
+                  avatarUrl={avatar.avatarUrl}
+                  githubHandle={avatar.githubHandle}
+                  name={avatar.name}
                   size={20}
                 />
-                {o.name}
+                <span>{m.name}</span>
+                {m.kind === "product" && (
+                  <span className="text-stone-400 dark:text-stone-500 font-normal">
+                    · {m.org.name}
+                  </span>
+                )}
               </button>
             );
           })}

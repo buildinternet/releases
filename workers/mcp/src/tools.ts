@@ -2092,9 +2092,15 @@ export async function listCollections(db: D1Db, params: McpPaginationInput): Pro
     db.all<{ n: number }>(sql`SELECT COUNT(*) as n FROM ${collections}`),
     db.all<Row>(sql`
       SELECT c.slug, c.name, c.description,
-        (SELECT COUNT(*) FROM ${collectionMembers} cm
-          INNER JOIN ${organizationsPublic} op ON op.id = cm.org_id
-          WHERE cm.collection_id = c.id) AS memberCount
+        (
+          (SELECT COUNT(*) FROM ${collectionMembers} cm
+            INNER JOIN ${organizationsPublic} op ON op.id = cm.org_id
+            WHERE cm.collection_id = c.id)
+          +
+          (SELECT COUNT(*) FROM ${collectionMembers} cm
+            INNER JOIN ${productsActive} pa ON pa.id = cm.product_id
+            WHERE cm.collection_id = c.id)
+        ) AS memberCount
       FROM ${collections} c
       ORDER BY c.name
       LIMIT ${pagination.pageSize} OFFSET ${pagination.offset}
@@ -2111,7 +2117,7 @@ export async function listCollections(db: D1Db, params: McpPaginationInput): Pro
   const body = rows
     .map((r) => {
       const descLine = r.description ? `\n  ${r.description}` : "";
-      const noun = Number(r.memberCount) === 1 ? "org" : "orgs";
+      const noun = Number(r.memberCount) === 1 ? "member" : "members";
       return `**${r.name}**\n  Slug: ${r.slug} | ${r.memberCount} ${noun}${descLine}`;
     })
     .join("\n\n");
@@ -2138,34 +2144,72 @@ export async function getCollection(db: D1Db, params: { slug: string }): Promise
     .where(eq(collections.slug, slug));
   if (!collection) return text(`No collection found with slug "${slug}".`);
 
-  // Match the REST endpoint: members joined through organizationsPublic so
-  // hidden / soft-deleted orgs don't leak.
-  const orgs = await db
-    .select({
-      slug: organizationsPublic.slug,
-      name: organizationsPublic.name,
-      domain: organizationsPublic.domain,
-      description: organizationsPublic.description,
-    })
-    .from(collectionMembers)
-    .innerJoin(organizationsPublic, eq(organizationsPublic.id, collectionMembers.orgId))
-    .where(eq(collectionMembers.collectionId, collection.id))
-    .orderBy(collectionMembers.position, organizationsPublic.name);
+  // Match the REST endpoint: org members joined through organizationsPublic
+  // and product members through productsActive so hidden / soft-deleted rows
+  // don't leak. Both kinds are interleaved by (position, name) for display.
+  const [orgs, productMembers] = await Promise.all([
+    db
+      .select({
+        position: collectionMembers.position,
+        slug: organizationsPublic.slug,
+        name: organizationsPublic.name,
+        domain: organizationsPublic.domain,
+        description: organizationsPublic.description,
+      })
+      .from(collectionMembers)
+      .innerJoin(organizationsPublic, eq(organizationsPublic.id, collectionMembers.orgId))
+      .where(eq(collectionMembers.collectionId, collection.id))
+      .orderBy(collectionMembers.position, organizationsPublic.name),
+    db
+      .select({
+        position: collectionMembers.position,
+        productSlug: productsActive.slug,
+        productName: productsActive.name,
+        productDescription: productsActive.description,
+        orgSlug: organizationsPublic.slug,
+        orgName: organizationsPublic.name,
+      })
+      .from(collectionMembers)
+      .innerJoin(productsActive, eq(productsActive.id, collectionMembers.productId))
+      .innerJoin(organizationsPublic, eq(organizationsPublic.id, productsActive.orgId))
+      .where(eq(collectionMembers.collectionId, collection.id))
+      .orderBy(collectionMembers.position, productsActive.name),
+  ]);
+
+  type MemberLine = { position: number; sort: string; line: string; sub?: string };
+  const items: MemberLine[] = [];
+  for (const o of orgs) {
+    const tail = o.domain ? ` — ${o.domain}` : "";
+    items.push({
+      position: o.position,
+      sort: o.name,
+      line: `- **${o.name}** (${o.slug})${tail}`,
+      sub: o.description ?? undefined,
+    });
+  }
+  for (const p of productMembers) {
+    items.push({
+      position: p.position,
+      sort: p.productName,
+      line: `- **${p.productName}** (product · ${p.orgName} / ${p.productSlug})`,
+      sub: p.productDescription ?? undefined,
+    });
+  }
+  items.sort((a, b) => a.position - b.position || a.sort.localeCompare(b.sort));
 
   const lines: string[] = [];
   lines.push(`**Collection: ${collection.name}**`);
   lines.push(`Slug: ${collection.slug}`);
   if (collection.description) lines.push(`Description: ${collection.description}`);
   lines.push("");
-  if (orgs.length === 0) {
+  if (items.length === 0) {
     lines.push("Members: none");
   } else {
-    const noun = orgs.length === 1 ? "org" : "orgs";
-    lines.push(`Members (${orgs.length} ${noun}):`);
-    for (const o of orgs) {
-      const tail = o.domain ? ` — ${o.domain}` : "";
-      lines.push(`- **${o.name}** (${o.slug})${tail}`);
-      if (o.description) lines.push(`  ${o.description}`);
+    const noun = items.length === 1 ? "member" : "members";
+    lines.push(`Members (${items.length} ${noun}):`);
+    for (const item of items) {
+      lines.push(item.line);
+      if (item.sub) lines.push(`  ${item.sub}`);
     }
   }
   return text(lines.join("\n"));
@@ -2189,20 +2233,28 @@ export async function getCollectionReleases(
     .where(eq(collections.slug, slug));
   if (!collection) return text(`No collection found with slug "${slug}".`);
 
-  // Visible-orgs only (matches the REST surface).
-  const memberRows = await db
-    .select({ orgId: organizationsPublic.id })
-    .from(collectionMembers)
-    .innerJoin(organizationsPublic, eq(organizationsPublic.id, collectionMembers.orgId))
-    .where(eq(collectionMembers.collectionId, collection.id));
-  const orgIds = memberRows.map((m) => m.orgId);
+  // Visible org + product members only (matches the REST surface).
+  const [orgRows, productRows] = await Promise.all([
+    db
+      .select({ orgId: organizationsPublic.id })
+      .from(collectionMembers)
+      .innerJoin(organizationsPublic, eq(organizationsPublic.id, collectionMembers.orgId))
+      .where(eq(collectionMembers.collectionId, collection.id)),
+    db
+      .select({ productId: productsActive.id })
+      .from(collectionMembers)
+      .innerJoin(productsActive, eq(productsActive.id, collectionMembers.productId))
+      .where(eq(collectionMembers.collectionId, collection.id)),
+  ]);
+  const orgIds = orgRows.map((m) => m.orgId);
+  const productIds = productRows.map((m) => m.productId);
 
-  if (orgIds.length === 0) {
+  if (orgIds.length === 0 && productIds.length === 0) {
     return {
       content: [
         {
           type: "text" as const,
-          text: `Collection "${collection.name}" has no visible member orgs yet.`,
+          text: `Collection "${collection.name}" has no visible members yet.`,
         },
       ],
       _meta: {
@@ -2216,6 +2268,7 @@ export async function getCollectionReleases(
   // @releases/core-internal/collection-feed.
   const results = await getCollectionReleasesFeed(db, orgIds, params.cursor ?? null, limit + 1, {
     includePrereleases: params.include_prereleases ?? false,
+    productIds,
   });
 
   const hasMore = results.length > limit;

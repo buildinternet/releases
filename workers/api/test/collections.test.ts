@@ -4,6 +4,7 @@ import {
   organizations,
   sources,
   releases,
+  products,
   collections,
   collectionMembers,
 } from "@buildinternet/releases-core/schema";
@@ -105,13 +106,37 @@ describe("collections", () => {
         description: null,
         memberCount: 0,
         previewMembers: [],
+        previewOrgs: [],
       },
       {
         slug: "test-frontier-labs",
         name: "Test Frontier Labs",
         description: null,
         memberCount: 2,
+        // previewMembers carries the kind discriminator so a mixed-kind
+        // collection can render product chips alongside org chips.
         previewMembers: [
+          {
+            kind: "org",
+            slug: "anthropic",
+            name: "Anthropic",
+            domain: null,
+            avatarUrl: null,
+            githubHandle: null,
+            description: null,
+          },
+          {
+            kind: "org",
+            slug: "openai",
+            name: "OpenAI",
+            domain: null,
+            avatarUrl: null,
+            githubHandle: null,
+            description: null,
+          },
+        ],
+        // Legacy previewOrgs subset (org-kind members only, no discriminator).
+        previewOrgs: [
           {
             slug: "anthropic",
             name: "Anthropic",
@@ -445,5 +470,232 @@ describe("collections (writes)", () => {
       }),
     );
     expect(res.status).toBe(404);
+  });
+});
+
+// Product members let a curator pin a single product out of an org's catalog
+// — the example use case from the original ticket is a "coding agents"
+// collection that includes Claude Code without dragging the rest of
+// Anthropic's products along.
+async function seedWithProduct(db: ReturnType<typeof mkDb>) {
+  await seed(db);
+  await db.insert(products).values([
+    {
+      id: "prod_claude_code",
+      orgId: "org_anth",
+      slug: "claude-code",
+      name: "Claude Code",
+      description: "Coding agent.",
+    },
+    // A sibling product on the same org that should NOT appear when the
+    // collection only pins Claude Code — proves product-grained membership.
+    { id: "prod_messages", orgId: "org_anth", slug: "messages", name: "Messages API" },
+  ]);
+  await db.insert(sources).values([
+    {
+      id: "src_cc_releases",
+      slug: "claude-code-releases",
+      name: "Claude Code Releases",
+      type: "github",
+      url: "https://github.com/anthropics/claude-code/releases",
+      orgId: "org_anth",
+      productId: "prod_claude_code",
+    },
+    {
+      id: "src_msg_releases",
+      slug: "messages-changelog",
+      name: "Messages Changelog",
+      type: "feed",
+      url: "https://docs.anthropic.com/messages/changelog",
+      orgId: "org_anth",
+      productId: "prod_messages",
+    },
+  ]);
+  await db.insert(releases).values([
+    {
+      id: "rel_cc1",
+      sourceId: "src_cc_releases",
+      title: "Claude Code 1.0",
+      content: "First release.",
+      url: "https://github.com/anthropics/claude-code/releases/tag/v1.0",
+      publishedAt: "2026-05-07T18:00:00.000Z",
+    },
+    {
+      id: "rel_msg1",
+      sourceId: "src_msg_releases",
+      title: "Messages API update",
+      content: "Streaming fix.",
+      url: "https://docs.anthropic.com/messages/changelog/2026-05-07",
+      publishedAt: "2026-05-07T19:00:00.000Z",
+    },
+  ]);
+}
+
+describe("collections (product members)", () => {
+  it("POST adds a product member with the kind discriminator", async () => {
+    const db = mkDb();
+    await seedWithProduct(db);
+    const fetch = mkApp(db);
+    const res = await fetch(
+      new Request(
+        "http://test/v1/collections/test-empty-set/members",
+        json("POST", { productId: "prod_claude_code" }),
+      ),
+    );
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as { kind: string; productId: string; orgId?: string };
+    expect(body.kind).toBe("product");
+    expect(body.productId).toBe("prod_claude_code");
+    expect(body.orgId).toBeUndefined();
+  });
+
+  it("POST resolves productSlug paired with orgSlug (per-org slugs are not globally unique)", async () => {
+    const db = mkDb();
+    await seedWithProduct(db);
+    const fetch = mkApp(db);
+    const res = await fetch(
+      new Request(
+        "http://test/v1/collections/test-empty-set/members",
+        json("POST", { orgSlug: "anthropic", productSlug: "claude-code" }),
+      ),
+    );
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as { kind: string; productId: string };
+    expect(body.productId).toBe("prod_claude_code");
+  });
+
+  it("POST rejects bare productSlug without an org context (400)", async () => {
+    const db = mkDb();
+    await seedWithProduct(db);
+    const fetch = mkApp(db);
+    const res = await fetch(
+      new Request(
+        "http://test/v1/collections/test-empty-set/members",
+        json("POST", { productSlug: "claude-code" }),
+      ),
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it("PUT mixes org and product members atomically", async () => {
+    const db = mkDb();
+    await seedWithProduct(db);
+    const fetch = mkApp(db);
+    const res = await fetch(
+      new Request(
+        "http://test/v1/collections/test-empty-set/members",
+        json("PUT", {
+          orgs: [{ orgSlug: "openai" }, { productId: "prod_claude_code" }],
+        }),
+      ),
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { members: Array<{ kind: string; position: number }> };
+    expect(body.members.map((m) => m.kind)).toEqual(["org", "product"]);
+
+    // Detail page surfaces both kinds via `members`; legacy `orgs` carries
+    // only the org-kind subset.
+    const detail = await fetch(new Request("http://test/v1/collections/test-empty-set"));
+    const detailBody = (await detail.json()) as {
+      members: Array<{ kind: string; slug: string }>;
+      orgs: Array<{ slug: string }>;
+    };
+    expect(detailBody.members.map((m) => `${m.kind}:${m.slug}`)).toEqual([
+      "org:openai",
+      "product:claude-code",
+    ]);
+    expect(detailBody.orgs.map((o) => o.slug)).toEqual(["openai"]);
+  });
+
+  it("releases feed pulls in product-source rows when a product is pinned", async () => {
+    const db = mkDb();
+    await seedWithProduct(db);
+    await db.insert(collectionMembers).values({
+      collectionId: "col_test_empty",
+      productId: "prod_claude_code",
+      position: 0,
+    });
+    const fetch = mkApp(db);
+    const res = await fetch(new Request("http://test/v1/collections/test-empty-set/releases"));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { releases: Array<{ id: string }> };
+    // Only Claude Code's release surfaces — the Messages API release is on the
+    // same org but a different product, so pinning only `prod_claude_code`
+    // must not pull it in.
+    expect(body.releases.map((r) => r.id)).toEqual(["rel_cc1"]);
+  });
+
+  it("releases feed merges org members with product members (no dupes)", async () => {
+    const db = mkDb();
+    await seedWithProduct(db);
+    // Pin both the whole Anthropic org AND Claude Code explicitly. A
+    // release whose source is bound to the pinned product would match both
+    // branches; dedup must keep it from appearing twice in the feed.
+    await db.insert(collectionMembers).values([
+      { collectionId: "col_test_empty", orgId: "org_anth", position: 0 },
+      { collectionId: "col_test_empty", productId: "prod_claude_code", position: 1 },
+    ]);
+    const fetch = mkApp(db);
+    const res = await fetch(new Request("http://test/v1/collections/test-empty-set/releases"));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { releases: Array<{ id: string }> };
+    const ids = body.releases.map((r) => r.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    // Both Anthropic releases (Claude 4.7 and 4.6) plus both product
+    // releases (Claude Code + Messages — Messages's source is on the org we
+    // pinned, so it qualifies via the org branch).
+    expect(ids.toSorted()).toEqual(["rel_a1", "rel_a2", "rel_cc1", "rel_msg1"]);
+  });
+
+  it("DELETE /members/products/:product unpins a product by id", async () => {
+    const db = mkDb();
+    await seedWithProduct(db);
+    await db.insert(collectionMembers).values({
+      collectionId: "col_test_empty",
+      productId: "prod_claude_code",
+      position: 0,
+    });
+    const fetch = mkApp(db);
+    const res = await fetch(
+      new Request("http://test/v1/collections/test-empty-set/members/products/prod_claude_code", {
+        method: "DELETE",
+      }),
+    );
+    expect(res.status).toBe(204);
+    const remaining = await db
+      .select()
+      .from(collectionMembers)
+      .where(eq(collectionMembers.collectionId, "col_test_empty"));
+    expect(remaining).toEqual([]);
+  });
+
+  it("DELETE /members/products/:product rejects a bare slug (400)", async () => {
+    const db = mkDb();
+    await seedWithProduct(db);
+    const fetch = mkApp(db);
+    // Bare slugs are ambiguous post-#690 (per-org); the org-scoped delete
+    // path requires a typed `prod_…` id.
+    const res = await fetch(
+      new Request("http://test/v1/collections/test-empty-set/members/products/claude-code", {
+        method: "DELETE",
+      }),
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it("?products= narrows the feed to a subset of product members", async () => {
+    const db = mkDb();
+    await seedWithProduct(db);
+    await db.insert(collectionMembers).values([
+      { collectionId: "col_test_empty", productId: "prod_claude_code", position: 0 },
+      { collectionId: "col_test_empty", productId: "prod_messages", position: 1 },
+    ]);
+    const fetch = mkApp(db);
+    const res = await fetch(
+      new Request("http://test/v1/collections/test-empty-set/releases?products=claude-code"),
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { releases: Array<{ id: string }> };
+    expect(body.releases.map((r) => r.id)).toEqual(["rel_cc1"]);
   });
 });

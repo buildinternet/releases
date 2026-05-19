@@ -7,6 +7,7 @@ import {
   real,
   uniqueIndex,
   index,
+  check,
 } from "drizzle-orm/sqlite-core";
 import {
   newSourceId,
@@ -198,12 +199,14 @@ export const productTags = sqliteTable(
   ],
 );
 
-// Collections are curated, named groups of orgs that drive a public
-// "playlist" page (e.g. /collections/frontier-ai-labs). Independent of the
-// fixed `category` taxonomy on `organizations` so a collection can mix orgs
-// across categories or surface a tighter subset than any single category. The
-// only read paths today are GET /v1/collections, GET /v1/collections/:slug,
-// and GET /v1/collections/:slug/releases (interleaved cross-org feed).
+// Collections are curated, named groups of orgs and/or products that drive a
+// public "playlist" page (e.g. /collections/frontier-ai-labs). Independent of
+// the fixed `category` taxonomy on `organizations` so a collection can mix
+// orgs across categories, surface a tighter subset than any single category,
+// or pin a single product without dragging in the owning org's other products
+// (e.g. Claude Code without the rest of Anthropic). The only read paths today
+// are GET /v1/collections, GET /v1/collections/:slug, and GET
+// /v1/collections/:slug/releases (interleaved cross-member feed).
 export const collections = sqliteTable("collections", {
   id: text("id").primaryKey().$defaultFn(newCollectionId),
   slug: text("slug").notNull().unique(),
@@ -221,25 +224,43 @@ export const collections = sqliteTable("collections", {
   embeddedAt: text("embedded_at"),
 });
 
+// A member is either an org (`org_id` set, `product_id` null) or a single
+// product (`product_id` set, `org_id` null). Exactly-one-of is enforced by a
+// SQL CHECK so a curator can pin Claude Code without dragging Anthropic's
+// other products along. Dedup is via two partial unique indexes — one per
+// kind — so org-membership and product-membership don't collide.
 export const collectionMembers = sqliteTable(
   "collection_members",
   {
     collectionId: text("collection_id")
       .notNull()
       .references(() => collections.id, { onDelete: "cascade" }),
-    orgId: text("org_id")
-      .notNull()
-      .references(() => organizations.id, { onDelete: "cascade" }),
+    orgId: text("org_id").references(() => organizations.id, { onDelete: "cascade" }),
+    productId: text("product_id").references(() => products.id, { onDelete: "cascade" }),
     // Authoring order — surfaces in the playlist header on the web page. Ties
-    // resolve by org name in the route handler so equal positions stay stable.
+    // resolve by name in the route handler so equal positions stay stable.
     position: integer("position").notNull().default(0),
     createdAt: text("created_at")
       .notNull()
       .$defaultFn(() => new Date().toISOString()),
   },
   (table) => [
-    uniqueIndex("idx_collection_members_pk").on(table.collectionId, table.orgId),
-    index("idx_collection_members_org").on(table.orgId),
+    uniqueIndex("idx_collection_members_org_pk")
+      .on(table.collectionId, table.orgId)
+      .where(sql`${table.orgId} IS NOT NULL`),
+    uniqueIndex("idx_collection_members_product_pk")
+      .on(table.collectionId, table.productId)
+      .where(sql`${table.productId} IS NOT NULL`),
+    index("idx_collection_members_org")
+      .on(table.orgId)
+      .where(sql`${table.orgId} IS NOT NULL`),
+    index("idx_collection_members_product")
+      .on(table.productId)
+      .where(sql`${table.productId} IS NOT NULL`),
+    check(
+      "collection_members_xor_kind",
+      sql`(${table.orgId} IS NOT NULL) <> (${table.productId} IS NOT NULL)`,
+    ),
   ],
 );
 

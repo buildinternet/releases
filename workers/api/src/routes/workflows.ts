@@ -9,6 +9,7 @@ import {
   organizations,
   organizationsPublic,
   products,
+  productsActive,
   releases,
   sources,
   sourcesVisible,
@@ -799,8 +800,10 @@ workflowsRoutes.post("/workflows/embed-entities", async (c) => {
       }
       return;
     }
-    // collection — include visible member-org names so the embedded text
-    // covers the topical coverage of the collection, not just its description.
+    // collection — include visible member names (orgs and products) so the
+    // embedded text covers the topical coverage of the collection, not just
+    // its description. Products are joined through productsActive so
+    // soft-deleted products don't leak; orgs go through organizationsPublic.
     const cols = await db
       .select()
       .from(collections)
@@ -808,18 +811,32 @@ workflowsRoutes.post("/workflows/embed-entities", async (c) => {
       .limit(n);
     if (cols.length === 0) return;
     const colIds = cols.map((col) => col.id);
-    const memberRows = await db
-      .select({
-        collectionId: collectionMembers.collectionId,
-        name: organizationsPublic.name,
-        position: collectionMembers.position,
-      })
-      .from(collectionMembers)
-      .innerJoin(organizationsPublic, sql`${organizationsPublic.id} = ${collectionMembers.orgId}`)
-      .where(inArray(collectionMembers.collectionId, colIds));
+    const [orgMemberRows, productMemberRows] = await Promise.all([
+      db
+        .select({
+          collectionId: collectionMembers.collectionId,
+          name: organizationsPublic.name,
+          position: collectionMembers.position,
+        })
+        .from(collectionMembers)
+        .innerJoin(organizationsPublic, sql`${organizationsPublic.id} = ${collectionMembers.orgId}`)
+        .where(inArray(collectionMembers.collectionId, colIds)),
+      db
+        .select({
+          collectionId: collectionMembers.collectionId,
+          name: productsActive.name,
+          position: collectionMembers.position,
+        })
+        .from(collectionMembers)
+        .innerJoin(productsActive, sql`${productsActive.id} = ${collectionMembers.productId}`)
+        .where(inArray(collectionMembers.collectionId, colIds)),
+    ]);
     const namesByCollection = new Map<string, string[]>();
-    // Sort each list by position so the embed input stays stable across runs.
-    const grouped = memberRows.toSorted((a, b) => a.position - b.position);
+    // Sort the combined list by position so the embed input stays stable
+    // across runs regardless of which kinds the collection mixes.
+    const grouped = [...orgMemberRows, ...productMemberRows].toSorted(
+      (a, b) => a.position - b.position,
+    );
     for (const m of grouped) {
       const arr = namesByCollection.get(m.collectionId) ?? [];
       arr.push(m.name);
@@ -831,7 +848,7 @@ workflowsRoutes.post("/workflows/embed-entities", async (c) => {
         kind: "collection",
         name: col.name,
         description: col.description,
-        memberOrgNames: namesByCollection.get(col.id) ?? [],
+        memberNames: namesByCollection.get(col.id) ?? [],
       });
     }
   }

@@ -36,13 +36,14 @@ export interface EmbedEntityInput {
    */
   orgId?: string | null;
   /**
-   * Member-org names baked into the embedded text for collections. Lets a
-   * topical query ("database stuff") match a collection whose member orgs
-   * cover the topic even when the collection's name/description doesn't
-   * mention it. Ignored on org/product/source kinds — those embed name +
-   * description + category + domain and don't need a synthetic context line.
+   * Member names (orgs + products) baked into the embedded text for
+   * collections. Lets a topical query ("coding agents") match a collection
+   * whose members cover the topic even when the collection's name/description
+   * doesn't mention it. Ignored on org/product/source kinds — those embed
+   * name + description + category + domain and don't need a synthetic
+   * context line.
    */
-  memberOrgNames?: string[];
+  memberNames?: string[];
 }
 
 export interface EmbedAndUpsertEntitiesOptions {
@@ -62,8 +63,8 @@ function buildEntityText(e: EmbedEntityInput): string {
   // Cap at 32 names so very large collections don't overflow the embedder's
   // effective input window.
   const parts: string[] = [e.name, e.description ?? "", e.category ?? "", e.domain ?? ""];
-  if (e.kind === "collection" && e.memberOrgNames && e.memberOrgNames.length > 0) {
-    parts.push(`Members: ${e.memberOrgNames.slice(0, 32).join(", ")}`);
+  if (e.kind === "collection" && e.memberNames && e.memberNames.length > 0) {
+    parts.push(`Members: ${e.memberNames.slice(0, 32).join(", ")}`);
   }
   return parts
     .map((s) => s.trim())

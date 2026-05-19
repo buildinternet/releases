@@ -19,13 +19,20 @@ function chunkArray<T>(arr: T[], size: number): T[][] {
  * D1 ceiling: 100 bound parameters per prepared statement. The collection
  * feed query binds up to 6 parameters for the cursor predicate, 1 for LIMIT,
  * and up to 4 for `sourceTypes` (the full SOURCE_TYPES enum). 100 − 11 = 89
- * org-IN slots in the worst case.
+ * slots for the IN clause (org_id or product_id chunked independently).
  */
-const ORG_ID_CHUNK_SIZE = 89;
+const ID_CHUNK_SIZE = 89;
+
+type MemberWhereKind = "org" | "product";
+
+function memberWhere(kind: MemberWhereKind, ids: string[]) {
+  return kind === "org" ? sql`s.org_id IN ${ids}` : sql`s.product_id IN ${ids}`;
+}
 
 function runFeedChunk(
   db: FeedQueryRunner,
-  orgIdsChunk: string[],
+  kind: MemberWhereKind,
+  idsChunk: string[],
   cursor: ReturnType<typeof feedCursorSql>,
   prereleaseWhere: ReturnType<typeof feedCursorSql>,
   sourceTypeWhere: ReturnType<typeof feedCursorSql>,
@@ -43,7 +50,7 @@ function runFeedChunk(
     INNER JOIN sources_active s ON s.id = r.source_id
     INNER JOIN organizations_active o ON o.id = s.org_id
     LEFT JOIN products_active p ON p.id = s.product_id
-    WHERE s.org_id IN ${orgIdsChunk}
+    WHERE ${memberWhere(kind, idsChunk)}
       AND (r.suppressed IS NULL OR r.suppressed = 0)
       ${prereleaseWhere}
       ${sourceTypeWhere}
@@ -57,28 +64,53 @@ function runFeedChunk(
   `);
 }
 
+function compareRows(a: CollectionReleaseRow, b: CollectionReleaseRow): number {
+  const aDated = a.published_at !== null ? 0 : 1;
+  const bDated = b.published_at !== null ? 0 : 1;
+  if (aDated !== bDated) return aDated - bDated;
+  if (a.published_at !== b.published_at) {
+    if (a.published_at === null) return 1;
+    if (b.published_at === null) return -1;
+    return b.published_at < a.published_at ? -1 : b.published_at > a.published_at ? 1 : 0;
+  }
+  if (a.fetched_at !== b.fetched_at) {
+    return b.fetched_at < a.fetched_at ? -1 : b.fetched_at > a.fetched_at ? 1 : 0;
+  }
+  return b.id < a.id ? -1 : b.id > a.id ? 1 : 0;
+}
+
 /**
- * Multi-org release feed for a collection. Used by both the REST handler
+ * Multi-member release feed for a collection. Used by both the REST handler
  * (`GET /v1/collections/:slug/releases`) and the MCP `get_collection_releases`
  * tool — sharing the query keeps ordering and cursor semantics in lock-step
  * across surfaces.
  *
- * D1 caps prepared-statement parameters at 100. When `orgIds` is large, a
- * single `IN (…)` clause would exceed this limit. The fix chunks `orgIds`
- * into batches of {@link ORG_ID_CHUNK_SIZE}, runs one query per chunk (each
- * carrying the same cursor + limit), then merges and re-sorts the combined
- * rows in JS before slicing to `limit`. Ordering is `published_at DESC,
- * fetched_at DESC, id DESC` with null `published_at` sorted last — matching
- * the ORDER BY inside each chunk query so the merge is stable.
+ * Collections can pin orgs (whole-org membership) and products (one product
+ * out of an org's catalog). Both kinds are passed as separate id lists and
+ * UNION-merged client-side: we run one query per chunk per kind, dedupe the
+ * combined rows by release id (a Claude Code release would match both the
+ * Anthropic-org branch and the Claude-Code-product branch if a collection
+ * happened to include both), then re-sort and slice to `limit`.
+ *
+ * D1 caps prepared-statement parameters at 100. Each chunk binds at most
+ * `ID_CHUNK_SIZE` (89) IN values plus the cursor and source-type binds,
+ * leaving the same headroom the previous single-kind implementation had.
  */
 export async function getCollectionReleasesFeed(
   db: FeedQueryRunner,
   orgIds: string[],
   cursorParam: string | null,
   limit: number,
-  opts: { includePrereleases?: boolean; sourceTypes?: string[] } = {},
+  opts: {
+    includePrereleases?: boolean;
+    sourceTypes?: string[];
+    /** Product members. Sources joined by `s.product_id IN productIds`. */
+    productIds?: string[];
+  } = {},
 ): Promise<CollectionReleaseRow[]> {
-  if (orgIds.length === 0) return [];
+  const productIds = opts.productIds ?? [];
+  if (orgIds.length === 0 && productIds.length === 0) return [];
+
   const cursor = feedCursorSql(cursorParam);
   const prereleaseWhere = opts.includePrereleases
     ? sql``
@@ -97,35 +129,41 @@ export async function getCollectionReleasesFeed(
         ? sql`AND 1 = 0`
         : sql`AND s.type IN ${sourceTypes}`;
 
-  const chunks = chunkArray(orgIds, ORG_ID_CHUNK_SIZE);
+  const orgChunks = chunkArray(orgIds, ID_CHUNK_SIZE).map(
+    (chunk) => ["org" as const, chunk] as const,
+  );
+  const productChunks = chunkArray(productIds, ID_CHUNK_SIZE).map(
+    (chunk) => ["product" as const, chunk] as const,
+  );
+  const allChunks = [...orgChunks, ...productChunks];
 
-  if (chunks.length === 1) {
-    return runFeedChunk(db, chunks[0]!, cursor, prereleaseWhere, sourceTypeWhere, limit);
+  if (allChunks.length === 1) {
+    const [kind, chunk] = allChunks[0]!;
+    return runFeedChunk(db, kind, chunk, cursor, prereleaseWhere, sourceTypeWhere, limit);
   }
 
   const chunkResults = await Promise.all(
-    chunks.map((chunk) => runFeedChunk(db, chunk, cursor, prereleaseWhere, sourceTypeWhere, limit)),
+    allChunks.map(([kind, chunk]) =>
+      runFeedChunk(db, kind, chunk, cursor, prereleaseWhere, sourceTypeWhere, limit),
+    ),
   );
 
-  const merged = chunkResults.flat();
+  // Dedupe across (kind × chunk) — a release whose source belongs to a
+  // product that is *itself* the org's only product would appear in both
+  // branches when a collection pins both the org and the product. Keep the
+  // first occurrence; the row content is the same either way.
+  const seen = new Set<string>();
+  const merged: CollectionReleaseRow[] = [];
+  for (const row of chunkResults.flat()) {
+    if (seen.has(row.id)) continue;
+    seen.add(row.id);
+    merged.push(row);
+  }
 
   // Re-sort to match the DB ORDER BY:
   //   dated rows (published_at IS NOT NULL) before undated, then
   //   published_at DESC, fetched_at DESC, id DESC
-  merged.sort((a, b) => {
-    const aDated = a.published_at !== null ? 0 : 1;
-    const bDated = b.published_at !== null ? 0 : 1;
-    if (aDated !== bDated) return aDated - bDated;
-    if (a.published_at !== b.published_at) {
-      if (a.published_at === null) return 1;
-      if (b.published_at === null) return -1;
-      return b.published_at < a.published_at ? -1 : b.published_at > a.published_at ? 1 : 0;
-    }
-    if (a.fetched_at !== b.fetched_at) {
-      return b.fetched_at < a.fetched_at ? -1 : b.fetched_at > a.fetched_at ? 1 : 0;
-    }
-    return b.id < a.id ? -1 : b.id > a.id ? 1 : 0;
-  });
+  merged.sort(compareRows);
 
   return merged.slice(0, limit);
 }

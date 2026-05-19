@@ -506,7 +506,7 @@ export function collectionToMarkdown(
   if (collection.description) {
     lines.push(yamlLine("description", collection.description));
   }
-  lines.push(yamlLine("member_count", collection.orgs.length));
+  lines.push(yamlLine("member_count", collection.members.length));
   if (opts.baseUrl) {
     lines.push(yamlLine("canonical", `${opts.baseUrl}/collections/${collection.slug}`));
   }
@@ -520,15 +520,24 @@ export function collectionToMarkdown(
     lines.push("");
   }
 
-  lines.push(`## Organizations (${collection.orgs.length})`);
+  lines.push(`## Members (${collection.members.length})`);
   lines.push("");
-  if (collection.orgs.length === 0) {
-    lines.push("_No organizations yet._");
+  if (collection.members.length === 0) {
+    lines.push("_No members yet._");
   } else {
-    for (const org of collection.orgs) {
-      const url = opts.baseUrl ? `${opts.baseUrl}/${org.slug}` : `/${org.slug}`;
-      const tail = org.domain ? ` — ${org.domain}` : "";
-      lines.push(`- [${org.name}](${url})${tail}`);
+    for (const member of collection.members) {
+      if (member.kind === "org") {
+        const url = opts.baseUrl ? `${opts.baseUrl}/${member.slug}` : `/${member.slug}`;
+        const tail = member.domain ? ` — ${member.domain}` : "";
+        lines.push(`- [${member.name}](${url})${tail}`);
+      } else {
+        // Product members link to the org-scoped product page; the chip shows
+        // the parent org's name for disambiguation.
+        const url = opts.baseUrl
+          ? `${opts.baseUrl}/${member.org.slug}/${member.slug}`
+          : `/${member.org.slug}/${member.slug}`;
+        lines.push(`- [${member.name}](${url}) (product · ${member.org.name})`);
+      }
     }
   }
   lines.push("");
