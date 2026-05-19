@@ -7,9 +7,13 @@
  * mirror, kept self-contained and committable so Claude Code clients see the
  * same content without needing a build step.
  *
- * Skills listed in AGENT_ONLY_SKILLS are intentionally not mirrored: they are
- * dispatched only by managed agents (regenerating overviews, maintaining orgs,
- * etc.) and have no audience in the Claude Code plugin cache.
+ * Every skill in src/agent/skills/ is mirrored. Even skills that are
+ * primarily invoked by managed agents (regenerating overviews, parsing
+ * pipeline helpers, etc.) belong in the plugin cache: Claude Code sessions
+ * routinely dispatch sub-agents that need to find them, and the Skill tool
+ * only surfaces a skill when its description matches user intent — so an
+ * irrelevant skill in the cache is invisible, not clutter. The pre-fix
+ * "agent-only exclusion" was the root cause of issue #1083.
  *
  * Usage:
  *   bun scripts/sync-plugin-skills.ts            # sync all skills
@@ -34,29 +38,17 @@ const PLUGIN_SKILLS_DIR = resolve(PROJECT_ROOT, "plugins/claude/releases/skills"
 const AUTO_GEN_COMMENT =
   "<!-- AUTO-GENERATED: Do not edit directly. Source of truth is src/agent/skills/. Changes here will be overwritten by scripts/sync-plugin-skills.ts -->";
 
-const AGENT_ONLY_SKILLS = new Set([
-  "generating-release-content",
-  "grouping-releases",
-  "maintaining-orgs",
-  "regenerating-overviews",
-]);
-
 function main() {
   const dryRun = process.argv.includes("--dry-run");
 
   if (dryRun) console.log("DRY RUN — no changes will be made\n");
 
-  const allSkillDirs = readdirSync(SOURCE_SKILLS_DIR, { withFileTypes: true })
+  const skillDirs = readdirSync(SOURCE_SKILLS_DIR, { withFileTypes: true })
     .filter((d) => d.isDirectory())
     .filter((d) => existsSync(join(SOURCE_SKILLS_DIR, d.name, "SKILL.md")))
     .map((d) => d.name);
 
-  const skillDirs = allSkillDirs.filter((d) => !AGENT_ONLY_SKILLS.has(d));
-  const skipped = allSkillDirs.filter((d) => AGENT_ONLY_SKILLS.has(d));
-
-  console.log(
-    `Found ${allSkillDirs.length} skill(s) in ${SOURCE_SKILLS_DIR} (${skillDirs.length} for plugin, ${skipped.length} agent-only)\n`,
-  );
+  console.log(`Found ${skillDirs.length} skill(s) in ${SOURCE_SKILLS_DIR}\n`);
 
   let synced = 0;
   let unchanged = 0;
@@ -104,10 +96,6 @@ function main() {
     }
   }
 
-  for (const dirName of skipped) {
-    console.log(`  · ${dirName} — agent-only, skipped`);
-  }
-
   let removed = 0;
 
   if (existsSync(PLUGIN_SKILLS_DIR)) {
@@ -116,8 +104,7 @@ function main() {
       .filter((d) => !skillDirs.includes(d.name));
 
     for (const orphan of pluginDirs) {
-      const reason = AGENT_ONLY_SKILLS.has(orphan.name) ? "agent-only" : "no longer in source";
-      console.log(`  ✗ ${orphan.name} — removing (${reason})`);
+      console.log(`  ✗ ${orphan.name} — removing (no longer in source)`);
       removed++;
       if (!dryRun) {
         rmSync(join(PLUGIN_SKILLS_DIR, orphan.name), { recursive: true });
@@ -125,9 +112,7 @@ function main() {
     }
   }
 
-  console.log(
-    `\nDone: ${synced} synced, ${unchanged} unchanged, ${removed} removed, ${skipped.length} agent-only`,
-  );
+  console.log(`\nDone: ${synced} synced, ${unchanged} unchanged, ${removed} removed`);
 }
 
 function refsEqual(sourceDir: string, destDir: string): boolean {
