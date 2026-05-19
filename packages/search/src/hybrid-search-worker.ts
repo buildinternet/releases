@@ -91,17 +91,50 @@ export interface HybridSearchEnv extends EmbedConfigEnv {
   EMBED_CACHE?: EmbedCacheBinding;
   /** Recency half-life in days. Default 120. Bounded [1, 3650] at parse time. */
   SEARCH_RECENCY_HALFLIFE_DAYS?: string;
+  /** Recency boost peak (age <= 30d). Default 1.5. Bounded [1.0, 5.0]. */
+  SEARCH_RECENCY_BOOST_30D?: string;
+  /** Recency boost knee (age = 90d / Option A 30-90d). Default 1.2. Bounded [1.0, 5.0]. */
+  SEARCH_RECENCY_BOOST_90D?: string;
 }
 
 const DEFAULT_HALFLIFE_DAYS = 120;
 const MIN_HALFLIFE_DAYS = 1;
 const MAX_HALFLIFE_DAYS = 3650;
 
+const DEFAULT_BOOST_30D = 1.5;
+const DEFAULT_BOOST_90D = 1.2;
+const MIN_BOOST = 1.0;
+const MAX_BOOST = 5.0;
+
+const BOOST_RAMP_START_MS = 30 * 86_400_000;
+const BOOST_RAMP_END_MS = 90 * 86_400_000;
+
 function parseHalfLifeDays(raw: string | undefined): number {
   if (!raw) return DEFAULT_HALFLIFE_DAYS;
   const n = Number(raw);
   if (!Number.isFinite(n)) return DEFAULT_HALFLIFE_DAYS;
   return Math.min(MAX_HALFLIFE_DAYS, Math.max(MIN_HALFLIFE_DAYS, n));
+}
+
+function parseBoost(raw: string | undefined, fallback: number): number {
+  if (!raw) return fallback;
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(MAX_BOOST, Math.max(MIN_BOOST, n));
+}
+
+/**
+ * Piecewise recency boost (see docs/architecture/semantic-search.md for the
+ * curve and the multiplier table). The `MIN_BOOST = 1.0` parse-time floor is
+ * load-bearing — this multiplier must never demote recent content, only lift
+ * it. Exported for unit tests so the curve can be pinned without a full
+ * hybridSearch fixture.
+ */
+export function recencyBoost(ageMs: number, boost30d: number, boost90d: number): number {
+  if (!Number.isFinite(ageMs) || ageMs <= BOOST_RAMP_START_MS) return boost30d;
+  if (ageMs >= BOOST_RAMP_END_MS) return 1;
+  const t = (ageMs - BOOST_RAMP_START_MS) / (BOOST_RAMP_END_MS - BOOST_RAMP_START_MS);
+  return boost30d + (boost90d - boost30d) * t;
 }
 
 /**
@@ -482,12 +515,15 @@ async function runHybridSearchInternal(
           return ids.map((id) => ({ id }));
         };
 
-  // Exponential decay on (now - published_at): 0.5x weight at half-life,
-  // 0.25x at 2× half-life, etc. Chunks skipped — they anchor to file
-  // slices, not dated entries. SQL chunked at 90 ids/statement to stay
-  // under D1's 100-bind cap.
+  // Chunks skipped — they anchor to file slices, not dated entries. SQL
+  // chunked at 90 ids/statement to stay under D1's 100-bind cap.
   const halfLifeDays = parseHalfLifeDays(env.SEARCH_RECENCY_HALFLIFE_DAYS);
   const halfLifeMs = halfLifeDays * 86_400_000;
+  const boost30d = parseBoost(env.SEARCH_RECENCY_BOOST_30D, DEFAULT_BOOST_30D);
+  // Clamp so an operator setting boost90d > boost30d can't invert the
+  // taper (which would lift 60d-old content above 30d-old within the boost
+  // layer). Silent — fires per request; logging would spam.
+  const boost90d = Math.min(parseBoost(env.SEARCH_RECENCY_BOOST_90D, DEFAULT_BOOST_90D), boost30d);
   const now = Date.now();
   const scoreMultipliers = async (ids: string[]): Promise<Map<string, number>> => {
     const map = new Map<string, number>();
@@ -512,7 +548,8 @@ async function runHybridSearchInternal(
       const ageMs = now - new Date(row.rankAt).getTime();
       // Reject malformed dates (Invalid Date → NaN) and future timestamps.
       if (!Number.isFinite(ageMs) || ageMs <= 0) continue;
-      map.set(row.id, Math.pow(0.5, ageMs / halfLifeMs));
+      const decay = Math.pow(0.5, ageMs / halfLifeMs);
+      map.set(row.id, decay * recencyBoost(ageMs, boost30d, boost90d));
     }
     return map;
   };

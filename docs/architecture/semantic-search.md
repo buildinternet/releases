@@ -38,6 +38,42 @@ All FTS5 input flows through `toFtsMatchQuery` (in `@buildinternet/releases-core
 
 The unified MCP `search` tool (and `GET /v1/search`) accepts `mode: "lexical"|"semantic"|"hybrid"` for release retrieval and defaults to `hybrid`. Release hits carry a `kind: "release"|"changelog_chunk"` discriminator — chunk hits expose a nested `chunk` with `source.slug`, `file_path`, `offset`, and `length` so agents can chain into `get_catalog_entry({ identifier: chunk.source.slug, changelog_path: chunk.file_path, changelog_offset: chunk.offset, changelog_limit: chunk.length * 3 })` to read the surrounding section (the `changelog_path` routing is what makes monorepos with multiple CHANGELOG files hit the right one). The hybrid path degrades to lexical with `degraded: true` + `degradedReason` set if Vectorize bindings or the embedding API are unavailable. Pass `type: ["orgs", "catalog"]` to skip the release-vector path when you only need registry lookups; pass `type: ["releases"]` to skip the entity-vector path. Deprecated shims `search_releases` and `search_registry` still exist for one release cycle.
 
+## Recency multipliers
+
+Hybrid release ranking multiplies the fused RRF score by `decay × boost`, both functions of `now − COALESCE(published_at, created_at)`. The decay is exponential (0.5× at the half-life, 0.25× at 2× half-life, …); the boost is a piecewise taper that lifts the freshest content without ever demoting it. Lives in `packages/search/src/hybrid-search-worker.ts`.
+
+Boost curve (Option B from #1045):
+
+```text
+boost(age) = boost30d                                              if age ≤ 30d
+           = boost30d − (boost30d − boost90d) · (age − 30d) / 60d  if 30d < age < 90d
+           = 1.0                                                    otherwise
+```
+
+Net multiplier with defaults (`halfLife=120`, `boost30d=1.5`, `boost90d=1.2`):
+
+| Age  | Decay | Boost      | Net                     |
+| ---- | ----- | ---------- | ----------------------- |
+| 14d  | 0.92  | 1.50       | **1.38**                |
+| 30d  | 0.84  | 1.50       | **1.26**                |
+| 60d  | 0.71  | 1.35       | **0.96**                |
+| 90d  | 0.59  | 1.20 → 1.0 | **0.71 → 0.59** (cliff) |
+| 180d | 0.35  | 1.00       | 0.35                    |
+| 365d | 0.12  | 1.00       | 0.12                    |
+| 2yr  | 0.02  | 1.00       | 0.02                    |
+
+The 0.2 cliff at 90d is the default trade-off — set `SEARCH_RECENCY_BOOST_90D=1.0` to land smoothly and eliminate the discontinuity entirely. The first 30 days are flat at `boost30d` by design: the operator concern in #1045 was that a 2-week-old release should dominate everything except a dramatically better older match.
+
+Tuning knobs (bound to both `api` and `mcp` workers via the `HybridSearchEnv` env type — set on each `wrangler.jsonc` to override):
+
+| Env var                        | Default | Range        | Effect                                                       |
+| ------------------------------ | ------- | ------------ | ------------------------------------------------------------ |
+| `SEARCH_RECENCY_HALFLIFE_DAYS` | `120`   | `[1, 3650]`  | Decay half-life. Lower → older content drops out faster.     |
+| `SEARCH_RECENCY_BOOST_30D`     | `1.5`   | `[1.0, 5.0]` | Peak boost applied to releases ≤ 30 days old.                |
+| `SEARCH_RECENCY_BOOST_90D`     | `1.2`   | `[1.0, 5.0]` | Boost at the 90-day knee. Set to `1.0` for a smooth landing. |
+
+The `[1.0, 5.0]` floor on both boost knobs is enforced at parse time so operators can never accidentally demote recent content with this lever — only lift it. The runtime additionally clamps `boost90d` to `min(boost90d, boost30d)` so the taper can't invert (an operator setting `boost90d > boost30d` would otherwise lift 60-day-old content above 30-day-old content within the boost layer). Setting both boosts to `1.0` disables tiered behavior cleanly: the multiplier collapses to pure decay.
+
 ## Query embedding cache
 
 Optional KV binding `EMBED_CACHE` (both workers) caches single-query embeddings for the hybrid/semantic search path so repeat queries skip the embedding provider. Keyed by `embed:v1:{provider}:{model}:{dim}:sha256(trim+lower(query))` with a 7-day TTL; skipped for empty queries and inputs over 512 chars. Writes use `ctx.waitUntil` so cache misses don't block the response. The helper is in `packages/search/src/embedding-cache.ts` and wraps the `buildEmbedder` closure in both workers' `search-hybrid.ts`. Binding is optional — without it the helper is a pass-through and behavior matches pre-cache. Ingest paths (`packages/search/src/embed-releases.ts`, `packages/search/src/embed-entities.ts`, `packages/search/src/embed-changelog-pipeline.ts`) deliberately do **not** use the cache: release/entity content rarely repeats, so caching would just bloat KV. The cache key auto-invalidates on any provider, model, or dim switch — there is no manual purge. The API and MCP workers share a single account-scoped KV namespace (keys are identical across workers, so a hit from either warms the other); provision once with `wrangler kv namespace create EMBED_CACHE` (+ `--preview`) and add the same `kv_namespaces` binding block to both `workers/api/wrangler.jsonc` and `workers/mcp/wrangler.jsonc`.
