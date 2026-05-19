@@ -34,6 +34,23 @@ export type SpendCapResult =
   | { blocked: true; scope: "org" | "global"; currentCents: number; capCents: number };
 
 /**
+ * Parse a KV-stored or env-supplied integer string into a non-negative number,
+ * falling back to `fallback` on null, undefined, NaN, or negative input.
+ *
+ * Without this, `parseInt("NaN", 10)` (which can happen if a previous write
+ * stringified NaN, or a manual `wrangler kv:key put` set a bad value) returns
+ * NaN. NaN poisons everything downstream: `NaN >= cap` is always false (silent
+ * cap bypass), and `NaN + cents = NaN` permanently corrupts the counter. The
+ * sanitizer treats malformed input as "zero so far today", which is the
+ * conservative choice — the cap will fire when actual spend catches up.
+ */
+function parseNonNegativeInt(raw: string | null | undefined, fallback: number): number {
+  if (raw === null || raw === undefined) return fallback;
+  const n = Number.parseInt(raw, 10);
+  return Number.isFinite(n) && n >= 0 ? n : fallback;
+}
+
+/**
  * Read-modify-write increment for a KV spend counter. Uses a 0-second cache
  * TTL on the read to bypass any edge cache so we see the freshest value.
  *
@@ -49,7 +66,7 @@ export async function incrementKvSpend(
   ttlSeconds: number,
 ): Promise<void> {
   const raw = await kv.get(key);
-  const current = raw !== null ? parseInt(raw, 10) : 0;
+  const current = parseNonNegativeInt(raw, 0);
   const newValue = current + cents;
   // expirationTtl must be at least 60 seconds per the KV API.
   await kv.put(key, String(newValue), { expirationTtl: Math.max(ttlSeconds, 60) });
@@ -68,12 +85,11 @@ export async function checkSpendCap(
   env: { MA_DAILY_SPEND_CAP_ORG_CENTS?: string; MA_DAILY_SPEND_CAP_GLOBAL_CENTS?: string },
 ): Promise<SpendCapResult> {
   const date = new Date().toISOString().slice(0, 10); // YYYY-MM-DD (UTC)
-  const orgCap = env.MA_DAILY_SPEND_CAP_ORG_CENTS
-    ? parseInt(env.MA_DAILY_SPEND_CAP_ORG_CENTS, 10)
-    : DEFAULT_ORG_CAP_CENTS;
-  const globalCap = env.MA_DAILY_SPEND_CAP_GLOBAL_CENTS
-    ? parseInt(env.MA_DAILY_SPEND_CAP_GLOBAL_CENTS, 10)
-    : DEFAULT_GLOBAL_CAP_CENTS;
+  const orgCap = parseNonNegativeInt(env.MA_DAILY_SPEND_CAP_ORG_CENTS, DEFAULT_ORG_CAP_CENTS);
+  const globalCap = parseNonNegativeInt(
+    env.MA_DAILY_SPEND_CAP_GLOBAL_CENTS,
+    DEFAULT_GLOBAL_CAP_CENTS,
+  );
 
   try {
     const globalKey = `ma:spend:global:${date}`;
@@ -84,8 +100,8 @@ export async function checkSpendCap(
       orgKey ? kv.get(orgKey) : Promise.resolve(null),
     ]);
 
-    const globalCents = globalRaw !== null ? parseInt(globalRaw, 10) : 0;
-    const orgCents = orgRaw !== null ? parseInt(orgRaw, 10) : 0;
+    const globalCents = parseNonNegativeInt(globalRaw, 0);
+    const orgCents = parseNonNegativeInt(orgRaw, 0);
 
     // Check org cap first (tighter) so the logged scope is accurate.
     if (orgId && orgCents >= orgCap) {
@@ -132,7 +148,7 @@ export async function recordSessionSpend(
       // Re-read the new value for logging (best-effort).
       try {
         const newRaw = await kv.get(globalKey);
-        const newCents = newRaw !== null ? parseInt(newRaw, 10) : cents;
+        const newCents = parseNonNegativeInt(newRaw, cents);
         logEvent("info", {
           component: "discovery",
           event: "spend-counter-incremented",
@@ -160,7 +176,7 @@ export async function recordSessionSpend(
       incrementKvSpend(kv, orgKey, cents, TTL_SECONDS).then(async () => {
         try {
           const newRaw = await kv.get(orgKey);
-          const newCents = newRaw !== null ? parseInt(newRaw, 10) : cents;
+          const newCents = parseNonNegativeInt(newRaw, cents);
           logEvent("info", {
             component: "discovery",
             event: "spend-counter-incremented",
