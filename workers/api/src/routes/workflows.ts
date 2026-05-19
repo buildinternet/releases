@@ -824,11 +824,15 @@ workflowsRoutes.post("/workflows/embed-entities", async (c) => {
       db
         .select({
           collectionId: collectionMembers.collectionId,
-          name: productsActive.name,
+          // Concatenate "Product · Org" so the embedded text carries the
+          // parent-org signal — a topical query for the org's name still
+          // matches a collection that only pins one product.
+          name: sql<string>`${productsActive.name} || ' · ' || ${organizationsPublic.name}`,
           position: collectionMembers.position,
         })
         .from(collectionMembers)
         .innerJoin(productsActive, sql`${productsActive.id} = ${collectionMembers.productId}`)
+        .innerJoin(organizationsPublic, sql`${organizationsPublic.id} = ${productsActive.orgId}`)
         .where(inArray(collectionMembers.collectionId, colIds)),
     ]);
     const namesByCollection = new Map<string, string[]>();

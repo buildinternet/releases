@@ -698,4 +698,56 @@ describe("collections (product members)", () => {
     const body = (await res.json()) as { releases: Array<{ id: string }> };
     expect(body.releases.map((r) => r.id)).toEqual(["rel_cc1"]);
   });
+
+  it("POSTing a product reflects in detail (members + memberCount + previewMembers); legacy orgs stays empty", async () => {
+    const db = mkDb();
+    await seedWithProduct(db);
+    const fetch = mkApp(db);
+
+    const postRes = await fetch(
+      new Request(
+        "http://test/v1/collections/test-empty-set/members",
+        json("POST", { productId: "prod_claude_code" }),
+      ),
+    );
+    expect(postRes.status).toBe(201);
+
+    const detailRes = await fetch(new Request("http://test/v1/collections/test-empty-set"));
+    const detailBody = (await detailRes.json()) as {
+      members: Array<{ kind: string; slug: string; name: string; org?: { slug: string } }>;
+      orgs: Array<{ slug: string }>;
+    };
+    expect(detailBody.members).toHaveLength(1);
+    expect(detailBody.members[0]?.kind).toBe("product");
+    expect(detailBody.members[0]?.slug).toBe("claude-code");
+    expect(detailBody.members[0]?.org?.slug).toBe("anthropic");
+    expect(detailBody.orgs).toEqual([]);
+
+    const listRes = await fetch(new Request("http://test/v1/collections"));
+    const listBody = (await listRes.json()) as Array<{
+      slug: string;
+      memberCount: number;
+      previewMembers: Array<{ kind: string; slug: string }>;
+      previewOrgs: Array<{ slug: string }>;
+    }>;
+    const row = listBody.find((c) => c.slug === "test-empty-set")!;
+    expect(row.memberCount).toBe(1);
+    expect(row.previewMembers).toEqual([
+      expect.objectContaining({ kind: "product", slug: "claude-code" }),
+    ]);
+    expect(row.previewOrgs).toEqual([]);
+  });
+
+  it("rejects contradictory org + product refs", async () => {
+    const db = mkDb();
+    await seedWithProduct(db);
+    const fetch = mkApp(db);
+    const res = await fetch(
+      new Request(
+        "http://test/v1/collections/test-empty-set/members",
+        json("POST", { orgSlug: "openai", productId: "prod_claude_code" }),
+      ),
+    );
+    expect(res.status).toBe(400);
+  });
 });

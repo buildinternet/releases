@@ -2099,6 +2099,7 @@ export async function listCollections(db: D1Db, params: McpPaginationInput): Pro
           +
           (SELECT COUNT(*) FROM ${collectionMembers} cm
             INNER JOIN ${productsActive} pa ON pa.id = cm.product_id
+            INNER JOIN ${organizationsPublic} op ON op.id = pa.org_id
             WHERE cm.collection_id = c.id)
         ) AS memberCount
       FROM ${collections} c

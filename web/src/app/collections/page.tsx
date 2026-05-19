@@ -5,7 +5,7 @@ import { Header } from "@/components/header";
 import { OrgAvatar } from "@/components/org-avatar";
 import { PageHeader } from "@/components/page-header";
 import { SetupMessage } from "@/components/setup-message";
-import { memberKey } from "@/components/collection-timeline";
+import { memberKey } from "@/lib/member-key";
 
 const TITLE = "Collections";
 const DESCRIPTION =

@@ -87,6 +87,19 @@ async function findCollectionBySlug(db: ReturnType<typeof createDb>, slug: strin
   return row ?? null;
 }
 
+function chunk<T>(arr: T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) chunks.push(arr.slice(i, i + size));
+  return chunks;
+}
+
+// D1 caps each prepared statement at 100 bound parameters. `inArray` lookups
+// chunk at 90 to leave headroom for the `deletedAt IS NULL` guard; bulk
+// inserts chunk at 20 (5 binds × 20 = 100 — `collection_id`, `org_id`,
+// `product_id`, `position`, `created_at`).
+const IN_LOOKUP_CHUNK = 90;
+const INSERT_CHUNK = 20;
+
 // ── Member input resolution ──────────────────────────────────────────────
 
 type ResolvedOrg = { kind: "org"; orgId: string };
@@ -113,6 +126,19 @@ function classifyMemberInput(
       status: 400,
       message:
         "productSlug requires an org context — supply productId, or pair productSlug with orgSlug/orgId.",
+    };
+  }
+  // Reject mixed refs except the legitimate "productSlug + org context" case
+  // — otherwise an `{ orgSlug, productId }` payload would silently drop the
+  // org ref and resolve as a product.
+  const isProductSlugWithContext =
+    m.productSlug !== undefined && m.productId === undefined && hasOrgRef;
+  if (hasOrgRef && hasProductRef && !isProductSlugWithContext) {
+    return {
+      ok: false,
+      status: 400,
+      message:
+        "Provide either an org ref or a product ref, or pair productSlug with orgSlug/orgId — not both.",
     };
   }
   if (hasProductRef) return { ok: true, value: { kind: "product", m } };
@@ -193,35 +219,35 @@ async function resolveMembersBatch(
   const productSlugContextMap = new Map<string, string>();
 
   const lookups: Promise<void>[] = [];
-  if (orgIds.size > 0) {
+  for (const idChunk of chunk([...orgIds], IN_LOOKUP_CHUNK)) {
     lookups.push(
       (async () => {
         const rows = await db
           .select({ id: organizations.id })
           .from(organizations)
-          .where(and(inArray(organizations.id, [...orgIds]), isNull(organizations.deletedAt)));
+          .where(and(inArray(organizations.id, idChunk), isNull(organizations.deletedAt)));
         for (const r of rows) orgIdMap.set(r.id, r.id);
       })(),
     );
   }
-  if (orgSlugs.size > 0) {
+  for (const slugChunk of chunk([...orgSlugs], IN_LOOKUP_CHUNK)) {
     lookups.push(
       (async () => {
         const rows = await db
           .select({ id: organizations.id, slug: organizations.slug })
           .from(organizations)
-          .where(and(inArray(organizations.slug, [...orgSlugs]), isNull(organizations.deletedAt)));
+          .where(and(inArray(organizations.slug, slugChunk), isNull(organizations.deletedAt)));
         for (const r of rows) orgSlugMap.set(r.slug, r.id);
       })(),
     );
   }
-  if (productIds.size > 0) {
+  for (const idChunk of chunk([...productIds], IN_LOOKUP_CHUNK)) {
     lookups.push(
       (async () => {
         const rows = await db
           .select({ id: products.id })
           .from(products)
-          .where(and(inArray(products.id, [...productIds]), isNull(products.deletedAt)));
+          .where(and(inArray(products.id, idChunk), isNull(products.deletedAt)));
         for (const r of rows) productIdMap.set(r.id, r.id);
       })(),
     );
@@ -398,24 +424,29 @@ collectionRoutes.get(
     const db = createDb(c.env.DB);
 
     const [countRows, orgMemberRows, productMemberRows] = await Promise.all([
-      // memberCount counts publicly visible members of either kind. The two
-      // LEFT JOINs are safe because each collection_members row has exactly
-      // one of (org_id, product_id) set, so one side is always NULL and
-      // COUNT(<id>) ignores it.
-      db
-        .select({
-          slug: collections.slug,
-          name: collections.name,
-          description: collections.description,
-          orgCount: sql<number>`COUNT(${organizationsPublic.id})`,
-          productCount: sql<number>`COUNT(${productsActive.id})`,
-        })
-        .from(collections)
-        .leftJoin(collectionMembers, eq(collectionMembers.collectionId, collections.id))
-        .leftJoin(organizationsPublic, eq(organizationsPublic.id, collectionMembers.orgId))
-        .leftJoin(productsActive, eq(productsActive.id, collectionMembers.productId))
-        .groupBy(collections.id)
-        .orderBy(collections.name),
+      // Raw correlated subqueries (Drizzle's relational `${collections.id}`
+      // gets confused by `id` columns on multiple aliases in the inner scope).
+      // Both kinds gate through `organizations_public` — products joined via
+      // `productsActive` must also have a visible parent org so an on_demand
+      // org's product doesn't inflate the count.
+      db.all<{
+        slug: string;
+        name: string;
+        description: string | null;
+        orgCount: number;
+        productCount: number;
+      }>(sql`
+        SELECT c.slug, c.name, c.description,
+          (SELECT COUNT(*) FROM ${collectionMembers} cm
+             INNER JOIN ${organizationsPublic} op ON op.id = cm.org_id
+             WHERE cm.collection_id = c.id) AS orgCount,
+          (SELECT COUNT(*) FROM ${collectionMembers} cm
+             INNER JOIN ${productsActive} pa ON pa.id = cm.product_id
+             INNER JOIN ${organizationsPublic} op ON op.id = pa.org_id
+             WHERE cm.collection_id = c.id) AS productCount
+        FROM ${collections} c
+        ORDER BY c.name
+      `),
 
       db
         .select({
@@ -704,10 +735,13 @@ collectionRoutes.get(
         .from(collectionMembers)
         .innerJoin(organizationsPublic, eq(organizationsPublic.id, collectionMembers.orgId))
         .where(eq(collectionMembers.collectionId, collection.id)),
+      // Inner-join through organizationsPublic on the parent org so a product
+      // attached to an on_demand / soft-deleted org doesn't surface releases.
       db
         .select({ productId: productsActive.id, slug: productsActive.slug })
         .from(collectionMembers)
         .innerJoin(productsActive, eq(productsActive.id, collectionMembers.productId))
+        .innerJoin(organizationsPublic, eq(organizationsPublic.id, productsActive.orgId))
         .where(eq(collectionMembers.collectionId, collection.id)),
     ]);
 
@@ -1051,17 +1085,16 @@ collectionRoutes.put(
     // membership writes are admin-only and low-frequency.
     const now = new Date().toISOString();
     await db.delete(collectionMembers).where(eq(collectionMembers.collectionId, existing.id));
-    if (resolved.length > 0) {
-      await db.insert(collectionMembers).values(
-        resolved.map(({ ref, position }) => ({
-          collectionId: existing.id,
-          orgId: ref.kind === "org" ? ref.orgId : null,
-          productId: ref.kind === "product" ? ref.productId : null,
-          position,
-          createdAt: now,
-        })),
-      );
-    }
+    const rows = resolved.map(({ ref, position }) => ({
+      collectionId: existing.id,
+      orgId: ref.kind === "org" ? ref.orgId : null,
+      productId: ref.kind === "product" ? ref.productId : null,
+      position,
+      createdAt: now,
+    }));
+    await Promise.all(
+      chunk(rows, INSERT_CHUNK).map((rowChunk) => db.insert(collectionMembers).values(rowChunk)),
+    );
     await db.update(collections).set({ updatedAt: now }).where(eq(collections.id, existing.id));
 
     // Membership feeds the embedded "Members:" line — re-embed after replace.
@@ -1363,14 +1396,28 @@ async function embedCollectionSideEffect(
         .orderBy(asc(collectionMembers.position), asc(organizationsPublic.name))
         .limit(32),
       db
-        .select({ name: productsActive.name, position: collectionMembers.position })
+        .select({
+          name: productsActive.name,
+          orgName: organizationsPublic.name,
+          position: collectionMembers.position,
+        })
         .from(collectionMembers)
         .innerJoin(productsActive, eq(productsActive.id, collectionMembers.productId))
+        .innerJoin(organizationsPublic, eq(organizationsPublic.id, productsActive.orgId))
         .where(eq(collectionMembers.collectionId, col.id))
         .orderBy(asc(collectionMembers.position), asc(productsActive.name))
         .limit(32),
     ]);
-    const memberNames = [...orgMembers, ...productMembers]
+    // Product entries get a `Name · OrgName` label so the embedded "Members:"
+    // line carries the parent-org signal too (a topical query for the org's
+    // name still matches a collection that only pins one product).
+    const memberNames = [
+      ...orgMembers.map((r) => ({ position: r.position, name: r.name })),
+      ...productMembers.map((r) => ({
+        position: r.position,
+        name: `${r.name} · ${r.orgName}`,
+      })),
+    ]
       .toSorted((a, b) => a.position - b.position || a.name.localeCompare(b.name))
       .map((r) => r.name);
 

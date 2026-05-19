@@ -15,6 +15,7 @@ import {
   type CollectionMemberOrg,
   type CollectionReleaseItem,
 } from "@/lib/api";
+import { memberKey } from "@/lib/member-key";
 import { tabButtonClass } from "@/lib/styles";
 import { useInfiniteScroll } from "@/hooks/use-infinite-scroll";
 import { InfiniteScrollTrigger } from "./infinite-scroll-trigger";
@@ -39,14 +40,6 @@ interface CollectionTimelineProps {
    * (like the category page) pass an array of `kind: "org"` entries.
    */
   members: CollectionMember[];
-}
-
-/**
- * `kind:slug` keeps an org and a product that share a slug from colliding in
- * the active-filter set. Exported so list / detail pages key chips the same way.
- */
-export function memberKey(m: CollectionMember): string {
-  return `${m.kind}:${m.slug}`;
 }
 
 function memberAvatar(m: CollectionMember) {

@@ -531,11 +531,9 @@ export function collectionToMarkdown(
         const tail = member.domain ? ` — ${member.domain}` : "";
         lines.push(`- [${member.name}](${url})${tail}`);
       } else {
-        // Product members link to the org-scoped product page; the chip shows
-        // the parent org's name for disambiguation.
         const url = opts.baseUrl
-          ? `${opts.baseUrl}/${member.org.slug}/${member.slug}`
-          : `/${member.org.slug}/${member.slug}`;
+          ? `${opts.baseUrl}/${member.org.slug}/product/${member.slug}`
+          : `/${member.org.slug}/product/${member.slug}`;
         lines.push(`- [${member.name}](${url}) (product · ${member.org.name})`);
       }
     }
