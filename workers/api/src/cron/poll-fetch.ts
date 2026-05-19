@@ -210,10 +210,20 @@ export async function queryDueSources(
     );
   });
 
+  // Exclude sources whose org has fetch_paused = true (#1057). Use a NOT IN
+  // subquery rather than a JOIN so the outer .select() shape stays Source[]
+  // without needing column projection gymnastics.
+  const pausedOrgIds = db
+    .select({ id: organizations.id })
+    .from(organizations)
+    .where(eq(organizations.fetchPaused, true));
+
+  const orgNotFetchPaused = sql`${sourcesVisible.orgId} NOT IN (${pausedOrgIds})`;
+
   return db
     .select()
     .from(sourcesVisible)
-    .where(and(pollable, notPaused, or(...tierConditions)));
+    .where(and(pollable, notPaused, orgNotFetchPaused, or(...tierConditions)));
 }
 
 // ── Poll one source ──

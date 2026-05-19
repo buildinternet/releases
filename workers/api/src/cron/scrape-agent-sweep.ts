@@ -165,6 +165,8 @@ export async function queryCandidates(
     isNotNull(sources.changeDetectedAt),
     sql`(json_extract(${sources.metadata}, '$.feedUrl') IS NULL OR ${sources.metadata} IS NULL)`,
     or(eq(sources.isHidden, false), isNull(sources.isHidden)),
+    // Exclude sources whose org has fetch_paused = true (#1057).
+    or(eq(organizations.fetchPaused, false), isNull(organizations.fetchPaused)),
   );
 
   const rows = await db
