@@ -1,5 +1,5 @@
 import { describe, test, expect } from "bun:test";
-import { embedBatch, resolveConfig } from "./embeddings";
+import { embedBatch, resolveConfig, getEmbedDim, VOYAGE_OUTPUT_DIMENSION } from "./embeddings";
 
 type FakeCall = { url: string; init: RequestInit };
 
@@ -54,6 +54,42 @@ describe("resolveConfig", () => {
 
   test("throws on unknown provider", () => {
     expect(() => resolveConfig({ provider: "bogus" as any })).toThrow(/Unknown EMBEDDING_PROVIDER/);
+  });
+});
+
+// Regression for #1041: the embedding cache key encodes (provider, model, dim).
+// Before the fix, dim was hardcoded to VOYAGE_OUTPUT_DIMENSION on every
+// caller — so flipping EMBEDDING_PROVIDER=openai would still key on 512
+// while the wire-actual vector was 1536. `getEmbedDim` is what closes that.
+describe("getEmbedDim", () => {
+  test("voyage always reports VOYAGE_OUTPUT_DIMENSION regardless of model", () => {
+    // We always request `output_dimension: VOYAGE_OUTPUT_DIMENSION` against
+    // Voyage, so each model returns that dim irrespective of its native one.
+    expect(getEmbedDim("voyage", "voyage-4-lite")).toBe(VOYAGE_OUTPUT_DIMENSION);
+    expect(getEmbedDim("voyage", "voyage-4")).toBe(VOYAGE_OUTPUT_DIMENSION);
+    expect(getEmbedDim("voyage", "voyage-3-lite")).toBe(VOYAGE_OUTPUT_DIMENSION);
+  });
+
+  test("openai reports each model's native dim", () => {
+    expect(getEmbedDim("openai", "text-embedding-3-small")).toBe(1536);
+    expect(getEmbedDim("openai", "text-embedding-3-large")).toBe(3072);
+  });
+
+  test("workers-ai reports each model's native dim", () => {
+    expect(getEmbedDim("workers-ai", "@cf/baai/bge-base-en-v1.5")).toBe(768);
+    expect(getEmbedDim("workers-ai", "@cf/baai/bge-small-en-v1.5")).toBe(384);
+  });
+
+  test("openai and voyage at the same query produce different dim → different cache key", () => {
+    // Same model name slot, different providers — cache key inputs diverge.
+    const voyageDim = getEmbedDim("voyage", "voyage-4-lite");
+    const openaiDim = getEmbedDim("openai", "text-embedding-3-small");
+    expect(voyageDim).not.toBe(openaiDim);
+  });
+
+  test("throws on unknown openai/workers-ai model", () => {
+    expect(() => getEmbedDim("openai", "made-up-model")).toThrow(/Unknown embedding model/);
+    expect(() => getEmbedDim("workers-ai", "@cf/bogus/model")).toThrow(/Unknown embedding model/);
   });
 });
 

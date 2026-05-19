@@ -27,6 +27,7 @@ import {
   type RawSearchReleaseRow,
 } from "../queries/search.js";
 import { runHybridSearch, runCollectionsSemantic, type HybridMode } from "../lib/search-hybrid.js";
+import { buildEmbedConfig } from "../lib/embed-config.js";
 import type { SearchCollectionHit } from "@buildinternet/releases-api-types";
 import { logSearch } from "../lib/log-search.js";
 import { isValidBearerAuth } from "../middleware/auth.js";
@@ -465,7 +466,13 @@ searchRoutes.get(
     // working. Chunk hits ride along on a new `chunks` field. Collection
     // semantic search runs in parallel; degrades the same way as the
     // release path (returns empty + reason) so a missing binding never
-    // 500s the whole response.
+    // 500s the whole response. Embed config is resolved once and shared so
+    // both helpers don't independently read the Secrets Store binding.
+    const embedConfig = await buildEmbedConfig(c.env);
+    const sharedOpts = {
+      waitUntil: c.executionCtx.waitUntil.bind(c.executionCtx),
+      embedConfig,
+    };
     const [hybrid, collectionsSemantic] = await Promise.all([
       runHybridSearch(
         c.env,
@@ -479,14 +486,9 @@ searchRoutes.get(
           // `orgSourceIds` filter so vector + FTS results both stay scoped.
           ...(scopeSourceIds && scopeSourceIds.length > 0 ? { orgSourceIds: scopeSourceIds } : {}),
         },
-        { waitUntil: c.executionCtx.waitUntil.bind(c.executionCtx) },
+        sharedOpts,
       ),
-      runCollectionsSemantic(
-        c.env,
-        db,
-        { query: q, limit },
-        { waitUntil: c.executionCtx.waitUntil.bind(c.executionCtx) },
-      ),
+      runCollectionsSemantic(c.env, db, { query: q, limit }, sharedOpts),
     ]);
 
     const releases: SearchReleaseHit[] = hybrid.hits

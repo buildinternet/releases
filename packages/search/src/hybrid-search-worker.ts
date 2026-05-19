@@ -35,11 +35,22 @@ import type { ReleaseType } from "@buildinternet/releases-api-types";
 import { hybridSearch, type VectorizeIndex as HybridVectorizeIndex } from "./vector-search.js";
 import {
   embedBatch,
-  VOYAGE_OUTPUT_DIMENSION,
+  getEmbedDim,
   type EmbeddingConfig,
   type EmbeddingProvider,
 } from "./embeddings.js";
 import { withEmbedCache, type EmbedCacheBinding } from "./embedding-cache.js";
+
+// Max ids per `IN (...)` clause. D1's hard cap is 100 binds per prepared
+// statement (per `AGENTS.md`); 90 leaves headroom for any other binds the
+// statement carries today and any added later.
+const D1_IN_CHUNK = 90;
+
+function chunkInto<T>(items: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  return out;
+}
 
 // Local D1 db type — same shape as workers/api and workers/mcp's `D1Db`
 // (both compute `ReturnType<typeof drizzle<typeof schema>>`). Re-deriving
@@ -140,9 +151,14 @@ export function recencyBoost(ageMs: number, boost30d: number, boost90d: number):
 /**
  * Per-call plumbing. `waitUntil` — when provided — lets the embedding
  * cache fire KV writes without blocking the response.
+ *
+ * `embedConfig` — when provided (including `null` for "no provider
+ * configured") — skips the per-helper call to the worker's
+ * `buildEmbedConfig` so multiple helpers share one Secrets Store read.
  */
 export interface HybridSearchOpts {
   waitUntil?: (p: Promise<unknown>) => void;
+  embedConfig?: ResolvedEmbedConfig | null;
 }
 
 interface InternalOpts extends HybridSearchOpts {
@@ -253,10 +269,9 @@ async function ftsReleaseIds(
  */
 async function buildEmbedder(
   env: HybridSearchEnv,
-  buildEmbedConfig: BuildEmbedConfig,
-  waitUntil?: (p: Promise<unknown>) => void,
+  opts: InternalOpts,
 ): Promise<((text: string) => Promise<number[]>) | null> {
-  const cfg = await buildEmbedConfig(env);
+  const cfg = opts.embedConfig !== undefined ? opts.embedConfig : await opts.buildEmbedConfig(env);
   if (!cfg) return null;
   const raw = async (text: string) => {
     const result = await embedBatch([text], cfg);
@@ -267,8 +282,8 @@ async function buildEmbedder(
   return withEmbedCache(
     raw,
     env.EMBED_CACHE,
-    { provider: cfg.provider, model: cfg.model, dim: VOYAGE_OUTPUT_DIMENSION },
-    waitUntil,
+    { provider: cfg.provider, model: cfg.model, dim: getEmbedDim(cfg.provider, cfg.model) },
+    opts.waitUntil,
   );
 }
 
@@ -304,37 +319,42 @@ async function hydrateReleases(
 ): Promise<Map<string, RawReleaseRow>> {
   if (ids.length === 0) return new Map();
   const releasesTable = opts.includeCoverage ? sql`releases` : sql`releases_visible`;
-  const rows = await db.all<RawReleaseRow>(sql`
-    SELECT r.id as id,
-           r.title as title,
-           r.version as version,
-           r.url as url,
-           r.published_at as publishedAt,
-           COALESCE(r.summary, SUBSTR(r.content, 1, 300)) as summary,
-           r.title_generated as titleGenerated,
-           r.title_short as titleShort,
-           r.content as content,
-           r.media as media,
-           r.type as type,
-           s.id as sourceId,
-           s.slug as sourceSlug,
-           s.name as sourceName,
-           s.type as sourceType,
-           o.slug as orgSlug,
-           o.name as orgName,
-           ${sql.raw(COVERAGE_COUNT_EXPR)} as coverageCount
-    FROM ${releasesTable} r
-    JOIN sources_active s ON s.id = r.source_id
-    LEFT JOIN organizations_active o ON o.id = s.org_id
-    WHERE r.id IN (${sql.join(
-      ids.map((id) => sql`${id}`),
-      sql`, `,
-    )})
-      AND (s.is_hidden = 0 OR s.is_hidden IS NULL)
-      AND (r.suppressed IS NULL OR r.suppressed = 0)
-  `);
+  // Chunked at D1_IN_CHUNK to stay under D1's 100-bind cap.
+  const results = await Promise.all(
+    chunkInto(ids, D1_IN_CHUNK).map((batch) =>
+      db.all<RawReleaseRow>(sql`
+        SELECT r.id as id,
+               r.title as title,
+               r.version as version,
+               r.url as url,
+               r.published_at as publishedAt,
+               COALESCE(r.summary, SUBSTR(r.content, 1, 300)) as summary,
+               r.title_generated as titleGenerated,
+               r.title_short as titleShort,
+               r.content as content,
+               r.media as media,
+               r.type as type,
+               s.id as sourceId,
+               s.slug as sourceSlug,
+               s.name as sourceName,
+               s.type as sourceType,
+               o.slug as orgSlug,
+               o.name as orgName,
+               ${sql.raw(COVERAGE_COUNT_EXPR)} as coverageCount
+        FROM ${releasesTable} r
+        JOIN sources_active s ON s.id = r.source_id
+        LEFT JOIN organizations_active o ON o.id = s.org_id
+        WHERE r.id IN (${sql.join(
+          batch.map((id) => sql`${id}`),
+          sql`, `,
+        )})
+          AND (s.is_hidden = 0 OR s.is_hidden IS NULL)
+          AND (r.suppressed IS NULL OR r.suppressed = 0)
+      `),
+    ),
+  );
   const map = new Map<string, RawReleaseRow>();
-  for (const row of rows) map.set(row.id, row);
+  for (const row of results.flat()) map.set(row.id, row);
   return map;
 }
 
@@ -367,38 +387,51 @@ async function hydrateChunks(
 ): Promise<Map<string, HybridChunkHit["chunk"]>> {
   if (vectorIds.length === 0) return new Map();
 
-  const chunkRows = await db.all<RawChunkRow>(sql`
-    SELECT scc.id as id,
-           scc.vector_id as vectorId,
-           scc.offset as offset,
-           scc.length as length,
-           scc.heading as heading,
-           scf.id as fileId,
-           scf.path as filePath,
-           s.id as sourceId,
-           s.slug as sourceSlug,
-           s.name as sourceName,
-           o.slug as orgSlug,
-           o.name as orgName
-    FROM source_changelog_chunks scc
-    JOIN source_changelog_files scf ON scf.id = scc.source_changelog_file_id
-    JOIN sources_active s ON s.id = scc.source_id
-    LEFT JOIN organizations_active o ON o.id = s.org_id
-    WHERE scc.vector_id IN (${sql.join(
-      vectorIds.map((id) => sql`${id}`),
-      sql`, `,
-    )})
-      AND (s.is_hidden = 0 OR s.is_hidden IS NULL)
-  `);
+  // Chunked at D1_IN_CHUNK to stay under D1's 100-bind cap.
+  const chunkRowResults = await Promise.all(
+    chunkInto(vectorIds, D1_IN_CHUNK).map((batch) =>
+      db.all<RawChunkRow>(sql`
+        SELECT scc.id as id,
+               scc.vector_id as vectorId,
+               scc.offset as offset,
+               scc.length as length,
+               scc.heading as heading,
+               scf.id as fileId,
+               scf.path as filePath,
+               s.id as sourceId,
+               s.slug as sourceSlug,
+               s.name as sourceName,
+               o.slug as orgSlug,
+               o.name as orgName
+        FROM source_changelog_chunks scc
+        JOIN source_changelog_files scf ON scf.id = scc.source_changelog_file_id
+        JOIN sources_active s ON s.id = scc.source_id
+        LEFT JOIN organizations_active o ON o.id = s.org_id
+        WHERE scc.vector_id IN (${sql.join(
+          batch.map((id) => sql`${id}`),
+          sql`, `,
+        )})
+          AND (s.is_hidden = 0 OR s.is_hidden IS NULL)
+      `),
+    ),
+  );
+  const chunkRows = chunkRowResults.flat();
 
   if (chunkRows.length === 0) return new Map();
 
-  // Batch-load file contents once per unique file.
+  // Batch-load file contents once per unique file. Chunked the same way —
+  // a search returning many distinct files plus topK*3 can push past the
+  // 100-bind cap here too.
   const uniqueFileIds = [...new Set(chunkRows.map((r) => r.fileId))];
-  const fileRows = await db
-    .select({ id: sourceChangelogFiles.id, content: sourceChangelogFiles.content })
-    .from(sourceChangelogFiles)
-    .where(inArray(sourceChangelogFiles.id, uniqueFileIds));
+  const fileRowsResults = await Promise.all(
+    chunkInto(uniqueFileIds, D1_IN_CHUNK).map((batch) =>
+      db
+        .select({ id: sourceChangelogFiles.id, content: sourceChangelogFiles.content })
+        .from(sourceChangelogFiles)
+        .where(inArray(sourceChangelogFiles.id, batch)),
+    ),
+  );
+  const fileRows = fileRowsResults.flat();
   const fileContent = new Map<string, string>();
   for (const f of fileRows) fileContent.set(f.id, f.content);
 
@@ -478,7 +511,7 @@ async function runHybridSearchInternal(
 
   if (requestedMode === "lexical") return lexicalResponse();
 
-  const embedder = await buildEmbedder(env, opts.buildEmbedConfig, opts.waitUntil);
+  const embedder = await buildEmbedder(env, opts);
   const hasVectorize = !!env.RELEASES_INDEX && !!env.CHANGELOG_CHUNKS_INDEX && !!embedder;
 
   if (!hasVectorize) {
@@ -688,7 +721,7 @@ async function runCollectionsSemanticInternal(
 ): Promise<CollectionSemanticResponse> {
   const limit = params.limit ?? 20;
 
-  const embedder = await buildEmbedder(env, opts.buildEmbedConfig, opts.waitUntil);
+  const embedder = await buildEmbedder(env, opts);
   if (!env.ENTITIES_INDEX || !embedder) {
     return {
       degraded: true,
@@ -728,31 +761,38 @@ async function runCollectionsSemanticInternal(
 
   // Hydrate + compute memberCount in one query. Mirrors the
   // `searchCollectionsDirect` helper but bound by an `IN (…)` list rather
-  // than a LIKE pattern.
+  // than a LIKE pattern. Chunked at D1_IN_CHUNK to stay under D1's 100-bind
+  // cap.
   const memberCountSql = sql<number>`(
     SELECT COUNT(*)
     FROM ${collectionMembers} cm
     INNER JOIN ${organizationsPublic} op ON op.id = cm.org_id
     WHERE cm.collection_id = ${collections.id}
   )`;
-  const rows = await db.all<{
+  type CollectionHydrateRow = {
     id: string;
     slug: string;
     name: string;
     description: string | null;
     memberCount: number;
-  }>(sql`
-    SELECT ${collections.id} as id,
-           ${collections.slug} as slug,
-           ${collections.name} as name,
-           ${collections.description} as description,
-           ${memberCountSql} as memberCount
-    FROM ${collections}
-    WHERE ${collections.id} IN (${sql.join(
-      collectionIds.map((id) => sql`${id}`),
-      sql`, `,
-    )})
-  `);
+  };
+  const rowResults = await Promise.all(
+    chunkInto(collectionIds, D1_IN_CHUNK).map((batch) =>
+      db.all<CollectionHydrateRow>(sql`
+        SELECT ${collections.id} as id,
+               ${collections.slug} as slug,
+               ${collections.name} as name,
+               ${collections.description} as description,
+               ${memberCountSql} as memberCount
+        FROM ${collections}
+        WHERE ${collections.id} IN (${sql.join(
+          batch.map((id) => sql`${id}`),
+          sql`, `,
+        )})
+      `),
+    ),
+  );
+  const rows = rowResults.flat();
 
   const byId = new Map(rows.map((r) => [r.id, r]));
   const hits: CollectionSemanticHit[] = [];
@@ -806,7 +846,7 @@ async function runRegistrySearchInternal(
 ): Promise<RegistrySearchResponse> {
   const limit = params.limit ?? 20;
 
-  const embedder = await buildEmbedder(env, opts.buildEmbedConfig, opts.waitUntil);
+  const embedder = await buildEmbedder(env, opts);
   if (!env.ENTITIES_INDEX || !embedder) {
     return {
       degraded: true,
@@ -847,41 +887,55 @@ async function runRegistrySearchInternal(
   const shouldFetchProducts = wantsKind("product") && productIds.length > 0;
   const shouldFetchSources = wantsKind("source") && sourceIds.length > 0;
 
+  // Drizzle's `inArray(...)` expands to `IN (?, ?, ...)` — one bind per id —
+  // so each bucket also needs chunking against D1's 100-bind cap. Buckets
+  // are typically small but the bucket-skew worst case (all matches are one
+  // kind) can push past 100 at high enough `limit`.
+  async function fetchChunked<T>(
+    should: boolean,
+    ids: string[],
+    query: (batch: string[]) => Promise<T[]>,
+  ): Promise<T[]> {
+    if (!should) return [];
+    const results = await Promise.all(chunkInto(ids, D1_IN_CHUNK).map(query));
+    return results.flat();
+  }
+
   const [orgRows, productRows, sourceRows] = await Promise.all([
-    shouldFetchOrgs
-      ? db
-          .select({
-            id: organizationsActive.id,
-            slug: organizationsActive.slug,
-            name: organizationsActive.name,
-            description: organizationsActive.description,
-            category: organizationsActive.category,
-          })
-          .from(organizationsActive)
-          .where(inArray(organizationsActive.id, orgIds))
-      : [],
-    shouldFetchProducts
-      ? db
-          .select({
-            id: productsActive.id,
-            slug: productsActive.slug,
-            name: productsActive.name,
-            description: productsActive.description,
-            category: productsActive.category,
-          })
-          .from(productsActive)
-          .where(inArray(productsActive.id, productIds))
-      : [],
-    shouldFetchSources
-      ? db
-          .select({
-            id: sourcesActive.id,
-            slug: sourcesActive.slug,
-            name: sourcesActive.name,
-          })
-          .from(sourcesActive)
-          .where(inArray(sourcesActive.id, sourceIds))
-      : [],
+    fetchChunked(shouldFetchOrgs, orgIds, (batch) =>
+      db
+        .select({
+          id: organizationsActive.id,
+          slug: organizationsActive.slug,
+          name: organizationsActive.name,
+          description: organizationsActive.description,
+          category: organizationsActive.category,
+        })
+        .from(organizationsActive)
+        .where(inArray(organizationsActive.id, batch)),
+    ),
+    fetchChunked(shouldFetchProducts, productIds, (batch) =>
+      db
+        .select({
+          id: productsActive.id,
+          slug: productsActive.slug,
+          name: productsActive.name,
+          description: productsActive.description,
+          category: productsActive.category,
+        })
+        .from(productsActive)
+        .where(inArray(productsActive.id, batch)),
+    ),
+    fetchChunked(shouldFetchSources, sourceIds, (batch) =>
+      db
+        .select({
+          id: sourcesActive.id,
+          slug: sourcesActive.slug,
+          name: sourcesActive.name,
+        })
+        .from(sourcesActive)
+        .where(inArray(sourcesActive.id, batch)),
+    ),
   ]);
 
   const byId = new Map<string, RegistryHit>();
