@@ -141,7 +141,7 @@ describe("embedAndUpsertEntities", () => {
     expect(persisted).toEqual([["org_1", "org_2"]]);
   });
 
-  test("collection kind appends a Members: line built from member org names", async () => {
+  test("collection kind appends a Members: line built from member names (orgs + products)", async () => {
     const { fetchImpl, calls } = fakeVoyageFetch();
     const vec = fakeVectorize();
     await embedAndUpsertEntities({
@@ -151,7 +151,7 @@ describe("embedAndUpsertEntities", () => {
           kind: "collection",
           name: "Frontier AI Labs",
           description: "Top frontier model labs.",
-          memberOrgNames: ["Anthropic", "OpenAI", "Google DeepMind"],
+          memberNames: ["Anthropic", "OpenAI", "Google DeepMind"],
         },
         {
           id: "col_empty",

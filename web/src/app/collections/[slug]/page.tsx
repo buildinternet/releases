@@ -26,7 +26,7 @@ export async function generateMetadata({
     return {
       title: detail.name,
       description:
-        detail.description ?? `Releases from ${detail.orgs.map((o) => o.name).join(", ")}.`,
+        detail.description ?? `Releases from ${detail.members.map((m) => m.name).join(", ")}.`,
       alternates: {
         canonical: `/collections/${slug}`,
         types: {
@@ -92,7 +92,7 @@ export default async function CollectionPage({ params }: { params: Promise<{ slu
             formatPath={`/collections/${slug}`}
             initialReleases={releases.releases}
             initialCursor={releases.pagination.nextCursor}
-            orgs={detail.orgs}
+            members={detail.members}
           />
         </div>
       </div>

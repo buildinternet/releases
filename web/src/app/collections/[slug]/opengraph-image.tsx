@@ -10,20 +10,20 @@ export default async function Image({ params }: { params: Promise<{ slug: string
   const { slug } = await params;
   try {
     const detail = await api.collectionDetail(slug);
-    const totalOrgs = detail.orgs.length;
-    const previewNames = detail.orgs
+    const totalMembers = detail.members.length;
+    const previewNames = detail.members
       .slice(0, 4)
-      .map((o) => o.name)
+      .map((m) => m.name)
       .join(", ");
     const subtitle =
-      totalOrgs > 4 ? `${previewNames} + ${totalOrgs - 4} more` : previewNames || undefined;
+      totalMembers > 4 ? `${previewNames} + ${totalMembers - 4} more` : previewNames || undefined;
 
     return renderOgImage({
       eyebrow: "Collection",
       title: detail.name,
       subtitle,
       description: detail.description ?? undefined,
-      metrics: [{ label: "Orgs", value: formatCount(detail.orgs.length) }],
+      metrics: [{ label: "Members", value: formatCount(totalMembers) }],
     });
   } catch {
     return renderOgFallback();

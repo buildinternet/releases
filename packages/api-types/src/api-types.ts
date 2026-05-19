@@ -187,6 +187,9 @@ import type {
 } from "./schemas/related.js";
 import type {
   CollectionMemberOrgSchema,
+  ProductParentOrgSchema,
+  CollectionMemberProductSchema,
+  CollectionMemberSchema,
   CollectionListItemSchema,
   CollectionListResponseSchema,
   CollectionDetailSchema,
@@ -397,6 +400,9 @@ export {
 } from "./schemas/related.js";
 export {
   CollectionMemberOrgSchema,
+  ProductParentOrgSchema,
+  CollectionMemberProductSchema,
+  CollectionMemberSchema,
   CollectionListItemSchema,
   CollectionListResponseSchema,
   CollectionDetailSchema,
@@ -947,6 +953,9 @@ export type CategoryReleaseItem = CollectionReleaseItem;
 // /collections/frontier-ai-labs). Independent of the fixed `category` taxonomy.
 
 export type CollectionMemberOrg = z.infer<typeof CollectionMemberOrgSchema>;
+export type ProductParentOrg = z.infer<typeof ProductParentOrgSchema>;
+export type CollectionMemberProduct = z.infer<typeof CollectionMemberProductSchema>;
+export type CollectionMember = z.infer<typeof CollectionMemberSchema>;
 export type CollectionListItem = z.infer<typeof CollectionListItemSchema>;
 export type CollectionListResponse = z.infer<typeof CollectionListResponseSchema>;
 export type CollectionDetail = z.infer<typeof CollectionDetailSchema>;

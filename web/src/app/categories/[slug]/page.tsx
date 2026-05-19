@@ -8,7 +8,7 @@ import {
   ApiSetupError,
   type CategoryDetail,
   type CategoryReleasesResponse,
-  type CollectionMemberOrg,
+  type CollectionMember,
 } from "@/lib/api";
 import { Header } from "@/components/header";
 import { SetupMessage } from "@/components/setup-message";
@@ -90,11 +90,13 @@ export default async function CategoryPage({ params }: { params: Promise<{ slug:
   if (!isValidCategory(detail.slug)) notFound();
 
   const title = detail.name ?? categoryDisplayName(detail.slug);
-  // The collections feed expects `CollectionMemberOrg` for chip rendering;
-  // category detail returns the narrower `TaxonomyOrg` (no githubHandle /
-  // description). Shim missing fields to `null` — OrgAvatar falls back to
-  // initials when both avatarUrl and githubHandle are absent.
-  const memberOrgs: CollectionMemberOrg[] = detail.orgs.map((o) => ({
+  // The timeline now consumes `CollectionMember[]`; category detail returns
+  // the narrower `TaxonomyOrg` (no githubHandle / description) for orgs and
+  // doesn't surface product memberships separately. Shim each org into an
+  // `org`-kind member entry — OrgAvatar falls back to initials when both
+  // avatarUrl and githubHandle are absent.
+  const memberOrgs: CollectionMember[] = detail.orgs.map((o) => ({
+    kind: "org" as const,
     slug: o.slug,
     name: o.name,
     domain: o.domain,
@@ -138,7 +140,7 @@ export default async function CategoryPage({ params }: { params: Promise<{ slug:
             formatPath={`/categories/${slug}`}
             initialReleases={releases.releases}
             initialCursor={releases.pagination.nextCursor}
-            orgs={memberOrgs}
+            members={memberOrgs}
           />
         </div>
 

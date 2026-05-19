@@ -112,6 +112,7 @@ const ALLOWLIST = new Set<string>([
   "PUT /collections/:slug/members",
   "POST /collections/:slug/members",
   "DELETE /collections/:slug/members/:org",
+  "DELETE /collections/:slug/members/products/:product",
 ]);
 
 const HTTP_METHODS = new Set(["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"]);
