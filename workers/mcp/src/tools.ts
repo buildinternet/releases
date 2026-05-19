@@ -1559,13 +1559,13 @@ export async function search(
   // this, each helper independently reads the Secrets Store binding.
   // Resolution is lazy: only fired when we'll actually use it.
   let embedConfigP: Promise<
-    Awaited<ReturnType<typeof import("./lib/embed-config.js").buildEmbedConfig>>
+    Awaited<ReturnType<typeof import("@releases/search/embed-config.js").buildEmbedConfig>>
   > | null = null;
   const resolveEmbedConfig = () => {
     if (!searchEnv || mode === "lexical") return Promise.resolve(null);
     if (!embedConfigP) {
       embedConfigP = (async () => {
-        const { buildEmbedConfig } = await import("./lib/embed-config.js");
+        const { buildEmbedConfig } = await import("@releases/search/embed-config.js");
         return buildEmbedConfig(searchEnv);
       })();
     }

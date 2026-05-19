@@ -93,9 +93,23 @@ const DEFAULT_BATCH_SIZES: Record<EmbeddingProvider, number> = {
 /** Max input characters per text before truncation. Rough 4-char-per-token heuristic. */
 const MAX_INPUT_CHARS = 32_000;
 
+/**
+ * Read an env var without a TypeScript `process` declaration. The CLI and
+ * tests run under Node/Bun (process.env populated); Workers either expose an
+ * empty object via nodejs_compat or no `process` at all. Going through
+ * `globalThis` keeps this file importable under a `@cloudflare/workers-types`-only
+ * tsconfig — the MCP worker used to need a local `process.d.ts` shim to work
+ * around this.
+ */
+function readEnvVar(name: string): string | undefined {
+  return (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env?.[
+    name
+  ];
+}
+
 export function resolveConfig(overrides: Partial<EmbeddingConfig> = {}): EmbeddingConfig {
   const provider = (overrides.provider ??
-    (process.env.EMBEDDING_PROVIDER as EmbeddingProvider | undefined) ??
+    (readEnvVar("EMBEDDING_PROVIDER") as EmbeddingProvider | undefined) ??
     "voyage") as EmbeddingProvider;
   if (!["voyage", "openai", "workers-ai"].includes(provider)) {
     throw new Error(`Unknown EMBEDDING_PROVIDER: ${provider}`);
@@ -108,9 +122,9 @@ export function resolveConfig(overrides: Partial<EmbeddingConfig> = {}): Embeddi
   const apiKey =
     overrides.apiKey ??
     (provider === "voyage"
-      ? process.env.VOYAGE_API_KEY
+      ? readEnvVar("VOYAGE_API_KEY")
       : provider === "openai"
-        ? process.env.OPENAI_API_KEY
+        ? readEnvVar("OPENAI_API_KEY")
         : undefined);
   return {
     provider,
