@@ -415,6 +415,7 @@ export class ManagedAgentsSession extends DurableObject<Env> {
           company: params.company,
           sessionType: mode,
           agent: statusHubAgentLabel,
+          ...(params.orgId ? { orgId: params.orgId } : {}),
           ...(params.correlationId ? { correlationId: params.correlationId } : {}),
           ...(params.sourceIdentifiers && params.sourceIdentifiers.length > 0
             ? { activeSources: params.sourceIdentifiers }

@@ -92,4 +92,12 @@ export interface Env {
   MEMORY_STORE_TOOL_NOTES_ID?: string;
   /** "true" to enable tool-loop extraction for large bodies globally. */
   EXTRACT_TOOLLOOP_ENABLED?: string;
+  /**
+   * Runtime kill switch. Set to "true" to block all new MA session creation
+   * at the /update + /onboard HTTP routes AND the typed RPC. Flip via
+   * `wrangler secret put MA_SESSIONS_DISABLED` — propagates on next request
+   * without a code deploy. Replaces the hardcoded constant deployed during
+   * the 2026-05-18 Notion runaway.
+   */
+  MA_SESSIONS_DISABLED?: string;
 }

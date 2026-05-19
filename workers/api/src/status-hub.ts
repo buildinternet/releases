@@ -54,6 +54,13 @@ export function buildSessionListResponse(
 export interface SessionState {
   sessionId: string;
   company: string;
+  /**
+   * Stable org identity (org_…). Preferred dedup key over the free-form
+   * `company` label when the caller has it — the `/update` and
+   * `startManagedFetchSession` paths both carry it, the legacy `/onboard`
+   * paths don't. See `checkUpdateSessionDedup` in the discovery worker.
+   */
+  orgId?: string;
   type: "onboard" | "update";
   agent?: "sonnet" | "haiku";
   /** Identifies the client that started this session (e.g. hostname, "sandbox-prod"). */
@@ -322,6 +329,7 @@ export class StatusHub extends DurableObject {
       const session: SessionState = {
         sessionId: event.sessionId as string,
         company: event.company as string,
+        orgId: event.orgId as string | undefined,
         type: (event.sessionType as SessionState["type"]) ?? "onboard",
         agent: event.agent as SessionState["agent"],
         runner: event.runner as string | undefined,
