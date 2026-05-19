@@ -10,7 +10,7 @@
  */
 
 import { createWorkerSearch } from "@releases/search/hybrid-search-worker.js";
-import { buildEmbedConfig } from "./embed-config.js";
+import { buildEmbedConfig } from "@releases/search/embed-config.js";
 
 export type {
   HybridSearchEnv,

@@ -27,7 +27,7 @@ import {
   type RawSearchReleaseRow,
 } from "../queries/search.js";
 import { runHybridSearch, runCollectionsSemantic, type HybridMode } from "../lib/search-hybrid.js";
-import { buildEmbedConfig } from "../lib/embed-config.js";
+import { buildEmbedConfig } from "@releases/search/embed-config.js";
 import type { SearchCollectionHit } from "@buildinternet/releases-api-types";
 import { logSearch } from "../lib/log-search.js";
 import { isValidBearerAuth } from "../middleware/auth.js";

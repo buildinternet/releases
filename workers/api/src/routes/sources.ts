@@ -127,7 +127,7 @@ import { embedAndUpsertReleases } from "@releases/search/embed-releases.js";
 import { embedAndUpsertEntities, type EntityKind } from "@releases/search/embed-entities.js";
 import { publishReleaseEvents } from "../events/publish.js";
 import type { InsertedReleaseRow } from "../events/build-event.js";
-import { buildEmbedConfig } from "../lib/embed-config.js";
+import { buildEmbedConfig } from "@releases/search/embed-config.js";
 import {
   RELEASES_BATCH_CHUNK_SIZE,
   RELEASES_ID_IN_CHUNK_SIZE,

@@ -10,7 +10,7 @@ import {
   organizationsPublic,
 } from "@buildinternet/releases-core/schema";
 import { embedAndUpsertEntities } from "@releases/search/embed-entities.js";
-import { buildEmbedConfig } from "../lib/embed-config.js";
+import { buildEmbedConfig } from "@releases/search/embed-config.js";
 import { logEvent } from "@releases/lib/log-event";
 import { dbErrorLogFields } from "@releases/lib/db-errors";
 import { newCollectionId } from "@buildinternet/releases-core/id";

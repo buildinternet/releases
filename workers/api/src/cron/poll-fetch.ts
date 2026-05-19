@@ -45,7 +45,7 @@ import {
   type EmbeddedChunk,
 } from "@releases/search/embed-changelog-pipeline.js";
 import type { DiffResult } from "@releases/search/embed-changelogs.js";
-import { buildEmbedConfig } from "../lib/embed-config.js";
+import { buildEmbedConfig } from "@releases/search/embed-config.js";
 import { runWithConcurrency } from "../lib/concurrency.js";
 import type { VectorizeIndex } from "@releases/search/vector-search.js";
 import { embedAndUpsertReleases } from "@releases/search/embed-releases.js";

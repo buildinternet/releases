@@ -42,7 +42,7 @@ import {
 } from "../utils.js";
 import type { Env } from "../index.js";
 import { embedAndUpsertEntities, type EntityKind } from "@releases/search/embed-entities.js";
-import { buildEmbedConfig } from "../lib/embed-config.js";
+import { buildEmbedConfig } from "@releases/search/embed-config.js";
 import { logEvent } from "@releases/lib/log-event";
 import { dbErrorLogFields } from "@releases/lib/db-errors";
 import { buildListResponse, parseListPagination } from "../lib/pagination.js";

@@ -35,7 +35,7 @@ import {
 } from "@releases/search/embed-entities.js";
 import { embedAndUpsertChangelogFile } from "@releases/search/embed-changelog-pipeline.js";
 import { applyOnDiff, setChunkVectorIds } from "../cron/poll-fetch.js";
-import { buildEmbedConfig } from "../lib/embed-config.js";
+import { buildEmbedConfig } from "@releases/search/embed-config.js";
 import { logEvent } from "@releases/lib/log-event";
 import { dbErrorLogFields } from "@releases/lib/db-errors";
 import type { VectorizeIndex } from "@releases/search/vector-search.js";
