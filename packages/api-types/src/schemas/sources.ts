@@ -213,6 +213,7 @@ export const SourcePatchInputSchema = z.object({
   isHidden: z.boolean().optional(),
   changeDetectedAt: z.string().nullable().optional(),
   lastPolledAt: z.string().nullable().optional(),
+  kind: z.enum(KIND_VALUES).nullable().optional(),
 });
 
 /** Body accepted by `POST /v1/sources`. */
@@ -233,6 +234,7 @@ export const CreateSourceBodySchema = z.object({
   productSlug: z.string().optional(),
   metadata: z.string().optional(),
   isPrimary: z.boolean().optional(),
+  kind: z.enum(KIND_VALUES).nullable().optional(),
 });
 
 export const ChangelogFileSummarySchema = z.object({

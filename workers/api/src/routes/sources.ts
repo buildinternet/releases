@@ -2287,6 +2287,7 @@ sourceRoutes.post(
       metadata: body.metadata ?? "{}",
       createdAt,
       ...(body.isPrimary !== undefined && { isPrimary: body.isPrimary }),
+      ...(body.kind !== undefined && { kind: body.kind ?? null }),
     });
 
     let source: typeof sources.$inferSelect | undefined;
@@ -2379,6 +2380,7 @@ const patchSourceHandler = async (c: import("hono").Context<Env>) => {
     "isHidden",
     "changeDetectedAt",
     "lastPolledAt",
+    "kind",
   ] as const;
 
   const updates: Record<string, unknown> = {};
@@ -2439,6 +2441,7 @@ const patchSourceHandler = async (c: import("hono").Context<Env>) => {
   if (body.isHidden !== undefined) updates.isHidden = body.isHidden;
   if (body.changeDetectedAt !== undefined) updates.changeDetectedAt = body.changeDetectedAt;
   if (body.lastPolledAt !== undefined) updates.lastPolledAt = body.lastPolledAt;
+  if ("kind" in body) updates.kind = body.kind ?? null;
 
   if (Object.keys(updates).length === 0) {
     const bodyKeys = Object.keys(body);

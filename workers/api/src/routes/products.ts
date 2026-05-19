@@ -426,6 +426,7 @@ productRoutes.post(
       description?: string;
       category?: string;
       tags?: string[];
+      kind?: string | null;
     } = { ...c.req.valid("json") };
 
     // Cross-field: at least one of orgId/orgSlug must be set. Can't express
@@ -475,6 +476,7 @@ productRoutes.post(
           url: body.url ?? null,
           description: body.description ?? null,
           category: body.category ?? null,
+          kind: body.kind ?? null,
         })
         .returning();
 
@@ -514,6 +516,7 @@ const patchProductHandler = async (c: import("hono").Context<Env>) => {
     category?: string | null;
     tags?: string[];
     aliases?: string[];
+    kind?: string | null;
   } = {
     ...(c.req as unknown as { valid: (target: "json") => Record<string, unknown> }).valid("json"),
   };
@@ -534,6 +537,7 @@ const patchProductHandler = async (c: import("hono").Context<Env>) => {
     body.category = resolved.slug;
   }
   if (body.category !== undefined) updates.category = body.category;
+  if ("kind" in body) updates.kind = body.kind ?? null;
 
   if (Object.keys(updates).length === 0 && body.tags === undefined && body.aliases === undefined) {
     return c.json(product);

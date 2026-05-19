@@ -86,6 +86,7 @@ export const CreateProductBodySchema = z.object({
   description: z.string().optional(),
   category: z.string().min(1).optional(),
   tags: z.array(z.string()).optional(),
+  kind: z.enum(KIND_VALUES).nullable().optional(),
 });
 
 /**
@@ -100,6 +101,7 @@ export const UpdateProductBodySchema = z.object({
   category: z.string().min(1).nullable().optional(),
   tags: z.array(z.string()).optional(),
   aliases: z.array(z.string()).optional(),
+  kind: z.enum(KIND_VALUES).nullable().optional(),
 });
 
 /**
