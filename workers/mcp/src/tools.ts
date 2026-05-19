@@ -1554,6 +1554,25 @@ export async function search(
     collectionHits: 0,
   };
 
+  // Resolve embed config once per request and thread it into every
+  // helper that consumes it (collections semantic + hybrid release path).
+  // Without this, each helper independently reads the Secrets Store
+  // binding — see #1043. Resolution is lazy: only fired when we'll
+  // actually use it, and only when not in pure lexical mode.
+  let embedConfigP: Promise<
+    Awaited<ReturnType<typeof import("./lib/embed-config.js").buildEmbedConfig>>
+  > | null = null;
+  const resolveEmbedConfig = () => {
+    if (!searchEnv || mode === "lexical") return Promise.resolve(null);
+    if (!embedConfigP) {
+      embedConfigP = (async () => {
+        const { buildEmbedConfig } = await import("./lib/embed-config.js");
+        return buildEmbedConfig(searchEnv);
+      })();
+    }
+    return embedConfigP;
+  };
+
   let orgScope: Awaited<ReturnType<typeof findOrg>> = null;
   if (params.organization) {
     orgScope = await findOrg(db, params.organization);
@@ -1741,11 +1760,12 @@ export async function search(
       ? (async () => {
           try {
             const { runCollectionsSemantic } = await import("./lib/search-hybrid.js");
+            const embedConfig = await resolveEmbedConfig();
             const r = await runCollectionsSemantic(
               searchEnv,
               db,
               { query: params.query, limit },
-              ctx ? { waitUntil: ctx.waitUntil.bind(ctx) } : {},
+              { ...(ctx ? { waitUntil: ctx.waitUntil.bind(ctx) } : {}), embedConfig },
             );
             if (r.degraded) return [];
             return r.hits.map((h) => ({
@@ -1777,6 +1797,7 @@ export async function search(
 
         if (mode !== "lexical" && searchEnv) {
           const { runHybridSearch } = await import("./lib/search-hybrid.js");
+          const embedConfig = await resolveEmbedConfig();
           const hybrid = await runHybridSearch(
             searchEnv,
             db,
@@ -1790,7 +1811,7 @@ export async function search(
               orgSourceIds: sourceIds && sourceIds.length > 1 ? sourceIds : undefined,
               includeCoverage,
             },
-            ctx ? { waitUntil: ctx.waitUntil.bind(ctx) } : {},
+            { ...(ctx ? { waitUntil: ctx.waitUntil.bind(ctx) } : {}), embedConfig },
           );
           return { mode: "hybrid", hybrid };
         }

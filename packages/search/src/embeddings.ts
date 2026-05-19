@@ -53,6 +53,46 @@ export const DEFAULT_MODELS: Record<EmbeddingProvider, string> = {
 // vector, so we request 512 explicitly to match the indexes.
 export const VOYAGE_OUTPUT_DIMENSION = 512;
 
+// Native output dimensions per model. Voyage is special-cased — we always
+// request `output_dimension: VOYAGE_OUTPUT_DIMENSION`, so every voyage model
+// reports 512 regardless of its native dim. OpenAI and Workers AI use the
+// model's native dim. Consulted by the embedding cache to keep the key
+// honest across provider/model flips (see #1041).
+const VOYAGE_DIM = VOYAGE_OUTPUT_DIMENSION;
+export const MODEL_DIMENSIONS: Record<string, number> = {
+  // Voyage — always returned at VOYAGE_OUTPUT_DIMENSION
+  "voyage-4-lite": VOYAGE_DIM,
+  "voyage-4": VOYAGE_DIM,
+  "voyage-4-large": VOYAGE_DIM,
+  "voyage-3-lite": VOYAGE_DIM,
+  "voyage-3": VOYAGE_DIM,
+  // OpenAI
+  "text-embedding-3-small": 1536,
+  "text-embedding-3-large": 3072,
+  "text-embedding-ada-002": 1536,
+  // Workers AI
+  "@cf/baai/bge-small-en-v1.5": 384,
+  "@cf/baai/bge-base-en-v1.5": 768,
+  "@cf/baai/bge-large-en-v1.5": 1024,
+};
+
+/**
+ * Look up the output vector dimension for a (provider, model) pair.
+ * Voyage is special-cased to honor the `output_dimension` request we always
+ * send. Unknown openai/workers-ai models throw — better than silently
+ * caching with a wrong dim that would invalidate every lookup.
+ */
+export function getEmbedDim(provider: EmbeddingProvider, model: string): number {
+  if (provider === "voyage") return VOYAGE_OUTPUT_DIMENSION;
+  const dim = MODEL_DIMENSIONS[model];
+  if (!dim) {
+    throw new Error(
+      `Unknown embedding model "${model}" for provider "${provider}" — add it to MODEL_DIMENSIONS in packages/search/src/embeddings.ts.`,
+    );
+  }
+  return dim;
+}
+
 const DEFAULT_BATCH_SIZES: Record<EmbeddingProvider, number> = {
   voyage: 128,
   openai: 128,
