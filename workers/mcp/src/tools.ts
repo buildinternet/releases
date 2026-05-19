@@ -28,6 +28,7 @@ import {
 import { daysAgoIso, nowIso, timeAgo } from "@buildinternet/releases-core/dates";
 import { toFtsMatchQuery } from "@buildinternet/releases-core/fts";
 import { likeContains } from "@buildinternet/releases-core/sql-like";
+import type { Kind } from "@buildinternet/releases-core/kinds";
 import { normalizeDomain } from "@buildinternet/releases-core/domain";
 import { getEntityType, normalizeReleaseId } from "@buildinternet/releases-core/id";
 import {
@@ -1569,6 +1570,7 @@ export async function search(
     mode?: SearchMode;
     include_coverage?: boolean;
     include_empty?: boolean;
+    kind?: Kind;
   },
   searchEnv?: import("./lib/search-hybrid.js").HybridSearchEnv,
   ctx?: ExecutionContext,
@@ -1717,6 +1719,7 @@ export async function search(
             LEFT JOIN domain_aliases da ON da.product_id = p.id
             WHERE (${likeContains(sql`p.name`, q)} OR ${likeContains(sql`p.slug`, q)} OR ${likeContains(sql`da.domain`, q)})
               ${orgScope ? sql`AND p.org_id = ${orgScope.id}` : sql``}
+              ${params.kind ? sql`AND p.kind = ${params.kind}` : sql``}
             ORDER BY p.name LIMIT ${limit}
           `),
           db.all<RawSourceHit>(sql`
@@ -1729,6 +1732,7 @@ export async function search(
             WHERE (s.is_hidden = 0 OR s.is_hidden IS NULL)
               AND (${likeContains(sql`s.name`, q)} OR ${likeContains(sql`s.slug`, q)} OR ${likeContains(sql`s.url`, q)})
               ${orgScope ? sql`AND s.org_id = ${orgScope.id}` : sql``}
+              ${params.kind ? sql`AND s.kind = ${params.kind}` : sql``}
             ORDER BY s.name LIMIT ${limit}
           `),
         ]);
@@ -1851,6 +1855,7 @@ export async function search(
               sourceId: sourceIds?.length === 1 ? sourceIds[0] : undefined,
               orgSourceIds: sourceIds && sourceIds.length > 1 ? sourceIds : undefined,
               includeCoverage,
+              kind: params.kind,
             },
             { ...(ctx ? { waitUntil: ctx.waitUntil.bind(ctx) } : {}), embedConfig },
           );
@@ -1868,6 +1873,7 @@ export async function search(
           FROM releases_fts
           JOIN releases r ON r.rowid = releases_fts.rowid
           JOIN sources s ON s.id = r.source_id
+          LEFT JOIN products p ON p.id = s.product_id
           LEFT JOIN organizations o ON o.id = s.org_id
           WHERE releases_fts MATCH ${toFtsMatchQuery(params.query)}
             AND (s.is_hidden = 0 OR s.is_hidden IS NULL)
@@ -1881,6 +1887,7 @@ export async function search(
                   )})`
                 : sql``
             }
+            ${params.kind ? sql`AND COALESCE(s.kind, p.kind) = ${params.kind}` : sql``}
           ORDER BY rank LIMIT ${limit}
         `);
         return { mode: "lexical", rows };

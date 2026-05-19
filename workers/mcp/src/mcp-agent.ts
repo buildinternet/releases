@@ -26,6 +26,7 @@ import { registerPrompts } from "./prompts.js";
 import { logMcpSearch, deriveMcpClientKind, type McpSearchCommand } from "./lib/log-search.js";
 import { buildSearchMeta } from "./lib/pagination.js";
 import type { SearchMode } from "@buildinternet/releases-core/schema";
+import { KIND_VALUES } from "@buildinternet/releases-core/kinds";
 import { parseCoordinate } from "@buildinternet/releases-core/lookup-coordinate";
 import type { LookupResultPayload } from "@buildinternet/releases-api-types";
 import { getSecret } from "@releases/lib/secrets";
@@ -408,6 +409,12 @@ export function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServ
           .optional()
           .describe(
             "Include orgs with zero indexed releases in the `orgs` section. Default false — empty orgs are stubs and surface as noise. Scoping by `domain` ignores this and always returns the resolved org.",
+          ),
+        kind: z
+          .enum(KIND_VALUES)
+          .optional()
+          .describe(
+            "Filter to a specific source/product kind. Release and catalog rows resolve through source.kind ?? product.kind.",
           ),
       },
     },
