@@ -209,8 +209,8 @@ describe("fetchOne — skipDelegation option (#1061)", () => {
 
     // Delegation should have been attempted — DISCOVERY_WORKER.startManagedFetchSession called
     expect(worker.calls.length).toBe(1);
-    // Delegation returns a synthetic no_change on success
-    expect(result.status).toBe("no_change");
+    // Delegation surfaces a dedicated "delegated" discriminant (#1056 / #1062).
+    expect(result.status).toBe("delegated");
     // No releases were inserted (delegation skips inline insert)
     const rows = await db.select().from(releases).where(eq(releases.sourceId, "src_notion_blog"));
     expect(rows.length).toBe(0);
