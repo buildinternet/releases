@@ -85,6 +85,10 @@ Web: `web/src/app/collections/[slug]/page.tsx` renders the header + member chips
 
 Seed model: the first collection (`frontier-ai-labs`) is created via migration (`20260507000003_seed_frontier_ai_labs.sql`); the CLI admin commands are the layer above the write API. Membership is intentionally curated — orgs onboarded later are not retroactively added to existing collections.
 
-## Media pipeline
+## Media handling
 
-Extracted media URLs go through `filterJunkMedia()` in `packages/rendering/src/media.ts` (drops tracking pixels, favicons, and AI-classified chrome), then `processMediaForR2()` downloads and uploads survivors to R2. `normalizeMediaUrl()` unwraps Next.js/Vercel image optimizer URLs (`/_next/image?url=...`, including Next `basePath` variants) to the underlying CDN asset before upload — those proxy endpoints 404 for off-origin fetchers. The web renders `r2Url ?? url`, and `FallbackImage` / `FallbackPlainImage` in `web/src/components/fallback-image.tsx` show an "Image unavailable" placeholder on load error.
+At ingest time, `normalizeMediaUrl()` in `packages/rendering/src/media-url.ts` rewrites Next.js/Vercel image-optimizer proxy URLs (`/_next/image?url=...`, including Next `basePath` variants) to the underlying CDN asset — those proxy endpoints 404 for off-origin fetchers, so the raw `url` query param is extracted and stored instead. Outside that rewrite, media URLs are stored verbatim in the `media` column as third-party-hosted URLs; there is no ingest-time upload to R2. Ingest-time R2 mirroring (junk filtering + upload) is planned but not yet implemented; see #1033.
+
+The `released-media` R2 bucket currently holds org avatars (`orgs/{slug}.{ext}`, written by `scripts/upload-org-avatars.ts`) and handles ad-hoc uploads via the auth-gated `PUT /v1/media/:key` endpoint in `workers/api/src/routes/media.ts`.
+
+`FallbackImage` / `FallbackPlainImage` in `web/src/components/fallback-image.tsx` show an "Image unavailable" placeholder when a third-party URL fails to load.
