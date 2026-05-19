@@ -363,6 +363,10 @@ sourceRoutes.get(
     }
 
     if (kind) {
+      // Direct match — admin listing wants rows whose kind is explicitly set,
+      // not rows that inherit via `resolveSourceKind`. The releases feed
+      // (`getOrgReleasesFeed`) COALESCEs through product.kind on purpose;
+      // this list does not.
       conditions.push(eq(sources.kind, kind));
     }
 
@@ -420,7 +424,7 @@ sourceRoutes.get(
       isHidden: Boolean(src.is_hidden),
       discovery: src.discovery ?? "curated",
       metadata: src.metadata ?? null,
-      kind: src.kind ?? null,
+      kind: src.kind && isValidKind(src.kind) ? src.kind : null,
       releaseCount: src.release_count,
       latestVersion: src.latest_version ?? null,
       latestDate: src.latest_date ?? null,

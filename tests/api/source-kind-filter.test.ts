@@ -270,6 +270,24 @@ describe("GET /v1/orgs/:slug/catalog?kind= filter", () => {
     expect(body.items.map((i) => i.slug)).toEqual(["sdk-src-cat"]);
   });
 
+  it("?kind= does NOT inherit kind from parent product (catalog is metadata-oriented)", async () => {
+    // Contract: catalog `?kind=` filters on the row's own kind, with no
+    // source→product fallback. This is intentionally asymmetric with the
+    // releases feed (`/orgs/:slug/releases?kind=`), which COALESCEs through
+    // product.kind. Rationale: catalog answers "which rows are classified as
+    // X?" while the feed answers "which content belongs to kind X?".
+    await seedOrg("acme");
+    await seedProduct({ id: "prod_py", slug: "py", kind: "sdk" });
+    await seedSource({ id: "src_py", slug: "py-src", productId: "prod_py", kind: null });
+
+    const res = await callOrg("/orgs/acme/catalog?kind=sdk&entryType=source");
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { items: Array<{ slug: string }> };
+    // Source's own kind is null, parent product is `sdk`, but catalog does
+    // not inherit — the source is excluded.
+    expect(body.items.map((i) => i.slug)).toEqual([]);
+  });
+
   it("returns 400 on unknown entity kind value", async () => {
     await seedOrg("acme");
     const res = await callOrg("/orgs/acme/catalog?kind=framework");
