@@ -109,15 +109,9 @@ export default async function SourceReleasesPage({
     throw err;
   }
 
-  // Hand the client component a cursor so its "Load more" can continue from
-  // where SSR left off. Must match `buildFeedCursor` on the API — the
-  // 3-part `publishedAt|fetchedAt|id` shape so same-`publishedAt` rows
-  // tie-break on fetched_at then id.
-  const last = source.releases[source.releases.length - 1];
-  const initialCursor =
-    source.pagination.hasMore && last && last.fetchedAt && last.id
-      ? `${last.publishedAt ?? ""}|${last.fetchedAt}|${last.id}`
-      : null;
+  // Hand the client component the API's nextCursor so its "Load more" can
+  // continue from where SSR left off.
+  const initialCursor = source.pagination.nextCursor;
 
   const sourceUrl = `https://releases.sh/${orgSlug}/${sourceSlug}`;
   const jsonLd = {

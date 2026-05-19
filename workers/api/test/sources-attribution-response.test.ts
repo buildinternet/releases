@@ -8,39 +8,19 @@
  * `productId`, and `productSlug` directly.
  */
 import { describe, it, expect } from "bun:test";
-import { Database } from "bun:sqlite";
-import { drizzle } from "drizzle-orm/bun-sqlite";
-import { applyMigrations } from "../../../tests/db-helper";
 import { organizations, products } from "@buildinternet/releases-core/schema";
-import { Hono } from "hono";
 import { sourceRoutes } from "../src/routes/sources.js";
+import { createTestDb as mkDb, createTestApp, type TestDb } from "./setup";
 
 const statusHubStub = {
   idFromName: () => "stub-id",
   get: () => ({ fetch: async () => new Response("ok", { status: 200 }) }),
 };
 
-function mkDb() {
-  const sqlite = new Database(":memory:");
-  const db = drizzle(sqlite);
-  applyMigrations(sqlite);
-  return db;
-}
+const mkApp = (db: TestDb) =>
+  createTestApp(db, sourceRoutes, { env: { STATUS_HUB: statusHubStub } });
 
-function mkApp(db: ReturnType<typeof mkDb>) {
-  const fakeEnv = { DB: db, STATUS_HUB: statusHubStub };
-  const fakeCtx = {
-    waitUntil: () => {},
-    passThroughOnException: () => {},
-  } as unknown as ExecutionContext;
-  const app = new Hono();
-  const v1 = new Hono();
-  v1.route("/", sourceRoutes);
-  app.route("/v1", v1);
-  return (req: Request) => app.fetch(req, fakeEnv, fakeCtx);
-}
-
-async function seed(db: ReturnType<typeof mkDb>) {
+async function seed(db: TestDb) {
   await db.insert(organizations).values({
     id: "org_google",
     slug: "google",

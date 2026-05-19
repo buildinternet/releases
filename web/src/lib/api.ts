@@ -240,10 +240,18 @@ export const api = {
   orgDetail: (slug: string) => fetchApi<OrgDetail>(`/v1/orgs/${slug}`),
   sources: (independent?: boolean) =>
     fetchApi<SourceListItem[]>(`/v1/sources${independent ? "?independent=true" : ""}`),
-  sourceDetail: (ref: { orgSlug: string; sourceSlug: string }, page = 1, pageSize = 20) =>
-    fetchApi<SourceDetail>(
-      `/v1/orgs/${ref.orgSlug}/sources/${ref.sourceSlug}?page=${page}&pageSize=${pageSize}`,
-    ),
+  sourceDetail: (
+    ref: { orgSlug: string; sourceSlug: string },
+    opts: { cursor?: string | null; limit?: number } = {},
+  ) => {
+    const params = new URLSearchParams();
+    if (opts.cursor != null) params.set("cursor", opts.cursor);
+    if (opts.limit != null) params.set("limit", String(opts.limit));
+    const qs = params.toString();
+    return fetchApi<SourceDetail>(
+      `/v1/orgs/${ref.orgSlug}/sources/${ref.sourceSlug}${qs ? `?${qs}` : ""}`,
+    );
+  },
   search: (q: string, limit = 20, offset = 0) => {
     // Coordinate-shaped queries skip the hybrid semantic rail so the API's
     // on-demand lookup fallback can fire — otherwise weakly-matched chunks

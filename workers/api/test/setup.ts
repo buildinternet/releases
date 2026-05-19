@@ -2,6 +2,8 @@ import { mock } from "bun:test";
 import { Hono, type ErrorHandler } from "hono";
 import { createTestDb as createSnapshotDb, type TestDb } from "../../../tests/db-helper";
 
+export type { TestDb };
+
 // Stub out cloudflare:workers so Bun can import Durable Objects and
 // WorkflowEntrypoints outside a Worker runtime.
 mock.module("cloudflare:workers", () => ({

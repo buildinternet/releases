@@ -24,8 +24,8 @@ curl -H "Authorization: Bearer YOUR_KEY" https://api.releases.sh/v1/...
 
 Two shapes, picked per surface:
 
-- **Page-based** (catalog-shaped surfaces: `/v1/sources`, `/v1/orgs`, `/v1/products`, `/v1/collections`, `/v1/categories/:slug/releases`) — `page` + `limit` inputs, `{ items, pagination }` output with `pagination: { page, pageSize, returned, totalItems, totalPages, hasMore }`. Default and max `limit` is 500 unless noted otherwise.
-- **Cursor-based** (feed-shaped surfaces: `/v1/orgs/:slug/releases`, `/v1/collections/:slug/releases`) — opaque `cursor` input, `nextCursor` output.
+- **Page-based** (catalog-shaped surfaces: `/v1/sources`, `/v1/orgs`, `/v1/products`, `/v1/collections`) — `page` + `limit` inputs, `{ items, pagination }` output with `pagination: { page, pageSize, returned, totalItems, totalPages, hasMore }`. Default and max `limit` is 500 unless noted otherwise.
+- **Cursor-based** (feed-shaped surfaces: `/v1/orgs/:slug/releases`, `/v1/orgs/:orgSlug/sources/:sourceSlug` and its embedded `releases` array, `/v1/orgs/:orgSlug/sources/:sourceSlug/releases`, `/v1/collections/:slug/releases`, `/v1/categories/:slug/releases`) — opaque `cursor` input, `pagination: { nextCursor, limit }` output. `nextCursor` is `null` when the slice is exhausted.
 
 Search endpoints (`/v1/search`, `/v1/search/releases`) attach `_meta.search` instead, with `hitCap: true` when results saturated `limit`.
 
