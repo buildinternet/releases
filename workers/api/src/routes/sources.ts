@@ -30,6 +30,7 @@ import {
   type ReleaseType,
 } from "@buildinternet/releases-core/schema";
 import { SOURCE_TYPES, type SourceType } from "@buildinternet/releases-core/source-enums";
+import { isValidKind, KIND_VALUES, type Kind } from "@buildinternet/releases-core/kinds";
 import { buildListResponse, parseListPagination } from "../lib/pagination.js";
 import { RELEASE_URL_UPSERT } from "@releases/core-internal/release-upsert";
 import { daysAgoIso, inferMonthOnlyDate } from "@buildinternet/releases-core/dates";
@@ -200,11 +201,24 @@ sourceRoutes.get(
     tags: ["Sources"],
     summary: "List sources",
     description:
-      "Returns a bare array by default; pass `?envelope=true` for the paginated `{items, pagination}` shape. Filter by `?orgId=`, `?orgSlug=`, `?productSlug=`, `?type=`, `?has_feed=`, `?stale=`, `?category=`, `?independent=true`, `?hasChangelog=false` (sources with no tracked CHANGELOG file), `?minRels30d=N` (sources with at least N visible releases in the last 30 days). Free-text search via `?q=`.",
+      "Returns a bare array by default; pass `?envelope=true` for the paginated `{items, pagination}` shape. Filter by `?orgId=`, `?orgSlug=`, `?productSlug=`, `?type=`, `?has_feed=`, `?stale=`, `?category=`, `?kind=`, `?independent=true`, `?hasChangelog=false` (sources with no tracked CHANGELOG file), `?minRels30d=N` (sources with at least N visible releases in the last 30 days). Free-text search via `?q=`.",
+    parameters: [
+      {
+        name: "kind",
+        in: "query",
+        required: false,
+        schema: { type: "string", enum: KIND_VALUES as unknown as string[] },
+        description: `Filter by entity kind. One of: ${KIND_VALUES.join(", ")}.`,
+      },
+    ],
     responses: {
       200: {
         description: "Sources (bare array unless `?envelope=true`)",
         content: { "application/json": { schema: resolver(SourceListResultSchema) } },
+      },
+      400: {
+        description: "Invalid kind value",
+        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
       },
     },
   }),
@@ -219,6 +233,18 @@ sourceRoutes.get(
     const queryText = c.req.query("q") ?? c.req.query("query");
     const includeHidden = c.req.query("include_hidden") === "true";
     const categoryFilter = c.req.query("category");
+
+    const kindParam = c.req.query("kind");
+    if (kindParam !== undefined && !isValidKind(kindParam)) {
+      return c.json(
+        {
+          error: "bad_request",
+          message: `Invalid kind. Expected one of: ${KIND_VALUES.join(", ")}`,
+        },
+        400,
+      );
+    }
+    const kind = kindParam as Kind | undefined;
 
     // Pagination: default limit 100, hard cap 500. `?offset=` is also accepted
     // and overrides `?page=` so callers that pre-compute offsets keep working.
@@ -336,6 +362,10 @@ sourceRoutes.get(
       );
     }
 
+    if (kind) {
+      conditions.push(eq(sources.kind, kind));
+    }
+
     const rawType = c.req.query("type");
     if (rawType && (SOURCE_TYPES as readonly string[]).includes(rawType)) {
       conditions.push(eq(sources.type, rawType as SourceType));
@@ -390,6 +420,7 @@ sourceRoutes.get(
       isHidden: Boolean(src.is_hidden),
       discovery: src.discovery ?? "curated",
       metadata: src.metadata ?? null,
+      kind: src.kind ?? null,
       releaseCount: src.release_count,
       latestVersion: src.latest_version ?? null,
       latestDate: src.latest_date ?? null,

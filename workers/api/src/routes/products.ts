@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { describeRoute, resolver } from "hono-openapi";
 import { hideInProduction } from "../openapi.js";
 import { and, count, eq, inArray, sql } from "drizzle-orm";
+import { isValidKind, KIND_VALUES, type Kind } from "@buildinternet/releases-core/kinds";
 import { createDb } from "../db.js";
 import {
   products,
@@ -50,18 +51,38 @@ import { IN_ARRAY_CHUNK_SIZE } from "../lib/d1-limits.js";
 
 export const productRoutes = new Hono<Env>();
 
-// List products, optionally filtered by orgId
+// List products, optionally filtered by orgId and/or kind
 productRoutes.get(
   "/products",
   describeRoute({
     tags: ["Products"],
     summary: "List products",
     description:
-      "Returns the paginated `{items, pagination}` envelope. Filter by `?orgId=` to scope to one org.",
+      "Returns the paginated `{items, pagination}` envelope. Filter by `?orgId=` to scope to one org. Filter by `?kind=` to narrow to a specific entity kind.",
+    parameters: [
+      {
+        name: "orgId",
+        in: "query",
+        required: false,
+        schema: { type: "string" },
+        description: "Scope results to one organization by ID.",
+      },
+      {
+        name: "kind",
+        in: "query",
+        required: false,
+        schema: { type: "string", enum: KIND_VALUES as unknown as string[] },
+        description: `Filter by entity kind. One of: ${KIND_VALUES.join(", ")}.`,
+      },
+    ],
     responses: {
       200: {
         description: "Products list",
         content: { "application/json": { schema: resolver(ProductListResponseSchema) } },
+      },
+      400: {
+        description: "Invalid kind value",
+        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
       },
     },
   }),
@@ -70,7 +91,24 @@ productRoutes.get(
     const orgId = c.req.query("orgId");
     const pagination = parseListPagination(new URL(c.req.url).searchParams);
 
-    const where = orgId ? eq(productsActive.orgId, orgId) : undefined;
+    const kindParam = c.req.query("kind");
+    if (kindParam !== undefined && !isValidKind(kindParam)) {
+      return c.json(
+        {
+          error: "bad_request",
+          message: `Invalid kind. Expected one of: ${KIND_VALUES.join(", ")}`,
+        },
+        400,
+      );
+    }
+    const kind = kindParam as Kind | undefined;
+
+    const conditions = [
+      ...(orgId ? [eq(productsActive.orgId, orgId)] : []),
+      ...(kind ? [eq(productsActive.kind, kind)] : []),
+    ];
+    const where = conditions.length > 0 ? and(...conditions) : undefined;
+
     const [rows, totalRow] = await Promise.all([
       db
         .select({

@@ -372,6 +372,11 @@ export async function getOrgReleasesFeed(
     includePrereleases?: boolean;
     /** FTS5 MATCH expression — pass through `toFtsMatchQuery` before calling. */
     ftsMatch?: string;
+    /**
+     * Filter by resolved entity kind: COALESCE(source.kind, product.kind).
+     * Mirrors `resolveSourceKind` from @buildinternet/releases-core/kinds.
+     */
+    kind?: string;
   } = {},
 ): Promise<OrgReleaseRow[]> {
   const releasesTable = opts.includeCoverage ? "releases" : "releases_visible";
@@ -392,6 +397,13 @@ export async function getOrgReleasesFeed(
       "AND r.id IN (SELECT releases.id FROM releases_fts JOIN releases ON releases.rowid = releases_fts.rowid WHERE releases_fts MATCH ?)";
     filterBindings.push(opts.ftsMatch);
   }
+  // COALESCE resolves the source's effective kind: source.kind, falling back to
+  // the parent product's kind when source.kind is NULL. Mirrors resolveSourceKind().
+  let kindWhere = "";
+  if (opts.kind) {
+    kindWhere = "AND COALESCE(s.kind, p.kind) = ?";
+    filterBindings.push(opts.kind);
+  }
 
   // Drop releases whose upstream-supplied date is in the future. Sources
   // occasionally publish a misdated entry (typo, scheduled-post slip);
@@ -410,12 +422,14 @@ export async function getOrgReleasesFeed(
            ${COVERAGE_COUNT_EXPR} AS coverage_count
     FROM ${releasesTable} r
     INNER JOIN sources_active s ON s.id = r.source_id
+    LEFT JOIN products_active p ON p.id = s.product_id
     WHERE s.org_id = ?
       AND (r.suppressed IS NULL OR r.suppressed = 0)
       AND (r.published_at IS NULL OR r.published_at <= ?)
       ${sourceTypeWhere}
       ${prereleaseWhere}
       ${ftsWhere}
+      ${kindWhere}
       ${cursor.cursorWhere}
     ORDER BY
       CASE WHEN r.published_at IS NOT NULL THEN 0 ELSE 1 END,
