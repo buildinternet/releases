@@ -7,18 +7,6 @@ import * as schema from "@buildinternet/releases-core/schema";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const MIGRATIONS_DIR = join(__dirname, "..", "workers", "api", "migrations");
-const SCRIPT_MIGRATIONS_DIR = join(__dirname, "..", "scripts", "migrations");
-
-// #690 Phase C rebuild lives outside workers/api/migrations because the D1
-// migration system can't run table rebuilds (see the marker file
-// 20260504000400_per_org_slug_cutover.sql). Tests still need to apply it
-// so the bun:sqlite fixture matches prod's post-rebuild schema.
-const SCRIPT_REBUILDS: Array<{ file: string; afterMigration: string }> = [
-  {
-    file: "690-phase-c-rebuild.sql",
-    afterMigration: "20260504000400_per_org_slug_cutover.sql",
-  },
-];
 
 export type TestDb = ReturnType<typeof drizzle<typeof schema>>;
 
@@ -31,8 +19,8 @@ export interface TestDatabase {
 /**
  * Apply every .sql file under workers/api/migrations/ in sorted filename
  * order to the given sqlite database. Matches what `wrangler d1 migrations
- * apply` does in prod, plus interleaves any scripts/migrations/*.sql
- * rebuilds at the point in the timeline where they were applied to prod.
+ * apply` does in prod. After the squashed baseline this is usually one file;
+ * any forward-delta migrations land in the same directory.
  */
 export function applyMigrations(sqlite: Database): void {
   const files = readdirSync(MIGRATIONS_DIR)
@@ -44,12 +32,6 @@ export function applyMigrations(sqlite: Database): void {
     // fine with them; bun:sqlite throws "no valid SQL statement".
     if (stripComments(sql).trim().length > 0) {
       sqlite.run(sql);
-    }
-    for (const rebuild of SCRIPT_REBUILDS) {
-      if (rebuild.afterMigration === f) {
-        const rebuildSql = readFileSync(join(SCRIPT_MIGRATIONS_DIR, rebuild.file), "utf8");
-        sqlite.run(rebuildSql);
-      }
     }
   }
 }
