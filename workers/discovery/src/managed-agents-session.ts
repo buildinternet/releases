@@ -34,6 +34,7 @@ import {
 } from "./fetch-wrappers.js";
 import { logEvent } from "@releases/lib/log-event.js";
 import { getSecret } from "@releases/lib/secrets";
+import { recordSessionSpend } from "./spend-cap.js";
 
 // ── MA 429 rate-limit retry loop ─────────────────────────────────────────────
 //
@@ -1144,6 +1145,22 @@ ${idList}
             event: "ma-source-lock-release-failed",
             sessionId,
             sourceIdentifiers: params.sourceIdentifiers,
+          });
+        }
+      }
+      // Persist session cost to the KV spend counters (global + per-org).
+      // Only written when the session incurred non-zero cost; cancelled/zero-cost
+      // paths (e.g. killed before the first LLM call) don't pollute the counter.
+      // Wrapped in try/catch — a KV blip must never propagate out of finally.
+      if (kv && sessionUsage?.estimatedUsd) {
+        try {
+          await recordSessionSpend(kv, sessionUsage.estimatedUsd, params.orgId);
+        } catch (err) {
+          logEvent("warn", {
+            component: "discovery",
+            event: "ma-spend-record-failed",
+            sessionId,
+            err: err instanceof Error ? err.message : String(err),
           });
         }
       }
