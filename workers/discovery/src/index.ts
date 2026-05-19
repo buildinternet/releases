@@ -156,6 +156,13 @@ export type StartManagedFetchSessionResult =
  * `"entrypoint": "DiscoveryEntrypoint"` on the service binding object.
  */
 export class DiscoveryEntrypoint extends WorkerEntrypoint<Env> {
+  // A service binding with `entrypoint: "DiscoveryEntrypoint"` only exposes
+  // this class's named methods, so the default-export `fetch` isn't reachable
+  // through the binding. This shim makes HTTP routing work alongside RPC.
+  async fetch(request: Request): Promise<Response> {
+    return httpHandler.fetch(request, this.env);
+  }
+
   /**
    * Kick off a managed-agent update session for one or more sources and
    * return immediately with the new sessionId. The session runs async on the
@@ -212,7 +219,7 @@ export class DiscoveryEntrypoint extends WorkerEntrypoint<Env> {
   }
 }
 
-export default {
+const httpHandler = {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
 
@@ -409,3 +416,5 @@ export default {
     return errorResponse("Not found", 404);
   },
 };
+
+export default httpHandler;
