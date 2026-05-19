@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { KIND_VALUES } from "@buildinternet/releases-core/kinds";
 import { CategorySchema } from "./shared.js";
 
 /**
@@ -114,6 +115,7 @@ export const DomainLookupProductSchema = z.object({
   // path resolves through `resolveCategoryInput` before persisting — unlike
   // the search catalog category, which passes the column through raw.
   category: CategorySchema.nullable(),
+  kind: z.enum(KIND_VALUES).nullable().optional(),
 });
 
 export const DomainLookupResponseSchema = z.object({

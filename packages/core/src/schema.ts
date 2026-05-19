@@ -115,6 +115,7 @@ export const products = sqliteTable(
     url: text("url"),
     description: text("description"),
     category: text("category"),
+    kind: text("kind"),
     createdAt: text("created_at")
       .notNull()
       .$defaultFn(() => new Date().toISOString()),
@@ -128,6 +129,9 @@ export const products = sqliteTable(
     index("idx_products_deleted_at")
       .on(table.deletedAt)
       .where(sql`${table.deletedAt} IS NOT NULL`),
+    index("idx_products_kind")
+      .on(table.kind)
+      .where(sql`${table.kind} IS NOT NULL`),
   ],
 );
 
@@ -302,6 +306,7 @@ export const sources = sqliteTable(
     discovery: text("discovery", { enum: ["curated", "agent", "on_demand"] })
       .notNull()
       .default("curated"),
+    kind: text("kind"),
     deletedAt: text("deleted_at"),
   },
   (table) => [
@@ -324,6 +329,9 @@ export const sources = sqliteTable(
     index("idx_sources_deleted_at")
       .on(table.deletedAt)
       .where(sql`${table.deletedAt} IS NOT NULL`),
+    index("idx_sources_kind")
+      .on(table.kind)
+      .where(sql`${table.kind} IS NOT NULL`),
   ],
 );
 
@@ -853,6 +861,7 @@ export const productsActive = sqliteView("products_active", {
   url: text("url"),
   description: text("description"),
   category: text("category"),
+  kind: text("kind"),
   createdAt: text("created_at").notNull(),
   embeddedAt: text("embedded_at"),
   deletedAt: text("deleted_at"),
@@ -882,6 +891,7 @@ export const sourcesActive = sqliteView("sources_active", {
   isHidden: integer("is_hidden", { mode: "boolean" }),
   embeddedAt: text("embedded_at"),
   discovery: text("discovery", { enum: ["curated", "agent", "on_demand"] }).notNull(),
+  kind: text("kind"),
   deletedAt: text("deleted_at"),
 }).existing();
 
@@ -940,6 +950,7 @@ export const sourcesVisible = sqliteView("sources_visible", {
   isHidden: integer("is_hidden", { mode: "boolean" }),
   embeddedAt: text("embedded_at"),
   discovery: text("discovery", { enum: ["curated", "agent", "on_demand"] }).notNull(),
+  kind: text("kind"),
   deletedAt: text("deleted_at"),
 }).existing();
 

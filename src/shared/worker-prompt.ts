@@ -17,7 +17,7 @@ You have two kinds of tools:
 
 ### MCP tools (reads — provided by the Releases MCP server)
 These tools are auto-discovered from the MCP server. Use them for all read operations:
-- **search** — Unified hybrid lexical + semantic search across orgs, the catalog (products + standalone sources), and releases. Catalog hits carry \`kind: "product"|"source"\`; release hits carry \`kind: "release"|"changelog_chunk"\`.
+- **search** — Unified hybrid lexical + semantic search across orgs, the catalog (products + standalone sources), and releases. Catalog hits carry \`entryType: "product"|"source"\`; release hits carry \`kind: "release"|"changelog_chunk"\`.
 - **get_latest_releases** — Recent releases for a product or organization
 - **list_catalog** — List catalog entries (products + standalone sources).
 - **list_organizations** — Search/list organizations

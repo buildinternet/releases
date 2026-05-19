@@ -1,6 +1,6 @@
 {
   "name": "@buildinternet/releases-core",
-  "version": "0.21.0",
+  "version": "0.22.0",
   "description": "Pure helpers shared by the Releases registry — schema, categories, slicing, IDs, slugs, tokens.",
   "type": "module",
   "license": "MIT",
@@ -13,6 +13,7 @@
     "./schema": "./src/schema.ts",
     "./source-enums": "./src/source-enums.ts",
     "./categories": "./src/categories.ts",
+    "./kinds": "./src/kinds.ts",
     "./dates": "./src/dates.ts",
     "./changelog-range": "./src/changelog-range.ts",
     "./changelog-slice": "./src/changelog-slice.ts",

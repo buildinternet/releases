@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { KIND_VALUES } from "@buildinternet/releases-core/kinds";
 import {
   CategorySchema,
   ListResponseSchema,
@@ -125,7 +126,8 @@ const OrgDetailPlaybookSchema = z.object({
 // ── Org catalog (/orgs/:slug/catalog) ──
 
 const OrgCatalogProductItemSchema = z.object({
-  kind: z.literal("product"),
+  entryType: z.literal("product"),
+  kind: z.enum(KIND_VALUES).nullable().optional(),
   id: z.string(),
   slug: z.string(),
   name: z.string(),
@@ -135,7 +137,8 @@ const OrgCatalogProductItemSchema = z.object({
 });
 
 const OrgCatalogSourceItemSchema = z.object({
-  kind: z.literal("source"),
+  entryType: z.literal("source"),
+  kind: z.enum(KIND_VALUES).nullable().optional(),
   id: z.string(),
   slug: z.string(),
   name: z.string(),
@@ -146,10 +149,12 @@ const OrgCatalogSourceItemSchema = z.object({
 
 /**
  * Combined product + source catalog for `GET /v1/orgs/:slug/catalog`.
- * `kind` discriminates between the two row shapes. Products carry
- * `category` and `description`; sources carry `type` and `productId`.
+ * `entryType` discriminates between the two row shapes (`"product"` vs
+ * `"source"`). `kind` carries the entity taxonomy (platform/sdk/mobile/…).
+ * Products carry `category` and `description`; sources carry `type` and
+ * `productId`.
  */
-export const OrgCatalogItemSchema = z.discriminatedUnion("kind", [
+export const OrgCatalogItemSchema = z.discriminatedUnion("entryType", [
   OrgCatalogProductItemSchema,
   OrgCatalogSourceItemSchema,
 ]);

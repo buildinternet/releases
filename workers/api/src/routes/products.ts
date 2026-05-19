@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { describeRoute, resolver } from "hono-openapi";
 import { hideInProduction } from "../openapi.js";
 import { and, count, eq, inArray, sql } from "drizzle-orm";
+import { parseKindParam, KIND_VALUES } from "@buildinternet/releases-core/kinds";
 import { createDb } from "../db.js";
 import {
   products,
@@ -50,18 +51,38 @@ import { IN_ARRAY_CHUNK_SIZE } from "../lib/d1-limits.js";
 
 export const productRoutes = new Hono<Env>();
 
-// List products, optionally filtered by orgId
+// List products, optionally filtered by orgId and/or kind
 productRoutes.get(
   "/products",
   describeRoute({
     tags: ["Products"],
     summary: "List products",
     description:
-      "Returns the paginated `{items, pagination}` envelope. Filter by `?orgId=` to scope to one org.",
+      "Returns the paginated `{items, pagination}` envelope. Filter by `?orgId=` to scope to one org. Filter by `?kind=` to narrow to a specific entity kind.",
+    parameters: [
+      {
+        name: "orgId",
+        in: "query",
+        required: false,
+        schema: { type: "string" },
+        description: "Scope results to one organization by ID.",
+      },
+      {
+        name: "kind",
+        in: "query",
+        required: false,
+        schema: { type: "string", enum: KIND_VALUES as unknown as string[] },
+        description: `Filter by entity kind. Direct match on the row's own kind — no inheritance from a parent. One of: ${KIND_VALUES.join(", ")}.`,
+      },
+    ],
     responses: {
       200: {
         description: "Products list",
         content: { "application/json": { schema: resolver(ProductListResponseSchema) } },
+      },
+      400: {
+        description: "Invalid kind value",
+        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
       },
     },
   }),
@@ -70,7 +91,22 @@ productRoutes.get(
     const orgId = c.req.query("orgId");
     const pagination = parseListPagination(new URL(c.req.url).searchParams);
 
-    const where = orgId ? eq(productsActive.orgId, orgId) : undefined;
+    const kind = parseKindParam(c.req.query("kind"));
+    if (kind === null)
+      return c.json(
+        {
+          error: "bad_request",
+          message: `Invalid kind. Expected one of: ${KIND_VALUES.join(", ")}`,
+        },
+        400,
+      );
+
+    const conditions = [
+      ...(orgId ? [eq(productsActive.orgId, orgId)] : []),
+      ...(kind ? [eq(productsActive.kind, kind)] : []),
+    ];
+    const where = conditions.length > 0 ? and(...conditions) : undefined;
+
     const [rows, totalRow] = await Promise.all([
       db
         .select({
@@ -82,6 +118,7 @@ productRoutes.get(
           description: productsActive.description,
           createdAt: productsActive.createdAt,
           category: productsActive.category,
+          kind: productsActive.kind,
           sourceCount: sql<number>`(SELECT COUNT(*) FROM sources_active s WHERE s.product_id = products_active.id)`,
         })
         .from(productsActive)
@@ -425,6 +462,7 @@ productRoutes.post(
       description?: string;
       category?: string;
       tags?: string[];
+      kind?: string | null;
     } = { ...c.req.valid("json") };
 
     // Cross-field: at least one of orgId/orgSlug must be set. Can't express
@@ -474,6 +512,7 @@ productRoutes.post(
           url: body.url ?? null,
           description: body.description ?? null,
           category: body.category ?? null,
+          kind: body.kind ?? null,
         })
         .returning();
 
@@ -513,6 +552,7 @@ const patchProductHandler = async (c: import("hono").Context<Env>) => {
     category?: string | null;
     tags?: string[];
     aliases?: string[];
+    kind?: string | null;
   } = {
     ...(c.req as unknown as { valid: (target: "json") => Record<string, unknown> }).valid("json"),
   };
@@ -533,6 +573,7 @@ const patchProductHandler = async (c: import("hono").Context<Env>) => {
     body.category = resolved.slug;
   }
   if (body.category !== undefined) updates.category = body.category;
+  if ("kind" in body) updates.kind = body.kind ?? null;
 
   if (Object.keys(updates).length === 0 && body.tags === undefined && body.aliases === undefined) {
     return c.json(product);

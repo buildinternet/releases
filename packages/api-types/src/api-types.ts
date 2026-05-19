@@ -644,17 +644,22 @@ export type SearchSourceHit = z.infer<typeof SearchSourceHitSchema>;
 export interface RawSourceHit extends SearchSourceHit {
   productName?: string;
   productCategory?: string;
+  /** Entity taxonomy kind from the `sources.kind` column. */
+  entityKind?: string | null;
 }
 
 /**
  * Fold source hits into the catalog list. Sources under a matched product
- * are dropped (product wins); orphan sources become `kind: "source"`.
+ * are dropped (product wins); orphan sources become `entryType: "source"`.
  */
 export function foldSourcesIntoCatalog(
   existingProducts: SearchCatalogHit[],
   rawSources: RawSourceHit[],
 ): SearchCatalogHit[] {
-  const result: SearchCatalogHit[] = existingProducts.map((p) => ({ ...p, kind: "product" }));
+  const result: SearchCatalogHit[] = existingProducts.map((p) => ({
+    ...p,
+    entryType: "product" as const,
+  }));
   const seen = new Set(result.map((p) => p.slug));
   for (const s of rawSources) {
     if (s.productSlug) {
@@ -665,7 +670,8 @@ export function foldSourcesIntoCatalog(
         orgSlug: s.orgSlug,
         orgName: s.orgName,
         category: s.productCategory ?? null,
-        kind: "product",
+        entryType: "product",
+        kind: undefined,
       });
       seen.add(s.productSlug);
     } else {
@@ -675,7 +681,8 @@ export function foldSourcesIntoCatalog(
         orgSlug: s.orgSlug,
         orgName: s.orgName,
         category: null,
-        kind: "source",
+        entryType: "source",
+        kind: (s.entityKind as SearchCatalogHit["kind"]) ?? undefined,
         sourceSlug: s.slug,
         sourceType: s.type,
       });

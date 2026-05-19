@@ -28,6 +28,7 @@ import {
 import { daysAgoIso, nowIso, timeAgo } from "@buildinternet/releases-core/dates";
 import { toFtsMatchQuery } from "@buildinternet/releases-core/fts";
 import { likeContains } from "@buildinternet/releases-core/sql-like";
+import type { Kind } from "@buildinternet/releases-core/kinds";
 import { normalizeDomain } from "@buildinternet/releases-core/domain";
 import { getEntityType, normalizeReleaseId } from "@buildinternet/releases-core/id";
 import {
@@ -1417,7 +1418,7 @@ export async function listCatalog(
         category: p.category,
         description: p.description,
         url: p.url,
-        kind: "product",
+        entryType: "product",
       }),
     ),
     ...orphanSourceRows.map(
@@ -1429,18 +1430,20 @@ export async function listCatalog(
         category: null,
         description: null,
         url: s.url,
-        kind: "source",
+        entryType: "source",
         sourceType: s.type,
         lastFetchedAt: s.lastFetchedAt,
       }),
     ),
   ];
 
-  // kind + slug tiebreakers keep page boundaries stable when product and
+  // entryType + slug tiebreakers keep page boundaries stable when product and
   // source entries share a name (or two products under different orgs do).
   entries.sort(
     (a, b) =>
-      a.name.localeCompare(b.name) || a.kind.localeCompare(b.kind) || a.slug.localeCompare(b.slug),
+      a.name.localeCompare(b.name) ||
+      a.entryType.localeCompare(b.entryType) ||
+      a.slug.localeCompare(b.slug),
   );
 
   // Catalog merge happens in JS because products + standalone sources are two
@@ -1456,12 +1459,12 @@ export async function listCatalog(
   const body = pageEntries
     .map((e) => {
       const coord = e.orgSlug ? `${e.orgSlug}/${e.slug}` : e.slug;
-      const parts = [`**${e.name}** _(${e.kind})_`, `  Slug: ${coord}`];
+      const parts = [`**${e.name}** _(${e.entryType})_`, `  Slug: ${coord}`];
       if (e.orgSlug) parts.push(`  Organization: ${e.orgName ?? e.orgSlug} (${e.orgSlug})`);
       if (e.category) parts.push(`  Category: ${e.category}`);
       if (e.url) parts.push(`  URL: ${e.url}`);
       if (e.description) parts.push(`  Description: ${e.description}`);
-      if (e.kind === "source") {
+      if (e.entryType === "source") {
         parts.push(`  Source type: ${e.sourceType}`);
         parts.push(`  Last fetched: ${e.lastFetchedAt ?? "Never"}`);
       }
@@ -1551,8 +1554,9 @@ export type SearchType = "orgs" | "catalog" | "releases" | "collections";
 
 /**
  * `type` here is the input-filter parameter (which sections to return).
- * Catalog entries in the response still carry a `kind` discriminator —
- * `type` stays on the input so it doesn't shadow `sources.type`.
+ * Catalog entries in the response carry an `entryType` discriminator
+ * (`"product"` | `"source"`) — `type` stays on the input so it doesn't
+ * shadow `sources.type`.
  */
 export async function search(
   db: D1Db,
@@ -1566,6 +1570,7 @@ export async function search(
     mode?: SearchMode;
     include_coverage?: boolean;
     include_empty?: boolean;
+    kind?: Kind;
   },
   searchEnv?: import("./lib/search-hybrid.js").HybridSearchEnv,
   ctx?: ExecutionContext,
@@ -1708,23 +1713,25 @@ export async function search(
         const [productRows, sourceRows] = await Promise.all([
           db.all<SearchCatalogHit>(sql`
             SELECT DISTINCT p.slug, p.name, o.slug as orgSlug, o.name as orgName,
-                   p.category, 'product' as kind
-            FROM products p
+                   p.category, 'product' as entryType, p.kind
+            FROM products_active p
             LEFT JOIN organizations o ON o.id = p.org_id
             LEFT JOIN domain_aliases da ON da.product_id = p.id
             WHERE (${likeContains(sql`p.name`, q)} OR ${likeContains(sql`p.slug`, q)} OR ${likeContains(sql`da.domain`, q)})
               ${orgScope ? sql`AND p.org_id = ${orgScope.id}` : sql``}
+              ${params.kind ? sql`AND p.kind = ${params.kind}` : sql``}
             ORDER BY p.name LIMIT ${limit}
           `),
           db.all<RawSourceHit>(sql`
             SELECT s.slug, s.name, s.type, o.slug as orgSlug, o.name as orgName,
-                   p.slug as productSlug, p.name as productName, p.category as productCategory
-            FROM sources s
-            LEFT JOIN products p ON p.id = s.product_id
+                   p.slug as productSlug, p.name as productName, p.category as productCategory,
+                   s.kind as entityKind
+            FROM sources_visible s
+            LEFT JOIN products_active p ON p.id = s.product_id
             LEFT JOIN organizations o ON o.id = s.org_id
-            WHERE (s.is_hidden = 0 OR s.is_hidden IS NULL)
-              AND (${likeContains(sql`s.name`, q)} OR ${likeContains(sql`s.slug`, q)} OR ${likeContains(sql`s.url`, q)})
+            WHERE (${likeContains(sql`s.name`, q)} OR ${likeContains(sql`s.slug`, q)} OR ${likeContains(sql`s.url`, q)})
               ${orgScope ? sql`AND s.org_id = ${orgScope.id}` : sql``}
+              ${params.kind ? sql`AND s.kind = ${params.kind}` : sql``}
             ORDER BY s.name LIMIT ${limit}
           `),
         ]);
@@ -1847,6 +1854,7 @@ export async function search(
               sourceId: sourceIds?.length === 1 ? sourceIds[0] : undefined,
               orgSourceIds: sourceIds && sourceIds.length > 1 ? sourceIds : undefined,
               includeCoverage,
+              kind: params.kind,
             },
             { ...(ctx ? { waitUntil: ctx.waitUntil.bind(ctx) } : {}), embedConfig },
           );
@@ -1864,6 +1872,7 @@ export async function search(
           FROM releases_fts
           JOIN releases r ON r.rowid = releases_fts.rowid
           JOIN sources s ON s.id = r.source_id
+          LEFT JOIN products p ON p.id = s.product_id
           LEFT JOIN organizations o ON o.id = s.org_id
           WHERE releases_fts MATCH ${toFtsMatchQuery(params.query)}
             AND (s.is_hidden = 0 OR s.is_hidden IS NULL)
@@ -1877,6 +1886,7 @@ export async function search(
                   )})`
                 : sql``
             }
+            ${params.kind ? sql`AND COALESCE(s.kind, p.kind) = ${params.kind}` : sql``}
           ORDER BY rank LIMIT ${limit}
         `);
         return { mode: "lexical", rows };
@@ -1975,7 +1985,7 @@ export async function search(
       ...catalog.map((e) => {
         const coord = e.orgSlug ? `${e.orgSlug}/${e.slug}` : e.slug;
         const orgLabel = e.orgSlug ? ` — ${e.orgName ?? e.orgSlug}` : "";
-        return `- [${e.kind}] **${e.name}** (${coord})${orgLabel}`;
+        return `- [${e.entryType}] **${e.name}** (${coord})${orgLabel}`;
       }),
     ];
     sections.push(lines.join("\n"));

@@ -4,6 +4,7 @@ import {
   SOURCE_DISCOVERY,
   SOURCE_FETCH_PRIORITIES,
 } from "@buildinternet/releases-core/source-enums";
+import { KIND_VALUES } from "@buildinternet/releases-core/kinds";
 import { ListResponseSchema, ReleaseItemSchema, ReleaseSummaryItemSchema } from "./shared.js";
 
 export const SourceTypeSchema = z.enum(SOURCE_TYPES);
@@ -48,6 +49,7 @@ export const SourceListItemSchema = z.object({
   metadata: z.string().nullable().optional(),
   productName: z.string().nullable().optional(),
   productSlug: z.string().nullable().optional(),
+  kind: z.enum(KIND_VALUES).nullable().optional(),
 });
 
 /**
@@ -81,6 +83,7 @@ export const SourceWithOrgSchema = z.object({
   nextFetchAfter: z.string().nullable(),
   medianGapDays: z.number().nullable(),
   lastRetieredAt: z.string().nullable(),
+  kind: z.enum(KIND_VALUES).nullable().optional(),
 });
 
 export const SourceListResponseSchema = ListResponseSchema(SourceWithOrgSchema);
@@ -157,6 +160,7 @@ export const SourceDetailSchema = z.object({
   releases: z.array(ReleaseItemSchema),
   pagination: SourceFeedPaginationSchema,
   summaries: SourceDetailSummariesSchema,
+  kind: z.enum(KIND_VALUES).nullable().optional(),
 });
 
 /**
@@ -187,6 +191,7 @@ export const SourceMutationResponseSchema = z.looseObject({
   isHidden: z.boolean().nullable().optional(),
   discovery: SourceDiscoverySchema.optional(),
   createdAt: z.string().optional(),
+  kind: z.enum(KIND_VALUES).nullable().optional(),
 });
 
 /** Body accepted by `PATCH /v1/sources/:slug`. */
@@ -208,6 +213,7 @@ export const SourcePatchInputSchema = z.object({
   isHidden: z.boolean().optional(),
   changeDetectedAt: z.string().nullable().optional(),
   lastPolledAt: z.string().nullable().optional(),
+  kind: z.enum(KIND_VALUES).nullable().optional(),
 });
 
 /** Body accepted by `POST /v1/sources`. */
@@ -228,6 +234,7 @@ export const CreateSourceBodySchema = z.object({
   productSlug: z.string().optional(),
   metadata: z.string().optional(),
   isPrimary: z.boolean().optional(),
+  kind: z.enum(KIND_VALUES).nullable().optional(),
 });
 
 export const ChangelogFileSummarySchema = z.object({

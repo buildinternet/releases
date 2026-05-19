@@ -26,6 +26,7 @@ import { registerPrompts } from "./prompts.js";
 import { logMcpSearch, deriveMcpClientKind, type McpSearchCommand } from "./lib/log-search.js";
 import { buildSearchMeta } from "./lib/pagination.js";
 import type { SearchMode } from "@buildinternet/releases-core/schema";
+import { KIND_VALUES } from "@buildinternet/releases-core/kinds";
 import { parseCoordinate } from "@buildinternet/releases-core/lookup-coordinate";
 import type { LookupResultPayload } from "@buildinternet/releases-api-types";
 import { getSecret } from "@releases/lib/secrets";
@@ -409,6 +410,12 @@ export function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServ
           .describe(
             "Include orgs with zero indexed releases in the `orgs` section. Default false — empty orgs are stubs and surface as noise. Scoping by `domain` ignores this and always returns the resolved org.",
           ),
+        kind: z
+          .enum(KIND_VALUES)
+          .optional()
+          .describe(
+            "Filter to a specific source/product kind. Release hits resolve through `source.kind ?? product.kind`; catalog hits filter on the row's own kind. The orgs and collections sections are unaffected; changelog chunk hits are unaffected.",
+          ),
       },
     },
     withSearchLog("search", async (params) => {
@@ -489,9 +496,9 @@ export function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServ
     {
       ...titled("List catalog", READ_ONLY_HINTS),
       description: [
-        "List catalog entries — products and standalone sources combined into one list with a `kind: 'product' | 'source'` discriminator per row.",
+        "List catalog entries — products and standalone sources combined into one list with an `entryType: 'product' | 'source'` discriminator per row.",
         "",
-        "Orgs that group multiple sources under a product (e.g. Vercel → Next.js, Turborepo) surface those products; orgs with a single source that isn't part of a product surface it directly as a `kind: 'source'` entry. Either shape is a reasonable thing to pass to `search(entity: ...)`.",
+        "Orgs that group multiple sources under a product (e.g. Vercel → Next.js, Turborepo) surface those products; orgs with a single source that isn't part of a product surface it directly as an `entryType: 'source'` entry. Either shape is a reasonable thing to pass to `search(entity: ...)`.",
         "",
         "Paginated: defaults to 50 entries per page. Pass `page: 2` for the next slice. The footer surfaces the total when more pages exist.",
       ].join("\n"),

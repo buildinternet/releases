@@ -30,6 +30,7 @@ import {
   type ReleaseType,
 } from "@buildinternet/releases-core/schema";
 import { SOURCE_TYPES, type SourceType } from "@buildinternet/releases-core/source-enums";
+import { parseKindParam, isValidKind, KIND_VALUES } from "@buildinternet/releases-core/kinds";
 import { buildListResponse, parseListPagination } from "../lib/pagination.js";
 import { RELEASE_URL_UPSERT } from "@releases/core-internal/release-upsert";
 import { daysAgoIso, inferMonthOnlyDate } from "@buildinternet/releases-core/dates";
@@ -43,6 +44,7 @@ import {
   selectChangelogFile,
 } from "@buildinternet/releases-core/changelog-slice";
 import type { SourceWithOrg, SourcePatchInput } from "@buildinternet/releases-api-types";
+import { SourcePatchInputSchema } from "@buildinternet/releases-api-types";
 import {
   SourceListResultSchema,
   SourceDetailSchema,
@@ -199,11 +201,24 @@ sourceRoutes.get(
     tags: ["Sources"],
     summary: "List sources",
     description:
-      "Returns a bare array by default; pass `?envelope=true` for the paginated `{items, pagination}` shape. Filter by `?orgId=`, `?orgSlug=`, `?productSlug=`, `?type=`, `?has_feed=`, `?stale=`, `?category=`, `?independent=true`, `?hasChangelog=false` (sources with no tracked CHANGELOG file), `?minRels30d=N` (sources with at least N visible releases in the last 30 days). Free-text search via `?q=`.",
+      "Returns a bare array by default; pass `?envelope=true` for the paginated `{items, pagination}` shape. Filter by `?orgId=`, `?orgSlug=`, `?productSlug=`, `?type=`, `?has_feed=`, `?stale=`, `?category=`, `?kind=`, `?independent=true`, `?hasChangelog=false` (sources with no tracked CHANGELOG file), `?minRels30d=N` (sources with at least N visible releases in the last 30 days). Free-text search via `?q=`.",
+    parameters: [
+      {
+        name: "kind",
+        in: "query",
+        required: false,
+        schema: { type: "string", enum: KIND_VALUES as unknown as string[] },
+        description: `Filter by entity kind. Direct match on the row's own kind — no inheritance from the parent product. One of: ${KIND_VALUES.join(", ")}.`,
+      },
+    ],
     responses: {
       200: {
         description: "Sources (bare array unless `?envelope=true`)",
         content: { "application/json": { schema: resolver(SourceListResultSchema) } },
+      },
+      400: {
+        description: "Invalid kind value",
+        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
       },
     },
   }),
@@ -218,6 +233,16 @@ sourceRoutes.get(
     const queryText = c.req.query("q") ?? c.req.query("query");
     const includeHidden = c.req.query("include_hidden") === "true";
     const categoryFilter = c.req.query("category");
+
+    const kind = parseKindParam(c.req.query("kind"));
+    if (kind === null)
+      return c.json(
+        {
+          error: "bad_request",
+          message: `Invalid kind. Expected one of: ${KIND_VALUES.join(", ")}`,
+        },
+        400,
+      );
 
     // Pagination: default limit 100, hard cap 500. `?offset=` is also accepted
     // and overrides `?page=` so callers that pre-compute offsets keep working.
@@ -335,6 +360,14 @@ sourceRoutes.get(
       );
     }
 
+    if (kind) {
+      // Direct match — admin listing wants rows whose kind is explicitly set,
+      // not rows that inherit via `resolveSourceKind`. The releases feed
+      // (`getOrgReleasesFeed`) COALESCEs through product.kind on purpose;
+      // this list does not.
+      conditions.push(eq(sources.kind, kind));
+    }
+
     const rawType = c.req.query("type");
     if (rawType && (SOURCE_TYPES as readonly string[]).includes(rawType)) {
       conditions.push(eq(sources.type, rawType as SourceType));
@@ -389,6 +422,7 @@ sourceRoutes.get(
       isHidden: Boolean(src.is_hidden),
       discovery: src.discovery ?? "curated",
       metadata: src.metadata ?? null,
+      kind: src.kind && isValidKind(src.kind) ? src.kind : null,
       releaseCount: src.release_count,
       latestVersion: src.latest_version ?? null,
       latestDate: src.latest_date ?? null,
@@ -2016,6 +2050,7 @@ const getSourceDetailHandler = async (c: import("hono").Context<Env>) => {
     isHidden: Boolean(src.isHidden),
     discovery: src.discovery ?? "curated",
     metadata: src.metadata ?? "{}",
+    kind: src.kind ?? null,
     releaseCount: totalItems,
     releasesLast30Days,
     avgReleasesPerWeek,
@@ -2286,6 +2321,7 @@ sourceRoutes.post(
       metadata: body.metadata ?? "{}",
       createdAt,
       ...(body.isPrimary !== undefined && { isPrimary: body.isPrimary }),
+      ...(body.kind !== undefined && { kind: body.kind ?? null }),
     });
 
     let source: typeof sources.$inferSelect | undefined;
@@ -2355,7 +2391,12 @@ sourceRoutes.post(
 
 const patchSourceHandler = async (c: import("hono").Context<Env>) => {
   const db = createDb(c.env.DB);
-  const body = await c.req.json<SourcePatchInput>();
+  const raw = (await c.req.json<unknown>()) as Record<string, unknown>;
+  const parsed = SourcePatchInputSchema.safeParse(raw);
+  if (!parsed.success) {
+    return c.json({ error: "bad_request", message: parsed.error.message }, 400);
+  }
+  const body = parsed.data as SourcePatchInput;
 
   const src = await resolveSourceFromContext(c, db);
   if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
@@ -2378,6 +2419,7 @@ const patchSourceHandler = async (c: import("hono").Context<Env>) => {
     "isHidden",
     "changeDetectedAt",
     "lastPolledAt",
+    "kind",
   ] as const;
 
   const updates: Record<string, unknown> = {};
@@ -2438,6 +2480,7 @@ const patchSourceHandler = async (c: import("hono").Context<Env>) => {
   if (body.isHidden !== undefined) updates.isHidden = body.isHidden;
   if (body.changeDetectedAt !== undefined) updates.changeDetectedAt = body.changeDetectedAt;
   if (body.lastPolledAt !== undefined) updates.lastPolledAt = body.lastPolledAt;
+  if ("kind" in body) updates.kind = body.kind ?? null;
 
   if (Object.keys(updates).length === 0) {
     const bodyKeys = Object.keys(body);

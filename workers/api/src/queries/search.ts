@@ -57,8 +57,12 @@ export interface RawSearchReleaseRow {
  * (#746). Defaulted off in the LIKE-on-name path because curator stubs
  * inflate the result set with noise; the `?domain=` short-circuit always
  * surfaces the resolved org regardless.
+ *
+ * `kind` filters by entity kind. For releases, COALESCE(source.kind,
+ * product.kind) is applied. For catalog rows (products/sources), only the
+ * row's own `kind` column is matched — no inheritance.
  */
-type ScopeOpts = { orgId?: string; includeEmpty?: boolean };
+type ScopeOpts = { orgId?: string; includeEmpty?: boolean; kind?: string };
 
 export async function searchOrgs(
   db: D1Db,
@@ -95,13 +99,14 @@ export async function searchProducts(
 ): Promise<SearchCatalogHit[]> {
   return db.all<SearchCatalogHit>(sql`
     SELECT DISTINCT p.slug, p.name, o.slug as orgSlug, o.name as orgName, p.category,
-           'product' as kind
+           'product' as entryType, p.kind
     FROM products_active p
     INNER JOIN organizations_active o ON o.id = p.org_id
     LEFT JOIN domain_aliases da ON da.product_id = p.id
     WHERE (${likeContains(sql`p.name`, query)} OR ${likeContains(sql`p.slug`, query)}
       OR ${likeContains(sql`da.domain`, query)})
       ${opts.orgId ? sql`AND o.id = ${opts.orgId}` : sql``}
+      ${opts.kind ? sql`AND p.kind = ${opts.kind}` : sql``}
     ORDER BY p.name LIMIT ${limit}
   `);
 }
@@ -114,7 +119,8 @@ export async function searchSources(
 ): Promise<RawSourceHit[]> {
   return db.all<RawSourceHit>(sql`
     SELECT s.slug, s.name, s.type, o.slug as orgSlug, o.name as orgName,
-           p.slug as productSlug, p.name as productName, p.category as productCategory
+           p.slug as productSlug, p.name as productName, p.category as productCategory,
+           s.kind as entityKind
     FROM sources_active s
     LEFT JOIN organizations_active o ON o.id = s.org_id
     LEFT JOIN products_active p ON p.id = s.product_id
@@ -122,6 +128,7 @@ export async function searchSources(
       AND (${likeContains(sql`s.name`, query)} OR ${likeContains(sql`s.slug`, query)}
         OR ${likeContains(sql`s.url`, query)})
       ${opts.orgId ? sql`AND s.org_id = ${opts.orgId}` : sql``}
+      ${opts.kind ? sql`AND s.kind = ${opts.kind}` : sql``}
     ORDER BY s.name LIMIT ${limit}
   `);
 }
@@ -150,11 +157,13 @@ export async function searchReleasesFts(
     JOIN releases r ON r.rowid = releases_fts.rowid
     JOIN sources_active s ON s.id = r.source_id
     LEFT JOIN organizations_active o ON o.id = s.org_id
+    LEFT JOIN products_active p ON p.id = s.product_id
     WHERE releases_fts MATCH ${ftsQuery}
       AND (s.is_hidden = 0 OR s.is_hidden IS NULL)
       AND (r.suppressed IS NULL OR r.suppressed = 0)
       ${opts.includeCoverage ? sql`` : sql`AND r.id IN (SELECT id FROM releases_visible)`}
       ${opts.orgId ? sql`AND s.org_id = ${opts.orgId}` : sql``}
+      ${opts.kind ? sql`AND COALESCE(s.kind, p.kind) = ${opts.kind}` : sql``}
     ORDER BY rank LIMIT ${limit} OFFSET ${offset}
   `);
 }
@@ -164,7 +173,7 @@ export async function searchReleasesFromMatchedEntities(
   orgSlugs: string[],
   productSlugs: string[],
   limit: number,
-  opts: { includeCoverage?: boolean } = {},
+  opts: { includeCoverage?: boolean } & ScopeOpts = {},
 ): Promise<RawSearchReleaseRow[]> {
   const conditions = [];
   if (orgSlugs.length > 0)
@@ -202,6 +211,7 @@ export async function searchReleasesFromMatchedEntities(
     WHERE (s.is_hidden = 0 OR s.is_hidden IS NULL)
       AND (r.suppressed IS NULL OR r.suppressed = 0)
       AND (${sql.join(conditions, sql` OR `)})
+      ${opts.kind ? sql`AND COALESCE(s.kind, p.kind) = ${opts.kind}` : sql``}
     ORDER BY r.published_at DESC LIMIT ${limit}
   `);
 }

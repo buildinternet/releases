@@ -46,6 +46,7 @@ import {
   collectionMembers,
 } from "@buildinternet/releases-core/schema";
 import { daysAgoIso } from "@buildinternet/releases-core/dates";
+import { parseKindParam, KIND_VALUES } from "@buildinternet/releases-core/kinds";
 import { resolveCategoryInput } from "../lib/category-alias.js";
 import { parseSourceTypesLenient } from "../lib/source-types.js";
 import { toSlug } from "@buildinternet/releases-core/slug";
@@ -748,9 +749,10 @@ orgRoutes.delete(
 );
 
 // Unified browse for the org's addressable things: sources + products today,
-// rollups when #693 ships them. `?kind=source|product` narrows the response;
-// `?limit=N` is per-kind (capped [1, 500]); unknown `kind` returns 400.
-const CATALOG_KINDS = new Set(["source", "product"]);
+// rollups when #693 ships them. `?entryType=source|product` narrows the response
+// by entry type; `?kind=<entity-kind>` narrows by entity kind (platform/sdk/…);
+// `?limit=N` is per-entryType (capped [1, 500]); invalid values return 400.
+const CATALOG_ENTRY_TYPES = new Set(["source", "product"]);
 orgRoutes.get(
   "/orgs/:slug/catalog",
   describeRoute({
@@ -758,21 +760,28 @@ orgRoutes.get(
     tags: ["Orgs"],
     summary: "Org catalog (sources + products)",
     description:
-      "Returns the org's sources and products as a unified list keyed by `kind`. Accepts optional `?kind=source|product` to filter to one kind; `?limit=N` caps results per kind (capped [1, 500]). Intended for org-detail UI sidebar — avoids a round-trip to `/v1/sources` + `/v1/products`.",
+      "Returns the org's sources and products as a unified list keyed by `entryType`. Accepts optional `?entryType=source|product` to filter to one entry type; `?kind=<entity-kind>` to filter by entity kind (platform/sdk/mobile/…); `?limit=N` caps results per entryType (capped [1, 500]). Intended for org-detail UI sidebar — avoids a round-trip to `/v1/sources` + `/v1/products`.",
     parameters: [
+      {
+        name: "entryType",
+        in: "query",
+        required: false,
+        schema: { type: "string", enum: ["source", "product"] },
+        description: "Narrow results to one entry type. Omit to return both.",
+      },
       {
         name: "kind",
         in: "query",
         required: false,
-        schema: { type: "string", enum: ["source", "product"] },
-        description: "Narrow results to one kind. Omit to return both.",
+        schema: { type: "string", enum: KIND_VALUES as unknown as string[] },
+        description: `Filter by entity kind. Direct match on the row's own kind — no inheritance from a parent. One of: ${KIND_VALUES.join(", ")}.`,
       },
       {
         name: "limit",
         in: "query",
         required: false,
         schema: { type: "integer", minimum: 1, maximum: 500, default: 100 },
-        description: "Max results per kind. Defaults to 100.",
+        description: "Max results per entry type. Defaults to 100.",
       },
     ],
     responses: {
@@ -781,7 +790,7 @@ orgRoutes.get(
         content: { "application/json": { schema: resolver(OrgCatalogResponseSchema) } },
       },
       400: {
-        description: "Unknown kind value",
+        description: "Unknown entryType or kind value",
         content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
       },
       404: {
@@ -793,24 +802,33 @@ orgRoutes.get(
   async (c) => {
     const db = createDb(c.env.DB);
     const slug = c.req.param("slug");
-    const kindParam = c.req.query("kind");
-    if (kindParam !== undefined && !CATALOG_KINDS.has(kindParam)) {
+    const entryTypeParam = c.req.query("entryType");
+    if (entryTypeParam !== undefined && !CATALOG_ENTRY_TYPES.has(entryTypeParam)) {
       return c.json(
         {
           error: "bad_request",
-          message: `Unknown kind '${kindParam}'. Expected source or product.`,
+          message: `Unknown entryType '${entryTypeParam}'. Expected source or product.`,
         },
         400,
       );
     }
+    const entityKind = parseKindParam(c.req.query("kind"));
+    if (entityKind === null)
+      return c.json(
+        {
+          error: "bad_request",
+          message: `Invalid kind. Expected one of: ${KIND_VALUES.join(", ")}`,
+        },
+        400,
+      );
     const limitRaw = parseInt(c.req.query("limit") ?? "100", 10);
     const limit = Math.min(Math.max(Number.isFinite(limitRaw) ? limitRaw : 100, 1), 500);
 
     const [org] = await db.select().from(organizations).where(orgWhere(slug));
     if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
 
-    const wantSources = !kindParam || kindParam === "source";
-    const wantProducts = !kindParam || kindParam === "product";
+    const wantSources = !entryTypeParam || entryTypeParam === "source";
+    const wantProducts = !entryTypeParam || entryTypeParam === "product";
 
     const [productRows, sourceRows] = await Promise.all([
       wantProducts
@@ -822,9 +840,15 @@ orgRoutes.get(
               url: productsActive.url,
               description: productsActive.description,
               category: productsActive.category,
+              kind: productsActive.kind,
             })
             .from(productsActive)
-            .where(eq(productsActive.orgId, org.id))
+            .where(
+              and(
+                eq(productsActive.orgId, org.id),
+                ...(entityKind ? [eq(productsActive.kind, entityKind)] : []),
+              ),
+            )
             .orderBy(productsActive.name)
             .limit(limit)
         : Promise.resolve([]),
@@ -837,9 +861,15 @@ orgRoutes.get(
               type: sourcesVisible.type,
               url: sourcesVisible.url,
               productId: sourcesVisible.productId,
+              kind: sourcesVisible.kind,
             })
             .from(sourcesVisible)
-            .where(eq(sourcesVisible.orgId, org.id))
+            .where(
+              and(
+                eq(sourcesVisible.orgId, org.id),
+                ...(entityKind ? [eq(sourcesVisible.kind, entityKind)] : []),
+              ),
+            )
             .orderBy(sourcesVisible.name)
             .limit(limit)
         : Promise.resolve([]),
@@ -847,7 +877,8 @@ orgRoutes.get(
 
     const items = [
       ...productRows.map((p) => ({
-        kind: "product" as const,
+        entryType: "product" as const,
+        kind: p.kind ?? null,
         id: p.id,
         slug: p.slug,
         name: p.name,
@@ -856,7 +887,8 @@ orgRoutes.get(
         category: p.category,
       })),
       ...sourceRows.map((s) => ({
-        kind: "source" as const,
+        entryType: "source" as const,
+        kind: s.kind ?? null,
         id: s.id,
         slug: s.slug,
         name: s.name,
@@ -1610,7 +1642,7 @@ orgRoutes.get(
     tags: ["Orgs"],
     summary: "Org release feed (cursor-paginated)",
     description:
-      "Returns the org's combined release feed across all sources, newest-first. Cursor-paginated — pass `nextCursor` from the previous response as `?cursor=` on the next request. Accepts `?source_type=`, `?include_coverage=true`, `?include_prereleases=true`, and `?q=` full-text search.",
+      "Returns the org's combined release feed across all sources, newest-first. Cursor-paginated — pass `nextCursor` from the previous response as `?cursor=` on the next request. Accepts `?source_type=`, `?kind=`, `?include_coverage=true`, `?include_prereleases=true`, and `?q=` full-text search.",
     parameters: [
       {
         name: "cursor",
@@ -1632,6 +1664,13 @@ orgRoutes.get(
         required: false,
         schema: { type: "string" },
         description: "Filter by source type (e.g. `github`, `feed`, `scrape`).",
+      },
+      {
+        name: "kind",
+        in: "query",
+        required: false,
+        schema: { type: "string", enum: KIND_VALUES as unknown as string[] },
+        description: `Filter by resolved entity kind (source.kind ?? product.kind). One of: ${KIND_VALUES.join(", ")}.`,
       },
       {
         name: "include_coverage",
@@ -1663,6 +1702,10 @@ orgRoutes.get(
           "text/markdown": { schema: { type: "string" } },
         },
       },
+      400: {
+        description: "Invalid kind value",
+        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      },
       404: {
         description: "Organization not found",
         content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
@@ -1678,6 +1721,16 @@ orgRoutes.get(
     const sourceTypes = parseSourceTypesLenient(c.req.query("source_type"));
     const qRaw = c.req.query("q")?.trim() ?? "";
     const ftsMatch = qRaw ? toFtsPrefixMatchQuery(qRaw) : undefined;
+
+    const kind = parseKindParam(c.req.query("kind"));
+    if (kind === null)
+      return c.json(
+        {
+          error: "bad_request",
+          message: `Invalid kind. Expected one of: ${KIND_VALUES.join(", ")}`,
+        },
+        400,
+      );
 
     const db = createDb(c.env.DB);
 
@@ -1695,7 +1748,7 @@ orgRoutes.get(
       org.id,
       parseFeedCursor(cursorParam),
       limit + 1,
-      { includeCoverage, sourceTypes, includePrereleases, ftsMatch },
+      { includeCoverage, sourceTypes, includePrereleases, ftsMatch, kind },
     );
 
     const hasMore = results.length > limit;

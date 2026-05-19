@@ -24,6 +24,7 @@ export type SourceListRow = {
   is_hidden: number | null;
   discovery: SourceDiscovery | null;
   metadata: string | null;
+  kind: string | null;
   last_fetched_at: string | null;
   last_polled_at: string | null;
   fetch_priority: SourceFetchPriority | null;
