@@ -446,12 +446,12 @@ describe("GET /v1/orgs/:slug/catalog", () => {
     expect(body.items.find((i) => i.entryType === "product")?.id).toBe("prod_acme_widget");
   });
 
-  it("filters by kind", async () => {
+  it("filters by entryType", async () => {
     const db = mkDb();
     await seed(db);
     const fetch = mkApp(db);
 
-    const res = await fetch(new Request("https://x.test/v1/orgs/acme/catalog?kind=product"));
+    const res = await fetch(new Request("https://x.test/v1/orgs/acme/catalog?entryType=product"));
     const body = (await res.json()) as { items: Array<{ entryType: string }> };
     expect(body.items.every((i) => i.entryType === "product")).toBe(true);
   });
