@@ -46,7 +46,7 @@ import {
   collectionMembers,
 } from "@buildinternet/releases-core/schema";
 import { daysAgoIso } from "@buildinternet/releases-core/dates";
-import { parseKindParam, KIND_VALUES, type Kind } from "@buildinternet/releases-core/kinds";
+import { parseKindParam, KIND_VALUES } from "@buildinternet/releases-core/kinds";
 import { resolveCategoryInput } from "../lib/category-alias.js";
 import { parseSourceTypesLenient } from "../lib/source-types.js";
 import { toSlug } from "@buildinternet/releases-core/slug";

@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { describeRoute, resolver } from "hono-openapi";
 import { hideInProduction } from "../openapi.js";
 import { and, count, eq, inArray, sql } from "drizzle-orm";
-import { parseKindParam, KIND_VALUES, type Kind } from "@buildinternet/releases-core/kinds";
+import { parseKindParam, KIND_VALUES } from "@buildinternet/releases-core/kinds";
 import { createDb } from "../db.js";
 import {
   products,

@@ -14,7 +14,7 @@ import type {
   MediaItem,
   LookupResultPayload,
 } from "@buildinternet/releases-api-types";
-import { parseKindParam, KIND_VALUES, type Kind } from "@buildinternet/releases-core/kinds";
+import { parseKindParam, KIND_VALUES } from "@buildinternet/releases-core/kinds";
 import { createDb } from "../db.js";
 import {
   findOrgByDomain,

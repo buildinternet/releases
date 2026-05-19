@@ -30,7 +30,7 @@ import {
   type ReleaseType,
 } from "@buildinternet/releases-core/schema";
 import { SOURCE_TYPES, type SourceType } from "@buildinternet/releases-core/source-enums";
-import { parseKindParam, KIND_VALUES, type Kind } from "@buildinternet/releases-core/kinds";
+import { parseKindParam, isValidKind, KIND_VALUES } from "@buildinternet/releases-core/kinds";
 import { buildListResponse, parseListPagination } from "../lib/pagination.js";
 import { RELEASE_URL_UPSERT } from "@releases/core-internal/release-upsert";
 import { daysAgoIso, inferMonthOnlyDate } from "@buildinternet/releases-core/dates";
@@ -422,7 +422,7 @@ sourceRoutes.get(
       isHidden: Boolean(src.is_hidden),
       discovery: src.discovery ?? "curated",
       metadata: src.metadata ?? null,
-      kind: src.kind ?? null,
+      kind: src.kind && isValidKind(src.kind) ? src.kind : null,
       releaseCount: src.release_count,
       latestVersion: src.latest_version ?? null,
       latestDate: src.latest_date ?? null,
