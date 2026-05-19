@@ -34,24 +34,15 @@
  * (proposal 2) — land separately. After they ship, this overlay becomes
  * defense in depth.
  */
+import type { Session } from "@buildinternet/releases-api-types";
 import { fetchLog } from "@buildinternet/releases-core/schema";
 import { inArray } from "drizzle-orm";
-
-type SessionLike = {
-  sessionId: string;
-  type?: "onboard" | "update";
-  status: string;
-  errorSource?: "provider" | "us";
-  error?: string;
-  warnings?: string[];
-  [key: string]: unknown;
-};
 
 /**
  * Apply the fetch_log overlay to a session list in place and return it.
  * Performs at most one batched `inArray` lookup regardless of session count.
  */
-export async function applyFetchLogOverlay<T extends SessionLike>(
+export async function applyFetchLogOverlay<T extends Session>(
   // db is `any` to match the convention in lib/sweep-results.ts — D1 drizzle
   // and bun:sqlite drizzle don't share a public type, and the test harness
   // uses the latter.
@@ -71,7 +62,6 @@ export async function applyFetchLogOverlay<T extends SessionLike>(
     .from(fetchLog)
     .where(inArray(fetchLog.sessionId, sessionIds));
 
-  // Bucket by sessionId so we can require "every row succeeded" per session.
   const bySession = new Map<string, { total: number; successes: number }>();
   for (const row of rows) {
     if (!row.sessionId) continue;
@@ -86,11 +76,10 @@ export async function applyFetchLogOverlay<T extends SessionLike>(
     if (!counts || counts.total === 0) continue;
     if (counts.successes !== counts.total) continue;
 
-    // Preserve the original error in warnings so debuggers can still trace
+    // Preserve the original error in `warnings` so debuggers can still trace
     // what the underlying session DO recorded.
-    const note = session.error
-      ? `Session reported "${session.error}" but fetch_log shows the fetch succeeded; treating as complete (#948)`
-      : `Session reported error but fetch_log shows the fetch succeeded; treating as complete (#948)`;
+    const reported = session.error ? `"${session.error}"` : "error";
+    const note = `Session reported ${reported} but fetch_log shows the fetch succeeded; treating as complete`;
     session.status = "complete";
     session.warnings = [...(session.warnings ?? []), note];
   }
@@ -101,7 +90,7 @@ export async function applyFetchLogOverlay<T extends SessionLike>(
 /**
  * Single-session convenience for the detail endpoint.
  */
-export async function applyFetchLogOverlaySingle<T extends SessionLike>(
+export async function applyFetchLogOverlaySingle<T extends Session>(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   db: any,
   session: T,
@@ -110,7 +99,7 @@ export async function applyFetchLogOverlaySingle<T extends SessionLike>(
   return session;
 }
 
-function isOverlayCandidate(session: SessionLike): boolean {
+function isOverlayCandidate(session: Session): boolean {
   if (session.type !== "update") return false;
   if (session.status !== "error") return false;
   // Absent `errorSource` is treated as "us" — that's the same default used by

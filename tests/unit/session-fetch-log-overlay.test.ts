@@ -3,6 +3,7 @@ import { Database } from "bun:sqlite";
 import { drizzle } from "drizzle-orm/bun-sqlite";
 import { applyMigrations } from "../db-helper";
 import { fetchLog, organizations, sources } from "@buildinternet/releases-core/schema";
+import type { Session } from "@buildinternet/releases-api-types";
 import {
   applyFetchLogOverlay,
   applyFetchLogOverlaySingle,
@@ -31,20 +32,7 @@ function mkDb() {
   return db;
 }
 
-type TestSession = {
-  sessionId: string;
-  company: string;
-  type: "onboard" | "update";
-  status: "running" | "complete" | "error" | "cancelled";
-  error?: string;
-  errorSource?: "provider" | "us";
-  errorType?: string;
-  warnings?: string[];
-  startedAt: number;
-  lastUpdatedAt: number;
-};
-
-function mkSession(overrides: Partial<TestSession> = {}): TestSession {
+function mkSession(overrides: Partial<Session> = {}): Session {
   return {
     sessionId: "ma-1",
     company: "A",
