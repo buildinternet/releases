@@ -115,6 +115,7 @@ export const products = sqliteTable(
     url: text("url"),
     description: text("description"),
     category: text("category"),
+    kind: text("kind"),
     createdAt: text("created_at")
       .notNull()
       .$defaultFn(() => new Date().toISOString()),
@@ -128,6 +129,9 @@ export const products = sqliteTable(
     index("idx_products_deleted_at")
       .on(table.deletedAt)
       .where(sql`${table.deletedAt} IS NOT NULL`),
+    index("idx_products_kind")
+      .on(table.kind)
+      .where(sql`${table.kind} IS NOT NULL`),
   ],
 );
 
@@ -302,6 +306,7 @@ export const sources = sqliteTable(
     discovery: text("discovery", { enum: ["curated", "agent", "on_demand"] })
       .notNull()
       .default("curated"),
+    kind: text("kind"),
     deletedAt: text("deleted_at"),
   },
   (table) => [
@@ -324,6 +329,9 @@ export const sources = sqliteTable(
     index("idx_sources_deleted_at")
       .on(table.deletedAt)
       .where(sql`${table.deletedAt} IS NOT NULL`),
+    index("idx_sources_kind")
+      .on(table.kind)
+      .where(sql`${table.kind} IS NOT NULL`),
   ],
 );
 
