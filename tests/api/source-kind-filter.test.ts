@@ -364,6 +364,27 @@ describe("kind filter on /v1/search", () => {
     expect(slugs).not.toContain("search-docs-prod");
   });
 
+  it("matched-entity fallback path also honors kind filter", async () => {
+    // When FTS returns 0 release hits but an org name matches the query,
+    // the handler falls back to `searchReleasesFromMatchedEntities` to
+    // pull recent releases from the matched org/product. That fallback
+    // must respect ?kind= — otherwise an org-name hit would leak releases
+    // from kinds the caller explicitly filtered out.
+    await seedOrg("acme");
+    await seedSource({ id: "src_sdk3", slug: "sdk-x", kind: "sdk" });
+    await seedSource({ id: "src_plat3", slug: "platform-x", kind: "platform" });
+    await seedRelease({ id: "rel_sdk3", sourceId: "src_sdk3", title: "sdk-only" });
+    await seedRelease({ id: "rel_plat3", sourceId: "src_plat3", title: "platform-only" });
+
+    // q=acme matches the org by name; no release body contains "acme",
+    // so FTS returns 0 and the fallback path fires.
+    const res = await callSearch("/search?q=acme&mode=lexical&kind=platform");
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { releases: Array<{ title: string }> };
+    const titles = body.releases.map((r) => r.title);
+    expect(titles).not.toContain("sdk-only");
+  });
+
   it("returns 400 on unknown kind value", async () => {
     const res = await callSearch("/search?q=anything&kind=framework");
     expect(res.status).toBe(400);

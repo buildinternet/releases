@@ -173,7 +173,7 @@ export async function searchReleasesFromMatchedEntities(
   orgSlugs: string[],
   productSlugs: string[],
   limit: number,
-  opts: { includeCoverage?: boolean } = {},
+  opts: { includeCoverage?: boolean } & ScopeOpts = {},
 ): Promise<RawSearchReleaseRow[]> {
   const conditions = [];
   if (orgSlugs.length > 0)
@@ -211,6 +211,7 @@ export async function searchReleasesFromMatchedEntities(
     WHERE (s.is_hidden = 0 OR s.is_hidden IS NULL)
       AND (r.suppressed IS NULL OR r.suppressed = 0)
       AND (${sql.join(conditions, sql` OR `)})
+      ${opts.kind ? sql`AND COALESCE(s.kind, p.kind) = ${opts.kind}` : sql``}
     ORDER BY r.published_at DESC LIMIT ${limit}
   `);
 }

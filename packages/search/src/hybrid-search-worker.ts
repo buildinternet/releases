@@ -491,11 +491,13 @@ export interface RunHybridSearchParams {
 /**
  * Run a hybrid search over releases + changelog chunks.
  *
- * Filtering note: we apply `sourceId` / `orgSourceIds` / `type` at the
- * FTS layer and then post-filter vector hits after hydration. Vectorize
- * metadata filters would be preferable here but would require the
- * indexer to tag every vector with these fields — out of scope for this
- * task.
+ * Filtering note: we apply `sourceId` / `orgSourceIds` / `type` / `kind`
+ * at the FTS layer and then post-filter vector hits after hydration.
+ * Vectorize metadata filters would be preferable here but would require
+ * the indexer to tag every vector with these fields — out of scope for
+ * this task. A narrow `kind` value can cause the returned hit count to
+ * fall well below `topK` even when more matches exist past the
+ * `topK * 3` candidate fetch window.
  */
 async function runHybridSearchInternal(
   env: HybridSearchEnv,

@@ -14,7 +14,7 @@ import type {
   MediaItem,
   LookupResultPayload,
 } from "@buildinternet/releases-api-types";
-import { isValidKind, KIND_VALUES } from "@buildinternet/releases-core/kinds";
+import { isValidKind, KIND_VALUES, type Kind } from "@buildinternet/releases-core/kinds";
 import { createDb } from "../db.js";
 import {
   findOrgByDomain,
@@ -230,7 +230,7 @@ searchRoutes.get(
         required: false,
         schema: { type: "string", enum: KIND_VALUES as unknown as string[] },
         description:
-          "Filter to a specific source/product kind. Release hits resolve through `source.kind ?? product.kind`; catalog hits filter on the row's own kind. The orgs section is unaffected by this filter.",
+          "Filter to a specific source/product kind. Release hits resolve through `source.kind ?? product.kind`; catalog hits filter on the row's own kind. The orgs and collections sections are unaffected; changelog chunk hits are unaffected.",
       },
     ],
     responses: {
@@ -276,7 +276,7 @@ searchRoutes.get(
         400,
       );
     }
-    const kindFilter = rawKind as string | undefined;
+    const kindFilter = rawKind as Kind | undefined;
     const db = createDb(c.env.DB);
     const mediaOrigin = c.env.MEDIA_ORIGIN ?? "";
 
@@ -437,7 +437,7 @@ searchRoutes.get(
           orgs.map((o) => o.slug),
           catalog.filter((p) => p.entryType !== "source").map((p) => p.slug),
           limit,
-          { includeCoverage },
+          { includeCoverage, kind: kindFilter },
         );
       }
       const releases = rawReleases.map((row) => hydrateReleaseHit(row, mediaOrigin));
