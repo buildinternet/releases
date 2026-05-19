@@ -28,6 +28,7 @@ import {
   readdirSync,
   rmSync,
   cpSync,
+  statSync,
 } from "fs";
 import { resolve, join } from "path";
 
@@ -127,9 +128,16 @@ function refsEqual(sourceDir: string, destDir: string): boolean {
 
   for (let i = 0; i < sourceFiles.length; i++) {
     if (sourceFiles[i] !== destFiles[i]) return false;
-    const a = readFileSync(join(sourceDir, sourceFiles[i]), "utf8");
-    const b = readFileSync(join(destDir, destFiles[i]), "utf8");
-    if (a !== b) return false;
+    const a = join(sourceDir, sourceFiles[i]);
+    const b = join(destDir, destFiles[i]);
+    const sa = statSync(a);
+    const sb = statSync(b);
+    if (sa.isDirectory() !== sb.isDirectory()) return false;
+    if (sa.isDirectory()) {
+      if (!refsEqual(a, b)) return false;
+      continue;
+    }
+    if (readFileSync(a, "utf8") !== readFileSync(b, "utf8")) return false;
   }
   return true;
 }
