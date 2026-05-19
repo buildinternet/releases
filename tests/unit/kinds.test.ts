@@ -1,10 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import {
-  KIND_VALUES,
-  isValidKind,
-  resolveSourceKind,
-  type Kind,
-} from "@buildinternet/releases-core/kinds";
+import { KIND_VALUES, isValidKind, resolveSourceKind } from "@buildinternet/releases-core/kinds";
 
 describe("kinds", () => {
   test("KIND_VALUES is the expected fixed list", () => {
