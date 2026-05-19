@@ -876,7 +876,6 @@ export const sourcesActive = sqliteView("sources_active", {
   orgId: text("org_id").notNull(),
   productId: text("product_id"),
   metadata: text("metadata"),
-  kind: text("kind"),
   createdAt: text("created_at").notNull(),
   lastFetchedAt: text("last_fetched_at"),
   lastContentHash: text("last_content_hash"),
@@ -892,6 +891,7 @@ export const sourcesActive = sqliteView("sources_active", {
   isHidden: integer("is_hidden", { mode: "boolean" }),
   embeddedAt: text("embedded_at"),
   discovery: text("discovery", { enum: ["curated", "agent", "on_demand"] }).notNull(),
+  kind: text("kind"),
   deletedAt: text("deleted_at"),
 }).existing();
 
@@ -935,7 +935,6 @@ export const sourcesVisible = sqliteView("sources_visible", {
   orgId: text("org_id").notNull(),
   productId: text("product_id"),
   metadata: text("metadata"),
-  kind: text("kind"),
   createdAt: text("created_at").notNull(),
   lastFetchedAt: text("last_fetched_at"),
   lastContentHash: text("last_content_hash"),
@@ -951,6 +950,7 @@ export const sourcesVisible = sqliteView("sources_visible", {
   isHidden: integer("is_hidden", { mode: "boolean" }),
   embeddedAt: text("embedded_at"),
   discovery: text("discovery", { enum: ["curated", "agent", "on_demand"] }).notNull(),
+  kind: text("kind"),
   deletedAt: text("deleted_at"),
 }).existing();
 
