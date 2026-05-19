@@ -832,6 +832,15 @@ export async function fetchOne(
      * When true, `insertedIds` is populated on success.
      */
     skipSideEffects?: boolean;
+    /**
+     * Skip the `delegateScrapeToDiscovery` branch even when the source would
+     * normally qualify for crawl delegation. Set by the `POST /v1/sources/:id/fetch`
+     * route when the caller is a managed-agent session (detected via the
+     * `X-Releases-MA-Session` request header). Without this guard the session
+     * would re-enter its own session-start path and self-collide on the
+     * per-source KV lock from #1058. See #1061.
+     */
+    skipDelegation?: boolean;
   },
 ): Promise<FetchOneResult> {
   const start = Date.now();
@@ -840,6 +849,7 @@ export async function fetchOne(
   const dryRun = opts?.dryRun ?? false;
   const maxEntries = opts?.maxEntries ?? DEFAULT_FETCH_MAX_ENTRIES;
   const skipSideEffects = opts?.skipSideEffects ?? false;
+  const skipDelegation = opts?.skipDelegation ?? false;
 
   try {
     let rawReleases: RawRelease[];
@@ -991,7 +1001,12 @@ export async function fetchOne(
     // pages get fetched and bodies + media land in D1. The feed becomes a
     // pure change detector. Dry-runs skip this branch — they're supposed to
     // be cheap probes of the feed itself, not full crawls.
-    if (!dryRun && env.DISCOVERY_WORKER && shouldDelegateToCrawl(source, meta, rawReleases)) {
+    if (
+      !dryRun &&
+      !skipDelegation &&
+      env.DISCOVERY_WORKER &&
+      shouldDelegateToCrawl(source, meta, rawReleases)
+    ) {
       logEvent("info", {
         component: "cron-poll-fetch",
         event: "crawl-delegation-start",

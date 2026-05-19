@@ -609,6 +609,26 @@ export function createTypedExecutor(opts: APIClientOptions) {
           const fetchPath = opts.sessionId
             ? `${built.path}?sessionId=${encodeURIComponent(opts.sessionId)}`
             : built.path;
+          // Carry the MA session ID in a request header so the API worker can
+          // detect that it is being called from within a managed-agent session
+          // and skip re-delegating to the discovery worker (which would
+          // self-collide on the per-source KV lock from #1058). See #1061.
+          if (opts.sessionId) {
+            const url = `${baseUrl}/v1${fetchPath}`;
+            const headers: Record<string, string> = {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${opts.apiKey}`,
+              "X-Releases-MA-Session": opts.sessionId,
+            };
+            try {
+              const res = await opts.fetcher.fetch(url, { method: "POST", headers });
+              const text = await res.text();
+              if (!res.ok) return `Error (HTTP ${res.status}): ${text}`;
+              return text || "(no output)";
+            } catch (err) {
+              return `Error: ${err instanceof Error ? err.message : String(err)}`;
+            }
+          }
           return api("POST", fetchPath);
         }
 
