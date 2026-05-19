@@ -78,6 +78,8 @@ export const UpdateOrgBodySchema = z.object({
   avatarUrl: z.string().nullable().optional(),
   tags: z.array(z.string()).optional(),
   aliases: z.array(z.string()).optional(),
+  /** Admin-only: pause/unpause all ingest for this org without touching sources (#1057). */
+  fetchPaused: z.boolean().optional(),
 });
 
 // Org detail's products query selects a strict subset of `ProductListItem` —

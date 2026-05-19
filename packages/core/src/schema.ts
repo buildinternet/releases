@@ -64,6 +64,13 @@ export const organizations = sqliteTable(
     autoGenerateContent: integer("auto_generate_content", { mode: "boolean" })
       .notNull()
       .default(false),
+    // Per-org ingest pause (#1057). When true, the org's sources are excluded
+    // from the poll-fetch and scrape-agent-sweep due-source queries so no new
+    // fetches fire. The org and its releases remain fully visible in the public
+    // catalog — only ingest stops. Toggle via PATCH /v1/orgs/:slug
+    // { fetchPaused: true }. Default false — identical to current behavior for
+    // every existing org.
+    fetchPaused: integer("fetch_paused", { mode: "boolean" }).notNull().default(false),
     // Soft-delete tombstone (#666). Read paths exclude rows where deleted_at
     // IS NOT NULL via notDeleted helpers in queries/shared.ts. On tombstone,
     // the route handler renames slug + domain to mangled forms (slug + "--" +
@@ -834,6 +841,7 @@ export const organizationsActive = sqliteView("organizations_active", {
   embeddedAt: text("embedded_at"),
   discovery: text("discovery", { enum: ["curated", "agent", "on_demand"] }).notNull(),
   autoGenerateContent: integer("auto_generate_content", { mode: "boolean" }).notNull(),
+  fetchPaused: integer("fetch_paused", { mode: "boolean" }).notNull(),
   deletedAt: text("deleted_at"),
 }).existing();
 
@@ -900,6 +908,7 @@ export const organizationsPublic = sqliteView("organizations_public", {
   embeddedAt: text("embedded_at"),
   discovery: text("discovery", { enum: ["curated", "agent", "on_demand"] }).notNull(),
   autoGenerateContent: integer("auto_generate_content", { mode: "boolean" }).notNull(),
+  fetchPaused: integer("fetch_paused", { mode: "boolean" }).notNull(),
   deletedAt: text("deleted_at"),
 }).existing();
 

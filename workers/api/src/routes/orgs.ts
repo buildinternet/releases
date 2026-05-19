@@ -533,6 +533,7 @@ orgRoutes.patch(
       avatarUrl?: string | null;
       tags?: string[];
       aliases?: string[];
+      fetchPaused?: boolean;
     } = { ...c.req.valid("json") };
 
     if (body.category !== undefined && body.category !== null) {
@@ -575,13 +576,16 @@ orgRoutes.patch(
         );
     }
 
-    const updates: Record<string, string | null> = { updatedAt: new Date().toISOString() };
+    const updates: Record<string, string | boolean | null> = {
+      updatedAt: new Date().toISOString(),
+    };
     if (body.name) updates.name = body.name;
     if (body.slug) updates.slug = body.slug;
     if (body.domain !== undefined) updates.domain = body.domain;
     if (body.description !== undefined) updates.description = body.description;
     if (body.category !== undefined) updates.category = body.category;
     if (body.avatarUrl !== undefined) updates.avatarUrl = body.avatarUrl;
+    if (body.fetchPaused !== undefined) updates.fetchPaused = body.fetchPaused;
 
     const [updated] = await db
       .update(organizations)
