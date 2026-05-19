@@ -95,7 +95,36 @@ orgRoutes.get(
     tags: ["Orgs"],
     summary: "List organizations",
     description:
-      "Paginated list of orgs with 30-day release sparklines. Supports `?q=` substring search on name/slug.",
+      "Paginated list of orgs with 30-day release sparklines. Supports `?q=` substring search on name/slug. Orgs that have no indexed releases yet are hidden by default; pass `?includeEmpty=true` to opt in. The response always carries `meta.emptyOrgCount` so a UI toggle can show how many are hidden without a second round-trip.",
+    parameters: [
+      {
+        name: "q",
+        in: "query",
+        required: false,
+        schema: { type: "string" },
+        description: "Case-insensitive substring match on name or slug.",
+      },
+      {
+        name: "page",
+        in: "query",
+        required: false,
+        schema: { type: "integer", minimum: 1 },
+      },
+      {
+        name: "limit",
+        in: "query",
+        required: false,
+        schema: { type: "integer", minimum: 1 },
+      },
+      {
+        name: "includeEmpty",
+        in: "query",
+        required: false,
+        schema: { type: "boolean" },
+        description:
+          "Include orgs that have zero indexed releases. Default `false` — empty orgs are stubs from in-flight discovery or broken parsers and surface as noise on the public catalog.",
+      },
+    ],
     responses: {
       200: {
         description: "Paginated org list",
@@ -108,13 +137,22 @@ orgRoutes.get(
     const cutoff30d = daysAgoIso(30);
     const qParam = c.req.query("q");
     const pagination = parseListPagination(new URL(c.req.url).searchParams);
+    // Default off — orgs without indexed releases are stubs; admin surfaces
+    // see them through `/v1/admin/*`, not this public catalog route.
+    const includeEmpty = parseBoolParam(c.req.query("includeEmpty"));
 
-    const [rows, totalItems] = await Promise.all([
-      getOrgsWithStats(db, cutoff30d, qParam ?? undefined, {
-        limit: pagination.pageSize,
-        offset: pagination.offset,
-      }),
-      countOrgsForList(db, qParam ?? undefined),
+    const [rows, counts] = await Promise.all([
+      getOrgsWithStats(
+        db,
+        cutoff30d,
+        qParam ?? undefined,
+        {
+          limit: pagination.pageSize,
+          offset: pagination.offset,
+        },
+        { includeEmpty },
+      ),
+      countOrgsForList(db, qParam ?? undefined, { includeEmpty }),
     ]);
     const sparklineRows = await getOrgSparklines(
       db,
@@ -156,7 +194,10 @@ orgRoutes.get(
       sparkline: sparklineMap.get(row.id) ?? Array.from({ length: 30 }, () => 0),
     }));
 
-    return c.json(buildListResponse(result, pagination, totalItems));
+    return c.json({
+      ...buildListResponse(result, pagination, counts.totalItems),
+      meta: { emptyOrgCount: counts.emptyOrgCount },
+    });
   },
 );
 

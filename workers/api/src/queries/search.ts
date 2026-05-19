@@ -52,8 +52,13 @@ export interface RawSearchReleaseRow {
  * to an org first and then passes the id through here, which keeps the
  * filter applied at the SQL layer instead of post-filtering after a
  * wider query.
+ *
+ * `includeEmpty` opts back into orgs that have no indexed releases yet
+ * (#746). Defaulted off in the LIKE-on-name path because curator stubs
+ * inflate the result set with noise; the `?domain=` short-circuit always
+ * surfaces the resolved org regardless.
  */
-type ScopeOpts = { orgId?: string };
+type ScopeOpts = { orgId?: string; includeEmpty?: boolean };
 
 export async function searchOrgs(
   db: D1Db,
@@ -61,6 +66,15 @@ export async function searchOrgs(
   limit: number,
   opts: ScopeOpts = {},
 ): Promise<SearchOrgHit[]> {
+  const nonEmptyClause = opts.includeEmpty
+    ? sql``
+    : sql`AND EXISTS (
+        SELECT 1
+        FROM sources_active s2
+        JOIN releases_visible r2 ON r2.source_id = s2.id
+        WHERE s2.org_id = o.id
+      )`;
+
   return db.all<SearchOrgHit>(sql`
     SELECT DISTINCT o.slug, o.name, o.domain, NULL as avatarUrl, o.category
     FROM organizations_active o
@@ -68,6 +82,7 @@ export async function searchOrgs(
     WHERE (${likeContains(sql`o.name`, query)} OR ${likeContains(sql`o.slug`, query)}
       OR ${likeContains(sql`o.domain`, query)} OR ${likeContains(sql`da.domain`, query)})
       ${opts.orgId ? sql`AND o.id = ${opts.orgId}` : sql``}
+      ${nonEmptyClause}
     ORDER BY o.name LIMIT ${limit}
   `);
 }

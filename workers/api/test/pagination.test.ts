@@ -51,7 +51,12 @@ describe("API list pagination", () => {
       { id: "org_cyan", name: "Cyan", slug: "cyan" },
     ]);
 
-    const res = await mkApp(db)(new Request("https://x.test/v1/orgs?limit=2&page=2"));
+    // These fixtures have no sources/releases, so the default empty-org
+    // filter (#746) would hide them. This test only cares about the
+    // pagination envelope shape — opt in explicitly.
+    const res = await mkApp(db)(
+      new Request("https://x.test/v1/orgs?limit=2&page=2&includeEmpty=true"),
+    );
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
       items: Array<{ id: string; name: string }>;

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { api, ApiSetupError } from "@/lib/api";
 import { tryFetch } from "@/lib/ssr-fetch";
 import { graphqlRequest } from "@/lib/graphql/client";
@@ -16,8 +17,22 @@ export const metadata: Metadata = {
   alternates: { canonical: "/" },
 };
 
-export default async function HomePage() {
-  let stats, orgs;
+/**
+ * `?empty=1` opts into orgs that are in the registry but have not produced any
+ * indexed releases yet (#746). Default hides them — they're curator stubs from
+ * in-flight discovery or broken parsers and look like noise on the catalog.
+ * The toggle below the table labels itself with `meta.emptyOrgCount`.
+ */
+export default async function HomePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ empty?: string }>;
+}) {
+  const { empty } = await searchParams;
+  const includeEmpty = empty === "1";
+
+  let stats: Awaited<ReturnType<typeof api.stats>> | undefined;
+  let orgsResult: Awaited<ReturnType<typeof api.orgs>> | undefined;
   let latest: TickerItem[] = [];
   try {
     const [tickerResult, fetchedStats, fetchedOrgs] = await Promise.all([
@@ -26,10 +41,10 @@ export default async function HomePage() {
         event: "homepage-ticker-fetch-failed",
       }),
       api.stats(),
-      api.orgs(),
+      api.orgs({ includeEmpty }),
     ]);
     stats = fetchedStats;
-    orgs = fetchedOrgs;
+    orgsResult = fetchedOrgs;
     latest = tickerResult.data?.latestReleases.items ?? [];
   } catch (err) {
     if (err instanceof ApiSetupError) {
@@ -42,6 +57,8 @@ export default async function HomePage() {
     }
     throw err;
   }
+  const orgs = orgsResult?.items ?? [];
+  const emptyOrgCount = orgsResult?.emptyOrgCount ?? 0;
 
   const jsonLd = {
     "@context": "https://schema.org",
@@ -76,14 +93,15 @@ export default async function HomePage() {
         </p>
         <div className="flex justify-center gap-8 text-[13px] text-stone-400 dark:text-stone-500">
           <span>
-            <strong className="text-stone-600 dark:text-stone-300">{stats.orgs}</strong> orgs
+            <strong className="text-stone-600 dark:text-stone-300">{stats?.orgs ?? 0}</strong> orgs
           </span>
           <span>
-            <strong className="text-stone-600 dark:text-stone-300">{stats.sources}</strong> sources
+            <strong className="text-stone-600 dark:text-stone-300">{stats?.sources ?? 0}</strong>{" "}
+            sources
           </span>
           <span>
             <strong className="text-stone-600 dark:text-stone-300">
-              {stats.releases.toLocaleString()}
+              {(stats?.releases ?? 0).toLocaleString()}
             </strong>{" "}
             releases
           </span>
@@ -98,7 +116,17 @@ export default async function HomePage() {
           <InstallStepsSidebar />
         </aside>
         <div className="xl:order-1 max-w-4xl xl:max-w-none w-full mx-auto">
-          {orgs && orgs.length > 0 && <OrgTable orgs={orgs} />}
+          {orgs.length > 0 && <OrgTable orgs={orgs} />}
+          {emptyOrgCount > 0 && (
+            <Link
+              href={includeEmpty ? "/" : "/?empty=1"}
+              className="mt-6 inline-block text-[12px] text-stone-400 dark:text-stone-500 underline decoration-stone-300 dark:decoration-stone-600 underline-offset-2 hover:text-stone-600 dark:hover:text-stone-300"
+            >
+              {includeEmpty
+                ? "Hide empty orgs"
+                : `Show ${emptyOrgCount} ${emptyOrgCount === 1 ? "org" : "orgs"} with no indexed releases yet`}
+            </Link>
+          )}
         </div>
       </div>
     </div>

@@ -136,6 +136,19 @@ export interface ReleaseFeedStructured {
 }
 
 /**
+ * Correlated EXISTS for "the outer-aliased `o` org has at least one visible
+ * release." Used by `listOrganizations` and the unified `search` tool to
+ * implement the empty-org filter (#746). Both call sites alias the orgs
+ * table as `o`, so the alias is hard-coded inside the fragment.
+ */
+const ORG_HAS_VISIBLE_RELEASE = sql`EXISTS (
+  SELECT 1
+  FROM sources_active s2
+  JOIN releases_visible r2 ON r2.source_id = s2.id
+  WHERE s2.org_id = o.id
+)`;
+
+/**
  * Shared mapper for the release-feed UI. Callers normalize their column
  * names to camelCase before calling; the `coordinate` is derived from the
  * `org`/`source` slugs the caller resolves.
@@ -620,7 +633,7 @@ export async function getLatestReleases(
 
 export async function listOrganizations(
   db: D1Db,
-  params: { query?: string; platform?: string } & McpPaginationInput,
+  params: { query?: string; platform?: string; include_empty?: boolean } & McpPaginationInput,
 ): Promise<ToolResult> {
   const pagination = parseMcpPagination(params);
 
@@ -630,6 +643,9 @@ export async function listOrganizations(
   // because account/alias joins fan a single org into multiple rows; the
   // unfiltered arm skips DISTINCT (it'd add a sort cost on the full table).
   const q = params.query ?? null;
+  // #746: default `false` — orgs with no indexed releases are stubs we hide
+  // from the public catalog. Opt in via `include_empty: true` to see them.
+  const includeEmpty = params.include_empty === true;
 
   let fromWhere = sql`FROM organizations o`;
   let distinct = false;
@@ -648,15 +664,17 @@ export async function listOrganizations(
     `;
   } else if (q) {
     distinct = true;
+    // The OR list is wrapped so `AND <empty-org filter>` below binds to the
+    // whole match group instead of just the trailing `oa.handle` clause.
     fromWhere = sql`
       FROM organizations o
       LEFT JOIN domain_aliases da ON da.org_id = o.id
       LEFT JOIN org_accounts oa ON oa.org_id = o.id
-      WHERE ${likeContains(sql`o.name`, q)}
+      WHERE (${likeContains(sql`o.name`, q)}
         OR ${likeContains(sql`o.slug`, q)}
         OR ${likeContains(sql`o.domain`, q)}
         OR ${likeContains(sql`da.domain`, q)}
-        OR ${likeContains(sql`oa.handle`, q)}
+        OR ${likeContains(sql`oa.handle`, q)})
     `;
   } else if (params.platform) {
     distinct = true;
@@ -667,18 +685,32 @@ export async function listOrganizations(
     `;
   }
 
+  // The empty-org filter is independent of q/platform — when active it adds
+  // a correlated EXISTS check so rows fan-out from account/alias joins still
+  // de-duplicate naturally through the outer DISTINCT (or COUNT(DISTINCT)
+  // in the count branch). When the base query has no WHERE clause (the
+  // un-distinct no-q/no-platform branch), the filter needs to lead with
+  // `WHERE` instead of `AND`.
+  const havingFrag = includeEmpty ? sql`` : sql`AND ${ORG_HAS_VISIBLE_RELEASE}`;
+  const filteredFromWhere =
+    !distinct && !includeEmpty
+      ? sql`FROM organizations o WHERE ${ORG_HAS_VISIBLE_RELEASE}`
+      : sql`${fromWhere} ${havingFrag}`;
+
   const distinctKw = distinct ? sql`DISTINCT` : sql``;
   type Row = { name: string; slug: string; domain: string | null };
   const [rows, totalRow] = await Promise.all([
     db.all<Row>(sql`
       SELECT ${distinctKw} o.name, o.slug, o.domain
-      ${fromWhere}
+      ${filteredFromWhere}
       ORDER BY o.name, o.slug
       LIMIT ${pagination.pageSize} OFFSET ${pagination.offset}
     `),
     distinct
-      ? db.all<{ n: number }>(sql`SELECT COUNT(*) as n FROM (SELECT DISTINCT o.id ${fromWhere})`)
-      : db.all<{ n: number }>(sql`SELECT COUNT(*) as n ${fromWhere}`),
+      ? db.all<{ n: number }>(
+          sql`SELECT COUNT(*) as n FROM (SELECT DISTINCT o.id ${filteredFromWhere})`,
+        )
+      : db.all<{ n: number }>(sql`SELECT COUNT(*) as n ${filteredFromWhere}`),
   ]);
 
   const totalItems = Number(totalRow[0]?.n ?? 0);
@@ -1533,6 +1565,7 @@ export async function search(
     limit?: number;
     mode?: SearchMode;
     include_coverage?: boolean;
+    include_empty?: boolean;
   },
   searchEnv?: import("./lib/search-hybrid.js").HybridSearchEnv,
   ctx?: ExecutionContext,
@@ -1545,6 +1578,10 @@ export async function search(
   const limit = params.limit ?? 20;
   const mode: SearchMode = params.mode ?? "hybrid";
   const includeCoverage = params.include_coverage === true;
+  // #746: hide orgs with no indexed releases by default — they're stubs.
+  // The `domain`/`organization` short-circuits below resolve a specific org
+  // and bypass this gate (the caller named an entity, so we surface it).
+  const includeEmpty = params.include_empty === true;
   const q = params.query;
   const empty: SearchCounts = {
     orgHits: 0,
@@ -1659,8 +1696,9 @@ export async function search(
           SELECT DISTINCT o.slug, o.name, o.domain, o.category
           FROM organizations o
           LEFT JOIN domain_aliases da ON da.org_id = o.id
-          WHERE ${likeContains(sql`o.name`, q)} OR ${likeContains(sql`o.slug`, q)}
-            OR ${likeContains(sql`o.domain`, q)} OR ${likeContains(sql`da.domain`, q)}
+          WHERE (${likeContains(sql`o.name`, q)} OR ${likeContains(sql`o.slug`, q)}
+            OR ${likeContains(sql`o.domain`, q)} OR ${likeContains(sql`da.domain`, q)})
+            ${includeEmpty ? sql`` : sql`AND ${ORG_HAS_VISIBLE_RELEASE}`}
           ORDER BY o.name LIMIT ${limit}
         `)
     : Promise.resolve([]);

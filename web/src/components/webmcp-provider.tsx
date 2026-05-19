@@ -117,7 +117,7 @@ export function WebMcpProvider({ apiBaseUrl }: { apiBaseUrl: string }) {
         name: "list_organizations",
         title: "List organizations",
         description:
-          "List all organizations tracked in the releases.sh registry, with release counts and activity. Returns the canonical `{ items, pagination }` envelope so callers can ask for the next slice via `page`.",
+          "List all organizations tracked in the releases.sh registry, with release counts and activity. Returns the canonical `{ items, pagination }` envelope so callers can ask for the next slice via `page`. Orgs with zero indexed releases are hidden by default (curator-stub noise); set `include_empty: true` to see them. The response carries `meta.emptyOrgCount` so a UI toggle can label itself.",
         inputSchema: {
           type: "object",
           properties: {
@@ -133,6 +133,11 @@ export function WebMcpProvider({ apiBaseUrl }: { apiBaseUrl: string }) {
               maximum: 500,
               description: "Entries per page (1–500). Defaults to the API's page size.",
             },
+            include_empty: {
+              type: "boolean",
+              description:
+                "Include orgs with zero indexed releases. Default false — empty orgs are stubs from in-flight discovery or broken parsers and surface as noise.",
+            },
           },
         },
         annotations: { readOnlyHint: true },
@@ -141,6 +146,7 @@ export function WebMcpProvider({ apiBaseUrl }: { apiBaseUrl: string }) {
           if (typeof input.page === "number" && input.page > 0) qs.set("page", String(input.page));
           if (typeof input.limit === "number" && input.limit > 0)
             qs.set("limit", String(input.limit));
+          if (input.include_empty === true) qs.set("includeEmpty", "true");
           const suffix = qs.toString();
           return apiFetch(`/v1/orgs${suffix ? `?${suffix}` : ""}`);
         },

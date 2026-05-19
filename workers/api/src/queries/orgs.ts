@@ -11,9 +11,14 @@ export async function getOrgsWithStats(
   cutoff30d: string,
   q?: string,
   pagination?: { limit: number; offset: number },
+  opts: { includeEmpty?: boolean } = {},
 ): Promise<OrgListRow[]> {
   const where = orgListSearchWhere(q);
   const page = pagination ? sql`LIMIT ${pagination.limit} OFFSET ${pagination.offset}` : sql``;
+  // Drop orgs that haven't produced any visible releases yet (#746). Applied
+  // post-aggregate via HAVING so the search-term filter still matches the
+  // same set of rows whether or not empties are included.
+  const having = opts.includeEmpty ? sql`` : sql`HAVING COUNT(r.id) > 0`;
 
   return db.all<OrgListRow>(sql`
     SELECT
@@ -28,19 +33,47 @@ export async function getOrgsWithStats(
     LEFT JOIN releases_visible r ON r.source_id = s.id
     ${where}
     GROUP BY o.id, o.slug, o.name, o.domain, o.description, o.category, o.avatar_url
+    ${having}
     ORDER BY o.name, o.id
     ${page}
   `);
 }
 
-export async function countOrgsForList(db: D1Db, q?: string): Promise<number> {
+/**
+ * Visible / empty split for the orgs list (#746). Returns the count the
+ * pagination envelope cares about (`totalItems`, scoped to the current
+ * `includeEmpty` setting) plus the empty-org count for the toggle-CTA meta,
+ * in one round-trip.
+ */
+export async function countOrgsForList(
+  db: D1Db,
+  q?: string,
+  opts: { includeEmpty?: boolean } = {},
+): Promise<{ totalItems: number; emptyOrgCount: number }> {
   const where = orgListSearchWhere(q);
-  const [row] = await db.all<{ n: number }>(sql`
-    SELECT COUNT(*) AS n
-    FROM organizations_active o
-    ${where}
+  // Two SUMs over the same per-org aggregate: orgs WITH ≥1 visible release vs
+  // orgs WITHOUT. `totalItems` picks whichever bucket(s) match the current
+  // filter; `emptyOrgCount` is always the empty bucket so the toggle CTA can
+  // label itself even when empties are excluded.
+  const [row] = await db.all<{ with_releases: number; without_releases: number }>(sql`
+    SELECT
+      SUM(CASE WHEN per_org.release_count > 0 THEN 1 ELSE 0 END) AS with_releases,
+      SUM(CASE WHEN per_org.release_count = 0 THEN 1 ELSE 0 END) AS without_releases
+    FROM (
+      SELECT o.id, COUNT(r.id) AS release_count
+      FROM organizations_active o
+      LEFT JOIN sources_active s ON s.org_id = o.id
+      LEFT JOIN releases_visible r ON r.source_id = s.id
+      ${where}
+      GROUP BY o.id
+    ) AS per_org
   `);
-  return Number(row?.n ?? 0);
+  const withReleases = Number(row?.with_releases ?? 0);
+  const withoutReleases = Number(row?.without_releases ?? 0);
+  return {
+    totalItems: opts.includeEmpty ? withReleases + withoutReleases : withReleases,
+    emptyOrgCount: withoutReleases,
+  };
 }
 
 function orgListSearchWhere(q?: string) {

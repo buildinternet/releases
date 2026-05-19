@@ -403,6 +403,12 @@ export function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServ
           .describe(
             "Include releases grouped as coverage of another (e.g. marketing posts that re-announce a platform release). Defaults to false so each underlying launch appears once.",
           ),
+        include_empty: z
+          .boolean()
+          .optional()
+          .describe(
+            "Include orgs with zero indexed releases in the `orgs` section. Default false — empty orgs are stubs and surface as noise. Scoping by `domain` ignores this and always returns the resolved org.",
+          ),
       },
     },
     withSearchLog("search", async (params) => {
@@ -551,13 +557,19 @@ export function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServ
     {
       ...titled("List organizations", READ_ONLY_HINTS),
       description:
-        "List all indexed organizations, optionally filtered. Paginated: defaults to 50 entries per page; pass `page: 2` for the next slice.",
+        "List all indexed organizations, optionally filtered. Paginated: defaults to 50 entries per page; pass `page: 2` for the next slice. Orgs with zero indexed releases are hidden by default (curator-stub noise); set `include_empty: true` to see them.",
       inputSchema: withPagination({
         query: z
           .string()
           .optional()
           .describe("Search across org name, slug, domain, and account handles"),
         platform: z.string().optional().describe("Filter to orgs with an account on this platform"),
+        include_empty: z
+          .boolean()
+          .optional()
+          .describe(
+            "Include orgs with zero indexed releases. Default false — empty orgs are stubs from in-flight discovery or broken parsers and surface as noise on the public catalog.",
+          ),
       }),
     },
     async (params) => listOrganizations(db, params),
