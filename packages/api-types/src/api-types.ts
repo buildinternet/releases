@@ -671,7 +671,7 @@ export function foldSourcesIntoCatalog(
         orgName: s.orgName,
         category: s.productCategory ?? null,
         entryType: "product",
-        kind: (s.entityKind as SearchCatalogHit["kind"]) ?? undefined,
+        kind: undefined,
       });
       seen.add(s.productSlug);
     } else {

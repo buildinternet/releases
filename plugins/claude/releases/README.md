@@ -33,7 +33,7 @@ Unified search across organizations, the catalog (products + standalone sources)
 
 ### list_catalog
 
-List catalog entries — products and standalone sources folded into one list with a `kind: "product"|"source"` discriminator per row. Scope with an optional `organization` filter.
+List catalog entries — products and standalone sources folded into one list with an `entryType: "product"|"source"` discriminator per row. Scope with an optional `organization` filter.
 
 ### get_catalog_entry
 

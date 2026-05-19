@@ -758,7 +758,7 @@ orgRoutes.get(
     tags: ["Orgs"],
     summary: "Org catalog (sources + products)",
     description:
-      "Returns the org's sources and products as a unified list keyed by `kind`. Accepts optional `?kind=source|product` to filter to one kind; `?limit=N` caps results per kind (capped [1, 500]). Intended for org-detail UI sidebar — avoids a round-trip to `/v1/sources` + `/v1/products`.",
+      "Returns the org's sources and products as a unified list keyed by `entryType`. Accepts optional `?kind=source|product` to filter to one kind; `?limit=N` caps results per kind (capped [1, 500]). Intended for org-detail UI sidebar — avoids a round-trip to `/v1/sources` + `/v1/products`.",
     parameters: [
       {
         name: "kind",

@@ -1979,7 +1979,7 @@ export async function search(
       ...catalog.map((e) => {
         const coord = e.orgSlug ? `${e.orgSlug}/${e.slug}` : e.slug;
         const orgLabel = e.orgSlug ? ` — ${e.orgName ?? e.orgSlug}` : "";
-        return `- [${e.kind}] **${e.name}** (${coord})${orgLabel}`;
+        return `- [${e.entryType}] **${e.name}** (${coord})${orgLabel}`;
       }),
     ];
     sections.push(lines.join("\n"));

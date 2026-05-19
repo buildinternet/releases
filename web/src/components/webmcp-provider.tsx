@@ -55,7 +55,7 @@ export function WebMcpProvider({ apiBaseUrl }: { apiBaseUrl: string }) {
         name: "search",
         title: "Search",
         description:
-          "Unified search across organizations, the catalog (products + standalone sources), and release content on releases.sh. Returns a single envelope with `orgs`, `catalog`, `releases`, and `chunks` — use `catalog` entries' `kind: 'product' | 'source'` discriminator to branch on entry shape. Pass `domain` to scope to one org by domain (input is normalized, so `https://vercel.com/` works the same as `vercel.com`).",
+          "Unified search across organizations, the catalog (products + standalone sources), and release content on releases.sh. Returns a single envelope with `orgs`, `catalog`, `releases`, and `chunks` — use `catalog` entries' `entryType: 'product' | 'source'` discriminator to branch on entry shape. Pass `domain` to scope to one org by domain (input is normalized, so `https://vercel.com/` works the same as `vercel.com`).",
         inputSchema: {
           type: "object",
           properties: {
