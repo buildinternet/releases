@@ -1417,7 +1417,7 @@ export async function listCatalog(
         category: p.category,
         description: p.description,
         url: p.url,
-        kind: "product",
+        entryType: "product",
       }),
     ),
     ...orphanSourceRows.map(
@@ -1429,18 +1429,20 @@ export async function listCatalog(
         category: null,
         description: null,
         url: s.url,
-        kind: "source",
+        entryType: "source",
         sourceType: s.type,
         lastFetchedAt: s.lastFetchedAt,
       }),
     ),
   ];
 
-  // kind + slug tiebreakers keep page boundaries stable when product and
+  // entryType + slug tiebreakers keep page boundaries stable when product and
   // source entries share a name (or two products under different orgs do).
   entries.sort(
     (a, b) =>
-      a.name.localeCompare(b.name) || a.kind.localeCompare(b.kind) || a.slug.localeCompare(b.slug),
+      a.name.localeCompare(b.name) ||
+      a.entryType.localeCompare(b.entryType) ||
+      a.slug.localeCompare(b.slug),
   );
 
   // Catalog merge happens in JS because products + standalone sources are two
@@ -1456,12 +1458,12 @@ export async function listCatalog(
   const body = pageEntries
     .map((e) => {
       const coord = e.orgSlug ? `${e.orgSlug}/${e.slug}` : e.slug;
-      const parts = [`**${e.name}** _(${e.kind})_`, `  Slug: ${coord}`];
+      const parts = [`**${e.name}** _(${e.entryType})_`, `  Slug: ${coord}`];
       if (e.orgSlug) parts.push(`  Organization: ${e.orgName ?? e.orgSlug} (${e.orgSlug})`);
       if (e.category) parts.push(`  Category: ${e.category}`);
       if (e.url) parts.push(`  URL: ${e.url}`);
       if (e.description) parts.push(`  Description: ${e.description}`);
-      if (e.kind === "source") {
+      if (e.entryType === "source") {
         parts.push(`  Source type: ${e.sourceType}`);
         parts.push(`  Last fetched: ${e.lastFetchedAt ?? "Never"}`);
       }
@@ -1551,8 +1553,9 @@ export type SearchType = "orgs" | "catalog" | "releases" | "collections";
 
 /**
  * `type` here is the input-filter parameter (which sections to return).
- * Catalog entries in the response still carry a `kind` discriminator —
- * `type` stays on the input so it doesn't shadow `sources.type`.
+ * Catalog entries in the response carry an `entryType` discriminator
+ * (`"product"` | `"source"`) — `type` stays on the input so it doesn't
+ * shadow `sources.type`.
  */
 export async function search(
   db: D1Db,
@@ -1708,7 +1711,7 @@ export async function search(
         const [productRows, sourceRows] = await Promise.all([
           db.all<SearchCatalogHit>(sql`
             SELECT DISTINCT p.slug, p.name, o.slug as orgSlug, o.name as orgName,
-                   p.category, 'product' as kind
+                   p.category, 'product' as entryType, p.kind
             FROM products p
             LEFT JOIN organizations o ON o.id = p.org_id
             LEFT JOIN domain_aliases da ON da.product_id = p.id
@@ -1718,7 +1721,8 @@ export async function search(
           `),
           db.all<RawSourceHit>(sql`
             SELECT s.slug, s.name, s.type, o.slug as orgSlug, o.name as orgName,
-                   p.slug as productSlug, p.name as productName, p.category as productCategory
+                   p.slug as productSlug, p.name as productName, p.category as productCategory,
+                   s.kind as entityKind
             FROM sources s
             LEFT JOIN products p ON p.id = s.product_id
             LEFT JOIN organizations o ON o.id = s.org_id

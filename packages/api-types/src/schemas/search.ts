@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { KIND_VALUES } from "@buildinternet/releases-core/kinds";
 import { MediaItemSchema, ReleaseTypeSchema } from "./shared.js";
 import { SourceTypeSchema } from "./sources.js";
 import { LookupStatusSchema } from "./lookups.js";
@@ -24,10 +25,10 @@ export const SearchOrgHitSchema = z.object({
 
 /**
  * Unified catalog entry — either a product row or a standalone source
- * presented as product-shaped. `kind` routes clicks to the right URL but
- * the two forms are otherwise interchangeable for display. `kind` (not
- * `type`) because source rows already carry
- * `type: github|scrape|feed|agent` on the wire.
+ * presented as product-shaped. `entryType` discriminates between the two
+ * row shapes (`"product"` vs `"source"`). `kind` carries the entity
+ * taxonomy (platform/sdk/mobile/…). `entryType` (not `type`) because
+ * source rows already carry `type: github|scrape|feed|agent` on the wire.
  */
 export const SearchCatalogHitSchema = z.object({
   slug: z.string(),
@@ -41,7 +42,8 @@ export const SearchCatalogHitSchema = z.object({
   // that haven't been migrated yet. Tighten once #689 (category overlay
   // backfill) lands across the prod data set.
   category: z.string().nullable(),
-  kind: z.enum(["product", "source"]),
+  entryType: z.enum(["product", "source"]),
+  kind: z.enum(KIND_VALUES).nullable().optional(),
   sourceSlug: z.string().optional(),
   sourceType: SourceTypeSchema.optional(),
 });

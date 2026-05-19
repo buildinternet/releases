@@ -82,6 +82,7 @@ productRoutes.get(
           description: productsActive.description,
           createdAt: productsActive.createdAt,
           category: productsActive.category,
+          kind: productsActive.kind,
           sourceCount: sql<number>`(SELECT COUNT(*) FROM sources_active s WHERE s.product_id = products_active.id)`,
         })
         .from(productsActive)

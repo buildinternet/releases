@@ -95,7 +95,7 @@ export async function searchProducts(
 ): Promise<SearchCatalogHit[]> {
   return db.all<SearchCatalogHit>(sql`
     SELECT DISTINCT p.slug, p.name, o.slug as orgSlug, o.name as orgName, p.category,
-           'product' as kind
+           'product' as entryType, p.kind
     FROM products_active p
     INNER JOIN organizations_active o ON o.id = p.org_id
     LEFT JOIN domain_aliases da ON da.product_id = p.id
@@ -114,7 +114,8 @@ export async function searchSources(
 ): Promise<RawSourceHit[]> {
   return db.all<RawSourceHit>(sql`
     SELECT s.slug, s.name, s.type, o.slug as orgSlug, o.name as orgName,
-           p.slug as productSlug, p.name as productName, p.category as productCategory
+           p.slug as productSlug, p.name as productName, p.category as productCategory,
+           s.kind as entityKind
     FROM sources_active s
     LEFT JOIN organizations_active o ON o.id = s.org_id
     LEFT JOIN products_active p ON p.id = s.product_id

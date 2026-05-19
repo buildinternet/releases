@@ -436,14 +436,14 @@ describe("GET /v1/orgs/:slug/catalog", () => {
 
     const body = (await res.json()) as {
       org: { id: string; slug: string };
-      items: Array<{ kind: "source" | "product"; id: string; slug: string }>;
+      items: Array<{ entryType: "source" | "product"; id: string; slug: string }>;
     };
     expect(body.org.slug).toBe("acme");
-    const kinds = new Set(body.items.map((i) => i.kind));
-    expect(kinds.has("source")).toBe(true);
-    expect(kinds.has("product")).toBe(true);
-    expect(body.items.find((i) => i.kind === "source")?.id).toBe("src_acme_cli");
-    expect(body.items.find((i) => i.kind === "product")?.id).toBe("prod_acme_widget");
+    const entryTypes = new Set(body.items.map((i) => i.entryType));
+    expect(entryTypes.has("source")).toBe(true);
+    expect(entryTypes.has("product")).toBe(true);
+    expect(body.items.find((i) => i.entryType === "source")?.id).toBe("src_acme_cli");
+    expect(body.items.find((i) => i.entryType === "product")?.id).toBe("prod_acme_widget");
   });
 
   it("filters by kind", async () => {
@@ -452,8 +452,8 @@ describe("GET /v1/orgs/:slug/catalog", () => {
     const fetch = mkApp(db);
 
     const res = await fetch(new Request("https://x.test/v1/orgs/acme/catalog?kind=product"));
-    const body = (await res.json()) as { items: Array<{ kind: string }> };
-    expect(body.items.every((i) => i.kind === "product")).toBe(true);
+    const body = (await res.json()) as { items: Array<{ entryType: string }> };
+    expect(body.items.every((i) => i.entryType === "product")).toBe(true);
   });
 
   it("404s for unknown org", async () => {

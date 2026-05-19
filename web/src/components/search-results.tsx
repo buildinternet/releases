@@ -480,7 +480,7 @@ export function SearchResults({
               <div className="space-y-2">
                 {results.catalog.map((p: SearchCatalogHit) => {
                   const href =
-                    p.kind === "source" && p.sourceSlug
+                    p.entryType === "source" && p.sourceSlug
                       ? p.orgSlug
                         ? `/${p.orgSlug}/${p.sourceSlug}`
                         : `/source/${p.sourceSlug}`

@@ -822,6 +822,7 @@ orgRoutes.get(
               url: productsActive.url,
               description: productsActive.description,
               category: productsActive.category,
+              kind: productsActive.kind,
             })
             .from(productsActive)
             .where(eq(productsActive.orgId, org.id))
@@ -837,6 +838,7 @@ orgRoutes.get(
               type: sourcesVisible.type,
               url: sourcesVisible.url,
               productId: sourcesVisible.productId,
+              kind: sourcesVisible.kind,
             })
             .from(sourcesVisible)
             .where(eq(sourcesVisible.orgId, org.id))
@@ -847,7 +849,8 @@ orgRoutes.get(
 
     const items = [
       ...productRows.map((p) => ({
-        kind: "product" as const,
+        entryType: "product" as const,
+        kind: p.kind ?? null,
         id: p.id,
         slug: p.slug,
         name: p.name,
@@ -856,7 +859,8 @@ orgRoutes.get(
         category: p.category,
       })),
       ...sourceRows.map((s) => ({
-        kind: "source" as const,
+        entryType: "source" as const,
+        kind: s.kind ?? null,
         id: s.id,
         slug: s.slug,
         name: s.name,

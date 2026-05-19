@@ -414,7 +414,7 @@ searchRoutes.get(
         rawReleases = await searchReleasesFromMatchedEntities(
           db,
           orgs.map((o) => o.slug),
-          catalog.filter((p) => p.kind !== "source").map((p) => p.slug),
+          catalog.filter((p) => p.entryType !== "source").map((p) => p.slug),
           limit,
           { includeCoverage },
         );

@@ -2016,6 +2016,7 @@ const getSourceDetailHandler = async (c: import("hono").Context<Env>) => {
     isHidden: Boolean(src.isHidden),
     discovery: src.discovery ?? "curated",
     metadata: src.metadata ?? "{}",
+    kind: src.kind ?? null,
     releaseCount: totalItems,
     releasesLast30Days,
     avgReleasesPerWeek,
