@@ -164,16 +164,17 @@ describe("shouldDelegateToCrawl — unit", () => {
     const meta = { crawlEnabled: true, feedContentDepth: "summary-only" } as Parameters<
       typeof shouldDelegateToCrawl
     >[1];
-    const items = [{ content: "" }] as Parameters<typeof shouldDelegateToCrawl>[2];
+    const items = [{ title: "", content: "" }] as Parameters<typeof shouldDelegateToCrawl>[2];
     expect(shouldDelegateToCrawl(source, meta, items)).toBe(true);
   });
 
   it("returns true for scrape + crawlEnabled + all-empty-content batch", () => {
     const source = { type: "scrape" } as Parameters<typeof shouldDelegateToCrawl>[0];
     const meta = { crawlEnabled: true } as Parameters<typeof shouldDelegateToCrawl>[1];
-    const items = [{ content: "" }, { content: "   " }] as Parameters<
-      typeof shouldDelegateToCrawl
-    >[2];
+    const items = [
+      { title: "", content: "" },
+      { title: "", content: "   " },
+    ] as Parameters<typeof shouldDelegateToCrawl>[2];
     expect(shouldDelegateToCrawl(source, meta, items)).toBe(true);
   });
 
@@ -182,7 +183,7 @@ describe("shouldDelegateToCrawl — unit", () => {
     const meta = { crawlEnabled: true, feedContentDepth: "summary-only" } as Parameters<
       typeof shouldDelegateToCrawl
     >[1];
-    const items = [{ content: "" }] as Parameters<typeof shouldDelegateToCrawl>[2];
+    const items = [{ title: "", content: "" }] as Parameters<typeof shouldDelegateToCrawl>[2];
     expect(shouldDelegateToCrawl(source, meta, items)).toBe(false);
   });
 });

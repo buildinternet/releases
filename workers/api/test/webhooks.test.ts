@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "bun:test";
-import { mockModule } from "../../../tests/mock-module.ts";
+import { mockModule } from "../../../tests/mock-module.js";
 
 type FakeSub = {
   id: string;

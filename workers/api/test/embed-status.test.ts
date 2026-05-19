@@ -36,7 +36,12 @@ describe("GET /v1/admin/embed/status", () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
       releases: { total: number; embedded: number; unembedded: number };
-      entities: { total: number; embedded: number; unembedded: number };
+      entities: {
+        total: number;
+        embedded: number;
+        unembedded: number;
+        breakdown?: Record<string, { total: number; embedded: number; unembedded: number }>;
+      };
       chunks: { total: number; embedded: number; unembedded: number };
     };
     expect(body.releases).toEqual({ total: 0, embedded: 0, unembedded: 0 });

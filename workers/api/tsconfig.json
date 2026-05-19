@@ -21,5 +21,9 @@
     },
     "resolveJsonModule": true
   },
-  "include": ["src/**/*.ts", "../../web/src/lib/graphql/__generated__/persisted-documents.json"]
+  "include": [
+    "src/**/*.ts",
+    "test/**/*.ts",
+    "../../web/src/lib/graphql/__generated__/persisted-documents.json"
+  ]
 }

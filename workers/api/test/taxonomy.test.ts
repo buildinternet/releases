@@ -44,7 +44,7 @@ describe("GET /v1/categories", () => {
     const fetch = mkApp(db);
     const res = await fetch(new Request("http://test/v1/categories"));
     expect(res.status).toBe(200);
-    const body = await res.json();
+    const body = (await res.json()) as any;
 
     // Every slug in the fixed taxonomy is present, in CATEGORIES order.
     expect(body.map((c: { slug: string }) => c.slug)).toEqual([...CATEGORIES]);
@@ -99,7 +99,7 @@ describe("GET /v1/categories", () => {
 
     const fetch = mkApp(db);
     const res = await fetch(new Request("http://test/v1/categories"));
-    const body = await res.json();
+    const body = (await res.json()) as any;
     const database = body.find((c: { slug: string }) => c.slug === "database");
     // Soft-deleted org filtered through organizations_public — only the live
     // row counts.
@@ -133,7 +133,7 @@ describe("GET /v1/categories", () => {
 
     const fetch = mkApp(db);
     const res = await fetch(new Request("http://test/v1/categories"));
-    const body = await res.json();
+    const body = (await res.json()) as any;
     const fw = body.find((c: { slug: string }) => c.slug === "framework");
     // Product belongs to an on_demand org, so it's hidden behind
     // organizations_public — neither the org nor the product should show.
