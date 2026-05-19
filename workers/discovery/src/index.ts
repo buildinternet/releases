@@ -24,8 +24,29 @@ const MAX_UPDATE_SOURCES = 20;
 // fixing the source config" CLI workflows.
 const UPDATE_DEDUP_WINDOW_MINUTES = 5;
 
-function maSessionsDisabled(env: Env): boolean {
-  return env.MA_SESSIONS_DISABLED === "true";
+/**
+ * Check whether MA session creation is globally disabled.
+ *
+ * KV is checked first — fastest path to kill sessions in an incident, no
+ * redeploy needed (sub-second propagation). Falls through to the env-flag
+ * check when KV is absent or throws.
+ *
+ * Returns `{ disabled: true, via: "kv" | "env" }` when blocked, or
+ * `{ disabled: false }` when clear.
+ */
+async function maSessionsDisabled(
+  env: Env,
+): Promise<{ disabled: false } | { disabled: true; via: "kv" | "env" }> {
+  try {
+    if (env.LATEST_CACHE) {
+      const flag = await env.LATEST_CACHE.get("ma:sessions:disabled");
+      if (flag) return { disabled: true, via: "kv" };
+    }
+  } catch {
+    // KV unreachable — fall through to env-flag fallback.
+  }
+  if (env.MA_SESSIONS_DISABLED === "true") return { disabled: true, via: "env" };
+  return { disabled: false };
 }
 
 /**
@@ -288,11 +309,13 @@ export class DiscoveryEntrypoint extends WorkerEntrypoint<Env> {
   async startManagedFetchSession(
     params: StartManagedFetchSessionParams,
   ): Promise<StartManagedFetchSessionResult> {
-    if (maSessionsDisabled(this.env)) {
+    const killSwitch = await maSessionsDisabled(this.env);
+    if (killSwitch.disabled) {
       logEvent("warn", {
         component: "discovery",
         event: "ma-session-blocked-kill-switch",
         entry: "startManagedFetchSession",
+        via: killSwitch.via,
         company: params.company,
         sourceIds: params.sourceIds,
       });
@@ -327,6 +350,28 @@ export class DiscoveryEntrypoint extends WorkerEntrypoint<Env> {
       };
     }
 
+    // Per-source dedup lock: reject if any source already has an active MA session.
+    if (this.env.LATEST_CACHE) {
+      const lockKeys = params.sourceIds.map((id) => `ma:active:src:${id}`);
+      const existing = await Promise.all(lockKeys.map((k) => this.env.LATEST_CACHE!.get(k)));
+      const lockedSources = existing
+        .map((v, i) => (v ? { id: params.sourceIds[i], sessionId: v } : null))
+        .filter((x): x is { id: string; sessionId: string } => x !== null);
+      if (lockedSources.length > 0) {
+        const detail = lockedSources
+          .map((s) => `Source ${s.id} has an active MA session (${s.sessionId})`)
+          .join("; ");
+        logEvent("info", {
+          component: "discovery",
+          event: "ma-session-blocked-source-dedup",
+          entry: "startManagedFetchSession",
+          company: params.company,
+          lockedSources: lockedSources.map((s) => s.id),
+        });
+        return { ok: false, error: detail };
+      }
+    }
+
     const result = await startManagedSession(
       this.env,
       "Failed to start managed fetch session",
@@ -352,6 +397,18 @@ export class DiscoveryEntrypoint extends WorkerEntrypoint<Env> {
       };
     }
 
+    // Acquire per-source locks immediately after the session ID is minted,
+    // before returning success. 15-min TTL ensures cleanup even if the DO
+    // crashes before its finally block runs.
+    if (this.env.LATEST_CACHE) {
+      const lockKeys = params.sourceIds.map((id) => `ma:active:src:${id}`);
+      await Promise.all(
+        lockKeys.map((k) =>
+          this.env.LATEST_CACHE!.put(k, result.sessionId, { expirationTtl: 15 * 60 }),
+        ),
+      );
+    }
+
     logEvent("info", {
       component: "discovery",
       event: "managed-fetch-session-started",
@@ -373,11 +430,13 @@ const httpHandler = {
     if (authError) return authError;
 
     if (request.method === "POST" && url.pathname === "/onboard") {
-      if (maSessionsDisabled(env)) {
+      const killSwitch = await maSessionsDisabled(env);
+      if (killSwitch.disabled) {
         logEvent("warn", {
           component: "discovery",
           event: "ma-session-blocked-kill-switch",
           entry: "/onboard",
+          via: killSwitch.via,
         });
         return errorResponse("Managed-agent sessions temporarily disabled (kill switch)", 503);
       }
@@ -519,11 +578,13 @@ const httpHandler = {
     }
 
     if (request.method === "POST" && url.pathname === "/update") {
-      if (maSessionsDisabled(env)) {
+      const killSwitch = await maSessionsDisabled(env);
+      if (killSwitch.disabled) {
         logEvent("warn", {
           component: "discovery",
           event: "ma-session-blocked-kill-switch",
           entry: "/update",
+          via: killSwitch.via,
         });
         return errorResponse("Managed-agent sessions temporarily disabled (kill switch)", 503);
       }
@@ -570,6 +631,31 @@ const httpHandler = {
         );
       }
 
+      // Per-source dedup lock: reject if any source already has an active MA session.
+      if (env.LATEST_CACHE && identifiers) {
+        const sourceIds = identifiers as string[];
+        const lockKeys = sourceIds.map((id) => `ma:active:src:${id}`);
+        const existing = await Promise.all(lockKeys.map((k) => env.LATEST_CACHE!.get(k)));
+        const lockedSources = existing
+          .map((v, i) => (v ? { id: sourceIds[i], sessionId: v } : null))
+          .filter((x): x is { id: string; sessionId: string } => x !== null);
+        if (lockedSources.length > 0) {
+          const detail = lockedSources
+            .map((s) => `Source ${s.id} has an active MA session (${s.sessionId})`)
+            .join("; ");
+          logEvent("info", {
+            component: "discovery",
+            event: "ma-session-blocked-source-dedup",
+            entry: "/update",
+            company: body.company,
+            lockedSources: lockedSources.map((s) => s.id),
+          });
+          return errorResponse(detail, 409, {
+            headers: { "Retry-After": "900" },
+          });
+        }
+      }
+
       const result = await startManagedSession(env, "Failed to start update session", (ctx) => ({
         company: body.company,
         mode: "update",
@@ -579,6 +665,17 @@ const httpHandler = {
         ...ctx,
       }));
       if (result instanceof Response) return result;
+
+      // Acquire per-source locks immediately after the session ID is minted.
+      if (env.LATEST_CACHE && identifiers) {
+        const sourceIds = identifiers as string[];
+        const lockKeys = sourceIds.map((id) => `ma:active:src:${id}`);
+        await Promise.all(
+          lockKeys.map((k) =>
+            env.LATEST_CACHE!.put(k, result.sessionId, { expirationTtl: 15 * 60 }),
+          ),
+        );
+      }
 
       return jsonResponse(
         { sessionId: result.sessionId, status: "running", sourceIdentifiers: identifiers },

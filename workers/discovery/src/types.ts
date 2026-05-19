@@ -98,6 +98,36 @@ export interface Env {
    * `wrangler secret put MA_SESSIONS_DISABLED` — propagates on next request
    * without a code deploy. Replaces the hardcoded constant deployed during
    * the 2026-05-18 Notion runaway.
+   *
+   * Superseded in practice by the KV kill switch (key "ma:sessions:disabled"
+   * in LATEST_CACHE), which can be flipped sub-second without a redeploy.
+   * Both are checked; KV takes priority.
    */
   MA_SESSIONS_DISABLED?: string;
+  /**
+   * KV namespace used for:
+   *   - Kill switch: key "ma:sessions:disabled" blocks all new MA sessions.
+   *     Flip on:  wrangler kv:key put --binding=LATEST_CACHE "ma:sessions:disabled" "1"
+   *     Flip off: wrangler kv:key delete --binding=LATEST_CACHE "ma:sessions:disabled"
+   *   - Per-source dedup lock: keys "ma:active:src:{sourceId}" (15-min TTL)
+   *     prevent the same source spawning two concurrent MA sessions.
+   *   - Daily spend counters: keys "ma:spend:global:{date}" and
+   *     "ma:spend:org:{orgId}:{date}" (26h TTL) track cumulative session cost.
+   * Optional so existing workers without the binding still start up.
+   */
+  LATEST_CACHE?: KVNamespace;
+  /**
+   * Per-org daily spend cap in US cents (integer). Default: 200 (= $2.00/day).
+   * Override via `wrangler secret put MA_DAILY_SPEND_CAP_ORG_CENTS`.
+   * Set to a high value (e.g. "999999") to effectively disable the org cap
+   * without disabling the global cap.
+   */
+  MA_DAILY_SPEND_CAP_ORG_CENTS?: string;
+  /**
+   * Global daily spend cap in US cents (integer). Default: 1500 (= $15.00/day).
+   * Override via `wrangler secret put MA_DAILY_SPEND_CAP_GLOBAL_CENTS`.
+   * At the $15 default the Notion incident ($20 over 4.5h) would have been
+   * stopped at ~3.5h. Bump after a week of real-traffic data.
+   */
+  MA_DAILY_SPEND_CAP_GLOBAL_CENTS?: string;
 }

@@ -390,6 +390,19 @@ export class ManagedAgentsSession extends DurableObject<Env> {
     let pendingArchive: { client: ReturnType<typeof buildAnthropicClient>; id: string } | null =
       null;
 
+    // Hoisted so the outer `finally` block can read the cost attribution from
+    // every exit path (success, error, timeout) to write the KV spend counter.
+    let sessionUsage:
+      | {
+          inputTokens?: number;
+          outputTokens?: number;
+          cacheWriteTokens?: number;
+          cacheReadTokens?: number;
+          model?: string;
+          estimatedUsd?: number;
+        }
+      | undefined = undefined;
+
     try {
       // Register the session with StatusHub BEFORE any Anthropic API calls so that
       // the session ID the caller already received is always visible in /v1/sessions.
@@ -926,6 +939,7 @@ ${idList}
                   providerErrorCount,
                 });
                 const usageOnError = await this.captureFinalUsage(client, session.id, agentRole);
+                sessionUsage = usageOnError;
                 await this.fail(
                   sessionId,
                   params.company,
@@ -979,6 +993,7 @@ ${idList}
                 break;
               }
               const usageOnError = await this.captureFinalUsage(client, session.id, agentRole);
+              sessionUsage = usageOnError;
               await this.fail(
                 sessionId,
                 params.company,
@@ -1014,7 +1029,9 @@ ${idList}
       // Snapshot final usage + cost via the shared helper; same call site as
       // the terminal-error branches so success and failure both attribute
       // cost correctly. See `captureFinalUsage` below.
-      const sessionUsage = await this.captureFinalUsage(client, session.id, agentRole);
+      // Writes to the outer-scoped `sessionUsage` so the finally block can
+      // persist the cost to the KV spend counter.
+      sessionUsage = await this.captureFinalUsage(client, session.id, agentRole);
 
       // Archive runs in the outer `finally` for every exit path — see the
       // comment on `pendingArchive` at the top of runSession. NOTE: worker
@@ -1101,6 +1118,33 @@ ${idList}
           await (pendingArchive.client.beta.sessions as any).archive(pendingArchive.id);
         } catch {
           /* non-critical */
+        }
+      }
+      // Release per-source dedup locks so the next run of the same source is
+      // not blocked. Conditional delete: only remove the key when its stored
+      // value matches THIS sessionId. If our 15-min TTL expired mid-session
+      // and a newer session has since claimed the same source, deleting
+      // blindly would clobber the newer owner's mutex. On miss (TTL expired,
+      // no new owner) the key is already absent — the delete becomes a no-op.
+      // Wrapped in try/catch so a KV failure can't escape finally; TTL cleans
+      // up at most 15 min later.
+      const kv = this.env.LATEST_CACHE;
+      if (kv && params.sourceIdentifiers && params.sourceIdentifiers.length > 0) {
+        try {
+          await Promise.all(
+            params.sourceIdentifiers.map(async (id) => {
+              const key = `ma:active:src:${id}`;
+              const owner = await kv.get(key);
+              if (owner === sessionId) await kv.delete(key);
+            }),
+          );
+        } catch {
+          logEvent("warn", {
+            component: "discovery",
+            event: "ma-source-lock-release-failed",
+            sessionId,
+            sourceIdentifiers: params.sourceIdentifiers,
+          });
         }
       }
     }
