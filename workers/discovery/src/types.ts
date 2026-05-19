@@ -111,8 +111,10 @@ export interface Env {
    *     Flip off: wrangler kv:key delete --binding=LATEST_CACHE "ma:sessions:disabled"
    *   - Per-source dedup lock: keys "ma:active:src:{sourceId}" (15-min TTL)
    *     prevent the same source spawning two concurrent MA sessions.
-   *   - Daily spend counters: keys "ma:spend:global:{date}" and
-   *     "ma:spend:org:{orgId}:{date}" (26h TTL) track cumulative session cost.
+   *   - Daily spend counters: keys "ma:spend:global:{YYYY-MM-DD}" and
+   *     "ma:spend:org:{orgId}:{YYYY-MM-DD}" (26h TTL) — sum of session cost.
+   *     Manual reset: wrangler kv:key delete --binding=LATEST_CACHE
+   *     "ma:spend:global:2026-05-19"
    * Optional so existing workers without the binding still start up.
    */
   LATEST_CACHE?: KVNamespace;

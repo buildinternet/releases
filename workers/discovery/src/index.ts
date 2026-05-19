@@ -8,6 +8,7 @@ import type {
 import { discoveryIdentityHeaders } from "./identity.js";
 import { logEvent } from "@releases/lib/log-event.js";
 import { getSecret } from "@releases/lib/secrets";
+import { checkSpendCap } from "./spend-cap.js";
 import { WorkerEntrypoint } from "cloudflare:workers";
 
 export { Sandbox } from "@cloudflare/sandbox";
@@ -350,6 +351,30 @@ export class DiscoveryEntrypoint extends WorkerEntrypoint<Env> {
       };
     }
 
+    // Daily spend cap: reject if global or per-org spend already hit the
+    // ceiling. Checked before the per-source lock because spend is the
+    // wider-reaching gate — a cap hit blocks ALL sources, so failing fast
+    // here saves a KV round-trip.
+    if (this.env.LATEST_CACHE) {
+      const spendCheck = await checkSpendCap(this.env.LATEST_CACHE, params.orgId, this.env);
+      if (spendCheck.blocked) {
+        logEvent("warn", {
+          component: "discovery",
+          event: "ma-session-blocked-spend-cap",
+          entry: "startManagedFetchSession",
+          scope: spendCheck.scope,
+          currentCents: spendCheck.currentCents,
+          capCents: spendCheck.capCents,
+          orgId: params.orgId,
+          company: params.company,
+        });
+        return {
+          ok: false,
+          error: `Daily ${spendCheck.scope} spend cap reached ($${(spendCheck.currentCents / 100).toFixed(2)} of $${(spendCheck.capCents / 100).toFixed(2)})`,
+        };
+      }
+    }
+
     // Per-source dedup lock: reject if any source already has an active MA session.
     if (this.env.LATEST_CACHE) {
       const lockKeys = params.sourceIds.map((id) => `ma:active:src:${id}`);
@@ -558,6 +583,30 @@ const httpHandler = {
         });
       }
 
+      // Daily spend cap: reject if the global daily ceiling has been reached.
+      // Onboard sessions don't carry orgId (the org doesn't exist yet), so only
+      // the global cap is checked here. Once the session completes and an org is
+      // created, subsequent update sessions will also enforce the per-org cap.
+      // LATEST_CACHE is added by #1052+#1053; when missing, the check is skipped.
+      if (env.LATEST_CACHE) {
+        const spendCheck = await checkSpendCap(env.LATEST_CACHE, undefined, env);
+        if (spendCheck.blocked) {
+          logEvent("warn", {
+            component: "discovery",
+            event: "ma-session-blocked-spend-cap",
+            entry: "/onboard",
+            scope: spendCheck.scope,
+            currentCents: spendCheck.currentCents,
+            capCents: spendCheck.capCents,
+            company: body.company,
+          });
+          return errorResponse(
+            `Daily ${spendCheck.scope} spend cap reached ($${(spendCheck.currentCents / 100).toFixed(2)} of $${(spendCheck.capCents / 100).toFixed(2)})`,
+            429,
+          );
+        }
+      }
+
       const result = await startManagedSession(
         env,
         "Failed to start managed agents discovery",
@@ -629,6 +678,29 @@ const httpHandler = {
             },
           },
         );
+      }
+
+      // Daily spend cap: reject if global or per-org spend already hit the
+      // ceiling. Checked before the per-source lock — cap hits block all
+      // sources, so failing fast here saves a KV round-trip.
+      if (env.LATEST_CACHE) {
+        const spendCheck = await checkSpendCap(env.LATEST_CACHE, body.orgId, env);
+        if (spendCheck.blocked) {
+          logEvent("warn", {
+            component: "discovery",
+            event: "ma-session-blocked-spend-cap",
+            entry: "/update",
+            scope: spendCheck.scope,
+            currentCents: spendCheck.currentCents,
+            capCents: spendCheck.capCents,
+            orgId: body.orgId,
+            company: body.company,
+          });
+          return errorResponse(
+            `Daily ${spendCheck.scope} spend cap reached ($${(spendCheck.currentCents / 100).toFixed(2)} of $${(spendCheck.capCents / 100).toFixed(2)})`,
+            429,
+          );
+        }
       }
 
       // Per-source dedup lock: reject if any source already has an active MA session.
