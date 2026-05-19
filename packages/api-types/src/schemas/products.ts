@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { KIND_VALUES } from "@buildinternet/releases-core/kinds";
 import { CategorySchema, ListResponseSchema } from "./shared.js";
 import { SourceTypeSchema } from "./sources.js";
 
@@ -19,6 +20,7 @@ export const ProductRowSchema = z.object({
   url: z.string().nullable(),
   description: z.string().nullable(),
   category: CategorySchema.nullable(),
+  kind: z.enum(KIND_VALUES).nullable().optional(),
   createdAt: z.string(),
   embeddedAt: z.string().nullable(),
   deletedAt: z.string().nullable(),
@@ -37,6 +39,7 @@ export const ProductListItemSchema = z.object({
   url: z.string().nullable(),
   description: z.string().nullable(),
   category: CategorySchema.nullable(),
+  kind: z.enum(KIND_VALUES).nullable().optional(),
   createdAt: z.string(),
   sourceCount: z.number().int().min(0),
 });
