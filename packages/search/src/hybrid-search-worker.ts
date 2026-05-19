@@ -119,12 +119,9 @@ function parseHalfLifeDays(raw: string | undefined): number {
  * Per-call plumbing. `waitUntil` — when provided — lets the embedding
  * cache fire KV writes without blocking the response.
  *
- * `embedConfig` — when provided — skips the per-helper call to the
- * worker's `buildEmbedConfig`. The default `/v1/search` path fans out
- * to `runHybridSearch` + `runCollectionsSemantic` in parallel; without
- * this, each independently reads the Secrets Store binding (#1043).
- * Passing the resolved config (or `null` for "no provider configured")
- * means one resolve per request, not one per helper.
+ * `embedConfig` — when provided (including `null` for "no provider
+ * configured") — skips the per-helper call to the worker's
+ * `buildEmbedConfig` so multiple helpers share one Secrets Store read.
  */
 export interface HybridSearchOpts {
   waitUntil?: (p: Promise<unknown>) => void;
@@ -133,15 +130,6 @@ export interface HybridSearchOpts {
 
 interface InternalOpts extends HybridSearchOpts {
   buildEmbedConfig: BuildEmbedConfig;
-}
-
-// Type-narrowed accessor that distinguishes "caller passed null
-// explicitly" (use it — don't re-resolve) from "caller didn't pass
-// anything" (fall through to buildEmbedConfig).
-function hasResolvedEmbedConfig(
-  opts: InternalOpts,
-): opts is InternalOpts & { embedConfig: ResolvedEmbedConfig | null } {
-  return "embedConfig" in opts;
 }
 
 export type HybridMode = "lexical" | "semantic" | "hybrid";
@@ -250,7 +238,7 @@ async function buildEmbedder(
   env: HybridSearchEnv,
   opts: InternalOpts,
 ): Promise<((text: string) => Promise<number[]>) | null> {
-  const cfg = hasResolvedEmbedConfig(opts) ? opts.embedConfig : await opts.buildEmbedConfig(env);
+  const cfg = opts.embedConfig !== undefined ? opts.embedConfig : await opts.buildEmbedConfig(env);
   if (!cfg) return null;
   const raw = async (text: string) => {
     const result = await embedBatch([text], cfg);
@@ -298,8 +286,7 @@ async function hydrateReleases(
 ): Promise<Map<string, RawReleaseRow>> {
   if (ids.length === 0) return new Map();
   const releasesTable = opts.includeCoverage ? sql`releases` : sql`releases_visible`;
-  // Chunked at D1_IN_CHUNK to stay under D1's 100-bind cap. `/v1/search`
-  // allows limit up to 100; `topK * 3 = 300` ids can feed into here.
+  // Chunked at D1_IN_CHUNK to stay under D1's 100-bind cap.
   const results = await Promise.all(
     chunkInto(ids, D1_IN_CHUNK).map((batch) =>
       db.all<RawReleaseRow>(sql`
@@ -367,7 +354,7 @@ async function hydrateChunks(
 ): Promise<Map<string, HybridChunkHit["chunk"]>> {
   if (vectorIds.length === 0) return new Map();
 
-  // Chunked at D1_IN_CHUNK to stay under D1's 100-bind cap (see #1042).
+  // Chunked at D1_IN_CHUNK to stay under D1's 100-bind cap.
   const chunkRowResults = await Promise.all(
     chunkInto(vectorIds, D1_IN_CHUNK).map((batch) =>
       db.all<RawChunkRow>(sql`
@@ -738,7 +725,7 @@ async function runCollectionsSemanticInternal(
   // Hydrate + compute memberCount in one query. Mirrors the
   // `searchCollectionsDirect` helper but bound by an `IN (…)` list rather
   // than a LIKE pattern. Chunked at D1_IN_CHUNK to stay under D1's 100-bind
-  // cap (limit * 2 candidates could exceed it for a high enough limit).
+  // cap.
   const memberCountSql = sql<number>`(
     SELECT COUNT(*)
     FROM ${collectionMembers} cm
@@ -864,66 +851,54 @@ async function runRegistrySearchInternal(
   const shouldFetchSources = wantsKind("source") && sourceIds.length > 0;
 
   // Drizzle's `inArray(...)` expands to `IN (?, ?, ...)` — one bind per id —
-  // so each bucket also needs chunking against D1's 100-bind cap (#1042).
-  // Buckets are typically small but the bucket-skew worst case (all matches
-  // are one kind) can push past 100 at high enough `limit`.
-  const fetchOrgs = async () => {
-    if (!shouldFetchOrgs) return [];
-    const results = await Promise.all(
-      chunkInto(orgIds, D1_IN_CHUNK).map((batch) =>
-        db
-          .select({
-            id: organizationsActive.id,
-            slug: organizationsActive.slug,
-            name: organizationsActive.name,
-            description: organizationsActive.description,
-            category: organizationsActive.category,
-          })
-          .from(organizationsActive)
-          .where(inArray(organizationsActive.id, batch)),
-      ),
-    );
+  // so each bucket also needs chunking against D1's 100-bind cap. Buckets
+  // are typically small but the bucket-skew worst case (all matches are one
+  // kind) can push past 100 at high enough `limit`.
+  async function fetchChunked<T>(
+    should: boolean,
+    ids: string[],
+    query: (batch: string[]) => Promise<T[]>,
+  ): Promise<T[]> {
+    if (!should) return [];
+    const results = await Promise.all(chunkInto(ids, D1_IN_CHUNK).map(query));
     return results.flat();
-  };
-  const fetchProducts = async () => {
-    if (!shouldFetchProducts) return [];
-    const results = await Promise.all(
-      chunkInto(productIds, D1_IN_CHUNK).map((batch) =>
-        db
-          .select({
-            id: productsActive.id,
-            slug: productsActive.slug,
-            name: productsActive.name,
-            description: productsActive.description,
-            category: productsActive.category,
-          })
-          .from(productsActive)
-          .where(inArray(productsActive.id, batch)),
-      ),
-    );
-    return results.flat();
-  };
-  const fetchSources = async () => {
-    if (!shouldFetchSources) return [];
-    const results = await Promise.all(
-      chunkInto(sourceIds, D1_IN_CHUNK).map((batch) =>
-        db
-          .select({
-            id: sourcesActive.id,
-            slug: sourcesActive.slug,
-            name: sourcesActive.name,
-          })
-          .from(sourcesActive)
-          .where(inArray(sourcesActive.id, batch)),
-      ),
-    );
-    return results.flat();
-  };
+  }
 
   const [orgRows, productRows, sourceRows] = await Promise.all([
-    fetchOrgs(),
-    fetchProducts(),
-    fetchSources(),
+    fetchChunked(shouldFetchOrgs, orgIds, (batch) =>
+      db
+        .select({
+          id: organizationsActive.id,
+          slug: organizationsActive.slug,
+          name: organizationsActive.name,
+          description: organizationsActive.description,
+          category: organizationsActive.category,
+        })
+        .from(organizationsActive)
+        .where(inArray(organizationsActive.id, batch)),
+    ),
+    fetchChunked(shouldFetchProducts, productIds, (batch) =>
+      db
+        .select({
+          id: productsActive.id,
+          slug: productsActive.slug,
+          name: productsActive.name,
+          description: productsActive.description,
+          category: productsActive.category,
+        })
+        .from(productsActive)
+        .where(inArray(productsActive.id, batch)),
+    ),
+    fetchChunked(shouldFetchSources, sourceIds, (batch) =>
+      db
+        .select({
+          id: sourcesActive.id,
+          slug: sourcesActive.slug,
+          name: sourcesActive.name,
+        })
+        .from(sourcesActive)
+        .where(inArray(sourcesActive.id, batch)),
+    ),
   ]);
 
   const byId = new Map<string, RegistryHit>();

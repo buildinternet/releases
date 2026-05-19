@@ -466,11 +466,8 @@ searchRoutes.get(
     // working. Chunk hits ride along on a new `chunks` field. Collection
     // semantic search runs in parallel; degrades the same way as the
     // release path (returns empty + reason) so a missing binding never
-    // 500s the whole response.
-    // Resolve embed config once and hand it to both helpers. Without this,
-    // `runHybridSearch` and `runCollectionsSemantic` each independently
-    // read the Secrets Store binding — 2× `.get()` per request on the
-    // default path (see #1043).
+    // 500s the whole response. Embed config is resolved once and shared so
+    // both helpers don't independently read the Secrets Store binding.
     const embedConfig = await buildEmbedConfig(c.env);
     const sharedOpts = {
       waitUntil: c.executionCtx.waitUntil.bind(c.executionCtx),

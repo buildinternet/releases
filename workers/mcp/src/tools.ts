@@ -1554,11 +1554,10 @@ export async function search(
     collectionHits: 0,
   };
 
-  // Resolve embed config once per request and thread it into every
-  // helper that consumes it (collections semantic + hybrid release path).
-  // Without this, each helper independently reads the Secrets Store
-  // binding — see #1043. Resolution is lazy: only fired when we'll
-  // actually use it, and only when not in pure lexical mode.
+  // Resolve embed config once per request and thread it into every helper
+  // that consumes it (collections semantic + hybrid release path). Without
+  // this, each helper independently reads the Secrets Store binding.
+  // Resolution is lazy: only fired when we'll actually use it.
   let embedConfigP: Promise<
     Awaited<ReturnType<typeof import("./lib/embed-config.js").buildEmbedConfig>>
   > | null = null;

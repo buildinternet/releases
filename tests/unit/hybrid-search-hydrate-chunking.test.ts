@@ -63,9 +63,9 @@ async function seedManyMatchingReleases(db: TestDatabase["db"]): Promise<string[
   });
   // Insert in batches small enough for bun:sqlite — drizzle's insert in one
   // statement would itself trip param caps on a real D1.
-  for (let i = 0; i < rows.length; i += 30) {
-    await db.insert(releases).values(rows.slice(i, i + 30));
-  }
+  const batches: (typeof rows)[] = [];
+  for (let i = 0; i < rows.length; i += 30) batches.push(rows.slice(i, i + 30));
+  await Promise.all(batches.map((batch) => db.insert(releases).values(batch)));
   return ids;
 }
 
