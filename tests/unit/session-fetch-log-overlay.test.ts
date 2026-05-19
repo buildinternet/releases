@@ -181,6 +181,31 @@ describe("applyFetchLogOverlay", () => {
     expect(sessions[2].status).toBe("error");
   });
 
+  it("chunks the inArray lookup so it stays under D1's 100-bind cap", async () => {
+    const db = mkDb();
+    // 95 distinct sessionIds forces two chunks of [90, 5] at the 90-ID limit.
+    const ids = Array.from({ length: 95 }, (_, i) => `ma-${i.toString().padStart(3, "0")}`);
+    db.insert(fetchLog)
+      .values(
+        ids.map((id) => ({
+          sourceId: "src_a1",
+          sessionId: id,
+          releasesFound: 1,
+          releasesInserted: 1,
+          status: "success" as const,
+        })),
+      )
+      .run();
+
+    const result = await applyFetchLogOverlay(
+      db,
+      ids.map((id) => mkSession({ sessionId: id })),
+    );
+
+    expect(result.every((s) => s.status === "complete")).toBe(true);
+    expect(result).toHaveLength(95);
+  });
+
   it("treats missing errorSource as 'us' (legacy sessions)", async () => {
     const db = mkDb();
     db.insert(fetchLog)

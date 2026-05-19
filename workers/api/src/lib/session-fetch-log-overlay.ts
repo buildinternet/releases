@@ -38,9 +38,17 @@ import type { Session } from "@buildinternet/releases-api-types";
 import { fetchLog } from "@buildinternet/releases-core/schema";
 import { inArray } from "drizzle-orm";
 
+// D1 caps prepared statements at 100 bind parameters. This query binds only
+// the `inArray` IDs, so 90 leaves headroom matching the project-wide
+// convention documented in CLAUDE.md ("`inArray(...)` lookups chunk at 90").
+const SESSION_ID_CHUNK_SIZE = 90;
+
+type FetchLogRow = { sessionId: string | null; status: string };
+
 /**
  * Apply the fetch_log overlay to a session list in place and return it.
- * Performs at most one batched `inArray` lookup regardless of session count.
+ * Performs at most ceil(N/90) batched `inArray` lookups regardless of how
+ * many candidate sessions are passed.
  */
 export async function applyFetchLogOverlay<T extends Session>(
   // db is `any` to match the convention in lib/sweep-results.ts — D1 drizzle
@@ -54,13 +62,19 @@ export async function applyFetchLogOverlay<T extends Session>(
   if (candidates.length === 0) return sessions;
 
   const sessionIds = candidates.map((s) => s.sessionId);
-  const rows: { sessionId: string | null; status: string }[] = await db
-    .select({
-      sessionId: fetchLog.sessionId,
-      status: fetchLog.status,
-    })
-    .from(fetchLog)
-    .where(inArray(fetchLog.sessionId, sessionIds));
+  const rows: FetchLogRow[] = [];
+  for (let i = 0; i < sessionIds.length; i += SESSION_ID_CHUNK_SIZE) {
+    const chunk = sessionIds.slice(i, i + SESSION_ID_CHUNK_SIZE);
+    // oxlint-disable-next-line no-await-in-loop -- sequential chunks: each statement stays under D1's 100-bind cap; parallel fan-out would race the same connection without benefit
+    const chunkRows: FetchLogRow[] = await db
+      .select({
+        sessionId: fetchLog.sessionId,
+        status: fetchLog.status,
+      })
+      .from(fetchLog)
+      .where(inArray(fetchLog.sessionId, chunk));
+    rows.push(...chunkRows);
+  }
 
   const bySession = new Map<string, { total: number; successes: number }>();
   for (const row of rows) {
