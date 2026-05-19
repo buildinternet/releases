@@ -38,14 +38,14 @@ function mkDb() {
 const asD1 = (db: ReturnType<typeof mkDb>): D1Db => {
   const handle = db as unknown as D1Db & { batch?: unknown };
   if (!handle.batch) {
-    handle.batch = async (ops: ReadonlyArray<Promise<unknown>>) => {
+    handle.batch = (async (ops: ReadonlyArray<Promise<unknown>>) => {
       const out: unknown[] = [];
       for (const op of ops) {
         // oxlint-disable-next-line no-await-in-loop -- shim mirrors D1 batch ordering
         out.push(await op);
       }
       return out;
-    };
+    }) as unknown as D1Db["batch"];
   }
   return handle as D1Db;
 };
@@ -119,9 +119,39 @@ describe("applyChunkOffsetUpdates", () => {
     // occupied when the loop starts. A naive one-pass UPDATE collides on the
     // unique index.
     await applyChunkOffsetUpdates(asD1(db), [
-      { id: "scc_a", chunk: { offset: 200, length: 60, tokens: 12, heading: "New A" } },
-      { id: "scc_b", chunk: { offset: 300, length: 70, tokens: 14, heading: "New B" } },
-      { id: "scc_c", chunk: { offset: 400, length: 80, tokens: 16, heading: "New C" } },
+      {
+        id: "scc_a",
+        chunk: {
+          offset: 200,
+          length: 60,
+          tokens: 12,
+          heading: "New A",
+          text: "",
+          contentHash: "h-a",
+        },
+      },
+      {
+        id: "scc_b",
+        chunk: {
+          offset: 300,
+          length: 70,
+          tokens: 14,
+          heading: "New B",
+          text: "",
+          contentHash: "h-b",
+        },
+      },
+      {
+        id: "scc_c",
+        chunk: {
+          offset: 400,
+          length: 80,
+          tokens: 16,
+          heading: "New C",
+          text: "",
+          contentHash: "h-c",
+        },
+      },
     ]);
 
     const rows = await db
@@ -143,8 +173,28 @@ describe("applyChunkOffsetUpdates", () => {
 
     // Pure swap of A↔B's offsets — no naive ordering avoids collision.
     await applyChunkOffsetUpdates(asD1(db), [
-      { id: "scc_a", chunk: { offset: 200, length: 50, tokens: 10, heading: "Old A" } },
-      { id: "scc_b", chunk: { offset: 100, length: 50, tokens: 10, heading: "Old B" } },
+      {
+        id: "scc_a",
+        chunk: {
+          offset: 200,
+          length: 50,
+          tokens: 10,
+          heading: "Old A",
+          text: "",
+          contentHash: "h-a",
+        },
+      },
+      {
+        id: "scc_b",
+        chunk: {
+          offset: 100,
+          length: 50,
+          tokens: 10,
+          heading: "Old B",
+          text: "",
+          contentHash: "h-b",
+        },
+      },
     ]);
 
     const a = await db

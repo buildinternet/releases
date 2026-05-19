@@ -37,7 +37,7 @@ describe("DELETE /v1/orgs/:slug/tags (batched)", () => {
       }),
     );
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ ok: true });
+    expect((await res.json()) as unknown).toEqual({ ok: true });
 
     const remaining = await db.select().from(orgTags).where(eq(orgTags.orgId, "org_acme"));
     expect(remaining).toHaveLength(0);

@@ -5,6 +5,7 @@ import { applyMigrations, ensureBatchShim } from "../../../tests/db-helper";
 import { eq, sql } from "drizzle-orm";
 import { organizations, sources, releases, fetchLog } from "@buildinternet/releases-core/schema";
 import type { RawRelease } from "@releases/adapters/types";
+import type { D1Db } from "../src/db.js";
 
 // Stateful stub for @releases/adapters/feed — configured per test via nextFeedResult.
 let nextFeedResult: {
@@ -65,11 +66,11 @@ const statusHubStub = {
   }),
 };
 
-function mkDb() {
+function mkDb(): D1Db {
   const sqlite = new Database(":memory:");
   const rawDb = drizzle(sqlite);
   applyMigrations(sqlite);
-  return ensureBatchShim(rawDb);
+  return ensureBatchShim(rawDb) as unknown as D1Db;
 }
 
 async function seed(

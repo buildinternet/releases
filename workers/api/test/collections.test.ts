@@ -91,7 +91,7 @@ describe("collections", () => {
     const fetch = mkApp(db);
     const res = await fetch(new Request("http://test/v1/collections"));
     expect(res.status).toBe(200);
-    const body = await res.json();
+    const body = (await res.json()) as any;
     // Filter past the seed migration's `frontier-ai-labs` row so the
     // assertion isn't coupled to its membership count.
     const ours = body.filter((c: { slug: string }) => c.slug.startsWith("test-"));
@@ -139,7 +139,7 @@ describe("collections", () => {
     const fetch = mkApp(db);
     const res = await fetch(new Request("http://test/v1/collections/test-frontier-labs"));
     expect(res.status).toBe(200);
-    const body = await res.json();
+    const body = (await res.json()) as any;
     expect(body.slug).toBe("test-frontier-labs");
     // Hidden Lab is filtered out by organizations_public; the remaining two
     // come back in position order.
@@ -160,7 +160,7 @@ describe("collections", () => {
     const fetch = mkApp(db);
     const res = await fetch(new Request("http://test/v1/collections/test-frontier-labs/releases"));
     expect(res.status).toBe(200);
-    const body = await res.json();
+    const body = (await res.json()) as any;
     // Default: prereleases hidden — GPT-5 Preview is filtered out, leaving
     // Claude 4.7 and Claude 4.6 (both Anthropic). Both rows carry the org
     // discriminator the cross-org UI uses for byline labels.
@@ -178,7 +178,7 @@ describe("collections", () => {
       ),
     );
     expect(res.status).toBe(200);
-    const body = await res.json();
+    const body = (await res.json()) as any;
     // Strict published_at DESC interleaving across the two visible orgs.
     expect(body.releases.map((r: { id: string }) => r.id)).toEqual(["rel_a1", "rel_o1", "rel_a2"]);
   });
@@ -189,7 +189,7 @@ describe("collections", () => {
     const fetch = mkApp(db);
     const res = await fetch(new Request("http://test/v1/collections/test-frontier-labs/releases"));
     expect(res.status).toBe(200);
-    const body = await res.json();
+    const body = (await res.json()) as any;
     // The web release card falls back from `content` to `summary` when
     // expanding — without `content` "Show more" silently shows the same
     // truncated text. Mirrors the org-feed shape on /v1/orgs/:slug/releases.
@@ -223,7 +223,7 @@ describe("collections", () => {
     const fetch = mkApp(db);
     const res = await fetch(new Request("http://test/v1/collections/test-empty-set/releases"));
     expect(res.status).toBe(200);
-    const body = await res.json();
+    const body = (await res.json()) as any;
     expect(body.releases).toEqual([]);
     expect(body.pagination.nextCursor).toBeNull();
   });
@@ -264,7 +264,7 @@ describe("collections (writes)", () => {
       ),
     );
     expect(res.status).toBe(201);
-    const created = await res.json();
+    const created = (await res.json()) as any;
     expect(created.slug).toBe("inference-providers");
     expect(created.name).toBe("Inference Providers");
     expect(created.description).toBe("API-first inference.");
@@ -305,7 +305,7 @@ describe("collections (writes)", () => {
       ),
     );
     expect(res.status).toBe(200);
-    const updated = await res.json();
+    const updated = (await res.json()) as any;
     expect(updated.name).toBe("Renamed Labs");
     expect(updated.description).toBe("Updated.");
     expect(updated.slug).toBe("test-frontier-labs");
@@ -357,7 +357,7 @@ describe("collections (writes)", () => {
     );
     expect(res.status).toBe(200);
     const detail = await fetch(new Request("http://test/v1/collections/test-frontier-labs"));
-    const body = await detail.json();
+    const body = (await detail.json()) as any;
     expect(body.orgs.map((o: { slug: string }) => o.slug)).toEqual(["openai", "anthropic"]);
   });
 
@@ -388,7 +388,7 @@ describe("collections (writes)", () => {
     );
     expect(res.status).toBe(201);
     const detail = await fetch(new Request("http://test/v1/collections/test-empty-set"));
-    const body = await detail.json();
+    const body = (await detail.json()) as any;
     expect(body.orgs.map((o: { slug: string }) => o.slug)).toEqual(["openai"]);
   });
 
@@ -416,7 +416,7 @@ describe("collections (writes)", () => {
       ),
     );
     expect(res.status).toBe(404);
-    const body = await res.json();
+    const body = (await res.json()) as any;
     expect(body.error).toBe("not_found");
   });
 
@@ -431,7 +431,7 @@ describe("collections (writes)", () => {
     );
     expect(res.status).toBe(204);
     const detail = await fetch(new Request("http://test/v1/collections/test-frontier-labs"));
-    const body = await detail.json();
+    const body = (await detail.json()) as any;
     expect(body.orgs.map((o: { slug: string }) => o.slug)).toEqual(["anthropic"]);
   });
 
