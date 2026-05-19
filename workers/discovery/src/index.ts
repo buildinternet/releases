@@ -157,6 +157,18 @@ export type StartManagedFetchSessionResult =
  */
 export class DiscoveryEntrypoint extends WorkerEntrypoint<Env> {
   /**
+   * Delegates to the default-export HTTP handler. Required because the API
+   * worker's service binding sets `entrypoint: "DiscoveryEntrypoint"`, which
+   * exposes only this class's named methods — without this shim, calls to
+   * `env.DISCOVERY_WORKER.fetch(...)` (the `/onboard` and `/update` proxy in
+   * `workers/api/src/routes/workflows.ts`) fail with "Handler does not export
+   * a fetch() function". See #1044.
+   */
+  async fetch(request: Request): Promise<Response> {
+    return httpHandler.fetch(request, this.env);
+  }
+
+  /**
    * Kick off a managed-agent update session for one or more sources and
    * return immediately with the new sessionId. The session runs async on the
    * MA platform; its completion writes `fetch_log` rows + source counters via
@@ -212,7 +224,7 @@ export class DiscoveryEntrypoint extends WorkerEntrypoint<Env> {
   }
 }
 
-export default {
+const httpHandler = {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
 
@@ -409,3 +421,5 @@ export default {
     return errorResponse("Not found", 404);
   },
 };
+
+export default httpHandler;
