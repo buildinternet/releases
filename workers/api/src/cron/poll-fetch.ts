@@ -472,19 +472,24 @@ export interface DiscoveryWorkerRpc {
   }): Promise<{ ok: true; sessionId: string } | { ok: false; error: string }>;
 }
 
-export interface FetchOneResult {
+type FetchOneBase = {
   releasesFound: number;
   releasesInserted: number;
   durationMs: number;
-  status: "success" | "no_change" | "error" | "dry_run";
-  error?: string;
-  /**
-   * IDs of newly-inserted release rows (empty when nothing changed).
-   * Populated so callers that opt out of the inline embed / changelog-refresh
-   * side-effects (`opts.skipSideEffects`) can drive those steps themselves.
-   */
+  /** IDs of newly-inserted release rows (empty when nothing changed). */
   insertedIds?: string[];
-}
+};
+
+export type FetchOneResult =
+  | (FetchOneBase & { status: "success" })
+  | (FetchOneBase & { status: "no_change" })
+  | (FetchOneBase & {
+      status: "delegated";
+      /** Session ID returned by the discovery worker's `startManagedFetchSession`. */
+      sessionId: string;
+    })
+  | (FetchOneBase & { status: "error"; error: string })
+  | (FetchOneBase & { status: "dry_run" });
 
 export const DEFAULT_FETCH_MAX_ENTRIES = 200;
 
@@ -694,7 +699,8 @@ export async function delegateScrapeToDiscovery(
     releasesFound: 0,
     releasesInserted: 0,
     durationMs,
-    status: "no_change" as const,
+    status: "delegated" as const,
+    sessionId: result.sessionId,
   };
 }
 
