@@ -43,6 +43,7 @@ import {
   selectChangelogFile,
 } from "@buildinternet/releases-core/changelog-slice";
 import type { SourceWithOrg, SourcePatchInput } from "@buildinternet/releases-api-types";
+import { SourcePatchInputSchema } from "@buildinternet/releases-api-types";
 import {
   SourceListResultSchema,
   SourceDetailSchema,
@@ -2357,7 +2358,16 @@ sourceRoutes.post(
 
 const patchSourceHandler = async (c: import("hono").Context<Env>) => {
   const db = createDb(c.env.DB);
-  const body = await c.req.json<SourcePatchInput>();
+  const raw = (await c.req.json<unknown>()) as Record<string, unknown>;
+  const parsed = SourcePatchInputSchema.safeParse(raw);
+  if (!parsed.success) {
+    return c.json({ error: "bad_request", message: parsed.error.message }, 400);
+  }
+  const body = parsed.data as SourcePatchInput;
+  // Preserve the "kind" in raw check semantics — zod parse strips undefined keys,
+  // so the "kind" in body discriminator below uses the validated `body` after
+  // re-attaching the original null/undefined intent.
+  if ("kind" in raw && !("kind" in body)) (body as Record<string, unknown>).kind = raw.kind;
 
   const src = await resolveSourceFromContext(c, db);
   if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);

@@ -122,4 +122,31 @@ describe("kind on write paths", () => {
     const body = (await res.json()) as Record<string, unknown>;
     expect(body.error).toBe("bad_request");
   });
+
+  it("rejects an invalid kind value on PATCH /v1/orgs/:slug/sources/:slug", async () => {
+    await seedOrg("acme");
+    await testDb.db.insert(sources).values({
+      id: "src_acme_invalid",
+      orgId: "org_acme",
+      slug: "acme-feed",
+      name: "Acme Feed",
+      url: "https://acme.com/feed",
+      type: "feed",
+      metadata: "{}",
+    });
+
+    const res = await sourceRoutes.request(
+      "/orgs/acme/sources/acme-feed",
+      {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ kind: "framework" }),
+      },
+      makeEnv(),
+      noopCtx as unknown as Parameters<typeof sourceRoutes.request>[3],
+    );
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.error).toBe("bad_request");
+  });
 });
