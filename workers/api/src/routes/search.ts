@@ -215,6 +215,14 @@ searchRoutes.get(
         schema: { type: "boolean" },
         description: "Include coverage-side rows that normally roll up into a canonical release.",
       },
+      {
+        name: "include_empty",
+        in: "query",
+        required: false,
+        schema: { type: "boolean" },
+        description:
+          "Include orgs with zero indexed releases in the `orgs` section. Default false — empty orgs are stubs and surface as noise. `?domain=` short-circuits this and always returns the resolved org.",
+      },
     ],
     responses: {
       200: {
@@ -247,6 +255,7 @@ searchRoutes.get(
     const offset = Number.isFinite(rawOffset) && rawOffset > 0 ? rawOffset : 0;
     const mode = parseMode(c.req.query("mode"));
     const includeCoverage = parseBoolParam(c.req.query("include_coverage"));
+    const includeEmpty = parseBoolParam(c.req.query("include_empty"));
     const rawDomain = c.req.query("domain");
     const db = createDb(c.env.DB);
     const mediaOrigin = c.env.MEDIA_ORIGIN ?? "";
@@ -363,7 +372,7 @@ searchRoutes.get(
               category: scopedOrgRow.category,
             },
           ])
-        : searchOrgs(db, q, limit, { orgId: scopeOrgId }),
+        : searchOrgs(db, q, limit, { orgId: scopeOrgId, includeEmpty }),
       searchProducts(db, q, limit, { orgId: scopeOrgId }),
       searchSources(db, q, limit, { orgId: scopeOrgId }),
       // Direct LIKE match on collection name/slug/description — runs in

@@ -231,10 +231,16 @@ export const api = {
     );
     return body.releases ?? [];
   },
-  orgs: async (): Promise<OrgListItem[]> => {
-    const body = await fetchApi<ListResponse<OrgListItem> | OrgListItem[]>("/v1/orgs");
-    if (Array.isArray(body)) return body;
-    return body?.items ?? [];
+  orgs: async (
+    opts: { includeEmpty?: boolean } = {},
+  ): Promise<{ items: OrgListItem[]; emptyOrgCount: number }> => {
+    const qs = opts.includeEmpty ? "?includeEmpty=true" : "";
+    type OrgsBody =
+      | (ListResponse<OrgListItem> & { meta?: { emptyOrgCount?: number } })
+      | OrgListItem[];
+    const body = await fetchApi<OrgsBody>(`/v1/orgs${qs}`);
+    if (Array.isArray(body)) return { items: body, emptyOrgCount: 0 };
+    return { items: body?.items ?? [], emptyOrgCount: body?.meta?.emptyOrgCount ?? 0 };
   },
   sitemap: () => fetchApi<SitemapPayload>("/v1/sitemap"),
   orgDetail: (slug: string) => fetchApi<OrgDetail>(`/v1/orgs/${slug}`),

@@ -3,6 +3,7 @@ import {
   CategorySchema,
   ListResponseSchema,
   OverviewPageItemSchema,
+  PaginationSchema,
   ReleaseItemSchema,
 } from "./shared.js";
 import { SourceListItemSchema } from "./sources.js";
@@ -25,7 +26,28 @@ export const OrgListItemSchema = z.object({
   sparkline: z.array(z.number().int().min(0)).length(30),
 });
 
-export const OrgListResponseSchema = ListResponseSchema(OrgListItemSchema);
+/**
+ * Per-request side-channel for the orgs list (#746). `emptyOrgCount` is the
+ * number of orgs that match the same `q` filter but have zero indexed
+ * releases — used to label a "Show empty orgs" toggle without a second
+ * round-trip. The value is scoped by the search term but independent of
+ * `?includeEmpty=` so the toggle CTA can render a count whether the current
+ * response included empty orgs or not.
+ */
+export const OrgListMetaSchema = z.object({
+  emptyOrgCount: z.number().int().min(0),
+});
+
+/**
+ * `meta` is optional on the wire so older workers / pinned clients mid-deploy
+ * don't trip the schema check. New clients can treat missing as
+ * `emptyOrgCount: 0` (the toggle just won't render a count).
+ */
+export const OrgListResponseSchema = z.object({
+  items: z.array(OrgListItemSchema),
+  pagination: PaginationSchema,
+  meta: OrgListMetaSchema.optional(),
+});
 
 export const OrgAccountItemSchema = z.object({
   platform: z.string(),

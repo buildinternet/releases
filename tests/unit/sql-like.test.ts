@@ -77,19 +77,26 @@ describe("getOrgsWithStats / countOrgsForList stay aligned on LIKE-special input
 
   test("underscore is treated literally — `foo_bar` does not match `fooXbar`", async () => {
     await seedOrgs(["foo_bar", "fooXbar", "foo1bar", "unrelated"]);
-    const rows = await getOrgsWithStats(asD1(tdb.db), cutoff, "foo_bar");
-    const total = await countOrgsForList(asD1(tdb.db), "foo_bar");
+    // Default LIKE behavior is independent of the empty-org filter, but
+    // `includeEmpty: true` makes the assertions readable here — the seeded
+    // orgs have no releases so the filter would zero out the visible slice.
+    const rows = await getOrgsWithStats(asD1(tdb.db), cutoff, "foo_bar", undefined, {
+      includeEmpty: true,
+    });
+    const counts = await countOrgsForList(asD1(tdb.db), "foo_bar", { includeEmpty: true });
     expect(rows.map((r) => r.name)).toEqual(["foo_bar"]);
-    expect(total).toBe(1);
-    expect(rows.length).toBe(total);
+    expect(counts.totalItems).toBe(1);
+    expect(rows.length).toBe(counts.totalItems);
   });
 
   test("percent is treated literally — `100%` does not act as a wildcard", async () => {
     await seedOrgs(["100% pure", "1000 hits", "the 100%"]);
-    const rows = await getOrgsWithStats(asD1(tdb.db), cutoff, "100%");
-    const total = await countOrgsForList(asD1(tdb.db), "100%");
+    const rows = await getOrgsWithStats(asD1(tdb.db), cutoff, "100%", undefined, {
+      includeEmpty: true,
+    });
+    const counts = await countOrgsForList(asD1(tdb.db), "100%", { includeEmpty: true });
     expect(rows.map((r) => r.name).toSorted()).toEqual(["100% pure", "the 100%"]);
-    expect(total).toBe(2);
-    expect(rows.length).toBe(total);
+    expect(counts.totalItems).toBe(2);
+    expect(rows.length).toBe(counts.totalItems);
   });
 });
