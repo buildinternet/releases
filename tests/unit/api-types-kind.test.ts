@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 import {
   ProductRowSchema,
   ProductListItemSchema,
-  SourceDetailSchema,
   SourceWithOrgSchema,
 } from "@buildinternet/releases-api-types";
 
