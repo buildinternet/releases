@@ -414,7 +414,7 @@ export function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServ
           .enum(KIND_VALUES)
           .optional()
           .describe(
-            "Filter to a specific source/product kind. Release and catalog rows resolve through source.kind ?? product.kind.",
+            "Filter to a specific source/product kind. Release hits resolve through `source.kind ?? product.kind`; catalog hits filter on the row's own kind. The orgs and collections sections are unaffected; changelog chunk hits are unaffected.",
           ),
       },
     },

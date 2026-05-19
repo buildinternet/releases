@@ -72,7 +72,7 @@ productRoutes.get(
         in: "query",
         required: false,
         schema: { type: "string", enum: KIND_VALUES as unknown as string[] },
-        description: `Filter by entity kind. One of: ${KIND_VALUES.join(", ")}.`,
+        description: `Filter by entity kind. Direct match on the row's own kind — no inheritance from a parent. One of: ${KIND_VALUES.join(", ")}.`,
       },
     ],
     responses: {
