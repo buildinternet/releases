@@ -23,6 +23,7 @@ import {
   synthesizeReleaseUrl,
   FEED_4XX_INVALIDATE_THRESHOLD,
   CLEARED_FEED_FIELDS,
+  extractMediaFromMarkdown,
 } from "@releases/adapters/feed.js";
 import type { SourceMetadata, ChangeStatus } from "@releases/adapters/feed.js";
 import { loadFetchQuirks, type FetchQuirk } from "@releases/ai-internal/playbook";
@@ -1574,6 +1575,7 @@ async function fetchGitHub(
       url,
       publishedAt: rel.published_at ? new Date(rel.published_at) : undefined,
       prerelease: rel.prerelease === true,
+      media: rel.body ? extractMediaFromMarkdown(rel.body) : undefined,
     };
   });
 }

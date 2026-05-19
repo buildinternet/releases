@@ -607,6 +607,62 @@ export function extractMedia(
   return media;
 }
 
+/**
+ * Classify a URL by file extension into the MediaRef type union.
+ * `.gif` -> "gif"; `.mp4`/`.webm`/`.mov` -> "video"; everything else -> "image".
+ */
+function classifyMediaType(url: string): "image" | "video" | "gif" {
+  const lower = url.split("?")[0].toLowerCase();
+  if (lower.endsWith(".gif")) return "gif";
+  if (lower.endsWith(".mp4") || lower.endsWith(".webm") || lower.endsWith(".mov")) return "video";
+  return "image";
+}
+
+/**
+ * Extract structured media items from markdown content.
+ *
+ * Handles:
+ * - Markdown image syntax: `![alt](url)` and `![alt](url "title")`
+ * - HTML `<img src="...">` tags embedded in markdown
+ * - HTML `<video src="...">` tags embedded in markdown
+ *
+ * Only `https://` URLs pass through. Type is inferred by file extension
+ * (`.gif` -> "gif", `.mp4`/`.webm`/`.mov` -> "video", else -> "image").
+ */
+export function extractMediaFromMarkdown(
+  markdown: string,
+): Array<{ type: "image" | "video" | "gif"; url: string; alt?: string }> {
+  const items: Array<{ type: "image" | "video" | "gif"; url: string; alt?: string }> = [];
+
+  // Markdown image syntax: ![alt text](url) or ![alt text](url "title")
+  const mdImgPattern = /!\[([^\]]*)\]\(([^)\s"]+)(?:\s+"[^"]*")?\)/g;
+  let match: RegExpExecArray | null;
+  while ((match = mdImgPattern.exec(markdown)) !== null) {
+    const url = match[2];
+    if (!isSafeMediaUrl(url)) continue;
+    const alt = match[1] || undefined;
+    items.push({ type: classifyMediaType(url), url, alt });
+  }
+
+  // HTML img tags
+  const htmlImgPattern = /<img[^>]*src=["']([^"']+)["'](?:[^>]*alt=["']([^"']*)["'])?[^>]*\/?>/gi;
+  while ((match = htmlImgPattern.exec(markdown)) !== null) {
+    const url = match[1];
+    if (!isSafeMediaUrl(url)) continue;
+    const alt = match[2] || undefined;
+    items.push({ type: classifyMediaType(url), url, alt });
+  }
+
+  // HTML video tags
+  const htmlVideoPattern = /<video[^>]*src=["']([^"']+)["'][^>]*>/gi;
+  while ((match = htmlVideoPattern.exec(markdown)) !== null) {
+    if (!isSafeMediaUrl(match[1])) continue;
+    items.push({ type: "video", url: match[1] });
+  }
+
+  return items;
+}
+
 /** Convert iframe embed URLs to user-facing watch URLs. */
 export function iframeSrcToWatchUrl(src: string): string {
   const ytMatch = src.match(/youtube\.com\/embed\/([^?&"]+)/);
