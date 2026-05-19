@@ -3,6 +3,8 @@ name: parsing-changelogs
 description: How the Releases fetch and parse pipeline works — covers feed vs scrape adapters, incremental vs bulk parsing, dry-run testing, crawl mode, content hashing, and enrichment
 ---
 
+<!-- AUTO-GENERATED: Do not edit directly. Source of truth is src/agent/skills/. Changes here will be overwritten by scripts/sync-plugin-skills.ts -->
+
 # Parsing Changelogs
 
 How the Releases fetch pipeline converts changelog pages into structured release data.

@@ -9,6 +9,8 @@ description: >
   release velocity comparisons.
 ---
 
+<!-- AUTO-GENERATED: Do not edit directly. Source of truth is src/agent/skills/. Changes here will be overwritten by scripts/sync-plugin-skills.ts -->
+
 # Analyzing Releases
 
 Turn changelog data into competitive intelligence by analyzing release patterns across a cohort of related companies.

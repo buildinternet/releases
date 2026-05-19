@@ -3,6 +3,8 @@ name: finding-changelogs
 description: How to find, evaluate, and recommend the best ingestion method for changelog URLs — covers feed discovery, provider detection, GitHub API, markdown sources, and scraping fallback
 ---
 
+<!-- AUTO-GENERATED: Do not edit directly. Source of truth is src/agent/skills/. Changes here will be overwritten by scripts/sync-plugin-skills.ts -->
+
 # Finding Changelogs
 
 Determine the best way to get structured release data from a changelog or release notes page.

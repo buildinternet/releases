@@ -3,6 +3,8 @@ name: managing-sources
 description: How to create, delete, list, validate, and manage changelog sources — covers ignored/blocked URLs, duplicate detection, and the validation workflow
 ---
 
+<!-- AUTO-GENERATED: Do not edit directly. Source of truth is src/agent/skills/. Changes here will be overwritten by scripts/sync-plugin-skills.ts -->
+
 # Managing Sources
 
 Operational guide for managing changelog sources.
