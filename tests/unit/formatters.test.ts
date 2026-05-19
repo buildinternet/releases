@@ -43,7 +43,7 @@ const fullSource: FormatSourceDetail = {
       url: null,
     },
   ],
-  pagination: { page: 1, pageSize: 20, totalPages: 1, totalItems: 2 },
+  pagination: { nextCursor: null, limit: 20 },
   summaries: {
     rolling: {
       windowDays: 90,
@@ -200,18 +200,18 @@ describe("sourceToMarkdown", () => {
     expect(md).toContain("## Next.js 15");
   });
 
-  it("does NOT show Pagination when totalPages is 1", () => {
+  it("does NOT show Pagination when nextCursor is null", () => {
     const md = sourceToMarkdown(fullSource);
     expect(md).not.toContain("<Pagination");
   });
 
-  it("shows Pagination tag when totalPages > 1", () => {
+  it("shows Pagination tag with cursor when nextCursor is set", () => {
     const source: FormatSourceDetail = {
       ...fullSource,
-      pagination: { page: 1, pageSize: 20, totalPages: 3, totalItems: 55 },
+      pagination: { nextCursor: "2024-05-01T00:00:00Z|2024-05-01T00:00:00Z|rel_abc", limit: 20 },
     };
     const md = sourceToMarkdown(source);
-    expect(md).toContain('<Pagination page="1" total-pages="3" total-items="55"');
+    expect(md).toContain('<Pagination cursor="2024-05-01T00:00:00Z|2024-05-01T00:00:00Z|rel_abc"');
   });
 
   it("includes canonical URL when baseUrl is provided", () => {
@@ -220,13 +220,15 @@ describe("sourceToMarkdown", () => {
     expect(md).toContain("organization_url: https://releases.sh/vercel");
   });
 
-  it("includes next page URL in Pagination when baseUrl is provided", () => {
+  it("includes cursor next URL in Pagination when baseUrl is provided", () => {
     const source: FormatSourceDetail = {
       ...fullSource,
-      pagination: { page: 1, pageSize: 20, totalPages: 3, totalItems: 55 },
+      pagination: { nextCursor: "2024-05-01T00:00:00Z|2024-05-01T00:00:00Z|rel_abc", limit: 20 },
     };
     const md = sourceToMarkdown(source, { baseUrl: "https://releases.sh" });
-    expect(md).toContain('next="https://releases.sh/vercel/next-js.md?page=2"');
+    expect(md).toContain(
+      'next="https://releases.sh/vercel/next-js.md?cursor=2024-05-01T00%3A00%3A00Z%7C2024-05-01T00%3A00%3A00Z%7Crel_abc&limit=20"',
+    );
   });
 
   it("omits canonical URL when baseUrl is not provided", () => {

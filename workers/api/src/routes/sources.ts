@@ -115,7 +115,6 @@ import type { Env } from "../index.js";
 import {
   getSourcesWithStats,
   countSourcesForList,
-  getSourceReleasesPaginated,
   getSourceReleasesFeed,
   getSourceActivityBuckets,
   getSourceHeatmapData,
@@ -1826,8 +1825,8 @@ sourceRoutes.post(
 // `/orgs/:orgSlug/sources/:sourceSlug` (org-scoped, both segments id-or-slug).
 // `resolveSourceFromContext` picks the right resolver from the matched params.
 const getSourceDetailHandler = async (c: import("hono").Context<Env>) => {
-  const page = parseInt(c.req.query("page") ?? "1", 10);
-  const pageSize = parseInt(c.req.query("pageSize") ?? "20", 10);
+  const cursorParam = c.req.query("cursor") ?? null;
+  const limit = parseLimitParam(c.req.query("limit"), 20, 100);
   const includeCoverage = parseBoolParam(c.req.query("include_coverage"));
   const includePrereleases = parseBoolParam(c.req.query("include_prereleases"));
   const db = createDb(c.env.DB);
@@ -1835,14 +1834,15 @@ const getSourceDetailHandler = async (c: import("hono").Context<Env>) => {
   const src = await resolveSourceFromContext(c, db);
   if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
 
-  const offset = (page - 1) * pageSize;
+  const cursor = parseFeedCursor(cursorParam);
+  const isFirstPage = cursorParam === null;
   const cutoff = daysAgoIso(30);
   const cutoff90d = daysAgoIso(90);
   const dateCol = sql`COALESCE(${releasesVisible.publishedAt}, ${releasesVisible.fetchedAt})`;
-  // Shared filter so the paginated rows, totals, derived stats, and fallback
-  // version lookup all see the same release set. Without this, hiding
-  // prereleases from the rows but leaving them in the count produces
-  // overcounted `totalPages` and stale derived metrics.
+  // Shared filter so the cursor-paginated rows, totals, derived stats, and
+  // fallback version lookup all see the same release set. Without this, hiding
+  // prereleases from the rows but leaving them in the count produces stale
+  // derived metrics.
   const prereleaseVisibleWhere = includePrereleases
     ? undefined
     : sql`(${releasesVisible.prerelease} IS NULL OR ${releasesVisible.prerelease} = 0)`;
@@ -1867,25 +1867,26 @@ const getSourceDetailHandler = async (c: import("hono").Context<Env>) => {
         .limit(1)
     : Promise.resolve([]);
 
-  // On page > 1 we can't derive latestVersion/latestDate from the paginated rows, so issue it in the same wave.
-  const latestByDateQuery =
-    page === 1
-      ? Promise.resolve([])
-      : db
-          .select({ version: releasesVisible.version, publishedAt: releasesVisible.publishedAt })
-          .from(releasesVisible)
-          .where(
-            and(
-              eq(releasesVisible.sourceId, src.id),
-              sql`${releasesVisible.publishedAt} IS NOT NULL`,
-              prereleaseVisibleWhere,
-            ),
-          )
-          .orderBy(desc(releasesVisible.publishedAt))
-          .limit(1);
+  // When a cursor is present, we can't derive latestVersion/latestDate from
+  // the returned rows (they're somewhere mid-feed), so issue the query in the
+  // same wave. The no-cursor first call still derives from the returned rows.
+  const latestByDateQuery = isFirstPage
+    ? Promise.resolve([])
+    : db
+        .select({ version: releasesVisible.version, publishedAt: releasesVisible.publishedAt })
+        .from(releasesVisible)
+        .where(
+          and(
+            eq(releasesVisible.sourceId, src.id),
+            sql`${releasesVisible.publishedAt} IS NOT NULL`,
+            prereleaseVisibleWhere,
+          ),
+        )
+        .orderBy(desc(releasesVisible.publishedAt))
+        .limit(1);
 
   const [
-    releaseRows,
+    feedRows,
     orgRows,
     productRows,
     metricsRows,
@@ -1894,7 +1895,7 @@ const getSourceDetailHandler = async (c: import("hono").Context<Env>) => {
     changelogExistsRows,
     latestByDateRows,
   ] = await Promise.all([
-    getSourceReleasesPaginated(db, src.id, pageSize, offset, {
+    getSourceReleasesFeed(c.env.DB, src.id, cursor, limit + 1, {
       includeCoverage,
       includePrereleases,
     }),
@@ -1938,8 +1939,13 @@ const getSourceDetailHandler = async (c: import("hono").Context<Env>) => {
   const earliest = earliestRows[0];
   const hasChangelogFile = changelogExistsRows.length > 0;
 
+  const hasMore = feedRows.length > limit;
+  const pageRows = hasMore ? feedRows.slice(0, limit) : feedRows;
+  const nextCursor =
+    hasMore && pageRows.length > 0 ? buildFeedCursor(pageRows[pageRows.length - 1]!) : null;
+
   const mediaOrigin = c.env.MEDIA_ORIGIN ?? "";
-  const releasesFormatted = releaseRows.map((r) => ({
+  const releasesFormatted = pageRows.map((r) => ({
     id: r.id,
     version: r.version,
     type: r.type,
@@ -1955,20 +1961,22 @@ const getSourceDetailHandler = async (c: import("hono").Context<Env>) => {
     coverageCount: r.coverage_count,
   }));
 
-  // Derive latest{Version,Date}. Page 1 uses already-fetched rows; page > 1 uses the parallel query above.
-  // The legacy fallback (latest by fetched_at when no version-bearing published row exists) runs only if needed.
+  // Derive latest{Version,Date}. The no-cursor first call uses already-fetched
+  // rows; cursor-continuation calls use the parallel query above. The legacy
+  // fallback (latest by fetched_at when no version-bearing published row
+  // exists) runs only if needed.
   let latestVersion: string | null = null;
   let latestDate: string | null = null;
 
-  if (page === 1 && releaseRows.length > 0) {
-    const latestPublished = releaseRows.find((r) => r.published_at !== null);
+  if (isFirstPage && pageRows.length > 0) {
+    const latestPublished = pageRows.find((r) => r.published_at !== null);
     if (latestPublished?.version) {
       latestVersion = latestPublished.version;
       latestDate = latestPublished.published_at;
     }
-    if (!latestVersion) latestVersion = releaseRows[0].version ?? null;
+    if (!latestVersion) latestVersion = pageRows[0]!.version ?? null;
     if (!latestDate && latestPublished) latestDate = latestPublished.published_at;
-  } else if (page > 1) {
+  } else if (!isFirstPage) {
     const latest = (
       latestByDateRows as Array<{ version: string | null; publishedAt: string | null }>
     )[0];
@@ -1988,7 +1996,6 @@ const getSourceDetailHandler = async (c: import("hono").Context<Env>) => {
   const releasesLast30Days = metrics.recent;
   const avgReleasesPerWeek = computeAvgPerWeek(metrics.recent90d, metrics.oldest);
   const totalItems = metrics.total;
-  const totalPages = Math.ceil(totalItems / pageSize);
 
   const rollingSummaryRow = summaryRows.find((s) => s.type === "rolling");
   const monthlySummaryRows = summaryRows.filter((s) => s.type === "monthly");
@@ -2020,14 +2027,7 @@ const getSourceDetailHandler = async (c: import("hono").Context<Env>) => {
     lastPolledAt: src.lastPolledAt,
     trackingSince: earliest?.date ?? metrics.oldest ?? src.createdAt,
     releases: releasesFormatted,
-    pagination: {
-      page,
-      pageSize,
-      returned: releasesFormatted.length,
-      totalItems,
-      totalPages,
-      hasMore: page < totalPages,
-    },
+    pagination: { nextCursor, limit },
     summaries: {
       rolling: rollingSummaryRow
         ? {
@@ -2057,7 +2057,7 @@ const getSourceDetailRoute = describeRoute({
   tags: ["Sources"],
   summary: "Get source detail",
   description:
-    "Resolves by slug or `src_…` ID on the bare path, or by org-scoped slug pair. Paginated `releases` array (`?page=`, `?pageSize=`); `?include_coverage=true` exposes coverage rows.",
+    "Resolves by slug or `src_…` ID on the bare path, or by org-scoped slug pair. Cursor-paginated `releases` array (`?cursor=` opaque cursor from a prior response's `pagination.nextCursor`, `?limit=` capped at 100); `?include_coverage=true` exposes coverage rows; `?include_prereleases=true` includes pre-release entries.",
   responses: {
     200: {
       description: "Source detail with paginated releases",

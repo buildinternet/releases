@@ -60,6 +60,7 @@ import type {
   SourceListResponseSchema,
   SourceListResultSchema,
   SourceDetailSchema,
+  SourceFeedPaginationSchema,
   SourceMutationResponseSchema,
   SourceOrgRefSchema,
   SourcePatchInputSchema,
@@ -268,6 +269,7 @@ export {
   SourceListResponseSchema,
   SourceListResultSchema,
   SourceDetailSchema,
+  SourceFeedPaginationSchema,
   SourceMutationResponseSchema,
   SourceOrgRefSchema,
   SourcePatchInputSchema,
@@ -508,6 +510,7 @@ export type CreateSourceBody = z.infer<typeof CreateSourceBodySchema>;
 export type ChangelogFileSummary = z.infer<typeof ChangelogFileSummarySchema>;
 export type SourceChangelogResponse = z.infer<typeof SourceChangelogResponseSchema>;
 export type SourceDetail = z.infer<typeof SourceDetailSchema>;
+export type SourceFeedPagination = z.infer<typeof SourceFeedPaginationSchema>;
 export type SourceMutationResponse = z.infer<typeof SourceMutationResponseSchema>;
 export type SourceOrgRef = z.infer<typeof SourceOrgRefSchema>;
 export type SourceActivityResponse = z.infer<typeof SourceActivityResponseSchema>;

@@ -12,19 +12,16 @@ export async function GET(
 ) {
   const { orgSlug, sourceSlug } = await params;
   const format = getFormat(request);
-  const page = parseInt(request.nextUrl.searchParams.get("page") ?? "1", 10) || 1;
-  const pageSize = parseInt(request.nextUrl.searchParams.get("pageSize") ?? "20", 10) || 20;
+  const cursor = request.nextUrl.searchParams.get("cursor");
+  const limit = parseInt(request.nextUrl.searchParams.get("limit") ?? "20", 10) || 20;
 
   let source;
   try {
-    // Atom feeds ignore pagination params and always fetch a full tranche of
-    // recent entries so the feed is self-contained.
-    const effectivePageSize = format === "atom" ? ATOM_DEFAULT_MAX_ENTRIES : pageSize;
-    source = await api.sourceDetail(
-      { orgSlug, sourceSlug },
-      format === "atom" ? 1 : page,
-      effectivePageSize,
-    );
+    // Atom feeds always fetch a fresh tranche of recent entries from the start
+    // of the feed so the feed is self-contained — ignore any cursor.
+    const opts =
+      format === "atom" ? { cursor: null, limit: ATOM_DEFAULT_MAX_ENTRIES } : { cursor, limit };
+    source = await api.sourceDetail({ orgSlug, sourceSlug }, opts);
   } catch {
     return NextResponse.json({ error: "not_found", message: "Source not found" }, { status: 404 });
   }

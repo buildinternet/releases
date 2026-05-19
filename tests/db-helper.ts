@@ -104,6 +104,15 @@ export function createTestDb(): TestDatabase {
   const sqlite = Database.deserialize(getMigratedSnapshot());
   sqlite.run("PRAGMA foreign_keys=ON");
   const db = ensureBatchShim(drizzle(sqlite, { schema }));
+  // Patch a D1-shaped `prepare` onto the drizzle handle so handlers that
+  // wire `c.env.DB` to this object can both call `createDb(c.env.DB)` (drizzle
+  // short-circuit via `.select`) and pass it to functions that talk to
+  // `D1Database.prepare` directly (e.g. cursor-paginated feed queries) without
+  // standing up a separate shim per test.
+  const shim = makeD1Shim(sqlite);
+  Object.assign(db as unknown as { prepare?: unknown }, {
+    prepare: shim.prepare.bind(shim),
+  });
 
   return {
     db,

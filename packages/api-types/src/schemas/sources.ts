@@ -4,12 +4,7 @@ import {
   SOURCE_DISCOVERY,
   SOURCE_FETCH_PRIORITIES,
 } from "@buildinternet/releases-core/source-enums";
-import {
-  ListResponseSchema,
-  PaginationSchema,
-  ReleaseItemSchema,
-  ReleaseSummaryItemSchema,
-} from "./shared.js";
+import { ListResponseSchema, ReleaseItemSchema, ReleaseSummaryItemSchema } from "./shared.js";
 
 export const SourceTypeSchema = z.enum(SOURCE_TYPES);
 export const SourceDiscoverySchema = z.enum(SOURCE_DISCOVERY);
@@ -106,6 +101,17 @@ const SourceDetailSummariesSchema = z.object({
 });
 
 /**
+ * Cursor pagination shape for the source detail's embedded release feed.
+ * Mirrors `OrgFeedPaginationSchema` and `CollectionFeedPaginationSchema` —
+ * release lists are feed-shaped (append-only, mutates between calls), so they
+ * use cursor pagination per the AGENTS.md convention.
+ */
+export const SourceFeedPaginationSchema = z.object({
+  nextCursor: z.string().nullable(),
+  limit: z.number().int().min(1),
+});
+
+/**
  * Resolved attribution block returned alongside a source row. `id` is
  * additive vs the legacy `{ slug, name }` shape — older clients that ignored
  * it still parse cleanly. `productId` / `productSlug` are sibling top-level
@@ -149,7 +155,7 @@ export const SourceDetailSchema = z.object({
   lastPolledAt: z.string().nullable(),
   trackingSince: z.string(),
   releases: z.array(ReleaseItemSchema),
-  pagination: PaginationSchema,
+  pagination: SourceFeedPaginationSchema,
   summaries: SourceDetailSummariesSchema,
 });
 

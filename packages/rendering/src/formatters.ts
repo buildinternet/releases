@@ -163,20 +163,14 @@ export function sourceToMarkdown(source: FormatSourceDetail, opts: FormatOptions
   }
 
   // ── Pagination ──
-  if ((source.pagination.totalPages ?? 0) > 1) {
-    const paginationAttrs = [
-      `page="${source.pagination.page}"`,
-      `total-pages="${source.pagination.totalPages}"`,
-      `total-items="${source.pagination.totalItems}"`,
-    ];
-    if (opts.baseUrl) {
-      paginationAttrs.push(
-        `next="${opts.baseUrl}${sourcePath}.md?page=${source.pagination.page + 1}"`,
-      );
-    }
-    lines.push(`<Pagination ${paginationAttrs.join(" ")} />`);
-    lines.push("");
-  }
+  // The embedded releases array is feed-shaped (append-only, mutates between
+  // calls) so it uses cursor pagination. The frontmatter's `total_releases`
+  // carries the absolute count; no `total-items` / `total-pages` attribute.
+  pushPaginationFooter(
+    lines,
+    source.pagination,
+    opts.baseUrl ? `${opts.baseUrl}${sourcePath}.md` : null,
+  );
 
   return lines.join("\n");
 }

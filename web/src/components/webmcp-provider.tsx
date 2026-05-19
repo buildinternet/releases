@@ -187,18 +187,25 @@ export function WebMcpProvider({ apiBaseUrl }: { apiBaseUrl: string }) {
               type: "string",
               description: "Org-scoped identifier: `<orgSlug>/<sourceSlug>` or `src_<id>`.",
             },
-            page: { type: "integer", minimum: 1, default: 1 },
-            pageSize: { type: "integer", minimum: 1, maximum: 100, default: 20 },
+            cursor: {
+              type: "string",
+              description:
+                "Opaque cursor from a previous response's `pagination.nextCursor`. Omit on the first call.",
+            },
+            limit: { type: "integer", minimum: 1, maximum: 100, default: 20 },
           },
           required: ["identifier"],
         },
         annotations: { readOnlyHint: true },
         execute: async (input) => {
           const identifier = String(input.identifier ?? "").trim();
-          const page = Number(input.page ?? 1);
-          const pageSize = Number(input.pageSize ?? 20);
+          const cursor = input.cursor != null ? String(input.cursor) : null;
+          const limit = Number(input.limit ?? 20);
           if (!identifier) throw new Error("`identifier` is required");
-          const qs = `?page=${page}&pageSize=${pageSize}`;
+          const params = new URLSearchParams();
+          if (cursor) params.set("cursor", cursor);
+          params.set("limit", String(limit));
+          const qs = `?${params.toString()}`;
           // Typed source ID — the bare path keeps accepting these because IDs
           // are globally unique. Slug-form bare paths are deprecated (#698).
           if (identifier.startsWith("src_")) {
