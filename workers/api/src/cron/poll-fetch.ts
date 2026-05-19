@@ -644,6 +644,39 @@ export async function delegateScrapeToDiscovery(
     };
   }
 
+  // Write bookkeeping so the source isn't immediately re-picked while the MA
+  // session is still in flight. Without this, `changeDetectedAt` stays set
+  // and `nextFetchAfter` stays null, so the next poll-fetch tick re-fires
+  // delegation — that's the runaway loop that burned ~$20 in Haiku on
+  // 2026-05-18 when a manual /fetch seeded one Notion session and the
+  // workflow kept re-spawning. The MA session writes the real fetch_log row
+  // (with actual `releasesInserted` count) when it completes; this synthetic
+  // row only exists to take the source out of the "due" queue.
+  //
+  // 1-hour fixed cooldown: longer than any reasonable MA session runtime
+  // (typical ~2 min), shorter than the normal-tier 4h base interval so we
+  // don't disrupt the source's natural cadence. We don't touch
+  // `consecutiveNoChange` because the source isn't actually unchanged — we
+  // just delegated; exponential backoff doesn't apply.
+  const DELEGATION_COOLDOWN_MS = 60 * 60_000;
+  await Promise.all([
+    db.insert(fetchLog).values({
+      sourceId: source.id,
+      sessionId: result.sessionId,
+      releasesFound: 0,
+      releasesInserted: 0,
+      durationMs,
+      status: "no_change",
+    }),
+    db
+      .update(sources)
+      .set({
+        nextFetchAfter: new Date(Date.now() + DELEGATION_COOLDOWN_MS).toISOString(),
+        changeDetectedAt: null,
+      })
+      .where(eq(sources.id, source.id)),
+  ]);
+
   logEvent("info", {
     component: "cron-poll-fetch",
     event: "crawl-delegation-handoff",
