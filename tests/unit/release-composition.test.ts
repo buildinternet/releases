@@ -70,7 +70,35 @@ describe("parseComposition (AI model output)", () => {
 describe("parseReleaseContent boilerplate-fallback guard", () => {
   // Without these guards the bad output below leaks straight to the web UI
   // as a SUMMARY block that just says "no summary". See rel_dH8OlYQtxhCGYMXZt6dWx.
-  it("nulls the summary when the model emits the EMPTY_BODY_FALLBACK sentinel", () => {
+
+  it("nulls summary + titleShort when <empty>true</empty> — the primary signal", () => {
+    const raw = `<empty>true</empty>
+<title>Chrome 148 for Android stability and performance improvements</title>
+<title_short>Dependency update</title_short>
+<summary>Release notes do not describe the change.</summary>
+<composition><bugs>0</bugs><features>0</features><enhancements>0</enhancements></composition>`;
+    const result = parseReleaseContent(raw, "end_turn");
+    expect(result.summary).toBeNull();
+    expect(result.titleShort).toBeNull();
+    expect(result.title).toBe("Chrome 148 for Android stability and performance improvements");
+  });
+
+  it("keeps the summary when <empty>false</empty> even if the text looks fallback-ish", () => {
+    // Defensive: if the model's structured signal says "I have real content",
+    // trust it over a coincidental string match. This release legitimately
+    // talks about releases not describing changes.
+    const raw = `<empty>false</empty>
+<title>Foo v1.0 ships</title>
+<title_short>Foo v1.0 ships</title_short>
+<summary>Foo v1.0 ships.</summary>`;
+    const result = parseReleaseContent(raw, "end_turn");
+    expect(result.summary).toBe("Foo v1.0 ships.");
+    expect(result.titleShort).toBe("Foo v1.0 ships");
+  });
+
+  it("falls back to string-matching when <empty> tag is absent (older cached prompt)", () => {
+    // Defense-in-depth: a response produced before the <empty> tag was added
+    // still gets the bad summary scrubbed by the string match.
     const raw = `<title>Chrome 148 for Android stability and performance improvements</title>
 <title_short>Dependency update</title_short>
 <summary>Release notes do not describe the change.</summary>
