@@ -497,8 +497,10 @@ export class BatchSummarizeWorkflow extends WorkflowEntrypoint<
 
       // Batch UPDATEs: each UPDATE binds at most 5 values (titleGenerated,
       // titleShort, summary, optional compositionJson, id) → D1 hard cap of 100
-      // params → chunk at 20 rows per batch. Idempotent: WHERE title_short
-      // IS NULL guards against double-writes on step retry.
+      // params → chunk at 20 rows per batch. Idempotent: WHERE title_generated
+      // IS NULL guards against double-writes on step retry — and unlike
+      // title_short, it stays non-null on the boilerplate-discard path so
+      // fetchEligibleReleases doesn't re-pick those rows on the next run.
       //
       // D1's db.batch([...]) is atomic per array — all statements in one batch
       // call commit or none do. succeeded and actualCostUsd are incremented only
@@ -516,7 +518,7 @@ export class BatchSummarizeWorkflow extends WorkflowEntrypoint<
               summary: row.summary,
               ...(metadataSet ? { metadata: metadataSet } : {}),
             })
-            .where(and(eq(releases.id, row.id), sql`${releases.titleShort} IS NULL`));
+            .where(and(eq(releases.id, row.id), sql`${releases.titleGenerated} IS NULL`));
         });
         try {
           // oxlint-disable-next-line no-await-in-loop -- chunked batch; parallelism would exceed D1 limits

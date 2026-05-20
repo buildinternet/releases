@@ -33,6 +33,9 @@ export const MAX_OUTPUT_TOKENS = 280;
 // rows skip the model entirely and return all-null fields.
 const EMPTY_BODY_FALLBACK = "Release notes do not describe the change.";
 
+// Boilerplate short titles authorized by <title_short_format> rule 8.
+const BOILERPLATE_SHORT_TITLES = new Set(["dependency update", "internal release"]);
+
 // Strings that, when they are the entire normalized body, indicate no real
 // release-note content. Compared lowercase after stripping markdown / HTML
 // comments / badges.
@@ -80,7 +83,9 @@ export function isEmptyContent(raw: string): boolean {
 export const SYSTEM_PROMPT = `You write a title, a short title, and a summary for a release-notes entry, used in a developer-facing changelog index.
 
 <output_structure>
-Output exactly one <title>...</title> tag, then one <title_short>...</title_short> tag, then one <summary>...</summary> tag, then one <composition>...</composition> tag, in that order. Output nothing before, between, or after these tags.
+Output exactly one <empty>...</empty> tag, then one <title>...</title> tag, then one <title_short>...</title_short> tag, then one <summary>...</summary> tag, then one <composition>...</composition> tag, in that order. Output nothing before, between, or after these tags.
+
+The <empty> tag is a boolean — exactly the literal string \`true\` or \`false\`, with no other text inside the tag. It is true when the body has no real release-note content (see <fallback> below) and false otherwise. When empty is true, downstream discards the summary and short title entirely — still produce a formulaic title from the product and version (e.g. "Next.js v15.4.2 dependency update"), but the summary and title_short content is ignored.
 </output_structure>
 
 <title_format>
@@ -189,9 +194,9 @@ Output format: \`<composition><bugs>N</bugs><features>N</features><enhancements>
 </composition_format>
 
 <fallback>
-The summary text "${EMPTY_BODY_FALLBACK}" is used only when the body is empty, a single dependency-bump line, or pure pipeline boilerplate with no other content. Even in this case, still produce a meaningful formulaic title and short title — never put the fallback string in the title or title_short.
+Set <empty>true</empty> only when the body is empty, a single dependency-bump line, or pure pipeline boilerplate with no other content. When empty is true, write the fallback summary "${EMPTY_BODY_FALLBACK}" and use "Dependency update" or "Internal release" for title_short — downstream will discard both fields, so their exact text only matters as a sanity signal. The title field is kept regardless, so always produce a formulaic title from product + version (e.g. "Next.js v15.4.2 dependency update").
 
-When the body is a documentation page, blog post, marketing announcement, or any prose describing something concrete, summarize that content using its actual words. Do not refuse just because it is not a code changelog.
+Set <empty>false</empty> in all other cases, including documentation pages, blog posts, and marketing announcements. Summarize that content using its actual words — do not refuse just because it is not a code changelog.
 </fallback>
 
 <examples>
@@ -207,12 +212,14 @@ Body:
 ### Bug Fixes
 * fix imagegen size enum regression</input>
 <good_output>
+<empty>false</empty>
 <title>OpenAI Node SDK v0.10.0 adds quantity field to admin org usage</title>
 <title_short>Admin org usage gets quantity field; realtime translate launches</title_short>
 <summary>Admin organization usage responses now include a quantity field, and realtime translation is available. Fixed an imagegen size enum regression.</summary>
 <composition><bugs>1</bugs><features>2</features><enhancements>0</enhancements></composition>
 </good_output>
 <bad_output reason="title_short used 'Adds X and Y' instead of leading with the noun and outcome">
+<empty>false</empty>
 <title>OpenAI Node SDK v0.10.0 adds quantity field to admin org usage</title>
 <title_short>Adds quantity field and launches realtime translate</title_short>
 <summary>Admin organization usage responses now include a quantity field, and realtime translation is available. Fixed an imagegen size enum regression.</summary>
@@ -226,12 +233,14 @@ Title: 2.1.128
 Version: 2.1.128
 Body: 35 bullets where #1-#3 are cosmetic ("/color picks random colors", model picker label, --plugin-dir accepts .zip), #15 is "EnterWorktree now creates from local HEAD instead of origin/, no longer dropping unpushed commits", #20 is "Fixed crash loop when piping >10 MB to claude -p via stdin"</input>
 <good_output>
+<empty>false</empty>
 <title>Claude Code 2.1.128 fixes worktree bug that dropped unpushed commits</title>
 <title_short>Worktree no longer drops unpushed commits</title_short>
 <summary>Fixed a worktree bug that was dropping unpushed commits and a crash loop when piping over 10 MB stdin to claude -p. Plus dozens of smaller fixes across MCP, vim mode, and terminal rendering.</summary>
 <composition><bugs>20</bugs><features>0</features><enhancements>3</enhancements></composition>
 </good_output>
 <bad_output reason="title_short led with 'Fixes' verb and described mechanism instead of outcome">
+<empty>false</empty>
 <title>Claude Code 2.1.128 fixes worktree bug that dropped unpushed commits</title>
 <title_short>Fixes worktree bug dropping unpushed commits</title_short>
 <summary>Fixed a worktree bug that was dropping unpushed commits and a crash loop when piping over 10 MB stdin to claude -p. Plus dozens of smaller fixes across MCP, vim mode, and terminal rendering.</summary>
@@ -245,12 +254,14 @@ Title: 2.1.129
 Version: 2.1.129
 Body: 25 bullets. The first 4 are feature additions: "Added --plugin-url flag to fetch a plugin .zip archive from a URL", "Added CLAUDE_CODE_FORCE_SYNC_OUTPUT env var", "Added CLAUDE_CODE_PACKAGE_MANAGER_AUTO_UPDATE", "Plugin manifests: themes and monitors should now be declared under experimental". Bullet #5 reads: "Gateway /v1/models discovery for the /model picker is now opt-in via CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY=1 (was automatic in 2.1.126–2.1.128)". Later bullets include: "Fixed OAuth refresh race after wake-from-sleep that could log out all running sessions" and "Fixed 1-hour prompt cache TTL being silently downgraded to 5 minutes".</input>
 <good_output>
+<empty>false</empty>
 <title>Claude Code 2.1.129 makes gateway model discovery opt-in and hardens OAuth refresh</title>
 <title_short>Gateway model discovery now opt-in; OAuth refresh hardened</title_short>
 <summary>Gateway /v1/models discovery for the /model picker is now opt-in via CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY=1, reverting the automatic behavior introduced in 2.1.126. Fixed an OAuth refresh race after wake-from-sleep that could log out all running sessions, and a 1-hour prompt cache TTL being silently downgraded to 5 minutes.</summary>
 <composition><bugs>15</bugs><features>4</features><enhancements>2</enhancements></composition>
 </good_output>
 <bad_output reason="led with #4 correctness fixes and missed the #1 default-behavior reversal buried at bullet #5; the gateway discovery change breaks users on 2.1.126-128">
+<empty>false</empty>
 <title>Claude Code 2.1.129 fixes prompt cache TTL downgrade and adds plugin URL flag</title>
 <title_short>Prompt cache TTL no longer downgrades; OAuth refresh hardened</title_short>
 <summary>Fixed a 1-hour prompt cache TTL being silently downgraded to 5 minutes, and an OAuth refresh race after wake-from-sleep. Added --plugin-url flag to fetch plugins from URLs.</summary>
@@ -264,6 +275,7 @@ Title: v15.4.2
 Version: v15.4.2
 Body: Updated dependencies.</input>
 <good_output>
+<empty>true</empty>
 <title>Next.js v15.4.2 dependency update</title>
 <title_short>Dependency update</title_short>
 <summary>${EMPTY_BODY_FALLBACK}</summary>
@@ -276,12 +288,14 @@ Body: Updated dependencies.</input>
 Title: Building live speech translation with the Realtime API
 Body: Shows how to build live speech translation with the Realtime API.</input>
 <good_output>
+<empty>false</empty>
 <title>OpenAI publishes guide to building live speech translation with Realtime API</title>
 <title_short>Live speech translation guide for Realtime API</title_short>
 <summary>New guide covers building live speech translation with the Realtime API.</summary>
 <composition><bugs>0</bugs><features>0</features><enhancements>0</enhancements></composition>
 </good_output>
 <bad_output reason="title_short forced smart-brevity transformation onto guide content; smart brevity does not apply to documentation/announcement releases">
+<empty>false</empty>
 <title>OpenAI publishes guide to building live speech translation with Realtime API</title>
 <title_short>Realtime API: live speech translation guide ships</title_short>
 <summary>New guide covers building live speech translation with the Realtime API.</summary>
@@ -302,12 +316,14 @@ This week's release brings exciting quality-of-life improvements across the app:
 - Sub-issues now inherit the parent's project automatically — previously they stayed unassigned, which surprised teams using project-scoped views.
 - Fixed a regression where the Cmd+K palette would crash if the user had >500 favorites.</input>
 <good_output>
+<empty>false</empty>
 <title>Linear 2026.18 fixes Cmd+K crash and inherits parent project on sub-issues</title>
 <title_short>Cmd+K palette crash fixed; sub-issues inherit parent project</title_short>
 <summary>Sub-issues now inherit the parent's project automatically, and a Cmd+K palette crash for users with more than 500 favorites is fixed.</summary>
 <composition><bugs>1</bugs><features>1</features><enhancements>2</enhancements></composition>
 </good_output>
 <bad_output reason="title and title_short kept marketing language and missed the real fixes buried below">
+<empty>false</empty>
 <title>Linear 2026.18 brings exciting quality-of-life improvements</title>
 <title_short>Powerful new keyboard shortcuts and bug fixes</title_short>
 <summary>Exciting quality-of-life improvements include powerful new keyboard shortcuts and various bug fixes (PR #4821).</summary>
@@ -322,12 +338,14 @@ Title: v1.4.0
 Version: v1.4.0
 Body: A new \`loss_type="chunked_nll"\` option for SFT drastically reduces peak activation memory by computing cross-entropy over tokens in checkpointed chunks instead of materializing the full \`[batch × seq × vocab]\` logits tensor, unlocking sequence lengths that previously caused out-of-memory errors. Also added OpenReward Standard environment adapter, length-normalized DPO sigmoid loss, training chat templates for Cohere, Cohere2, Gemma 3, Qwen3, and Qwen2.5.</input>
 <good_output>
+<empty>false</empty>
 <title>TRL v1.4.0 unlocks longer SFT sequences with chunked cross-entropy loss</title>
 <title_short>Chunked cross-entropy unlocks longer SFT sequences</title_short>
 <summary>A new loss_type="chunked_nll" option for SFT computes cross-entropy over tokens in checkpointed chunks instead of materializing the full logits tensor, unlocking sequence lengths that previously caused out-of-memory errors. Also added OpenReward Standard environment adapter, length-normalized DPO sigmoid loss, and training chat templates for Cohere, Cohere2, Gemma 3, Qwen3, and Qwen2.5.</summary>
 <composition><bugs>0</bugs><features>4</features><enhancements>0</enhancements></composition>
 </good_output>
 <bad_output reason="title_short led with the mechanism (chunked cross-entropy loss is the *how*) framed as an added option; for capacity/performance releases, the user-facing outcome (longer sequences now fit) is the headline">
+<empty>false</empty>
 <title>TRL v1.4.0 adds chunked cross-entropy loss for SFT memory optimization</title>
 <title_short>Chunked NLL loss option added to SFT</title_short>
 <summary>A new loss_type="chunked_nll" option for SFT reduces peak activation memory. Also added OpenReward Standard environment adapter, length-normalized DPO sigmoid loss, and training chat templates.</summary>
@@ -464,12 +482,34 @@ export function parseReleaseContent(
       `model output missing or empty <summary> tag (raw length ${raw.length}, stop_reason=${stopReason ?? "unknown"})`,
     );
   }
+  const titleShort = extractTagged(raw, "title_short") || null;
+
+  // <empty>true</empty> is the primary boilerplate signal — when present, we
+  // discard summary + title_short regardless of their text. <empty>false</empty>
+  // means trust the model: keep the content even if the short title coincidentally
+  // matches a boilerplate constant. Only when the tag is absent (older cached
+  // prompt, output truncated) do we fall back to string-matching the in-prompt
+  // sentinels as defense-in-depth.
+  const emptyTag = readEmptyTag(raw);
+  const isFallbackSummary = summary.trim().toLowerCase() === EMPTY_BODY_FALLBACK.toLowerCase();
+  const isFallbackShort =
+    titleShort !== null && BOILERPLATE_SHORT_TITLES.has(titleShort.trim().toLowerCase());
+  const discard =
+    emptyTag === "true" || (emptyTag === null && (isFallbackSummary || isFallbackShort));
+
   return {
     title: extractTagged(raw, "title") || null,
-    titleShort: extractTagged(raw, "title_short") || null,
-    summary,
+    titleShort: discard ? null : titleShort,
+    summary: discard ? null : summary,
     composition: parseComposition(raw),
   };
+}
+
+function readEmptyTag(raw: string): "true" | "false" | null {
+  const v = extractTagged(raw, "empty").trim().toLowerCase();
+  if (v === "true") return "true";
+  if (v === "false") return "false";
+  return null;
 }
 
 /**

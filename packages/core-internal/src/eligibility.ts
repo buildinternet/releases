@@ -102,7 +102,7 @@ export async function fetchEligibleReleases(
           eq(releases.suppressed, false),
           eq(sources.isHidden, false),
           gte(releases.publishedAt, cutoffIso),
-          sql`${releases.titleShort} IS NULL`,
+          sql`${releases.titleGenerated} IS NULL`,
           sql`${releaseCoverage.coverageId} IS NULL`,
         ),
       )
@@ -149,7 +149,7 @@ export async function fetchEligibleReleases(
           eq(releases.suppressed, false),
           eq(sources.isHidden, false),
           gte(releases.publishedAt, cutoffIso),
-          sql`${releases.titleShort} IS NULL`,
+          sql`${releases.titleGenerated} IS NULL`,
           sql`${releaseCoverage.coverageId} IS NULL`,
           inArray(sql`LOWER(${organizations.slug})`, chunk),
         ),
