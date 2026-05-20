@@ -18,6 +18,7 @@ concurrency:
 
 permissions:
   contents: read
+  id-token: write # OIDC: mint a short-lived npm publish credential (no NPM_TOKEN)
 
 jobs:
   publish:
@@ -30,6 +31,14 @@ jobs:
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: latest
+
+      # npm OIDC trusted publishing needs npm >= 11.5.1 and Node >= 22.14.0.
+      # bun runs install/tests; npm does the publish + OIDC token exchange. No
+      # registry-url here on purpose — an empty _authToken line breaks OIDC.
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 22
+      - run: npm install -g npm@latest
 
       - run: bun install --frozen-lockfile
 
@@ -55,19 +64,15 @@ jobs:
             echo "already=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Configure npm auth
-        if: steps.check.outputs.already == 'false'
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_PUBLISHING_TOKEN }}
-        run: |
-          echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
-          echo "registry=https://registry.npmjs.org/" >> ~/.npmrc
-
       - name: Publish
         if: steps.check.outputs.already == 'false'
         working-directory: packages/api-types
         env:
           DRY_RUN: ${{ inputs.dry-run }}
+          # Source repo is private — npm provenance is unsupported from private
+          # repos, and trusted publishing would otherwise try to attach it and
+          # fail. OIDC still provides the (tokenless) publish credential.
+          NPM_CONFIG_PROVENANCE: "false"
         run: |
           if [ "${DRY_RUN}" = "true" ]; then
             npm publish --dry-run
