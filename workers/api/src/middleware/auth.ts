@@ -117,13 +117,22 @@ const requireReadAuthMiddleware: MiddlewareHandler<Env> = createAuthMiddleware({
 });
 
 /**
+ * Exact self-introspection paths. The middleware runs inside the `v1` sub-app,
+ * which is mounted at `/v1`, so `c.req.path` is the full `/v1/tokens/me` in
+ * production; the bare `/tokens/me` form covers direct-mount unit tests. Exact
+ * match (not `endsWith`) so no other path under the `/tokens` namespace can ever
+ * reach the read-only gate.
+ */
+const TOKENS_ME_PATHS = new Set(["/v1/tokens/me", "/tokens/me"]);
+
+/**
  * Auth for the `/v1/tokens` namespace. `GET /v1/tokens/me` is self-introspection
  * (any valid identity, read+); every other token route is admin-only. One
  * wrapper guarantees exactly one auth path runs per request — the generic
  * adminRoutes loop in index.ts would otherwise blanket-admin-gate `/me` too.
  */
 export const tokensAuthMiddleware: MiddlewareHandler<Env> = (c, next) => {
-  if (c.req.method === "GET" && c.req.path.endsWith("/tokens/me")) {
+  if (c.req.method === "GET" && TOKENS_ME_PATHS.has(c.req.path)) {
     return requireReadAuthMiddleware(c, next);
   }
   return authMiddleware(c, next);

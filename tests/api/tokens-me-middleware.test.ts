@@ -73,3 +73,42 @@ describe("tokensAuthMiddleware", () => {
     expect((await app(h.db)("/tokens/me", "root-secret")).status).toBe(200);
   });
 });
+
+// Mirrors the real index.ts wiring: tokensAuthMiddleware runs on the `v1`
+// sub-app, which is mounted at `/v1`, so `c.req.path` is the FULL `/v1/tokens/me`
+// here (not the bare `/tokens/me` the standalone tests above see). This guards
+// the exact-path match against a regression to `=== "/tokens/me"`, which would
+// silently admin-gate `/me` in production while leaving the standalone tests green.
+function prodApp(db: TestDatabase["db"]) {
+  const v1 = new Hono();
+  v1.use("/tokens", tokensAuthMiddleware);
+  v1.use("/tokens/*", tokensAuthMiddleware);
+  v1.get("/tokens/me", (c) => c.json({ ok: true }));
+  v1.get("/tokens/abc", (c) => c.json({ ok: true }));
+  const root = new Hono();
+  root.route("/v1", v1);
+  return (path: string, token?: string) =>
+    root.request(path, token ? { headers: { Authorization: `Bearer ${token}` } } : {}, {
+      DB: db,
+      RELEASED_API_KEY: mockSecret("root-secret"),
+    });
+}
+
+describe("tokensAuthMiddleware under the /v1 mount (production path shape)", () => {
+  it("read-only token reaches GET /v1/tokens/me", async () => {
+    h = createTestDb();
+    const token = await seed(h.db, ["read"]);
+    expect((await prodApp(h.db)("/v1/tokens/me", token)).status).toBe(200);
+  });
+
+  it("anonymous request to /v1/tokens/me is 401", async () => {
+    h = createTestDb();
+    expect((await prodApp(h.db)("/v1/tokens/me")).status).toBe(401);
+  });
+
+  it("read-only token is 403 on a non-me /v1/tokens route (still admin)", async () => {
+    h = createTestDb();
+    const token = await seed(h.db, ["read"]);
+    expect((await prodApp(h.db)("/v1/tokens/abc", token)).status).toBe(403);
+  });
+});
