@@ -14,31 +14,28 @@ The user-facing CLI (`@buildinternet/releases`) lives in [buildinternet/releases
 - `workers/mcp/` — Remote MCP server at `mcp.releases.sh`.
 - `workers/webhooks/` — Outbound webhook consumer: signs and delivers `release.created` events to subscribed endpoints with HMAC-SHA256, retry/DLQ via Cloudflare Queues, and a 7-day replay window. See [docs/webhooks.md](docs/webhooks.md).
 - `web/` — Next.js frontend for releases.sh.
-- `packages/` — In-tree shared code. `packages/core/` publishes `@buildinternet/releases-core` (schema + pure helpers shared with the OSS CLI) and `packages/api-types/` publishes `@buildinternet/releases-api-types` (wire protocol types). `packages/core-internal/`, `packages/adapters/`, `packages/ai/`, `packages/rendering/`, `packages/search/`, and the slimmed `packages/lib/` are private workspaces. `packages/lib/src/logger.ts` is also published via the OSS CLI as `@buildinternet/releases-lib/logger`.
-- `src/agent/` — Managed-agents discovery + worker harness (invoked by the discovery worker's Durable Object).
-- `plugins/claude/releases/` — Claude Code plugin (committed copy; skill source of truth is OSS `@buildinternet/releases-skills`).
+- `packages/` — In-tree shared code. `packages/core/` publishes `@buildinternet/releases-core` (schema + pure helpers shared with the OSS CLI) and `packages/api-types/` publishes `@buildinternet/releases-api-types` (wire protocol types). `packages/core-internal/`, `packages/adapters/`, `packages/ai/`, `packages/rendering/`, `packages/search/`, and `packages/lib/` are private workspaces. The monorepo consumes `@buildinternet/releases-lib/logger` and `@buildinternet/releases-skills` from npm (both published from the OSS CLI); the local `packages/lib/src/logger.ts` is a worker-runtime-aware fork, not the source of those npm artifacts.
+- `src/agent/` — Managed-agents discovery + worker harness (invoked by the discovery worker's Durable Object). `src/agent/skills/` is the canonical home for every skill in this repo — managed agents read from it directly, and the `releases-dev` Claude Code plugin references the same paths via `.claude-plugin/marketplace.json`.
+- `.claude-plugin/marketplace.json` + `plugins/claude/releases/` — Claude Code plugin manifest at the repo root, plus the agents / `/releases` command / `.mcp.json` assets it references. See [docs/architecture/agents.md](docs/architecture/agents.md#claude-code-plugin).
 
 ## Consumer surfaces
 
 ### Claude Code Plugin
 
-Install the plugin to get MCP tools, auto-triggering skills, and operational agents directly in Claude Code:
+This monorepo publishes a single Claude Code plugin named `releases-dev` (marketplace `releases-monorepo`) via `.claude-plugin/marketplace.json`. It targets monorepo developers — end users should install the public `releases` / `releases-admin` plugins from the [`buildinternet/releases-cli`](https://github.com/buildinternet/releases-cli) marketplace instead.
+
+`.claude/settings.json` declares the marketplace under `extraKnownMarketplaces`, so on a fresh clone Claude Code prompts you to install when you trust the project folder. Manual install:
 
 ```bash
-claude plugin add /path/to/releases/plugins/claude/releases
+/plugin marketplace add buildinternet/releases
+/plugin install releases-dev@releases-monorepo
 ```
 
-Or load for a single session:
-
-```bash
-claude --plugin-dir plugins/claude/releases
-```
-
-The plugin includes:
+The plugin bundles:
 
 - **MCP tools** — search releases, inspect orgs/products/sources, read stored CHANGELOGs (via `mcp.releases.sh`)
-- **Skills** — auto-triggers on changelog/release questions, plus operational skills for source management
-- **Agents** — `discovery` (finds and onboards sources) and `worker` (executes fetches)
+- **Skills** — every skill in `src/agent/skills/`, including the 4 monorepo-only operator skills
+- **Agents** — `discovery`, `worker`, and the monorepo-only `grader` subagent
 - **Commands** — `/releases <product> [query]` for quick lookups
 
 See [`plugins/claude/releases/README.md`](plugins/claude/releases/README.md) for full details.

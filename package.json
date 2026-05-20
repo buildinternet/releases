@@ -30,7 +30,6 @@
     "deploy:agents:worker": "bun scripts/sync-agent-skills.ts --worker",
     "deploy:agents:coordinator": "bun scripts/sync-agent-skills.ts --coordinator",
     "deploy:skills": "bun scripts/sync-agent-skills.ts --skills",
-    "sync:plugin-skills": "bun scripts/sync-plugin-skills.ts",
     "deploy": "bun run deploy:api && bun run deploy:discovery && bun run deploy:mcp",
     "db:generate": "drizzle-kit generate",
     "db:check-filenames": "./scripts/check-migration-filenames.sh",
