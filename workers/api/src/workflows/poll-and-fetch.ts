@@ -94,7 +94,7 @@ const RETRY_EMBED = {
 } satisfies WorkflowStepConfig;
 
 // Per-row failures are caught + logged inside the step body, so retries are
-// conservative; the `title_short IS NULL` predicate on the UPDATE
+// conservative; the `title_generated IS NULL` predicate on the UPDATE
 // makes a step-level retry safe.
 const RETRY_GENERATE = {
   retries: { limit: 1, delay: "30 seconds", backoff: "exponential" },
@@ -265,8 +265,11 @@ export async function generateContentForReleases(
   // a single batched UPDATE pass at the end. Each UPDATE binds at most 5 values
   // (titleGenerated, titleShort, summary, optional compositionJson, id) →
   // chunk at 20 to stay under D1's 100-bind per-statement cap. WHERE
-  // title_short IS NULL preserves idempotency against step retry. When
-  // composition is null we omit the metadata SET entirely so boilerplate
+  // title_generated IS NULL preserves idempotency against step retry — and
+  // unlike title_short, it survives the boilerplate-discard path (where
+  // title_short is intentionally null) so eligibility doesn't re-pick those
+  // rows on the next batch run. When composition is null we omit metadata SET
+  // entirely so boilerplate
   // rows don't trigger a no-op D1 page write.
   const updates: {
     id: string;
@@ -342,7 +345,7 @@ export async function generateContentForReleases(
           summary: u.summary,
           ...(metadataSet ? { metadata: metadataSet } : {}),
         })
-        .where(and(eq(releases.id, u.id), sql`${releases.titleShort} IS NULL`));
+        .where(and(eq(releases.id, u.id), sql`${releases.titleGenerated} IS NULL`));
     });
     try {
       // eslint-disable-next-line no-await-in-loop -- chunked batch; parallelism would exceed D1 limits

@@ -414,7 +414,7 @@ describe("fetchEligibleReleases — suppressed exclusion", () => {
     expect(rows.length).toBe(0);
   });
 
-  it("excludes already-summarized releases (title_short IS NOT NULL)", async () => {
+  it("excludes already-summarized releases (title_generated IS NOT NULL)", async () => {
     tdb.db
       .insert(organizations)
       .values(makeOrg({ autoGenerateContent: true }))
@@ -422,7 +422,40 @@ describe("fetchEligibleReleases — suppressed exclusion", () => {
     tdb.db.insert(sources).values(makeSource()).run();
     tdb.db
       .insert(releases)
-      .values(makeRelease({ titleShort: "Already summarized" }))
+      .values(
+        makeRelease({
+          titleGenerated: "Org v1 ships",
+          titleShort: "Already summarized",
+        }),
+      )
+      .run();
+
+    const rows = await fetchEligibleReleases(asDb(tdb.db), {
+      cutoffIso: "2026-04-01T00:00:00Z",
+    });
+    expect(rows.length).toBe(0);
+  });
+
+  it("excludes boilerplate-discard rows (title_generated set, title_short null)", async () => {
+    // Regression: parseReleaseContent nulls title_short + summary when the
+    // model signals <empty>true</empty> for boilerplate releases, but keeps
+    // title_generated (the formulaic headline). The eligibility predicate
+    // must key on title_generated so these rows don't get re-summarized
+    // every batch run, racking up Anthropic spend on the same null result.
+    tdb.db
+      .insert(organizations)
+      .values(makeOrg({ autoGenerateContent: true }))
+      .run();
+    tdb.db.insert(sources).values(makeSource()).run();
+    tdb.db
+      .insert(releases)
+      .values(
+        makeRelease({
+          titleGenerated: "Chrome 148 for Android stability and performance improvements",
+          titleShort: null,
+          summary: null,
+        }),
+      )
       .run();
 
     const rows = await fetchEligibleReleases(asDb(tdb.db), {

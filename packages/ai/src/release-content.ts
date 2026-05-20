@@ -30,19 +30,10 @@ export const MAX_OUTPUT_TOKENS = 280;
 
 // In-prompt sentinel emitted by the model when the body is boilerplate-only.
 // The empty-body short-circuit (isEmptyContent) is a separate path — those
-// rows skip the model entirely and return all-null fields. We also detect
-// this string in the parsed <summary> below (see parseReleaseContent) and
-// null it out so the model's "I have nothing meaningful to summarize" signal
-// maps to absence in the DB instead of a literal summary announcing "we have
-// no summary."
+// rows skip the model entirely and return all-null fields.
 const EMPTY_BODY_FALLBACK = "Release notes do not describe the change.";
 
-// Boilerplate short titles authorized by <title_short_format> rule 8. The
-// model emits one of these when the body is empty-or-chore-only; we treat
-// them as the same "no meaningful content" signal as EMPTY_BODY_FALLBACK
-// and null them out so the UI hides the short-title chip rather than
-// displaying a misleading classification (e.g. "Dependency update" on
-// Chrome for Android release notes that aren't a dependency update).
+// Boilerplate short titles authorized by <title_short_format> rule 8.
 const BOILERPLATE_SHORT_TITLES = new Set(["dependency update", "internal release"]);
 
 // Strings that, when they are the entire normalized body, indicate no real
@@ -493,19 +484,18 @@ export function parseReleaseContent(
   }
   const titleShort = extractTagged(raw, "title_short") || null;
 
-  // Boilerplate-fallback signal: the model emits <empty>true</empty> when the
-  // body has no real content. Downstream discards summary + short title (the
-  // title_generated headline like "Next.js v15.4.2 dependency update" is still
-  // useful, and read paths fall back to release.title when title_generated is
-  // null too). String-matching the in-prompt fallback sentence and the two
-  // boilerplate short-title constants is defense-in-depth — it catches
-  // responses produced by older cached prompts and any model deviation where
-  // the body of the tag drifted but the surface text is unchanged.
-  const empty = isEmpty(raw);
+  // <empty>true</empty> is the primary boilerplate signal — when present, we
+  // discard summary + title_short regardless of their text. <empty>false</empty>
+  // means trust the model: keep the content even if the short title coincidentally
+  // matches a boilerplate constant. Only when the tag is absent (older cached
+  // prompt, output truncated) do we fall back to string-matching the in-prompt
+  // sentinels as defense-in-depth.
+  const emptyTag = readEmptyTag(raw);
   const isFallbackSummary = summary.trim().toLowerCase() === EMPTY_BODY_FALLBACK.toLowerCase();
   const isFallbackShort =
     titleShort !== null && BOILERPLATE_SHORT_TITLES.has(titleShort.trim().toLowerCase());
-  const discard = empty || isFallbackSummary || isFallbackShort;
+  const discard =
+    emptyTag === "true" || (emptyTag === null && (isFallbackSummary || isFallbackShort));
 
   return {
     title: extractTagged(raw, "title") || null,
@@ -515,14 +505,11 @@ export function parseReleaseContent(
   };
 }
 
-/**
- * Read the <empty>true|false</empty> signal from the model response. Returns
- * `false` when the tag is missing (older prompt response, output truncated)
- * or its body is anything other than the literal "true" — the string-matching
- * fallback in parseReleaseContent then catches the boilerplate case from text.
- */
-function isEmpty(raw: string): boolean {
-  return extractTagged(raw, "empty").trim().toLowerCase() === "true";
+function readEmptyTag(raw: string): "true" | "false" | null {
+  const v = extractTagged(raw, "empty").trim().toLowerCase();
+  if (v === "true") return "true";
+  if (v === "false") return "false";
+  return null;
 }
 
 /**

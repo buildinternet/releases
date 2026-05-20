@@ -96,6 +96,22 @@ describe("parseReleaseContent boilerplate-fallback guard", () => {
     expect(result.titleShort).toBe("Foo v1.0 ships");
   });
 
+  it("trusts <empty>false</empty> over a coincidental fallback short title", () => {
+    // Edge case caught in review: if the model emits <empty>false</empty>
+    // (signaling real content) but title_short happens to be one of the
+    // boilerplate constants, the structured signal wins. Without this gating
+    // the valid summary would be nulled out.
+    const raw = `<empty>false</empty>
+<title>npm/cli v10.5.0 reduces install size</title>
+<title_short>Dependency update</title_short>
+<summary>Removed three transitive dependencies, shrinking npm install size by 1.2MB.</summary>`;
+    const result = parseReleaseContent(raw, "end_turn");
+    expect(result.summary).toBe(
+      "Removed three transitive dependencies, shrinking npm install size by 1.2MB.",
+    );
+    expect(result.titleShort).toBe("Dependency update");
+  });
+
   it("falls back to string-matching when <empty> tag is absent (older cached prompt)", () => {
     // Defense-in-depth: a response produced before the <empty> tag was added
     // still gets the bad summary scrubbed by the string match.
