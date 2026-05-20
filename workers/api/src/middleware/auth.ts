@@ -107,6 +107,29 @@ export const publicReadAuthMiddleware: MiddlewareHandler<Env> = createAuthMiddle
 });
 
 /**
+ * Requires any valid identity (`read` scope or higher); anonymous/invalid → 401.
+ * Used for self-introspection (`GET /v1/tokens/me`), reachable by a read-only
+ * token but not by an anonymous caller.
+ */
+export const requireReadAuthMiddleware: MiddlewareHandler<Env> = createAuthMiddleware({
+  allowPublicReads: false,
+  requiredScope: "read",
+});
+
+/**
+ * Auth for the `/v1/tokens` namespace. `GET /v1/tokens/me` is self-introspection
+ * (any valid identity, read+); every other token route is admin-only. One
+ * wrapper guarantees exactly one auth path runs per request — the generic
+ * adminRoutes loop in index.ts would otherwise blanket-admin-gate `/me` too.
+ */
+export const tokensAuthMiddleware: MiddlewareHandler<Env> = (c, next) => {
+  if (c.req.method === "GET" && c.req.path.endsWith("/tokens/me")) {
+    return requireReadAuthMiddleware(c, next);
+  }
+  return authMiddleware(c, next);
+};
+
+/**
  * Attach the resolved identity to the request context and, for DB tokens,
  * record usage (throttled, fire-and-forget). In tests there's no executionCtx,
  * so fall back to an un-awaited promise.
