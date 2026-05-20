@@ -135,15 +135,22 @@ The rubric defines a three-layer routing rule: target-shaped facts go in the pla
 
 ## Claude Code Plugin
 
-A Claude Code plugin at `plugins/claude/releases/` exposes the registry for use in Claude Code sessions. It connects to the remote MCP server at `mcp.releases.sh` and adapts the managed agent prompts for CLI-based operation.
+The monorepo publishes a single Claude Code plugin named **`releases-dev`** via `.claude-plugin/marketplace.json` at the repo root. It targets monorepo developers — end users install the public `releases` / `releases-admin` plugins from the [`buildinternet/releases-cli`](https://github.com/buildinternet/releases-cli) marketplace instead. The two repos publish under different marketplace identities to avoid the silent name shadowing that motivated the rename (see [#1087](https://github.com/buildinternet/releases/issues/1087)).
 
-**Components:** `.mcp.json` (MCP connection), `discovery` and `worker` agents, the `/releases` command, and the operator skill set synced from `src/agent/skills/`.
+**Components:** every skill in `src/agent/skills/` (referenced by path, no mirror), the `discovery` / `worker` / `grader` agents under `plugins/claude/releases/agents/`, the `/releases` command, and the `.mcp.json` pointing at `mcp.releases.sh`.
 
-**Test locally:** `claude --plugin-dir plugins/claude/releases`
+**Manifest layout:** `strict: false` on the plugin entry means the marketplace.json IS the entire definition. There is no per-plugin `plugin.json`; adding one back would create a conflict and the plugin would fail to load.
 
-**Validate:** `claude plugin validate plugins/claude/releases`
+**Install (monorepo developers):**
 
-**Skill sources of truth.** Two skill trees coexist and do not share tooling:
+```bash
+/plugin marketplace add buildinternet/releases
+/plugin install releases-dev@releases-monorepo
+```
 
-- `src/agent/skills/` (this monorepo) is the canonical source for managed agents and this repo's Claude plugin at `plugins/claude/releases/skills/`. Copies are maintained by hand — `scripts/sync-plugin-skills.ts` was removed when local mode was killed. After editing `src/agent/skills/<skill>/SKILL.md`, copy the change to `plugins/claude/releases/skills/<skill>/SKILL.md` in the same PR, then run `bun run deploy:skills` to push the managed-agents update.
-- The OSS CLI at [`buildinternet/releases-cli`](https://github.com/buildinternet/releases-cli) ships its own `skills/` tree (publishes `@buildinternet/releases-skills` + a separate Claude plugin) that includes the six user-oriented skills plus `releases-cli` / `releases-mcp`. When you edit one of the six shared skills here, mirror the change into the OSS CLI so the published package doesn't drift.
+**Validate:** `claude plugin validate . --strict` from the repo root. The same command runs in CI on every PR.
+
+**Skill sources of truth.** Two skill trees coexist but no longer copy:
+
+- `src/agent/skills/` (this monorepo) is the canonical source for managed agents AND for this repo's `releases-dev` plugin. The marketplace.json references these paths directly via `./src/agent/skills/<name>`. No mirror tree, no sync script. After editing `src/agent/skills/<skill>/SKILL.md`, run `bun run deploy:skills` to push the managed-agents update; the plugin picks up the change with no extra step.
+- The OSS CLI at [`buildinternet/releases-cli`](https://github.com/buildinternet/releases-cli) ships its own `skills/` tree (publishes `@buildinternet/releases-skills` + the `releases` / `releases-admin` plugins) that includes the six user-oriented skills plus `releases-cli` / `releases-mcp`. When you edit one of the six shared skills here, mirror the change into the OSS CLI so the published package doesn't drift. Cross-repo skill drift is a known follow-up tracked separately from the marketplace rename.

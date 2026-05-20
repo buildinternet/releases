@@ -196,15 +196,11 @@ jobs:
         # ALLOWLIST. Sub-second pure-JS check; no network, D1, or Wrangler.
         run: bun scripts/check-openapi-coverage.ts
 
-      - name: Verify Claude Code plugin skill mirror is in sync
-        run: |
-          bun run sync:plugin-skills
-          if ! git diff --exit-code plugins/claude/releases/skills/; then
-            echo "ERROR: plugins/claude/releases/skills/ is stale relative to src/agent/skills/." >&2
-            echo "Regenerate with: bun run sync:plugin-skills" >&2
-            echo "Remember to bump plugins/claude/releases/.claude-plugin/plugin.json if clients should refresh." >&2
-            exit 1
-          fi
+      - name: Validate Claude Code plugin marketplace manifest
+        # Catches schema bugs in .claude-plugin/marketplace.json before they
+        # reach a user's /plugin install. --strict treats unrecognized fields
+        # and missing metadata as failures, not warnings.
+        run: bunx --package=@anthropic-ai/claude-code claude plugin validate . --strict
 
       - name: Run tests
         run: bun run test

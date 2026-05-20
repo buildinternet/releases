@@ -1,95 +1,52 @@
-# Releases Plugin for Claude Code
+# `releases-dev` plugin (monorepo developer build)
 
-Search changelogs, track releases, and manage changelog sources with the [Releases.sh](https://releases.sh) registry.
+Internal Claude Code plugin shipped from `buildinternet/releases`. Bundles every skill in `src/agent/skills/`, the `discovery` / `worker` / `grader` subagents, the `/releases` command, and the hosted MCP connection.
 
-## What's Included
+**This plugin is for people developing the monorepo, not end users.** Anyone querying the registry — including engineers at other companies — should install the public `releases` and `releases-admin` plugins from the [`buildinternet/releases-cli`](https://github.com/buildinternet/releases-cli) marketplace instead. The CLI plugins ship the same public-facing skills with a tighter audience split (reader vs admin) and a versioned release process.
 
-- **MCP Server** — Connects Claude Code to the Releases.sh changelog registry
-- **Skills** — Operator playbooks bundled from `src/agent/skills/` covering source discovery, parsing, ingestion, maintenance, and trend analysis
-- **Agents** — `discovery` (finds and onboards sources) and `worker` (executes fetch operations)
-- **Commands** — `/releases` for manual changelog queries
-
-## Installation
+## Install (monorepo developers)
 
 ```bash
-claude plugin add /path/to/releases/plugins/claude/releases
+/plugin marketplace add buildinternet/releases
+/plugin install releases-dev@releases-monorepo
 ```
 
-### Skills only (no plugin)
+Reload Claude Code; `/releases`, the MCP tools at `mcp.releases.sh`, the discovery/worker/grader subagents, and the auto-triggering skills should all be available.
 
-To use just the auto-triggering skills in another agent (Claude Code, Codex, Cursor, OpenCode), install the standalone skills package via the [`skills`](https://github.com/vercel-labs/skills) CLI:
+## Layout
+
+- **`.claude-plugin/marketplace.json`** (repo root) — single source of plugin definition truth. References `./src/agent/skills/*` canonically and the assets under `./plugins/claude/releases/` for agents, commands, and `.mcp.json`. `strict: false` on the plugin entry means the marketplace entry IS the entire definition — there is no per-plugin `plugin.json`.
+- **`./src/agent/skills/<name>/SKILL.md`** — the canonical home for every skill. Managed agents (discovery + worker workers in production) read from here directly; the plugin references the same paths, so there is no mirror tree and no sync script.
+- **`./plugins/claude/releases/agents/{discovery,worker,grader}.md`** — subagent prompts. `discovery` and `worker` are the prompts the managed agents production workers use (kept in step with `src/agent/managed-discovery.ts`). `grader` is a local-only rubric subagent used when iterating on managed-agent rubrics.
+- **`./plugins/claude/releases/commands/releases.md`** — the `/releases` slash command.
+- **`./plugins/claude/releases/.mcp.json`** — points Claude Code at `https://mcp.releases.sh/mcp`.
+
+## Relationship to the CLI plugins
+
+The user-facing OSS CLI ([`buildinternet/releases-cli`](https://github.com/buildinternet/releases-cli)) publishes two plugins via its own marketplace:
+
+| Plugin                     | Audience           | Bundles                                                            |
+| -------------------------- | ------------------ | ------------------------------------------------------------------ |
+| `releases`                 | Reader             | Hosted MCP, `/releases`, public reader skills                      |
+| `releases-admin`           | Operator           | `discovery` + `worker` agents, operator playbook skills            |
+| `releases-dev` (this repo) | Monorepo developer | Everything above + the 4 monorepo-only skills + the `grader` agent |
+
+Six skills exist in both repos as hand-maintained copies — that drift is a known follow-up tracked separately from the marketplace rename. See [#1087](https://github.com/buildinternet/releases/issues/1087) for the cross-repo skill drift discussion.
+
+## Validation
+
+`claude plugin validate . --strict` from the repo root checks the manifest. The same command runs in CI on every PR via `.github/workflows/ci.yml`.
+
+## Available MCP tools
+
+Documented canonically in [`docs/architecture/mcp.md`](../../../docs/architecture/mcp.md) and surfaced via the live server at `https://mcp.releases.sh/mcp`. Tool shapes there are the source of truth; this README intentionally does not duplicate them.
+
+## Standalone skills (no plugin)
+
+To use just the auto-triggering skills in a different host (Codex, Cursor, OpenCode), install the public skill bundle from the OSS CLI repo via the [`skills`](https://github.com/vercel-labs/skills) CLI:
 
 ```bash
 npx skills add buildinternet/releases-cli
 ```
 
-This skips the MCP connection, agents, and `/releases` command that the full plugin registers.
-
-## Available MCP Tools
-
-### search
-
-Unified search across organizations, the catalog (products + standalone sources), and release content. Pass `type: ("orgs"|"catalog"|"releases")[]` to narrow which sections to return and skip expensive paths; pass `entity` (product slug / `prod_` id or source slug / `src_` id) to scope release results. Hybrid retrieval (FTS5 + semantic vectors via RRF) by default; falls back to lexical and flags `degraded` when Vectorize is unavailable.
-
-### list_catalog
-
-List catalog entries — products and standalone sources folded into one list with an `entryType: "product"|"source"` discriminator per row. Scope with an optional `organization` filter.
-
-### get_catalog_entry
-
-Detail for a single catalog entry. Accepts a product identifier (slug or `prod_` id) or a source identifier (slug or `src_` id); dispatches on entity type and returns the appropriate detail shape. Source entries list tracked CHANGELOG files by path and byte size. Pass `include_changelog: true` to inline the root CHANGELOG, or `changelog_path` to target a specific file (e.g. `packages/next/CHANGELOG.md`). Heading-aligned slicing via `changelog_offset` + `changelog_limit` (chars) or `changelog_tokens` (cl100k_base). Every embedded-slice response reports `totalTokens` for budget planning; token-mode calls also report `sliceTokens`. Chain successive calls via the returned `nextOffset` to page through large files. Recommended token brackets: 2000 / 5000 / 10000 / 20000.
-
-### get_latest_releases
-
-Get the most recent releases, optionally filtered by product, organization, or release `type`.
-
-### get_release
-
-Fetch the full content of a single release by id. Accepts a `rel_` prefix or a bare nanoid.
-
-### list_organizations
-
-List all indexed organizations, with optional search.
-
-### get_organization
-
-Get detailed information about a single organization. Includes a preview of the AI-generated overview when one exists (with a stale warning if it's older than 30 days). Pass `include_overview: true` to inline the full briefing — a short narrative that distills recent changelog activity into themed sections.
-
-### summarize_changes
-
-AI-generated summary of recent changes for a product.
-
-### compare_products
-
-Compare recent release activity between two products.
-
-### Deprecated shims
-
-One release cycle: `search_releases`, `search_registry`, `list_sources`, `list_products`, `get_product`. Their titles are suffixed `(deprecated)` and descriptions point at the replacement above.
-
-## Usage Examples
-
-The plugin works automatically when you ask about releases:
-
-- "What changed in Next.js 15?"
-- "Show me the latest Tailwind releases"
-- "Compare Bun vs Deno release activity"
-
-For manual lookups:
-
-```
-/releases next.js
-/releases tailwind v4 breaking changes
-/releases --compare bun deno
-```
-
-For source management, spawn the agents:
-
-```
-Use the discovery agent to onboard Stripe as a changelog source
-Use the worker agent to fetch all Vercel sources
-```
-
-## Skill Sync
-
-Plugin skill copies are maintained by hand alongside their source of truth in `src/agent/skills/`. When you edit a skill, update both files in the same PR; there is no sync script (the previous `scripts/sync-plugin-skills.ts` was removed when local mode was killed). See `docs/architecture/agents.md` for the full skill ownership matrix.
+That bundle excludes the monorepo-only skills (`regenerating-overviews`, `maintaining-orgs`, `grouping-releases`, `generating-release-content`) and the `grader` agent — those stay monorepo-internal.
