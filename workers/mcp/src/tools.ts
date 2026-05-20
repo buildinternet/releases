@@ -92,6 +92,12 @@ export type ToolResult = {
     pagination?: McpPaginationMeta | McpCursorPaginationMeta;
     search?: McpSearchMeta;
   };
+  /**
+   * Signals a tool-level failure (e.g. insufficient scope) without raising a
+   * protocol error — the host surfaces `content[0].text` to the model so it can
+   * adapt. Mirrors the MCP SDK's `CallToolResult.isError`.
+   */
+  isError?: boolean;
 };
 
 /**

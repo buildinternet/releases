@@ -27,6 +27,7 @@ import { logMcpSearch, deriveMcpClientKind, type McpSearchCommand } from "./lib/
 import { buildSearchMeta } from "./lib/pagination.js";
 import type { SearchMode } from "@buildinternet/releases-core/schema";
 import { KIND_VALUES } from "@buildinternet/releases-core/kinds";
+import { scopeSatisfies, type ApiScope } from "@buildinternet/releases-core/api-token";
 import { parseCoordinate } from "@buildinternet/releases-core/lookup-coordinate";
 import type { LookupResultPayload } from "@buildinternet/releases-api-types";
 import { getSecret } from "@releases/lib/secrets";
@@ -191,6 +192,18 @@ export interface CreateServerOptions {
    * column's schema default.
    */
   userAgent?: string | null;
+  /**
+   * Caller scopes resolved at the HTTP boundary (workers/mcp/src/auth.ts).
+   * Defaults to `["read"]` — anonymous public reads. Write/AI tools and the
+   * on-demand lookup gate on `write`.
+   */
+  authScopes?: string[];
+  /**
+   * Raw `relk_…` token of the caller, forwarded to the API worker on the
+   * on-demand lookup so the privileged indexer runs as the caller — never as a
+   * borrowed root key (confused-deputy fix).
+   */
+  authToken?: string | null;
 }
 
 export function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServerOptions) {
@@ -216,6 +229,35 @@ export function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServ
   const mediaOrigin = env.MEDIA_ORIGIN ?? "";
   const requestUserAgent = opts?.userAgent ?? null;
   const requestClientKind = deriveMcpClientKind(requestUserAgent);
+  // Caller scopes/token resolved at the HTTP boundary. Default to anonymous
+  // read so direct callers (and tests) that don't pass options still work.
+  const authScopes = opts?.authScopes ?? ["read"];
+  const authToken = opts?.authToken ?? null;
+
+  /** Tool-level scope failure surfaced to the model (not a protocol error). */
+  function scopeError(required: ApiScope): ToolResult {
+    return {
+      content: [
+        {
+          type: "text",
+          text: `insufficient_scope: this MCP tool requires a '${required}'-scoped API token. Present one via Authorization: Bearer relk_…`,
+        },
+      ],
+      isError: true,
+    };
+  }
+
+  /**
+   * Wrap a tool handler so it returns a scope error unless the caller's scopes
+   * satisfy `required`. Outermost wrapper — runs before any DB / AI work.
+   */
+  function requireScope<T>(
+    required: ApiScope,
+    handler: (params: T) => Promise<ToolResult>,
+  ): (params: T) => Promise<ToolResult> {
+    return async (params: T) =>
+      scopeSatisfies(authScopes, required) ? handler(params) : scopeError(required);
+  }
 
   /** Hydrate portable /_media/ URLs in tool text output. */
   function withMedia<T>(handler: (params: T) => Promise<ToolResult>) {
@@ -299,16 +341,27 @@ export function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServ
    * like a GitHub coordinate and the primary search returned nothing. Renders
    * the result into the tool's text response so MCP clients see it inline.
    * Silently degrades when the binding is absent (local dev / staging without API).
+   *
+   * Confused-deputy fix (scoped API tokens, Phase 2): POST /v1/lookups is a
+   * write (it materializes a hidden source). Only fire it when the caller
+   * carries `write`, and forward the caller's OWN credential — never lend the
+   * static root key to an unauthenticated/under-scoped MCP client. A static-root
+   * caller (authToken null, scopes ["*"]) forwards the root key, which is just
+   * root acting as root. Anonymous/read callers skip the lookup entirely.
    */
   async function maybeLookup(out: SearchToolReturn, query: string): Promise<void> {
     if (!env.API) return;
     const coord = parseCoordinate(query);
     if (!coord) return;
+    if (!scopeSatisfies(authScopes, "write")) return;
+    const forwardToken =
+      authToken ?? (await getSecret(env.RELEASED_API_KEY).catch(() => null)) ?? "";
+    if (!forwardToken) return;
     try {
-      const headers: Record<string, string> = { "content-type": "application/json" };
-      // /v1/lookups is admin-gated — present a Bearer for the API auth middleware.
-      const apiKey = (await getSecret(env.RELEASED_API_KEY).catch(() => null)) ?? "";
-      if (apiKey) headers["Authorization"] = `Bearer ${apiKey}`;
+      const headers: Record<string, string> = {
+        "content-type": "application/json",
+        Authorization: `Bearer ${forwardToken}`,
+      };
       // Service-binding requests still flow through the API worker's middleware
       // pipeline, which includes the staging access gate. Attach the staging
       // key when bound (no-op in prod/local where the binding is absent).
@@ -731,10 +784,13 @@ export function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServ
             ),
         },
       },
-      withMedia(async (params) => {
-        const anthropic = await getAnthropic();
-        return summarizeChanges(db, params, anthropic);
-      }),
+      requireScope(
+        "write",
+        withMedia(async (params) => {
+          const anthropic = await getAnthropic();
+          return summarizeChanges(db, params, anthropic);
+        }),
+      ),
     );
 
     server.registerTool(
@@ -751,10 +807,13 @@ export function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServ
           days: z.number().optional().describe("Look back this many days (default 30)"),
         },
       },
-      withMedia(async (params) => {
-        const anthropic = await getAnthropic();
-        return compareProducts(db, params, anthropic);
-      }),
+      requireScope(
+        "write",
+        withMedia(async (params) => {
+          const anthropic = await getAnthropic();
+          return compareProducts(db, params, anthropic);
+        }),
+      ),
     );
   }
 
