@@ -31,7 +31,9 @@ import {
   newWebhookSubscriptionId,
   newCollectionId,
   newBatchRunId,
+  newApiTokenId,
 } from "./id.js";
+import { PRINCIPAL_TYPES } from "./api-token.js";
 
 export const RELEASE_TYPES = ["feature", "rollup"] as const;
 export type ReleaseType = (typeof RELEASE_TYPES)[number];
@@ -1048,3 +1050,41 @@ export const batchRuns = sqliteTable(
 
 export type BatchRun = typeof batchRuns.$inferSelect;
 export type NewBatchRun = typeof batchRuns.$inferInsert;
+
+export const apiTokens = sqliteTable(
+  "api_tokens",
+  {
+    id: text("id").primaryKey().$defaultFn(newApiTokenId),
+    // Public, non-secret identifier embedded in the token. Indexed; safe to log.
+    lookupId: text("lookup_id").notNull(),
+    // SHA-256 hex of the secret. Never the plaintext.
+    tokenHash: text("token_hash").notNull(),
+    name: text("name").notNull(),
+    // JSON array of scope strings, e.g. ["read","write"].
+    scopes: text("scopes").notNull(),
+    // Ownership: whom the token acts as. `internal` for systems/scripts.
+    principalType: text("principal_type", { enum: PRINCIPAL_TYPES }).notNull().default("internal"),
+    // Typed id of the owning entity when one exists (user_…, agent id). Null for internal.
+    principalId: text("principal_id"),
+    active: integer("active", { mode: "boolean" }).notNull().default(true),
+    revokedAt: text("revoked_at"),
+    expiresAt: text("expires_at"),
+    lastUsedAt: text("last_used_at"),
+    createdAt: text("created_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
+    // Provenance: who minted it ("static-key", a minting token's id, later a user id).
+    createdBy: text("created_by"),
+    metadata: text("metadata").default("{}"),
+  },
+  (table) => [
+    uniqueIndex("idx_api_tokens_lookup_id").on(table.lookupId),
+    index("idx_api_tokens_principal").on(table.principalType, table.principalId),
+    // DB-level guard so non-ORM writes can't slip in an out-of-vocabulary value.
+    // Keep in lockstep with PRINCIPAL_TYPES and the matching CHECK in the migration.
+    check(
+      "api_tokens_principal_type_check",
+      sql`${table.principalType} IN ('internal', 'agent', 'user')`,
+    ),
+  ],
+);

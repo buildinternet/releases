@@ -6,6 +6,22 @@ The API worker at `workers/api/` is the authoritative data plane — every read 
 
 GET endpoints are public (no auth required). Write operations (POST/PATCH/DELETE) require a Bearer token. The `publicReadAuthMiddleware` in `workers/api/src/middleware/auth.ts` handles this split. Admin-only routes (sessions, `admin/*`, `workflows/*`) require auth for all methods. The `GET /v1/orgs/:slug/playbook` endpoint is also admin-only (inline `authMiddleware` on the handler) since playbook content is internal.
 
+### Scoped API tokens
+
+Alongside the single static `RELEASED_API_KEY` (now treated as implicit **root** —
+all scopes, break-glass), the API worker accepts **DB-backed scoped tokens** in
+the `Authorization: Bearer relk_<lookupId>_<secret>` form. Each token (`api_tokens`
+table) carries a JSON set of scopes (`read` ⊂ `write` ⊂ `admin`), can be revoked
+(`active=0`) or expired (`expires_at`), records `last_used_at`, and is attributed
+to a principal (`principal_type`: `internal | agent | user`, plus optional
+`principal_id`). Only the `SHA-256` hash of the secret is stored; the public
+`lookup_id` is the indexed handle. Validation lives in
+`workers/api/src/middleware/token-store.ts` (constant-time, uniform-failure) and
+`middleware/auth.ts` (scope enforcement: writes need `write`, admin routes need
+`admin`). Manage via admin-gated `/v1/tokens` (mint/list/revoke/patch); mint with
+`scripts/mint-token.ts`. Kill switch: `API_TOKENS_DISABLED=true` falls back to the
+static key only. See `docs/superpowers/specs/2026-05-20-scoped-api-tokens-design.md`.
+
 ## On-demand AI admin endpoints
 
 `POST /v1/workflows/summarize` and `POST /v1/workflows/compare` generate summaries and comparisons via Anthropic on demand. Both are gated by `authMiddleware` and fail with 503 when `ANTHROPIC_API_KEY` is unset. They are distinct from `POST /v1/sources/:slug/summaries`, which upserts a pre-generated row into `release_summaries`. Payload: `summarize` takes exactly one of `source` / `org` (slug or id) plus optional `days` and `instructions`; `compare` takes `sourceA` / `sourceB` plus optional `days`. Each success writes a `usage_log` row tagged with operation `summarize` / `compare`. Prompts live in `workers/api/src/routes/workflows.ts`.

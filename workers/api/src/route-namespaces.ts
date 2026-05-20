@@ -51,4 +51,5 @@ export const adminRoutes = [
   "errata",
   "webhooks",
   "workflows",
+  "tokens",
 ] as const;

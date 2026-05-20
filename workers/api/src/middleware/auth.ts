@@ -1,5 +1,13 @@
 import type { Context, MiddlewareHandler } from "hono";
 import { getSecret } from "@releases/lib/secrets";
+import {
+  type ApiScope,
+  isApiTokenShaped,
+  ROOT_SCOPE,
+  scopeSatisfies,
+} from "@buildinternet/releases-core/api-token";
+import { createDb } from "../db.js";
+import { touchLastUsed, verifyApiToken } from "./token-store.js";
 import type { Env } from "../index.js";
 
 export const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
@@ -7,24 +15,73 @@ export const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 /** Custom header carrying the trusted-proxy shared secret. */
 export const PROXY_KEY_HEADER = "X-Releases-Proxy-Key";
 
-/**
- * Returns true iff the request carries an `Authorization: Bearer <token>` header
- * matching the configured `RELEASED_API_KEY` secret. Admin-level — gates writes
- * and unlocks internal fields (e.g. org playbook) on public-read routes.
- */
-export async function isValidBearerAuth(c: Context<Env>): Promise<boolean> {
+/** Resolved identity attached to the Hono context for downstream handlers. */
+export type AuthContext =
+  | { kind: "root"; scopes: string[] }
+  | { kind: "token"; tokenId: string; scopes: string[] };
+
+type ResolvedAuth =
+  | { kind: "root"; scopes: string[] }
+  | { kind: "token"; tokenId: string; scopes: string[] }
+  // skip=true means "local dev, no secret configured" — preserve open access.
+  | { kind: "none"; skip: boolean };
+
+function bearer(c: Context<Env>): string {
   const header = c.req.header("Authorization") ?? "";
-  if (!header.startsWith("Bearer ")) return false;
-  const secret = await getSecret(c.env.RELEASED_API_KEY);
-  if (!secret) return false;
-  return header.slice(7) === secret;
+  return header.startsWith("Bearer ") ? header.slice(7) : "";
 }
 
 /**
- * Returns true iff the request carries an `X-Releases-Proxy-Key` header matching
- * the configured `RELEASES_PROXY_KEY` secret. Server-trust signal only — used
- * by the rate limiter to exempt the web frontend's server-to-server traffic from
- * the per-IP limit. Does NOT unlock admin-gated content.
+ * Resolve a presented credential to an identity. `relk_…` tokens go to the DB
+ * path only; everything else compares to the static RELEASED_API_KEY (root).
+ * No credential is eligible for both paths.
+ */
+async function resolveAuth(c: Context<Env>, presented: string): Promise<ResolvedAuth> {
+  if (isApiTokenShaped(presented)) {
+    if (c.env.API_TOKENS_DISABLED === "true") return { kind: "none", skip: false };
+    const result = await verifyApiToken(createDb(c.env.DB), presented);
+    if (result.ok) return { kind: "token", tokenId: result.tokenId, scopes: result.scopes };
+    return { kind: "none", skip: false };
+  }
+
+  const secret = await getSecret(c.env.RELEASED_API_KEY);
+  if (!secret) return { kind: "none", skip: true }; // local dev — no secret configured
+  if (presented && presented === secret) return { kind: "root", scopes: [ROOT_SCOPE] };
+  return { kind: "none", skip: false };
+}
+
+/**
+ * True iff the request carries ANY valid identity — the static root key or an
+ * active DB token of any scope. Used by the rate limiter to exempt known
+ * callers. Does NOT imply admin-level access.
+ */
+export async function hasValidAuth(c: Context<Env>): Promise<boolean> {
+  const presented = bearer(c);
+  if (!presented) return false;
+  const auth = await resolveAuth(c, presented);
+  return auth.kind === "root" || auth.kind === "token";
+}
+
+/**
+ * True iff the request carries ADMIN-level auth — the static root key or a DB
+ * token whose scopes satisfy `admin`. Gates writes elsewhere and unlocks
+ * internal fields (e.g. org playbook) on public-read routes. A read/write-only
+ * token returns false here so it can't escalate to admin-only content.
+ */
+export async function isValidBearerAuth(c: Context<Env>): Promise<boolean> {
+  const presented = bearer(c);
+  if (!presented) return false;
+  const auth = await resolveAuth(c, presented);
+  if (auth.kind === "root") return true;
+  if (auth.kind === "token") return scopeSatisfies(auth.scopes, "admin");
+  return false;
+}
+
+/**
+ * True iff the request carries an `X-Releases-Proxy-Key` header matching the
+ * configured `RELEASES_PROXY_KEY`. Server-trust signal only — exempts the web
+ * frontend's server-to-server traffic from the per-IP rate limit. Does NOT
+ * unlock admin-gated content.
  */
 export async function isTrustedProxy(c: Context<Env>): Promise<boolean> {
   const header = c.req.header(PROXY_KEY_HEADER);
@@ -34,44 +91,81 @@ export async function isTrustedProxy(c: Context<Env>): Promise<boolean> {
   return header === secret;
 }
 
-/** Requires a valid Bearer token for all requests. Returns 401 if missing/invalid. */
+/** Requires `admin` scope (or root) for all requests. 401 if no identity, 403 if under-scoped. */
 export const authMiddleware: MiddlewareHandler<Env> = createAuthMiddleware({
   allowPublicReads: false,
+  requiredScope: "admin",
 });
 
 /**
- * GET/HEAD/OPTIONS pass through without auth (public read access).
- * POST/PATCH/DELETE require a valid Bearer token.
+ * GET/HEAD/OPTIONS pass without auth. POST/PATCH/DELETE require `write` scope
+ * (or higher / root).
  */
 export const publicReadAuthMiddleware: MiddlewareHandler<Env> = createAuthMiddleware({
   allowPublicReads: true,
+  requiredScope: "write",
 });
 
-function createAuthMiddleware(opts: { allowPublicReads: boolean }): MiddlewareHandler<Env> {
+/**
+ * Attach the resolved identity to the request context and, for DB tokens,
+ * record usage (throttled, fire-and-forget). In tests there's no executionCtx,
+ * so fall back to an un-awaited promise.
+ */
+function recordAuth(
+  c: Context<Env>,
+  auth: Extract<ResolvedAuth, { kind: "root" | "token" }>,
+): void {
+  c.set("auth", auth);
+  if (auth.kind !== "token") return;
+  const tokenId = auth.tokenId;
+  try {
+    c.executionCtx.waitUntil(touchLastUsed(createDb(c.env.DB), tokenId).catch(() => undefined));
+  } catch {
+    // No executionCtx in tests — fire-and-forget without waitUntil.
+    touchLastUsed(createDb(c.env.DB), tokenId).catch(() => undefined);
+  }
+}
+
+function createAuthMiddleware(opts: {
+  allowPublicReads: boolean;
+  requiredScope: ApiScope;
+}): MiddlewareHandler<Env> {
   return async (c, next) => {
-    // Public reads skip auth entirely — no need to fetch the secret
     if (opts.allowPublicReads && SAFE_METHODS.has(c.req.method)) {
+      // Public reads never require auth. If a caller does present a valid
+      // credential we attach the identity and record usage (this is what lets
+      // a read-only token record last_used_at), but an absent or invalid token
+      // is ignored — never rejected — so the read stays public.
+      const presented = bearer(c);
+      if (presented) {
+        const auth = await resolveAuth(c, presented);
+        if (auth.kind !== "none") recordAuth(c, auth);
+      }
       await next();
       return;
     }
 
-    // No secret configured — skip auth (local dev)
-    const secret = await getSecret(c.env.RELEASED_API_KEY);
-    if (!secret) {
-      await next();
-      return;
-    }
+    const auth = await resolveAuth(c, bearer(c));
 
-    const header = c.req.header("Authorization") ?? "";
-    const token = header.startsWith("Bearer ") ? header.slice(7) : "";
-    if (token !== secret) {
-      // RFC 7235: 401 responses MUST carry a WWW-Authenticate challenge so
-      // clients (incl. AI agents) can discover the required auth scheme
-      // without reading docs.
+    if (auth.kind === "none") {
+      if (auth.skip) {
+        await next();
+        return;
+      }
+      // RFC 7235: 401 carries a WWW-Authenticate challenge so clients (incl.
+      // AI agents) can discover the scheme without docs.
       c.header("WWW-Authenticate", 'Bearer realm="releases-api"');
       return c.json({ error: "unauthorized", message: "Invalid or missing API key" }, 401);
     }
 
+    if (!scopeSatisfies(auth.scopes, opts.requiredScope)) {
+      return c.json(
+        { error: "insufficient_scope", message: `Requires '${opts.requiredScope}' scope` },
+        403,
+      );
+    }
+
+    recordAuth(c, auth);
     await next();
   };
 }
