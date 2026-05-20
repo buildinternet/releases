@@ -67,6 +67,58 @@ describe("parseComposition (AI model output)", () => {
   });
 });
 
+describe("parseReleaseContent boilerplate-fallback guard", () => {
+  // Without these guards the bad output below leaks straight to the web UI
+  // as a SUMMARY block that just says "no summary". See rel_dH8OlYQtxhCGYMXZt6dWx.
+  it("nulls the summary when the model emits the EMPTY_BODY_FALLBACK sentinel", () => {
+    const raw = `<title>Chrome 148 for Android stability and performance improvements</title>
+<title_short>Dependency update</title_short>
+<summary>Release notes do not describe the change.</summary>
+<composition><bugs>0</bugs><features>0</features><enhancements>0</enhancements></composition>`;
+    const result = parseReleaseContent(raw, "end_turn");
+    expect(result.summary).toBeNull();
+    expect(result.titleShort).toBeNull();
+    expect(result.title).toBe("Chrome 148 for Android stability and performance improvements");
+  });
+
+  it("nulls 'Internal release' short title", () => {
+    const raw = `<title>Claude Code v2.1.138 internal release</title>
+<title_short>Internal release</title_short>
+<summary>Release notes do not describe the change.</summary>`;
+    const result = parseReleaseContent(raw, "end_turn");
+    expect(result.titleShort).toBeNull();
+    expect(result.summary).toBeNull();
+  });
+
+  it("matches the fallback strings case-insensitively and with whitespace", () => {
+    const raw = `<title>X</title>
+<title_short>  dependency update  </title_short>
+<summary>  release notes DO NOT describe the change.  </summary>`;
+    const result = parseReleaseContent(raw, "end_turn");
+    expect(result.summary).toBeNull();
+    expect(result.titleShort).toBeNull();
+  });
+
+  it("preserves real summaries that mention the word 'change'", () => {
+    const raw = `<title>Foo v1 ships</title>
+<title_short>Foo v1 ships</title_short>
+<summary>Default behavior changes to opt-in. Release notes describe the migration path.</summary>`;
+    const result = parseReleaseContent(raw, "end_turn");
+    expect(result.summary).toBe(
+      "Default behavior changes to opt-in. Release notes describe the migration path.",
+    );
+  });
+
+  it("preserves a real short title that contains 'update'", () => {
+    const raw = `<title>X</title>
+<title_short>Auth middleware update breaks v1 callers</title_short>
+<summary>Real summary.</summary>`;
+    const result = parseReleaseContent(raw, "end_turn");
+    expect(result.titleShort).toBe("Auth middleware update breaks v1 callers");
+    expect(result.summary).toBe("Real summary.");
+  });
+});
+
 describe("parseCompositionFromMetadata (DB read path)", () => {
   it("extracts a stored composition object", () => {
     const meta = JSON.stringify({ composition: { bugs: 5, features: 2, enhancements: 1 } });

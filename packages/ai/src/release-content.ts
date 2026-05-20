@@ -30,8 +30,20 @@ export const MAX_OUTPUT_TOKENS = 280;
 
 // In-prompt sentinel emitted by the model when the body is boilerplate-only.
 // The empty-body short-circuit (isEmptyContent) is a separate path — those
-// rows skip the model entirely and return all-null fields.
+// rows skip the model entirely and return all-null fields. We also detect
+// this string in the parsed <summary> below (see parseReleaseContent) and
+// null it out so the model's "I have nothing meaningful to summarize" signal
+// maps to absence in the DB instead of a literal summary announcing "we have
+// no summary."
 const EMPTY_BODY_FALLBACK = "Release notes do not describe the change.";
+
+// Boilerplate short titles authorized by <title_short_format> rule 8. The
+// model emits one of these when the body is empty-or-chore-only; we treat
+// them as the same "no meaningful content" signal as EMPTY_BODY_FALLBACK
+// and null them out so the UI hides the short-title chip rather than
+// displaying a misleading classification (e.g. "Dependency update" on
+// Chrome for Android release notes that aren't a dependency update).
+const BOILERPLATE_SHORT_TITLES = new Set(["dependency update", "internal release"]);
 
 // Strings that, when they are the entire normalized body, indicate no real
 // release-note content. Compared lowercase after stripping markdown / HTML
@@ -464,10 +476,19 @@ export function parseReleaseContent(
       `model output missing or empty <summary> tag (raw length ${raw.length}, stop_reason=${stopReason ?? "unknown"})`,
     );
   }
+  const titleShort = extractTagged(raw, "title_short") || null;
+  // Boilerplate-fallback guard: when the model emits the in-prompt fallback
+  // strings, treat them as the same "no content" signal as isEmptyContent and
+  // store null. The title_generated is still kept — it's a usable headline
+  // even for chore releases ("Next.js v15.4.2 dependency update") and the
+  // read paths fall back to the raw release.title when it is null.
+  const isFallbackSummary = summary.trim().toLowerCase() === EMPTY_BODY_FALLBACK.toLowerCase();
+  const isFallbackShort =
+    titleShort !== null && BOILERPLATE_SHORT_TITLES.has(titleShort.trim().toLowerCase());
   return {
     title: extractTagged(raw, "title") || null,
-    titleShort: extractTagged(raw, "title_short") || null,
-    summary,
+    titleShort: isFallbackShort ? null : titleShort,
+    summary: isFallbackSummary ? null : summary,
     composition: parseComposition(raw),
   };
 }
