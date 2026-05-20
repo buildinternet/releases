@@ -1,6 +1,6 @@
 # Remote MCP Server
 
-The MCP Worker (`workers/mcp/`) exposes a remote MCP server at `mcp.releases.sh` using Cloudflare's `createMcpHandler` with Streamable HTTP transport. It provides read-only tools across three surfaces — search (`search`, `get_latest_releases`, `get_release`), registry detail (`list_catalog`, `get_catalog_entry`, `list_organizations`, `get_organization`, `lookup_domain`), and AI analysis (`summarize_changes`, `compare_products`, gated behind `ENABLE_AI_TOOLS=true`). Alongside the tool surface it advertises MCP **resources** (`releases://org/...`, `releases://catalog/...`) for browseable access and **prompts** (`whats_new`, `compare_products`, `catch_me_up`) as priming entry points. No authentication required — all read surfaces are public.
+The MCP Worker (`workers/mcp/`) exposes a remote MCP server at `mcp.releases.sh` using Cloudflare's `createMcpHandler` with Streamable HTTP transport. It provides read-only tools across three surfaces — search (`search`, `get_latest_releases`, `get_release`), registry detail (`list_catalog`, `get_catalog_entry`, `list_organizations`, `get_organization`, `lookup_domain`), and AI analysis (`summarize_changes`, `compare_products`, gated behind `ENABLE_AI_TOOLS=true`). Alongside the tool surface it advertises MCP **resources** (`releases://org/...`, `releases://catalog/...`) for browseable access and **prompts** (`whats_new`, `compare_products`, `catch_me_up`) as priming entry points. Read tools are public — no token required. Privileged paths (the AI tools and the on-demand lookup) require a `write`-scoped API token; see [Authentication & scope enforcement](#authentication--scope-enforcement).
 
 **Catalog unification (issue #539):** `list_catalog` and `get_catalog_entry` treat products and standalone sources as one thing — a catalog entry — and fold them into a single list with an `entryType: "product" | "source"` discriminator. `search` is the unified entry point: it searches orgs, catalog, and releases in one call, and takes an optional `type: ("orgs" | "catalog" | "releases")[]` filter to skip sections (agents that only need registry lookups should pass `type: ["catalog"]` to avoid the vector-retrieval path). The per-surface tools (`search_releases`, `search_registry`, `list_sources`, `list_products`, `get_product`) remain as deprecated shims for one release cycle — their titles and descriptions mark them `(deprecated)`. The `releases://catalog/{slug}` resource mirrors the tool shape; `releases://product/...` and `releases://source/...` stay for one cycle as deprecated aliases.
 
@@ -13,6 +13,32 @@ The worker binds to the same D1 database as the API and discovery workers and ca
 **Domain lookup (`lookup_domain`):** Pure resolution — given a URL-shaped input, normalize it via `normalizeDomain` (`@buildinternet/releases-core/domain`) and exact-match against `organizations.domain` (primary) and `domain_aliases.domain` (alias for either an org or a product). Returns the matched org plus any products whose alias targets the same domain. Distinct from the GitHub coordinate path: there is no probing or materialization for domains — unknown domains surface a "no match" message. The same normalizer powers the `domain` input on `search`, which scopes a query to the resolved org (and short-circuits with empty arrays + a "no match" hint when the domain isn't owned).
 
 Deploy: `bun run deploy:mcp`. Dev: `bun run dev:mcp`. Connect from Claude Desktop: `npx mcp-remote https://mcp.releases.sh/mcp`.
+
+## Authentication & scope enforcement
+
+Scoped API tokens (Phase 2 of the [scoped API tokens design](../superpowers/specs/2026-05-20-scoped-api-tokens-design.md)) are enforced here. `workers/mcp/src/auth.ts` resolves the caller's identity once per request, **at the HTTP boundary** in `index.ts` — `createMcpHandler` doesn't expose the inbound `Authorization` header to tool handlers, so the boundary is the only place to read it. Identity (scopes + the raw token) is threaded into `createServer` via `CreateServerOptions`, the same mechanism that carries `userAgent`.
+
+**Identity resolution** (`resolveMcpAuth`, mirroring the API worker's `resolveAuth`):
+
+- A `relk_…` Bearer is verified against D1 via the shared `verifyApiToken` from `@releases/core-internal/api-token-store` — one verification path for both workers. On success the caller carries the token's scopes; an invalid/unknown `relk_` token is **ignored** (resolves to anonymous read) so public reads never 401, exactly like the API worker's public-read path. Gated by `API_TOKENS_DISABLED`.
+- The static `RELEASED_API_KEY` presented as Bearer maps to **root** (`["*"]`).
+- Anything else (including no credential) is **anonymous**, carrying an implicit `["read"]` scope.
+
+A successful token use records `last_used_at` via `touchLastUsed` (throttled to 60s, fire-and-forget through `waitUntil`) so the admin surface audits usage across both workers.
+
+**Per-tool scope map** (`requireScope` wrapper in `mcp-agent.ts`):
+
+| Tools                                                                | Required scope                  |
+| -------------------------------------------------------------------- | ------------------------------- |
+| All read tools (`search`, `get_*`, `list_*`, `lookup_domain`)        | none (open to anonymous `read`) |
+| `summarize_changes`, `compare_products` (gated by `ENABLE_AI_TOOLS`) | `write`                         |
+| The on-demand `/v1/lookups` fallback inside `search`                 | `write`                         |
+
+Under-scoped AI-tool calls return a tool result with `isError: true` and an `insufficient_scope` message (a tool-level error the model can read and adapt to, not a protocol abort).
+
+**Confused-deputy fix:** the on-demand lookup (`maybeLookup`) materializes a hidden source — a write. It previously presented the static root key on every call, so any MCP client borrowed root downstream. It now fires only when the caller's scopes satisfy `write`, and forwards the **caller's own** `relk_` token to `POST /v1/lookups` (a static-root caller forwards root — root acting as root). Anonymous/read callers no longer trigger the lookup at all. **Behavior change:** on-demand GitHub indexing via the public MCP now requires a `write`-scoped token rather than silently running as root for everyone.
+
+**Staging gate bridge:** the staging access gate (`STAGING_ACCESS_KEY`, staging only) runs in the same `resolveMcpAuth` pass. It still accepts the `X-Releases-Staging-Key` header and `Authorization: Bearer <staging-key>`, and now **also** accepts a valid staging-DB `relk_` token (or the root key) — so an Anthropic managed agent, whose vault credentials are Bearer-only, can authenticate to `mcp-staging` with a token instead of the shared staging key. CORS preflight (`OPTIONS`) always passes.
 
 ## MCP App UIs (`workers/mcp/ui/`)
 

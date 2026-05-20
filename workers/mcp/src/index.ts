@@ -1,37 +1,9 @@
 import { createMcpHandler } from "agents/mcp";
 import { isHtmlRequest, renderLandingPage } from "./landing.js";
 import { createServer, type Env } from "./mcp-agent.js";
-import { getSecret } from "@releases/lib/secrets";
-
-/** Custom header carrying the staging shared secret. Mirrors workers/api. */
-const STAGING_KEY_HEADER = "X-Releases-Staging-Key";
-
-/**
- * Staging access gate. Accepts the secret via either:
- *   - `X-Releases-Staging-Key: <key>` — preferred for CLI/curl callers.
- *   - `Authorization: Bearer <key>` — enables Anthropic managed-agent vault
- *     credentials (which only expose OAuth or Bearer, not custom headers) to
- *     reach `mcp-staging` without a separate header.
- *
- * The gate runs above `createMcpHandler`, so MCP's own downstream auth (API
- * key checks inside tool handlers) is independent. Requests that pass the
- * gate with the staging key may still 401 at the tool layer if they try to
- * call an authenticated tool — see docs/architecture/mcp.md for the staging
- * auth follow-up.
- */
-async function checkStagingKey(request: Request, env: Env): Promise<Response | null> {
-  if (!env.STAGING_ACCESS_KEY) return null;
-  if (request.method === "OPTIONS") return null;
-  const secret = await getSecret(env.STAGING_ACCESS_KEY);
-  if (!secret) return null;
-  if (request.headers.get(STAGING_KEY_HEADER) === secret) return null;
-  const auth = request.headers.get("Authorization") ?? "";
-  if (auth.startsWith("Bearer ") && auth.slice(7) === secret) return null;
-  return new Response(
-    JSON.stringify({ error: "unauthorized", message: "Missing or invalid staging access key" }),
-    { status: 401, headers: { "Content-Type": "application/json" } },
-  );
-}
+import { resolveMcpAuth } from "./auth.js";
+import { touchLastUsed } from "@releases/core-internal/api-token-store";
+import { createDb } from "./db.js";
 
 async function handle(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
   const url = new URL(request.url);
@@ -46,8 +18,18 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
     });
   }
 
-  const unauthorized = await checkStagingKey(request, env);
-  if (unauthorized) return unauthorized;
+  // Resolve the caller's identity (relk_ token → scopes, static key → root,
+  // else anonymous read) and enforce the staging access gate in one pass. The
+  // gate runs above createMcpHandler so MCP routing is only reached once the
+  // caller clears it; per-tool scope enforcement happens inside createServer.
+  const auth = await resolveMcpAuth(request, env);
+  if (!auth.ok) return auth.response;
+  const { identity } = auth;
+  // Record token usage (throttled, fire-and-forget) so the admin surface can
+  // audit last-used across both the API and MCP workers.
+  if (identity.kind === "token") {
+    ctx.waitUntil(touchLastUsed(createDb(env.DB), identity.tokenId).catch(() => undefined));
+  }
 
   if (url.pathname === "/" && request.method === "GET") {
     if (isHtmlRequest(request)) {
@@ -73,6 +55,8 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
 
   const server = createServer(env, ctx, {
     userAgent: request.headers.get("user-agent"),
+    authScopes: identity.scopes,
+    authToken: identity.token,
   });
   return createMcpHandler(server)(request, env, ctx);
 }
