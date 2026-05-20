@@ -191,3 +191,66 @@ describe("PATCH /v1/tokens/:id", () => {
     expect(res.status).toBe(404);
   });
 });
+
+describe("GET /v1/tokens/me", () => {
+  // Helper that injects a specific identity, mirroring how the real middleware
+  // attaches `auth` to the context.
+  function callAs(db: TestDatabase["db"], auth: AuthContext) {
+    const a = new Hono<{ Variables: { auth?: AuthContext } }>();
+    a.use("*", async (c, next) => {
+      c.set("auth", auth);
+      await next();
+    });
+    a.route("/", apiTokenRoutes);
+    return (path: string) => a.request(path, {}, { DB: db });
+  }
+
+  it("returns synthetic root identity for the static key", async () => {
+    h = createTestDb();
+    const res = await callAs(h.db, { kind: "root", scopes: ["*"] })("/tokens/me");
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { kind: string; name: string; scopes: string[] };
+    expect(body.kind).toBe("root");
+    expect(body.name).toBe("root");
+    expect(body.scopes).toEqual(["*"]);
+  });
+
+  it("returns the token's identity (name + scopes) without leaking the hash", async () => {
+    h = createTestDb();
+    h.db
+      .insert(apiTokens)
+      .values({
+        id: "tok_me",
+        lookupId: "lookupme0001",
+        tokenHash: "c".repeat(64),
+        name: "laptop",
+        scopes: '["read","write"]',
+        principalType: "user",
+      })
+      .run();
+    const res = await callAs(h.db, { kind: "token", tokenId: "tok_me", scopes: ["read", "write"] })(
+      "/tokens/me",
+    );
+    expect(res.status).toBe(200);
+    const text = await res.text();
+    expect(text).not.toContain("c".repeat(64)); // no hash leak
+    const body = JSON.parse(text) as {
+      kind: string;
+      name: string;
+      scopes: string[];
+      principalType: string;
+    };
+    expect(body.kind).toBe("token");
+    expect(body.name).toBe("laptop");
+    expect(body.scopes).toEqual(["read", "write"]);
+    expect(body.principalType).toBe("user");
+  });
+
+  it("401 when the token's row no longer exists", async () => {
+    h = createTestDb();
+    const res = await callAs(h.db, { kind: "token", tokenId: "tok_gone", scopes: ["read"] })(
+      "/tokens/me",
+    );
+    expect(res.status).toBe(401);
+  });
+});
