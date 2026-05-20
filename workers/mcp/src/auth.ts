@@ -1,5 +1,5 @@
 import { getSecret } from "@releases/lib/secrets";
-import { isApiTokenShaped } from "@buildinternet/releases-core/api-token";
+import { isApiTokenShaped, ROOT_SCOPE } from "@buildinternet/releases-core/api-token";
 import { verifyApiToken } from "@releases/core-internal/api-token-store";
 import { createDb } from "./db.js";
 import type { Env } from "./mcp-agent.js";
@@ -27,25 +27,25 @@ function bearer(request: Request): string {
 }
 
 /**
- * Resolve a presented credential to an identity. A `relk_…` Bearer goes to the
- * DB-token path (verified against D1); the static RELEASED_API_KEY maps to root;
- * anything else — including an invalid/unknown `relk_` token — resolves to
- * anonymous read. No credential is eligible for both paths.
+ * Resolve the presented Bearer credential to an identity. A `relk_…` token goes
+ * to the DB-token path (verified against D1); the static RELEASED_API_KEY maps
+ * to root; anything else — no credential, or an invalid/unknown `relk_` token —
+ * resolves to anonymous read. No credential is eligible for both paths.
  */
-async function resolveIdentity(request: Request, env: Env): Promise<McpIdentity> {
-  const presented = bearer(request);
-  if (presented && isApiTokenShaped(presented)) {
+async function resolveIdentity(presented: string, env: Env): Promise<McpIdentity> {
+  if (!presented) return ANONYMOUS;
+  if (isApiTokenShaped(presented)) {
     if (env.API_TOKENS_DISABLED === "true") return ANONYMOUS;
     const res = await verifyApiToken(createDb(env.DB), presented);
     if (res.ok)
       return { kind: "token", scopes: res.scopes, tokenId: res.tokenId, token: presented };
-    // Invalid token is ignored — reads stay public, matching the API worker's
-    // public-read path. The staging gate below still applies.
+    // An invalid/unknown token is ignored rather than rejected, so public reads
+    // stay open; the staging gate below still applies.
     return ANONYMOUS;
   }
   const rootKey = await getSecret(env.RELEASED_API_KEY).catch(() => null);
-  if (rootKey && presented && presented === rootKey) {
-    return { kind: "root", scopes: ["*"], tokenId: null, token: null };
+  if (rootKey && presented === rootKey) {
+    return { kind: "root", scopes: [ROOT_SCOPE], tokenId: null, token: null };
   }
   return ANONYMOUS;
 }
@@ -63,21 +63,22 @@ function unauthorized(): Response {
  * staging the gate accepts any of: the `X-Releases-Staging-Key` header, a
  * Bearer staging-key, a valid staging-DB `relk_` token, or the static root key
  * — so a managed agent can authenticate with a Bearer token instead of the
- * shared key. CORS preflight (OPTIONS) always passes.
+ * shared key. CORS preflight (OPTIONS) always passes; an unresolvable staging
+ * secret fails open (same as the binding being absent).
  */
 export async function resolveMcpAuth(request: Request, env: Env): Promise<McpAuthResult> {
-  const identity = await resolveIdentity(request, env);
+  const presented = bearer(request);
+  const identity = await resolveIdentity(presented, env);
 
   if (env.STAGING_ACCESS_KEY && request.method !== "OPTIONS") {
     const stagingSecret = await getSecret(env.STAGING_ACCESS_KEY).catch(() => null);
-    if (stagingSecret) {
-      const passes =
-        request.headers.get(STAGING_KEY_HEADER) === stagingSecret ||
-        bearer(request) === stagingSecret ||
-        identity.kind === "token" ||
-        identity.kind === "root";
-      if (!passes) return { ok: false, response: unauthorized() };
-    }
+    const passes =
+      !stagingSecret ||
+      request.headers.get(STAGING_KEY_HEADER) === stagingSecret ||
+      presented === stagingSecret ||
+      identity.kind === "token" ||
+      identity.kind === "root";
+    if (!passes) return { ok: false, response: unauthorized() };
   }
 
   return { ok: true, identity };
