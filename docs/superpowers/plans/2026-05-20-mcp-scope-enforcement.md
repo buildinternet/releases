@@ -866,7 +866,7 @@ git commit -m "feat(mcp): enforce token auth at the request boundary, thread sco
 
 - [ ] **Step 1: Update `AGENTS.md`** — replace the trailing `MCP enforcement is Phase 2.` in the scoped-API-tokens bullet with:
 
-```
+```md
 MCP enforcement (Phase 2, shipped): the MCP worker resolves the caller's `relk_` token at the request boundary via the shared `@releases/core-internal/api-token-store`, derives scopes, and gates write/AI tools + the on-demand `/v1/lookups` fallback on `write`. The lookup forwards the caller's own token (a static-root caller forwards root) instead of borrowing the root key — closing the confused deputy. Anonymous MCP reads stay open (implicit `read`); `API_TOKENS_DISABLED` rolls the token path back. In staging a valid relk token also satisfies the access gate.
 ```
 
