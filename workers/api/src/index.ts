@@ -1,7 +1,11 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { HTTPException } from "hono/http-exception";
-import { authMiddleware, publicReadAuthMiddleware } from "./middleware/auth.js";
+import {
+  authMiddleware,
+  publicReadAuthMiddleware,
+  tokensAuthMiddleware,
+} from "./middleware/auth.js";
 import type { AuthContext } from "./middleware/auth.js";
 import { publicRateLimitMiddleware } from "./middleware/rate-limit.js";
 import { dbHealthCheck } from "./middleware/db-health.js";
@@ -266,8 +270,11 @@ for (const r of publicReadRoutes) {
   v1.use(`/${r}/*`, publicReadAuthMiddleware, publicRateLimitMiddleware, dbHealthCheck);
 }
 for (const r of adminRoutes) {
-  v1.use(`/${r}`, authMiddleware, dbHealthCheck);
-  v1.use(`/${r}/*`, authMiddleware, dbHealthCheck);
+  // /tokens needs a split gate: read for /tokens/me self-introspection, admin
+  // for the rest. Every other admin namespace stays admin-only.
+  const mw = r === "tokens" ? tokensAuthMiddleware : authMiddleware;
+  v1.use(`/${r}`, mw, dbHealthCheck);
+  v1.use(`/${r}/*`, mw, dbHealthCheck);
 }
 
 // Admin / write paths — scope CORS to known first-party origins so the

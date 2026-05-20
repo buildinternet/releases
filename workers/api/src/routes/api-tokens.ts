@@ -9,8 +9,10 @@ import {
   isApiScope,
   parseStoredScopes,
   PRINCIPAL_TYPES,
+  ROOT_SCOPE,
   type PrincipalType,
 } from "@buildinternet/releases-core/api-token";
+import type { TokenIdentity } from "@buildinternet/releases-api-types";
 import { newApiTokenId } from "@buildinternet/releases-core/id";
 import { logEvent } from "@releases/lib/log-event";
 import type { Env } from "../index.js";
@@ -112,6 +114,47 @@ apiTokenRoutes.get("/tokens", async (c) => {
   const db = createDb(c.env.DB);
   const rows = await db.select().from(apiTokens).all();
   return c.json({ tokens: rows.map(toPublicRow) });
+});
+
+apiTokenRoutes.get("/tokens/me", async (c) => {
+  const auth = c.get("auth");
+  // Local dev: no RELEASED_API_KEY secret bound → the auth middleware skips and
+  // attaches no identity. Treat as the implicit local root so login works
+  // against a local worker.
+  if (!auth) {
+    return c.json({
+      kind: "root",
+      name: "local-dev",
+      scopes: [ROOT_SCOPE],
+      principalType: "internal",
+      principalId: null,
+      expiresAt: null,
+      lastUsedAt: null,
+    } satisfies TokenIdentity);
+  }
+  if (auth.kind === "root") {
+    return c.json({
+      kind: "root",
+      name: "root",
+      scopes: auth.scopes,
+      principalType: "internal",
+      principalId: null,
+      expiresAt: null,
+      lastUsedAt: null,
+    } satisfies TokenIdentity);
+  }
+  const db = createDb(c.env.DB);
+  const row = await db.select().from(apiTokens).where(eq(apiTokens.id, auth.tokenId)).get();
+  if (!row) return c.json({ error: "unauthorized", message: "Invalid or missing API key" }, 401);
+  return c.json({
+    kind: "token",
+    name: row.name,
+    scopes: parseStoredScopes(row.scopes),
+    principalType: row.principalType,
+    principalId: row.principalId,
+    expiresAt: row.expiresAt,
+    lastUsedAt: row.lastUsedAt,
+  } satisfies TokenIdentity);
 });
 
 apiTokenRoutes.get("/tokens/:id", async (c) => {

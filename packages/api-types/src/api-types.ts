@@ -1245,3 +1245,20 @@ export interface EvaluationResult {
   provider?: string;
   notes?: string;
 }
+
+/**
+ * Identity returned by `GET /v1/tokens/me` — the caller introspecting its own
+ * credential. `kind: "root"` is the static break-glass key (synthetic identity,
+ * no DB row); `kind: "token"` is a DB-backed `relk_` token.
+ */
+export interface TokenIdentity {
+  kind: "root" | "token";
+  /** Display label; "root" for the static key, "local-dev" when no secret is bound. */
+  name: string;
+  /** e.g. ["read","write"] or ["*"] for root. */
+  scopes: string[];
+  principalType: "internal" | "agent" | "user";
+  principalId?: string | null;
+  expiresAt?: string | null;
+  lastUsedAt?: string | null;
+}
