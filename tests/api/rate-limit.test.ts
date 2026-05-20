@@ -1,5 +1,8 @@
-import { describe, it, expect } from "bun:test";
+import { describe, it, expect, afterEach } from "bun:test";
 import { Hono, type MiddlewareHandler } from "hono";
+import { createTestDb, type TestDatabase } from "../db-helper.js";
+import { apiTokens } from "@buildinternet/releases-core/schema";
+import { generateApiToken, hashSecret } from "@buildinternet/releases-core/api-token";
 
 const { publicRateLimitMiddleware } =
   (await import("../../workers/api/src/middleware/rate-limit.js")) as unknown as {
@@ -13,8 +16,26 @@ type Env = {
     RATE_LIMIT_ENABLED?: string;
     PUBLIC_RATE_LIMITER?: RateLimiter;
     RELEASED_API_KEY?: { get(): Promise<string> };
+    DB?: unknown;
   };
 };
+
+let h: TestDatabase | null = null;
+afterEach(() => h?.cleanup());
+
+async function seedReadToken(db: TestDatabase["db"]) {
+  const { token, lookupId, secret } = generateApiToken();
+  db.insert(apiTokens)
+    .values({
+      id: `tok_${lookupId}`,
+      lookupId,
+      tokenHash: await hashSecret(secret),
+      name: "read-token",
+      scopes: JSON.stringify(["read"]),
+    })
+    .run();
+  return token;
+}
 
 function mockSecret(value: string) {
   return { get: () => Promise.resolve(value) };
@@ -130,6 +151,27 @@ describe("publicRateLimitMiddleware", () => {
     );
     expect(res.status).toBe(200);
     expect(limiter.calls).toEqual([]);
+  });
+
+  it("bypasses the limiter for a read-only DB token (any valid token skips rate limit)", async () => {
+    h = createTestDb();
+    const token = await seedReadToken(h.db);
+    const app = createApp();
+    const limiter = mockLimiter([false]);
+    const res = await app.request(
+      "/test",
+      { headers: { Authorization: `Bearer ${token}`, "cf-connecting-ip": "1.2.3.4" } },
+      {
+        PUBLIC_RATE_LIMITER: limiter,
+        RATE_LIMIT_ENABLED: "true",
+        RELEASED_API_KEY: mockSecret("root-secret"),
+        DB: h.db,
+      },
+    );
+    // The limiter binding is never consulted for an authenticated caller.
+    expect(limiter.calls).toEqual([]);
+    // And the request is allowed through.
+    expect(res.status).toBe(200);
   });
 
   it("still limits requests that present an invalid Bearer token", async () => {

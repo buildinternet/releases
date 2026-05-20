@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { HTTPException } from "hono/http-exception";
 import { authMiddleware, publicReadAuthMiddleware } from "./middleware/auth.js";
+import type { AuthContext } from "./middleware/auth.js";
 import { publicRateLimitMiddleware } from "./middleware/rate-limit.js";
 import { dbHealthCheck } from "./middleware/db-health.js";
 import { cacheControl } from "./middleware/cache.js";
@@ -154,6 +155,9 @@ export type Env = {
     ALERT_DEDUP_KV?: KVNamespace;
     // Staging-only kill switch — see middleware/indexing.ts.
     INDEXING_DISABLED?: string;
+    // Kill switch for DB-backed token validation (see middleware/auth.ts).
+    // When "true", all relk_… tokens are rejected without a DB lookup.
+    API_TOKENS_DISABLED?: string;
     // When "true", `/v1/search` and the MCP search tools skip writing rows to
     // `search_queries`. Default off → logging on. See workers/api/src/lib/log-search.ts.
     SEARCH_QUERY_LOG_DISABLED?: string;
@@ -183,6 +187,9 @@ export type Env = {
     // wrangler.jsonc vars and "staging" in the env.staging block. Read by
     // /v1/graphql to gate GraphiQL + introspection. Absent in `wrangler dev`.
     ENVIRONMENT?: string;
+  };
+  Variables: {
+    auth?: AuthContext;
   };
 };
 

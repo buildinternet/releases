@@ -45,6 +45,7 @@ import { workflowsRoutes } from "./routes/workflows.js";
 import { telemetryRoutes } from "./routes/telemetry.js";
 import { taxonomyRoutes } from "./routes/taxonomy.js";
 import { collectionRoutes } from "./routes/collections.js";
+import { apiTokenRoutes } from "./routes/api-tokens.js";
 import { mountOpenApi } from "./openapi.js";
 
 /**
@@ -89,6 +90,7 @@ export function mountV1Routes(v1: Hono<Env>) {
   v1.route("/", telemetryRoutes);
   v1.route("/", taxonomyRoutes);
   v1.route("/", collectionRoutes);
+  v1.route("/", apiTokenRoutes);
   // `graphqlRoutes` is intentionally NOT mounted here — it carries its own
   // dedicated middleware sandwich in `index.ts` (publicRateLimit + dbHealth,
   // no publicReadAuth) and isn't under any namespace the OpenAPI gate cares

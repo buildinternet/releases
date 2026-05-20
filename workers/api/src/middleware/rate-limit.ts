@@ -1,6 +1,6 @@
 import type { MiddlewareHandler } from "hono";
 import type { Env } from "../index.js";
-import { SAFE_METHODS, isValidBearerAuth, isTrustedProxy } from "./auth.js";
+import { SAFE_METHODS, hasValidAuth, isTrustedProxy } from "./auth.js";
 
 // Mirrors `simple.limit` / `simple.period` in workers/api/wrangler.jsonc.
 // Surfaced to clients via the RateLimit-Policy header so AI agents and other
@@ -22,7 +22,8 @@ export const publicRateLimitMiddleware: MiddlewareHandler<Env> = async (c, next)
   if (!c.env.PUBLIC_RATE_LIMITER) return next();
   if (!SAFE_METHODS.has(c.req.method)) return next();
 
-  if (await isValidBearerAuth(c)) return next();
+  // Authenticated callers (static root key or any active DB token) bypass.
+  if (await hasValidAuth(c)) return next();
   if (await isTrustedProxy(c)) return next();
 
   const ip = c.req.header("cf-connecting-ip") ?? "unknown";

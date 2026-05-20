@@ -19,6 +19,7 @@
     "./changelog-slice": "./src/changelog-slice.ts",
     "./overview": "./src/overview.ts",
     "./id": "./src/id.ts",
+    "./api-token": "./src/api-token.ts",
     "./lookup-coordinate": "./src/lookup-coordinate.ts",
     "./domain": "./src/domain.ts",
     "./fts": "./src/fts.ts",
