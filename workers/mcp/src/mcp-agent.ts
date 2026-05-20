@@ -184,6 +184,19 @@ function withPagination<T extends Record<string, z.ZodTypeAny>>(schema: T) {
   return { ...schema, ...paginationFields };
 }
 
+/** Tool-level scope failure surfaced to the model (not a protocol error). */
+function scopeError(required: ApiScope): ToolResult {
+  return {
+    content: [
+      {
+        type: "text",
+        text: `insufficient_scope: this MCP tool requires a '${required}'-scoped API token. Present one via Authorization: Bearer relk_…`,
+      },
+    ],
+    isError: true,
+  };
+}
+
 export interface CreateServerOptions {
   /**
    * Inbound request UA — passed through to `search_queries.user_agent` and
@@ -229,23 +242,8 @@ export function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServ
   const mediaOrigin = env.MEDIA_ORIGIN ?? "";
   const requestUserAgent = opts?.userAgent ?? null;
   const requestClientKind = deriveMcpClientKind(requestUserAgent);
-  // Caller scopes/token resolved at the HTTP boundary. Default to anonymous
-  // read so direct callers (and tests) that don't pass options still work.
   const authScopes = opts?.authScopes ?? ["read"];
   const authToken = opts?.authToken ?? null;
-
-  /** Tool-level scope failure surfaced to the model (not a protocol error). */
-  function scopeError(required: ApiScope): ToolResult {
-    return {
-      content: [
-        {
-          type: "text",
-          text: `insufficient_scope: this MCP tool requires a '${required}'-scoped API token. Present one via Authorization: Bearer relk_…`,
-        },
-      ],
-      isError: true,
-    };
-  }
 
   /**
    * Wrap a tool handler so it returns a scope error unless the caller's scopes
@@ -342,12 +340,9 @@ export function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServ
    * the result into the tool's text response so MCP clients see it inline.
    * Silently degrades when the binding is absent (local dev / staging without API).
    *
-   * Confused-deputy fix (scoped API tokens, Phase 2): POST /v1/lookups is a
-   * write (it materializes a hidden source). Only fire it when the caller
-   * carries `write`, and forward the caller's OWN credential — never lend the
-   * static root key to an unauthenticated/under-scoped MCP client. A static-root
-   * caller (authToken null, scopes ["*"]) forwards the root key, which is just
-   * root acting as root. Anonymous/read callers skip the lookup entirely.
+   * Requires `write` scope — POST /v1/lookups materializes a hidden source row.
+   * Forwards the caller's own credential so the API runs as the caller, never as
+   * a borrowed root key. Root callers (authToken null) fall back to the root key.
    */
   async function maybeLookup(out: SearchToolReturn, query: string): Promise<void> {
     if (!env.API) return;

@@ -1,9 +1,8 @@
 /**
  * Worker-shared verification for opaque `relk_…` API tokens. Lives in
- * core-internal (not pure `core`) because it reads D1 via drizzle. Both the API
- * worker (workers/api/src/middleware/token-store.ts re-exports this) and the
- * MCP worker (workers/mcp/src/auth.ts) call it, so there is one verification
- * path — see docs/superpowers/specs/2026-05-20-scoped-api-tokens-design.md.
+ * core-internal (not pure `core`) because it reads D1 via drizzle. Consumed by
+ * the API worker (via token-store.ts re-export) and the MCP worker directly, so
+ * both share one verification path.
  */
 import { and, eq, isNull, lt, or } from "drizzle-orm";
 import type { DrizzleD1Database } from "drizzle-orm/d1";
