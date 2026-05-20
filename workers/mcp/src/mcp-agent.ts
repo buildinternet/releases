@@ -96,12 +96,20 @@ export interface Env {
   INDEXING_DISABLED?: string;
   /** When "true", search-tool calls skip writing to `search_queries`. */
   SEARCH_QUERY_LOG_DISABLED?: string;
+  /**
+   * Kill switch for the `relk_` token path — mirrors the API worker. When
+   * "true", `relk_` tokens are not verified (treated as anonymous read) so the
+   * server falls back to staging-key / root-key auth only. Rollback lever.
+   */
+  API_TOKENS_DISABLED?: string;
   /** Service binding to the API worker — used for on-demand /v1/lookups calls. */
   API?: Fetcher;
   /**
-   * Bearer token presented to the API worker on the lookup-fallback path
-   * (`maybeLookup`). The /v1/lookups route is admin-gated, so without this
-   * the fallback returns 401. Bound from Secrets Store in both prod + staging.
+   * Static root credential. Forwarded to the API worker's write-gated
+   * `/v1/lookups` route only when the MCP caller authenticated AS root (static
+   * key). For `relk_`-token callers the caller's OWN token is forwarded instead
+   * (confused-deputy fix, see `maybeLookup`). Bound from Secrets Store in both
+   * prod + staging.
    */
   RELEASED_API_KEY?: SecretBinding;
   /**
