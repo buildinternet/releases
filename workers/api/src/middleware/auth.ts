@@ -111,7 +111,7 @@ export const publicReadAuthMiddleware: MiddlewareHandler<Env> = createAuthMiddle
  * Used for self-introspection (`GET /v1/tokens/me`), reachable by a read-only
  * token but not by an anonymous caller.
  */
-export const requireReadAuthMiddleware: MiddlewareHandler<Env> = createAuthMiddleware({
+const requireReadAuthMiddleware: MiddlewareHandler<Env> = createAuthMiddleware({
   allowPublicReads: false,
   requiredScope: "read",
 });
