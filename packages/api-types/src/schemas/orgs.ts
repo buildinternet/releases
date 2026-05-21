@@ -117,6 +117,7 @@ const OrgDetailProductSchema = ProductListItemSchema.pick({
   url: true,
   description: true,
   sourceCount: true,
+  kind: true,
 });
 
 const OrgDetailPlaybookSchema = z.object({
