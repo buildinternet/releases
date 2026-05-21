@@ -594,7 +594,7 @@ const releasesPerSource = activeSources.map((s) => ({
 }));
 ```
 
-(The `OverviewInputsForOrg.sources` interface stays `{ id, slug, name, type }`; the extra `kind`/`productId` carried at runtime on the returned `sources` array are harmless — existing tests only assert `sources.length`.)
+(The `OverviewInputsForOrg.sources` interface stays `{ id, slug, name, type }`; `kind`/`productId` are selected only to resolve each source's kind for selection and are projected back out of the returned `sources` array before return, so they never leak onto the contract.)
 
 - [ ] **Step 4: Run the eligibility tests**
 
