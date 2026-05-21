@@ -2,7 +2,7 @@
 // WebMCP in `web/src/components/webmcp-provider.tsx`. When adding, renaming, or
 // changing the signature of a read-only tool here, update that provider in the
 // same PR so the remote, local-stdio, and browser surfaces don't drift.
-import { eq, desc, inArray, and, isNull, or, lt, lte, sql, asc } from "drizzle-orm";
+import { eq, desc, inArray, and, isNull, or, lt, lte, sql, asc, type SQL } from "drizzle-orm";
 import {
   sources,
   releases,
@@ -463,6 +463,7 @@ export async function getLatestReleases(
     product?: string;
     organization?: string;
     type?: ReleaseType;
+    kind?: Kind;
     limit?: number;
     cursor?: string;
     include_coverage?: boolean;
@@ -513,6 +514,12 @@ export async function getLatestReleases(
   if (sourceFilter) conditions.push(eq(releasesTable.sourceId, sourceFilter));
   if (orgSourceIds) conditions.push(inArray(releasesTable.sourceId, orgSourceIds));
   if (params.type) conditions.push(eq(releasesTable.type, params.type));
+  // Content surface → resolve kind through source→product inheritance
+  // (`COALESCE(source.kind, product.kind)`), the same asymmetry the unified
+  // `search` tool and the `/v1/orgs/:slug/releases` feed apply. See AGENTS.md.
+  if (params.kind) {
+    conditions.push(sql`COALESCE(${sources.kind}, ${products.kind}) = ${params.kind}`);
+  }
   // Default excludes prereleases (canaries / alphas / betas / RCs). Matches
   // the web/API read paths and the `get_collection_releases` default.
   if (!params.include_prereleases) {
@@ -562,6 +569,9 @@ export async function getLatestReleases(
     })
     .from(releasesTable)
     .innerJoin(sources, eq(releasesTable.sourceId, sources.id))
+    // Left-joined for the kind-inheritance COALESCE; a null product_id (the
+    // common case) leaves products.kind null and the source's own kind stands.
+    .leftJoin(products, eq(sources.productId, products.id))
     .leftJoin(organizations, eq(sources.orgId, organizations.id))
     .where(and(...conditions))
     .orderBy(desc(releasesTable.publishedAt), desc(releasesTable.id))
@@ -1366,7 +1376,7 @@ type CatalogEntry = SearchCatalogHit & {
 
 export async function listCatalog(
   db: D1Db,
-  params: { organization?: string } & McpPaginationInput,
+  params: { organization?: string; kind?: Kind } & McpPaginationInput,
 ): Promise<ToolResult> {
   const pagination = parseMcpPagination(params);
 
@@ -1376,6 +1386,17 @@ export async function listCatalog(
     if (!org) return text(`No organization found matching "${params.organization}"`);
     orgId = org.id;
   }
+
+  // Catalog surface → match each row's OWN kind (no source→product
+  // inheritance), the list-side of the asymmetry documented in AGENTS.md.
+  // Products and standalone sources are two separate queries, so each gets its
+  // own WHERE composed from the org scope + the optional kind filter.
+  const productConds: SQL[] = [];
+  if (orgId) productConds.push(sql`p.org_id = ${orgId}`);
+  if (params.kind) productConds.push(sql`p.kind = ${params.kind}`);
+  const productWhere = productConds.length
+    ? sql`WHERE ${sql.join(productConds, sql` AND `)}`
+    : sql``;
 
   const [productRows, orphanSourceRows] = await Promise.all([
     db.all<{
@@ -1391,7 +1412,7 @@ export async function listCatalog(
              o.slug as orgSlug, o.name as orgName
       FROM products p
       LEFT JOIN organizations o ON o.id = p.org_id
-      ${orgId ? sql`WHERE p.org_id = ${orgId}` : sql``}
+      ${productWhere}
       ORDER BY p.name, p.slug
     `),
     db.all<{
@@ -1410,6 +1431,7 @@ export async function listCatalog(
       WHERE s.product_id IS NULL
         AND (s.is_hidden = 0 OR s.is_hidden IS NULL)
         ${orgId ? sql`AND s.org_id = ${orgId}` : sql``}
+        ${params.kind ? sql`AND s.kind = ${params.kind}` : sql``}
       ORDER BY s.name, s.slug
     `),
   ]);

@@ -26,7 +26,7 @@ import { registerPrompts } from "./prompts.js";
 import { logMcpSearch, deriveMcpClientKind, type McpSearchCommand } from "./lib/log-search.js";
 import { buildSearchMeta } from "./lib/pagination.js";
 import type { SearchMode } from "@buildinternet/releases-core/schema";
-import { KIND_VALUES } from "@buildinternet/releases-core/kinds";
+import { KIND_VALUES, type Kind } from "@buildinternet/releases-core/kinds";
 import { scopeSatisfies, type ApiScope } from "@buildinternet/releases-core/api-token";
 import { parseCoordinate } from "@buildinternet/releases-core/lookup-coordinate";
 import type { LookupResultPayload } from "@buildinternet/releases-api-types";
@@ -287,6 +287,8 @@ export function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServ
       organization?: string;
       entity?: string;
       limit?: number;
+      kind?: Kind;
+      type?: string[];
     },
   >(
     command: McpSearchCommand,
@@ -307,6 +309,8 @@ export function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServ
           limit: params.limit ?? 20,
           counts: hitCounts,
           degraded,
+          kind: params.kind,
+          type: params.type,
         });
         out.result._meta = { ...out.result._meta, search: searchMeta };
         return out.result;
@@ -517,6 +521,12 @@ export function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServ
           .describe(
             "Filter by release type: 'feature' for individual releases, 'rollup' for seasonal/quarterly catch-all posts. Omit to include both.",
           ),
+        kind: z
+          .enum(KIND_VALUES)
+          .optional()
+          .describe(
+            "Filter to releases from sources of a specific kind. Resolves through `source.kind ?? product.kind`, so an SDK repo with no own kind still matches its product's kind. Omit to include all kinds.",
+          ),
         limit: z
           .number()
           .int()
@@ -563,6 +573,12 @@ export function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServ
           .string()
           .optional()
           .describe("Organization to scope to. Accepts an org_ id, slug, domain, or name."),
+        kind: z
+          .enum(KIND_VALUES)
+          .optional()
+          .describe(
+            "Filter to catalog entries of a specific kind. Matches each row's own kind (a product's kind, or a standalone source's kind) — no source→product inheritance on this catalog surface. Omit to include all kinds.",
+          ),
       }),
     },
     async (params) => listCatalog(db, params),

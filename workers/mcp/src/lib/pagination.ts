@@ -1,5 +1,6 @@
 import { computePagination } from "@buildinternet/releases-core/cli-contracts";
 import { fromBase64Url, toBase64Url } from "@buildinternet/releases-core/cursor";
+import type { Kind } from "@buildinternet/releases-core/kinds";
 import type { SearchMode } from "@buildinternet/releases-core/schema";
 
 export interface McpPaginationInput {
@@ -196,6 +197,19 @@ export interface McpSearchMeta {
   hitCap: boolean;
   hitCounts: McpSearchHitCounts;
   degraded: boolean;
+  /**
+   * Echo of the applied `kind` filter, when one was passed. Lets a caller
+   * confirm the taxonomy filter took effect (release hits resolve through
+   * `source.kind ?? product.kind`; catalog hits match the row's own kind).
+   * Omitted entirely when no kind filter was applied.
+   */
+  kind?: Kind;
+  /**
+   * Echo of the applied `type` (section) filter — which of orgs / catalog /
+   * releases / collections the caller asked for. Omitted when unset (all
+   * sections searched).
+   */
+  type?: string[];
 }
 
 export function buildSearchMeta(opts: {
@@ -203,6 +217,8 @@ export function buildSearchMeta(opts: {
   limit: number;
   counts: McpSearchHitCounts;
   degraded?: boolean;
+  kind?: Kind;
+  type?: string[];
 }): McpSearchMeta {
   const { mode, limit, counts } = opts;
   const sections = [
@@ -227,5 +243,18 @@ export function buildSearchMeta(opts: {
   const degraded = opts.degraded === true;
   // When semantic infra is unavailable the fallback path is lexical, so the
   // reported mode reflects what actually ran rather than what was requested.
-  return { mode: degraded ? "lexical" : mode, limit, returned, hitCap, hitCounts, degraded };
+  const meta: McpSearchMeta = {
+    mode: degraded ? "lexical" : mode,
+    limit,
+    returned,
+    hitCap,
+    hitCounts,
+    degraded,
+  };
+  // Echo applied filters only when present, so the back-compat shape (and the
+  // `toEqual` assertions in mcp-pagination-meta.test.ts) stay intact for the
+  // unfiltered case.
+  if (opts.kind) meta.kind = opts.kind;
+  if (opts.type && opts.type.length > 0) meta.type = opts.type;
+  return meta;
 }
