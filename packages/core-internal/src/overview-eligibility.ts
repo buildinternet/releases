@@ -38,11 +38,13 @@ import type { DrizzleD1Database } from "drizzle-orm/d1";
 import {
   knowledgePages,
   organizationsPublic,
+  products,
   releases,
   sourcesActive,
 } from "@buildinternet/releases-core/schema";
 import type { Release, Source } from "@buildinternet/releases-core/schema";
 import { daysAgoIso } from "@buildinternet/releases-core/dates";
+import { resolveSourceKind, type Kind } from "@buildinternet/releases-core/kinds";
 import {
   OVERVIEW_RELEASE_LIMIT,
   OVERVIEW_WINDOW_DAYS,
@@ -262,6 +264,8 @@ export async function fetchOverviewInputsForOrg(
       slug: sourcesActive.slug,
       name: sourcesActive.name,
       type: sourcesActive.type,
+      kind: sourcesActive.kind,
+      productId: sourcesActive.productId,
     })
     .from(sourcesActive)
     .where(
@@ -307,8 +311,18 @@ export async function fetchOverviewInputsForOrg(
     list.push(r);
     releasesBySource.set(r.sourceId, list);
   }
+  const orgProducts = await db
+    .select({ id: products.id, kind: products.kind })
+    .from(products)
+    .where(eq(products.orgId, org.id));
+  const productKindById = new Map(orgProducts.map((p) => [p.id, p.kind]));
+
   const releasesPerSource = activeSources.map((s) => ({
     type: s.type,
+    kind: resolveSourceKind(
+      { kind: s.kind as Kind | null },
+      s.productId ? { kind: (productKindById.get(s.productId) ?? null) as Kind | null } : null,
+    ),
     releases: releasesBySource.get(s.id) ?? [],
   }));
 
