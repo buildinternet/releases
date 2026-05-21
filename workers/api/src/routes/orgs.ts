@@ -87,6 +87,7 @@ import { buildEmbedConfig } from "@releases/search/embed-config.js";
 import { logEvent } from "@releases/lib/log-event";
 import { dbErrorLogFields } from "@releases/lib/db-errors";
 import { buildListResponse, parseListPagination } from "../lib/pagination.js";
+import { invalidateLatestCache } from "../lib/latest-cache.js";
 
 export const orgRoutes = new Hono<Env>();
 
@@ -404,6 +405,7 @@ orgRoutes.get(
       description: org.description,
       category: org.category,
       avatarUrl: org.avatarUrl,
+      isHidden: org.isHidden ?? false,
       tags: tagRows.map((t) => t.name),
       sourceCount: orgSources.length,
       releaseCount: totalReleases.n,
@@ -576,6 +578,7 @@ orgRoutes.patch(
       tags?: string[];
       aliases?: string[];
       fetchPaused?: boolean;
+      isHidden?: boolean;
     } = { ...c.req.valid("json") };
 
     if (body.category !== undefined && body.category !== null) {
@@ -628,12 +631,21 @@ orgRoutes.patch(
     if (body.category !== undefined) updates.category = body.category;
     if (body.avatarUrl !== undefined) updates.avatarUrl = body.avatarUrl;
     if (body.fetchPaused !== undefined) updates.fetchPaused = body.fetchPaused;
+    if (body.isHidden !== undefined) updates.isHidden = body.isHidden;
 
     const [updated] = await db
       .update(organizations)
       .set(updates)
       .where(eq(organizations.id, org.id))
       .returning();
+
+    if (body.isHidden !== undefined) {
+      // Hiding/unhiding changes what the homepage ticker + /v1/releases/latest
+      // default shapes return; purge so the change appears within seconds
+      // rather than waiting out the 300s KV TTL. Best-effort, gated on
+      // INVALIDATION_ENABLED, so a missing binding (dev/tests) just no-ops.
+      c.executionCtx.waitUntil(invalidateLatestCache(c.env, { nReleases: 1, sourceId: org.id }));
+    }
 
     if (body.tags !== undefined) {
       await db.delete(orgTags).where(eq(orgTags.orgId, org.id));
