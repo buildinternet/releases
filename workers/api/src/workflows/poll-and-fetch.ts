@@ -593,7 +593,7 @@ export class PollAndFetchWorkflow extends WorkflowEntrypoint<
         await step.do("invalidate-latest-cache", async () => {
           await invalidateLatestCache(env, {
             nReleases: fetchResult.releasesInserted,
-            sourceId: source.id,
+            cause: source.id,
           });
         });
       }

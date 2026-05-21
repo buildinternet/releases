@@ -636,7 +636,7 @@ sourceRoutes.post("/sources/:slug/fetch", postSourceFetchRoute, async (c) => {
       c.executionCtx.waitUntil(
         invalidateLatestCache(c.env, {
           nReleases: result.releasesInserted,
-          sourceId: src.id,
+          cause: src.id,
         }),
       );
     }
@@ -794,7 +794,7 @@ const postReleasesBatchHandler = async (c: import("hono").Context<Env>) => {
       c.executionCtx.waitUntil(
         invalidateLatestCache(c.env, {
           nReleases: visiblePublishRows.length,
-          sourceId: src.id,
+          cause: src.id,
         }),
       );
       c.executionCtx.waitUntil(
@@ -2981,7 +2981,7 @@ sourceRoutes.post(
     // A row that was visible a moment ago is now hidden — purge the homepage
     // reel caches so users don't click a stale card into a 404.
     c.executionCtx.waitUntil(
-      invalidateLatestCache(c.env, { nReleases: 1, sourceId: updated.sourceId }),
+      invalidateLatestCache(c.env, { nReleases: 1, cause: updated.sourceId }),
     );
 
     return c.json({ suppressed: true });
@@ -3025,7 +3025,7 @@ sourceRoutes.post(
 
     // Newly-visible row should appear in the reel without waiting out the TTL.
     c.executionCtx.waitUntil(
-      invalidateLatestCache(c.env, { nReleases: 1, sourceId: updated.sourceId }),
+      invalidateLatestCache(c.env, { nReleases: 1, cause: updated.sourceId }),
     );
 
     return c.json({ unsuppressed: true });

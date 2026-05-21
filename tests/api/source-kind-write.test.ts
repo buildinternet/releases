@@ -7,6 +7,7 @@ import { organizations, sources } from "@buildinternet/releases-core/schema";
 import { productRoutes } from "../../workers/api/src/routes/products.js";
 import { sourceRoutes } from "../../workers/api/src/routes/sources.js";
 import { createTestDb, type TestDatabase } from "../db-helper.js";
+import { makeJsonCaller } from "./route-test-helpers.js";
 
 let testDb: TestDatabase;
 
@@ -22,7 +23,8 @@ function makeEnv() {
   return { DB: testDb.db as unknown as never };
 }
 
-const noopCtx = { waitUntil: () => {}, passThroughOnException: () => {} };
+const callProduct = makeJsonCaller(productRoutes, makeEnv);
+const callSource = makeJsonCaller(sourceRoutes, makeEnv);
 
 async function seedOrg(slug = "acme") {
   await testDb.db.insert(organizations).values({
@@ -36,16 +38,12 @@ async function seedOrg(slug = "acme") {
 describe("kind on write paths", () => {
   it("POST /v1/products accepts kind:sdk", async () => {
     await seedOrg("acme");
-    const res = await productRoutes.request(
-      "/products",
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ name: "Py SDK", slug: "py-sdk", orgSlug: "acme", kind: "sdk" }),
-      },
-      makeEnv(),
-      noopCtx as unknown as Parameters<typeof productRoutes.request>[3],
-    );
+    const res = await callProduct("/products", "POST", {
+      name: "Py SDK",
+      slug: "py-sdk",
+      orgSlug: "acme",
+      kind: "sdk",
+    });
     expect(res.status).toBe(201);
     const body = (await res.json()) as Record<string, unknown>;
     expect(body.kind).toBe("sdk");
@@ -63,16 +61,7 @@ describe("kind on write paths", () => {
       metadata: "{}",
     });
 
-    const res = await sourceRoutes.request(
-      "/orgs/acme/sources/acme-feed",
-      {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ kind: "sdk" }),
-      },
-      makeEnv(),
-      noopCtx as unknown as Parameters<typeof sourceRoutes.request>[3],
-    );
+    const res = await callSource("/orgs/acme/sources/acme-feed", "PATCH", { kind: "sdk" });
     expect(res.status).toBe(200);
     const body = (await res.json()) as Record<string, unknown>;
     expect(body.kind).toBe("sdk");
@@ -91,16 +80,7 @@ describe("kind on write paths", () => {
       kind: "sdk",
     });
 
-    const res = await sourceRoutes.request(
-      "/orgs/acme/sources/x",
-      {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ kind: null }),
-      },
-      makeEnv(),
-      noopCtx as unknown as Parameters<typeof sourceRoutes.request>[3],
-    );
+    const res = await callSource("/orgs/acme/sources/x", "PATCH", { kind: null });
     expect(res.status).toBe(200);
     const body = (await res.json()) as Record<string, unknown>;
     expect(body.kind).toBe(null);
@@ -108,16 +88,12 @@ describe("kind on write paths", () => {
 
   it("rejects an invalid kind value on POST /v1/products", async () => {
     await seedOrg("acme");
-    const res = await productRoutes.request(
-      "/products",
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ name: "Y", slug: "y", orgSlug: "acme", kind: "framework" }),
-      },
-      makeEnv(),
-      noopCtx as unknown as Parameters<typeof productRoutes.request>[3],
-    );
+    const res = await callProduct("/products", "POST", {
+      name: "Y",
+      slug: "y",
+      orgSlug: "acme",
+      kind: "framework",
+    });
     expect(res.status).toBe(400);
     const body = (await res.json()) as Record<string, unknown>;
     expect(body.error).toBe("bad_request");
@@ -135,16 +111,7 @@ describe("kind on write paths", () => {
       metadata: "{}",
     });
 
-    const res = await sourceRoutes.request(
-      "/orgs/acme/sources/acme-feed",
-      {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ kind: "framework" }),
-      },
-      makeEnv(),
-      noopCtx as unknown as Parameters<typeof sourceRoutes.request>[3],
-    );
+    const res = await callSource("/orgs/acme/sources/acme-feed", "PATCH", { kind: "framework" });
     expect(res.status).toBe(400);
     const body = (await res.json()) as Record<string, unknown>;
     expect(body.error).toBe("bad_request");

@@ -8,6 +8,7 @@ import { productRoutes } from "../../workers/api/src/routes/products.js";
 import { sourceRoutes } from "../../workers/api/src/routes/sources.js";
 import { orgRoutes } from "../../workers/api/src/routes/orgs.js";
 import { createTestDb, type TestDatabase } from "../db-helper.js";
+import { makeCaller } from "./route-test-helpers.js";
 
 let testDb: TestDatabase;
 
@@ -23,34 +24,9 @@ function makeEnv() {
   return { DB: testDb.db as unknown as never };
 }
 
-const noopCtx = { waitUntil: () => {}, passThroughOnException: () => {} };
-
-async function callProduct(path: string): Promise<Response> {
-  return productRoutes.request(
-    path,
-    { method: "GET" },
-    makeEnv(),
-    noopCtx as unknown as Parameters<typeof productRoutes.request>[3],
-  );
-}
-
-async function callSource(path: string): Promise<Response> {
-  return sourceRoutes.request(
-    path,
-    { method: "GET" },
-    makeEnv(),
-    noopCtx as unknown as Parameters<typeof sourceRoutes.request>[3],
-  );
-}
-
-async function callOrg(path: string): Promise<Response> {
-  return orgRoutes.request(
-    path,
-    { method: "GET" },
-    makeEnv(),
-    noopCtx as unknown as Parameters<typeof orgRoutes.request>[3],
-  );
-}
+const callProduct = makeCaller(productRoutes, makeEnv);
+const callSource = makeCaller(sourceRoutes, makeEnv);
+const callOrg = makeCaller(orgRoutes, makeEnv);
 
 async function seedOrg() {
   await testDb.db.insert(organizations).values({

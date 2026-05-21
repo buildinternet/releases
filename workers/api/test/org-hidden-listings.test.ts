@@ -64,6 +64,72 @@ describe("getLatestReleasesAcross — hidden-org filter", () => {
   });
 });
 
+async function seedSoftDeletedOrg(): Promise<D1Database> {
+  const sqlite = new Database(":memory:");
+  applyMigrations(sqlite);
+  const db = drizzle(sqlite);
+  await db.insert(organizations).values([
+    { id: "org_live", slug: "live-org", name: "Live" },
+    {
+      // Soft-delete stamps deletedAt and mangles the slug to "<slug>--<id>".
+      id: "org_gone",
+      slug: "gone-org--org_gone",
+      name: "Gone",
+      deletedAt: "2026-05-01T00:00:00.000Z",
+    },
+  ]);
+  await db.insert(sources).values([
+    {
+      id: "src_live",
+      slug: "live-src",
+      name: "Live Src",
+      type: "feed",
+      url: "https://live.example/feed",
+      orgId: "org_live",
+    },
+    {
+      // Active source still pointing at the tombstoned org — the divergence the
+      // sweep-tombstones cron flags as "tombstoned org with active children".
+      // Only an org-level deleted_at filter can drop its releases here.
+      id: "src_orphan",
+      slug: "orphan-src",
+      name: "Orphan Src",
+      type: "feed",
+      url: "https://gone.example/feed",
+      orgId: "org_gone",
+    },
+  ]);
+  await db.insert(releases).values([
+    {
+      id: "rel_live",
+      sourceId: "src_live",
+      title: "Live 1.0",
+      content: "x",
+      url: "https://live.example/r/1",
+      publishedAt: "2026-05-05T12:00:00.000Z",
+    },
+    {
+      id: "rel_gone",
+      sourceId: "src_orphan",
+      title: "Gone 1.0",
+      content: "x",
+      url: "https://gone.example/r/1",
+      publishedAt: "2026-05-06T12:00:00.000Z",
+    },
+  ]);
+  return makeD1Shim(sqlite);
+}
+
+describe("getLatestReleasesAcross — soft-deleted-org filter", () => {
+  it("excludes releases whose org is soft-deleted", async () => {
+    const d1 = await seedSoftDeletedOrg();
+    const rows = await getLatestReleasesAcross(d1, { limit: 50 });
+    const ids = rows.map((r) => r.id);
+    expect(ids).toContain("rel_live");
+    expect(ids).not.toContain("rel_gone");
+  });
+});
+
 // ── GET /v1/orgs directory filter (Task 3) ──
 
 const mkApp = (db: ReturnType<typeof mkDb>) => createTestApp(db, orgRoutes);

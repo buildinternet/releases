@@ -12,6 +12,7 @@ import { sourceRoutes } from "../../workers/api/src/routes/sources.js";
 import { orgRoutes } from "../../workers/api/src/routes/orgs.js";
 import { searchRoutes } from "../../workers/api/src/routes/search.js";
 import { createTestDb, type TestDatabase } from "../db-helper.js";
+import { makeCaller } from "./route-test-helpers.js";
 
 let testDb: TestDatabase;
 
@@ -27,34 +28,9 @@ function makeEnv() {
   return { DB: testDb.db as unknown as never };
 }
 
-const noopCtx = { waitUntil: () => {}, passThroughOnException: () => {} };
-
-async function callSource(path: string): Promise<Response> {
-  return sourceRoutes.request(
-    path,
-    { method: "GET" },
-    makeEnv(),
-    noopCtx as unknown as Parameters<typeof sourceRoutes.request>[3],
-  );
-}
-
-async function callProduct(path: string): Promise<Response> {
-  return productRoutes.request(
-    path,
-    { method: "GET" },
-    makeEnv(),
-    noopCtx as unknown as Parameters<typeof productRoutes.request>[3],
-  );
-}
-
-async function callOrg(path: string): Promise<Response> {
-  return orgRoutes.request(
-    path,
-    { method: "GET" },
-    makeEnv(),
-    noopCtx as unknown as Parameters<typeof orgRoutes.request>[3],
-  );
-}
+const callSource = makeCaller(sourceRoutes, makeEnv);
+const callProduct = makeCaller(productRoutes, makeEnv);
+const callOrg = makeCaller(orgRoutes, makeEnv);
 
 async function seedOrg(slug = "acme") {
   await testDb.db.insert(organizations).values({
@@ -321,19 +297,7 @@ function makeSearchEnv() {
   };
 }
 
-const searchCtx = {
-  waitUntil: (_p: Promise<unknown>) => {},
-  passThroughOnException: () => {},
-} as never;
-
-async function callSearch(path: string): Promise<Response> {
-  return searchRoutes.request(
-    path,
-    { method: "GET" },
-    makeSearchEnv(),
-    searchCtx as unknown as Parameters<typeof searchRoutes.request>[3],
-  );
-}
+const callSearch = makeCaller(searchRoutes, makeSearchEnv);
 
 describe("kind filter on /v1/search", () => {
   it("lexical mode filters release hits by kind", async () => {

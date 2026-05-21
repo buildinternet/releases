@@ -647,7 +647,7 @@ orgRoutes.patch(
     // invalidation log tag (the purge clears the fixed default + ticker shapes
     // regardless of scope); we pass the org id since this isn't source-scoped.
     if (body.isHidden !== undefined && body.isHidden !== org.isHidden) {
-      c.executionCtx.waitUntil(invalidateLatestCache(c.env, { nReleases: 1, sourceId: org.id }));
+      c.executionCtx.waitUntil(invalidateLatestCache(c.env, { nReleases: 1, cause: org.id }));
     }
 
     if (body.tags !== undefined) {
