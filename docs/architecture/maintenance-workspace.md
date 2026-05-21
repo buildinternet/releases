@@ -2,7 +2,9 @@
 
 A per-user **`~/.releases/work/`** workspace that gives agent-driven admin maintenance a durable, reviewable, cost-aware trail. When a local agent (Claude Code running a skill like [seeding-playbooks](../../src/agent/skills/seeding-playbooks/SKILL.md), `maintaining-orgs`, `managing-sources`, or `regenerating-overviews`) makes real prod mutations, the only other record is the ephemeral conversation transcript. This workspace is where the agent writes down what it set out to do, what it actually did, and what it cost.
 
-Inspired by Browserbase's [`autobrowse`](https://github.com/browserbase/skills/tree/main/skills/autobrowse) `tasks` / `traces` / `reports` convention. Two deliberate divergences: (1) this is a **skill convention, not a CLI feature** — the agent creates the folders and writes the artifacts while running a maintenance skill; the `releases` CLI stays a pure HTTP client. (2) autobrowse keeps its workspace in CWD; ours lives in the **home dir** instead, because this work spans repos — we move between the monorepo and the [`releases-cli`](https://github.com/buildinternet/releases-cli) checkout (and worktrees), and a single per-user trail both can write to and read beats a per-checkout silo.
+Inspired by Browserbase's [`autobrowse`](https://github.com/browserbase/skills/tree/main/skills/autobrowse) `tasks` / `traces` / `reports` convention. Two deliberate divergences: (1) the **agent** creates the folders and writes the judgment-layer artifacts while running a maintenance skill; the CLI captures the mechanical evidence automatically (see [What the CLI captures](#what-the-cli-captures-automatically-phase-b)) but stays a pure HTTP client otherwise. (2) autobrowse keeps its workspace in CWD; ours lives in the **home dir** instead, because this work spans repos — we move between the monorepo and the [`releases-cli`](https://github.com/buildinternet/releases-cli) checkout (and worktrees), and a single per-user trail both can write to and read beats a per-checkout silo.
+
+> **May graduate to a standalone skill.** Today each maintenance skill carries a short "Record the Run" pointer to this doc. If that pointer proves to duplicate across the seeding/maintaining/managing/overview skills, the convention can move into a dedicated `recording-maintenance-runs` skill the others reference in one line. Kept as a per-skill pointer for now (#1112).
 
 ## Layout
 
@@ -103,6 +105,11 @@ Written once per session, after all runs. The cross-run record you can read late
 - <data-quality issue, coverage gap, or onboarding candidate>
 ```
 
-## Managed-agent sessions slot in here too
+## What the CLI captures automatically (Phase B)
 
-Server-triggered sessions (`onboard`, `source fetch --wait`, `overview batch --wait`) already return full session records — steps, `usage.inputTokens/outputTokens/estimatedUsd`, `model`, `result` — that the CLI reads but does not persist. Phase B of this convention (tracked in the OSS CLI repo) gives those commands a `--trace-dir` flag (defaulting to `~/.releases/work/runs/`) and `admin discovery task get <id> --save <dir>` so a managed session lands as `runs/<sessionId>/{trace.json,summary.md}` in the same shape. Because the workspace is per-user, a session triggered from the `releases-cli` repo and a playbook batch run from the monorepo land in the same `runs/` — a single, greppable cost ledger for the money-spending operations, defense-in-depth alongside the server-side spend cap.
+The agent writes the judgment layer — task intent, the run narrative, the report's findings. The CLI owns the mechanical evidence, so the agent doesn't hand-assemble it. This capture lives in the OSS CLI repo; tracked as Phase B of #1112.
+
+- **Admin-mutation log.** When `RELEASES_RUN_DIR` is set (the skill exports it once at the start of a batch, e.g. `RELEASES_RUN_DIR=~/.releases/work/runs/<ts>-<batch>`), every `releases admin …` write appends a JSONL line — timestamp, command, target, result — to `$RELEASES_RUN_DIR/mutations.jsonl`. No per-command flags; the raw record of what changed accumulates on its own.
+- **Managed-session traces.** Server-triggered sessions (`onboard`, `source fetch --wait`, `overview batch --wait`) already return full session records — steps, `usage.inputTokens/outputTokens/estimatedUsd`, `model`, `result` — that the CLI reads but does not persist. A `--trace-dir` flag (defaulting to `~/.releases/work/runs/`) and `admin discovery task get <id> --save <dir>` land a session as `runs/<sessionId>/{trace.json,summary.md}` in the same shape.
+
+Because the workspace is per-user, a session triggered from the `releases-cli` repo and a playbook batch run from the monorepo land in the same `runs/` — a single, greppable cost + mutation ledger for the money-spending operations, defense-in-depth alongside the server-side spend cap.
