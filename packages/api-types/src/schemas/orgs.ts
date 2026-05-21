@@ -105,6 +105,8 @@ export const UpdateOrgBodySchema = z.object({
   fetchPaused: z.boolean().optional(),
   /** Admin-only: hide the org from the homepage ticker + /v1/orgs directory. Stays reachable via detail, search, sitemap. */
   isHidden: z.boolean().optional(),
+  /** Admin-only: opt the org into automatic AI content — org overviews AND per-release summaries (single backend flag `auto_generate_content`). */
+  autoGenerateContent: z.boolean().optional(),
 });
 
 // Org detail's products query selects a strict subset of `ProductListItem` —
@@ -398,6 +400,12 @@ export const OrgDetailSchema = z.object({
   avatarUrl: z.string().nullable(),
   /** Admin display flag: true when the org is hidden from listings (homepage + /v1/orgs). Optional on the wire for older workers mid-deploy. */
   isHidden: z.boolean().optional(),
+  /** Admin display flag: org is opted into automatic overviews + per-release summaries. Optional on the wire for older workers mid-deploy. */
+  autoGenerateContent: z.boolean().optional(),
+  /** Admin display flag: all ingest paused for this org. */
+  fetchPaused: z.boolean().optional(),
+  /** How the org row was created. `on_demand` orgs are excluded from overview generation regardless of `autoGenerateContent`. */
+  discovery: z.enum(["curated", "agent", "on_demand"]).optional(),
   tags: z.array(z.string()).optional(),
   sourceCount: z.number().int().min(0),
   releaseCount: z.number().int().min(0),
