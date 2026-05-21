@@ -97,7 +97,7 @@ Resolution precedence inside the limiter: **root → bypass; trusted proxy → b
 
 ## Testing
 
-Extend `tests/api/rate-limit.test.ts` (reuses `seedReadToken`, `mockLimiter`, `mockSecret`):
+Extend `tests/api/rate-limit.test.ts` (reuses `seedToken(db, scopes)` → `{ token, tokenId }`, `mockLimiter`, `mockSecret`):
 
 - **Token over quota → 429** with `RateLimit-Policy` carrying the `"token"` policy and `Retry-After: 60`; `TOKEN_RATE_LIMITER` keyed by the token's `tokenId` (`tok_…`); `PUBLIC_RATE_LIMITER` never consulted.
 - **Token under quota → 200**, token limiter consulted once, IP limiter untouched.
