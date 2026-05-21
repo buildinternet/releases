@@ -13,7 +13,7 @@ export async function getOrgsWithStats(
   pagination?: { limit: number; offset: number },
   opts: { includeEmpty?: boolean } = {},
 ): Promise<OrgListRow[]> {
-  const where = orgListSearchWhere(q);
+  const where = orgListWhere(q);
   const page = pagination ? sql`LIMIT ${pagination.limit} OFFSET ${pagination.offset}` : sql``;
   // Drop orgs that haven't produced any visible releases yet (#746). Applied
   // post-aggregate via HAVING so the search-term filter still matches the
@@ -50,7 +50,7 @@ export async function countOrgsForList(
   q?: string,
   opts: { includeEmpty?: boolean } = {},
 ): Promise<{ totalItems: number; emptyOrgCount: number }> {
-  const where = orgListSearchWhere(q);
+  const where = orgListWhere(q);
   // Two SUMs over the same per-org aggregate: orgs WITH ≥1 visible release vs
   // orgs WITHOUT. `totalItems` picks whichever bucket(s) match the current
   // filter; `emptyOrgCount` is always the empty bucket so the toggle CTA can
@@ -76,10 +76,13 @@ export async function countOrgsForList(
   };
 }
 
-function orgListSearchWhere(q?: string) {
-  if (!q) return sql``;
+function orgListWhere(q?: string) {
+  // Hidden orgs ("don't feature") never appear in the directory listing,
+  // regardless of the empty-org toggle. is_hidden is NOT NULL so `= 0` is safe.
+  const hidden = sql`o.is_hidden = 0`;
+  if (!q) return sql`WHERE ${hidden}`;
   const lower = q.toLowerCase();
-  return sql`WHERE (${likeContains(sql`lower(o.name)`, lower)} OR ${likeContains(sql`lower(o.slug)`, lower)})`;
+  return sql`WHERE ${hidden} AND (${likeContains(sql`lower(o.name)`, lower)} OR ${likeContains(sql`lower(o.slug)`, lower)})`;
 }
 
 export async function getOrgSourcesWithStats(db: D1Db, orgId: string): Promise<SourceWithStats[]> {
