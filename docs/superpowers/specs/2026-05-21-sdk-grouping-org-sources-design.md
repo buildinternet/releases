@@ -35,16 +35,33 @@ web surface catching up.
 
 ## Blast radius
 
-Zero backend change. `kind` already rides on the wire:
+The grouping logic is frontend, but it needs `kind` on the org-detail payload —
+which the `GET /v1/orgs/:slug` handler does **not** currently emit. The schemas
+_allow_ `kind` (`SourceListItem`, `ProductListItem`), but the handler hand-builds
+its rows and drops it:
 
-- `SourceListItem.kind` (`packages/api-types/src/schemas/sources.ts`) — present on
-  `OrgDetail.sources[]`.
-- `ProductListItem.kind` (`packages/api-types/src/schemas/products.ts`) — present on
-  `OrgDetail.products[]`.
+- `getOrgSourcesWithStats` (`workers/api/src/queries/orgs.ts:94`) never `SELECT`s
+  `s.kind` (and `SourceWithStats` in `workers/api/src/queries/shared.ts` has no
+  `kind` field).
+- The `sourcesWithStats` map (`workers/api/src/routes/orgs.ts:352`) doesn't copy
+  `kind`.
+- The org-detail products query (`routes/orgs.ts:273`) selects only
+  `id, slug, name, url, description, sourceCount`, and `OrgDetailProductSchema`
+  (`packages/api-types/src/schemas/orgs.ts:113`) `.pick(...)` omits `kind`.
 
-So `org.sources` and `org.products` (already passed into `SourceTable` from
-`web/src/app/[orgSlug]/(org)/sources/page.tsx`) carry everything needed. Orgs with
-no SDK sources render byte-for-byte identical to today.
+So `org.sources[].kind` and `org.products[].kind` are both `undefined` on the
+`/sources` page today — there is no frontend-only path. The feature requires a
+small, **additive, backwards-compatible** API change to emit each source's own
+`kind` plus each product's `kind` (so the web can apply the source→product
+inheritance the resolution rule mandates — the backfill deliberately set `kind`
+on parent products and left some child sources null).
+
+**No DB migration** — the `kind` columns already exist and are backfilled; this is
+purely about emitting columns the handler currently discards. Orgs with fewer than
+2 resolved SDK sources render byte-for-byte identical to today.
+
+`org.sources` and `org.products` are already passed into `SourceTable` from
+`web/src/app/[orgSlug]/(org)/sources/page.tsx` — they just gain a `kind` field.
 
 ## Membership: what counts as an SDK
 
@@ -150,21 +167,40 @@ be exercised against the helper output.
 
 ## Files
 
-**Modify**
+**Modify — API (emit `kind` on org detail)**
+
+- `workers/api/src/queries/shared.ts` — add `kind: string | null` to the
+  `SourceWithStats` type.
+- `workers/api/src/queries/orgs.ts` — `getOrgSourcesWithStats` SELECT: add `s.kind`.
+- `workers/api/src/routes/orgs.ts` — `sourcesWithStats` map: add
+  `kind: row.kind ?? null`; org-detail products query: add `kind: productsActive.kind`.
+- `packages/api-types/src/schemas/orgs.ts` — add `kind: true` to
+  `OrgDetailProductSchema`'s `.pick(...)`.
+
+**Modify — Web**
 
 - `web/src/components/source-table.tsx` — partition sources, render the non-SDK flat
-  rows as today, render the `SdkSourceGroup` block at the bottom of the active
-  section.
+  rows as today, render the `SdkSourceGroup` block between flat-active and
+  flat-inactive rows; thread an `indent` flag through `renderRow`.
 
-**Create**
+**Create — Web**
 
+- `web/src/lib/sdk-grouping.ts` — pure helpers `partitionSdkSources` + `sdkPreview`
+  - `SDK_GROUP_MIN`.
 - `web/src/components/sdk-source-group.tsx` — `"use client"` collapsible block
-  (subheading row + member rows + toggle). (Or co-locate in `source-table.tsx` if it
-  stays small; the plan can decide.)
-- A pure helper module for `partitionSdkSources` + its preview-string builder
-  (location to be set in the plan — likely alongside `source-table.tsx` or in
-  `web/src/lib/`).
-- Tests for the helper.
+  (subheading `<tr>` + chevron toggle + conditional member rows), mirroring the
+  existing `inactive-sources-toggle.tsx` disclosure idiom.
+
+**Create — Tests**
+
+- `tests/unit/sdk-grouping.test.ts` — unit tests for the pure helpers (root
+  `bun test`).
+- Extend `tests/api/source-kind-read.test.ts` — assert `GET /v1/orgs/:slug` emits
+  `kind` on `sources[]` and `products[]`.
+
+Note: source→product inheritance on the web reads the source's own `kind` (now
+emitted) and falls back to the parent product's `kind` (now emitted) via
+`resolveSourceKind` + a `productSlug → kind` map built from `org.products`.
 
 ## Open questions
 
