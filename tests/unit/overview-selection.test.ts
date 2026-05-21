@@ -2,6 +2,7 @@ import { describe, it, expect } from "bun:test";
 import {
   selectReleasesForOverview,
   PER_SOURCE_CAPS,
+  PER_KIND_FAMILY_CAPS,
   OVERVIEW_RELEASE_LIMIT,
 } from "@buildinternet/releases-core/overview";
 import type { Release } from "@buildinternet/releases-core/schema";
@@ -95,5 +96,46 @@ describe("selectReleasesForOverview", () => {
     expect(out.length).toBe(2);
     // Non-null date sorts ahead of empty string
     expect(out[0].id).toBe("rel_b");
+  });
+
+  it("caps the SDK family collectively so non-SDK sources survive", () => {
+    // 10 SDK github repos (older) + 1 platform changelog (newest).
+    const sdkSources = Array.from({ length: 10 }, (_, i) => ({
+      type: "github" as const,
+      kind: "sdk" as const,
+      releases: mkBatch(`sdk${i}`, 10, "2026-01-01"),
+    }));
+    const changelog = {
+      type: "scrape" as const,
+      kind: "platform" as const,
+      releases: mkBatch("changelog", 10, "2026-05-01"),
+    };
+    const { releases } = selectReleasesForOverview([...sdkSources, changelog], 50);
+
+    const sdkCount = releases.filter((r) => r.id.includes("rel_sdk")).length;
+    const changelogCount = releases.filter((r) => r.id.startsWith("rel_changelog_")).length;
+
+    // SDK family pooled + capped regardless of how many repos contributed.
+    expect(sdkCount).toBe(PER_KIND_FAMILY_CAPS.sdk!);
+    // Changelog fully represented (10 <= scrape cap 20), not crowded out.
+    expect(changelogCount).toBe(10);
+  });
+
+  it("treats null/undefined kind as uncapped (back-compat)", () => {
+    const perSource = [
+      { type: "github" as const, releases: mkBatch("github", 30) },
+      { type: "scrape" as const, releases: mkBatch("scrape", 30) },
+    ];
+    const { releases } = selectReleasesForOverview(perSource, 100);
+    // Identical to the pre-family-cap behavior: 10 (github cap) + 20 (scrape cap).
+    expect(releases.length).toBe(30);
+  });
+
+  it("does not pad an SDK family that is under its cap", () => {
+    const { releases } = selectReleasesForOverview(
+      [{ type: "github" as const, kind: "sdk" as const, releases: mkBatch("sdk", 3) }],
+      50,
+    );
+    expect(releases.length).toBe(3);
   });
 });
