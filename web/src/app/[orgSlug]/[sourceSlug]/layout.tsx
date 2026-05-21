@@ -11,8 +11,8 @@ import { Sidebar } from "@/components/sidebar";
 import { SourceTabs } from "@/components/source-tabs";
 import { SourceTypeIcon } from "@/components/source-type-icon";
 import { StateBadge, getHiddenStateBadge } from "@/components/source-table";
-import { PromoteSourceButton } from "@/components/promote-source-button";
-import { isPromoteSourceEnabled } from "@/lib/promote-source-flag";
+import { SourceAdminMenu } from "@/components/source-admin-menu";
+import { isLocalAdminEnabled } from "@/lib/local-admin-flag";
 import { SourceTimeline } from "@/components/source-timeline";
 import { CliCommand } from "@/components/cli-command";
 import { api } from "@/lib/api";
@@ -82,8 +82,18 @@ export default async function SourceLayout({
   ];
 
   const hiddenBadge = getHiddenStateBadge(source);
-  const showPromoteButton =
-    source.discovery === "on_demand" && source.isHidden && isPromoteSourceEnabled();
+  const adminEnabled = isLocalAdminEnabled();
+  const sourceMeta = (() => {
+    try {
+      return JSON.parse(source.metadata || "{}") as {
+        marketingFilter?: boolean;
+        marketingFilterHint?: string;
+        feedContentDepth?: "full" | "summary-only";
+      };
+    } catch {
+      return {};
+    }
+  })();
   const hasHighlights = !!(source.summaries?.rolling || source.summaries?.monthly?.length);
   const hasChangelog = !!source.hasChangelogFile;
 
@@ -109,8 +119,16 @@ export default async function SourceLayout({
           </ViewTransition>
           <SourceTypeIcon type={source.type} size={18} />
           {hiddenBadge && <StateBadge label={hiddenBadge.label} title={hiddenBadge.title} />}
-          {showPromoteButton && (
-            <PromoteSourceButton orgSlug={source.org.slug} sourceSlug={source.slug} />
+          {adminEnabled && (
+            <SourceAdminMenu
+              orgSlug={source.org.slug}
+              sourceSlug={source.slug}
+              marketingFilter={sourceMeta.marketingFilter === true}
+              marketingFilterHint={sourceMeta.marketingFilterHint ?? null}
+              feedContentDepth={sourceMeta.feedContentDepth ?? null}
+              discovery={source.discovery}
+              isHidden={source.isHidden ?? false}
+            />
           )}
         </div>
         <CliCommand identifier={source.slug} />
