@@ -405,7 +405,7 @@ orgRoutes.get(
       description: org.description,
       category: org.category,
       avatarUrl: org.avatarUrl,
-      isHidden: org.isHidden ?? false,
+      isHidden: org.isHidden,
       tags: tagRows.map((t) => t.name),
       sourceCount: orgSources.length,
       releaseCount: totalReleases.n,
@@ -639,11 +639,14 @@ orgRoutes.patch(
       .where(eq(organizations.id, org.id))
       .returning();
 
-    if (body.isHidden !== undefined) {
-      // Hiding/unhiding changes what the homepage ticker + /v1/releases/latest
-      // default shapes return; purge so the change appears within seconds
-      // rather than waiting out the 300s KV TTL. Best-effort, gated on
-      // INVALIDATION_ENABLED, so a missing binding (dev/tests) just no-ops.
+    // Only purge when visibility actually flips — a no-op toggle shouldn't
+    // force a homepage-ticker recompute. Hiding/unhiding changes what the
+    // ticker + /v1/releases/latest default shapes return; purge so the change
+    // appears within seconds rather than waiting out the 300s KV TTL.
+    // Best-effort, gated on INVALIDATION_ENABLED. `sourceId` is only an
+    // invalidation log tag (the purge clears the fixed default + ticker shapes
+    // regardless of scope); we pass the org id since this isn't source-scoped.
+    if (body.isHidden !== undefined && body.isHidden !== org.isHidden) {
       c.executionCtx.waitUntil(invalidateLatestCache(c.env, { nReleases: 1, sourceId: org.id }));
     }
 

@@ -198,10 +198,16 @@ builder.queryType({
           .select()
           .from(releasesVisible)
           .innerJoin(sources, eq(sources.id, releasesVisible.sourceId))
+          // Join the org so hidden orgs ("don't feature") drop off this feed —
+          // it backs the homepage ticker. sources.orgId is NOT NULL, so the
+          // inner join can't shed otherwise-visible rows. Mirrors the
+          // is_hidden filter on the REST getLatestReleasesAcross path.
+          .innerJoin(organizations, eq(organizations.id, sources.orgId))
           .where(
             and(
               eq(sources.isHidden, false),
               isNull(sources.deletedAt),
+              eq(organizations.isHidden, false),
               orgFilter,
               excludeFilter,
               futureFilter,

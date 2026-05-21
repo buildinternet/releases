@@ -2,25 +2,15 @@
 
 import { revalidatePath } from "next/cache";
 import { webApiHeaders } from "@/lib/api";
-import { isLocalAdminEnabled } from "@/lib/local-admin-flag";
+import { adminActionEnv } from "@/lib/admin-action";
 
 type ActionResult = { ok: true } | { ok: false; error: string };
-
-function adminEnv(): { apiUrl: string; apiSecret: string } | { error: string } {
-  if (!isLocalAdminEnabled()) {
-    return { error: "Admin actions are disabled in this environment." };
-  }
-  const apiUrl = process.env.RELEASED_API_URL ?? "http://localhost:3456";
-  const apiSecret = process.env.RELEASED_API_KEY;
-  if (!apiSecret) return { error: "RELEASED_API_KEY not configured." };
-  return { apiUrl, apiSecret };
-}
 
 export async function setOrgHiddenAction(input: {
   slug: string;
   hidden: boolean;
 }): Promise<ActionResult> {
-  const env = adminEnv();
+  const env = adminActionEnv();
   if ("error" in env) return { ok: false, error: env.error };
 
   let res: Response;
