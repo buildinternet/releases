@@ -805,6 +805,10 @@ describe("get_latest_releases kind filter (COALESCE inheritance)", () => {
   const fixture = useFixture(async (db) => {
     const seeded = await seed(db);
     await db.update(products).set({ kind: "sdk" }).where(eq(products.id, seeded.nextjsId));
+    // Turborepo's parent product is sdk too, so the source-own kind below has a
+    // *different* product kind to override — without this the "source wins" test
+    // would pass trivially (COALESCE(tool, null) = tool either way).
+    await db.update(products).set({ kind: "sdk" }).where(eq(products.id, seeded.turborepoId));
     // Give Turborepo a release so its source-own kind is observable in the feed.
     await db.insert(releases).values({
       id: newReleaseId(),
