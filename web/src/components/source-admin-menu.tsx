@@ -64,6 +64,7 @@ export function SourceAdminMenu({
         setError(res.error);
         return;
       }
+      close();
       router.refresh();
     });
   }

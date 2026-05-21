@@ -52,6 +52,7 @@ export function OrgAdminMenu({
         setError(res.error);
         return;
       }
+      close();
       router.refresh();
     });
   }
