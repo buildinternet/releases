@@ -20,8 +20,9 @@ web surface catching up.
 
 ## Scope
 
-**In scope:** A frontend-only change to the org `/sources` tab — grouping
-`sdk`-kind sources into one collapsible block in `web/src/components/source-table.tsx`.
+**In scope:** Grouping `sdk`-kind sources into one collapsible block on the org
+`/sources` tab (`web/src/components/source-table.tsx`), plus the small additive API
+change needed to feed it `kind` (see "Blast radius").
 
 **Out of scope** (each its own later step under #1080):
 
@@ -31,7 +32,8 @@ web surface catching up.
   on every org. Generalizing to all kinds is a later decision if it proves useful.
 - The releases-feed `?kind=` filter UI, the homepage / latest feed, and overview
   downweighting by kind.
-- Any API, schema, or DB change.
+- Any DB/schema migration (the `kind` columns already exist and are backfilled), and
+  any API change beyond emitting `kind` on the org-detail payload.
 
 ## Blast radius
 
@@ -111,14 +113,18 @@ flowchart TD
 The header is a full-width row inside the same `<table>` (`<tr><td colSpan>`),
 styled as a plain text subheading — **no color chip, no count badge**.
 
-- **Collapsed:** subheading **SDKs** + a member preview + a `▸` caret.
+The disclosure affordance is an **SVG chevron** that rotates on open (mirroring
+`web/src/components/inactive-sources-toggle.tsx`), not a Unicode caret or emoji —
+per the project's no-emoji-in-UI rule.
+
+- **Collapsed:** chevron + subheading **SDKs** + a member preview.
   - Preview = member display names, ordered by release count desc, joined with
     `·`, on a single line, truncated with CSS `text-overflow: ellipsis`. No
     trailing "+N", no count — the line just clips to the column width.
-  - Example: `SDKs   node · python · php · ruby · go · java · .NET   ▸`
-- **Expanded:** subheading **SDKs** + a `▾` caret, then the SDK rows beneath in the
-  existing indented row style, keeping every current column (Type, Product when the
-  org has products, Releases, sparkline, Last update).
+  - Example: `SDKs   node · python · php · ruby · go · java · .NET`
+- **Expanded:** rotated chevron + subheading **SDKs**, then the SDK rows beneath in
+  the existing indented row style, keeping every current column (Type, Product when
+  the org has products, Releases, sparkline, Last update).
 
 ## Within-group ordering and inactive SDKs
 
