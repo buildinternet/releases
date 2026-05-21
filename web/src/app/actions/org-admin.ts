@@ -38,3 +38,35 @@ export async function setOrgHiddenAction(input: {
   revalidatePath(`/${input.slug}`);
   return { ok: true };
 }
+
+export async function setOrgAutoGenerateContentAction(input: {
+  slug: string;
+  enabled: boolean;
+}): Promise<ActionResult> {
+  const env = adminActionEnv();
+  if ("error" in env) return { ok: false, error: env.error };
+
+  let res: Response;
+  try {
+    res = await fetch(`${env.apiUrl}/v1/orgs/${encodeURIComponent(input.slug)}`, {
+      method: "PATCH",
+      headers: webApiHeaders({
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${env.apiSecret}`,
+      }),
+      body: JSON.stringify({ autoGenerateContent: input.enabled }),
+      cache: "no-store",
+    });
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Network error" };
+  }
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    return { ok: false, error: `API ${res.status}: ${text || res.statusText}` };
+  }
+
+  // Auto-content state shows on the org detail page only.
+  revalidatePath(`/${input.slug}`);
+  return { ok: true };
+}
