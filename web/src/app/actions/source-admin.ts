@@ -6,22 +6,29 @@ import { adminActionEnv } from "@/lib/admin-action";
 
 type ActionResult = { ok: true } | { ok: false; error: string };
 
-export async function setOrgHiddenAction(input: {
-  slug: string;
-  hidden: boolean;
+/**
+ * Shallow-merge a patch into the source's `metadata` blob via
+ * `PATCH /v1/orgs/:orgSlug/sources/:sourceSlug/metadata`. A `null` value for a
+ * key deletes that key server-side; all other keys are merged.
+ */
+export async function setSourceMetadataAction(input: {
+  orgSlug: string;
+  sourceSlug: string;
+  patch: Record<string, unknown>;
 }): Promise<ActionResult> {
   const env = adminActionEnv();
   if ("error" in env) return { ok: false, error: env.error };
 
+  const path = `/v1/orgs/${encodeURIComponent(input.orgSlug)}/sources/${encodeURIComponent(input.sourceSlug)}/metadata`;
   let res: Response;
   try {
-    res = await fetch(`${env.apiUrl}/v1/orgs/${encodeURIComponent(input.slug)}`, {
+    res = await fetch(`${env.apiUrl}${path}`, {
       method: "PATCH",
       headers: webApiHeaders({
         "Content-Type": "application/json",
         Authorization: `Bearer ${env.apiSecret}`,
       }),
-      body: JSON.stringify({ isHidden: input.hidden }),
+      body: JSON.stringify(input.patch),
       cache: "no-store",
     });
   } catch (err) {
@@ -33,28 +40,31 @@ export async function setOrgHiddenAction(input: {
     return { ok: false, error: `API ${res.status}: ${text || res.statusText}` };
   }
 
-  // Bust the homepage (ticker + directory table) and the org detail page.
-  revalidatePath("/");
-  revalidatePath(`/${input.slug}`);
+  revalidatePath(`/${input.orgSlug}/${input.sourceSlug}`);
   return { ok: true };
 }
 
-export async function setOrgAutoGenerateContentAction(input: {
-  slug: string;
-  enabled: boolean;
+/**
+ * Un-hide an on-demand source so it appears in listings, sitemap, and AI
+ * features. Sets `isHidden: false` via the org-scoped source PATCH.
+ */
+export async function promoteSourceAction(input: {
+  orgSlug: string;
+  sourceSlug: string;
 }): Promise<ActionResult> {
   const env = adminActionEnv();
   if ("error" in env) return { ok: false, error: env.error };
 
+  const path = `/v1/orgs/${encodeURIComponent(input.orgSlug)}/sources/${encodeURIComponent(input.sourceSlug)}`;
   let res: Response;
   try {
-    res = await fetch(`${env.apiUrl}/v1/orgs/${encodeURIComponent(input.slug)}`, {
+    res = await fetch(`${env.apiUrl}${path}`, {
       method: "PATCH",
       headers: webApiHeaders({
         "Content-Type": "application/json",
         Authorization: `Bearer ${env.apiSecret}`,
       }),
-      body: JSON.stringify({ autoGenerateContent: input.enabled }),
+      body: JSON.stringify({ isHidden: false }),
       cache: "no-store",
     });
   } catch (err) {
@@ -66,7 +76,7 @@ export async function setOrgAutoGenerateContentAction(input: {
     return { ok: false, error: `API ${res.status}: ${text || res.statusText}` };
   }
 
-  // Auto-content state shows on the org detail page only.
-  revalidatePath(`/${input.slug}`);
+  revalidatePath(`/${input.orgSlug}/${input.sourceSlug}`);
+  revalidatePath(`/${input.orgSlug}`);
   return { ok: true };
 }

@@ -408,6 +408,9 @@ orgRoutes.get(
       category: org.category,
       avatarUrl: org.avatarUrl,
       isHidden: org.isHidden,
+      autoGenerateContent: org.autoGenerateContent,
+      fetchPaused: org.fetchPaused,
+      discovery: org.discovery,
       tags: tagRows.map((t) => t.name),
       sourceCount: orgSources.length,
       releaseCount: totalReleases.n,
@@ -581,6 +584,7 @@ orgRoutes.patch(
       aliases?: string[];
       fetchPaused?: boolean;
       isHidden?: boolean;
+      autoGenerateContent?: boolean;
     } = { ...c.req.valid("json") };
 
     if (body.category !== undefined && body.category !== null) {
@@ -634,6 +638,8 @@ orgRoutes.patch(
     if (body.avatarUrl !== undefined) updates.avatarUrl = body.avatarUrl;
     if (body.fetchPaused !== undefined) updates.fetchPaused = body.fetchPaused;
     if (body.isHidden !== undefined) updates.isHidden = body.isHidden;
+    if (body.autoGenerateContent !== undefined)
+      updates.autoGenerateContent = body.autoGenerateContent;
 
     const [updated] = await db
       .update(organizations)
