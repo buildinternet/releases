@@ -29,6 +29,10 @@ export function SdkSourceGroup({
             type="button"
             onClick={() => setOpen((o) => !o)}
             aria-expanded={open}
+            // Disclosure pattern: the accessible name names the region (a stable
+            // noun) and aria-expanded conveys open/closed. Don't fold an
+            // Expand/Collapse verb into the label — paired with the announced
+            // "collapsed"/"expanded" state it reads as redundant double-speak.
             aria-label={`${count} SDK ${count === 1 ? "source" : "sources"}`}
             className="flex items-center gap-2 w-full text-left text-stone-600 dark:text-stone-300 hover:text-stone-900 dark:hover:text-stone-100 transition-colors"
           >
