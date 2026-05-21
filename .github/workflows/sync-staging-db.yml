@@ -19,7 +19,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  BUN_VERSION: "1.3.11"
+  BUN_VERSION: "1.3.13"
   # wrangler 4.88+ requires Node 22+; bunx invokes wrangler's bin via the
   # `#!/usr/bin/env node` shebang, so the runner's Node version is what counts.
   NODE_VERSION: "22"
@@ -28,6 +28,7 @@ jobs:
   sync:
     name: Export prod → import staging
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - name: Guard against accidental runs
         env:
