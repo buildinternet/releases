@@ -744,11 +744,57 @@ export async function delegateScrapeToDiscovery(
 }
 
 /**
- * Per-fire cap on marketing-classifier calls. A normal feed delta is 0–5 items;
- * a first-onboard backfill can be 50+. Above the cap we skip classification and
- * insert visibly — operators can run a one-off backfill via the suppress API.
+ * Per-fire cap on marketing-classifier calls, applied to the genuinely-new
+ * items in a fire (not the re-listed feed window). A normal feed delta is 0–5
+ * items; a first-onboard backfill can be 50+. Above the cap we skip
+ * classification and insert visibly — operators can run a one-off backfill via
+ * the suppress API.
  */
 const MARKETING_CLASSIFIER_MAX_PER_FIRE = 20;
+
+/**
+ * Indices of `rawReleases` whose URL is not already stored for this source —
+ * i.e. the items a subsequent insert would actually persist (the rest collide
+ * on `UNIQUE(source_id, url)` and are dropped by `onConflictDoNothing`). Feeds
+ * re-list their whole window every fetch (dbt-blog returns 25, ClickHouse 200),
+ * so classifying — and capping — against `rawReleases.length` would trip the
+ * cap on every fire and permanently disable the filter for high-volume feeds.
+ *
+ * Items with no URL count as new: the insert path always writes them (SQLite
+ * treats NULL as distinct under the unique index), so they should be classified
+ * too. Lookups are chunked under D1's 100-bind cap.
+ */
+async function selectNewReleaseIndices(
+  db: ReturnType<typeof drizzle>,
+  sourceId: string,
+  rawReleases: readonly RawRelease[],
+): Promise<number[]> {
+  const candidateUrls = [
+    ...new Set(
+      rawReleases
+        .map((raw) => raw.url)
+        .filter((url): url is string => typeof url === "string" && url.length > 0),
+    ),
+  ];
+
+  const existing = new Set<string>();
+  for (let i = 0; i < candidateUrls.length; i += RELEASES_ID_IN_CHUNK_SIZE) {
+    const slice = candidateUrls.slice(i, i + RELEASES_ID_IN_CHUNK_SIZE);
+    // oxlint-disable-next-line no-await-in-loop -- chunked IN lookup; stays under D1's 100-bind cap
+    const rows = await db
+      .select({ url: releases.url })
+      .from(releases)
+      .where(and(eq(releases.sourceId, sourceId), inArray(releases.url, slice)));
+    for (const row of rows) if (row.url) existing.add(row.url);
+  }
+
+  const indices: number[] = [];
+  for (const [index, raw] of rawReleases.entries()) {
+    if (raw.url && existing.has(raw.url)) continue;
+    indices.push(index);
+  }
+  return indices;
+}
 
 /**
  * Per-source marketing classification. Runs Haiku 4.5 sequentially over each
@@ -765,6 +811,7 @@ const MARKETING_CLASSIFIER_MAX_PER_FIRE = 20;
  * isolate-wide, so it doesn't depend on call ordering.
  */
 async function classifyMarketingForReleases(
+  db: ReturnType<typeof drizzle>,
   source: Source,
   meta: SourceMetadata,
   rawReleases: readonly RawRelease[],
@@ -773,12 +820,19 @@ async function classifyMarketingForReleases(
   const result = new Map<number, MarketingClassifierResult>();
   if (rawReleases.length === 0) return result;
 
-  if (rawReleases.length > MARKETING_CLASSIFIER_MAX_PER_FIRE) {
+  // Only the items an insert would actually persist are worth classifying;
+  // the rest are re-listed feed entries we already have. Counting the whole
+  // window against the cap is what let marketing slip through on high-volume
+  // feeds (see selectNewReleaseIndices).
+  const newIndices = await selectNewReleaseIndices(db, source.id, rawReleases);
+  if (newIndices.length === 0) return result;
+
+  if (newIndices.length > MARKETING_CLASSIFIER_MAX_PER_FIRE) {
     logEvent("warn", {
       component: "cron-poll-fetch",
       event: "marketing-filter-cap-tripped",
       sourceSlug: source.slug,
-      candidateCount: rawReleases.length,
+      candidateCount: newIndices.length,
       cap: MARKETING_CLASSIFIER_MAX_PER_FIRE,
     });
     return result;
@@ -805,7 +859,8 @@ async function classifyMarketingForReleases(
 
     const client = buildAnthropicClient({ apiKey, ...(await resolveGatewayOpts(env)) });
 
-    for (const [index, raw] of rawReleases.entries()) {
+    for (const index of newIndices) {
+      const raw = rawReleases[index];
       try {
         // oxlint-disable-next-line no-await-in-loop -- sequential per-item bounds concurrent Anthropic load per cron fire; the prompt cache hit doesn't depend on ordering
         const verdict = await classifyMarketing(client, {
@@ -850,7 +905,7 @@ async function classifyMarketingForReleases(
     component: "cron-poll-fetch",
     event: "marketing-filter-applied",
     sourceSlug: source.slug,
-    classified: rawReleases.length,
+    classified: newIndices.length,
     suppressed: suppressedCount,
     failed: failedCount,
     inputTokens,
@@ -1065,7 +1120,7 @@ export async function fetchOne(
 
     const marketingMap =
       meta.marketingFilter === true
-        ? await classifyMarketingForReleases(source, meta, rawReleases, env)
+        ? await classifyMarketingForReleases(db, source, meta, rawReleases, env)
         : new Map<number, MarketingClassifierResult>();
 
     const rows = rawReleases.map((raw, index) => {
