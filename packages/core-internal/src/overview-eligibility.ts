@@ -338,7 +338,10 @@ export async function fetchOverviewInputsForOrg(
 
   return {
     org,
-    sources: activeSources,
+    // Project to the declared interface — `kind`/`productId` are selected only
+    // to resolve each source's kind for overview selection, not part of the
+    // returned contract.
+    sources: activeSources.map(({ id, slug, name, type }) => ({ id, slug, name, type })),
     existingContent: existing?.content ?? null,
     selected,
     totalAvailable,

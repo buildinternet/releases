@@ -203,7 +203,10 @@ app.get(
 
     return c.json({
       org,
-      sources: activeSources,
+      // Project to the documented response shape — `kind`/`productId` are
+      // selected only to resolve each source's kind for overview selection,
+      // not exposed on the wire.
+      sources: activeSources.map(({ id, slug, name, type }) => ({ id, slug, name, type })),
       existingContent: existing?.content ?? null,
       selected: selectedShaped,
       totalAvailable,
