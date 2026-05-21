@@ -46,7 +46,7 @@ import {
   collectionMembers,
 } from "@buildinternet/releases-core/schema";
 import { daysAgoIso } from "@buildinternet/releases-core/dates";
-import { parseKindParam, KIND_VALUES, type Kind } from "@buildinternet/releases-core/kinds";
+import { parseKindParam, KIND_VALUES, isValidKind } from "@buildinternet/releases-core/kinds";
 import { resolveCategoryInput } from "../lib/category-alias.js";
 import { parseSourceTypesLenient } from "../lib/source-types.js";
 import { toSlug } from "@buildinternet/releases-core/slug";
@@ -368,7 +368,7 @@ orgRoutes.get(
       latestAddedAt: row.latest_added_at ?? null,
       productSlug: row.product_slug ?? null,
       productName: row.product_name ?? null,
-      kind: (row.kind ?? null) as Kind | null,
+      kind: row.kind && isValidKind(row.kind) ? row.kind : null,
     }));
 
     const metrics = metricsRow[0];

@@ -217,12 +217,14 @@ describe("kind on org detail", () => {
     const res = await callOrg("/orgs/acme");
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
-      sources: Array<{ slug: string; kind: string | null }>;
+      sources: Array<{ slug: string; kind: string | null; productSlug: string | null }>;
       products: Array<{ slug: string; kind: string | null }>;
     };
 
     expect(body.sources.find((s) => s.slug === "acme-js")?.kind).toBe("sdk");
     expect(body.sources.find((s) => s.slug === "acme-py")?.kind).toBeNull();
     expect(body.products.find((p) => p.slug === "acme-sdk")?.kind).toBe("sdk");
+    // Inherited source carries its productSlug so the web resolves kind from the product.
+    expect(body.sources.find((s) => s.slug === "acme-py")?.productSlug).toBe("acme-sdk");
   });
 });

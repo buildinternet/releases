@@ -5,8 +5,7 @@ import { useState } from "react";
 /**
  * Collapsible "SDKs" block for the org sources table. Renders a full-width
  * subheading row (its own `<tr>`) with a disclosure toggle; when open, renders
- * the SDK member rows passed as `children`. Mirrors the disclosure idiom in
- * `inactive-sources-toggle.tsx`.
+ * the SDK member rows passed as `children`.
  */
 export function SdkSourceGroup({
   colSpan,

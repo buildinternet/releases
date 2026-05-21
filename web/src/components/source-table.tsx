@@ -88,6 +88,20 @@ function sortByImportance(a: SourceListItem, b: SourceListItem): number {
   return b.releaseCount - a.releaseCount;
 }
 
+function splitAndSort(sources: SourceListItem[]): {
+  active: SourceListItem[];
+  inactive: SourceListItem[];
+} {
+  const active: SourceListItem[] = [];
+  const inactive: SourceListItem[] = [];
+  for (const s of sources) {
+    (isInactive(s) ? inactive : active).push(s);
+  }
+  active.sort(sortByImportance);
+  inactive.sort(sortByImportance);
+  return { active, inactive };
+}
+
 export function SourceTable({
   sources,
   products,
@@ -101,21 +115,8 @@ export function SourceTable({
 }) {
   const { flat, sdk } = partitionSdkSources(sources, products);
 
-  const active: SourceListItem[] = [];
-  const inactive: SourceListItem[] = [];
-  for (const s of flat) {
-    (isInactive(s) ? inactive : active).push(s);
-  }
-  active.sort(sortByImportance);
-  inactive.sort(sortByImportance);
-
-  const sdkActive: SourceListItem[] = [];
-  const sdkInactive: SourceListItem[] = [];
-  for (const s of sdk) {
-    (isInactive(s) ? sdkInactive : sdkActive).push(s);
-  }
-  sdkActive.sort(sortByImportance);
-  sdkInactive.sort(sortByImportance);
+  const { active, inactive } = splitAndSort(flat);
+  const { active: sdkActive, inactive: sdkInactive } = splitAndSort(sdk);
 
   const productMap = new Map(products.map((p) => [p.slug, p.name]));
   const hasProducts = products.length > 0;
