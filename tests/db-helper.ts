@@ -106,6 +106,22 @@ export function createTestDb(): TestDatabase {
 }
 
 /**
+ * Build a seeded, D1-compatible database for tests that drive raw
+ * `d1.prepare(...).bind(...).all()` query helpers (e.g. getLatestReleasesAcross)
+ * rather than the drizzle query builder.
+ *
+ * Reuses createTestDb(): its handle is both a drizzle client (for the seeder's
+ * `.insert(...)`) and a makeD1Shim-backed D1 object — createTestDb wires the
+ * shim's `.prepare` onto it — so no separate Database/applyMigrations/makeD1Shim
+ * dance is needed at the call site, and the migrated snapshot keeps setup cheap.
+ */
+export async function createSeededD1(seeder: (db: TestDb) => Promise<void>): Promise<D1Database> {
+  const { db } = createTestDb();
+  await seeder(db);
+  return db as unknown as D1Database;
+}
+
+/**
  * Build a minimal D1Database shim over a bun:sqlite Database so code that
  * calls into raw `d1.prepare(...).bind(...).all()` (or the drizzle D1
  * adapter) can run against an in-process SQLite fixture. Errors on
