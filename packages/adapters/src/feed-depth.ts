@@ -26,6 +26,34 @@ export function isThinItem(raw: RawRelease, opts: ThinOpts): boolean {
 }
 
 /**
+ * Pre-fetch guard on a feed item's link: returns `false` when following the URL
+ * is unlikely to yield one article. Two bad shapes, both confirmed against real
+ * feeds:
+ *
+ *  - **Anchored fragment** (`…/changelog#march-2026`) — the link targets a
+ *    section of a docs page shared by every entry, so a fetch returns the whole
+ *    page (nav + all sections), not one release.
+ *  - **Filtered index** (`…/release-notes/?title=…`) — a listing root where the
+ *    item identity rides in the query string; the page serves the entire index.
+ *    Detected as a query string on a directory-style (trailing-slash) path, so a
+ *    clean permalink carrying tracking params (`/blog/post?utm=…`) still passes.
+ *
+ * Pure and per-item. Skipping is fail-safe — the caller keeps the feed teaser —
+ * so an unparseable link is treated as not enrichable rather than fetched blind.
+ */
+export function isEnrichableUrl(url: string): boolean {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return false;
+  }
+  if (parsed.hash.length > 0) return false;
+  if (parsed.search.length > 0 && parsed.pathname.endsWith("/")) return false;
+  return true;
+}
+
+/**
  * Verdict for a parsed batch. `null` means "not enough signal" — too few items
  * to trust, so callers must not flip the persisted flag.
  */
