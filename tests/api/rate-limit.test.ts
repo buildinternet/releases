@@ -15,7 +15,10 @@ type Env = {
   Bindings: {
     RATE_LIMIT_ENABLED?: string;
     PUBLIC_RATE_LIMITER?: RateLimiter;
+    TOKEN_RATE_LIMIT_ENABLED?: string;
+    TOKEN_RATE_LIMITER?: RateLimiter;
     RELEASED_API_KEY?: { get(): Promise<string> };
+    RELEASES_PROXY_KEY?: { get(): Promise<string> };
     DB?: unknown;
   };
 };
@@ -23,18 +26,19 @@ type Env = {
 let h: TestDatabase | null = null;
 afterEach(() => h?.cleanup());
 
-async function seedReadToken(db: TestDatabase["db"]) {
+/** Seed a token with the given scopes and return both the secret and its tokenId. */
+async function seedToken(db: TestDatabase["db"], scopes: string[]) {
   const { token, lookupId, secret } = generateApiToken();
   db.insert(apiTokens)
     .values({
       id: `tok_${lookupId}`,
       lookupId,
       tokenHash: await hashSecret(secret),
-      name: "read-token",
-      scopes: JSON.stringify(["read"]),
+      name: "t",
+      scopes: JSON.stringify(scopes),
     })
     .run();
-  return token;
+  return { token, tokenId: `tok_${lookupId}` };
 }
 
 function mockSecret(value: string) {
@@ -155,7 +159,7 @@ describe("publicRateLimitMiddleware", () => {
 
   it("bypasses the limiter for a read-only DB token (any valid token skips rate limit)", async () => {
     h = createTestDb();
-    const token = await seedReadToken(h.db);
+    const { token } = await seedToken(h.db, ["read"]);
     const app = createApp();
     const limiter = mockLimiter([false]);
     const res = await app.request(
@@ -200,5 +204,154 @@ describe("publicRateLimitMiddleware", () => {
     );
     expect(res.status).toBe(201);
     expect(limiter.calls).toEqual([]);
+  });
+});
+
+describe("publicRateLimitMiddleware — per-token limiting", () => {
+  it("limits a relk_ token by its tokenId when TOKEN_RATE_LIMIT_ENABLED", async () => {
+    h = createTestDb();
+    const { token, tokenId } = await seedToken(h.db, ["read"]);
+    const app = createApp();
+    const ipLimiter = mockLimiter([false]);
+    const tokenLimiter = mockLimiter([true]);
+    const res = await app.request(
+      "/test",
+      { headers: { Authorization: `Bearer ${token}`, "cf-connecting-ip": "1.2.3.4" } },
+      {
+        PUBLIC_RATE_LIMITER: ipLimiter,
+        RATE_LIMIT_ENABLED: "true",
+        TOKEN_RATE_LIMITER: tokenLimiter,
+        TOKEN_RATE_LIMIT_ENABLED: "true",
+        RELEASED_API_KEY: mockSecret("root-secret"),
+        DB: h.db,
+      },
+    );
+    expect(res.status).toBe(200);
+    // Keyed by the token's id, not the IP. IP limiter never consulted.
+    expect(tokenLimiter.calls).toEqual([tokenId]);
+    expect(ipLimiter.calls).toEqual([]);
+  });
+
+  it("returns 429 with a 'token' policy when a token is over quota", async () => {
+    h = createTestDb();
+    const { token, tokenId } = await seedToken(h.db, ["read"]);
+    const app = createApp();
+    const tokenLimiter = mockLimiter([false]);
+    const res = await app.request(
+      "/test",
+      { headers: { Authorization: `Bearer ${token}`, "cf-connecting-ip": "1.2.3.4" } },
+      {
+        TOKEN_RATE_LIMITER: tokenLimiter,
+        TOKEN_RATE_LIMIT_ENABLED: "true",
+        RELEASED_API_KEY: mockSecret("root-secret"),
+        DB: h.db,
+      },
+    );
+    expect(res.status).toBe(429);
+    expect(res.headers.get("Retry-After")).toBe("60");
+    expect(res.headers.get("RateLimit-Policy")).toContain('"token"');
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toBe("rate_limited");
+    expect(tokenLimiter.calls).toEqual([tokenId]);
+  });
+
+  it("exempts the static root key from the per-token limiter", async () => {
+    const app = createApp();
+    const tokenLimiter = mockLimiter([false]);
+    const ipLimiter = mockLimiter([false]);
+    const res = await app.request(
+      "/test",
+      { headers: { Authorization: "Bearer root-secret", "cf-connecting-ip": "1.2.3.4" } },
+      {
+        PUBLIC_RATE_LIMITER: ipLimiter,
+        RATE_LIMIT_ENABLED: "true",
+        TOKEN_RATE_LIMITER: tokenLimiter,
+        TOKEN_RATE_LIMIT_ENABLED: "true",
+        RELEASED_API_KEY: mockSecret("root-secret"),
+      },
+    );
+    expect(res.status).toBe(200);
+    expect(tokenLimiter.calls).toEqual([]);
+    expect(ipLimiter.calls).toEqual([]);
+  });
+
+  it("exempts a trusted proxy even when it carries a token", async () => {
+    h = createTestDb();
+    const { token } = await seedToken(h.db, ["read"]);
+    const app = createApp();
+    const tokenLimiter = mockLimiter([false]);
+    const res = await app.request(
+      "/test",
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "X-Releases-Proxy-Key": "proxy-secret",
+          "cf-connecting-ip": "1.2.3.4",
+        },
+      },
+      {
+        TOKEN_RATE_LIMITER: tokenLimiter,
+        TOKEN_RATE_LIMIT_ENABLED: "true",
+        RELEASED_API_KEY: mockSecret("root-secret"),
+        RELEASES_PROXY_KEY: mockSecret("proxy-secret"),
+        DB: h.db,
+      },
+    );
+    expect(res.status).toBe(200);
+    expect(tokenLimiter.calls).toEqual([]);
+  });
+
+  it("bypasses a token when TOKEN_RATE_LIMIT_ENABLED is unset (ships dark)", async () => {
+    h = createTestDb();
+    const { token } = await seedToken(h.db, ["read"]);
+    const app = createApp();
+    const tokenLimiter = mockLimiter([false]);
+    const res = await app.request(
+      "/test",
+      { headers: { Authorization: `Bearer ${token}`, "cf-connecting-ip": "1.2.3.4" } },
+      {
+        TOKEN_RATE_LIMITER: tokenLimiter,
+        RELEASED_API_KEY: mockSecret("root-secret"),
+        DB: h.db,
+      },
+    );
+    expect(res.status).toBe(200);
+    expect(tokenLimiter.calls).toEqual([]);
+  });
+
+  it("bypasses a token when the binding is missing even with the flag on", async () => {
+    h = createTestDb();
+    const { token } = await seedToken(h.db, ["read"]);
+    const app = createApp();
+    const res = await app.request(
+      "/test",
+      { headers: { Authorization: `Bearer ${token}`, "cf-connecting-ip": "1.2.3.4" } },
+      {
+        TOKEN_RATE_LIMIT_ENABLED: "true",
+        RELEASED_API_KEY: mockSecret("root-secret"),
+        DB: h.db,
+      },
+    );
+    expect(res.status).toBe(200);
+  });
+
+  it("sends an invalid token to the per-IP limiter, never the token bucket", async () => {
+    const app = createApp();
+    const ipLimiter = mockLimiter([false]);
+    const tokenLimiter = mockLimiter([false]);
+    const res = await app.request(
+      "/test",
+      { headers: { Authorization: "Bearer wrong", "cf-connecting-ip": "9.9.9.9" } },
+      {
+        PUBLIC_RATE_LIMITER: ipLimiter,
+        RATE_LIMIT_ENABLED: "true",
+        TOKEN_RATE_LIMITER: tokenLimiter,
+        TOKEN_RATE_LIMIT_ENABLED: "true",
+        RELEASED_API_KEY: mockSecret("root-secret"),
+      },
+    );
+    expect(res.status).toBe(429);
+    expect(ipLimiter.calls).toEqual(["9.9.9.9"]);
+    expect(tokenLimiter.calls).toEqual([]);
   });
 });

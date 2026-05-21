@@ -51,15 +51,26 @@ async function resolveAuth(c: Context<Env>, presented: string): Promise<Resolved
 }
 
 /**
+ * Resolve the caller's identity for callers that need more than a boolean —
+ * the rate limiter keys its per-token bucket on `tokenId`. Returns the `root`
+ * or `token` identity for a valid credential, else `null` (anonymous, invalid,
+ * disabled-token, or local-dev skip). Single resolution path so `hasValidAuth`
+ * and the limiter can't drift.
+ */
+export async function resolveAuthIdentity(c: Context<Env>): Promise<AuthContext | null> {
+  const presented = bearer(c);
+  if (!presented) return null;
+  const auth = await resolveAuth(c, presented);
+  return auth.kind === "none" ? null : auth;
+}
+
+/**
  * True iff the request carries ANY valid identity — the static root key or an
  * active DB token of any scope. Used by the rate limiter to exempt known
  * callers. Does NOT imply admin-level access.
  */
 export async function hasValidAuth(c: Context<Env>): Promise<boolean> {
-  const presented = bearer(c);
-  if (!presented) return false;
-  const auth = await resolveAuth(c, presented);
-  return auth.kind === "root" || auth.kind === "token";
+  return (await resolveAuthIdentity(c)) !== null;
 }
 
 /**

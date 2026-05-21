@@ -62,7 +62,13 @@ a per-client `since` would fork the cache key and defeat the point.
 
 ## Rate limiting
 
-Unauthenticated public reads can be throttled per-IP via `publicRateLimitMiddleware` (`workers/api/src/middleware/rate-limit.ts`). It's a Cloudflare Workers Rate Limiting binding (`PUBLIC_RATE_LIMITER`) gated by the `RATE_LIMIT_ENABLED` var — off by default so initial deploys change nothing. Flip the var to `"true"` in `workers/api/wrangler.jsonc` and redeploy to activate. Authenticated callers (valid Bearer token) bypass entirely, so the CLI and MCP server in remote mode are never throttled. Limit values live on the binding in `wrangler.jsonc` — keep them out of user-facing docs. State is per-colo (CF constraint), not global. Wired only onto the public-read route group in `workers/api/src/index.ts`; admin routes are already key-gated.
+`publicRateLimitMiddleware` (`workers/api/src/middleware/rate-limit.ts`) applies two independent Cloudflare Workers Rate Limiting bindings, each behind its own kill switch (both off by default, so initial deploys change nothing). Limit values live on the bindings in `wrangler.jsonc` — keep them out of user-facing docs. State is per-colo (CF constraint), not global. Wired only onto the public-read route group + `/graphql` in `workers/api/src/index.ts`, and only acts on safe (read) methods; admin routes are already key-gated.
+
+- **Anonymous reads → per-IP** (`PUBLIC_RATE_LIMITER`, gated by `RATE_LIMIT_ENABLED`). An invalid/unrecognized Bearer credential falls here too, so a bogus token can't dodge the IP cap.
+- **`relk_` tokens → per-token** (`TOKEN_RATE_LIMITER`, keyed by `tokenId`, gated by `TOKEN_RATE_LIMIT_ENABLED`). Closes the old "any valid token = unlimited" gap (#1100). On a 429 the response carries a distinct `"token"` policy in `RateLimit-Policy` and a `rate-limit`/`token-throttled` structured log. A flat quota for now; scope-tiered ceilings are deferred until user-facing tokens exist.
+- **Exempt:** the static root key (CLI/MCP/scripts) and the trusted web-frontend proxy (`X-Releases-Proxy-Key`) bypass both limiters, so server-to-server and tooling traffic is never throttled.
+
+Flip either var to `"true"` in `workers/api/wrangler.jsonc` and redeploy to activate.
 
 ## Schema + deployment
 

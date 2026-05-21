@@ -135,6 +135,9 @@ export type Env = {
     // Per-IP rate limiter for unauthenticated public reads (see middleware/rate-limit.ts).
     RATE_LIMIT_ENABLED?: string;
     PUBLIC_RATE_LIMITER?: { limit(options: { key: string }): Promise<{ success: boolean }> };
+    // Per-token rate limiter for relk_ tokens, keyed by tokenId (see middleware/rate-limit.ts).
+    TOKEN_RATE_LIMIT_ENABLED?: string;
+    TOKEN_RATE_LIMITER?: { limit(options: { key: string }): Promise<{ success: boolean }> };
     // Optional KV namespace caching single-query embeddings on the search
     // path (see packages/search/src/embedding-cache.ts). Absent → every cold search
     // re-calls the embedding provider, matching pre-cache behavior.
