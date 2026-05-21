@@ -146,13 +146,16 @@ export interface InvalidationEnv {
  */
 export async function invalidateLatestCache(
   env: InvalidationEnv,
-  meta: { nReleases: number; sourceId: string },
+  // `cause` is a free-form diagnostic tag for what triggered the purge — a
+  // source id, an org id, or a literal like "cron". It's logged, never matched
+  // on, so callers pass whatever identifies the trigger most usefully.
+  meta: { nReleases: number; cause: string },
 ): Promise<void> {
   // REST shapes from CACHEABLE_DEFAULT_SHAPES + GraphQL homepage ticker
   // hash from the persisted-operations manifest. Invalidation is best-effort;
   // the 5-minute TTL is the safety net on either side.
   const keys = [...CACHEABLE_DEFAULT_SHAPES.map(defaultShapeKey), ...purgeKeysForHomepageTicker()];
-  const logCtx = { cacheKeys: keys, sourceId: meta.sourceId, nReleases: meta.nReleases };
+  const logCtx = { cacheKeys: keys, cause: meta.cause, nReleases: meta.nReleases };
 
   if (env.INVALIDATION_ENABLED !== "true") {
     logEvent("info", {

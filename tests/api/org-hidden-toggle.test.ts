@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 import { applyMigrations, createTestDb, type TestDatabase } from "../db-helper";
 import { organizations } from "@buildinternet/releases-core/schema";
 import { orgRoutes } from "../../workers/api/src/routes/orgs.js";
+import { makeJsonCaller } from "./route-test-helpers.js";
 
 describe("organizations.is_hidden column", () => {
   it("defaults to false and round-trips true", async () => {
@@ -43,20 +44,7 @@ afterEach(() => {
   testDb.cleanup();
 });
 
-const noopCtx = { waitUntil: () => {}, passThroughOnException: () => {} };
-
-async function call(path: string, method: string, body?: unknown): Promise<Response> {
-  return orgRoutes.request(
-    path,
-    {
-      method,
-      headers: body !== undefined ? { "content-type": "application/json" } : undefined,
-      body: body === undefined ? undefined : JSON.stringify(body),
-    },
-    { DB: testDb.db as unknown as never },
-    noopCtx as unknown as Parameters<typeof orgRoutes.request>[3],
-  );
-}
+const call = makeJsonCaller(orgRoutes, () => ({ DB: testDb.db as unknown as never }));
 
 describe("PATCH /v1/orgs/:slug { isHidden }", () => {
   it("hides and persists, and the org stays reachable via detail", async () => {

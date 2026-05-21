@@ -14,6 +14,7 @@ import { organizations, sources } from "@buildinternet/releases-core/schema";
 import { queryDueSources } from "../../workers/api/src/cron/poll-fetch";
 import { queryCandidates } from "../../workers/api/src/cron/scrape-agent-sweep";
 import { orgRoutes } from "../../workers/api/src/routes/orgs.js";
+import { makeJsonCaller } from "./route-test-helpers.js";
 
 // ── queryDueSources ──────────────────────────────────────────────────────────
 
@@ -167,20 +168,7 @@ function makeEnv(extra: Record<string, unknown> = {}) {
   return { DB: testDb.db as unknown as never, ...extra };
 }
 
-const noopCtx = { waitUntil: () => {}, passThroughOnException: () => {} };
-
-async function call(path: string, method: string, body?: unknown): Promise<Response> {
-  return orgRoutes.request(
-    path,
-    {
-      method,
-      headers: body !== undefined ? { "content-type": "application/json" } : undefined,
-      body: body === undefined ? undefined : JSON.stringify(body),
-    },
-    makeEnv(),
-    noopCtx as unknown as Parameters<typeof orgRoutes.request>[3],
-  );
-}
+const call = makeJsonCaller(orgRoutes, makeEnv);
 
 describe("PATCH /v1/orgs/:slug { fetchPaused }", () => {
   it("sets fetchPaused = true and persists it", async () => {

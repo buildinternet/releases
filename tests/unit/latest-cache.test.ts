@@ -307,7 +307,7 @@ describe("invalidateLatestCache", () => {
 
   it("skips with reason=flag_off when INVALIDATION_ENABLED is unset", async () => {
     const kv = mkKv();
-    await invalidateLatestCache({ LATEST_CACHE: kv }, { nReleases: 3, sourceId: "src_abc" });
+    await invalidateLatestCache({ LATEST_CACHE: kv }, { nReleases: 3, cause: "src_abc" });
     expect(kv.delete).not.toHaveBeenCalled();
     expect(
       logs.some(
@@ -320,7 +320,7 @@ describe("invalidateLatestCache", () => {
     const kv = mkKv();
     await invalidateLatestCache(
       { LATEST_CACHE: kv, INVALIDATION_ENABLED: "false" },
-      { nReleases: 3, sourceId: "src_abc" },
+      { nReleases: 3, cause: "src_abc" },
     );
     expect(kv.delete).not.toHaveBeenCalled();
     expect(
@@ -334,7 +334,7 @@ describe("invalidateLatestCache", () => {
     const kv = mkKv();
     await invalidateLatestCache(
       { LATEST_CACHE: kv, INVALIDATION_ENABLED: "true" },
-      { nReleases: 0, sourceId: "src_abc" },
+      { nReleases: 0, cause: "src_abc" },
     );
     expect(kv.delete).not.toHaveBeenCalled();
     expect(
@@ -348,7 +348,7 @@ describe("invalidateLatestCache", () => {
   it("skips with reason=no_binding when LATEST_CACHE is undefined", async () => {
     await invalidateLatestCache(
       { INVALIDATION_ENABLED: "true" },
-      { nReleases: 2, sourceId: "src_abc" },
+      { nReleases: 2, cause: "src_abc" },
     );
     expect(
       logs.some(
@@ -361,7 +361,7 @@ describe("invalidateLatestCache", () => {
     const kv = mkKv();
     await invalidateLatestCache(
       { LATEST_CACHE: kv, INVALIDATION_ENABLED: "true" },
-      { nReleases: 5, sourceId: "src_abc" },
+      { nReleases: 5, cause: "src_abc" },
     );
     expect(kv.delete).toHaveBeenCalledWith("latest:v2:count=10");
     expect(kv.delete).toHaveBeenCalledWith("latest:v2:count=20&exclude=github");
@@ -383,7 +383,7 @@ describe("invalidateLatestCache", () => {
     });
     const result = await invalidateLatestCache(
       { LATEST_CACHE: kv, INVALIDATION_ENABLED: "true" },
-      { nReleases: 2, sourceId: "src_abc" },
+      { nReleases: 2, cause: "src_abc" },
     );
     expect(result).toBeUndefined();
     // 2 REST shapes + 1 GraphQL homepage hash; first call throws, others

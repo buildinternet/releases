@@ -192,7 +192,7 @@ export async function pollAndFetch(
   if (totalInserted > 0) {
     await invalidateLatestCache(env, {
       nReleases: totalInserted,
-      sourceId: lastInsertingSource ?? "cron",
+      cause: lastInsertingSource ?? "cron",
     });
   }
 

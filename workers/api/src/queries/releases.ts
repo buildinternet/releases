@@ -46,6 +46,14 @@ export async function getLatestReleasesAcross(
   const wheres: string[] = [
     "(s.is_hidden = 0 OR s.is_hidden IS NULL)",
     "(o.is_hidden = 0 OR o.is_hidden IS NULL)",
+    // Drop releases whose org is soft-deleted. A tombstoned org keeps its row
+    // (slug mangled to "<slug>--<id>") and its sources are normally tombstoned
+    // alongside it, but the two can diverge — the sweep-tombstones cron flags
+    // orgs that still have active children. `sources_active` already sheds
+    // tombstoned sources; this guards the org side. On a LEFT-join miss
+    // (genuine orphan source, no org row) `o.deleted_at` is NULL, so orphans
+    // still pass with a NULL org_slug exactly as before.
+    "(o.deleted_at IS NULL)",
     "(r.suppressed IS NULL OR r.suppressed = 0)",
   ];
   // Matches the source-feed, org-feed, and MCP `get_latest_releases` defaults

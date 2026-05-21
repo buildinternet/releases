@@ -384,6 +384,29 @@ describe("GraphQL spike", () => {
     expect(ids.some((id) => id.startsWith("rel_src_b1_1"))).toBe(false);
   });
 
+  it("latestReleases excludes releases whose org is soft-deleted", async () => {
+    // A soft-deleted org keeps its row (slug mangled to "<slug>--<id>"); if it
+    // still has an active child source — the divergence the sweep-tombstones
+    // cron flags — its releases must not leak onto the ticker. Tombstone org_b
+    // but leave its source active so only the org-level filter can drop it.
+    await h.db
+      .update(organizations)
+      .set({ deletedAt: "2026-05-01T00:00:00.000Z", slug: "beta--org_b" })
+      .where(eq(organizations.id, "org_b"));
+
+    const result = await graphql({
+      schema,
+      source: `query { latestReleases(limit: 100) { items { id } } }`,
+      contextValue: ctx(h.db),
+    });
+    expect(result.errors).toBeUndefined();
+    const ids = (
+      result.data as { latestReleases: { items: Array<{ id: string }> } }
+    ).latestReleases.items.map((r) => r.id);
+    expect(ids.some((id) => id.startsWith("rel_src_a"))).toBe(true);
+    expect(ids.some((id) => id.startsWith("rel_src_b1_1"))).toBe(false);
+  });
+
   it("latestReleases drops releases dated in the future", async () => {
     // Sources occasionally publish a misdated entry (typo, scheduled-post slip);
     // without the guardrail it would sit at the top of the feed until the date

@@ -208,6 +208,12 @@ builder.queryType({
               eq(sources.isHidden, false),
               isNull(sources.deletedAt),
               eq(organizations.isHidden, false),
+              // Drop soft-deleted orgs. A tombstoned org keeps its row (slug
+              // mangled to "<slug>--<id>") and can outlive the tombstoning of
+              // its sources, so the source-side `isNull(sources.deletedAt)`
+              // above isn't enough — guard the org side too. Mirrors the
+              // `o.deleted_at IS NULL` clause on the REST path.
+              isNull(organizations.deletedAt),
               orgFilter,
               excludeFilter,
               futureFilter,
