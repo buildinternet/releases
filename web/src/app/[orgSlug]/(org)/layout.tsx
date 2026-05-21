@@ -99,7 +99,13 @@ export default async function OrgLayout({
         <CliCommand identifier={org.slug} />
         {adminEnabled && (
           <div className="mt-2">
-            <OrgAdminMenu orgSlug={org.slug} isHidden={org.isHidden ?? false} />
+            <OrgAdminMenu
+              orgSlug={org.slug}
+              isHidden={org.isHidden ?? false}
+              autoGenerateContent={org.autoGenerateContent ?? false}
+              discovery={org.discovery}
+              fetchPaused={org.fetchPaused}
+            />
           </div>
         )}
         <div className="flex flex-col md:flex-row gap-10 mt-6 pb-6">
