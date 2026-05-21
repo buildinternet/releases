@@ -92,7 +92,7 @@ function Card({ slide }: { slide: Slide }) {
           </span>
         )}
       </div>
-      <p className="text-[13px] text-stone-700 dark:text-stone-300 line-clamp-2 leading-5 min-h-[2.5rem]">
+      <p className="text-[13px] text-stone-700 dark:text-stone-300 line-clamp-3 leading-5 min-h-[2.5rem]">
         {pickLabel(release)}
       </p>
       <div className="flex items-center gap-2 min-w-0">
