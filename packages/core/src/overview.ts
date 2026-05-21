@@ -1,3 +1,4 @@
+import type { Kind } from "./kinds.js";
 import type { Release, Source } from "./schema.js";
 
 /**
@@ -28,19 +29,63 @@ export const PER_SOURCE_CAPS: Record<Source["type"], number> = {
 };
 
 /**
+ * Per-kind family caps applied AFTER per-source caps but BEFORE the global
+ * limit. Where `PER_SOURCE_CAPS` keeps a single noisy repo from dominating,
+ * this keeps a whole *family* of same-kind sources from dominating: an org
+ * with 10 SDK repos would otherwise feed ~100 SDK releases into the window and
+ * crowd the changelog out of the model's context. Capping the SDK family
+ * collectively makes it read as one prominent voice rather than N peers.
+ *
+ * Keyed by *resolved* kind (source.kind ?? product.kind). Kinds absent from
+ * this map are uncapped at the family level. Tunable.
+ */
+export const PER_KIND_FAMILY_CAPS: Partial<Record<Kind, number>> = {
+  sdk: 10,
+};
+
+/**
  * Select releases to feed into overview regeneration. Pure: input arrays must
  * each be sorted by `publishedAt` desc; output is the merged, capped, limited,
  * resorted slice plus the pre-cap total for reporting.
  */
 export function selectReleasesForOverview(
-  perSource: Array<{ type: Source["type"]; releases: Release[] }>,
+  perSource: Array<{ type: Source["type"]; kind?: Kind | null; releases: Release[] }>,
   limit: number = OVERVIEW_RELEASE_LIMIT,
 ): { releases: Release[]; totalAvailable: number } {
   const totalAvailable = perSource.reduce((n, s) => n + s.releases.length, 0);
-  const capped = perSource.flatMap(({ type, releases }) =>
-    releases.slice(0, PER_SOURCE_CAPS[type] ?? 20),
-  );
-  const sorted = capped.toSorted((a, b) =>
+
+  // 1. Per-source cap by adapter type (unchanged): a single noisy repo can't
+  //    contribute more than its type's cap.
+  const perSourceCapped = perSource.map(({ type, kind, releases }) => ({
+    kind: kind ?? null,
+    releases: releases.slice(0, PER_SOURCE_CAPS[type] ?? 20),
+  }));
+
+  // 2. Per-kind family cap: pool releases of a capped kind across all its
+  //    sources, keep the most-recent N. Other kinds (and untagged sources)
+  //    pass through untouched.
+  const familyPools = new Map<Kind, Release[]>();
+  const passthrough: Release[] = [];
+  for (const { kind, releases } of perSourceCapped) {
+    if (kind && kind in PER_KIND_FAMILY_CAPS) {
+      const pool = familyPools.get(kind) ?? [];
+      pool.push(...releases);
+      familyPools.set(kind, pool);
+    } else {
+      passthrough.push(...releases);
+    }
+  }
+  const familyCapped: Release[] = [];
+  for (const [kind, pool] of familyPools) {
+    const cap = PER_KIND_FAMILY_CAPS[kind]!;
+    const mostRecent = pool
+      .toSorted((a, b) => (b.publishedAt ?? "").localeCompare(a.publishedAt ?? ""))
+      .slice(0, cap);
+    familyCapped.push(...mostRecent);
+  }
+
+  // 3. Merge, global recency sort, global limit (unchanged semantics).
+  const sorted = [...passthrough, ...familyCapped].toSorted((a, b) =>
     (b.publishedAt ?? "").localeCompare(a.publishedAt ?? ""),
   );
   return { releases: sorted.slice(0, limit), totalAvailable };

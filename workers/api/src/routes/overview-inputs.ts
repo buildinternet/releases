@@ -6,10 +6,12 @@ import { createDb } from "../db.js";
 import {
   knowledgePages,
   organizationsPublic,
+  products,
   releases,
   sourcesActive,
 } from "@buildinternet/releases-core/schema";
 import { daysAgoIso } from "@buildinternet/releases-core/dates";
+import { resolveSourceKind, type Kind } from "@buildinternet/releases-core/kinds";
 import {
   OVERVIEW_RELEASE_LIMIT,
   OVERVIEW_WINDOW_DAYS,
@@ -111,6 +113,8 @@ app.get(
         slug: sourcesActive.slug,
         name: sourcesActive.name,
         type: sourcesActive.type,
+        kind: sourcesActive.kind,
+        productId: sourcesActive.productId,
       })
       .from(sourcesActive)
       .where(
@@ -123,6 +127,12 @@ app.get(
           or(ne(sourcesActive.fetchPriority, "paused"), isNull(sourcesActive.fetchPriority)),
         ),
       );
+
+    const orgProducts = await db
+      .select({ id: products.id, kind: products.kind })
+      .from(products)
+      .where(eq(products.orgId, org.id));
+    const productKindById = new Map(orgProducts.map((p) => [p.id, p.kind]));
 
     const cutoff = daysAgoIso(windowDays);
 
@@ -139,7 +149,16 @@ app.get(
             ),
           )
           .orderBy(desc(releases.publishedAt));
-        return { type: s.type, releases: rows };
+        return {
+          type: s.type,
+          kind: resolveSourceKind(
+            { kind: s.kind as Kind | null },
+            s.productId
+              ? { kind: (productKindById.get(s.productId) ?? null) as Kind | null }
+              : null,
+          ),
+          releases: rows,
+        };
       }),
     );
 
@@ -184,7 +203,10 @@ app.get(
 
     return c.json({
       org,
-      sources: activeSources,
+      // Project to the documented response shape — `kind`/`productId` are
+      // selected only to resolve each source's kind for overview selection,
+      // not exposed on the wire.
+      sources: activeSources.map(({ id, slug, name, type }) => ({ id, slug, name, type })),
       existingContent: existing?.content ?? null,
       selected: selectedShaped,
       totalAvailable,
