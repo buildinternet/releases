@@ -1,5 +1,6 @@
 "use client";
 
+import { CommandSyntax } from "@/components/command-syntax";
 import { CopyIcon } from "@/components/copy-icon";
 import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
 
@@ -12,20 +13,20 @@ export function CliCommand({ identifier, command, className }: CliCommandProps) 
   const resolved = command ?? `npx @buildinternet/releases get ${identifier}`;
 
   return (
-    <div
-      className={`inline-flex max-w-full items-center gap-2 rounded-md border border-stone-200 bg-stone-50 px-3 py-1.5 font-mono text-[12px] text-stone-700 shadow-sm dark:border-stone-700 dark:bg-stone-900 dark:text-stone-300 ${className ?? "mt-4"}`}
+    <button
+      type="button"
+      onClick={() => copy(resolved)}
+      aria-label={copied ? "Copied" : `Copy command: ${resolved}`}
+      title={copied ? "Copied" : "Copy command"}
+      className={`group inline-flex max-w-full cursor-pointer items-center gap-2 rounded-md border border-stone-200 bg-stone-50 px-3 py-1.5 text-left font-mono text-[12px] text-stone-700 shadow-sm transition-colors hover:border-stone-300 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-300 dark:hover:border-stone-600 ${className ?? "mt-4"}`}
     >
       <span className="select-none text-stone-400 dark:text-stone-500">$</span>
-      <span className="truncate">{resolved}</span>
-      <button
-        type="button"
-        onClick={() => copy(resolved)}
-        className="flex-shrink-0 rounded p-0.5 text-stone-500 transition-colors hover:bg-stone-200 hover:text-stone-700 dark:text-stone-400 dark:hover:bg-stone-800 dark:hover:text-stone-200"
-        aria-label={copied ? "Copied" : "Copy command"}
-        title={copied ? "Copied" : "Copy command"}
-      >
+      <code className="min-w-0 truncate">
+        <CommandSyntax command={resolved} />
+      </code>
+      <span className="flex-shrink-0 text-stone-500 transition-colors group-hover:text-stone-700 dark:text-stone-400 dark:group-hover:text-stone-200">
         <CopyIcon copied={copied} size={13} />
-      </button>
-    </div>
+      </span>
+    </button>
   );
 }
