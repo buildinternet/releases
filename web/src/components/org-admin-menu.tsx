@@ -139,7 +139,9 @@ export function OrgAdminMenu({
                 </div>
                 <div className="flex justify-between gap-2">
                   <dt>Fetch paused</dt>
-                  <dd className="font-mono">{fetchPaused ? "true" : "false"}</dd>
+                  <dd className="font-mono">
+                    {fetchPaused === undefined ? "—" : fetchPaused ? "true" : "false"}
+                  </dd>
                 </div>
               </dl>
             </div>

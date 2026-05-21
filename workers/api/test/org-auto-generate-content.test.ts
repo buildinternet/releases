@@ -51,13 +51,14 @@ describe("PATCH /v1/orgs/:slug — autoGenerateContent", () => {
     const app = mkApp(db);
 
     // Enable it.
-    await app(
+    const enable = await app(
       new Request("https://x.test/v1/orgs/acme", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ autoGenerateContent: true }),
       }),
     );
+    expect(enable.status).toBe(200);
 
     // PATCH a different field, omitting autoGenerateContent.
     const patch = await app(
@@ -79,13 +80,14 @@ describe("PATCH /v1/orgs/:slug — autoGenerateContent", () => {
     await seed(db);
     const app = mkApp(db);
 
-    await app(
+    const enable = await app(
       new Request("https://x.test/v1/orgs/acme", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ autoGenerateContent: true }),
       }),
     );
+    expect(enable.status).toBe(200);
     const off = await app(
       new Request("https://x.test/v1/orgs/acme", {
         method: "PATCH",
