@@ -104,7 +104,15 @@ async function seed(db: TestDatabase["db"]) {
     },
   ]);
 
-  return { vercelId, anthropicId, nextjsId, nextjsSrcId, claudeSrcId };
+  return {
+    vercelId,
+    anthropicId,
+    nextjsId,
+    turborepoId,
+    nextjsSrcId,
+    turborepoSrcId,
+    claudeSrcId,
+  };
 }
 
 /**
@@ -785,6 +793,99 @@ describe("get_latest_releases (round-trippable source coordinates)", () => {
     // Both sources appear in the seed data; both must show up with an org prefix.
     expect(text).toContain("vercel/next-js");
     expect(text).toContain("anthropic/anthropic-releases");
+  });
+});
+
+describe("get_latest_releases kind filter (COALESCE inheritance)", () => {
+  // Tag the seed so release-feed filtering can be exercised through the
+  // source→product inheritance rule (`COALESCE(source.kind, product.kind)`).
+  //   • Next.js source: kind=null, parent product kind=sdk → inherits sdk.
+  //   • Turborepo source: own kind=tool, parent product kind=sdk → tool wins.
+  //   • Anthropic standalone source: own kind=platform (no parent product).
+  const fixture = useFixture(async (db) => {
+    const seeded = await seed(db);
+    await db.update(products).set({ kind: "sdk" }).where(eq(products.id, seeded.nextjsId));
+    // Turborepo's parent product is sdk too, so the source-own kind below has a
+    // *different* product kind to override — without this the "source wins" test
+    // would pass trivially (COALESCE(tool, null) = tool either way).
+    await db.update(products).set({ kind: "sdk" }).where(eq(products.id, seeded.turborepoId));
+    // Give Turborepo a release so its source-own kind is observable in the feed.
+    await db.insert(releases).values({
+      id: newReleaseId(),
+      sourceId: seeded.turborepoSrcId,
+      title: "Turborepo 2.0",
+      content: "Turborepo 2.0 ships a rewritten engine.",
+      url: "https://example.com/turbo-2",
+      publishedAt: "2024-11-01T00:00:00Z",
+    });
+    await db.update(sources).set({ kind: "tool" }).where(eq(sources.id, seeded.turborepoSrcId));
+    await db.update(sources).set({ kind: "platform" }).where(eq(sources.id, seeded.claudeSrcId));
+    return seeded;
+  });
+
+  it("returns releases whose source inherits the kind from its parent product", async () => {
+    const text = resultText(await getLatestReleases(asD1(fixture.db), { kind: "sdk" }));
+    // Next.js source has no own kind but its product is sdk → included.
+    expect(text).toContain("Next.js 15");
+    // Anthropic source is platform, Turborepo source is tool → excluded.
+    expect(text).not.toContain("Claude 4 release");
+    expect(text).not.toContain("Turborepo 2.0");
+  });
+
+  it("lets a source's own kind win over the parent product's kind", async () => {
+    const text = resultText(await getLatestReleases(asD1(fixture.db), { kind: "tool" }));
+    // Turborepo source own kind=tool overrides product kind=sdk.
+    expect(text).toContain("Turborepo 2.0");
+    expect(text).not.toContain("Next.js 15");
+  });
+
+  it("filters standalone sources by their own kind", async () => {
+    const text = resultText(await getLatestReleases(asD1(fixture.db), { kind: "platform" }));
+    expect(text).toContain("Claude 4 release");
+    expect(text).not.toContain("Next.js 15");
+  });
+
+  it("returns the unfiltered feed when no kind is passed", async () => {
+    const text = resultText(await getLatestReleases(asD1(fixture.db), {}));
+    expect(text).toContain("Next.js 15");
+    expect(text).toContain("Claude 4 release");
+    expect(text).toContain("Turborepo 2.0");
+  });
+});
+
+describe("list_catalog kind filter (own kind, no inheritance)", () => {
+  // Catalog surfaces match each row's OWN kind (the asymmetry documented in
+  // AGENTS.md). A source with a null kind never inherits its product's kind here.
+  const fixture = useFixture(async (db) => {
+    const seeded = await seed(db);
+    await db.update(products).set({ kind: "sdk" }).where(eq(products.id, seeded.nextjsId));
+    await db.update(products).set({ kind: "tool" }).where(eq(products.id, seeded.turborepoId));
+    await db.update(sources).set({ kind: "platform" }).where(eq(sources.id, seeded.claudeSrcId));
+    return seeded;
+  });
+
+  it("returns only product rows whose own kind matches", async () => {
+    const text = resultText(await listCatalog(asD1(fixture.db), { kind: "sdk" }));
+    expect(text).toContain("**Next.js** _(product)_");
+    expect(text).not.toContain("**Turborepo** _(product)_");
+    expect(text).not.toContain("Anthropic Release Notes");
+  });
+
+  it("returns only standalone-source rows whose own kind matches", async () => {
+    const text = resultText(await listCatalog(asD1(fixture.db), { kind: "platform" }));
+    expect(text).toContain("**Anthropic Release Notes** _(source)_");
+    expect(text).not.toContain("Next.js");
+    expect(text).not.toContain("Turborepo");
+  });
+
+  it("scopes the paginated total to the kind filter", async () => {
+    const result = await listCatalog(asD1(fixture.db), { kind: "sdk" });
+    expect(result._meta?.pagination).toMatchObject({ totalItems: 1, returned: 1 });
+  });
+
+  it("returns no rows for a kind nothing is tagged with", async () => {
+    const text = resultText(await listCatalog(asD1(fixture.db), { kind: "mobile" }));
+    expect(text).toContain("No catalog entries found.");
   });
 });
 

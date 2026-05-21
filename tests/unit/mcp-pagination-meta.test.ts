@@ -156,4 +156,34 @@ describe("buildSearchMeta", () => {
     expect(meta.returned).toBe(0);
     expect(meta.hitCap).toBe(false);
   });
+
+  it("echoes the applied kind filter back to the caller", () => {
+    const meta = buildSearchMeta({
+      mode: "hybrid",
+      limit: 20,
+      counts: { catalogHits: 2, releaseHits: 1 },
+      kind: "sdk",
+    });
+    expect(meta.kind).toBe("sdk");
+  });
+
+  it("echoes the applied type (section) filter back to the caller", () => {
+    const meta = buildSearchMeta({
+      mode: "hybrid",
+      limit: 20,
+      counts: { catalogHits: 2 },
+      type: ["catalog", "releases"],
+    });
+    expect(meta.type).toEqual(["catalog", "releases"]);
+  });
+
+  it("omits kind and type keys entirely when no such filters were applied", () => {
+    const meta = buildSearchMeta({
+      mode: "hybrid",
+      limit: 20,
+      counts: { releaseHits: 3 },
+    });
+    expect(meta).not.toHaveProperty("kind");
+    expect(meta).not.toHaveProperty("type");
+  });
 });
