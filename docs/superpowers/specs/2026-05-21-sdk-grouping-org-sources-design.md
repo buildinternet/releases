@@ -69,8 +69,8 @@ purely about emitting columns the handler currently discards. Orgs with fewer th
 
 A source joins the group when its **resolved** kind is `sdk`:
 
-```
-resolveSourceKind(source, product) === "sdk"
+```ts
+resolveSourceKind(source, product) === "sdk";
 ```
 
 `resolveSourceKind` (from `@buildinternet/releases-core/kinds`) returns the source's

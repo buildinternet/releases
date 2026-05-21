@@ -12,7 +12,7 @@
 
 ---
 
-### Task 1: Worktree setup + baseline
+## Task 1: Worktree setup + baseline
 
 **Files:** none (environment only)
 
@@ -30,7 +30,7 @@ Expected: PASS (this is the file Task 2 extends).
 
 ---
 
-### Task 2: Emit `kind` on the org-detail payload (API)
+## Task 2: Emit `kind` on the org-detail payload (API)
 
 **Files:**
 
@@ -196,7 +196,7 @@ git commit -m "feat(api): emit kind on org-detail sources + products (#1080)"
 
 ---
 
-### Task 3: Pure partition helper (web)
+## Task 3: Pure partition helper (web)
 
 **Files:**
 
@@ -351,7 +351,7 @@ git commit -m "feat(web): add SDK source partition helper (#1080)"
 
 ---
 
-### Task 4: `SdkSourceGroup` collapsible component (web)
+## Task 4: `SdkSourceGroup` collapsible component (web)
 
 **Files:**
 
@@ -437,7 +437,7 @@ git commit -m "feat(web): add SdkSourceGroup collapsible block (#1080)"
 
 ---
 
-### Task 5: Wire grouping into `SourceTable` (web)
+## Task 5: Wire grouping into `SourceTable` (web)
 
 **Files:**
 
@@ -564,7 +564,7 @@ git commit -m "feat(web): group SDK sources on the org sources page (#1080)"
 
 ---
 
-### Task 6: Full verification + manual check
+## Task 6: Full verification + manual check
 
 **Files:** none (verification only)
 
