@@ -118,12 +118,12 @@
     // Feed content enrichment (#feed-enrich). When a feed item arrives
     // summary-only, follow its link and capture the full article via cheap
     // fetch → AI extract, escalating to Cloudflare Browser Rendering only when
-    // the result is still thin. Ships OFF; flip FEED_ENRICH_ENABLED to "true"
-    // after staging validation. The forward path is cron-gated (poll-fetch);
-    // the admin backfill POST /v1/workflows/enrich-feed-content runs regardless.
+    // the result is still thin. Enabled in prod after staging validation
+    // (#1109 follow-up). The forward path is cron-gated (poll-fetch); the admin
+    // backfill POST /v1/workflows/enrich-feed-content runs regardless.
     // FEED_ENRICH_MAX_PER_FIRE caps enrich attempts per source per cron fire;
     // FEED_THIN_CHARS is the char floor below which a body counts as "thin".
-    "FEED_ENRICH_ENABLED": "false",
+    "FEED_ENRICH_ENABLED": "true",
     "FEED_ENRICH_MAX_PER_FIRE": "10",
     "FEED_THIN_CHARS": "600",
     // Discriminator read by /v1/graphql to gate GraphiQL + introspection.
