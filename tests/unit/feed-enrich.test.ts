@@ -81,6 +81,21 @@ describe("enrichFeedItem", () => {
     expect(res.status).toBe("no_improvement");
   });
 
+  it("skips a bad-shape URL without fetching", async () => {
+    let fetched = 0;
+    const deps = baseDeps({
+      fetchImpl: async () => {
+        fetched++;
+        return htmlResponse("<article>full</article>");
+      },
+      extractArticleFn: async () => ({ content: "x".repeat(800), media: [] }),
+    });
+    const anchored = { ...item, url: "https://x.test/docs/changelog#march-2026" };
+    const res = await enrichFeedItem(anchored, deps);
+    expect(res.status).toBe("no_improvement");
+    expect(fetched).toBe(0);
+  });
+
   it("fails open on a thrown fetch error", async () => {
     const deps = baseDeps({
       fetchImpl: async () => {
@@ -215,6 +230,31 @@ describe("enrichNewThinItems", () => {
     expect([...map.keys()]).toEqual([1]);
     expect(map.get(1)!.content!.length).toBe(800);
     expect(map.get(1)!.marker.succeeded).toBe(true);
+  });
+
+  it("excludes thin items with a bad-shape URL from enrichment", async () => {
+    const source = await seedSource();
+    const items = [
+      raw("https://x.test/docs/changelog#march-2026", true), // anchored fragment → skip
+      raw("https://x.test/new-post", true), // clean permalink → enrich
+    ];
+    let enrichCalls = 0;
+    const map = await enrichNewThinItems(
+      tdb.db as any,
+      source as any,
+      { feedContentDepth: "summary-only" } as any,
+      items,
+      env,
+      {
+        enrichFn: async () => {
+          enrichCalls++;
+          return { status: "enriched", via: "fetch", content: "X".repeat(800), media: [] };
+        },
+      },
+    );
+    // Only the clean URL (index 1) is enriched; the anchored one is never attempted.
+    expect([...map.keys()]).toEqual([1]);
+    expect(enrichCalls).toBe(1);
   });
 
   it("marks enriched-without-content as a failure", async () => {

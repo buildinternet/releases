@@ -21,7 +21,11 @@ import type { drizzle } from "drizzle-orm/d1";
 import type { Source } from "@buildinternet/releases-core/schema";
 import type { SourceMetadata } from "@releases/adapters/feed.js";
 import type { RawRelease } from "@releases/adapters/types.js";
-import { isThinItem, DEFAULT_FEED_THIN_CHARS } from "@releases/adapters/feed-depth";
+import {
+  isThinItem,
+  isEnrichableUrl,
+  DEFAULT_FEED_THIN_CHARS,
+} from "@releases/adapters/feed-depth";
 
 type ReleaseMedia = { type: "image" | "video" | "gif"; url: string; alt?: string };
 
@@ -63,6 +67,14 @@ function bar(summary: string, thinChars: number): number {
 }
 
 export async function enrichFeedItem(item: EnrichItem, deps: EnrichDeps): Promise<EnrichResult> {
+  // Chokepoint for both the forward path and the backfill route — skip before
+  // spending a fetch + extract on URLs that won't yield a single article (see
+  // isEnrichableUrl for the shapes).
+  if (!isEnrichableUrl(item.url)) {
+    deps.logEvent("info", { component: "feed-enrich", event: "skip-url-shape", url: item.url });
+    return { status: "no_improvement" };
+  }
+
   const fetchImpl = deps.fetchImpl ?? fetch;
   const floor = bar(item.summary, deps.thinChars);
 
@@ -224,7 +236,7 @@ export async function enrichNewThinItems(
 
   const candidates = rawReleases
     .map((raw, index) => ({ raw, index }))
-    .filter(({ raw }) => raw.url && isThinItem(raw, { thinChars }));
+    .filter(({ raw }) => raw.url && isThinItem(raw, { thinChars }) && isEnrichableUrl(raw.url));
   if (candidates.length === 0) return out;
 
   const urls = [...new Set(candidates.map((c) => c.raw.url!))];
