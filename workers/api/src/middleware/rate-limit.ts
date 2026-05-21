@@ -56,15 +56,24 @@ async function enforce(
 export const publicRateLimitMiddleware: MiddlewareHandler<Env> = async (c, next) => {
   if (!SAFE_METHODS.has(c.req.method)) return next();
 
+  // Resolve the active binding for each limiter (undefined when its kill switch
+  // is off or the binding is absent). Nothing to enforce when both are off (the
+  // default) — bail before resolving identity so a token-authenticated read
+  // doesn't pay a DB lookup.
+  const tokenLimiter =
+    c.env.TOKEN_RATE_LIMIT_ENABLED === "true" ? c.env.TOKEN_RATE_LIMITER : undefined;
+  const ipLimiter = c.env.RATE_LIMIT_ENABLED === "true" ? c.env.PUBLIC_RATE_LIMITER : undefined;
+  if (!tokenLimiter && !ipLimiter) return next();
+
   const identity = await resolveAuthIdentity(c);
   if (identity?.kind === "root") return next(); // break-glass key: never throttled
   if (await isTrustedProxy(c)) return next(); // web SSR: never throttled
 
   if (identity?.kind === "token") {
-    if (c.env.TOKEN_RATE_LIMIT_ENABLED !== "true" || !c.env.TOKEN_RATE_LIMITER) return next();
+    if (!tokenLimiter) return next(); // token limiter off; IP limiter doesn't apply to tokens
     const rejected = await enforce(
       c,
-      c.env.TOKEN_RATE_LIMITER,
+      tokenLimiter,
       identity.tokenId,
       TOKEN_POLICY_NAME,
       TOKEN_RATE_LIMIT_QUOTA,
@@ -81,15 +90,12 @@ export const publicRateLimitMiddleware: MiddlewareHandler<Env> = async (c, next)
   }
 
   // Anonymous or invalid credential → per-IP limiter.
-  if (c.env.RATE_LIMIT_ENABLED !== "true" || !c.env.PUBLIC_RATE_LIMITER) return next();
+  if (!ipLimiter) return next();
   const ip = c.req.header("cf-connecting-ip") ?? "unknown";
-  const rejected = await enforce(
-    c,
-    c.env.PUBLIC_RATE_LIMITER,
-    ip,
-    IP_POLICY_NAME,
-    IP_RATE_LIMIT_QUOTA,
-  );
-  if (rejected) return rejected;
+  const rejected = await enforce(c, ipLimiter, ip, IP_POLICY_NAME, IP_RATE_LIMIT_QUOTA);
+  if (rejected) {
+    logEvent("warn", { component: "rate-limit", event: "ip-throttled", ip });
+    return rejected;
+  }
   return next();
 };

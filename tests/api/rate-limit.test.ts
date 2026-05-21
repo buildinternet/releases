@@ -26,20 +26,6 @@ type Env = {
 let h: TestDatabase | null = null;
 afterEach(() => h?.cleanup());
 
-async function seedReadToken(db: TestDatabase["db"]) {
-  const { token, lookupId, secret } = generateApiToken();
-  db.insert(apiTokens)
-    .values({
-      id: `tok_${lookupId}`,
-      lookupId,
-      tokenHash: await hashSecret(secret),
-      name: "read-token",
-      scopes: JSON.stringify(["read"]),
-    })
-    .run();
-  return token;
-}
-
 /** Seed a token with the given scopes and return both the secret and its tokenId. */
 async function seedToken(db: TestDatabase["db"], scopes: string[]) {
   const { token, lookupId, secret } = generateApiToken();
@@ -173,7 +159,7 @@ describe("publicRateLimitMiddleware", () => {
 
   it("bypasses the limiter for a read-only DB token (any valid token skips rate limit)", async () => {
     h = createTestDb();
-    const token = await seedReadToken(h.db);
+    const { token } = await seedToken(h.db, ["read"]);
     const app = createApp();
     const limiter = mockLimiter([false]);
     const res = await app.request(

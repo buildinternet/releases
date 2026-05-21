@@ -61,11 +61,7 @@ export async function resolveAuthIdentity(c: Context<Env>): Promise<AuthContext 
   const presented = bearer(c);
   if (!presented) return null;
   const auth = await resolveAuth(c, presented);
-  if (auth.kind === "root") return { kind: "root", scopes: auth.scopes };
-  if (auth.kind === "token") {
-    return { kind: "token", tokenId: auth.tokenId, scopes: auth.scopes };
-  }
-  return null;
+  return auth.kind === "none" ? null : auth;
 }
 
 /**
