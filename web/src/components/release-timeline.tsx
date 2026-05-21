@@ -29,6 +29,8 @@ import {
   type RangePreset,
 } from "@/components/timeline-chrome";
 import { groupSourcesByProduct } from "@/lib/sources";
+import { partitionSdkSources, sdkPreview } from "@/lib/sdk-grouping";
+import { SdkSourceCardGroup } from "@/components/sdk-source-card-group";
 
 /** Merge multiple bucket arrays into one, summing counts at each week timestamp. */
 function mergeBuckets(bucketArrays: WeeklyBucket[][]): WeeklyBucket[] {
@@ -52,6 +54,61 @@ interface ReleaseTimelineProps {
   products: OrgDetail["products"];
   trackingSince?: string | null;
   overview?: OverviewPageItem | null;
+}
+
+/**
+ * Render a list of source cards with any loose SDK-kind sources (resolved via
+ * source.kind ?? product.kind) folded into a single collapsed group at the
+ * bottom. Below the SDK_GROUP_MIN threshold, `partitionSdkSources` returns
+ * everything in `flat`, so the group simply doesn't render.
+ */
+function FlatSourcesWithSdk({
+  sources,
+  products,
+  orgSlug,
+  cadenceMap,
+  showProductBadge = false,
+}: {
+  sources: SourceListItem[];
+  products: OrgDetail["products"];
+  orgSlug: string;
+  cadenceMap: Map<string, SourceCadenceData>;
+  showProductBadge?: boolean;
+}) {
+  const { flat, sdk } = partitionSdkSources(sources, products);
+  const preview = sdkPreview(
+    sdk.map((s) => ({
+      name: s.name,
+      releaseCount: cadenceMap.get(s.slug)?.totalReleaseCount ?? 0,
+    })),
+  );
+
+  return (
+    <div className="space-y-2">
+      {flat.map((source) => (
+        <SourceCard
+          key={source.slug}
+          source={source}
+          orgSlug={orgSlug}
+          cadence={cadenceMap.get(source.slug)}
+          showProductBadge={showProductBadge}
+        />
+      ))}
+      {sdk.length > 0 && (
+        <SdkSourceCardGroup count={sdk.length} preview={preview}>
+          {sdk.map((source) => (
+            <SourceCard
+              key={source.slug}
+              source={source}
+              orgSlug={orgSlug}
+              cadence={cadenceMap.get(source.slug)}
+              showProductBadge={showProductBadge}
+            />
+          ))}
+        </SdkSourceCardGroup>
+      )}
+    </div>
+  );
 }
 
 function ProductGroupedSources({
@@ -94,17 +151,13 @@ function ProductGroupedSources({
               Other Sources
             </h3>
           )}
-          <div className="space-y-2">
-            {ungrouped.map((source) => (
-              <SourceCard
-                key={source.slug}
-                source={source}
-                orgSlug={orgSlug}
-                cadence={cadenceMap.get(source.slug)}
-                showProductBadge={false}
-              />
-            ))}
-          </div>
+          <FlatSourcesWithSdk
+            sources={ungrouped}
+            products={products}
+            orgSlug={orgSlug}
+            cadenceMap={cadenceMap}
+            showProductBadge={false}
+          />
         </div>
       )}
     </div>
@@ -428,16 +481,12 @@ export function ReleaseTimeline({
             cadenceMap={cadenceMap}
           />
         ) : (
-          <div className="space-y-2">
-            {activeSources.map((source) => (
-              <SourceCard
-                key={source.slug}
-                source={source}
-                orgSlug={orgSlug}
-                cadence={cadenceMap.get(source.slug)}
-              />
-            ))}
-          </div>
+          <FlatSourcesWithSdk
+            sources={activeSources}
+            products={products}
+            orgSlug={orgSlug}
+            cadenceMap={cadenceMap}
+          />
         )}
       </div>
     </div>
