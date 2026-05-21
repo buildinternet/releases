@@ -1,6 +1,15 @@
 // Mount point for /v1/workflows/* job/workflow trigger endpoints.
 import { Hono } from "hono";
 import { and, count, desc, eq, gte, inArray, sql } from "drizzle-orm";
+import { computeContentSize } from "@buildinternet/releases-core/tokens";
+import { contentHash } from "@releases/adapters/content-hash";
+import { normalizeMediaUrl } from "@releases/rendering/media-url.js";
+import {
+  enrichFeedItem,
+  buildEnrichDeps,
+  parsePositiveInt,
+  type EnrichResult,
+} from "../cron/feed-enrich.js";
 import { sendCronReport } from "../lib/notifications.js";
 import { sendEmail } from "../lib/email.js";
 import type { CronReport, CronReportStatus } from "../lib/cron-report.js";
@@ -20,7 +29,7 @@ import {
   usageLog,
 } from "@buildinternet/releases-core/schema";
 import { daysAgoIso } from "@buildinternet/releases-core/dates";
-import { orgWhere, sourceMatchByIdOrSlug } from "../utils.js";
+import { orgWhere, sourceMatchByIdOrSlug, isSourceId } from "../utils.js";
 import { APIError } from "@anthropic-ai/sdk";
 import {
   anthropicErrorHttpStatus,
@@ -1571,4 +1580,232 @@ workflowsRoutes.post("/workflows/update", async (c) => {
   const body = await c.req.text();
   const res = await proxyToDiscovery(c, "/update", body);
   return new Response(res.body, { status: res.status, headers: res.headers });
+});
+
+// ── POST /workflows/enrich-feed-content ──────────────────────────────────────
+//
+// Operator-triggered backfill: re-enrich already-stored thin releases for a
+// given source. Resolves thin un-enriched candidates, enriches up to `limit`,
+// updates rows (nulling summary/titleGenerated/titleShort/embeddedAt), then
+// calls generateContentForReleases for the richer body.
+//
+// Body: { sourceId?, sourceSlug?, limit?, dryRun? }
+// Returns: { source, scanned, enriched, skipped, failed, dryRun }
+
+interface EnrichBackfillOpts {
+  limit: number;
+  dryRun: boolean;
+  thinChars: number;
+}
+
+interface EnrichBackfillDeps {
+  enrichFn: (item: { url: string; title: string; summary: string }) => Promise<EnrichResult>;
+  regenerate: (ids: string[]) => Promise<void>;
+}
+
+export interface EnrichBackfillReport {
+  scanned: number;
+  enriched: number;
+  skipped: number;
+  dryRun: boolean;
+}
+
+/** Merge an enrichment marker into a release's existing metadata JSON, preserving
+ *  any other top-level keys. Tolerates null / malformed metadata. */
+function mergeEnrichmentMarker(
+  existing: string | null,
+  enrichment: { attemptedAt: string; succeeded: boolean; via?: "fetch" | "render" },
+): string {
+  let base: Record<string, unknown> = {};
+  if (existing) {
+    try {
+      const parsed = JSON.parse(existing);
+      if (parsed && typeof parsed === "object") base = parsed as Record<string, unknown>;
+    } catch {
+      // malformed metadata — start fresh rather than throw
+    }
+  }
+  return JSON.stringify({ ...base, enrichment });
+}
+
+/** True when a release's stored media JSON holds at least one entry. */
+function hasStoredMedia(raw: string | null): boolean {
+  if (!raw) return false;
+  try {
+    const arr = JSON.parse(raw);
+    return Array.isArray(arr) && arr.length > 0;
+  } catch {
+    return false;
+  }
+}
+
+export async function runEnrichBackfill(
+  db: ReturnType<typeof createDb>,
+  sourceId: string,
+  opts: EnrichBackfillOpts,
+  deps: EnrichBackfillDeps,
+): Promise<EnrichBackfillReport> {
+  // Thin releases that haven't been successfully enriched: either no prior
+  // attempt, or a failed one (so transient failures stay retryable; a successful
+  // enrichment is never re-run).
+  const candidates = await db
+    .select({
+      id: releases.id,
+      title: releases.title,
+      version: releases.version,
+      publishedAt: releases.publishedAt,
+      content: releases.content,
+      url: releases.url,
+      media: releases.media,
+      metadata: releases.metadata,
+    })
+    .from(releases)
+    .where(
+      and(
+        eq(releases.sourceId, sourceId),
+        sql`${releases.url} IS NOT NULL`,
+        // Not yet attempted, or a prior attempt failed — retry transient failures.
+        sql`(json_extract(${releases.metadata}, '$.enrichment') IS NULL OR json_extract(${releases.metadata}, '$.enrichment.succeeded') = 0)`,
+        // Thin only: teaser-as-content (content == summary), or no summary AND a
+        // short body. The length guard keeps full-body summary-less releases out,
+        // so they don't burn a fetch+extract before the improvement bar no-ops
+        // them. (`releases` has no thinChars column; gate on the env value.)
+        sql`(${releases.content} = ${releases.summary} OR (${releases.summary} IS NULL AND length(${releases.content}) <= ${opts.thinChars}))`,
+      ),
+    )
+    .orderBy(sql`${releases.publishedAt} DESC`)
+    .limit(opts.limit);
+
+  const report: EnrichBackfillReport = {
+    scanned: candidates.length,
+    enriched: 0,
+    skipped: 0,
+    dryRun: opts.dryRun,
+  };
+  if (opts.dryRun) return report;
+
+  const enrichedIds: string[] = [];
+  for (const row of candidates) {
+    const attemptedAt = new Date().toISOString();
+    // oxlint-disable-next-line no-await-in-loop -- bounded by `limit`
+    const res = await deps.enrichFn({ url: row.url!, title: row.title, summary: row.content });
+    if (res.status !== "enriched" || !res.content) {
+      report.skipped++;
+      // oxlint-disable-next-line no-await-in-loop
+      await db
+        .update(releases)
+        .set({ metadata: mergeEnrichmentMarker(row.metadata, { attemptedAt, succeeded: false }) })
+        .where(eq(releases.id, row.id));
+      continue;
+    }
+    const size = computeContentSize(res.content);
+    // Only backfill media from the article when the release has none — never
+    // clobber existing feed / curated images.
+    const mediaJson =
+      !hasStoredMedia(row.media) && res.media && res.media.length > 0
+        ? JSON.stringify(
+            // oxlint-disable-next-line no-map-spread
+            res.media.map((m) => ({ ...m, url: normalizeMediaUrl(m.url) })),
+          )
+        : undefined;
+    // oxlint-disable-next-line no-await-in-loop
+    await db
+      .update(releases)
+      .set({
+        content: res.content,
+        contentChars: size.contentChars,
+        contentTokens: size.contentTokens,
+        contentHash: contentHash({
+          title: row.title,
+          version: row.version ?? undefined,
+          publishedAt: row.publishedAt ? new Date(row.publishedAt) : undefined,
+          content: res.content,
+        }),
+        ...(mediaJson !== undefined ? { media: mediaJson } : {}),
+        metadata: mergeEnrichmentMarker(row.metadata, {
+          attemptedAt,
+          succeeded: true,
+          via: res.via,
+        }),
+        // Force summary + embedding refresh on the richer body.
+        summary: null,
+        titleGenerated: null,
+        titleShort: null,
+        embeddedAt: null,
+      })
+      .where(eq(releases.id, row.id));
+    report.enriched++;
+    enrichedIds.push(row.id);
+  }
+
+  if (enrichedIds.length > 0) await deps.regenerate(enrichedIds);
+  return report;
+}
+
+interface EnrichFeedContentBody {
+  sourceId?: string;
+  sourceSlug?: string;
+  limit?: number;
+  dryRun?: boolean;
+}
+
+workflowsRoutes.post("/workflows/enrich-feed-content", async (c) => {
+  const db = createDb(c.env.DB);
+  const body = await c.req.json<EnrichFeedContentBody>().catch(() => ({}) as EnrichFeedContentBody);
+
+  const ident = body.sourceId?.trim() || body.sourceSlug?.trim();
+  if (!ident) {
+    return c.json({ error: "bad_request", message: "Provide `sourceId` or `sourceSlug`" }, 400);
+  }
+  // Bare slugs are ambiguous across orgs post-#690 (per-org slug uniqueness), so
+  // require a typed `src_…` ID. Resolve a slug via the org-scoped detail route or
+  // /v1/lookups/source-by-slug first.
+  if (!isSourceId(ident)) {
+    return c.json(
+      {
+        error: "bare_slug_rejected",
+        message:
+          "Pass a typed source ID (src_…). Bare slugs are ambiguous across orgs — resolve via /v1/orgs/{orgSlug}/sources/{sourceSlug} or /v1/lookups/source-by-slug first.",
+      },
+      400,
+    );
+  }
+  const [src] = await db
+    .select({ id: sources.id, slug: sources.slug, name: sources.name, orgId: sources.orgId })
+    .from(sources)
+    .where(sourceMatchByIdOrSlug(ident));
+  if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
+
+  const rawLimit = Number(body.limit ?? 25);
+  const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(Math.floor(rawLimit), 1), 200) : 25;
+  const dryRun = body.dryRun !== false; // default to a dry run for safety
+  const thinChars = parsePositiveInt(c.env.FEED_THIN_CHARS, 600);
+
+  const deps = await buildEnrichDeps(c.env, thinChars);
+  if (!deps)
+    return c.json(
+      { error: "service_unavailable", message: "ANTHROPIC_API_KEY not configured" },
+      503,
+    );
+
+  const report = await runEnrichBackfill(
+    db,
+    src.id,
+    { limit, dryRun, thinChars },
+    {
+      enrichFn: (item) => enrichFeedItem(item, deps),
+      // Lazy import: poll-and-fetch.ts pulls `cloudflare:workers`, which only
+      // resolves in the Workers runtime. A static import would break tooling that
+      // loads the route module under plain Bun (the OpenAPI coverage check).
+      // Structural cast: src is a partial {id,slug,name,orgId}; generateContentForReleases
+      // only reads isHidden/orgId so the partial is safe at runtime; db and c.env are
+      // cast to satisfy the typed workflow-env shape difference.
+      regenerate: async (ids) => {
+        const { generateContentForReleases } = await import("../workflows/poll-and-fetch.js");
+        await generateContentForReleases(db as never, c.env as never, src as never, ids);
+      },
+    },
+  );
+
+  return c.json({ source: { id: src.id, slug: src.slug }, ...report });
 });
