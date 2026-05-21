@@ -23,6 +23,13 @@ export interface RawRelease {
    * to drop noise from mixed-topic feeds without paying for an agent pass.
    */
   categories?: string[];
+  /**
+   * True when `content` was derived from the item's short `<description>` /
+   * JSON-feed `summary` because no distinct `content:encoded` / `content_html`
+   * body was present. Drives summary-only feed detection (`assessFeedDepth`).
+   * Transient — never persisted on the release row.
+   */
+  contentFromSummary?: boolean;
 }
 
 export interface FetchOptions {

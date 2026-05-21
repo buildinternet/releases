@@ -13,6 +13,7 @@
     "./cloudflare": "./src/cloudflare.ts",
     "./crawl": "./src/crawl.ts",
     "./feed": "./src/feed.ts",
+    "./feed-depth": "./src/feed-depth.ts",
     "./extract": "./src/extract/index.ts",
     "./extract/shared": "./src/extract/shared.ts",
     "./extract/types": "./src/extract/types.ts",

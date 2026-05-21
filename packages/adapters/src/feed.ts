@@ -493,6 +493,7 @@ export function parseRss(xml: string): RawRelease[] {
   const releases: RawRelease[] = [];
   for (const item of libParseFeed(xml).items) {
     if (!item.title) continue;
+    const hasDistinctBody = Boolean(item.content && item.content.trim().length > 0);
     const body = item.content ?? item.description ?? "";
     const dateRaw = item.updated ?? item.published;
     const categories = item.categories
@@ -501,6 +502,7 @@ export function parseRss(xml: string): RawRelease[] {
     releases.push({
       title: item.title,
       content: htmlToMarkdown(body),
+      contentFromSummary: !hasDistinctBody,
       url: feedItemUrl(item),
       publishedAt: dateRaw ? new Date(dateRaw) : undefined,
       version: extractVersionFromTitle(item.title),
@@ -551,12 +553,14 @@ export function parseJsonFeed(json: string): RawRelease[] {
   return items
     .filter((item) => item.title)
     .map((item) => {
+      const hasDistinctBody = Boolean(item.content_html && item.content_html.trim().length > 0);
       const html = item.content_html ?? item.summary ?? "";
       const dateStr = item.date_published ?? item.date_modified;
       const categories = (item.tags ?? []).filter((t): t is string => Boolean(t));
       return {
         title: item.title!,
         content: item.content_text ?? htmlToMarkdown(html),
+        contentFromSummary: !hasDistinctBody && !item.content_text,
         url: item.url,
         publishedAt: dateStr ? new Date(dateStr) : undefined,
         version: extractVersionFromTitle(item.title!),

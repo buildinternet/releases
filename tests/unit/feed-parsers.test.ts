@@ -921,3 +921,35 @@ describe("filterByCategoryAllow", () => {
     expect(dropped).toBe(2);
   });
 });
+
+describe("contentFromSummary flag", () => {
+  it("marks RSS items that fall back to <description>", () => {
+    const xml = `<?xml version="1.0"?><rss version="2.0"><channel>
+      <item><title>Has body</title><link>https://x.test/a</link>
+        <content:encoded xmlns:content="http://purl.org/rss/1.0/modules/content/"><![CDATA[<p>Full body paragraph here.</p>]]></content:encoded>
+        <description>teaser</description></item>
+      <item><title>Summary only</title><link>https://x.test/b</link>
+        <description>just a teaser sentence</description></item>
+    </channel></rss>`;
+    const [withBody, summaryOnly] = parseRss(xml);
+    expect(withBody.contentFromSummary).toBe(false);
+    expect(summaryOnly.contentFromSummary).toBe(true);
+  });
+
+  it("marks JSON Feed items that fall back to summary", () => {
+    const json = JSON.stringify({
+      items: [
+        {
+          title: "Has body",
+          url: "https://x.test/a",
+          content_html: "<p>Full body here.</p>",
+          summary: "teaser",
+        },
+        { title: "Summary only", url: "https://x.test/b", summary: "just a teaser" },
+      ],
+    });
+    const [withBody, summaryOnly] = parseJsonFeed(json);
+    expect(withBody.contentFromSummary).toBe(false);
+    expect(summaryOnly.contentFromSummary).toBe(true);
+  });
+});

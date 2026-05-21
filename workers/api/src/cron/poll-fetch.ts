@@ -69,6 +69,14 @@ import {
 } from "@releases/ai-internal/marketing-classifier";
 import { getAnthropicKey, resolveGatewayOpts, type AnthropicEnv } from "../lib/anthropic.js";
 import { buildAnthropicClient } from "@releases/lib/anthropic-client.js";
+import { assessFeedDepth, DEFAULT_FEED_THIN_CHARS } from "@releases/adapters/feed-depth";
+import {
+  enrichNewThinItems,
+  enrichFeedItem,
+  buildEnrichDeps,
+  parsePositiveInt,
+  type EnrichOutcome,
+} from "./feed-enrich.js";
 
 // ── Tier intervals (hours) ──
 
@@ -563,6 +571,14 @@ export interface FetchOneEnv extends IndexNowEnv, AnthropicEnv {
    * RPC bypasses the discovery worker's HTTP auth middleware.
    */
   DISCOVERY_WORKER?: DiscoveryWorkerRpc;
+  // Feed content enrichment. Kill switch + cap as strings (Workers env vars are
+  // strings). CF creds are bound from the same Secrets Store entries the
+  // discovery worker uses; absent => render escalation is skipped.
+  FEED_ENRICH_ENABLED?: string;
+  FEED_ENRICH_MAX_PER_FIRE?: string;
+  FEED_THIN_CHARS?: string;
+  CLOUDFLARE_ACCOUNT_ID?: { get(): Promise<string> };
+  CLOUDFLARE_API_TOKEN?: { get(): Promise<string> };
 }
 
 /**
@@ -1021,6 +1037,26 @@ export async function fetchOne(
         if (result.lastModified) metaUpdates.feedLastModified = result.lastModified;
         if (result.contentLength) metaUpdates.feedContentLength = result.contentLength;
         if (meta.feed4xxStreak) metaUpdates.feed4xxStreak = undefined;
+        // Auto-detect summary-only feeds once and persist the flag. Only set it;
+        // never clear it here (a feed that upgrades to full bodies clearing the
+        // flag is future work). Skip if already decided.
+        if (!meta.feedContentDepth) {
+          const thinChars = parsePositiveInt(env.FEED_THIN_CHARS, DEFAULT_FEED_THIN_CHARS);
+          const depth = assessFeedDepth(rawReleases, { thinChars });
+          if (depth === "summary-only") {
+            metaUpdates.feedContentDepth = "summary-only";
+            // Reflect the just-detected value in the in-memory meta so this same
+            // run's buildEnrichMap enriches the batch (no one-fire delay). Only
+            // set it here; clearing stays future work per the comment above.
+            meta.feedContentDepth = "summary-only";
+            logEvent("info", {
+              component: "cron-poll-fetch",
+              event: "feed-depth-detected",
+              sourceSlug: source.slug,
+              feedItemCount: rawReleases.length,
+            });
+          }
+        }
         if (Object.keys(metaUpdates).length > 0) {
           const merged = { ...meta, ...metaUpdates };
           await db
@@ -1123,17 +1159,25 @@ export async function fetchOne(
         ? await classifyMarketingForReleases(db, source, meta, rawReleases, env)
         : new Map<number, MarketingClassifierResult>();
 
+    const enrichMap = await buildEnrichMap(db, source, meta, rawReleases, env);
+
     const rows = rawReleases.map((raw, index) => {
-      const size = computeContentSize(raw.content);
+      const enrich = enrichMap.get(index);
+      const content = enrich?.content ?? raw.content;
+      // Keep feed-provided media; backfill from the enriched article only when
+      // the feed item carried none (spec: article media only when feed is empty).
+      const media =
+        raw.media && raw.media.length > 0 ? raw.media : (enrich?.media ?? raw.media ?? []);
+      const size = computeContentSize(content);
       const verdict = marketingMap.get(index);
       return {
         sourceId: source.id,
         version: raw.version ?? null,
         versionSort: computeVersionSort(raw.version),
         title: raw.title,
-        content: raw.content,
+        content,
         url: raw.url ?? null,
-        contentHash: contentHash(raw),
+        contentHash: contentHash({ ...raw, content }),
         contentChars: size.contentChars,
         contentTokens: size.contentTokens,
         publishedAt: raw.publishedAt?.toISOString() ?? null,
@@ -1142,8 +1186,9 @@ export async function fetchOne(
         // and direct rendering both see the underlying CDN asset.
         media: JSON.stringify(
           // oxlint-disable-next-line no-map-spread -- copy-on-write required; m is an adapter-returned object
-          (raw.media ?? []).map((m) => ({ ...m, url: normalizeMediaUrl(m.url) })),
+          media.map((m) => ({ ...m, url: normalizeMediaUrl(m.url) })),
         ),
+        ...(enrich ? { metadata: JSON.stringify({ enrichment: enrich.marker }) } : {}),
         suppressed: verdict?.isMarketing === true,
         suppressedReason: verdict?.isMarketing ? `marketing_classifier:${verdict.reason}` : null,
       };
@@ -2017,5 +2062,24 @@ export async function embedChangelogFileForSource(
         embedded: committed,
       });
     },
+  });
+}
+
+async function buildEnrichMap(
+  db: ReturnType<typeof drizzle>,
+  source: Source,
+  meta: SourceMetadata,
+  rawReleases: readonly RawRelease[],
+  env: FetchOneEnv,
+): Promise<Map<number, EnrichOutcome>> {
+  if (env.FEED_ENRICH_ENABLED !== "true" || meta.feedContentDepth !== "summary-only") {
+    return new Map();
+  }
+  const thinChars = parsePositiveInt(env.FEED_THIN_CHARS, DEFAULT_FEED_THIN_CHARS);
+  const deps = await buildEnrichDeps(env, thinChars);
+  if (!deps) return new Map();
+
+  return enrichNewThinItems(db, source, meta, rawReleases, env, {
+    enrichFn: (item) => enrichFeedItem(item, deps),
   });
 }

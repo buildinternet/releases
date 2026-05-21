@@ -194,6 +194,14 @@ export type Env = {
     // wrangler.jsonc vars and "staging" in the env.staging block. Read by
     // /v1/graphql to gate GraphiQL + introspection. Absent in `wrangler dev`.
     ENVIRONMENT?: string;
+    // Cloudflare Browser Rendering credentials for feed-content enrichment.
+    // Bound via Secrets Store in Task 9 — optional here so the route degrades
+    // gracefully (cheap-path-only) when absent.
+    CLOUDFLARE_ACCOUNT_ID?: SecretBinding;
+    CLOUDFLARE_API_TOKEN?: SecretBinding;
+    // Floor length (chars) below which a feed item's content is considered thin.
+    // Mirrors FetchOneEnv.FEED_THIN_CHARS; default 600 when absent.
+    FEED_THIN_CHARS?: string;
   };
   Variables: {
     auth?: AuthContext;
