@@ -104,6 +104,7 @@ Deep dives live in `docs/architecture/`:
 - [cli-distribution.md](docs/architecture/cli-distribution.md) — OSS repo, npm, Homebrew tap.
 - [ai-gateway.md](docs/architecture/ai-gateway.md) — optional Cloudflare AI Gateway passthrough for Anthropic SDK calls; covers direct worker calls, leaves Voyage embeddings + managed-agent internal loops on the direct path.
 - [extract.md](docs/architecture/extract.md) — two-tier extraction path: one-shot inline for small bodies, multi-round tool-use loop for large ones, hard fallback to one-shot on any failure. Feature-gated behind `EXTRACT_TOOLLOOP_ENABLED`.
+- [maintenance-workspace.md](docs/architecture/maintenance-workspace.md) — per-user `~/.releases/work/` (tasks / runs / reports) convention for agent-driven admin maintenance; durable, cost-aware trail for the seeding/maintaining/managing/overview skills, reachable across the monorepo and CLI checkouts.
 
 ## Environment
 

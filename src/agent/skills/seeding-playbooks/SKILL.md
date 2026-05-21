@@ -212,13 +212,26 @@ for (const org of orgs) {
 
 **Important**: Do not pipe `bun | bun` in shell for-loops — stdin contention causes silent failures. Use `Bun.spawnSync` in a single process as shown above.
 
-## Tracking Notes
+## Record the Run
 
-When coordinating a batch run, keep notes on:
+A batch run makes real prod mutations across many orgs. Leave a durable, cost-aware trail in the per-user `~/.releases/work/` workspace so the work is auditable after the transcript scrolls away — don't let it evaporate into the conversation. The workspace is in the home dir (not CWD) so the trail is the same whether you run from the monorepo or the `releases-cli` checkout. Full layout and templates: **`docs/architecture/maintenance-workspace.md`**.
 
-- **Failure modes**: Which agents failed to save? Was it permissions, timeouts, or bad output?
-- **Data quality issues found**: Verified runs surface broken feeds, empty content, stale data. Collect these for follow-up fixes.
-- **Model quality at this tier**: Did Haiku produce usable output or did it need manual cleanup?
-- **Coverage gaps identified**: Agents often note missing sources — collect these as onboarding candidates.
+At the start of a batch:
 
-Write findings to `.context/` for future reference.
+```bash
+mkdir -p ~/.releases/work/tasks ~/.releases/work/runs ~/.releases/work/reports
+```
+
+(Honors `RELEASED_DATA_DIR` — substitute `$RELEASED_DATA_DIR/work` if set.) Optionally write the batch definition (targets, workflow, model) to `~/.releases/work/tasks/<batch>.md` up front so the run is re-runnable.
+
+After all agents complete:
+
+1. **Per run** — write `~/.releases/work/runs/<YYYY-MM-DD-HHMM>-<batch>/summary.md`: status, per-target result table, cost, and what changed. Drop the raw `--json` outputs of the playbook saves beside it so the mutations are auditable.
+2. **Per session** — write `~/.releases/work/reports/<date>-<batch>.md` with the cross-run pass-rate / cost table and findings worth acting on.
+
+What to capture in the summary and report (these are the data-grounded observations a verified run surfaces):
+
+- **Failure modes**: Which agents failed to save? Permissions, timeouts, or bad output? Note parent-saves fallbacks.
+- **Data quality issues found**: Broken feeds, empty content, stale `lastFetchedAt`. File or list these as follow-up fixes.
+- **Model quality at this tier**: Did Haiku produce usable output or need manual cleanup?
+- **Coverage gaps identified**: Missing sources agents flagged — collect as onboarding candidates.
