@@ -182,3 +182,47 @@ describe("entryType + kind on org catalog", () => {
     expect(item?.kind).toBeNull();
   });
 });
+
+describe("kind on org detail", () => {
+  it("GET /v1/orgs/:slug emits kind on sources and products", async () => {
+    await seedOrg();
+    await testDb.db.insert(products).values({
+      id: "prod_sdk",
+      name: "Acme SDK",
+      slug: "acme-sdk",
+      orgId: "org_acme",
+      kind: "sdk",
+    });
+    await testDb.db.insert(sources).values([
+      {
+        id: "src_own",
+        name: "acme-js",
+        slug: "acme-js",
+        orgId: "org_acme",
+        type: "github",
+        url: "https://github.com/acme/js",
+        kind: "sdk",
+      },
+      {
+        id: "src_inherit",
+        name: "acme-py",
+        slug: "acme-py",
+        orgId: "org_acme",
+        type: "github",
+        url: "https://github.com/acme/py",
+        productId: "prod_sdk",
+      },
+    ]);
+
+    const res = await callOrg("/orgs/acme");
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      sources: Array<{ slug: string; kind: string | null }>;
+      products: Array<{ slug: string; kind: string | null }>;
+    };
+
+    expect(body.sources.find((s) => s.slug === "acme-js")?.kind).toBe("sdk");
+    expect(body.sources.find((s) => s.slug === "acme-py")?.kind).toBeNull();
+    expect(body.products.find((p) => p.slug === "acme-sdk")?.kind).toBe("sdk");
+  });
+});

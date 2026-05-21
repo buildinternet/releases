@@ -46,7 +46,7 @@ import {
   collectionMembers,
 } from "@buildinternet/releases-core/schema";
 import { daysAgoIso } from "@buildinternet/releases-core/dates";
-import { parseKindParam, KIND_VALUES } from "@buildinternet/releases-core/kinds";
+import { parseKindParam, KIND_VALUES, type Kind } from "@buildinternet/releases-core/kinds";
 import { resolveCategoryInput } from "../lib/category-alias.js";
 import { parseSourceTypesLenient } from "../lib/source-types.js";
 import { toSlug } from "@buildinternet/releases-core/slug";
@@ -276,6 +276,7 @@ orgRoutes.get(
           name: productsActive.name,
           url: productsActive.url,
           description: productsActive.description,
+          kind: productsActive.kind,
           sourceCount: sql<number>`(SELECT COUNT(*) FROM sources_active s WHERE s.product_id = products_active.id)`,
         })
         .from(productsActive)
@@ -367,6 +368,7 @@ orgRoutes.get(
       latestAddedAt: row.latest_added_at ?? null,
       productSlug: row.product_slug ?? null,
       productName: row.product_name ?? null,
+      kind: (row.kind ?? null) as Kind | null,
     }));
 
     const metrics = metricsRow[0];
