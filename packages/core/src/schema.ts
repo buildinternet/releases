@@ -879,6 +879,7 @@ export const organizationsActive = sqliteView("organizations_active", {
   discovery: text("discovery", { enum: ["curated", "agent", "on_demand"] }).notNull(),
   autoGenerateContent: integer("auto_generate_content", { mode: "boolean" }).notNull(),
   fetchPaused: integer("fetch_paused", { mode: "boolean" }).notNull(),
+  isHidden: integer("is_hidden", { mode: "boolean" }).notNull(),
   deletedAt: text("deleted_at"),
 }).existing();
 
@@ -948,6 +949,7 @@ export const organizationsPublic = sqliteView("organizations_public", {
   discovery: text("discovery", { enum: ["curated", "agent", "on_demand"] }).notNull(),
   autoGenerateContent: integer("auto_generate_content", { mode: "boolean" }).notNull(),
   fetchPaused: integer("fetch_paused", { mode: "boolean" }).notNull(),
+  isHidden: integer("is_hidden", { mode: "boolean" }).notNull(),
   deletedAt: text("deleted_at"),
 }).existing();
 

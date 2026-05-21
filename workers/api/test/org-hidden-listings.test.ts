@@ -134,6 +134,7 @@ describe("GET /v1/orgs — hidden-org filter", () => {
     await seedDirectory(db);
 
     const res = await mkApp(db)(new Request("https://x.test/v1/orgs?includeEmpty=true"));
+    expect(res.status).toBe(200);
     const body = (await res.json()) as { items: Array<{ slug: string }> };
     expect(body.items.map((o) => o.slug)).not.toContain("koute");
   });
