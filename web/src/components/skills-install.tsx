@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { CommandSyntax } from "@/components/command-syntax";
 import { CopyIcon } from "@/components/copy-icon";
 import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
 
@@ -58,13 +59,13 @@ export function SkillsInstall() {
         onClick={() => copy(copyText)}
         className="flex cursor-pointer items-start justify-between gap-3 rounded-b-lg border border-t-0 border-stone-200 bg-stone-100 px-4 py-3 transition-colors hover:bg-stone-200 dark:border-stone-700 dark:bg-stone-900 dark:hover:bg-stone-800/80"
       >
-        <div className="pointer-events-none flex flex-col gap-1 overflow-x-auto">
+        <div className="pointer-events-none flex flex-col gap-1 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {current.commands.map((cmd) => (
             <code
               key={cmd}
               className="whitespace-nowrap font-mono text-[13px] text-stone-700 dark:text-stone-300"
             >
-              {cmd}
+              <CommandSyntax command={cmd} />
             </code>
           ))}
         </div>

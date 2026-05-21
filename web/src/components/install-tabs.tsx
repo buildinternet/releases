@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { CommandSyntax } from "@/components/command-syntax";
 import { CopyIcon } from "@/components/copy-icon";
 import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
 
@@ -64,8 +65,8 @@ export function InstallTabs() {
         aria-label={copied ? "Copied" : `Copy command: ${current.command}`}
         className="w-full text-left bg-stone-100 dark:bg-stone-900 border border-t-0 border-stone-200 dark:border-stone-700 rounded-b-lg px-4 py-3 flex items-center justify-between gap-3 cursor-pointer hover:bg-stone-200 dark:hover:bg-stone-800/80 transition-colors"
       >
-        <code className="text-[13px] font-mono text-stone-700 dark:text-stone-300 overflow-x-auto whitespace-nowrap pointer-events-none">
-          {current.command}
+        <code className="text-[13px] font-mono text-stone-700 dark:text-stone-300 overflow-x-auto whitespace-nowrap pointer-events-none [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <CommandSyntax command={current.command} />
         </code>
         <span className="shrink-0 p-1.5 text-stone-400 dark:text-stone-500">
           <CopyIcon copied={copied} />
