@@ -32,13 +32,15 @@ jobs:
         with:
           bun-version: latest
 
-      # npm OIDC trusted publishing needs npm >= 11.5.1 and Node >= 22.14.0.
-      # bun runs install/tests; npm does the publish + OIDC token exchange. No
-      # registry-url here on purpose — an empty _authToken line breaks OIDC.
+      # OIDC trusted publishing needs npm >= 11.5.1 / Node >= 22.14.0. Node 24
+      # bundles npm 11.12.1, clearing the bar without an in-place
+      # `npm i -g npm@latest` self-upgrade (that races and dies with
+      # MODULE_NOT_FOUND 'promise-retry'). bun runs install/tests; npm does the
+      # publish + OIDC token exchange. No registry-url here on purpose — an
+      # empty _authToken line breaks OIDC (npm/cli#8976).
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
-          node-version: 22
-      - run: npm install -g npm@latest
+          node-version: 24
 
       - run: bun install --frozen-lockfile
 
