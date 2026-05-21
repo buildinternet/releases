@@ -2,6 +2,8 @@ import Link from "next/link";
 import type { SourceListItem, OrgDetail } from "@/lib/api";
 import { formatRelativeDate } from "@/lib/formatters";
 import { Sparkline } from "@/components/sparkline";
+import { partitionSdkSources, sdkPreview } from "@/lib/sdk-grouping";
+import { SdkSourceGroup } from "@/components/sdk-source-group";
 
 const TYPE_LABELS: Record<string, string> = {
   github: "GitHub",
@@ -97,27 +99,37 @@ export function SourceTable({
   orgSlug: string;
   sourceSparklines?: Record<string, number[]>;
 }) {
+  const { flat, sdk } = partitionSdkSources(sources, products);
+
   const active: SourceListItem[] = [];
   const inactive: SourceListItem[] = [];
-  for (const s of sources) {
+  for (const s of flat) {
     (isInactive(s) ? inactive : active).push(s);
   }
-
   active.sort(sortByImportance);
   inactive.sort(sortByImportance);
+
+  const sdkActive: SourceListItem[] = [];
+  const sdkInactive: SourceListItem[] = [];
+  for (const s of sdk) {
+    (isInactive(s) ? sdkInactive : sdkActive).push(s);
+  }
+  sdkActive.sort(sortByImportance);
+  sdkInactive.sort(sortByImportance);
 
   const productMap = new Map(products.map((p) => [p.slug, p.name]));
   const hasProducts = products.length > 0;
   const hasOnDemand = sources.some((s) => s.discovery === "on_demand");
+  const columnCount = 4 + (hasProducts ? 1 : 0) + (sourceSparklines ? 1 : 0);
 
-  const renderRow = (source: SourceListItem, muted: boolean) => {
+  const renderRow = (source: SourceListItem, muted: boolean, indent = false) => {
     const state = getSourceState(source);
     return (
       <tr
         key={source.slug}
         className={`hover:bg-stone-50 dark:hover:bg-stone-900/50 transition-colors ${muted ? "opacity-55 hover:opacity-90" : ""}`}
       >
-        <td className="px-3 py-3 max-w-0">
+        <td className={`${indent ? "pl-7 pr-3" : "px-3"} py-3 max-w-0`}>
           <div className="flex items-center gap-2 min-w-0">
             <Link
               href={`/${orgSlug}/${source.slug}`}
@@ -195,6 +207,12 @@ export function SourceTable({
           </thead>
           <tbody className="divide-y divide-stone-100 dark:divide-stone-800/50">
             {active.map((s) => renderRow(s, false))}
+            {sdk.length > 0 && (
+              <SdkSourceGroup colSpan={columnCount} count={sdk.length} preview={sdkPreview(sdk)}>
+                {sdkActive.map((s) => renderRow(s, false, true))}
+                {sdkInactive.map((s) => renderRow(s, true, true))}
+              </SdkSourceGroup>
+            )}
             {inactive.map((s) => renderRow(s, true))}
           </tbody>
         </table>
