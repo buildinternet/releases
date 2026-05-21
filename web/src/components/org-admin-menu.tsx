@@ -47,13 +47,17 @@ export function OrgAdminMenu({
   function run(action: () => Promise<{ ok: true } | { ok: false; error: string }>) {
     startTransition(async () => {
       setError(null);
-      const res = await action();
-      if (!res.ok) {
-        setError(res.error);
-        return;
+      try {
+        const res = await action();
+        if (!res.ok) {
+          setError(res.error);
+          return;
+        }
+        close();
+        router.refresh();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
       }
-      close();
-      router.refresh();
     });
   }
 

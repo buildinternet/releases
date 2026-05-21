@@ -44,4 +44,59 @@ describe("PATCH /v1/orgs/:slug — autoGenerateContent", () => {
     const afterBody = (await after.json()) as { autoGenerateContent?: boolean };
     expect(afterBody.autoGenerateContent).toBe(true);
   });
+
+  it("preserves autoGenerateContent when a PATCH omits the field", async () => {
+    const db = mkDb();
+    await seed(db);
+    const app = mkApp(db);
+
+    // Enable it.
+    await app(
+      new Request("https://x.test/v1/orgs/acme", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ autoGenerateContent: true }),
+      }),
+    );
+
+    // PATCH a different field, omitting autoGenerateContent.
+    const patch = await app(
+      new Request("https://x.test/v1/orgs/acme", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ description: "Updated" }),
+      }),
+    );
+    expect(patch.status).toBe(200);
+
+    const after = await app(new Request("https://x.test/v1/orgs/acme"));
+    const afterBody = (await after.json()) as { autoGenerateContent?: boolean };
+    expect(afterBody.autoGenerateContent).toBe(true);
+  });
+
+  it("toggles autoGenerateContent back off", async () => {
+    const db = mkDb();
+    await seed(db);
+    const app = mkApp(db);
+
+    await app(
+      new Request("https://x.test/v1/orgs/acme", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ autoGenerateContent: true }),
+      }),
+    );
+    const off = await app(
+      new Request("https://x.test/v1/orgs/acme", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ autoGenerateContent: false }),
+      }),
+    );
+    expect(off.status).toBe(200);
+
+    const after = await app(new Request("https://x.test/v1/orgs/acme"));
+    const afterBody = (await after.json()) as { autoGenerateContent?: boolean };
+    expect(afterBody.autoGenerateContent).toBe(false);
+  });
 });
