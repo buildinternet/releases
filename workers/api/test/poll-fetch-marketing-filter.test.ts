@@ -309,6 +309,127 @@ describe("fetchOne — metadata.marketingFilter", () => {
     expect(result.insertedIds?.[0]).toBe(productRow?.id);
   });
 
+  it("counts only genuinely-new items against the per-fire cap", async () => {
+    // Regression for the cap counting the full feed window: feeds re-list their
+    // whole window every fetch (dbt-blog returns 25, ClickHouse 200), so a cap
+    // checked against `rawReleases.length` trips on every fire and the
+    // classifier never runs. Only items not already in the DB should count.
+    let anthropicCalls = 0;
+    installFetch((input, init) => {
+      const url = urlOf(input);
+      if (url.includes("api.anthropic.com")) {
+        anthropicCalls++;
+        const bodyText = init?.body as string | undefined;
+        if (bodyText?.includes("How NewCo migrated")) {
+          return anthropicJson({ marketing: true, reason: "case_study" });
+        }
+        return anthropicJson({ marketing: false, reason: "not_marketing" });
+      }
+      return new Response("not found", { status: 404 });
+    });
+
+    const db = mkDb();
+    await seedFeedSource(db, {
+      feedUrl: "https://clickhouse.com/rss.xml",
+      feedType: "rss",
+      marketingFilter: true,
+    });
+
+    // Pre-seed 20 already-ingested rows whose URLs the feed will re-list.
+    const existingUrls = Array.from(
+      { length: 20 },
+      (_, i) => `https://clickhouse.com/blog/existing-${i}`,
+    );
+    await db.insert(releases).values(
+      existingUrls.map((u, i) => ({
+        sourceId: "src_ch_blog",
+        title: `Existing post ${i}`,
+        content: "Already in the database.",
+        url: u,
+      })),
+    );
+
+    // Feed re-lists all 20 existing URLs plus one genuinely-new marketing item.
+    // 21 total > cap (20); only the 1 new item should be classified.
+    nextFeedReleases = [
+      ...existingUrls.map((u, i) => ({
+        title: `Existing post ${i}`,
+        content: "Already in the database.",
+        url: u,
+        publishedAt: new Date("2026-05-01T00:00:00.000Z"),
+        isBreaking: false,
+        media: [],
+      })),
+      {
+        title: "How NewCo migrated to ClickHouse",
+        content: "How NewCo cut analytics query times by 100x with ClickHouse.",
+        url: "https://clickhouse.com/blog/newco",
+        publishedAt: new Date("2026-05-20T00:00:00.000Z"),
+        isBreaking: false,
+        media: [],
+      },
+    ];
+
+    const [src] = await db.select().from(sources).where(eq(sources.id, "src_ch_blog"));
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const result = await fetchOne(db as any, src, makeEnv({ withAnthropic: true }) as any);
+
+    expect(result.status).toBe("success");
+    // Only the new row is inserted; the 20 existing collide and are skipped.
+    expect(result.releasesInserted).toBe(1);
+    // Classifier ran on exactly the one new item, not the whole feed window.
+    expect(anthropicCalls).toBe(1);
+
+    const rows = await db.select().from(releases).where(eq(releases.sourceId, "src_ch_blog"));
+    const newRow = rows.find((r) => r.url === "https://clickhouse.com/blog/newco");
+    expect(newRow?.suppressed).toBe(true);
+    expect(newRow?.suppressedReason).toBe("marketing_classifier:case_study");
+    // Suppressed-at-insert row stays out of insertedIds.
+    expect(result.insertedIds?.length).toBe(0);
+  });
+
+  it("still trips the cap when more than the cap's worth of items are genuinely new", async () => {
+    // The cap is retained as a cost backstop — but on the new-item set, not the
+    // re-listed feed window. A burst of >20 brand-new items skips classification
+    // and inserts visibly for operator backfill.
+    let anthropicCalls = 0;
+    installFetch((input) => {
+      const url = urlOf(input);
+      if (url.includes("api.anthropic.com")) {
+        anthropicCalls++;
+        return anthropicJson({ marketing: true, reason: "case_study" });
+      }
+      return new Response("not found", { status: 404 });
+    });
+
+    const db = mkDb();
+    await seedFeedSource(db, {
+      feedUrl: "https://clickhouse.com/rss.xml",
+      feedType: "rss",
+      marketingFilter: true,
+    });
+
+    nextFeedReleases = Array.from({ length: 21 }, (_, i) => ({
+      title: `Brand-new post ${i}`,
+      content: "Never seen before.",
+      url: `https://clickhouse.com/blog/fresh-${i}`,
+      publishedAt: new Date("2026-05-20T00:00:00.000Z"),
+      isBreaking: false,
+      media: [],
+    }));
+
+    const [src] = await db.select().from(sources).where(eq(sources.id, "src_ch_blog"));
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const result = await fetchOne(db as any, src, makeEnv({ withAnthropic: true }) as any);
+
+    expect(result.status).toBe("success");
+    expect(result.releasesInserted).toBe(21);
+    expect(anthropicCalls).toBe(0);
+
+    const rows = await db.select().from(releases).where(eq(releases.sourceId, "src_ch_blog"));
+    expect(rows.every((r) => r.suppressed === false)).toBe(true);
+  });
+
   it("fails open when the classifier throws — inserts everything visibly", async () => {
     installFetch((input) => {
       const url = urlOf(input);
