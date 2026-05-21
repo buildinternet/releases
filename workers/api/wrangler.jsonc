@@ -66,7 +66,7 @@
     // Kill-switch for the PUBLIC_RATE_LIMITER binding below. Tune the cap there.
     "RATE_LIMIT_ENABLED": "false",
     // Kill-switch for the per-token TOKEN_RATE_LIMITER binding. Tune the cap there.
-    "TOKEN_RATE_LIMIT_ENABLED": "false",
+    "TOKEN_RATE_LIMIT_ENABLED": "true",
     // Email notifications (see src/lib/email.ts + src/lib/notifications.ts).
     // Recipient must be verified in Cloudflare Email Routing; sender domain
     // (releases.sh) must have Email Routing enabled.
