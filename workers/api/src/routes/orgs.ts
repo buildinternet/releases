@@ -87,6 +87,7 @@ import { buildEmbedConfig } from "@releases/search/embed-config.js";
 import { logEvent } from "@releases/lib/log-event";
 import { dbErrorLogFields } from "@releases/lib/db-errors";
 import { buildListResponse, parseListPagination } from "../lib/pagination.js";
+import { invalidateLatestCache } from "../lib/latest-cache.js";
 
 export const orgRoutes = new Hono<Env>();
 
@@ -404,6 +405,7 @@ orgRoutes.get(
       description: org.description,
       category: org.category,
       avatarUrl: org.avatarUrl,
+      isHidden: org.isHidden,
       tags: tagRows.map((t) => t.name),
       sourceCount: orgSources.length,
       releaseCount: totalReleases.n,
@@ -576,6 +578,7 @@ orgRoutes.patch(
       tags?: string[];
       aliases?: string[];
       fetchPaused?: boolean;
+      isHidden?: boolean;
     } = { ...c.req.valid("json") };
 
     if (body.category !== undefined && body.category !== null) {
@@ -628,12 +631,24 @@ orgRoutes.patch(
     if (body.category !== undefined) updates.category = body.category;
     if (body.avatarUrl !== undefined) updates.avatarUrl = body.avatarUrl;
     if (body.fetchPaused !== undefined) updates.fetchPaused = body.fetchPaused;
+    if (body.isHidden !== undefined) updates.isHidden = body.isHidden;
 
     const [updated] = await db
       .update(organizations)
       .set(updates)
       .where(eq(organizations.id, org.id))
       .returning();
+
+    // Only purge when visibility actually flips — a no-op toggle shouldn't
+    // force a homepage-ticker recompute. Hiding/unhiding changes what the
+    // ticker + /v1/releases/latest default shapes return; purge so the change
+    // appears within seconds rather than waiting out the 300s KV TTL.
+    // Best-effort, gated on INVALIDATION_ENABLED. `sourceId` is only an
+    // invalidation log tag (the purge clears the fixed default + ticker shapes
+    // regardless of scope); we pass the org id since this isn't source-scoped.
+    if (body.isHidden !== undefined && body.isHidden !== org.isHidden) {
+      c.executionCtx.waitUntil(invalidateLatestCache(c.env, { nReleases: 1, sourceId: org.id }));
+    }
 
     if (body.tags !== undefined) {
       await db.delete(orgTags).where(eq(orgTags.orgId, org.id));

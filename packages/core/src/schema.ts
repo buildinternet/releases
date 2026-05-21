@@ -74,6 +74,12 @@ export const organizations = sqliteTable(
     // { fetchPaused: true }. Default false — identical to current behavior for
     // every existing org.
     fetchPaused: integer("fetch_paused", { mode: "boolean" }).notNull().default(false),
+    // Per-org "don't feature" flag. When true, the org is excluded from the
+    // homepage latest-releases ticker and the main /v1/orgs directory table,
+    // but stays fully reachable via its detail page, search, and the sitemap.
+    // Distinct from fetchPaused (ingest-only) and deletedAt (soft-delete).
+    // Toggle via PATCH /v1/orgs/:slug { isHidden: true }. Default false.
+    isHidden: integer("is_hidden", { mode: "boolean" }).notNull().default(false),
     // Soft-delete tombstone (#666). Read paths exclude rows where deleted_at
     // IS NOT NULL via notDeleted helpers in queries/shared.ts. On tombstone,
     // the route handler renames slug + domain to mangled forms (slug + "--" +
@@ -873,6 +879,7 @@ export const organizationsActive = sqliteView("organizations_active", {
   discovery: text("discovery", { enum: ["curated", "agent", "on_demand"] }).notNull(),
   autoGenerateContent: integer("auto_generate_content", { mode: "boolean" }).notNull(),
   fetchPaused: integer("fetch_paused", { mode: "boolean" }).notNull(),
+  isHidden: integer("is_hidden", { mode: "boolean" }).notNull(),
   deletedAt: text("deleted_at"),
 }).existing();
 
@@ -942,6 +949,7 @@ export const organizationsPublic = sqliteView("organizations_public", {
   discovery: text("discovery", { enum: ["curated", "agent", "on_demand"] }).notNull(),
   autoGenerateContent: integer("auto_generate_content", { mode: "boolean" }).notNull(),
   fetchPaused: integer("fetch_paused", { mode: "boolean" }).notNull(),
+  isHidden: integer("is_hidden", { mode: "boolean" }).notNull(),
   deletedAt: text("deleted_at"),
 }).existing();
 

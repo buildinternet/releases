@@ -9,6 +9,7 @@
 import { describe, it, expect, beforeEach } from "bun:test";
 import { Database } from "bun:sqlite";
 import { drizzle } from "drizzle-orm/bun-sqlite";
+import { eq } from "drizzle-orm";
 import { applyMigrations } from "../../../tests/db-helper";
 import { organizations, products, releases, sources } from "@buildinternet/releases-core/schema";
 import { releaseCoverage } from "../../../src/db/schema-coverage";
@@ -362,6 +363,25 @@ describe("GraphQL spike", () => {
     ).latestReleases;
     expect(feed.items).toHaveLength(5);
     expect(feed.items.every((r) => r.source.type === "feed")).toBe(true);
+  });
+
+  it("latestReleases excludes releases whose org is hidden", async () => {
+    // Hidden orgs ("don't feature") must not surface on the homepage ticker,
+    // which this resolver backs. Mark org_b hidden; its releases drop while
+    // org_a's remain.
+    await h.db.update(organizations).set({ isHidden: true }).where(eq(organizations.id, "org_b"));
+
+    const result = await graphql({
+      schema,
+      source: `query { latestReleases(limit: 100) { items { id } } }`,
+      contextValue: ctx(h.db),
+    });
+    expect(result.errors).toBeUndefined();
+    const ids = (
+      result.data as { latestReleases: { items: Array<{ id: string }> } }
+    ).latestReleases.items.map((r) => r.id);
+    expect(ids.some((id) => id.startsWith("rel_src_a"))).toBe(true);
+    expect(ids.some((id) => id.startsWith("rel_src_b1_1"))).toBe(false);
   });
 
   it("latestReleases drops releases dated in the future", async () => {

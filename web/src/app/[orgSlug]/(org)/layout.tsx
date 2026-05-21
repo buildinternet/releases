@@ -9,6 +9,8 @@ import { OrgAvatar } from "@/components/org-avatar";
 import { OrgTabs } from "@/components/org-tabs";
 import { CliCommand } from "@/components/cli-command";
 import { taxonomySidebarSections, TaxonomyChips } from "@/components/taxonomy-chips";
+import { OrgAdminMenu } from "@/components/org-admin-menu";
+import { isLocalAdminEnabled } from "@/lib/local-admin-flag";
 import { getOrg, getOrgCollections } from "../_lib/org-data";
 
 export default async function OrgLayout({
@@ -38,6 +40,7 @@ export default async function OrgLayout({
   const collections = await getOrgCollections(orgSlug);
   const hasPlaybook = process.env.NODE_ENV === "development";
   const hasFetchLog = process.env.NODE_ENV === "development";
+  const adminEnabled = isLocalAdminEnabled();
 
   const sidebarSections = [
     {
@@ -94,6 +97,11 @@ export default async function OrgLayout({
           </h1>
         )}
         <CliCommand identifier={org.slug} />
+        {adminEnabled && (
+          <div className="mt-2">
+            <OrgAdminMenu orgSlug={org.slug} isHidden={org.isHidden ?? false} />
+          </div>
+        )}
         <div className="flex flex-col md:flex-row gap-10 mt-6 pb-6">
           <div className="flex-1 min-w-0">
             <OrgTabs orgSlug={orgSlug} hasPlaybook={hasPlaybook} hasFetchLog={hasFetchLog} />

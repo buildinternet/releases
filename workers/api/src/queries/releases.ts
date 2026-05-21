@@ -45,6 +45,7 @@ export async function getLatestReleasesAcross(
   const releasesTable = f.includeCoverage ? "releases" : "releases_visible";
   const wheres: string[] = [
     "(s.is_hidden = 0 OR s.is_hidden IS NULL)",
+    "(o.is_hidden = 0 OR o.is_hidden IS NULL)",
     "(r.suppressed IS NULL OR r.suppressed = 0)",
   ];
   // Matches the source-feed, org-feed, and MCP `get_latest_releases` defaults
