@@ -89,6 +89,9 @@ const ALLOWLIST = new Set<string>([
   "PATCH /orgs/:orgSlug/sources/:sourceSlug/changelog/tokens",
   "POST /sources/:slug/changelog/probe",
   "POST /orgs/:orgSlug/sources/:sourceSlug/changelog/probe",
+  // Experimental coordinate-based changelog fetch — hide: hideInProduction,
+  // so suppressed in the prod-generated spec this coverage script uses.
+  "POST /changelog/fetch",
   "POST /sources/:slug/releases",
   "POST /sources/:slug/summaries",
   "PATCH /orgs/:slug/playbook/notes",

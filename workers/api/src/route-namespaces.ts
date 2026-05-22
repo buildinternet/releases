@@ -30,6 +30,10 @@ export const publicReadRoutes = [
   // resolution primitives. POST /v1/lookups (on-demand GitHub indexer) is
   // gated as a write by publicReadAuthMiddleware's SAFE_METHODS check.
   "lookups",
+  // /changelog: experimental POST /v1/changelog/fetch (coordinate-based, no
+  // persistence). POST → Bearer required via publicReadAuthMiddleware's
+  // non-SAFE_METHODS branch, mirroring the source-scoped changelog probe.
+  "changelog",
 ] as const;
 
 /** Admin-only namespaces: every method requires `authMiddleware`. */

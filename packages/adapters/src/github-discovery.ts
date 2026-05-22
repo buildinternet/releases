@@ -125,8 +125,20 @@ export function pickChangelogInDir(entries: GitHubContentEntry[]): string | null
   return CHANGELOG_FILENAMES.find((name) => files.has(name)) ?? null;
 }
 
-interface ListingCache {
+export interface ListingCache {
   map: Map<string, GitHubContentEntry[] | null>;
+  /**
+   * Count of GitHub network requests made through this cache — directory
+   * listings plus the workspace-manifest raw reads in `collectWorkspaceGlobs`.
+   * Cache hits do not increment. Lets a caller report how many upstream calls
+   * a discovery pass cost without instrumenting `fetch` globally.
+   */
+  requests: number;
+}
+
+/** Fresh listing cache with a zeroed request counter. */
+export function createListingCache(): ListingCache {
+  return { map: new Map(), requests: 0 };
 }
 
 async function listContents(
@@ -141,6 +153,7 @@ async function listContents(
     const url = dirPath
       ? `https://api.github.com/repos/${owner}/${repo}/contents/${dirPath}`
       : `https://api.github.com/repos/${owner}/${repo}/contents/`;
+    cache.requests++;
     const res = await fetch(url, { headers: apiHeaders });
     if (!res.ok) {
       cache.map.set(dirPath, null);
@@ -249,12 +262,12 @@ function normalizeOverridePath(entry: string): { path: string; dir: string; file
 export async function discoverChangelogPaths(
   source: Source,
   headers: { apiHeaders: Record<string, string>; rawHeaders: Record<string, string> },
+  cache: ListingCache = createListingCache(),
 ): Promise<DiscoveredChangelogPath[] | null> {
   const parsed = parseOwnerRepo(source.url);
   if (!parsed) return null;
   const { owner, repo } = parsed;
   const { apiHeaders, rawHeaders } = headers;
-  const cache: ListingCache = { map: new Map() };
   const ctx = { owner, repo, apiHeaders, cache };
 
   const out: DiscoveredChangelogPath[] = [];
@@ -293,7 +306,7 @@ export async function discoverChangelogPaths(
   // Resolve every workspace declaration we recognize. Adding a new format
   // (Lerna, Rush, …) is one entry in this list — the rest of the function
   // doesn't care which file the globs came from.
-  const workspaceGlobs = await collectWorkspaceGlobs(rootListing, owner, repo, rawHeaders);
+  const workspaceGlobs = await collectWorkspaceGlobs(rootListing, owner, repo, rawHeaders, cache);
   const packageDirs = await expandGlobs(workspaceGlobs, ctx);
   for (const dir of packageDirs) {
     // oxlint-disable-next-line no-await-in-loop -- GitHub REST API rate limit; package dirs scanned sequentially
@@ -307,6 +320,134 @@ export async function discoverChangelogPaths(
   return out;
 }
 
+interface GitTreeEntry {
+  path: string;
+  type: "blob" | "tree" | "commit";
+  size?: number;
+}
+interface GitTreeResponse {
+  tree: GitTreeEntry[];
+  truncated: boolean;
+}
+
+/**
+ * A discovered changelog file plus its blob `size` (bytes) when known. The
+ * recursive tree enumerates sizes for free; the workspace-walk fallback does
+ * not fetch them, so `size` is null for fallback results.
+ */
+export interface DiscoveredChangelogFile extends DiscoveredChangelogPath {
+  size: number | null;
+}
+
+const CHANGELOG_FILENAMES_LC = new Set(CHANGELOG_FILENAMES.map((f) => f.toLowerCase()));
+
+/**
+ * Directory segments whose CHANGELOGs are noise for "what did this project
+ * ship" — vendored deps, build output, and test fixtures. A whole-tree search
+ * matches files anywhere, so without this it would surface e.g.
+ * `node_modules/**​/CHANGELOG.md`.
+ */
+const CHANGELOG_EXCLUDE_DIRS = new Set([
+  "node_modules",
+  "bower_components",
+  "vendor",
+  "third_party",
+  "third-party",
+  ".yarn",
+  "dist",
+  "build",
+  "out",
+  ".next",
+  ".nuxt",
+  "coverage",
+  "fixtures",
+  "__fixtures__",
+  "testdata",
+  "example",
+  "examples",
+]);
+
+function basenameOf(path: string): string {
+  const i = path.lastIndexOf("/");
+  return i === -1 ? path : path.slice(i + 1);
+}
+
+function isChangelogFilename(name: string): boolean {
+  return CHANGELOG_FILENAMES_LC.has(name.toLowerCase());
+}
+
+function isExcludedTreePath(path: string): boolean {
+  return path.split("/").some((seg) => CHANGELOG_EXCLUDE_DIRS.has(seg.toLowerCase()));
+}
+
+/**
+ * Discover CHANGELOG paths via a single recursive Git Trees call instead of
+ * walking workspace declarations dir-by-dir. One request returns the whole
+ * tree; we filter to changelog-named blobs (case-insensitive) outside the
+ * excluded dirs. Cheaper and more thorough than {@link discoverChangelogPaths}
+ * on monorepos — a repo with N workspace packages costs 1 listing here vs. N.
+ *
+ * Falls back to the workspace walk when the tree request fails or GitHub marks
+ * it `truncated` (very large repos exceed the recursive-tree limit), so giant
+ * repos still get bounded, precise discovery. Returns `null` when the source
+ * URL doesn't parse as a GitHub coordinate.
+ *
+ * Results are sorted root-first, then shallowest path, then alphabetical, so a
+ * caller that caps how many it fetches keeps the most relevant files. `exists`
+ * is always true — the tree confirms the blob is present on HEAD — and `size`
+ * carries the blob byte count (null only on the workspace-walk fallback).
+ */
+export async function discoverChangelogPathsViaTree(
+  source: Source,
+  headers: { apiHeaders: Record<string, string>; rawHeaders: Record<string, string> },
+  cache: ListingCache = createListingCache(),
+): Promise<DiscoveredChangelogFile[] | null> {
+  const parsed = parseOwnerRepo(source.url);
+  if (!parsed) return null;
+  const { owner, repo } = parsed;
+
+  let tree: GitTreeResponse | null = null;
+  try {
+    cache.requests++;
+    const res = await fetch(
+      `https://api.github.com/repos/${owner}/${repo}/git/trees/HEAD?recursive=1`,
+      { headers: headers.apiHeaders },
+    );
+    if (res.ok) tree = (await res.json()) as GitTreeResponse;
+  } catch {
+    // fall through to the workspace-walk fallback below
+  }
+
+  // Failure or truncation → defer to the precise, bounded workspace walk (which
+  // doesn't fetch sizes, so they come back null).
+  if (!tree || tree.truncated) {
+    const walked = await discoverChangelogPaths(source, headers, cache);
+    return walked === null ? null : walked.map((p) => ({ ...p, size: null }));
+  }
+
+  const matches: DiscoveredChangelogFile[] = tree.tree
+    .filter(
+      (e) =>
+        e.type === "blob" && isChangelogFilename(basenameOf(e.path)) && !isExcludedTreePath(e.path),
+    )
+    .map((e) => ({
+      path: e.path,
+      origin: (e.path.includes("/") ? "workspace" : "root") as ChangelogPathOrigin,
+      exists: true,
+      size: e.size ?? null,
+    }));
+
+  // Root first, then shallowest, then alphabetical — keeps the most relevant
+  // files when a caller caps the fetch count.
+  matches.sort((a, b) => {
+    const da = a.path.split("/").length;
+    const db = b.path.split("/").length;
+    if (da !== db) return da - db;
+    return a.path.localeCompare(b.path);
+  });
+  return matches;
+}
+
 /**
  * Read every workspace declaration present in the repo root and merge them
  * into a single glob list. Unknown / malformed files contribute nothing.
@@ -316,15 +457,18 @@ async function collectWorkspaceGlobs(
   owner: string,
   repo: string,
   rawHeaders: Record<string, string>,
+  cache: ListingCache,
 ): Promise<string[]> {
   const rootFiles = new Set(rootListing.filter((e) => e.type === "file").map((e) => e.name));
   const globs: string[] = [];
 
   if (rootFiles.has("package.json")) {
+    cache.requests++;
     const pkgText = await readRawFile(owner, repo, "package.json", rawHeaders);
     if (pkgText) globs.push(...parseWorkspaces(pkgText));
   }
   if (rootFiles.has("pnpm-workspace.yaml")) {
+    cache.requests++;
     const yaml = await readRawFile(owner, repo, "pnpm-workspace.yaml", rawHeaders);
     if (yaml) globs.push(...parsePnpmWorkspaces(yaml));
   }
