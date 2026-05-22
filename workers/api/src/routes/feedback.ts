@@ -21,10 +21,10 @@ const MIN_MESSAGE = 5;
 const MAX_MESSAGE = 4000;
 const MAX_CONTACT = 200;
 
-// Matches the test-injection pattern in admin routes: real requests get a fresh
-// drizzle handle; tests inject their own via c.set("db", ...) or env.DB.
-function getDb(c: { get: (k: string) => unknown; env: Env["Bindings"] }) {
-  return (c.get("db") as ReturnType<typeof createDb> | undefined) ?? createDb(c.env.DB);
+// Matches the test-injection pattern in workers/api/src/routes/admin-cron-runs.ts;
+// real routes get a fresh drizzle handle, tests inject their own via c.set("db", ...).
+function getDb(c: any): ReturnType<typeof createDb> {
+  return c.get("db") ?? createDb(c.env.DB);
 }
 
 function coerceType(v: unknown): string {

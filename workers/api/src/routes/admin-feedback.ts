@@ -13,8 +13,10 @@ export const adminFeedbackRoutes = new Hono<Env>();
 
 const FEEDBACK_STATUSES = ["new", "triaged", "closed"] as const;
 
-function getDb(c: { get: (k: string) => unknown; env: Env["Bindings"] }) {
-  return (c.get("db") as ReturnType<typeof createDb> | undefined) ?? createDb(c.env.DB);
+// Matches the test-injection pattern in workers/api/src/routes/admin-cron-runs.ts;
+// real routes get a fresh drizzle handle, tests inject their own via c.set("db", ...).
+function getDb(c: any): ReturnType<typeof createDb> {
+  return c.get("db") ?? createDb(c.env.DB);
 }
 
 function parseLimit(raw: string | undefined): number {
