@@ -59,10 +59,13 @@ releases tail --since 30d                # Only releases from the last 30 days
 releases tail --since 2026-01-01 --until 2026-03-31  # A specific window
 releases tail -f                         # Follow new releases (polls every 60s)
 releases tail -f --interval 30           # Follow with a 30s poll interval
-releases tail --json                     # JSON output
+releases tail --json                     # Slim JSON output
+releases tail --json --full              # Complete unprojected payload
 ```
 
 `--since` and `--until` bound results by publish date and compose with the other filters. Each accepts an ISO date (`2026-01-01`) or relative shorthand (`90d`, `4w`, `6m`, `2y`). `latest` is an alias for `tail`; an unparseable value exits with code `2`.
+
+The human view is a single aligned row per release — identity (a package-qualified version like `@scope/pkg@1.2.3`, otherwise the source name) · a one-line description · relative age · a dimmed `rel_…` handle. `--json` returns a [slim release shape](#slim-release-json) by default; add `--full` for everything.
 
 ## Search
 
@@ -104,9 +107,34 @@ If the org segment matches a known org but the specific repo doesn't, the CLI sh
 | `--kind <kind>`     | Filter by taxonomy: `platform`, `sdk`, `mobile`, `desktop`, `docs`, `integration`, `tool`. For release hits the effective kind resolves from the source, falling back to its product (`COALESCE(source.kind, product.kind)`); catalog hits match the row's own `kind` only |
 | `--since <when>`    | Keep only release hits published on/after this date (ISO or `90d`/`4w`/`6m`/`2y`)                                                                                                                                                                                          |
 | `--until <when>`    | Keep only release hits published on/before this date (same formats as `--since`)                                                                                                                                                                                           |
-| `--json`            | Machine-readable output                                                                                                                                                                                                                                                    |
+| `--json`            | Machine-readable output ([slim release hits](#slim-release-json) by default)                                                                                                                                                                                               |
+| `--full`            | With `--json`, return complete unprojected release hits                                                                                                                                                                                                                    |
 
 `--mode`, `--domain`, and `--kind` shape retrieval and scoping; `--since` / `--until` filter the release hits only — org, product, and source matches are unaffected.
+
+In the human view, each release hit is one aligned row (source · title · relative age · dimmed `rel_…`) with a cleaned, markdown-stripped excerpt underneath — never raw `## heading`/`**bold**` markup.
+
+### Slim release JSON
+
+The release reader commands — `search`, `tail`/`latest`, and `get <rel_…>` — return a **slim** release shape under `--json` by default, so agents aren't billed tokens for storage internals:
+
+```jsonc
+{
+  "id": "rel_…",
+  "version": "@scope/pkg@1.2.3",
+  "title": "…",
+  "summary": null, // AI summary; often null
+  "excerpt": "…", // markdown-stripped, ~280 chars
+  "url": "https://…",
+  "publishedAt": "2026-05-22T20:25:54.000Z",
+  "source": { "slug": "…", "name": "…" },
+  "org": { "slug": "…", "name": "…" },
+  "contentChars": 51,
+  "contentTokens": 24,
+}
+```
+
+Pass `--full` to recover the complete payload (`content`, `contentHash`, `composition`, `titleGenerated`/`titleShort`, and other internals). This is the inverse of `list`, which is verbose by default and opts _into_ a lightweight shape with `--compact`.
 
 ## Categories
 
