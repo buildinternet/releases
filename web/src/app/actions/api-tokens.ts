@@ -29,7 +29,7 @@ export interface MintedTokenRow extends PublicTokenRow {
 
 function adminHeaders(): Record<string, string> {
   const secret = serverApiKey();
-  if (!secret) throw new Error("RELEASED_API_KEY not configured.");
+  if (!secret) throw new Error("RELEASES_API_KEY (or legacy RELEASED_API_KEY) not configured.");
   return webApiHeaders({ Authorization: `Bearer ${secret}`, "Content-Type": "application/json" });
 }
 

@@ -15,6 +15,6 @@ export function adminActionEnv(): { apiUrl: string; apiSecret: string } | { erro
   }
   const apiUrl = apiBaseUrl() ?? "http://localhost:3456";
   const apiSecret = serverApiKey();
-  if (!apiSecret) return { error: "RELEASED_API_KEY not configured." };
+  if (!apiSecret) return { error: "RELEASES_API_KEY (or legacy RELEASED_API_KEY) not configured." };
   return { apiUrl, apiSecret };
 }
