@@ -226,8 +226,8 @@ jobs:
         if: github.event_name == 'push'
         continue-on-error: true
         env:
-          RELEASED_API_URL: https://api.releases.sh
-          RELEASED_API_KEY: ${{ secrets.RELEASED_API_KEY }}
+          RELEASES_API_URL: https://api.releases.sh
+          RELEASES_API_KEY: ${{ secrets.RELEASES_API_KEY || secrets.RELEASED_API_KEY }}
           SUBSCRIPTION_ID: ${{ secrets.WEBHOOK_E2E_SUBSCRIPTION_ID }}
         run: |
           set -euo pipefail
@@ -235,16 +235,16 @@ jobs:
             echo "[e2e] WEBHOOK_E2E_SUBSCRIPTION_ID not set — skipping"
             exit 0
           fi
-          AUTH="Authorization: Bearer $RELEASED_API_KEY"
-          curl -fsS -X POST -H "$AUTH" "$RELEASED_API_URL/v1/admin/webhooks/$SUBSCRIPTION_ID/test" \
+          AUTH="Authorization: Bearer $RELEASES_API_KEY"
+          curl -fsS -X POST -H "$AUTH" "$RELEASES_API_URL/v1/admin/webhooks/$SUBSCRIPTION_ID/test" \
             || echo "[e2e] webhook test call failed (non-fatal)"
           # Queue max_batch_timeout is 5s, so a plain sleep races the flush. Poll up to ~14s.
           for _ in 1 2 3 4 5 6 7; do
-            ROWS=$(curl -fsS -H "$AUTH" "$RELEASED_API_URL/v1/admin/webhooks/$SUBSCRIPTION_ID/deliveries?limit=1" 2>/dev/null || true)
+            ROWS=$(curl -fsS -H "$AUTH" "$RELEASES_API_URL/v1/admin/webhooks/$SUBSCRIPTION_ID/deliveries?limit=1" 2>/dev/null || true)
             if echo "$ROWS" | grep -q '"event_id"'; then break; fi
             sleep 2
           done
-          curl -fsS -H "$AUTH" "$RELEASED_API_URL/v1/admin/webhooks/$SUBSCRIPTION_ID/deliveries?limit=5" \
+          curl -fsS -H "$AUTH" "$RELEASES_API_URL/v1/admin/webhooks/$SUBSCRIPTION_ID/deliveries?limit=5" \
             || echo "[e2e] deliveries call failed (non-fatal)"
 
   publish-mcp-registry:
