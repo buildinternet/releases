@@ -4,16 +4,19 @@ import { OrgAvatar } from "@/components/org-avatar";
 import { memberKey } from "@/lib/member-key";
 
 /** How many collections the homepage promo block renders, regardless of how
- * many the API returns featured. Keeps the sidebar block "one or two". */
+ * many the API returns featured. Keeps the block "one or two". */
 const MAX_FEATURED = 2;
 /** Avatar chips per card before collapsing into a "+N" count. */
 const MAX_AVATARS = 4;
 
 /**
- * Small homepage promo block for curated collections. Renders in the xl-only
- * sidebar below the install steps; surfaces up to {@link MAX_FEATURED}
- * featured collections so visitors discover the feature exists. Renders
- * nothing when there are no featured collections.
+ * Homepage promo for curated collections, in two breakpoint-specific shells
+ * over a shared list:
+ * - {@link FeaturedCollections}: an expanded card for the xl-only sidebar.
+ * - {@link FeaturedCollectionsCollapsible}: an inline disclosure, collapsed by
+ *   default, for sub-xl widths where the sidebar is hidden.
+ *
+ * Both render nothing when there are no featured collections.
  */
 export function FeaturedCollections({ collections }: { collections: CollectionListItem[] }) {
   const featured = collections.slice(0, MAX_FEATURED);
@@ -21,15 +24,61 @@ export function FeaturedCollections({ collections }: { collections: CollectionLi
 
   return (
     <div className="mt-6 text-left bg-stone-50 dark:bg-stone-900/40 border border-stone-200 dark:border-stone-800 rounded-lg p-5 space-y-4">
-      <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-stone-400 dark:text-stone-500">
-        Collections
-      </div>
+      <SectionLabel />
+      <FeaturedList collections={featured} />
+    </div>
+  );
+}
 
+export function FeaturedCollectionsCollapsible({
+  collections,
+}: {
+  collections: CollectionListItem[];
+}) {
+  const featured = collections.slice(0, MAX_FEATURED);
+  if (featured.length === 0) return null;
+
+  return (
+    <details className="group mb-6 rounded-lg border border-stone-200 dark:border-stone-800 bg-stone-50 dark:bg-stone-900/40 xl:hidden">
+      <summary className="flex items-center justify-between px-5 py-3 cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+        <SectionLabel />
+        <svg
+          className="w-4 h-4 text-stone-500 transition-transform group-open:rotate-180"
+          viewBox="0 0 20 20"
+          fill="currentColor"
+          aria-hidden
+        >
+          <path
+            fillRule="evenodd"
+            d="M5.23 7.21a.75.75 0 011.06.02L10 11.06l3.71-3.83a.75.75 0 111.08 1.04l-4.25 4.39a.75.75 0 01-1.08 0L5.21 8.27a.75.75 0 01.02-1.06z"
+            clipRule="evenodd"
+          />
+        </svg>
+      </summary>
+      <div className="px-5 pb-5 pt-1">
+        <FeaturedList collections={featured} />
+      </div>
+    </details>
+  );
+}
+
+function SectionLabel() {
+  return (
+    <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-stone-400 dark:text-stone-500">
+      Collections
+    </div>
+  );
+}
+
+/** The featured collection cards plus a "browse all" link — shared by both shells. */
+function FeaturedList({ collections }: { collections: CollectionListItem[] }) {
+  return (
+    <div className="space-y-4">
       <ul className="space-y-4">
-        {featured.map((c) => (
+        {collections.map((c) => (
           <li key={c.slug}>
-            <Link href={`/collections/${c.slug}`} className="group block">
-              <div className="text-[13px] font-semibold text-stone-900 dark:text-stone-100 group-hover:text-stone-600 dark:group-hover:text-stone-300">
+            <Link href={`/collections/${c.slug}`} className="group/card block">
+              <div className="text-[13px] font-semibold text-stone-900 dark:text-stone-100 group-hover/card:text-stone-600 dark:group-hover/card:text-stone-300">
                 {c.name}
               </div>
               {c.description && (

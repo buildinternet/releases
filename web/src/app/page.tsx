@@ -10,7 +10,10 @@ import { SetupMessage } from "@/components/setup-message";
 import { OrgTable } from "@/components/org-table";
 import { InstallStepsInline, InstallStepsSidebar } from "@/components/install-steps";
 import { ShippingNowTicker } from "@/components/shipping-now-ticker";
-import { FeaturedCollections } from "@/components/featured-collections";
+import {
+  FeaturedCollections,
+  FeaturedCollectionsCollapsible,
+} from "@/components/featured-collections";
 
 type TickerItem = HomepageTickerQuery["latestReleases"]["items"][number];
 
@@ -123,6 +126,7 @@ export default async function HomePage({
           <FeaturedCollections collections={featuredCollections} />
         </aside>
         <div className="xl:order-1 max-w-4xl xl:max-w-none w-full mx-auto">
+          <FeaturedCollectionsCollapsible collections={featuredCollections} />
           {orgs.length > 0 && <OrgTable orgs={orgs} />}
           {emptyOrgCount > 0 && (
             <Link
