@@ -6,6 +6,8 @@ Inspired by Browserbase's [`autobrowse`](https://github.com/browserbase/skills/t
 
 > **May graduate to a standalone skill.** Today each maintenance skill carries a short "Record the Run" pointer to this doc. If that pointer proves to duplicate across the seeding/maintaining/managing/overview skills, the convention can move into a dedicated `recording-maintenance-runs` skill the others reference in one line. Kept as a per-skill pointer for now (#1112).
 
+> **Local Claude Code only, today.** The whole convention assumes a **persistent local filesystem** — the `~/.releases/work/` tree, the `RELEASES_RUN_DIR` mutation log, and the `--trace-dir` session traces all write to disk that outlives the run. A **managed-agent session runs in an ephemeral sandbox**: that disk is discarded on teardown, so anything written here evaporates before it can be read. The skills that own this convention (`seeding-playbooks`, `maintaining-orgs`) are local-Claude-Code-driven today, so this is forward-looking — but until a managed agent can sync the workspace out to durable storage (R2, the API, or a memory store) at the end of a session, treat run-recording as a local-only step and skip it inside managed sessions. It's also why the trail lives on a real home dir rather than a per-session temp dir.
+
 ## Layout
 
 `~/.releases/work/` (honors `RELEASED_DATA_DIR` — `$RELEASED_DATA_DIR/work/` when set; sits beside the CLI's existing `logs/`, `credentials`, and caches):
