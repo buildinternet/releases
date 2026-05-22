@@ -216,17 +216,21 @@ for (const org of orgs) {
 
 A batch run makes real prod mutations across many orgs. Leave a durable, cost-aware trail in the per-user `~/.releases/work/` workspace so the work is auditable after the transcript scrolls away — don't let it evaporate into the conversation. The workspace is in the home dir (not CWD) so the trail is the same whether you run from the monorepo or the `releases-cli` checkout. Full layout and templates: **`docs/architecture/maintenance-workspace.md`**.
 
-At the start of a batch:
+> **Local Claude Code only.** This assumes a persistent local filesystem. A managed-agent session runs in an ephemeral sandbox whose disk is discarded on teardown — skip run-recording there until the workspace can be synced to durable storage (see the doc's "Local Claude Code only" note). The dispatch pattern in this skill is local-driven today, so this is the normal case.
+
+At the start of a batch, create the workspace and point the CLI's mutation log at this run:
 
 ```bash
-mkdir -p ~/.releases/work/tasks ~/.releases/work/runs ~/.releases/work/reports
+RUN_DIR=~/.releases/work/runs/$(date +%Y-%m-%d-%H%M)-<batch>
+mkdir -p ~/.releases/work/tasks "$RUN_DIR" ~/.releases/work/reports
+export RELEASES_RUN_DIR="$RUN_DIR"
 ```
 
-(Honors `RELEASED_DATA_DIR` — substitute `$RELEASED_DATA_DIR/work` if set.) Optionally write the batch definition (targets, workflow, model) to `~/.releases/work/tasks/<batch>.md` up front so the run is re-runnable.
+(Honors `RELEASED_DATA_DIR` — substitute `$RELEASED_DATA_DIR/work` for `~/.releases/work` if set.) With `RELEASES_RUN_DIR` exported, every `releases admin …` write that runs in this shell — including the parent-saves fallback above, which is where most playbook saves land — auto-appends a line to `$RELEASES_RUN_DIR/mutations.jsonl`. You no longer hand-collect the raw `--json` outputs. Optionally write the batch definition (targets, workflow, model) to `~/.releases/work/tasks/<batch>.md` up front so the run is re-runnable.
 
-After all agents complete:
+After all agents complete, write the judgment layer the CLI can't capture:
 
-1. **Per run** — write `~/.releases/work/runs/<YYYY-MM-DD-HHMM>-<batch>/summary.md`: status, per-target result table, cost, and what changed. Drop the raw `--json` outputs of the playbook saves beside it so the mutations are auditable.
+1. **Per run** — write `$RELEASES_RUN_DIR/summary.md`: status, per-target result table, cost, and what changed. `mutations.jsonl` beside it already holds the raw record of every save.
 2. **Per session** — write `~/.releases/work/reports/<date>-<batch>.md` with the cross-run pass-rate / cost table and findings worth acting on.
 
 What to capture in the summary and report (these are the data-grounded observations a verified run surfaces):

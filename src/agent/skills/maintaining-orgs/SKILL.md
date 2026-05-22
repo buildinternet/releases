@@ -199,6 +199,37 @@ Summary table format:
 | …   | 90d    | 0/0            | skipped — no releases in window       |
 | …   | 90d    | 14/14          | regenerated in-session (agent bailed) |
 
+## Record the Run
+
+A batch refresh makes real prod mutations (`overview update`, `source fetch`) and spends money on managed fetch sessions and sub-agent generation — exactly the kind of work that should leave a durable, cost-aware trail. Write that trail to the per-user `~/.releases/work/` workspace so the run is auditable after the transcript scrolls away. The workspace is in the home dir (not CWD) so it's the same whether you run from the monorepo or the `releases-cli` checkout. Full layout and templates: **`docs/architecture/maintenance-workspace.md`**.
+
+> **Local Claude Code only.** This assumes a persistent local filesystem. A managed-agent session runs in an ephemeral sandbox whose disk is discarded on teardown — skip run-recording there until the workspace can be synced to durable storage (see the doc's "Local Claude Code only" note). This skill is local-driven today, so that's the normal case.
+
+Skip this for a single-org spot check — it's for batch sweeps. At the start of a batch, create the workspace and point the CLI at this run:
+
+```bash
+RUN_DIR=~/.releases/work/runs/$(date +%Y-%m-%d-%H%M)-<batch>
+mkdir -p ~/.releases/work/tasks "$RUN_DIR" ~/.releases/work/reports
+export RELEASES_RUN_DIR="$RUN_DIR"
+```
+
+(Honors `RELEASED_DATA_DIR` — substitute `$RELEASED_DATA_DIR/work` for `~/.releases/work` if set.) With `RELEASES_RUN_DIR` exported, the CLI captures the mechanical evidence on its own:
+
+- Every `releases admin …` write the parent runs — each `overview update`, each `source fetch` trigger — auto-appends a line to `$RELEASES_RUN_DIR/mutations.jsonl`. (The parent does the `overview update` per the prompt above, so those land regardless of sub-agent env.)
+- Managed fetch sessions (`releases admin source fetch … --wait`) you run from the batch shell land their trace + cost at `$RELEASES_RUN_DIR/<sessionId>/{trace.json,summary.md}` — `RELEASES_RUN_DIR` is the default trace dir, so no `--trace-dir` flag is needed. To snapshot a session a sub-agent ran, use `releases admin discovery task get <id> --save "$RELEASES_RUN_DIR"`. The session `summary.md` carries its `estimatedUsd`.
+
+After all sub-agents complete, write the judgment layer the CLI can't:
+
+1. **Per run** — write `$RELEASES_RUN_DIR/summary.md`: status, the per-org result table (reuse the "Tracking results" table above), total cost, and what changed.
+2. **Per session** — write `~/.releases/work/reports/<date>-<batch>.md` with the cross-run pass-rate / cost table and findings worth acting on.
+
+What to capture, specific to overview regen:
+
+- **Lint rejects**: bodies that tripped the org-as-subject / >25-word opener / banned-phrase checks and had to be re-prompted or fixed in-session.
+- **Empty-window skips**: orgs where `overview inputs` returned `selected: []` — a no-op, not a failure.
+- **Agents that bailed**: which orgs fell back to in-session generation, and whether citations survived (a refresh that drops `--citations-file` silently strips every link).
+- **Fetch errors surfaced**: orgs where `source fetch` exited non-zero and regen was correctly skipped rather than run on stale data.
+
 ## Composing With Other Skills
 
 - **`regenerating-overviews`** — the AI prompt + workflow for the overview step. Required reading for any sub-agent doing the second step above.
