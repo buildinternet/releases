@@ -18,8 +18,11 @@ two collections — enough to signal the feature without dominating the page.
 
 ## Non-goals
 
-- Mobile/tablet visibility. The block lives in the `xl`-only sidebar, so it does not
-  render below the `xl` breakpoint. This is an accepted tradeoff (chosen during design).
+- A second, full-width mobile/tablet treatment. At and above the `xl` breakpoint the block
+  renders as the expanded sidebar card; below `xl` (where the sidebar is hidden) the same
+  featured collections render in a compact, collapsed-by-default `<details>` disclosure
+  above the org table. So they are exposed at every width — just not as a prominent
+  full-width banner on small screens.
 - A featured-ordering / weight system. Featured is a boolean; display order is by name,
   capped at 2 in the web component.
 - CLI support for the `--featured` flag. The OSS CLI lives in a separate repo; the wire
@@ -159,7 +162,8 @@ block's display cap.
 
 ## Risks / notes
 
-- The block is invisible below `xl` (sidebar-only) — accepted.
+- Below `xl` the block is a collapsed-by-default `<details>` disclosure (the expanded
+  sidebar card is `xl`-only) — so it's compact on small screens, not a full-width banner.
 - If a curator features more than 2 collections, the home block still shows only the first 2
   (by name); the rest are simply not rendered. No error.
 - `bun install` must be run inside the worktree before tests resolve the edited

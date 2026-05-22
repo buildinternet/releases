@@ -497,11 +497,19 @@ describe("collections (featured)", () => {
     const fetch = mkApp(db);
     const res = await fetch(new Request("http://test/v1/collections?featured=1"));
     expect(res.status).toBe(200);
-    const body = (await res.json()) as Array<{ slug: string; isFeatured: boolean }>;
+    const body = (await res.json()) as Array<{
+      slug: string;
+      isFeatured: boolean;
+      previewMembers: Array<{ slug: string }>;
+    }>;
     const slugs = body.map((c) => c.slug);
     expect(slugs).toContain("test-frontier-labs");
     expect(slugs).not.toContain("test-empty-set");
     expect(body.every((c) => c.isFeatured === true)).toBe(true);
+    // The member queries are filtered by the same featured predicate; the
+    // featured row must still carry its preview members (not be emptied).
+    const row = body.find((c) => c.slug === "test-frontier-labs")!;
+    expect(row.previewMembers.map((m) => m.slug)).toEqual(["anthropic", "openai"]);
   });
 
   it("detail payload includes isFeatured", async () => {

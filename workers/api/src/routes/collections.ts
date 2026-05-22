@@ -438,6 +438,9 @@ collectionRoutes.get(
     const featuredParam = c.req.query("featured");
     const featuredOnly = featuredParam === "1" || featuredParam === "true";
     const featuredFilter = featuredOnly ? sql`WHERE c.is_featured = 1` : sql``;
+    // Same filter as a Drizzle predicate for the member queries below, so they
+    // don't fetch members for non-featured collections when `?featured=1`.
+    const featuredPredicate = featuredOnly ? eq(collections.isFeatured, true) : undefined;
 
     const [countRows, orgMemberRows, productMemberRows] = await Promise.all([
       // Raw correlated subqueries (Drizzle's relational `${collections.id}`
@@ -480,6 +483,7 @@ collectionRoutes.get(
         .from(collectionMembers)
         .innerJoin(collections, eq(collections.id, collectionMembers.collectionId))
         .innerJoin(organizationsPublic, eq(organizationsPublic.id, collectionMembers.orgId))
+        .where(featuredPredicate)
         .orderBy(collectionMembers.position, organizationsPublic.name),
 
       db
@@ -499,6 +503,7 @@ collectionRoutes.get(
         .innerJoin(collections, eq(collections.id, collectionMembers.collectionId))
         .innerJoin(productsActive, eq(productsActive.id, collectionMembers.productId))
         .innerJoin(organizationsPublic, eq(organizationsPublic.id, productsActive.orgId))
+        .where(featuredPredicate)
         .orderBy(collectionMembers.position, productsActive.name),
     ]);
 
