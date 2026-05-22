@@ -64,6 +64,8 @@ import {
   parseBoolParam,
   parseFeedCursor,
   parseLimitParam,
+  parseTimeWindow,
+  TIME_WINDOW_HINT,
   replaceAliases,
 } from "../utils.js";
 import { IN_ARRAY_CHUNK_SIZE } from "../lib/d1-limits.js";
@@ -1718,6 +1720,22 @@ orgRoutes.get(
         schema: { type: "string" },
         description: "Full-text search query applied to release title and content.",
       },
+      {
+        name: "since",
+        in: "query",
+        required: false,
+        schema: { type: "string" },
+        description:
+          "Keep only releases published at or after this bound. Accepts an ISO date/datetime or relative shorthand (`90d`, `4w`, `6m`, `2y`). Filters `published_at`; undated releases are dropped.",
+      },
+      {
+        name: "until",
+        in: "query",
+        required: false,
+        schema: { type: "string" },
+        description:
+          "Keep only releases published at or before this bound. Same input formats as `since`.",
+      },
     ],
     responses: {
       200: {
@@ -1728,7 +1746,7 @@ orgRoutes.get(
         },
       },
       400: {
-        description: "Invalid kind value",
+        description: "Invalid `kind` value or unparseable `since`/`until`",
         content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
       },
       404: {
@@ -1757,6 +1775,16 @@ orgRoutes.get(
         400,
       );
 
+    const window = parseTimeWindow(c.req.query("since"), c.req.query("until"));
+    if (!window.ok)
+      return c.json(
+        {
+          error: "bad_request",
+          message: `Invalid \`${window.invalid}\` query param — ${TIME_WINDOW_HINT}`,
+        },
+        400,
+      );
+
     const db = createDb(c.env.DB);
 
     // Resolve org
@@ -1773,7 +1801,15 @@ orgRoutes.get(
       org.id,
       parseFeedCursor(cursorParam),
       limit + 1,
-      { includeCoverage, sourceTypes, includePrereleases, ftsMatch, kind },
+      {
+        includeCoverage,
+        sourceTypes,
+        includePrereleases,
+        ftsMatch,
+        kind,
+        since: window.since,
+        until: window.until,
+      },
     );
 
     const hasMore = results.length > limit;

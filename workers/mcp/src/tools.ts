@@ -2,7 +2,7 @@
 // WebMCP in `web/src/components/webmcp-provider.tsx`. When adding, renaming, or
 // changing the signature of a read-only tool here, update that provider in the
 // same PR so the remote, local-stdio, and browser surfaces don't drift.
-import { eq, desc, inArray, and, isNull, or, lt, lte, sql, asc, type SQL } from "drizzle-orm";
+import { eq, desc, inArray, and, isNull, or, lt, lte, gte, sql, asc, type SQL } from "drizzle-orm";
 import {
   sources,
   releases,
@@ -25,7 +25,7 @@ import {
   type ReleaseType,
   type SearchMode,
 } from "@buildinternet/releases-core/schema";
-import { daysAgoIso, nowIso, timeAgo } from "@buildinternet/releases-core/dates";
+import { daysAgoIso, nowIso, timeAgo, resolveDateParam } from "@buildinternet/releases-core/dates";
 import { toFtsMatchQuery } from "@buildinternet/releases-core/fts";
 import { likeContains } from "@buildinternet/releases-core/sql-like";
 import type { Kind } from "@buildinternet/releases-core/kinds";
@@ -455,6 +455,34 @@ async function resolveEntityToSourceIds(db: D1Db, identifier: string): Promise<s
   return rows.length > 0 ? rows.map((r) => r.id) : null;
 }
 
+/**
+ * Resolve optional `since`/`until` tool inputs to canonical ISO bounds on
+ * `published_at`. Mirrors the API's `parseTimeWindow` — accepts an ISO
+ * date/datetime or relative shorthand (`90d`/`4w`/`6m`/`2y`). On a miss it
+ * returns a model-readable error message instead of an HTTP 400.
+ */
+function resolveToolWindow(params: {
+  since?: string;
+  until?: string;
+}): { ok: true; since?: string; until?: string } | { ok: false; message: string } {
+  const hint = "must be an ISO date/datetime or relative shorthand (e.g. 90d, 4w, 6m, 2y)";
+  let since: string | undefined;
+  let until: string | undefined;
+  if (params.since) {
+    const resolved = resolveDateParam(params.since);
+    if (resolved === null)
+      return { ok: false, message: `Invalid \`since\` "${params.since}" — ${hint}.` };
+    since = resolved;
+  }
+  if (params.until) {
+    const resolved = resolveDateParam(params.until);
+    if (resolved === null)
+      return { ok: false, message: `Invalid \`until\` "${params.until}" — ${hint}.` };
+    until = resolved;
+  }
+  return { ok: true, since, until };
+}
+
 // ── get_latest_releases ──────────────────────────────────────────────
 
 export async function getLatestReleases(
@@ -468,9 +496,13 @@ export async function getLatestReleases(
     cursor?: string;
     include_coverage?: boolean;
     include_prereleases?: boolean;
+    since?: string;
+    until?: string;
   },
 ): Promise<ToolResult> {
   const limit = parseFeedLimit(params.limit ?? 10);
+  const window = resolveToolWindow(params);
+  if (!window.ok) return text(window.message);
   const includeCoverage = params.include_coverage === true;
 
   let sourceFilter: string | undefined;
@@ -514,6 +546,10 @@ export async function getLatestReleases(
   if (sourceFilter) conditions.push(eq(releasesTable.sourceId, sourceFilter));
   if (orgSourceIds) conditions.push(inArray(releasesTable.sourceId, orgSourceIds));
   if (params.type) conditions.push(eq(releasesTable.type, params.type));
+  // Time window on published_at. `gte`/`lte` against the ISO text column drop
+  // NULL-dated rows — an undated release can't be placed in a window.
+  if (window.since) conditions.push(gte(releasesTable.publishedAt, window.since));
+  if (window.until) conditions.push(lte(releasesTable.publishedAt, window.until));
   // Content surface → resolve kind through source→product inheritance
   // (`COALESCE(source.kind, product.kind)`), the same asymmetry the unified
   // `search` tool and the `/v1/orgs/:slug/releases` feed apply. See AGENTS.md.
@@ -1599,6 +1635,8 @@ export async function search(
     include_coverage?: boolean;
     include_empty?: boolean;
     kind?: Kind;
+    since?: string;
+    until?: string;
   },
   searchEnv?: import("./lib/search-hybrid.js").HybridSearchEnv,
   ctx?: ExecutionContext,
@@ -1623,6 +1661,12 @@ export async function search(
     chunkHits: 0,
     collectionHits: 0,
   };
+
+  // Optional time window on release hits — only the release section honors it
+  // (orgs/catalog/collections are unaffected, mirroring the API).
+  const window = resolveToolWindow(params);
+  if (!window.ok) return { result: text(window.message), counts: empty };
+  const { since, until } = window;
 
   // Resolve embed config once per request and thread it into every helper
   // that consumes it (collections semantic + hybrid release path). Without
@@ -1883,6 +1927,8 @@ export async function search(
               orgSourceIds: sourceIds && sourceIds.length > 1 ? sourceIds : undefined,
               includeCoverage,
               kind: params.kind,
+              since,
+              until,
             },
             { ...(ctx ? { waitUntil: ctx.waitUntil.bind(ctx) } : {}), embedConfig },
           );
@@ -1915,6 +1961,8 @@ export async function search(
                 : sql``
             }
             ${params.kind ? sql`AND COALESCE(s.kind, p.kind) = ${params.kind}` : sql``}
+            ${since ? sql`AND r.published_at >= ${since}` : sql``}
+            ${until ? sql`AND r.published_at <= ${until}` : sql``}
           ORDER BY rank LIMIT ${limit}
         `);
         return { mode: "lexical", rows };

@@ -380,6 +380,13 @@ export async function getOrgReleasesFeed(
      * Mirrors `resolveSourceKind` from @buildinternet/releases-core/kinds.
      */
     kind?: string;
+    /**
+     * Canonical ISO bounds on `published_at` (resolved from any relative
+     * shorthand upstream). `since` keeps rows at or after the bound; `until`
+     * at or before. Both drop NULL-`published_at` rows.
+     */
+    since?: string;
+    until?: string;
   } = {},
 ): Promise<OrgReleaseRow[]> {
   const releasesTable = opts.includeCoverage ? "releases" : "releases_visible";
@@ -408,6 +415,18 @@ export async function getOrgReleasesFeed(
     filterBindings.push(opts.kind);
   }
 
+  // Time window on published_at. `>=`/`<=` on the ISO text column drop
+  // NULL-dated rows, which is the intended semantics for a windowed feed.
+  let windowWhere = "";
+  if (opts.since) {
+    windowWhere += " AND r.published_at >= ?";
+    filterBindings.push(opts.since);
+  }
+  if (opts.until) {
+    windowWhere += " AND r.published_at <= ?";
+    filterBindings.push(opts.until);
+  }
+
   // Drop releases whose upstream-supplied date is in the future. Sources
   // occasionally publish a misdated entry (typo, scheduled-post slip);
   // without this, the row sticks at the top of the feed until the date
@@ -433,6 +452,7 @@ export async function getOrgReleasesFeed(
       ${prereleaseWhere}
       ${ftsWhere}
       ${kindWhere}
+      ${windowWhere}
       ${cursor.cursorWhere}
     ORDER BY
       CASE WHEN r.published_at IS NOT NULL THEN 0 ELSE 1 END,

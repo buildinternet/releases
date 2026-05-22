@@ -1,5 +1,10 @@
 import { describe, it, expect } from "bun:test";
-import { daysAgoIso, timeAgo, inferMonthOnlyDate } from "@buildinternet/releases-core/dates";
+import {
+  daysAgoIso,
+  timeAgo,
+  inferMonthOnlyDate,
+  resolveDateParam,
+} from "@buildinternet/releases-core/dates";
 
 describe("inferMonthOnlyDate", () => {
   it("returns the first of the month for a standard title", () => {
@@ -100,6 +105,74 @@ describe("daysAgoIso", () => {
   it("returns roughly now for 0 days", () => {
     const result = new Date(daysAgoIso(0));
     expect(Date.now() - result.getTime()).toBeLessThan(1_000);
+  });
+});
+
+describe("resolveDateParam", () => {
+  // Fixed reference point so relative-shorthand assertions are deterministic.
+  const now = new Date("2026-05-22T12:00:00.000Z");
+
+  it("normalizes an ISO date to a canonical UTC timestamp", () => {
+    expect(resolveDateParam("2026-01-01")).toBe("2026-01-01T00:00:00.000Z");
+  });
+
+  it("normalizes an ISO datetime to a canonical UTC timestamp", () => {
+    expect(resolveDateParam("2026-01-01T12:30:00Z")).toBe("2026-01-01T12:30:00.000Z");
+  });
+
+  it("resolves a days shorthand counted back from now", () => {
+    expect(resolveDateParam("90d", now)).toBe("2026-02-21T12:00:00.000Z");
+  });
+
+  it("resolves a weeks shorthand (7 days each)", () => {
+    expect(resolveDateParam("4w", now)).toBe("2026-04-24T12:00:00.000Z");
+  });
+
+  it("resolves a months shorthand using calendar months", () => {
+    expect(resolveDateParam("6m", now)).toBe("2025-11-22T12:00:00.000Z");
+  });
+
+  it("resolves a years shorthand using calendar years", () => {
+    expect(resolveDateParam("2y", now)).toBe("2024-05-22T12:00:00.000Z");
+  });
+
+  it("is case-insensitive on the unit and tolerates surrounding whitespace", () => {
+    expect(resolveDateParam("  90D ", now)).toBe("2026-02-21T12:00:00.000Z");
+    expect(resolveDateParam("6M", now)).toBe("2025-11-22T12:00:00.000Z");
+  });
+
+  it("treats 0 as now", () => {
+    expect(resolveDateParam("0d", now)).toBe("2026-05-22T12:00:00.000Z");
+  });
+
+  it("defaults `now` to the current time for relative input", () => {
+    const result = resolveDateParam("1d");
+    expect(result).not.toBeNull();
+    const diff = Date.now() - new Date(result!).getTime();
+    expect(Math.abs(diff - 86_400_000)).toBeLessThan(1_000);
+  });
+
+  it("returns null for an empty or whitespace-only string", () => {
+    expect(resolveDateParam("")).toBeNull();
+    expect(resolveDateParam("   ")).toBeNull();
+  });
+
+  it("returns null for a bare number with no unit", () => {
+    expect(resolveDateParam("90")).toBeNull();
+  });
+
+  it("returns null for an unknown unit", () => {
+    expect(resolveDateParam("90x")).toBeNull();
+  });
+
+  it("returns null for a negative or fractional shorthand", () => {
+    expect(resolveDateParam("-5d")).toBeNull();
+    expect(resolveDateParam("1.5d")).toBeNull();
+  });
+
+  it("returns null for unparseable garbage", () => {
+    expect(resolveDateParam("not-a-date")).toBeNull();
+    expect(resolveDateParam("2026-13-45")).toBeNull();
   });
 });
 

@@ -486,18 +486,27 @@ export interface RunHybridSearchParams {
    * inheritance — but that path lives in the route, not here.
    */
   kind?: string;
+  /**
+   * Time-window bounds on `published_at`, as canonical ISO timestamps (already
+   * resolved from any relative shorthand by the caller). `since` keeps hits at
+   * or after the bound; `until` keeps hits at or before it. Releases with a
+   * NULL `published_at` are excluded whenever either bound is set — an undated
+   * release can't be placed in a window.
+   */
+  since?: string;
+  until?: string;
 }
 
 /**
  * Run a hybrid search over releases + changelog chunks.
  *
- * Filtering note: we apply `sourceId` / `orgSourceIds` / `type` / `kind`
- * at the FTS layer and then post-filter vector hits after hydration.
- * Vectorize metadata filters would be preferable here but would require
- * the indexer to tag every vector with these fields — out of scope for
- * this task. A narrow `kind` value can cause the returned hit count to
- * fall well below `topK` even when more matches exist past the
- * `topK * 3` candidate fetch window.
+ * Filtering note: we apply `sourceId` / `orgSourceIds` / `type` / `kind` /
+ * `since` / `until` as a post-filter after hydration (the `kind` filter also
+ * narrows the FTS candidate set up front). Vectorize metadata filters would be
+ * preferable here but would require the indexer to tag every vector with these
+ * fields — out of scope for this task. A narrow `kind` value or a tight time
+ * window can cause the returned hit count to fall well below `topK` even when
+ * more matches exist past the `topK * 3` candidate fetch window.
  */
 async function runHybridSearchInternal(
   env: HybridSearchEnv,
@@ -681,6 +690,11 @@ async function buildReleaseHits(
     if (params.type && row.type !== params.type) continue;
     // COALESCE(source.kind, product.kind) must match the requested kind.
     if (params.kind && (row.sourceKind ?? row.productKind) !== params.kind) continue;
+    // Time-window post-filter. ISO timestamps sort lexically, so string
+    // comparison is correct; a NULL published_at fails both bounds and is
+    // dropped — an undated release can't sit inside a window.
+    if (params.since && (row.publishedAt === null || row.publishedAt < params.since)) continue;
+    if (params.until && (row.publishedAt === null || row.publishedAt > params.until)) continue;
     out.push({
       kind: "release",
       score: entry.score,

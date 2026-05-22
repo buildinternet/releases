@@ -39,6 +39,9 @@ export interface NormalizedLatestParams {
   includeCoverage: boolean;
   /** Source types excluded from the result, sorted ascending. */
   excludeSourceTypes: string[];
+  /** Canonical ISO `since`/`until` window bounds, when supplied. */
+  since: string | undefined;
+  until: string | undefined;
 }
 
 /**
@@ -78,6 +81,10 @@ function arraysEqual(a: readonly string[], b: readonly string[]): boolean {
 
 function isCacheableDefaultShape(p: NormalizedLatestParams): boolean {
   if (p.sourceId !== undefined || p.orgId !== undefined || p.includeCoverage) return false;
+  // A time window is a filtered, low-cardinality-unfriendly shape — never let
+  // it collide with the shared homepage/CLI key. (Matches the `tail -f`
+  // rationale: windowed polling would otherwise fork the cache.)
+  if (p.since !== undefined || p.until !== undefined) return false;
   return CACHEABLE_DEFAULT_SHAPES.some(
     (s) => s.count === p.count && arraysEqual(s.excludeSourceTypes, p.excludeSourceTypes),
   );

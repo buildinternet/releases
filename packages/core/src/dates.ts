@@ -51,6 +51,62 @@ export function daysAgoIso(days: number): string {
   return new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
 }
 
+/** Relative time-window shorthand: `<n><unit>` where unit ∈ d/w/m/y. */
+const RELATIVE_DATE_RE = /^(\d+)([dwmy])$/i;
+
+/**
+ * Resolve a time-window query param to a canonical ISO-8601 UTC timestamp.
+ *
+ * Accepts either:
+ *  - an absolute date/datetime parseable by `new Date()` (`2026-01-01`,
+ *    `2026-01-01T12:30:00Z`), normalized to `…T..:..:..Z`; or
+ *  - a small relative shorthand counted back from `now`: `90d` (days),
+ *    `4w` (weeks), `6m` (months), `2y` (years). The unit is case-insensitive
+ *    and surrounding whitespace is tolerated.
+ *
+ * Months and years use calendar arithmetic (`setUTCMonth` / `setUTCFullYear`),
+ * so `6m` lands on the same day-of-month six months earlier; days and weeks use
+ * exact 24h/7d math. Returns `null` for empty, fractional, negative, bad-unit,
+ * or otherwise unparseable input so callers can map a miss to a 400 / error.
+ *
+ * `now` is injectable for deterministic tests; defaults to the current time.
+ */
+export function resolveDateParam(input: string, now: Date = new Date()): string | null {
+  const trimmed = input.trim();
+  if (!trimmed) return null;
+
+  const rel = trimmed.match(RELATIVE_DATE_RE);
+  if (rel) {
+    const n = Number(rel[1]);
+    if (!Number.isInteger(n) || n < 0) return null;
+    const d = new Date(now.getTime());
+    switch (rel[2].toLowerCase()) {
+      case "d":
+        d.setUTCDate(d.getUTCDate() - n);
+        break;
+      case "w":
+        d.setUTCDate(d.getUTCDate() - n * 7);
+        break;
+      case "m":
+        d.setUTCMonth(d.getUTCMonth() - n);
+        break;
+      case "y":
+        d.setUTCFullYear(d.getUTCFullYear() - n);
+        break;
+    }
+    return d.toISOString();
+  }
+
+  // A bare number is neither shorthand (no unit) nor a valid ISO date, yet
+  // `new Date("90")` leniently yields year 1990 — reject it so the ambiguity
+  // surfaces as an error instead of a silent unbounded window.
+  if (/^\d+$/.test(trimmed)) return null;
+
+  const parsed = new Date(trimmed);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed.toISOString();
+}
+
 export function nowIso(): string {
   return new Date().toISOString();
 }

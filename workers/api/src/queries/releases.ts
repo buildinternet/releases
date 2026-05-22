@@ -35,6 +35,13 @@ export interface LatestReleasesFilter {
    * the input here and bind it directly into a NOT IN clause.
    */
   excludeSourceTypes?: string[];
+  /**
+   * Canonical ISO bounds on `published_at` (resolved from any relative
+   * shorthand upstream). `since` keeps rows at or after the bound; `until` at
+   * or before. Both drop NULL-`published_at` rows.
+   */
+  since?: string;
+  until?: string;
   limit: number;
 }
 
@@ -76,6 +83,17 @@ export async function getLatestReleasesAcross(
     const placeholders = f.excludeSourceTypes.map(() => "?").join(", ");
     wheres.push(`s.type NOT IN (${placeholders})`);
     bindings.push(...f.excludeSourceTypes);
+  }
+
+  // Time window on published_at — string comparison is correct for the ISO
+  // text column, and `>=`/`<=` naturally drop NULL-dated rows.
+  if (f.since) {
+    wheres.push("r.published_at >= ?");
+    bindings.push(f.since);
+  }
+  if (f.until) {
+    wheres.push("r.published_at <= ?");
+    bindings.push(f.until);
   }
 
   const whereSql = wheres.join(" AND ");
