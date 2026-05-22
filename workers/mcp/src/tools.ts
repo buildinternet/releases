@@ -480,6 +480,9 @@ function resolveToolWindow(params: {
       return { ok: false, message: `Invalid \`until\` "${params.until}" — ${hint}.` };
     until = resolved;
   }
+  if (since !== undefined && until !== undefined && since > until) {
+    return { ok: false, message: "`since` must not be after `until`." };
+  }
   return { ok: true, since, until };
 }
 

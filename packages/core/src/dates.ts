@@ -55,11 +55,22 @@ export function daysAgoIso(days: number): string {
 const RELATIVE_DATE_RE = /^(\d+)([dwmy])$/i;
 
 /**
+ * ISO-8601 we accept as an absolute bound: a date (`2026-01-01`, parsed as UTC
+ * midnight) or a datetime that carries an explicit timezone — trailing `Z` or a
+ * `±HH[:MM]` offset. A datetime WITHOUT a timezone (`2026-01-01T12:30:00`) is
+ * deliberately not matched: `new Date()` would parse it as local time, so the
+ * same input would resolve to different instants depending on the runtime.
+ */
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}(:?\d{2})?))?$/;
+
+/**
  * Resolve a time-window query param to a canonical ISO-8601 UTC timestamp.
  *
  * Accepts either:
- *  - an absolute date/datetime parseable by `new Date()` (`2026-01-01`,
- *    `2026-01-01T12:30:00Z`), normalized to `…T..:..:..Z`; or
+ *  - an absolute ISO-8601 date (`2026-01-01`, UTC midnight) or a
+ *    timezone-qualified datetime (`2026-01-01T12:30:00Z`, `…+05:00`),
+ *    normalized to `…T..:..:..Z`. A datetime without an explicit timezone is
+ *    rejected — see `ISO_DATE_RE` — so resolution is runtime-independent; or
  *  - a small relative shorthand counted back from `now`: `90d` (days),
  *    `4w` (weeks), `6m` (months), `2y` (years). The unit is case-insensitive
  *    and surrounding whitespace is tolerated.
@@ -97,11 +108,14 @@ export function resolveDateParam(input: string, now: Date = new Date()): string 
     return d.toISOString();
   }
 
-  // A bare number is neither shorthand (no unit) nor a valid ISO date, yet
-  // `new Date("90")` leniently yields year 1990 — reject it so the ambiguity
-  // surfaces as an error instead of a silent unbounded window.
-  if (/^\d+$/.test(trimmed)) return null;
+  // Require strict ISO-8601 (date, or timezone-qualified datetime). This also
+  // rejects the lenient shapes `new Date()` would otherwise accept — a bare
+  // number (`90` → year 1990), `2026/01/01`, `Jan 1 2026`, and tz-less
+  // datetimes — so a window bound is never ambiguous or runtime-dependent.
+  if (!ISO_DATE_RE.test(trimmed)) return null;
 
+  // The regex is structural; `new Date` still rejects impossible calendar
+  // values like `2026-13-45` or `2026-02-29`.
   const parsed = new Date(trimmed);
   if (Number.isNaN(parsed.getTime())) return null;
   return parsed.toISOString();

@@ -125,4 +125,14 @@ describe("runHybridSearch — since/until post-filter", () => {
     });
     expect(ids).toEqual(new Set([mar]));
   });
+
+  it("bounds are inclusive — a row at the exact bound is kept", async () => {
+    const { jan, mar, may } = await seed(testDb.db);
+    // The bound is the row's stored timestamp verbatim (`mar` is
+    // "2026-03-01T00:00:00Z"). Bounds are compared lexically against the ISO
+    // text column, so an exact-format match proves `>=`/`<=` inclusivity
+    // without depending on cross-precision ordering (`Z` vs `.000Z`).
+    expect(await searchIds({ since: "2026-03-01T00:00:00Z" })).toEqual(new Set([mar, may]));
+    expect(await searchIds({ until: "2026-03-01T00:00:00Z" })).toEqual(new Set([jan, mar]));
+  });
 });

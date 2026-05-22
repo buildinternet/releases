@@ -65,7 +65,6 @@ import {
   parseFeedCursor,
   parseLimitParam,
   parseTimeWindow,
-  TIME_WINDOW_HINT,
   replaceAliases,
 } from "../utils.js";
 import { IN_ARRAY_CHUNK_SIZE } from "../lib/d1-limits.js";
@@ -1776,14 +1775,7 @@ orgRoutes.get(
       );
 
     const window = parseTimeWindow(c.req.query("since"), c.req.query("until"));
-    if (!window.ok)
-      return c.json(
-        {
-          error: "bad_request",
-          message: `Invalid \`${window.invalid}\` query param — ${TIME_WINDOW_HINT}`,
-        },
-        400,
-      );
+    if (!window.ok) return c.json({ error: "bad_request", message: window.message }, 400);
 
     const db = createDb(c.env.DB);
 

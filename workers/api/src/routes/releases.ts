@@ -13,7 +13,6 @@ import {
   parseBoolParam,
   parseReleaseMedia,
   parseTimeWindow,
-  TIME_WINDOW_HINT,
 } from "../utils.js";
 import { getLatestReleasesAcross } from "../queries/releases.js";
 import { parseExcludeSourceTypes } from "../lib/source-types.js";
@@ -211,13 +210,7 @@ releaseRoutes.get(
 
     const window = parseTimeWindow(c.req.query("since"), c.req.query("until"));
     if (!window.ok) {
-      return c.json(
-        {
-          error: "bad_request",
-          message: `Invalid \`${window.invalid}\` query param — ${TIME_WINDOW_HINT}`,
-        },
-        400,
-      );
+      return c.json({ error: "bad_request", message: window.message }, 400);
     }
     const { since, until } = window;
 

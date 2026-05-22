@@ -156,4 +156,12 @@ describe("get_latest_releases — since/until", () => {
     const out = await getLatestReleases(asD1(testDb.db), { until: "garbage" });
     expect(out.content[0].text).toContain("Invalid `until`");
   });
+
+  it("rejects an inverted window (since after until)", async () => {
+    const out = await getLatestReleases(asD1(testDb.db), {
+      since: "2026-05-01",
+      until: "2026-01-01",
+    });
+    expect(out.content[0].text).toContain("`since` must not be after `until`");
+  });
 });

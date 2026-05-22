@@ -174,6 +174,19 @@ describe("resolveDateParam", () => {
     expect(resolveDateParam("not-a-date")).toBeNull();
     expect(resolveDateParam("2026-13-45")).toBeNull();
   });
+
+  it("returns null for a non-ISO date string", () => {
+    expect(resolveDateParam("Jan 1, 2026")).toBeNull();
+    expect(resolveDateParam("2026/01/01")).toBeNull();
+  });
+
+  it("returns null for a datetime without an explicit timezone (ambiguous local time)", () => {
+    expect(resolveDateParam("2026-01-01T12:30:00")).toBeNull();
+  });
+
+  it("accepts a timezone offset and normalizes to UTC", () => {
+    expect(resolveDateParam("2026-01-01T12:30:00+05:00")).toBe("2026-01-01T07:30:00.000Z");
+  });
 });
 
 describe("timeAgo", () => {

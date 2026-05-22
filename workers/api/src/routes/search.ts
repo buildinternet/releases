@@ -38,7 +38,6 @@ import {
   parseBoolParam,
   parseLimitParam,
   parseTimeWindow,
-  TIME_WINDOW_HINT,
 } from "../utils.js";
 import {
   organizationsActive,
@@ -302,14 +301,7 @@ searchRoutes.get(
     // Optional time window on release hits — resolves ISO or relative
     // shorthand (90d/4w/6m/2y) to canonical ISO bounds on published_at.
     const window = parseTimeWindow(c.req.query("since"), c.req.query("until"));
-    if (!window.ok)
-      return c.json(
-        {
-          error: "bad_request",
-          message: `Invalid \`${window.invalid}\` query param — ${TIME_WINDOW_HINT}`,
-        },
-        400,
-      );
+    if (!window.ok) return c.json({ error: "bad_request", message: window.message }, 400);
     const { since, until } = window;
     const db = createDb(c.env.DB);
     const mediaOrigin = c.env.MEDIA_ORIGIN ?? "";
