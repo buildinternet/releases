@@ -157,6 +157,8 @@ export type Env = {
     EMAIL_NOTIFY_ENABLED?: string;
     EMAIL_NOTIFY_TO?: string;
     EMAIL_FROM?: string;
+    // Kill switch for the open POST /v1/feedback endpoint (releases feedback).
+    FEEDBACK_DISABLED?: string;
     ADMIN_BASE_URL?: string;
     // Optional KV namespace for Tier-1 alert dedup (1h TTL per subject).
     // Reuses an existing KV binding — no new resource needed.
