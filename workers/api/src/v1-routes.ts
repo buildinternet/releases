@@ -43,6 +43,8 @@ import { errataRoutes } from "./routes/errata.js";
 import { webhooksRoutes } from "./routes/webhooks.js";
 import { workflowsRoutes } from "./routes/workflows.js";
 import { telemetryRoutes } from "./routes/telemetry.js";
+import { feedbackRoutes } from "./routes/feedback.js";
+import { adminFeedbackRoutes } from "./routes/admin-feedback.js";
 import { taxonomyRoutes } from "./routes/taxonomy.js";
 import { collectionRoutes } from "./routes/collections.js";
 import { apiTokenRoutes } from "./routes/api-tokens.js";
@@ -89,6 +91,8 @@ export function mountV1Routes(v1: Hono<Env>) {
   v1.route("/", webhooksRoutes);
   v1.route("/", workflowsRoutes);
   v1.route("/", telemetryRoutes);
+  v1.route("/", feedbackRoutes);
+  v1.route("/", adminFeedbackRoutes);
   v1.route("/", taxonomyRoutes);
   v1.route("/", collectionRoutes);
   v1.route("/", apiTokenRoutes);

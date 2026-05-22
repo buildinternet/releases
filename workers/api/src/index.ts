@@ -401,6 +401,10 @@ mountV1Routes(v1);
 v1.use("/graphql", publicRateLimitMiddleware, dbHealthCheck);
 v1.route("/", graphqlRoutes);
 
+// /feedback is an open POST (like /telemetry) but carries free text — rate
+// limit it. dbHealthCheck guards the D1 insert.
+v1.use("/feedback", publicRateLimitMiddleware, dbHealthCheck);
+
 // Bare-API JSON index. A human or agent hitting `https://api.releases.sh/` or
 // `/v1` gets a self-describing payload pointing at the OpenAPI spec, the
 // rendered reference, and the human docs — instead of Hono's default text 404.

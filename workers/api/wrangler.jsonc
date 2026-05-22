@@ -73,6 +73,8 @@
     "EMAIL_NOTIFY_ENABLED": "true",
     "EMAIL_NOTIFY_TO": "zach@releases.sh",
     "EMAIL_FROM": "notifications@releases.sh",
+    // Kill switch for the open POST /v1/feedback endpoint (releases feedback).
+    "FEEDBACK_DISABLED": "false",
     "ADMIN_BASE_URL": "https://api.releases.sh",
     // Event-driven KV purge of GET /v1/releases/latest. Ships "false" to
     // run the helper in shadow mode (log-only); flip to "true" after a
@@ -393,6 +395,7 @@
         "EMAIL_NOTIFY_ENABLED": "false",
         "EMAIL_NOTIFY_TO": "zach@releases.sh",
         "EMAIL_FROM": "notifications@releases.sh",
+        "FEEDBACK_DISABLED": "false",
         "ADMIN_BASE_URL": "https://api-staging.releases.sh",
         "INVALIDATION_ENABLED": "false",
         "MEMORY_STORE_ERRATA_ID": "memstore_01BWRxdBdkPbBWcxmKoVGEA9",
