@@ -459,12 +459,25 @@ export const SourceMetadataResponseSchema = z.object({
 
 // ── Changelog probe (POST /sources/:slug/changelog/probe) ──
 
+/**
+ * A discovered CHANGELOG path returned by the probe. Mirrors
+ * `DiscoveredChangelogPath` from `@releases/adapters/github-discovery`:
+ * `origin` tags where the path came from (repo root, a workspace package, or
+ * an explicit `metadata.changelogPaths` override) and `exists` is true when a
+ * directory listing confirmed the file on HEAD.
+ */
+export const DiscoveredChangelogPathSchema = z.object({
+  path: z.string(),
+  origin: z.enum(["root", "workspace", "override"]),
+  exists: z.boolean(),
+});
+
 /** Response for `POST /v1/sources/:slug/changelog/probe`. */
 export const ChangelogProbeResponseSchema = z.object({
   sourceId: z.string(),
   sourceSlug: z.string(),
   url: z.string(),
-  paths: z.array(z.string()),
+  paths: z.array(DiscoveredChangelogPathSchema),
 });
 
 // ── Delete source (DELETE /sources/:slug) ──
