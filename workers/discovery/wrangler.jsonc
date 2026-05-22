@@ -20,7 +20,7 @@
     },
   },
   "vars": {
-    "RELEASED_API_URL": "https://api.releases.sh",
+    "RELEASES_API_URL": "https://api.releases.sh",
     "ANTHROPIC_AGENT_ID": "agent_011CZtWpasPtsYjF3aysf2ZH",
     "ANTHROPIC_ENVIRONMENT_ID": "env_01Tq7S8F2FK1KBz68NMje2RU",
     "ANTHROPIC_VAULT_ID": "vlt_011CZvFkwFPgCkGqRqP87AKB",
@@ -88,6 +88,11 @@
       "secret_name": "RELEASED_API_KEY",
     },
     {
+      "binding": "RELEASES_API_KEY",
+      "store_id": "a887a71cab084105b79706df23380723",
+      "secret_name": "RELEASES_API_KEY",
+    },
+    {
       "binding": "ANTHROPIC_API_KEY",
       "store_id": "a887a71cab084105b79706df23380723",
       "secret_name": "ANTHROPIC_API_KEY",
@@ -119,7 +124,7 @@
     "staging": {
       "name": "releases-discovery-staging",
       "vars": {
-        "RELEASED_API_URL": "https://api-staging.releases.sh",
+        "RELEASES_API_URL": "https://api-staging.releases.sh",
         "ANTHROPIC_AGENT_ID": "agent_011CaHHrroDymm1aEitzUmz1",
         "ANTHROPIC_ENVIRONMENT_ID": "env_015c9WRKAWFfSqAV6tsAj6Qf",
         "ANTHROPIC_VAULT_ID": "vlt_011CaHHvBA7pA6GDwRHJa4TN",
@@ -167,6 +172,11 @@
           "binding": "RELEASED_API_KEY",
           "store_id": "a887a71cab084105b79706df23380723",
           "secret_name": "RELEASED_API_KEY",
+        },
+        {
+          "binding": "RELEASES_API_KEY",
+          "store_id": "a887a71cab084105b79706df23380723",
+          "secret_name": "RELEASES_API_KEY",
         },
         {
           "binding": "ANTHROPIC_API_KEY",
