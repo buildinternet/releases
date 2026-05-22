@@ -1,16 +1,18 @@
 /**
  * Experimental: `POST /v1/changelog/fetch` — given a GitHub `owner/repo`
- * coordinate, discover and fetch every CHANGELOG file in the repo (root +
- * monorepo workspace packages) and return an inventory with per-file excerpts
- * plus efficiency stats. **Nothing is persisted** — no D1/KV/R2 writes, no
- * source row required.
+ * coordinate, discover every CHANGELOG file in the repo and return the full
+ * inventory (path + size, enumerated for free by a single recursive Git Trees
+ * call) plus efficiency stats. Bodies are downloaded for a short excerpt only
+ * for the first `EXCERPT_LIMIT` files; the rest are inventory-only. **Nothing
+ * is persisted** — no D1/KV/R2 writes, no source row required.
  *
- * This is the coordinate-based sibling of the source-scoped changelog probe
- * (`POST /v1/sources/:slug/changelog/probe`): it reuses the same worker-safe
- * discovery planner (`discoverChangelogPaths`) and the shared repo precheck
- * (`classifyRepoStatus`), then does its own lightweight body-fetch loop since
- * the cron fetch path's body fetcher is Node-flavored. Hidden from the
- * production OpenAPI spec; auth-gated as a write (Bearer) like the probe.
+ * Coordinate-based sibling of the source-scoped changelog probe
+ * (`POST /v1/sources/:slug/changelog/probe`): it reuses the shared repo
+ * precheck (`classifyRepoStatus`) and the worker-safe tree-search discovery
+ * (`discoverChangelogPathsViaTree`, which falls back to the workspace walk on
+ * truncation/failure), then does its own lightweight body-fetch loop since the
+ * cron fetch path's body fetcher is Node-flavored. Hidden from the production
+ * OpenAPI spec; auth-gated as a write (Bearer) like the probe.
  */
 import { Hono } from "hono";
 import { describeRoute, resolver } from "hono-openapi";
@@ -30,14 +32,15 @@ import { logEvent } from "@releases/lib/log-event";
 import { classifyRepoStatus } from "../lib/github-repo-status.js";
 import type { Env } from "../index.js";
 
-/** Match the cron fetch path's per-source ceiling so the experiment's cost
- *  profile mirrors production. */
-const MAX_FILES = 20;
+/** How many file bodies we download for excerpts. The inventory (paths +
+ *  sizes) is complete and free from the single tree call; only excerpt fetches
+ *  are bounded — each is a sequential round-trip against the rate-limited raw API. */
+const EXCERPT_LIMIT = 20;
 /** A file larger than this would be tail-truncated by the real ingest path; we
  *  download it whole (cost is real) and just flag it. Matches CHANGELOG_MAX_BYTES. */
 const MAX_BYTES = 1024 * 1024;
-/** How much of each file body to echo back. Newest entries sit at the top of a
- *  conventional changelog, so the head is the useful slice. */
+/** How much of each fetched file body to echo back. Newest entries sit at the
+ *  top of a conventional changelog, so the head is the useful slice. */
 const EXCERPT_CHARS = 2000;
 
 const encoder = new TextEncoder();
@@ -48,15 +51,25 @@ const ChangelogFileSchema = z.object({
   origin: z.enum(["root", "workspace", "override"]),
   url: z.string(),
   rawUrl: z.string(),
-  bytes: z.number(),
+  /** Blob size in bytes from the recursive tree; null on the walk fallback. */
+  size: z.number().nullable(),
+  /** True when the body was downloaded for an excerpt (first EXCERPT_LIMIT files). */
+  fetched: z.boolean(),
+  /** First ~2000 chars of the body; null for inventory-only (un-fetched) entries. */
+  excerpt: z.string().nullable(),
+  /** Body exceeded the 1MB cap (only meaningful when fetched). */
   truncated: z.boolean(),
-  excerpt: z.string(),
 });
 
 const ChangelogFetchStatsSchema = z.object({
+  /** Total changelog files discovered (the full inventory). */
   pathsDiscovered: z.number(),
+  /** How many bodies were downloaded for excerpts (≤ EXCERPT_LIMIT). */
   filesFetched: z.number(),
+  /** Bytes actually downloaded (sum of fetched bodies). */
   totalBytes: z.number(),
+  /** Sum of sizes across all discovered files, from the tree (excludes nulls). */
+  inventoryBytes: z.number(),
   truncatedCount: z.number(),
   githubRequests: z.number(),
   elapsedMs: z.number(),
@@ -73,7 +86,7 @@ const fetchChangelogsRoute = describeRoute({
   tags: ["Changelog"],
   summary: "Fetch CHANGELOG files for a GitHub repo (experimental, no persistence)",
   description:
-    'Experimental. Given a `{ repo: "owner/repo" }` coordinate (or `github:owner/repo`), runs the same CHANGELOG discovery the cron fetch path uses — root listing plus monorepo workspace expansion (`package.json#workspaces`, `pnpm-workspace.yaml`) — then fetches each discovered file and returns an inventory with per-file excerpts plus efficiency stats (`githubRequests`, `totalBytes`, `elapsedMs`). Nothing is written to D1/KV/R2 and no source row is required. Capped at 20 files. Auth: Bearer (write) via `publicReadAuthMiddleware`\'s non-SAFE_METHODS branch. Hidden from the production OpenAPI spec.',
+    'Experimental. Given a `{ repo: "owner/repo" }` coordinate (or `github:owner/repo`), discovers every CHANGELOG file via a single recursive Git Trees call (falling back to a per-directory workspace walk on truncation/failure) and returns the full inventory — path, origin, and size per file. Bodies are downloaded for a ~2KB excerpt only for the first 20 files; the rest are inventory-only (`fetched: false`, `excerpt: null`). Includes efficiency stats (`githubRequests`, `totalBytes`, `inventoryBytes`, `elapsedMs`). Nothing is written to D1/KV/R2 and no source row is required. Auth: Bearer (write) via `publicReadAuthMiddleware`\'s non-SAFE_METHODS branch. Hidden from the production OpenAPI spec.',
   security: [{ bearerAuth: [] }],
   responses: {
     200: {
@@ -144,55 +157,69 @@ const fetchChangelogsHandler = async (c: import("hono").Context<Env>) => {
     metadata: null,
   } as unknown as Source;
 
-  // Tree-search first pass: one recursive Git Trees call instead of a per-dir
-  // workspace walk (which falls back automatically on truncation/failure).
-  // Caller-owned cache lets us read back the upstream request count after.
+  // Tree-search discovery: one recursive Git Trees call enumerates the whole
+  // inventory (paths + sizes) for free, falling back to the workspace walk on
+  // truncation/failure. Caller-owned cache reports the upstream request count.
   const cache = createListingCache();
-  const planned = (await discoverChangelogPathsViaTree(syntheticSource, headers, cache)) ?? [];
-  const fetchable = planned.filter((p) => p.exists).slice(0, MAX_FILES);
+  const discovered = (
+    (await discoverChangelogPathsViaTree(syntheticSource, headers, cache)) ?? []
+  ).filter((p) => p.exists);
 
   const files: z.infer<typeof ChangelogFileSchema>[] = [];
   let bodyFetches = 0;
   let totalBytes = 0;
+  let inventoryBytes = 0;
   let truncatedCount = 0;
 
-  for (const entry of fetchable) {
-    const rawUrl = `https://raw.githubusercontent.com/${owner}/${repo}/HEAD/${entry.path}`;
-    bodyFetches++;
-    let res: Response;
-    try {
-      // oxlint-disable-next-line no-await-in-loop -- GitHub raw API is rate-limited; fetch sequentially like the cron path
-      res = await fetch(rawUrl, { headers: headers.rawHeaders });
-    } catch {
-      continue;
-    }
-    if (!res.ok) continue;
-    // oxlint-disable-next-line no-await-in-loop -- body read paired with the sequential fetch above
-    const text = await res.text();
-    const bytes = encoder.encode(text).length;
-    const truncated = bytes > MAX_BYTES;
-    totalBytes += bytes;
-    if (truncated) truncatedCount++;
+  for (const entry of discovered) {
     const lastSlash = entry.path.lastIndexOf("/");
     const filename = lastSlash === -1 ? entry.path : entry.path.slice(lastSlash + 1);
+    const rawUrl = `https://raw.githubusercontent.com/${owner}/${repo}/HEAD/${entry.path}`;
+    if (entry.size != null) inventoryBytes += entry.size;
+
+    // The inventory is complete and free; only download bodies (for excerpts)
+    // up to the cap. Files past it are returned inventory-only.
+    let excerpt: string | null = null;
+    let truncated = false;
+    if (bodyFetches < EXCERPT_LIMIT) {
+      bodyFetches++;
+      try {
+        // oxlint-disable-next-line no-await-in-loop -- raw API is rate-limited; fetch sequentially like the cron path
+        const res = await fetch(rawUrl, { headers: headers.rawHeaders });
+        if (res.ok) {
+          // oxlint-disable-next-line no-await-in-loop -- body read paired with the sequential fetch above
+          const text = await res.text();
+          const bytes = encoder.encode(text).length;
+          truncated = bytes > MAX_BYTES;
+          totalBytes += bytes;
+          if (truncated) truncatedCount++;
+          excerpt = text.slice(0, EXCERPT_CHARS);
+        }
+      } catch {
+        // leave excerpt null on fetch failure
+      }
+    }
+
     files.push({
       path: entry.path,
       filename,
       origin: entry.origin,
       url: `https://github.com/${owner}/${repo}/blob/HEAD/${entry.path}`,
       rawUrl,
-      bytes,
+      size: entry.size,
+      fetched: excerpt !== null,
+      excerpt,
       truncated,
-      excerpt: text.slice(0, EXCERPT_CHARS),
     });
   }
 
   const stats = {
-    pathsDiscovered: planned.length,
-    filesFetched: files.length,
+    pathsDiscovered: discovered.length,
+    filesFetched: files.filter((f) => f.fetched).length,
     totalBytes,
+    inventoryBytes,
     truncatedCount,
-    // 1 repo precheck + discovery listings/manifest reads + one raw fetch per file.
+    // 1 repo precheck + discovery (tree call, or walk listings on fallback) + one raw fetch per excerpted file.
     githubRequests: 1 + cache.requests + bodyFetches,
     elapsedMs: Date.now() - startedAt,
   };

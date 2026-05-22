@@ -323,10 +323,20 @@ export async function discoverChangelogPaths(
 interface GitTreeEntry {
   path: string;
   type: "blob" | "tree" | "commit";
+  size?: number;
 }
 interface GitTreeResponse {
   tree: GitTreeEntry[];
   truncated: boolean;
+}
+
+/**
+ * A discovered changelog file plus its blob `size` (bytes) when known. The
+ * recursive tree enumerates sizes for free; the workspace-walk fallback does
+ * not fetch them, so `size` is null for fallback results.
+ */
+export interface DiscoveredChangelogFile extends DiscoveredChangelogPath {
+  size: number | null;
 }
 
 const CHANGELOG_FILENAMES_LC = new Set(CHANGELOG_FILENAMES.map((f) => f.toLowerCase()));
@@ -383,14 +393,15 @@ function isExcludedTreePath(path: string): boolean {
  * URL doesn't parse as a GitHub coordinate.
  *
  * Results are sorted root-first, then shallowest path, then alphabetical, so a
- * caller that caps the fetch count keeps the most relevant files. `exists` is
- * always true — the tree confirms the blob is present on HEAD.
+ * caller that caps how many it fetches keeps the most relevant files. `exists`
+ * is always true — the tree confirms the blob is present on HEAD — and `size`
+ * carries the blob byte count (null only on the workspace-walk fallback).
  */
 export async function discoverChangelogPathsViaTree(
   source: Source,
   headers: { apiHeaders: Record<string, string>; rawHeaders: Record<string, string> },
   cache: ListingCache = createListingCache(),
-): Promise<DiscoveredChangelogPath[] | null> {
+): Promise<DiscoveredChangelogFile[] | null> {
   const parsed = parseOwnerRepo(source.url);
   if (!parsed) return null;
   const { owner, repo } = parsed;
@@ -407,12 +418,14 @@ export async function discoverChangelogPathsViaTree(
     // fall through to the workspace-walk fallback below
   }
 
-  // Failure or truncation → defer to the precise, bounded workspace walk.
+  // Failure or truncation → defer to the precise, bounded workspace walk (which
+  // doesn't fetch sizes, so they come back null).
   if (!tree || tree.truncated) {
-    return discoverChangelogPaths(source, headers, cache);
+    const walked = await discoverChangelogPaths(source, headers, cache);
+    return walked === null ? null : walked.map((p) => ({ ...p, size: null }));
   }
 
-  const matches: DiscoveredChangelogPath[] = tree.tree
+  const matches: DiscoveredChangelogFile[] = tree.tree
     .filter(
       (e) =>
         e.type === "blob" && isChangelogFilename(basenameOf(e.path)) && !isExcludedTreePath(e.path),
@@ -421,6 +434,7 @@ export async function discoverChangelogPathsViaTree(
       path: e.path,
       origin: (e.path.includes("/") ? "workspace" : "root") as ChangelogPathOrigin,
       exists: true,
+      size: e.size ?? null,
     }));
 
   // Root first, then shallowest, then alphabetical — keeps the most relevant
