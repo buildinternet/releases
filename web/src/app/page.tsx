@@ -10,6 +10,7 @@ import { SetupMessage } from "@/components/setup-message";
 import { OrgTable } from "@/components/org-table";
 import { InstallStepsInline, InstallStepsSidebar } from "@/components/install-steps";
 import { ShippingNowTicker } from "@/components/shipping-now-ticker";
+import { TerminalSession, type TerminalBlock } from "@/components/terminal-session";
 import {
   FeaturedCollections,
   FeaturedCollectionsCollapsible,
@@ -20,6 +21,156 @@ type TickerItem = HomepageTickerQuery["latestReleases"]["items"][number];
 export const metadata: Metadata = {
   alternates: { canonical: "/" },
 };
+
+/**
+ * Curated `releases` CLI transcript shown in the home-page terminal demo.
+ * Faithful to the live CLI: real commands, values, IDs, and AI summaries, so the
+ * demo never invents a format the CLI doesn't actually print. Block 1 is a
+ * cross-vendor `search` ("who shipped webhooks") whose hits carry a content
+ * excerpt; block 2 drills into one of those hits by ID to show its record + AI
+ * summary. The Humans view dims the `rel_…` handles the CLI prints; the Agents
+ * view appends `--json` and shows the real structured payload (full content
+ * included).
+ *
+ * The current `search`/`get` human formatting is itself rough (verbose source
+ * lines, full ISO timestamps). A future CLI formatting pass — and the more
+ * polished column layout an earlier draft of this demo used — is tracked in
+ * buildinternet/releases-cli#215. Until that lands, this stays accurate to what
+ * ships. Block 2 omits only the real `get` output's trailing "Next steps:" hint,
+ * which currently points at the deprecated top-level `releases release get`.
+ * Edit here when refreshing.
+ */
+const DEMO_SESSION: TerminalBlock[] = [
+  {
+    command: 'releases search "webhooks" --type releases',
+    output: `Releases
+  Custom webhooks rel_YqORWhmpDZmlpyarFGtg0
+  Source: Changelog (changelog)  |  Published: 2024-07-22T00:00:00.000Z
+  Axiom introduces custom webhooks.
+
+  Webhooks Support Launched rel_vpnvlVinttqFUfgIlDlVZ
+  Source: API Release Notes (api-release-notes)  |  Published: 2026-05-04T00:00:00.000Z
+  Event-driven webhooks support is now available in the Gemini API, replacing polling workflows for the Batch API and long-running operations.
+
+  New Contact Webhooks rel_q3UEtvayJ4I-kbzRJfSir
+  Source: Resend Changelog (resend-changelog)  |  Published: 2024-07-17T00:00:00.000Z
+  Receive real-time notifications when contacts are created, updated, or deleted.`,
+    json: `{
+  "query": "webhooks",
+  "releases": [
+    {
+      "id": "rel_YqORWhmpDZmlpyarFGtg0",
+      "sourceSlug": "changelog",
+      "sourceName": "Changelog",
+      "sourceType": "feed",
+      "orgSlug": "axiom",
+      "orgName": "Axiom",
+      "version": null,
+      "title": "Custom webhooks",
+      "summary": "Axiom introduces custom webhooks.",
+      "titleGenerated": null,
+      "titleShort": null,
+      "content": "Axiom introduces custom webhooks.",
+      "media": [],
+      "publishedAt": "2024-07-22T00:00:00.000Z",
+      "type": "feature",
+      "coverageCount": 0,
+      "score": 0.03131881575727918
+    },
+    {
+      "id": "rel_vpnvlVinttqFUfgIlDlVZ",
+      "sourceSlug": "api-release-notes",
+      "sourceName": "API Release Notes",
+      "sourceType": "scrape",
+      "orgSlug": "google",
+      "orgName": "Google",
+      "version": null,
+      "title": "Webhooks Support Launched",
+      "summary": "Event-driven webhooks support is now available in the Gemini API, replacing polling workflows for the Batch API and long-running operations.",
+      "titleGenerated": "Gemini API launches webhooks for event-driven batch and long-running operations",
+      "titleShort": "Webhooks replace polling for batch API and long-running ops",
+      "content": "Launched event-driven Webhooks support in the Gemini API to replace polling workflows for the Batch API and long-running operations.",
+      "media": [],
+      "publishedAt": "2026-05-04T00:00:00.000Z",
+      "type": "feature",
+      "coverageCount": 0,
+      "score": 0.02715098147128967
+    },
+    {
+      "id": "rel_q3UEtvayJ4I-kbzRJfSir",
+      "sourceSlug": "resend-changelog",
+      "sourceName": "Resend Changelog",
+      "sourceType": "scrape",
+      "orgSlug": "resend",
+      "orgName": "Resend",
+      "version": null,
+      "title": "New Contact Webhooks",
+      "summary": "Receive real-time notifications when contacts are created, updated, or deleted.",
+      "titleGenerated": null,
+      "titleShort": null,
+      "content": "Receive real-time notifications when contacts are created, updated, or deleted.",
+      "media": [
+        {
+          "type": "image",
+          "url": "https://cdn.resend.com/posts/new-contact-webhooks.png",
+          "alt": "New Contact Webhooks"
+        }
+      ],
+      "publishedAt": "2024-07-17T00:00:00.000Z",
+      "type": "feature",
+      "coverageCount": 0,
+      "score": 0.02564935064935065
+    }
+  ],
+  "mode": "hybrid",
+  "degraded": false
+}`,
+  },
+  {
+    command: "releases get rel_vpnvlVinttqFUfgIlDlVZ",
+    output: `Release
+Webhooks Support Launched
+  ID:        rel_vpnvlVinttqFUfgIlDlVZ
+  Source:    API Release Notes (api-release-notes)
+  Published: 2026-05-04T00:00:00.000Z
+  URL:       https://ai.google.dev/gemini-api/docs/changelog#webhooks-support-launched
+  Content:   132 chars (~24 tokens)
+
+Summary  · AI-generated, abbreviated
+Event-driven webhooks support is now available in the Gemini API, replacing polling workflows for the Batch API and long-running operations.`,
+    json: `{
+  "id": "rel_vpnvlVinttqFUfgIlDlVZ",
+  "sourceId": "src_kuGkahx_mXV0uqMPU5p7y",
+  "version": null,
+  "versionSort": null,
+  "type": "feature",
+  "title": "Webhooks Support Launched",
+  "content": "Launched event-driven Webhooks support in the Gemini API to replace polling workflows for the Batch API and long-running operations.",
+  "summary": "Event-driven webhooks support is now available in the Gemini API, replacing polling workflows for the Batch API and long-running operations.",
+  "titleGenerated": "Gemini API launches webhooks for event-driven batch and long-running operations",
+  "titleShort": "Webhooks replace polling for batch API and long-running ops",
+  "url": "https://ai.google.dev/gemini-api/docs/changelog#webhooks-support-launched",
+  "contentHash": null,
+  "contentChars": 132,
+  "contentTokens": 24,
+  "media": [],
+  "publishedAt": "2026-05-04T00:00:00.000Z",
+  "prerelease": false,
+  "suppressed": false,
+  "suppressedReason": null,
+  "fetchedAt": "2026-05-10T01:00:38.170Z",
+  "embeddedAt": "2026-05-10T01:00:39.361Z",
+  "sourceName": "API Release Notes",
+  "sourceSlug": "api-release-notes",
+  "sourceType": "scrape",
+  "org": {
+    "slug": "google",
+    "name": "Google"
+  },
+  "composition": null
+}`,
+  },
+];
 
 /**
  * `?empty=1` opts into orgs that are in the registry but have not produced any
@@ -118,6 +269,17 @@ export default async function HomePage({
         <div className="mt-8 xl:hidden">
           <InstallStepsInline />
         </div>
+      </div>
+      {/* Illustrative CLI transcript. `data-nosnippet` keeps its example text and
+          JSON out of search-result snippets so it doesn't skew the page's topic;
+          the `aria-label` already frames it as an example for assistive tech. */}
+      <div data-nosnippet className="max-w-3xl mx-auto px-6 pb-12">
+        <TerminalSession
+          blocks={DEMO_SESSION}
+          maxHeight="20rem"
+          animate
+          ariaLabel="Example releases CLI session"
+        />
       </div>
       {latest.length > 0 && <ShippingNowTicker releases={latest} />}
       <div className="max-w-[1240px] mx-auto px-6 pb-12 xl:grid xl:grid-cols-[minmax(0,1fr)_320px] xl:gap-12">
