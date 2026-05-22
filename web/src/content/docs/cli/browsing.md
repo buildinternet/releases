@@ -95,16 +95,16 @@ If the org segment matches a known org but the specific repo doesn't, the CLI sh
 
 ### Options
 
-| Flag                | Description                                                                                                                                                                                |
-| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `--type <type>`     | Limit to one result type: `orgs`, `catalog`, `releases`, or `collections`                                                                                                                  |
-| `--limit <n>`       | Max results per type (default 10)                                                                                                                                                          |
-| `--mode <mode>`     | Release-retrieval strategy: `lexical`, `semantic`, or `hybrid` (default)                                                                                                                   |
-| `--domain <domain>` | Scope results to the org owning this domain (URL-shaped input is normalized)                                                                                                               |
-| `--kind <kind>`     | Filter by taxonomy: `platform`, `sdk`, `mobile`, `desktop`, `docs`, `integration`, `tool`. Release hits inherit `source.kind` from the product; catalog hits match the row's own kind only |
-| `--since <when>`    | Keep only release hits published on/after this date (ISO or `90d`/`4w`/`6m`/`2y`)                                                                                                          |
-| `--until <when>`    | Keep only release hits published on/before this date (same formats as `--since`)                                                                                                           |
-| `--json`            | Machine-readable output                                                                                                                                                                    |
+| Flag                | Description                                                                                                                                                                                                                                                                |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--type <type>`     | Limit to one result type: `orgs`, `catalog`, `releases`, or `collections`                                                                                                                                                                                                  |
+| `--limit <n>`       | Max results per type (default 10)                                                                                                                                                                                                                                          |
+| `--mode <mode>`     | Release-retrieval strategy: `lexical`, `semantic`, or `hybrid` (default)                                                                                                                                                                                                   |
+| `--domain <domain>` | Scope results to the org owning this domain (URL-shaped input is normalized)                                                                                                                                                                                               |
+| `--kind <kind>`     | Filter by taxonomy: `platform`, `sdk`, `mobile`, `desktop`, `docs`, `integration`, `tool`. For release hits the effective kind resolves from the source, falling back to its product (`COALESCE(source.kind, product.kind)`); catalog hits match the row's own `kind` only |
+| `--since <when>`    | Keep only release hits published on/after this date (ISO or `90d`/`4w`/`6m`/`2y`)                                                                                                                                                                                          |
+| `--until <when>`    | Keep only release hits published on/before this date (same formats as `--since`)                                                                                                                                                                                           |
+| `--json`            | Machine-readable output                                                                                                                                                                                                                                                    |
 
 `--mode`, `--domain`, and `--kind` shape retrieval and scoping; `--since` / `--until` filter the release hits only — org, product, and source matches are unaffected.
 
