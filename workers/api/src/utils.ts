@@ -7,6 +7,7 @@ import {
   domainAliases,
 } from "@buildinternet/releases-core/schema";
 import { toSlug } from "@buildinternet/releases-core/slug";
+import { resolveDateParam } from "@buildinternet/releases-core/dates";
 import { hydrateMediaUrls, resolveR2Url } from "@releases/rendering/media-url.js";
 import type { CollectionReleaseItem, MediaItem } from "@buildinternet/releases-api-types";
 import type { AggregateReleaseRow } from "@releases/core-internal/feed-cursor";
@@ -404,6 +405,49 @@ export function parseLimitParam(raw: string | undefined, defaultVal: number, max
   const n = parseInt(raw ?? String(defaultVal), 10);
   if (isNaN(n) || n < 1) return defaultVal;
   return Math.min(n, max);
+}
+
+/** Human-readable hint for the accepted `since`/`until` formats — reused in 400 messages and OpenAPI docs. */
+export const TIME_WINDOW_HINT =
+  "must be an ISO date/datetime or relative shorthand (e.g. `90d`, `4w`, `6m`, `2y`)";
+
+export type TimeWindowResult =
+  | { ok: true; since?: string; until?: string }
+  | { ok: false; message: string };
+
+/**
+ * Resolve optional `since`/`until` query params to canonical ISO bounds on
+ * `published_at`. Each accepts an ISO date/datetime or a relative shorthand
+ * (`90d`/`4w`/`6m`/`2y`); empty/missing values are passed through as
+ * undefined. Returns `{ ok: false, message }` (ready for a 400 body) when a
+ * bound is unparseable or when the window is inverted (`since` after `until`,
+ * which would silently match nothing). Both bounds are canonical ISO, so the
+ * `since > until` comparison is a correct instant comparison. Filtering on a
+ * NULL `published_at` is handled at the query layer (the `>=`/`<=` comparisons
+ * drop undated rows).
+ */
+export function parseTimeWindow(
+  sinceRaw: string | undefined,
+  untilRaw: string | undefined,
+): TimeWindowResult {
+  let since: string | undefined;
+  let until: string | undefined;
+  if (sinceRaw !== undefined && sinceRaw !== "") {
+    const resolved = resolveDateParam(sinceRaw);
+    if (resolved === null)
+      return { ok: false, message: `Invalid \`since\` query param — ${TIME_WINDOW_HINT}` };
+    since = resolved;
+  }
+  if (untilRaw !== undefined && untilRaw !== "") {
+    const resolved = resolveDateParam(untilRaw);
+    if (resolved === null)
+      return { ok: false, message: `Invalid \`until\` query param — ${TIME_WINDOW_HINT}` };
+    until = resolved;
+  }
+  if (since !== undefined && until !== undefined && since > until) {
+    return { ok: false, message: "`since` must not be after `until`" };
+  }
+  return { ok: true, since, until };
 }
 
 // Re-exported so existing api callers (collections.ts, sources.ts, …) keep

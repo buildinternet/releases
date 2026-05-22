@@ -91,6 +91,8 @@ describe("isCacheableLatestRequest", () => {
     orgId?: string;
     includeCoverage?: boolean;
     excludeSourceTypes?: string[];
+    since?: string;
+    until?: string;
   }): boolean {
     const exclude = (params.excludeSourceTypes ?? []).toSorted();
     const normalized = {
@@ -99,6 +101,8 @@ describe("isCacheableLatestRequest", () => {
       orgId: params.orgId,
       includeCoverage: params.includeCoverage ?? false,
       excludeSourceTypes: exclude,
+      since: params.since,
+      until: params.until,
     };
     const key = buildLatestCacheKey({
       count: String(normalized.count),
@@ -106,6 +110,8 @@ describe("isCacheableLatestRequest", () => {
       org: normalized.orgId,
       include_coverage: normalized.includeCoverage ? "true" : undefined,
       exclude: exclude.length > 0 ? exclude.join(",") : undefined,
+      since: normalized.since,
+      until: normalized.until,
     });
     return isCacheableLatestRequest(key, normalized);
   }
@@ -135,6 +141,14 @@ describe("isCacheableLatestRequest", () => {
     expect(check({ count: 1 })).toBe(false);
   });
 
+  it("does not cache the default count when a `since` window is present", () => {
+    expect(check({ count: 10, since: "2026-01-01T00:00:00.000Z" })).toBe(false);
+  });
+
+  it("does not cache the default count when an `until` window is present", () => {
+    expect(check({ count: 10, until: "2026-01-01T00:00:00.000Z" })).toBe(false);
+  });
+
   it("does not cache when coverage is explicitly included", () => {
     expect(check({ includeCoverage: true })).toBe(false);
   });
@@ -150,6 +164,8 @@ describe("isCacheableLatestRequest", () => {
       orgId: "org_test_allowlist",
       includeCoverage: false,
       excludeSourceTypes: [],
+      since: undefined,
+      until: undefined,
     };
     expect(isCacheableLatestRequest(allowlistedKey, params)).toBe(false);
 

@@ -32,7 +32,13 @@ import { buildEmbedConfig } from "@releases/search/embed-config.js";
 import type { SearchCollectionHit } from "@buildinternet/releases-api-types";
 import { logSearch } from "../lib/log-search.js";
 import { isValidBearerAuth } from "../middleware/auth.js";
-import { hydrateMediaUrls, resolveR2Url, parseBoolParam, parseLimitParam } from "../utils.js";
+import {
+  hydrateMediaUrls,
+  resolveR2Url,
+  parseBoolParam,
+  parseLimitParam,
+  parseTimeWindow,
+} from "../utils.js";
 import {
   organizationsActive,
   sources,
@@ -232,6 +238,22 @@ searchRoutes.get(
         description:
           "Filter to a specific source/product kind. Release hits resolve through `source.kind ?? product.kind`; catalog hits filter on the row's own kind. The orgs and collections sections are unaffected; changelog chunk hits are unaffected.",
       },
+      {
+        name: "since",
+        in: "query",
+        required: false,
+        schema: { type: "string" },
+        description:
+          "Keep only release hits published at or after this bound. Accepts an ISO date/datetime or relative shorthand (`90d`, `4w`, `6m`, `2y`). Filters `published_at`; releases with no date are dropped. The orgs/catalog/collections sections are unaffected.",
+      },
+      {
+        name: "until",
+        in: "query",
+        required: false,
+        schema: { type: "string" },
+        description:
+          "Keep only release hits published at or before this bound. Same input formats as `since`. Filters `published_at`; releases with no date are dropped.",
+      },
     ],
     responses: {
       200: {
@@ -243,7 +265,8 @@ searchRoutes.get(
         },
       },
       400: {
-        description: "Missing `q`, invalid `domain` hostname, or unknown `kind` value",
+        description:
+          "Missing `q`, invalid `domain` hostname, unknown `kind` value, or unparseable `since`/`until`",
         content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
       },
     },
@@ -275,6 +298,11 @@ searchRoutes.get(
         },
         400,
       );
+    // Optional time window on release hits — resolves ISO or relative
+    // shorthand (90d/4w/6m/2y) to canonical ISO bounds on published_at.
+    const window = parseTimeWindow(c.req.query("since"), c.req.query("until"));
+    if (!window.ok) return c.json({ error: "bad_request", message: window.message }, 400);
+    const { since, until } = window;
     const db = createDb(c.env.DB);
     const mediaOrigin = c.env.MEDIA_ORIGIN ?? "";
 
@@ -427,6 +455,8 @@ searchRoutes.get(
         includeCoverage,
         orgId: scopeOrgId,
         kind: kindFilter,
+        since,
+        until,
       }).catch(() => [] as RawSearchReleaseRow[]);
       let rawReleases = ftsRows;
       if (rawReleases.length === 0 && (orgs.length > 0 || catalog.length > 0)) {
@@ -435,7 +465,7 @@ searchRoutes.get(
           orgs.map((o) => o.slug),
           catalog.filter((p) => p.entryType !== "source").map((p) => p.slug),
           limit,
-          { includeCoverage, kind: kindFilter },
+          { includeCoverage, kind: kindFilter, since, until },
         );
       }
       const releases = rawReleases.map((row) => hydrateReleaseHit(row, mediaOrigin));
@@ -514,6 +544,8 @@ searchRoutes.get(
           // `orgSourceIds` filter so vector + FTS results both stay scoped.
           ...(scopeSourceIds && scopeSourceIds.length > 0 ? { orgSourceIds: scopeSourceIds } : {}),
           ...(kindFilter ? { kind: kindFilter } : {}),
+          ...(since ? { since } : {}),
+          ...(until ? { until } : {}),
         },
         sharedOpts,
       ),

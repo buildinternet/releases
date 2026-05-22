@@ -480,6 +480,18 @@ export function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServ
           .describe(
             "Filter to a specific source/product kind. Release hits resolve through `source.kind ?? product.kind`; catalog hits filter on the row's own kind. The orgs and collections sections are unaffected; changelog chunk hits are unaffected.",
           ),
+        since: z
+          .string()
+          .optional()
+          .describe(
+            "Keep only release hits published at or after this bound. Accepts an ISO date/datetime (`2026-01-01`) or relative shorthand (`90d`, `4w`, `6m`, `2y`). Filters `published_at`; undated releases are dropped. Only the releases section is affected — great for capability-discovery queries like 'who added X in the last 90 days'.",
+          ),
+        until: z
+          .string()
+          .optional()
+          .describe(
+            "Keep only release hits published at or before this bound. Same input formats as `since`.",
+          ),
       },
     },
     withSearchLog("search", async (params) => {
@@ -555,6 +567,18 @@ export function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServ
           .optional()
           .describe(
             "Include prerelease tags (alphas, betas, RCs, canaries). Defaults to false so the feed matches the public web view.",
+          ),
+        since: z
+          .string()
+          .optional()
+          .describe(
+            "Keep only releases published at or after this bound. Accepts an ISO date/datetime (`2026-01-01`) or relative shorthand (`90d`, `4w`, `6m`, `2y`). Filters `published_at`; undated releases are dropped.",
+          ),
+        until: z
+          .string()
+          .optional()
+          .describe(
+            "Keep only releases published at or before this bound. Same input formats as `since`.",
           ),
       },
     },

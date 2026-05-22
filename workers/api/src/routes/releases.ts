@@ -7,7 +7,13 @@ import { releases, organizations, sources } from "@buildinternet/releases-core/s
 import { SOURCE_TYPES } from "@buildinternet/releases-core/source-enums";
 import { releaseCoverage } from "@releases/db/schema-coverage.js";
 import type { Env } from "../index.js";
-import { orgWhere, sourceMatchByIdOrSlug, parseBoolParam, parseReleaseMedia } from "../utils.js";
+import {
+  orgWhere,
+  sourceMatchByIdOrSlug,
+  parseBoolParam,
+  parseReleaseMedia,
+  parseTimeWindow,
+} from "../utils.js";
 import { getLatestReleasesAcross } from "../queries/releases.js";
 import { parseExcludeSourceTypes } from "../lib/source-types.js";
 import {
@@ -146,6 +152,22 @@ releaseRoutes.get(
         description:
           "Comma-separated source types to exclude. Allowed: `github`, `scrape`, `feed`, `agent`.",
       },
+      {
+        name: "since",
+        in: "query",
+        required: false,
+        schema: { type: "string" },
+        description:
+          "Keep only releases published at or after this bound. Accepts an ISO date/datetime or relative shorthand (`90d`, `4w`, `6m`, `2y`). Filters `published_at`; undated releases are dropped. Windowed requests bypass the KV cache (`X-Cache: BYPASS`).",
+      },
+      {
+        name: "until",
+        in: "query",
+        required: false,
+        schema: { type: "string" },
+        description:
+          "Keep only releases published at or before this bound. Same input formats as `since`.",
+      },
     ],
     responses: {
       200: {
@@ -153,7 +175,8 @@ releaseRoutes.get(
         content: { "application/json": { schema: resolver(ReleaseLatestResponseSchema) } },
       },
       400: {
-        description: "Invalid `exclude` value, or `source` and `org` both supplied",
+        description:
+          "Invalid `exclude` value, unparseable `since`/`until`, or `source` and `org` both supplied",
         content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
       },
       404: {
@@ -184,6 +207,12 @@ releaseRoutes.get(
     }
     // Sort so any param ordering hits the same cache key.
     const excludeSourceTypes = [...parsedExclude.values].toSorted();
+
+    const window = parseTimeWindow(c.req.query("since"), c.req.query("until"));
+    if (!window.ok) {
+      return c.json({ error: "bad_request", message: window.message }, 400);
+    }
+    const { since, until } = window;
 
     if (sourceParam && orgParam) {
       return c.json(
@@ -222,6 +251,10 @@ releaseRoutes.get(
       include_coverage: includeCoverage ? "true" : undefined,
       include_prereleases: includePrereleases ? "true" : undefined,
       exclude: excludeSourceTypes.length > 0 ? excludeSourceTypes.join(",") : undefined,
+      // Windowed requests are non-cacheable (see isCacheableLatestRequest), but
+      // keying on the resolved bounds keeps any future allowlisting safe.
+      since,
+      until,
     });
 
     const mediaOrigin = c.env.MEDIA_ORIGIN ?? "";
@@ -234,6 +267,8 @@ releaseRoutes.get(
         includeCoverage,
         includePrereleases,
         excludeSourceTypes,
+        since,
+        until,
         limit: count,
       });
       return rows.map((r) => ({
@@ -268,6 +303,8 @@ releaseRoutes.get(
       orgId,
       includeCoverage,
       excludeSourceTypes,
+      since,
+      until,
     });
 
     if (!cacheable) {

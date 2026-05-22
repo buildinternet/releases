@@ -61,8 +61,19 @@ export interface RawSearchReleaseRow {
  * `kind` filters by entity kind. For releases, COALESCE(source.kind,
  * product.kind) is applied. For catalog rows (products/sources), only the
  * row's own `kind` column is matched — no inheritance.
+ *
+ * `since` / `until` are canonical ISO bounds on `published_at` (resolved from
+ * any relative shorthand by the route). They apply only to the release
+ * helpers; the org/product/source helpers ignore them. Both bounds drop rows
+ * with a NULL `published_at`.
  */
-type ScopeOpts = { orgId?: string; includeEmpty?: boolean; kind?: string };
+type ScopeOpts = {
+  orgId?: string;
+  includeEmpty?: boolean;
+  kind?: string;
+  since?: string;
+  until?: string;
+};
 
 export async function searchOrgs(
   db: D1Db,
@@ -164,6 +175,8 @@ export async function searchReleasesFts(
       ${opts.includeCoverage ? sql`` : sql`AND r.id IN (SELECT id FROM releases_visible)`}
       ${opts.orgId ? sql`AND s.org_id = ${opts.orgId}` : sql``}
       ${opts.kind ? sql`AND COALESCE(s.kind, p.kind) = ${opts.kind}` : sql``}
+      ${opts.since ? sql`AND r.published_at >= ${opts.since}` : sql``}
+      ${opts.until ? sql`AND r.published_at <= ${opts.until}` : sql``}
     ORDER BY rank LIMIT ${limit} OFFSET ${offset}
   `);
 }
@@ -212,6 +225,8 @@ export async function searchReleasesFromMatchedEntities(
       AND (r.suppressed IS NULL OR r.suppressed = 0)
       AND (${sql.join(conditions, sql` OR `)})
       ${opts.kind ? sql`AND COALESCE(s.kind, p.kind) = ${opts.kind}` : sql``}
+      ${opts.since ? sql`AND r.published_at >= ${opts.since}` : sql``}
+      ${opts.until ? sql`AND r.published_at <= ${opts.until}` : sql``}
     ORDER BY r.published_at DESC LIMIT ${limit}
   `);
 }

@@ -51,6 +51,76 @@ export function daysAgoIso(days: number): string {
   return new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
 }
 
+/** Relative time-window shorthand: `<n><unit>` where unit ∈ d/w/m/y. */
+const RELATIVE_DATE_RE = /^(\d+)([dwmy])$/i;
+
+/**
+ * ISO-8601 we accept as an absolute bound: a date (`2026-01-01`, parsed as UTC
+ * midnight) or a datetime that carries an explicit timezone — trailing `Z` or a
+ * `±HH[:MM]` offset. A datetime WITHOUT a timezone (`2026-01-01T12:30:00`) is
+ * deliberately not matched: `new Date()` would parse it as local time, so the
+ * same input would resolve to different instants depending on the runtime.
+ */
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}(:?\d{2})?))?$/;
+
+/**
+ * Resolve a time-window query param to a canonical ISO-8601 UTC timestamp.
+ *
+ * Accepts either:
+ *  - an absolute ISO-8601 date (`2026-01-01`, UTC midnight) or a
+ *    timezone-qualified datetime (`2026-01-01T12:30:00Z`, `…+05:00`),
+ *    normalized to `…T..:..:..Z`. A datetime without an explicit timezone is
+ *    rejected — see `ISO_DATE_RE` — so resolution is runtime-independent; or
+ *  - a small relative shorthand counted back from `now`: `90d` (days),
+ *    `4w` (weeks), `6m` (months), `2y` (years). The unit is case-insensitive
+ *    and surrounding whitespace is tolerated.
+ *
+ * Months and years use calendar arithmetic (`setUTCMonth` / `setUTCFullYear`),
+ * so `6m` lands on the same day-of-month six months earlier; days and weeks use
+ * exact 24h/7d math. Returns `null` for empty, fractional, negative, bad-unit,
+ * or otherwise unparseable input so callers can map a miss to a 400 / error.
+ *
+ * `now` is injectable for deterministic tests; defaults to the current time.
+ */
+export function resolveDateParam(input: string, now: Date = new Date()): string | null {
+  const trimmed = input.trim();
+  if (!trimmed) return null;
+
+  const rel = trimmed.match(RELATIVE_DATE_RE);
+  if (rel) {
+    const n = Number(rel[1]);
+    if (!Number.isInteger(n) || n < 0) return null;
+    const d = new Date(now.getTime());
+    switch (rel[2].toLowerCase()) {
+      case "d":
+        d.setUTCDate(d.getUTCDate() - n);
+        break;
+      case "w":
+        d.setUTCDate(d.getUTCDate() - n * 7);
+        break;
+      case "m":
+        d.setUTCMonth(d.getUTCMonth() - n);
+        break;
+      case "y":
+        d.setUTCFullYear(d.getUTCFullYear() - n);
+        break;
+    }
+    return d.toISOString();
+  }
+
+  // Require strict ISO-8601 (date, or timezone-qualified datetime). This also
+  // rejects the lenient shapes `new Date()` would otherwise accept — a bare
+  // number (`90` → year 1990), `2026/01/01`, `Jan 1 2026`, and tz-less
+  // datetimes — so a window bound is never ambiguous or runtime-dependent.
+  if (!ISO_DATE_RE.test(trimmed)) return null;
+
+  // The regex is structural; `new Date` still rejects impossible calendar
+  // values like `2026-13-45` or `2026-02-29`.
+  const parsed = new Date(trimmed);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed.toISOString();
+}
+
 export function nowIso(): string {
   return new Date().toISOString();
 }
