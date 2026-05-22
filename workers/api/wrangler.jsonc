@@ -73,6 +73,13 @@
     "EMAIL_NOTIFY_ENABLED": "true",
     "EMAIL_NOTIFY_TO": "zach@releases.sh",
     "EMAIL_FROM": "notifications@releases.sh",
+    // Kill switch for the open POST /v1/feedback endpoint (releases feedback).
+    "FEEDBACK_DISABLED": "false",
+    // Per-IP rate limiter for /v1/feedback (binding FEEDBACK_RATE_LIMITER). On
+    // by default; set to "false" to bypass. See routes/feedback.ts.
+    "FEEDBACK_RATE_LIMIT_ENABLED": "true",
+    // Max feedback notification emails per rolling hour (inbox-bomb cap).
+    "FEEDBACK_NOTIFY_MAX_PER_HOUR": "20",
     "ADMIN_BASE_URL": "https://api.releases.sh",
     // Event-driven KV purge of GET /v1/releases/latest. Ships "false" to
     // run the helper in shadow mode (log-only); flip to "true" after a
@@ -280,6 +287,14 @@
         "namespace_id": "1002",
         "simple": { "limit": 600, "period": 60 },
       },
+      // Per-IP cap for the open POST /v1/feedback. Enforced in-handler
+      // (routes/feedback.ts), gated by FEEDBACK_RATE_LIMIT_ENABLED (default on).
+      {
+        "name": "FEEDBACK_RATE_LIMITER",
+        "type": "ratelimit",
+        "namespace_id": "1003",
+        "simple": { "limit": 5, "period": 60 },
+      },
     ],
   },
   // Secrets are managed in Cloudflare's Secrets Store (dashboard → Workers → Secrets Store).
@@ -393,6 +408,11 @@
         "EMAIL_NOTIFY_ENABLED": "false",
         "EMAIL_NOTIFY_TO": "zach@releases.sh",
         "EMAIL_FROM": "notifications@releases.sh",
+        "FEEDBACK_DISABLED": "false",
+        // Staging has no FEEDBACK_RATE_LIMITER binding (no `unsafe` block); the
+        // handler no-ops the limiter there. Vars kept for parity.
+        "FEEDBACK_RATE_LIMIT_ENABLED": "true",
+        "FEEDBACK_NOTIFY_MAX_PER_HOUR": "20",
         "ADMIN_BASE_URL": "https://api-staging.releases.sh",
         "INVALIDATION_ENABLED": "false",
         "MEMORY_STORE_ERRATA_ID": "memstore_01BWRxdBdkPbBWcxmKoVGEA9",

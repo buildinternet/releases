@@ -140,6 +140,15 @@ export type Env = {
     // Per-token rate limiter for relk_ tokens, keyed by tokenId (see middleware/rate-limit.ts).
     TOKEN_RATE_LIMIT_ENABLED?: string;
     TOKEN_RATE_LIMITER?: { limit(options: { key: string }): Promise<{ success: boolean }> };
+    // Per-IP limiter for the open POST /v1/feedback (see routes/feedback.ts).
+    // Kill switch defaults ON (only "false" opts out); enforced in-handler
+    // because publicRateLimitMiddleware only covers safe methods.
+    FEEDBACK_RATE_LIMIT_ENABLED?: string;
+    FEEDBACK_RATE_LIMITER?: { limit(options: { key: string }): Promise<{ success: boolean }> };
+    // Max feedback notification emails per rolling hour (default 20). Caps the
+    // inbox-bomb amplification of the open endpoint; overflow rows are still
+    // stored. See lib/feedback-email.ts.
+    FEEDBACK_NOTIFY_MAX_PER_HOUR?: string;
     // Optional KV namespace caching single-query embeddings on the search
     // path (see packages/search/src/embedding-cache.ts). Absent → every cold search
     // re-calls the embedding provider, matching pre-cache behavior.
@@ -157,6 +166,8 @@ export type Env = {
     EMAIL_NOTIFY_ENABLED?: string;
     EMAIL_NOTIFY_TO?: string;
     EMAIL_FROM?: string;
+    // Kill switch for the open POST /v1/feedback endpoint (releases feedback).
+    FEEDBACK_DISABLED?: string;
     ADMIN_BASE_URL?: string;
     // Optional KV namespace for Tier-1 alert dedup (1h TTL per subject).
     // Reuses an existing KV binding — no new resource needed.
@@ -398,6 +409,11 @@ mountV1Routes(v1);
 // gating is resolved inside the resolver via isValidBearerAuth.
 v1.use("/graphql", publicRateLimitMiddleware, dbHealthCheck);
 v1.route("/", graphqlRoutes);
+
+// /feedback is an open POST (like /telemetry). publicRateLimitMiddleware only
+// covers safe methods, so rate limiting for this POST lives in the handler
+// (FEEDBACK_RATE_LIMITER, per-IP). dbHealthCheck guards the D1 insert.
+v1.use("/feedback", dbHealthCheck);
 
 // Bare-API JSON index. A human or agent hitting `https://api.releases.sh/` or
 // `/v1` gets a self-describing payload pointing at the OpenAPI spec, the

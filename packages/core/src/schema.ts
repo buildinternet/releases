@@ -32,6 +32,7 @@ import {
   newCollectionId,
   newBatchRunId,
   newApiTokenId,
+  newFeedbackId,
 } from "./id.js";
 import { PRINCIPAL_TYPES } from "./api-token.js";
 
@@ -561,6 +562,46 @@ export const telemetryEvents = sqliteTable(
 
 export type TelemetryEvent = typeof telemetryEvents.$inferSelect;
 export type NewTelemetryEvent = typeof telemetryEvents.$inferInsert;
+
+export const FEEDBACK_TYPES = ["bug", "idea", "other", "general"] as const;
+export type FeedbackType = (typeof FEEDBACK_TYPES)[number];
+
+export const FEEDBACK_STATUSES = ["new", "triaged", "closed"] as const;
+export type FeedbackStatus = (typeof FEEDBACK_STATUSES)[number];
+
+/**
+ * User-submitted CLI feedback. Distinct from `telemetry_events` (which is
+ * PII-clean by contract): `feedback` intentionally carries free text and an
+ * optional contact. `anon_id` is attached by the CLI only when telemetry is
+ * enabled.
+ */
+export const feedback = sqliteTable(
+  "feedback",
+  {
+    id: text("id").primaryKey().$defaultFn(newFeedbackId),
+    createdAt: integer("created_at").notNull(),
+    message: text("message").notNull(),
+    contact: text("contact"),
+    type: text("type").notNull().default("general"),
+    status: text("status").notNull().default("new"),
+    cliVersion: text("cli_version"),
+    clientKind: text("client_kind").notNull().default("external"),
+    anonId: text("anon_id"),
+    os: text("os"),
+    arch: text("arch"),
+    runtime: text("runtime"),
+    surface: text("surface").notNull().default("cli"),
+  },
+  (table) => [
+    index("idx_feedback_created").on(table.createdAt),
+    index("idx_feedback_status_created").on(table.status, table.createdAt),
+    index("idx_feedback_type_created").on(table.type, table.createdAt),
+    index("idx_feedback_anon").on(table.anonId),
+  ],
+);
+
+export type Feedback = typeof feedback.$inferSelect;
+export type NewFeedback = typeof feedback.$inferInsert;
 
 export const SEARCH_SURFACES = ["web", "mcp", "api"] as const;
 export type SearchSurface = (typeof SEARCH_SURFACES)[number];
