@@ -42,7 +42,7 @@ function req(headers: Record<string, string> = {}): Request {
 function baseEnv(overrides: Partial<Env> = {}): Env {
   return {
     DB: h.db,
-    RELEASED_API_KEY: mockSecret("root-secret"),
+    RELEASES_API_KEY: mockSecret("root-secret"),
     ...overrides,
   } as unknown as Env;
 }

@@ -40,7 +40,7 @@ function app(db: TestDatabase["db"]) {
   return (path: string, token?: string) =>
     a.request(path, token ? { headers: { Authorization: `Bearer ${token}` } } : {}, {
       DB: db,
-      RELEASED_API_KEY: mockSecret("root-secret"),
+      RELEASES_API_KEY: mockSecret("root-secret"),
     });
 }
 
@@ -90,7 +90,7 @@ function prodApp(db: TestDatabase["db"]) {
   return (path: string, token?: string) =>
     root.request(path, token ? { headers: { Authorization: `Bearer ${token}` } } : {}, {
       DB: db,
-      RELEASED_API_KEY: mockSecret("root-secret"),
+      RELEASES_API_KEY: mockSecret("root-secret"),
     });
 }
 

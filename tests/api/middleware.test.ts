@@ -33,7 +33,12 @@ function mockSecret(value: string) {
 
 describe("authMiddleware", () => {
   function createApp() {
-    type Env = { Bindings: { RELEASED_API_KEY?: { get(): Promise<string> } } };
+    type Env = {
+      Bindings: {
+        RELEASED_API_KEY?: { get(): Promise<string> };
+        RELEASES_API_KEY?: { get(): Promise<string> };
+      };
+    };
     const app = new Hono<Env>();
     app.use("*", authMiddleware);
     app.get("/test", (c) => c.json({ ok: true }));
@@ -42,7 +47,7 @@ describe("authMiddleware", () => {
 
   it("returns 401 when no Authorization header is provided", async () => {
     const app = createApp();
-    const res = await app.request("/test", {}, { RELEASED_API_KEY: mockSecret("secret") });
+    const res = await app.request("/test", {}, { RELEASES_API_KEY: mockSecret("secret") });
     expect(res.status).toBe(401);
     const body = (await res.json()) as { error: string };
     expect(body.error).toBe("unauthorized");
@@ -53,7 +58,7 @@ describe("authMiddleware", () => {
     const res = await app.request(
       "/test",
       { headers: { Authorization: "Bearer wrong-key" } },
-      { RELEASED_API_KEY: mockSecret("secret") },
+      { RELEASES_API_KEY: mockSecret("secret") },
     );
     expect(res.status).toBe(401);
   });
@@ -63,7 +68,7 @@ describe("authMiddleware", () => {
     const res = await app.request(
       "/test",
       { headers: { Authorization: "Bearer secret" } },
-      { RELEASED_API_KEY: mockSecret("secret") },
+      { RELEASES_API_KEY: mockSecret("secret") },
     );
     expect(res.status).toBe(200);
     const body = (await res.json()) as { ok: boolean };
@@ -81,7 +86,7 @@ describe("authMiddleware", () => {
     const res = await app.request(
       "/test",
       { headers: { Authorization: "Basic dXNlcjpwYXNz" } },
-      { RELEASED_API_KEY: mockSecret("secret") },
+      { RELEASES_API_KEY: mockSecret("secret") },
     );
     expect(res.status).toBe(401);
   });
@@ -91,9 +96,21 @@ describe("authMiddleware", () => {
     const res = await app.request(
       "/test",
       { headers: { Authorization: "Bearer " } },
-      { RELEASED_API_KEY: mockSecret("secret") },
+      { RELEASES_API_KEY: mockSecret("secret") },
     );
     expect(res.status).toBe(401);
+  });
+
+  it("falls back to the legacy RELEASED_API_KEY binding when RELEASES_API_KEY is unset", async () => {
+    const app = createApp();
+    const res = await app.request(
+      "/test",
+      { headers: { Authorization: "Bearer legacy-secret" } },
+      { RELEASED_API_KEY: mockSecret("legacy-secret") },
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { ok: boolean };
+    expect(body.ok).toBe(true);
   });
 });
 

@@ -42,7 +42,7 @@ describe("authMiddleware with DB tokens (requires admin)", () => {
       a.request(
         "/admin-thing",
         { headers: { Authorization: `Bearer ${token}` } },
-        { DB: db, RELEASED_API_KEY: mockSecret("root-secret") },
+        { DB: db, RELEASES_API_KEY: mockSecret("root-secret") },
       );
   }
 
@@ -104,7 +104,7 @@ describe("publicReadAuthMiddleware with DB tokens (write needs `write`)", () => 
     a.post("/thing", (c) => c.json({ ok: true }));
     return a;
   }
-  const env = (db: TestDatabase["db"]) => ({ DB: db, RELEASED_API_KEY: mockSecret("root-secret") });
+  const env = (db: TestDatabase["db"]) => ({ DB: db, RELEASES_API_KEY: mockSecret("root-secret") });
 
   it("GET passes with no token", async () => {
     h = createTestDb();
@@ -185,7 +185,7 @@ describe("isValidBearerAuth (admin-level predicate)", () => {
       a.request(
         "/probe",
         { headers: { Authorization: `Bearer ${token}` } },
-        { DB: db, RELEASED_API_KEY: mockSecret("root-secret") },
+        { DB: db, RELEASES_API_KEY: mockSecret("root-secret") },
       );
   }
 
