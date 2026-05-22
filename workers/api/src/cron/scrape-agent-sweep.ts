@@ -229,7 +229,7 @@ export type SweepEnv = EmailEnv & {
    */
   FORCE_DRAIN_STALE_HOURS?: string;
   DISCOVERY_WORKER: { fetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response> };
-  RELEASED_API_KEY: string;
+  RELEASES_API_KEY: string;
   ANTHROPIC_API_KEY?: string;
   ANTHROPIC_BASE_URL?: string;
   AI_GATEWAY_TOKEN?: string;
@@ -467,7 +467,7 @@ export async function dispatchOne(
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${env.RELEASED_API_KEY}`,
+        Authorization: `Bearer ${env.RELEASES_API_KEY}`,
       },
       body: JSON.stringify({
         company: group.orgName,

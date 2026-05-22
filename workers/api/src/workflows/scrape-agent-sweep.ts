@@ -64,6 +64,7 @@ export type ScrapeAgentSweepWorkflowEnv = {
   FORCE_DRAIN_STALE_HOURS?: string;
   DISCOVERY_WORKER?: Fetcher;
   RELEASED_API_KEY?: { get(): Promise<string> };
+  RELEASES_API_KEY?: { get(): Promise<string> };
   ANTHROPIC_API_KEY?: { get(): Promise<string> };
   ANTHROPIC_BASE_URL?: string;
   AI_GATEWAY_TOKEN?: { get(): Promise<string> };
@@ -169,7 +170,7 @@ async function resolveDispatchEnv(env: ScrapeAgentSweepWorkflowEnv): Promise<Swe
   return {
     ...baseEnvFields(env),
     DISCOVERY_WORKER: env.DISCOVERY_WORKER,
-    RELEASED_API_KEY: (await getSecret(env.RELEASED_API_KEY)) ?? "",
+    RELEASES_API_KEY: (await getSecret(env.RELEASES_API_KEY ?? env.RELEASED_API_KEY)) ?? "",
   };
 }
 
@@ -182,7 +183,7 @@ function resolveReportEnv(env: ScrapeAgentSweepWorkflowEnv): SweepEnv {
     ...baseEnvFields(env),
     DISCOVERY_WORKER:
       env.DISCOVERY_WORKER ?? ({ fetch: async () => new Response() } as unknown as Fetcher),
-    RELEASED_API_KEY: "",
+    RELEASES_API_KEY: "",
   };
 }
 

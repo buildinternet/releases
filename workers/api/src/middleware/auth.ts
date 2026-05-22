@@ -33,7 +33,7 @@ function bearer(c: Context<Env>): string {
 
 /**
  * Resolve a presented credential to an identity. `relk_…` tokens go to the DB
- * path only; everything else compares to the static RELEASED_API_KEY (root).
+ * path only; everything else compares to the static RELEASES_API_KEY (root).
  * No credential is eligible for both paths.
  */
 async function resolveAuth(c: Context<Env>, presented: string): Promise<ResolvedAuth> {
@@ -44,7 +44,7 @@ async function resolveAuth(c: Context<Env>, presented: string): Promise<Resolved
     return { kind: "none", skip: false };
   }
 
-  const secret = await getSecret(c.env.RELEASED_API_KEY);
+  const secret = await getSecret(c.env.RELEASES_API_KEY ?? c.env.RELEASED_API_KEY);
   if (!secret) return { kind: "none", skip: true }; // local dev — no secret configured
   if (presented && presented === secret) return { kind: "root", scopes: [ROOT_SCOPE] };
   return { kind: "none", skip: false };

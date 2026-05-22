@@ -63,7 +63,9 @@ export interface Env {
   CLOUDFLARE_ACCOUNT_ID: SecretBinding;
   CLOUDFLARE_API_TOKEN: SecretBinding;
   RELEASED_API_URL: string;
+  RELEASES_API_URL?: string;
   RELEASED_API_KEY: SecretBinding;
+  RELEASES_API_KEY?: SecretBinding;
   API_WORKER?: Fetcher;
   /** Pre-created Anthropic Managed Agent ID (discovery — Sonnet). */
   ANTHROPIC_AGENT_ID?: string;

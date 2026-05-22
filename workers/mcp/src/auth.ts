@@ -28,7 +28,7 @@ function bearer(request: Request): string {
 
 /**
  * Resolve the presented Bearer credential to an identity. A `relk_…` token goes
- * to the DB-token path (verified against D1); the static RELEASED_API_KEY maps
+ * to the DB-token path (verified against D1); the static RELEASES_API_KEY maps
  * to root; anything else — no credential, or an invalid/unknown `relk_` token —
  * resolves to anonymous read. No credential is eligible for both paths.
  */
@@ -43,7 +43,7 @@ async function resolveIdentity(presented: string, env: Env): Promise<McpIdentity
     // stay open; the staging gate below still applies.
     return ANONYMOUS;
   }
-  const rootKey = await getSecret(env.RELEASED_API_KEY).catch(() => null);
+  const rootKey = await getSecret(env.RELEASES_API_KEY ?? env.RELEASED_API_KEY).catch(() => null);
   if (rootKey && presented === rootKey) {
     return { kind: "root", scopes: [ROOT_SCOPE], tokenId: null, token: null };
   }

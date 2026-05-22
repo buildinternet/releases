@@ -1,7 +1,7 @@
 /**
  * Worker-side ExtractDeps implementation. All DB access goes through the
  * API worker via the supplied fetcher (service binding in prod, direct HTTP
- * over `RELEASED_API_URL` in local dev).
+ * over `RELEASES_API_URL` in local dev).
  */
 
 import { buildAnthropicClient } from "@releases/lib/anthropic-client.js";
