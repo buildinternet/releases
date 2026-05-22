@@ -36,3 +36,23 @@ export async function getSecret(binding: SecretBinding | undefined): Promise<str
     `Failed to resolve secret after 2 attempts: ${lastErr instanceof Error ? lastErr.message : String(lastErr)}`,
   );
 }
+
+/**
+ * Resolve `primary`, falling back to `fallback` when `primary` yields no usable
+ * value (undefined binding, null, or empty string).
+ *
+ * Use this for a secret rename where both the new and legacy names are bound at
+ * once. `env.NEW ?? env.OLD` does NOT work for Secrets Store bindings: both are
+ * always-present binding objects, so `??` always picks `env.NEW` and never
+ * reaches the legacy binding. The fallback has to happen at the resolved-value
+ * level, which is what this does. (It rescues a missing/empty new secret, not a
+ * diverged non-empty one — that's an operational concern.)
+ */
+export async function getSecretWithFallback(
+  primary: SecretBinding | undefined,
+  fallback: SecretBinding | undefined,
+): Promise<string | null> {
+  const value = await getSecret(primary);
+  if (value) return value;
+  return getSecret(fallback);
+}

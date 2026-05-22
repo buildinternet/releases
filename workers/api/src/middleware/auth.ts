@@ -1,5 +1,5 @@
 import type { Context, MiddlewareHandler } from "hono";
-import { getSecret } from "@releases/lib/secrets";
+import { getSecret, getSecretWithFallback } from "@releases/lib/secrets";
 import {
   type ApiScope,
   isApiTokenShaped,
@@ -44,7 +44,7 @@ async function resolveAuth(c: Context<Env>, presented: string): Promise<Resolved
     return { kind: "none", skip: false };
   }
 
-  const secret = await getSecret(c.env.RELEASES_API_KEY ?? c.env.RELEASED_API_KEY);
+  const secret = await getSecretWithFallback(c.env.RELEASES_API_KEY, c.env.RELEASED_API_KEY);
   if (!secret) return { kind: "none", skip: true }; // local dev — no secret configured
   if (presented && presented === secret) return { kind: "root", scopes: [ROOT_SCOPE] };
   return { kind: "none", skip: false };
@@ -188,17 +188,25 @@ function createAuthMiddleware(opts: {
       return;
     }
 
-    const auth = await resolveAuth(c, bearer(c));
+    const presented = bearer(c);
+    const auth = await resolveAuth(c, presented);
 
     if (auth.kind === "none") {
       if (auth.skip) {
         await next();
         return;
       }
-      // RFC 7235: 401 carries a WWW-Authenticate challenge so clients (incl.
-      // AI agents) can discover the scheme without docs.
+      // RFC 7235/6750: 401 carries a WWW-Authenticate challenge so clients
+      // (incl. AI agents) can discover the scheme without docs. We distinguish
+      // "no credential" from "credential presented but rejected" — the latter
+      // adds the standard `error="invalid_token"` parameter. We deliberately do
+      // NOT leak *why* a token is invalid (expired vs. revoked vs. wrong value).
+      if (presented) {
+        c.header("WWW-Authenticate", 'Bearer realm="releases-api", error="invalid_token"');
+        return c.json({ error: "unauthorized", message: "Invalid API key" }, 401);
+      }
       c.header("WWW-Authenticate", 'Bearer realm="releases-api"');
-      return c.json({ error: "unauthorized", message: "Invalid or missing API key" }, 401);
+      return c.json({ error: "unauthorized", message: "Missing API key" }, 401);
     }
 
     if (!scopeSatisfies(auth.scopes, opts.requiredScope)) {
