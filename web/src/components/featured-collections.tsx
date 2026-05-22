@@ -6,8 +6,10 @@ import { memberKey } from "@/lib/member-key";
 /** How many collections the homepage promo block renders, regardless of how
  * many the API returns featured. Keeps the block "one or two". */
 const MAX_FEATURED = 2;
-/** Avatar chips per card before collapsing into a "+N" count. */
-const MAX_AVATARS = 4;
+/** Avatar chips per card before collapsing into a "+N" count. Matches the
+ * API's `previewMembers` cap (PREVIEW_LIMIT = 3) so the slice is a real guard,
+ * not a no-op, if that cap ever grows. */
+const MAX_AVATARS = 3;
 
 /**
  * Homepage promo for curated collections, in two breakpoint-specific shells
