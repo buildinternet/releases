@@ -46,25 +46,26 @@ function call(repo: unknown) {
   );
 }
 
-// A small monorepo: root CHANGELOG + a package.json workspace whose one package
-// (packages/core) also has a CHANGELOG. Exercises root listing, workspace glob
-// expansion, two body fetches, and the request counter end-to-end.
+// A small monorepo whose recursive tree carries a root CHANGELOG, a per-package
+// CHANGELOG, a non-changelog source file, and a vendored CHANGELOG under
+// node_modules. Exercises the tree-search discovery, noise filtering, two body
+// fetches, and the request counter end-to-end.
 function monorepoHandler(url: string): Response {
   switch (url) {
     case "https://api.github.com/repos/owner/repo":
       return json({ full_name: "owner/repo" });
-    case "https://api.github.com/repos/owner/repo/contents/":
-      return json([
-        { name: "CHANGELOG.md", type: "file" },
-        { name: "package.json", type: "file" },
-        { name: "packages", type: "dir" },
-      ]);
-    case "https://raw.githubusercontent.com/owner/repo/HEAD/package.json":
-      return text(JSON.stringify({ workspaces: ["packages/*"] }));
-    case "https://api.github.com/repos/owner/repo/contents/packages":
-      return json([{ name: "core", type: "dir" }]);
-    case "https://api.github.com/repos/owner/repo/contents/packages/core":
-      return json([{ name: "CHANGELOG.md", type: "file" }]);
+    case "https://api.github.com/repos/owner/repo/git/trees/HEAD?recursive=1":
+      return json({
+        truncated: false,
+        tree: [
+          { path: "CHANGELOG.md", type: "blob" },
+          { path: "packages", type: "tree" },
+          { path: "packages/core", type: "tree" },
+          { path: "packages/core/CHANGELOG.md", type: "blob" },
+          { path: "packages/core/src/index.ts", type: "blob" },
+          { path: "node_modules/dep/CHANGELOG.md", type: "blob" },
+        ],
+      });
     case "https://raw.githubusercontent.com/owner/repo/HEAD/CHANGELOG.md":
       return text("# Root\n\n## 2.0.0\n- big change");
     case "https://raw.githubusercontent.com/owner/repo/HEAD/packages/core/CHANGELOG.md":
@@ -75,7 +76,7 @@ function monorepoHandler(url: string): Response {
 }
 
 describe("POST /changelog/fetch", () => {
-  it("discovers root + workspace changelogs and reports accurate stats", async () => {
+  it("discovers tree changelogs (excluding noise) and reports accurate stats", async () => {
     installFetch(monorepoHandler);
     const res = await call("owner/repo");
     expect(res.status).toBe(200);
@@ -94,6 +95,7 @@ describe("POST /changelog/fetch", () => {
 
     expect(body.repo).toBe("owner/repo");
     const paths = body.files.map((f) => f.path).sort();
+    // node_modules CHANGELOG and the .ts source file are filtered out.
     expect(paths).toEqual(["CHANGELOG.md", "packages/core/CHANGELOG.md"]);
     expect(body.files.find((f) => f.path === "CHANGELOG.md")?.origin).toBe("root");
     expect(body.files.find((f) => f.path === "packages/core/CHANGELOG.md")?.origin).toBe(
@@ -105,9 +107,8 @@ describe("POST /changelog/fetch", () => {
     expect(body.stats.filesFetched).toBe(2);
     expect(body.stats.truncatedCount).toBe(0);
     expect(body.stats.totalBytes).toBeGreaterThan(0);
-    // 1 precheck + 4 discovery calls (root listing, package.json read,
-    // packages/ listing, packages/core listing) + 2 body fetches.
-    expect(body.stats.githubRequests).toBe(7);
+    // 1 precheck + 1 recursive tree call + 2 body fetches.
+    expect(body.stats.githubRequests).toBe(4);
     expect(body.stats.elapsedMs).toBeGreaterThanOrEqual(0);
   });
 

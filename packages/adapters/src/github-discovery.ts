@@ -320,6 +320,120 @@ export async function discoverChangelogPaths(
   return out;
 }
 
+interface GitTreeEntry {
+  path: string;
+  type: "blob" | "tree" | "commit";
+}
+interface GitTreeResponse {
+  tree: GitTreeEntry[];
+  truncated: boolean;
+}
+
+const CHANGELOG_FILENAMES_LC = new Set(CHANGELOG_FILENAMES.map((f) => f.toLowerCase()));
+
+/**
+ * Directory segments whose CHANGELOGs are noise for "what did this project
+ * ship" — vendored deps, build output, and test fixtures. A whole-tree search
+ * matches files anywhere, so without this it would surface e.g.
+ * `node_modules/**​/CHANGELOG.md`.
+ */
+const CHANGELOG_EXCLUDE_DIRS = new Set([
+  "node_modules",
+  "bower_components",
+  "vendor",
+  "third_party",
+  "third-party",
+  ".yarn",
+  "dist",
+  "build",
+  "out",
+  ".next",
+  ".nuxt",
+  "coverage",
+  "fixtures",
+  "__fixtures__",
+  "testdata",
+  "example",
+  "examples",
+]);
+
+function basenameOf(path: string): string {
+  const i = path.lastIndexOf("/");
+  return i === -1 ? path : path.slice(i + 1);
+}
+
+function isChangelogFilename(name: string): boolean {
+  return CHANGELOG_FILENAMES_LC.has(name.toLowerCase());
+}
+
+function isExcludedTreePath(path: string): boolean {
+  return path.split("/").some((seg) => CHANGELOG_EXCLUDE_DIRS.has(seg.toLowerCase()));
+}
+
+/**
+ * Discover CHANGELOG paths via a single recursive Git Trees call instead of
+ * walking workspace declarations dir-by-dir. One request returns the whole
+ * tree; we filter to changelog-named blobs (case-insensitive) outside the
+ * excluded dirs. Cheaper and more thorough than {@link discoverChangelogPaths}
+ * on monorepos — a repo with N workspace packages costs 1 listing here vs. N.
+ *
+ * Falls back to the workspace walk when the tree request fails or GitHub marks
+ * it `truncated` (very large repos exceed the recursive-tree limit), so giant
+ * repos still get bounded, precise discovery. Returns `null` when the source
+ * URL doesn't parse as a GitHub coordinate.
+ *
+ * Results are sorted root-first, then shallowest path, then alphabetical, so a
+ * caller that caps the fetch count keeps the most relevant files. `exists` is
+ * always true — the tree confirms the blob is present on HEAD.
+ */
+export async function discoverChangelogPathsViaTree(
+  source: Source,
+  headers: { apiHeaders: Record<string, string>; rawHeaders: Record<string, string> },
+  cache: ListingCache = createListingCache(),
+): Promise<DiscoveredChangelogPath[] | null> {
+  const parsed = parseOwnerRepo(source.url);
+  if (!parsed) return null;
+  const { owner, repo } = parsed;
+
+  let tree: GitTreeResponse | null = null;
+  try {
+    cache.requests++;
+    const res = await fetch(
+      `https://api.github.com/repos/${owner}/${repo}/git/trees/HEAD?recursive=1`,
+      { headers: headers.apiHeaders },
+    );
+    if (res.ok) tree = (await res.json()) as GitTreeResponse;
+  } catch {
+    // fall through to the workspace-walk fallback below
+  }
+
+  // Failure or truncation → defer to the precise, bounded workspace walk.
+  if (!tree || tree.truncated) {
+    return discoverChangelogPaths(source, headers, cache);
+  }
+
+  const matches: DiscoveredChangelogPath[] = tree.tree
+    .filter(
+      (e) =>
+        e.type === "blob" && isChangelogFilename(basenameOf(e.path)) && !isExcludedTreePath(e.path),
+    )
+    .map((e) => ({
+      path: e.path,
+      origin: (e.path.includes("/") ? "workspace" : "root") as ChangelogPathOrigin,
+      exists: true,
+    }));
+
+  // Root first, then shallowest, then alphabetical — keeps the most relevant
+  // files when a caller caps the fetch count.
+  matches.sort((a, b) => {
+    const da = a.path.split("/").length;
+    const db = b.path.split("/").length;
+    if (da !== db) return da - db;
+    return a.path.localeCompare(b.path);
+  });
+  return matches;
+}
+
 /**
  * Read every workspace declaration present in the repo root and merge them
  * into a single glob list. Unknown / malformed files contribute nothing.

@@ -17,7 +17,7 @@ import { describeRoute, resolver } from "hono-openapi";
 import { z } from "zod";
 import { hideInProduction } from "../openapi.js";
 import {
-  discoverChangelogPaths,
+  discoverChangelogPathsViaTree,
   buildGitHubHeaders,
   createListingCache,
 } from "@releases/adapters/github-discovery";
@@ -136,18 +136,19 @@ const fetchChangelogsHandler = async (c: import("hono").Context<Env>) => {
     return c.json(repoStatus.body, repoStatus.status);
   }
 
-  // discoverChangelogPaths only reads `url` (for owner/repo) and `metadata`
-  // (for changelogPaths overrides, which a coordinate caller never has), so a
+  // Discovery only reads `url` (for owner/repo) and `metadata` (for
+  // changelogPaths overrides, which a coordinate caller never has), so a
   // minimal synthetic Source is enough — no DB row required.
   const syntheticSource = {
     url: `https://github.com/${owner}/${repo}`,
     metadata: null,
   } as unknown as Source;
 
-  // Caller-owned cache lets us read back the upstream request count (listings
-  // + workspace-manifest reads) after discovery.
+  // Tree-search first pass: one recursive Git Trees call instead of a per-dir
+  // workspace walk (which falls back automatically on truncation/failure).
+  // Caller-owned cache lets us read back the upstream request count after.
   const cache = createListingCache();
-  const planned = (await discoverChangelogPaths(syntheticSource, headers, cache)) ?? [];
+  const planned = (await discoverChangelogPathsViaTree(syntheticSource, headers, cache)) ?? [];
   const fetchable = planned.filter((p) => p.exists).slice(0, MAX_FILES);
 
   const files: z.infer<typeof ChangelogFileSchema>[] = [];
