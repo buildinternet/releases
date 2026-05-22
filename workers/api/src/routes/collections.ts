@@ -74,6 +74,7 @@ function rowToWire(row: typeof collections.$inferSelect): CollectionRow {
     slug: row.slug,
     name: row.name,
     description: row.description,
+    isFeatured: row.isFeatured,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -412,16 +413,31 @@ collectionRoutes.get(
     tags: ["Collections"],
     summary: "List curated collections",
     description:
-      "Returns every collection with a member count and a small `previewMembers` array (capped at 3) so the list page can render inline avatars without a second round trip. `previewMembers` is the mixed-kind preview (orgs and products); `previewOrgs` is the legacy org-only preview retained for back-compat. Member counts and previews are joined through `organizations_public` (for orgs) and `products_active` (for products), so soft-deleted / on_demand rows never inflate the totals.",
+      "Returns every collection with a member count and a small `previewMembers` array (capped at 3) so the list page can render inline avatars without a second round trip. `previewMembers` is the mixed-kind preview (orgs and products); `previewOrgs` is the legacy org-only preview retained for back-compat. Member counts and previews are joined through `organizations_public` (for orgs) and `products_active` (for products), so soft-deleted / on_demand rows never inflate the totals. Pass `?featured=1` to return only homepage-featured collections.",
+    parameters: [
+      {
+        name: "featured",
+        in: "query",
+        required: false,
+        schema: { type: "string", enum: ["1", "true"] },
+        description: "When `1` (or `true`), return only homepage-featured collections.",
+      },
+    ],
     responses: {
       200: {
-        description: "All collections, ordered by name.",
+        description: "Collections, ordered by name (optionally filtered to featured).",
         content: { "application/json": { schema: resolver(CollectionListResponseSchema) } },
       },
     },
   }),
   async (c) => {
     const db = createDb(c.env.DB);
+
+    // `?featured=1` (or `featured=true`) narrows the list to homepage-promoted
+    // collections; absent/other values return everything.
+    const featuredParam = c.req.query("featured");
+    const featuredOnly = featuredParam === "1" || featuredParam === "true";
+    const featuredFilter = featuredOnly ? sql`WHERE c.is_featured = 1` : sql``;
 
     const [countRows, orgMemberRows, productMemberRows] = await Promise.all([
       // Raw correlated subqueries (Drizzle's relational `${collections.id}`
@@ -433,10 +449,11 @@ collectionRoutes.get(
         slug: string;
         name: string;
         description: string | null;
+        isFeatured: number;
         orgCount: number;
         productCount: number;
       }>(sql`
-        SELECT c.slug, c.name, c.description,
+        SELECT c.slug, c.name, c.description, c.is_featured AS isFeatured,
           (SELECT COUNT(*) FROM ${collectionMembers} cm
              INNER JOIN ${organizationsPublic} op ON op.id = cm.org_id
              WHERE cm.collection_id = c.id) AS orgCount,
@@ -445,6 +462,7 @@ collectionRoutes.get(
              INNER JOIN ${organizationsPublic} op ON op.id = pa.org_id
              WHERE cm.collection_id = c.id) AS productCount
         FROM ${collections} c
+        ${featuredFilter}
         ORDER BY c.name
       `),
 
@@ -531,6 +549,7 @@ collectionRoutes.get(
         name: r.name,
         description: r.description,
         memberCount,
+        isFeatured: Boolean(r.isFeatured),
         previewMembers,
         previewOrgs,
       };
@@ -619,6 +638,7 @@ collectionRoutes.get(
       slug: collection.slug,
       name: collection.name,
       description: collection.description,
+      isFeatured: collection.isFeatured,
       members,
       orgs,
     };
@@ -951,6 +971,9 @@ collectionRoutes.patch(
         );
       }
       updates.slug = next;
+    }
+    if (body.isFeatured !== undefined) {
+      updates.isFeatured = body.isFeatured;
     }
 
     if (Object.keys(updates).length === 0) {

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { api, ApiSetupError } from "@/lib/api";
+import { api, ApiSetupError, type CollectionListItem } from "@/lib/api";
 import { tryFetch } from "@/lib/ssr-fetch";
 import { graphqlRequest } from "@/lib/graphql/client";
 import { HomepageTickerDocument } from "@/lib/graphql/__generated__/graphql";
@@ -10,6 +10,7 @@ import { SetupMessage } from "@/components/setup-message";
 import { OrgTable } from "@/components/org-table";
 import { InstallStepsInline, InstallStepsSidebar } from "@/components/install-steps";
 import { ShippingNowTicker } from "@/components/shipping-now-ticker";
+import { FeaturedCollections } from "@/components/featured-collections";
 
 type TickerItem = HomepageTickerQuery["latestReleases"]["items"][number];
 
@@ -34,18 +35,23 @@ export default async function HomePage({
   let stats: Awaited<ReturnType<typeof api.stats>> | undefined;
   let orgsResult: Awaited<ReturnType<typeof api.orgs>> | undefined;
   let latest: TickerItem[] = [];
+  let featuredCollections: CollectionListItem[] = [];
   try {
-    const [tickerResult, fetchedStats, fetchedOrgs] = await Promise.all([
+    const [tickerResult, fetchedStats, fetchedOrgs, fetchedFeatured] = await Promise.all([
       tryFetch(graphqlRequest(HomepageTickerDocument, { limit: 40, exclude: ["github"] }), {
         route: "/",
         event: "homepage-ticker-fetch-failed",
       }),
       api.stats(),
       api.orgs({ includeEmpty }),
+      // Promo block is non-essential — a collections hiccup must never break
+      // the homepage, so degrade to an empty (hidden) block on failure.
+      api.collections({ featured: true }).catch(() => [] as CollectionListItem[]),
     ]);
     stats = fetchedStats;
     orgsResult = fetchedOrgs;
     latest = tickerResult.data?.latestReleases.items ?? [];
+    featuredCollections = fetchedFeatured;
   } catch (err) {
     if (err instanceof ApiSetupError) {
       return (
@@ -114,6 +120,7 @@ export default async function HomePage({
       <div className="max-w-[1240px] mx-auto px-6 pb-12 xl:grid xl:grid-cols-[minmax(0,1fr)_320px] xl:gap-12">
         <aside className="hidden xl:block xl:order-2 xl:pt-2">
           <InstallStepsSidebar />
+          <FeaturedCollections collections={featuredCollections} />
         </aside>
         <div className="xl:order-1 max-w-4xl xl:max-w-none w-full mx-auto">
           {orgs.length > 0 && <OrgTable orgs={orgs} />}

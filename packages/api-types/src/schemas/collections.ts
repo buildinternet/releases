@@ -62,6 +62,8 @@ export const CollectionListItemSchema = z.object({
   name: z.string(),
   description: z.string().nullable(),
   memberCount: z.number().int().min(0),
+  /** Whether the collection is promoted on the homepage. Filterable via `?featured=1`. */
+  isFeatured: z.boolean(),
   /** Mixed-kind preview (org + product). Cap matches `previewOrgs`. */
   previewMembers: z.array(CollectionMemberSchema).optional(),
   /** Legacy org-only preview. Populated with the org-kind subset of `previewMembers`. */
@@ -81,6 +83,8 @@ export const CollectionDetailSchema = z.object({
   slug: z.string(),
   name: z.string(),
   description: z.string().nullable(),
+  /** Whether the collection is promoted on the homepage. */
+  isFeatured: z.boolean(),
   members: z.array(CollectionMemberSchema),
   /** @deprecated Use `members`. Org-only subset, kept for back-compat. */
   orgs: z.array(CollectionMemberOrgSchema),
@@ -126,6 +130,7 @@ export const CollectionRowSchema = z.object({
   slug: z.string(),
   name: z.string(),
   description: z.string().nullable(),
+  isFeatured: z.boolean(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -146,6 +151,8 @@ export const UpdateCollectionRequestSchema = z.object({
   slug: z.string().optional(),
   name: z.string().min(1).max(200).optional(),
   description: z.string().max(2000).nullable().optional(),
+  /** Promote / demote the collection on the homepage. */
+  isFeatured: z.boolean().optional(),
 });
 
 /**

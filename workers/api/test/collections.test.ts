@@ -105,6 +105,7 @@ describe("collections", () => {
         name: "Test Empty Set",
         description: null,
         memberCount: 0,
+        isFeatured: false,
         previewMembers: [],
         previewOrgs: [],
       },
@@ -113,6 +114,7 @@ describe("collections", () => {
         name: "Test Frontier Labs",
         description: null,
         memberCount: 2,
+        isFeatured: false,
         // previewMembers carries the kind discriminator so a mixed-kind
         // collection can render product chips alongside org chips.
         previewMembers: [
@@ -470,6 +472,66 @@ describe("collections (writes)", () => {
       }),
     );
     expect(res.status).toBe(404);
+  });
+});
+
+describe("collections (featured)", () => {
+  it("list rows carry isFeatured, defaulting to false", async () => {
+    const db = mkDb();
+    await seed(db);
+    const fetch = mkApp(db);
+    const res = await fetch(new Request("http://test/v1/collections"));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as Array<{ slug: string; isFeatured: boolean }>;
+    const row = body.find((c) => c.slug === "test-empty-set")!;
+    expect(row.isFeatured).toBe(false);
+  });
+
+  it("?featured=1 returns only featured collections", async () => {
+    const db = mkDb();
+    await seed(db);
+    await db
+      .update(collections)
+      .set({ isFeatured: true })
+      .where(eq(collections.slug, "test-frontier-labs"));
+    const fetch = mkApp(db);
+    const res = await fetch(new Request("http://test/v1/collections?featured=1"));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as Array<{ slug: string; isFeatured: boolean }>;
+    const slugs = body.map((c) => c.slug);
+    expect(slugs).toContain("test-frontier-labs");
+    expect(slugs).not.toContain("test-empty-set");
+    expect(body.every((c) => c.isFeatured === true)).toBe(true);
+  });
+
+  it("detail payload includes isFeatured", async () => {
+    const db = mkDb();
+    await seed(db);
+    await db
+      .update(collections)
+      .set({ isFeatured: true })
+      .where(eq(collections.slug, "test-frontier-labs"));
+    const fetch = mkApp(db);
+    const res = await fetch(new Request("http://test/v1/collections/test-frontier-labs"));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { isFeatured: boolean };
+    expect(body.isFeatured).toBe(true);
+  });
+
+  it("PATCH { isFeatured } persists, echoes, and surfaces under ?featured=1", async () => {
+    const db = mkDb();
+    await seed(db);
+    const fetch = mkApp(db);
+    const res = await fetch(
+      new Request("http://test/v1/collections/test-empty-set", json("PATCH", { isFeatured: true })),
+    );
+    expect(res.status).toBe(200);
+    const updated = (await res.json()) as { isFeatured: boolean };
+    expect(updated.isFeatured).toBe(true);
+
+    const listed = await fetch(new Request("http://test/v1/collections?featured=1"));
+    const body = (await listed.json()) as Array<{ slug: string }>;
+    expect(body.map((c) => c.slug)).toContain("test-empty-set");
   });
 });
 

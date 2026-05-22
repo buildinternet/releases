@@ -11,6 +11,8 @@ import {
 import { Header } from "@/components/header";
 import { SetupMessage } from "@/components/setup-message";
 import { CollectionTimeline } from "@/components/collection-timeline";
+import { CollectionAdminMenu } from "@/components/collection-admin-menu";
+import { isLocalAdminEnabled } from "@/lib/local-admin-flag";
 
 const getCollection = cache((slug: string) => api.collectionDetail(slug));
 const getCollectionReleases = cache((slug: string) => api.collectionReleases(slug, { limit: 20 }));
@@ -83,6 +85,11 @@ export default async function CollectionPage({ params }: { params: Promise<{ slu
           <p className="text-[15px] text-stone-500 dark:text-stone-400 mt-1">
             {detail.description}
           </p>
+        )}
+        {isLocalAdminEnabled() && (
+          <div className="mt-3">
+            <CollectionAdminMenu slug={slug} isFeatured={detail.isFeatured} />
+          </div>
         )}
 
         <div className="mt-7 pb-10">
