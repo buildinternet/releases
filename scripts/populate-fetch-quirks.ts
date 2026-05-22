@@ -60,7 +60,8 @@ type OrgPlan = {
 };
 
 const REPORT_PATH = ".context/515-change-detectors.md";
-const API_URL = process.env.RELEASED_API_URL ?? "https://api.releases.sh";
+const API_URL =
+  process.env.RELEASES_API_URL ?? process.env.RELEASED_API_URL ?? "https://api.releases.sh";
 
 const argv = process.argv.slice(2);
 const args = new Set(argv);

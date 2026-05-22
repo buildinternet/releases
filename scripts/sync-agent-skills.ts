@@ -674,7 +674,9 @@ async function main() {
       label: "Discovery agent",
       agentId,
       prompt: discoveryPrompt,
-      model: process.env.RELEASED_AGENT_MODEL || "claude-sonnet-4-6",
+      model:
+        (process.env.RELEASES_AGENT_MODEL ?? process.env.RELEASED_AGENT_MODEL) ||
+        "claude-sonnet-4-6",
       remoteAgent: agent!,
       onSuccess: () => {
         config.agentId = agentId;
@@ -687,7 +689,9 @@ async function main() {
 
   if (syncWorker && syncAgent) {
     console.log("── Worker Agent ─────────────────────────────────");
-    const workerModel = process.env.RELEASED_WORKER_AGENT_MODEL || "claude-haiku-4-5";
+    const workerModel =
+      (process.env.RELEASES_WORKER_AGENT_MODEL ?? process.env.RELEASED_WORKER_AGENT_MODEL) ||
+      "claude-haiku-4-5";
     const workerPrompt = buildWorkerSystemPrompt({ categories: CATEGORIES });
     const workerAgentId = getWorkerAgentId(deployEnv, config);
 
@@ -734,7 +738,8 @@ async function main() {
 
   if (syncCoordinator && syncAgent) {
     console.log("── Coordinator Agent ────────────────────────────");
-    const coordinatorModel = process.env.RELEASED_AGENT_MODEL || "claude-sonnet-4-6";
+    const coordinatorModel =
+      (process.env.RELEASES_AGENT_MODEL ?? process.env.RELEASED_AGENT_MODEL) || "claude-sonnet-4-6";
     const coordinatorPrompt = buildCoordinatorSystemPrompt({
       categories: CATEGORIES,
       workerAgentName: WORKER_AGENT_NAME,

@@ -1,7 +1,7 @@
 /**
  * Shared admin API client for scripts/.
  *
- * Reads RELEASED_API_URL / RELEASED_API_KEY once at module scope. All helpers
+ * Reads RELEASES_API_URL / RELEASES_API_KEY once at module scope. All helpers
  * prepend "/v1" to the path argument, so callers pass bare resource paths
  * (e.g. "/admin/batch-runs").
  *
@@ -24,8 +24,12 @@
 
 import { logger } from "@buildinternet/releases-lib/logger";
 
-const BASE_URL = (process.env.RELEASED_API_URL ?? "https://api.releases.sh").replace(/\/$/, "");
-const API_KEY = process.env.RELEASED_API_KEY;
+const BASE_URL = (
+  process.env.RELEASES_API_URL ??
+  process.env.RELEASED_API_URL ??
+  "https://api.releases.sh"
+).replace(/\/$/, "");
+const API_KEY = process.env.RELEASES_API_KEY ?? process.env.RELEASED_API_KEY;
 const STAGING_KEY = process.env.STAGING_ACCESS_KEY;
 
 // ── Defaults ─────────────────────────────────────────────────────────────────
@@ -108,7 +112,7 @@ async function request<T>(
 
   if (!API_KEY) {
     if (required) {
-      throw new Error("RELEASED_API_KEY is not set");
+      throw new Error("RELEASES_API_KEY is not set");
     }
     return null;
   }

@@ -57,7 +57,8 @@ type Verdict = {
   error?: string;
 };
 
-const API_URL = process.env.RELEASED_API_URL ?? "https://api.releases.sh";
+const API_URL =
+  process.env.RELEASES_API_URL ?? process.env.RELEASED_API_URL ?? "https://api.releases.sh";
 
 const args = new Set(process.argv.slice(2));
 const apply = args.has("--apply");
