@@ -566,6 +566,9 @@ export type NewTelemetryEvent = typeof telemetryEvents.$inferInsert;
 export const FEEDBACK_TYPES = ["bug", "idea", "other", "general"] as const;
 export type FeedbackType = (typeof FEEDBACK_TYPES)[number];
 
+export const FEEDBACK_STATUSES = ["new", "triaged", "closed"] as const;
+export type FeedbackStatus = (typeof FEEDBACK_STATUSES)[number];
+
 /**
  * User-submitted CLI feedback. Distinct from `telemetry_events` (which is
  * PII-clean by contract): `feedback` intentionally carries free text and an
@@ -592,6 +595,7 @@ export const feedback = sqliteTable(
   (table) => [
     index("idx_feedback_created").on(table.createdAt),
     index("idx_feedback_status_created").on(table.status, table.createdAt),
+    index("idx_feedback_type_created").on(table.type, table.createdAt),
     index("idx_feedback_anon").on(table.anonId),
   ],
 );

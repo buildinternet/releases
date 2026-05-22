@@ -5,13 +5,11 @@
  */
 import { Hono } from "hono";
 import { and, eq, or, lt, desc, type SQL } from "drizzle-orm";
-import { feedback, FEEDBACK_TYPES } from "@buildinternet/releases-core/schema";
+import { feedback, FEEDBACK_TYPES, FEEDBACK_STATUSES } from "@buildinternet/releases-core/schema";
 import { createDb } from "../db.js";
 import type { Env } from "../index.js";
 
 export const adminFeedbackRoutes = new Hono<Env>();
-
-const FEEDBACK_STATUSES = ["new", "triaged", "closed"] as const;
 
 // Matches the test-injection pattern in workers/api/src/routes/admin-cron-runs.ts;
 // real routes get a fresh drizzle handle, tests inject their own via c.set("db", ...).

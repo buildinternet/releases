@@ -91,6 +91,15 @@ describe("POST /v1/feedback", () => {
     expect(res.status).toBe(400);
   });
 
+  it("rejects a non-object JSON body (null) with 400, not 500", async () => {
+    const db = mkDb();
+    const fetch = await makeApp(db);
+    const res = await fetch(post(null));
+    expect(res.status).toBe(400);
+    const rows = await db.select().from(feedback);
+    expect(rows).toHaveLength(0);
+  });
+
   it("returns 503 when FEEDBACK_DISABLED=true", async () => {
     const db = mkDb();
     const fetch = await makeApp(db, { FEEDBACK_DISABLED: "true" });

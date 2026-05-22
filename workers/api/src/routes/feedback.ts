@@ -90,12 +90,18 @@ feedbackRoutes.post("/feedback", async (c) => {
     }
   }
 
-  let body: Record<string, unknown>;
+  let parsed: unknown;
   try {
-    body = await c.req.json();
+    parsed = await c.req.json();
   } catch {
     return c.json({ error: "invalid_json" }, 400);
   }
+  // JSON literals like `null`, numbers, strings, and arrays parse fine but
+  // aren't the object shape we read fields off — guard before access.
+  if (typeof parsed !== "object" || parsed === null) {
+    return c.json({ error: "invalid_json" }, 400);
+  }
+  const body = parsed as Record<string, unknown>;
 
   const rawMessage = sanitizeString(body.message, MAX_MESSAGE);
   const message = rawMessage ? stripControl(rawMessage).trim() : null;

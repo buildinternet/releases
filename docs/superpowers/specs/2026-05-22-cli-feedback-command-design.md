@@ -68,7 +68,7 @@ email is logged (`logEvent`) and swallowed.
 Registered as a **top-level public command** (next to `telemetry`, `whoami`) in
 `src/cli/program.ts` via `registerFeedbackCommand(program)`.
 
-```
+```text
 releases feedback [message]
 ```
 

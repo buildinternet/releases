@@ -17,4 +17,5 @@ CREATE TABLE feedback (
 );
 CREATE INDEX idx_feedback_created ON feedback (created_at);
 CREATE INDEX idx_feedback_status_created ON feedback (status, created_at);
+CREATE INDEX idx_feedback_type_created ON feedback (type, created_at);
 CREATE INDEX idx_feedback_anon ON feedback (anon_id);
