@@ -1,6 +1,17 @@
 import { describe, it, expect } from "bun:test";
-import { formatFeedbackEmail } from "../src/lib/feedback-email.js";
+import { formatFeedbackEmail, withinNotifyBudget } from "../src/lib/feedback-email.js";
 import type { Feedback } from "@buildinternet/releases-core/schema";
+
+function fakeKv(initial: Record<string, string> = {}) {
+  const store = new Map(Object.entries(initial));
+  return {
+    get: async (k: string) => store.get(k) ?? null,
+    put: async (k: string, v: string) => {
+      store.set(k, v);
+    },
+    store,
+  };
+}
 
 const base: Feedback = {
   id: "fb_123",
@@ -40,5 +51,24 @@ describe("formatFeedbackEmail", () => {
   it("includes the contact when present", () => {
     const { text } = formatFeedbackEmail({ ...base, contact: "zach@example.com" });
     expect(text).toContain("Contact: zach@example.com");
+  });
+});
+
+describe("withinNotifyBudget", () => {
+  it("allows and increments when under the hourly cap", async () => {
+    const kv = fakeKv();
+    expect(await withinNotifyBudget(kv, 2)).toBe(true);
+    expect(await withinNotifyBudget(kv, 2)).toBe(true);
+  });
+
+  it("blocks once the cap is reached", async () => {
+    const kv = fakeKv();
+    expect(await withinNotifyBudget(kv, 2)).toBe(true);
+    expect(await withinNotifyBudget(kv, 2)).toBe(true);
+    expect(await withinNotifyBudget(kv, 2)).toBe(false);
+  });
+
+  it("fails open when no KV is available", async () => {
+    expect(await withinNotifyBudget(undefined, 2)).toBe(true);
   });
 });

@@ -140,6 +140,15 @@ export type Env = {
     // Per-token rate limiter for relk_ tokens, keyed by tokenId (see middleware/rate-limit.ts).
     TOKEN_RATE_LIMIT_ENABLED?: string;
     TOKEN_RATE_LIMITER?: { limit(options: { key: string }): Promise<{ success: boolean }> };
+    // Per-IP limiter for the open POST /v1/feedback (see routes/feedback.ts).
+    // Kill switch defaults ON (only "false" opts out); enforced in-handler
+    // because publicRateLimitMiddleware only covers safe methods.
+    FEEDBACK_RATE_LIMIT_ENABLED?: string;
+    FEEDBACK_RATE_LIMITER?: { limit(options: { key: string }): Promise<{ success: boolean }> };
+    // Max feedback notification emails per rolling hour (default 20). Caps the
+    // inbox-bomb amplification of the open endpoint; overflow rows are still
+    // stored. See lib/feedback-email.ts.
+    FEEDBACK_NOTIFY_MAX_PER_HOUR?: string;
     // Optional KV namespace caching single-query embeddings on the search
     // path (see packages/search/src/embedding-cache.ts). Absent → every cold search
     // re-calls the embedding provider, matching pre-cache behavior.
@@ -401,9 +410,10 @@ mountV1Routes(v1);
 v1.use("/graphql", publicRateLimitMiddleware, dbHealthCheck);
 v1.route("/", graphqlRoutes);
 
-// /feedback is an open POST (like /telemetry) but carries free text — rate
-// limit it. dbHealthCheck guards the D1 insert.
-v1.use("/feedback", publicRateLimitMiddleware, dbHealthCheck);
+// /feedback is an open POST (like /telemetry). publicRateLimitMiddleware only
+// covers safe methods, so rate limiting for this POST lives in the handler
+// (FEEDBACK_RATE_LIMITER, per-IP). dbHealthCheck guards the D1 insert.
+v1.use("/feedback", dbHealthCheck);
 
 // Bare-API JSON index. A human or agent hitting `https://api.releases.sh/` or
 // `/v1` gets a self-describing payload pointing at the OpenAPI spec, the
