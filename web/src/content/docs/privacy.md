@@ -43,7 +43,7 @@ You can disable telemetry at any time. Any of the following will silence it:
 
 ```bash
 releases telemetry disable              # persistent opt-out (stored locally)
-RELEASED_TELEMETRY_DISABLED=1 releases … # per-invocation opt-out
+RELEASES_TELEMETRY_DISABLED=1 releases … # per-invocation opt-out
 DO_NOT_TRACK=1 releases …                # also respected
 ```
 

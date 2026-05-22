@@ -226,7 +226,7 @@ mkdir -p ~/.releases/work/tasks "$RUN_DIR" ~/.releases/work/reports
 export RELEASES_RUN_DIR="$RUN_DIR"
 ```
 
-(Honors `RELEASED_DATA_DIR` — substitute `$RELEASED_DATA_DIR/work` for `~/.releases/work` if set.) With `RELEASES_RUN_DIR` exported, every `releases admin …` write that runs in this shell — including the parent-saves fallback above, which is where most playbook saves land — auto-appends a line to `$RELEASES_RUN_DIR/mutations.jsonl`. You no longer hand-collect the raw `--json` outputs. Optionally write the batch definition (targets, workflow, model) to `~/.releases/work/tasks/<batch>.md` up front so the run is re-runnable.
+(Honors `RELEASES_DATA_DIR` — substitute `$RELEASES_DATA_DIR/work` for `~/.releases/work` if set.) With `RELEASES_RUN_DIR` exported, every `releases admin …` write that runs in this shell — including the parent-saves fallback above, which is where most playbook saves land — auto-appends a line to `$RELEASES_RUN_DIR/mutations.jsonl`. You no longer hand-collect the raw `--json` outputs. Optionally write the batch definition (targets, workflow, model) to `~/.releases/work/tasks/<batch>.md` up front so the run is re-runnable.
 
 After all agents complete, write the judgment layer the CLI can't capture:
 

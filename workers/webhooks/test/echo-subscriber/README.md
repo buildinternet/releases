@@ -38,7 +38,7 @@ The command prints the subscription ID (`whk_...`). Copy it.
 Add two repository secrets (`Settings → Secrets and variables → Actions`):
 
 - `WEBHOOK_E2E_SUBSCRIPTION_ID` — the `whk_...` ID from step 2.
-- `RELEASED_API_KEY` — a production admin key; the CLI uses it to call the admin webhook commands.
+- `RELEASES_API_KEY` — a production admin key; the CLI uses it to call the admin webhook commands.
 
 The CI live e2e step in `.github/workflows/deploy-workers.yml` is gated on `WEBHOOK_E2E_SUBSCRIPTION_ID`. Until it is set, the step is skipped cleanly.
 

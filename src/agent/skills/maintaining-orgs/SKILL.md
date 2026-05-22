@@ -213,7 +213,7 @@ mkdir -p ~/.releases/work/tasks "$RUN_DIR" ~/.releases/work/reports
 export RELEASES_RUN_DIR="$RUN_DIR"
 ```
 
-(Honors `RELEASED_DATA_DIR` — substitute `$RELEASED_DATA_DIR/work` for `~/.releases/work` if set.) With `RELEASES_RUN_DIR` exported, the CLI captures the mechanical evidence on its own:
+(Honors `RELEASES_DATA_DIR` — substitute `$RELEASES_DATA_DIR/work` for `~/.releases/work` if set.) With `RELEASES_RUN_DIR` exported, the CLI captures the mechanical evidence on its own:
 
 - Every `releases admin …` write the parent runs — each `overview update`, each `source fetch` trigger — auto-appends a line to `$RELEASES_RUN_DIR/mutations.jsonl`. (The parent does the `overview update` per the prompt above, so those land regardless of sub-agent env.)
 - Managed fetch sessions (`releases admin source fetch … --wait`) you run from the batch shell land their trace + cost at `$RELEASES_RUN_DIR/<sessionId>/{trace.json,summary.md}` — `RELEASES_RUN_DIR` is the default trace dir, so no `--trace-dir` flag is needed. To snapshot a session a sub-agent ran, use `releases admin discovery task get <id> --save "$RELEASES_RUN_DIR"`. The session `summary.md` carries its `estimatedUsd`.

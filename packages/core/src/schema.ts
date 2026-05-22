@@ -594,7 +594,7 @@ export const searchQueries = sqliteTable(
     userAgent: text("user_agent"),
     // Nullable on purpose: NULL = unknown (e.g. transports that never carry
     // an Authorization header, like MCP today), false = explicitly unauthed,
-    // true = valid Bearer matched RELEASED_API_KEY at request time.
+    // true = valid Bearer matched RELEASES_API_KEY at request time.
     authed: integer("authed", { mode: "boolean" }),
   },
   (table) => [
