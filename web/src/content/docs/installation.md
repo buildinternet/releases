@@ -123,6 +123,20 @@ releases admin mcp serve
 
 See the [MCP Server](/docs/api/mcp) docs for the general endpoint, client-specific setup, and stdio fallback configuration.
 
+## Environment variables
+
+All variables are optional — nothing is required for read-only use. Admin commands need a token, which you can also store with `releases auth login` (see [Source Management](/docs/cli/admin)).
+
+| Variable                              | Default                   | Description                                                                                                                                           |
+| ------------------------------------- | ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `RELEASES_API_KEY`                    | _unset_                   | Bearer token for `admin` / write commands. Takes priority over a credential stored via `releases auth login` — handy for CI or per-command overrides. |
+| `RELEASES_API_URL`                    | `https://api.releases.sh` | Point the CLI at a different API host, e.g. a self-hosted or staging endpoint.                                                                        |
+| `RELEASES_INSTALL_DIR`                | `/usr/local/bin`          | Install location used by the `install.sh` script.                                                                                                     |
+| `RELEASES_TELEMETRY_DISABLED`         | _unset_                   | Set to `1` to opt out of anonymous telemetry. `DO_NOT_TRACK=1` is also honored — see [Privacy & Telemetry](/docs/privacy).                            |
+| `RELEASES_DISABLE_SKILL_UPDATE_CHECK` | _unset_                   | Set to `1` to silence the once-a-day "skills are behind, run `releases skills install`" reminder.                                                     |
+| `RELEASES_NO_COMPLETION_HINT`         | _unset_                   | Set to `1` to silence the shell-completion setup reminder on the landing screen and `--help`.                                                         |
+| `RELEASES_RUN_DIR`                    | _unset_                   | When set, each `admin` write appends a JSONL line to `$RELEASES_RUN_DIR/mutations.jsonl` — an audit trail for agent-driven maintenance batches.       |
+
 ## Telemetry
 
 The CLI and local MCP server record anonymous usage events (command name, CLI version, OS/arch, exit code, duration) to help us understand what's used. No arguments, flag values, queries, or content are ever sent. Opt out any time:

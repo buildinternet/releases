@@ -31,8 +31,10 @@ releases admin source fetch --retry-errors
 
 Sources track `consecutiveNoChange` and `consecutiveErrors` counters. These drive exponential backoff:
 
-- **No change**: 1h → 2h → 4h → … → 48h max
-- **Errors**: 1h → 2h → 4h → … → 72h max
+| Counter               | When it increments             | Backoff schedule           |
+| --------------------- | ------------------------------ | -------------------------- |
+| `consecutiveNoChange` | A fetch detects no new content | 1h → 2h → 4h → … → 48h max |
+| `consecutiveErrors`   | A fetch fails                  | 1h → 2h → 4h → … → 72h max |
 
 The `--stale` flag respects these timers via the `nextFetchAfter` column.
 

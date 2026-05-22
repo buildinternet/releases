@@ -22,29 +22,35 @@ curl -H "Authorization: Bearer YOUR_KEY" https://api.releases.sh/v1/...
 
 ## Pagination
 
-Two shapes, picked per surface:
+Three shapes, picked per surface:
 
-- **Page-based** (catalog-shaped surfaces: `/v1/sources`, `/v1/orgs`, `/v1/products`, `/v1/collections`) — `page` + `limit` inputs, `{ items, pagination }` output with `pagination: { page, pageSize, returned, totalItems, totalPages, hasMore }`. Default and max `limit` is 500 unless noted otherwise.
-- **Cursor-based** (feed-shaped surfaces: `/v1/orgs/:slug/releases`, `/v1/orgs/:orgSlug/sources/:sourceSlug` and its embedded `releases` array, `/v1/orgs/:orgSlug/sources/:sourceSlug/releases`, `/v1/collections/:slug/releases`, `/v1/categories/:slug/releases`) — opaque `cursor` input, `pagination: { nextCursor, limit }` output. `nextCursor` is `null` when the slice is exhausted.
-
-Search endpoints (`/v1/search`, `/v1/search/releases`) attach `_meta.search` instead, with `hitCap: true` when results saturated `limit`.
+| Shape            | Surfaces                                                                                                                                                                                                                                 | Input                                                 | Output                                                                                                     |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| **Page-based**   | Catalog-shaped: `/v1/sources`, `/v1/orgs`, `/v1/products`, `/v1/collections`                                                                                                                                                             | `page` + `limit` (default and max `500` unless noted) | `{ items, pagination }`, where `pagination: { page, pageSize, returned, totalItems, totalPages, hasMore }` |
+| **Cursor-based** | Feed-shaped: `/v1/orgs/:slug/releases`, `/v1/orgs/:orgSlug/sources/:sourceSlug` (and its embedded `releases` array), `/v1/orgs/:orgSlug/sources/:sourceSlug/releases`, `/v1/collections/:slug/releases`, `/v1/categories/:slug/releases` | opaque `cursor`                                       | `pagination: { nextCursor, limit }`; `nextCursor` is `null` when the slice is exhausted                    |
+| **Search**       | `/v1/search`, `/v1/search/releases`                                                                                                                                                                                                      | query + `limit`                                       | `_meta.search`, with `hitCap: true` when results saturated `limit`                                         |
 
 ## Resource shape
 
-- **Orgs** publish releases. Resolved by typed ID (`org_…`) or slug.
-- **Products** are an optional grouping layer between orgs and sources.
-- **Sources** are changelog endpoints owned by an org. Type is one of `github`, `scrape`, `feed`, `agent`. Resolved by typed ID (`src_…`) on the bare path or by slug under the org-scoped path (`/v1/orgs/:orgSlug/sources/:sourceSlug`).
-- **Releases** carry `id`, `orgId`, `sourceId`, `title`, `version`, `publishedAt`, `url`, `description`, `media`, plus optional `summary`, `title_generated`, `title_short`.
+| Resource     | Notes                                                                                                                                                                                                                       |
+| ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Orgs**     | Publish releases. Resolved by typed ID (`org_…`) or slug.                                                                                                                                                                   |
+| **Products** | Optional grouping layer between orgs and sources.                                                                                                                                                                           |
+| **Sources**  | Changelog endpoints owned by an org. `type` is one of `github`, `scrape`, `feed`, `agent`. Resolved by typed ID (`src_…`) on the bare path, or by slug under the org-scoped path (`/v1/orgs/:orgSlug/sources/:sourceSlug`). |
+| **Releases** | Carry `id`, `orgId`, `sourceId`, `title`, `version`, `publishedAt`, `url`, `description`, `media`, plus optional `summary`, `title_generated`, `title_short`.                                                               |
 
 IDs are immutable; prefer them over slugs.
 
 ## Lookups
 
-Two GET resolvers help when you only have a coordinate or domain:
+When you only have a coordinate or a domain:
 
-- `GET /v1/lookups/by-domain?domain=…` — resolves a normalized domain to its owning org and any products whose alias targets the same domain.
-- `GET /v1/lookups/source-by-slug?slug=…` / `GET /v1/lookups/product-by-slug?slug=…` — returns the canonical org-scoped home for a bare slug.
-- `POST /v1/lookups { provider: "github", coordinate: "org/repo" }` — materializes a hidden source row from a GitHub coordinate on first call.
+| Endpoint                                                          | Resolves                                                                                    |
+| ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `GET /v1/lookups/by-domain?domain=…`                              | A normalized domain to its owning org and any products whose alias targets the same domain. |
+| `GET /v1/lookups/source-by-slug?slug=…`                           | The canonical org-scoped home for a bare source slug.                                       |
+| `GET /v1/lookups/product-by-slug?slug=…`                          | The canonical org-scoped home for a bare product slug.                                      |
+| `POST /v1/lookups { provider: "github", coordinate: "org/repo" }` | Materializes a hidden source row from a GitHub coordinate on first call.                    |
 
 ## Discoverability
 

@@ -108,7 +108,7 @@ Deep dives live in `docs/architecture/`:
 
 ## Environment
 
-Do not edit `.env` directly. Required vars documented in `.env.example`.
+Do not edit `.env` directly. Required vars are documented in `.env.example`. App env vars use the `RELEASES_` prefix (`RELEASES_API_URL`, `RELEASES_API_KEY`, `RELEASES_DATA_DIR`, …).
 
 ## Staging
 
@@ -149,9 +149,8 @@ When iterating on a new migration against staging, use `bunx wrangler d1 migrati
 
 ## Legacy naming
 
-The project was originally called "Released"; the rename to "Releases" leaves one deliberately-unchanged category plus an in-progress env-var migration:
+The project was originally called "Released"; the rename to "Releases" leaves the Cloudflare resource names deliberately unchanged:
 
-- **Env vars** are standardized on the `RELEASES_` prefix (`RELEASES_API_URL`, `RELEASES_API_KEY`, `RELEASES_DATA_DIR`, etc.). Legacy `RELEASED_`-prefixed names are still honored via a warn-once fallback — `legacyEnv()` in `packages/lib/src/legacy-env.ts` (Node/CLI/scripts), the accessors in `web/src/lib/env.ts` (web), and `env.RELEASES_API_KEY ?? env.RELEASED_API_KEY` at worker binding sites — and will be removed in a teardown follow-up (#1122). During the transition the API-token secret is dual-bound (`RELEASES_API_KEY` alongside `RELEASED_API_KEY`) in all six worker/env `wrangler.jsonc` blocks; the Cloudflare Secrets Store `secret_name` and the GitHub Actions repo secret use the new name.
 - **Cloudflare resources** keep their old names: D1 database `released-db` and R2 bucket `released-media`. Renaming these is a live migration, not a text change.
 
-Everything else — copy, prompts, display names, webhook headers (`X-Releases-*`), package/workspace names, the `~/.releases` data dir, localStorage keys — uses the new name.
+Everything else — env vars (`RELEASES_*`), copy, prompts, display names, webhook headers (`X-Releases-*`), package/workspace names, the `~/.releases` data dir, localStorage keys — uses the new name.
