@@ -410,7 +410,8 @@ export class ManagedAgentsSession extends DurableObject<Env> {
       // If anything below fails, fail() will update this session row to status=error
       // rather than silently dropping the notification (which happened previously
       // because StatusHub's session:error handler required an existing row).
-      const releasesApiKey = (await getSecret(this.env.RELEASED_API_KEY)) ?? undefined;
+      const releasesApiKey =
+        (await getSecret(this.env.RELEASES_API_KEY ?? this.env.RELEASED_API_KEY)) ?? undefined;
       let statusHubAgentLabel: "haiku" | "sonnet" | "coordinator";
       switch (agentRole) {
         case "worker":
@@ -451,10 +452,12 @@ export class ManagedAgentsSession extends DurableObject<Env> {
 
       // Direct fetch used when no service binding is present (local dev /
       // tests). Rewrites the placeholder `https://api/...` host to
-      // `RELEASED_API_URL`, handling string, URL, and Request inputs — by the
+      // `RELEASES_API_URL`, handling string, URL, and Request inputs — by the
       // time this fetcher is invoked, the wrappers above have already upgraded
       // strings into Request objects.
-      const baseFetcher = this.env.API_WORKER ?? directApiFetcher(this.env.RELEASED_API_URL);
+      const baseFetcher =
+        this.env.API_WORKER ??
+        directApiFetcher(this.env.RELEASES_API_URL ?? this.env.RELEASED_API_URL);
       const fetcher = withDiscoveryIdentity(
         withStagingHeader(baseFetcher as Fetcher, await this.getStagingKey()),
       );
@@ -1253,7 +1256,10 @@ ${idList}
     cachedApiKey?: string,
   ): Promise<void> {
     try {
-      const apiKey = cachedApiKey ?? (await getSecret(this.env.RELEASED_API_KEY)) ?? undefined;
+      const apiKey =
+        cachedApiKey ??
+        (await getSecret(this.env.RELEASES_API_KEY ?? this.env.RELEASED_API_KEY)) ??
+        undefined;
       const stagingKey = await this.getStagingKey();
       const headers: Record<string, string> = {
         "Content-Type": "application/json",
@@ -1272,7 +1278,7 @@ ${idList}
           }),
         );
       } else {
-        await fetch(`${this.env.RELEASED_API_URL}/v1/status/event`, {
+        await fetch(`${this.env.RELEASES_API_URL ?? this.env.RELEASED_API_URL}/v1/status/event`, {
           method: "POST",
           headers,
           body,

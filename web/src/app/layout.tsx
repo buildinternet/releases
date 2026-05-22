@@ -8,8 +8,9 @@ import { WebMcpProvider } from "@/components/webmcp-provider";
 import { SearchHotkey } from "@/components/search-hotkey";
 import { Footer } from "@/components/footer";
 import "./globals.css";
+import { apiBaseUrl } from "@/lib/env";
 
-const PUBLIC_API_URL = process.env.RELEASED_API_URL ?? "https://api.releases.sh";
+const PUBLIC_API_URL = apiBaseUrl() ?? "https://api.releases.sh";
 
 const jetbrainsMono = JetBrains_Mono({
   subsets: ["latin"],

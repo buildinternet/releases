@@ -10,7 +10,7 @@ Inspired by Browserbase's [`autobrowse`](https://github.com/browserbase/skills/t
 
 ## Layout
 
-`~/.releases/work/` (honors `RELEASED_DATA_DIR` — `$RELEASED_DATA_DIR/work/` when set; sits beside the CLI's existing `logs/`, `credentials`, and caches):
+`~/.releases/work/` (honors `RELEASES_DATA_DIR` — `$RELEASES_DATA_DIR/work/` when set; sits beside the CLI's existing `logs/`, `credentials`, and caches):
 
 ```
 ~/.releases/work/
@@ -31,7 +31,7 @@ flowchart LR
 
 - **Reachable from any checkout.** You run these skills from the monorepo and admin commands from the `releases-cli` repo. A home-dir workspace gives one audit trail both reach, instead of artifacts stranded in whichever directory happened to be CWD that session.
 - **Survives worktree churn.** Worktrees come and go; `~/.releases/work/` persists, so the trail isn't lost when an isolated checkout is cleaned up.
-- **Consistent with the CLI's data dir.** It uses the same root as `getDataDir()` (`RELEASED_DATA_DIR` || `~/.releases`), so maintenance artifacts sit next to the per-day `logs/`, `credentials`, and caches the CLI already owns — one place for per-user state.
+- **Consistent with the CLI's data dir.** It uses the same root as `getDataDir()` (`RELEASES_DATA_DIR` || `~/.releases`), so maintenance artifacts sit next to the per-day `logs/`, `credentials`, and caches the CLI already owns — one place for per-user state.
 - **Not committed, by design.** It's outside any repo — these are working artifacts, not source. Promote anything durable (a recurring task definition, a notable finding) into `.context/` or an issue deliberately.
 
 ## Artifacts

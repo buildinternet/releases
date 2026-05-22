@@ -126,7 +126,7 @@ function mkEnv(overrides: Partial<ScrapeAgentSweepWorkflowEnv> = {}) {
     DISCOVERY_WORKER: {
       fetch: async () => new Response(JSON.stringify({ sessionId: "ma-auto" }), { status: 202 }),
     } as ScrapeAgentSweepWorkflowEnv["DISCOVERY_WORKER"],
-    RELEASED_API_KEY: { get: async () => "test-api-key" },
+    RELEASES_API_KEY: { get: async () => "test-api-key" },
     ANTHROPIC_API_KEY: { get: async () => "test-anthropic-key" },
     ...overrides,
   } as ScrapeAgentSweepWorkflowEnv;

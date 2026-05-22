@@ -76,7 +76,7 @@ sequenceDiagram
     Note over M,API: Custom tool (write)
     M->>S: agent.custom_tool_use
     S-->>DO: stream event
-    DO->>API: Bearer RELEASED_API_KEY<br/>(+ X-Releases-Staging-Key in staging)
+    DO->>API: Bearer RELEASES_API_KEY<br/>(+ X-Releases-Staging-Key in staging)
     API->>D1: INSERT
     D1-->>API: row
     API-->>DO: 200 OK

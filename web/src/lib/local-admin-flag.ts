@@ -1,4 +1,5 @@
 import "server-only";
+import { serverApiKey } from "./env";
 
 /**
  * Gates the local-development-only admin UI (org, source, and release admin
@@ -9,5 +10,5 @@ import "server-only";
 export function isLocalAdminEnabled(): boolean {
   if (process.env.NODE_ENV === "production") return false;
   if (process.env.VERCEL_ENV === "production") return false;
-  return Boolean(process.env.RELEASED_API_KEY);
+  return Boolean(serverApiKey());
 }

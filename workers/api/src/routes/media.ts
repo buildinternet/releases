@@ -9,6 +9,7 @@ type Env = {
   Bindings: {
     DB: D1Database;
     RELEASED_API_KEY: string;
+    RELEASES_API_KEY?: string;
     STATUS_HUB: DurableObjectNamespace;
     MEDIA: R2Bucket;
     MEDIA_ORIGIN?: string;

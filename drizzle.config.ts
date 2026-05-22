@@ -2,7 +2,8 @@ import { defineConfig } from "drizzle-kit";
 import { homedir } from "os";
 import { join } from "path";
 
-const dataDir = process.env.RELEASED_DATA_DIR || join(homedir(), ".releases");
+const dataDir =
+  process.env.RELEASES_DATA_DIR || process.env.RELEASED_DATA_DIR || join(homedir(), ".releases");
 
 export default defineConfig({
   dialect: "sqlite",

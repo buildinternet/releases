@@ -34,6 +34,7 @@ import type {
   CollectionReleasesResponse,
 } from "@buildinternet/releases-api-types";
 import { parseCoordinate } from "@buildinternet/releases-core/lookup-coordinate";
+import { apiBaseUrl, serverApiKey } from "./env";
 
 export type {
   ReleaseSummaryItem,
@@ -85,7 +86,7 @@ export type {
   CollectionReleasesResponse,
 };
 
-export const API_URL = process.env.RELEASED_API_URL ?? "http://localhost:3456";
+export const API_URL = apiBaseUrl() ?? "http://localhost:3456";
 // Trusted-proxy secret — bypasses the API's per-IP rate limiter for
 // server-to-server traffic from Vercel. Does NOT carry admin privileges, so
 // admin-gated fields (e.g. org playbook) never leak into the public cache.
@@ -93,7 +94,7 @@ const PROXY_KEY = process.env.RELEASES_PROXY_KEY;
 // Admin bearer — server-only. Do NOT pass this to fetchApi or any path that
 // serves cached public responses. Use adminFetchApi from server components
 // for dev-gated views that need admin content.
-const API_SECRET = process.env.RELEASED_API_KEY;
+const API_SECRET = serverApiKey();
 
 // Identifies server-side web→API traffic in Cloudflare analytics. UA shows up
 // in the "Source user agents" panel; X-Requested-With has its own panel.

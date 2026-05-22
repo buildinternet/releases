@@ -1,6 +1,6 @@
 # API worker (D1)
 
-The API worker at `workers/api/` is the authoritative data plane — every read and write goes through it. There is no local-SQLite path anymore; the OSS CLI ([`buildinternet/releases-cli`](https://github.com/buildinternet/releases-cli)) is a pure HTTP client that talks to `RELEASED_API_URL` (default `https://api.releases.sh`), and all the internal workers (MCP, discovery, webhooks, cron) bind directly to D1.
+The API worker at `workers/api/` is the authoritative data plane — every read and write goes through it. There is no local-SQLite path anymore; the OSS CLI ([`buildinternet/releases-cli`](https://github.com/buildinternet/releases-cli)) is a pure HTTP client that talks to `RELEASES_API_URL` (default `https://api.releases.sh`), and all the internal workers (MCP, discovery, webhooks, cron) bind directly to D1.
 
 ## Auth model
 
@@ -8,7 +8,7 @@ GET endpoints are public (no auth required). Write operations (POST/PATCH/DELETE
 
 ### Scoped API tokens
 
-Alongside the single static `RELEASED_API_KEY` (now treated as implicit **root** —
+Alongside the single static `RELEASES_API_KEY` (now treated as implicit **root** —
 all scopes, break-glass), the API worker accepts **DB-backed scoped tokens** in
 the `Authorization: Bearer relk_<lookupId>_<secret>` form. Each token (`api_tokens`
 table) carries a JSON set of scopes (`read` ⊂ `write` ⊂ `admin`), can be revoked

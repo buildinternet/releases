@@ -5,7 +5,7 @@ set -euo pipefail
 # Usage: curl -fsSL https://releases.sh/install | bash
 
 REPO="buildinternet/releases"
-INSTALL_DIR="${RELEASED_INSTALL_DIR:-/usr/local/bin}"
+INSTALL_DIR="${RELEASES_INSTALL_DIR:-${RELEASED_INSTALL_DIR:-/usr/local/bin}}"
 BINARY_NAME="releases"
 
 # ── Detect platform ──

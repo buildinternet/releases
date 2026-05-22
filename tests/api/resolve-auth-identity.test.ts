@@ -43,7 +43,7 @@ function probe(db?: TestDatabase["db"], extraEnv: Record<string, unknown> = {}) 
     const res = await app.request(
       "/p",
       token ? { headers: { Authorization: `Bearer ${token}` } } : {},
-      { DB: db, RELEASED_API_KEY: mockSecret("root-secret"), ...extraEnv },
+      { DB: db, RELEASES_API_KEY: mockSecret("root-secret"), ...extraEnv },
     );
     return (await res.json()) as { id: AuthIdentity };
   };

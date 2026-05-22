@@ -7,8 +7,8 @@
  *
  * Env required:
  *   ANTHROPIC_API_KEY, ANTHROPIC_ENVIRONMENT_ID, ANTHROPIC_VAULT_ID
- *   RELEASED_STAGING_API_URL  (eval dispatch always targets staging)
- *   RELEASED_API_KEY          (bearer for staging API)
+ *   RELEASES_STAGING_API_URL  (eval dispatch always targets staging)
+ *   RELEASES_API_KEY          (bearer for staging API)
  *   STAGING_ACCESS_KEY        (X-Releases-Staging-Key header)
  *
  * Usage:
@@ -62,8 +62,13 @@ const outPath = arg("--out") ?? `tests/evals/fixtures/tool-ux/runs/${taskId}-${D
 const anthropicApiKey = requireEnv("ANTHROPIC_API_KEY");
 const environmentId = requireEnv("ANTHROPIC_ENVIRONMENT_ID");
 const vaultId = process.env.ANTHROPIC_VAULT_ID;
-const stagingApiUrl = requireEnv("RELEASED_STAGING_API_URL").replace(/\/+$/, "");
-const stagingApiKey = requireEnv("RELEASED_API_KEY");
+const stagingApiUrl = (
+  process.env.RELEASES_STAGING_API_URL ??
+  process.env.RELEASED_STAGING_API_URL ??
+  requireEnv("RELEASES_STAGING_API_URL")
+).replace(/\/+$/, "");
+const stagingApiKey =
+  process.env.RELEASES_API_KEY ?? process.env.RELEASED_API_KEY ?? requireEnv("RELEASES_API_KEY");
 const stagingAccessKey = requireEnv("STAGING_ACCESS_KEY");
 
 // Executor talks to the staging API worker via global fetch, attaching the

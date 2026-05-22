@@ -9,7 +9,7 @@ RUN mkdir -p /app/.claude/skills && cp -r /usr/share/releases/skills/* /app/.cla
 ENV COMMAND_TIMEOUT_MS=300000
 
 # Default data dir
-ENV RELEASED_DATA_DIR=/app/data
+ENV RELEASES_DATA_DIR=/app/data
 RUN mkdir -p /app/data
 
 EXPOSE 8081

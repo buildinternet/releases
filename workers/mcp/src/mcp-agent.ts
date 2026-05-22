@@ -113,6 +113,8 @@ export interface Env {
    * prod + staging.
    */
   RELEASED_API_KEY?: SecretBinding;
+  /** New-prefix alias of the static root credential. Preferred over the legacy binding. */
+  RELEASES_API_KEY?: SecretBinding;
   /**
    * Staging-only shared secret. When bound, every request must carry a
    * matching `X-Releases-Staging-Key` header. See workers/mcp/src/index.ts.
@@ -354,7 +356,9 @@ export function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServ
     if (!coord) return;
     if (!scopeSatisfies(authScopes, "write")) return;
     const forwardToken =
-      authToken ?? (await getSecret(env.RELEASED_API_KEY).catch(() => null)) ?? "";
+      authToken ??
+      (await getSecret(env.RELEASES_API_KEY ?? env.RELEASED_API_KEY).catch(() => null)) ??
+      "";
     if (!forwardToken) return;
     try {
       const headers: Record<string, string> = {

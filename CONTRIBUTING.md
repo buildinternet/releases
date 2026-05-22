@@ -12,7 +12,7 @@ bun install
 
 Working in a git worktree? Run `./scripts/setup-worktree.sh` once after `git worktree add` — it installs dependencies and copies `.env` + `web/.env.local` from the main checkout. Claude Code sessions trigger the dependency install automatically via a `SessionStart` hook; the script is for terminal-driven bootstraps.
 
-The monorepo no longer ships a local CLI. If you need `releases <cmd>` while working on backend changes, clone [buildinternet/releases-cli](https://github.com/buildinternet/releases-cli) alongside this repo and point it at a local API worker (`bun run dev:api`) via `RELEASED_API_URL=http://localhost:8787`.
+The monorepo no longer ships a local CLI. If you need `releases <cmd>` while working on backend changes, clone [buildinternet/releases-cli](https://github.com/buildinternet/releases-cli) alongside this repo and point it at a local API worker (`bun run dev:api`) via `RELEASES_API_URL=http://localhost:8787`.
 
 ## Environment variables
 
@@ -21,7 +21,7 @@ Copy `.env.example` to `.env` and fill in:
 - `ANTHROPIC_API_KEY` — Required for AI-powered parsing and summaries
 - `CLOUDFLARE_ACCOUNT_ID` / `CLOUDFLARE_API_TOKEN` — Required for scraping changelog pages (only used as a fallback when no feed is available)
 - `GITHUB_TOKEN` — Optional, increases GitHub API rate limits
-- `RELEASED_API_URL` / `RELEASED_API_KEY` — Remote mode: route CLI data operations through the API Worker. Compiled binaries default to `https://api.releases.sh` when unset
+- `RELEASES_API_URL` / `RELEASES_API_KEY` — Remote mode: route CLI data operations through the API Worker. Compiled binaries default to `https://api.releases.sh` when unset
 - `VOYAGE_API_KEY` — Required on the API and MCP workers for semantic search ingest and queries. Provision the Vectorize indexes once with `./scripts/create-vectorize-indexes.sh`, then add `VOYAGE_API_KEY` to Cloudflare's Secrets Store and confirm both workers bind it in `workers/{api,mcp}/wrangler.jsonc` under `secrets_store_secrets`
 - `EMBEDDING_PROVIDER` — Optional, defaults to `voyage` (`voyage-4-lite`, requested at 512 dims). Set to `openai` or `workers-ai` in `workers/{api,mcp}/wrangler.jsonc` to switch; recreate the indexes if vector dimensionality changes
 
@@ -35,9 +35,9 @@ bun run dev:discovery        # Discovery worker locally
 bun run dev:mcp              # MCP worker locally
 ```
 
-Point the web frontend at the local API worker by setting `RELEASED_API_URL=http://localhost:8787` in `web/.env.local`.
+Point the web frontend at the local API worker by setting `RELEASES_API_URL=http://localhost:8787` in `web/.env.local`.
 
-`wrangler dev` does not pull from Cloudflare's Secrets Store, so any endpoint that reads `ANTHROPIC_API_KEY`, `GITHUB_TOKEN`, `VOYAGE_API_KEY`, `RELEASED_API_KEY`, or `WEBHOOK_HMAC_MASTER` will fail locally unless you create `workers/api/.dev.vars` with the values you need. The file is gitignored.
+`wrangler dev` does not pull from Cloudflare's Secrets Store, so any endpoint that reads `ANTHROPIC_API_KEY`, `GITHUB_TOKEN`, `VOYAGE_API_KEY`, `RELEASES_API_KEY`, or `WEBHOOK_HMAC_MASTER` will fail locally unless you create `workers/api/.dev.vars` with the values you need. The file is gitignored.
 
 ## Type-checking
 

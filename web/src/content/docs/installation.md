@@ -40,7 +40,7 @@ Download and install the latest binary directly:
 curl -fsSL https://releases.sh/install | bash
 ```
 
-The script detects your platform, downloads the correct binary from npm, and installs it to `/usr/local/bin`. Set `RELEASED_INSTALL_DIR` to change the install location. Windows users should use npm or the GitHub Releases archives below.
+The script detects your platform, downloads the correct binary from npm, and installs it to `/usr/local/bin`. Set `RELEASES_INSTALL_DIR` to change the install location. Windows users should use npm or the GitHub Releases archives below.
 
 ## GitHub Releases (precompiled binaries)
 
@@ -129,7 +129,7 @@ The CLI and local MCP server record anonymous usage events (command name, CLI ve
 
 ```bash
 releases telemetry disable              # persistent
-RELEASED_TELEMETRY_DISABLED=1 releases … # per-invocation
+RELEASES_TELEMETRY_DISABLED=1 releases … # per-invocation
 ```
 
 See [Privacy & Telemetry](/docs/privacy) for the full list of what is and isn't collected.

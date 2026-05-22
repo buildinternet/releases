@@ -17,7 +17,7 @@ type Env = {
     PUBLIC_RATE_LIMITER?: RateLimiter;
     TOKEN_RATE_LIMIT_ENABLED?: string;
     TOKEN_RATE_LIMITER?: RateLimiter;
-    RELEASED_API_KEY?: { get(): Promise<string> };
+    RELEASES_API_KEY?: { get(): Promise<string> };
     RELEASES_PROXY_KEY?: { get(): Promise<string> };
     DB?: unknown;
   };
@@ -150,7 +150,7 @@ describe("publicRateLimitMiddleware", () => {
       {
         PUBLIC_RATE_LIMITER: limiter,
         RATE_LIMIT_ENABLED: "true",
-        RELEASED_API_KEY: mockSecret("secret"),
+        RELEASES_API_KEY: mockSecret("secret"),
       },
     );
     expect(res.status).toBe(200);
@@ -168,7 +168,7 @@ describe("publicRateLimitMiddleware", () => {
       {
         PUBLIC_RATE_LIMITER: limiter,
         RATE_LIMIT_ENABLED: "true",
-        RELEASED_API_KEY: mockSecret("root-secret"),
+        RELEASES_API_KEY: mockSecret("root-secret"),
         DB: h.db,
       },
     );
@@ -187,7 +187,7 @@ describe("publicRateLimitMiddleware", () => {
       {
         PUBLIC_RATE_LIMITER: limiter,
         RATE_LIMIT_ENABLED: "true",
-        RELEASED_API_KEY: mockSecret("secret"),
+        RELEASES_API_KEY: mockSecret("secret"),
       },
     );
     expect(res.status).toBe(429);
@@ -222,7 +222,7 @@ describe("publicRateLimitMiddleware — per-token limiting", () => {
         RATE_LIMIT_ENABLED: "true",
         TOKEN_RATE_LIMITER: tokenLimiter,
         TOKEN_RATE_LIMIT_ENABLED: "true",
-        RELEASED_API_KEY: mockSecret("root-secret"),
+        RELEASES_API_KEY: mockSecret("root-secret"),
         DB: h.db,
       },
     );
@@ -243,7 +243,7 @@ describe("publicRateLimitMiddleware — per-token limiting", () => {
       {
         TOKEN_RATE_LIMITER: tokenLimiter,
         TOKEN_RATE_LIMIT_ENABLED: "true",
-        RELEASED_API_KEY: mockSecret("root-secret"),
+        RELEASES_API_KEY: mockSecret("root-secret"),
         DB: h.db,
       },
     );
@@ -267,7 +267,7 @@ describe("publicRateLimitMiddleware — per-token limiting", () => {
         RATE_LIMIT_ENABLED: "true",
         TOKEN_RATE_LIMITER: tokenLimiter,
         TOKEN_RATE_LIMIT_ENABLED: "true",
-        RELEASED_API_KEY: mockSecret("root-secret"),
+        RELEASES_API_KEY: mockSecret("root-secret"),
       },
     );
     expect(res.status).toBe(200);
@@ -292,7 +292,7 @@ describe("publicRateLimitMiddleware — per-token limiting", () => {
       {
         TOKEN_RATE_LIMITER: tokenLimiter,
         TOKEN_RATE_LIMIT_ENABLED: "true",
-        RELEASED_API_KEY: mockSecret("root-secret"),
+        RELEASES_API_KEY: mockSecret("root-secret"),
         RELEASES_PROXY_KEY: mockSecret("proxy-secret"),
         DB: h.db,
       },
@@ -311,7 +311,7 @@ describe("publicRateLimitMiddleware — per-token limiting", () => {
       { headers: { Authorization: `Bearer ${token}`, "cf-connecting-ip": "1.2.3.4" } },
       {
         TOKEN_RATE_LIMITER: tokenLimiter,
-        RELEASED_API_KEY: mockSecret("root-secret"),
+        RELEASES_API_KEY: mockSecret("root-secret"),
         DB: h.db,
       },
     );
@@ -328,7 +328,7 @@ describe("publicRateLimitMiddleware — per-token limiting", () => {
       { headers: { Authorization: `Bearer ${token}`, "cf-connecting-ip": "1.2.3.4" } },
       {
         TOKEN_RATE_LIMIT_ENABLED: "true",
-        RELEASED_API_KEY: mockSecret("root-secret"),
+        RELEASES_API_KEY: mockSecret("root-secret"),
         DB: h.db,
       },
     );
@@ -347,7 +347,7 @@ describe("publicRateLimitMiddleware — per-token limiting", () => {
         RATE_LIMIT_ENABLED: "true",
         TOKEN_RATE_LIMITER: tokenLimiter,
         TOKEN_RATE_LIMIT_ENABLED: "true",
-        RELEASED_API_KEY: mockSecret("root-secret"),
+        RELEASES_API_KEY: mockSecret("root-secret"),
       },
     );
     expect(res.status).toBe(429);

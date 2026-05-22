@@ -290,6 +290,13 @@
       "store_id": "a887a71cab084105b79706df23380723",
       "secret_name": "RELEASED_API_KEY",
     },
+    // New-prefix alias of the static root credential. Dual-bound during the
+    // RELEASED_->RELEASES_ migration; legacy binding removed in the teardown.
+    {
+      "binding": "RELEASES_API_KEY",
+      "store_id": "a887a71cab084105b79706df23380723",
+      "secret_name": "RELEASES_API_KEY",
+    },
     // RELEASES_PROXY_KEY exempts the web frontend's server-to-server traffic
     // from the per-IP public rate limiter without unlocking admin content.
     {
@@ -515,6 +522,11 @@
           "binding": "RELEASED_API_KEY",
           "store_id": "a887a71cab084105b79706df23380723",
           "secret_name": "RELEASED_API_KEY",
+        },
+        {
+          "binding": "RELEASES_API_KEY",
+          "store_id": "a887a71cab084105b79706df23380723",
+          "secret_name": "RELEASES_API_KEY",
         },
         {
           "binding": "RELEASES_PROXY_KEY",

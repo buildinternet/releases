@@ -225,8 +225,8 @@ Empty string clears the field (writes NULL). `--dry-run --json` returns the diff
 **Composition is API-only.** The CLI's `release update` doesn't accept `--composition` (the field stores into `metadata.$.composition` via `json_set`, which the CLI hasn't surfaced). When you need to write composition:
 
 ```bash
-curl -fsS -X PATCH "$RELEASED_API_URL/v1/releases/rel_…" \
-  -H "Authorization: Bearer $RELEASED_API_KEY" \
+curl -fsS -X PATCH "$RELEASES_API_URL/v1/releases/rel_…" \
+  -H "Authorization: Bearer $RELEASES_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"composition":{"bugs":2,"features":1,"enhancements":3}}'
 ```

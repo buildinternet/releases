@@ -46,8 +46,10 @@ export type Env = {
   Bindings: {
     DB: D1Database;
     RELEASED_API_KEY?: SecretBinding;
+    // New-prefix alias of the static root credential. Preferred over the legacy binding.
+    RELEASES_API_KEY?: SecretBinding;
     // Shared secret for the web frontend's server-to-server traffic. Unlike
-    // RELEASED_API_KEY this only exempts requests from the public rate limiter —
+    // RELEASES_API_KEY this only exempts requests from the public rate limiter —
     // it does NOT unlock admin-gated content. Sent as X-Releases-Proxy-Key.
     RELEASES_PROXY_KEY?: SecretBinding;
     STATUS_HUB: DurableObjectNamespace;
@@ -587,7 +589,7 @@ export default {
         );
         return;
       }
-      const releasesApiKey = await getSecret(env.RELEASED_API_KEY);
+      const releasesApiKey = await getSecret(env.RELEASES_API_KEY ?? env.RELEASED_API_KEY);
       if (!releasesApiKey) {
         logEvent("warn", { component: "scrape-agent-cron", event: "api-key-missing" });
         return;
@@ -602,7 +604,7 @@ export default {
             SCRAPE_AGENT_MAX_SESSIONS: env.SCRAPE_AGENT_MAX_SESSIONS,
             FORCE_DRAIN_STALE_HOURS: env.FORCE_DRAIN_STALE_HOURS,
             DISCOVERY_WORKER: env.DISCOVERY_WORKER,
-            RELEASED_API_KEY: releasesApiKey,
+            RELEASES_API_KEY: releasesApiKey,
             ANTHROPIC_API_KEY: (await getSecret(env.ANTHROPIC_API_KEY)) ?? undefined,
             ANTHROPIC_BASE_URL: env.ANTHROPIC_BASE_URL,
             AI_GATEWAY_TOKEN:

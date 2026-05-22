@@ -118,7 +118,7 @@ apiTokenRoutes.get("/tokens", async (c) => {
 
 apiTokenRoutes.get("/tokens/me", async (c) => {
   const auth = c.get("auth");
-  // Local dev: no RELEASED_API_KEY secret bound → the auth middleware skips and
+  // Local dev: no RELEASES_API_KEY secret bound → the auth middleware skips and
   // attaches no identity. Treat as the implicit local root so login works
   // against a local worker.
   if (!auth) {

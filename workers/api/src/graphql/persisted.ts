@@ -12,7 +12,7 @@
  *   2. KV read-through cache — wraps yoga.fetch for the (hash, variables)
  *      combinations we know are safe to cache.
  *
- * Admin callers (Authorization: Bearer matches RELEASED_API_KEY) bypass
+ * Admin callers (Authorization: Bearer matches RELEASES_API_KEY) bypass
  * both: they may send arbitrary documents and their responses are not
  * cached. The route handler stamps the X-Releases-Graphql-Admin sentinel
  * after stripping any client-supplied copy.

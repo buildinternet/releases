@@ -140,7 +140,7 @@ async function checkUpdateSessionDedup(
 } | null> {
   try {
     const guardPath = `/v1/sessions?type=update&recent_minutes=${UPDATE_DEDUP_WINDOW_MINUTES}`;
-    const apiKey = await getSecret(env.RELEASED_API_KEY);
+    const apiKey = await getSecret(env.RELEASES_API_KEY ?? env.RELEASED_API_KEY);
     const stagingKey = (await getSecret(env.STAGING_ACCESS_KEY).catch(() => null)) ?? "";
     const guardHeaders: Record<string, string> = {
       ...discoveryIdentityHeaders(),
@@ -151,9 +151,12 @@ async function checkUpdateSessionDedup(
       ? await env.API_WORKER.fetch(
           new Request(`https://api${guardPath}`, { headers: guardHeaders }),
         )
-      : await fetch(`${env.RELEASED_API_URL.replace(/\/+$/, "")}${guardPath}`, {
-          headers: guardHeaders,
-        });
+      : await fetch(
+          `${(env.RELEASES_API_URL ?? env.RELEASED_API_URL).replace(/\/+$/, "")}${guardPath}`,
+          {
+            headers: guardHeaders,
+          },
+        );
     if (!guardRes.ok) return null;
     type SessionSummary = {
       sessionId: string;
@@ -208,7 +211,7 @@ async function checkUpdateSessionDedup(
 }
 
 async function checkAuth(request: Request, env: Env): Promise<Response | null> {
-  const apiKey = await getSecret(env.RELEASED_API_KEY);
+  const apiKey = await getSecret(env.RELEASES_API_KEY ?? env.RELEASED_API_KEY);
   if (!apiKey) return null;
   const header = request.headers.get("Authorization") ?? "";
   const token = header.startsWith("Bearer ") ? header.slice(7) : "";
@@ -486,7 +489,7 @@ const httpHandler = {
       const DEDUP_WINDOW_MINUTES = 10;
       try {
         const guardPath = `/v1/sessions?type=onboard&recent_minutes=${DEDUP_WINDOW_MINUTES}`;
-        const apiKey = await getSecret(env.RELEASED_API_KEY);
+        const apiKey = await getSecret(env.RELEASES_API_KEY ?? env.RELEASED_API_KEY);
         const stagingKey = (await getSecret(env.STAGING_ACCESS_KEY).catch(() => null)) ?? "";
         const guardHeaders: Record<string, string> = {
           ...discoveryIdentityHeaders(),
@@ -498,9 +501,12 @@ const httpHandler = {
           ? await env.API_WORKER.fetch(
               new Request(`https://api${guardPath}`, { headers: guardHeaders }),
             )
-          : await fetch(`${env.RELEASED_API_URL.replace(/\/+$/, "")}${guardPath}`, {
-              headers: guardHeaders,
-            });
+          : await fetch(
+              `${(env.RELEASES_API_URL ?? env.RELEASED_API_URL).replace(/\/+$/, "")}${guardPath}`,
+              {
+                headers: guardHeaders,
+              },
+            );
         if (guardRes.ok) {
           const sessionsBody = (await guardRes.json()) as
             | {

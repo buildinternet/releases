@@ -21,19 +21,19 @@
  *     --manifest /path/to/manifest.csv
  *
  *   # apply against staging (sets X-Releases-Staging-Key from env)
- *   RELEASED_API_URL=https://api-staging.releases.sh \
- *   RELEASED_API_KEY=... \
+ *   RELEASES_API_URL=https://api-staging.releases.sh \
+ *   RELEASES_API_KEY=... \
  *   STAGING_ACCESS_KEY=... \
  *   bun scripts/upload-org-avatars.ts --manifest /path/to/manifest.csv --apply
  *
  *   # apply against prod (media URL defaults to https://media.releases.sh)
- *   RELEASED_API_URL=https://api.releases.sh \
- *   RELEASED_API_KEY=... \
+ *   RELEASES_API_URL=https://api.releases.sh \
+ *   RELEASES_API_KEY=... \
  *   bun scripts/upload-org-avatars.ts --manifest /path/to/manifest.csv --apply
  *
  * Env:
- *   RELEASED_API_URL      Required when --apply (e.g. https://api.releases.sh)
- *   RELEASED_API_KEY      Required when --apply (Bearer token)
+ *   RELEASES_API_URL      Required when --apply (e.g. https://api.releases.sh)
+ *   RELEASES_API_KEY      Required when --apply (Bearer token)
  *   STAGING_ACCESS_KEY    Optional; if set, sent as X-Releases-Staging-Key
  *   MEDIA_ORIGIN          Optional; defaults to https://media.releases.sh
  */
@@ -74,7 +74,7 @@ function parseArgs(argv: string[]): Args {
           "  --apply             Actually upload + PATCH (default: dry run)",
           "  -h, --help          Show this help",
           "",
-          "Env: RELEASED_API_URL, RELEASED_API_KEY, STAGING_ACCESS_KEY?, MEDIA_ORIGIN?",
+          "Env: RELEASES_API_URL, RELEASES_API_KEY, STAGING_ACCESS_KEY?, MEDIA_ORIGIN?",
           "",
         ].join("\n"),
       );
@@ -151,18 +151,21 @@ async function main(): Promise<void> {
   const manifestPath = resolve(args.manifest);
   const rawDir = args.rawDir ? resolve(args.rawDir) : join(dirname(manifestPath), "raw");
   const mediaOrigin = (process.env.MEDIA_ORIGIN ?? "https://media.releases.sh").replace(/\/+$/, "");
-  const apiUrl = (process.env.RELEASED_API_URL ?? "").replace(/\/+$/, "");
-  const apiKey = process.env.RELEASED_API_KEY ?? "";
+  const apiUrl = (process.env.RELEASES_API_URL ?? process.env.RELEASED_API_URL ?? "").replace(
+    /\/+$/,
+    "",
+  );
+  const apiKey = process.env.RELEASES_API_KEY ?? process.env.RELEASED_API_KEY ?? "";
   const stagingKey = process.env.STAGING_ACCESS_KEY ?? "";
   const only = args.only ? new Set(args.only.split(",").map((s) => s.trim())) : null;
 
   if (args.apply) {
     if (!apiUrl) {
-      logger.error("RELEASED_API_URL is required when --apply is set");
+      logger.error("RELEASES_API_URL is required when --apply is set");
       process.exit(1);
     }
     if (!apiKey) {
-      logger.error("RELEASED_API_KEY is required when --apply is set");
+      logger.error("RELEASES_API_KEY is required when --apply is set");
       process.exit(1);
     }
   }

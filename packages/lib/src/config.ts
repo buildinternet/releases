@@ -1,12 +1,13 @@
 import { mkdirSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
+import { legacyEnv } from "./legacy-env";
 
 let _dataDir: string | null = null;
 
 export function getDataDir(): string {
   if (!_dataDir) {
-    _dataDir = process.env.RELEASED_DATA_DIR || join(homedir(), ".releases");
+    _dataDir = legacyEnv("RELEASES_DATA_DIR", "RELEASED_DATA_DIR") || join(homedir(), ".releases");
     mkdirSync(_dataDir, { recursive: true });
   }
   return _dataDir;
@@ -27,11 +28,19 @@ export const config = {
   cloudflareAccountId: () => process.env.CLOUDFLARE_ACCOUNT_ID || "",
   cloudflareApiToken: () => process.env.CLOUDFLARE_API_TOKEN || "",
   githubToken: () => process.env.GITHUB_TOKEN || "",
-  ingestModel: () => process.env.RELEASED_INGEST_MODEL || "claude-haiku-4-5-20251001",
-  agentModel: () => process.env.RELEASED_AGENT_MODEL || "claude-sonnet-4-6",
-  queryModel: () => process.env.RELEASED_QUERY_MODEL || "claude-sonnet-4-6",
-  summaryModel: () => process.env.RELEASED_SUMMARY_MODEL || "claude-haiku-4-5-20251001",
-  groupingModel: () => process.env.RELEASED_GROUPING_MODEL || "claude-haiku-4-5-20251001",
-  apiUrl: () => process.env.RELEASED_API_URL || "",
-  apiKey: () => process.env.RELEASED_API_KEY || "",
+  ingestModel: () =>
+    legacyEnv("RELEASES_INGEST_MODEL", "RELEASED_INGEST_MODEL") || "claude-haiku-4-5-20251001",
+  agentModel: () =>
+    legacyEnv("RELEASES_AGENT_MODEL", "RELEASED_AGENT_MODEL") || "claude-sonnet-4-6",
+  queryModel: () =>
+    legacyEnv("RELEASES_QUERY_MODEL", "RELEASED_QUERY_MODEL") || "claude-sonnet-4-6",
+  summaryModel: () =>
+    legacyEnv("RELEASES_SUMMARY_MODEL", "RELEASED_SUMMARY_MODEL") || "claude-haiku-4-5-20251001",
+  groupingModel: () =>
+    legacyEnv("RELEASES_GROUPING_MODEL", "RELEASED_GROUPING_MODEL") || "claude-haiku-4-5-20251001",
+  workerAgentModel: () =>
+    legacyEnv("RELEASES_WORKER_AGENT_MODEL", "RELEASED_WORKER_AGENT_MODEL") || "claude-haiku-4-5",
+  apiUrl: () => legacyEnv("RELEASES_API_URL", "RELEASED_API_URL") || "",
+  stagingApiUrl: () => legacyEnv("RELEASES_STAGING_API_URL", "RELEASED_STAGING_API_URL") || "",
+  apiKey: () => legacyEnv("RELEASES_API_KEY", "RELEASED_API_KEY") || "",
 } as const;

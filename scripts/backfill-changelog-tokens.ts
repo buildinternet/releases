@@ -12,7 +12,7 @@
  * Lists oversized rows via `GET /v1/sources/changelog-files/oversized`,
  * fetches content via `GET /v1/sources/:slug/changelog`, and writes back
  * via `PATCH /v1/sources/:slug/changelog/tokens`. Requires
- * RELEASED_API_URL and admin RELEASED_API_KEY in env.
+ * RELEASES_API_URL and admin RELEASES_API_KEY in env.
  *
  * Usage:
  *   bun scripts/backfill-changelog-tokens.ts                 # dry run (default)
@@ -30,7 +30,7 @@ import cl100k_base from "js-tiktoken/ranks/cl100k_base";
 import { logger } from "@buildinternet/releases-lib/logger";
 import { adminGet, adminPatch as adminPatchClient } from "./lib/admin-client.js";
 
-const API_URL = process.env.RELEASED_API_URL;
+const API_URL = process.env.RELEASES_API_URL ?? process.env.RELEASED_API_URL;
 
 // Matches LIVE_ENCODE_MAX_CHARS in src/lib/tokens.ts. Kept as a local
 // constant so the script doesn't depend on an internal export.
@@ -215,7 +215,7 @@ async function run(args: ParsedArgs): Promise<BackfillRow[]> {
 
 async function main() {
   if (!API_URL) {
-    throw new Error("RELEASED_API_URL must be set");
+    throw new Error("RELEASES_API_URL must be set");
   }
   const args = parseArgs(process.argv.slice(2));
   logger.info(

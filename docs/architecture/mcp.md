@@ -21,7 +21,7 @@ Scoped API tokens (Phase 2 of the [scoped API tokens design](../superpowers/spec
 **Identity resolution** (`resolveMcpAuth`, mirroring the API worker's `resolveAuth`):
 
 - A `relk_…` Bearer is verified against D1 via the shared `verifyApiToken` from `@releases/core-internal/api-token-store` — one verification path for both workers. On success the caller carries the token's scopes; an invalid/unknown `relk_` token is **ignored** (resolves to anonymous read) so public reads never 401, exactly like the API worker's public-read path. Gated by `API_TOKENS_DISABLED`.
-- The static `RELEASED_API_KEY` presented as Bearer maps to **root** (`["*"]`).
+- The static `RELEASES_API_KEY` presented as Bearer maps to **root** (`["*"]`).
 - Anything else (including no credential) is **anonymous**, carrying an implicit `["read"]` scope.
 
 A successful token use records `last_used_at` via `touchLastUsed` (throttled to 60s, fire-and-forget through `waitUntil`) so the admin surface audits usage across both workers.

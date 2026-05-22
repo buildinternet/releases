@@ -238,11 +238,11 @@ export async function runManagedDiscovery(
   const executeToolCall =
     executor ??
     (() => {
-      const apiUrl = process.env.RELEASED_API_URL;
-      const releasesApiKey = process.env.RELEASED_API_KEY;
+      const apiUrl = config.apiUrl();
+      const releasesApiKey = config.apiKey();
       if (!apiUrl || !releasesApiKey) {
         throw new Error(
-          "RELEASED_API_URL and RELEASED_API_KEY are required for managed agents discovery",
+          "RELEASES_API_URL and RELEASES_API_KEY are required for managed agents discovery",
         );
       }
       return createTypedExecutor({

@@ -26,7 +26,7 @@ import { inferMonthOnlyDate } from "@buildinternet/releases-core/dates";
 import { logger } from "@buildinternet/releases-lib/logger";
 import { adminGet, adminPatch as adminPatchClient } from "./lib/admin-client.js";
 
-const API_URL = process.env.RELEASED_API_URL;
+const API_URL = process.env.RELEASES_API_URL ?? process.env.RELEASED_API_URL;
 
 interface ParsedArgs {
   apply: boolean;
@@ -220,7 +220,7 @@ async function run(args: ParsedArgs): Promise<BackfillRow[]> {
 
 async function main() {
   if (!API_URL) {
-    throw new Error("RELEASED_API_URL must be set");
+    throw new Error("RELEASES_API_URL must be set");
   }
   const args = parseArgs(process.argv.slice(2));
   logger.info(
