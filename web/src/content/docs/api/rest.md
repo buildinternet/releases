@@ -30,6 +30,15 @@ Three shapes, picked per surface:
 | **Cursor-based** | Feed-shaped: `/v1/orgs/:slug/releases`, `/v1/orgs/:orgSlug/sources/:sourceSlug` (and its embedded `releases` array), `/v1/orgs/:orgSlug/sources/:sourceSlug/releases`, `/v1/collections/:slug/releases`, `/v1/categories/:slug/releases` | opaque `cursor`                                       | `pagination: { nextCursor, limit }`; `nextCursor` is `null` when the slice is exhausted                    |
 | **Search**       | `/v1/search`, `/v1/search/releases`                                                                                                                                                                                                      | query + `limit`                                       | `_meta.search`, with `hitCap: true` when results saturated `limit`                                         |
 
+## Release date filtering
+
+`/v1/search` and `/v1/releases/latest` accept optional `since` and `until` query params that bound results by publish date. Each takes an ISO date/datetime (`2026-01-01`) or relative shorthand (`90d`, `4w`, `6m`, `2y`); an unparseable value is a `400`. On `/v1/search` they filter the release hits only — the orgs, catalog, and collections sections are unaffected — and releases with no `published_at` are dropped from the window.
+
+```bash
+curl "https://api.releases.sh/v1/search?q=slack%20integration&since=90d"
+curl "https://api.releases.sh/v1/releases/latest?org=vercel&since=2026-01-01&until=2026-03-31"
+```
+
 ## Resource shape
 
 | Resource     | Notes                                                                                                                                                                                                                       |

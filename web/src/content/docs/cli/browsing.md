@@ -55,10 +55,14 @@ The `tail` command shows the most recent releases and can optionally poll for ne
 releases tail                            # Across all sources
 releases tail claude-code                # From one source
 releases tail --org vercel --count 20    # Latest 20 from an org
+releases tail --since 30d                # Only releases from the last 30 days
+releases tail --since 2026-01-01 --until 2026-03-31  # A specific window
 releases tail -f                         # Follow new releases (polls every 60s)
 releases tail -f --interval 30           # Follow with a 30s poll interval
 releases tail --json                     # JSON output
 ```
+
+`--since` and `--until` bound results by publish date and compose with the other filters. Each accepts an ISO date (`2026-01-01`) or relative shorthand (`90d`, `4w`, `6m`, `2y`). `latest` is an alias for `tail`; an unparseable value exits with code `2`.
 
 ## Search
 
@@ -70,6 +74,7 @@ releases search "authentication" --type releases --limit 5
 releases search "vercel" --json
 releases search "vercel/next.js"          # GitHub coordinate — falls back to on-demand lookup
 releases search "github:Shopify/toxiproxy" # Same coordinate with explicit provider prefix
+releases search "slack integration" --since 90d  # Only release hits from the last 90 days
 ```
 
 ### On-demand GitHub lookup
@@ -90,11 +95,15 @@ If the org segment matches a known org but the specific repo doesn't, the CLI sh
 
 ### Options
 
-| Flag            | Description                                                   |
-| --------------- | ------------------------------------------------------------- |
-| `--type <type>` | Limit results to `orgs`, `products`, `sources`, or `releases` |
-| `--limit <n>`   | Max results per type (default 10)                             |
-| `--json`        | Machine-readable output                                       |
+| Flag             | Description                                                                       |
+| ---------------- | --------------------------------------------------------------------------------- |
+| `--type <type>`  | Limit results to `orgs`, `products`, `sources`, or `releases`                     |
+| `--limit <n>`    | Max results per type (default 10)                                                 |
+| `--since <when>` | Keep only release hits published on/after this date (ISO or `90d`/`4w`/`6m`/`2y`) |
+| `--until <when>` | Keep only release hits published on/before this date (same formats as `--since`)  |
+| `--json`         | Machine-readable output                                                           |
+
+`--since` / `--until` filter the release hits only — org, product, and source matches are unaffected.
 
 ## Categories
 
@@ -113,3 +122,17 @@ Get a quick count of organizations, sources, releases, and products in the datab
 ```bash
 releases stats
 ```
+
+## Feedback
+
+Send feedback about the CLI — a bug, an idea, or anything else — straight to the maintainers. No API key or account required.
+
+```bash
+releases feedback "tail -f reconnects slowly on flaky wifi"   # one-shot message
+releases feedback --type bug                                  # prompts for the text (interactive)
+echo "longer write-up…" | releases feedback                   # pipe from stdin
+releases feedback "love the tool" --contact you@example.com   # optional reply-to
+releases feedback "draft" --dry-run --json                    # preview the payload, send nothing
+```
+
+With no message argument in an interactive terminal, `feedback` prompts for the text (and an optional contact); otherwise pass it inline or pipe via stdin. `--type` accepts `bug`, `idea`, or `other`. Submissions are confirmed with an ID you can reference later.

@@ -202,3 +202,18 @@ Manage remote fetch and discovery sessions:
 releases admin discovery task list
 releases admin discovery task cancel <sessionId>
 ```
+
+## User feedback
+
+Review feedback submitted through `releases feedback`. Newest first; read-only.
+
+```bash
+releases admin feedback list                       # Most recent submissions
+releases admin feedback list --type bug            # Filter by type: bug | idea | other | general
+releases admin feedback list --status new          # Filter by status: new | triaged | closed
+releases admin feedback list --limit 100           # Rows per page (default 50, max 200)
+releases admin feedback list --cursor <cursor>     # Next page (from a previous --json `nextCursor`)
+releases admin feedback list --json                # Raw envelope: { items, nextCursor }
+```
+
+Each entry carries the message, optional contact, type, status, and submission time. Pagination is cursor-based — pass the `nextCursor` from a `--json` response back as `--cursor` to walk older pages.
