@@ -30,7 +30,7 @@ import { KIND_VALUES, type Kind } from "@buildinternet/releases-core/kinds";
 import { scopeSatisfies, type ApiScope } from "@buildinternet/releases-core/api-token";
 import { parseCoordinate } from "@buildinternet/releases-core/lookup-coordinate";
 import type { LookupResultPayload } from "@buildinternet/releases-api-types";
-import { getSecret } from "@releases/lib/secrets";
+import { getSecret, getSecretWithFallback } from "@releases/lib/secrets";
 
 /**
  * Render the lookup payload as a markdown rail appended to the tool's text
@@ -357,7 +357,7 @@ export function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServ
     if (!scopeSatisfies(authScopes, "write")) return;
     const forwardToken =
       authToken ??
-      (await getSecret(env.RELEASES_API_KEY ?? env.RELEASED_API_KEY).catch(() => null)) ??
+      (await getSecretWithFallback(env.RELEASES_API_KEY, env.RELEASED_API_KEY).catch(() => null)) ??
       "";
     if (!forwardToken) return;
     try {

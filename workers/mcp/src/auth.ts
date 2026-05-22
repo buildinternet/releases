@@ -1,4 +1,4 @@
-import { getSecret } from "@releases/lib/secrets";
+import { getSecret, getSecretWithFallback } from "@releases/lib/secrets";
 import { isApiTokenShaped, ROOT_SCOPE } from "@buildinternet/releases-core/api-token";
 import { verifyApiToken } from "@releases/core-internal/api-token-store";
 import { createDb } from "./db.js";
@@ -43,7 +43,9 @@ async function resolveIdentity(presented: string, env: Env): Promise<McpIdentity
     // stay open; the staging gate below still applies.
     return ANONYMOUS;
   }
-  const rootKey = await getSecret(env.RELEASES_API_KEY ?? env.RELEASED_API_KEY).catch(() => null);
+  const rootKey = await getSecretWithFallback(env.RELEASES_API_KEY, env.RELEASED_API_KEY).catch(
+    () => null,
+  );
   if (rootKey && presented === rootKey) {
     return { kind: "root", scopes: [ROOT_SCOPE], tokenId: null, token: null };
   }

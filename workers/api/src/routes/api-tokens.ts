@@ -145,7 +145,9 @@ apiTokenRoutes.get("/tokens/me", async (c) => {
   }
   const db = createDb(c.env.DB);
   const row = await db.select().from(apiTokens).where(eq(apiTokens.id, auth.tokenId)).get();
-  if (!row) return c.json({ error: "unauthorized", message: "Invalid or missing API key" }, 401);
+  // Auth resolved a token id but its row is gone (revoked/deleted mid-request).
+  // A credential was presented, so this is "invalid", never "missing".
+  if (!row) return c.json({ error: "unauthorized", message: "Invalid API key" }, 401);
   return c.json({
     kind: "token",
     name: row.name,

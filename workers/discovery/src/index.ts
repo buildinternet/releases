@@ -7,7 +7,7 @@ import type {
 } from "./types.js";
 import { discoveryIdentityHeaders } from "./identity.js";
 import { logEvent } from "@releases/lib/log-event.js";
-import { getSecret } from "@releases/lib/secrets";
+import { getSecret, getSecretWithFallback } from "@releases/lib/secrets";
 import { checkSpendCap } from "./spend-cap.js";
 import { WorkerEntrypoint } from "cloudflare:workers";
 
@@ -140,7 +140,7 @@ async function checkUpdateSessionDedup(
 } | null> {
   try {
     const guardPath = `/v1/sessions?type=update&recent_minutes=${UPDATE_DEDUP_WINDOW_MINUTES}`;
-    const apiKey = await getSecret(env.RELEASES_API_KEY ?? env.RELEASED_API_KEY);
+    const apiKey = await getSecretWithFallback(env.RELEASES_API_KEY, env.RELEASED_API_KEY);
     const stagingKey = (await getSecret(env.STAGING_ACCESS_KEY).catch(() => null)) ?? "";
     const guardHeaders: Record<string, string> = {
       ...discoveryIdentityHeaders(),
@@ -211,7 +211,7 @@ async function checkUpdateSessionDedup(
 }
 
 async function checkAuth(request: Request, env: Env): Promise<Response | null> {
-  const apiKey = await getSecret(env.RELEASES_API_KEY ?? env.RELEASED_API_KEY);
+  const apiKey = await getSecretWithFallback(env.RELEASES_API_KEY, env.RELEASED_API_KEY);
   if (!apiKey) return null;
   const header = request.headers.get("Authorization") ?? "";
   const token = header.startsWith("Bearer ") ? header.slice(7) : "";
@@ -489,7 +489,7 @@ const httpHandler = {
       const DEDUP_WINDOW_MINUTES = 10;
       try {
         const guardPath = `/v1/sessions?type=onboard&recent_minutes=${DEDUP_WINDOW_MINUTES}`;
-        const apiKey = await getSecret(env.RELEASES_API_KEY ?? env.RELEASED_API_KEY);
+        const apiKey = await getSecretWithFallback(env.RELEASES_API_KEY, env.RELEASED_API_KEY);
         const stagingKey = (await getSecret(env.STAGING_ACCESS_KEY).catch(() => null)) ?? "";
         const guardHeaders: Record<string, string> = {
           ...discoveryIdentityHeaders(),

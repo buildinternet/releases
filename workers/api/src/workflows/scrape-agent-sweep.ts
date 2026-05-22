@@ -45,7 +45,7 @@ import {
 } from "../lib/search-no-results.js";
 import { sendAlert, type AlertEnv } from "../lib/send-alert.js";
 import { logEvent } from "@releases/lib/log-event";
-import { getSecret } from "@releases/lib/secrets";
+import { getSecret, getSecretWithFallback } from "@releases/lib/secrets";
 
 /**
  * Workflow env. Secrets stay as SecretBinding here and are resolved inside
@@ -170,7 +170,8 @@ async function resolveDispatchEnv(env: ScrapeAgentSweepWorkflowEnv): Promise<Swe
   return {
     ...baseEnvFields(env),
     DISCOVERY_WORKER: env.DISCOVERY_WORKER,
-    RELEASES_API_KEY: (await getSecret(env.RELEASES_API_KEY ?? env.RELEASED_API_KEY)) ?? "",
+    RELEASES_API_KEY:
+      (await getSecretWithFallback(env.RELEASES_API_KEY, env.RELEASED_API_KEY)) ?? "",
   };
 }
 

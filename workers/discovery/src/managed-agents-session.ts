@@ -33,7 +33,7 @@ import {
   directApiFetcher,
 } from "./fetch-wrappers.js";
 import { logEvent } from "@releases/lib/log-event.js";
-import { getSecret } from "@releases/lib/secrets";
+import { getSecret, getSecretWithFallback } from "@releases/lib/secrets";
 import { recordSessionSpend } from "./spend-cap.js";
 
 // ── MA 429 rate-limit retry loop ─────────────────────────────────────────────
@@ -411,7 +411,8 @@ export class ManagedAgentsSession extends DurableObject<Env> {
       // rather than silently dropping the notification (which happened previously
       // because StatusHub's session:error handler required an existing row).
       const releasesApiKey =
-        (await getSecret(this.env.RELEASES_API_KEY ?? this.env.RELEASED_API_KEY)) ?? undefined;
+        (await getSecretWithFallback(this.env.RELEASES_API_KEY, this.env.RELEASED_API_KEY)) ??
+        undefined;
       let statusHubAgentLabel: "haiku" | "sonnet" | "coordinator";
       switch (agentRole) {
         case "worker":
@@ -1258,7 +1259,7 @@ ${idList}
     try {
       const apiKey =
         cachedApiKey ??
-        (await getSecret(this.env.RELEASES_API_KEY ?? this.env.RELEASED_API_KEY)) ??
+        (await getSecretWithFallback(this.env.RELEASES_API_KEY, this.env.RELEASED_API_KEY)) ??
         undefined;
       const stagingKey = await this.getStagingKey();
       const headers: Record<string, string> = {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { getSecret } from "./secrets";
+import { getSecret, getSecretWithFallback } from "./secrets";
 
 function makeBinding(value: string): { get(): Promise<string> } {
   let callCount = 0;
@@ -66,5 +66,36 @@ describe("getSecret", () => {
   it("throws when both attempts fail", async () => {
     const binding = makeAlwaysFailingBinding();
     await expect(getSecret(binding)).rejects.toThrow("Failed to resolve secret after 2 attempts");
+  });
+});
+
+describe("getSecretWithFallback", () => {
+  it("returns the primary value and never reads the fallback when primary is non-empty", async () => {
+    const primary = makeBinding("primary-value");
+    const fallback = makeBinding("legacy-value");
+    expect(await getSecretWithFallback(primary, fallback)).toBe("primary-value");
+    expect((fallback as any).callCount).toBe(0);
+  });
+
+  it("falls back to the legacy value when the primary binding is undefined", async () => {
+    const fallback = makeBinding("legacy-value");
+    expect(await getSecretWithFallback(undefined, fallback)).toBe("legacy-value");
+  });
+
+  it("falls back to the legacy value when the primary resolves to null", async () => {
+    const primary = makeBinding(null as unknown as string);
+    const fallback = makeBinding("legacy-value");
+    expect(await getSecretWithFallback(primary, fallback)).toBe("legacy-value");
+  });
+
+  it("falls back to the legacy value when the primary resolves to an empty string", async () => {
+    // Migration-safe: an unset/empty new secret must not shadow the legacy one.
+    const primary = makeBinding("");
+    const fallback = makeBinding("legacy-value");
+    expect(await getSecretWithFallback(primary, fallback)).toBe("legacy-value");
+  });
+
+  it("returns null when neither binding yields a value", async () => {
+    expect(await getSecretWithFallback(undefined, undefined)).toBeNull();
   });
 });

@@ -28,7 +28,7 @@ import { sweepTombstones } from "./cron/sweep-tombstones.js";
 import { sendAlert, type AlertEnv } from "./lib/send-alert.js";
 import { logEvent } from "@releases/lib/log-event";
 import { dbErrorLogFields } from "@releases/lib/db-errors";
-import { getSecret } from "@releases/lib/secrets";
+import { getSecret, getSecretWithFallback } from "@releases/lib/secrets";
 
 export { StatusHub } from "./status-hub.js";
 export { ReleaseHub } from "./release-hub.js";
@@ -589,7 +589,10 @@ export default {
         );
         return;
       }
-      const releasesApiKey = await getSecret(env.RELEASES_API_KEY ?? env.RELEASED_API_KEY);
+      const releasesApiKey = await getSecretWithFallback(
+        env.RELEASES_API_KEY,
+        env.RELEASED_API_KEY,
+      );
       if (!releasesApiKey) {
         logEvent("warn", { component: "scrape-agent-cron", event: "api-key-missing" });
         return;
