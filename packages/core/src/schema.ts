@@ -234,6 +234,10 @@ export const collections = sqliteTable("collections", {
   // the collection hasn't been embedded yet (e.g. seed rows pre-feature, or a
   // transient embed failure). The backfill script sweeps NULL rows.
   embeddedAt: text("embedded_at"),
+  // "Promote on the homepage" flag. When set, the collection appears in the
+  // home page's featured-collections sidebar block. Toggle via
+  // PATCH /v1/collections/:slug { isFeatured: true }. Default false.
+  isFeatured: integer("is_featured", { mode: "boolean" }).notNull().default(false),
 });
 
 // A member is either an org (`org_id` set, `product_id` null) or a single

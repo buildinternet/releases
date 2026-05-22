@@ -350,7 +350,8 @@ export const api = {
     );
   },
   tagDetail: (slug: string) => fetchApi<TagDetail>(`/v1/tags/${slug}`),
-  collections: () => fetchApi<CollectionListItem[]>("/v1/collections"),
+  collections: (opts: { featured?: boolean } = {}) =>
+    fetchApi<CollectionListItem[]>(`/v1/collections${opts.featured ? "?featured=1" : ""}`),
   orgCollections: (slug: string) => fetchApi<CollectionListItem[]>(`/v1/orgs/${slug}/collections`),
   collectionDetail: (slug: string) => fetchApi<CollectionDetail>(`/v1/collections/${slug}`),
   collectionReleases: (

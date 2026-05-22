@@ -962,6 +962,7 @@ orgRoutes.get(
         slug: collections.slug,
         name: collections.name,
         description: collections.description,
+        isFeatured: collections.isFeatured,
         // Count visible members only — joining through organizations_public
         // matches /v1/collections so the count and the rendered list agree.
         memberCount: sql<number>`(
@@ -979,6 +980,7 @@ orgRoutes.get(
       slug: r.slug,
       name: r.name,
       description: r.description,
+      isFeatured: r.isFeatured,
       memberCount: Number(r.memberCount),
     }));
     return c.json(body);
