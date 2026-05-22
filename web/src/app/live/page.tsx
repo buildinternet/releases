@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Header } from "@/components/header";
 import { LiveStream } from "./live-stream";
+import { apiBaseUrl } from "@/lib/env";
 
 const TITLE = "Live releases";
 const DESCRIPTION =
@@ -22,7 +23,7 @@ export const metadata: Metadata = {
 };
 
 export default function LivePage() {
-  const apiUrl = process.env.RELEASED_API_URL ?? "http://localhost:3456";
+  const apiUrl = apiBaseUrl() ?? "http://localhost:3456";
 
   return (
     <div className="min-h-screen">

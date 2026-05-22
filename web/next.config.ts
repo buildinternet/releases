@@ -1,7 +1,8 @@
 import type { NextConfig } from "next";
 import path from "path";
 
-const apiUrl = process.env.RELEASED_API_URL ?? "http://localhost:3456";
+const apiUrl =
+  process.env.RELEASES_API_URL ?? process.env.RELEASED_API_URL ?? "http://localhost:3456";
 let apiHostname: string;
 try {
   apiHostname = new URL(apiUrl).hostname;

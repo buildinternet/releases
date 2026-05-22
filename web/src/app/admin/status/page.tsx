@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { Header } from "@/components/header";
 import { StatusDashboard } from "./dashboard";
 import { statusDashboard } from "@/flags";
+import { apiBaseUrl } from "@/lib/env";
 
 export const metadata: Metadata = { title: "Status" };
 
@@ -12,7 +13,7 @@ export default function StatusPage() {
   // apiUrl is only used client-side for the WebSocket connection to /v1/status/ws,
   // which has no auth. Admin HTTP calls go through /api/proxy/... so the bearer
   // never crosses server→client.
-  const apiUrl = process.env.RELEASED_API_URL ?? "http://localhost:3456";
+  const apiUrl = apiBaseUrl() ?? "http://localhost:3456";
 
   return (
     <div className="min-h-screen">

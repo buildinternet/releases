@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { staticBaseUrlEnv } from "./env";
 
 const PRODUCTION_BASE_URL = "https://releases.sh";
 
@@ -8,7 +9,7 @@ const PRODUCTION_BASE_URL = "https://releases.sh";
  * request context is available in these contexts.
  */
 export function getStaticBaseUrl(): string {
-  return process.env.RELEASED_BASE_URL?.replace(/\/$/, "") ?? PRODUCTION_BASE_URL;
+  return staticBaseUrlEnv()?.replace(/\/$/, "") ?? PRODUCTION_BASE_URL;
 }
 
 /**
@@ -16,8 +17,9 @@ export function getStaticBaseUrl(): string {
  * In production this is always releases.sh; in dev it reflects localhost.
  */
 export function getBaseUrl(request: NextRequest): string {
-  if (process.env.RELEASED_BASE_URL) {
-    return process.env.RELEASED_BASE_URL.replace(/\/$/, "");
+  const override = staticBaseUrlEnv();
+  if (override) {
+    return override.replace(/\/$/, "");
   }
 
   const host = request.headers.get("host");

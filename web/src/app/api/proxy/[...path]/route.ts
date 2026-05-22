@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { statusDashboard } from "@/flags";
 import { webApiHeaders } from "@/lib/api";
+import { apiBaseUrl, serverApiKey } from "@/lib/env";
 
-const API_URL = process.env.RELEASED_API_URL ?? "http://localhost:3456";
-const API_SECRET = process.env.RELEASED_API_KEY;
+const API_URL = apiBaseUrl() ?? "http://localhost:3456";
+const API_SECRET = serverApiKey();
 
 export const dynamic = "force-dynamic";
 

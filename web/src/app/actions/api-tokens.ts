@@ -3,8 +3,9 @@
 import { webApiHeaders } from "@/lib/api";
 import { isApiScope, type ApiScope } from "@buildinternet/releases-core/api-token";
 import { isApiTokensAdminEnabled, PRIMARY_OWNER } from "@/lib/api-tokens-admin-flag";
+import { apiBaseUrl, serverApiKey } from "@/lib/env";
 
-const API_URL = process.env.RELEASED_API_URL ?? "http://localhost:3456";
+const API_URL = apiBaseUrl() ?? "http://localhost:3456";
 const REQUEST_TIMEOUT_MS = 10_000;
 
 export interface PublicTokenRow {
@@ -27,7 +28,7 @@ export interface MintedTokenRow extends PublicTokenRow {
 }
 
 function adminHeaders(): Record<string, string> {
-  const secret = process.env.RELEASED_API_KEY;
+  const secret = serverApiKey();
   if (!secret) throw new Error("RELEASED_API_KEY not configured.");
   return webApiHeaders({ Authorization: `Bearer ${secret}`, "Content-Type": "application/json" });
 }
