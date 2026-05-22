@@ -125,8 +125,20 @@ export function pickChangelogInDir(entries: GitHubContentEntry[]): string | null
   return CHANGELOG_FILENAMES.find((name) => files.has(name)) ?? null;
 }
 
-interface ListingCache {
+export interface ListingCache {
   map: Map<string, GitHubContentEntry[] | null>;
+  /**
+   * Count of GitHub network requests made through this cache — directory
+   * listings plus the workspace-manifest raw reads in `collectWorkspaceGlobs`.
+   * Cache hits do not increment. Lets a caller report how many upstream calls
+   * a discovery pass cost without instrumenting `fetch` globally.
+   */
+  requests: number;
+}
+
+/** Fresh listing cache with a zeroed request counter. */
+export function createListingCache(): ListingCache {
+  return { map: new Map(), requests: 0 };
 }
 
 async function listContents(
@@ -141,6 +153,7 @@ async function listContents(
     const url = dirPath
       ? `https://api.github.com/repos/${owner}/${repo}/contents/${dirPath}`
       : `https://api.github.com/repos/${owner}/${repo}/contents/`;
+    cache.requests++;
     const res = await fetch(url, { headers: apiHeaders });
     if (!res.ok) {
       cache.map.set(dirPath, null);
@@ -249,12 +262,12 @@ function normalizeOverridePath(entry: string): { path: string; dir: string; file
 export async function discoverChangelogPaths(
   source: Source,
   headers: { apiHeaders: Record<string, string>; rawHeaders: Record<string, string> },
+  cache: ListingCache = createListingCache(),
 ): Promise<DiscoveredChangelogPath[] | null> {
   const parsed = parseOwnerRepo(source.url);
   if (!parsed) return null;
   const { owner, repo } = parsed;
   const { apiHeaders, rawHeaders } = headers;
-  const cache: ListingCache = { map: new Map() };
   const ctx = { owner, repo, apiHeaders, cache };
 
   const out: DiscoveredChangelogPath[] = [];
@@ -293,7 +306,7 @@ export async function discoverChangelogPaths(
   // Resolve every workspace declaration we recognize. Adding a new format
   // (Lerna, Rush, …) is one entry in this list — the rest of the function
   // doesn't care which file the globs came from.
-  const workspaceGlobs = await collectWorkspaceGlobs(rootListing, owner, repo, rawHeaders);
+  const workspaceGlobs = await collectWorkspaceGlobs(rootListing, owner, repo, rawHeaders, cache);
   const packageDirs = await expandGlobs(workspaceGlobs, ctx);
   for (const dir of packageDirs) {
     // oxlint-disable-next-line no-await-in-loop -- GitHub REST API rate limit; package dirs scanned sequentially
@@ -316,15 +329,18 @@ async function collectWorkspaceGlobs(
   owner: string,
   repo: string,
   rawHeaders: Record<string, string>,
+  cache: ListingCache,
 ): Promise<string[]> {
   const rootFiles = new Set(rootListing.filter((e) => e.type === "file").map((e) => e.name));
   const globs: string[] = [];
 
   if (rootFiles.has("package.json")) {
+    cache.requests++;
     const pkgText = await readRawFile(owner, repo, "package.json", rawHeaders);
     if (pkgText) globs.push(...parseWorkspaces(pkgText));
   }
   if (rootFiles.has("pnpm-workspace.yaml")) {
+    cache.requests++;
     const yaml = await readRawFile(owner, repo, "pnpm-workspace.yaml", rawHeaders);
     if (yaml) globs.push(...parsePnpmWorkspaces(yaml));
   }

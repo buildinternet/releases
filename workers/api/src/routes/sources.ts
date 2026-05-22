@@ -141,6 +141,7 @@ import { resolveOrgSlug, resolveProductSlug } from "../lib/slug-lookups.js";
 import { logEvent } from "@releases/lib/log-event";
 import { classifyDbError } from "@releases/lib/db-errors";
 import { getSecret } from "@releases/lib/secrets";
+import { classifyRepoStatus } from "../lib/github-repo-status.js";
 
 export const sourceRoutes = new Hono<Env>();
 
@@ -1752,72 +1753,6 @@ const probeChangelogsHandler = async (c: import("hono").Context<Env>) => {
   });
 };
 
-/**
- * Distinguish the four states callers care about for a probe precheck:
- * - 404 → repo doesn't exist (probe responds 404)
- * - 401/403 → auth/permission failure (probe responds 502)
- * - 429 → rate-limited (probe responds 503)
- * - 5xx / network error → upstream issue (probe responds 502)
- *
- * Pre-existing planner code swallows all of these into "empty result"; the
- * probe surfaces them so an operator distinguishes "no CHANGELOG found" from
- * "we couldn't read this repo."
- */
-async function classifyRepoStatus(
-  ownerRepo: { owner: string; repo: string },
-  apiHeaders: Record<string, string>,
-): Promise<
-  | { kind: "ok" }
-  | { kind: "fail"; status: 404 | 502 | 503; body: { error: string; message: string } }
-> {
-  const { owner, repo } = ownerRepo;
-  let res: Response;
-  try {
-    res = await fetch(`https://api.github.com/repos/${owner}/${repo}`, { headers: apiHeaders });
-  } catch (err) {
-    return {
-      kind: "fail",
-      status: 502,
-      body: {
-        error: "github_upstream_error",
-        message: `GitHub network error: ${err instanceof Error ? err.message : String(err)}`,
-      },
-    };
-  }
-  if (res.ok) return { kind: "ok" };
-  if (res.status === 404) {
-    return {
-      kind: "fail",
-      status: 404,
-      body: { error: "repo_not_found", message: `${owner}/${repo} not found on GitHub` },
-    };
-  }
-  if (res.status === 401 || res.status === 403) {
-    return {
-      kind: "fail",
-      status: 502,
-      body: {
-        error: "github_auth_error",
-        message: `GitHub returned ${res.status} for ${owner}/${repo}`,
-      },
-    };
-  }
-  if (res.status === 429) {
-    return {
-      kind: "fail",
-      status: 503,
-      body: { error: "github_rate_limited", message: "GitHub rate limit exceeded" },
-    };
-  }
-  return {
-    kind: "fail",
-    status: 502,
-    body: {
-      error: "github_upstream_error",
-      message: `GitHub returned ${res.status} for ${owner}/${repo}`,
-    },
-  };
-}
 const probeChangelogsRoute = describeRoute({
   hide: hideInProduction,
   tags: ["Sources"],
