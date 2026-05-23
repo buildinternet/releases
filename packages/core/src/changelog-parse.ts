@@ -154,3 +154,37 @@ export function parseChangelog(markdown: string): ParseChangelogResult {
     skipped,
   };
 }
+
+/**
+ * Minimal structural shape of a GitHub Releases API row. Declared here (rather
+ * than importing the adapter's `GitHubRelease`) to keep core free of an
+ * adapters dependency. Mirrors `packages/adapters/src/github.ts`'s shape.
+ */
+export interface GitHubReleaseLike {
+  tag_name: string;
+  name: string | null;
+  body: string | null;
+  html_url: string;
+  published_at: string | null;
+  prerelease: boolean;
+}
+
+/**
+ * Map GitHub Releases API rows into entries. The API is already structured, so
+ * there's no parsing: `published_at` and `prerelease` are authoritative.
+ */
+export function mapGitHubReleases(releases: GitHubReleaseLike[]): ParsedChangelogRelease[] {
+  return releases.map((r) => ({
+    version: r.tag_name,
+    type: "feature" as const,
+    title: r.name || r.tag_name,
+    content: (r.body ?? "").trim(),
+    url: r.html_url,
+    publishedAt: r.published_at,
+    prerelease: r.prerelease === true,
+    summary: null,
+    titleGenerated: null,
+    titleShort: null,
+    media: [],
+  }));
+}

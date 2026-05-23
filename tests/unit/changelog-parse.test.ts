@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { parseChangelog } from "@buildinternet/releases-core/changelog-parse";
+import { parseChangelog, mapGitHubReleases } from "@buildinternet/releases-core/changelog-parse";
 
 const keepAChangelog = [
   "# Changelog",
@@ -118,5 +118,50 @@ describe("parseChangelog", () => {
     const result = parseChangelog("");
     expect(result.parsable).toBe(false);
     expect(result.releases).toEqual([]);
+  });
+});
+
+describe("mapGitHubReleases", () => {
+  it("maps API rows straight into entries", () => {
+    const entries = mapGitHubReleases([
+      {
+        tag_name: "v1.4.0",
+        name: "Version 1.4.0",
+        body: "## What's changed\n- a thing",
+        html_url: "https://github.com/o/r/releases/tag/v1.4.0",
+        published_at: "2026-05-01T12:00:00Z",
+        prerelease: false,
+      },
+      {
+        tag_name: "v2.0.0-beta.1",
+        name: null,
+        body: null,
+        html_url: "https://github.com/o/r/releases/tag/v2.0.0-beta.1",
+        published_at: null,
+        prerelease: true,
+      },
+    ]);
+
+    expect(entries).toHaveLength(2);
+
+    expect(entries[0].version).toBe("v1.4.0");
+    expect(entries[0].title).toBe("Version 1.4.0");
+    expect(entries[0].content).toContain("a thing");
+    expect(entries[0].url).toBe("https://github.com/o/r/releases/tag/v1.4.0");
+    expect(entries[0].publishedAt).toBe("2026-05-01T12:00:00Z");
+    expect(entries[0].prerelease).toBe(false);
+    expect(entries[0].type).toBe("feature");
+    expect(entries[0].summary).toBeNull();
+    expect(entries[0].media).toEqual([]);
+
+    // name falls back to tag_name; null body → ""
+    expect(entries[1].title).toBe("v2.0.0-beta.1");
+    expect(entries[1].content).toBe("");
+    expect(entries[1].publishedAt).toBeNull();
+    expect(entries[1].prerelease).toBe(true);
+  });
+
+  it("returns [] for no releases", () => {
+    expect(mapGitHubReleases([])).toEqual([]);
   });
 });
