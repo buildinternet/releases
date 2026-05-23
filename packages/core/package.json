@@ -17,6 +17,7 @@
     "./dates": "./src/dates.ts",
     "./changelog-range": "./src/changelog-range.ts",
     "./changelog-slice": "./src/changelog-slice.ts",
+    "./changelog-parse": "./src/changelog-parse.ts",
     "./overview": "./src/overview.ts",
     "./id": "./src/id.ts",
     "./api-token": "./src/api-token.ts",
