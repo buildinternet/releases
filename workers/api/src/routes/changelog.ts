@@ -26,6 +26,13 @@ import {
 import { RELEASES_BOT_UA } from "@releases/adapters/user-agent";
 import { parseCoordinate } from "@buildinternet/releases-core/lookup-coordinate";
 import type { Source } from "@buildinternet/releases-core/schema";
+import { selectChangelogFile } from "@buildinternet/releases-core/changelog-slice";
+import {
+  parseChangelog,
+  mapGitHubReleases,
+  type ParsedChangelogRelease,
+  type GitHubReleaseLike,
+} from "@buildinternet/releases-core/changelog-parse";
 import { ErrorResponseSchema } from "@buildinternet/releases-api-types";
 import { getSecret } from "@releases/lib/secrets";
 import { logEvent } from "@releases/lib/log-event";
@@ -234,5 +241,320 @@ const fetchChangelogsHandler = async (c: import("hono").Context<Env>) => {
   return c.json({ repo: `${owner}/${repo}`, files, stats });
 };
 
+// ---------------------------------------------------------------------------
+// POST /changelog/parse
+// ---------------------------------------------------------------------------
+
+const PARSE_SOURCES = ["auto", "github_releases", "changelog_file"] as const;
+
+const ParsedReleaseSchema = z.object({
+  version: z.string().nullable(),
+  type: z.literal("feature"),
+  title: z.string(),
+  content: z.string(),
+  url: z.string().nullable(),
+  publishedAt: z.string().nullable(),
+  prerelease: z.boolean(),
+  summary: z.null(),
+  titleGenerated: z.null(),
+  titleShort: z.null(),
+  // always empty at runtime; z.unknown() keeps OpenAPI spec generation safe.
+  media: z.array(z.unknown()),
+});
+
+const ChangelogParseFileSchema = z.object({
+  path: z.string(),
+  url: z.string(),
+  rawUrl: z.string(),
+  size: z.number().nullable(),
+  truncated: z.boolean(),
+});
+
+const ChangelogParseResponseSchema = z.object({
+  repo: z.string(),
+  source: z.enum(["github_releases", "changelog_file"]).nullable(),
+  parsable: z.boolean(),
+  format: z.enum(["keep-a-changelog", "conventional", "plain", "unknown"]).nullable(),
+  file: ChangelogParseFileSchema.nullable(),
+  releases: z.array(ParsedReleaseSchema),
+  stats: z.object({
+    releasesParsed: z.number(),
+    headingsScanned: z.number(),
+    skipped: z.number(),
+    githubRequests: z.number(),
+    bytes: z.number(),
+    elapsedMs: z.number(),
+  }),
+});
+
+const parseChangelogRoute = describeRoute({
+  hide: hideInProduction,
+  tags: ["Changelog"],
+  summary:
+    "Parse a GitHub repo's changelog into structured releases (experimental, no persistence)",
+  description:
+    'Experimental. Given a `{ repo: "owner/repo", path?, source? }` coordinate, resolves the repo\'s changelog deterministically from the best available source — GitHub Releases (already structured) or a parsed root `CHANGELOG.md` — and returns release entries in the stored-release shape. `source` is `"auto"` (default), `"github_releases"`, or `"changelog_file"`; `path` forces the file source at that path. Nothing is written. Auth: Bearer (write). Hidden from the production OpenAPI spec.',
+  security: [{ bearerAuth: [] }],
+  responses: {
+    200: {
+      description: "Structured releases plus the resolved source and stats",
+      content: { "application/json": { schema: resolver(ChangelogParseResponseSchema) } },
+    },
+    400: {
+      description: "Missing/invalid `repo`, unparseable coordinate, or invalid `source`",
+      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+    },
+    404: {
+      description: "Repo not found, or an explicit `path` that does not exist",
+      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+    },
+    502: {
+      description: "GitHub auth error or upstream 5xx",
+      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+    },
+    503: {
+      description: "GitHub rate limit exceeded",
+      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+    },
+  },
+});
+
+type ChangelogParseSource = (typeof PARSE_SOURCES)[number];
+
+/** Fetch + map a repo's GitHub Releases (one page). Returns [] on any non-ok. */
+async function fetchGitHubReleases(
+  owner: string,
+  repo: string,
+  apiHeaders: Record<string, string>,
+): Promise<ParsedChangelogRelease[]> {
+  const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/releases?per_page=100`, {
+    headers: apiHeaders,
+  });
+  if (!res.ok) return [];
+  const data = (await res.json().catch(() => null)) as GitHubReleaseLike[] | null;
+  if (!Array.isArray(data)) return [];
+  return mapGitHubReleases(data);
+}
+
+interface ResolvedFile {
+  file: z.infer<typeof ChangelogParseFileSchema>;
+  result: ReturnType<typeof parseChangelog>;
+}
+
+/**
+ * Discover + select one CHANGELOG file (root by default, or `path`), fetch its
+ * full body (≤ MAX_BYTES), and parse it. Returns null when no file is found.
+ */
+async function resolveChangelogFile(
+  owner: string,
+  repo: string,
+  headers: ReturnType<typeof buildGitHubHeaders>,
+  cache: ReturnType<typeof createListingCache>,
+  path: string | null,
+): Promise<ResolvedFile | null> {
+  const syntheticSource = {
+    url: `https://github.com/${owner}/${repo}`,
+    metadata: null,
+  } as unknown as Source;
+
+  const discovered = (
+    (await discoverChangelogPathsViaTree(syntheticSource, headers, cache)) ?? []
+  ).filter((p) => p.exists);
+  const selected = selectChangelogFile(discovered, path);
+  if (!selected) return null;
+
+  const rawUrl = `https://raw.githubusercontent.com/${owner}/${repo}/HEAD/${selected.path}`;
+  let body = "";
+  let truncated = false;
+  try {
+    const res = await fetch(rawUrl, { headers: headers.rawHeaders });
+    if (res.ok) {
+      body = await res.text();
+      truncated = encoder.encode(body).length > MAX_BYTES;
+    }
+  } catch {
+    // leave body empty on fetch failure
+  }
+
+  return {
+    file: {
+      path: selected.path,
+      url: `https://github.com/${owner}/${repo}/blob/HEAD/${selected.path}`,
+      rawUrl,
+      size: selected.size,
+      truncated,
+    },
+    result: parseChangelog(body),
+  };
+}
+
+const parseChangelogHandler = async (c: import("hono").Context<Env>) => {
+  const startedAt = Date.now();
+
+  const body = (await c.req.json().catch(() => null)) as {
+    repo?: unknown;
+    path?: unknown;
+    source?: unknown;
+  } | null;
+
+  const repoInput = typeof body?.repo === "string" ? body.repo.trim() : "";
+  if (!repoInput) {
+    return c.json(
+      {
+        error: "bad_request",
+        message: 'Body must include a "repo" string, e.g. { "repo": "owner/repo" }',
+      },
+      400,
+    );
+  }
+
+  const coord = parseCoordinate(repoInput);
+  if (!coord) {
+    return c.json(
+      {
+        error: "bad_request",
+        message: `Cannot parse "${repoInput}" as a github owner/repo coordinate`,
+      },
+      400,
+    );
+  }
+
+  const pathInput = typeof body?.path === "string" && body.path.trim() ? body.path.trim() : null;
+
+  const sourceRaw = typeof body?.source === "string" ? body.source.trim() : "auto";
+  if (!(PARSE_SOURCES as readonly string[]).includes(sourceRaw)) {
+    return c.json(
+      {
+        error: "bad_request",
+        message: `Invalid "source": ${sourceRaw}. Use one of: ${PARSE_SOURCES.join(", ")}`,
+      },
+      400,
+    );
+  }
+  // A path names a file, so it forces the changelog_file source.
+  const source: ChangelogParseSource = pathInput
+    ? "changelog_file"
+    : (sourceRaw as ChangelogParseSource);
+
+  const { org: owner, repo } = coord;
+  const token = (await getSecret(c.env.GITHUB_TOKEN)) ?? undefined;
+  const headers = buildGitHubHeaders(token, RELEASES_BOT_UA);
+
+  const repoStatus = await classifyRepoStatus({ owner, repo }, headers.apiHeaders);
+  if (repoStatus.kind !== "ok") {
+    return c.json(repoStatus.body, repoStatus.status);
+  }
+
+  const cache = createListingCache();
+  let githubRequests = 1; // precheck
+
+  let resolvedSource: "github_releases" | "changelog_file" | null = null;
+  let releases: ParsedChangelogRelease[] = [];
+  let file: z.infer<typeof ChangelogParseFileSchema> | null = null;
+  let format: z.infer<typeof ChangelogParseResponseSchema>["format"] = null;
+  let headingsScanned = 0;
+  let skipped = 0;
+
+  const runReleases = async () => {
+    githubRequests++;
+    return fetchGitHubReleases(owner, repo, headers.apiHeaders);
+  };
+
+  const runFile = async () => {
+    const before = cache.requests;
+    const resolved = await resolveChangelogFile(owner, repo, headers, cache, pathInput);
+    // discovery listing/tree calls + the single raw body fetch (when a file matched)
+    githubRequests += cache.requests - before + (resolved ? 1 : 0);
+    return resolved;
+  };
+
+  if (source === "changelog_file") {
+    const resolved = await runFile();
+    if (!resolved) {
+      // An explicit path the caller asserted must exist is a 404; an absent
+      // root changelog is just "nothing to show".
+      if (pathInput) {
+        return c.json(
+          {
+            error: "not_found",
+            message: `No changelog file at "${pathInput}" in ${owner}/${repo}`,
+          },
+          404,
+        );
+      }
+    } else {
+      file = resolved.file;
+      format = resolved.result.format;
+      headingsScanned = resolved.result.headingsScanned;
+      skipped = resolved.result.skipped;
+      if (resolved.result.parsable) {
+        resolvedSource = "changelog_file";
+        releases = resolved.result.releases;
+      }
+    }
+  } else if (source === "github_releases") {
+    const rel = await runReleases();
+    if (rel.length > 0) {
+      resolvedSource = "github_releases";
+      releases = rel;
+    }
+  } else {
+    // auto: prefer GitHub Releases with non-trivial bodies, else CHANGELOG.md,
+    // else any releases that exist (thin), else nothing.
+    const rel = await runReleases();
+    const hasBody = rel.some((r) => r.content.trim().length > 0);
+    if (rel.length > 0 && hasBody) {
+      resolvedSource = "github_releases";
+      releases = rel;
+    } else {
+      const resolved = await runFile();
+      if (resolved) {
+        file = resolved.file;
+        format = resolved.result.format;
+        headingsScanned = resolved.result.headingsScanned;
+        skipped = resolved.result.skipped;
+      }
+      if (resolved?.result.parsable) {
+        resolvedSource = "changelog_file";
+        releases = resolved.result.releases;
+      } else if (rel.length > 0) {
+        // Releases exist but are body-less; better than nothing.
+        resolvedSource = "github_releases";
+        releases = rel;
+        file = null;
+        format = null;
+      }
+    }
+  }
+
+  const stats = {
+    releasesParsed: releases.length,
+    headingsScanned,
+    skipped,
+    githubRequests,
+    bytes: file && resolvedSource === "changelog_file" ? (file.size ?? 0) : 0,
+    elapsedMs: Date.now() - startedAt,
+  };
+
+  logEvent("info", {
+    component: "changelog-parse-experiment",
+    event: "parsed",
+    repo: `${owner}/${repo}`,
+    source: resolvedSource,
+    ...stats,
+  });
+
+  return c.json({
+    repo: `${owner}/${repo}`,
+    source: resolvedSource,
+    parsable: releases.length > 0,
+    format: resolvedSource === "changelog_file" ? format : null,
+    file: resolvedSource === "changelog_file" ? file : null,
+    releases,
+    stats,
+  });
+};
+
 export const changelogRoutes = new Hono<Env>();
 changelogRoutes.post("/changelog/fetch", fetchChangelogsRoute, fetchChangelogsHandler);
+changelogRoutes.post("/changelog/parse", parseChangelogRoute, parseChangelogHandler);
