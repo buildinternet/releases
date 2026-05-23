@@ -50,12 +50,10 @@ export async function generateMetadata({
  */
 function RelatedRails({
   anchorReleaseId,
-  sourceSlug,
   orgSlug,
   orgName,
 }: {
   anchorReleaseId: string | null;
-  sourceSlug: string;
   orgSlug: string | null;
   orgName: string | null;
 }) {
@@ -65,7 +63,6 @@ function RelatedRails({
         <Suspense fallback={null}>
           <RelatedRail
             anchorReleaseId={anchorReleaseId}
-            anchorSourceSlug={sourceSlug}
             scope="org"
             heading={orgName ? `More from ${orgName}` : "More from this team"}
           />
@@ -74,7 +71,6 @@ function RelatedRails({
       <Suspense fallback={null}>
         <RelatedRail
           anchorReleaseId={anchorReleaseId}
-          anchorSourceSlug={sourceSlug}
           scope="global"
           heading="From other products"
           excludeOrgSlug={orgSlug}
@@ -149,7 +145,6 @@ export default async function SourceReleasesPage({
       />
       <RelatedRails
         anchorReleaseId={source.releases[0]?.id ?? null}
-        sourceSlug={source.slug}
         orgSlug={source.org?.slug ?? null}
         orgName={source.org?.name ?? null}
       />

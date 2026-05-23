@@ -411,8 +411,10 @@ export interface RelatedReleaseItem {
     id: string;
     slug: string;
     name: string;
+    productName: string | null;
     orgSlug: string | null;
     orgName: string | null;
+    orgAvatarUrl: string | null;
   };
 }
 

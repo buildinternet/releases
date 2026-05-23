@@ -248,7 +248,6 @@ export default async function ReleaseDetailPage({ params }: { params: Promise<{ 
             <Suspense fallback={null}>
               <RelatedRail
                 anchorReleaseId={release.id}
-                anchorSourceSlug={release.sourceSlug}
                 scope="org"
                 heading={`More from ${release.org.name}`}
               />
@@ -257,7 +256,6 @@ export default async function ReleaseDetailPage({ params }: { params: Promise<{ 
           <Suspense fallback={null}>
             <RelatedRail
               anchorReleaseId={release.id}
-              anchorSourceSlug={release.sourceSlug}
               scope="global"
               heading="From other products"
               excludeOrgSlug={release.org?.slug ?? null}

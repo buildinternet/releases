@@ -17,8 +17,12 @@ export const RelatedReleaseSourceSchema = z.object({
   id: z.string(),
   slug: z.string(),
   name: z.string(),
+  /** Parent product name, when the source belongs to one — preferred over the
+   * bare source/feed name for display. Null for sources with no product. */
+  productName: z.string().nullable(),
   orgSlug: z.string().nullable(),
   orgName: z.string().nullable(),
+  orgAvatarUrl: z.string().nullable(),
 });
 
 /**
