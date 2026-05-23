@@ -207,6 +207,13 @@ describe("POST /changelog/parse", () => {
     expect(((await res.json()) as { error: string }).error).toBe("bad_request");
   });
 
+  it("returns 400 for a non-github coordinate", async () => {
+    installFetch(() => json({}));
+    const res = await call({ repo: "npm:left-pad" });
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: string }).error).toBe("bad_request");
+  });
+
   it("returns 400 for an invalid source value", async () => {
     installFetch(() => json({}));
     const res = await call({ repo: "owner/repo", source: "bogus" });
