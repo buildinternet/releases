@@ -144,10 +144,14 @@ interface ReleaseCardProps {
 
 function ReleaseCard({ item }: ReleaseCardProps) {
   const href = `/release/${item.id}`;
-  const heading = item.version ?? item.title;
-  const showSubtitle = !!item.version && item.title && item.title !== item.version;
-  const subtitleText =
-    item.titleShort?.trim() || item.titleGenerated?.trim() || (showSubtitle ? item.title : null);
+  // Content-first: lead with the release title and demote the version to the
+  // subtitle. Fall back to an AI-cleaned short title only when there's no
+  // version to surface there.
+  const heading = item.title || item.version || "";
+  const showVersion = !!item.version && item.version !== heading;
+  const subtitleText = showVersion
+    ? item.version
+    : item.titleShort?.trim() || item.titleGenerated?.trim() || null;
   const preview = releasePreview(item, subtitleText);
   // Prefer the product name over the bare source/feed name when the release's
   // source belongs to a product (e.g. "Vercel · Next.js" rather than the feed).
