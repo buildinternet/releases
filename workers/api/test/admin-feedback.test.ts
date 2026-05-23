@@ -73,6 +73,33 @@ describe("GET /v1/admin/feedback", () => {
     expect(json.items.map((r) => r.id)).toEqual(["fb_1"]);
   });
 
+  it("hides archived rows by default and shows them with includeArchived", async () => {
+    const db = mkDb();
+    await seed(db);
+    await db.insert(feedback).values({
+      id: "fb_archived",
+      createdAt: 4000,
+      message: "archived",
+      type: "bug",
+      status: "new",
+      archived: true,
+      clientKind: "external",
+      surface: "cli",
+    });
+    const fetch = await makeApp(db);
+
+    const def = (await (await fetch(new Request("http://x/v1/admin/feedback"))).json()) as {
+      items: { id: string }[];
+    };
+    expect(def.items.map((r) => r.id)).not.toContain("fb_archived");
+    expect(def.items.map((r) => r.id)).toEqual(["fb_3", "fb_2", "fb_1"]);
+
+    const all = (await (
+      await fetch(new Request("http://x/v1/admin/feedback?includeArchived=true"))
+    ).json()) as { items: { id: string }[] };
+    expect(all.items.map((r) => r.id)).toEqual(["fb_archived", "fb_3", "fb_2", "fb_1"]);
+  });
+
   it("paginates via limit + cursor", async () => {
     const db = mkDb();
     await seed(db);

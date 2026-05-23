@@ -414,6 +414,10 @@ v1.route("/", graphqlRoutes);
 // covers safe methods, so rate limiting for this POST lives in the handler
 // (FEEDBACK_RATE_LIMITER, per-IP). dbHealthCheck guards the D1 insert.
 v1.use("/feedback", dbHealthCheck);
+// …but the triage write-path (/feedback/:id — PATCH/DELETE) is admin-only,
+// mirroring the /v1/admin/feedback read-back. Only the sub-paths are gated; the
+// bare /feedback above stays open. Strict CORS like the other admin paths.
+v1.use("/feedback/*", adminCors, authMiddleware, dbHealthCheck);
 
 // Bare-API JSON index. A human or agent hitting `https://api.releases.sh/` or
 // `/v1` gets a self-describing payload pointing at the OpenAPI spec, the

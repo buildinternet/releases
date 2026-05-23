@@ -588,6 +588,11 @@ export const feedback = sqliteTable(
     contact: text("contact"),
     type: text("type").notNull().default("general"),
     status: text("status").notNull().default("new"),
+    // Soft-removal flag: hides spam/test/handled rows from the default admin
+    // read path without losing the row. Orthogonal to triage `status` — a row
+    // can be `closed` and visible, or `new` and archived. Hard delete still
+    // exists (DELETE /v1/feedback/:id) for genuine junk.
+    archived: integer("archived", { mode: "boolean" }).notNull().default(false),
     cliVersion: text("cli_version"),
     clientKind: text("client_kind").notNull().default("external"),
     anonId: text("anon_id"),
