@@ -173,6 +173,14 @@ import type {
   StatsRecentActivitySchema,
   StatsResponseSchema,
 } from "./schemas/stats.js";
+import type {
+  FeedbackTypeSchema,
+  FeedbackStatusSchema,
+  FeedbackItemSchema,
+  FeedbackListResponseSchema,
+  FeedbackUpdateBodySchema,
+  FeedbackDeleteResponseSchema,
+} from "./schemas/feedback.js";
 import type { SitemapSourceSchema, SitemapPayloadSchema } from "./schemas/sitemap.js";
 import type {
   RelatedScopeSchema,
@@ -386,6 +394,14 @@ export {
   StatsRecentActivitySchema,
   StatsResponseSchema,
 } from "./schemas/stats.js";
+export {
+  FeedbackTypeSchema,
+  FeedbackStatusSchema,
+  FeedbackItemSchema,
+  FeedbackListResponseSchema,
+  FeedbackUpdateBodySchema,
+  FeedbackDeleteResponseSchema,
+} from "./schemas/feedback.js";
 export { SitemapSourceSchema, SitemapPayloadSchema } from "./schemas/sitemap.js";
 export {
   RelatedScopeSchema,
@@ -1099,6 +1115,14 @@ export type StatsResponse = z.infer<typeof StatsResponseSchema>;
  * counts.
  */
 export type StatsSummary = Omit<StatsResponse, "orgs" | "sources" | "releases" | "products">;
+
+// ── Feedback ──
+export type FeedbackType = z.infer<typeof FeedbackTypeSchema>;
+export type FeedbackStatus = z.infer<typeof FeedbackStatusSchema>;
+export type FeedbackItem = z.infer<typeof FeedbackItemSchema>;
+export type FeedbackListResponse = z.infer<typeof FeedbackListResponseSchema>;
+export type FeedbackUpdateBody = z.infer<typeof FeedbackUpdateBodySchema>;
+export type FeedbackDeleteResponse = z.infer<typeof FeedbackDeleteResponseSchema>;
 
 // ── Fetch log ──
 

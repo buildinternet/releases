@@ -20,6 +20,7 @@ const base: Feedback = {
   contact: null,
   type: "general",
   status: "new",
+  archived: false,
   cliVersion: "0.43.0",
   clientKind: "external",
   anonId: null,

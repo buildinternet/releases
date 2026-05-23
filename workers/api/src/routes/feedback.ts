@@ -8,9 +8,11 @@
  * is volume-capped separately in feedback-email.ts.
  */
 import { Hono } from "hono";
+import { eq } from "drizzle-orm";
 import {
   feedback,
   FEEDBACK_TYPES,
+  FEEDBACK_STATUSES,
   TELEMETRY_CLIENT_KINDS,
 } from "@buildinternet/releases-core/schema";
 import { newFeedbackId } from "@buildinternet/releases-core/id";
@@ -120,6 +122,7 @@ feedbackRoutes.post("/feedback", async (c) => {
     contact,
     type: coerceType(body.type),
     status: "new",
+    archived: false,
     cliVersion: sanitizeString(body.cliVersion, 32),
     clientKind: coerceClientKind(body.clientKind),
     anonId: sanitizeString(body.anonId, 64),
@@ -134,4 +137,91 @@ feedbackRoutes.post("/feedback", async (c) => {
   c.executionCtx.waitUntil(notifyFeedback(c.env, row));
 
   return c.json({ ok: true, id: row.id }, 202);
+});
+
+// ── Triage write-path (admin-gated) ──
+//
+// The POST above is open + unauthenticated. Everything under /feedback/:id is
+// admin-only — the gate is wired in index.ts (`/feedback/*` → authMiddleware),
+// mirroring how the read-back at /v1/admin/feedback is protected. These live on
+// the canonical resource path (not a new /v1/admin/* CRUD endpoint) per the
+// route conventions in AGENTS.md / #494.
+
+/**
+ * PATCH /v1/feedback/:id — partial update of the triage state. Accepts any of:
+ *   - `status`: one of FEEDBACK_STATUSES (`new` | `triaged` | `closed`).
+ *   - `archived`: boolean. `true` hides the row from the default admin read
+ *     path (soft removal, reversible); `false` restores it.
+ * At least one field must be present and valid. Returns the updated row, or 404
+ * if no feedback matches the id.
+ */
+feedbackRoutes.patch("/feedback/:id", async (c) => {
+  const id = c.req.param("id");
+
+  let parsed: unknown;
+  try {
+    parsed = await c.req.json();
+  } catch {
+    return c.json({ error: "invalid_json" }, 400);
+  }
+  if (typeof parsed !== "object" || parsed === null) {
+    return c.json({ error: "invalid_json" }, 400);
+  }
+  const body = parsed as Record<string, unknown>;
+
+  const update: { status?: string; archived?: boolean } = {};
+
+  if (body.status !== undefined) {
+    if (
+      typeof body.status !== "string" ||
+      !(FEEDBACK_STATUSES as readonly string[]).includes(body.status)
+    ) {
+      return c.json(
+        {
+          error: "invalid_status",
+          message: `status must be one of: ${FEEDBACK_STATUSES.join(", ")}`,
+        },
+        400,
+      );
+    }
+    update.status = body.status;
+  }
+
+  if (body.archived !== undefined) {
+    if (typeof body.archived !== "boolean") {
+      return c.json({ error: "invalid_archived", message: "archived must be a boolean" }, 400);
+    }
+    update.archived = body.archived;
+  }
+
+  if (update.status === undefined && update.archived === undefined) {
+    return c.json({ error: "nothing_to_update", message: "provide status and/or archived" }, 400);
+  }
+
+  const db = getDb(c);
+  const [updated] = await db.update(feedback).set(update).where(eq(feedback.id, id)).returning();
+
+  if (!updated) return c.json({ error: "not_found", message: "Feedback not found" }, 404);
+
+  return c.json(updated);
+});
+
+/**
+ * DELETE /v1/feedback/:id — hard delete. Removes the row entirely; use this for
+ * genuine junk (spam, smoke-test rows). For reversible removal that keeps an
+ * audit trail, archive via PATCH instead. Returns `{ deleted: true, id }`, or
+ * 404 if no feedback matches the id.
+ */
+feedbackRoutes.delete("/feedback/:id", async (c) => {
+  const id = c.req.param("id");
+  const db = getDb(c);
+
+  const [deleted] = await db
+    .delete(feedback)
+    .where(eq(feedback.id, id))
+    .returning({ id: feedback.id });
+
+  if (!deleted) return c.json({ error: "not_found", message: "Feedback not found" }, 404);
+
+  return c.json({ deleted: true, id: deleted.id });
 });

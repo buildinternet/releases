@@ -52,6 +52,11 @@ adminFeedbackRoutes.get("/admin/feedback", async (c) => {
   if (type && (FEEDBACK_TYPES as readonly string[]).includes(type)) {
     conditions.push(eq(feedback.type, type));
   }
+  // Archived rows (soft-removed via PATCH /v1/feedback/:id) drop out of the
+  // default view; pass ?includeArchived=true to see them.
+  if (c.req.query("includeArchived") !== "true") {
+    conditions.push(eq(feedback.archived, false));
+  }
 
   const cursor = decodeCursor(c.req.query("cursor"));
   if (cursor) {

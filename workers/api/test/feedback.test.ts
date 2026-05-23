@@ -181,4 +181,134 @@ describe("POST /v1/feedback", () => {
     expect(rows[0]!.message).toContain("\n");
     expect(rows[0]!.message).toContain("\t");
   });
+
+  it("stores new feedback as not archived", async () => {
+    const db = mkDb();
+    const fetch = await makeApp(db);
+    await fetch(post({ message: "fresh feedback, not archived" }));
+    const rows = await db.select().from(feedback);
+    expect(rows[0]!.archived).toBe(false);
+  });
+});
+
+async function seedOne(
+  db: ReturnType<typeof mkDb>,
+  overrides: Partial<typeof feedback.$inferInsert> = {},
+) {
+  const row = {
+    id: "fb_seed",
+    createdAt: 1000,
+    message: "seed feedback row",
+    type: "bug",
+    status: "new",
+    archived: false,
+    clientKind: "external",
+    surface: "cli",
+    ...overrides,
+  };
+  await db.insert(feedback).values(row);
+  return row;
+}
+
+function patch(id: string, body: unknown) {
+  return new Request(`http://x/v1/feedback/${id}`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+describe("PATCH /v1/feedback/:id", () => {
+  it("updates status and returns the updated row", async () => {
+    const db = mkDb();
+    await seedOne(db);
+    const fetch = await makeApp(db);
+    const res = await fetch(patch("fb_seed", { status: "closed" }));
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as { id: string; status: string };
+    expect(json.id).toBe("fb_seed");
+    expect(json.status).toBe("closed");
+    const [row] = await db.select().from(feedback);
+    expect(row!.status).toBe("closed");
+  });
+
+  it("archives a row (and can restore it)", async () => {
+    const db = mkDb();
+    await seedOne(db);
+    const fetch = await makeApp(db);
+
+    const archived = await fetch(patch("fb_seed", { archived: true }));
+    expect(archived.status).toBe(200);
+    expect((await db.select().from(feedback))[0]!.archived).toBe(true);
+
+    const restored = await fetch(patch("fb_seed", { archived: false }));
+    expect(restored.status).toBe(200);
+    expect((await db.select().from(feedback))[0]!.archived).toBe(false);
+  });
+
+  it("can set status and archived in one request", async () => {
+    const db = mkDb();
+    await seedOne(db);
+    const fetch = await makeApp(db);
+    const res = await fetch(patch("fb_seed", { status: "triaged", archived: true }));
+    expect(res.status).toBe(200);
+    const [row] = await db.select().from(feedback);
+    expect(row!.status).toBe("triaged");
+    expect(row!.archived).toBe(true);
+  });
+
+  it("rejects an invalid status with 400", async () => {
+    const db = mkDb();
+    await seedOne(db);
+    const fetch = await makeApp(db);
+    const res = await fetch(patch("fb_seed", { status: "nonsense" }));
+    expect(res.status).toBe(400);
+    expect((await db.select().from(feedback))[0]!.status).toBe("new");
+  });
+
+  it("rejects a non-boolean archived with 400", async () => {
+    const db = mkDb();
+    await seedOne(db);
+    const fetch = await makeApp(db);
+    const res = await fetch(patch("fb_seed", { archived: "yes" }));
+    expect(res.status).toBe(400);
+  });
+
+  it("rejects an empty body with 400", async () => {
+    const db = mkDb();
+    await seedOne(db);
+    const fetch = await makeApp(db);
+    const res = await fetch(patch("fb_seed", {}));
+    expect(res.status).toBe(400);
+  });
+
+  it("returns 404 for an unknown id", async () => {
+    const db = mkDb();
+    const fetch = await makeApp(db);
+    const res = await fetch(patch("fb_missing", { status: "closed" }));
+    expect(res.status).toBe(404);
+  });
+});
+
+describe("DELETE /v1/feedback/:id", () => {
+  it("hard-deletes the row and returns deleted:true", async () => {
+    const db = mkDb();
+    await seedOne(db);
+    const fetch = await makeApp(db);
+    const res = await fetch(new Request("http://x/v1/feedback/fb_seed", { method: "DELETE" }));
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as { deleted: boolean; id: string };
+    expect(json.deleted).toBe(true);
+    expect(json.id).toBe("fb_seed");
+    expect(await db.select().from(feedback)).toHaveLength(0);
+  });
+
+  it("returns 404 for an unknown id", async () => {
+    const db = mkDb();
+    await seedOne(db);
+    const fetch = await makeApp(db);
+    const res = await fetch(new Request("http://x/v1/feedback/fb_missing", { method: "DELETE" }));
+    expect(res.status).toBe(404);
+    expect(await db.select().from(feedback)).toHaveLength(1);
+  });
 });
