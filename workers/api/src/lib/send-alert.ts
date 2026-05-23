@@ -20,6 +20,8 @@ export type AlertEnv = EmailEnv & {
 export type SendAlertInput = {
   subject: string;
   body: string;
+  /** Optional HTML alternative part. Plain-text `body` is always sent too. */
+  html?: string;
 };
 
 /**
@@ -48,7 +50,7 @@ export async function sendAlert(env: AlertEnv, input: SendAlertInput): Promise<b
   }
 
   try {
-    const result = await sendEmail(env, { subject, text: input.body });
+    const result = await sendEmail(env, { subject, text: input.body, html: input.html });
     if (!result.sent) {
       logEvent("info", {
         component: "send-alert",

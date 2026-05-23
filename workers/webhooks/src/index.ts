@@ -1,9 +1,17 @@
 import { createDb } from "./db.js";
 import {
   getWebhookSubscriptionById,
+  getWebhookSubscriptionLabels,
+  getOrgLabelById,
   updateWebhookSubscriptionSummary,
   setWebhookSubscriptionEnabled,
 } from "./queries.js";
+import {
+  formatDlqAlert,
+  formatAutoDisableAlert,
+  type DlqEntry,
+  type SubscriptionLabel,
+} from "./alert-format.js";
 import { deliver } from "./deliver.js";
 import { writeDeliveryAttempt, type DeliveryAttempt, type Outcome } from "./ae.js";
 import type { DeliveryMessage } from "../../api/src/webhooks/types.js";
@@ -86,21 +94,28 @@ export default {
 
       // Send one alert per DLQ batch — DLQ batches are infrequent; no dedup needed.
       if (bySubId.size > 0) {
-        const totalMsgs = [...bySubId.values()].reduce((s, e) => s + e.count, 0);
-        const lines = [`${totalMsgs} message(s) reached the DLQ in this batch.`, ""];
-        for (const [subId, info] of bySubId) {
-          lines.push(
-            `  sub=${subId}  messages=${info.count}  lastError=${info.lastError ?? "unknown"}`,
-          );
-        }
-        // Background — let the runtime keep the worker alive until the email
-        // settles, but never block the queue handler.
+        // Resolve subscription URLs + owning orgs inside waitUntil so the DB
+        // round-trip stays off the synchronous ack path; fail open to the bare
+        // id on any lookup error.
         ctx.waitUntil(
-          sendWebhookAlert(
-            alertEnv,
-            `[alert] webhook DLQ: ${totalMsgs} messages`,
-            lines.join("\n"),
-          ).catch(() => undefined),
+          (async () => {
+            let labels = new Map<string, SubscriptionLabel>();
+            try {
+              const db = createDb(env.DB);
+              const resolved = await getWebhookSubscriptionLabels(db, [...bySubId.keys()]);
+              labels = new Map(resolved.map((r) => [r.id, r]));
+            } catch (err) {
+              logEvent("warn", { component: "webhook-dlq", event: "resolve-labels-failed", err });
+            }
+            const entries: DlqEntry[] = [...bySubId].map(([subId, info]) => ({
+              subId,
+              count: info.count,
+              lastError: info.lastError,
+              label: labels.get(subId) ?? null,
+            }));
+            const { subject, body } = formatDlqAlert(entries);
+            await sendWebhookAlert(alertEnv, subject, body);
+          })().catch(() => undefined),
         );
       }
 
@@ -183,19 +198,32 @@ export default {
           // enabled→disabled transition so concurrent batch messages past the
           // threshold don't each fire an email.
           if (flipped) {
-            const alertBody = [
-              `Subscription ID: ${fresh.id}`,
-              `URL: ${fresh.url}`,
-              `Org ID: ${fresh.orgId ?? "n/a"}`,
-              `Consecutive failures: ${fresh.consecutiveFailures}`,
-              `Last error: ${result.errorMessage ?? "unknown"}`,
-            ].join("\n");
+            // Resolve the owning org so the alert names the company instead of
+            // a bare org id; fail open to no org label on lookup error.
             ctx.waitUntil(
-              sendWebhookAlert(
-                alertEnv,
-                `[alert] webhook subscription auto-disabled: ${fresh.id}`,
-                alertBody,
-              ).catch(() => undefined),
+              (async () => {
+                let org: { name: string; slug: string } | null = null;
+                try {
+                  org = await getOrgLabelById(db, fresh.orgId);
+                } catch (err) {
+                  logEvent("warn", {
+                    component: "webhook-auto-disable",
+                    event: "resolve-org-failed",
+                    subscriptionId: fresh.id,
+                    err,
+                  });
+                }
+                const alert = formatAutoDisableAlert({
+                  subId: fresh.id,
+                  url: fresh.url,
+                  description: fresh.description,
+                  orgName: org?.name ?? null,
+                  orgSlug: org?.slug ?? null,
+                  consecutiveFailures: fresh.consecutiveFailures,
+                  lastError: result.errorMessage ?? null,
+                });
+                await sendWebhookAlert(alertEnv, alert.subject, alert.body);
+              })().catch(() => undefined),
             );
           }
         }
