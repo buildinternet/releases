@@ -112,7 +112,7 @@ If the org segment matches a known org but the specific repo doesn't, the CLI sh
 
 `--mode`, `--domain`, and `--kind` shape retrieval and scoping; `--since` / `--until` filter the release hits only — org, product, and source matches are unaffected.
 
-In the human view, each release hit is one aligned row (source · title · relative age · dimmed `rel_…`) with a cleaned, markdown-stripped excerpt underneath — never raw `## heading`/`**bold**` markup.
+In the human view, each release hit is one aligned row (`Org/Source` · title · relative age · dimmed `rel_…`) with a cleaned, markdown-stripped excerpt underneath — never raw `## heading`/`**bold**` markup. The identity leads with the owning org so cross-vendor results make clear who ships each release (the prefix is dropped when the source name already starts with the org name, e.g. `Railway Changelog`).
 
 ### Slim release JSON
 

@@ -32,25 +32,27 @@ export const metadata: Metadata = {
  * view appends `--json` and shows the real structured payload (full content
  * included).
  *
- * Reflects the reworked CLI output (buildinternet/releases-cli#215): `search`
- * renders one aligned row per hit — identity (source name, or a package-
- * qualified version) · title · relative age · dimmed `rel_…` — with a cleaned
- * one-line excerpt underneath, and `--json` returns the slim release shape
- * (nested `source`/`org`, derived `excerpt`, `contentChars`; storage internals
- * dropped). The relative ages ("1y", "2w") are a capture-time snapshot. Block 2
- * omits only the real `get` output's trailing "Next steps:" hint, which points
- * at the deprecated top-level `releases release get`. Edit here when refreshing.
+ * Reflects the reworked CLI output (buildinternet/releases-cli#215, refined in
+ * #222): `search` renders one aligned row per hit — identity (`Org/Source`, or
+ * a package-qualified version) · title · relative age · dimmed `rel_…` — with a
+ * cleaned one-line excerpt underneath, and `--json` returns the slim release
+ * shape (nested `source`/`org`, derived `excerpt`, `contentChars`; storage
+ * internals dropped). Block 2 drills into a hit: its `get` card names the owning
+ * org, prints a human date, and labels the AI summary. The relative ages ("1y",
+ * "2w") are a capture-time snapshot. Block 2 omits only the real `get` output's
+ * trailing "Next steps:" hint, which points at the deprecated top-level
+ * `releases release get`. Edit here when refreshing.
  */
 const DEMO_SESSION: TerminalBlock[] = [
   {
     command: 'releases search "webhooks" --type releases',
     output: `Releases
-Changelog          Custom webhooks            1y  rel_YqORWhmpDZmlpyarFGtg0
-                   Axiom introduces custom webhooks.
-API Release Notes  Webhooks Support Launched  2w  rel_vpnvlVinttqFUfgIlDlVZ
-                   Event-driven webhooks support is now available in the Ge…
-Resend Changelog   New Contact Webhooks       1y  rel_q3UEtvayJ4I-kbzRJfSir
-                   Receive real-time notifications when contacts are create…
+Axiom/Changelog           Custom webhooks            1y  rel_YqORWhmpDZmlpyarFGtg0
+                          Axiom introduces custom webhooks.
+Google/API Release Notes  Webhooks Support Launched  2w  rel_vpnvlVinttqFUfgIlDlVZ
+                          Event-driven webhooks support is now available in the Ge…
+Resend Changelog          New Contact Webhooks       1y  rel_q3UEtvayJ4I-kbzRJfSir
+                          Receive real-time notifications when contacts are create…
 
 3 result(s) found.`,
     json: `{
@@ -93,15 +95,15 @@ Resend Changelog   New Contact Webhooks       1y  rel_q3UEtvayJ4I-kbzRJfSir
   },
   {
     command: "releases get rel_vpnvlVinttqFUfgIlDlVZ",
-    output: `Release
-Webhooks Support Launched
+    output: `Webhooks Support Launched
   ID:        rel_vpnvlVinttqFUfgIlDlVZ
+  Org:       Google (google)
   Source:    API Release Notes (api-release-notes)
-  Published: 2026-05-04T00:00:00.000Z
+  Published: May 4, 2026
   URL:       https://ai.google.dev/gemini-api/docs/changelog#webhooks-support-launched
   Content:   132 chars (~24 tokens)
 
-Summary  · AI-generated, abbreviated
+AI summary
 Event-driven webhooks support is now available in the Gemini API, replacing polling workflows for the Batch API and long-running operations.`,
     json: `{
   "id": "rel_vpnvlVinttqFUfgIlDlVZ",
