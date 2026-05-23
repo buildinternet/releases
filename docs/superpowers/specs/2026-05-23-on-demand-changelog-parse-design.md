@@ -1,4 +1,4 @@
-# On-demand changelog parse — structured releases without persistence
+# On-demand changelog — structured releases for any repo, without persistence
 
 **Date:** 2026-05-23
 **Status:** Design — approved, pending spec review
@@ -12,66 +12,120 @@ markdown — a caller asking "what releases are in this changelog?" still has to
 parse it themselves, and the answer differs in shape from an indexed release
 served by `GET /v1/releases/:id`.
 
-We want a coordinate-driven endpoint that returns a changelog as **structured
-release entries in the same shape as our stored releases**, so a caller gets a
-consistent answer whether or not we've indexed the repo yet. Indexed releases
-are produced by an AI extraction pass; that costs tokens and adds latency. But
-the dominant changelog conventions are predictable enough that a deterministic
-markdown parser handles the common case with zero AI cost — which is the bet
-this endpoint makes.
+We want a coordinate-driven endpoint that returns a repo's changelog as
+**structured release entries in the same shape as our stored releases** —
+whether or not we've indexed that repo.
+
+The motivation is **utility and consistency, not backfill.** We track on the
+order of a hundred orgs; there is a whole universe of repos we don't. An agent
+(via CLI/MCP) or a person should be able to ask "what's the changelog for
+`owner/repo`?" knowing nothing more than the coordinate, and get a consistent
+structured answer in seconds — the only difference for an un-indexed repo being
+a little latency, not a different (or absent) answer. The eventual front-end is
+a Mintlify-style web route (`/gh/owner/repo`) that renders any public repo's
+changelog as a clean changelog page, so people don't have to go spelunking
+through GitHub. This spec defines the JSON contract underneath that.
+
+Indexed releases are produced by an AI extraction pass; that costs tokens and
+adds latency. This endpoint instead resolves changelogs **deterministically**
+from two structured-or-near-structured sources, so the common case is free and
+fast.
 
 ## Scope
 
-**In:** one changelog file per call (root by default, or a caller-specified
-`path`), deterministic parsing only, response shaped like a stored release.
+**In:** a single repo coordinate per call resolved to one changelog from the
+best available **deterministic** source — GitHub Releases (already structured)
+or a parsed `CHANGELOG.md` — returned as release entries in the stored-release
+shape, with a `source` discriminator. No persistence.
 
-**Out (v1):** AI fallback for non-conforming files, fan-out across all
-discovered files, persistence of any kind, the `type: "rollup"` classification
-(AI-only), per-change `media` extraction, typed section breakdowns.
+**Out (v1):** AI fallback for repos with neither source, fan-out across every
+file in a monorepo, persistence of any kind, the `type: "rollup"` classification
+(AI-only), per-change `media` extraction, typed section breakdowns, and the web
+`/gh/...` route itself (this is its JSON contract; the rendered page is a
+follow-up).
 
 ## Decisions (locked during brainstorming)
 
-1. **Deterministic only.** No Claude calls. A file that doesn't match a known
-   convention returns `parsable: false` with `releases: []`; the caller falls
-   back to `/changelog/fetch`'s raw excerpt.
-2. **Mirror the stored release shape.** Each entry carries the parse-relevant
+1. **Utility/presentation surface, not an ingest tier.** This is deliberately a
+   read-only path that *presents* a repo's changelog. It is **not** a cheaper
+   feeder into the AI ingest pipeline, and is not reconciled against indexed
+   releases — keeping the two cleanly separate avoids a "two sources of truth
+   disagree" problem. (If a deterministic ingest tier is ever wanted, that's a
+   separate, conscious decision with its own validation.)
+2. **Deterministic only.** No Claude calls. A repo with neither a usable GitHub
+   Releases feed nor a parseable `CHANGELOG.md` returns `parsable: false` with
+   `releases: []`.
+3. **Two deterministic sources, one shape, prefer-one-fallback.** GitHub
+   Releases and `CHANGELOG.md` both resolve into the same
+   `ParsedChangelogRelease[]`. A single `source` answers per response (no
+   per-entry merge/dedup — that would reintroduce reconciliation). Resolution
+   order in `auto` mode (the default): prefer GitHub Releases when it yields ≥1
+   release with a non-trivial body; else a parseable `CHANGELOG.md`; else any
+   releases that exist (even thin); else `parsable: false`.
+4. **Mirror the stored release shape.** Each entry carries the parse-relevant
    subset of `ReleaseDetailResponseSchema`. AI-only fields (`summary`,
    `titleGenerated`, `titleShort`) are always `null`; `media` is always `[]`.
-3. **New endpoint, coordinate input only.** `POST /v1/changelog/parse`
-   `{ repo, path? }`. Not an extension of `/changelog/fetch` — that endpoint
-   only downloads a 2 KB excerpt for the first 20 files, which is incompatible
-   with full-body parsing. `/fetch` stays the lightweight inventory scout.
-4. **`type` is always `"feature"`.** The `RELEASE_TYPES` enum is
-   `["feature", "rollup"]` — an entry-level "ordinary release vs. seasonal
-   rollup" distinction, _not_ feature/fix/security. Deterministic parsing can't
-   tell a rollup from an ordinary release, so every parsed entry is `"feature"`,
-   exactly as a stored bugfix release is. The fix/feature/security signal lives
-   in the `### Added`/`### Fixed`/`### Security` subheadings inside `content`;
-   the caller reads it there (a structured `sections`/`kinds` breakdown was
-   considered and deferred).
+5. **New endpoint, coordinate input only.** `POST /v1/changelog/parse`
+   `{ repo, path?, source? }`. Not an extension of `/changelog/fetch` — that
+   endpoint only downloads a 2 KB excerpt for the first 20 files, incompatible
+   with full resolution. `/fetch` stays the lightweight inventory scout.
+6. **`type` is always `"feature"`.** `RELEASE_TYPES` is `["feature", "rollup"]`
+   — an entry-level "ordinary release vs. seasonal rollup" distinction, _not_
+   feature/fix/security. Deterministic resolution can't identify a rollup, so
+   every entry is `"feature"`, exactly as a stored bugfix release is. (The
+   GitHub Releases API has no rollup concept either.) The fix/feature/security
+   signal lives in the `### Added`/`### Fixed`/`### Security` subheadings inside
+   `content`; a structured `sections`/`kinds` breakdown was considered and
+   deferred.
+
+## Inputs
+
+```jsonc
+{
+  "repo": "owner/repo",        // required; also accepts "github:owner/repo"
+  "path": "packages/x/CHANGELOG.md", // optional; forces the changelog_file source at this path
+  "source": "auto"             // optional; "auto" (default) | "github_releases" | "changelog_file"
+}
+```
+
+- `path` implies `source: "changelog_file"` (you're naming a file), and lets a
+  caller target a specific monorepo workspace changelog.
+- `source` is an escape hatch to force one resolver; `auto` applies the
+  prefer-one-fallback order from decision #3.
 
 ## Architecture
 
-A pure, runtime-neutral parser in `@buildinternet/releases-core` does the work;
-the worker route only handles fetch + auth + plumbing. This keeps the parsing
-logic unit-testable in isolation and reusable (CLI, future ingest, the eventual
-AI-fallback caller) without dragging in worker concerns.
+The release-producing logic is **pure and runtime-neutral**, in
+`@buildinternet/releases-core`: `parseChangelog()` for markdown and
+`mapGitHubReleases()` for the API shape, both emitting `ParsedChangelogRelease[]`.
+The worker route owns only fetch + auth + resolution-order plumbing. This keeps
+the producers unit-testable in isolation and reusable by the CLI (which consumes
+core) so it can fetch + resolve client-side too.
 
 ```mermaid
 flowchart TD
-    A["POST /v1/changelog/parse<br/>{ repo, path? }"] --> B{parseCoordinate}
+    A["POST /v1/changelog/parse<br/>{ repo, path?, source? }"] --> B{parseCoordinate}
     B -->|invalid| E400[400 bad_request]
     B -->|ok| C[classifyRepoStatus precheck]
-    C -->|not ok| ERR["404 / 502 / 503<br/>(passthrough)"]
-    C -->|ok| D[discoverChangelogPathsViaTree]
-    D --> S["selectChangelogFile(discovered, path)<br/>root by default"]
-    S -->|no file| E404[404 not_found]
-    S -->|file| F["fetch full body<br/>(raw API, ≤ MAX_BYTES)"]
-    F --> P["parseChangelog(markdown)<br/>@buildinternet/releases-core"]
-    P --> R["200 { repo, file, parsable,<br/>format, releases[], stats }"]
+    C -->|not ok| ERR["404 / 502 / 503 (passthrough)"]
+    C -->|ok| MODE{resolve source}
+
+    MODE -->|path set or<br/>source=changelog_file| FILE
+    MODE -->|source=github_releases| REL
+    MODE -->|auto| REL
+
+    REL["GET /repos/owner/repo/releases<br/>map → entries[]"] --> RELQ{≥1 release<br/>w/ non-trivial body?}
+    RELQ -->|yes| OK_REL["200 source=github_releases"]
+    RELQ -->|no, auto| FILE["discover + select CHANGELOG.md<br/>fetch body ≤ MAX_BYTES<br/>parseChangelog()"]
+    RELQ -->|no, forced| THIN["200 source=github_releases (thin/empty)"]
+
+    FILE --> FQ{parsable?}
+    FQ -->|yes| OK_FILE["200 source=changelog_file"]
+    FQ -->|no, auto + releases existed| THIN
+    FQ -->|no| NONE["200 parsable:false, source:null"]
 ```
 
-### Layer 1 — pure parser (core)
+### Pure producers (core)
 
 New `packages/core/src/changelog-parse.ts`, exported as
 `@buildinternet/releases-core/changelog-parse`. Lives beside `changelog-slice.ts`
@@ -81,11 +135,11 @@ and reuses its `findHeadings`, plus `isPrereleaseVersion` from `prerelease.ts`.
 export interface ParsedChangelogRelease {
   version: string | null;
   type: "feature"; // deterministic default; never "rollup"
-  title: string; // the version string
-  content: string; // markdown body under the heading, trimmed
-  url: string | null; // version-link href when the heading links it
-  publishedAt: string | null; // ISO date from the heading, else null
-  prerelease: boolean; // isPrereleaseVersion(version)
+  title: string; // version (file) or release name (GH)
+  content: string; // markdown body, trimmed
+  url: string | null; // version-link href (file) / html_url (GH)
+  publishedAt: string | null; // ISO date; authoritative from GH, parsed from file
+  prerelease: boolean; // GH: authoritative flag; file: isPrereleaseVersion(version)
   summary: null; // AI-only — shape parity
   titleGenerated: null; // AI-only
   titleShort: null; // AI-only
@@ -101,19 +155,33 @@ export interface ParseChangelogResult {
 }
 
 export function parseChangelog(markdown: string): ParseChangelogResult;
+
+/** Minimal structural shape of a GitHub Releases API row — avoids a core→adapters dep. */
+export interface GitHubReleaseLike {
+  tag_name: string;
+  name: string | null;
+  body: string | null;
+  html_url: string;
+  published_at: string | null;
+  prerelease: boolean;
+}
+
+export function mapGitHubReleases(releases: GitHubReleaseLike[]): ParsedChangelogRelease[];
 ```
 
+#### `parseChangelog` (the `changelog_file` source)
+
 **Anchor.** Split on `##` headings whose text begins with a version-ish token.
-This covers the dominant conventions:
+Covers the dominant conventions:
 
-| Convention                                | Heading example                                                           | `format`           |
-| ----------------------------------------- | ------------------------------------------------------------------------- | ------------------ |
-| Keep a Changelog                          | `## [1.4.0] - 2026-05-01`                                                 | `keep-a-changelog` |
+| Convention                                | Heading example                                                          | `format`           |
+| ----------------------------------------- | ------------------------------------------------------------------------ | ------------------ |
+| Keep a Changelog                          | `## [1.4.0] - 2026-05-01`                                                | `keep-a-changelog` |
 | conventional-changelog / semantic-release | `## [1.4.0](https://github.com/o/r/compare/v1.3.0...v1.4.0) (2026-05-01)` | `conventional`     |
-| conventional (no link)                    | `## 1.4.0 (2026-05-01)`                                                   | `conventional`     |
-| plain tag                                 | `## v1.4.0` / `## 1.4.0`                                                  | `plain`            |
+| conventional (no link)                    | `## 1.4.0 (2026-05-01)`                                                  | `conventional`     |
+| plain tag                                 | `## v1.4.0` / `## 1.4.0`                                                 | `plain`            |
 
-**Per-entry extraction:**
+Per-entry extraction:
 
 - **version** — first bracket/paren-stripped token after optional leading `v`.
 - **url** — the href if the version is a markdown link `[ver](href)`, else `null`.
@@ -121,127 +189,143 @@ This covers the dominant conventions:
   separator or inside `(...)`), else `null`. No fuzzy date parsing in v1; a
   non-ISO date is left `null` rather than guessed.
 - **prerelease** — `isPrereleaseVersion(version)`.
-- **content** — the markdown from just after the heading line up to the next
-  `##` (or EOF), trimmed.
-- **title** — the version string (matches how stored releases often title `vX`).
+- **content** — markdown from after the heading line up to the next `##` (or
+  EOF), trimmed.
+- **title** — the version string.
 
-**parsable / format.** `parsable` is `true` when at least one `##` heading
-yields a recognizable version. `format` reports the family that matched the
-majority of headings; `"unknown"` when nothing parsed. A file with zero
-version-shaped `##` headings (e.g. a prose release-notes page) returns
-`parsable: false, releases: [], format: "unknown"`.
+`parsable` is `true` when ≥1 `##` heading yields a recognizable version;
+`format` reports the matched family, `"unknown"` when nothing parsed. A prose
+release-notes file returns `parsable: false, releases: [], format: "unknown"`.
+`## [Unreleased]` and version-less headings are skipped and counted in `skipped`.
 
-**Skipped.** `## [Unreleased]` and any version-less `##` heading are not emitted
-(they aren't published releases) and counted in `skipped`.
+#### `mapGitHubReleases` (the `github_releases` source)
 
-### Layer 2 — worker route
+Maps the GitHub Releases API rows (reference shape in
+`packages/adapters/src/github.ts`'s `GitHubRelease`) straight into entries — no
+parsing needed, the API is already structured:
+
+- **version** ← `tag_name`; **title** ← `name || tag_name`; **content** ←
+  `body ?? ""`; **url** ← `html_url`; **publishedAt** ← `published_at`
+  (already ISO); **prerelease** ← `prerelease` (authoritative). `format` is not
+  applicable to this source (response carries `format: null`).
+
+### Worker route
 
 Add a handler to the existing `workers/api/src/routes/changelog.ts`, sibling to
-`/changelog/fetch`. It reuses, unchanged:
+`/changelog/fetch`. Reuses, unchanged: the `classifyRepoStatus` precheck;
+`buildGitHubHeaders`/`createListingCache`; `discoverChangelogPathsViaTree` +
+`selectChangelogFile(discovered, path)` (root by default) for the file source;
+and the same full-body fetch pattern (`headers.rawHeaders`, `MAX_BYTES = 1 MB`
+cap, `truncated` flag). The GitHub Releases source is a lightweight
+`GET /repos/{owner}/{repo}/releases?per_page=100` fetch (one page in v1) → JSON
+→ `mapGitHubReleases`, mirroring how `/fetch` does its own fetch rather than
+importing the Node-flavored adapter.
 
-- `classifyRepoStatus` precheck — so a transient GitHub failure surfaces as
-  404/502/503 instead of an empty parse.
-- `discoverChangelogPathsViaTree` (the single recursive Git Trees call, with the
-  workspace-walk fallback) to enumerate candidate files and their sizes.
-- `selectChangelogFile(discovered, path)` from core — root CHANGELOG by default
-  (no slash in path), exact match when `path` is supplied, `null` → 404.
-- The same full-body fetch loop pattern `/fetch` uses (`headers.rawHeaders`,
-  `MAX_BYTES = 1 MB` cap, `truncated` flag), but for the single selected file.
-
-Then it calls `parseChangelog(body)` and returns:
+The handler applies the decision-#3 resolution order, then returns:
 
 ```jsonc
 {
   "repo": "owner/repo",
-  "file": {
-    "path": "CHANGELOG.md",
-    "url": "...",
-    "rawUrl": "...",
-    "size": 48213,
-    "truncated": false,
-  },
+  "source": "github_releases", // "changelog_file" | "github_releases" | null
   "parsable": true,
-  "format": "keep-a-changelog",
+  "format": null, // populated only for source=changelog_file
+  "file": null, // {path,url,rawUrl,size,truncated} only for source=changelog_file
   "releases": [
     /* ParsedChangelogRelease[] */
   ],
   "stats": {
     "releasesParsed": 37,
-    "headingsScanned": 38,
-    "skipped": 1,
-    "githubRequests": 2, // precheck + tree (+1 raw body fetch)
-    "bytes": 48213,
+    "headingsScanned": 0, // file source only
+    "skipped": 0, // file source only
+    "githubRequests": 2, // precheck + releases (or + tree + raw body)
+    "bytes": 0, // file source: fetched body size
     "elapsedMs": 120,
   },
 }
 ```
 
-Auth, OpenAPI, and registration mirror `/fetch`:
-
-- **Auth:** Bearer (write) via `publicReadAuthMiddleware`'s non-SAFE_METHODS
-  branch — `/changelog` is registered in `route-namespaces.ts`.
-- **OpenAPI:** `hide: hideInProduction`, so it's absent from the production spec
-  and outside the coverage gate (matching `/fetch`). No `check-openapi-coverage`
-  allowlist entry needed.
-- **Response schema:** defined locally in the route file (zod), mirroring how
-  `/fetch` keeps `ChangelogFetchResponseSchema` inline rather than in
-  `@buildinternet/releases-api-types`. It's experimental and hidden; promoting
-  the shape to api-types is a follow-up if/when it stabilizes.
+Auth/OpenAPI/registration mirror `/fetch`: Bearer (write) via
+`publicReadAuthMiddleware`'s non-SAFE_METHODS branch (the `/changelog` prefix is
+already registered in `route-namespaces.ts`); `hide: hideInProduction` (absent
+from the production spec, outside the coverage gate, no allowlist entry); the
+zod response schema lives locally in the route file, as `/fetch`'s does
+(promotion to `@buildinternet/releases-api-types` is a post-experiment
+follow-up).
 
 ## Error handling
 
-| Condition                               | Status | Body                                |
-| --------------------------------------- | ------ | ----------------------------------- |
-| Missing/blank `repo`                    | 400    | `{ error: "bad_request", message }` |
-| `repo` not a parseable `owner/repo`     | 400    | `{ error: "bad_request", message }` |
-| Repo not found on GitHub                | 404    | `classifyRepoStatus` body           |
-| GitHub auth error / upstream 5xx        | 502    | `classifyRepoStatus` body           |
-| GitHub rate limited                     | 503    | `classifyRepoStatus` body           |
-| No changelog file (or `path` not found) | 404    | `{ error: "not_found", message }`   |
-| File found but non-conforming           | 200    | `parsable: false, releases: []`     |
+| Condition                                       | Status | Body                                       |
+| ----------------------------------------------- | ------ | ------------------------------------------ |
+| Missing/blank `repo`                            | 400    | `{ error: "bad_request", message }`        |
+| `repo` not a parseable `owner/repo`             | 400    | `{ error: "bad_request", message }`        |
+| Invalid `source` value                          | 400    | `{ error: "bad_request", message }`        |
+| Repo not found on GitHub                        | 404    | `classifyRepoStatus` body                  |
+| GitHub auth error / upstream 5xx                | 502    | `classifyRepoStatus` body                  |
+| GitHub rate limited                             | 503    | `classifyRepoStatus` body                  |
+| `source: changelog_file` + `path` not found     | 404    | `{ error: "not_found", message }`          |
+| Repo exists, no usable releases and no changelog | 200    | `parsable: false, releases: [], source: null` |
 
-Non-conforming is a **200, not an error** — discovery and fetch succeeded; the
-file just isn't in a deterministic shape. The caller decides whether to fall
-back to `/changelog/fetch`.
+"Nothing to show" is a **200, not a 404** — the repo exists; it just has no
+deterministic changelog. (`source`-forced misses are the exception: an explicit
+`path` that doesn't exist is a 404, since the caller asserted a specific file.)
 
 ## Testing
 
-**Unit (`packages/core`, pure `parseChangelog`):** fixtures per family —
+**Unit (`tests/unit/changelog-parse.test.ts`, pure producers):**
 
-- Keep a Changelog with `## [Unreleased]` + several versioned sections (asserts
-  Unreleased skipped, dates + prerelease flags correct).
-- conventional-changelog output with linked version headings (asserts `url`
-  extraction, `format: "conventional"`).
-- plain `## vX.Y.Z` headings, no dates (asserts `publishedAt: null`).
-- a prerelease tag (`## 2.0.0-rc.1 - ...`) → `prerelease: true`.
-- a prose/non-conforming file → `parsable: false`, `format: "unknown"`.
+- `parseChangelog`: Keep a Changelog with `## [Unreleased]` + versioned sections
+  (Unreleased skipped, dates + prerelease correct); conventional output with
+  linked headings (`url` extracted, `format: "conventional"`); plain `## vX.Y.Z`
+  with no dates (`publishedAt: null`); a prerelease tag → `prerelease: true`; a
+  prose file → `parsable: false, format: "unknown"`.
+- `mapGitHubReleases`: maps tag/name/body/url/date/prerelease; empty `body` →
+  `content: ""`; preserves authoritative `prerelease` and ISO `published_at`.
 
 **Worker (`workers/api/test/changelog-parse.test.ts`, mocked GitHub fetch,
 mirroring `changelog-fetch.test.ts`):**
 
-- happy path (root selected, releases parsed, stats coherent),
-- explicit `path` targeting a monorepo workspace changelog,
-- non-conforming file → 200 `parsable: false`,
-- repo-not-found / rate-limit passthrough from `classifyRepoStatus`,
-- `path` not found → 404.
+- auto → GitHub Releases wins (repo with rich releases), `source: "github_releases"`;
+- auto → falls back to `CHANGELOG.md` when releases are absent/empty,
+  `source: "changelog_file"`, `file` + `format` populated;
+- auto → `parsable: false, source: null` when neither exists;
+- `source: "changelog_file"` forces the file path even when releases exist;
+- explicit `path` targets a monorepo workspace changelog; missing `path` → 404;
+- repo-not-found / rate-limit passthrough from `classifyRepoStatus`;
+- invalid `source` → 400.
+
+## Success metric
+
+The question this experiment answers is **coverage**: for an arbitrary public
+repo, how often does `auto` return a usable changelog (`parsable: true`), and via
+which `source`? A simple offline sweep over a sample of repos (mix of tracked +
+random popular + long-tail) records the `parsable`/`source`/`releasesParsed`
+distribution. High coverage justifies the `/gh/...` web route; a high
+empty-rate says the deterministic bet needs the AI fallback before it's a public
+surface. The `source`/`parsable`/`format` fields are exactly what that sweep
+reads.
 
 ## Files
 
-- **new** `packages/core/src/changelog-parse.ts`
+- **new** `packages/core/src/changelog-parse.ts` — `parseChangelog` + `mapGitHubReleases` + types
 - **new** `tests/unit/changelog-parse.test.ts` (root `tests/unit/`, beside `changelog-slice.test.ts`)
-- **edit** `workers/api/src/routes/changelog.ts` — add route + handler + local zod schema
 - **edit** `packages/core/package.json` exports map — add `"./changelog-parse": "./src/changelog-parse.ts"` (match `./changelog-slice`)
+- **edit** `workers/api/src/routes/changelog.ts` — add route + handler (both resolvers + resolution order) + local zod schema
 - **new** `workers/api/test/changelog-parse.test.ts`
 - **verify** `workers/api/src/route-namespaces.ts` — `/changelog` prefix already write-gated by `/fetch`; no change expected, confirm during impl
 
 ## Open questions / future work
 
-- **AI fallback** for `parsable: false` (the deferred 20%) — a `mode: "auto"`
-  that escalates to `extractFromBody`. Out of scope; the `format`/`parsable`
-  fields are the seam for it.
-- **Fan-out** across all discovered files (`parseAll`) — `/fetch` already
-  enumerates the inventory; a future flag parses each.
+- **Web `/gh/owner/repo` route** — the Mintlify-style rendered changelog page on
+  top of this contract. Inverts the auth model (public, not Bearer-gated), so it
+  needs: edge/KV caching of resolved results, per-IP rate limiting, and a repo
+  size cap before it ships — this endpoint is an open proxy to GitHub on our
+  rate budget otherwise. Tracked as the primary follow-up.
+- **AI fallback** for `parsable: false` — a `mode: "auto-ai"` that escalates to
+  `extractFromBody`. The `source`/`parsable` fields are the seam.
+- **Fan-out** across all discovered files (`parseAll`) for monorepos — `/fetch`
+  already enumerates the inventory.
 - **Promote response shape to `@buildinternet/releases-api-types`** once the
-  endpoint graduates from experimental.
+  endpoint graduates from experimental; then wire CLI/MCP surfaces.
 - **Typed `sections` / `kinds`** breakdown if a caller needs machine-readable
   change kinds without re-parsing `content`.
+- **GitHub Releases pagination** beyond the first 100 for very release-heavy repos.
