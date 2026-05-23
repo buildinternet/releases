@@ -137,14 +137,16 @@ export function parseChangelog(markdown: string): ParseChangelogResult {
   }
 
   // conventional (linked headings) > keep-a-changelog (bracketed) > plain.
-  const format: ChangelogFormat =
-    releases.length === 0
-      ? "unknown"
-      : sawLink
-        ? "conventional"
-        : sawBracket
-          ? "keep-a-changelog"
-          : "plain";
+  let format: ChangelogFormat;
+  if (releases.length === 0) {
+    format = "unknown";
+  } else if (sawLink) {
+    format = "conventional";
+  } else if (sawBracket) {
+    format = "keep-a-changelog";
+  } else {
+    format = "plain";
+  }
 
   return {
     parsable: releases.length > 0,
