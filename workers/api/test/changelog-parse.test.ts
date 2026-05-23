@@ -261,4 +261,46 @@ describe("POST /changelog/parse", () => {
     expect(res.status).toBe(404);
     expect(((await res.json()) as { error: string }).error).toBe("repo_not_found");
   });
+
+  it("source=github_releases: surfaces an upstream releases failure as 502", async () => {
+    installFetch((url) => {
+      if (url === "https://api.github.com/repos/owner/repo") return json({}); // precheck OK
+      if (url === RELEASES_URL) return new Response("boom", { status: 500 }); // sub-call fails
+      return new Response("nf", { status: 404 });
+    });
+    const res = await call({ repo: "owner/repo", source: "github_releases" });
+    expect(res.status).toBe(502);
+    expect(((await res.json()) as { error: string }).error).toBe("github_upstream_error");
+  });
+
+  it("source=changelog_file: surfaces a raw body fetch failure as 502", async () => {
+    installFetch((url) => {
+      if (url === "https://api.github.com/repos/owner/repo") return json({}); // precheck OK
+      if (url === TREE_URL) {
+        return json({ truncated: false, tree: [{ path: "CHANGELOG.md", type: "blob", size: 50 }] });
+      }
+      if (url === ROOT_CHANGELOG) return new Response("boom", { status: 500 }); // body fetch fails
+      return new Response("nf", { status: 404 });
+    });
+    const res = await call({ repo: "owner/repo", source: "changelog_file" });
+    expect(res.status).toBe(502);
+    expect(((await res.json()) as { error: string }).error).toBe("github_upstream_error");
+  });
+
+  it("auto: degrades past a releases failure to CHANGELOG.md (no error surfaced)", async () => {
+    installFetch((url) => {
+      if (url === "https://api.github.com/repos/owner/repo") return json({}); // precheck OK
+      if (url === RELEASES_URL) return new Response("boom", { status: 500 }); // releases fail
+      if (url === TREE_URL) {
+        return json({ truncated: false, tree: [{ path: "CHANGELOG.md", type: "blob", size: 50 }] });
+      }
+      if (url === ROOT_CHANGELOG) return text("## [3.0.0] - 2026-03-03\n- via fallback");
+      return new Response("nf", { status: 404 });
+    });
+    const res = await call({ repo: "owner/repo" });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as ParseBody;
+    expect(body.source).toBe("changelog_file");
+    expect(body.releases[0].version).toBe("3.0.0");
+  });
 });

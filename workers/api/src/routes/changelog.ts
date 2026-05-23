@@ -321,19 +321,31 @@ const parseChangelogRoute = describeRoute({
 
 type ChangelogParseSource = (typeof PARSE_SOURCES)[number];
 
-/** Fetch + map a repo's GitHub Releases (one page). Returns [] on any non-ok. */
+/**
+ * Fetch + map a repo's GitHub Releases (one page). `failed` is set on a
+ * transport error or non-OK / unparseable response — distinct from a 200 with
+ * an empty array, which is just a repo with no releases. Repo-level auth /
+ * rate-limit / 5xx are already surfaced upfront by `classifyRepoStatus`; this
+ * lets a forced `github_releases` request report the rare post-precheck failure
+ * instead of masking it as "no releases".
+ */
 async function fetchGitHubReleases(
   owner: string,
   repo: string,
   apiHeaders: Record<string, string>,
-): Promise<ParsedChangelogRelease[]> {
-  const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/releases?per_page=100`, {
-    headers: apiHeaders,
-  });
-  if (!res.ok) return [];
+): Promise<{ releases: ParsedChangelogRelease[]; failed: boolean }> {
+  let res: Response;
+  try {
+    res = await fetch(`https://api.github.com/repos/${owner}/${repo}/releases?per_page=100`, {
+      headers: apiHeaders,
+    });
+  } catch {
+    return { releases: [], failed: true };
+  }
+  if (!res.ok) return { releases: [], failed: true };
   const data = (await res.json().catch(() => null)) as GitHubReleaseLike[] | null;
-  if (!Array.isArray(data)) return [];
-  return mapGitHubReleases(data);
+  if (!Array.isArray(data)) return { releases: [], failed: true };
+  return { releases: mapGitHubReleases(data), failed: false };
 }
 
 interface ResolvedFile {
@@ -343,8 +355,20 @@ interface ResolvedFile {
 }
 
 /**
+ * Outcome of resolving the CHANGELOG file source:
+ * - `ok`        — a file was found and its body fetched + parsed.
+ * - `not_found` — no changelog file matched (root absent, or `path` missing).
+ * - `error`     — the raw body fetch failed (transport / non-OK). A forced
+ *                 request surfaces this as 502; `auto` degrades past it.
+ */
+type ResolveOutcome =
+  | ({ kind: "ok" } & ResolvedFile)
+  | { kind: "not_found" }
+  | { kind: "error"; status: number };
+
+/**
  * Discover + select one CHANGELOG file (root by default, or `path`), fetch its
- * full body (≤ MAX_BYTES), and parse it. Returns null when no file is found.
+ * full body (≤ MAX_BYTES), and parse it.
  */
 async function resolveChangelogFile(
   owner: string,
@@ -352,7 +376,7 @@ async function resolveChangelogFile(
   headers: ReturnType<typeof buildGitHubHeaders>,
   cache: ReturnType<typeof createListingCache>,
   path: string | null,
-): Promise<ResolvedFile | null> {
+): Promise<ResolveOutcome> {
   const syntheticSource = {
     url: `https://github.com/${owner}/${repo}`,
     metadata: null,
@@ -362,35 +386,36 @@ async function resolveChangelogFile(
     (await discoverChangelogPathsViaTree(syntheticSource, headers, cache)) ?? []
   ).filter((p) => p.exists);
   const selected = selectChangelogFile(discovered, path);
-  if (!selected) return null;
+  if (!selected) return { kind: "not_found" };
 
   const rawUrl = `https://raw.githubusercontent.com/${owner}/${repo}/HEAD/${selected.path}`;
-  let body = "";
-  let truncated = false;
-  let bytes = 0;
+  let res: Response;
   try {
-    const res = await fetch(rawUrl, { headers: headers.rawHeaders });
-    if (res.ok) {
-      body = await res.text();
-      bytes = encoder.encode(body).length;
-      truncated = bytes > MAX_BYTES;
-    }
+    res = await fetch(rawUrl, { headers: headers.rawHeaders });
   } catch {
-    // leave body empty on fetch failure
+    return { kind: "error", status: 502 };
   }
+  if (!res.ok) return { kind: "error", status: res.status };
+
+  const bodyText = await res.text();
+  const bytes = encoder.encode(bodyText).length;
 
   return {
+    kind: "ok",
     file: {
       path: selected.path,
       url: `https://github.com/${owner}/${repo}/blob/HEAD/${selected.path}`,
       rawUrl,
       size: selected.size,
-      truncated,
+      truncated: bytes > MAX_BYTES,
     },
-    result: parseChangelog(body),
+    result: parseChangelog(bodyText),
     bytes,
   };
 }
+
+/** Map a failed GitHub sub-call to an upstream HTTP status (rate-limit → 503, else 502). */
+const upstreamStatus = (status: number): 502 | 503 => (status === 429 ? 503 : 502);
 
 const parseChangelogHandler = async (c: import("hono").Context<Env>) => {
   const startedAt = Date.now();
@@ -459,6 +484,9 @@ const parseChangelogHandler = async (c: import("hono").Context<Env>) => {
   let headingsScanned = 0;
   let skipped = 0;
   let downloadedBytes = 0;
+  // Sub-call failures recorded for the log in auto mode (forced modes return early).
+  let releasesFailed = false;
+  let fileErrorStatus: number | null = null;
 
   const runReleases = async () => {
     githubRequests++;
@@ -467,15 +495,25 @@ const parseChangelogHandler = async (c: import("hono").Context<Env>) => {
 
   const runFile = async () => {
     const before = cache.requests;
-    const resolved = await resolveChangelogFile(owner, repo, headers, cache, pathInput);
-    // discovery listing/tree calls + the single raw body fetch (when a file matched)
-    githubRequests += cache.requests - before + (resolved ? 1 : 0);
-    return resolved;
+    const outcome = await resolveChangelogFile(owner, repo, headers, cache, pathInput);
+    // discovery listing/tree calls + the single raw body fetch (only attempted
+    // once a file was selected — i.e. not on a not_found outcome).
+    githubRequests += cache.requests - before + (outcome.kind === "not_found" ? 0 : 1);
+    return outcome;
   };
 
   if (source === "changelog_file") {
-    const resolved = await runFile();
-    if (!resolved) {
+    const outcome = await runFile();
+    if (outcome.kind === "error") {
+      return c.json(
+        {
+          error: "github_upstream_error",
+          message: `Failed to fetch the changelog file for ${owner}/${repo} (status ${outcome.status})`,
+        },
+        upstreamStatus(outcome.status),
+      );
+    }
+    if (outcome.kind === "not_found") {
       // An explicit path the caller asserted must exist is a 404; an absent
       // root changelog is just "nothing to show".
       if (pathInput) {
@@ -488,46 +526,60 @@ const parseChangelogHandler = async (c: import("hono").Context<Env>) => {
         );
       }
     } else {
-      file = resolved.file;
-      downloadedBytes = resolved.bytes;
-      format = resolved.result.format;
-      headingsScanned = resolved.result.headingsScanned;
-      skipped = resolved.result.skipped;
-      if (resolved.result.parsable) {
+      file = outcome.file;
+      downloadedBytes = outcome.bytes;
+      format = outcome.result.format;
+      headingsScanned = outcome.result.headingsScanned;
+      skipped = outcome.result.skipped;
+      if (outcome.result.parsable) {
         resolvedSource = "changelog_file";
-        releases = resolved.result.releases;
+        releases = outcome.result.releases;
       }
     }
   } else if (source === "github_releases") {
     const rel = await runReleases();
-    if (rel.length > 0) {
+    if (rel.failed) {
+      return c.json(
+        {
+          error: "github_upstream_error",
+          message: `Failed to fetch GitHub Releases for ${owner}/${repo}`,
+        },
+        502,
+      );
+    }
+    if (rel.releases.length > 0) {
       resolvedSource = "github_releases";
-      releases = rel;
+      releases = rel.releases;
     }
   } else {
     // auto: prefer GitHub Releases with non-trivial bodies, else CHANGELOG.md,
-    // else any releases that exist (thin), else nothing.
+    // else any releases that exist (thin), else nothing. Sub-call failures here
+    // degrade gracefully — the viewer still tries the other source — and are
+    // only logged, never surfaced (forced modes above surface them instead).
     const rel = await runReleases();
-    const hasBody = rel.some((r) => r.content.trim().length > 0);
-    if (rel.length > 0 && hasBody) {
+    releasesFailed = rel.failed;
+    const hasBody = rel.releases.some((r) => r.content.trim().length > 0);
+    if (rel.releases.length > 0 && hasBody) {
       resolvedSource = "github_releases";
-      releases = rel;
+      releases = rel.releases;
     } else {
-      const resolved = await runFile();
-      if (resolved) {
-        file = resolved.file;
-        downloadedBytes = resolved.bytes;
-        format = resolved.result.format;
-        headingsScanned = resolved.result.headingsScanned;
-        skipped = resolved.result.skipped;
+      const outcome = await runFile();
+      if (outcome.kind === "error") fileErrorStatus = outcome.status;
+      if (outcome.kind === "ok") {
+        file = outcome.file;
+        downloadedBytes = outcome.bytes;
+        format = outcome.result.format;
+        headingsScanned = outcome.result.headingsScanned;
+        skipped = outcome.result.skipped;
+        if (outcome.result.parsable) {
+          resolvedSource = "changelog_file";
+          releases = outcome.result.releases;
+        }
       }
-      if (resolved?.result.parsable) {
-        resolvedSource = "changelog_file";
-        releases = resolved.result.releases;
-      } else if (rel.length > 0) {
+      if (resolvedSource === null && rel.releases.length > 0) {
         // Releases exist but are body-less; better than nothing.
         resolvedSource = "github_releases";
-        releases = rel;
+        releases = rel.releases;
         file = null;
         format = null;
       }
@@ -548,6 +600,9 @@ const parseChangelogHandler = async (c: import("hono").Context<Env>) => {
     event: "parsed",
     repo: `${owner}/${repo}`,
     source: resolvedSource,
+    // auto-mode degradation diagnostics (false/null in forced modes, which return early on failure)
+    releasesFailed,
+    fileErrorStatus,
     ...stats,
   });
 

@@ -245,12 +245,15 @@ The handler applies the decision-#3 resolution order, then returns:
 ```
 
 Auth/OpenAPI/registration mirror `/fetch`: Bearer (write) via
-`publicReadAuthMiddleware`'s non-SAFE_METHODS branch (the `/changelog` prefix is
-already registered in `route-namespaces.ts`); `hide: hideInProduction` (absent
-from the production spec, outside the coverage gate, no allowlist entry); the
-zod response schema lives locally in the route file, as `/fetch`'s does
-(promotion to `@buildinternet/releases-api-types` is a post-experiment
-follow-up).
+`publicReadAuthMiddleware`'s non-SAFE*METHODS branch (the `/changelog` prefix is
+already registered in `route-namespaces.ts`). `hide: hideInProduction` keeps it
+out of the production OpenAPI spec — but the OpenAPI **coverage gate**
+(`scripts/check-openapi-coverage.ts`) compares routes \_registered* under a
+public-read namespace against that spec, so a hidden route is registered yet
+absent and must carry an explicit `ALLOWLIST` entry (exactly as `/changelog/fetch`
+does). `POST /changelog/parse` is added to that allowlist. The zod response
+schema lives locally in the route file, as `/fetch`'s does (promotion to
+`@buildinternet/releases-api-types` is a post-experiment follow-up).
 
 ## Error handling
 
