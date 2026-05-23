@@ -47,7 +47,7 @@ follow-up).
 ## Decisions (locked during brainstorming)
 
 1. **Utility/presentation surface, not an ingest tier.** This is deliberately a
-   read-only path that *presents* a repo's changelog. It is **not** a cheaper
+   read-only path that _presents_ a repo's changelog. It is **not** a cheaper
    feeder into the AI ingest pipeline, and is not reconciled against indexed
    releases — keeping the two cleanly separate avoids a "two sources of truth
    disagree" problem. (If a deterministic ingest tier is ever wanted, that's a
@@ -82,9 +82,9 @@ follow-up).
 
 ```jsonc
 {
-  "repo": "owner/repo",        // required; also accepts "github:owner/repo"
+  "repo": "owner/repo", // required; also accepts "github:owner/repo"
   "path": "packages/x/CHANGELOG.md", // optional; forces the changelog_file source at this path
-  "source": "auto"             // optional; "auto" (default) | "github_releases" | "changelog_file"
+  "source": "auto", // optional; "auto" (default) | "github_releases" | "changelog_file"
 }
 ```
 
@@ -174,12 +174,12 @@ export function mapGitHubReleases(releases: GitHubReleaseLike[]): ParsedChangelo
 **Anchor.** Split on `##` headings whose text begins with a version-ish token.
 Covers the dominant conventions:
 
-| Convention                                | Heading example                                                          | `format`           |
-| ----------------------------------------- | ------------------------------------------------------------------------ | ------------------ |
-| Keep a Changelog                          | `## [1.4.0] - 2026-05-01`                                                | `keep-a-changelog` |
+| Convention                                | Heading example                                                           | `format`           |
+| ----------------------------------------- | ------------------------------------------------------------------------- | ------------------ |
+| Keep a Changelog                          | `## [1.4.0] - 2026-05-01`                                                 | `keep-a-changelog` |
 | conventional-changelog / semantic-release | `## [1.4.0](https://github.com/o/r/compare/v1.3.0...v1.4.0) (2026-05-01)` | `conventional`     |
-| conventional (no link)                    | `## 1.4.0 (2026-05-01)`                                                  | `conventional`     |
-| plain tag                                 | `## v1.4.0` / `## 1.4.0`                                                 | `plain`            |
+| conventional (no link)                    | `## 1.4.0 (2026-05-01)`                                                   | `conventional`     |
+| plain tag                                 | `## v1.4.0` / `## 1.4.0`                                                  | `plain`            |
 
 Per-entry extraction:
 
@@ -254,15 +254,15 @@ follow-up).
 
 ## Error handling
 
-| Condition                                       | Status | Body                                       |
-| ----------------------------------------------- | ------ | ------------------------------------------ |
-| Missing/blank `repo`                            | 400    | `{ error: "bad_request", message }`        |
-| `repo` not a parseable `owner/repo`             | 400    | `{ error: "bad_request", message }`        |
-| Invalid `source` value                          | 400    | `{ error: "bad_request", message }`        |
-| Repo not found on GitHub                        | 404    | `classifyRepoStatus` body                  |
-| GitHub auth error / upstream 5xx                | 502    | `classifyRepoStatus` body                  |
-| GitHub rate limited                             | 503    | `classifyRepoStatus` body                  |
-| `source: changelog_file` + `path` not found     | 404    | `{ error: "not_found", message }`          |
+| Condition                                        | Status | Body                                          |
+| ------------------------------------------------ | ------ | --------------------------------------------- |
+| Missing/blank `repo`                             | 400    | `{ error: "bad_request", message }`           |
+| `repo` not a parseable `owner/repo`              | 400    | `{ error: "bad_request", message }`           |
+| Invalid `source` value                           | 400    | `{ error: "bad_request", message }`           |
+| Repo not found on GitHub                         | 404    | `classifyRepoStatus` body                     |
+| GitHub auth error / upstream 5xx                 | 502    | `classifyRepoStatus` body                     |
+| GitHub rate limited                              | 503    | `classifyRepoStatus` body                     |
+| `source: changelog_file` + `path` not found      | 404    | `{ error: "not_found", message }`             |
 | Repo exists, no usable releases and no changelog | 200    | `parsable: false, releases: [], source: null` |
 
 "Nothing to show" is a **200, not a 404** — the repo exists; it just has no

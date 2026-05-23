@@ -45,6 +45,7 @@ Expected: PASS (sanity check that the workspace resolves).
 ## Task 1: Core — `parseChangelog` (the `changelog_file` source)
 
 **Files:**
+
 - Create: `packages/core/src/changelog-parse.ts`
 - Modify: `packages/core/package.json` (exports map)
 - Test: `tests/unit/changelog-parse.test.ts`
@@ -372,6 +373,7 @@ git commit -m "feat(core): deterministic parseChangelog (file source for /change
 ## Task 2: Core — `mapGitHubReleases` (the `github_releases` source)
 
 **Files:**
+
 - Modify: `packages/core/src/changelog-parse.ts`
 - Test: `tests/unit/changelog-parse.test.ts`
 
@@ -494,6 +496,7 @@ git commit -m "feat(core): mapGitHubReleases (GitHub Releases source for /change
 ## Task 3: Worker — `POST /v1/changelog/parse` route + handler
 
 **Files:**
+
 - Modify: `workers/api/src/routes/changelog.ts`
 - Test: `workers/api/test/changelog-parse.test.ts`
 
@@ -639,7 +642,16 @@ describe("POST /changelog/parse", () => {
       if (url === "https://api.github.com/repos/owner/repo") return json({});
       if (url === RELEASES_URL) {
         // releases exist, but we forced the file source — must not be consulted
-        return json([{ tag_name: "v9", name: null, body: "x", html_url: "h", published_at: null, prerelease: false }]);
+        return json([
+          {
+            tag_name: "v9",
+            name: null,
+            body: "x",
+            html_url: "h",
+            published_at: null,
+            prerelease: false,
+          },
+        ]);
       }
       if (url === TREE_URL) {
         return json({ truncated: false, tree: [{ path: "CHANGELOG.md", type: "blob", size: 30 }] });
@@ -787,9 +799,7 @@ const ChangelogParseResponseSchema = z.object({
   repo: z.string(),
   source: z.enum(["github_releases", "changelog_file"]).nullable(),
   parsable: z.boolean(),
-  format: z
-    .enum(["keep-a-changelog", "conventional", "plain", "unknown"])
-    .nullable(),
+  format: z.enum(["keep-a-changelog", "conventional", "plain", "unknown"]).nullable(),
   file: ChangelogParseFileSchema.nullable(),
   releases: z.array(ParsedReleaseSchema),
   stats: z.object({
@@ -805,7 +815,8 @@ const ChangelogParseResponseSchema = z.object({
 const parseChangelogRoute = describeRoute({
   hide: hideInProduction,
   tags: ["Changelog"],
-  summary: "Parse a GitHub repo's changelog into structured releases (experimental, no persistence)",
+  summary:
+    "Parse a GitHub repo's changelog into structured releases (experimental, no persistence)",
   description:
     'Experimental. Given a `{ repo: "owner/repo", path?, source? }` coordinate, resolves the repo\'s changelog deterministically from the best available source — GitHub Releases (already structured) or a parsed root `CHANGELOG.md` — and returns release entries in the stored-release shape. `source` is `"auto"` (default), `"github_releases"`, or `"changelog_file"`; `path` forces the file source at that path. Nothing is written. Auth: Bearer (write). Hidden from the production OpenAPI spec.',
   security: [{ bearerAuth: [] }],
@@ -822,8 +833,14 @@ const parseChangelogRoute = describeRoute({
       description: "Repo not found, or an explicit `path` that does not exist",
       content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
     },
-    502: { description: "GitHub auth error or upstream 5xx", content: { "application/json": { schema: resolver(ErrorResponseSchema) } } },
-    503: { description: "GitHub rate limit exceeded", content: { "application/json": { schema: resolver(ErrorResponseSchema) } } },
+    502: {
+      description: "GitHub auth error or upstream 5xx",
+      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+    },
+    503: {
+      description: "GitHub rate limit exceeded",
+      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+    },
   },
 });
 ```
@@ -839,10 +856,9 @@ async function fetchGitHubReleases(
   repo: string,
   apiHeaders: Record<string, string>,
 ): Promise<ParsedChangelogRelease[]> {
-  const res = await fetch(
-    `https://api.github.com/repos/${owner}/${repo}/releases?per_page=100`,
-    { headers: apiHeaders },
-  );
+  const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/releases?per_page=100`, {
+    headers: apiHeaders,
+  });
   if (!res.ok) return [];
   const data = (await res.json().catch(() => null)) as GitHubReleaseLike[] | null;
   if (!Array.isArray(data)) return [];
@@ -904,14 +920,19 @@ async function resolveChangelogFile(
 const parseChangelogHandler = async (c: import("hono").Context<Env>) => {
   const startedAt = Date.now();
 
-  const body = (await c.req.json().catch(() => null)) as
-    | { repo?: unknown; path?: unknown; source?: unknown }
-    | null;
+  const body = (await c.req.json().catch(() => null)) as {
+    repo?: unknown;
+    path?: unknown;
+    source?: unknown;
+  } | null;
 
   const repoInput = typeof body?.repo === "string" ? body.repo.trim() : "";
   if (!repoInput) {
     return c.json(
-      { error: "bad_request", message: 'Body must include a "repo" string, e.g. { "repo": "owner/repo" }' },
+      {
+        error: "bad_request",
+        message: 'Body must include a "repo" string, e.g. { "repo": "owner/repo" }',
+      },
       400,
     );
   }
@@ -919,7 +940,10 @@ const parseChangelogHandler = async (c: import("hono").Context<Env>) => {
   const coord = parseCoordinate(repoInput);
   if (!coord) {
     return c.json(
-      { error: "bad_request", message: `Cannot parse "${repoInput}" as a github owner/repo coordinate` },
+      {
+        error: "bad_request",
+        message: `Cannot parse "${repoInput}" as a github owner/repo coordinate`,
+      },
       400,
     );
   }
@@ -929,12 +953,17 @@ const parseChangelogHandler = async (c: import("hono").Context<Env>) => {
   const sourceRaw = typeof body?.source === "string" ? body.source.trim() : "auto";
   if (!(PARSE_SOURCES as readonly string[]).includes(sourceRaw)) {
     return c.json(
-      { error: "bad_request", message: `Invalid "source": ${sourceRaw}. Use one of: ${PARSE_SOURCES.join(", ")}` },
+      {
+        error: "bad_request",
+        message: `Invalid "source": ${sourceRaw}. Use one of: ${PARSE_SOURCES.join(", ")}`,
+      },
       400,
     );
   }
   // A path names a file, so it forces the changelog_file source.
-  const source: ChangelogParseSource = pathInput ? "changelog_file" : (sourceRaw as ChangelogParseSource);
+  const source: ChangelogParseSource = pathInput
+    ? "changelog_file"
+    : (sourceRaw as ChangelogParseSource);
 
   const { org: owner, repo } = coord;
   const token = (await getSecret(c.env.GITHUB_TOKEN)) ?? undefined;
@@ -974,7 +1003,13 @@ const parseChangelogHandler = async (c: import("hono").Context<Env>) => {
       // An explicit path the caller asserted must exist is a 404; an absent
       // root changelog is just "nothing to show".
       if (pathInput) {
-        return c.json({ error: "not_found", message: `No changelog file at "${pathInput}" in ${owner}/${repo}` }, 404);
+        return c.json(
+          {
+            error: "not_found",
+            message: `No changelog file at "${pathInput}" in ${owner}/${repo}`,
+          },
+          404,
+        );
       }
     } else {
       file = resolved.file;
