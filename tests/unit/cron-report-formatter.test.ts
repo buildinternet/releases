@@ -188,10 +188,11 @@ describe("formatCronReport", () => {
     expect(text).toContain("Results (after 30min settle):");
     expect(text).toContain("Releases inserted:  10");
     expect(text).toContain("Still running:      1 session");
-    expect(text).toContain("- acme: fetched=3 found=12 inserted=8");
-    expect(text).toContain("- beta: fetched=1 found=3 inserted=2 errors=1");
-    // acme listed before beta (sorted by inserted desc)
-    expect(text.indexOf("- acme")).toBeLessThan(text.indexOf("- beta"));
+    // Org name leads, slug in parens (the name is what the operator recognizes).
+    expect(text).toContain("- Acme (acme): fetched=3 found=12 inserted=8");
+    expect(text).toContain("- Beta (beta): fetched=1 found=3 inserted=2 errors=1");
+    // Acme listed before Beta (sorted by inserted desc)
+    expect(text.indexOf("- Acme")).toBeLessThan(text.indexOf("- Beta"));
   });
 
   it("html body renders results table and escapes org slugs", () => {

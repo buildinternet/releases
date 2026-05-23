@@ -108,6 +108,28 @@ describe("formatPollFetchAlert", () => {
     expect(html).not.toContain("<tag>");
   });
 
+  it("does not linkify a non-http(s) source url, rendering it as escaped text", () => {
+    const failures: PollFetchFailure[] = [{ sourceId: "src_js", stepName: "fetch", error: "e" }];
+    const hostile = detail({
+      sourceId: "src_js",
+      sourceName: "JS",
+      sourceSlug: "js",
+      sourceUrl: "javascript:alert(1)",
+      orgName: "Org",
+      orgSlug: "org",
+    });
+    const { html, text } = formatPollFetchAlert(
+      failures,
+      new Map([["src_js", hostile]]),
+      SCHEDULED,
+    );
+    // No anchor for a non-http scheme; the value still appears (as text) for context.
+    expect(html).not.toContain("<a href");
+    expect(html).toContain("javascript:alert(1)");
+    // The plain-text body never linkifies, so it carries the url verbatim.
+    expect(text).toContain("url:         javascript:alert(1)");
+  });
+
   it("uses slug when name is missing and degrades partial identity", () => {
     const failures: PollFetchFailure[] = [{ sourceId: "src_p", stepName: "fetch", error: "e" }];
     const partial = detail({

@@ -44,6 +44,22 @@ function escapeHtml(s: string): string {
     .replace(/'/g, "&#39;");
 }
 
+/**
+ * Only http/https values become clickable anchors. Validates the original
+ * (pre-escape) URL so a malformed or hostile `sources.url` — e.g. a
+ * `javascript:` scheme — renders as escaped text, never a live link in an
+ * operator's mail client. Escaping already blocks attribute breakout; this
+ * blocks the scheme itself.
+ */
+function isHttpUrl(value: string): boolean {
+  try {
+    const { protocol } = new URL(value);
+    return protocol === "http:" || protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 /** "Vercel — Next.js", degrading to the bare source id if nothing resolved. */
 function headline(detail: PollFetchSourceDetail | undefined, sourceId: string): string {
   if (!detail) return sourceId;
@@ -118,7 +134,7 @@ export function formatPollFetchAlert(
     let cell: string;
     switch (kind) {
       case "url":
-        cell = `<a href="${escaped}">${escaped}</a>`;
+        cell = isHttpUrl(value) ? `<a href="${escaped}">${escaped}</a>` : escaped;
         break;
       case "error":
         cell = `<span style="color:#dc2626;">${escaped}</span>`;
