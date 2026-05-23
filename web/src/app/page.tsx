@@ -32,94 +32,59 @@ export const metadata: Metadata = {
  * view appends `--json` and shows the real structured payload (full content
  * included).
  *
- * The current `search`/`get` human formatting is itself rough (verbose source
- * lines, full ISO timestamps). A future CLI formatting pass — and the more
- * polished column layout an earlier draft of this demo used — is tracked in
- * buildinternet/releases-cli#215. Until that lands, this stays accurate to what
- * ships. Block 2 omits only the real `get` output's trailing "Next steps:" hint,
- * which currently points at the deprecated top-level `releases release get`.
- * Edit here when refreshing.
+ * Reflects the reworked CLI output (buildinternet/releases-cli#215): `search`
+ * renders one aligned row per hit — identity (source name, or a package-
+ * qualified version) · title · relative age · dimmed `rel_…` — with a cleaned
+ * one-line excerpt underneath, and `--json` returns the slim release shape
+ * (nested `source`/`org`, derived `excerpt`, `contentChars`; storage internals
+ * dropped). The relative ages ("1y", "2w") are a capture-time snapshot. Block 2
+ * omits only the real `get` output's trailing "Next steps:" hint, which points
+ * at the deprecated top-level `releases release get`. Edit here when refreshing.
  */
 const DEMO_SESSION: TerminalBlock[] = [
   {
     command: 'releases search "webhooks" --type releases',
     output: `Releases
-  Custom webhooks rel_YqORWhmpDZmlpyarFGtg0
-  Source: Changelog (changelog)  |  Published: 2024-07-22T00:00:00.000Z
-  Axiom introduces custom webhooks.
+Changelog          Custom webhooks            1y  rel_YqORWhmpDZmlpyarFGtg0
+                   Axiom introduces custom webhooks.
+API Release Notes  Webhooks Support Launched  2w  rel_vpnvlVinttqFUfgIlDlVZ
+                   Event-driven webhooks support is now available in the Ge…
+Resend Changelog   New Contact Webhooks       1y  rel_q3UEtvayJ4I-kbzRJfSir
+                   Receive real-time notifications when contacts are create…
 
-  Webhooks Support Launched rel_vpnvlVinttqFUfgIlDlVZ
-  Source: API Release Notes (api-release-notes)  |  Published: 2026-05-04T00:00:00.000Z
-  Event-driven webhooks support is now available in the Gemini API, replacing polling workflows for the Batch API and long-running operations.
-
-  New Contact Webhooks rel_q3UEtvayJ4I-kbzRJfSir
-  Source: Resend Changelog (resend-changelog)  |  Published: 2024-07-17T00:00:00.000Z
-  Receive real-time notifications when contacts are created, updated, or deleted.`,
+3 result(s) found.`,
     json: `{
   "query": "webhooks",
   "releases": [
     {
       "id": "rel_YqORWhmpDZmlpyarFGtg0",
-      "sourceSlug": "changelog",
-      "sourceName": "Changelog",
-      "sourceType": "feed",
-      "orgSlug": "axiom",
-      "orgName": "Axiom",
-      "version": null,
       "title": "Custom webhooks",
       "summary": "Axiom introduces custom webhooks.",
-      "titleGenerated": null,
-      "titleShort": null,
-      "content": "Axiom introduces custom webhooks.",
-      "media": [],
+      "excerpt": "Axiom introduces custom webhooks.",
       "publishedAt": "2024-07-22T00:00:00.000Z",
-      "type": "feature",
-      "coverageCount": 0,
-      "score": 0.03131881575727918
+      "source": { "slug": "changelog", "name": "Changelog" },
+      "org": { "slug": "axiom", "name": "Axiom" },
+      "contentChars": 33
     },
     {
       "id": "rel_vpnvlVinttqFUfgIlDlVZ",
-      "sourceSlug": "api-release-notes",
-      "sourceName": "API Release Notes",
-      "sourceType": "scrape",
-      "orgSlug": "google",
-      "orgName": "Google",
-      "version": null,
       "title": "Webhooks Support Launched",
       "summary": "Event-driven webhooks support is now available in the Gemini API, replacing polling workflows for the Batch API and long-running operations.",
-      "titleGenerated": "Gemini API launches webhooks for event-driven batch and long-running operations",
-      "titleShort": "Webhooks replace polling for batch API and long-running ops",
-      "content": "Launched event-driven Webhooks support in the Gemini API to replace polling workflows for the Batch API and long-running operations.",
-      "media": [],
+      "excerpt": "Launched event-driven Webhooks support in the Gemini API to replace polling workflows for the Batch API and long-running operations.",
       "publishedAt": "2026-05-04T00:00:00.000Z",
-      "type": "feature",
-      "coverageCount": 0,
-      "score": 0.02715098147128967
+      "source": { "slug": "api-release-notes", "name": "API Release Notes" },
+      "org": { "slug": "google", "name": "Google" },
+      "contentChars": 132
     },
     {
       "id": "rel_q3UEtvayJ4I-kbzRJfSir",
-      "sourceSlug": "resend-changelog",
-      "sourceName": "Resend Changelog",
-      "sourceType": "scrape",
-      "orgSlug": "resend",
-      "orgName": "Resend",
-      "version": null,
       "title": "New Contact Webhooks",
       "summary": "Receive real-time notifications when contacts are created, updated, or deleted.",
-      "titleGenerated": null,
-      "titleShort": null,
-      "content": "Receive real-time notifications when contacts are created, updated, or deleted.",
-      "media": [
-        {
-          "type": "image",
-          "url": "https://cdn.resend.com/posts/new-contact-webhooks.png",
-          "alt": "New Contact Webhooks"
-        }
-      ],
+      "excerpt": "Receive real-time notifications when contacts are created, updated, or deleted.",
       "publishedAt": "2024-07-17T00:00:00.000Z",
-      "type": "feature",
-      "coverageCount": 0,
-      "score": 0.02564935064935065
+      "source": { "slug": "resend-changelog", "name": "Resend Changelog" },
+      "org": { "slug": "resend", "name": "Resend" },
+      "contentChars": 79
     }
   ],
   "mode": "hybrid",
@@ -140,34 +105,15 @@ Summary  · AI-generated, abbreviated
 Event-driven webhooks support is now available in the Gemini API, replacing polling workflows for the Batch API and long-running operations.`,
     json: `{
   "id": "rel_vpnvlVinttqFUfgIlDlVZ",
-  "sourceId": "src_kuGkahx_mXV0uqMPU5p7y",
-  "version": null,
-  "versionSort": null,
-  "type": "feature",
   "title": "Webhooks Support Launched",
-  "content": "Launched event-driven Webhooks support in the Gemini API to replace polling workflows for the Batch API and long-running operations.",
   "summary": "Event-driven webhooks support is now available in the Gemini API, replacing polling workflows for the Batch API and long-running operations.",
-  "titleGenerated": "Gemini API launches webhooks for event-driven batch and long-running operations",
-  "titleShort": "Webhooks replace polling for batch API and long-running ops",
+  "excerpt": "Launched event-driven Webhooks support in the Gemini API to replace polling workflows for the Batch API and long-running operations.",
   "url": "https://ai.google.dev/gemini-api/docs/changelog#webhooks-support-launched",
-  "contentHash": null,
-  "contentChars": 132,
-  "contentTokens": 24,
-  "media": [],
   "publishedAt": "2026-05-04T00:00:00.000Z",
-  "prerelease": false,
-  "suppressed": false,
-  "suppressedReason": null,
-  "fetchedAt": "2026-05-10T01:00:38.170Z",
-  "embeddedAt": "2026-05-10T01:00:39.361Z",
-  "sourceName": "API Release Notes",
-  "sourceSlug": "api-release-notes",
-  "sourceType": "scrape",
-  "org": {
-    "slug": "google",
-    "name": "Google"
-  },
-  "composition": null
+  "source": { "slug": "api-release-notes", "name": "API Release Notes" },
+  "org": { "slug": "google", "name": "Google" },
+  "contentChars": 132,
+  "contentTokens": 24
 }`,
   },
 ];

@@ -6,7 +6,7 @@ adminOnly: false
 
 # Examples
 
-Every command outputs a human-readable table by default. Add `--json` for structured output that's easy for scripts and agents to parse.
+Every command outputs a human-readable table by default. Add `--json` for structured output that's easy for scripts and agents to parse. The release readers (`search`, `tail`/`latest`, `get`) return a [slim JSON shape](/docs/cli/browsing#slim-release-json) by default to keep token usage low — add `--full` when you need the complete payload.
 
 ## Stay up to date
 
