@@ -339,6 +339,7 @@ async function fetchGitHubReleases(
 interface ResolvedFile {
   file: z.infer<typeof ChangelogParseFileSchema>;
   result: ReturnType<typeof parseChangelog>;
+  bytes: number;
 }
 
 /**
@@ -366,11 +367,13 @@ async function resolveChangelogFile(
   const rawUrl = `https://raw.githubusercontent.com/${owner}/${repo}/HEAD/${selected.path}`;
   let body = "";
   let truncated = false;
+  let bytes = 0;
   try {
     const res = await fetch(rawUrl, { headers: headers.rawHeaders });
     if (res.ok) {
       body = await res.text();
-      truncated = encoder.encode(body).length > MAX_BYTES;
+      bytes = encoder.encode(body).length;
+      truncated = bytes > MAX_BYTES;
     }
   } catch {
     // leave body empty on fetch failure
@@ -385,6 +388,7 @@ async function resolveChangelogFile(
       truncated,
     },
     result: parseChangelog(body),
+    bytes,
   };
 }
 
@@ -454,6 +458,7 @@ const parseChangelogHandler = async (c: import("hono").Context<Env>) => {
   let format: z.infer<typeof ChangelogParseResponseSchema>["format"] = null;
   let headingsScanned = 0;
   let skipped = 0;
+  let downloadedBytes = 0;
 
   const runReleases = async () => {
     githubRequests++;
@@ -484,6 +489,7 @@ const parseChangelogHandler = async (c: import("hono").Context<Env>) => {
       }
     } else {
       file = resolved.file;
+      downloadedBytes = resolved.bytes;
       format = resolved.result.format;
       headingsScanned = resolved.result.headingsScanned;
       skipped = resolved.result.skipped;
@@ -510,6 +516,7 @@ const parseChangelogHandler = async (c: import("hono").Context<Env>) => {
       const resolved = await runFile();
       if (resolved) {
         file = resolved.file;
+        downloadedBytes = resolved.bytes;
         format = resolved.result.format;
         headingsScanned = resolved.result.headingsScanned;
         skipped = resolved.result.skipped;
@@ -532,7 +539,7 @@ const parseChangelogHandler = async (c: import("hono").Context<Env>) => {
     headingsScanned,
     skipped,
     githubRequests,
-    bytes: file && resolvedSource === "changelog_file" ? (file.size ?? 0) : 0,
+    bytes: resolvedSource === "changelog_file" ? downloadedBytes : 0,
     elapsedMs: Date.now() - startedAt,
   };
 

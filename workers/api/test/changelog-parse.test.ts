@@ -114,6 +114,36 @@ describe("POST /changelog/parse", () => {
     expect(body.releases[0].publishedAt).toBe("2026-01-01");
   });
 
+  it("auto: prefers CHANGELOG.md when releases exist but have empty bodies", async () => {
+    installFetch((url) => {
+      if (url === "https://api.github.com/repos/owner/repo") return json({});
+      if (url === RELEASES_URL) {
+        // releases exist but body-less → hasBody is false → fall through to the file
+        return json([
+          {
+            tag_name: "v1.0.0",
+            name: null,
+            body: "",
+            html_url: "h",
+            published_at: null,
+            prerelease: false,
+          },
+        ]);
+      }
+      if (url === TREE_URL) {
+        return json({ truncated: false, tree: [{ path: "CHANGELOG.md", type: "blob", size: 40 }] });
+      }
+      if (url === ROOT_CHANGELOG) return text("## [2.0.0] - 2026-02-02\n- real notes");
+      return new Response("nf", { status: 404 });
+    });
+
+    const res = await call({ repo: "owner/repo" });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as ParseBody;
+    expect(body.source).toBe("changelog_file");
+    expect(body.releases[0].version).toBe("2.0.0");
+  });
+
   it("auto: returns parsable:false when neither source exists", async () => {
     installFetch((url) => {
       if (url === "https://api.github.com/repos/owner/repo") return json({});
