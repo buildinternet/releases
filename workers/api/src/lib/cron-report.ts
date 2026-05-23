@@ -78,6 +78,12 @@ function formatDuration(ms: number | null): string {
   return `${m}m${rem}s`;
 }
 
+/** "Acme Inc (acme)" — name with slug, falling back to the slug alone. */
+function orgLabel(o: CronReportResultsOrg): string {
+  const name = o.orgName?.trim();
+  return name && name !== o.orgSlug ? `${name} (${o.orgSlug})` : o.orgSlug;
+}
+
 function totalReleasesInserted(r: CronReportResults): number {
   let n = 0;
   for (const o of r.perOrg) n += o.releasesInserted;
@@ -151,7 +157,7 @@ export function formatCronReport(report: CronReport): FormattedReport {
       for (const o of r.perOrg) {
         const errSeg = o.errors > 0 ? ` errors=${o.errors}` : "";
         lines.push(
-          `  - ${o.orgSlug}: fetched=${o.sourcesFetched} found=${o.releasesFound} inserted=${o.releasesInserted}${errSeg}`,
+          `  - ${orgLabel(o)}: fetched=${o.sourcesFetched} found=${o.releasesFound} inserted=${o.releasesInserted}${errSeg}`,
         );
       }
     }
@@ -226,7 +232,7 @@ export function formatCronReport(report: CronReport): FormattedReport {
       .map((o) => {
         const errSeg =
           o.errors > 0 ? ` <span style="color:#dc2626;">errors=${o.errors}</span>` : "";
-        return `<tr><td style="padding:4px 12px 4px 0;font-family:ui-monospace,monospace;">${escapeHtml(o.orgSlug)}</td><td style="padding:4px 12px 4px 0;color:#64748b;">${o.sourcesFetched} fetched</td><td style="padding:4px 12px 4px 0;color:#64748b;">${o.releasesFound} found</td><td style="padding:4px 0;"><strong>${o.releasesInserted}</strong> inserted${errSeg}</td></tr>`;
+        return `<tr><td style="padding:4px 12px 4px 0;font-family:ui-monospace,monospace;">${escapeHtml(orgLabel(o))}</td><td style="padding:4px 12px 4px 0;color:#64748b;">${o.sourcesFetched} fetched</td><td style="padding:4px 12px 4px 0;color:#64748b;">${o.releasesFound} found</td><td style="padding:4px 0;"><strong>${o.releasesInserted}</strong> inserted${errSeg}</td></tr>`;
       })
       .join("");
     const orgTable =
