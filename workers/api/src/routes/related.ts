@@ -237,8 +237,10 @@ async function hydrateReleaseNeighbors(
     sourceId: string;
     sourceSlug: string;
     sourceName: string;
+    productName: string | null;
     orgSlug: string | null;
     orgName: string | null;
+    orgAvatarUrl: string | null;
   }>(sql`
     SELECT r.id as id,
            r.title as title,
@@ -252,10 +254,13 @@ async function hydrateReleaseNeighbors(
            s.id as sourceId,
            s.slug as sourceSlug,
            s.name as sourceName,
+           p.name as productName,
            o.slug as orgSlug,
-           o.name as orgName
+           o.name as orgName,
+           o.avatar_url as orgAvatarUrl
     FROM releases_visible r
     JOIN sources_active s ON s.id = r.source_id
+    LEFT JOIN products_active p ON p.id = s.product_id
     LEFT JOIN organizations_active o ON o.id = s.org_id
     WHERE r.id IN (${sql.join(
       ids.map((id) => sql`${id}`),
@@ -287,8 +292,10 @@ async function hydrateReleaseNeighbors(
         id: row.sourceId,
         slug: row.sourceSlug,
         name: row.sourceName,
+        productName: row.productName,
         orgSlug: row.orgSlug,
         orgName: row.orgName,
+        orgAvatarUrl: row.orgAvatarUrl,
       },
     });
     if (out.length >= limit) break;
