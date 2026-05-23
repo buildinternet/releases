@@ -18,6 +18,7 @@ import { evaluateFetchPending } from "./source-fetch-status";
 import { CronRunsTab } from "./cron-runs-tab";
 import { SearchQueriesTab } from "./search-queries-tab";
 import { BatchRunsTab } from "./batch-runs-tab";
+import { StuckSourcesTab } from "./stuck-sources-tab";
 import { ForceDrainTile } from "./force-drain-tile";
 import {
   formatSessionError,
@@ -117,7 +118,7 @@ interface FetchTriggerResult {
   type?: string;
 }
 
-type Tab = "sessions" | "fetch-log" | "sources" | "orgs" | "cron" | "searches" | "batch";
+type Tab = "sessions" | "fetch-log" | "sources" | "stuck" | "orgs" | "cron" | "searches" | "batch";
 type DateRange = "today" | "week" | "month" | "all";
 
 type SourceSortField =
@@ -134,6 +135,7 @@ const TABS: { value: Tab; label: string }[] = [
   { value: "sessions", label: "Sessions" },
   { value: "fetch-log", label: "Fetch Log" },
   { value: "sources", label: "Sources" },
+  { value: "stuck", label: "Stuck" },
   { value: "orgs", label: "Orgs" },
   { value: "cron", label: "Cron" },
   { value: "searches", label: "Searches" },
@@ -647,6 +649,7 @@ export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
         />
       )}
       {tab === "sources" && <SourcesTable now={now} />}
+      {tab === "stuck" && <StuckSourcesTab />}
       {tab === "orgs" && <OrgsTable />}
       {tab === "cron" && <CronRunsTab />}
       {tab === "searches" && <SearchQueriesTab />}
