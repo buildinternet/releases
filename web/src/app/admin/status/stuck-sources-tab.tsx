@@ -21,13 +21,15 @@ export function StuckSourcesTab() {
   const [totalItems, setTotalItems] = useState<number | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [includePaused, setIncludePaused] = useState(false);
+  const [page, setPage] = useState(1);
   const [pausing, setPausing] = useState<Set<string>>(new Set());
   const [pauseError, setPauseError] = useState<Record<string, string>>({});
+  const perPage = 100;
 
   useEffect(() => {
     setRows(null);
     setErr(null);
-    const params = new URLSearchParams({ limit: "100" });
+    const params = new URLSearchParams({ limit: String(perPage), page: String(page) });
     if (includePaused) params.set("includePaused", "true");
     const controller = new AbortController();
     fetch(`/api/proxy/admin/sources/stuck?${params}`, { signal: controller.signal })
@@ -46,51 +48,67 @@ export function StuckSourcesTab() {
         setErr(e instanceof Error ? e.message : String(e));
       });
     return () => controller.abort();
-  }, [includePaused]);
+  }, [includePaused, page]);
 
   // Pause = PATCH fetchPriority. The typed `src_…` ID is used on the bare path
-  // (the legacy bare-slug path was retired in #698). On success the row drops
-  // out of the default view since it's no longer a stuck *candidate*.
-  const pauseSource = useCallback(async (s: StuckSource) => {
-    setPausing((prev) => new Set(prev).add(s.sourceId));
-    setPauseError((prev) => {
-      const next = { ...prev };
-      delete next[s.sourceId];
-      return next;
-    });
-    try {
-      const res = await fetch(`/api/proxy/sources/${s.sourceId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fetchPriority: "paused" }),
-      });
-      if (!res.ok) throw new Error(`${res.status}`);
-      setRows((prev) => (prev ? prev.filter((r) => r.sourceId !== s.sourceId) : prev));
-      setTotalItems((t) => (t != null ? Math.max(0, t - 1) : t));
-    } catch (e) {
-      setPauseError((prev) => ({
-        ...prev,
-        [s.sourceId]: e instanceof Error ? e.message : "failed",
-      }));
-    } finally {
-      setPausing((prev) => {
-        const next = new Set(prev);
-        next.delete(s.sourceId);
+  // (the legacy bare-slug path was retired in #698). In the default view the
+  // row drops out (it's no longer a stuck *candidate*); in the paused-inclusive
+  // view it stays visible and just flips to its paused state.
+  const pauseSource = useCallback(
+    async (s: StuckSource) => {
+      setPausing((prev) => new Set(prev).add(s.sourceId));
+      setPauseError((prev) => {
+        const next = { ...prev };
+        delete next[s.sourceId];
         return next;
       });
-    }
-  }, []);
+      try {
+        const res = await fetch(`/api/proxy/sources/${s.sourceId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ fetchPriority: "paused" }),
+        });
+        if (!res.ok) throw new Error(`${res.status}`);
+        if (includePaused) {
+          setRows((prev) =>
+            prev
+              ? prev.map((r) => (r.sourceId === s.sourceId ? { ...r, fetchPriority: "paused" } : r))
+              : prev,
+          );
+        } else {
+          setRows((prev) => (prev ? prev.filter((r) => r.sourceId !== s.sourceId) : prev));
+          setTotalItems((t) => (t != null ? Math.max(0, t - 1) : t));
+        }
+      } catch (e) {
+        setPauseError((prev) => ({
+          ...prev,
+          [s.sourceId]: e instanceof Error ? e.message : "failed",
+        }));
+      } finally {
+        setPausing((prev) => {
+          const next = new Set(prev);
+          next.delete(s.sourceId);
+          return next;
+        });
+      }
+    },
+    [includePaused],
+  );
 
   const explainer = meta
     ? `Sources whose last ${meta.window} fetch attempts all failed (≥${meta.minAttempts} attempts), with no successful fetch in between.`
     : "Sources whose recent fetch attempts all failed, with no successful fetch in between.";
+  const totalPages = totalItems != null ? Math.max(1, Math.ceil(totalItems / perPage)) : 1;
 
   return (
     <div>
       <div className="flex items-center justify-between gap-3 mb-3">
         <p className="text-xs text-stone-400 dark:text-stone-500">{explainer}</p>
         <button
-          onClick={() => setIncludePaused((v) => !v)}
+          onClick={() => {
+            setIncludePaused((v) => !v);
+            setPage(1);
+          }}
           title="Include sources that are already paused"
           className={`shrink-0 px-2.5 py-1 text-xs rounded-full transition-colors ${
             includePaused
@@ -132,9 +150,32 @@ export function StuckSourcesTab() {
               />
             ))}
           </div>
-          <div className="mt-3 text-xs text-stone-400 dark:text-stone-500">
-            {totalItems != null ? `${totalItems.toLocaleString()} stuck source(s)` : null}
-            {meta ? ` · window=${meta.window} · minAttempts=${meta.minAttempts}` : null}
+          <div className="flex items-center justify-between mt-3 text-xs text-stone-400 dark:text-stone-500">
+            <span>
+              {totalItems != null ? `${totalItems.toLocaleString()} stuck source(s)` : null}
+              {meta ? ` · window=${meta.window} · minAttempts=${meta.minAttempts}` : null}
+            </span>
+            {totalPages > 1 && (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page <= 1}
+                  className="px-2 py-1 rounded border border-stone-200 dark:border-stone-700 hover:bg-stone-50 dark:hover:bg-stone-800 disabled:opacity-30 disabled:cursor-default"
+                >
+                  Prev
+                </button>
+                <span>
+                  {page} / {totalPages}
+                </span>
+                <button
+                  onClick={() => setPage((p) => p + 1)}
+                  disabled={page >= totalPages}
+                  className="px-2 py-1 rounded border border-stone-200 dark:border-stone-700 hover:bg-stone-50 dark:hover:bg-stone-800 disabled:opacity-30 disabled:cursor-default"
+                >
+                  Next
+                </button>
+              </div>
+            )}
           </div>
         </>
       )}

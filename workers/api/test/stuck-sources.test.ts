@@ -143,6 +143,29 @@ describe("getStuckSources", () => {
     expect(incl.items[0].fetchPriority).toBe("paused");
   });
 
+  it("includes a stuck source with NULL fetch_priority in the default view", async () => {
+    const { db } = createTestDb();
+    await addOrg(db, "org_a", "acme");
+    // fetch_priority is nullable; a NULL row must not be dropped by the
+    // not-paused predicate (NULL != 'paused' is NULL, not TRUE).
+    await db.insert(sources).values({
+      id: "src_null",
+      orgId: "org_a",
+      slug: "acme-null",
+      name: "acme-null",
+      url: "https://acme-null.test/changelog",
+      type: "scrape",
+      fetchPriority: null,
+    });
+    await addErrorStreak(db, "src_null", 4);
+
+    const { items } = await getStuckSources(db as unknown as D1Db);
+
+    expect(items).toHaveLength(1);
+    expect(items[0].sourceSlug).toBe("acme-null");
+    expect(items[0].fetchPriority).toBe("normal"); // NULL → defaulted in the row mapping
+  });
+
   it("excludes soft-deleted sources", async () => {
     const { db } = createTestDb();
     await addOrg(db, "org_a", "acme");

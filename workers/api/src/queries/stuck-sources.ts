@@ -76,7 +76,12 @@ export async function getStuckSources(
   const offset = Math.max(0, Math.floor(opts.offset ?? 0));
   const includePaused = opts.includePaused ?? false;
 
-  const pausedPredicate = includePaused ? sql`` : sql`AND s.fetch_priority != 'paused'`;
+  // COALESCE keeps the comparison NULL-safe: fetch_priority is nullable, and a
+  // bare `!= 'paused'` evaluates to NULL (not TRUE) for NULL rows, which would
+  // wrongly drop a NULL-priority stuck source from the default view.
+  const pausedPredicate = includePaused
+    ? sql``
+    : sql`AND COALESCE(s.fetch_priority, 'normal') != 'paused'`;
 
   const rows = await db.all<StuckSourceSqlRow>(sql`
     WITH attempts AS (
