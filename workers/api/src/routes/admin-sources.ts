@@ -5,9 +5,20 @@ import { buildListResponse, parseListPagination } from "../lib/pagination.js";
 import { parseEnumParam } from "../utils.js";
 import { likeContains } from "@buildinternet/releases-core/sql-like";
 import { daysAgoIso } from "@buildinternet/releases-core/dates";
-import type { OrgsRollupResponse, OrgsRollupRow } from "@buildinternet/releases-api-types";
+import type {
+  OrgsRollupResponse,
+  OrgsRollupRow,
+  StuckSourcesResponse,
+} from "@buildinternet/releases-api-types";
 import { SOURCE_STALE_DAYS } from "../queries/sources.js";
+import { getStuckSources } from "../queries/stuck-sources.js";
 import type { Env } from "../index.js";
+
+function parseOptionalInt(v: string | undefined): number | undefined {
+  if (v == null) return undefined;
+  const n = parseInt(v, 10);
+  return Number.isFinite(n) ? n : undefined;
+}
 
 export const adminSourcesRoutes = new Hono<Env>();
 
@@ -152,6 +163,46 @@ adminSourcesRoutes.get("/admin/sources/orgs-rollup", async (c) => {
       totalOrgs: Number(metaRow?.total_orgs) || 0,
       dormantOrgs: Number(metaRow?.dormant_orgs) || 0,
       anyStaleOrgs: Number(metaRow?.any_stale_orgs) || 0,
+    },
+  };
+  return c.json(response);
+});
+
+/**
+ * Sources whose recent fetch history is all errors with no reachability —
+ * pause candidates. Reads the fetch_log error streak (not
+ * `sources.consecutive_errors`, which the scrape/agent path never bumps).
+ * Knobs: `?window` (recent attempts examined, default 5), `?minAttempts`
+ * (default 3), `?includePaused=true` (default excludes already-paused rows).
+ */
+adminSourcesRoutes.get("/admin/sources/stuck", async (c) => {
+  const db = getDb(c);
+  const url = new URL(c.req.url);
+  const pagination = parseListPagination(url.searchParams, {
+    defaultPageSize: 100,
+    maxPageSize: 500,
+  });
+  const { page, pageSize: limit, offset } = pagination;
+
+  const result = await getStuckSources(db, {
+    window: parseOptionalInt(c.req.query("window")),
+    minAttempts: parseOptionalInt(c.req.query("minAttempts")),
+    includePaused: c.req.query("includePaused") === "true",
+    limit,
+    offset,
+  });
+
+  const envelope = buildListResponse(
+    result.items,
+    { page, pageSize: limit, offset },
+    result.totalItems,
+  );
+  const response: StuckSourcesResponse = {
+    ...envelope,
+    meta: {
+      window: result.window,
+      minAttempts: result.minAttempts,
+      includePaused: result.includePaused,
     },
   };
   return c.json(response);

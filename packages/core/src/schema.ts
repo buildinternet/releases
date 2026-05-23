@@ -495,6 +495,10 @@ export const fetchLog = sqliteTable(
     index("idx_fetch_log_source").on(table.sourceId),
     index("idx_fetch_log_created").on(table.createdAt),
     index("idx_fetch_log_session").on(table.sessionId),
+    // Backs the per-source window query in getStuckSources (PARTITION BY
+    // source_id ORDER BY created_at DESC) — see migration
+    // 20260523000000_add_fetch_log_source_created_idx.sql.
+    index("idx_fetch_log_source_created").on(table.sourceId, table.createdAt),
   ],
 );
 

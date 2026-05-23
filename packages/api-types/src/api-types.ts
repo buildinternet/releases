@@ -10,6 +10,8 @@ export type {
   SourceDiscovery,
   SourceFetchPriority,
 } from "@buildinternet/releases-core/source-enums";
+// Re-export above doesn't create local bindings; import for use in interfaces below.
+import type { SourceType, SourceFetchPriority } from "@buildinternet/releases-core/source-enums";
 import type {
   MediaItemSchema,
   PaginationSchema,
@@ -569,6 +571,61 @@ export interface OrgsRollupResponse extends ListResponse<OrgsRollupRow> {
     dormantOrgs: number;
     /** Orgs with at least one stale source. */
     anyStaleOrgs: number;
+  };
+}
+
+// ── Admin telemetry: stuck sources ──
+
+/**
+ * A source whose recent fetch history is all errors with no reachability — a
+ * candidate for pausing. "Stuck" means: within the last `window` non-`dry_run`
+ * fetch attempts, every one was an `error` (zero `success`/`no_change`) and
+ * there were at least `minAttempts` of them.
+ *
+ * This keys off the `fetch_log` error streak rather than
+ * `sources.consecutive_errors`, because the scrape/agent fetch path never bumps
+ * that column (a source can fail for days with `consecutive_errors = 0`).
+ */
+export interface StuckSource {
+  sourceId: string;
+  sourceSlug: string;
+  name: string;
+  type: SourceType;
+  url: string;
+  kind: string | null;
+  orgSlug: string | null;
+  orgName: string | null;
+  /** Current fetch tier — `paused` rows only appear when `includePaused`. */
+  fetchPriority: SourceFetchPriority;
+  /** True when this is the org's primary changelog (Firebase's was). */
+  isPrimary: boolean;
+  isHidden: boolean;
+  /** Non-`dry_run` attempts examined in the window (all errors when stuck). */
+  recentAttempts: number;
+  /** Errors among the examined attempts (equals `recentAttempts` when stuck). */
+  recentErrors: number;
+  /** Most-recent fetch attempt timestamp (ISO), or null. */
+  lastAttemptAt: string | null;
+  /** Most-recent error message. */
+  lastError: string | null;
+  /** Most-recent error category, when the fetcher classified it. */
+  lastErrorCategory: string | null;
+  /** Last time the source was reachable (`success`/`no_change`), ISO; null = never. */
+  lastSuccessAt: string | null;
+  /** `sources.last_fetched_at` — null when the source has never fetched. */
+  lastFetchedAt: string | null;
+  /** When the source row was created (ISO) — proxy for how long it's failed. */
+  sourceCreatedAt: string | null;
+}
+
+export interface StuckSourcesResponse extends ListResponse<StuckSource> {
+  meta: {
+    /** Recent non-`dry_run` attempts examined per source. */
+    window: number;
+    /** Minimum attempts in the window required to flag a source. */
+    minAttempts: number;
+    /** Whether already-paused sources were included. */
+    includePaused: boolean;
   };
 }
 
