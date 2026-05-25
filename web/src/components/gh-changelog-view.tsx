@@ -196,12 +196,26 @@ export async function GhChangelogContent({
       ? source
       : undefined;
 
-  const [result, indexed] = await Promise.all([
-    adminApi.parseChangelog({ repo: coordinate, path, source: sourceInput }),
-    adminApi.sourceByCoordinate(coordinate),
-  ]);
-
+  // The parse is the essential dependency — resolve it first so a failure (the
+  // admin helpers throw on a network error, not just return null) surfaces as
+  // the resolve-error state instead of being masked by a parallel lookup
+  // rejection.
+  let result: GhChangelogParseResult | null;
+  try {
+    result = await adminApi.parseChangelog({ repo: coordinate, path, source: sourceInput });
+  } catch {
+    result = null;
+  }
   if (!result) return <ResolveError coordinate={coordinate} />;
+
+  // The "already indexed?" lookup only powers a banner, so a failure here is
+  // non-fatal: fall back to no banner rather than taking down a good parse.
+  let indexed: IndexedSourceRef | null = null;
+  try {
+    indexed = await adminApi.sourceByCoordinate(coordinate);
+  } catch {
+    indexed = null;
+  }
 
   return <GhChangelogView result={result} indexed={indexed} />;
 }
