@@ -126,6 +126,7 @@ export const products = sqliteTable(
     description: text("description"),
     category: text("category"),
     kind: text("kind"),
+    avatarUrl: text("avatar_url"),
     createdAt: text("created_at")
       .notNull()
       .$defaultFn(() => new Date().toISOString()),
@@ -946,6 +947,7 @@ export const productsActive = sqliteView("products_active", {
   description: text("description"),
   category: text("category"),
   kind: text("kind"),
+  avatarUrl: text("avatar_url"),
   createdAt: text("created_at").notNull(),
   embeddedAt: text("embedded_at"),
   deletedAt: text("deleted_at"),

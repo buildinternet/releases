@@ -21,6 +21,7 @@ export const ProductRowSchema = z.object({
   description: z.string().nullable(),
   category: CategorySchema.nullable(),
   kind: z.enum(KIND_VALUES).nullable().optional(),
+  avatarUrl: z.string().nullable().optional(),
   createdAt: z.string(),
   embeddedAt: z.string().nullable(),
   deletedAt: z.string().nullable(),
@@ -102,6 +103,7 @@ export const UpdateProductBodySchema = z.object({
   tags: z.array(z.string()).optional(),
   aliases: z.array(z.string()).optional(),
   kind: z.enum(KIND_VALUES).nullable().optional(),
+  avatarUrl: z.string().nullable().optional(),
 });
 
 /**
