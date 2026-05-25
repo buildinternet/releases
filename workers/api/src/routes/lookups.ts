@@ -1,6 +1,5 @@
 import { Hono } from "hono";
 import { describeRoute, resolver } from "hono-openapi";
-import { z } from "zod";
 import { and, asc, desc, eq, sql } from "drizzle-orm";
 import {
   domainAliases,
@@ -510,13 +509,10 @@ lookupRoutes.get(
  * (non-hidden) rows, so an on-demand stub never produces a false "indexed"
  * answer. Backs the local-dev `/gh/owner/repo` viewer's "we also index this"
  * banner; usable by any client wanting a non-materializing indexed check.
+ *
+ * Reuses `LookupSourceBySlugResponseSchema` — the canonical-home triple is the
+ * same shape the slug resolver returns.
  */
-const LookupSourceByCoordinateResponseSchema = z.object({
-  sourceId: z.string(),
-  sourceSlug: z.string(),
-  orgSlug: z.string(),
-});
-
 lookupRoutes.get(
   "/lookups/source-by-coordinate",
   describeRoute({
@@ -538,7 +534,7 @@ lookupRoutes.get(
       200: {
         description: "Canonical home for the indexed repo",
         content: {
-          "application/json": { schema: resolver(LookupSourceByCoordinateResponseSchema) },
+          "application/json": { schema: resolver(LookupSourceBySlugResponseSchema) },
         },
       },
       400: {

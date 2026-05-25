@@ -134,7 +134,7 @@ export function GhChangelogView({
           <a
             href={repoUrl}
             target="_blank"
-            rel="noreferrer noopener"
+            rel="noopener noreferrer"
             className="underline-offset-2 hover:underline"
           >
             View on GitHub
@@ -177,7 +177,7 @@ export function GhChangelogView({
                       <a
                         href={r.url}
                         target="_blank"
-                        rel="noreferrer noopener"
+                        rel="noopener noreferrer"
                         className="underline-offset-2 hover:underline"
                       >
                         {r.title}
