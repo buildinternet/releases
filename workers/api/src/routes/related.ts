@@ -26,6 +26,7 @@ import { createDb } from "../db.js";
 import { sourceMatchByIdOrSlug, parseReleaseMedia } from "../utils.js";
 import { daysAgoIso } from "@buildinternet/releases-core/dates";
 import { logEvent } from "@releases/lib/log-event";
+import { scoreRelatedRelease, recencyMultiplier } from "../related-ranking.js";
 import {
   RelatedReleasesResponseSchema,
   RelatedSourcesResponseSchema,
@@ -82,7 +83,7 @@ relatedRoutes.get(
     tags: ["Related"],
     summary: "Releases semantically similar to an anchor release",
     description:
-      "Pulls the anchor's vector from the `RELEASES_INDEX` Vectorize index via `getByIds`, then runs a follow-up `query` with that vector. The anchor itself is always excluded from results. `scope=org` filters by the anchor's org id (Vectorize metadata filter on `org_id`); `scope=global` (default) is unscoped.\n\n**Degrades gracefully:** when the binding is missing, the anchor isn't embedded yet, or Vectorize errors, the response is `{ degraded: true, degradedReason, items: [] }` with HTTP 200 — callers render nothing in that case. `degradedReason` is human-readable and not stable.\n\n`topK` is hard over-fetched to `max(limit * 3, 25)` so the web layer can rerank by recency without exhausting candidates after hidden/suppressed filtering.",
+      "Pulls the anchor's vector from the `RELEASES_INDEX` Vectorize index via `getByIds`, then runs a follow-up `query` with that vector. The anchor itself is always excluded from results. `scope=org` filters by the anchor's org id (Vectorize metadata filter on `org_id`); `scope=global` (default) is unscoped.\n\n**Degrades gracefully:** when the binding is missing, the anchor isn't embedded yet, or Vectorize errors, the response is `{ degraded: true, degradedReason, items: [] }` with HTTP 200 — callers render nothing in that case. `degradedReason` is human-readable and not stable.\n\n**Ranking:** `topK` is over-fetched (`min(max(limit * 10, 50), 100)`), then candidates are ranked server-side by `cosine × recency × contentWeight` and sliced to `limit`. Content-free releases (empty bodies, boilerplate \"no changes\" notes) are dropped entirely; short-but-real releases are down-weighted; recency uses a 45-day half-life. Items are returned already in display order.",
     parameters: [
       {
         name: "release",
@@ -104,6 +105,14 @@ relatedRoutes.get(
         required: false,
         schema: { type: "integer", minimum: 1, maximum: 25, default: 8 },
         description: "Max neighbors to return. Clamped to 1–25.",
+      },
+      {
+        name: "excludeOrg",
+        in: "query",
+        required: false,
+        schema: { type: "string" },
+        description:
+          "Org slug to drop from results before slicing. Used by the global rail to avoid overlap with an org-scoped rail rendered alongside it.",
       },
     ],
     responses: {
@@ -131,6 +140,7 @@ relatedRoutes.get(
     }
     const scope = parseScope(c.req.query("scope"));
     const limit = clampLimit(c.req.query("limit"), 8, 25);
+    const excludeOrg = c.req.query("excludeOrg")?.trim() || null;
     const mediaOrigin = c.env.MEDIA_ORIGIN ?? "";
 
     const index = c.env.RELEASES_INDEX as unknown as ReadOnlyVectorizeIndex | undefined;
@@ -178,10 +188,10 @@ relatedRoutes.get(
       return c.json({ degraded: true as const, degradedReason: "anchor not embedded", items: [] });
     }
 
-    // Over-fetch hard: the web layer reranks semantic score against publishedAt
-    // to bias toward recent items, so give it at least 25 candidates even when
-    // the caller asked for a few.
-    const topK = Math.max(limit * 3, 25);
+    // Over-fetch hard: we rank cosine × recency × content server-side and drop
+    // content-free candidates, so the raw neighbor pool needs real headroom to
+    // survive filtering. Capped at Vectorize's 100-match ceiling.
+    const topK = Math.min(Math.max(limit * 10, 50), 100);
     const filter: Record<string, unknown> | undefined =
       scope === "org" && anchor.orgId ? { org_id: anchor.orgId } : undefined;
 
@@ -190,7 +200,7 @@ relatedRoutes.get(
       const res = await index.query(anchorVector, {
         topK,
         returnMetadata: "none",
-        ...(filter ? { filter } : {}),
+        filter,
       });
       matches = res.matches.map((m) => ({ id: m.id, score: m.score }));
     } catch (err) {
@@ -204,12 +214,19 @@ relatedRoutes.get(
       return c.json(degraded(err instanceof Error ? err.message : String(err)));
     }
 
-    const neighborIds = matches.map((m) => m.id).filter((id) => id !== anchor.id);
-    if (neighborIds.length === 0) {
+    // The anchor's own vector is the top hit; bail only when nothing else came back.
+    if (!matches.some((m) => m.id !== anchor.id)) {
       return c.json({ scope, items: [] as RelatedReleaseItem[] });
     }
 
-    const items = await hydrateReleaseNeighbors(db, matches, anchor.id, limit, mediaOrigin);
+    const items = await hydrateReleaseNeighbors(
+      db,
+      matches,
+      anchor.id,
+      limit,
+      mediaOrigin,
+      excludeOrg,
+    );
     return c.json({ scope, items });
   },
 );
@@ -220,6 +237,7 @@ async function hydrateReleaseNeighbors(
   anchorId: string,
   limit: number,
   mediaOrigin: string,
+  excludeOrg: string | null,
 ): Promise<RelatedReleaseItem[]> {
   const ids = matches.map((m) => m.id).filter((id) => id !== anchorId);
   if (ids.length === 0) return [];
@@ -231,6 +249,7 @@ async function hydrateReleaseNeighbors(
     url: string | null;
     publishedAt: string | null;
     summary: string;
+    contentChars: number;
     titleGenerated: string | null;
     titleShort: string | null;
     media: string | null;
@@ -248,6 +267,7 @@ async function hydrateReleaseNeighbors(
            r.url as url,
            r.published_at as publishedAt,
            COALESCE(r.summary, SUBSTR(r.content, 1, 300)) as summary,
+           COALESCE(r.content_chars, LENGTH(r.content), LENGTH(r.summary), 0) as contentChars,
            r.title_generated as titleGenerated,
            r.title_short as titleShort,
            r.media as media,
@@ -272,35 +292,59 @@ async function hydrateReleaseNeighbors(
   const byId = new Map<string, (typeof rows)[number]>();
   for (const row of rows) byId.set(row.id, row);
 
-  const out: RelatedReleaseItem[] = [];
+  // Rank every surviving candidate by cosine × recency × content quality,
+  // dropping content-free releases and (optionally) one org, then slice. We
+  // rank the full pool rather than walking cosine order so recent, content-rich
+  // matches can overtake a closer-but-stale or closer-but-empty neighbor.
+  const now = Date.now();
+  const ranked: Array<{ item: RelatedReleaseItem; rank: number }> = [];
   for (const m of matches) {
     if (m.id === anchorId) continue;
     const row = byId.get(m.id);
     if (!row) continue;
-    out.push({
-      id: row.id,
-      title: row.title,
-      version: row.version,
-      url: row.url,
-      publishedAt: row.publishedAt,
-      summary: row.summary,
-      titleGenerated: row.titleGenerated,
-      titleShort: row.titleShort,
-      thumbnail: firstImageThumbnail(row.media, mediaOrigin),
-      score: m.score,
-      source: {
-        id: row.sourceId,
-        slug: row.sourceSlug,
-        name: row.sourceName,
-        productName: row.productName,
-        orgSlug: row.orgSlug,
-        orgName: row.orgName,
-        orgAvatarUrl: row.orgAvatarUrl,
+    if (excludeOrg && row.orgSlug === excludeOrg) continue;
+
+    const { tier, rank } = scoreRelatedRelease(
+      {
+        score: m.score,
+        publishedAt: row.publishedAt,
+        summary: row.summary,
+        contentChars: row.contentChars,
+      },
+      now,
+    );
+    if (tier === "empty") continue;
+
+    ranked.push({
+      rank,
+      item: {
+        id: row.id,
+        title: row.title,
+        version: row.version,
+        url: row.url,
+        publishedAt: row.publishedAt,
+        summary: row.summary,
+        titleGenerated: row.titleGenerated,
+        titleShort: row.titleShort,
+        thumbnail: firstImageThumbnail(row.media, mediaOrigin),
+        score: m.score,
+        source: {
+          id: row.sourceId,
+          slug: row.sourceSlug,
+          name: row.sourceName,
+          productName: row.productName,
+          orgSlug: row.orgSlug,
+          orgName: row.orgName,
+          orgAvatarUrl: row.orgAvatarUrl,
+        },
       },
     });
-    if (out.length >= limit) break;
   }
-  return out;
+
+  return ranked
+    .toSorted((a, b) => b.rank - a.rank)
+    .slice(0, limit)
+    .map((r) => r.item);
 }
 
 /**
@@ -426,8 +470,8 @@ relatedRoutes.get(
     const filter: Record<string, unknown> = { type: "source" };
     if (scope === "org" && anchor.orgId) filter.org_id = anchor.orgId;
 
-    // Over-fetch so the web layer can rerank by recency without running out
-    // of candidates after hidden/suppressed filtering.
+    // Over-fetch so the recency rerank below has real headroom after
+    // hidden/suppressed filtering thins the pool.
     const topK = Math.max(limit * 3, 25);
     let matches: Array<{ id: string; score: number }>;
     try {
@@ -538,31 +582,45 @@ relatedRoutes.get(
     const statsById = new Map<string, (typeof statsRows)[number]>();
     for (const row of statsRows) statsById.set(row.sourceId, row);
 
-    const items: RelatedSourceItem[] = [];
+    // Rank by cosine × recency of the source's latest release (45-day
+    // half-life), so a semantically-close but dormant source falls behind a
+    // slightly-less-close but actively-shipping one. Build the full candidate
+    // set first, then sort and slice — no content weighting (a source isn't a
+    // body of content).
+    const now = Date.now();
+    const ranked: Array<{ item: RelatedSourceItem; rank: number }> = [];
     for (const m of matches) {
       if (m.id === anchor.id) continue;
       const row = visibleById.get(m.id);
       if (!row) continue;
       const org = row.orgId ? orgById.get(row.orgId) : undefined;
       const stats = statsById.get(row.id);
-      items.push({
-        id: row.id,
-        slug: row.slug,
-        name: row.name,
-        type: row.type,
-        url: row.url,
-        score: m.score,
-        orgSlug: org?.slug ?? null,
-        orgName: org?.name ?? null,
-        orgAvatarUrl: org?.avatarUrl ?? null,
-        releaseCount: stats?.n ?? 0,
-        latestDate: stats?.latest ?? null,
-        latestTitle: stats?.latestTitle ?? null,
-        latestVersion: stats?.latestVersion ?? null,
-        recentCount: stats?.recentCount ?? 0,
+      const latestDate = stats?.latest ?? null;
+      ranked.push({
+        rank: m.score * recencyMultiplier(latestDate, now),
+        item: {
+          id: row.id,
+          slug: row.slug,
+          name: row.name,
+          type: row.type,
+          url: row.url,
+          score: m.score,
+          orgSlug: org?.slug ?? null,
+          orgName: org?.name ?? null,
+          orgAvatarUrl: org?.avatarUrl ?? null,
+          releaseCount: stats?.n ?? 0,
+          latestDate,
+          latestTitle: stats?.latestTitle ?? null,
+          latestVersion: stats?.latestVersion ?? null,
+          recentCount: stats?.recentCount ?? 0,
+        },
       });
-      if (items.length >= limit) break;
     }
+
+    const items = ranked
+      .toSorted((a, b) => b.rank - a.rank)
+      .slice(0, limit)
+      .map((r) => r.item);
 
     return c.json({ scope, items });
   },
