@@ -1,4 +1,4 @@
-import { describe, it, expect } from "bun:test";
+import { describe, it, expect, afterEach } from "bun:test";
 import { readFileSync } from "fs";
 import { join } from "path";
 import type { Source } from "@buildinternet/releases-core/schema";
@@ -9,6 +9,8 @@ import {
   versionDistinctUrl,
   mapListingToRawReleases,
   appStoreCoordFromSource,
+  resolveAppStore,
+  fetchAppStore,
   type AppStoreListing,
 } from "@releases/adapters/appstore";
 
@@ -118,5 +120,48 @@ describe("appStoreCoordFromSource", () => {
   });
   it("returns null when metadata is malformed JSON", () => {
     expect(appStoreCoordFromSource(sourceWith("not json"))).toBeNull();
+  });
+});
+
+describe("resolveAppStore (network)", () => {
+  const realFetch = globalThis.fetch;
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+  });
+
+  it("requests the macSoftware entity for macos and returns the listing", async () => {
+    let requested = "";
+    globalThis.fetch = (async (input: string) => {
+      requested = String(input);
+      return new Response(
+        JSON.stringify({ resultCount: 1, results: [{ ...listing, version: "1.2.3" }] }),
+        { status: 200 },
+      );
+    }) as unknown as typeof fetch;
+
+    const out = await resolveAppStore({ trackId: "999", platform: "macos", storefront: "gb" });
+    expect(requested).toContain("id=999");
+    expect(requested).toContain("country=gb");
+    expect(requested).toContain("entity=macSoftware");
+    expect(out?.version).toBe("1.2.3");
+  });
+
+  it("returns null on resultCount=0", async () => {
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify({ resultCount: 0, results: [] }), {
+        status: 200,
+      })) as unknown as typeof fetch;
+    expect(await resolveAppStore({ trackId: "1", platform: "ios", storefront: "us" })).toBeNull();
+  });
+
+  it("returns null on non-2xx", async () => {
+    globalThis.fetch = (async () =>
+      new Response("nope", { status: 403 })) as unknown as typeof fetch;
+    expect(await resolveAppStore({ trackId: "1", platform: "ios", storefront: "us" })).toBeNull();
+  });
+
+  it("fetchAppStore returns [] when the source has no appStore meta", async () => {
+    const src = { type: "appstore", metadata: "{}" } as never;
+    expect(await fetchAppStore(src)).toEqual([]);
   });
 });
