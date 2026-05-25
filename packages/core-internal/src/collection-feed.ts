@@ -40,10 +40,14 @@ function runFeedChunk(
 ): Promise<CollectionReleaseRow[]> {
   return db.all<CollectionReleaseRow>(sql`
     SELECT r.id, r.version, r.title, r.content, r.summary,
+           r.content_chars, r.content_tokens,
            r.title_generated, r.title_short, r.type,
            r.published_at, r.fetched_at, r.url, r.media, r.prerelease,
            s.slug AS source_slug, s.name AS source_name, s.type AS source_type,
-           o.slug AS org_slug, o.name AS org_name,
+           o.slug AS org_slug, o.name AS org_name, o.avatar_url AS org_avatar_url,
+           (SELECT handle FROM org_accounts
+              WHERE org_id = o.id AND platform = 'github'
+              ORDER BY created_at, id LIMIT 1) AS org_github_handle,
            p.slug AS product_slug, p.name AS product_name,
            ${sql.raw(COVERAGE_COUNT_EXPR)} AS coverage_count
     FROM releases_visible r

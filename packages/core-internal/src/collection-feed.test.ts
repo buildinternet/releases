@@ -12,7 +12,7 @@
 
 import { describe, it, expect, beforeAll, beforeEach, afterAll } from "bun:test";
 import { createTestDb, clearAllTables, type TestDatabase } from "../../../tests/db-helper.js";
-import { organizations, sources, releases } from "@buildinternet/releases-core/schema";
+import { organizations, sources, releases, orgAccounts } from "@buildinternet/releases-core/schema";
 import { getCollectionReleasesFeed, buildFeedCursor } from "./collection-feed.js";
 import type { D1Db } from "../../../workers/api/src/db.js";
 
@@ -320,5 +320,139 @@ describe("getCollectionReleasesFeed — large orgIds (>90, fixes #862)", () => {
     // All 150 releases should be returned with no duplicates.
     expect(uniqueIds.size).toBe(150);
     expect(allIds.length).toBe(150);
+  });
+});
+
+describe("getCollectionReleasesFeed — content size columns (#958 parity)", () => {
+  let tdb: TestDatabase;
+
+  beforeAll(() => {
+    tdb = createTestDb();
+  });
+
+  beforeEach(() => {
+    clearAllTables(tdb.db);
+  });
+
+  afterAll(() => {
+    tdb.cleanup();
+  });
+
+  it("returns cached content_chars / content_tokens so feed surfaces can advertise size", async () => {
+    await tdb.db
+      .insert(organizations)
+      .values({ id: "org_size", name: "Sized", slug: "sized", discovery: "curated" });
+    await tdb.db.insert(sources).values({
+      id: "src_size",
+      name: "Sized Src",
+      slug: "sized-src",
+      type: "github",
+      url: "https://github.com/example/sized",
+      orgId: "org_size",
+      discovery: "curated",
+    });
+    await tdb.db.insert(releases).values({
+      id: "rel_size",
+      sourceId: "src_size",
+      title: "Sized release",
+      content: "a".repeat(4321),
+      type: "feature",
+      publishedAt: "2026-01-01T00:00:00Z",
+      fetchedAt: "2026-01-01T00:00:00Z",
+      contentChars: 4321,
+      contentTokens: 1080,
+    });
+
+    const rows = await getCollectionReleasesFeed(asD1(tdb.db), ["org_size"], null, 10);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.content_chars).toBe(4321);
+    expect(rows[0]!.content_tokens).toBe(1080);
+  });
+});
+
+describe("getCollectionReleasesFeed — org avatar identity (MCP feed parity)", () => {
+  let tdb: TestDatabase;
+
+  beforeAll(() => {
+    tdb = createTestDb();
+  });
+
+  beforeEach(() => {
+    clearAllTables(tdb.db);
+  });
+
+  afterAll(() => {
+    tdb.cleanup();
+  });
+
+  it("carries org_avatar_url and the first github handle so cross-org rows can show a company icon", async () => {
+    await tdb.db.insert(organizations).values({
+      id: "org_av",
+      name: "Avatar Co",
+      slug: "avatar-co",
+      discovery: "curated",
+      avatarUrl: "https://media.releases.sh/orgs/avatar-co.png",
+    });
+    await tdb.db.insert(orgAccounts).values({
+      id: "oa_av",
+      orgId: "org_av",
+      platform: "github",
+      handle: "avatarco",
+    });
+    await tdb.db.insert(sources).values({
+      id: "src_av",
+      name: "Avatar Src",
+      slug: "avatar-src",
+      type: "feed",
+      url: "https://avatar.co/feed",
+      orgId: "org_av",
+      discovery: "curated",
+    });
+    await tdb.db.insert(releases).values({
+      id: "rel_av",
+      sourceId: "src_av",
+      title: "Avatar release",
+      content: "body",
+      type: "feature",
+      publishedAt: "2026-01-01T00:00:00Z",
+      fetchedAt: "2026-01-01T00:00:00Z",
+    });
+
+    const rows = await getCollectionReleasesFeed(asD1(tdb.db), ["org_av"], null, 10);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.org_avatar_url).toBe("https://media.releases.sh/orgs/avatar-co.png");
+    expect(rows[0]!.org_github_handle).toBe("avatarco");
+  });
+
+  it("leaves the github handle null when the org has no github account", async () => {
+    await tdb.db.insert(organizations).values({
+      id: "org_noav",
+      name: "No Avatar Co",
+      slug: "no-avatar-co",
+      discovery: "curated",
+    });
+    await tdb.db.insert(sources).values({
+      id: "src_noav",
+      name: "Src",
+      slug: "src-noav",
+      type: "feed",
+      url: "https://noavatar.co/feed",
+      orgId: "org_noav",
+      discovery: "curated",
+    });
+    await tdb.db.insert(releases).values({
+      id: "rel_noav",
+      sourceId: "src_noav",
+      title: "Release",
+      content: "body",
+      type: "feature",
+      publishedAt: "2026-01-01T00:00:00Z",
+      fetchedAt: "2026-01-01T00:00:00Z",
+    });
+
+    const rows = await getCollectionReleasesFeed(asD1(tdb.db), ["org_noav"], null, 10);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.org_avatar_url).toBeNull();
+    expect(rows[0]!.org_github_handle).toBeNull();
   });
 });

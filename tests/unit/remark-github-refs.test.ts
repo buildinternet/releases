@@ -1,5 +1,5 @@
 import { describe, test, expect } from "bun:test";
-import { remarkGithubRefs, githubRepoUrlFor } from "../../web/src/lib/remark-github-refs";
+import { remarkGithubRefs, githubRepoUrlFor } from "@releases/rendering/markdown-plugins";
 
 // Untyped mdast — @types/mdast isn't a direct dep at the repo root, and the
 // shapes used here are simple enough that `any` is fine for tests.
