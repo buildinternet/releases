@@ -23,6 +23,13 @@ export type AggregateReleaseRow = {
   title: string;
   content: string;
   summary: string | null;
+  /**
+   * Cached `LENGTH(content)` / token count (#958). Optional because not every
+   * cross-org feed query selects them; feed renderers degrade gracefully when
+   * absent.
+   */
+  content_chars?: number | null;
+  content_tokens?: number | null;
   title_generated: string | null;
   title_short: string | null;
   published_at: string | null;
@@ -36,6 +43,14 @@ export type AggregateReleaseRow = {
   type: ReleaseType;
   org_slug: string;
   org_name: string;
+  /**
+   * Org identity for cross-org feed surfaces (e.g. the MCP release-feed UI's
+   * company icon). Optional because not every cross-org query selects them.
+   * `org_avatar_url` is the stored R2/3rd-party avatar; `org_github_handle` is
+   * the first linked GitHub account, used as the avatar fallback.
+   */
+  org_avatar_url?: string | null;
+  org_github_handle?: string | null;
   product_slug: string | null;
   product_name: string | null;
   /** Number of demoted siblings rolling up via `release_coverage` (0 when standalone). */

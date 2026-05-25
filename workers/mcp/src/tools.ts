@@ -85,9 +85,11 @@ export type ToolResult = {
    * Typed payload paired with the markdown `content[0].text` fallback. MCP App
    * UIs (see `workers/mcp/ui/`) read this directly so they don't have to parse
    * the rendered markdown. Hosts without UI support ignore the field and the
-   * model uses the text content as before.
+   * model uses the text content as before. Feed tools attach a
+   * {@link ReleaseFeedStructured}; `get_release` attaches a
+   * {@link ReleaseDetailStructured} for the App's drill-down view.
    */
-  structuredContent?: ReleaseFeedStructured;
+  structuredContent?: ReleaseFeedStructured | ReleaseDetailStructured;
   _meta?: {
     pagination?: McpPaginationMeta | McpCursorPaginationMeta;
     search?: McpSearchMeta;
@@ -117,7 +119,16 @@ export interface ReleaseFeedRow {
   contentPreview: string;
   publishedAt: string | null;
   url: string | null;
-  source: { name: string; coordinate: string };
+  /** `type` lets the UI branch GitHub (`org/repo` coordinate) vs. display name. */
+  source: { name: string; coordinate: string; type: string };
+  /**
+   * Org identity for the feed's company icon + human-readable label.
+   * `avatarUrl` is the stored avatar; `githubHandle` is the avatar fallback
+   * (`github.com/{handle}.png`). Null only when a release has no resolvable org.
+   */
+  org: { name: string; slug: string; avatarUrl: string | null; githubHandle: string | null } | null;
+  /** Optional product grouping; lets non-GitHub rows show a product name. */
+  product: { name: string; slug: string } | null;
   /**
    * Cached release-body size (`LENGTH(content)` and `countTokensSafe`).
    * `null` for rows that pre-date the columns; the backfill script fills them
@@ -172,7 +183,14 @@ function toReleaseFeedRow(r: {
   publishedAt: string | null;
   url: string | null;
   sourceName: string;
+  sourceType: string;
   coordinate: string;
+  orgName?: string | null;
+  orgSlug?: string | null;
+  orgAvatarUrl?: string | null;
+  orgGithubHandle?: string | null;
+  productName?: string | null;
+  productSlug?: string | null;
   contentChars?: number | null;
   contentTokens?: number | null;
 }): ReleaseFeedRow {
@@ -186,8 +204,17 @@ function toReleaseFeedRow(r: {
     summary: r.summary,
     contentPreview: (r.summary || r.content || "").slice(0, 500),
     publishedAt: r.publishedAt,
-    url: r.url ?? null,
-    source: { name: r.sourceName, coordinate: r.coordinate },
+    url: r.url,
+    source: { name: r.sourceName, coordinate: r.coordinate, type: r.sourceType },
+    org: r.orgName
+      ? {
+          name: r.orgName,
+          slug: r.orgSlug ?? "",
+          avatarUrl: r.orgAvatarUrl ?? null,
+          githubHandle: r.orgGithubHandle ?? null,
+        }
+      : null,
+    product: r.productName ? { name: r.productName, slug: r.productSlug ?? "" } : null,
     contentChars: r.contentChars ?? null,
     contentTokens: r.contentTokens ?? null,
   };
@@ -299,6 +326,63 @@ function formatRelease(r: {
 
 function formatReleaseTitle(r: { title: string; type: ReleaseType }): string {
   return r.type === "rollup" ? `**${r.title}** _(rollup)_` : `**${r.title}**`;
+}
+
+/** Chars of body inlined per release in a feed's model-facing text. */
+const FEED_PREVIEW_CHARS = 500;
+
+/** Compact human size for the meta line; tokens preferred, chars as fallback. */
+function formatSizeLabel(chars?: number | null, tokens?: number | null): string | null {
+  if (tokens != null && tokens > 0) return `~${tokens} tokens`;
+  if (chars != null && chars > 0) return `${chars} chars`;
+  return null;
+}
+
+/** Normalized row for {@link renderFeedReleaseText}. */
+interface FeedReleaseTextRow {
+  id: string;
+  title: string;
+  type: ReleaseType;
+  version: string | null;
+  publishedAt: string | null;
+  summary: string | null;
+  content: string | null;
+  sourceName: string;
+  coordinate: string;
+  orgName?: string | null;
+  orgSlug?: string | null;
+  contentChars?: number | null;
+  contentTokens?: number | null;
+}
+
+/**
+ * Render one release into the model-facing text block shared by
+ * `get_latest_releases` and `get_collection_releases`. Each block is
+ * self-describing: it always carries the release `id` (the handle for
+ * `get_release`), surfaces a content-size signal, and appends a `get_release`
+ * hint only when the inlined preview is shorter than the full body — so short,
+ * fully-shown releases don't get a wasted "fetch more" nudge.
+ */
+function renderFeedReleaseText(r: FeedReleaseTextRow): string {
+  const previewSource = r.summary || r.content || "";
+  const preview = previewSource.slice(0, FEED_PREVIEW_CHARS);
+
+  const metaParts: string[] = [];
+  if (r.orgName) metaParts.push(`Org: ${r.orgName}${r.orgSlug ? ` (${r.orgSlug})` : ""}`);
+  metaParts.push(`Source: ${r.sourceName} (${r.coordinate})`);
+  metaParts.push(`Version: ${r.version ?? "N/A"}`);
+  metaParts.push(`Date: ${r.publishedAt ?? "N/A"}`);
+  const sizeLabel = formatSizeLabel(r.contentChars, r.contentTokens);
+  if (sizeLabel) metaParts.push(sizeLabel);
+
+  const lines = [formatReleaseTitle(r), `ID: ${r.id}`, metaParts.join(" | "), preview];
+
+  const truncated =
+    (r.contentChars ?? 0) > preview.length || previewSource.length > FEED_PREVIEW_CHARS;
+  if (truncated) {
+    lines.push(`_Preview truncated — call get_release(id: "${r.id}") for the full release._`);
+  }
+  return lines.join("\n");
 }
 
 async function callAnthropic(
@@ -601,7 +685,17 @@ export async function getLatestReleases(
       publishedAt: releasesTable.publishedAt,
       sourceName: sources.name,
       sourceSlug: sources.slug,
+      sourceType: sources.type,
+      orgName: organizations.name,
       orgSlug: organizations.slug,
+      orgAvatarUrl: organizations.avatarUrl,
+      orgGithubHandle: sql<string | null>`(
+        SELECT handle FROM org_accounts
+          WHERE org_id = ${organizations.id} AND platform = 'github'
+          ORDER BY created_at, id LIMIT 1
+      )`,
+      productName: products.name,
+      productSlug: products.slug,
       url: releasesTable.url,
       contentChars: releasesTable.contentChars,
       contentTokens: releasesTable.contentTokens,
@@ -648,25 +742,30 @@ export async function getLatestReleases(
     };
   }
 
-  const structuredRows = pageRows.map((r) =>
-    toReleaseFeedRow({
-      ...r,
-      coordinate: r.orgSlug ? `${r.orgSlug}/${r.sourceSlug}` : r.sourceSlug,
-    }),
-  );
-
-  const body = pageRows
-    .map((r) => {
-      const preview = (r.summary || r.content).slice(0, 500);
-      const titleLine = formatReleaseTitle(r);
-      const srcCoord = r.orgSlug ? `${r.orgSlug}/${r.sourceSlug}` : r.sourceSlug;
-      return [
-        titleLine,
-        `Source: ${r.sourceName} (${srcCoord}) | Version: ${r.version ?? "N/A"} | Date: ${r.publishedAt ?? "N/A"}`,
-        preview,
-      ].join("\n");
-    })
-    .join("\n\n---\n\n");
+  const structuredRows: ReleaseFeedRow[] = [];
+  const textParts: string[] = [];
+  for (const r of pageRows) {
+    const coordinate = r.orgSlug ? `${r.orgSlug}/${r.sourceSlug}` : r.sourceSlug;
+    structuredRows.push(toReleaseFeedRow({ ...r, coordinate }));
+    textParts.push(
+      renderFeedReleaseText({
+        id: r.id,
+        title: r.title,
+        type: r.type as ReleaseType,
+        version: r.version,
+        publishedAt: r.publishedAt,
+        summary: r.summary,
+        content: r.content,
+        sourceName: r.sourceName,
+        coordinate,
+        orgName: r.orgName,
+        orgSlug: r.orgSlug,
+        contentChars: r.contentChars,
+        contentTokens: r.contentTokens,
+      }),
+    );
+  }
+  const body = textParts.join("\n\n---\n\n");
 
   // LLM-readable continuation hint, mirroring the page-based footer pattern.
   const footer = hasMore
@@ -1152,6 +1251,29 @@ export async function compareProducts(
 
 // ── get_release ──────────────────────────────────────────────────────
 
+/**
+ * Structured detail payload for the release-feed MCP App's lazy-fetch
+ * drill-down. Mirrors {@link ReleaseFeedRow} but carries the full `content`
+ * body. Attached alongside the text fallback so non-app hosts and the model
+ * are unaffected.
+ */
+export interface ReleaseDetailStructured {
+  [key: string]: unknown;
+  id: string;
+  title: string | null;
+  titleShort: string | null;
+  titleGenerated: string | null;
+  version: string | null;
+  type: "feature" | "rollup";
+  content: string;
+  summary: string | null;
+  publishedAt: string | null;
+  url: string | null;
+  source: { name: string; coordinate: string; type: string };
+  org: { name: string; slug: string; avatarUrl: string | null; githubHandle: string | null } | null;
+  product: { name: string; slug: string } | null;
+}
+
 export async function getRelease(db: D1Db, params: { id: string }): Promise<ToolResult> {
   const id = normalizeReleaseId(params.id);
 
@@ -1170,18 +1292,27 @@ export async function getRelease(db: D1Db, params: { id: string }): Promise<Tool
       suppressed: releases.suppressed,
       sourceName: sources.name,
       sourceSlug: sources.slug,
+      sourceType: sources.type,
       orgName: organizations.name,
       orgSlug: organizations.slug,
+      orgAvatarUrl: organizations.avatarUrl,
+      orgGithubHandle: sql<string | null>`(
+        SELECT handle FROM org_accounts
+          WHERE org_id = ${organizations.id} AND platform = 'github'
+          ORDER BY created_at, id LIMIT 1
+      )`,
+      productName: products.name,
+      productSlug: products.slug,
     })
     .from(releases)
     .leftJoin(sources, eq(releases.sourceId, sources.id))
+    .leftJoin(products, eq(sources.productId, products.id))
     .leftJoin(organizations, eq(sources.orgId, organizations.id))
     .where(eq(releases.id, id))
     .limit(1);
 
-  if (rows.length === 0) return text(`No release found matching "${params.id}"`);
   const r = rows[0];
-  if (r.suppressed) return text(`No release found matching "${params.id}"`);
+  if (!r || r.suppressed) return text(`No release found matching "${params.id}"`);
 
   const body = r.content && r.content.length > 0 ? r.content : (r.summary ?? "");
 
@@ -1199,7 +1330,31 @@ export async function getRelease(db: D1Db, params: { id: string }): Promise<Tool
   lines.push("");
   lines.push(body);
 
-  return text(lines.join("\n"));
+  const coordinate = r.orgSlug ? `${r.orgSlug}/${r.sourceSlug}` : (r.sourceSlug ?? "");
+  const structuredContent: ReleaseDetailStructured = {
+    id: r.id,
+    title: r.title,
+    titleShort: r.titleShort,
+    titleGenerated: r.titleGenerated,
+    version: r.version,
+    type: r.type as "feature" | "rollup",
+    content: body,
+    summary: r.summary,
+    publishedAt: r.publishedAt,
+    url: r.url,
+    source: { name: r.sourceName ?? "Unknown", coordinate, type: r.sourceType ?? "" },
+    org: r.orgName
+      ? {
+          name: r.orgName,
+          slug: r.orgSlug ?? "",
+          avatarUrl: r.orgAvatarUrl ?? null,
+          githubHandle: r.orgGithubHandle ?? null,
+        }
+      : null,
+    product: r.productName ? { name: r.productName, slug: r.productSlug ?? "" } : null,
+  };
+
+  return { content: [{ type: "text" as const, text: lines.join("\n") }], structuredContent };
 }
 
 // ── renderSourceDetail ───────────────────────────────────────────────
@@ -2397,35 +2552,54 @@ export async function getCollectionReleases(
     };
   }
 
-  const structuredRows = pageRows.map((r) =>
-    toReleaseFeedRow({
-      id: r.id,
-      title: r.title,
-      titleShort: r.title_short,
-      titleGenerated: r.title_generated,
-      version: r.version,
-      type: r.type,
-      summary: r.summary,
-      content: r.content,
-      publishedAt: r.published_at,
-      url: r.url ?? null,
-      sourceName: r.source_name,
-      coordinate: `${r.org_slug}/${r.source_slug}`,
-    }),
-  );
-
-  const body = pageRows
-    .map((r) => {
-      const preview = (r.summary || r.content).slice(0, 500);
-      const titleLine = formatReleaseTitle(r);
-      const srcCoord = `${r.org_slug}/${r.source_slug}`;
-      return [
-        titleLine,
-        `Org: ${r.org_name} (${r.org_slug}) | Source: ${r.source_name} (${srcCoord}) | Version: ${r.version ?? "N/A"} | Date: ${r.published_at ?? "N/A"}`,
-        preview,
-      ].join("\n");
-    })
-    .join("\n\n---\n\n");
+  const structuredRows: ReleaseFeedRow[] = [];
+  const textParts: string[] = [];
+  for (const r of pageRows) {
+    const coordinate = `${r.org_slug}/${r.source_slug}`;
+    structuredRows.push(
+      toReleaseFeedRow({
+        id: r.id,
+        title: r.title,
+        titleShort: r.title_short,
+        titleGenerated: r.title_generated,
+        version: r.version,
+        type: r.type,
+        summary: r.summary,
+        content: r.content,
+        publishedAt: r.published_at,
+        url: r.url,
+        sourceName: r.source_name,
+        sourceType: r.source_type,
+        coordinate,
+        orgName: r.org_name,
+        orgSlug: r.org_slug,
+        orgAvatarUrl: r.org_avatar_url,
+        orgGithubHandle: r.org_github_handle,
+        productName: r.product_name,
+        productSlug: r.product_slug,
+        contentChars: r.content_chars,
+        contentTokens: r.content_tokens,
+      }),
+    );
+    textParts.push(
+      renderFeedReleaseText({
+        id: r.id,
+        title: r.title,
+        type: r.type as ReleaseType,
+        version: r.version,
+        publishedAt: r.published_at,
+        summary: r.summary,
+        content: r.content,
+        sourceName: r.source_name,
+        coordinate,
+        orgName: r.org_name,
+        orgSlug: r.org_slug,
+        contentChars: r.content_chars,
+        contentTokens: r.content_tokens,
+      }),
+    );
+  }
+  const body = textParts.join("\n\n---\n\n");
 
   const footer = hasMore
     ? `\n\n_Showing ${pageRows.length} of more. Pass \`cursor: "${nextCursor}", limit: ${limit}\` to continue._`

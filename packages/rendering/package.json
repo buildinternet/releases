@@ -7,10 +7,16 @@
     "./atom": "./src/atom.ts",
     "./atom-http": "./src/atom-http.ts",
     "./formatters": "./src/formatters.ts",
+    "./markdown-plugins": "./src/markdown-plugins.ts",
     "./media": "./src/media.ts",
     "./media-url": "./src/media-url.ts"
   },
   "dependencies": {
-    "@buildinternet/releases-api-types": "workspace:*"
+    "@buildinternet/releases-api-types": "workspace:*",
+    "remark-gemoji": "^8.0.0",
+    "remark-gfm": "^4.0.1"
+  },
+  "devDependencies": {
+    "@types/mdast": "^4.0.4"
   }
 }

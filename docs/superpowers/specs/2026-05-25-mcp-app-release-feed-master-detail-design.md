@@ -34,15 +34,15 @@ the existing web feed.
 
 ## Decisions (settled during brainstorming)
 
-| Decision            | Choice                                                                                                                      |
-| ------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| Drill-down model    | **Master → detail swap** — clicking a row replaces the list with a single full-release view + Back button                   |
-| Full-content source | **Lazy-fetch on expand** via the `get_release` tool through `app.callServerTool` (keeps the feed payload lean)              |
-| Markdown fidelity   | **Web parity, text + structure** — reuse the web's `react-markdown` + remark stack (GFM, emoji, GitHub alerts, GitHub refs) |
-| Media               | **Inline images kept** (height-capped); video iframes (YouTube/Vimeo/Loom) and shiki syntax highlighting **excluded**       |
-| Fixed height        | **~520px** (header + ~2–3 rows visible, scroll for the rest)                                                                |
+| Decision            | Choice                                                                                                                                                                           |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Drill-down model    | **Master → detail swap** — clicking a row replaces the list with a single full-release view + Back button                                                                        |
+| Full-content source | **Lazy-fetch on expand** via the `get_release` tool through `app.callServerTool` (keeps the feed payload lean)                                                                   |
+| Markdown fidelity   | **Web parity, text + structure** — reuse the web's `react-markdown` + remark stack (GFM, emoji, GitHub alerts, GitHub refs)                                                      |
+| Media               | **Inline images kept** (height-capped); video iframes (YouTube/Vimeo/Loom) and shiki syntax highlighting **excluded**                                                            |
+| Fixed height        | **~520px** (header + ~2–3 rows visible, scroll for the rest)                                                                                                                     |
 | Model-facing text   | **Self-describing releases** — each text block carries the release `id`, a content-size signal (chars + tokens), and a truncation/`get_release` hint when the preview is partial |
-| Scope               | The shared `release-feed` app, its two backing feed tools' text fallback, and `get_release` → both `get_collection_releases` and `get_latest_releases` improve at once |
+| Scope               | The shared `release-feed` app, its two backing feed tools' text fallback, and `get_release` → both `get_collection_releases` and `get_latest_releases` improve at once           |
 
 ## Architecture
 
@@ -263,3 +263,37 @@ collection path just needs the columns threaded through so they're non-null.
 | `@releases/rendering` won't resolve in the isolated `ui/` build | Verify first; fallback = vendor the two plugin files into `ui/`                                                           |
 | Bundle size growth from react-markdown + remark + emoji map     | Acceptable for a single inlined app; measure post-build; emoji is the largest single add — revisit if the bundle balloons |
 | Sandboxed frame blocks remote `<img>` / `app.openLink`          | Images degrade to alt text gracefully; links already use `app.openLink` today                                             |
+
+## Addendum — org identity, view-source, and web-parity grouping
+
+Refinements layered on top of the master/detail base after host testing, to close
+the gap with the web collection view:
+
+- **Org identity on every row.** Feed rows and the detail byline now carry the
+  org's company icon (avatar) plus a human-readable label. `ReleaseFeedRow` /
+  `ReleaseDetailStructured` gained `source.type`, `org { name, slug, avatarUrl,
+githubHandle }`, and `product { name, slug }`; the shared collection-feed
+  `SELECT` and the latest-releases / `get_release` queries now resolve
+  `avatar_url` plus the first linked GitHub handle (`org_accounts`,
+  `platform = 'github'`) for the `OrgAvatar` fallback chain (stored avatar →
+  `github.com/{handle}.png` → monogram).
+- **Display-name preference.** Labels favor human-readable org/product/source
+  names, except GitHub sources, which keep the `org/repo` coordinate (the
+  recognizable handle) in mono.
+- **View source promoted.** The detail "Open source" footer button became a
+  header action (external-link SVG icon, not the `↗` glyph) mirroring the web
+  byline; "Ask about this" stays in the footer. Back is collection/feed-aware
+  ("‹ Back to {collection or feed title}").
+- **Day → org grouping (cross-org feeds).** Collections and the across-registry
+  "Latest" feed now group by day (weekday + date + count header) then by org
+  (avatar + name + count sub-header), matching the web `CollectionTimeline`
+  structure. In grouped mode the org avatar sits in the sub-header and the date
+  in the day header, so rows drop both and lead with the product/source name.
+  Single-org / product feeds keep the flat list since the header already names
+  the org. (Out of scope, deferred: the web view's post-vs-tag hero/commit-log
+  split, same-product rollup collapsing, member filter chips, type tabs,
+  prerelease toggle, format links, and inline list thumbnails.)
+- **Tests.** Added: collection-feed query carries `org_avatar_url` /
+  `org_github_handle`; both feed tools' structured rows carry `org` identity,
+  `source.type`, and `product`; `get_release` detail carries the widened
+  `org` / `source.type` / `product` shape.

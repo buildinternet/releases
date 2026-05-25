@@ -1,7 +1,12 @@
 /*
  * Release-feed UI styles. Uses CSS custom properties so the host (Claude
- * Desktop, etc.) can override via `applyHostStyleVariables`. Fallbacks
- * here match a sensible default for hosts that don't push any theming.
+ * Desktop, etc.) can override via `applyHostStyleVariables`. Fallbacks here
+ * match a sensible default for hosts that don't push any theming.
+ *
+ * Layout contract: `.app-shell` is capped at a compact `max-height` and scrolls
+ * internally, so the embedded app stays a small block in the chat instead of
+ * growing to fit every release. Master (feed list) and detail (one release)
+ * views reuse the same shell.
  */
 
 :root {
@@ -18,6 +23,8 @@
   --rl-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 1px 3px rgba(0, 0, 0, 0.06);
   --rl-font: var(--mcp-ui-font-family, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif);
   --rl-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  /* Compact fixed height — the feed scrolls inside this, capping chat footprint. */
+  --rl-max-height: 520px;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -51,7 +58,7 @@ body {
 }
 
 .status {
-  padding: 24px;
+  padding: 20px;
   color: var(--rl-muted);
   font-size: 14px;
 }
@@ -59,14 +66,17 @@ body {
   color: #b91c1c;
 }
 
-.feed {
-  max-width: 720px;
-  margin: 0 auto;
-  padding: 24px 20px 64px;
+/* The shell the host measures: capped height + internal scroll. */
+.app-shell {
+  max-height: var(--rl-max-height);
+  overflow-y: auto;
+  padding: 16px 18px 22px;
 }
 
+/* ── Master view ─────────────────────────────────────────────────────── */
+
 .feed-head {
-  margin-bottom: 20px;
+  margin-bottom: 12px;
 }
 .feed-sub {
   margin: 0 0 4px;
@@ -76,9 +86,15 @@ body {
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
+.feed-title-line {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0 0 4px;
+}
 .feed-title {
-  margin: 0 0 6px;
-  font-size: 24px;
+  margin: 0;
+  font-size: 22px;
   font-weight: 700;
   letter-spacing: -0.01em;
 }
@@ -88,49 +104,184 @@ body {
   font-size: 12px;
 }
 
-.feed-list {
+/* Company icon (org avatar). Fallback is a monogram circle. */
+.org-avatar {
+  border-radius: 50%;
+  flex: none;
+  object-fit: cover;
+  background: color-mix(in srgb, var(--rl-fg) 8%, transparent);
+}
+.org-avatar-fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  color: var(--rl-muted);
+  line-height: 1;
+}
+
+/* ── Day / org grouping (cross-org feeds) ────────────────────────────── */
+
+.day {
+  margin-top: 18px;
+}
+.day:first-child {
+  margin-top: 6px;
+}
+.day-head {
   display: flex;
-  flex-direction: column;
-  gap: 12px;
+  align-items: baseline;
+  gap: 10px;
+  padding: 3px 0 6px;
+  border-bottom: 1px solid var(--rl-border);
+}
+.day-weekday {
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--rl-muted);
+}
+.day-date {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--rl-fg);
+}
+.day-count {
+  margin-left: auto;
+  font-family: var(--rl-mono);
+  font-size: 11px;
+  color: var(--rl-muted);
+  font-variant-numeric: tabular-nums;
 }
 
-.card {
-  background: var(--rl-card-bg);
-  border: 1px solid var(--rl-border);
-  border-radius: var(--rl-radius);
-  padding: 16px 18px;
-  box-shadow: var(--rl-shadow);
+.org-group {
+  margin-top: 10px;
+}
+.org-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 1px;
+}
+.org-name {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+}
+.org-count {
+  font-family: var(--rl-mono);
+  font-size: 10.5px;
+  color: var(--rl-muted);
+  font-variant-numeric: tabular-nums;
 }
 
-.card-head {
-  margin-bottom: 8px;
+.feed-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.feed-list li + li .row {
+  border-top: 1px solid var(--rl-border);
 }
 
-.card-meta {
+/* Whole row is the click target → detail view. */
+.row {
+  position: relative;
+  display: block;
+  width: 100%;
+  text-align: left;
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  padding: 11px 26px 11px 2px;
+  transition: background 0.1s ease;
+}
+.row:hover {
+  background: color-mix(in srgb, var(--rl-fg) 4%, transparent);
+}
+.row:focus-visible {
+  outline: 2px solid var(--rl-accent);
+  outline-offset: -2px;
+  border-radius: var(--rl-radius-sm);
+}
+
+.row-meta {
   display: flex;
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
-  margin-bottom: 6px;
-  font-size: 12px;
+  margin-bottom: 3px;
+  font-size: 11.5px;
   color: var(--rl-muted);
 }
-
 .source {
   font-family: var(--rl-mono);
-  font-size: 12px;
+  font-size: 11.5px;
   color: var(--rl-fg);
 }
-
+/* Human-readable org/product label (non-GitHub rows). */
+.source-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--rl-fg);
+}
+.source-sub {
+  font-size: 11.5px;
+  color: var(--rl-muted);
+}
+.source-sub::before {
+  content: "·";
+  margin-right: 6px;
+  color: var(--rl-muted);
+}
 .date {
   margin-left: auto;
   font-variant-numeric: tabular-nums;
 }
 
+.row-title-line {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.row-title {
+  font-size: 14.5px;
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: -0.005em;
+}
+.row-snippet {
+  margin: 3px 0 0;
+  color: var(--rl-muted);
+  font-size: 12.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.row-chevron {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  transform: translateY(-50%);
+  color: var(--rl-muted);
+  font-size: 20px;
+  line-height: 1;
+}
+.row:hover .row-chevron {
+  color: var(--rl-fg);
+}
+
+/* ── Chips ───────────────────────────────────────────────────────────── */
+
 .chip {
   display: inline-flex;
   align-items: center;
-  padding: 2px 8px;
+  padding: 1px 7px;
   font-size: 11px;
   font-weight: 500;
   border-radius: 999px;
@@ -138,49 +289,239 @@ body {
   background: transparent;
   color: var(--rl-fg);
 }
-
 .chip-version {
   font-family: var(--rl-mono);
   background: color-mix(in srgb, var(--rl-accent) 12%, transparent);
   border-color: color-mix(in srgb, var(--rl-accent) 30%, transparent);
   color: var(--rl-accent);
 }
-
 .chip-rollup {
   background: color-mix(in srgb, var(--rl-muted) 12%, transparent);
 }
 
-.card-title {
-  margin: 0 0 6px;
-  font-size: 16px;
-  font-weight: 600;
-  line-height: 1.35;
-  letter-spacing: -0.005em;
-}
+/* ── Detail view ─────────────────────────────────────────────────────── */
 
-.version {
-  margin-bottom: 6px;
+.detail-head {
+  position: sticky;
+  top: -16px; /* cancel the shell's top padding so it pins flush */
+  background: var(--rl-bg);
+  margin: -16px -18px 10px;
+  padding: 14px 18px 10px;
+  border-bottom: 1px solid var(--rl-border);
+  z-index: 1;
 }
-
-.card-body {
-  margin: 6px 0 12px;
-  color: var(--rl-fg);
+.detail-head-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+.back {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--rl-muted);
+  font: inherit;
   font-size: 13px;
-  line-height: 1.55;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  /* Clamp body to a reasonable height; users can "Ask about this" to dig in. */
-  display: -webkit-box;
-  -webkit-line-clamp: 6;
-  -webkit-box-orient: vertical;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+  min-width: 0;
   overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.back:hover {
+  color: var(--rl-accent);
+}
+/* Header-level link action (e.g. View source), mirroring the web byline. */
+.header-action {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: none;
+  border: 1px solid var(--rl-border);
+  background: transparent;
+  color: var(--rl-muted);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 4px 10px;
+  border-radius: var(--rl-radius-sm);
+  cursor: pointer;
+  transition:
+    color 0.1s ease,
+    border-color 0.1s ease;
+}
+.header-action:hover {
+  color: var(--rl-accent);
+  border-color: color-mix(in srgb, var(--rl-accent) 40%, var(--rl-border));
+}
+.detail-title {
+  margin: 4px 0 6px;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
 }
 
-.card-foot {
+.detail-error {
+  padding: 4px 0;
+}
+.detail-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.detail-foot {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--rl-border);
 }
+
+/* ── Rendered markdown (detail body) ─────────────────────────────────── */
+
+.md {
+  font-size: 13.5px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.md > :first-child {
+  margin-top: 0;
+}
+.md h1,
+.md h2,
+.md h3,
+.md h4,
+.md h5,
+.md h6 {
+  margin: 18px 0 8px;
+  font-weight: 650;
+  line-height: 1.3;
+}
+.md h1 {
+  font-size: 17px;
+}
+.md h2 {
+  font-size: 15.5px;
+}
+.md h3 {
+  font-size: 14.5px;
+}
+.md h4,
+.md h5,
+.md h6 {
+  font-size: 13.5px;
+}
+.md p,
+.md ul,
+.md ol,
+.md blockquote,
+.md table,
+.md pre {
+  margin: 8px 0;
+}
+.md ul,
+.md ol {
+  padding-left: 22px;
+}
+.md li {
+  margin: 3px 0;
+}
+.md a {
+  color: var(--rl-accent);
+  text-decoration: none;
+}
+.md a:hover {
+  text-decoration: underline;
+}
+.md code {
+  font-family: var(--rl-mono);
+  font-size: 0.9em;
+  background: color-mix(in srgb, var(--rl-fg) 7%, transparent);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+.md pre {
+  background: color-mix(in srgb, var(--rl-fg) 6%, transparent);
+  border: 1px solid var(--rl-border);
+  border-radius: var(--rl-radius-sm);
+  padding: 12px;
+  overflow-x: auto;
+}
+.md pre code {
+  background: transparent;
+  padding: 0;
+}
+.md blockquote {
+  border-left: 3px solid var(--rl-border);
+  margin-left: 0;
+  padding: 2px 0 2px 12px;
+  color: var(--rl-muted);
+}
+.md table {
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+.md th,
+.md td {
+  border: 1px solid var(--rl-border);
+  padding: 5px 9px;
+  text-align: left;
+}
+.md hr {
+  border: 0;
+  border-top: 1px solid var(--rl-border);
+  margin: 16px 0;
+}
+.md-img {
+  max-width: 100%;
+  max-height: 320px;
+  height: auto;
+  border-radius: var(--rl-radius-sm);
+  border: 1px solid var(--rl-border);
+  display: block;
+  margin: 10px 0;
+}
+
+/* GitHub-style alerts emitted by the remark-github-alerts plugin. */
+.md .markdown-alert {
+  border-left: 3px solid var(--rl-border);
+  border-radius: var(--rl-radius-sm);
+  background: color-mix(in srgb, var(--rl-muted) 8%, transparent);
+  padding: 8px 12px;
+  margin: 10px 0;
+}
+.md .markdown-alert-title {
+  margin: 0 0 4px;
+  font-weight: 600;
+  font-size: 12.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+.md .markdown-alert-note {
+  border-left-color: #2563eb;
+}
+.md .markdown-alert-tip {
+  border-left-color: #16a34a;
+}
+.md .markdown-alert-important {
+  border-left-color: #7c3aed;
+}
+.md .markdown-alert-warning {
+  border-left-color: #d97706;
+}
+.md .markdown-alert-caution {
+  border-left-color: #dc2626;
+}
+
+/* ── Buttons / shared ────────────────────────────────────────────────── */
 
 .btn {
   appearance: none;
@@ -202,7 +543,6 @@ body {
   opacity: 0.5;
   cursor: default;
 }
-
 .btn-primary {
   background: var(--rl-accent);
   color: var(--rl-accent-fg);
@@ -213,13 +553,13 @@ body {
 }
 
 .feed-foot {
-  margin-top: 20px;
+  margin-top: 16px;
   display: flex;
   justify-content: center;
 }
 
 .error {
-  margin-top: 12px;
+  margin: 10px 0 0;
   padding: 10px 14px;
   border-radius: var(--rl-radius-sm);
   background: color-mix(in srgb, #dc2626 8%, transparent);
