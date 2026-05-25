@@ -193,7 +193,7 @@ export async function materializeAppStoreSource(
 
   // Source (curated, visible). Slug is `<product>-<platform>`.
   const sourceId = newSourceId();
-  const sourceSlug = `${productSlug}-${coord.platform === "macos" ? "macos" : "ios"}`;
+  const sourceSlug = `${productSlug}-${coord.platform}`;
   // NOTE: concurrent POSTs for the same new trackId both clear the idempotency
   // check above, then race on UNIQUE(org_id, slug) for the product/source inserts.
   // This endpoint is admin-gated + low-concurrency, so a rare 500 on a true race is
