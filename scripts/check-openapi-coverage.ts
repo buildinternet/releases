@@ -74,6 +74,7 @@ const ALLOWLIST = new Set<string>([
   "DELETE /orgs/:slug/ignored-urls/:url",
   "POST /orgs/:slug/overview",
   "POST /sources",
+  "POST /sources/appstore",
   "PATCH /sources/:slug",
   "PATCH /orgs/:orgSlug/sources/:sourceSlug",
   "DELETE /sources/:slug",

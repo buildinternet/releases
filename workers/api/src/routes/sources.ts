@@ -142,6 +142,7 @@ import { logEvent } from "@releases/lib/log-event";
 import { classifyDbError } from "@releases/lib/db-errors";
 import { getSecret } from "@releases/lib/secrets";
 import { classifyRepoStatus } from "../lib/github-repo-status.js";
+import { materializeAppStoreSource } from "../lib/appstore-materialize.js";
 
 export const sourceRoutes = new Hono<Env>();
 
@@ -2121,6 +2122,61 @@ sourceRoutes.get(
   "/sources/:slug/releases",
   getSourceReleasesFeedRoute,
   getSourceReleasesFeedHandler,
+);
+
+sourceRoutes.post(
+  "/sources/appstore",
+  describeRoute({
+    hide: hideInProduction,
+    tags: ["Sources"],
+    summary: "Materialize an Apple App Store source",
+    description:
+      "Resolves an App Store identifier (an `apps.apple.com/.../id<trackId>` URL or a bare numeric `trackId`) via the iTunes Lookup API and creates a curated Org → Product → Source, minting the current version as the first Release. Idempotent on the resolved trackId. `platform` defaults to `ios` (pass `macos` for Mac App Store apps); `storefront` defaults to `us`. Write — requires a Bearer token.",
+    security: [{ bearerAuth: [] }],
+    responses: {
+      200: { description: "Source already existed for this trackId (no new resource created)" },
+      201: { description: "Source materialized" },
+      400: { description: "Missing url/trackId, or unparseable identifier" },
+      404: { description: "iTunes Lookup found no matching app" },
+    },
+  }),
+  async (c) => {
+    const body = (await c.req.json().catch(() => null)) as {
+      url?: string;
+      trackId?: string | number;
+      platform?: "ios" | "macos";
+      storefront?: string;
+      orgSlug?: string;
+      productSlug?: string;
+    } | null;
+
+    const identifier = body?.url ?? (body?.trackId != null ? String(body.trackId) : undefined);
+    if (!identifier) {
+      return c.json({ error: "bad_request", message: "url or trackId is required" }, 400);
+    }
+
+    const db = createDb(c.env.DB);
+    const result = await materializeAppStoreSource(db, {
+      identifier,
+      platform: body?.platform,
+      storefront: body?.storefront,
+      orgSlug: body?.orgSlug,
+      productSlug: body?.productSlug,
+    });
+
+    if (result.status === "bad_request") {
+      return c.json({ error: "bad_request", message: "Could not parse App Store identifier" }, 400);
+    }
+    if (result.status === "not_found") {
+      return c.json({ error: "not_found", message: "No App Store app for that identifier" }, 404);
+    }
+    try {
+      c.executionCtx.waitUntil(embedSourceSideEffect(c.env, db, result.source.id));
+    } catch {
+      // no ExecutionContext in tests — embedding is best-effort
+    }
+    return c.json(result, result.status === "existing" ? 200 : 201);
+  },
 );
 
 sourceRoutes.post(
