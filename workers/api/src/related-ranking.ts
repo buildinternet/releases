@@ -35,14 +35,35 @@ export const THIN_WEIGHT = 0.5;
 const DAY_MS = 86_400_000;
 
 /**
- * The "no changes" / "no user-facing changes" / "no notable updates" family.
- * Anchored on `no … changes|updates|fixes` with an optional qualifier so it
- * catches the common changelog filler without matching arbitrary prose. Only
- * consulted for short bodies (see {@link BOILERPLATE_MAX_CHARS}), so a rich
- * release that merely mentions "no breaking changes" is never excluded.
+ * The "no changes" family: `no … changes|updates|fixes` with any short run of
+ * qualifier words in between, so it catches "no changes", "no user-facing
+ * changes", and "no code changes" alike. Only consulted for short bodies (see
+ * {@link BOILERPLATE_MAX_CHARS}) — the bounded gap plus the length gate keep a
+ * rich release that merely mentions "no breaking changes" from being excluded.
  */
-const BOILERPLATE_RE =
-  /\bno\s+(?:(?:user[\s-]?facing|notable|significant|meaningful|functional|breaking|major|visible)\s+)*(?:changes?|updates?|fixes?)\b/i;
+const BOILERPLATE_RE = /\bno\b[\s\w,'-]{0,24}\b(?:changes?|updates?|fixes?)\b/i;
+
+/**
+ * Placeholder bodies an extractor leaves behind when it found nothing to
+ * describe ("release notes do not describe the change", "no description").
+ * Same short-body gate as {@link BOILERPLATE_RE}.
+ */
+const PLACEHOLDER_RE =
+  /\b(?:(?:release )?notes?\s+(?:do|does)\s+not\s+describe|no\s+release\s+notes|no\s+description|no\s+notes\b|description\s+(?:unavailable|not\s+provided)|nothing\s+(?:to\s+note|noteworthy))\b/i;
+
+/**
+ * Length of a body once URLs and auto-generated scaffolding are stripped. A
+ * bare GitHub "Full Changelog: <compare-url>" body has real character length
+ * but no prose, so it would otherwise pass the length gate — this collapses it
+ * to ~0. Markdown punctuation is dropped too so the residual is just words.
+ */
+function meaningfulTextLength(text: string): number {
+  return text
+    .replace(/https?:\/\/\S+/gi, " ")
+    .replace(/\bfull\s+changelog\b/gi, " ")
+    .replace(/[#*_>`~()[\]:;,.\s-]+/g, " ")
+    .trim().length;
+}
 
 export interface ContentQuality {
   tier: ContentTier;
@@ -63,7 +84,13 @@ export function classifyContentQuality(
   const len = contentChars != null && contentChars > 0 ? contentChars : trimmed.length;
 
   if (len < MIN_CONTENT_CHARS) return { tier: "empty", weight: 0 };
-  if (len < BOILERPLATE_MAX_CHARS && BOILERPLATE_RE.test(trimmed)) {
+  // URL- / scaffolding-only bodies have length but no prose once stripped.
+  if (meaningfulTextLength(trimmed) < MIN_CONTENT_CHARS) return { tier: "empty", weight: 0 };
+  // Short boilerplate / placeholder notes that carry no real content.
+  if (
+    len < BOILERPLATE_MAX_CHARS &&
+    (BOILERPLATE_RE.test(trimmed) || PLACEHOLDER_RE.test(trimmed))
+  ) {
     return { tier: "empty", weight: 0 };
   }
   if (len < THIN_CONTENT_CHARS) return { tier: "thin", weight: THIN_WEIGHT };
