@@ -404,8 +404,13 @@ export class BatchOverviewWorkflow extends WorkflowEntrypoint<
       );
 
       const outcomes = await collectResults(client, anthropicBatchId, (message, customId) => {
-        // Per-outcome parse: extract body + citations. clampCitationsToBody
-        // catches any post-strip overhang before SQL even sees them.
+        // Per-outcome parse: extract body + citations. extractOverviewBody
+        // HTML-entity-decodes each text block before measuring offsets (#1146 —
+        // the batch model over-escapes the same way sub-agents do; the agent
+        // path's fix is releases-cli #229), and clampCitationsToBody catches any
+        // post-strip overhang before SQL even sees them. NB: the cron entry to
+        // this workflow self-gates on BATCH_OVERVIEW_ENABLED (false in prod), so
+        // today this path runs only via the admin POST / `overview batch`.
         const extraction = extractOverviewBody(message);
         const citations = clampCitationsToBody(extraction.body, extraction.citations);
         return {

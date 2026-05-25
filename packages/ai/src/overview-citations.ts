@@ -39,12 +39,41 @@ export interface OverviewExtraction {
   strippedHeading: boolean;
 }
 
+const HTML_ENTITY_MAP: Record<string, string> = {
+  "&amp;": "&",
+  "&lt;": "<",
+  "&gt;": ">",
+  "&quot;": '"',
+  "&#39;": "'",
+};
+
+/**
+ * Single-pass decode of the five entities models reflexively over-escape when
+ * emitting markdown (`&amp;`, `&lt;`, `&gt;`, `&quot;`, `&#39;`) — `Q&amp;A`,
+ * `streams.input&lt;T&gt;`. Single-pass so `&amp;lt;` decodes to `&lt;` (one
+ * level), not `<`, which makes it idempotent on already-clean bodies.
+ *
+ * Mirrors `unescapeHtmlEntities` in releases-cli (#229) so the agent-driven
+ * regen path and the batch auto-regen path normalize overview bodies
+ * identically. The store (`POST /v1/orgs/:slug/overview`) stays verbatim — this
+ * is a client-of-the-store concern.
+ */
+export function decodeHtmlEntities(s: string): string {
+  return s.replace(/&amp;|&lt;|&gt;|&quot;|&#39;/g, (m) => HTML_ENTITY_MAP[m] ?? m);
+}
+
 /**
  * Walk the assistant response, concatenate text blocks, and surface citations
  * pinned to character spans in the final body string.
  *
  * Non-text blocks (tool use, etc.) are skipped. The overview prompt never
  * issues tools, but defending against the shape is cheap.
+ *
+ * Each block's text is HTML-entity-decoded BEFORE its offsets are measured.
+ * Citations are whole-block spans (`runningOffset` → `runningOffset + len`), so
+ * decoding after accumulation would shrink the body and silently misalign every
+ * downstream citation. Decoding per block keeps the running offset and the body
+ * in lockstep. Idempotent on clean bodies (see `decodeHtmlEntities`).
  */
 export function extractOverviewBody(message: Anthropic.Message): OverviewExtraction {
   let runningOffset = 0;
@@ -53,7 +82,7 @@ export function extractOverviewBody(message: Anthropic.Message): OverviewExtract
 
   for (const block of message.content) {
     if (block.type !== "text") continue;
-    const text = block.text;
+    const text = decodeHtmlEntities(block.text);
     rawBody += text;
 
     const citations = block.citations ?? [];

@@ -24,6 +24,7 @@ import type Anthropic from "@anthropic-ai/sdk";
 import {
   extractOverviewBody,
   clampCitationsToBody,
+  decodeHtmlEntities,
   type OverviewCitation,
 } from "./overview-citations.js";
 
@@ -211,6 +212,77 @@ describe("extractOverviewBody", () => {
     expect(out.body).toBe("Body text.");
     expect(out.citations[0]!.startIndex).toBe(0);
     expect(out.citations[0]!.endIndex).toBe(10);
+  });
+
+  it("decodes the transport-artifact HTML entities in the body (#1146)", () => {
+    const out = extractOverviewBody(
+      makeMessage([{ text: "Q&amp;A on streams.input&lt;T&gt; &quot;done&quot; &#39;ok&#39;" }]),
+    );
+    expect(out.body).toBe(`Q&A on streams.input<T> "done" 'ok'`);
+    expect(out.citations).toEqual([]);
+  });
+
+  it("keeps a whole-block citation aligned to the DECODED body, not the escaped source", () => {
+    // "Q&amp;A shipped." is 16 chars escaped, "Q&A shipped." is 12 decoded.
+    // The citation spans the whole block, so its endIndex must be the decoded
+    // length (12). A naive decode-after-accumulate would leave endIndex at 16
+    // and clampCitationsToBody would silently truncate it.
+    const out = extractOverviewBody(
+      makeMessage([{ text: "Q&amp;A shipped.", citations: [citation({ source: "https://x/a" })] }]),
+    );
+    expect(out.body).toBe("Q&A shipped.");
+    expect(out.citations.length).toBe(1);
+    expect(out.citations[0]).toMatchObject({
+      startIndex: 0,
+      endIndex: "Q&A shipped.".length,
+      sourceUrl: "https://x/a",
+    });
+  });
+
+  it("tracks decoded running offsets so a later block's citation isn't shifted", () => {
+    // Block 1 decodes 8→5 chars ("A &amp; B" → "A & B"). Block 2's whole-block
+    // citation must start at the DECODED offset (5), not the escaped offset (9).
+    const out = extractOverviewBody(
+      makeMessage([
+        { text: "A &amp; B" },
+        { text: "plain.", citations: [citation({ source: "https://x/b" })] },
+      ]),
+    );
+    expect(out.body).toBe("A & Bplain.");
+    expect(out.citations.length).toBe(1);
+    expect(out.citations[0]).toMatchObject({
+      startIndex: "A & B".length,
+      endIndex: "A & Bplain.".length,
+      sourceUrl: "https://x/b",
+    });
+  });
+});
+
+// ── decodeHtmlEntities ───────────────────────────────────────────────────────
+
+describe("decodeHtmlEntities", () => {
+  it("decodes each of the five entities", () => {
+    expect(decodeHtmlEntities("a &amp; b")).toBe("a & b");
+    expect(decodeHtmlEntities("a &lt; b")).toBe("a < b");
+    expect(decodeHtmlEntities("a &gt; b")).toBe("a > b");
+    expect(decodeHtmlEntities("say &quot;hi&quot;")).toBe('say "hi"');
+    expect(decodeHtmlEntities("it&#39;s")).toBe("it's");
+  });
+
+  it("decodes mixed entities in one pass", () => {
+    expect(decodeHtmlEntities("(string &amp; {}) &lt;T&gt;")).toBe("(string & {}) <T>");
+  });
+
+  it("is single-pass: &amp;lt; decodes to &lt;, not <", () => {
+    expect(decodeHtmlEntities("&amp;lt;")).toBe("&lt;");
+  });
+
+  it("is idempotent on already-decoded text", () => {
+    expect(decodeHtmlEntities("foo & bar <T>")).toBe("foo & bar <T>");
+  });
+
+  it("leaves unrelated text unchanged", () => {
+    expect(decodeHtmlEntities("hello world")).toBe("hello world");
   });
 });
 
