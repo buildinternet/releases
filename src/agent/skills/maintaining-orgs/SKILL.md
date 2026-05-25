@@ -110,7 +110,7 @@ Use the Agent tool with `run_in_background: true` and `model: "sonnet"` for each
 
 **Fetch `needsFetch` rows in the parent, not the sub-agent.** For rows the manifest flags `needsFetch: true`, run `releases admin source fetch --org <slug>` from the parent _before_ dispatching — and have sub-agents skip the fetch step entirely (work from current indexed data). This centralizes fetch cost + exit-code visibility (you see a non-zero exit before spending generation tokens), avoids per-agent fetch races on shared sources, and keeps sub-agents read-only so they never trip a `Bash`/`Write` denial. It also measurably helps: a pre-dispatch fetch can widen a thin window (one sweep saw a source go 6 → 13 selectable releases after the parent fetch). Sub-agents whose org wasn't flagged `needsFetch` skip the fetch regardless — the most recent release is already < 7 days old.
 
-**Project `overview inputs` content for high-volume orgs.** A handful of orgs (`sentry`, `wordpress`, `pulumi`, …) return `overview inputs` payloads of 100K+ tokens — GitHub monorepo release notes and major-version announcements can each run 100K+ characters. The raw `--json` dump piped to stdout exceeds the sub-agent's Bash output cap (~30K chars) and is truncated before the model sees it, so the agent silently generates from only the first few releases. Have sub-agents fetch to a file and read a content-projected view (`jq '.selected |= map(.content = ((.content // "")[0:1000]))'`); the file write dodges the cap, and 1000 chars/release is what generation truncates to anyway. **A drop in citation count is the symptom** — in the 2026-05-25 sweep, `sentry` and `wordpress` came back with 9 and 5 citations from truncated reads, then 11 and 10 once redone from a complete read.
+**Clip `overview inputs` content for high-volume orgs.** A handful of orgs (`sentry`, `wordpress`, `pulumi`, …) return `overview inputs` payloads of 100K+ tokens — GitHub monorepo release notes and major-version announcements can each run 100K+ characters. The raw `--json` dump piped to stdout exceeds the sub-agent's Bash output cap (~30K chars) and is truncated before the model sees it, so the agent silently generates from only the first few releases. Have sub-agents always pass `--max-content-chars 1000`, which clips each release body to 1000 chars client-side before printing (the CLI still gets the full payload over the wire — only stdout is capped — and 1000 chars/release is what generation truncates to anyway). **A drop in citation count is the symptom** — in the 2026-05-25 sweep, `sentry` and `wordpress` came back with 9 and 5 citations from truncated reads, then 11 and 10 once redone from a complete read.
 
 Prompt template:
 
@@ -124,11 +124,9 @@ below are the load-bearing subset and override anything else.
   2. Do NOT fetch — the parent already fetched this org's sources. Work from
      current indexed data. (If you believe a fetch is needed, STOP and report
      it; don't fetch from inside the sub-agent.)
-  3. Fetch inputs to a FILE, then read a content-projected view — the raw
-     payload for high-volume orgs exceeds the Bash output cap and truncates
-     silently:
-       releases admin overview inputs {slug} --json > /tmp/{slug}-inputs.json
-       jq '.selected |= map(.content = ((.content // "")[0:1000]))' /tmp/{slug}-inputs.json
+  3. Read inputs with each release body clipped — the raw payload for
+     high-volume orgs exceeds the Bash output cap and truncates silently:
+       releases admin overview inputs {slug} --json --max-content-chars 1000
      If `selected` is empty, stop and report "empty-window". Use the URLs in
      `selected[*].url` as the citation source set — do not invent URLs. If the
      read still looks truncated (ends mid-JSON, or `selected` count is far below
