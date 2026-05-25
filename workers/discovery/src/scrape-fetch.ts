@@ -675,11 +675,18 @@ async function runScrapePath(
       cacheReadTokens: result.cacheReadTokens,
       cacheWriteTokens: result.cacheWriteTokens,
     });
-    deps.logger.info(
-      `Crawl extract mode=${result.mode} rounds=${result.toolRounds ?? "-"} ` +
-        `toolChars=${result.toolChars ?? "-"} cacheRead=${result.cacheReadTokens} ` +
-        `entries=${result.entries.length} in=${result.totalInput} out=${result.totalOutput}`,
-    );
+    logEvent("info", {
+      component: "scrape-fetch",
+      event: "crawl-extract",
+      sourceSlug: source.slug,
+      mode: result.mode,
+      toolRounds: result.toolRounds ?? null,
+      toolChars: result.toolChars ?? null,
+      cacheRead: result.cacheReadTokens,
+      entries: result.entries.length,
+      totalInput: result.totalInput,
+      totalOutput: result.totalOutput,
+    });
     if (result.hitMaxTokens) {
       throw new CategorizedError(
         "model",
