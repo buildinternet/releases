@@ -553,6 +553,7 @@ const patchProductHandler = async (c: import("hono").Context<Env>) => {
     tags?: string[];
     aliases?: string[];
     kind?: string | null;
+    avatarUrl?: string | null;
   } = {
     ...(c.req as unknown as { valid: (target: "json") => Record<string, unknown> }).valid("json"),
   };
@@ -574,6 +575,7 @@ const patchProductHandler = async (c: import("hono").Context<Env>) => {
   }
   if (body.category !== undefined) updates.category = body.category;
   if ("kind" in body) updates.kind = body.kind ?? null;
+  if (body.avatarUrl !== undefined) updates.avatarUrl = body.avatarUrl;
 
   if (Object.keys(updates).length === 0 && body.tags === undefined && body.aliases === undefined) {
     return c.json(product);
