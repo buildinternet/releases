@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { parseCoordinate } from "@buildinternet/releases-core/lookup-coordinate";
+import { Header } from "@/components/header";
 import { GhChangelogContent, GhChangelogSkeleton } from "@/components/gh-changelog-view";
 
 /**
@@ -31,19 +32,21 @@ export default async function GhChangelogPage({
 }) {
   if (process.env.NODE_ENV !== "development") notFound();
 
-  const { owner, repo } = await params;
-  const { path, source } = await searchParams;
+  const [{ owner, repo }, { path, source }] = await Promise.all([params, searchParams]);
   const coordinate = `${owner}/${repo}`;
 
   // Defensive: the route only ever serves github owner/repo coordinates.
   if (!parseCoordinate(coordinate)) notFound();
 
   return (
-    <Suspense
-      key={`${coordinate}:${path ?? ""}:${source ?? ""}`}
-      fallback={<GhChangelogSkeleton coordinate={coordinate} />}
-    >
-      <GhChangelogContent coordinate={coordinate} path={path} source={source} />
-    </Suspense>
+    <div className="min-h-screen">
+      <Header />
+      <Suspense
+        key={`${coordinate}:${path ?? ""}:${source ?? ""}`}
+        fallback={<GhChangelogSkeleton coordinate={coordinate} />}
+      >
+        <GhChangelogContent coordinate={coordinate} path={path} source={source} />
+      </Suspense>
+    </div>
   );
 }
