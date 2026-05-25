@@ -31,7 +31,7 @@ export interface LatestReleasesFilter {
   includePrereleases?: boolean;
   /**
    * Exclude releases whose source.type is in this list. Validated upstream
-   * against the canonical `["github","scrape","feed","agent"]` set; we trust
+   * against the canonical `["github","scrape","feed","agent","appstore"]` set; we trust
    * the input here and bind it directly into a NOT IN clause.
    */
   excludeSourceTypes?: string[];

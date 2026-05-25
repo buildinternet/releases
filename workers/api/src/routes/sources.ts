@@ -102,6 +102,7 @@ import { authMiddleware } from "../middleware/auth.js";
 import { sourceToMarkdown, releaseToMarkdown } from "@releases/rendering/formatters.js";
 import { fetchOne, embedReleasesForSource } from "../cron/poll-fetch.js";
 import { getSourceMeta, isGitHubFetched } from "@releases/adapters/feed.js";
+import { isAppStoreFetched } from "@releases/adapters/source-meta";
 import { sanitizeVersion } from "@releases/adapters/extract/shared.js";
 import {
   discoverChangelogPaths,
@@ -597,9 +598,10 @@ sourceRoutes.post("/sources/:slug/fetch", postSourceFetchRoute, async (c) => {
   if (
     src.type === "feed" ||
     isGitHubFetched(src, meta) ||
+    isAppStoreFetched(src) ||
     (src.type === "scrape" && meta.feedUrl != null)
   ) {
-    // Feed, GitHub, and scrape sources with a discovered feedUrl: fetch server-side
+    // Feed, GitHub, App Store, and scrape sources with a discovered feedUrl: fetch server-side
     const githubToken = (await getSecret(c.env.GITHUB_TOKEN)) ?? undefined;
     const sessionId = c.req.query("sessionId") ?? undefined;
     const dryRun = c.req.query("dryRun") === "true" || c.req.query("dryRun") === "1";
