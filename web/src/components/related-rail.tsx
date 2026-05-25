@@ -13,11 +13,6 @@ interface RelatedRailProps {
   limit?: number;
 }
 
-/** Half-life (in days) of the recency boost applied to raw semantic score. */
-const RECENCY_HALF_LIFE_DAYS = 75;
-/** Score multiplier for items with no usable date — keeps them eligible but demoted. */
-const UNDATED_PENALTY = 0.25;
-
 /** Shared card chrome. */
 const CARD_CLASS =
   "flex gap-3 bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-lg p-3 hover:border-stone-300 dark:hover:border-stone-600 transition-colors h-full";
@@ -34,9 +29,11 @@ const CARD_IMAGE_CLASS =
  *   - `scope="org"` — "More from {org}" (same-org neighbors)
  *   - `scope="global"` — "From other products" (neighbors in other orgs)
  *
- * Releases are reranked by semantic score blended with a recency boost.
- * Renders null when the anchor is missing, the fetch degrades, or nothing
- * survives — so callers can stack both rails and let an empty one collapse.
+ * The API returns neighbors already ranked (cosine × recency × content
+ * quality) with content-free releases dropped and `excludeOrg` applied, so
+ * this component renders that order directly. Renders null when the anchor is
+ * missing, the fetch degrades, or nothing survives — so callers can stack both
+ * rails and let an empty one collapse.
  */
 export async function RelatedRail({
   anchorReleaseId,
@@ -47,25 +44,17 @@ export async function RelatedRail({
 }: RelatedRailProps) {
   if (!anchorReleaseId) return null;
 
-  // Enough headroom for the recency rerank to have real choice without
-  // hydrating 20 neighbors we'll throw away. Matches the backend's
-  // Math.max(limit * 3, 25) floor when limit defaults to ~8.
-  const fetchLimit = Math.max(limit * 3, 10);
+  const res = await api
+    .relatedReleases(anchorReleaseId, scope, limit, excludeOrgSlug)
+    .catch((err) => {
+      console.error(
+        `[related-rail] releases fetch failed scope=${scope} anchor=${anchorReleaseId}:`,
+        err instanceof Error ? err.message : err,
+      );
+      return null;
+    });
 
-  const res = await api.relatedReleases(anchorReleaseId, scope, fetchLimit).catch((err) => {
-    console.error(
-      `[related-rail] releases fetch failed scope=${scope} anchor=${anchorReleaseId}:`,
-      err instanceof Error ? err.message : err,
-    );
-    return null;
-  });
-
-  let releases = res && !res.degraded ? res.items : [];
-  if (excludeOrgSlug) {
-    releases = releases.filter((r) => r.source.orgSlug !== excludeOrgSlug);
-  }
-
-  const items = rerankReleases(releases, limit);
+  const items = res && !res.degraded ? res.items : [];
   if (items.length === 0) return null;
 
   return (
@@ -82,30 +71,6 @@ export async function RelatedRail({
       </ul>
     </section>
   );
-}
-
-/**
- * Blend semantic score with an exponential recency decay. The half-life is
- * set so that a 75-day-old item is worth half a brand-new one at the same
- * cosine score — enough to move 6-month-old matches behind fresh ones
- * without flattening score entirely. Items without a usable date still
- * compete, but at a fixed penalty so they can't dominate the rail.
- */
-function recencyRank(score: number, date: string | null): number {
-  if (!date) return score * UNDATED_PENALTY;
-  const ms = Date.parse(date);
-  if (!Number.isFinite(ms)) return score * UNDATED_PENALTY;
-  const ageDays = Math.max(0, (Date.now() - ms) / 86_400_000);
-  return score * Math.pow(0.5, ageDays / RECENCY_HALF_LIFE_DAYS);
-}
-
-/** Rerank neighbors by recency-weighted score and take the top `limit`. */
-function rerankReleases(releases: RelatedReleaseItem[], limit: number): RelatedReleaseItem[] {
-  return releases
-    .map((item) => ({ item, rank: recencyRank(item.score, item.publishedAt) }))
-    .toSorted((a, b) => b.rank - a.rank)
-    .slice(0, limit)
-    .map((r) => r.item);
 }
 
 /**

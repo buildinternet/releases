@@ -472,9 +472,16 @@ export const api = {
       `/v1/orgs/${ref.orgSlug}/sources/${ref.sourceSlug}/changelog${qs ? `?${qs}` : ""}`,
     );
   },
-  relatedReleases: (releaseId: string, scope: "org" | "global" = "global", limit = 8) =>
+  relatedReleases: (
+    releaseId: string,
+    scope: "org" | "global" = "global",
+    limit = 8,
+    excludeOrg?: string | null,
+  ) =>
     fetchApi<RelatedReleasesResponse>(
-      `/v1/related/releases?release=${encodeURIComponent(releaseId)}&scope=${scope}&limit=${limit}`,
+      `/v1/related/releases?release=${encodeURIComponent(releaseId)}&scope=${scope}&limit=${limit}${
+        excludeOrg ? `&excludeOrg=${encodeURIComponent(excludeOrg)}` : ""
+      }`,
       RELATED_CACHE_OPTS,
     ),
   coverage: (releaseId: string) =>
