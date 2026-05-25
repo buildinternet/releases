@@ -12,6 +12,7 @@
     "./github-discovery": "./src/github-discovery.ts",
     "./cloudflare": "./src/cloudflare.ts",
     "./crawl": "./src/crawl.ts",
+    "./appstore": "./src/appstore.ts",
     "./feed": "./src/feed.ts",
     "./feed-depth": "./src/feed-depth.ts",
     "./extract": "./src/extract/index.ts",

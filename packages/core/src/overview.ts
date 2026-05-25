@@ -26,6 +26,7 @@ export const PER_SOURCE_CAPS: Record<Source["type"], number> = {
   scrape: 20,
   feed: 20,
   agent: 20,
+  appstore: 20,
 };
 
 /**
