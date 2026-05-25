@@ -477,6 +477,19 @@ export async function resolveHeroImage(
   }
 }
 
+/**
+ * Resolve the display avatar for a surface that may belong to a product:
+ * prefer the product's own icon (e.g. an App Store app icon), then fall back
+ * to the org's avatar → GitHub-handle chain.
+ */
+export async function resolveDisplayAvatarUrl(
+  productAvatarUrl: string | null | undefined,
+  org: OrgAvatarShape,
+): Promise<string | null> {
+  if (productAvatarUrl) return productAvatarUrl;
+  return resolveAvatarUrl(org);
+}
+
 export async function resolveAvatarUrl(org: OrgAvatarShape): Promise<string | null> {
   if (!org) return null;
   if (org.avatarUrl) return org.avatarUrl;

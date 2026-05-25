@@ -6,7 +6,7 @@ import {
   formatCount,
   renderOgFallback,
   renderOgImage,
-  resolveAvatarUrl,
+  resolveDisplayAvatarUrl,
 } from "@/lib/og";
 
 export const alt = "Product on releases.sh";
@@ -25,7 +25,7 @@ export default async function Image({
       api.productDetail({ orgSlug, productSlug }),
       api.orgDetail(orgSlug).catch(() => null),
     ]);
-    const avatarUrl = await resolveAvatarUrl(orgDetail);
+    const avatarUrl = await resolveDisplayAvatarUrl(product.avatarUrl, orgDetail);
 
     return renderOgImage({
       eyebrow: "Product",
