@@ -4,6 +4,7 @@ import { createRemarkPlugins } from "@/lib/markdown-plugins";
 import { rehypeShikiPlugin } from "@/lib/shiki";
 import { detailMarkdownComponents } from "@/components/markdown-components";
 import { formatDate } from "@/lib/formatters";
+import { adminApi } from "@/lib/api";
 import type { GhChangelogParseResult, IndexedSourceRef } from "@/lib/api";
 
 /**
@@ -94,6 +95,117 @@ function EmptyState({ repo }: { repo: string }) {
   );
 }
 
+function Spinner({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <circle cx="8" cy="8" r="6.25" stroke="currentColor" strokeOpacity="0.25" strokeWidth="1.5" />
+      <path
+        d="M8 1.75a6.25 6.25 0 0 1 6.25 6.25"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+/** Shell shown while the parse + lookup are in flight. Mirrors the loaded
+ *  layout (same container, header chrome, two-column grid) so the streamed
+ *  content swaps in with minimal shift. The repo coordinate is known from the
+ *  route, so we render it immediately instead of a blank box. */
+export function GhChangelogSkeleton({ coordinate }: { coordinate: string }) {
+  return (
+    <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8" aria-busy="true">
+      <header className="mb-6 border-b border-stone-200 pb-5 dark:border-stone-800">
+        <div className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-wide text-stone-400 dark:text-stone-500">
+          <span>Changelog preview</span>
+          <span aria-hidden="true">·</span>
+          <span className="rounded bg-amber-100 px-1.5 py-0.5 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400">
+            local dev
+          </span>
+        </div>
+        <h1 className="mt-2 font-mono text-2xl font-semibold text-stone-900 dark:text-stone-100">
+          {coordinate}
+        </h1>
+        <div
+          className="mt-2 flex items-center gap-2 text-[13px] text-stone-500 dark:text-stone-400"
+          aria-live="polite"
+        >
+          <Spinner className="h-3.5 w-3.5 animate-spin" />
+          <span>Fetching changelog…</span>
+        </div>
+      </header>
+      <div className="grid gap-8 lg:grid-cols-[180px_minmax(0,1fr)]" aria-hidden="true">
+        <nav className="hidden animate-pulse lg:block">
+          <div className="mb-2 h-3 w-16 rounded bg-stone-200 dark:bg-stone-800" />
+          <div className="space-y-2">
+            {Array.from({ length: 12 }).map((_, i) => (
+              <div key={i} className="h-3 w-24 rounded bg-stone-200 dark:bg-stone-800" />
+            ))}
+          </div>
+        </nav>
+        <div className="min-w-0 animate-pulse space-y-3">
+          <div className="h-5 w-52 rounded bg-stone-200 dark:bg-stone-800" />
+          <div className="h-3 w-1/3 rounded bg-stone-200 dark:bg-stone-800" />
+          <div className="h-3 w-11/12 rounded bg-stone-200 dark:bg-stone-800" />
+          <div className="h-3 w-10/12 rounded bg-stone-200 dark:bg-stone-800" />
+          <div className="h-3 w-9/12 rounded bg-stone-200 dark:bg-stone-800" />
+          <div className="mt-6 h-5 w-44 rounded bg-stone-200 dark:bg-stone-800" />
+          <div className="h-3 w-11/12 rounded bg-stone-200 dark:bg-stone-800" />
+          <div className="h-3 w-8/12 rounded bg-stone-200 dark:bg-stone-800" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ResolveError({ coordinate }: { coordinate: string }) {
+  return (
+    <div className="mx-auto max-w-2xl px-4 py-16 text-center">
+      <h1 className="font-mono text-xl font-semibold text-stone-900 dark:text-stone-100">
+        {coordinate}
+      </h1>
+      <p className="mx-auto mt-3 max-w-md text-[14px] leading-relaxed text-stone-500 dark:text-stone-400">
+        Couldn&apos;t resolve this repo&apos;s changelog. It may not exist, GitHub may have
+        rate-limited us, or the admin API key isn&apos;t configured locally (
+        <span className="font-mono">RELEASES_API_KEY</span>).
+      </p>
+    </div>
+  );
+}
+
+/**
+ * Async data boundary: fetches the deterministic parse + the "already indexed?"
+ * lookup, then renders the viewer (or the resolve-error fallback). Kept separate
+ * from the page so the page can wrap it in `<Suspense>` and stream the shell
+ * (header chrome + skeleton) before these GitHub round-trips resolve.
+ */
+export async function GhChangelogContent({
+  coordinate,
+  path,
+  source,
+}: {
+  coordinate: string;
+  path?: string;
+  source?: string;
+}) {
+  // `path` (a monorepo workspace changelog) and `source` are power-user
+  // selectors honored from the query string; no visible control yet.
+  const sourceInput =
+    source === "auto" || source === "github_releases" || source === "changelog_file"
+      ? source
+      : undefined;
+
+  const [result, indexed] = await Promise.all([
+    adminApi.parseChangelog({ repo: coordinate, path, source: sourceInput }),
+    adminApi.sourceByCoordinate(coordinate),
+  ]);
+
+  if (!result) return <ResolveError coordinate={coordinate} />;
+
+  return <GhChangelogView result={result} indexed={indexed} />;
+}
+
 export function GhChangelogView({
   result,
   indexed,
@@ -127,8 +239,15 @@ export function GhChangelogView({
             </>
           )}
           <span aria-hidden="true">·</span>
-          <span>
-            {releases.length} {releases.length === 1 ? "release" : "releases"}
+          <span
+            title={
+              result.capped
+                ? "GitHub returns at most 100 releases per request; this shows the 100 most recent."
+                : undefined
+            }
+          >
+            {result.capped ? `${releases.length}+` : releases.length}{" "}
+            {releases.length === 1 ? "release" : "releases"}
           </span>
           <span aria-hidden="true">·</span>
           <a
@@ -158,9 +277,16 @@ export function GhChangelogView({
                   <li key={i}>
                     <a
                       href={`#${anchorId(i)}`}
-                      className="block truncate rounded px-2 py-1 font-mono text-[12px] text-stone-500 hover:bg-stone-100 hover:text-stone-900 dark:text-stone-400 dark:hover:bg-stone-800 dark:hover:text-stone-100"
+                      className="group block rounded px-2 py-1 hover:bg-stone-100 dark:hover:bg-stone-800"
                     >
-                      {r.version ?? r.title}
+                      <span className="block truncate font-mono text-[12px] text-stone-500 group-hover:text-stone-900 dark:text-stone-400 dark:group-hover:text-stone-100">
+                        {r.version ?? r.title}
+                      </span>
+                      {r.publishedAt && (
+                        <span className="block truncate text-[10px] tabular-nums text-stone-400 dark:text-stone-500">
+                          {formatDate(r.publishedAt)}
+                        </span>
+                      )}
                     </a>
                   </li>
                 ))}

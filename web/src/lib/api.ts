@@ -241,6 +241,8 @@ export interface GhChangelogParseResult {
   repo: string;
   source: "github_releases" | "changelog_file" | null;
   parsable: boolean;
+  /** GitHub Releases hit the single-page (100) cap — older releases exist. */
+  capped: boolean;
   format: "keep-a-changelog" | "conventional" | "plain" | "unknown" | null;
   file: {
     path: string;

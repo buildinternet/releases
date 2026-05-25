@@ -51,11 +51,34 @@ type ParseBody = {
   repo: string;
   source: "github_releases" | "changelog_file" | null;
   parsable: boolean;
+  capped: boolean;
   format: string | null;
   file: { path: string; truncated: boolean } | null;
   releases: { version: string | null; title: string; publishedAt: string | null }[];
   stats: { releasesParsed: number; githubRequests: number };
 };
+
+type GitHubReleaseRow = {
+  tag_name: string;
+  name: string | null;
+  body: string | null;
+  html_url: string;
+  published_at: string | null;
+  prerelease: boolean;
+};
+
+/** Build a GitHub Releases API row with sane defaults. */
+function ghRelease(over: Partial<GitHubReleaseRow> = {}): GitHubReleaseRow {
+  return {
+    tag_name: "v1.0.0",
+    name: null,
+    body: "- a change",
+    html_url: "https://github.com/owner/repo/releases/tag/v1.0.0",
+    published_at: "2026-01-01T00:00:00Z",
+    prerelease: false,
+    ...over,
+  };
+}
 
 describe("POST /changelog/parse", () => {
   it("auto: prefers GitHub Releases when they have bodies", async () => {
@@ -302,5 +325,64 @@ describe("POST /changelog/parse", () => {
     const body = (await res.json()) as ParseBody;
     expect(body.source).toBe("changelog_file");
     expect(body.releases[0].version).toBe("3.0.0");
+    // changelog_file source is never capped (the whole file is parsed).
+    expect(body.capped).toBe(false);
+  });
+
+  it("github_releases: re-sorts releases by published_at descending", async () => {
+    // Returned out of order (GitHub's default created_at order can diverge from
+    // publish order); the handler must re-sort newest-first.
+    installFetch((url) => {
+      if (url === "https://api.github.com/repos/owner/repo") return json({});
+      if (url === RELEASES_URL) {
+        return json([
+          ghRelease({ tag_name: "v2.1.0", published_at: "2026-02-01T00:00:00Z" }),
+          ghRelease({ tag_name: "v3.0.0", published_at: "2026-05-01T00:00:00Z" }),
+          ghRelease({ tag_name: "v2.0.0", published_at: "2026-01-01T00:00:00Z" }),
+          ghRelease({ tag_name: "v2.5.0", published_at: "2026-03-01T00:00:00Z" }),
+        ]);
+      }
+      return new Response("nf", { status: 404 });
+    });
+    const res = await call({ repo: "owner/repo", source: "github_releases" });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as ParseBody;
+    expect(body.releases.map((r) => r.version)).toEqual(["v3.0.0", "v2.5.0", "v2.1.0", "v2.0.0"]);
+    expect(body.capped).toBe(false);
+  });
+
+  it("github_releases: sets capped when a full page (100) is returned", async () => {
+    const hundred = Array.from({ length: 100 }, (_, i) =>
+      ghRelease({
+        tag_name: `v1.0.${i}`,
+        published_at: new Date(Date.UTC(2026, 0, 1) + i * 86400000).toISOString(),
+      }),
+    );
+    installFetch((url) => {
+      if (url === "https://api.github.com/repos/owner/repo") return json({});
+      if (url === RELEASES_URL) return json(hundred);
+      return new Response("nf", { status: 404 });
+    });
+    const res = await call({ repo: "owner/repo", source: "github_releases" });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as ParseBody;
+    expect(body.releases.length).toBe(100);
+    expect(body.capped).toBe(true);
+    // Newest-first after the re-sort: v1.0.99 was published last.
+    expect(body.releases[0].version).toBe("v1.0.99");
+  });
+
+  it("github_releases: not capped just under the page size", async () => {
+    const ninetyNine = Array.from({ length: 99 }, (_, i) => ghRelease({ tag_name: `v1.0.${i}` }));
+    installFetch((url) => {
+      if (url === "https://api.github.com/repos/owner/repo") return json({});
+      if (url === RELEASES_URL) return json(ninetyNine);
+      return new Response("nf", { status: 404 });
+    });
+    const res = await call({ repo: "owner/repo", source: "github_releases" });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as ParseBody;
+    expect(body.releases.length).toBe(99);
+    expect(body.capped).toBe(false);
   });
 });
