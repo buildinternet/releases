@@ -12,6 +12,7 @@ import {
   scoreRelatedRelease,
   RELATED_RECENCY_HALF_LIFE_DAYS,
   RELATED_UNDATED_PENALTY,
+  RELATED_GLOBAL_MIN_RANK,
 } from "../../workers/api/src/related-ranking.js";
 
 const DAY_MS = 86_400_000;
@@ -158,5 +159,22 @@ describe("scoreRelatedRelease", () => {
       now,
     );
     expect(fullItem.rank).toBeGreaterThan(thinItem.rank);
+  });
+
+  // The global rail hides cards whose combined rank falls below
+  // RELATED_GLOBAL_MIN_RANK. These inputs mirror the prod smoke: a thin
+  // anchor's best global match (high cosine but ~3.5 months stale) must fall
+  // below the floor, while a strong recent match must clear it comfortably.
+  it("floor separates a stale global match from a strong recent one", () => {
+    const stale = scoreRelatedRelease(
+      { score: 0.75, publishedAt: iso(110), summary: full, contentChars: 400 },
+      now,
+    ).rank;
+    const strong = scoreRelatedRelease(
+      { score: 0.7, publishedAt: iso(20), summary: full, contentChars: 400 },
+      now,
+    ).rank;
+    expect(stale).toBeLessThan(RELATED_GLOBAL_MIN_RANK);
+    expect(strong).toBeGreaterThan(RELATED_GLOBAL_MIN_RANK);
   });
 });
