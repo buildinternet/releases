@@ -7,7 +7,7 @@ export type Incremental<T> =
   | { [P in keyof T]?: P extends " $fragmentName" | "__typename" ? T[P] : never };
 import { TypedDocumentNode as DocumentNode } from "@graphql-typed-document-node/core";
 /** How a source is ingested: GitHub releases API, scraped HTML, parsed feed, or AI agent. */
-export type SourceType = "agent" | "feed" | "github" | "scrape";
+export type SourceType = "agent" | "appstore" | "feed" | "github" | "scrape";
 
 export type HomepageTickerQueryVariables = Exact<{
   limit: number;
