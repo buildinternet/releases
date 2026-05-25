@@ -44,6 +44,9 @@ describe("parseAppStoreIdentifier", () => {
     expect(parseAppStoreIdentifier("github:foo/bar")).toBeNull();
     expect(parseAppStoreIdentifier("")).toBeNull();
   });
+  it("rejects a spoofed host that merely mentions apps.apple.com", () => {
+    expect(parseAppStoreIdentifier("https://evil.example/apps.apple.com/id324684580")).toBeNull();
+  });
 });
 
 describe("URL helpers", () => {

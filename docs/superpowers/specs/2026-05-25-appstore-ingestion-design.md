@@ -5,7 +5,7 @@
 adapter. Each store version becomes a Release. Forward-only history
 (latest-version polling). Android, historical backfill, R2 asset mirroring, and
 the on-demand coordinate path are explicitly out of scope for v1 (see
-[§10](#10-out-of-scope-v1)).
+[§12](#12-out-of-scope-v1)).
 
 This supersedes the draft `mobile-app-ingestion-spec.md`, which was written
 without inspecting the codebase. Its core direction is sound, but it mislabels
@@ -203,7 +203,7 @@ Releases are unique on `(source_id, url)`. To keep each version a distinct
 release without touching the global unique index or the insert path, the
 per-release `url` carries the version as a query param:
 
-```
+```text
 source.url   = https://apps.apple.com/us/app/id324684580          (clean, human)
 release.url  = https://apps.apple.com/us/app/id324684580?v=9.0.12  (dedup key)
 ```

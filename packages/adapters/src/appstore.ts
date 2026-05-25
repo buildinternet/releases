@@ -48,8 +48,18 @@ export function parseAppStoreIdentifier(
   if (!trimmed) return null;
   if (TRACK_ID_RE.test(trimmed)) return { trackId: trimmed, platform, storefront };
   const m = trimmed.match(URL_ID_RE);
-  if (m && trimmed.includes("apps.apple.com")) {
-    return { trackId: m[1]!, platform, storefront };
+  if (m) {
+    // Validate the host instead of a substring check, so a stray
+    // "apps.apple.com" anywhere in the string can't smuggle in a trackId.
+    // Tolerate a scheme-less paste by prepending https:// before parsing.
+    try {
+      const parsed = new URL(/^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`);
+      if (parsed.hostname === "apps.apple.com" || parsed.hostname.endsWith(".apps.apple.com")) {
+        return { trackId: m[1]!, platform, storefront };
+      }
+    } catch {
+      // not a parseable URL — fall through to null
+    }
   }
   return null;
 }
@@ -83,15 +93,18 @@ export function mapListingToRawReleases(
   const cleanUrl = stripUoParam(listing.trackViewUrl);
   const screenshots = [...(listing.screenshotUrls ?? []), ...(listing.ipadScreenshotUrls ?? [])];
   const media = screenshots.map((url) => ({ type: "image" as const, url }));
+  // Guard against a malformed date string producing an Invalid Date, which
+  // would throw downstream on .toISOString().
+  const published = listing.currentVersionReleaseDate
+    ? new Date(listing.currentVersionReleaseDate)
+    : undefined;
   return [
     {
       version: listing.version,
       title: `${listing.trackName} ${listing.version}`,
       content: listing.releaseNotes ?? "",
       url: versionDistinctUrl(cleanUrl, listing.version),
-      publishedAt: listing.currentVersionReleaseDate
-        ? new Date(listing.currentVersionReleaseDate)
-        : undefined,
+      publishedAt: published && !Number.isNaN(published.getTime()) ? published : undefined,
       media,
     },
   ];

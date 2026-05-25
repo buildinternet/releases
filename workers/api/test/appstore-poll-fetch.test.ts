@@ -86,8 +86,15 @@ describe("appstore pollOne", () => {
   it("marks the source changed without an HTTP probe", async () => {
     const db = createTestDb();
     const source = await seedAppStoreSource(db);
+    // Enforce the no-probe contract: any network call fails the test.
+    let fetched = false;
+    globalThis.fetch = (async () => {
+      fetched = true;
+      throw new Error("pollOne must not make an HTTP request for appstore sources");
+    }) as unknown as typeof fetch;
     // oxlint-disable-next-line no-explicit-any -- BunSQLiteDatabase vs DrizzleD1Database; works at runtime via the shim
     const result = await pollOne(db as any, source, new Date());
+    expect(fetched).toBe(false);
     expect(result.changed).toBe(true);
   });
 });
