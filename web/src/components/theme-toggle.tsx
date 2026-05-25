@@ -23,6 +23,7 @@ export function ThemeToggle() {
   // light = sun, dark = moon, system = monitor
   return (
     <button
+      type="button"
       onClick={cycle}
       className="text-stone-400 hover:text-stone-600 dark:text-stone-500 dark:hover:text-stone-300 transition-colors"
       aria-label={`Theme: ${displayTheme}`}
