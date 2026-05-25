@@ -3,7 +3,7 @@
 ## Problem
 
 The `release-feed` MCP App UI (shared by `get_collection_releases` and
-`get_latest_releases`, in `workers/mcp/ui/release-feed/`) has four problems,
+`get_latest_releases`, in `workers/mcp/ui/release-feed/`) has five problems,
 all visible when rendering a 40-item collection feed:
 
 1. **Unbounded height.** The feed `<main>` grows to fit every release, so the
@@ -17,10 +17,20 @@ all visible when rendering a 40-item collection feed:
 4. **No drill-down.** The only path to full content is the "Ask about this"
    button, which sends a chat message asking the model to call `get_release` —
    it leaves the app entirely.
+5. **The model-facing text isn't self-describing.** The text the model reads
+   (`content[0].text`, built identically at `tools.ts:658` and `tools.ts:2417`)
+   renders each release as title/byline + a silent 500-char slice. It omits the
+   release `id`, any content-size signal, and any truncation marker — so the
+   model can't tell a complete short release from a 1%-of-50K preview, and has no
+   `rel_…` handle to pass to `get_release` for the rest. The structured payload
+   carries `id`/`contentChars`/`contentTokens` (for the App UI), but the model
+   never sees structured content — only the text channel.
 
 The goal: make the feed take less vertical space, render markdown the way the
-web app does, and allow drilling into a single release to read its full content
-inline — with the overall presentation heavily inspired by the existing web feed.
+web app does, allow drilling into a single release to read its full content
+inline, and make every tool response self-describing enough that the agent knows
+whether and how to fetch more — with the overall presentation heavily inspired by
+the existing web feed.
 
 ## Decisions (settled during brainstorming)
 
@@ -31,7 +41,8 @@ inline — with the overall presentation heavily inspired by the existing web fe
 | Markdown fidelity   | **Web parity, text + structure** — reuse the web's `react-markdown` + remark stack (GFM, emoji, GitHub alerts, GitHub refs) |
 | Media               | **Inline images kept** (height-capped); video iframes (YouTube/Vimeo/Loom) and shiki syntax highlighting **excluded**       |
 | Fixed height        | **~520px** (header + ~2–3 rows visible, scroll for the rest)                                                                |
-| Scope               | Only the shared `release-feed` app changes → both `get_collection_releases` and `get_latest_releases` improve at once       |
+| Model-facing text   | **Self-describing releases** — each text block carries the release `id`, a content-size signal (chars + tokens), and a truncation/`get_release` hint when the preview is partial |
+| Scope               | The shared `release-feed` app, its two backing feed tools' text fallback, and `get_release` → both `get_collection_releases` and `get_latest_releases` improve at once |
 
 ## Architecture
 
@@ -172,10 +183,52 @@ The existing text fallback is untouched, so non-app hosts and the model see the
 same response as today. `coordinate` is built the same way the feed row builds it
 (`org.slug/source.slug`, falling back to source slug).
 
+### 6. Model-facing text: self-describing releases
+
+The App UI is only half the response — the model reads `content[0].text`. Both
+feed tools must make each release block answer three questions for the agent:
+_what is this (handle), how big is it, and do I need to fetch more?_
+
+Per-release text block becomes:
+
+```
+<title> | <version> | <date>
+ID: rel_<nanoid>
+Source: <name> (<coordinate>) | Version: <…> | Date: <…>
+<preview — first 500 chars>
+[… truncated — ~<N> tokens / <M> chars total. Call get_release(id: "rel_<nanoid>") for the full release.]
+```
+
+Rules:
+
+- **`id` line always present** — it's the handle for `get_release` (and for
+  "Ask about this" in the UI). Without it the agent can't fetch more.
+- **Size signal** — surface `contentChars` and `contentTokens` so the agent can
+  budget. `get_latest_releases` already selects these columns; the collection
+  feed query (`packages/core-internal/src/collection-feed.ts`, `AggregateReleaseRow`)
+  does **not** — add `r.content_chars` / `r.content_tokens` to its SELECT + row
+  type. This also backfills the collection App-UI payload, which currently passes
+  `null` for both, and benefits the REST `/v1/collections/:slug/releases` surface.
+- **Truncation hint is conditional** — only appended when the preview is actually
+  shorter than the full body (`contentChars > preview.length`, or content was
+  sliced). A short release whose full body fits in 500 chars gets no hint and no
+  wasted "fetch more" nudge.
+- Implement once in a shared `renderFeedReleaseText(row)` helper used by both
+  `getLatestReleases` and `getCollectionReleases` (today the two duplicate the
+  block). Cursor footer is unchanged.
+- `get_release` already emits `ID:` + full body, so the loop closes once the feed
+  hands the agent the id.
+
+This keeps the same self-describing contract on the structured side too: the App
+UI's `ReleaseFeedRow` already carries `id`/`contentChars`/`contentTokens` — the
+collection path just needs the columns threaded through so they're non-null.
+
 ## Out of scope
 
-- Other MCP tools' results (this is the first of several; only `release-feed`
-  here).
+- Other MCP tools' UI (this is the first of several; only `release-feed` here).
+- Extending the self-describing text contract (`id` + size + fetch hint) to other
+  tools — the `search` / `search_releases` release hits are the obvious next
+  candidate, but they're a separate follow-up, not this spec.
 - Video iframe embeds, shiki syntax highlighting, image galleries / thumbnails.
 - Changing pagination semantics, cursor shape, or tool inputs.
 - Web app changes beyond re-pointing its markdown-plugin import at the shared
@@ -187,6 +240,11 @@ same response as today. `coordinate` is built the same way the feed row builds i
   present, `content` falls back to `summary`, suppressed releases still 404, text
   fallback unchanged. Use the in-process worker pattern already established in the
   MCP test suite.
+- **Self-describing text:** assert both feed tools' text emits an `ID:` line per
+  release, surfaces a size signal, and appends the `get_release` hint only when
+  the body is longer than the preview (not for short, fully-shown releases).
+  Assert the collection feed query now returns non-null `contentChars` /
+  `contentTokens`.
 - **Shared plugins:** a smoke test that `@releases/rendering/markdown-plugins`
   exports the expected plugin array and that web still imports it cleanly
   (`web` + worker `tsc --noEmit`).
