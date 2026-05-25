@@ -49,6 +49,37 @@ describe("classifyContentQuality", () => {
     expect(q.weight).toBe(1);
   });
 
+  it("marks a 'version bump only, no code changes' release empty", () => {
+    // The qualifier ('code') sits between 'no' and 'changes' — the broadened
+    // boilerplate match must catch it, not just the known-qualifier list.
+    const text =
+      "## 2.106.2-beta.2 (2026-05-22)\n\nThis was a version bump only, there were no code changes.";
+    expect(classifyContentQuality(text, text.length).tier).toBe("empty");
+  });
+
+  it("marks the 'release notes do not describe the change' placeholder empty", () => {
+    expect(classifyContentQuality("Release notes do not describe the change.", 41).tier).toBe(
+      "empty",
+    );
+  });
+
+  it("marks a bare 'Full Changelog' compare link empty", () => {
+    const text =
+      "**Full Changelog**: https://github.com/cloudflare/workerd/compare/v1.20260516.1...v1.20260517.1";
+    expect(classifyContentQuality(text, text.length).tier).toBe("empty");
+  });
+
+  it("keeps a real release that happens to include a link as full", () => {
+    const text =
+      "Added streaming support and reworked the config loader for clarity. See the migration " +
+      "guide at https://example.com/docs for upgrade steps, breaking-change notes, and examples.";
+    expect(classifyContentQuality(text, text.length).tier).toBe("full");
+  });
+
+  it("does not over-exclude 'no new features' (lacks a changes/updates/fixes head)", () => {
+    expect(classifyContentQuality("Bug fixes, no new features", 26).tier).toBe("thin");
+  });
+
   it("classifies a substantial body as full", () => {
     expect(classifyContentQuality("x".repeat(400), 400).tier).toBe("full");
   });

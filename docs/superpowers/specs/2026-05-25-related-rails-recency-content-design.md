@@ -90,3 +90,11 @@ Build all visible candidate items first, then sort by `cosineScore × recencyMul
 ## Tunables
 
 `RELATED_RECENCY_HALF_LIFE_DAYS=45`, `RELATED_UNDATED_PENALTY=0.25`, `MIN_CONTENT_CHARS=15`, `BOILERPLATE_MAX_CHARS=120`, `THIN_CONTENT_CHARS=160`, `THIN_WEIGHT=0.5`, `BOILERPLATE_RE`. All centralized in `related-ranking.ts`.
+
+## Follow-up — broadened content detection (post-merge prod smoke, 2026-05-25)
+
+Smoke-testing the live `v2.1.150` page confirmed recency was fixed on both rails and the org rail was clean, but the global rail still leaked three content-free shapes the initial heuristics missed. Tightened in `classifyContentQuality`:
+
+- **`no <qualifier> changes`** — the original `BOILERPLATE_RE` enumerated qualifiers (`user-facing`, `notable`, …) and so missed "version bump only, there were **no code changes**". Broadened to `\bno\b[\s\w,'-]{0,24}\b(?:changes?|updates?|fixes?)\b` (any short qualifier run between `no` and the head noun), still gated to short bodies.
+- **Placeholder bodies** — new `PLACEHOLDER_RE` catches extractor fallbacks like "release notes do not describe the change", "no description", "no release notes" (same short-body gate).
+- **URL- / scaffolding-only bodies** — new `meaningfulTextLength()` strips URLs, the GitHub auto-generated "Full Changelog" label, and markdown punctuation; a body whose residual is under `MIN_CONTENT_CHARS` is `empty`. Catches a bare "Full Changelog: \<compare-url\>" release that otherwise passed the length gate.
