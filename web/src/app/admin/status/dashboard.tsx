@@ -1238,7 +1238,7 @@ function FetchLogTable({
   );
 }
 
-type SourceTypeFilter = "all" | "feed" | "github" | "scrape" | "agent";
+type SourceTypeFilter = "all" | "feed" | "github" | "scrape" | "agent" | "appstore";
 
 function SourcesTable({ now }: { now: number }) {
   const [sources, setSources] = useState<SourceEntry[]>([]);
@@ -1346,6 +1346,7 @@ function SourcesTable({ now }: { now: number }) {
     { value: "github", label: "GitHub" },
     { value: "scrape", label: "Scrape" },
     { value: "agent", label: "Agent" },
+    { value: "appstore", label: "App Store" },
   ];
 
   return (
