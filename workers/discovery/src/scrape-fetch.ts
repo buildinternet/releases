@@ -646,8 +646,39 @@ async function runScrapePath(
         guidance,
         sourceUrl: source.url,
         fetchUrl: source.url,
+        // Crawl bodies are the largest we extract (multi-page concatenations can
+        // run 100K–700K+ tokens), so inlining the whole thing one-shot blows the
+        // input budget and routinely maxes the output cap without committing a
+        // hash — meaning the same giant body re-extracts on every fetch. Honor
+        // the tool-loop opt-in (global flag or per-source extractStrategy) so
+        // these route through preview + get_slice instead. Mirrors
+        // run-direct-fetch.ts; falls back to one-shot on any loop error.
+        useToolLoop: deps.extractToolLoopEnabled || meta.extractStrategy === "toolloop",
       },
       deps,
+    );
+    // The crawl branch calls extractFromBody directly (not via run-direct-fetch /
+    // run-agent), so it was the one extraction path that never logged usage —
+    // which is why crawl Sonnet spend was invisible in usage_log. Log it here,
+    // before the max_tokens throw, so even a maxed-out run is attributable.
+    await deps.repo.logUsage({
+      operation: "agent-ingest",
+      model: deps.agentModel,
+      inputTokens: result.totalInput,
+      outputTokens: result.totalOutput,
+      sourceSlug: source.slug,
+      releaseCount: result.entries.length,
+      extractionMode: result.mode,
+      toolRounds: result.toolRounds,
+      toolChars: result.toolChars,
+      fallbackReason: result.fallbackReason,
+      cacheReadTokens: result.cacheReadTokens,
+      cacheWriteTokens: result.cacheWriteTokens,
+    });
+    deps.logger.info(
+      `Crawl extract mode=${result.mode} rounds=${result.toolRounds ?? "-"} ` +
+        `toolChars=${result.toolChars ?? "-"} cacheRead=${result.cacheReadTokens} ` +
+        `entries=${result.entries.length} in=${result.totalInput} out=${result.totalOutput}`,
     );
     if (result.hitMaxTokens) {
       throw new CategorizedError(
