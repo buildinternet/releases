@@ -274,6 +274,13 @@ const ChangelogParseResponseSchema = z.object({
   repo: z.string(),
   source: z.enum(["github_releases", "changelog_file"]).nullable(),
   parsable: z.boolean(),
+  /**
+   * True when the resolved source is GitHub Releases and we fetched a full page
+   * (per_page=100) without paginating — i.e. older releases very likely exist.
+   * Always false for the CHANGELOG.md source (the whole file is parsed; size
+   * truncation is reported on `file.truncated` instead).
+   */
+  capped: z.boolean(),
   format: z.enum(["keep-a-changelog", "conventional", "plain", "unknown"]).nullable(),
   file: ChangelogParseFileSchema.nullable(),
   releases: z.array(ParsedReleaseSchema),
@@ -321,31 +328,51 @@ const parseChangelogRoute = describeRoute({
 
 type ChangelogParseSource = (typeof PARSE_SOURCES)[number];
 
+/** Single-page release cap — we request one page of this size and don't paginate. */
+const RELEASES_PER_PAGE = 100;
+
 /**
  * Fetch + map a repo's GitHub Releases (one page). `failed` is set on a
  * transport error or non-OK / unparseable response — distinct from a 200 with
  * an empty array, which is just a repo with no releases. Repo-level auth /
  * rate-limit / 5xx are already surfaced upfront by `classifyRepoStatus`; this
  * lets a forced `github_releases` request report the rare post-precheck failure
- * instead of masking it as "no releases".
+ * instead of masking it as "no releases". `capped` is true when a full page
+ * came back, signalling there are very likely older releases we didn't fetch.
  */
 async function fetchGitHubReleases(
   owner: string,
   repo: string,
   apiHeaders: Record<string, string>,
-): Promise<{ releases: ParsedChangelogRelease[]; failed: boolean }> {
+): Promise<{ releases: ParsedChangelogRelease[]; failed: boolean; capped: boolean }> {
   let res: Response;
   try {
-    res = await fetch(`https://api.github.com/repos/${owner}/${repo}/releases?per_page=100`, {
-      headers: apiHeaders,
-    });
+    res = await fetch(
+      `https://api.github.com/repos/${owner}/${repo}/releases?per_page=${RELEASES_PER_PAGE}`,
+      { headers: apiHeaders },
+    );
   } catch {
-    return { releases: [], failed: true };
+    return { releases: [], failed: true, capped: false };
   }
-  if (!res.ok) return { releases: [], failed: true };
+  if (!res.ok) return { releases: [], failed: true, capped: false };
   const data = (await res.json().catch(() => null)) as GitHubReleaseLike[] | null;
-  if (!Array.isArray(data)) return { releases: [], failed: true };
-  return { releases: mapGitHubReleases(data), failed: false };
+  if (!Array.isArray(data)) return { releases: [], failed: true, capped: false };
+
+  // GitHub's default list order is by the tag commit's `created_at`, which
+  // diverges from publish order on repos with interleaved release lines (e.g.
+  // Node's parallel LTS branches), making the viewer's version rail look
+  // unsorted. Re-sort by `published_at` descending — authoritative for this
+  // source — so it's reliably newest-first; undated entries sink to the end.
+  // `Array.sort` is stable, so equal/undated entries keep their API order.
+  const releases = mapGitHubReleases(data).sort((a, b) => {
+    const ta = a.publishedAt ? Date.parse(a.publishedAt) : -Infinity;
+    const tb = b.publishedAt ? Date.parse(b.publishedAt) : -Infinity;
+    return tb - ta;
+  });
+
+  // A full page means there are very likely older releases we didn't fetch
+  // (no pagination). The viewer renders this as "100+".
+  return { releases, failed: false, capped: data.length >= RELEASES_PER_PAGE };
 }
 
 interface ResolvedFile {
@@ -479,6 +506,8 @@ const parseChangelogHandler = async (c: import("hono").Context<Env>) => {
 
   let resolvedSource: "github_releases" | "changelog_file" | null = null;
   let releases: ParsedChangelogRelease[] = [];
+  // Set only when github_releases resolves: did we hit the single-page cap?
+  let releasesCapped = false;
   let file: z.infer<typeof ChangelogParseFileSchema> | null = null;
   let format: z.infer<typeof ChangelogParseResponseSchema>["format"] = null;
   let headingsScanned = 0;
@@ -550,6 +579,7 @@ const parseChangelogHandler = async (c: import("hono").Context<Env>) => {
     if (rel.releases.length > 0) {
       resolvedSource = "github_releases";
       releases = rel.releases;
+      releasesCapped = rel.capped;
     }
   } else {
     // auto: prefer GitHub Releases with non-trivial bodies, else CHANGELOG.md,
@@ -562,6 +592,7 @@ const parseChangelogHandler = async (c: import("hono").Context<Env>) => {
     if (rel.releases.length > 0 && hasBody) {
       resolvedSource = "github_releases";
       releases = rel.releases;
+      releasesCapped = rel.capped;
     } else {
       const outcome = await runFile();
       if (outcome.kind === "error") fileErrorStatus = outcome.status;
@@ -580,6 +611,7 @@ const parseChangelogHandler = async (c: import("hono").Context<Env>) => {
         // Releases exist but are body-less; better than nothing.
         resolvedSource = "github_releases";
         releases = rel.releases;
+        releasesCapped = rel.capped;
         file = null;
         format = null;
       }
@@ -610,6 +642,7 @@ const parseChangelogHandler = async (c: import("hono").Context<Env>) => {
     repo: `${owner}/${repo}`,
     source: resolvedSource,
     parsable: releases.length > 0,
+    capped: resolvedSource === "github_releases" ? releasesCapped : false,
     format: resolvedSource === "changelog_file" ? format : null,
     file: resolvedSource === "changelog_file" ? file : null,
     releases,
