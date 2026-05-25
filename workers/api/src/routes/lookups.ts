@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { describeRoute, resolver } from "hono-openapi";
-import { asc, desc, eq, sql } from "drizzle-orm";
+import { z } from "zod";
+import { and, asc, desc, eq, sql } from "drizzle-orm";
 import {
   domainAliases,
   organizations,
@@ -496,6 +497,99 @@ lookupRoutes.get(
       return c.json({ error: "not_found", message: `No source matches slug "${slug}"` }, 404);
     }
     c.header("Sunset", "Sun, 01 Nov 2026 00:00:00 GMT");
+    return c.json(row);
+  },
+);
+
+/**
+ * Coordinate → canonical-home lookup for GitHub sources, **read-only**. Answers
+ * "is `owner/repo` already in the catalog?" without the side effect of the
+ * on-demand `POST /v1/lookups`, which probes GitHub and materializes a hidden
+ * stub on miss. It reuses the indexer's case-insensitive `sources.url` match
+ * (and its exact-case-then-oldest tie-break) but only over **visible**
+ * (non-hidden) rows, so an on-demand stub never produces a false "indexed"
+ * answer. Backs the local-dev `/gh/owner/repo` viewer's "we also index this"
+ * banner; usable by any client wanting a non-materializing indexed check.
+ */
+const LookupSourceByCoordinateResponseSchema = z.object({
+  sourceId: z.string(),
+  sourceSlug: z.string(),
+  orgSlug: z.string(),
+});
+
+lookupRoutes.get(
+  "/lookups/source-by-coordinate",
+  describeRoute({
+    tags: ["Lookups"],
+    summary:
+      "Resolve a GitHub owner/repo coordinate to an indexed source (read-only, no materialize)",
+    description:
+      "Read-only counterpart to `POST /v1/lookups`: given `coordinate=owner/repo` (optionally `github:owner/repo`), returns the canonical org-scoped tuple `{ sourceId, sourceSlug, orgSlug }` for a matching **visible** catalog source, or 404 when the repo isn't indexed. Unlike the POST, it never probes GitHub or materializes a hidden stub. Matches `sources.url` case-insensitively; on a multi-row case collision it prefers the exact-case row, then the oldest by `(createdAt, id)`.",
+    parameters: [
+      {
+        name: "coordinate",
+        in: "query",
+        required: true,
+        schema: { type: "string" },
+        description: 'GitHub coordinate, e.g. "honojs/hono" or "github:honojs/hono".',
+      },
+    ],
+    responses: {
+      200: {
+        description: "Canonical home for the indexed repo",
+        content: {
+          "application/json": { schema: resolver(LookupSourceByCoordinateResponseSchema) },
+        },
+      },
+      400: {
+        description: "Missing `coordinate`, or not a parseable github owner/repo coordinate",
+        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      },
+      404: {
+        description: "No visible source matches the coordinate",
+        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      },
+    },
+  }),
+  async (c) => {
+    const raw = c.req.query("coordinate")?.trim();
+    if (!raw) {
+      return c.json({ error: "bad_request", message: "coordinate query param is required" }, 400);
+    }
+    const parsed = parseCoordinate(raw);
+    if (!parsed) {
+      return c.json(
+        {
+          error: "bad_request",
+          message: `Cannot parse "${raw}" as a github owner/repo coordinate`,
+        },
+        400,
+      );
+    }
+    const url = `https://github.com/${parsed.org}/${parsed.repo}`;
+    const urlLower = url.toLowerCase();
+    const db = createDb(c.env.DB);
+    const [row] = await db
+      .select({
+        sourceId: sourcesActive.id,
+        sourceSlug: sourcesActive.slug,
+        orgSlug: organizationsActive.slug,
+      })
+      .from(sourcesActive)
+      .innerJoin(organizationsActive, eq(organizationsActive.id, sourcesActive.orgId))
+      .where(and(sql`LOWER(${sourcesActive.url}) = ${urlLower}`, eq(sourcesActive.isHidden, false)))
+      .orderBy(
+        sql`CASE WHEN ${sourcesActive.url} = ${url} THEN 0 ELSE 1 END`,
+        asc(sourcesActive.createdAt),
+        asc(sourcesActive.id),
+      )
+      .limit(1);
+    if (!row) {
+      return c.json(
+        { error: "not_found", message: `No indexed source for "${parsed.org}/${parsed.repo}"` },
+        404,
+      );
+    }
     return c.json(row);
   },
 );
