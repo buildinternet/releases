@@ -377,8 +377,12 @@ function renderFeedReleaseText(r: FeedReleaseTextRow): string {
 
   const lines = [formatReleaseTitle(r), `ID: ${r.id}`, metaParts.join(" | "), preview];
 
+  // Fall back to the live body length for legacy rows where contentChars is
+  // null — otherwise a long body hidden behind a short summary preview never
+  // gets the "fetch more" hint.
+  const effectiveContentLen = r.contentChars ?? r.content?.length ?? 0;
   const truncated =
-    (r.contentChars ?? 0) > preview.length || previewSource.length > FEED_PREVIEW_CHARS;
+    effectiveContentLen > preview.length || previewSource.length > FEED_PREVIEW_CHARS;
   if (truncated) {
     lines.push(`_Preview truncated — call get_release(id: "${r.id}") for the full release._`);
   }

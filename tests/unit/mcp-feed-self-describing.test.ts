@@ -88,6 +88,27 @@ describe("get_latest_releases — self-describing text", () => {
     const text = out.content[0].text;
     expect(text).not.toContain(`get_release(id: "${SHORT_ID}")`);
   });
+
+  it("nudges get_release for a legacy row (null contentChars) with a long body behind a short summary", async () => {
+    // Legacy rows pre-date the content_chars backfill, so contentChars is null.
+    // The preview shows the short summary, but the full body (content) is long —
+    // the hint must still fire, falling back to content length.
+    const id = "rel_legacynullchars0";
+    await testDb.db.insert(releases).values({
+      id,
+      sourceId: "src_sd",
+      title: "Legacy long body",
+      type: "feature",
+      summary: "Short summary.",
+      content: "y".repeat(900),
+      publishedAt: "2026-05-03T00:00:00Z",
+      // contentChars / contentTokens intentionally omitted (legacy row)
+    });
+
+    const out = await getLatestReleases(asD1(testDb.db), {});
+    const text = out.content[0].text;
+    expect(text).toContain(`get_release(id: "${id}")`);
+  });
 });
 
 describe("get_collection_releases — self-describing text", () => {

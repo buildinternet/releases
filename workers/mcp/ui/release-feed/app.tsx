@@ -108,6 +108,20 @@ function pickTitle(r: {
   return r.titleShort || r.titleGenerated || r.title || r.version || "Untitled release";
 }
 
+/**
+ * Only http(s) URLs may be forwarded to `app.openLink`. Release markdown is
+ * untrusted content, so reject `javascript:`, `data:`, relative, and malformed
+ * hrefs before handing them to the host.
+ */
+function isAllowedProtocol(url: string): boolean {
+  try {
+    const { protocol } = new URL(url);
+    return protocol === "http:" || protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 /** Collapse markdown to a single line of plain text for the compact list row. */
 function stripMarkdown(md: string): string {
   return md
@@ -511,6 +525,7 @@ function DetailView({ app, row, backLabel, loadDetail, onBack }: DetailViewProps
 
   const openLink = useCallback(
     (href: string) => {
+      if (!isAllowedProtocol(href)) return;
       app.openLink({ url: href }).catch((e) => console.error("openLink failed", e));
     },
     [app],
@@ -603,7 +618,9 @@ function makeMarkdownComponents(app: App): Components {
           href={href ?? "#"}
           onClick={(e) => {
             e.preventDefault();
-            if (href) app.openLink({ url: href }).catch((err) => console.error("openLink", err));
+            if (href && isAllowedProtocol(href)) {
+              app.openLink({ url: href }).catch((err) => console.error("openLink", err));
+            }
           }}
         >
           {children}
@@ -704,7 +721,7 @@ function FeedApp() {
   const [unsupported, setUnsupported] = useState(false);
 
   const { app, error } = useApp({
-    appInfo: { name: "Releases Feed", version: "0.4.0" },
+    appInfo: { name: "Releases Feed", version: "0.4.1" },
     capabilities: {},
     onAppCreated: (created) => {
       created.ontoolresult = (result) => {

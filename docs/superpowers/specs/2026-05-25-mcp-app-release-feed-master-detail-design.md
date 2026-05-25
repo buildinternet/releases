@@ -191,7 +191,7 @@ _what is this (handle), how big is it, and do I need to fetch more?_
 
 Per-release text block becomes:
 
-```
+```text
 <title> | <version> | <date>
 ID: rel_<nanoid>
 Source: <name> (<coordinate>) | Version: <…> | Date: <…>
