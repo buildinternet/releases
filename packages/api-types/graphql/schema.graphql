@@ -184,6 +184,7 @@ How a source is ingested: GitHub releases API, scraped HTML, parsed feed, or AI 
 """
 enum SourceType {
   agent
+  appstore
   feed
   github
   scrape

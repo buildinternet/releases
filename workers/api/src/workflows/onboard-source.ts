@@ -120,6 +120,7 @@ export class OnboardSourceWorkflow extends WorkflowEntrypoint<
         const meta = getSourceMeta(source);
         const serverSideFetchable =
           source.type === "feed" ||
+          source.type === "appstore" ||
           isGitHubFetched(source, meta) ||
           (source.type === "scrape" && meta.feedUrl != null);
 

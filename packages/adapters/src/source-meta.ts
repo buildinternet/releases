@@ -184,6 +184,22 @@ export interface SourceMetadata {
    * non-empty, deny-prefix filtering is bypassed entirely.
    */
   tagAllowPatterns?: string[];
+
+  /**
+   * App Store listing routing + cached listing metadata (#appstore). Present
+   * only on `type: "appstore"` sources. `trackId` is the iTunes lookup key;
+   * `platform` selects the lookup `entity` (macos → macSoftware). `artworkUrl`
+   * is the last-seen icon, used to skip no-op product-avatar refreshes.
+   */
+  appStore?: {
+    trackId: string;
+    bundleId?: string;
+    storefront: string;
+    platform: "ios" | "macos";
+    firstPublishedAt?: string;
+    minOsVersion?: string;
+    artworkUrl?: string;
+  };
 }
 
 /** Parse the JSON metadata blob from a source row. */
@@ -205,6 +221,15 @@ export function isGitHubFetched(source: Source, meta?: SourceMetadata): boolean 
   if (source.type === "github") return true;
   const m = meta ?? getSourceMeta(source);
   return typeof m.githubUrl === "string" && m.githubUrl.length > 0;
+}
+
+/**
+ * True when a source is fetched via the Apple App Store adapter. Unlike
+ * `isGitHubFetched`, there's no metadata-override form — the type is the
+ * only signal.
+ */
+export function isAppStoreFetched(source: Source): boolean {
+  return source.type === "appstore";
 }
 
 /**

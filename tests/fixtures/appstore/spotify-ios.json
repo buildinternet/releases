@@ -1,0 +1,26 @@
+{
+  "resultCount": 1,
+  "results": [
+    {
+      "trackId": 324684580,
+      "bundleId": "com.spotify.client",
+      "trackName": "Spotify - Music and Podcasts",
+      "version": "9.0.12",
+      "currentVersionReleaseDate": "2026-05-19T11:42:00Z",
+      "releaseDate": "2011-07-14T01:34:08Z",
+      "releaseNotes": "Bug fixes and performance improvements.",
+      "trackViewUrl": "https://apps.apple.com/us/app/id324684580?uo=4",
+      "artistName": "Spotify",
+      "sellerName": "Spotify AB",
+      "primaryGenreName": "Music",
+      "artworkUrl512": "https://is1-ssl.mzstatic.com/image/thumb/PurpleX/v4/ab/cd/ef/abcdef.png/512x512bb.jpg",
+      "artworkUrl100": "https://is1-ssl.mzstatic.com/image/thumb/PurpleX/v4/ab/cd/ef/abcdef.png/100x100bb.jpg",
+      "screenshotUrls": [
+        "https://is1-ssl.mzstatic.com/image/thumb/aaa/392x696bb.jpg",
+        "https://is1-ssl.mzstatic.com/image/thumb/bbb/392x696bb.jpg"
+      ],
+      "ipadScreenshotUrls": ["https://is1-ssl.mzstatic.com/image/thumb/ccc/748x1024bb.jpg"],
+      "minimumOsVersion": "13.0"
+    }
+  ]
+}

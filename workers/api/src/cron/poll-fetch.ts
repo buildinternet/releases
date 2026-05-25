@@ -26,6 +26,13 @@ import {
   extractMediaFromMarkdown,
 } from "@releases/adapters/feed.js";
 import type { SourceMetadata, ChangeStatus } from "@releases/adapters/feed.js";
+import { isAppStoreFetched } from "@releases/adapters/source-meta";
+import {
+  resolveAppStore,
+  appStoreCoordFromSource,
+  mapListingToRawReleases,
+} from "@releases/adapters/appstore";
+import { refreshAppStoreListing } from "../lib/appstore-materialize.js";
 import { loadFetchQuirks, type FetchQuirk } from "@releases/ai-internal/playbook";
 import { FeedHttpError } from "@releases/lib/errors";
 import { contentHash } from "@releases/adapters/content-hash";
@@ -172,6 +179,7 @@ export async function pollAndFetch(
         }
         return true;
       }
+      if (s.type === "appstore") return true;
       return s.type === "github";
     });
 
@@ -234,8 +242,8 @@ export async function queryDueSources(
   // playbook's `fetchQuirks` (unreliable class is a no-op, so the widened
   // filter doesn't explode poll volume).
   const pollable = opts?.changeDetectEnabled
-    ? sql`(json_extract(${sourcesVisible.metadata}, '$.feedUrl') IS NOT NULL OR json_extract(${sourcesVisible.metadata}, '$.githubUrl') IS NOT NULL OR ${sourcesVisible.type} = 'github' OR ${sourcesVisible.type} IN ('scrape','agent'))`
-    : sql`(json_extract(${sourcesVisible.metadata}, '$.feedUrl') IS NOT NULL OR json_extract(${sourcesVisible.metadata}, '$.githubUrl') IS NOT NULL OR ${sourcesVisible.type} = 'github')`;
+    ? sql`(json_extract(${sourcesVisible.metadata}, '$.feedUrl') IS NOT NULL OR json_extract(${sourcesVisible.metadata}, '$.githubUrl') IS NOT NULL OR ${sourcesVisible.type} = 'github' OR ${sourcesVisible.type} = 'appstore' OR ${sourcesVisible.type} IN ('scrape','agent'))`
+    : sql`(json_extract(${sourcesVisible.metadata}, '$.feedUrl') IS NOT NULL OR json_extract(${sourcesVisible.metadata}, '$.githubUrl') IS NOT NULL OR ${sourcesVisible.type} = 'github' OR ${sourcesVisible.type} = 'appstore')`;
 
   // Build OR conditions for each tier using sql template to avoid enum type issues
   const tierConditions = (Object.keys(TIER_INTERVALS) as PollTier[]).map((tier) => {
@@ -312,6 +320,17 @@ export async function pollOne(
   // feeds to HEAD-check — mark as changed so the fetch phase always runs
   // (dedup happens at the DB insert level).
   if (isGitHubFetched(source, meta)) {
+    await db
+      .update(sources)
+      .set({ lastPolledAt: nowIso, changeDetectedAt: nowIso })
+      .where(eq(sources.id, source.id));
+    return { source, changed: true };
+  }
+
+  // App Store sources have no cheap HEAD probe; the lookup is a single tiny
+  // JSON GET, so mark changed and let fetchOne do the one lookup + dedup
+  // (mirrors the GitHub branch above).
+  if (isAppStoreFetched(source)) {
     await db
       .update(sources)
       .set({ lastPolledAt: nowIso, changeDetectedAt: nowIso })
@@ -974,6 +993,13 @@ export async function fetchOne(
       rawReleases = await fetchGitHub(source, env.GITHUB_TOKEN, {
         repoUrl: effectiveGitHubUrl(source, meta),
       });
+    } else if (isAppStoreFetched(source)) {
+      const coord = appStoreCoordFromSource(source);
+      const listing = coord ? await resolveAppStore(coord) : null;
+      rawReleases = listing ? mapListingToRawReleases(listing, coord!) : [];
+      if (!dryRun && listing) {
+        await refreshAppStoreListing(db, source, listing);
+      }
     } else {
       if (!meta.feedUrl || !meta.feedType) {
         logEvent("warn", {
