@@ -59,6 +59,8 @@ Skip this for orgs with only `feed` and `github` sources. Check source types wit
 
 After regen, `releases admin overview get <slug>` prints the new content with metadata. If `selected: []` came back from `overview inputs`, no overview is written — that's usually a signal that the fetch missed (try `--max` higher) or all sources are paused.
 
+**`overview get` does not return citations.** Its payload is `org`, `content`, `releaseCount`, `generatedAt`, `updatedAt`, `lastContributingReleaseAt` — no citations field. Confirm the stored citation count from the `overview update` response (`"citations": N`), not `overview get`, or you'll think a successful write dropped every link.
+
 ## Batch Updates
 
 When updating multiple orgs, use parallel Claude Code sub-agents (one per org). Each agent runs the two-step flow above for its target.
@@ -106,6 +108,8 @@ Use the Agent tool with `run_in_background: true` and `model: "sonnet"` for each
 
 **Always have agents return citations too.** `overview update` is replace-all on citations — if `--citations-file` is omitted, existing citations are CLEARED. Batch refreshes that skip citations silently strip every inline source link from the page. Require a citations JSON in the agent's return payload (even when model-asserted rather than Anthropic-emitted), then upload both with `--content-file` and `--citations-file`. The two existing-content sub-agents that wrote `/tmp/<slug>-overview-citations.json` proved this works in practice.
 
+**Fetch `needsFetch` rows in the parent, not the sub-agent.** For rows the manifest flags `needsFetch: true`, run `releases admin source fetch --org <slug>` from the parent _before_ dispatching — and have sub-agents skip the fetch step entirely (work from current indexed data). This centralizes fetch cost + exit-code visibility (you see a non-zero exit before spending generation tokens), avoids per-agent fetch races on shared sources, and keeps sub-agents read-only so they never trip a `Bash`/`Write` denial. It also measurably helps: a pre-dispatch fetch can widen a thin window (one sweep saw a source go 6 → 13 selectable releases after the parent fetch). Sub-agents whose org wasn't flagged `needsFetch` skip the fetch regardless — the most recent release is already < 7 days old.
+
 Prompt template:
 
 ```
@@ -115,9 +119,9 @@ Read the `regenerating-overviews` skill for the full prompt; the style rules
 below are the load-bearing subset and override anything else.
 
   1. (If scrape/agent sources) skim `releases admin playbook {slug}`.
-  2. `releases admin source fetch --org {slug} --json --wait 600` if needed.
-     If exit code != 0, STOP and report the error verbatim — do not generate
-     from older data.
+  2. Do NOT fetch — the parent already fetched this org's sources. Work from
+     current indexed data. (If you believe a fetch is needed, STOP and report
+     it; don't fetch from inside the sub-agent.)
   3. `releases admin overview inputs {slug} --json`. If `selected` is empty,
      stop and report "empty-window". Use the URLs in `selected[*].url` as
      the citation source set — do not invent URLs.
@@ -148,13 +152,15 @@ Style rules — these are not negotiable; the parent lints for violations:
 Citations — model-asserted is acceptable in batch:
   - For each major claim, pick the release URL from `selected[*].url` that
     most directly backs it.
-  - Emit a JSON array of `{startIndex, endIndex, sourceUrl, title, citedText}`
-    where `startIndex`/`endIndex` are character offsets into your generated
-    markdown body (compute against the final body you return), `sourceUrl`
-    is the chosen release URL, `title` is its release title, and
-    `citedText` is a short substring of your body that the citation backs.
-  - Spans should not overlap stripped characters and `endIndex` must not
-    exceed the body length.
+  - Emit a JSON array of `{sourceUrl, title, citedText}`. Do NOT compute
+    `startIndex`/`endIndex` — the parent re-derives offsets by substring
+    search, so character math on your side is wasted effort and a source of
+    errors. `sourceUrl` is the chosen release URL, `title` its release title,
+    and `citedText` an EXACT substring of your body that the claim rests on.
+  - `citedText` must be a verbatim, contiguous slice of your body from a
+    SINGLE formatting run — a bold lead OR the prose after it, never spanning
+    the `**` markers. A span that crosses `**` won't be found (the markers sit
+    between the words) and the parent will drop that citation.
 
 Return EXACTLY two fenced blocks in your final message — nothing else
 between them, no preamble, no commentary after:
@@ -168,8 +174,7 @@ between them, no preamble, no commentary after:
   ~~~
 
   ~~~json
-  [ {"startIndex": …, "endIndex": …, "sourceUrl": "…", "title": "…",
-     "citedText": "…"}, … ]
+  [ {"sourceUrl": "…", "title": "…", "citedText": "…"}, … ]
   ~~~
 
 Do not attempt to upload. The parent session writes both files and runs
@@ -185,9 +190,11 @@ After agents complete, the parent runs a **lint pass** on each returned body bef
 - A bold-tease that leads with a version number or CVE identifier.
 - Any banned phrase from the prompt's editorializing list.
 
-Then write `/tmp/<slug>-overview.md` and `/tmp/<slug>-overview-citations.json`, and run `releases admin overview update <slug> --content-file … --citations-file …` in parallel (idempotent, last write wins). Both files are required — omitting `--citations-file` clears existing citations on the page.
+**De-escape HTML entities from the returned body first.** Sub-agents reflexively over-escape `&`, `<`, `>`, `"`, `'` (e.g. `Q&amp;A`, `streams.input&lt;T&gt;`) when relaying markdown back as a message — a transport artifact, not the agent's content. The API stores the body verbatim, so an un-decoded entity persists in the rendered page. Decode all five entities in **both** the `body` and each `citedText` _before_ the offset step below, using the **single-pass** replacement the CLI's `unescapeHtmlEntities` uses — `s.replace(/&amp;|&lt;|&gt;|&quot;|&#39;/g, (m) => MAP[m])` where `MAP` is `{ "&amp;": "&", "&lt;": "<", "&gt;": ">", "&quot;": '"', "&#39;": "'" }` (one pass, so `&amp;lt;` stays `&lt;` rather than collapsing to `<`). Decode **in-parent** so your re-derived offsets line up with the stored body, then call the upload **without** `--unescape-html`. (The CLI's `overview update --unescape-html` flag is the alternative for callers who upload escaped text and do _not_ compute offsets locally: it decodes _during_ upload, which would shift offsets you measured against the still-escaped body — so never combine it with the offset-re-deriving flow below.) Background: confirmed sweep issue — monorepo #590, CLI PR #70.
 
-**Citation offsets are JS string length, not bytes.** The API validates `endIndex <= content.length` where `content.length` is the JS `String.prototype.length` (UTF-16 code units). `wc -c` reports bytes — em-dashes (—), curly quotes, and other multi-byte UTF-8 characters inflate the byte count vs. the JS length. When clamping/validating offsets, use `bun --eval "const c=require('fs').readFileSync(path,'utf8'); process.stdout.write(String(c.length))"` to get the real ceiling. The API also rejects `endIndex` equal to the trailing newline position, so clamp to the JS length of the trimmed body.
+**Re-derive citation offsets in the parent — don't trust agent arithmetic.** Sub-agents return `{sourceUrl, title, citedText}` only. For each citation, find `citedText` in the final (decoded) body with `indexOf` and set `startIndex = idx`, `endIndex = idx + citedText.length`. Drop any citation whose `citedText` isn't found (it crossed a `**` boundary, or the agent paraphrased instead of quoting) or whose span overlaps an earlier one. Offsets built this way are valid against the stored body by construction — it sidesteps the `400 bad_citations` rejections that hand-computed offsets routinely cause, and it's cheaper (agents don't burn tokens counting characters). The offsets are JS `String.prototype.length` (UTF-16 code units), not bytes — so write the parent script in **JS/TS**, where `indexOf` + `.length` give those units directly and need no `wc -c` correction. If you must script the offsets in another language, emit **UTF-16 code-unit** `startIndex`/`endIndex` — not bytes, and not Unicode code points (Python `len()` / Go runes count code points, which diverge from UTF-16 units on non-BMP characters like emoji) — since the API validates against JS `String.length`. Trim the body to remove a trailing newline before computing, since the API rejects `endIndex` at the trailing-newline position.
+
+Then write `/tmp/<slug>-overview.md` and `/tmp/<slug>-overview-citations.json` (the re-derived `{startIndex, endIndex, sourceUrl, title, citedText}` rows), and run `releases admin overview update <slug> --content-file … --citations-file …` in parallel (idempotent, last write wins). Both files are required — omitting `--citations-file` clears existing citations on the page. Confirm the accepted citation count from each update response (`"citations": N`) — `overview get` won't show it.
 
 For any agent that bailed without content, re-fetch `overview inputs` locally and generate inline. When generating in-session, the parent can produce richer Anthropic-emitted citations per the `regenerating-overviews` skill (search_result blocks); batch sub-agents produce model-asserted citations from the URLs visible in `overview inputs` — accept the tradeoff.
 
@@ -213,10 +220,22 @@ mkdir -p ~/.releases/work/tasks "$RUN_DIR" ~/.releases/work/reports
 export RELEASES_RUN_DIR="$RUN_DIR"
 ```
 
-(Honors `RELEASES_DATA_DIR` — substitute `$RELEASES_DATA_DIR/work` for `~/.releases/work` if set.) With `RELEASES_RUN_DIR` exported, the CLI captures the mechanical evidence on its own:
+(Honors `RELEASES_DATA_DIR` — substitute `$RELEASES_DATA_DIR/work` for `~/.releases/work` if set.)
 
-- Every `releases admin …` write the parent runs — each `overview update`, each `source fetch` trigger — auto-appends a line to `$RELEASES_RUN_DIR/mutations.jsonl`. (The parent does the `overview update` per the prompt above, so those land regardless of sub-agent env.)
+> **The `export` does not survive across commands in an agent harness.** Claude Code (and most agent runtimes) run **each Bash call in a fresh shell** — shell state, including `export RELEASES_RUN_DIR`, does _not_ carry from one tool call to the next (CWD can reset too). A one-time `export` silently stops logging after the first command. So either set it **inline on every mutation command** that should be logged:
+>
+> ```bash
+> RELEASES_RUN_DIR=~/.releases/work/runs/<ts>-<batch> \
+>   releases admin overview update <slug> --content-file … --citations-file …
+> ```
+>
+> or run all your mutations inside a **single** Bash call that exports at the top. The failure mode is silent — a write in a call that forgot the var just isn't logged, no error. (Only when you drive one persistent shell does the one-time `export` above suffice.)
+
+With `RELEASES_RUN_DIR` set on the invocation, the CLI captures the mechanical evidence on its own:
+
+- Every `releases admin …` write the parent runs — each `overview update`, each `source fetch` trigger — auto-appends a line (`{timestamp, command, target, result}`) to `$RELEASES_RUN_DIR/mutations.jsonl`.
 - Managed fetch sessions (`releases admin source fetch … --wait`) you run from the batch shell land their trace + cost at `$RELEASES_RUN_DIR/<sessionId>/{trace.json,summary.md}` — `RELEASES_RUN_DIR` is the default trace dir, so no `--trace-dir` flag is needed. To snapshot a session a sub-agent ran, use `releases admin discovery task get <id> --save "$RELEASES_RUN_DIR"`. The session `summary.md` carries its `estimatedUsd`.
+- **Sub-agent generation cost is NOT auto-captured.** The parallel generation sub-agents are the dominant spend on a regen sweep (each ~40–80K tokens), but they aren't CLI sessions, so nothing lands in `runs/`. Record their token totals by hand in `summary.md` from each agent's completion summary — this number is parent-estimated, not logged.
 
 After all sub-agents complete, write the judgment layer the CLI can't:
 
