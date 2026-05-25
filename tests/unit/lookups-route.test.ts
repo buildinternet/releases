@@ -577,6 +577,148 @@ describe("GET /v1/lookups/source-by-slug", () => {
   });
 });
 
+// Read-only "is this repo indexed?" check that backs the local-dev
+// /gh/owner/repo viewer's "we also index this" banner. Unlike POST /v1/lookups
+// it must never materialize a stub, and must ignore hidden on-demand rows.
+describe("GET /v1/lookups/source-by-coordinate", () => {
+  async function getByCoord(coordinate: string | undefined): Promise<Response> {
+    const env = makeEnv(makeKv());
+    const path =
+      coordinate === undefined
+        ? "/lookups/source-by-coordinate"
+        : `/lookups/source-by-coordinate?coordinate=${encodeURIComponent(coordinate)}`;
+    return lookupRoutes.request(path, { method: "GET" }, env);
+  }
+
+  test("400 when coordinate param is missing", async () => {
+    const res = await getByCoord(undefined);
+    expect(res.status).toBe(400);
+  });
+
+  test("400 when coordinate is unparseable", async () => {
+    const res = await getByCoord("not-a-coordinate");
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toBe("bad_request");
+  });
+
+  test("404 when no source matches", async () => {
+    const res = await getByCoord("acme/nope");
+    expect(res.status).toBe(404);
+  });
+
+  test("200 with the org-scoped triple for a visible match, case-insensitively", async () => {
+    await testDb.db.insert(organizations).values({
+      id: "org_shopify",
+      name: "Shopify",
+      slug: "shopify",
+      discovery: "curated",
+    });
+    await testDb.db.insert(sources).values({
+      id: "src_canonical",
+      name: "Shopify/toxiproxy",
+      slug: "toxiproxy",
+      type: "github",
+      url: "https://github.com/Shopify/toxiproxy",
+      orgId: "org_shopify",
+      discovery: "curated",
+    });
+
+    // User types lowercased; should still resolve to the canonical row.
+    const res = await getByCoord("shopify/TOXIPROXY");
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      sourceId: string;
+      sourceSlug: string;
+      orgSlug: string;
+    };
+    expect(body).toEqual({
+      sourceId: "src_canonical",
+      sourceSlug: "toxiproxy",
+      orgSlug: "shopify",
+    });
+  });
+
+  test("accepts the github: prefix", async () => {
+    await testDb.db.insert(organizations).values({
+      id: "org_acme",
+      name: "Acme",
+      slug: "acme",
+      discovery: "curated",
+    });
+    await testDb.db.insert(sources).values({
+      id: "src_one",
+      name: "Acme CLI",
+      slug: "cli",
+      type: "github",
+      url: "https://github.com/acme/cli",
+      orgId: "org_acme",
+      discovery: "curated",
+    });
+
+    const res = await getByCoord("github:acme/cli");
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { sourceId: string };
+    expect(body.sourceId).toBe("src_one");
+  });
+
+  test("ignores a hidden on-demand stub (no false 'indexed' answer)", async () => {
+    await testDb.db.insert(organizations).values({
+      id: "org_acme",
+      name: "acme",
+      slug: "acme",
+      discovery: "on_demand",
+    });
+    await testDb.db.insert(sources).values({
+      id: "src_stub",
+      name: "acme/foo",
+      slug: "foo",
+      type: "github",
+      url: "https://github.com/acme/foo",
+      orgId: "org_acme",
+      discovery: "on_demand",
+      isHidden: true,
+    });
+
+    const res = await getByCoord("acme/foo");
+    expect(res.status).toBe(404);
+  });
+
+  test("prefers the exact-case row over a case-folded match", async () => {
+    await testDb.db.insert(organizations).values({
+      id: "org_acme",
+      name: "Acme",
+      slug: "acme",
+      discovery: "curated",
+    });
+    await testDb.db.insert(sources).values({
+      id: "src_lowercase",
+      name: "acme/Foo",
+      slug: "foo-lower",
+      type: "github",
+      url: "https://github.com/acme/foo",
+      orgId: "org_acme",
+      discovery: "curated",
+      createdAt: "2026-01-01T00:00:00.000Z",
+    });
+    await testDb.db.insert(sources).values({
+      id: "src_canonical",
+      name: "Acme/Foo",
+      slug: "foo-canonical",
+      type: "github",
+      url: "https://github.com/Acme/Foo",
+      orgId: "org_acme",
+      discovery: "curated",
+      createdAt: "2026-02-01T00:00:00.000Z",
+    });
+
+    const res = await getByCoord("Acme/Foo");
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { sourceId: string };
+    expect(body.sourceId).toBe("src_canonical");
+  });
+});
+
 describe("GET /v1/lookups/product-by-slug", () => {
   async function getByslug(slug: string | undefined): Promise<Response> {
     const env = makeEnv(makeKv());

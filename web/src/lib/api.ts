@@ -196,10 +196,100 @@ async function adminFetchApi<T>(path: string): Promise<T | null> {
   return res.json();
 }
 
+/**
+ * Server-only admin POST. Same Bearer + server-boundary rules as
+ * {@link adminFetchApi}; returns `null` on any non-2xx so callers can treat
+ * "couldn't resolve" uniformly. Used by the dev-only changelog parse viewer.
+ */
+async function adminPostApi<T>(path: string, body: unknown): Promise<T | null> {
+  if (!API_SECRET) return null;
+  const res = await fetch(`${API_URL}${path}`, {
+    method: "POST",
+    headers: webApiHeaders({
+      Authorization: `Bearer ${API_SECRET}`,
+      "Content-Type": "application/json",
+    }),
+    body: JSON.stringify(body),
+    cache: "no-store",
+  });
+  if (!res.ok) return null;
+  return res.json();
+}
+
+/**
+ * One parsed release from `POST /v1/changelog/parse` — the deterministic
+ * "tier-0" shape (AI fields always null, `media` always empty). Mirrors the
+ * worker's `ParsedReleaseSchema`; kept local until the endpoint graduates from
+ * experimental and the shape is promoted to `@buildinternet/releases-api-types`.
+ */
+export interface GhParsedRelease {
+  version: string | null;
+  type: "feature";
+  title: string;
+  content: string;
+  url: string | null;
+  publishedAt: string | null;
+  prerelease: boolean;
+  summary: null;
+  titleGenerated: null;
+  titleShort: null;
+  media: unknown[];
+}
+
+/** Full `POST /v1/changelog/parse` response. */
+export interface GhChangelogParseResult {
+  repo: string;
+  source: "github_releases" | "changelog_file" | null;
+  parsable: boolean;
+  format: "keep-a-changelog" | "conventional" | "plain" | "unknown" | null;
+  file: {
+    path: string;
+    url: string;
+    rawUrl: string;
+    size: number | null;
+    truncated: boolean;
+  } | null;
+  releases: GhParsedRelease[];
+  stats: {
+    releasesParsed: number;
+    headingsScanned: number;
+    skipped: number;
+    githubRequests: number;
+    bytes: number;
+    elapsedMs: number;
+  };
+}
+
+/** Canonical org-scoped home of an indexed source, from the read-only lookup. */
+export interface IndexedSourceRef {
+  sourceId: string;
+  sourceSlug: string;
+  orgSlug: string;
+}
+
 export const adminApi = {
   orgPlaybook: (slug: string) =>
     adminFetchApi<{ content: string; updatedAt: string } | null>(
       `/v1/orgs/${encodeURIComponent(slug)}/playbook`,
+    ),
+  /**
+   * Deterministic changelog parse for any GitHub repo (no persistence). Bearer
+   * (write)-gated, so this is server-only — the dev-gated /gh/[owner]/[repo]
+   * viewer is the sole caller. Returns `null` when the repo can't be resolved
+   * (missing, rate-limited, or no admin key configured).
+   */
+  parseChangelog: (input: {
+    repo: string;
+    path?: string;
+    source?: "auto" | "github_releases" | "changelog_file";
+  }) => adminPostApi<GhChangelogParseResult>("/v1/changelog/parse", input),
+  /**
+   * Read-only "is this repo already in the catalog?" check (never materializes
+   * a stub). Returns the canonical org-scoped home, or `null` when un-indexed.
+   */
+  sourceByCoordinate: (coordinate: string) =>
+    adminFetchApi<IndexedSourceRef>(
+      `/v1/lookups/source-by-coordinate?coordinate=${encodeURIComponent(coordinate)}`,
     ),
 };
 
