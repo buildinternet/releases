@@ -218,19 +218,20 @@ A batch run makes real prod mutations across many orgs. Leave a durable, cost-aw
 
 > **Local Claude Code only.** This assumes a persistent local filesystem. A managed-agent session runs in an ephemeral sandbox whose disk is discarded on teardown — skip run-recording there until the workspace can be synced to durable storage (see the doc's "Local Claude Code only" note). The dispatch pattern in this skill is local-driven today, so this is the normal case.
 
-At the start of a batch, create the workspace and point the CLI's mutation log at this run:
+At the start of a batch, start a run so the CLI's mutation log points at it:
 
 ```bash
-RUN_DIR=~/.releases/work/runs/$(date +%Y-%m-%d-%H%M)-<batch>
-mkdir -p ~/.releases/work/tasks "$RUN_DIR" ~/.releases/work/reports
-export RELEASES_RUN_DIR="$RUN_DIR"
+releases admin work start <batch>
+# Creates ~/.releases/work/runs/<ts>-<batch>/ and writes a sticky
+# ~/.releases/work/.current-run pointer the CLI reads on every later call.
+mkdir -p ~/.releases/work/{tasks,reports} # for the batch definition + cross-run report below
 ```
 
-(Honors `RELEASES_DATA_DIR` — substitute `$RELEASES_DATA_DIR/work` for `~/.releases/work` if set.) With `RELEASES_RUN_DIR` exported, every `releases admin …` write that runs in this shell — including the parent-saves fallback above, which is where most playbook saves land — auto-appends a line to `$RELEASES_RUN_DIR/mutations.jsonl`. You no longer hand-collect the raw `--json` outputs. Optionally write the batch definition (targets, workflow, model) to `~/.releases/work/tasks/<batch>.md` up front so the run is re-runnable.
+(Honors `RELEASES_DATA_DIR` — substitute `$RELEASES_DATA_DIR/work` for `~/.releases/work` if set.) With a run active, every `releases admin …` write — including the parent-saves fallback above, which is where most playbook saves land — auto-appends a line to the run's `mutations.jsonl`. You no longer hand-collect the raw `--json` outputs. **Use `work start`, not `export RELEASES_RUN_DIR`:** each Bash tool call is a fresh shell, so a one-time `export` stops logging after the first command, while the `.current-run` pointer is read fresh on every invocation. (`RELEASES_RUN_DIR` set inline still wins as a one-off override; `releases admin work status` shows the active run, `work end` clears it.) Optionally write the batch definition (targets, workflow, model) to `~/.releases/work/tasks/<batch>.md` up front so the run is re-runnable.
 
 After all agents complete, write the judgment layer the CLI can't capture:
 
-1. **Per run** — write `$RELEASES_RUN_DIR/summary.md`: status, per-target result table, cost, and what changed. `mutations.jsonl` beside it already holds the raw record of every save.
+1. **Per run** — write `summary.md` in the run dir (the path `work start` printed; `work status` reprints it): status, per-target result table, cost, and what changed. `mutations.jsonl` beside it already holds the raw record of every save.
 2. **Per session** — write `~/.releases/work/reports/<date>-<batch>.md` with the cross-run pass-rate / cost table and findings worth acting on.
 
 What to capture in the summary and report (these are the data-grounded observations a verified run surfaces):

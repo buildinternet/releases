@@ -212,34 +212,28 @@ A batch refresh makes real prod mutations (`overview update`, `source fetch`) an
 
 > **Local Claude Code only.** This assumes a persistent local filesystem. A managed-agent session runs in an ephemeral sandbox whose disk is discarded on teardown — skip run-recording there until the workspace can be synced to durable storage (see the doc's "Local Claude Code only" note). This skill is local-driven today, so that's the normal case.
 
-Skip this for a single-org spot check — it's for batch sweeps. At the start of a batch, create the workspace and point the CLI at this run:
+Skip this for a single-org spot check — it's for batch sweeps. At the start of a batch, start a run so the CLI auto-captures the mechanical evidence:
 
 ```bash
-RUN_DIR=~/.releases/work/runs/$(date +%Y-%m-%d-%H%M)-<batch>
-mkdir -p ~/.releases/work/tasks "$RUN_DIR" ~/.releases/work/reports
-export RELEASES_RUN_DIR="$RUN_DIR"
+releases admin work start <batch>
+# Creates ~/.releases/work/runs/<ts>-<batch>/ and writes a sticky
+# ~/.releases/work/.current-run pointer the CLI reads on every later call.
+mkdir -p ~/.releases/work/{tasks,reports} # for the batch definition + cross-run report below
 ```
 
-(Honors `RELEASES_DATA_DIR` — substitute `$RELEASES_DATA_DIR/work` for `~/.releases/work` if set.)
+(Honors `RELEASES_DATA_DIR` — substitute `$RELEASES_DATA_DIR/work` for `~/.releases/work` if set.) `releases admin work status` shows the active run plus a mutations/sessions tally; `releases admin work end` clears the pointer when the batch is done.
 
-> **The `export` does not survive across commands in an agent harness.** Claude Code (and most agent runtimes) run **each Bash call in a fresh shell** — shell state, including `export RELEASES_RUN_DIR`, does _not_ carry from one tool call to the next (CWD can reset too). A one-time `export` silently stops logging after the first command. So either set it **inline on every mutation command** that should be logged:
->
-> ```bash
-> RELEASES_RUN_DIR=~/.releases/work/runs/<ts>-<batch> \
->   releases admin overview update <slug> --content-file … --citations-file …
-> ```
->
-> or run all your mutations inside a **single** Bash call that exports at the top. The failure mode is silent — a write in a call that forgot the var just isn't logged, no error. (Only when you drive one persistent shell does the one-time `export` above suffice.)
+> **Use `work start`, not `export RELEASES_RUN_DIR`.** Claude Code (and most agent runtimes) run **each Bash call in a fresh shell** — shell state, including `export RELEASES_RUN_DIR`, does _not_ carry from one tool call to the next (CWD can reset too), so a one-time `export` silently stops logging after the first command. The sticky `.current-run` pointer `work start` writes is read fresh on every invocation, so logging survives across separate calls. The CLI resolves the active run as `RELEASES_RUN_DIR` env → `.current-run` pointer → none, so for a one-off override you can still set `RELEASES_RUN_DIR=…` inline on a single command and it wins over the pointer.
 
-With `RELEASES_RUN_DIR` set on the invocation, the CLI captures the mechanical evidence on its own:
+With a run active, the CLI captures the mechanical evidence on its own:
 
-- Every `releases admin …` write the parent runs — each `overview update`, each `source fetch` trigger — auto-appends a line (`{timestamp, command, target, result}`) to `$RELEASES_RUN_DIR/mutations.jsonl`.
-- Managed fetch sessions (`releases admin source fetch … --wait`) you run from the batch shell land their trace + cost at `$RELEASES_RUN_DIR/<sessionId>/{trace.json,summary.md}` — `RELEASES_RUN_DIR` is the default trace dir, so no `--trace-dir` flag is needed. To snapshot a session a sub-agent ran, use `releases admin discovery task get <id> --save "$RELEASES_RUN_DIR"`. The session `summary.md` carries its `estimatedUsd`.
+- Every `releases admin …` write the parent runs — each `overview update`, each `source fetch` trigger — auto-appends a line (`{timestamp, command, target, result}`) to the run's `mutations.jsonl`.
+- Managed fetch sessions (`releases admin source fetch … --wait`) you run during the batch land their trace + cost at `<run-dir>/<sessionId>/{trace.json,summary.md}` — the active run is the default trace dir, so no `--trace-dir` flag is needed. To snapshot a session a sub-agent ran, use `releases admin discovery task get <id> --save` (bare `--save` defaults to the active run). The session `summary.md` carries its `estimatedUsd`.
 - **Sub-agent generation cost is NOT auto-captured.** The parallel generation sub-agents are the dominant spend on a regen sweep (each ~40–80K tokens), but they aren't CLI sessions, so nothing lands in `runs/`. Record their token totals by hand in `summary.md` from each agent's completion summary — this number is parent-estimated, not logged.
 
 After all sub-agents complete, write the judgment layer the CLI can't:
 
-1. **Per run** — write `$RELEASES_RUN_DIR/summary.md`: status, the per-org result table (reuse the "Tracking results" table above), total cost, and what changed.
+1. **Per run** — write `summary.md` in the run dir (the path `work start` printed; `work status` reprints it): status, the per-org result table (reuse the "Tracking results" table above), total cost, and what changed.
 2. **Per session** — write `~/.releases/work/reports/<date>-<batch>.md` with the cross-run pass-rate / cost table and findings worth acting on.
 
 What to capture, specific to overview regen:
