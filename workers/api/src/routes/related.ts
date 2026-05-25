@@ -26,7 +26,11 @@ import { createDb } from "../db.js";
 import { sourceMatchByIdOrSlug, parseReleaseMedia } from "../utils.js";
 import { daysAgoIso } from "@buildinternet/releases-core/dates";
 import { logEvent } from "@releases/lib/log-event";
-import { scoreRelatedRelease, recencyMultiplier } from "../related-ranking.js";
+import {
+  scoreRelatedRelease,
+  recencyMultiplier,
+  RELATED_GLOBAL_MIN_RANK,
+} from "../related-ranking.js";
 import {
   RelatedReleasesResponseSchema,
   RelatedSourcesResponseSchema,
@@ -219,6 +223,10 @@ relatedRoutes.get(
       return c.json({ scope, items: [] as RelatedReleaseItem[] });
     }
 
+    // The global rail competes against every product, so hide weak matches
+    // (a stale, low-similarity pool means "nothing good out there"). The org
+    // rail is inherently scoped, so it shows its best even when modest.
+    const minRank = scope === "global" ? RELATED_GLOBAL_MIN_RANK : 0;
     const items = await hydrateReleaseNeighbors(
       db,
       matches,
@@ -226,6 +234,7 @@ relatedRoutes.get(
       limit,
       mediaOrigin,
       excludeOrg,
+      minRank,
     );
     return c.json({ scope, items });
   },
@@ -238,6 +247,7 @@ async function hydrateReleaseNeighbors(
   limit: number,
   mediaOrigin: string,
   excludeOrg: string | null,
+  minRank: number,
 ): Promise<RelatedReleaseItem[]> {
   const ids = matches.map((m) => m.id).filter((id) => id !== anchorId);
   if (ids.length === 0) return [];
@@ -293,9 +303,10 @@ async function hydrateReleaseNeighbors(
   for (const row of rows) byId.set(row.id, row);
 
   // Rank every surviving candidate by cosine × recency × content quality,
-  // dropping content-free releases and (optionally) one org, then slice. We
-  // rank the full pool rather than walking cosine order so recent, content-rich
-  // matches can overtake a closer-but-stale or closer-but-empty neighbor.
+  // dropping content-free releases, (optionally) one org, and anything below
+  // `minRank`, then slice. We rank the full pool rather than walking cosine
+  // order so recent, content-rich matches can overtake a closer-but-stale or
+  // closer-but-empty neighbor.
   const now = Date.now();
   const ranked: Array<{ item: RelatedReleaseItem; rank: number }> = [];
   for (const m of matches) {
@@ -314,6 +325,7 @@ async function hydrateReleaseNeighbors(
       now,
     );
     if (tier === "empty") continue;
+    if (rank < minRank) continue;
 
     ranked.push({
       rank,

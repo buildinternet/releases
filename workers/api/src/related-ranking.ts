@@ -32,6 +32,18 @@ export const THIN_CONTENT_CHARS = 160;
 /** Rank multiplier applied to thin releases. */
 export const THIN_WEIGHT = 0.5;
 
+/**
+ * Minimum combined rank (`cosine × recency × contentWeight`) a candidate must
+ * clear to appear on the GLOBAL "From other products" rail. A thin anchor's
+ * only semantically-similar global neighbors are maintenance/version-bump
+ * releases; once the recent content-free ones are dropped, what remains is
+ * stale, and its best match falls below this — so the rail collapses rather
+ * than render months-old filler. Calibrated against prod: strong rails top out
+ * ~0.45–0.7, the stale v2.1.150 rail topped ~0.14. NOT applied to the org rail,
+ * where a slow-moving org's older releases are still its best content.
+ */
+export const RELATED_GLOBAL_MIN_RANK = 0.2;
+
 const DAY_MS = 86_400_000;
 
 /**
