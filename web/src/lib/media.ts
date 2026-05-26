@@ -15,10 +15,34 @@ const MEDIA_ORIGIN = "https://media.releases.sh";
 export const IMG_TRANSFORM_ON = process.env.NEXT_PUBLIC_RELEASES_IMG_TRANSFORM === "true";
 
 /**
+ * Pure core of {@link releaseThumbUrl}, parameterized on the flag + origin so
+ * both states are unit-testable without juggling the build-time env const.
+ *
+ * Only **same-origin** sources (already on the media origin — i.e. R2-hosted,
+ * `r2Url`) are routed through the Cloudflare width transform. Third-party
+ * sources pass through untransformed: once ingest-time R2 upload (#1177) makes
+ * media same-origin, the Cloudflare Transformations "Sources" setting is
+ * tightened back to "Specified origins", at which point a cross-origin
+ * `/cdn-cgi/image/.../<third-party-url>` 403s. Gating to same-origin means we
+ * never emit such a URL — un-uploaded media renders untransformed (jagged but
+ * never broken) rather than hitting the error placeholder.
+ */
+export function thumbUrl(
+  src: string,
+  width: number,
+  opts: { enabled: boolean; origin: string },
+): string {
+  if (!opts.enabled) return src;
+  if (!src.startsWith(opts.origin)) return src; // third-party / relative → passthrough
+  return cfImageUrl(src, { origin: opts.origin, width });
+}
+
+/**
  * Downscaled thumbnail URL for a release-media image. When the rollout flag is
- * on, routes the image through a Cloudflare width transform so the browser gets
- * an appropriately-sized variant instead of squeezing a full-resolution
- * original into a small box. When off, returns `src` unchanged.
+ * on, routes a same-origin (R2-hosted) image through a Cloudflare width
+ * transform so the browser gets an appropriately-sized variant instead of
+ * squeezing a full-resolution original into a small box. When off — or for a
+ * third-party source — returns `src` unchanged.
  *
  * Call sites should render the result with next/image `unoptimized` (see
  * {@link IMG_TRANSFORM_ON}) — the image is already CF-optimized, so Vercel must
@@ -26,6 +50,5 @@ export const IMG_TRANSFORM_ON = process.env.NEXT_PUBLIC_RELEASES_IMG_TRANSFORM =
  * otherwise trigger a second optimization pass + billing).
  */
 export function releaseThumbUrl(src: string, width: number): string {
-  if (!IMG_TRANSFORM_ON) return src;
-  return cfImageUrl(src, { origin: MEDIA_ORIGIN, width });
+  return thumbUrl(src, width, { enabled: IMG_TRANSFORM_ON, origin: MEDIA_ORIGIN });
 }
