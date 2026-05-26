@@ -137,6 +137,7 @@
     // Production deploys advertise "production"; the staging block overrides
     // to "staging".
     "ENVIRONMENT": "production",
+    "WEB_BOT_AUTH_ENABLED": "false",
   },
   "d1_databases": [
     {
@@ -366,6 +367,11 @@
       "store_id": "a887a71cab084105b79706df23380723",
       "secret_name": "INDEXNOW_KEY",
     },
+    {
+      "binding": "WEB_BOT_AUTH_PRIVATE_KEY",
+      "store_id": "a887a71cab084105b79706df23380723",
+      "secret_name": "WEB_BOT_AUTH_PRIVATE_KEY",
+    },
   ],
   // ── Staging environment ──────────────────────────────────────────────
   // Deployed as `releases-api-staging` at api-staging.releases.sh. Points
@@ -451,6 +457,7 @@
         "FEED_THIN_CHARS": "600",
         // Discriminator read by /v1/graphql to gate GraphiQL + introspection.
         "ENVIRONMENT": "staging",
+        "WEB_BOT_AUTH_ENABLED": "false",
       },
       "d1_databases": [
         {
@@ -604,6 +611,11 @@
           "binding": "CLOUDFLARE_API_TOKEN",
           "store_id": "a887a71cab084105b79706df23380723",
           "secret_name": "CLOUDFLARE_API_TOKEN",
+        },
+        {
+          "binding": "WEB_BOT_AUTH_PRIVATE_KEY",
+          "store_id": "a887a71cab084105b79706df23380723",
+          "secret_name": "WEB_BOT_AUTH_PRIVATE_KEY",
         },
       ],
     },

@@ -70,6 +70,7 @@ import { clusterAndPersistCascades } from "../lib/cluster-cascades.js";
 import { resolveOrgSlug, resolveProductSlug } from "../lib/slug-lookups.js";
 import { logEvent } from "@releases/lib/log-event";
 import { classifyDbError, dbErrorLogFields } from "@releases/lib/db-errors";
+import { makeBotFetch } from "../lib/web-bot-auth-fetch.js";
 import {
   classifyMarketing,
   type MarketingClassifierResult,
@@ -132,11 +133,17 @@ export async function pollAndFetch(
     ? await loadPlaybookNotesForSources(db, dueSources)
     : new Map<string, string | null>();
 
+  // Build the signing fetch once per fire — `createSigningFetch` returns a
+  // stateless closure, so sharing it across concurrent sources is safe and
+  // avoids one Secrets Store read per source when signing is enabled.
+  const signedFetch = await makeBotFetch(env);
+
   // Poll phase: HEAD checks
   const pollResults = await runWithConcurrency(dueSources, POLL_CONCURRENCY, async (source) => {
     return pollOne(db, source, now, {
       changeDetectEnabled,
       playbookNotes: source.orgId ? (playbookNotesByOrg.get(source.orgId) ?? null) : null,
+      signedFetch,
     });
   });
 
@@ -195,7 +202,7 @@ export async function pollAndFetch(
       sourceCount: fetchable.length,
     });
     const results = await runWithConcurrency(fetchable, FETCH_CONCURRENCY, async (source) => {
-      const r = await fetchOne(db, source, env);
+      const r = await fetchOne(db, source, env, { signedFetch });
       if (r.releasesInserted > 0) {
         totalInserted += r.releasesInserted;
         lastInsertingSource = source.id;
@@ -311,7 +318,11 @@ export async function pollOne(
   db: ReturnType<typeof drizzle>,
   source: Source,
   now: Date,
-  opts?: { changeDetectEnabled?: boolean; playbookNotes?: string | null },
+  opts?: {
+    changeDetectEnabled?: boolean;
+    playbookNotes?: string | null;
+    signedFetch?: typeof fetch;
+  },
 ): Promise<PollResult> {
   const nowIso = now.toISOString();
   const meta = getSourceMeta(source);
@@ -346,7 +357,14 @@ export async function pollOne(
       await db.update(sources).set({ lastPolledAt: nowIso }).where(eq(sources.id, source.id));
       return { source, changed: false };
     }
-    return pollScrapeOrAgentByQuirk(db, source, meta, now, opts.playbookNotes ?? null);
+    return pollScrapeOrAgentByQuirk(
+      db,
+      source,
+      meta,
+      now,
+      opts.playbookNotes ?? null,
+      opts.signedFetch,
+    );
   }
 
   if (!meta.feedUrl) {
@@ -355,11 +373,15 @@ export async function pollOne(
   }
 
   try {
-    const result = await headCheckUrl(meta.feedUrl, {
-      etag: meta.feedEtag,
-      lastModified: meta.feedLastModified,
-      contentLength: meta.feedContentLength,
-    });
+    const result = await headCheckUrl(
+      meta.feedUrl,
+      {
+        etag: meta.feedEtag,
+        lastModified: meta.feedLastModified,
+        contentLength: meta.feedContentLength,
+      },
+      opts?.signedFetch,
+    );
 
     // Update stored header values in metadata
     const metaUpdates: Partial<SourceMetadata> = {};
@@ -427,6 +449,7 @@ async function pollScrapeOrAgentByQuirk(
   meta: SourceMetadata,
   now: Date,
   playbookNotes: string | null,
+  signedFetch?: typeof fetch,
 ): Promise<PollResult> {
   const nowIso = now.toISOString();
   const start = Date.now();
@@ -483,9 +506,12 @@ async function pollScrapeOrAgentByQuirk(
     switch (detector) {
       case "body-hash":
       case "body-hash-filtered": {
-        const result = await bodyHashCheck(probeUrl, meta.pageContentHash, {
-          filter: detector === "body-hash-filtered",
-        });
+        const result = await bodyHashCheck(
+          probeUrl,
+          meta.pageContentHash,
+          { filter: detector === "body-hash-filtered" },
+          signedFetch,
+        );
         metaUpdates = {};
         if (result.contentHash) metaUpdates.pageContentHash = result.contentHash;
         status = result.status;
@@ -496,11 +522,15 @@ async function pollScrapeOrAgentByQuirk(
       // not a different probe.
       case "etag":
       case "content-length": {
-        const result = await headCheckUrl(probeUrl, {
-          etag: meta.pageEtag,
-          lastModified: meta.pageLastModified,
-          contentLength: meta.pageContentLength,
-        });
+        const result = await headCheckUrl(
+          probeUrl,
+          {
+            etag: meta.pageEtag,
+            lastModified: meta.pageLastModified,
+            contentLength: meta.pageContentLength,
+          },
+          signedFetch,
+        );
         metaUpdates = {};
         if (result.etag) metaUpdates.pageEtag = result.etag;
         if (result.lastModified) metaUpdates.pageLastModified = result.lastModified;
@@ -598,6 +628,8 @@ export interface FetchOneEnv extends IndexNowEnv, AnthropicEnv {
   FEED_THIN_CHARS?: string;
   CLOUDFLARE_ACCOUNT_ID?: { get(): Promise<string> };
   CLOUDFLARE_API_TOKEN?: { get(): Promise<string> };
+  WEB_BOT_AUTH_ENABLED?: string;
+  WEB_BOT_AUTH_PRIVATE_KEY?: { get(): Promise<string> };
 }
 
 /**
@@ -976,6 +1008,13 @@ export async function fetchOne(
      * per-source KV lock from #1058. See #1061.
      */
     skipDelegation?: boolean;
+    /**
+     * Pre-built Web Bot Auth signing fetch shared across a cron fire. When
+     * omitted, fetchOne builds its own via makeBotFetch(env); passing the
+     * instance hoisted in `pollAndFetch` avoids one Secrets Store read per
+     * source when signing is enabled.
+     */
+    signedFetch?: typeof fetch;
   },
 ): Promise<FetchOneResult> {
   const start = Date.now();
@@ -1032,11 +1071,13 @@ export async function fetchOne(
       if (meta.feedEtag) conditionalHeaders["If-None-Match"] = meta.feedEtag;
       if (meta.feedLastModified) conditionalHeaders["If-Modified-Since"] = meta.feedLastModified;
 
+      const botFetch = opts?.signedFetch ?? (await makeBotFetch(env));
       const result = await fetchAndParseFeed(
         meta.feedUrl,
         meta.feedType as "rss" | "atom" | "jsonfeed",
         { maxEntries },
         Object.keys(conditionalHeaders).length > 0 ? conditionalHeaders : undefined,
+        botFetch,
       );
       rawReleases = result.releases;
 

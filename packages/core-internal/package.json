@@ -8,6 +8,7 @@
     "./release-upsert": "./src/release-upsert.ts",
     "./hash": "./src/hash.ts",
     "./webhook-sign": "./src/webhook-sign.ts",
+    "./web-bot-auth-sign": "./src/web-bot-auth-sign.ts",
     "./collection-feed": "./src/collection-feed.ts",
     "./category-feed": "./src/category-feed.ts",
     "./feed-cursor": "./src/feed-cursor.ts",

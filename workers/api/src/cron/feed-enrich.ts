@@ -15,6 +15,7 @@ import { logEvent } from "@releases/lib/log-event";
 import { getSecret } from "@releases/lib/secrets";
 import { buildAnthropicClient } from "@releases/lib/anthropic-client.js";
 import { getAnthropicKey, resolveGatewayOpts, type AnthropicEnv } from "../lib/anthropic.js";
+import { makeBotFetch } from "../lib/web-bot-auth-fetch.js";
 import { IN_ARRAY_CHUNK_SIZE } from "../lib/d1-limits.js";
 import { releases } from "@buildinternet/releases-core/schema";
 import type { drizzle } from "drizzle-orm/d1";
@@ -150,6 +151,8 @@ export function makeExtractArticleFn(
 export interface EnrichDepsEnv extends AnthropicEnv {
   CLOUDFLARE_ACCOUNT_ID?: { get(): Promise<string | null> } | { get(): Promise<string> };
   CLOUDFLARE_API_TOKEN?: { get(): Promise<string | null> } | { get(): Promise<string> };
+  WEB_BOT_AUTH_ENABLED?: string;
+  WEB_BOT_AUTH_PRIVATE_KEY?: { get(): Promise<string> };
 }
 
 /**
@@ -182,7 +185,8 @@ export async function buildEnrichDeps(
     return { content };
   });
 
-  return { thinChars, extractArticleFn, renderFn, logEvent };
+  const fetchImpl = await makeBotFetch(env);
+  return { thinChars, extractArticleFn, renderFn, logEvent, fetchImpl };
 }
 
 export const DEFAULT_ENRICH_MAX_PER_FIRE = 10;
