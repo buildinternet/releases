@@ -16,6 +16,7 @@ import {
   parseFeedLinks,
   getSourceMeta,
   filterByCategoryAllow,
+  filterByKeywordAllow,
 } from "@releases/adapters/feed";
 import type { RawRelease } from "@releases/adapters/types";
 
@@ -919,6 +920,85 @@ describe("filterByCategoryAllow", () => {
       "Mixed-case match",
     ]);
     expect(dropped).toBe(2);
+  });
+});
+
+describe("filterByKeywordAllow", () => {
+  // Models the Discord blog feed: a mixed-topic feed with no <category> tags,
+  // where the changelog/patch-notes items are only distinguishable by the
+  // keyword appearing in the title or the URL slug.
+  const items: RawRelease[] = [
+    {
+      title: "Discord Patch Notes: May 4, 2026",
+      content: "",
+      url: "https://discord.com/blog/discord-patch-notes-may-4-2026",
+    },
+    {
+      title: "Discord Update - March 24, 2026 (Changelog)",
+      content: "",
+      url: "https://discord.com/blog/discord-update-march-24-2026-changelog",
+    },
+    {
+      title: "Celebrate Discord's 11th Birthday",
+      content: "",
+      url: "https://discord.com/blog/celebrate-discords-11th-birthday",
+    },
+    {
+      title: "Every Voice Call Is Now End-to-End Encrypted",
+      content: "",
+      url: "https://discord.com/blog/every-voice-and-video-call-is-now-e2ee",
+    },
+  ];
+
+  it("keeps items whose title or URL contains any keyword (case-insensitive)", () => {
+    const { kept, dropped } = filterByKeywordAllow(items, ["changelog", "patch-notes"]);
+    expect(kept.map((i) => i.title)).toEqual([
+      "Discord Patch Notes: May 4, 2026",
+      "Discord Update - March 24, 2026 (Changelog)",
+    ]);
+    expect(dropped).toBe(2);
+  });
+
+  it("matches on the URL slug even when the title spaces the keyword differently", () => {
+    // Title says "Patch Notes" (space); only the URL has "patch-notes" (hyphen).
+    const { kept } = filterByKeywordAllow([items[0]!], ["patch-notes"]);
+    expect(kept).toHaveLength(1);
+  });
+
+  it("matches on the title when the URL is absent", () => {
+    const { kept } = filterByKeywordAllow(
+      [{ title: "Weekly Changelog", content: "" }],
+      ["changelog"],
+    );
+    expect(kept).toHaveLength(1);
+  });
+
+  it("drops items matching no keyword", () => {
+    const { kept, dropped } = filterByKeywordAllow(
+      [items[2]!, items[3]!],
+      ["changelog", "patch-notes"],
+    );
+    expect(kept).toHaveLength(0);
+    expect(dropped).toBe(2);
+  });
+
+  it("treats an empty allowlist as passthrough", () => {
+    const { kept, dropped } = filterByKeywordAllow(items, []);
+    expect(kept).toEqual(items);
+    expect(dropped).toBe(0);
+  });
+
+  it("ignores whitespace-only / empty keywords instead of matching (or dropping) everything", () => {
+    // A blank entry must not silently disable the filter (empty string matches
+    // everything) nor silently drop everything (whitespace matches nothing).
+    expect(filterByKeywordAllow(items, [""]).kept).toEqual(items);
+    expect(filterByKeywordAllow(items, ["   "]).kept).toEqual(items);
+  });
+
+  it("trims surrounding whitespace on keywords and skips blank entries", () => {
+    // Models a hand-typed "changelog, " → ["changelog", " "] or a stray space.
+    const { kept } = filterByKeywordAllow(items, [" ", "  changelog  "]);
+    expect(kept.map((i) => i.title)).toEqual(["Discord Update - March 24, 2026 (Changelog)"]);
   });
 });
 

@@ -552,6 +552,31 @@ export function filterByCategoryAllow(
   return { kept, dropped };
 }
 
+/**
+ * Keep only items whose `title` or `url` contains any allowed keyword
+ * (case-insensitive substring). Built for mixed-topic feeds that carry no
+ * usable `<category>` tags but encode the section in the title or the URL
+ * slug — e.g. Discord's blog feed, where changelog/patch-notes posts live at
+ * `…/discord-patch-notes-…` and `…-changelog` alongside marketing posts.
+ * Complements `filterByCategoryAllow` (which needs real categories). Empty
+ * `allow` short-circuits to passthrough.
+ */
+export function filterByKeywordAllow(
+  items: RawRelease[],
+  allow: readonly string[],
+): { kept: RawRelease[]; dropped: number } {
+  const needles = allow.map((k) => k.toLowerCase().trim()).filter(Boolean);
+  if (needles.length === 0) return { kept: items, dropped: 0 };
+  const kept: RawRelease[] = [];
+  let dropped = 0;
+  for (const item of items) {
+    const haystack = `${item.title} ${item.url ?? ""}`.toLowerCase();
+    if (needles.some((n) => haystack.includes(n))) kept.push(item);
+    else dropped++;
+  }
+  return { kept, dropped };
+}
+
 export function parseJsonFeed(json: string): RawRelease[] {
   const feed = JSON.parse(json);
   const items: Array<{

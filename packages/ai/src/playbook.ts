@@ -143,6 +143,24 @@ export function generatePlaybookHeader(input: PlaybookInput): string {
     }
   }
 
+  // Keyword allowlists (title/URL substring) — shown as footnotes below the table
+  const sourcesWithKeywordAllow = [...active, ...disabled]
+    .map((s) => ({ source: s, meta: getSourceMeta(s) }))
+    .filter(({ meta }) => meta.feedKeywordAllow && meta.feedKeywordAllow.length > 0);
+  if (sourcesWithKeywordAllow.length > 0) {
+    lines.push(`## Keyword Allowlists`);
+    lines.push("");
+    lines.push(
+      `> Feed items are kept only when one of these keywords appears (case-insensitive) in the item's title or URL slug. All others are dropped at ingest.`,
+    );
+    lines.push("");
+    for (const { source, meta } of sourcesWithKeywordAllow) {
+      const list = meta.feedKeywordAllow!.map((c) => `\`${c}\``).join(", ");
+      lines.push(`**${source.name}** (\`${source.slug}\`): ${list}`);
+      lines.push("");
+    }
+  }
+
   return lines.join("\n");
 }
 

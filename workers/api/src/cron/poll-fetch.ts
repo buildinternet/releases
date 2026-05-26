@@ -17,6 +17,7 @@ import {
   bodyHashCheck,
   fetchAndParseFeed,
   filterByCategoryAllow,
+  filterByKeywordAllow,
   getSourceMeta,
   isGitHubFetched,
   effectiveGitHubUrl,
@@ -1098,6 +1099,21 @@ export async function fetchOne(
             kept: filtered.kept.length,
             dropped: filtered.dropped,
             categoryAllow: meta.categoryAllow,
+          });
+        }
+        rawReleases = filtered.kept;
+      }
+
+      if (meta.feedKeywordAllow && meta.feedKeywordAllow.length > 0) {
+        const filtered = filterByKeywordAllow(rawReleases, meta.feedKeywordAllow);
+        if (filtered.dropped > 0) {
+          logEvent("info", {
+            component: "cron-poll-fetch",
+            event: "keyword-filter-applied",
+            sourceSlug: source.slug,
+            kept: filtered.kept.length,
+            dropped: filtered.dropped,
+            feedKeywordAllow: meta.feedKeywordAllow,
           });
         }
         rawReleases = filtered.kept;
