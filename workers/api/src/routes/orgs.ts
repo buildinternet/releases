@@ -66,6 +66,7 @@ import {
   parseLimitParam,
   parseTimeWindow,
   replaceAliases,
+  findProductForOrgSlug,
 } from "../utils.js";
 import { IN_ARRAY_CHUNK_SIZE } from "../lib/d1-limits.js";
 import { wantsMarkdown, markdownResponse } from "../middleware/content-negotiation.js";
@@ -1700,6 +1701,14 @@ orgRoutes.get(
         description: `Filter by resolved entity kind (source.kind ?? product.kind). One of: ${KIND_VALUES.join(", ")}.`,
       },
       {
+        name: "product",
+        in: "query",
+        required: false,
+        schema: { type: "string" },
+        description:
+          "Restrict the feed to one product (slug or `prod_…` id, scoped to this org). Unknown product → 404.",
+      },
+      {
         name: "include_coverage",
         in: "query",
         required: false,
@@ -1789,6 +1798,14 @@ orgRoutes.get(
 
     if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
 
+    const productParam = c.req.query("product");
+    let productId: string | undefined;
+    if (productParam) {
+      const product = await findProductForOrgSlug(db, slug, productParam);
+      if (!product) return c.json({ error: "not_found", message: "Product not found" }, 404);
+      productId = product.id;
+    }
+
     const results = await getOrgReleasesFeed(
       c.env.DB,
       org.id,
@@ -1800,6 +1817,7 @@ orgRoutes.get(
         includePrereleases,
         ftsMatch,
         kind,
+        productId,
         since: window.since,
         until: window.until,
       },
