@@ -380,6 +380,8 @@ export async function getOrgReleasesFeed(
      * Mirrors `resolveSourceKind` from @buildinternet/releases-core/kinds.
      */
     kind?: string;
+    /** Restrict to sources under one product (resolved id). */
+    productId?: string;
     /**
      * Canonical ISO bounds on `published_at` (resolved from any relative
      * shorthand upstream). `since` keeps rows at or after the bound; `until`
@@ -413,6 +415,11 @@ export async function getOrgReleasesFeed(
   if (opts.kind) {
     kindWhere = "AND COALESCE(s.kind, p.kind) = ?";
     filterBindings.push(opts.kind);
+  }
+  let productWhere = "";
+  if (opts.productId) {
+    productWhere = "AND s.product_id = ?";
+    filterBindings.push(opts.productId);
   }
 
   // Time window on published_at. `>=`/`<=` on the ISO text column drop
@@ -452,6 +459,7 @@ export async function getOrgReleasesFeed(
       ${prereleaseWhere}
       ${ftsWhere}
       ${kindWhere}
+      ${productWhere}
       ${windowWhere}
       ${cursor.cursorWhere}
     ORDER BY
