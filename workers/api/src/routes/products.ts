@@ -369,6 +369,8 @@ const getProductDetailHandler = async (c: import("hono").Context<Env>) => {
         name: sourcesActive.name,
         type: sourcesActive.type,
         url: sourcesActive.url,
+        metadata: sourcesActive.metadata,
+        kind: sourcesActive.kind,
       })
       .from(sourcesActive)
       .where(eq(sourcesActive.productId, product.id))

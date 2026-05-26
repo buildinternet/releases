@@ -1,6 +1,9 @@
 import Link from "next/link";
 import { ViewTransition } from "react";
 import { SourceTypeIcon } from "./source-type-icon";
+import { AppIcon } from "@/components/app-icon";
+import { PlatformBadge } from "@/components/platform-badge";
+import { getAppInfo } from "@/lib/app-source";
 import {
   type CadenceKey,
   type WeeklyBucket,
@@ -147,6 +150,7 @@ export function SourceCard({
   const cadenceInfo = cadence ? getCadenceInfo(cadence.avgReleasesPerWeek) : null;
   const color = cadence ? getProductColor(cadence.colorIndex) : undefined;
   const capped = cadence ? cadence.totalReleaseCount >= FETCH_CAP : false;
+  const appInfo = getAppInfo(source);
 
   return (
     <Link
@@ -155,11 +159,13 @@ export function SourceCard({
     >
       <div className="flex justify-between items-center">
         <div className="flex items-center gap-2">
+          {appInfo && <AppIcon iconUrl={appInfo.iconUrl} name={source.name} size={20} />}
           <ViewTransition name={transitionName} default="none">
             <span className="font-semibold text-[15px] text-stone-900 dark:text-stone-100">
               {source.name}
             </span>
           </ViewTransition>
+          {appInfo && <PlatformBadge label={appInfo.label} />}
           {source.isPrimary && (
             <span className="text-[10px] font-medium uppercase tracking-wide text-stone-500 dark:text-stone-400 bg-stone-100 dark:bg-stone-800 px-1.5 py-0.5 rounded">
               Primary

@@ -11,6 +11,8 @@ import { JsonLd } from "@/components/json-ld";
 import { taxonomySidebarSections } from "@/components/taxonomy-chips";
 import { getOrg } from "../../_lib/org-data";
 import Link from "next/link";
+import { AppIcon } from "@/components/app-icon";
+import { getAppInfo, type AppInfo } from "@/lib/app-source";
 
 const getProduct = cache((orgSlug: string, productSlug: string) =>
   api.productDetail({ orgSlug, productSlug }),
@@ -59,6 +61,13 @@ export default async function ProductPage({
     throw err;
   }
   const orgName = org.name;
+
+  const appEntries = product.sources
+    .map((s) => {
+      const app = getAppInfo(s);
+      return app ? { slug: s.slug, name: s.name, app } : null;
+    })
+    .filter((e): e is { slug: string; name: string; app: AppInfo } => e !== null);
 
   const sidebarSections = [
     {
@@ -115,6 +124,23 @@ export default async function ProductPage({
         </h1>
         {product.description && (
           <p className="text-sm text-stone-500 dark:text-stone-400 mt-1">{product.description}</p>
+        )}
+        {appEntries.length > 0 && (
+          <div className="flex items-center gap-2 mt-3">
+            <span className="text-xs text-stone-400 dark:text-stone-500">Available on</span>
+            {appEntries.map((e) => (
+              <Link
+                key={e.slug}
+                href={`/${orgSlug}/${e.slug}`}
+                className="flex items-center gap-1.5 bg-stone-100 dark:bg-stone-800 hover:bg-stone-200 dark:hover:bg-stone-700 rounded-md px-2 py-1 transition-colors"
+              >
+                <AppIcon iconUrl={e.app.iconUrl} name={e.name} size={16} />
+                <span className="text-xs font-medium text-stone-600 dark:text-stone-300">
+                  {e.app.label}
+                </span>
+              </Link>
+            ))}
+          </div>
         )}
         <CliCommand identifier={product.slug} />
 
