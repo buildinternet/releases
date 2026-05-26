@@ -101,6 +101,7 @@ export default async function OrgLayout({
           <div className="mt-2">
             <OrgAdminMenu
               orgSlug={org.slug}
+              name={org.name}
               isHidden={org.isHidden ?? false}
               autoGenerateContent={org.autoGenerateContent ?? false}
               discovery={org.discovery}

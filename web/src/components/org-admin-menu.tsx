@@ -2,16 +2,22 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { setOrgHiddenAction, setOrgAutoGenerateContentAction } from "@/app/actions/org-admin";
+import {
+  setOrgHiddenAction,
+  setOrgAutoGenerateContentAction,
+  renameOrgAction,
+} from "@/app/actions/org-admin";
 
 export function OrgAdminMenu({
   orgSlug,
+  name,
   isHidden,
   autoGenerateContent,
   discovery,
   fetchPaused,
 }: {
   orgSlug: string;
+  name: string;
   isHidden: boolean;
   autoGenerateContent: boolean;
   discovery?: string;
@@ -19,6 +25,7 @@ export function OrgAdminMenu({
 }) {
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [nameDraft, setNameDraft] = useState(name);
   const [pending, startTransition] = useTransition();
   const containerRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
@@ -61,6 +68,13 @@ export function OrgAdminMenu({
     });
   }
 
+  // Keep the name field in sync when the org data refreshes.
+  useEffect(() => {
+    setNameDraft(name);
+  }, [name]);
+
+  const canRename = nameDraft.trim().length > 0 && nameDraft.trim() !== name;
+
   const onDemand = discovery === "on_demand";
   const buttonLabel = isHidden ? "Admin · Hidden" : autoGenerateContent ? "Admin · AI" : "Admin";
 
@@ -83,6 +97,29 @@ export function OrgAdminMenu({
         >
           <div className="p-3 space-y-3">
             <div className="space-y-2">
+              <div className="font-medium text-stone-700 dark:text-stone-200">Display name</div>
+              <input
+                type="text"
+                value={nameDraft}
+                onChange={(e) => setNameDraft(e.target.value)}
+                className="w-full px-2 py-1 rounded border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 text-stone-700 dark:text-stone-200 text-[13px]"
+              />
+              <button
+                type="button"
+                onClick={() =>
+                  run(() => renameOrgAction({ slug: orgSlug, name: nameDraft.trim() }))
+                }
+                disabled={pending || !canRename}
+                className="w-full px-2 py-1 rounded border border-stone-300 dark:border-stone-700 bg-stone-50 hover:bg-stone-100 dark:bg-stone-900 dark:hover:bg-stone-800 text-stone-700 dark:text-stone-200 disabled:opacity-50"
+              >
+                {pending ? "Saving…" : "Save"}
+              </button>
+              <p className="text-[12px] text-stone-500 dark:text-stone-400">
+                Renames the display name only — slug and URL stay the same.
+              </p>
+            </div>
+
+            <div className="space-y-2 border-t border-stone-200 dark:border-stone-800 pt-3">
               <div className="font-medium text-stone-700 dark:text-stone-200">Listings</div>
               <p className="text-[12px] text-stone-500 dark:text-stone-400">
                 {isHidden
