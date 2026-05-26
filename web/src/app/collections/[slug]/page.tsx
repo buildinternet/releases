@@ -9,10 +9,12 @@ import {
   type CollectionReleasesResponse,
 } from "@/lib/api";
 import { Header } from "@/components/header";
+import { JsonLd } from "@/components/json-ld";
 import { SetupMessage } from "@/components/setup-message";
 import { CollectionTimeline } from "@/components/collection-timeline";
 import { CollectionAdminMenu } from "@/components/collection-admin-menu";
 import { isLocalAdminEnabled } from "@/lib/local-admin-flag";
+import { buildFeedPageJsonLd } from "@/lib/schema-org";
 
 const getCollection = cache((slug: string) => api.collectionDetail(slug));
 const getCollectionReleases = cache((slug: string) => api.collectionReleases(slug, { limit: 20 }));
@@ -37,6 +39,7 @@ export async function generateMetadata({
           ],
         },
       },
+      openGraph: { type: "website", url: `/collections/${slug}` },
     };
   } catch {
     return { title: "Collection" };
@@ -62,8 +65,18 @@ export default async function CollectionPage({ params }: { params: Promise<{ slu
     notFound();
   }
 
+  const collectionUrl = `https://releases.sh/collections/${slug}`;
+  const jsonLd = buildFeedPageJsonLd(releases.releases, {
+    pageUrl: collectionUrl,
+    name: detail.name,
+    description:
+      detail.description ?? `Releases from ${detail.members.map((m) => m.name).join(", ")}.`,
+    section: { name: "Collections", url: "https://releases.sh/collections" },
+  });
+
   return (
     <div className="min-h-screen">
+      <JsonLd data={jsonLd} />
       <Header />
       <div className="max-w-4xl mx-auto px-6">
         <div className="pt-5 text-[13px] text-stone-400 dark:text-stone-500">

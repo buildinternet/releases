@@ -6,7 +6,7 @@ import { tryFetch } from "@/lib/ssr-fetch";
 import { ReleaseTimeline } from "@/components/release-timeline";
 import { OverviewView } from "@/components/overview-view";
 import { JsonLd } from "@/components/json-ld";
-import { lastModifiedAt } from "@/lib/schema-org";
+import { currentPeriod, lastModifiedAt } from "@/lib/schema-org";
 import { getOrg } from "../_lib/org-data";
 
 const LEGACY_ORG_TABS = new Set(["releases", "sources", "playbook", "fetch-log"]);
@@ -21,8 +21,8 @@ export async function generateMetadata({
     const org = await getOrg(orgSlug);
     const lastModified = lastModifiedAt(org);
     return {
-      title: org.name,
-      description: `Release activity, summary, and tracked sources for ${org.name}.`,
+      title: `${org.name} Releases & Latest Updates`,
+      description: `Latest releases, product updates, and tracked sources for ${org.name} — updated ${currentPeriod()}.`,
       openGraph: {
         type: "website",
         url: `/${orgSlug}`,

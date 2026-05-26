@@ -14,6 +14,8 @@ import { Header } from "@/components/header";
 import { SetupMessage } from "@/components/setup-message";
 import { CollectionTimeline } from "@/components/collection-timeline";
 import { TaxonomyList } from "@/components/taxonomy-list";
+import { JsonLd } from "@/components/json-ld";
+import { buildFeedPageJsonLd } from "@/lib/schema-org";
 
 const getCategory = cache((slug: string) => api.categoryDetail(slug));
 const getCategoryReleases = cache((slug: string) => api.categoryReleases(slug, { limit: 20 }));
@@ -90,6 +92,17 @@ export default async function CategoryPage({ params }: { params: Promise<{ slug:
   if (!isValidCategory(detail.slug)) notFound();
 
   const title = detail.name ?? categoryDisplayName(detail.slug);
+
+  const categoryUrl = `https://releases.sh/categories/${detail.slug}`;
+  const jsonLd = buildFeedPageJsonLd(releases.releases, {
+    pageUrl: categoryUrl,
+    name: title,
+    description:
+      detail.description ??
+      `Recent releases from organizations and products in the ${title} category.`,
+    section: { name: "Categories", url: "https://releases.sh/categories" },
+  });
+
   // The timeline now consumes `CollectionMember[]`; category detail returns
   // the narrower `TaxonomyOrg` (no githubHandle / description) for orgs and
   // doesn't surface product memberships separately. Shim each org into an
@@ -107,6 +120,7 @@ export default async function CategoryPage({ params }: { params: Promise<{ slug:
 
   return (
     <div className="min-h-screen">
+      <JsonLd data={jsonLd} />
       <Header />
       <div className="max-w-4xl mx-auto px-6">
         <div className="pt-5 text-[13px] text-stone-400 dark:text-stone-500">
