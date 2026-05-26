@@ -10,6 +10,9 @@ import { SetupMessage } from "@/components/setup-message";
 import { Sidebar } from "@/components/sidebar";
 import { SourceTabs } from "@/components/source-tabs";
 import { SourceTypeIcon } from "@/components/source-type-icon";
+import { AppIcon } from "@/components/app-icon";
+import { PlatformBadge } from "@/components/platform-badge";
+import { getAppInfo } from "@/lib/app-source";
 import { StateBadge, getHiddenStateBadge } from "@/components/source-table";
 import { SourceAdminMenu } from "@/components/source-admin-menu";
 import { isLocalAdminEnabled } from "@/lib/local-admin-flag";
@@ -96,6 +99,7 @@ export default async function SourceLayout({
   })();
   const hasHighlights = !!(source.summaries?.rolling || source.summaries?.monthly?.length);
   const hasChangelog = !!source.hasChangelogFile;
+  const appInfo = getAppInfo(source);
 
   return (
     <div className="min-h-screen">
@@ -112,12 +116,14 @@ export default async function SourceLayout({
           <span className="text-stone-600 dark:text-stone-300 font-medium">{source.name}</span>
         </div>
         <div className="flex items-center gap-2.5 mt-4">
+          {appInfo && <AppIcon iconUrl={appInfo.iconUrl} name={source.name} size={32} />}
           <ViewTransition name={`src-${source.org.slug}-${source.slug}`} default="none">
             <h1 className="text-[28px] font-bold tracking-tight text-stone-900 dark:text-stone-100">
               {source.name}
             </h1>
           </ViewTransition>
           <SourceTypeIcon type={source.type} size={18} />
+          {appInfo && <PlatformBadge label={appInfo.label} />}
           {hiddenBadge && <StateBadge label={hiddenBadge.label} title={hiddenBadge.title} />}
           {adminEnabled && (
             <SourceAdminMenu
