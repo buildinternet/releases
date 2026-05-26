@@ -120,6 +120,8 @@ const OrgDetailProductSchema = ProductListItemSchema.pick({
   description: true,
   sourceCount: true,
   kind: true,
+}).extend({
+  releaseCount: z.number().int().min(0),
 });
 
 const OrgDetailPlaybookSchema = z.object({

@@ -280,6 +280,7 @@ orgRoutes.get(
           description: productsActive.description,
           kind: productsActive.kind,
           sourceCount: sql<number>`(SELECT COUNT(*) FROM sources_active s WHERE s.product_id = products_active.id)`,
+          releaseCount: sql<number>`(SELECT COUNT(*) FROM releases_visible rv JOIN sources_active sa ON sa.id = rv.source_id WHERE sa.product_id = products_active.id)`,
         })
         .from(productsActive)
         .where(eq(productsActive.orgId, org.id))
