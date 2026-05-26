@@ -2,13 +2,18 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { setSourceMetadataAction, promoteSourceAction } from "@/app/actions/source-admin";
+import {
+  setSourceMetadataAction,
+  promoteSourceAction,
+  renameSourceAction,
+} from "@/app/actions/source-admin";
 
 type Depth = "full" | "summary-only" | null;
 
 export function SourceAdminMenu({
   orgSlug,
   sourceSlug,
+  name,
   marketingFilter,
   marketingFilterHint,
   feedContentDepth,
@@ -17,6 +22,7 @@ export function SourceAdminMenu({
 }: {
   orgSlug: string;
   sourceSlug: string;
+  name: string;
   marketingFilter: boolean;
   marketingFilterHint: string | null;
   feedContentDepth: Depth;
@@ -26,6 +32,7 @@ export function SourceAdminMenu({
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hint, setHint] = useState(marketingFilterHint ?? "");
+  const [nameDraft, setNameDraft] = useState(name);
   const [pending, startTransition] = useTransition();
   const containerRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
@@ -55,6 +62,13 @@ export function SourceAdminMenu({
   useEffect(() => {
     setHint(marketingFilterHint ?? "");
   }, [marketingFilterHint]);
+
+  // Keep the name field in sync when the source data refreshes.
+  useEffect(() => {
+    setNameDraft(name);
+  }, [name]);
+
+  const canRename = nameDraft.trim().length > 0 && nameDraft.trim() !== name;
 
   function run(action: () => Promise<{ ok: true } | { ok: false; error: string }>) {
     startTransition(async () => {
@@ -114,6 +128,29 @@ export function SourceAdminMenu({
         >
           <div className="p-3 space-y-3">
             <div className="space-y-2">
+              <div className="font-medium text-stone-700 dark:text-stone-200">Display name</div>
+              <input
+                type="text"
+                value={nameDraft}
+                onChange={(e) => setNameDraft(e.target.value)}
+                className="w-full px-2 py-1 rounded border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 text-stone-700 dark:text-stone-200 text-[13px]"
+              />
+              <button
+                type="button"
+                onClick={() =>
+                  run(() => renameSourceAction({ orgSlug, sourceSlug, name: nameDraft.trim() }))
+                }
+                disabled={pending || !canRename}
+                className="w-full px-2 py-1 rounded border border-stone-300 dark:border-stone-700 bg-stone-50 hover:bg-stone-100 dark:bg-stone-900 dark:hover:bg-stone-800 text-stone-700 dark:text-stone-200 disabled:opacity-50"
+              >
+                {pending ? "Saving…" : "Save"}
+              </button>
+              <p className="text-[12px] text-stone-500 dark:text-stone-400">
+                Renames the display name only — slug and URL stay the same.
+              </p>
+            </div>
+
+            <div className="space-y-2 border-t border-stone-200 dark:border-stone-800 pt-3">
               <div className="font-medium text-stone-700 dark:text-stone-200">
                 Marketing classifier
               </div>

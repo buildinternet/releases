@@ -129,6 +129,7 @@ export default async function SourceLayout({
             <SourceAdminMenu
               orgSlug={source.org.slug}
               sourceSlug={source.slug}
+              name={source.name}
               marketingFilter={sourceMeta.marketingFilter === true}
               marketingFilterHint={sourceMeta.marketingFilterHint ?? null}
               feedContentDepth={sourceMeta.feedContentDepth ?? null}
