@@ -25,25 +25,26 @@ Expected: completes; `node_modules/` now present at the worktree root.
 
 ## File structure
 
-| File | Responsibility | Action |
-|---|---|---|
-| `workers/api/src/queries/orgs.ts` | `getOrgReleasesFeed` — add `productId` opt → `AND s.product_id = ?` | Modify |
-| `workers/api/test/org-releases-product-filter.test.ts` | Unit test for the product filter (makeD1Shim) | Create |
-| `workers/api/src/routes/orgs.ts` | `/orgs/:slug/releases` — resolve `?product=`, 404 unknown, pass `productId`; org-detail per-product `releaseCount` subquery | Modify |
-| `packages/api-types/src/schemas/orgs.ts` | `OrgDetailProductSchema` — add `releaseCount` | Modify |
-| `workers/api/test/org-detail-product-release-count.test.ts` | Route test for per-product `releaseCount` | Create |
-| `web/src/lib/api.ts` | `orgReleases` gains `product` opt; new `productOverview` method | Modify |
-| `web/src/app/api/org-releases/[slug]/route.ts` | Forward `product` query param to the API | Modify |
-| `web/src/components/org-release-list.tsx` | Optional `product` prop pins the feed | Modify |
-| `web/src/app/[orgSlug]/product/[productSlug]/page.tsx` | Rewrite: ≤1-product 301, overview, product feed, ItemList JSON-LD | Modify |
-| `web/src/components/product-grid.tsx` | Hub product card grid (renders only at 2+ products) | Create |
-| `web/src/app/[orgSlug]/(org)/page.tsx` | Render `ProductGrid` above the timeline | Modify |
+| File                                                        | Responsibility                                                                                                              | Action |
+| ----------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- | ------ |
+| `workers/api/src/queries/orgs.ts`                           | `getOrgReleasesFeed` — add `productId` opt → `AND s.product_id = ?`                                                         | Modify |
+| `workers/api/test/org-releases-product-filter.test.ts`      | Unit test for the product filter (makeD1Shim)                                                                               | Create |
+| `workers/api/src/routes/orgs.ts`                            | `/orgs/:slug/releases` — resolve `?product=`, 404 unknown, pass `productId`; org-detail per-product `releaseCount` subquery | Modify |
+| `packages/api-types/src/schemas/orgs.ts`                    | `OrgDetailProductSchema` — add `releaseCount`                                                                               | Modify |
+| `workers/api/test/org-detail-product-release-count.test.ts` | Route test for per-product `releaseCount`                                                                                   | Create |
+| `web/src/lib/api.ts`                                        | `orgReleases` gains `product` opt; new `productOverview` method                                                             | Modify |
+| `web/src/app/api/org-releases/[slug]/route.ts`              | Forward `product` query param to the API                                                                                    | Modify |
+| `web/src/components/org-release-list.tsx`                   | Optional `product` prop pins the feed                                                                                       | Modify |
+| `web/src/app/[orgSlug]/product/[productSlug]/page.tsx`      | Rewrite: ≤1-product 301, overview, product feed, ItemList JSON-LD                                                           | Modify |
+| `web/src/components/product-grid.tsx`                       | Hub product card grid (renders only at 2+ products)                                                                         | Create |
+| `web/src/app/[orgSlug]/(org)/page.tsx`                      | Render `ProductGrid` above the timeline                                                                                     | Modify |
 
 ---
 
 ## Task 1: `productId` filter in `getOrgReleasesFeed`
 
 **Files:**
+
 - Modify: `workers/api/src/queries/orgs.ts` (the `getOrgReleasesFeed` function, ~lines 367–469)
 - Test: `workers/api/test/org-releases-product-filter.test.ts` (create)
 
@@ -78,20 +79,66 @@ describe("getOrgReleasesFeed product filter", () => {
     applyMigrations(sqlite);
     d1 = makeD1Shim(sqlite);
 
-    await db.insert(organizations).values({ id: "org_a", slug: "acme", name: "Acme", category: "cloud" });
+    await db
+      .insert(organizations)
+      .values({ id: "org_a", slug: "acme", name: "Acme", category: "cloud" });
     await db.insert(products).values([
       { id: "prod_x", slug: "x", name: "Product X", orgId: "org_a" },
       { id: "prod_y", slug: "y", name: "Product Y", orgId: "org_a" },
     ]);
     await db.insert(sources).values([
-      { id: "src_x", slug: "x-feed", name: "X Feed", type: "feed", url: "https://acme.test/x", orgId: "org_a", productId: "prod_x" },
-      { id: "src_y", slug: "y-feed", name: "Y Feed", type: "feed", url: "https://acme.test/y", orgId: "org_a", productId: "prod_y" },
-      { id: "src_orphan", slug: "blog", name: "Blog", type: "feed", url: "https://acme.test/blog", orgId: "org_a" },
+      {
+        id: "src_x",
+        slug: "x-feed",
+        name: "X Feed",
+        type: "feed",
+        url: "https://acme.test/x",
+        orgId: "org_a",
+        productId: "prod_x",
+      },
+      {
+        id: "src_y",
+        slug: "y-feed",
+        name: "Y Feed",
+        type: "feed",
+        url: "https://acme.test/y",
+        orgId: "org_a",
+        productId: "prod_y",
+      },
+      {
+        id: "src_orphan",
+        slug: "blog",
+        name: "Blog",
+        type: "feed",
+        url: "https://acme.test/blog",
+        orgId: "org_a",
+      },
     ]);
     await db.insert(releases).values([
-      { id: "rel_x", sourceId: "src_x", title: "X 1.0", content: "x", url: "https://acme.test/x/1", publishedAt: "2026-04-20T00:00:00Z" },
-      { id: "rel_y", sourceId: "src_y", title: "Y 1.0", content: "y", url: "https://acme.test/y/1", publishedAt: "2026-04-21T00:00:00Z" },
-      { id: "rel_orphan", sourceId: "src_orphan", title: "Blog post", content: "b", url: "https://acme.test/blog/1", publishedAt: "2026-04-22T00:00:00Z" },
+      {
+        id: "rel_x",
+        sourceId: "src_x",
+        title: "X 1.0",
+        content: "x",
+        url: "https://acme.test/x/1",
+        publishedAt: "2026-04-20T00:00:00Z",
+      },
+      {
+        id: "rel_y",
+        sourceId: "src_y",
+        title: "Y 1.0",
+        content: "y",
+        url: "https://acme.test/y/1",
+        publishedAt: "2026-04-21T00:00:00Z",
+      },
+      {
+        id: "rel_orphan",
+        sourceId: "src_orphan",
+        title: "Blog post",
+        content: "b",
+        url: "https://acme.test/blog/1",
+        publishedAt: "2026-04-22T00:00:00Z",
+      },
     ]);
   });
 
@@ -132,11 +179,11 @@ In `workers/api/src/queries/orgs.ts`, add `productId` to the `opts` type. Find t
 Then, immediately after the `kindWhere` block (the `if (opts.kind) { ... }` block, ~lines 412–416), add:
 
 ```ts
-  let productWhere = "";
-  if (opts.productId) {
-    productWhere = "AND s.product_id = ?";
-    filterBindings.push(opts.productId);
-  }
+let productWhere = "";
+if (opts.productId) {
+  productWhere = "AND s.product_id = ?";
+  filterBindings.push(opts.productId);
+}
 ```
 
 Finally, in the SQL template, add `${productWhere}` on its own line directly after `${kindWhere}`:
@@ -166,6 +213,7 @@ git commit -m "feat(api): productId filter in getOrgReleasesFeed"
 ## Task 2: `?product=` param on `GET /v1/orgs/:slug/releases`
 
 **Files:**
+
 - Modify: `workers/api/src/routes/orgs.ts` (the `/orgs/:slug/releases` handler, ~lines 1667–1849)
 
 **Harness note:** This route mixes a Drizzle read (org resolve) with a raw-D1 read (`getOrgReleasesFeed`'s `.prepare()`). The shared `createTestApp` injects a Drizzle handle as `env.DB`, which does not serve raw `.prepare()`; `makeD1Shim` (raw) does not serve Drizzle query-builder reads. A full route integration test of this handler is therefore not supported by the current harness — the behavioral guarantee is covered by Task 1's query test. This task is thin wiring verified by `tsc`.
@@ -197,13 +245,13 @@ In the `describeRoute({...})` for `/orgs/:slug/releases`, inside the `parameters
 In the handler body, after the org-not-found guard (the line `if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);`, ~line 1790) and before the `const results = await getOrgReleasesFeed(...)` call, insert:
 
 ```ts
-    const productParam = c.req.query("product");
-    let productId: string | undefined;
-    if (productParam) {
-      const product = await findProductForOrgSlug(db, slug, productParam);
-      if (!product) return c.json({ error: "not_found", message: "Product not found" }, 404);
-      productId = product.id;
-    }
+const productParam = c.req.query("product");
+let productId: string | undefined;
+if (productParam) {
+  const product = await findProductForOrgSlug(db, slug, productParam);
+  if (!product) return c.json({ error: "not_found", message: "Product not found" }, 404);
+  productId = product.id;
+}
 ```
 
 Then add `productId,` to the options object passed to `getOrgReleasesFeed` (the object containing `includeCoverage, sourceTypes, ...`):
@@ -238,6 +286,7 @@ git commit -m "feat(api): ?product= filter on org releases feed"
 ## Task 3: Per-product `releaseCount` (schema + org-detail handler)
 
 **Files:**
+
 - Modify: `packages/api-types/src/schemas/orgs.ts` (`OrgDetailProductSchema`, ~lines 115–123)
 - Modify: `workers/api/src/routes/orgs.ts` (org-detail products select, ~lines 273–285)
 - Test: `workers/api/test/org-detail-product-release-count.test.ts` (create)
@@ -260,20 +309,66 @@ import { orgRoutes } from "../src/routes/orgs.js";
 describe("GET /v1/orgs/:slug — per-product releaseCount", () => {
   it("counts visible releases per product and excludes orphan-source releases", async () => {
     const db = createTestDb();
-    await db.insert(organizations).values({ id: "org_a", slug: "acme", name: "Acme", category: "cloud" });
+    await db
+      .insert(organizations)
+      .values({ id: "org_a", slug: "acme", name: "Acme", category: "cloud" });
     await db.insert(products).values([
       { id: "prod_x", slug: "x", name: "Product X", orgId: "org_a" },
       { id: "prod_y", slug: "y", name: "Product Y", orgId: "org_a" },
     ]);
     await db.insert(sources).values([
-      { id: "src_x", slug: "x-feed", name: "X Feed", type: "feed", url: "https://acme.test/x", orgId: "org_a", productId: "prod_x" },
-      { id: "src_y", slug: "y-feed", name: "Y Feed", type: "feed", url: "https://acme.test/y", orgId: "org_a", productId: "prod_y" },
-      { id: "src_orphan", slug: "blog", name: "Blog", type: "feed", url: "https://acme.test/blog", orgId: "org_a" },
+      {
+        id: "src_x",
+        slug: "x-feed",
+        name: "X Feed",
+        type: "feed",
+        url: "https://acme.test/x",
+        orgId: "org_a",
+        productId: "prod_x",
+      },
+      {
+        id: "src_y",
+        slug: "y-feed",
+        name: "Y Feed",
+        type: "feed",
+        url: "https://acme.test/y",
+        orgId: "org_a",
+        productId: "prod_y",
+      },
+      {
+        id: "src_orphan",
+        slug: "blog",
+        name: "Blog",
+        type: "feed",
+        url: "https://acme.test/blog",
+        orgId: "org_a",
+      },
     ]);
     await db.insert(releases).values([
-      { id: "rel_x1", sourceId: "src_x", title: "X 1", content: "x", url: "https://acme.test/x/1", publishedAt: "2026-04-20T00:00:00Z" },
-      { id: "rel_x2", sourceId: "src_x", title: "X 2", content: "x", url: "https://acme.test/x/2", publishedAt: "2026-04-21T00:00:00Z" },
-      { id: "rel_orphan", sourceId: "src_orphan", title: "Post", content: "b", url: "https://acme.test/blog/1", publishedAt: "2026-04-22T00:00:00Z" },
+      {
+        id: "rel_x1",
+        sourceId: "src_x",
+        title: "X 1",
+        content: "x",
+        url: "https://acme.test/x/1",
+        publishedAt: "2026-04-20T00:00:00Z",
+      },
+      {
+        id: "rel_x2",
+        sourceId: "src_x",
+        title: "X 2",
+        content: "x",
+        url: "https://acme.test/x/2",
+        publishedAt: "2026-04-21T00:00:00Z",
+      },
+      {
+        id: "rel_orphan",
+        sourceId: "src_orphan",
+        title: "Post",
+        content: "b",
+        url: "https://acme.test/blog/1",
+        publishedAt: "2026-04-22T00:00:00Z",
+      },
     ]);
 
     const fetch = createTestApp(db, [orgRoutes], { env: {} });
@@ -347,6 +442,7 @@ git commit -m "feat(api): per-product releaseCount on org detail"
 ## Task 4: Web data layer — `product` feed opt, `productOverview`, proxy passthrough
 
 **Files:**
+
 - Modify: `web/src/lib/api.ts` (`orgReleases` opts ~lines 383–400; add `productOverview` near `productDetail` ~line 427)
 - Modify: `web/src/app/api/org-releases/[slug]/route.ts`
 
@@ -437,6 +533,7 @@ git commit -m "feat(web): product feed opt + productOverview + proxy passthrough
 ## Task 5: `OrgReleaseList` optional `product` prop
 
 **Files:**
+
 - Modify: `web/src/components/org-release-list.tsx`
 
 - [ ] **Step 1: Add the prop to the interface**
@@ -468,19 +565,19 @@ export function OrgReleaseList({
 In the `buildQuery` `useCallback`, add the `product` line after the `q` line, and add `product` to the dependency array:
 
 ```ts
-  const buildQuery = useCallback(
-    (extra: Record<string, string> = {}) => {
-      const params = new URLSearchParams();
-      const types = FILTER_GROUPS[filterGroup].types;
-      if (types.length > 0) params.set("source_type", types.join(","));
-      if (includePrereleases) params.set("include_prereleases", "true");
-      if (trimmedSearch) params.set("q", trimmedSearch);
-      if (product) params.set("product", product);
-      for (const [k, v] of Object.entries(extra)) params.set(k, v);
-      return params.toString();
-    },
-    [filterGroup, includePrereleases, trimmedSearch, product],
-  );
+const buildQuery = useCallback(
+  (extra: Record<string, string> = {}) => {
+    const params = new URLSearchParams();
+    const types = FILTER_GROUPS[filterGroup].types;
+    if (types.length > 0) params.set("source_type", types.join(","));
+    if (includePrereleases) params.set("include_prereleases", "true");
+    if (trimmedSearch) params.set("q", trimmedSearch);
+    if (product) params.set("product", product);
+    for (const [k, v] of Object.entries(extra)) params.set(k, v);
+    return params.toString();
+  },
+  [filterGroup, includePrereleases, trimmedSearch, product],
+);
 ```
 
 - [ ] **Step 4: Type-check**
@@ -500,6 +597,7 @@ git commit -m "feat(web): OrgReleaseList product prop pins the feed"
 ## Task 6: Rewrite the product page (collapse + overview + feed + JSON-LD)
 
 **Files:**
+
 - Modify: `web/src/app/[orgSlug]/product/[productSlug]/page.tsx` (full rewrite)
 
 - [ ] **Step 1: Replace the page**
@@ -635,7 +733,12 @@ export default async function ProductPage({
         "@type": "BreadcrumbList",
         itemListElement: [
           { "@type": "ListItem", position: 1, name: "Home", item: "https://releases.sh" },
-          { "@type": "ListItem", position: 2, name: orgName, item: `https://releases.sh/${orgSlug}` },
+          {
+            "@type": "ListItem",
+            position: 2,
+            name: orgName,
+            item: `https://releases.sh/${orgSlug}`,
+          },
           { "@type": "ListItem", position: 3, name: product.name, item: productUrl },
         ],
       },
@@ -725,6 +828,7 @@ git commit -m "feat(web): product page is now a product-scoped feed with ≤1-pr
 ## Task 7: Product card grid on the org Overview hub
 
 **Files:**
+
 - Create: `web/src/components/product-grid.tsx`
 - Modify: `web/src/app/[orgSlug]/(org)/page.tsx`
 
@@ -840,6 +944,7 @@ Expected: PASS. (Note: per repo guidance the root suite splits worker vs package
 - [ ] **Step 5: Manual smoke (dev server)**
 
 Run: `bun run dev:web` (and `bun run dev:api` if not already up), then verify in the browser:
+
 - A 2+-product org (e.g. `/vercel`): the **Products** grid renders above the timeline with per-product counts; clicking a card lands on `/vercel/product/<slug>` showing that product's feed only.
 - A 0–1-product org: org page is unchanged (no grid).
 - Visiting `/<org>/product/<slug>` for an org with ≤1 product 301s to `/<org>`.
