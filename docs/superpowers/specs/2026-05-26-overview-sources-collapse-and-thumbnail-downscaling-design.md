@@ -30,9 +30,11 @@ on its chip.
 - `COLLAPSE_THRESHOLD = 6`. Collapsing only engages when `items.length > 6`
   (i.e. 7+ sources); ≤6 renders exactly as today.
 - When collapsible and collapsed: show the first 6 chips; the remaining chips
-  stay in the DOM but are hidden (`hidden` attribute, so display:none — removed
-  from layout and the a11y tree). A toggle button reads
-  `Show {items.length - 6} more sources`.
+  stay **mounted** in the DOM but get a collapsed display class (Tailwind
+  `hidden` = `display:none`, swapped for `inline-flex` when expanded) — not the
+  `hidden` _attribute_, which loses to the `inline-flex` author class.
+  `display:none` still removes them from layout and the a11y tree. A toggle
+  button reads `Show {items.length - 6} more sources`.
 - When expanded: all chips visible; toggle reads `Show fewer`.
 - The toggle is its own line below the chip grid, styled like the existing body
   "Show more" affordance: `text-[12px] font-medium text-stone-500
@@ -48,8 +50,9 @@ browser scrolls nowhere.
 
 Two-part fix, kept self-contained inside `SourceChips`:
 
-1. **Keep all chips mounted.** Hide the tail with the `hidden` attribute rather
-   than conditional rendering, so every `id` is always present in the DOM.
+1. **Keep all chips mounted.** Hide the tail by swapping its display class
+   (`inline-flex` → `hidden`) rather than using the `hidden` attribute or
+   conditional rendering, so every `id` is always present in the DOM.
 2. **Auto-expand + scroll on jump.** A `useEffect` listens for `hashchange` and
    runs once on mount. When `location.hash` matches `#user-content-fn-<label>`
    for a label in the collapsed tail (`items.slice(6)`), it `setExpanded(true)`,
@@ -92,7 +95,7 @@ downscale aliases.
 origin (`MEDIA_ORIGIN = https://media.releases.sh`). Cloudflare Image
 Transformations is confirmed live on that zone:
 
-```
+```text
 GET https://media.releases.sh/cdn-cgi/image/width=240,quality=80,format=auto/orgs/github.png
 → 200 image/jpeg, 4 KB   (same-origin: works)
 GET https://media.releases.sh/cdn-cgi/image/width=240,.../<external-url>

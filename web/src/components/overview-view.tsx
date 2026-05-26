@@ -62,7 +62,13 @@ function SourceChips({ items }: { items: RenderedCitation[] }) {
   useEffect(() => {
     if (!collapsible) return;
     const maybeExpand = () => {
-      const id = decodeURIComponent(window.location.hash.slice(1));
+      const raw = window.location.hash.slice(1);
+      let id: string;
+      try {
+        id = decodeURIComponent(raw);
+      } catch {
+        id = raw; // malformed %-encoding — fall back to the raw fragment
+      }
       if (id && tailIds.has(id)) {
         setExpanded(true);
         // The browser already tried to scroll to a then-`display:none` chip and
