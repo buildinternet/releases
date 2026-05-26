@@ -307,13 +307,21 @@ export function mapEntries(entries: ExtractedEntry[], opts: MapEntriesOptions): 
     .map((e) => {
       const version = sanitizeVersion(e.version);
 
-      // Resolve relative URLs against the source
+      // Resolve the entry's permalink. Absolute URLs (crawl / multi-page
+      // sources) and fragment-only anchors resolve directly. A relative,
+      // non-anchor "read more" link — common on single-page doc changelogs —
+      // would resolve against the source's directory and produce doubled,
+      // 404ing paths (…/release-notes/developers/…), so we synthesize a stable
+      // section anchor on the source page instead.
       let entryUrl: string;
-      if (e.url && e.url !== opts.sourceUrl) {
+      const href = e.url?.trim();
+      const isAbsolute = !!href && /^(?:https?:)?\/\//i.test(href);
+      const isFragment = !!href && href.startsWith("#");
+      if (href && href !== opts.sourceUrl && (isAbsolute || isFragment)) {
         try {
-          entryUrl = new URL(e.url, opts.sourceUrl).href;
+          entryUrl = new URL(href, opts.sourceUrl).href;
         } catch {
-          entryUrl = e.url;
+          entryUrl = href;
         }
       } else {
         const frag = (version ?? e.title ?? "")
