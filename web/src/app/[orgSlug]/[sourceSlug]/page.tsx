@@ -5,7 +5,11 @@ import { ApiSetupError, ApiNotFoundError } from "@/lib/api";
 import { JsonLd } from "@/components/json-ld";
 import { SourceReleaseList } from "@/components/source-release-list";
 import { RelatedRail } from "@/components/related-rail";
-import { buildSourceEntityJsonLd } from "@/lib/schema-org";
+import {
+  buildReleaseItemListJsonLd,
+  buildSourceEntityJsonLd,
+  currentPeriod,
+} from "@/lib/schema-org";
 import { getSource } from "./_lib/source-data";
 
 const LEGACY_SOURCE_TABS = new Set(["highlights", "changelog"]);
@@ -21,7 +25,7 @@ export async function generateMetadata({
     const orgName = source.org?.name ?? orgSlug;
     return {
       title: `${source.name} — ${orgName}`,
-      description: `Release notes and version history for ${source.name} by ${orgName}.`,
+      description: `Release notes, changelog, and version history for ${source.name} by ${orgName} — updated ${currentPeriod()}.`,
       openGraph: { type: "website", url: `/${orgSlug}/${sourceSlug}` },
       alternates: {
         canonical: `/${orgSlug}/${sourceSlug}`,
@@ -110,6 +114,7 @@ export default async function SourceReleasesPage({
   const initialCursor = source.pagination.nextCursor;
 
   const sourceUrl = `https://releases.sh/${orgSlug}/${sourceSlug}`;
+  const releaseListId = `${sourceUrl}#releases`;
   const jsonLd = {
     "@context": "https://schema.org",
     "@graph": [
@@ -131,6 +136,11 @@ export default async function SourceReleasesPage({
             : [{ "@type": "ListItem", position: 2, name: source.name, item: sourceUrl }]),
         ],
       },
+      buildReleaseItemListJsonLd(source.releases, {
+        listId: releaseListId,
+        name: `${source.name} releases`,
+        isPartOfId: sourceUrl,
+      }),
     ],
   };
 

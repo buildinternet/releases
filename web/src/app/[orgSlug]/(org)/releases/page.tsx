@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { api, ApiSetupError, ApiNotFoundError, type OrgReleasesResponse } from "@/lib/api";
 import { OrgReleaseList } from "@/components/org-release-list";
 import { JsonLd } from "@/components/json-ld";
-import { lastModifiedAt } from "@/lib/schema-org";
+import { buildReleaseItemListJsonLd, currentPeriod, lastModifiedAt } from "@/lib/schema-org";
 import { getOrg } from "../../_lib/org-data";
 
 export async function generateMetadata({
@@ -15,9 +15,10 @@ export async function generateMetadata({
   try {
     const org = await getOrg(orgSlug);
     const modifiedTime = lastModifiedAt(org);
+    const period = currentPeriod();
     return {
-      title: `${org.name} Releases & Changelog`,
-      description: `Complete release feed and changelog for ${org.name} — every version, every product, every source.`,
+      title: `${org.name} Release Notes & Changelog · ${period}`,
+      description: `Every ${org.name} release note, changelog, and product update across all tracked sources — version history refreshed ${period}.`,
       openGraph: {
         type: "website",
         url: `/${orgSlug}/releases`,
@@ -54,6 +55,8 @@ export default async function OrgReleasesPage({
 
   const orgUrl = `https://releases.sh/${orgSlug}`;
   const pageUrl = `${orgUrl}/releases`;
+  const orgNodeId = `${orgUrl}#org`;
+  const releaseListId = `${pageUrl}#releases`;
   const dateModified = lastModifiedAt(org);
   const jsonLd = {
     "@context": "https://schema.org",
@@ -63,8 +66,10 @@ export default async function OrgReleasesPage({
         name: `${org.name} Releases`,
         url: pageUrl,
         ...(dateModified ? { dateModified } : {}),
+        mainEntity: { "@id": releaseListId },
         about: {
           "@type": "Organization",
+          "@id": orgNodeId,
           name: org.name,
           url: orgUrl,
           ...(org.domain ? { sameAs: [`https://${org.domain}`] } : {}),
@@ -78,6 +83,11 @@ export default async function OrgReleasesPage({
           { "@type": "ListItem", position: 3, name: "Releases", item: pageUrl },
         ],
       },
+      buildReleaseItemListJsonLd(initialReleases.releases, {
+        listId: releaseListId,
+        name: `${org.name} Releases`,
+        isPartOfId: orgNodeId,
+      }),
     ],
   };
 

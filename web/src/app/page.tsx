@@ -6,6 +6,7 @@ import { graphqlRequest } from "@/lib/graphql/client";
 import { HomepageTickerDocument } from "@/lib/graphql/__generated__/graphql";
 import type { HomepageTickerQuery } from "@/lib/graphql/__generated__/graphql";
 import { Header } from "@/components/header";
+import { JsonLd } from "@/components/json-ld";
 import { SetupMessage } from "@/components/setup-message";
 import { OrgTable } from "@/components/org-table";
 import { InstallStepsInline, InstallStepsSidebar } from "@/components/install-steps";
@@ -170,27 +171,37 @@ export default async function HomePage({
 
   const jsonLd = {
     "@context": "https://schema.org",
-    "@type": "WebSite",
-    name: "releases.sh",
-    url: "https://releases.sh",
-    description:
-      "An agent-friendly API for product changelogs. A unified registry of product releases, available via CLI, API, or MCP.",
-    potentialAction: {
-      "@type": "SearchAction",
-      target: {
-        "@type": "EntryPoint",
-        urlTemplate: "https://releases.sh/search?q={search_term_string}",
+    "@graph": [
+      {
+        "@type": "WebSite",
+        "@id": "https://releases.sh#website",
+        name: "releases.sh",
+        url: "https://releases.sh",
+        description:
+          "An agent-friendly API for product changelogs. A unified registry of product releases, available via CLI, API, or MCP.",
+        publisher: { "@id": "https://releases.sh#org" },
+        potentialAction: {
+          "@type": "SearchAction",
+          target: {
+            "@type": "EntryPoint",
+            urlTemplate: "https://releases.sh/search?q={search_term_string}",
+          },
+          "query-input": "required name=search_term_string",
+        },
       },
-      "query-input": "required name=search_term_string",
-    },
+      {
+        "@type": "Organization",
+        "@id": "https://releases.sh#org",
+        name: "releases.sh",
+        url: "https://releases.sh",
+        description: "An agent-friendly registry of product changelogs and release notes.",
+      },
+    ],
   };
 
   return (
     <div className="min-h-screen">
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
-      />
+      <JsonLd data={jsonLd} />
       <Header />
       <div className="pt-12 pb-8 text-center px-6">
         <h1 className="text-[28px] font-bold tracking-tight text-stone-900 dark:text-stone-100 mb-2">
