@@ -1,18 +1,28 @@
 import type { Metadata } from "next";
 import { cache } from "react";
-import { notFound } from "next/navigation";
-import { api, ApiSetupError, ApiNotFoundError, type ProductDetail } from "@/lib/api";
+import { notFound, permanentRedirect } from "next/navigation";
+import Link from "next/link";
+import {
+  api,
+  ApiSetupError,
+  ApiNotFoundError,
+  type ProductDetail,
+  type OrgReleasesResponse,
+  type OverviewPageItem,
+} from "@/lib/api";
+import type { SourceType } from "@buildinternet/releases-core/source-enums";
 import { Header } from "@/components/header";
 import { SetupMessage } from "@/components/setup-message";
-import { SourceCard } from "@/components/source-card";
 import { Sidebar } from "@/components/sidebar";
 import { CliCommand } from "@/components/cli-command";
 import { JsonLd } from "@/components/json-ld";
+import { OrgReleaseList } from "@/components/org-release-list";
+import { OverviewView } from "@/components/overview-view";
 import { taxonomySidebarSections } from "@/components/taxonomy-chips";
-import { getOrg } from "../../_lib/org-data";
-import Link from "next/link";
+import { buildReleaseItemListJsonLd } from "@/lib/schema-org";
 import { AppIcon } from "@/components/app-icon";
 import { getAppInfo, type AppInfo } from "@/lib/app-source";
+import { getOrg } from "../../_lib/org-data";
 
 const getProduct = cache((orgSlug: string, productSlug: string) =>
   api.productDetail({ orgSlug, productSlug }),
@@ -27,8 +37,9 @@ export async function generateMetadata({
   try {
     const product = await getProduct(orgSlug, productSlug);
     return {
-      title: product.name,
-      description: product.description ?? `Release feed and changelog sources for ${product.name}.`,
+      title: `${product.name} Release Notes & Changelog`,
+      description:
+        product.description ?? `Release notes, changelog, and updates for ${product.name}.`,
       openGraph: { type: "website", url: `/${orgSlug}/product/${productSlug}` },
       alternates: { canonical: `/${orgSlug}/product/${productSlug}` },
     };
@@ -60,7 +71,28 @@ export default async function ProductPage({
     if (err instanceof ApiNotFoundError) notFound();
     throw err;
   }
+
+  // Single-product collapse: with ≤1 product the org page is already this
+  // product's feed, so the product page would be duplicate content. 301 home.
+  if (org.products.length <= 1) {
+    permanentRedirect(`/${orgSlug}`);
+  }
+
   const orgName = org.name;
+
+  // Initial feed rows (product-scoped) + overview, both best-effort.
+  let initialReleases: OrgReleasesResponse;
+  try {
+    initialReleases = await api.orgReleases(orgSlug, { product: productSlug });
+  } catch {
+    initialReleases = { releases: [], pagination: { nextCursor: null, limit: 20 } };
+  }
+  let overview: OverviewPageItem | null = null;
+  try {
+    overview = await api.productOverview(product.id);
+  } catch {
+    overview = null;
+  }
 
   const appEntries = product.sources
     .map((s) => {
@@ -69,14 +101,17 @@ export default async function ProductPage({
     })
     .filter((e): e is { slug: string; name: string; app: AppInfo } => e !== null);
 
+  const availableSourceTypes = Array.from(
+    new Set(product.sources.map((s) => s.type)),
+  ) as SourceType[];
+
   const sidebarSections = [
-    {
-      items: [{ label: "Sources", value: product.sources.length, large: true }],
-    },
+    { items: [{ label: "Sources", value: product.sources.length, large: true }] },
     ...taxonomySidebarSections({ category: product.category, tags: product.tags }),
   ];
 
   const productUrl = `https://releases.sh/${orgSlug}/product/${productSlug}`;
+  const releaseListId = `${productUrl}#releases`;
   const jsonLd = {
     "@context": "https://schema.org",
     "@graph": [
@@ -84,6 +119,7 @@ export default async function ProductPage({
         "@type": "CollectionPage",
         name: product.name,
         url: productUrl,
+        mainEntity: { "@id": releaseListId },
         ...(product.description ? { description: product.description } : {}),
       },
       {
@@ -99,6 +135,10 @@ export default async function ProductPage({
           { "@type": "ListItem", position: 3, name: product.name, item: productUrl },
         ],
       },
+      buildReleaseItemListJsonLd(initialReleases.releases, {
+        listId: releaseListId,
+        name: `${product.name} Releases`,
+      }),
     ],
   };
 
@@ -146,18 +186,15 @@ export default async function ProductPage({
 
         <div className="flex flex-col md:flex-row gap-10 mt-6 pb-6">
           <div className="flex-1 min-w-0">
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-stone-400 dark:text-stone-500 mb-3">
-              Sources
-            </h2>
-            <div className="space-y-2">
-              {product.sources.map((source) => (
-                <SourceCard
-                  key={source.slug}
-                  source={{ ...source, releaseCount: 0, latestVersion: null, latestDate: null }}
-                  orgSlug={orgSlug}
-                />
-              ))}
-            </div>
+            {overview && <OverviewView page={overview} />}
+            <OrgReleaseList
+              orgSlug={orgSlug}
+              product={productSlug}
+              initialReleases={initialReleases.releases}
+              initialCursor={initialReleases.pagination.nextCursor}
+              multipleSourcesExist={product.sources.length > 1}
+              availableSourceTypes={availableSourceTypes}
+            />
           </div>
           <Sidebar sections={sidebarSections} formatPath={`/${orgSlug}/product/${productSlug}`} />
         </div>
