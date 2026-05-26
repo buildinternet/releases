@@ -94,10 +94,23 @@ export function normalizeMediaUrl(url: string): string {
     const isProxy = IMAGE_PROXY_PATHS.some(
       (p) => parsed.pathname === p || parsed.pathname.endsWith(p),
     );
-    if (!isProxy) return url;
-    const inner = parsed.searchParams.get("url");
-    if (!inner) return url;
-    return new URL(inner, parsed.origin).toString();
+    if (isProxy) {
+      const inner = parsed.searchParams.get("url");
+      if (inner) return new URL(inner, parsed.origin).toString();
+      return url;
+    }
+    // Fallback for mangled proxy URLs where the optimizer path landed in the
+    // query string instead of the pathname — happens when a relative
+    // `_next/image?url=…` got concatenated onto a source URL that carried its
+    // own query (e.g. `/blog?category=changelog`), so `pathname` is just
+    // `/blog` and the proxy check above misses. Recover the inner asset from
+    // the proxy marker's `url=` param.
+    const marker = url.match(/\/_(?:next|vercel)\/image\?(.+)$/);
+    if (marker) {
+      const inner = new URLSearchParams(marker[1]).get("url");
+      if (inner) return new URL(inner, parsed.origin).toString();
+    }
+    return url;
   } catch {
     return url;
   }
