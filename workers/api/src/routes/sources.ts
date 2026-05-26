@@ -732,13 +732,11 @@ const postReleasesBatchHandler = async (c: import("hono").Context<Env>) => {
           continue;
         }
         if (!Array.isArray(parsed) || parsed.length === 0) continue;
-        const filtered = filterJunkMedia(parsed.filter((m) => m && typeof m.url === "string"));
         // oxlint-disable-next-line no-await-in-loop -- sequential per release; helper bounds image concurrency internally
-        const processed = await processMediaForR2(filtered, {
-          db,
-          bucket: c.env.MEDIA!,
-          sourceId: src.id,
-        });
+        const processed = await processMediaForR2(
+          filterJunkMedia(parsed.filter((m) => m && typeof m.url === "string")),
+          { db, bucket: c.env.MEDIA!, sourceId: src.id },
+        );
         mediaJsonByIndex[i] = JSON.stringify(processed);
       }
     }
