@@ -25,10 +25,6 @@ function errorMessage(error: string | undefined): string {
   }
 }
 
-function caughtErrorMessage(err: unknown): string {
-  return err instanceof Error ? err.message : "Network error";
-}
-
 export function SubmitSourceForm() {
   const [state, setState] = useState<SubmitState>({ status: "idle", message: null });
 
@@ -62,8 +58,8 @@ export function SubmitSourceForm() {
         status: "success",
         message: "Thanks. The URL is in the review queue.",
       });
-    } catch (err) {
-      setState({ status: "error", message: errorMessage(caughtErrorMessage(err)) });
+    } catch {
+      setState({ status: "error", message: "Network error" });
     }
   }
 
