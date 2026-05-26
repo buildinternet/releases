@@ -987,6 +987,19 @@ describe("filterByKeywordAllow", () => {
     expect(kept).toEqual(items);
     expect(dropped).toBe(0);
   });
+
+  it("ignores whitespace-only / empty keywords instead of matching (or dropping) everything", () => {
+    // A blank entry must not silently disable the filter (empty string matches
+    // everything) nor silently drop everything (whitespace matches nothing).
+    expect(filterByKeywordAllow(items, [""]).kept).toEqual(items);
+    expect(filterByKeywordAllow(items, ["   "]).kept).toEqual(items);
+  });
+
+  it("trims surrounding whitespace on keywords and skips blank entries", () => {
+    // Models a hand-typed "changelog, " → ["changelog", " "] or a stray space.
+    const { kept } = filterByKeywordAllow(items, [" ", "  changelog  "]);
+    expect(kept.map((i) => i.title)).toEqual(["Discord Update - March 24, 2026 (Changelog)"]);
+  });
 });
 
 describe("contentFromSummary flag", () => {

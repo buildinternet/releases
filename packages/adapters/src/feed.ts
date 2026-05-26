@@ -565,8 +565,8 @@ export function filterByKeywordAllow(
   items: RawRelease[],
   allow: readonly string[],
 ): { kept: RawRelease[]; dropped: number } {
-  if (allow.length === 0) return { kept: items, dropped: 0 };
-  const needles = allow.map((k) => k.toLowerCase());
+  const needles = allow.map((k) => k.toLowerCase().trim()).filter(Boolean);
+  if (needles.length === 0) return { kept: items, dropped: 0 };
   const kept: RawRelease[] = [];
   let dropped = 0;
   for (const item of items) {
