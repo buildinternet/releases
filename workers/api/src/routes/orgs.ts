@@ -370,6 +370,7 @@ orgRoutes.get(
       productSlug: row.product_slug ?? null,
       productName: row.product_name ?? null,
       kind: row.kind && isValidKind(row.kind) ? row.kind : null,
+      metadata: row.metadata ?? null,
     }));
 
     const metrics = metricsRow[0];

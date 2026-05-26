@@ -29,6 +29,7 @@ export type SourceWithStats = {
   product_slug: string | null;
   product_name: string | null;
   kind: string | null;
+  metadata: string | null;
 };
 
 /** Common row type for org list items */
