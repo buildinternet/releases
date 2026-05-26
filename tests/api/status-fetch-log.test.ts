@@ -7,13 +7,19 @@ type Envelope = {
   entries: Array<{ id: string; status: string; createdAt: string }>;
   nextCursor: string | null;
   totalCount?: number;
-  statusCounts?: { success: number; error: number; no_change: number; dry_run: number };
+  statusCounts?: {
+    success: number;
+    error: number;
+    no_change: number;
+    dry_run: number;
+    blocked: number;
+  };
 };
 
 async function seed(
   db: any,
   count: number,
-  status: "success" | "error" | "no_change" | "dry_run" = "success",
+  status: "success" | "error" | "no_change" | "dry_run" | "blocked" = "success",
 ) {
   await db.insert(organizations).values({ id: "org_1", name: "Acme", slug: "acme" });
   await db.insert(sources).values({
@@ -45,7 +51,13 @@ describe("GET /v1/status/fetch-log", () => {
     const body = (await res.json()) as Envelope;
     expect(body.entries.length).toBe(3);
     expect(body.totalCount).toBe(5);
-    expect(body.statusCounts).toEqual({ success: 5, error: 0, no_change: 0, dry_run: 0 });
+    expect(body.statusCounts).toEqual({
+      success: 5,
+      error: 0,
+      no_change: 0,
+      dry_run: 0,
+      blocked: 0,
+    });
     expect(body.nextCursor).not.toBeNull();
   });
 
@@ -126,7 +138,13 @@ describe("GET /v1/status/fetch-log", () => {
     expect(res.entries.length).toBe(1);
     expect(res.entries[0].status).toBe("error");
     expect(res.totalCount).toBe(3);
-    expect(res.statusCounts).toEqual({ success: 2, error: 1, no_change: 0, dry_run: 0 });
+    expect(res.statusCounts).toEqual({
+      success: 2,
+      error: 1,
+      no_change: 0,
+      dry_run: 0,
+      blocked: 0,
+    });
   });
 
   it("emits a valid next cursor pointing at the last returned row", async () => {

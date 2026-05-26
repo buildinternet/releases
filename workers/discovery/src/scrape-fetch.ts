@@ -19,6 +19,7 @@
 import type { Source } from "@buildinternet/releases-core/schema";
 import { CategorizedError, type ErrorCategory } from "@releases/lib/errors";
 import { fetchCloudflareMarkdown } from "@releases/adapters/cloudflare";
+import { isCloudflareChallengePage } from "@releases/adapters/cf-challenge";
 import { startCrawl, pollCrawlResults } from "@releases/adapters/crawl";
 import { getSourceMeta } from "@releases/adapters/source-meta";
 import {
@@ -625,6 +626,33 @@ async function runScrapePath(
       errorCategory: "infra",
     });
     return `Error [infra]: Cloudflare Browser Rendering returned no content for ${source.url}`;
+  }
+
+  // Cloudflare Browser Rendering egresses from datacenter IPs, so a Managed
+  // Challenge serves it the "verifying you are human" interstitial rather than
+  // the article. Extracting that yields 0 releases and logs a misleading
+  // `no_change` (~6.5 min wasted on render + a Haiku extraction). Short-circuit
+  // to a distinct `blocked` signal so the source is flagged for an escalation
+  // render path instead of silently looking healthy. See issue #1171.
+  if (isCloudflareChallengePage(markdown)) {
+    const durationMs = Date.now() - start;
+    const errMsg = `Cloudflare challenge interstitial rendered for ${source.url}; skipping extraction`;
+    await writeFetchLog(env, source.id, {
+      releasesFound: 0,
+      releasesInserted: 0,
+      durationMs,
+      status: "blocked",
+      error: errMsg,
+      errorCategory: "bot_challenge",
+    });
+    logEvent("warn", {
+      component: "scrape-fetch",
+      event: "bot-challenge-detected",
+      sourceSlug: source.slug,
+      sourceUrl: source.url,
+      cameFromCrawl,
+    });
+    return `Blocked [bot_challenge]: ${errMsg}`;
   }
 
   const knownReleases = await knownReleasesPromise;
