@@ -10,12 +10,14 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ slug
   const sourceType = req.nextUrl.searchParams.get("source_type") ?? "";
   const includePrereleases = req.nextUrl.searchParams.get("include_prereleases") ?? "";
   const q = req.nextUrl.searchParams.get("q") ?? "";
+  const product = req.nextUrl.searchParams.get("product") ?? "";
 
   const qs = new URLSearchParams();
   if (cursor) qs.set("cursor", cursor);
   if (sourceType) qs.set("source_type", sourceType);
   if (includePrereleases) qs.set("include_prereleases", includePrereleases);
   if (q) qs.set("q", q);
+  if (product) qs.set("product", product);
 
   const res = await fetch(`${API_URL}/v1/orgs/${slug}/releases?${qs}`, {
     headers: webApiHeaders(),
