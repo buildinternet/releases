@@ -80,19 +80,17 @@ export default async function ProductPage({
 
   const orgName = org.name;
 
-  // Initial feed rows (product-scoped) + overview, both best-effort.
-  let initialReleases: OrgReleasesResponse;
-  try {
-    initialReleases = await api.orgReleases(orgSlug, { product: productSlug });
-  } catch {
-    initialReleases = { releases: [], pagination: { nextCursor: null, limit: 20 } };
-  }
-  let overview: OverviewPageItem | null = null;
-  try {
-    overview = await api.productOverview(product.id);
-  } catch {
-    overview = null;
-  }
+  // Initial feed rows (product-scoped) + overview, both best-effort; run in parallel.
+  const [releasesResult, overviewResult] = await Promise.allSettled([
+    api.orgReleases(orgSlug, { product: productSlug }),
+    api.productOverview(product.id),
+  ]);
+  const initialReleases: OrgReleasesResponse =
+    releasesResult.status === "fulfilled"
+      ? releasesResult.value
+      : { releases: [], pagination: { nextCursor: null, limit: 20 } };
+  const overview: OverviewPageItem | null =
+    overviewResult.status === "fulfilled" ? overviewResult.value : null;
 
   const appEntries = product.sources
     .map((s) => {

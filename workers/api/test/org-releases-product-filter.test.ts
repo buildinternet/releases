@@ -102,6 +102,6 @@ describe("getOrgReleasesFeed product filter", () => {
 
   it("is unchanged (full org feed) when productId is absent", async () => {
     const rows = await getOrgReleasesFeed(d1, "org_a", noCursor, 50);
-    expect(rows.map((r) => r.id).sort()).toEqual(["rel_orphan", "rel_x", "rel_y"]);
+    expect(rows.map((r) => r.id).toSorted()).toEqual(["rel_orphan", "rel_x", "rel_y"]);
   });
 });
