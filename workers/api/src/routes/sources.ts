@@ -101,7 +101,7 @@ import { wantsMarkdown, markdownResponse } from "../middleware/content-negotiati
 import { authMiddleware } from "../middleware/auth.js";
 import { sourceToMarkdown, releaseToMarkdown } from "@releases/rendering/formatters.js";
 import { filterJunkMedia } from "@releases/rendering/media-filter.js";
-import { processMediaForR2 } from "../lib/media-ingest.js";
+import { processMediaForR2, selectExistingReleaseUrls } from "../lib/media-ingest.js";
 import { fetchOne, embedReleasesForSource } from "../cron/poll-fetch.js";
 import { getSourceMeta, isGitHubFetched } from "@releases/adapters/feed.js";
 import { isAppStoreFetched } from "@releases/adapters/source-meta";
@@ -717,8 +717,18 @@ const postReleasesBatchHandler = async (c: import("hono").Context<Env>) => {
     const r2UploadEnabled = c.env.MEDIA_R2_UPLOAD_ENABLED === "true" && c.env.MEDIA != null;
     const mediaJsonByIndex = body.releases.map((r) => r.media ?? "[]");
     if (r2UploadEnabled) {
+      // Skip releases whose URL already exists: RELEASE_URL_UPSERT never updates
+      // the `media` column on conflict, so mirroring their images to R2 would
+      // upload bytes the upsert immediately discards.
+      const existingMediaUrls = await selectExistingReleaseUrls(
+        db,
+        src.id,
+        body.releases.map((r) => r.url),
+      );
       for (let i = 0; i < body.releases.length; i++) {
-        const rawMedia = body.releases[i]!.media;
+        const rel = body.releases[i]!;
+        if (rel.url != null && existingMediaUrls.has(rel.url)) continue;
+        const rawMedia = rel.media;
         if (!rawMedia) continue;
         let parsed: Array<{
           type: "image" | "video" | "gif";

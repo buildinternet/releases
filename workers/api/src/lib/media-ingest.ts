@@ -17,7 +17,8 @@
  * pixels / spacers not distinguishable by URL.
  */
 import { drizzle } from "drizzle-orm/d1";
-import { mediaAssets } from "@buildinternet/releases-core/schema";
+import { and, eq, inArray } from "drizzle-orm";
+import { mediaAssets, releases } from "@buildinternet/releases-core/schema";
 import { logEvent } from "@releases/lib/log-event";
 
 // Loose drizzle handle (matches the worker-helper convention in
@@ -97,9 +98,18 @@ export async function processMediaForR2<T extends { url: string; r2Key?: string 
         logSkip("not-image", item.url, opts.sourceId, { contentType });
         return;
       }
-      const buf = await res.arrayBuffer();
+      // Read with a hard ceiling so a huge (or unbounded / chunked) body can't
+      // buffer past the cap into the worker's memory — `arrayBuffer()` would
+      // pull the whole response first, then check the size too late.
+      const buf = await readBodyBounded(res, MEDIA_MAX_BYTES);
+      if (buf === null) {
+        logSkip("size-out-of-range", item.url, opts.sourceId, {
+          declaredBytes: res.headers.get("content-length"),
+        });
+        return;
+      }
       const byteSize = buf.byteLength;
-      if (byteSize < MEDIA_MIN_BYTES || byteSize > MEDIA_MAX_BYTES) {
+      if (byteSize < MEDIA_MIN_BYTES) {
         logSkip("size-out-of-range", item.url, opts.sourceId, { byteSize });
         return;
       }
@@ -153,6 +163,38 @@ export async function processMediaForR2<T extends { url: string; r2Key?: string 
   return items;
 }
 
+/** D1 caps a prepared statement at 100 bound params; `IN (...)` lookups chunk at 90. */
+const URL_LOOKUP_CHUNK = 90;
+
+/**
+ * Of `urls`, return the subset that already has a release row under `sourceId`.
+ *
+ * The media pre-pass gates `processMediaForR2` on this: a release whose URL
+ * already exists is skipped by the poll-fetch `onConflictDoNothing` insert, and
+ * the `/releases/batch` upsert (`RELEASE_URL_UPSERT`) never touches the `media`
+ * column on conflict — so mirroring its images to R2 would fetch + upload bytes
+ * whose result is immediately discarded. Null/empty URLs aren't queried (a null
+ * URL is always a fresh insert under the `UNIQUE(source_id, url)` index).
+ */
+export async function selectExistingReleaseUrls(
+  db: Db,
+  sourceId: string,
+  urls: readonly (string | null | undefined)[],
+): Promise<Set<string>> {
+  const distinct = [...new Set(urls.filter((u): u is string => typeof u === "string" && u !== ""))];
+  const existing = new Set<string>();
+  for (let i = 0; i < distinct.length; i += URL_LOOKUP_CHUNK) {
+    const chunk = distinct.slice(i, i + URL_LOOKUP_CHUNK);
+    // oxlint-disable-next-line no-await-in-loop -- chunked IN lookup (90-id D1 limit)
+    const rows = await db
+      .select({ url: releases.url })
+      .from(releases)
+      .where(and(eq(releases.sourceId, sourceId), inArray(releases.url, chunk)));
+    for (const r of rows) if (r.url) existing.add(r.url);
+  }
+  return existing;
+}
+
 function logSkip(
   event: string,
   url: string,
@@ -180,6 +222,45 @@ async function fetchWithTimeout(
   } finally {
     clearTimeout(timer);
   }
+}
+
+/**
+ * Read a response body into an `ArrayBuffer`, bailing out (→ `null`) the moment
+ * it would exceed `maxBytes`. Cheap `Content-Length` pre-check first, then a
+ * streamed accumulation so a lying or absent header still can't blow the cap.
+ */
+async function readBodyBounded(res: Response, maxBytes: number): Promise<ArrayBuffer | null> {
+  const declared = Number(res.headers.get("content-length"));
+  if (Number.isFinite(declared) && declared > maxBytes) return null;
+
+  const body = res.body;
+  if (!body) {
+    const buf = await res.arrayBuffer();
+    return buf.byteLength > maxBytes ? null : buf;
+  }
+
+  const reader = body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    // oxlint-disable-next-line no-await-in-loop -- sequential stream drain; cap-bounded early exit
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > maxBytes) {
+      await reader.cancel();
+      return null;
+    }
+    chunks.push(value);
+  }
+
+  const out = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    out.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return out.buffer;
 }
 
 async function sha256Hex(buf: ArrayBuffer): Promise<string> {

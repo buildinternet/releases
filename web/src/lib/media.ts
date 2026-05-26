@@ -33,7 +33,16 @@ export function thumbUrl(
   opts: { enabled: boolean; origin: string },
 ): string {
   if (!opts.enabled) return src;
-  if (!src.startsWith(opts.origin)) return src; // third-party / relative → passthrough
+  // Exact origin match — a `startsWith` prefix check would treat a hostile host
+  // like `media.releases.sh.evil.com` as same-origin. Relative/malformed URLs
+  // throw and pass through untransformed.
+  let parsed: URL;
+  try {
+    parsed = new URL(src);
+  } catch {
+    return src;
+  }
+  if (parsed.origin !== opts.origin) return src; // third-party → passthrough
   return cfImageUrl(src, { origin: opts.origin, width });
 }
 

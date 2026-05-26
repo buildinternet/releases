@@ -6,7 +6,7 @@ raw vendor-CDN URLs. This is the deferred **Option B** from #1033.
 
 Once release media is same-origin, the #1174 release-feed thumbnail transform no
 longer needs the open "Any origin" Cloudflare Image Transformations setting that
-#1176 enabled — so a second outcome of this work is **tightening CF Sources back
+issue #1176 enabled — so a second outcome of this work is **tightening CF Sources back
 to "Specified origins"** (an owner dashboard action) and repointing the AGENTS.md
 "Media pipeline" bullet from the closed #1033 to here.
 

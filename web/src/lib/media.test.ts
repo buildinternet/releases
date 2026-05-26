@@ -20,6 +20,11 @@ describe("thumbUrl", () => {
     expect(thumbUrl(src, 240, { enabled: true, origin })).toBe(src);
   });
 
+  it("does not treat a host that merely prefixes the origin as same-origin", () => {
+    const src = "https://media.releases.sh.evil.com/releases/abc.png";
+    expect(thumbUrl(src, 240, { enabled: true, origin })).toBe(src);
+  });
+
   it("passes a relative/non-absolute src through", () => {
     expect(thumbUrl("/_media/releases/x.png", 240, { enabled: true, origin })).toBe(
       "/_media/releases/x.png",

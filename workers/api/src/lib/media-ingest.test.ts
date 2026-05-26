@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { eq } from "drizzle-orm";
-import { mediaAssets } from "@buildinternet/releases-core/schema";
+import { mediaAssets, organizations, releases, sources } from "@buildinternet/releases-core/schema";
 import { createTestDb } from "../../../../tests/db-helper.js";
 import { createDb } from "../db.js";
-import { processMediaForR2 } from "./media-ingest.js";
+import { MEDIA_MAX_BYTES, processMediaForR2, selectExistingReleaseUrls } from "./media-ingest.js";
 
 /** Minimal in-memory R2 stand-in recording put() calls. */
 function makeFakeBucket() {
@@ -152,6 +152,21 @@ describe("processMediaForR2", () => {
     expect(rows).toHaveLength(1);
   });
 
+  test("fail-open: above the byte ceiling is skipped without buffering past the cap", async () => {
+    const { db: testDb } = createTestDb();
+    const db = createDb(testDb as unknown as D1Database);
+    const { bucket, puts } = makeFakeBucket();
+
+    const result = await processMediaForR2([{ type: "image", url: "https://x/huge.png" }], {
+      db,
+      bucket,
+      fetchImpl: imageFetch(MEDIA_MAX_BYTES + 1),
+    });
+
+    expect(result[0]!.r2Key).toBeUndefined();
+    expect(puts).toHaveLength(0);
+  });
+
   test("caps uploads at maxItems; extras pass through untouched", async () => {
     const { db: testDb } = createTestDb();
     const db = createDb(testDb as unknown as D1Database);
@@ -174,5 +189,58 @@ describe("processMediaForR2", () => {
 
     expect(puts).toHaveLength(2);
     expect(result[2]!.r2Key).toBeUndefined();
+  });
+});
+
+describe("selectExistingReleaseUrls", () => {
+  test("returns only URLs that already exist under the given source", async () => {
+    const { db: testDb } = createTestDb();
+    const db = createDb(testDb as unknown as D1Database);
+
+    await db
+      .insert(organizations)
+      .values({ id: "org_1", slug: "acme", name: "Acme", category: "developer-tools" });
+    await db.insert(sources).values([
+      {
+        id: "src_1",
+        orgId: "org_1",
+        slug: "acme-blog",
+        name: "Acme Blog",
+        type: "scrape",
+        url: "https://acme.test/blog",
+        metadata: "{}",
+      },
+      {
+        id: "src_2",
+        orgId: "org_1",
+        slug: "acme-other",
+        name: "Acme Other",
+        type: "scrape",
+        url: "https://acme.test/other",
+        metadata: "{}",
+      },
+    ]);
+    await db.insert(releases).values([
+      { id: "rel_1", sourceId: "src_1", title: "A", content: "", url: "https://acme.test/a" },
+      { id: "rel_2", sourceId: "src_2", title: "B", content: "", url: "https://acme.test/b" },
+    ]);
+
+    const existing = await selectExistingReleaseUrls(db, "src_1", [
+      "https://acme.test/a", // exists under src_1
+      "https://acme.test/b", // exists, but under src_2 → excluded (source-scoped)
+      "https://acme.test/new", // does not exist
+      null,
+      undefined,
+      "",
+    ]);
+
+    expect([...existing]).toEqual(["https://acme.test/a"]);
+  });
+
+  test("returns an empty set when given only null/empty URLs (no query)", async () => {
+    const { db: testDb } = createTestDb();
+    const db = createDb(testDb as unknown as D1Database);
+    const existing = await selectExistingReleaseUrls(db, "src_missing", [null, undefined, ""]);
+    expect(existing.size).toBe(0);
   });
 });

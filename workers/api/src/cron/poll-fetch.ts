@@ -48,7 +48,7 @@ import { isPrereleaseVersion } from "@buildinternet/releases-core/prerelease";
 import { computeVersionSort } from "@buildinternet/releases-core/version-sort";
 import { normalizeMediaUrl } from "@releases/rendering/media-url.js";
 import { filterJunkMedia } from "@releases/rendering/media-filter.js";
-import { processMediaForR2 } from "../lib/media-ingest.js";
+import { processMediaForR2, selectExistingReleaseUrls } from "../lib/media-ingest.js";
 import {
   embedAndUpsertChangelogFile,
   type EmbeddedChunk,
@@ -1244,6 +1244,17 @@ export async function fetchOne(
     // failure keeps the third-party URL. Flag-off / unbound bucket = today's
     // verbatim behavior.
     const r2UploadEnabled = env.MEDIA_R2_UPLOAD_ENABLED === "true" && env.MEDIA != null;
+    // Mirror media only for releases the insert below will actually create —
+    // existing URLs are skipped by onConflictDoNothing, so their media JSON is
+    // discarded and re-fetching their images every fire would be pure waste.
+    // Only queried when R2 upload is on; the normalize pass always runs.
+    const existingMediaUrls = r2UploadEnabled
+      ? await selectExistingReleaseUrls(
+          db,
+          source.id,
+          rawReleases.map((r) => r.url),
+        )
+      : new Set<string>();
     const mediaJsonByIndex: string[] = [];
     for (let index = 0; index < rawReleases.length; index++) {
       const raw = rawReleases[index]!;
@@ -1255,7 +1266,8 @@ export async function fetchOne(
       // oxlint-disable-next-line no-map-spread -- copy-on-write required; m is an adapter-returned object
       const base = rawMedia.map((m) => ({ ...m, url: normalizeMediaUrl(m.url) }));
       let finalMedia = base;
-      if (r2UploadEnabled && base.length > 0) {
+      const isNewRelease = raw.url == null || !existingMediaUrls.has(raw.url);
+      if (r2UploadEnabled && isNewRelease && base.length > 0) {
         // oxlint-disable-next-line no-await-in-loop -- sequential per release; helper bounds image concurrency internally
         finalMedia = await processMediaForR2(filterJunkMedia(base), {
           db,
