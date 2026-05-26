@@ -13,6 +13,8 @@ import { getOrg } from "../../_lib/org-data";
 import Link from "next/link";
 import { AppIcon } from "@/components/app-icon";
 import { getAppInfo, type AppInfo } from "@/lib/app-source";
+import { ProductAdminMenu } from "@/components/product-admin-menu";
+import { isLocalAdminEnabled } from "@/lib/local-admin-flag";
 
 const getProduct = cache((orgSlug: string, productSlug: string) =>
   api.productDetail({ orgSlug, productSlug }),
@@ -61,6 +63,7 @@ export default async function ProductPage({
     throw err;
   }
   const orgName = org.name;
+  const adminEnabled = isLocalAdminEnabled();
 
   const appEntries = product.sources
     .map((s) => {
@@ -143,6 +146,11 @@ export default async function ProductPage({
           </div>
         )}
         <CliCommand identifier={product.slug} />
+        {adminEnabled && (
+          <div className="mt-2">
+            <ProductAdminMenu orgSlug={orgSlug} productSlug={productSlug} name={product.name} />
+          </div>
+        )}
 
         <div className="flex flex-col md:flex-row gap-10 mt-6 pb-6">
           <div className="flex-1 min-w-0">
