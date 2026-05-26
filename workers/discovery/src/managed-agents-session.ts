@@ -34,7 +34,29 @@ import {
 } from "./fetch-wrappers.js";
 import { logEvent } from "@releases/lib/log-event.js";
 import { getSecret, getSecretWithFallback } from "@releases/lib/secrets";
+import { signingFetchFromRawKey } from "@releases/core-internal/web-bot-auth-sign";
 import { recordSessionSpend } from "./spend-cap.js";
+
+/**
+ * Signing fetch for the scrape path; global fetch when disabled, unkeyed, or
+ * on any signing error. Fail-open. Mirrors the API worker's `makeBotFetch`
+ * observability (`key-missing` / `sign-setup-failed` warns) so both call sites
+ * behave consistently.
+ */
+async function buildDiscoverySignedFetch(env: Env): Promise<typeof fetch> {
+  if (env.WEB_BOT_AUTH_ENABLED !== "true") return fetch;
+  try {
+    const raw = (await getSecret(env.WEB_BOT_AUTH_PRIVATE_KEY).catch(() => null)) ?? "";
+    if (!raw) {
+      logEvent("warn", { component: "web-bot-auth", event: "key-missing" });
+      return fetch;
+    }
+    return await signingFetchFromRawKey(raw);
+  } catch (err) {
+    logEvent("warn", { component: "web-bot-auth", event: "sign-setup-failed", err });
+    return fetch;
+  }
+}
 
 // ── MA 429 rate-limit retry loop ─────────────────────────────────────────────
 //
@@ -478,6 +500,8 @@ export class ManagedAgentsSession extends DurableObject<Env> {
       const gatewayToken = (await getSecret(this.env.AI_GATEWAY_TOKEN).catch(() => null)) ?? "";
       const anthropicBaseURL = this.env.ANTHROPIC_BASE_URL;
 
+      const signedFetch = await buildDiscoverySignedFetch(this.env);
+
       const scrapeHandler =
         cfAccountId && cfApiToken
           ? async (sourceIdentifier: string) => {
@@ -492,6 +516,7 @@ export class ManagedAgentsSession extends DurableObject<Env> {
                   apiKey: releasesApiKey ?? "",
                   sessionId,
                   extractToolLoopEnabled: this.env.EXTRACT_TOOLLOOP_ENABLED,
+                  signedFetch,
                 },
                 sourceIdentifier,
               );

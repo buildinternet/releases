@@ -94,6 +94,10 @@ export interface Env {
   MEMORY_STORE_TOOL_NOTES_ID?: string;
   /** "true" to enable tool-loop extraction for large bodies globally. */
   EXTRACT_TOOLLOOP_ENABLED?: string;
+  /** "true" to sign outbound scrape-path content fetches with Web Bot Auth headers. */
+  WEB_BOT_AUTH_ENABLED?: string;
+  /** Secrets Store binding for the Ed25519 private JWK used by Web Bot Auth signing. */
+  WEB_BOT_AUTH_PRIVATE_KEY?: SecretBinding;
   /**
    * Runtime kill switch. Set to "true" to block all new MA session creation
    * at the /update + /onboard HTTP routes AND the typed RPC. Flip via

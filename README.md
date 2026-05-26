@@ -145,6 +145,7 @@ WebMCP is intentionally a lightweight tool subset — it does not mirror resourc
 
 - **Storage** — Cloudflare D1 (FTS5 + vector indexes via Vectorize). The API worker is the sole data plane.
 - **Adapters** — GitHub Releases API, RSS/Atom/JSON Feed parser, and Cloudflare browser-rendering fallback for pages without feeds (`packages/adapters/`).
+- **Web Bot Auth:** the crawler signs its direct outbound fetches (RFC 9421 HTTP Message Signatures) and publishes a key directory at `/.well-known/http-message-signatures-directory`, so it can register as a Cloudflare Verified Bot. See [`docs/runbooks/web-bot-auth-registration.md`](docs/runbooks/web-bot-auth-registration.md).
 - **AI Layer** — changelog parsing, summarization, grouping, and overviews run inside the API worker as direct Anthropic SDK calls.
 - **Agents** — discovery + worker agents run as Anthropic-hosted **managed agents**. Agent definitions (system prompt, tools, skills, model) auto-deploy on merges to `main` whenever the relevant source files change, keeping live agents in lockstep with the repo.
 - **MCP Server** — hosted at `mcp.releases.sh`, read-only tools, no auth required.

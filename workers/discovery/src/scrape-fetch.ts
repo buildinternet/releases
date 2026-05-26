@@ -76,6 +76,8 @@ export interface ScrapeEnv {
   sessionId?: string;
   /** "true" to enable tool-loop extraction for large bodies globally. */
   extractToolLoopEnabled?: string;
+  /** Signed outbound fetch for third-party content; falls back to global fetch. */
+  signedFetch?: typeof fetch;
 }
 
 // ── API helpers ────────────────────────────────────────────────────
@@ -451,9 +453,12 @@ export function isUpstreamGone(status: number): boolean {
   return status === 404 || status === 410;
 }
 
-async function fetchMarkdownUrl(url: string): Promise<string | null> {
+async function fetchMarkdownUrl(
+  url: string,
+  fetchFn: typeof fetch = fetch,
+): Promise<string | null> {
   try {
-    const res = await fetch(url, {
+    const res = await fetchFn(url, {
       headers: { "User-Agent": RELEASES_BOT_UA },
       redirect: "follow",
       signal: AbortSignal.timeout(30_000),
@@ -563,7 +568,7 @@ async function runScrapePath(
   // Probe the origin first and short-circuit on 404 / 410 so a dead source
   // URL doesn't pollute the registry. Transient / blocked / non-HTTP probes
   // (returns null) fall through — CF rendering may still succeed.
-  const probe = await probeUpstreamStatus(source.url);
+  const probe = await probeUpstreamStatus(source.url, env.signedFetch ?? fetch);
   if (probe && isUpstreamGone(probe.status)) {
     const durationMs = Date.now() - start;
     const errMsg = `Upstream returned ${probe.status} for ${source.url}; refusing to extract from rendered error page`;
@@ -590,7 +595,7 @@ async function runScrapePath(
   let markdown: string | null = null;
   let cameFromCrawl = false;
   if (meta.markdownUrl) {
-    markdown = await fetchMarkdownUrl(meta.markdownUrl);
+    markdown = await fetchMarkdownUrl(meta.markdownUrl, env.signedFetch ?? fetch);
   }
 
   if (!markdown && meta.crawlEnabled === true) {

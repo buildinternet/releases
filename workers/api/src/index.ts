@@ -130,6 +130,8 @@ export type Env = {
     VOYAGE_API_KEY?: SecretBinding;
     OPENAI_API_KEY?: SecretBinding;
     WEBHOOK_HMAC_MASTER?: SecretBinding;
+    WEB_BOT_AUTH_PRIVATE_KEY?: SecretBinding;
+    WEB_BOT_AUTH_ENABLED?: string;
     // Cloudflare credentials for querying Analytics Engine (webhook deliveries endpoint).
     // Absent → GET /v1/webhooks/:id/deliveries returns 501.
     CF_API_TOKEN?: SecretBinding;
@@ -685,6 +687,10 @@ export default {
           LATEST_CACHE: env.LATEST_CACHE,
           INVALIDATION_ENABLED: env.INVALIDATION_ENABLED,
           DISCOVERY_WORKER: env.DISCOVERY_WORKER,
+          // Without these the inline-cron fallback (POLL_FETCH_USE_WORKFLOW
+          // !== "true") would fetch unsigned even when signing is enabled.
+          WEB_BOT_AUTH_ENABLED: env.WEB_BOT_AUTH_ENABLED,
+          WEB_BOT_AUTH_PRIVATE_KEY: env.WEB_BOT_AUTH_PRIVATE_KEY,
         }),
         alertEnv,
       ),

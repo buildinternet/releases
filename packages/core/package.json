@@ -33,7 +33,8 @@
     "./cli-contracts": "./src/cli-contracts.ts",
     "./cursor": "./src/cursor.ts",
     "./version-sort": "./src/version-sort.ts",
-    "./composition": "./src/composition.ts"
+    "./composition": "./src/composition.ts",
+    "./web-bot-auth": "./src/web-bot-auth.ts"
   },
   "files": [
     "src",

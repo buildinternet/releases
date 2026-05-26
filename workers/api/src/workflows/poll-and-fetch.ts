@@ -35,6 +35,7 @@ import { invalidateLatestCache, type InvalidationEnv } from "../lib/latest-cache
 import { getAnthropicKey, resolveGatewayOpts, type AnthropicEnv } from "../lib/anthropic.js";
 import { buildAnthropicClient } from "@releases/lib/anthropic-client.js";
 import { IN_ARRAY_CHUNK_SIZE } from "../lib/d1-limits.js";
+import { makeBotFetch } from "../lib/web-bot-auth-fetch.js";
 
 /**
  * Environment for the workflow. Bindings follow the same shape as the API
@@ -63,6 +64,8 @@ export type PollAndFetchWorkflowEnv = InvalidationEnv &
     FANOUT_JITTER_WINDOW_MS?: string;
     /** Service binding used to delegate summary-only feeds to discovery's crawl path (RPC). */
     DISCOVERY_WORKER?: import("../cron/poll-fetch.js").DiscoveryWorkerRpc;
+    WEB_BOT_AUTH_ENABLED?: string;
+    WEB_BOT_AUTH_PRIVATE_KEY?: { get(): Promise<string> };
     /** TEST-ONLY: bypass drizzle(env.DB) and use the provided instance directly. */
     _drizzleOverride?: unknown;
   };
@@ -151,6 +154,8 @@ async function resolveFetchEnv(env: PollAndFetchWorkflowEnv): Promise<FetchOneEn
     WEBHOOK_DELIVERY_QUEUE: env.WEBHOOK_DELIVERY_QUEUE,
     DB: env.DB,
     DISCOVERY_WORKER: env.DISCOVERY_WORKER,
+    WEB_BOT_AUTH_ENABLED: env.WEB_BOT_AUTH_ENABLED,
+    WEB_BOT_AUTH_PRIVATE_KEY: env.WEB_BOT_AUTH_PRIVATE_KEY,
   };
 }
 
@@ -434,6 +439,7 @@ export class PollAndFetchWorkflow extends WorkflowEntrypoint<
         return await pollOne(db, source, now, {
           changeDetectEnabled,
           playbookNotes: source.orgId ? (notesByOrg.get(source.orgId) ?? null) : null,
+          signedFetch: await makeBotFetch(env),
         });
       });
 

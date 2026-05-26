@@ -89,8 +89,11 @@ const PAGE_SIBLING_SUFFIXES = [
  * 3. Probe well-known feed paths at the origin root as a last resort.
  * Prefers JSON feeds over XML when multiple are available.
  */
-export async function discoverFeed(pageUrl: string): Promise<DiscoveredFeed | null> {
-  const fromHead = await discoverFromHead(pageUrl);
+export async function discoverFeed(
+  pageUrl: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<DiscoveredFeed | null> {
+  const fromHead = await discoverFromHead(pageUrl, fetchImpl);
   if (fromHead) return fromHead;
 
   const base = new URL(pageUrl);
@@ -101,7 +104,9 @@ export async function discoverFeed(pageUrl: string): Promise<DiscoveredFeed | nu
   const trimmedPath = base.pathname.replace(/\/$/, "");
   if (trimmedPath && trimmedPath !== "") {
     const siblingResults = await Promise.allSettled(
-      PAGE_SIBLING_SUFFIXES.map((suffix) => probeFeedPath(base.origin, `${trimmedPath}${suffix}`)),
+      PAGE_SIBLING_SUFFIXES.map((suffix) =>
+        probeFeedPath(base.origin, `${trimmedPath}${suffix}`, fetchImpl),
+      ),
     );
     for (const result of siblingResults) {
       if (result.status === "fulfilled" && result.value) return result.value;
@@ -110,7 +115,7 @@ export async function discoverFeed(pageUrl: string): Promise<DiscoveredFeed | nu
 
   // Step 3: fall back to well-known origin-root paths.
   const results = await Promise.allSettled(
-    WELL_KNOWN_PATHS.map((path) => probeFeedPath(base.origin, path)),
+    WELL_KNOWN_PATHS.map((path) => probeFeedPath(base.origin, path, fetchImpl)),
   );
 
   for (const result of results) {
@@ -131,9 +136,12 @@ export async function discoverFeed(pageUrl: string): Promise<DiscoveredFeed | nu
  */
 const HEAD_DISCOVERY_BYTE_CAP = 512_000;
 
-async function discoverFromHead(pageUrl: string): Promise<DiscoveredFeed | null> {
+async function discoverFromHead(
+  pageUrl: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<DiscoveredFeed | null> {
   try {
-    const res = await fetch(pageUrl, {
+    const res = await fetchImpl(pageUrl, {
       headers: { Accept: "text/html", "User-Agent": RELEASES_BOT_UA },
       redirect: "follow",
     });
@@ -162,9 +170,13 @@ async function discoverFromHead(pageUrl: string): Promise<DiscoveredFeed | null>
   }
 }
 
-async function probeFeedPath(origin: string, path: string): Promise<DiscoveredFeed | null> {
+async function probeFeedPath(
+  origin: string,
+  path: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<DiscoveredFeed | null> {
   const probeUrl = `${origin}${path}`;
-  const res = await fetch(probeUrl, {
+  const res = await fetchImpl(probeUrl, {
     method: "HEAD",
     redirect: "follow",
     headers: { "User-Agent": RELEASES_BOT_UA },
@@ -176,7 +188,7 @@ async function probeFeedPath(origin: string, path: string): Promise<DiscoveredFe
   if (feedType) return { url: probeUrl, type: feedType };
 
   if (path.endsWith(".xml") || path.endsWith(".json") || path === "/feed" || path === "/rss") {
-    const getRes = await fetch(probeUrl, {
+    const getRes = await fetchImpl(probeUrl, {
       redirect: "follow",
       headers: {
         "User-Agent": RELEASES_BOT_UA,
@@ -248,6 +260,7 @@ export async function fetchAndParseFeed(
   feedType: FeedType,
   options?: FetchOptions,
   headers?: Record<string, string>,
+  fetchImpl: typeof fetch = fetch,
 ): Promise<{
   releases: RawRelease[];
   etag?: string;
@@ -260,14 +273,14 @@ export async function fetchAndParseFeed(
     ...headers,
   };
 
-  let res = await fetch(feedUrl, { headers: reqHeaders, redirect: "follow" });
+  let res = await fetchImpl(feedUrl, { headers: reqHeaders, redirect: "follow" });
 
   // Belt-and-braces: if the server returns 406 (Not Acceptable) — some
   // CDN/WAF stacks reject even feed-specific Accept types — retry once with
   // Accept: */* before giving up. This is a single fallback, not a loop.
   if (res.status === 406) {
     const fallbackHeaders = { ...reqHeaders, Accept: "*/*" };
-    res = await fetch(feedUrl, { headers: fallbackHeaders, redirect: "follow" });
+    res = await fetchImpl(feedUrl, { headers: fallbackHeaders, redirect: "follow" });
   }
 
   if (res.status === 304) return { releases: [] };
@@ -327,13 +340,14 @@ export interface HeadCheckResult {
 export async function headCheckUrl(
   url: string,
   stored: { etag?: string; lastModified?: string; contentLength?: string },
+  fetchImpl: typeof fetch = fetch,
 ): Promise<HeadCheckResult> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 10_000);
   const start = Date.now();
 
   try {
-    const res = await fetch(url, {
+    const res = await fetchImpl(url, {
       method: "HEAD",
       headers: { "User-Agent": RELEASES_BOT_UA },
       signal: controller.signal,
@@ -419,13 +433,14 @@ export async function bodyHashCheck(
   url: string,
   storedHash: string | undefined,
   opts?: { filter?: boolean },
+  fetchImpl: typeof fetch = fetch,
 ): Promise<BodyHashCheckResult> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 20_000);
   const start = Date.now();
 
   try {
-    const res = await fetch(url, {
+    const res = await fetchImpl(url, {
       headers: { "User-Agent": RELEASES_BOT_UA },
       signal: controller.signal,
       redirect: "follow",

@@ -9,4 +9,4 @@
  * discovery→API use `releases-web` / `releases-discovery-worker` instead so
  * they're distinguishable from outbound scraping in Cloudflare Analytics.
  */
-export const RELEASES_BOT_UA = "releases/0.1 (+https://releases.sh)";
+export { WEB_BOT_AUTH_USER_AGENT as RELEASES_BOT_UA } from "@buildinternet/releases-core/web-bot-auth";
