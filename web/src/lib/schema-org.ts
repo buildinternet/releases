@@ -1,10 +1,16 @@
 import type { SourceType } from "@buildinternet/releases-core/source-enums";
 
 /** Current month + year (e.g. "May 2026") in `en-US`, for freshness signals in
- *  feed-page titles and descriptions. Recomputed per render, so keep the
- *  surfaces that call it on a revalidation cadence or the period freezes stale. */
+ *  feed-page titles and descriptions. Pinned to UTC so the period doesn't drift
+ *  by a day at month boundaries depending on the runtime's local timezone.
+ *  Recomputed per render, so keep the surfaces that call it on a revalidation
+ *  cadence or the period freezes stale. */
 export function currentPeriod(): string {
-  return new Date().toLocaleDateString("en-US", { month: "long", year: "numeric" });
+  return new Date().toLocaleDateString("en-US", {
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  });
 }
 
 /** Most recent activity timestamp for an org or source row. Falls back from
