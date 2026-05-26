@@ -1,4 +1,4 @@
-export type ErrorCategory = "infra" | "extraction" | "validation" | "model";
+export type ErrorCategory = "infra" | "extraction" | "validation" | "model" | "bot_challenge";
 
 export class CategorizedError extends Error {
   constructor(

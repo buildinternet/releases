@@ -1,0 +1,9 @@
+-- Marker migration (no DDL): adds the "blocked" value to FETCH_LOG_STATUSES in
+-- packages/core/src/schema.ts. fetch_log.status is a free-form TEXT column with
+-- no CHECK constraint (see 20260520010000_squashed_baseline.sql), so storing a
+-- new status value requires no schema change — this file exists only to pair
+-- the schema.ts edit with a migration per the CI "schema-change" gate.
+--
+-- "blocked" is written when the scrape path detects a Cloudflare challenge
+-- interstitial instead of the article (issue #1171), distinguishing it from a
+-- genuine `no_change` (healthy/stable) and from extraction/infra `error`s.

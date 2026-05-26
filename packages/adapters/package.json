@@ -11,6 +11,7 @@
     "./github": "./src/github.ts",
     "./github-discovery": "./src/github-discovery.ts",
     "./cloudflare": "./src/cloudflare.ts",
+    "./cf-challenge": "./src/cf-challenge.ts",
     "./crawl": "./src/crawl.ts",
     "./appstore": "./src/appstore.ts",
     "./feed": "./src/feed.ts",
