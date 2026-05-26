@@ -111,6 +111,17 @@ export interface SourceMetadata {
   categoryAllow?: string[];
 
   /**
+   * Optional allowlist of keywords matched case-insensitively as substrings
+   * against each feed item's `title` or `url`. When present, the cron keeps
+   * only items where at least one keyword appears in the title or URL slug;
+   * all others are dropped. Complements `categoryAllow` for mixed-topic feeds
+   * that carry no usable `<category>` tags but encode the section in the slug
+   * — e.g. Discord's blog feed, where the changelog/patch-notes posts live at
+   * `…/discord-patch-notes-…` and `…-changelog` among marketing posts.
+   */
+  feedKeywordAllow?: string[];
+
+  /**
    * When true, run each newly-parsed item through a Haiku classifier before
    * insert; items classified as marketing are inserted with `suppressed=true`
    * and `suppressedReason="marketing_classifier:<slug>"` so they stay out of
