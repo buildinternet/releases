@@ -49,6 +49,7 @@ export const adminRoutes = [
   "admin/logs",
   "admin/search-queries",
   "admin/feedback",
+  "admin/recommendations",
   "admin/overviews",
   "admin/orgs",
   "admin/sources",
