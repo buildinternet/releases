@@ -9,7 +9,8 @@
     "./formatters": "./src/formatters.ts",
     "./markdown-plugins": "./src/markdown-plugins.ts",
     "./media": "./src/media.ts",
-    "./media-url": "./src/media-url.ts"
+    "./media-url": "./src/media-url.ts",
+    "./media-filter": "./src/media-filter.ts"
   },
   "dependencies": {
     "@buildinternet/releases-api-types": "workspace:*",

@@ -40,31 +40,10 @@ export function formatDate(iso: string | null | undefined): string | null {
   });
 }
 
-/**
- * URL substrings that indicate a media item is a tiny thumbnail (typically
- * an author avatar baked into a changelog page) rather than a hero image
- * worth promoting into the OG card.
- */
-export const SMALL_MEDIA_MARKERS: readonly string[] = [
-  "c_fill,w_44",
-  "c_fill,w_48",
-  "c_fill,w_64",
-  "c_fill,w_96",
-  "/avatar/",
-  "?s=32",
-  "?s=44",
-  "?s=48",
-  "?s=64",
-  "&s=32",
-  "&s=44",
-  "&s=48",
-  "&s=64",
-];
-
-export function isJunkMediaUrl(url: string | null | undefined): boolean {
-  if (!url) return false;
-  return SMALL_MEDIA_MARKERS.some((marker) => url.includes(marker));
-}
+// Junk-media detection (avatars, favicons, data URIs) lives in
+// `@releases/rendering/media-filter` so the ingest R2-upload pre-filter and the
+// OG hero-image picker share one marker list and can't drift apart.
+export { SMALL_MEDIA_MARKERS, isJunkMediaUrl } from "@releases/rendering/media-filter";
 
 export const HERO_MIN_BYTES = 50_000;
 export const HERO_MAX_BYTES = 3_000_000;
