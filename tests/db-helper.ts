@@ -205,6 +205,7 @@ export function clearAllTables(db: TestDb): void {
   db.delete(schema.collectionMembers).run();
   db.delete(schema.collections).run();
   db.delete(schema.recommendations).run();
+  db.delete(schema.notificationCounters).run();
   db.delete(schema.organizations).run();
   db.delete(schema.blockedUrls).run();
 }

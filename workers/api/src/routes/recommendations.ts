@@ -61,6 +61,55 @@ function parseRecommendationType(v: unknown): string | null {
     : null;
 }
 
+function concatChunks(chunks: Uint8Array[], total: number): Uint8Array {
+  const out = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    out.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return out;
+}
+
+async function readJsonBody(
+  req: Request,
+): Promise<
+  | { ok: true; value: unknown }
+  | { ok: false; status: 400; error: "invalid_json" }
+  | { ok: false; status: 413; error: "payload_too_large" }
+> {
+  if (!req.body) {
+    return { ok: false, status: 400, error: "invalid_json" };
+  }
+
+  const reader = req.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+
+  try {
+    while (true) {
+      // oxlint-disable-next-line no-await-in-loop -- request streams must be consumed sequentially
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > MAX_BODY_BYTES) {
+        void reader.cancel().catch(() => {});
+        return { ok: false, status: 413, error: "payload_too_large" };
+      }
+      chunks.push(value);
+    }
+  } catch {
+    return { ok: false, status: 400, error: "invalid_json" };
+  }
+
+  try {
+    const text = new TextDecoder().decode(concatChunks(chunks, total));
+    return { ok: true, value: JSON.parse(text) };
+  } catch {
+    return { ok: false, status: 400, error: "invalid_json" };
+  }
+}
+
 recommendationRoutes.post("/recommendations", async (c) => {
   if (c.env.RECOMMENDATIONS_DISABLED === "true") {
     return c.json({ error: "recommendations_disabled" }, 503);
@@ -85,16 +134,14 @@ recommendationRoutes.post("/recommendations", async (c) => {
     }
   }
 
-  let parsed: unknown;
-  try {
-    parsed = await c.req.json();
-  } catch {
+  const parsed = await readJsonBody(c.req.raw);
+  if (!parsed.ok) {
+    return c.json({ error: parsed.error }, parsed.status);
+  }
+  if (typeof parsed.value !== "object" || parsed.value === null) {
     return c.json({ error: "invalid_json" }, 400);
   }
-  if (typeof parsed !== "object" || parsed === null) {
-    return c.json({ error: "invalid_json" }, 400);
-  }
-  const body = parsed as Record<string, unknown>;
+  const body = parsed.value as Record<string, unknown>;
   const type = parseRecommendationType(body.type);
   if (!type) {
     return c.json(

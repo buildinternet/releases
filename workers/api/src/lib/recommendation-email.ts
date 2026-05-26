@@ -10,27 +10,37 @@ import { sendEmail, type EmailEnv } from "./email.js";
 const DEFAULT_NOTIFY_MAX_PER_HOUR = 20;
 const HOUR_MS = 3_600_000;
 
-type NotifyKv = {
-  get(key: string): Promise<string | null>;
-  put(key: string, value: string, opts?: { expirationTtl?: number }): Promise<void>;
-};
+type AtomicCounterStore = Pick<D1Database, "prepare">;
 
 export type RecommendationNotifyEnv = EmailEnv & {
-  ALERT_DEDUP_KV?: NotifyKv;
+  DB?: AtomicCounterStore;
   RECOMMENDATION_NOTIFY_MAX_PER_HOUR?: string;
 };
 
 export async function withinRecommendationNotifyBudget(
-  kv: NotifyKv | undefined,
+  counter: AtomicCounterStore | undefined,
   max: number,
 ): Promise<boolean> {
-  if (!kv) return true;
+  if (!counter) return true;
   const bucket = Math.floor(Date.now() / HOUR_MS);
   const key = `recommendation:notify:${bucket}`;
-  const current = parseInt((await kv.get(key)) ?? "0", 10) || 0;
-  if (current >= max) return false;
-  await kv.put(key, String(current + 1), { expirationTtl: 3600 });
-  return true;
+  const expiresAt = (bucket + 2) * HOUR_MS;
+  await counter
+    .prepare("DELETE FROM notification_counters WHERE expires_at < ?")
+    .bind(Date.now())
+    .run();
+  const row = await counter
+    .prepare(
+      `INSERT INTO notification_counters (key, count, expires_at)
+       VALUES (?, 1, ?)
+       ON CONFLICT(key) DO UPDATE SET
+         count = count + 1,
+         expires_at = excluded.expires_at
+       RETURNING count`,
+    )
+    .bind(key, expiresAt)
+    .first<{ count: number }>();
+  return Number(row?.count ?? max + 1) <= max;
 }
 
 function truncate(s: string, max: number): string {
@@ -67,7 +77,7 @@ export async function notifyRecommendation(
   try {
     const max =
       parseInt(env.RECOMMENDATION_NOTIFY_MAX_PER_HOUR ?? "", 10) || DEFAULT_NOTIFY_MAX_PER_HOUR;
-    if (!(await withinRecommendationNotifyBudget(env.ALERT_DEDUP_KV, max))) {
+    if (!(await withinRecommendationNotifyBudget(env.DB, max))) {
       logEvent("warn", {
         component: "recommendations",
         event: "notify-rate-capped",

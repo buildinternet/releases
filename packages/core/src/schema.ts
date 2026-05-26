@@ -650,6 +650,19 @@ export const recommendations = sqliteTable(
 export type Recommendation = typeof recommendations.$inferSelect;
 export type NewRecommendation = typeof recommendations.$inferInsert;
 
+export const notificationCounters = sqliteTable(
+  "notification_counters",
+  {
+    key: text("key").primaryKey(),
+    count: integer("count").notNull().default(0),
+    expiresAt: integer("expires_at").notNull(),
+  },
+  (table) => [index("idx_notification_counters_expires_at").on(table.expiresAt)],
+);
+
+export type NotificationCounter = typeof notificationCounters.$inferSelect;
+export type NewNotificationCounter = typeof notificationCounters.$inferInsert;
+
 export const SEARCH_SURFACES = ["web", "mcp", "api"] as const;
 export type SearchSurface = (typeof SEARCH_SURFACES)[number];
 

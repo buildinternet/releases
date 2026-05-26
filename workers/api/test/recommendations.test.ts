@@ -128,3 +128,34 @@ describe("PATCH /v1/recommendations/:id", () => {
     expect(row!.archived).toBe(true);
   });
 });
+
+describe("DELETE /v1/recommendations/:id", () => {
+  it("deletes an existing recommendation", async () => {
+    const { db, fetch } = await makeApp();
+    await db.insert(recommendations).values({
+      id: "rec_seed",
+      createdAt: 1000,
+      type: "source",
+      url: "https://example.com/releases",
+      status: "new",
+      archived: false,
+      surface: "web",
+    });
+
+    const res = await fetch(
+      new Request("http://x/v1/recommendations/rec_seed", { method: "DELETE" }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(await db.select().from(recommendations)).toHaveLength(0);
+  });
+
+  it("returns 404 for a missing recommendation", async () => {
+    const { fetch } = await makeApp();
+    const res = await fetch(
+      new Request("http://x/v1/recommendations/rec_missing", { method: "DELETE" }),
+    );
+
+    expect(res.status).toBe(404);
+  });
+});

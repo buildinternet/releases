@@ -4,17 +4,7 @@ import {
   withinRecommendationNotifyBudget,
 } from "../src/lib/recommendation-email.js";
 import type { Recommendation } from "@buildinternet/releases-core/schema";
-
-function fakeKv(initial: Record<string, string> = {}) {
-  const store = new Map(Object.entries(initial));
-  return {
-    get: async (k: string) => store.get(k) ?? null,
-    put: async (k: string, v: string) => {
-      store.set(k, v);
-    },
-    store,
-  };
-}
+import { createTestDb } from "./setup";
 
 const base: Recommendation = {
   id: "rec_123",
@@ -53,15 +43,15 @@ describe("formatRecommendationEmail", () => {
 
 describe("withinRecommendationNotifyBudget", () => {
   it("allows and increments when under the hourly cap", async () => {
-    const kv = fakeKv();
-    expect(await withinRecommendationNotifyBudget(kv, 2)).toBe(true);
-    expect(await withinRecommendationNotifyBudget(kv, 2)).toBe(true);
+    const db = createTestDb();
+    expect(await withinRecommendationNotifyBudget(db as unknown as D1Database, 2)).toBe(true);
+    expect(await withinRecommendationNotifyBudget(db as unknown as D1Database, 2)).toBe(true);
   });
 
   it("blocks once the cap is reached", async () => {
-    const kv = fakeKv();
-    expect(await withinRecommendationNotifyBudget(kv, 2)).toBe(true);
-    expect(await withinRecommendationNotifyBudget(kv, 2)).toBe(true);
-    expect(await withinRecommendationNotifyBudget(kv, 2)).toBe(false);
+    const db = createTestDb();
+    expect(await withinRecommendationNotifyBudget(db as unknown as D1Database, 2)).toBe(true);
+    expect(await withinRecommendationNotifyBudget(db as unknown as D1Database, 2)).toBe(true);
+    expect(await withinRecommendationNotifyBudget(db as unknown as D1Database, 2)).toBe(false);
   });
 });

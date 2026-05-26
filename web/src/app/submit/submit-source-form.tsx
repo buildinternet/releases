@@ -16,9 +16,17 @@ function errorMessage(error: string | undefined): string {
       return "Enter a valid email address, or leave it blank.";
     case "rate_limited":
       return "Too many submissions. Please try again in a minute.";
+    case "api_timeout":
+      return "The submission timed out. Please try again.";
+    case "api_unavailable":
+      return "The API is unavailable right now. Please try again.";
     default:
       return "Something went sideways. Please try again.";
   }
+}
+
+function caughtErrorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : "Network error";
 }
 
 export function SubmitSourceForm() {
@@ -30,29 +38,33 @@ export function SubmitSourceForm() {
     const data = new FormData(form);
     setState({ status: "submitting", message: null });
 
-    const res = await fetch("/api/recommendations", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        url: data.get("url"),
-        note: data.get("note"),
-        contactEmail: data.get("contactEmail"),
-        type: "source",
-        surface: "web",
-      }),
-    });
+    try {
+      const res = await fetch("/api/recommendations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          url: data.get("url"),
+          note: data.get("note"),
+          contactEmail: data.get("contactEmail"),
+          type: "source",
+          surface: "web",
+        }),
+      });
 
-    const json = (await res.json().catch(() => null)) as { error?: string; id?: string } | null;
-    if (!res.ok) {
-      setState({ status: "error", message: errorMessage(json?.error) });
-      return;
+      const json = (await res.json().catch(() => null)) as { error?: string; id?: string } | null;
+      if (!res.ok) {
+        setState({ status: "error", message: errorMessage(json?.error) });
+        return;
+      }
+
+      form.reset();
+      setState({
+        status: "success",
+        message: "Thanks. The URL is in the review queue.",
+      });
+    } catch (err) {
+      setState({ status: "error", message: errorMessage(caughtErrorMessage(err)) });
     }
-
-    form.reset();
-    setState({
-      status: "success",
-      message: "Thanks. The URL is in the review queue.",
-    });
   }
 
   const submitting = state.status === "submitting";

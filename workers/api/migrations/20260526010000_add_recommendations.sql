@@ -17,3 +17,11 @@ CREATE INDEX idx_recommendations_created ON recommendations (created_at);
 CREATE INDEX idx_recommendations_status_created ON recommendations (status, created_at);
 CREATE INDEX idx_recommendations_type_created ON recommendations (type, created_at);
 CREATE INDEX idx_recommendations_url ON recommendations (url);
+
+-- Transactional per-bucket counters for notification volume caps.
+CREATE TABLE notification_counters (
+  key TEXT PRIMARY KEY,
+  count INTEGER NOT NULL DEFAULT 0,
+  expires_at INTEGER NOT NULL
+);
+CREATE INDEX idx_notification_counters_expires_at ON notification_counters (expires_at);

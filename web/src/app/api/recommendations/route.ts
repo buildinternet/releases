@@ -3,6 +3,7 @@ import { webApiHeaders } from "@/lib/api";
 import { apiBaseUrl } from "@/lib/env";
 
 const API_URL = apiBaseUrl() ?? "http://localhost:3456";
+const UPSTREAM_TIMEOUT_MS = 10_000;
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +16,8 @@ export async function POST(req: NextRequest) {
   }
 
   let res: Response;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), UPSTREAM_TIMEOUT_MS);
   try {
     res = await fetch(`${API_URL}/v1/recommendations`, {
       method: "POST",
@@ -24,9 +27,15 @@ export async function POST(req: NextRequest) {
       }),
       body: JSON.stringify(body),
       cache: "no-store",
+      signal: controller.signal,
     });
-  } catch {
+  } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") {
+      return NextResponse.json({ error: "api_timeout" }, { status: 504 });
+    }
     return NextResponse.json({ error: "api_unavailable" }, { status: 502 });
+  } finally {
+    clearTimeout(timeout);
   }
 
   const payload = await res.json().catch(() => ({ error: "upstream_error" }));
