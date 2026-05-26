@@ -8,6 +8,7 @@ import Link from "next/link";
 import type { ReleaseItem } from "@/lib/api";
 import Image from "next/image";
 import { FallbackImage } from "./fallback-image";
+import { releaseThumbUrl, IMG_TRANSFORM_ON } from "@/lib/media";
 import { EXTERNAL_UGC_REL, isOptimizableImage } from "@/lib/sanitize";
 import { SourceTypeIcon } from "./source-type-icon";
 import { markdownComponents, collapsedMarkdownComponents } from "./markdown-components";
@@ -68,11 +69,12 @@ function MediaGallery({
               aria-label="Preview image"
             >
               <FallbackImage
-                src={src}
+                src={releaseThumbUrl(src, 800)}
                 alt={item.alt || ""}
                 width={400}
                 height={192}
                 className="rounded-md object-contain max-h-48 w-auto"
+                unoptimized={IMG_TRANSFORM_ON || undefined}
               />
             </button>
           );
@@ -341,11 +343,12 @@ export function ReleaseListItem({
                     aria-label="Preview image"
                   >
                     <FallbackImage
-                      src={thumbnail.r2Url ?? thumbnail.url}
+                      src={releaseThumbUrl(thumbnail.r2Url ?? thumbnail.url, 240)}
                       alt={thumbnail.alt || ""}
                       width={120}
                       height={72}
                       className="rounded-md object-cover w-[120px] h-[72px] border border-stone-200 dark:border-stone-800"
+                      unoptimized={IMG_TRANSFORM_ON || undefined}
                     />
                   </button>
                 )}
