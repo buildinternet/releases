@@ -22,10 +22,23 @@ interface FallbackImageProps {
   width: number;
   height: number;
   className?: string;
+  /**
+   * Override the optimizer decision. Defaults to `!isOptimizableImage(src)`.
+   * Pass `true` for URLs already optimized upstream (e.g. a Cloudflare
+   * `/cdn-cgi/image/` transform) so next/image doesn't re-process them.
+   */
+  unoptimized?: boolean;
 }
 
 /** next/image wrapper that renders a placeholder on load error. */
-export function FallbackImage({ src, alt, width, height, className }: FallbackImageProps) {
+export function FallbackImage({
+  src,
+  alt,
+  width,
+  height,
+  className,
+  unoptimized,
+}: FallbackImageProps) {
   const [failed, setFailed] = useState(false);
   if (failed) return <Placeholder className={className} />;
   return (
@@ -35,7 +48,7 @@ export function FallbackImage({ src, alt, width, height, className }: FallbackIm
       width={width}
       height={height}
       className={className}
-      unoptimized={!isOptimizableImage(src)}
+      unoptimized={unoptimized ?? !isOptimizableImage(src)}
       onError={() => setFailed(true)}
     />
   );

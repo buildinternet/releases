@@ -117,6 +117,42 @@ export function normalizeMediaUrl(url: string): string {
 }
 
 /**
+ * Wrap an absolute image URL in a Cloudflare Image Transformation that serves a
+ * downscaled, format-negotiated variant from `origin`'s `/cdn-cgi/image/`
+ * endpoint. Used for release-feed thumbnails / gallery images so the browser
+ * isn't handed a full-resolution original to squeeze into a small box (the
+ * one-pass downscale of a detailed screenshot aliases — "jagged" thumbs).
+ *
+ * The source is appended raw (Cloudflare's URL format parses everything after
+ * the options segment as the source image), so query strings survive. Requires
+ * `origin` to permit cross-origin sources for third-party URLs — same-zone keys
+ * always work.
+ *
+ * Returns `src` unchanged (a safe passthrough) when there's nothing to gain or
+ * the transform can't apply: empty `origin`, a non-absolute / non-http(s) /
+ * unparseable URL, an SVG (vector — nothing to downscale), or a URL that is
+ * already a `/cdn-cgi/image/` transform (no double-wrap). The caller is
+ * expected to only pass URLs it knows are images.
+ */
+export function cfImageUrl(src: string, opts: { origin: string; width: number }): string {
+  const { origin, width } = opts;
+  if (!src || !origin) return src;
+  if (src.includes("/cdn-cgi/image/")) return src;
+
+  let parsed: URL;
+  try {
+    parsed = new URL(src);
+  } catch {
+    return src; // relative or malformed — no absolute source to fetch
+  }
+  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return src;
+  if (/\.svg$/i.test(parsed.pathname)) return src;
+
+  const base = origin.endsWith("/") ? origin.slice(0, -1) : origin;
+  return `${base}/cdn-cgi/image/width=${width},quality=80,format=auto/${src}`;
+}
+
+/**
  * Build an absolute media URL from an R2 key, or undefined if no key.
  * Returns a plain URL without Image Transforms — gallery images go through
  * next/image which handles its own optimization.

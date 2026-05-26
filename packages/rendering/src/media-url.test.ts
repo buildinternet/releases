@@ -1,5 +1,74 @@
 import { describe, expect, test } from "bun:test";
-import { normalizeMediaUrl } from "./media-url.js";
+import { normalizeMediaUrl, cfImageUrl } from "./media-url.js";
+
+describe("cfImageUrl", () => {
+  const origin = "https://media.releases.sh";
+
+  test("wraps an absolute raster image URL in a Cloudflare width transform", () => {
+    expect(cfImageUrl("https://cdn.example.com/a.png", { origin, width: 240 })).toBe(
+      "https://media.releases.sh/cdn-cgi/image/width=240,quality=80,format=auto/https://cdn.example.com/a.png",
+    );
+  });
+
+  test("reflects the requested width", () => {
+    expect(cfImageUrl("https://cdn.example.com/a.jpg", { origin, width: 800 })).toBe(
+      "https://media.releases.sh/cdn-cgi/image/width=800,quality=80,format=auto/https://cdn.example.com/a.jpg",
+    );
+  });
+
+  test("appends the source URL raw, preserving its query string", () => {
+    expect(cfImageUrl("https://cdn.example.com/a.png?v=2&x=y", { origin, width: 240 })).toBe(
+      "https://media.releases.sh/cdn-cgi/image/width=240,quality=80,format=auto/https://cdn.example.com/a.png?v=2&x=y",
+    );
+  });
+
+  test("transforms an extension-less image URL (caller vouches it is an image)", () => {
+    expect(cfImageUrl("https://cdn.example.com/abc123", { origin, width: 240 })).toBe(
+      "https://media.releases.sh/cdn-cgi/image/width=240,quality=80,format=auto/https://cdn.example.com/abc123",
+    );
+  });
+
+  test("strips a trailing slash on origin so the path is not doubled", () => {
+    expect(cfImageUrl("https://cdn.example.com/a.png", { origin: `${origin}/`, width: 240 })).toBe(
+      "https://media.releases.sh/cdn-cgi/image/width=240,quality=80,format=auto/https://cdn.example.com/a.png",
+    );
+  });
+
+  test("leaves SVG sources unchanged (vector — nothing to downscale)", () => {
+    const svg = "https://cdn.example.com/logo.svg";
+    expect(cfImageUrl(svg, { origin, width: 240 })).toBe(svg);
+  });
+
+  test("leaves SVG sources with a query string unchanged", () => {
+    const svg = "https://cdn.example.com/logo.svg?cache=1";
+    expect(cfImageUrl(svg, { origin, width: 240 })).toBe(svg);
+  });
+
+  test("leaves a relative URL unchanged (no absolute source to fetch)", () => {
+    expect(cfImageUrl("/local/a.png", { origin, width: 240 })).toBe("/local/a.png");
+  });
+
+  test("leaves a data: URL unchanged", () => {
+    const data = "data:image/png;base64,AAAA";
+    expect(cfImageUrl(data, { origin, width: 240 })).toBe(data);
+  });
+
+  test("does not double-wrap an already-transformed URL", () => {
+    const already =
+      "https://media.releases.sh/cdn-cgi/image/width=240,quality=80,format=auto/https://cdn.example.com/a.png";
+    expect(cfImageUrl(already, { origin, width: 240 })).toBe(already);
+  });
+
+  test("leaves a non-parseable string unchanged", () => {
+    expect(cfImageUrl("not a url", { origin, width: 240 })).toBe("not a url");
+  });
+
+  test("returns the source unchanged when origin is empty", () => {
+    expect(cfImageUrl("https://cdn.example.com/a.png", { origin: "", width: 240 })).toBe(
+      "https://cdn.example.com/a.png",
+    );
+  });
+});
 
 describe("normalizeMediaUrl", () => {
   test("unwraps a root _next/image optimizer URL to the underlying origin asset", () => {
