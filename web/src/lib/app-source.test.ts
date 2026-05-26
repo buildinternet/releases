@@ -41,4 +41,15 @@ describe("getAppInfo", () => {
       iconUrl: null,
     });
   });
+
+  it("falls back to iOS + null icon when appStore fields are wrong-typed", () => {
+    // JSON parses fine, but platform/artworkUrl are non-strings — must not leak
+    // a number/boolean into the AppInfo contract.
+    expect(
+      getAppInfo({
+        type: "appstore",
+        metadata: meta({ appStore: { platform: 123, artworkUrl: false } }),
+      }),
+    ).toEqual({ platform: "ios", label: "iOS", iconUrl: null });
+  });
 });

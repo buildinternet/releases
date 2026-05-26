@@ -20,20 +20,23 @@ interface AppSourceLike {
 export function getAppInfo(source: AppSourceLike): AppInfo | null {
   if (source.type !== "appstore") return null;
 
-  let appStore: { platform?: string; artworkUrl?: string } | undefined;
+  // Parse defensively: the metadata blob is untrusted JSON, so validate that
+  // appStore is an object and that the fields we read are actually strings
+  // before they flow into the typed AppInfo (a non-string artworkUrl would
+  // otherwise leak through `?? null` and break the `string | null` contract).
+  let appStore: Record<string, unknown> | undefined;
   try {
-    const parsed = JSON.parse(source.metadata ?? "{}") as {
-      appStore?: { platform?: string; artworkUrl?: string };
-    };
-    appStore = parsed?.appStore;
+    const block = (JSON.parse(source.metadata ?? "{}") as { appStore?: unknown } | null)?.appStore;
+    if (block && typeof block === "object") appStore = block as Record<string, unknown>;
   } catch {
     appStore = undefined;
   }
 
   const platform = appStore?.platform === "macos" ? "macos" : "ios";
+  const iconUrl = typeof appStore?.artworkUrl === "string" ? appStore.artworkUrl : null;
   return {
     platform,
     label: platform === "macos" ? "macOS" : "iOS",
-    iconUrl: appStore?.artworkUrl ?? null,
+    iconUrl,
   };
 }
