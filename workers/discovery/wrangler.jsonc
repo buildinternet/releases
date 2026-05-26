@@ -39,7 +39,7 @@
     // internal loop runs on Anthropic's infra and stays off-gateway.
     // See docs/architecture/ai-gateway.md. Gateway runs in authenticated mode.
     "ANTHROPIC_BASE_URL": "https://gateway.ai.cloudflare.com/v1/b082600d280d44fd5da3501bc1bffe2f/releases/anthropic",
-    "WEB_BOT_AUTH_ENABLED": "false",
+    "WEB_BOT_AUTH_ENABLED": "true",
   },
   "containers": [
     {

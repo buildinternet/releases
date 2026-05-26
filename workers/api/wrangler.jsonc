@@ -137,7 +137,7 @@
     // Production deploys advertise "production"; the staging block overrides
     // to "staging".
     "ENVIRONMENT": "production",
-    "WEB_BOT_AUTH_ENABLED": "false",
+    "WEB_BOT_AUTH_ENABLED": "true",
   },
   "d1_databases": [
     {
