@@ -58,6 +58,8 @@ export const ProductDetailSourceSchema = z.object({
   name: z.string(),
   type: SourceTypeSchema,
   url: z.string(),
+  metadata: z.string().nullable().optional(),
+  kind: z.enum(KIND_VALUES).nullable().optional(),
 });
 
 /**
