@@ -57,6 +57,8 @@ export type Env = {
     WEBHOOK_DELIVERY_QUEUE: Queue<unknown>;
     MEDIA: R2Bucket;
     MEDIA_ORIGIN?: string;
+    /** Ingest-time R2 media upload kill switch (#1177); default off. */
+    MEDIA_R2_UPLOAD_ENABLED?: string;
     CACHE_DISABLED?: string;
     GITHUB_TOKEN?: SecretBinding;
     CRON_ENABLED?: string;

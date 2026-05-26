@@ -87,8 +87,17 @@ Seed model: the first collection (`frontier-ai-labs`) is created via migration (
 
 ## Media handling
 
-At ingest time, `normalizeMediaUrl()` in `packages/rendering/src/media-url.ts` rewrites Next.js/Vercel image-optimizer proxy URLs (`/_next/image?url=...`, including Next `basePath` variants) to the underlying CDN asset — those proxy endpoints 404 for off-origin fetchers, so the raw `url` query param is extracted and stored instead. Outside that rewrite, media URLs are stored verbatim in the `media` column as third-party-hosted URLs; there is no ingest-time upload to R2. Ingest-time R2 mirroring (junk filtering + upload) is planned but not yet implemented; see #1033.
+At ingest time, `normalizeMediaUrl()` in `packages/rendering/src/media-url.ts` rewrites Next.js/Vercel image-optimizer proxy URLs (`/_next/image?url=...`, including Next `basePath` variants) to the underlying CDN asset — those proxy endpoints 404 for off-origin fetchers, so the raw `url` query param is extracted and stored instead.
 
-The `released-media` R2 bucket currently holds org avatars (`orgs/{slug}.{ext}`, written by `scripts/upload-org-avatars.ts`) and handles ad-hoc uploads via the auth-gated `PUT /v1/media/:key` endpoint in `workers/api/src/routes/media.ts`.
+**Ingest-time R2 mirroring (#1177)** is implemented but gated behind `MEDIA_R2_UPLOAD_ENABLED` (default off). When on, the two fresh-media ingest paths — the cron `poll-fetch` insert and the `/releases/batch` endpoint — run a media pre-pass:
+
+1. `filterJunkMedia` (`@releases/rendering/media-filter`) drops chrome by URL: favicons, gravatar/`?s=NN` avatar thumbnails, `/avatar/` crops, and `data:` URIs. It's shared with the OG hero-image picker (`web/src/lib/og-helpers.ts` delegates to it) so the two marker lists can't drift.
+2. `processMediaForR2` (`workers/api/src/lib/media-ingest.ts`) fetches each survivor, gates on a `Content-Type` of `image/*` and a byte size in `[1 KB, 8 MB]` (the floor catches tracking pixels / spacers the URL heuristic misses), content-hash-keys it (`releases/{sha256}.{ext}`), `put`s it to the `released-media` bucket, registers a `media_assets` row, and stamps `r2Key` on the stored `media[]` item. Read paths resolve `r2Key → r2Url` via `resolveR2Url` (already wired in `parseReleaseMedia`). Content-hash keying gives free dedup against `media_assets`' `UNIQUE(content_hash)`/`UNIQUE(r2_key)`.
+
+The pass is **bounded** (per-release + per-fire caps, a per-image `AbortController` timeout, limited concurrency) and **fail-open**: any fetch error, timeout, non-image response, out-of-range size, or `put`/registry error leaves the original third-party URL in place. The `r2Key` is stamped immediately after a successful `put`, so a registry-write failure can't strip the user-facing same-origin URL. Flag-off stores third-party URLs verbatim, as before; backfill of pre-existing rows is a follow-up.
+
+On the read side, `releaseThumbUrl` (`web/src/lib/media.ts`) only routes **same-origin** (R2-hosted) sources through the Cloudflare width transform — third-party / not-yet-mirrored media passes through untransformed. That keeps Cloudflare Image Transformations "Sources" scoped to "Specified origins" (no open cross-origin resize proxy): un-uploaded media renders jagged-but-never-broken rather than 403ing.
+
+The `released-media` R2 bucket also holds org avatars (`orgs/{slug}.{ext}`, written by `scripts/upload-org-avatars.ts`) and handles ad-hoc uploads via the auth-gated `PUT /v1/media/:key` endpoint in `workers/api/src/routes/media.ts`.
 
 `FallbackImage` / `FallbackPlainImage` in `web/src/components/fallback-image.tsx` show an "Image unavailable" placeholder when a third-party URL fails to load.

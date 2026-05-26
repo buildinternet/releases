@@ -37,6 +37,9 @@ export type OnboardSourceWorkflowEnv = InvalidationEnv & {
   WEBHOOK_DELIVERY_QUEUE?: Queue<unknown>;
   /** Service binding used to delegate summary-only feeds to discovery's crawl path (RPC). */
   DISCOVERY_WORKER?: import("../cron/poll-fetch.js").DiscoveryWorkerRpc;
+  /** Ingest-time R2 media upload (#1177): kill switch + `released-media` bucket. */
+  MEDIA_R2_UPLOAD_ENABLED?: string;
+  MEDIA?: R2Bucket;
   /** TEST-ONLY: bypass drizzle(env.DB) and use the provided instance directly. */
   _drizzleOverride?: unknown;
 };
@@ -74,6 +77,8 @@ async function resolveFetchEnv(env: OnboardSourceWorkflowEnv): Promise<FetchOneE
     WEBHOOK_DELIVERY_QUEUE: env.WEBHOOK_DELIVERY_QUEUE,
     DB: env.DB,
     DISCOVERY_WORKER: env.DISCOVERY_WORKER,
+    MEDIA_R2_UPLOAD_ENABLED: env.MEDIA_R2_UPLOAD_ENABLED,
+    MEDIA: env.MEDIA,
   };
 }
 

@@ -100,6 +100,8 @@ import {
 import { wantsMarkdown, markdownResponse } from "../middleware/content-negotiation.js";
 import { authMiddleware } from "../middleware/auth.js";
 import { sourceToMarkdown, releaseToMarkdown } from "@releases/rendering/formatters.js";
+import { filterJunkMedia } from "@releases/rendering/media-filter.js";
+import { processMediaForR2, selectExistingReleaseUrls } from "../lib/media-ingest.js";
 import { fetchOne, embedReleasesForSource } from "../cron/poll-fetch.js";
 import { getSourceMeta, isGitHubFetched } from "@releases/adapters/feed.js";
 import { isAppStoreFetched } from "@releases/adapters/source-meta";
@@ -632,6 +634,8 @@ sourceRoutes.post("/sources/:slug/fetch", postSourceFetchRoute, async (c) => {
         WEBHOOK_DELIVERY_QUEUE: c.env.WEBHOOK_DELIVERY_QUEUE,
         DB: c.env.DB,
         DISCOVERY_WORKER: c.env.DISCOVERY_WORKER,
+        MEDIA_R2_UPLOAD_ENABLED: c.env.MEDIA_R2_UPLOAD_ENABLED,
+        MEDIA: c.env.MEDIA,
       },
       { sessionId, dryRun, maxEntries: maxParsed ?? undefined, skipDelegation },
     );
@@ -704,8 +708,51 @@ const postReleasesBatchHandler = async (c: import("hono").Context<Env>) => {
     // clustering. We can't run the clusterer off `publishRows` because
     // those omit `content` (the publish payload doesn't need it).
     const clusterRows: Array<{ id: string; version: string | null; content: string }> = [];
+
+    // Ingest-time R2 media upload (#1177). When enabled + the bucket is bound,
+    // drop junk and mirror surviving images to `released-media` before insert
+    // so reads resolve a same-origin `r2Url`. Sequential per release (the
+    // helper bounds image concurrency within); fail-open. Flag-off / unbound
+    // bucket => the agent-provided media JSON is stored verbatim, as today.
+    const r2UploadEnabled = c.env.MEDIA_R2_UPLOAD_ENABLED === "true" && c.env.MEDIA != null;
+    const mediaJsonByIndex = body.releases.map((r) => r.media ?? "[]");
+    if (r2UploadEnabled) {
+      // Skip releases whose URL already exists: RELEASE_URL_UPSERT never updates
+      // the `media` column on conflict, so mirroring their images to R2 would
+      // upload bytes the upsert immediately discards.
+      const existingMediaUrls = await selectExistingReleaseUrls(
+        db,
+        src.id,
+        body.releases.map((r) => r.url),
+      );
+      for (let i = 0; i < body.releases.length; i++) {
+        const rel = body.releases[i]!;
+        if (rel.url != null && existingMediaUrls.has(rel.url)) continue;
+        const rawMedia = rel.media;
+        if (!rawMedia) continue;
+        let parsed: Array<{
+          type: "image" | "video" | "gif";
+          url: string;
+          alt?: string;
+          r2Key?: string;
+        }>;
+        try {
+          parsed = JSON.parse(rawMedia);
+        } catch {
+          continue;
+        }
+        if (!Array.isArray(parsed) || parsed.length === 0) continue;
+        // oxlint-disable-next-line no-await-in-loop -- sequential per release; helper bounds image concurrency internally
+        const processed = await processMediaForR2(
+          filterJunkMedia(parsed.filter((m) => m && typeof m.url === "string")),
+          { db, bucket: c.env.MEDIA!, sourceId: src.id },
+        );
+        mediaJsonByIndex[i] = JSON.stringify(processed);
+      }
+    }
+
     for (let i = 0; i < body.releases.length; i += RELEASES_BATCH_CHUNK_SIZE) {
-      const chunk = body.releases.slice(i, i + RELEASES_BATCH_CHUNK_SIZE).map((r) => {
+      const chunk = body.releases.slice(i, i + RELEASES_BATCH_CHUNK_SIZE).map((r, j) => {
         // LLM-driven agent fetches occasionally emit literal placeholders
         // ("<UNKNOWN>", "n/a", "none") instead of omitting the version.
         // The web frontend promotes a non-null version to the heading slot
@@ -734,7 +781,7 @@ const postReleasesBatchHandler = async (c: import("hono").Context<Env>) => {
           contentTokens: size.contentTokens,
           publishedAt: r.publishedAt ?? inferredPublishedAt ?? null,
           prerelease: r.prerelease ?? isPrereleaseVersion(version),
-          media: r.media ?? "[]",
+          media: mediaJsonByIndex[i + j]!,
         };
       });
       // RETURNING is built here — not zipped against `chunk` — because
