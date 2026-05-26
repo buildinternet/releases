@@ -73,7 +73,8 @@ export function OrgAdminMenu({
     setNameDraft(name);
   }, [name]);
 
-  const canRename = nameDraft.trim().length > 0 && nameDraft.trim() !== name;
+  const trimmed = nameDraft.trim();
+  const canRename = trimmed.length > 0 && trimmed !== name.trim();
 
   const onDemand = discovery === "on_demand";
   const buttonLabel = isHidden ? "Admin · Hidden" : autoGenerateContent ? "Admin · AI" : "Admin";
@@ -106,9 +107,7 @@ export function OrgAdminMenu({
               />
               <button
                 type="button"
-                onClick={() =>
-                  run(() => renameOrgAction({ slug: orgSlug, name: nameDraft.trim() }))
-                }
+                onClick={() => run(() => renameOrgAction({ slug: orgSlug, name: trimmed }))}
                 disabled={pending || !canRename}
                 className="w-full px-2 py-1 rounded border border-stone-300 dark:border-stone-700 bg-stone-50 hover:bg-stone-100 dark:bg-stone-900 dark:hover:bg-stone-800 text-stone-700 dark:text-stone-200 disabled:opacity-50"
               >

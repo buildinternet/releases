@@ -68,8 +68,6 @@ export function SourceAdminMenu({
     setNameDraft(name);
   }, [name]);
 
-  const canRename = nameDraft.trim().length > 0 && nameDraft.trim() !== name;
-
   function run(action: () => Promise<{ ok: true } | { ok: false; error: string }>) {
     startTransition(async () => {
       setError(null);
@@ -87,6 +85,8 @@ export function SourceAdminMenu({
     });
   }
 
+  const trimmed = nameDraft.trim();
+  const canRename = trimmed.length > 0 && trimmed !== name.trim();
   const canPromote = discovery === "on_demand" && isHidden;
   const depthBtn = (label: string, value: Depth) => (
     <button
@@ -138,7 +138,7 @@ export function SourceAdminMenu({
               <button
                 type="button"
                 onClick={() =>
-                  run(() => renameSourceAction({ orgSlug, sourceSlug, name: nameDraft.trim() }))
+                  run(() => renameSourceAction({ orgSlug, sourceSlug, name: trimmed }))
                 }
                 disabled={pending || !canRename}
                 className="w-full px-2 py-1 rounded border border-stone-300 dark:border-stone-700 bg-stone-50 hover:bg-stone-100 dark:bg-stone-900 dark:hover:bg-stone-800 text-stone-700 dark:text-stone-200 disabled:opacity-50"

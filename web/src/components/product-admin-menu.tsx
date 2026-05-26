@@ -63,7 +63,8 @@ export function ProductAdminMenu({
     });
   }
 
-  const canRename = nameDraft.trim().length > 0 && nameDraft.trim() !== name;
+  const trimmed = nameDraft.trim();
+  const canRename = trimmed.length > 0 && trimmed !== name.trim();
 
   return (
     <div ref={containerRef} className="relative inline-flex items-center">
@@ -94,7 +95,7 @@ export function ProductAdminMenu({
               <button
                 type="button"
                 onClick={() =>
-                  run(() => renameProductAction({ orgSlug, productSlug, name: nameDraft.trim() }))
+                  run(() => renameProductAction({ orgSlug, productSlug, name: trimmed }))
                 }
                 disabled={pending || !canRename}
                 className="w-full px-2 py-1 rounded border border-stone-300 dark:border-stone-700 bg-stone-50 hover:bg-stone-100 dark:bg-stone-900 dark:hover:bg-stone-800 text-stone-700 dark:text-stone-200 disabled:opacity-50"
