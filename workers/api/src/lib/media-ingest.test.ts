@@ -48,7 +48,7 @@ describe("processMediaForR2", () => {
 
     // bucket.put called once with that exact key + content type
     expect(puts).toHaveLength(1);
-    expect(puts[0]!.key).toBe(result[0]!.r2Key);
+    expect(puts[0]!.key).toBe(result[0]!.r2Key!);
     expect(puts[0]!.contentType).toBe("image/png");
     expect(puts[0]!.size).toBe(2048);
 

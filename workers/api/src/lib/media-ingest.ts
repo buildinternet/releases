@@ -16,9 +16,14 @@
  * adds the post-fetch content-type + byte-size gate that catches tracking
  * pixels / spacers not distinguishable by URL.
  */
+import { drizzle } from "drizzle-orm/d1";
 import { mediaAssets } from "@buildinternet/releases-core/schema";
 import { logEvent } from "@releases/lib/log-event";
-import type { D1Db } from "../db.js";
+
+// Loose drizzle handle (matches the worker-helper convention in
+// `appstore-materialize.ts`) so both the schema-typed `createDb` result and
+// poll-fetch's `ReturnType<typeof drizzle>` handle pass without a cast.
+type Db = ReturnType<typeof drizzle>;
 
 /** Below this many bytes an image is almost certainly a spacer / pixel. */
 export const MEDIA_MIN_BYTES = 1024;
@@ -40,7 +45,7 @@ const CONTENT_TYPE_EXT: Record<string, string> = {
 };
 
 export interface ProcessMediaOptions {
-  db: D1Db;
+  db: Db;
   /** The `released-media` R2 bucket binding (`env.MEDIA`). */
   bucket: R2Bucket;
   sourceId?: string | null;
@@ -64,8 +69,8 @@ export interface ProcessMediaOptions {
 export async function processMediaForR2<T extends { url: string; r2Key?: string }>(
   media: readonly T[],
   opts: ProcessMediaOptions,
-): Promise<T[]> {
-  const items = media.map((m) => ({ ...m }));
+): Promise<Array<T & { r2Key?: string }>> {
+  const items: Array<T & { r2Key?: string }> = media.map((m) => ({ ...m }));
   if (items.length === 0) return items;
 
   const maxItems = opts.maxItems ?? DEFAULT_MAX_ITEMS;
@@ -76,7 +81,7 @@ export async function processMediaForR2<T extends { url: string; r2Key?: string 
 
   const toProcess = items.slice(0, maxItems);
 
-  const uploadOne = async (item: T): Promise<void> => {
+  const uploadOne = async (item: T & { r2Key?: string }): Promise<void> => {
     try {
       const res = await fetchWithTimeout(item.url, timeoutMs, fetchImpl);
       if (!res.ok) {
@@ -203,6 +208,7 @@ async function mapLimit<I>(
   const workers = Array.from({ length: Math.min(limit, queue.length) }, async () => {
     let next = queue.shift();
     while (next !== undefined) {
+      // oxlint-disable-next-line no-await-in-loop -- bounded-concurrency runner; awaiting per slot is the design
       await fn(next);
       next = queue.shift();
     }

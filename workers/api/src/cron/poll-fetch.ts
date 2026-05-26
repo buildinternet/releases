@@ -47,6 +47,8 @@ import { CHANGELOG_MAX_FILES, truncateToByteCap } from "@releases/adapters/githu
 import { isPrereleaseVersion } from "@buildinternet/releases-core/prerelease";
 import { computeVersionSort } from "@buildinternet/releases-core/version-sort";
 import { normalizeMediaUrl } from "@releases/rendering/media-url.js";
+import { filterJunkMedia } from "@releases/rendering/media-filter.js";
+import { processMediaForR2 } from "../lib/media-ingest.js";
 import {
   embedAndUpsertChangelogFile,
   type EmbeddedChunk,
@@ -630,6 +632,11 @@ export interface FetchOneEnv extends IndexNowEnv, AnthropicEnv {
   CLOUDFLARE_API_TOKEN?: { get(): Promise<string> };
   WEB_BOT_AUTH_ENABLED?: string;
   WEB_BOT_AUTH_PRIVATE_KEY?: { get(): Promise<string> };
+  // Ingest-time R2 media upload (#1177). Kill switch as a string (Workers env
+  // vars are strings); default off. `MEDIA` is the `released-media` R2 bucket
+  // binding — absent or flag-off => media is stored verbatim as today.
+  MEDIA_R2_UPLOAD_ENABLED?: string;
+  MEDIA?: R2Bucket;
 }
 
 /**
@@ -1228,13 +1235,40 @@ export async function fetchOne(
 
     const enrichMap = await buildEnrichMap(db, source, meta, rawReleases, env);
 
+    // Media pre-pass. Always unwrap Next.js/Vercel optimizer proxy URLs so
+    // downstream readers see the underlying CDN asset. When ingest-time R2
+    // upload is enabled (#1177) and the bucket is bound, additionally drop junk
+    // (favicons / avatars / pixels) and mirror survivors into `released-media`
+    // so reads resolve a same-origin `r2Url`. Sequential per release (the
+    // helper bounds image concurrency within); fail-open — any image-level
+    // failure keeps the third-party URL. Flag-off / unbound bucket = today's
+    // verbatim behavior.
+    const r2UploadEnabled = env.MEDIA_R2_UPLOAD_ENABLED === "true" && env.MEDIA != null;
+    const mediaJsonByIndex: string[] = [];
+    for (let index = 0; index < rawReleases.length; index++) {
+      const raw = rawReleases[index]!;
+      const enrich = enrichMap.get(index);
+      // Keep feed-provided media; backfill from the enriched article only when
+      // the feed item carried none (spec: article media only when feed is empty).
+      const rawMedia =
+        raw.media && raw.media.length > 0 ? raw.media : (enrich?.media ?? raw.media ?? []);
+      // oxlint-disable-next-line no-map-spread -- copy-on-write required; m is an adapter-returned object
+      const base = rawMedia.map((m) => ({ ...m, url: normalizeMediaUrl(m.url) }));
+      let finalMedia = base;
+      if (r2UploadEnabled && base.length > 0) {
+        // oxlint-disable-next-line no-await-in-loop -- sequential per release; helper bounds image concurrency internally
+        finalMedia = await processMediaForR2(filterJunkMedia(base), {
+          db,
+          bucket: env.MEDIA!,
+          sourceId: source.id,
+        });
+      }
+      mediaJsonByIndex[index] = JSON.stringify(finalMedia);
+    }
+
     const rows = rawReleases.map((raw, index) => {
       const enrich = enrichMap.get(index);
       const content = enrich?.content ?? raw.content;
-      // Keep feed-provided media; backfill from the enriched article only when
-      // the feed item carried none (spec: article media only when feed is empty).
-      const media =
-        raw.media && raw.media.length > 0 ? raw.media : (enrich?.media ?? raw.media ?? []);
       const size = computeContentSize(content);
       const verdict = marketingMap.get(index);
       return {
@@ -1249,12 +1283,7 @@ export async function fetchOne(
         contentTokens: size.contentTokens,
         publishedAt: raw.publishedAt?.toISOString() ?? null,
         prerelease: raw.prerelease ?? isPrereleaseVersion(raw.version),
-        // Unwrap Next.js/Vercel image optimizer URLs so downstream R2 upload
-        // and direct rendering both see the underlying CDN asset.
-        media: JSON.stringify(
-          // oxlint-disable-next-line no-map-spread -- copy-on-write required; m is an adapter-returned object
-          media.map((m) => ({ ...m, url: normalizeMediaUrl(m.url) })),
-        ),
+        media: mediaJsonByIndex[index]!,
         ...(enrich ? { metadata: JSON.stringify({ enrichment: enrich.marker }) } : {}),
         suppressed: verdict?.isMarketing === true,
         suppressedReason: verdict?.isMarketing ? `marketing_classifier:${verdict.reason}` : null,
