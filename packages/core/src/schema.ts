@@ -33,6 +33,7 @@ import {
   newBatchRunId,
   newApiTokenId,
   newFeedbackId,
+  newRecommendationId,
 } from "./id.js";
 import { PRINCIPAL_TYPES } from "./api-token.js";
 
@@ -612,6 +613,42 @@ export const feedback = sqliteTable(
 
 export type Feedback = typeof feedback.$inferSelect;
 export type NewFeedback = typeof feedback.$inferInsert;
+
+export const RECOMMENDATION_TYPES = ["source"] as const;
+export type RecommendationType = (typeof RECOMMENDATION_TYPES)[number];
+
+export const RECOMMENDATION_STATUSES = ["new", "triaged", "closed"] as const;
+export type RecommendationStatus = (typeof RECOMMENDATION_STATUSES)[number];
+
+/**
+ * User-submitted recommendations from the web app. Today the only supported
+ * type is `source` (release-note/source URL recommendations), but the resource
+ * is intentionally generic so future recommendation types can share triage.
+ */
+export const recommendations = sqliteTable(
+  "recommendations",
+  {
+    id: text("id").primaryKey().$defaultFn(newRecommendationId),
+    createdAt: integer("created_at").notNull(),
+    type: text("type").notNull().default("source"),
+    url: text("url").notNull(),
+    note: text("note"),
+    contactEmail: text("contact_email"),
+    status: text("status").notNull().default("new"),
+    archived: integer("archived", { mode: "boolean" }).notNull().default(false),
+    surface: text("surface").notNull().default("web"),
+    userAgent: text("user_agent"),
+  },
+  (table) => [
+    index("idx_recommendations_created").on(table.createdAt),
+    index("idx_recommendations_status_created").on(table.status, table.createdAt),
+    index("idx_recommendations_type_created").on(table.type, table.createdAt),
+    index("idx_recommendations_url").on(table.url),
+  ],
+);
+
+export type Recommendation = typeof recommendations.$inferSelect;
+export type NewRecommendation = typeof recommendations.$inferInsert;
 
 export const SEARCH_SURFACES = ["web", "mcp", "api"] as const;
 export type SearchSurface = (typeof SEARCH_SURFACES)[number];

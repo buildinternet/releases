@@ -204,6 +204,7 @@ export function clearAllTables(db: TestDb): void {
   // `frontier-ai-labs`, so leaving it in would leak into every test.
   db.delete(schema.collectionMembers).run();
   db.delete(schema.collections).run();
+  db.delete(schema.recommendations).run();
   db.delete(schema.organizations).run();
   db.delete(schema.blockedUrls).run();
 }
