@@ -8,7 +8,11 @@ import {
 } from "@buildinternet/releases-core/schema";
 import { toSlug } from "@buildinternet/releases-core/slug";
 import { resolveDateParam } from "@buildinternet/releases-core/dates";
-import { hydrateMediaUrls, resolveR2Url } from "@releases/rendering/media-url.js";
+import {
+  hydrateMediaUrls,
+  normalizeMediaUrl,
+  resolveR2Url,
+} from "@releases/rendering/media-url.js";
 import type { CollectionReleaseItem, MediaItem } from "@buildinternet/releases-api-types";
 import type { AggregateReleaseRow } from "@releases/core-internal/feed-cursor";
 import type { createDb } from "./db.js";
@@ -62,7 +66,17 @@ export function parseReleaseMedia(raw: string | null, mediaOrigin: string): Medi
   }
   if (!Array.isArray(parsed)) return [];
   return parsed.map((m: RawMediaRow) =>
-    Object.assign({}, m, { r2Url: resolveR2Url(m.r2Key, mediaOrigin) }),
+    Object.assign({}, m, {
+      // Unwrap Next.js/Vercel image-optimizer URLs (including basePath-doubled
+      // forms like `…/updates/_next/image?…` that 404 off-origin) to the
+      // underlying asset. The extract/scrape ingest path stores media verbatim
+      // (unlike poll-fetch, which normalizes at write time), so this read-time
+      // unwrap is the universal safety net — mirroring how `hydrateMediaUrls`
+      // already rewrites proxy URLs in content bodies at read time. Idempotent
+      // on plain URLs.
+      url: typeof m.url === "string" ? normalizeMediaUrl(m.url) : m.url,
+      r2Url: resolveR2Url(m.r2Key, mediaOrigin),
+    }),
   );
 }
 
