@@ -450,6 +450,8 @@ export {
   UpdatePlaybookNotesBodySchema,
   UpdatePlaybookNotesResponseSchema,
 } from "./schemas/overviews.js";
+export { ResolveResponseSchema } from "./schemas/resolve.js";
+export type { ResolveResponse } from "./schemas/resolve.js";
 
 // ── Media ──
 
