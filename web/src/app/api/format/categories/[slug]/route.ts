@@ -1,27 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { categoryDisplayName, isValidCategory } from "@buildinternet/releases-core/categories";
-import { api, ApiNotFoundError } from "@/lib/api";
+import { api } from "@/lib/api";
 import { ATOM_DEFAULT_MAX_ENTRIES } from "@/lib/atom";
 import { categoryAtomResponse } from "@/lib/atom-response";
 import { getBaseUrl } from "@/lib/base-url";
+import { formatErrorResponse } from "@/lib/format-error";
 import { categoryReleaseFeedToMarkdown } from "@/lib/formatters";
 import { markdownResponse } from "@/lib/markdown-response";
 import { getFormat } from "@/lib/request";
 
-const NOT_FOUND_BODY = { error: "not_found", message: "Category not found" };
-const BAD_GATEWAY_BODY = { error: "bad_gateway", message: "Upstream API error" };
-
-function errorResponse(err: unknown): NextResponse {
-  if (err instanceof ApiNotFoundError) {
-    return NextResponse.json(NOT_FOUND_BODY, { status: 404 });
-  }
-  return NextResponse.json(BAD_GATEWAY_BODY, { status: 502 });
-}
-
 export async function GET(request: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   if (!isValidCategory(slug)) {
-    return NextResponse.json(NOT_FOUND_BODY, { status: 404 });
+    return NextResponse.json(
+      { error: "not_found", message: "Category not found" },
+      { status: 404 },
+    );
   }
   const name = categoryDisplayName(slug);
   const format = getFormat(request);
@@ -31,7 +25,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     try {
       feed = await api.categoryReleases(slug, { limit: ATOM_DEFAULT_MAX_ENTRIES });
     } catch (err) {
-      return errorResponse(err);
+      return formatErrorResponse(err, "Category not found");
     }
     return categoryAtomResponse(request, { slug, name }, feed);
   }
@@ -41,7 +35,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     try {
       feed = await api.categoryReleases(slug, { limit: 20 });
     } catch (err) {
-      return errorResponse(err);
+      return formatErrorResponse(err, "Category not found");
     }
     const baseUrl = getBaseUrl(request);
     const body = categoryReleaseFeedToMarkdown(slug, name, feed.releases, feed.pagination, {
@@ -57,7 +51,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       api.categoryReleases(slug, { limit: 20 }),
     ]);
   } catch (err) {
-    return errorResponse(err);
+    return formatErrorResponse(err, "Category not found");
   }
   return NextResponse.json({
     slug,

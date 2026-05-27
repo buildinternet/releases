@@ -4,6 +4,7 @@ import { sourceToMarkdown } from "@/lib/formatters";
 import { ATOM_DEFAULT_MAX_ENTRIES } from "@/lib/atom";
 import { sourceAtomResponse } from "@/lib/atom-response";
 import { getBaseUrl } from "@/lib/base-url";
+import { formatErrorResponse } from "@/lib/format-error";
 import { getFormat } from "@/lib/request";
 
 export async function GET(
@@ -22,8 +23,8 @@ export async function GET(
     const opts =
       format === "atom" ? { cursor: null, limit: ATOM_DEFAULT_MAX_ENTRIES } : { cursor, limit };
     source = await api.sourceDetail({ orgSlug, sourceSlug }, opts);
-  } catch {
-    return NextResponse.json({ error: "not_found", message: "Source not found" }, { status: 404 });
+  } catch (err) {
+    return formatErrorResponse(err, "Source not found");
   }
 
   // Validate org slug matches
