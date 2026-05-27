@@ -150,8 +150,7 @@ describe("GET /sitemap", () => {
       hasChangelog: false,
       hasHighlights: false,
     });
-    expect(typeof result.sources[0].id).toBe("string");
-    expect(result.sources[0].id.length).toBeGreaterThan(0);
+    expect(result.sources[0].id).toBe(src.id);
   });
 
   test("filters out hidden sources but keeps their parent org", async () => {

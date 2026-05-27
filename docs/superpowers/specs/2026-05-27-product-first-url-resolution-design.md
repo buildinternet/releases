@@ -107,9 +107,10 @@ type ResolveResponse =
 
 - Resolution precedence (product wins) lives server-side in the handler/query.
 - `:org` accepts an org slug or `org_…` ID (consistent with existing resolvers).
-- Public-read route → **must** carry a `describeRoute(...)` annotation and appear
-  in `/v1/openapi.json` (the #894 coverage gate, enforced in CI). Add it under the
-  correct `publicReadRoutes` prefix in `workers/api/src/route-namespaces.ts`.
+- Public-read route → carries a `describeRoute(...)` annotation so it appears in
+  `/v1/openapi.json` (the #894 coverage gate, enforced in CI). It lives under the
+  `orgs` prefix, which is already in `publicReadRoutes`
+  (`workers/api/src/route-namespaces.ts`), so **no change to that file is needed**.
 - Reuses `findProductForOrgSlug` / `findSourceForOrgSlug` (`workers/api/src/utils.ts`).
 
 ### Unit 2 — Next.js route merge (web)

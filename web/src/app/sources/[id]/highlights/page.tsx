@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
 import { ApiNotFoundError } from "@/lib/api";
 import { JsonLd } from "@/components/json-ld";
 import { HighlightsView } from "@/components/highlights-view";
@@ -41,13 +41,21 @@ export default async function SourceByIdHighlightsPage({
     throw err;
   }
 
+  // Orphan source (has org, no productId) → canonical highlights is the bare path.
+  if (source.org && !source.productId) {
+    permanentRedirect(`/${source.org.slug}/${source.slug}/highlights`);
+  }
+
   const hasContent = !!(source.summaries?.rolling || source.summaries?.monthly?.length);
   if (!hasContent) notFound();
 
-  // TODO(#1190): after PR-2 cutover, member-source entity URL should be /sources/:id (bare /{org}/{slug} will resolve to the product)
-  const sourceUrl = source.org
-    ? `https://releases.sh/${source.org.slug}/${source.slug}`
-    : `https://releases.sh/sources/${id}`;
+  // Member sources are canonical at /sources/:id; sourceless too; only a non-member
+  // with an org uses bare (orphans-with-org are redirected above).
+  const sourceUrl = source.productId
+    ? `https://releases.sh/sources/${id}`
+    : source.org
+      ? `https://releases.sh/${source.org.slug}/${source.slug}`
+      : `https://releases.sh/sources/${id}`;
   const pageUrl = `https://releases.sh/sources/${id}/highlights`;
 
   const jsonLd = {

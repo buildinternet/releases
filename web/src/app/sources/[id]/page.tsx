@@ -125,11 +125,13 @@ export default async function SourceByIdPage({
   const orgSlug = source.org?.slug ?? "";
   const initialCursor = source.pagination.nextCursor;
 
-  // For member sources, canonical is /sources/:id; for sourceless-org sources, bare.
-  // TODO(#1190): after PR-2 cutover, member-source entity URL should be /sources/:id (bare /{org}/{slug} will resolve to the product)
-  const sourceUrl = source.org
-    ? `https://releases.sh/${source.org.slug}/${source.slug}`
-    : `https://releases.sh/sources/${id}`;
+  // Member sources are canonical at /sources/:id (bare /{org}/{slug} resolves to the
+  // product post-flip); sourceless sources too; only a non-member with an org uses bare.
+  const sourceUrl = source.productId
+    ? `https://releases.sh/sources/${id}`
+    : source.org
+      ? `https://releases.sh/${source.org.slug}/${source.slug}`
+      : `https://releases.sh/sources/${id}`;
   const releaseListId = `${sourceUrl}#releases`;
 
   const jsonLd = {

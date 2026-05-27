@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
 import { Suspense } from "react";
 import { ApiNotFoundError } from "@/lib/api";
 import { JsonLd } from "@/components/json-ld";
@@ -59,13 +59,21 @@ export default async function SourceByIdChangelogPage({
     throw err;
   }
 
+  // Orphan source (has org, no productId) → canonical changelog is the bare path.
+  if (source.org && !source.productId) {
+    permanentRedirect(`/${source.org.slug}/${source.slug}/changelog`);
+  }
+
   if (!source.hasChangelogFile) notFound();
 
   const orgSlug = source.org?.slug ?? "";
-  // TODO(#1190): after PR-2 cutover, member-source entity URL should be /sources/:id (bare /{org}/{slug} will resolve to the product)
-  const sourceUrl = source.org
-    ? `https://releases.sh/${source.org.slug}/${source.slug}`
-    : `https://releases.sh/sources/${id}`;
+  // Member sources are canonical at /sources/:id; sourceless too; only a non-member
+  // with an org uses bare (orphans-with-org are redirected above).
+  const sourceUrl = source.productId
+    ? `https://releases.sh/sources/${id}`
+    : source.org
+      ? `https://releases.sh/${source.org.slug}/${source.slug}`
+      : `https://releases.sh/sources/${id}`;
   const pageUrl = `https://releases.sh/sources/${id}/changelog`;
 
   const jsonLd = {

@@ -431,13 +431,15 @@ export const api = {
   productDetail: (ref: { orgSlug: string; productSlug: string }) =>
     fetchApi<ProductDetail>(`/v1/orgs/${ref.orgSlug}/products/${ref.productSlug}`),
   resolve: (ref: { orgSlug: string; slug: string }) =>
-    fetchApi<ResolveResponse>(`/v1/orgs/${ref.orgSlug}/resolve/${ref.slug}`),
+    fetchApi<ResolveResponse>(
+      `/v1/orgs/${encodeURIComponent(ref.orgSlug)}/resolve/${encodeURIComponent(ref.slug)}`,
+    ),
   sourceById: (id: string, opts: { cursor?: string | null; limit?: number } = {}) => {
     const params = new URLSearchParams();
     if (opts.cursor != null) params.set("cursor", opts.cursor);
     if (opts.limit != null) params.set("limit", String(opts.limit));
     const qs = params.toString();
-    return fetchApi<SourceDetail>(`/v1/sources/${id}${qs ? `?${qs}` : ""}`);
+    return fetchApi<SourceDetail>(`/v1/sources/${encodeURIComponent(id)}${qs ? `?${qs}` : ""}`);
   },
   productOverview: (identifier: string) =>
     fetchApi<OverviewPageItem | null>(`/v1/products/${identifier}/overview`),
