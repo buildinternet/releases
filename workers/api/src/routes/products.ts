@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { describeRoute, resolver } from "hono-openapi";
 import { hideInProduction } from "../openapi.js";
-import { and, count, eq, inArray, sql } from "drizzle-orm";
+import { and, count, eq, inArray, max, min, sql } from "drizzle-orm";
 import { parseKindParam, KIND_VALUES } from "@buildinternet/releases-core/kinds";
 import { createDb } from "../db.js";
 import {
@@ -9,6 +9,7 @@ import {
   productsActive,
   sources,
   sourcesActive,
+  releasesVisible,
   organizations,
   orgAccounts,
   tags,
@@ -32,6 +33,8 @@ import {
   ProductTagsListResponseSchema,
   ProductTagsBodySchema,
   ProductTagsMutationResponseSchema,
+  ProductActivityResponseSchema,
+  ProductHeatmapResponseSchema,
   ErrorResponseSchema,
   ResolveResponseSchema,
 } from "@buildinternet/releases-api-types";
@@ -43,6 +46,8 @@ import {
   orgWhere,
   replaceAliases,
   resolveProductFromContext,
+  computeAvgPerWeek,
+  heatmapDateRange,
 } from "../utils.js";
 import { buildSourceDetailPayload } from "./sources.js";
 import type { Env } from "../index.js";
@@ -52,6 +57,7 @@ import { logEvent } from "@releases/lib/log-event";
 import { dbErrorLogFields } from "@releases/lib/db-errors";
 import { buildListResponse, parseListPagination } from "../lib/pagination.js";
 import { IN_ARRAY_CHUNK_SIZE } from "../lib/d1-limits.js";
+import { getProductActivityData, getProductHeatmapData } from "../queries/orgs.js";
 
 export const productRoutes = new Hono<Env>();
 
@@ -1007,3 +1013,249 @@ async function embedProductSideEffect(
     });
   }
 }
+
+// ── Product activity + heatmap ──
+
+function isValidCalendarDate(s: string): boolean {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+  if (!m) return false;
+  const y = Number(m[1]),
+    mo = Number(m[2]),
+    d = Number(m[3]);
+  const dt = new Date(Date.UTC(y, mo - 1, d));
+  return dt.getUTCFullYear() === y && dt.getUTCMonth() === mo - 1 && dt.getUTCDate() === d;
+}
+
+const getProductActivityHandler = async (c: import("hono").Context<Env>) => {
+  const db = createDb(c.env.DB);
+  const product = await resolveProductFromContext(c, db);
+  if (!product) return c.json({ error: "not_found", message: "Product not found" }, 404);
+
+  // Validate date params
+  const fromParam = c.req.query("from");
+  const toParam = c.req.query("to");
+
+  if (fromParam && !isValidCalendarDate(fromParam)) {
+    return c.json(
+      { error: "bad_request", message: "Invalid date format for 'from'. Use YYYY-MM-DD." },
+      400,
+    );
+  }
+  if (toParam && !isValidCalendarDate(toParam)) {
+    return c.json(
+      { error: "bad_request", message: "Invalid date format for 'to'. Use YYYY-MM-DD." },
+      400,
+    );
+  }
+  if (fromParam && toParam && fromParam > toParam) {
+    return c.json({ error: "bad_request", message: "'from' must be before 'to'." }, 400);
+  }
+
+  // Fetch all active sources for this product
+  const productSources = await db
+    .select({ id: sourcesActive.id, slug: sourcesActive.slug, name: sourcesActive.name })
+    .from(sourcesActive)
+    .where(eq(sourcesActive.productId, product.id))
+    .orderBy(sourcesActive.name);
+
+  if (productSources.length === 0) {
+    const today = new Date().toISOString().slice(0, 10);
+    return c.json({
+      product: { slug: product.slug, name: product.name },
+      range: { from: fromParam ?? today, to: toParam ?? today },
+      sources: [],
+      aggregateWeekly: [],
+    });
+  }
+
+  const sourceIds = productSources.map((s) => s.id);
+
+  // Default range: oldest to newest release across all product sources
+  let from = fromParam;
+  let to = toParam;
+  if (!from || !to) {
+    const [bounds] = await db
+      .select({
+        oldest: min(releasesVisible.publishedAt),
+        newest: max(releasesVisible.publishedAt),
+      })
+      .from(releasesVisible)
+      .where(
+        and(
+          inArray(releasesVisible.sourceId, sourceIds),
+          sql`${releasesVisible.publishedAt} IS NOT NULL`,
+        ),
+      );
+    const today = new Date().toISOString().slice(0, 10);
+    if (!from) from = bounds.oldest?.slice(0, 10) ?? today;
+    if (!to) to = bounds.newest?.slice(0, 10) ?? today;
+  }
+
+  // Compute exclusive upper bound for inclusive to-date
+  const toDate = new Date(to + "T00:00:00Z");
+  toDate.setUTCDate(toDate.getUTCDate() + 1);
+  const toExclusive = toDate.toISOString().slice(0, 10);
+
+  const {
+    bucketRows,
+    statsRows,
+    latestVersionRows: versionRows,
+    earliestVersionRows,
+  } = await getProductActivityData(db, product.id, from, toExclusive);
+
+  const latestVersionBySource = new Map<string, string | null>();
+  for (const row of versionRows) {
+    latestVersionBySource.set(row.source_id, row.version);
+  }
+
+  const earliestVersionBySource = new Map<string, string | null>();
+  for (const row of earliestVersionRows) {
+    earliestVersionBySource.set(row.source_id, row.version);
+  }
+
+  // Index stats and buckets by source ID
+  const statsMap = new Map(statsRows.map((r) => [r.source_id, r]));
+  const bucketMap = new Map<
+    string,
+    {
+      weekStart: string;
+      count: number;
+      earliestVersion: string | null;
+      latestVersion: string | null;
+    }[]
+  >();
+  for (const row of bucketRows) {
+    let arr = bucketMap.get(row.source_id);
+    if (!arr) {
+      arr = [];
+      bucketMap.set(row.source_id, arr);
+    }
+    arr.push({
+      weekStart: row.week_start,
+      count: row.cnt,
+      earliestVersion: row.earliest_version ?? null,
+      latestVersion: row.latest_version ?? null,
+    });
+  }
+
+  // Assemble per-source response
+  const sourcesOut = productSources.map((src) => {
+    const stats = statsMap.get(src.id);
+    const total = stats?.total ?? 0;
+    const oldest = stats?.oldest ?? null;
+    const latestDate = stats?.latest_date ?? null;
+
+    return {
+      slug: src.slug,
+      name: src.name,
+      releaseCount: total,
+      avgReleasesPerWeek: computeAvgPerWeek(total, oldest),
+      earliestVersion: earliestVersionBySource.get(src.id) ?? null,
+      latestVersion: latestVersionBySource.get(src.id) ?? null,
+      latestDate,
+      weeklyBuckets: bucketMap.get(src.id) ?? [],
+    };
+  });
+
+  // Aggregate weekly buckets across all sources
+  const aggMap = new Map<string, number>();
+  for (const row of bucketRows) {
+    aggMap.set(row.week_start, (aggMap.get(row.week_start) ?? 0) + row.cnt);
+  }
+  const aggregateWeekly = Array.from(aggMap.entries())
+    .toSorted(([a], [b]) => a.localeCompare(b))
+    .map(([weekStart, releaseCount]) => ({ weekStart, count: releaseCount }));
+
+  return c.json({
+    product: { slug: product.slug, name: product.name },
+    range: { from, to },
+    sources: sourcesOut,
+    aggregateWeekly,
+  });
+};
+
+const getProductActivityRoute = describeRoute({
+  hide: hideInProduction,
+  tags: ["Products"],
+  summary: "Product release activity (weekly buckets)",
+  description:
+    "Returns per-source weekly release buckets across the product, plus an aggregate rollup. Used for timeline / chart visualization. Accepts optional `?from=YYYY-MM-DD` and `?to=YYYY-MM-DD` date bounds — defaults to the earliest/latest release across all sources when omitted.",
+  parameters: [
+    {
+      name: "from",
+      in: "query",
+      required: false,
+      schema: { type: "string", format: "date" },
+      description: "Start date (inclusive, YYYY-MM-DD). Defaults to oldest release date.",
+    },
+    {
+      name: "to",
+      in: "query",
+      required: false,
+      schema: { type: "string", format: "date" },
+      description: "End date (inclusive, YYYY-MM-DD). Defaults to newest release date.",
+    },
+  ],
+  responses: {
+    200: {
+      description: "Activity data",
+      content: { "application/json": { schema: resolver(ProductActivityResponseSchema) } },
+    },
+    400: {
+      description: "Invalid date format or range",
+      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+    },
+    404: {
+      description: "Product not found",
+      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+    },
+  },
+});
+
+productRoutes.get("/products/:slug/activity", getProductActivityRoute, getProductActivityHandler);
+productRoutes.get(
+  "/orgs/:orgSlug/products/:productSlug/activity",
+  getProductActivityRoute,
+  getProductActivityHandler,
+);
+
+const getProductHeatmapHandler = async (c: import("hono").Context<Env>) => {
+  const db = createDb(c.env.DB);
+  const product = await resolveProductFromContext(c, db);
+  if (!product) return c.json({ error: "not_found", message: "Product not found" }, 404);
+
+  const { from, to, toExclusive } = heatmapDateRange();
+  const { rows, total } = await getProductHeatmapData(db, product.id, from, toExclusive);
+
+  return c.json({
+    product: { slug: product.slug, name: product.name },
+    range: { from, to },
+    dailyCounts: rows.map((r) => ({ date: r.date, count: r.cnt })),
+    total,
+  });
+};
+
+const getProductHeatmapRoute = describeRoute({
+  hide: hideInProduction,
+  tags: ["Products"],
+  summary: "Product release heatmap (daily counts)",
+  description:
+    "Returns daily release counts for the trailing 365 days — used for the contribution-graph visualization on the product detail page. Range is fixed server-side; no date parameters accepted.",
+  responses: {
+    200: {
+      description: "Heatmap data",
+      content: { "application/json": { schema: resolver(ProductHeatmapResponseSchema) } },
+    },
+    404: {
+      description: "Product not found",
+      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+    },
+  },
+});
+
+productRoutes.get("/products/:slug/heatmap", getProductHeatmapRoute, getProductHeatmapHandler);
+productRoutes.get(
+  "/orgs/:orgSlug/products/:productSlug/heatmap",
+  getProductHeatmapRoute,
+  getProductHeatmapHandler,
+);

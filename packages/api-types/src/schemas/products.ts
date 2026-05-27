@@ -188,3 +188,49 @@ export const ProductTagsBodySchema = z.object({
 export const ProductTagsMutationResponseSchema = z.object({
   ok: z.literal(true),
 });
+
+// ── Product activity (/products/:slug/activity, /orgs/:orgSlug/products/:productSlug/activity) ──
+
+const ProductActivityWeeklyBucketSchema = z.object({
+  weekStart: z.string(),
+  count: z.number().int().min(0),
+  earliestVersion: z.string().nullable(),
+  latestVersion: z.string().nullable(),
+});
+
+const ProductActivitySourceSchema = z.object({
+  slug: z.string(),
+  name: z.string(),
+  releaseCount: z.number().int().min(0),
+  avgReleasesPerWeek: z.number(),
+  earliestVersion: z.string().nullable(),
+  latestVersion: z.string().nullable(),
+  latestDate: z.string().nullable(),
+  weeklyBuckets: z.array(ProductActivityWeeklyBucketSchema),
+});
+
+/**
+ * Response shape for `GET /v1/products/:slug/activity` and the org-scoped twin.
+ * Returns per-source weekly release buckets plus an aggregate rollup — used for
+ * timeline visualization on the product detail page.
+ */
+export const ProductActivityResponseSchema = z.object({
+  product: z.object({ slug: z.string(), name: z.string() }),
+  range: z.object({ from: z.string(), to: z.string() }),
+  sources: z.array(ProductActivitySourceSchema),
+  aggregateWeekly: z.array(z.object({ weekStart: z.string(), count: z.number().int().min(0) })),
+});
+
+// ── Product heatmap (/products/:slug/heatmap, /orgs/:orgSlug/products/:productSlug/heatmap) ──
+
+/**
+ * Response shape for `GET /v1/products/:slug/heatmap` and the org-scoped twin.
+ * Returns daily release counts for the trailing 365 days — used for
+ * contribution-graph visualization on the product detail page.
+ */
+export const ProductHeatmapResponseSchema = z.object({
+  product: z.object({ slug: z.string(), name: z.string() }),
+  range: z.object({ from: z.string(), to: z.string() }),
+  dailyCounts: z.array(z.object({ date: z.string(), count: z.number().int().min(0) })),
+  total: z.number().int().min(0),
+});

@@ -13,6 +13,8 @@ import type {
   OrgReleasesFeedResponse,
   ReleaseDetail,
   ProductDetail,
+  ProductActivityResponse,
+  ProductHeatmapResponse,
   SourceChangelogResponse,
   ChangelogFileSummary,
   SitemapPayload,
@@ -69,6 +71,8 @@ export type {
   OrgReleasesFeedResponse,
   ReleaseDetail,
   ProductDetail,
+  ProductActivityResponse,
+  ProductHeatmapResponse,
   SourceChangelogResponse,
   ChangelogFileSummary,
   SitemapPayload,
@@ -443,6 +447,17 @@ export const api = {
   },
   productOverview: (identifier: string) =>
     fetchApi<OverviewPageItem | null>(`/v1/products/${identifier}/overview`),
+  productActivity: (ref: { orgSlug: string; productSlug: string }, from?: string, to?: string) => {
+    const params = new URLSearchParams();
+    if (from) params.set("from", from);
+    if (to) params.set("to", to);
+    const qs = params.toString();
+    return fetchApi<ProductActivityResponse>(
+      `/v1/orgs/${ref.orgSlug}/products/${ref.productSlug}/activity${qs ? `?${qs}` : ""}`,
+    );
+  },
+  productHeatmap: (ref: { orgSlug: string; productSlug: string }) =>
+    fetchApi<ProductHeatmapResponse>(`/v1/orgs/${ref.orgSlug}/products/${ref.productSlug}/heatmap`),
   categories: () => fetchApi<CategoryListItem[]>("/v1/categories"),
   categoryDetail: (slug: string) => fetchApi<CategoryDetail>(`/v1/categories/${slug}`),
   categoryReleases: (
