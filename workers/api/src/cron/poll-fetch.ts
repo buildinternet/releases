@@ -843,7 +843,12 @@ async function recordNoChange(
   const newNoChange = (source.consecutiveNoChange ?? 0) + 1;
   const backoffHours = Math.min(Math.pow(2, newNoChange - 1), 48);
   const nextFetch = new Date(Date.now() + backoffHours * 3600_000).toISOString();
-  await Promise.all([
+  // db.batch is atomic — the fetch_log row and the backoff stamp commit
+  // together or neither does. A half-written state (log row without the
+  // matching counter advance, or vice versa) would either drop the source from
+  // observability or relax the cadence with no record of why. Mirrors
+  // delegateScrapeToDiscovery's handoff write.
+  const ops = [
     db.insert(fetchLog).values({
       sourceId: source.id,
       sessionId: opts.sessionId,
@@ -861,7 +866,8 @@ async function recordNoChange(
         changeDetectedAt: null,
       })
       .where(eq(sources.id, source.id)),
-  ]);
+  ];
+  await db.batch(ops as [(typeof ops)[number], ...typeof ops]);
   return {
     releasesFound: opts.releasesFound,
     releasesInserted: 0,
