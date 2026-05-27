@@ -275,10 +275,18 @@ export async function queryDueSources(
 
   const orgNotFetchPaused = sql`${sourcesVisible.orgId} NOT IN (${pausedOrgIds})`;
 
+  // Honor the smart-fetch exponential backoff. The no-change / error paths in
+  // `fetchOne` stamp `nextFetchAfter` (1h→48h on repeat no_change, up to 72h on
+  // errors); without this predicate the hourly cron re-polled on the tier
+  // interval alone and the backoff only gated the `?mode=stale` agent endpoint.
+  // A null (never backed off) or past `nextFetchAfter` is ready to poll.
+  const nowIso = now.toISOString();
+  const backoffReady = sql`(${sourcesVisible.nextFetchAfter} IS NULL OR ${sourcesVisible.nextFetchAfter} <= ${nowIso})`;
+
   return db
     .select()
     .from(sourcesVisible)
-    .where(and(pollable, notPaused, orgNotFetchPaused, or(...tierConditions)));
+    .where(and(pollable, notPaused, orgNotFetchPaused, backoffReady, or(...tierConditions)));
 }
 
 // ── Poll one source ──
@@ -819,6 +827,50 @@ export async function delegateScrapeToDiscovery(
 }
 
 /**
+ * No-change bookkeeping shared by the empty-feed branch and the summary-only
+ * crawl novelty gate. Writes a `no_change` fetch_log row and advances the
+ * source's exponential backoff (`consecutiveNoChange++`,
+ * `nextFetchAfter = now + min(2^(n-1), 48)h`), resets the error counter, and
+ * clears `changeDetectedAt`. `releasesFound` is what the feed surfaced this
+ * poll — 0 for an empty feed, the item count when items were present but none
+ * were new — so the fetch_log row stays honest about what we saw.
+ */
+async function recordNoChange(
+  db: ReturnType<typeof drizzle>,
+  source: Source,
+  opts: { sessionId: string | null; start: number; releasesFound: number },
+): Promise<FetchOneResult> {
+  const newNoChange = (source.consecutiveNoChange ?? 0) + 1;
+  const backoffHours = Math.min(Math.pow(2, newNoChange - 1), 48);
+  const nextFetch = new Date(Date.now() + backoffHours * 3600_000).toISOString();
+  await Promise.all([
+    db.insert(fetchLog).values({
+      sourceId: source.id,
+      sessionId: opts.sessionId,
+      releasesFound: opts.releasesFound,
+      releasesInserted: 0,
+      durationMs: Date.now() - opts.start,
+      status: "no_change",
+    }),
+    db
+      .update(sources)
+      .set({
+        consecutiveNoChange: newNoChange,
+        consecutiveErrors: 0,
+        nextFetchAfter: nextFetch,
+        changeDetectedAt: null,
+      })
+      .where(eq(sources.id, source.id)),
+  ]);
+  return {
+    releasesFound: opts.releasesFound,
+    releasesInserted: 0,
+    durationMs: Date.now() - opts.start,
+    status: "no_change" as const,
+  };
+}
+
+/**
  * Per-fire cap on marketing-classifier calls, applied to the genuinely-new
  * items in a fire (not the re-listed feed window). A normal feed delta is 0–5
  * items; a first-onboard backfill can be 50+. Above the cap we skip
@@ -1183,41 +1235,14 @@ export async function fetchOne(
     }
 
     if (rawReleases.length === 0) {
-      const newNoChange = (source.consecutiveNoChange ?? 0) + 1;
-      const backoffHours = Math.min(Math.pow(2, newNoChange - 1), 48);
-      const nextFetch = new Date(Date.now() + backoffHours * 3600_000).toISOString();
-      await Promise.all([
-        db.insert(fetchLog).values({
-          sourceId: source.id,
-          sessionId,
-          releasesFound: 0,
-          releasesInserted: 0,
-          durationMs: Date.now() - start,
-          status: "no_change",
-        }),
-        db
-          .update(sources)
-          .set({
-            consecutiveNoChange: newNoChange,
-            consecutiveErrors: 0,
-            nextFetchAfter: nextFetch,
-            changeDetectedAt: null,
-          })
-          .where(eq(sources.id, source.id)),
-      ]);
-      const dur = Date.now() - start;
+      const result = await recordNoChange(db, source, { sessionId, start, releasesFound: 0 });
       logEvent("info", {
         component: "cron-poll-fetch",
         event: "fetch-no-changes",
         sourceSlug: source.slug,
-        durationMs: dur,
+        durationMs: result.durationMs,
       });
-      return {
-        releasesFound: 0,
-        releasesInserted: 0,
-        durationMs: dur,
-        status: "no_change" as const,
-      };
+      return result;
     }
 
     // Summary-only feed (e.g. RSS that only carries `<title>` + `<link>`):
@@ -1233,6 +1258,36 @@ export async function fetchOne(
       env.DISCOVERY_WORKER &&
       shouldDelegateToCrawl(source, meta, rawReleases)
     ) {
+      // The summary-only feed is the change detector: only pay for a managed-
+      // agent crawl when it surfaces a release URL we don't already have.
+      // Otherwise a quiet source (Notion sat unchanged for ~9 days) spawns a
+      // Haiku crawl on every 4h poll that crawls all N pages and inserts 0 —
+      // the feed still lists items, but they're all already indexed. Gate the
+      // handoff on novelty and fold the "nothing new" case into the standard
+      // no-change backoff so the source's poll cadence actually relaxes.
+      const existingUrls = await selectExistingReleaseUrls(
+        db,
+        source.id,
+        rawReleases.map((r) => r.url),
+      );
+      const hasNewUrl = rawReleases.some(
+        (r) => typeof r.url === "string" && r.url !== "" && !existingUrls.has(r.url),
+      );
+      if (!hasNewUrl) {
+        const result = await recordNoChange(db, source, {
+          sessionId,
+          start,
+          releasesFound: rawReleases.length,
+        });
+        logEvent("info", {
+          component: "cron-poll-fetch",
+          event: "crawl-delegation-skipped-no-new",
+          sourceSlug: source.slug,
+          feedItemCount: rawReleases.length,
+          durationMs: result.durationMs,
+        });
+        return result;
+      }
       logEvent("info", {
         component: "cron-poll-fetch",
         event: "crawl-delegation-start",

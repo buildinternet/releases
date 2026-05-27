@@ -263,3 +263,76 @@ describe("fetchOne — skipDelegation option (#1061)", () => {
     expect(worker.calls.length).toBe(0);
   });
 });
+
+// ── novelty gate ──────────────────────────────────────────────────────────────
+//
+// A summary-only crawl source whose feed window contains only URLs we've
+// already indexed must NOT spawn a managed-agent crawl. It should fold into the
+// standard no-change backoff instead. Delegation fires only when the feed
+// surfaces a genuinely new release URL.
+
+async function seedRelease(db: ReturnType<typeof mkDb>, url: string): Promise<void> {
+  await db.insert(releases).values({
+    sourceId: "src_notion_blog",
+    title: `seeded ${url}`,
+    content: "already indexed",
+    url,
+  });
+}
+
+describe("fetchOne — crawl novelty gate", () => {
+  beforeEach(() => {
+    feedFetchCalls.length = 0;
+    nextFeedReleases = SUMMARY_ONLY_ITEMS;
+  });
+
+  it("skips delegation and records no_change when every feed URL already exists", async () => {
+    const db = mkDb();
+    await seedScrapeSource(db, {
+      feedUrl: "https://notion.so/feed.xml",
+      feedType: "rss",
+      crawlEnabled: true,
+      feedContentDepth: "summary-only",
+    });
+    // Both feed item URLs are already indexed → nothing new to crawl.
+    await Promise.all(SUMMARY_ONLY_ITEMS.map((item) => seedRelease(db, item.url!)));
+    const [src] = await db.select().from(sources).where(eq(sources.id, "src_notion_blog"));
+
+    const worker = makeDiscoveryWorker();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const result = await fetchOne(db as any, src, makeEnv(worker) as any);
+
+    // No managed-agent session spawned.
+    expect(worker.calls.length).toBe(0);
+    // Folds into the no-change path.
+    expect(result.status).toBe("no_change");
+    expect(result.releasesInserted).toBe(0);
+    expect(result.releasesFound).toBe(SUMMARY_ONLY_ITEMS.length);
+
+    // Backoff advanced: consecutiveNoChange bumped and nextFetchAfter stamped.
+    const [after] = await db.select().from(sources).where(eq(sources.id, "src_notion_blog"));
+    expect(after!.consecutiveNoChange).toBe(1);
+    expect(after!.nextFetchAfter).not.toBeNull();
+    expect(after!.changeDetectedAt).toBeNull();
+  });
+
+  it("delegates when at least one feed URL is new", async () => {
+    const db = mkDb();
+    await seedScrapeSource(db, {
+      feedUrl: "https://notion.so/feed.xml",
+      feedType: "rss",
+      crawlEnabled: true,
+      feedContentDepth: "summary-only",
+    });
+    // Only one of the two feed URLs is already indexed → the other is new.
+    await seedRelease(db, SUMMARY_ONLY_ITEMS[1]!.url!);
+    const [src] = await db.select().from(sources).where(eq(sources.id, "src_notion_blog"));
+
+    const worker = makeDiscoveryWorker();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const result = await fetchOne(db as any, src, makeEnv(worker) as any);
+
+    expect(worker.calls.length).toBe(1);
+    expect(result.status).toBe("delegated");
+  });
+});
