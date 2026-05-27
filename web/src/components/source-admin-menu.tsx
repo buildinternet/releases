@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useId, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   setSourceMetadataAction,
@@ -36,6 +36,7 @@ export function SourceAdminMenu({
   const [pending, startTransition] = useTransition();
   const containerRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
+  const displayNameId = useId();
 
   function close() {
     setOpen(false);
@@ -128,8 +129,14 @@ export function SourceAdminMenu({
         >
           <div className="p-3 space-y-3">
             <div className="space-y-2">
-              <div className="font-medium text-stone-700 dark:text-stone-200">Display name</div>
+              <label
+                htmlFor={displayNameId}
+                className="block font-medium text-stone-700 dark:text-stone-200"
+              >
+                Display name
+              </label>
               <input
+                id={displayNameId}
                 type="text"
                 value={nameDraft}
                 onChange={(e) => setNameDraft(e.target.value)}

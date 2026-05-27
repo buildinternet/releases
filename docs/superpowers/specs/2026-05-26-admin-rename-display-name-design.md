@@ -48,7 +48,7 @@ prop, a Save button, the shared `run()` helper, and the existing error region.
 
 ### UI — added as the first section in each menu
 
-```
+```text
 Display name
 [ text input prefilled with current name        ]
 [ Save ]
