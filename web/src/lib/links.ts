@@ -1,11 +1,15 @@
 /**
- * Public URL builders for org / product / source pages.
+ * Public URL builders for org / product / source pages in the web React
+ * component tree.
  *
- * This module is the single seam for the planned namespace flip (product-first
- * resolution on the bare `/[org]/[slug]` path — see the Phase 2 design doc's
- * "Long-term" section). When that lands, `productPath` changes to emit
- * `/${orgSlug}/${productSlug}` and a 308 is added from the prefixed form;
- * nothing else in the web tree needs to move.
+ * This module is the seam for the product-first namespace flip (#1190) on the
+ * client: `productPath` now emits the bare `/${orgSlug}/${productSlug}` form
+ * (the prefixed `/[org]/product/[slug]` route is a 308 alias), and every web
+ * component that links to a product/source page routes through `productPath` /
+ * `sourcePath` / `sourceIdPath`. Server-rendered markdown and XML
+ * (`packages/rendering`) and worker-side URL builders construct product URLs
+ * independently — they do not import these helpers and are updated alongside
+ * this flip in a separate task.
  */
 
 /**
@@ -13,7 +17,12 @@
  * hits, which may lack an org (rare); those fall back to the bare form.
  */
 export function productPath(orgSlug: string | null, productSlug: string): string {
-  return orgSlug ? `/${orgSlug}/product/${productSlug}` : `/product/${productSlug}`;
+  return orgSlug ? `/${orgSlug}/${productSlug}` : `/product/${productSlug}`;
+}
+
+/** ID-keyed source page. The stable home for product-member / shadowed sources. */
+export function sourceIdPath(sourceId: string): string {
+  return `/sources/${sourceId}`;
 }
 
 /**
