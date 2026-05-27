@@ -32,6 +32,7 @@ import type {
   CollectionMemberProduct,
   CollectionReleaseItem,
   CollectionReleasesResponse,
+  OverviewPageItem,
 } from "@buildinternet/releases-api-types";
 import { parseCoordinate } from "@buildinternet/releases-core/lookup-coordinate";
 import { apiBaseUrl, serverApiKey } from "./env";
@@ -387,14 +388,16 @@ export const api = {
       limit?: number;
       sourceType?: string;
       includePrereleases?: boolean;
+      product?: string;
     } = {},
   ) => {
-    const { cursor, limit = 20, sourceType, includePrereleases } = opts;
+    const { cursor, limit = 20, sourceType, includePrereleases, product } = opts;
     const params = new URLSearchParams();
     if (cursor) params.set("cursor", cursor);
     if (limit !== 20) params.set("limit", String(limit));
     if (sourceType && sourceType !== "all") params.set("source_type", sourceType);
     if (includePrereleases) params.set("include_prereleases", "true");
+    if (product) params.set("product", product);
     const qs = params.toString();
     return fetchApi<OrgReleasesResponse>(`/v1/orgs/${slug}/releases${qs ? `?${qs}` : ""}`);
   },
@@ -426,6 +429,8 @@ export const api = {
     ),
   productDetail: (ref: { orgSlug: string; productSlug: string }) =>
     fetchApi<ProductDetail>(`/v1/orgs/${ref.orgSlug}/products/${ref.productSlug}`),
+  productOverview: (identifier: string) =>
+    fetchApi<OverviewPageItem | null>(`/v1/products/${identifier}/overview`),
   categories: () => fetchApi<CategoryListItem[]>("/v1/categories"),
   categoryDetail: (slug: string) => fetchApi<CategoryDetail>(`/v1/categories/${slug}`),
   categoryReleases: (

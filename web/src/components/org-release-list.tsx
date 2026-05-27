@@ -15,6 +15,8 @@ interface OrgReleaseListProps {
   multipleSourcesExist: boolean;
   /** Source types present on this org's sources, used to populate filter tabs. */
   availableSourceTypes: SourceType[];
+  /** When set, pins the feed to one product (slug or prod_ id). Not a user-flippable filter. */
+  product?: string;
 }
 
 // Source types collapse into two filter groups for the user-facing tabs.
@@ -35,6 +37,7 @@ export function OrgReleaseList({
   initialCursor,
   multipleSourcesExist,
   availableSourceTypes,
+  product,
 }: OrgReleaseListProps) {
   const [filterGroup, setFilterGroup] = useState<FilterGroup>("all");
   const [includePrereleases, setIncludePrereleases] = useState(false);
@@ -87,10 +90,11 @@ export function OrgReleaseList({
       if (types.length > 0) params.set("source_type", types.join(","));
       if (includePrereleases) params.set("include_prereleases", "true");
       if (trimmedSearch) params.set("q", trimmedSearch);
+      if (product) params.set("product", product);
       for (const [k, v] of Object.entries(extra)) params.set(k, v);
       return params.toString();
     },
-    [filterGroup, includePrereleases, trimmedSearch],
+    [filterGroup, includePrereleases, trimmedSearch, product],
   );
 
   // Flip `pristine` once the debounced search query lands so the fetch effect

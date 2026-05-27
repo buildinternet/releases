@@ -6,6 +6,7 @@ import { tryFetch } from "@/lib/ssr-fetch";
 import { ReleaseTimeline } from "@/components/release-timeline";
 import { OverviewView } from "@/components/overview-view";
 import { JsonLd } from "@/components/json-ld";
+import { ProductGrid } from "@/components/product-grid";
 import { currentPeriod, lastModifiedAt } from "@/lib/schema-org";
 import { getOrg } from "../_lib/org-data";
 
@@ -108,6 +109,7 @@ export default async function OrgOverviewPage({
   return (
     <>
       <JsonLd data={jsonLd} />
+      <ProductGrid orgSlug={orgSlug} products={org.products} />
       {activity && (
         <ReleaseTimeline
           activity={activity}
