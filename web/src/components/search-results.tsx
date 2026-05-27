@@ -52,6 +52,7 @@ import { LookupRail } from "./lookup-rail";
 import { RollupBadge } from "./rollup-badge";
 import { Highlight, rehypeHighlightTokens, tokenizeQuery } from "./highlight";
 import { formatDate } from "@/lib/formatters";
+import { productPath, sourcePath, sourceOrProductPath } from "@/lib/links";
 
 type SearchFilter = "all" | "orgs" | "products" | "collections" | "releases";
 
@@ -90,10 +91,6 @@ function interleaveRankedHits(
   return merged;
 }
 
-function sourceHref(orgSlug: string | null, sourceSlug: string): string {
-  return orgSlug ? `/${orgSlug}/${sourceSlug}` : `/source/${sourceSlug}`;
-}
-
 function releaseHref(hit: SearchReleaseHit): string {
   return `/release/${hit.id}`;
 }
@@ -102,7 +99,7 @@ function chunkDeepLink(hit: SearchChunkHit): string {
   // Heading-aware slicer on the server snaps the offset forward to the
   // nearest `##` heading, so this URL lands the user on the correct
   // section even if `offset` points mid-paragraph.
-  const base = sourceHref(hit.orgSlug, hit.sourceSlug);
+  const base = sourcePath(hit.orgSlug, hit.sourceSlug);
   return `${base}/changelog?offset=${hit.offset}#chunk`;
 }
 
@@ -181,6 +178,7 @@ function ResultCard({
   sourceName,
   sourceSlug,
   orgSlug,
+  productSlug,
   orgName,
   sourceType,
   children,
@@ -196,6 +194,7 @@ function ResultCard({
   sourceName: string;
   sourceSlug: string;
   orgSlug: string | null;
+  productSlug?: string | null;
   orgName?: string | null;
   sourceType?: string;
   children: React.ReactNode;
@@ -233,7 +232,7 @@ function ResultCard({
         {sourceType && <SourceTypeIcon type={sourceType} size={12} />}
         {orgSlug ? (
           <Link
-            href={`/${orgSlug}/${sourceSlug}`}
+            href={sourceOrProductPath({ orgSlug, sourceSlug, productSlug })}
             className="text-stone-500 dark:text-stone-400 font-medium hover:text-stone-700 dark:hover:text-stone-300"
           >
             <Highlight text={sourceName} tokens={tokens} />
@@ -307,6 +306,7 @@ function ReleaseResultCard({ hit, tokens }: { hit: SearchReleaseHit; tokens: str
       sourceName={hit.sourceName}
       sourceSlug={hit.sourceSlug}
       orgSlug={hit.orgSlug}
+      productSlug={hit.productSlug ?? null}
       orgName={hit.orgName}
       sourceType={hit.sourceType}
       thumbnail={thumbnail}
@@ -481,12 +481,8 @@ export function SearchResults({
                 {results.catalog.map((p: SearchCatalogHit) => {
                   const href =
                     p.entryType === "source" && p.sourceSlug
-                      ? p.orgSlug
-                        ? `/${p.orgSlug}/${p.sourceSlug}`
-                        : `/source/${p.sourceSlug}`
-                      : p.orgSlug
-                        ? `/${p.orgSlug}/product/${p.slug}`
-                        : `/product/${p.slug}`;
+                      ? sourcePath(p.orgSlug, p.sourceSlug)
+                      : productPath(p.orgSlug, p.slug);
                   return (
                     <Link
                       key={p.slug}

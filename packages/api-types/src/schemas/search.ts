@@ -68,6 +68,9 @@ export const SearchReleaseHitSchema = z.object({
   sourceType: z.string().optional(),
   orgSlug: z.string().nullable(),
   orgName: z.string().nullable().optional(),
+  /** Owning product slug — present when the source belongs to a product. Lets
+   *  the web byline link to the product page instead of the source. */
+  productSlug: z.string().nullable().optional(),
   version: z.string().nullable(),
   title: z.string(),
   summary: z.string(),
@@ -113,8 +116,9 @@ export const SearchCollectionHitSchema = z.object({
 /**
  * Heading-aware CHANGELOG.md slice returned by hybrid / semantic search.
  * Clients can deep-link to
- * `/source/<sourceSlug>?tab=changelog&offset=<offset>` to read the
- * surrounding file content.
+ * `/<orgSlug>/<sourceSlug>/changelog?offset=<offset>#chunk` to read the
+ * surrounding file content (the web `chunkDeepLink` builder; falls back to
+ * the `/source/<sourceSlug>` redirect shim when `orgSlug` is null).
  */
 export const SearchChunkHitSchema = z.object({
   sourceSlug: z.string(),

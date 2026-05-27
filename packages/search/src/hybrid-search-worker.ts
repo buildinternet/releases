@@ -182,6 +182,8 @@ export interface HybridReleaseHit {
     /** JSON-encoded MediaItem[] or null — route parses + resolves r2Url. */
     media: string | null;
     source: { id: string; slug: string; name: string; type: string };
+    /** Owning product slug — null for orphan sources; powers product-aware byline links. */
+    productSlug: string | null;
     orgSlug: string | null;
     orgName: string | null;
     /** Release type — "feature" (default) or "rollup". */
@@ -308,6 +310,8 @@ interface RawReleaseRow {
   sourceKind: string | null;
   /** Parent product's kind — fallback when sourceKind is null. */
   productKind: string | null;
+  /** Owning product's slug — null for orphan sources; powers product-aware byline links. */
+  productSlug: string | null;
   orgSlug: string | null;
   orgName: string | null;
   /** Release type — "feature" (default) or "rollup". */
@@ -346,6 +350,7 @@ async function hydrateReleases(
                s.type as sourceType,
                s.kind as sourceKind,
                p.kind as productKind,
+               p.slug as productSlug,
                o.slug as orgSlug,
                o.name as orgName,
                ${sql.raw(COVERAGE_COUNT_EXPR)} as coverageCount
@@ -715,6 +720,7 @@ async function buildReleaseHits(
           name: row.sourceName,
           type: row.sourceType,
         },
+        productSlug: row.productSlug,
         orgSlug: row.orgSlug,
         orgName: row.orgName,
         type: row.type,

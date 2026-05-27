@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, useCallback } from "react";
+import Link from "next/link";
 import {
   type OrgActivity,
   type OrgHeatmap,
@@ -29,6 +30,7 @@ import {
   type RangePreset,
 } from "@/components/timeline-chrome";
 import { groupSourcesByProduct } from "@/lib/sources";
+import { productPath } from "@/lib/links";
 import { partitionSdkSources, sdkPreview } from "@/lib/sdk-grouping";
 import { SdkSourceCardGroup } from "@/components/sdk-source-card-group";
 
@@ -129,7 +131,9 @@ function ProductGroupedSources({
       {grouped.map(({ product, sources: srcs }) => (
         <div key={product.slug}>
           <h3 className="text-sm font-semibold text-stone-700 dark:text-stone-300 mb-2">
-            {product.name}
+            <Link href={productPath(orgSlug, product.slug)} className="hover:underline">
+              {product.name}
+            </Link>
           </h3>
           <div className="space-y-2">
             {srcs.map((source) => (
