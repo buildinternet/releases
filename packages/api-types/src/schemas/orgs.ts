@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { KIND_VALUES } from "@buildinternet/releases-core/kinds";
 import {
+  AppStoreSourceInfoSchema,
   CategorySchema,
   ListResponseSchema,
   OverviewPageItemSchema,
@@ -335,7 +336,12 @@ export const OrgSparklinesResponseSchema = z.object({
  * with a `source` block identifying the originating source within the org.
  */
 export const OrgReleaseItemSchema = ReleaseItemSchema.extend({
-  source: z.object({ slug: z.string(), name: z.string(), type: z.string() }),
+  source: z.object({
+    slug: z.string(),
+    name: z.string(),
+    type: z.string(),
+    appStore: AppStoreSourceInfoSchema.optional(),
+  }),
 });
 
 /** Cursor pagination shape for the org releases feed. */

@@ -1,6 +1,11 @@
 import { z } from "zod";
 import { SOURCE_TYPES } from "@buildinternet/releases-core/source-enums";
-import { MediaItemSchema, ReleaseCompositionSchema, ReleaseTypeSchema } from "./shared.js";
+import {
+  AppStoreSourceInfoSchema,
+  MediaItemSchema,
+  ReleaseCompositionSchema,
+  ReleaseTypeSchema,
+} from "./shared.js";
 
 // ReleaseCompositionSchema lives in ./shared.js (single source of truth) — both
 // this file and ReleaseItemSchema reference it from there.
@@ -160,6 +165,7 @@ export const ReleaseDetailResponseSchema = z.object({
   sourceType: z.enum(SOURCE_TYPES).nullable(),
   org: ReleaseDetailOrgSchema.nullable(),
   composition: ReleaseCompositionSchema.nullable(),
+  appStore: AppStoreSourceInfoSchema.nullable().optional(),
 });
 
 /**

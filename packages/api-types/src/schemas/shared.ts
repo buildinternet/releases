@@ -11,6 +11,17 @@ export const MediaItemSchema = z.object({
   r2Url: z.string().optional(),
 });
 
+/**
+ * App Store platform + icon for a `type: "appstore"` source. Threaded onto
+ * read surfaces so the UI can render the compact app-update row (app icon +
+ * "Available for iOS/macOS") instead of the standard version/notes/thumbnail
+ * layout. Sourced from `source.metadata.appStore` server-side. #mobile-appstore-feed-row
+ */
+export const AppStoreSourceInfoSchema = z.object({
+  platform: z.enum(["ios", "macos"]),
+  iconUrl: z.string().nullable(),
+});
+
 export const PaginationSchema = z.object({
   page: z.number().int().min(1),
   pageSize: z.number().int().min(1),
