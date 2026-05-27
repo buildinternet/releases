@@ -944,7 +944,7 @@ export type SourceActivity = SourceActivityResponse;
 
 // ── Org Activity (Zod-derived aliases) ──
 // The old hand-written OrgActivitySource / OrgActivity / OrgSparklines /
-// OrgHeatmap / OrgReleaseItem / OrgReleasesResponse interfaces have been
+// OrgHeatmap / OrgReleaseItem interfaces have been
 // replaced by Zod-derived types in the Organizations section above. Keeping
 // the interface names as deprecated aliases so callsites don't need an
 // immediate churn.
@@ -957,9 +957,6 @@ export type OrgSparklines = OrgSparklinesResponse;
 
 /** @deprecated Use OrgHeatmapResponse */
 export type OrgHeatmap = OrgHeatmapResponse;
-
-/** @deprecated Use OrgReleasesFeedResponse */
-export type OrgReleasesResponse = OrgReleasesFeedResponse;
 
 // ── Org Sparklines (per-source/product breakdown) ──
 // (covered above)

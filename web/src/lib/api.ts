@@ -10,7 +10,7 @@ import type {
   OrgHeatmap,
   SourceHeatmap,
   OrgSparklines,
-  OrgReleasesResponse,
+  OrgReleasesFeedResponse,
   ReleaseDetail,
   ProductDetail,
   SourceChangelogResponse,
@@ -66,7 +66,7 @@ export type {
   OrgHeatmap,
   SourceHeatmap,
   OrgSparklines,
-  OrgReleasesResponse,
+  OrgReleasesFeedResponse,
   ReleaseDetail,
   ProductDetail,
   SourceChangelogResponse,
@@ -400,7 +400,7 @@ export const api = {
     if (includePrereleases) params.set("include_prereleases", "true");
     if (product) params.set("product", product);
     const qs = params.toString();
-    return fetchApi<OrgReleasesResponse>(`/v1/orgs/${slug}/releases${qs ? `?${qs}` : ""}`);
+    return fetchApi<OrgReleasesFeedResponse>(`/v1/orgs/${slug}/releases${qs ? `?${qs}` : ""}`);
   },
   orgHeatmap: (slug: string) => fetchApi<OrgHeatmap>(`/v1/orgs/${slug}/heatmap`),
   orgSparklines: (slug: string) => fetchApi<OrgSparklines>(`/v1/orgs/${slug}/sparklines`),

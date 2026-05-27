@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { api, ApiSetupError, ApiNotFoundError, type OrgReleasesResponse } from "@/lib/api";
+import { api, ApiSetupError, ApiNotFoundError, type OrgReleasesFeedResponse } from "@/lib/api";
 import { OrgReleaseList } from "@/components/org-release-list";
 import { JsonLd } from "@/components/json-ld";
 import { buildReleaseItemListJsonLd, currentPeriod, lastModifiedAt } from "@/lib/schema-org";
@@ -44,7 +44,7 @@ export default async function OrgReleasesPage({
   const { orgSlug } = await params;
 
   let org;
-  let initialReleases: OrgReleasesResponse;
+  let initialReleases: OrgReleasesFeedResponse;
   try {
     [org, initialReleases] = await Promise.all([getOrg(orgSlug), api.orgReleases(orgSlug)]);
   } catch (err) {

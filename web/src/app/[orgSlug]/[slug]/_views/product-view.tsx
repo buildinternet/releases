@@ -2,7 +2,7 @@ import Link from "next/link";
 import {
   api,
   type ProductDetail,
-  type OrgReleasesResponse,
+  type OrgReleasesFeedResponse,
   type OverviewPageItem,
 } from "@/lib/api";
 import type { SourceType } from "@buildinternet/releases-core/source-enums";
@@ -37,7 +37,7 @@ export async function ProductView({
     api.orgReleases(orgSlug, { product: productSlug }),
     api.productOverview(product.id),
   ]);
-  const initialReleases: OrgReleasesResponse =
+  const initialReleases: OrgReleasesFeedResponse =
     releasesResult.status === "fulfilled"
       ? releasesResult.value
       : { releases: [], pagination: { nextCursor: null, limit: 20 } };
