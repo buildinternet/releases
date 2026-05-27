@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import type {
   SourceDetail,
   OrgDetail,
-  OrgReleasesResponse,
+  OrgReleasesFeedResponse,
   CollectionDetail,
   CollectionReleasesResponse,
   CategoryReleasesResponse,
@@ -108,7 +108,7 @@ export function categoryAtomResponse(
 export function orgAtomResponse(
   request: NextRequest,
   org: Pick<OrgDetail, "slug" | "name" | "lastFetchedAt" | "overview">,
-  feed: OrgReleasesResponse,
+  feed: OrgReleasesFeedResponse,
 ): NextResponse {
   const baseUrl = getBaseUrl(request);
   const body = orgReleasesToAtom(
