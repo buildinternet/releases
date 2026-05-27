@@ -1,11 +1,24 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { api } from "@/lib/api";
+import { api, ApiNotFoundError } from "@/lib/api";
 import { ATOM_DEFAULT_MAX_ENTRIES } from "@/lib/atom";
 import { productAtomResponse } from "@/lib/atom-response";
 import { getBaseUrl } from "@/lib/base-url";
 import { productToMarkdown } from "@/lib/formatters";
 import { markdownResponse } from "@/lib/markdown-response";
 import { getFormat } from "@/lib/request";
+
+const NOT_FOUND_BODY = { error: "not_found", message: "Product not found" };
+const BAD_GATEWAY_BODY = { error: "bad_gateway", message: "Upstream API error" };
+
+// Only a genuine 404 from the API maps to not_found; transient/backend
+// failures (503 setup, 5xx, network) surface as 502 so they aren't
+// misclassified. Mirrors the categories format route.
+function errorResponse(err: unknown): NextResponse {
+  if (err instanceof ApiNotFoundError) {
+    return NextResponse.json(NOT_FOUND_BODY, { status: 404 });
+  }
+  return NextResponse.json(BAD_GATEWAY_BODY, { status: 502 });
+}
 
 export async function GET(
   request: NextRequest,
@@ -21,11 +34,8 @@ export async function GET(
         api.productDetail({ orgSlug, productSlug }),
         api.orgReleases(orgSlug, { product: productSlug, limit: ATOM_DEFAULT_MAX_ENTRIES }),
       ]);
-    } catch {
-      return NextResponse.json(
-        { error: "not_found", message: "Product not found" },
-        { status: 404 },
-      );
+    } catch (err) {
+      return errorResponse(err);
     }
     return productAtomResponse(request, orgSlug, product, feed);
   }
@@ -33,8 +43,8 @@ export async function GET(
   let product;
   try {
     product = await api.productDetail({ orgSlug, productSlug });
-  } catch {
-    return NextResponse.json({ error: "not_found", message: "Product not found" }, { status: 404 });
+  } catch (err) {
+    return errorResponse(err);
   }
 
   if (format === "md") {
