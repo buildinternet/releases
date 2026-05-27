@@ -32,15 +32,18 @@ import {
   ProductTagsBodySchema,
   ProductTagsMutationResponseSchema,
   ErrorResponseSchema,
+  ResolveResponseSchema,
 } from "@buildinternet/releases-api-types";
 import {
   findProductForOrgSlug,
+  findSourceForOrgSlug,
   isConflictError,
   getOrCreateTagsD1,
   orgWhere,
   replaceAliases,
   resolveProductFromContext,
 } from "../utils.js";
+import { buildSourceDetailPayload } from "./sources.js";
 import type { Env } from "../index.js";
 import { embedAndUpsertEntities, type EntityKind } from "@releases/search/embed-entities.js";
 import { buildEmbedConfig } from "@releases/search/embed-config.js";
@@ -854,6 +857,70 @@ productRoutes.delete(
     return c.json({ deleted: true, deletedAt: now });
   },
 );
+
+// ── Resolve: product-first slug resolution for /[org]/[slug] ──
+
+const resolveRoute = describeRoute({
+  tags: ["Orgs"],
+  summary: "Resolve an org-scoped slug to a product or source",
+  description:
+    'Product-first: returns `{ kind: "product", product }` when a product owns the slug, else `{ kind: "source", source }` for a source, else 404. One round trip for the bare `/[org]/[slug]` web route (#1190).',
+  parameters: [
+    {
+      name: "org",
+      in: "path",
+      required: true,
+      schema: { type: "string" },
+      description: "Organization slug or `org_…` ID.",
+    },
+    {
+      name: "slug",
+      in: "path",
+      required: true,
+      schema: { type: "string" },
+      description: "Org-scoped product or source slug to resolve (product-first).",
+    },
+  ],
+  responses: {
+    200: {
+      description: "Discriminated product or source detail",
+      content: { "application/json": { schema: resolver(ResolveResponseSchema) } },
+    },
+    404: {
+      description: "Neither a product nor a source matched",
+      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+    },
+  },
+});
+
+const resolveHandler = async (c: import("hono").Context<Env>) => {
+  const db = createDb(c.env.DB);
+  const org = c.req.param("org");
+  const slug = c.req.param("slug");
+  if (!org || !slug) return c.json({ error: "bad_request", message: "org and slug required" }, 400);
+
+  const product = await findProductForOrgSlug(db, org, slug);
+  if (product) {
+    return c.json({ kind: "product", product: await buildProductDetailPayload(db, product) });
+  }
+  const src = await findSourceForOrgSlug(db, org, slug);
+  if (src) {
+    return c.json({
+      kind: "source",
+      source: await buildSourceDetailPayload(db, src, {
+        cursor: null,
+        limit: 20,
+        includeCoverage: false,
+        includePrereleases: false,
+        d1: c.env.DB,
+        mediaOrigin: c.env.MEDIA_ORIGIN ?? "",
+      }),
+    });
+  }
+  return c.json({ error: "not_found", message: "No product or source for that slug" }, 404);
+};
+
+productRoutes.get("/orgs/:org/resolve/:slug", resolveRoute, resolveHandler);
 
 // ── Embed side effect ──
 
