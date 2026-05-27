@@ -4,6 +4,7 @@ import { orgToMarkdown } from "@/lib/formatters";
 import { ATOM_DEFAULT_MAX_ENTRIES } from "@/lib/atom";
 import { orgAtomResponse } from "@/lib/atom-response";
 import { getBaseUrl } from "@/lib/base-url";
+import { formatErrorResponse } from "@/lib/format-error";
 import { markdownResponse } from "@/lib/markdown-response";
 import { getFormat } from "@/lib/request";
 
@@ -21,11 +22,8 @@ export async function GET(
         api.orgDetail(orgSlug),
         api.orgReleases(orgSlug, { limit: ATOM_DEFAULT_MAX_ENTRIES }),
       ]);
-    } catch {
-      return NextResponse.json(
-        { error: "not_found", message: "Organization not found" },
-        { status: 404 },
-      );
+    } catch (err) {
+      return formatErrorResponse(err, "Organization not found");
     }
     return orgAtomResponse(request, org, feed);
   }
@@ -37,11 +35,8 @@ export async function GET(
         api.orgDetail(orgSlug),
         api.orgReleases(orgSlug, { limit: 10 }),
       ]);
-    } catch {
-      return NextResponse.json(
-        { error: "not_found", message: "Organization not found" },
-        { status: 404 },
-      );
+    } catch (err) {
+      return formatErrorResponse(err, "Organization not found");
     }
     const baseUrl = getBaseUrl(request);
     return markdownResponse(orgToMarkdown(org, { baseUrl, recentReleases: feed.releases }), {
@@ -52,11 +47,8 @@ export async function GET(
   let org;
   try {
     org = await api.orgDetail(orgSlug);
-  } catch {
-    return NextResponse.json(
-      { error: "not_found", message: "Organization not found" },
-      { status: 404 },
-    );
+  } catch (err) {
+    return formatErrorResponse(err, "Organization not found");
   }
 
   // The API's public-read endpoints gate admin-only fields (e.g. playbook)

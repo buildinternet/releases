@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { sourceToAtom, orgReleasesToAtom } from "./atom.js";
+import { sourceToAtom, orgReleasesToAtom, productReleasesToAtom } from "./atom.js";
 import type { SourceDetail, OrgReleaseItem } from "@buildinternet/releases-api-types";
 
 const BASE = "https://releases.sh";
@@ -190,5 +190,71 @@ describe("orgReleasesToAtom", () => {
 
     expect(xml).toInclude("<id>tag:staging.example.com,2005:org/acme</id>");
     expect(xml).toInclude("tag:staging.example.com,2005:acme-blog/");
+  });
+});
+
+describe("productReleasesToAtom", () => {
+  const releases: OrgReleaseItem[] = [
+    {
+      id: "rel_1",
+      version: "2.0",
+      title: "Turborepo 2.0",
+      summary: "Major release",
+      publishedAt: "2026-05-01T00:00:00Z",
+      url: "https://turbo.build/2",
+      source: { slug: "turborepo", name: "Turborepo", type: "github" },
+    },
+  ];
+
+  it("titles the feed by product and authors it by org", () => {
+    const xml = productReleasesToAtom(
+      {
+        orgSlug: "vercel",
+        productSlug: "turborepo",
+        productName: "Turborepo",
+        releases,
+      },
+      { baseUrl: BASE },
+    );
+    expect(xml).toInclude("<title>Turborepo release notes</title>");
+    expect(xml).toInclude("<author><name>Turborepo</name></author>");
+    expect(xml).toInclude("<id>tag:releases.sh,2005:product/vercel/turborepo</id>");
+    expect(xml).toInclude('category term="turborepo"');
+    expect(xml).toInclude("<updated>2026-05-01T00:00:00.000Z</updated>");
+  });
+
+  it("serves the feed at the /product/ machine path but points the human alternate at the bare canonical page", () => {
+    const xml = productReleasesToAtom(
+      {
+        orgSlug: "vercel",
+        productSlug: "turborepo",
+        productName: "Turborepo",
+        releases,
+      },
+      { baseUrl: BASE },
+    );
+    // self link == where the feed is actually served (bare /vercel/turborepo.atom
+    // routes to the SOURCE formatter, per the static route-map).
+    expect(xml).toInclude(
+      '<link rel="self" type="application/atom+xml" href="https://releases.sh/vercel/product/turborepo.atom" />',
+    );
+    // human alternate == the bare canonical product page (post-#1190 flip).
+    expect(xml).toInclude(
+      '<link rel="alternate" type="text/html" href="https://releases.sh/vercel/turborepo" />',
+    );
+  });
+
+  it("emits a valid empty feed when the product has no releases", () => {
+    const xml = productReleasesToAtom(
+      {
+        orgSlug: "vercel",
+        productSlug: "turborepo",
+        productName: "Turborepo",
+        releases: [],
+      },
+      { baseUrl: BASE },
+    );
+    expect(xml).toStartWith('<?xml version="1.0" encoding="utf-8"?>');
+    expect(xml).toInclude("<title>Turborepo release notes</title>");
   });
 });

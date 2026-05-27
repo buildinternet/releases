@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { api } from "@/lib/api";
 import { overviewToMarkdown } from "@/lib/formatters";
 import { getBaseUrl } from "@/lib/base-url";
+import { formatErrorResponse } from "@/lib/format-error";
 import { getFormat } from "@/lib/request";
 
 export async function GET(
@@ -14,11 +15,8 @@ export async function GET(
   let org;
   try {
     org = await api.orgDetail(orgSlug);
-  } catch {
-    return NextResponse.json(
-      { error: "not_found", message: "Organization not found" },
-      { status: 404 },
-    );
+  } catch (err) {
+    return formatErrorResponse(err, "Organization not found");
   }
 
   const overview = org.overview;
