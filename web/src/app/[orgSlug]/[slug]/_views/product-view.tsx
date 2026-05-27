@@ -16,6 +16,7 @@ import { taxonomySidebarSections } from "@/components/taxonomy-chips";
 import { buildReleaseItemListJsonLd } from "@/lib/schema-org";
 import { AppIcon } from "@/components/app-icon";
 import { getAppInfo, type AppInfo } from "@/lib/app-source";
+import { sourceIdPath } from "@/lib/links";
 import { ProductAdminMenu } from "@/components/product-admin-menu";
 import { isLocalAdminEnabled } from "@/lib/local-admin-flag";
 
@@ -46,9 +47,9 @@ export async function ProductView({
   const appEntries = product.sources
     .map((s) => {
       const app = getAppInfo(s);
-      return app ? { slug: s.slug, name: s.name, app } : null;
+      return app ? { id: s.id, slug: s.slug, name: s.name, app } : null;
     })
-    .filter((e): e is { slug: string; name: string; app: AppInfo } => e !== null);
+    .filter((e): e is { id: string; slug: string; name: string; app: AppInfo } => e !== null);
 
   const availableSourceTypes = Array.from(
     new Set(product.sources.map((s) => s.type)),
@@ -120,7 +121,7 @@ export async function ProductView({
             {appEntries.map((e) => (
               <Link
                 key={e.slug}
-                href={`/${orgSlug}/${e.slug}`}
+                href={sourceIdPath(e.id)}
                 className="flex items-center gap-1.5 bg-stone-100 dark:bg-stone-800 hover:bg-stone-200 dark:hover:bg-stone-700 rounded-md px-2 py-1 transition-colors"
               >
                 <AppIcon iconUrl={e.app.iconUrl} name={e.name} size={16} />
