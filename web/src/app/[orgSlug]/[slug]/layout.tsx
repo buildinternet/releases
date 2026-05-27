@@ -1,8 +1,8 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import { daysAgoIso } from "@buildinternet/releases-core/dates";
-import { ApiSetupError } from "@/lib/api";
+import { ApiSetupError, ApiNotFoundError } from "@/lib/api";
 import { tryFetch } from "@/lib/ssr-fetch";
 import { ViewTransition } from "react";
 import { Header } from "@/components/header";
@@ -20,36 +20,22 @@ import { SourceTimeline } from "@/components/source-timeline";
 import { CliCommand } from "@/components/cli-command";
 import { api } from "@/lib/api";
 import { formatSourceDate, sourceUrlSidebarItem } from "@/lib/source-display";
-import { getSource } from "./_lib/source-data";
+import { getResolved } from "./_lib/resolve";
 
 const formatDate = formatSourceDate;
 
-export default async function SourceLayout({
+export default async function OrgSlugLayout({
   children,
   params,
 }: {
   children: ReactNode;
-  params: Promise<{ orgSlug: string; sourceSlug: string }>;
+  params: Promise<{ orgSlug: string; slug: string }>;
 }) {
-  const { orgSlug, sourceSlug } = await params;
+  const { orgSlug, slug } = await params;
 
-  const activityFrom = daysAgoIso(365 * 2).slice(0, 10);
-
-  let source;
-  let activityResult;
-  let heatmapResult;
+  let resolved;
   try {
-    [source, activityResult, heatmapResult] = await Promise.all([
-      getSource(orgSlug, sourceSlug),
-      tryFetch(api.sourceActivity({ orgSlug, sourceSlug }, activityFrom), {
-        route: `/${orgSlug}/${sourceSlug}`,
-        event: "source-activity-fetch-failed",
-      }),
-      tryFetch(api.sourceHeatmap({ orgSlug, sourceSlug }), {
-        route: `/${orgSlug}/${sourceSlug}`,
-        event: "source-heatmap-fetch-failed",
-      }),
-    ]);
+    resolved = await getResolved(orgSlug, slug);
   } catch (err) {
     if (err instanceof ApiSetupError) {
       return (
@@ -59,18 +45,35 @@ export default async function SourceLayout({
         </div>
       );
     }
-    notFound();
+    if (err instanceof ApiNotFoundError) notFound();
+    throw err;
   }
+
+  // Products carry their own chrome (ProductView). The layout only wraps the
+  // source render with the tab-chrome shell; the resolver is already org-scoped,
+  // so the old `source.org.slug !== orgSlug` slug-correction redirect is moot.
+  if (resolved.kind === "product") {
+    return <>{children}</>;
+  }
+
+  const source = resolved.source;
+  const sourceSlug = source.slug;
+  const base = `/${orgSlug}/${sourceSlug}`;
+  const activityFrom = daysAgoIso(365 * 2).slice(0, 10);
+
+  const [activityResult, heatmapResult] = await Promise.all([
+    tryFetch(api.sourceActivity({ orgSlug, sourceSlug }, activityFrom), {
+      route: base,
+      event: "source-activity-fetch-failed",
+    }),
+    tryFetch(api.sourceHeatmap({ orgSlug, sourceSlug }), {
+      route: base,
+      event: "source-heatmap-fetch-failed",
+    }),
+  ]);
 
   const activity = activityResult.data;
   const heatmap = heatmapResult.data;
-
-  if (source.org && source.org.slug !== orgSlug) {
-    redirect(`/${source.org.slug}/${source.slug}`);
-  }
-  if (!source.org) {
-    redirect(`/source/${source.slug}`);
-  }
 
   const sidebarSections = [
     {
@@ -100,24 +103,23 @@ export default async function SourceLayout({
   const hasHighlights = !!(source.summaries?.rolling || source.summaries?.monthly?.length);
   const hasChangelog = !!source.hasChangelogFile;
   const appInfo = getAppInfo(source);
+  const orgName = source.org?.name ?? orgSlug;
+  const orgHref = source.org ? `/${source.org.slug}` : `/${orgSlug}`;
 
   return (
     <div className="min-h-screen">
       <Header />
       <div className="max-w-4xl mx-auto px-6">
         <div className="pt-5 text-[13px] text-stone-400 dark:text-stone-500">
-          <Link
-            href={`/${source.org.slug}`}
-            className="hover:text-stone-600 dark:hover:text-stone-300"
-          >
-            {source.org.name}
+          <Link href={orgHref} className="hover:text-stone-600 dark:hover:text-stone-300">
+            {orgName}
           </Link>
           <span className="mx-1.5">/</span>
           <span className="text-stone-600 dark:text-stone-300 font-medium">{source.name}</span>
         </div>
         <div className="flex items-center gap-2.5 mt-4">
           {appInfo && <AppIcon iconUrl={appInfo.iconUrl} name={source.name} size={32} />}
-          <ViewTransition name={`src-${source.org.slug}-${source.slug}`} default="none">
+          <ViewTransition name={`src-${source.org?.slug ?? orgSlug}-${source.slug}`} default="none">
             <h1 className="text-[28px] font-bold tracking-tight text-stone-900 dark:text-stone-100">
               {source.name}
             </h1>
@@ -127,7 +129,7 @@ export default async function SourceLayout({
           {hiddenBadge && <StateBadge label={hiddenBadge.label} title={hiddenBadge.title} />}
           {adminEnabled && (
             <SourceAdminMenu
-              orgSlug={source.org.slug}
+              orgSlug={source.org?.slug ?? orgSlug}
               sourceSlug={source.slug}
               name={source.name}
               marketingFilter={sourceMeta.marketingFilter === true}
@@ -148,17 +150,12 @@ export default async function SourceLayout({
                 trackingSince={source.trackingSince}
               />
             )}
-            <SourceTabs
-              orgSlug={orgSlug}
-              sourceSlug={sourceSlug}
-              hasHighlights={hasHighlights}
-              hasChangelog={hasChangelog}
-            />
+            <SourceTabs base={base} hasHighlights={hasHighlights} hasChangelog={hasChangelog} />
             {children}
           </div>
           <Sidebar
             sections={sidebarSections}
-            formatPath={`/${orgSlug}/${sourceSlug}`}
+            formatPath={base}
             lastCheckedAt={source.lastPolledAt ?? source.lastFetchedAt}
             lastFetchedAt={source.lastFetchedAt}
             trackingSince={source.trackingSince}

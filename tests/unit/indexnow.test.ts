@@ -43,7 +43,7 @@ describe("buildUrls", () => {
     expect(buildUrls("https://releases.sh", { ...SOURCE, productSlug: "next" })).toEqual([
       "https://releases.sh/vercel",
       "https://releases.sh/vercel/nextjs",
-      "https://releases.sh/vercel/product/next",
+      "https://releases.sh/vercel/next",
     ]);
   });
 
@@ -154,7 +154,7 @@ describe("submitToIndexNow happy path", () => {
     expect(body.urlList).toEqual([
       "https://releases.sh/vercel",
       "https://releases.sh/vercel/nextjs",
-      "https://releases.sh/vercel/product/next",
+      "https://releases.sh/vercel/next",
     ]);
   });
 

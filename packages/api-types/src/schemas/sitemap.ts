@@ -6,6 +6,12 @@ import { z } from "zod";
  * fields, but the current handler always populates them (#875).
  */
 export const SitemapSourceSchema = z.object({
+  /**
+   * Source id. `.optional()` for backwards compatibility — added #1190 so the
+   * web can route shadowed sources to `/sources/:id`; older/cached responses
+   * may omit it and the web degrades to the bare URL.
+   */
+  id: z.string().optional(),
   orgSlug: z.string(),
   slug: z.string(),
   latestDate: z.string().nullable(),

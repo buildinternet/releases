@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound, permanentRedirect } from "next/navigation";
 import { Suspense } from "react";
-import { ApiSetupError, ApiNotFoundError } from "@/lib/api";
+import { ApiNotFoundError } from "@/lib/api";
 import { JsonLd } from "@/components/json-ld";
 import { SourceReleaseList } from "@/components/source-release-list";
 import { RelatedRail } from "@/components/related-rail";
@@ -10,37 +10,50 @@ import {
   buildSourceEntityJsonLd,
   currentPeriod,
 } from "@/lib/schema-org";
-import { getSource } from "./_lib/source-data";
+import { getSourceById } from "./_lib/source-by-id";
 
 const LEGACY_SOURCE_TABS = new Set(["highlights", "changelog"]);
 
 export async function generateMetadata({
   params,
 }: {
-  params: Promise<{ orgSlug: string; sourceSlug: string }>;
+  params: Promise<{ id: string }>;
 }): Promise<Metadata> {
-  const { orgSlug, sourceSlug } = await params;
+  const { id } = await params;
   try {
-    const source = await getSource(orgSlug, sourceSlug);
+    const source = await getSourceById(id);
+    const orgSlug = source.org?.slug ?? id;
     const orgName = source.org?.name ?? orgSlug;
+    const canonicalPath = source.productId
+      ? `/sources/${id}`
+      : source.org
+        ? `/${source.org.slug}/${source.slug}`
+        : `/sources/${id}`;
     return {
       title: `${source.name} — ${orgName}`,
       description: `Release notes, changelog, and version history for ${source.name} by ${orgName} — updated ${currentPeriod()}.`,
-      openGraph: { type: "website", url: `/${orgSlug}/${sourceSlug}` },
+      openGraph: { type: "website", url: canonicalPath },
       alternates: {
-        canonical: `/${orgSlug}/${sourceSlug}`,
-        types: {
-          "application/atom+xml": [
-            {
-              url: `/${orgSlug}/${sourceSlug}.atom`,
-              title: `${source.name} release notes — ${orgName}`,
-            },
-          ],
-        },
+        canonical: canonicalPath,
+        // The `.atom` feed route lives only under the org-scoped path; skip the
+        // alternate entirely for a (rare) member source with no resolved org so
+        // we never emit a broken protocol-relative `//{slug}.atom` URL.
+        ...(source.org
+          ? {
+              types: {
+                "application/atom+xml": [
+                  {
+                    url: `/${source.org.slug}/${source.slug}.atom`,
+                    title: `${source.name} release notes — ${orgName}`,
+                  },
+                ],
+              },
+            }
+          : {}),
       },
     };
   } catch {
-    return { title: sourceSlug };
+    return { title: id };
   }
 }
 
@@ -48,9 +61,6 @@ export async function generateMetadata({
  * Two rails under the release list:
  *   1. "More from {org}" — same-org releases + sibling sources.
  *   2. "From other products" — global semantic neighbors, excluding this org.
- *
- * Server-rendered inside Suspense so a slow Vectorize roundtrip doesn't
- * hold the rest of the page hostage. Empty/degraded rails collapse to null.
  */
 function RelatedRails({
   anchorReleaseId,
@@ -84,37 +94,46 @@ function RelatedRails({
   );
 }
 
-export default async function SourceReleasesPage({
+export default async function SourceByIdPage({
   params,
   searchParams,
 }: {
-  params: Promise<{ orgSlug: string; sourceSlug: string }>;
+  params: Promise<{ id: string }>;
   searchParams: Promise<{ tab?: string | string[] }>;
 }) {
-  const { orgSlug, sourceSlug } = await params;
+  const { id } = await params;
   const { tab } = await searchParams;
   const tabValue = Array.isArray(tab) ? tab[0] : tab;
 
-  // See `(org)/page.tsx` — same `:orgSlug` greedy-match concern applies here.
   if (tabValue && LEGACY_SOURCE_TABS.has(tabValue)) {
-    permanentRedirect(`/${orgSlug}/${sourceSlug}/${tabValue}`);
+    permanentRedirect(`/sources/${id}/${tabValue}`);
   }
 
   let source;
   try {
-    source = await getSource(orgSlug, sourceSlug);
-  } catch (err) {
-    if (err instanceof ApiSetupError) throw err;
-    if (err instanceof ApiNotFoundError) notFound();
-    throw err;
+    source = await getSourceById(id);
+  } catch (e) {
+    if (e instanceof ApiNotFoundError) notFound();
+    throw e;
   }
 
-  // Hand the client component the API's nextCursor so its "Load more" can
-  // continue from where SSR left off.
+  // Orphan source (has org, no productId) → redirect to canonical bare URL.
+  if (source.org && !source.productId) {
+    permanentRedirect(`/${source.org.slug}/${source.slug}`);
+  }
+
+  const orgSlug = source.org?.slug ?? "";
   const initialCursor = source.pagination.nextCursor;
 
-  const sourceUrl = `https://releases.sh/${orgSlug}/${sourceSlug}`;
+  // Member sources are canonical at /sources/:id (bare /{org}/{slug} resolves to the
+  // product post-flip); sourceless sources too; only a non-member with an org uses bare.
+  const sourceUrl = source.productId
+    ? `https://releases.sh/sources/${id}`
+    : source.org
+      ? `https://releases.sh/${source.org.slug}/${source.slug}`
+      : `https://releases.sh/sources/${id}`;
   const releaseListId = `${sourceUrl}#releases`;
+
   const jsonLd = {
     "@context": "https://schema.org",
     "@graph": [

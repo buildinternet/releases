@@ -21,6 +21,7 @@ let app: Hono;
 type SitemapResponse = {
   orgs: { slug: string; lastActivity: string | null }[];
   sources: {
+    id: string;
     orgSlug: string;
     slug: string;
     latestDate: string | null;
@@ -142,13 +143,14 @@ describe("GET /sitemap", () => {
 
     expect(result.orgs).toEqual([{ slug: "acme", lastActivity: null }]);
     expect(result.sources).toHaveLength(1);
-    expect(result.sources[0]).toEqual({
+    expect(result.sources[0]).toMatchObject({
       orgSlug: "acme",
       slug: "acme-cli",
       latestDate: "2026-03-15T00:00:00Z",
       hasChangelog: false,
       hasHighlights: false,
     });
+    expect(result.sources[0].id).toBe(src.id);
   });
 
   test("filters out hidden sources but keeps their parent org", async () => {

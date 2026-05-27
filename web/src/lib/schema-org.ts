@@ -87,6 +87,41 @@ export function buildSourceEntityJsonLd(
  *  emitted nodes always describe the canonical surface (not a preview host). */
 const SITE_URL = "https://releases.sh";
 
+/**
+ * Builds the `BreadcrumbList.itemListElement` array for a source sub-page
+ * (e.g. /highlights or /changelog). The org breadcrumb is included only when
+ * the source has a resolved org.
+ *
+ * Pure helper (no route coupling), shared by both the `[orgSlug]/[slug]`
+ * and ID-keyed `/sources/[id]` source surfaces.
+ */
+export function sourceBreadcrumbItems(
+  source: { name: string; org: { slug: string; name: string } | null },
+  sourceUrl: string,
+  pageName: string,
+  pageUrl: string,
+): object[] {
+  const home = { "@type": "ListItem", position: 1, name: "Home", item: SITE_URL };
+  if (source.org) {
+    return [
+      home,
+      {
+        "@type": "ListItem",
+        position: 2,
+        name: source.org.name,
+        item: `${SITE_URL}/${source.org.slug}`,
+      },
+      { "@type": "ListItem", position: 3, name: source.name, item: sourceUrl },
+      { "@type": "ListItem", position: 4, name: pageName, item: pageUrl },
+    ];
+  }
+  return [
+    home,
+    { "@type": "ListItem", position: 2, name: source.name, item: sourceUrl },
+    { "@type": "ListItem", position: 3, name: pageName, item: pageUrl },
+  ];
+}
+
 /** Subset of a release feed item needed to render a `SoftwareRelease` node.
  *  Structurally satisfied by `OrgReleaseItem`, `CollectionReleaseItem`, and
  *  `CategoryReleaseItem` from `@buildinternet/releases-api-types`. */

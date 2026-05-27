@@ -4,26 +4,26 @@ import { Suspense } from "react";
 import { ApiSetupError } from "@/lib/api";
 import { JsonLd } from "@/components/json-ld";
 import { ChangelogView, ChangelogSkeleton } from "@/components/changelog-view";
-import { buildSourceEntityJsonLd } from "@/lib/schema-org";
-import { getSource, sourceBreadcrumbItems } from "../_lib/source-data";
+import { buildSourceEntityJsonLd, sourceBreadcrumbItems } from "@/lib/schema-org";
+import { getSource } from "../_lib/source-data";
 
 export async function generateMetadata({
   params,
 }: {
-  params: Promise<{ orgSlug: string; sourceSlug: string }>;
+  params: Promise<{ orgSlug: string; slug: string }>;
 }): Promise<Metadata> {
-  const { orgSlug, sourceSlug } = await params;
+  const { orgSlug, slug } = await params;
   try {
-    const source = await getSource(orgSlug, sourceSlug);
+    const source = await getSource(orgSlug, slug);
     const orgName = source.org?.name ?? orgSlug;
     return {
       title: `${source.name} Changelog File — ${orgName}`,
       description: `Read the CHANGELOG.md file from the ${source.name} repository by ${orgName}.`,
-      openGraph: { type: "website", url: `/${orgSlug}/${sourceSlug}/changelog` },
-      alternates: { canonical: `/${orgSlug}/${sourceSlug}/changelog` },
+      openGraph: { type: "website", url: `/${orgSlug}/${slug}/changelog` },
+      alternates: { canonical: `/${orgSlug}/${slug}/changelog` },
     };
   } catch {
-    return { title: sourceSlug };
+    return { title: slug };
   }
 }
 
@@ -35,7 +35,7 @@ export default async function SourceChangelogPage({
   params,
   searchParams,
 }: {
-  params: Promise<{ orgSlug: string; sourceSlug: string }>;
+  params: Promise<{ orgSlug: string; slug: string }>;
   // Next.js delivers repeated query params as `string[]`; collapse to the
   // first value so `?path=a&path=b` doesn't reach the API as an array.
   searchParams: Promise<{
@@ -43,7 +43,7 @@ export default async function SourceChangelogPage({
     offset?: string | string[];
   }>;
 }) {
-  const { orgSlug, sourceSlug } = await params;
+  const { orgSlug, slug } = await params;
   const sp = await searchParams;
   const changelogPath = firstParam(sp.path);
   const offsetParam = firstParam(sp.offset);
@@ -58,7 +58,7 @@ export default async function SourceChangelogPage({
 
   let source;
   try {
-    source = await getSource(orgSlug, sourceSlug);
+    source = await getSource(orgSlug, slug);
   } catch (err) {
     if (err instanceof ApiSetupError) throw err;
     notFound();
@@ -66,7 +66,7 @@ export default async function SourceChangelogPage({
 
   if (!source.hasChangelogFile) notFound();
 
-  const sourceUrl = `https://releases.sh/${orgSlug}/${sourceSlug}`;
+  const sourceUrl = `https://releases.sh/${orgSlug}/${slug}`;
   const pageUrl = `${sourceUrl}/changelog`;
   const jsonLd = {
     "@context": "https://schema.org",

@@ -5,8 +5,8 @@ import { api } from "@/lib/api";
  * Legacy bare-slug source page. Every source now belongs to an org (#690
  * Phase C made `sources.orgId` NOT NULL), so this route only exists to
  * 308-redirect bookmarks and inbound links to the canonical
- * `/[orgSlug]/[sourceSlug]` shape. The full page render lives at
- * `app/[orgSlug]/[sourceSlug]/page.tsx`.
+ * `/[orgSlug]/[slug]` shape. The full page render lives at
+ * `app/[orgSlug]/[slug]/page.tsx`.
  *
  * Schedule for deletion: once the API's bare `/v1/sources/:slug` path
  * starts returning 400 (the final piece of #698), this resolver call

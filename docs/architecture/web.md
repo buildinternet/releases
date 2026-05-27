@@ -1,5 +1,30 @@
 # Web surfaces
 
+## Product-first URL resolution (#1190)
+
+The bare second segment is a **product**: `/[org]/[slug]` resolves product-first, falling back to a source. Phases 1–2 (#1187, #1189) made the product the default feed + link unit; #1190 flipped the namespace so products own the clean coordinate and sources are demoted toward an ID-keyed surface.
+
+**Resolution** (`web/src/app/[orgSlug]/[slug]/page.tsx` calls `GET /v1/orgs/:org/resolve/:slug`, a one-round-trip discriminated `{ kind: "product" | "source" }` payload — `workers/api/src/routes/products.ts`):
+
+| Path                    | resolves to           | Action                                              |
+| ----------------------- | --------------------- | --------------------------------------------------- |
+| `/[org]/[slug]`         | product               | render product                                      |
+| `/[org]/[slug]`         | source (non-shadowed) | render source                                       |
+| `/[org]/[slug]`         | nothing               | 404                                                 |
+| `/[org]/product/[slug]` | (any)                 | 308 → `/[org]/[slug]`                               |
+| `/sources/[id]`         | member source         | render source (canonical home for shadowed sources) |
+| `/sources/[id]`         | orphan source         | 308 → `/[org]/[sourceSlug]`                         |
+
+Because a **shadowed** source's slug _is_ its product's slug, product-first resolution returns the product directly — no redirect, no broken URL; the bare URL's content just flips from source to product. Of ~71 member sources, ~23 collide; only those need `/sources/:id`. Non-shadowed members and all orphans keep their bare URL.
+
+- **Seam:** `web/src/lib/links.ts` is the single path builder for the web component tree — `productPath` emits bare, `sourceIdPath(id)` → `/sources/:id`. Server-rendered markdown/XML (`packages/rendering/src/formatters.ts`), the rename `revalidatePath`, and IndexNow construct product URLs independently and were swept to bare alongside the flip.
+- **Machine format routes stay at `/product/`:** `/api/format/[orgSlug]/product/[productSlug]` (and the matching `Sidebar formatPath`) are download surfaces, intentionally not moved.
+- **Reserved nested slugs** (`@buildinternet/releases-core/reserved-slugs`) gained `product`/`products`/`playbook`/`fetch-log` so no slug can shadow a static second-segment route. Creating a product whose slug shadows a same-org source **warns but allows** (the intended "wrap" mechanism).
+
+**Deferred edges:** `/[org]/[productSlug]/changelog` 404s (products have no changelog view); changelog _chunk_ deep-links for the ~11 shadowed-with-changelog sources stay on the bare `sourcePath` (rerouting them to `/sources/:id/changelog` needs a `sourceId`-on-hit wire change). Both ride with the product-scoped-views follow-up (#1191-adjacent).
+
+**Committed destination:** orgs + products own slugs, sources become ID-only. Gated on the catalog becoming product-centric — bridged non-breakingly by selective orphan→product wrapping (same-slug, so URLs are preserved), owned by **#1194**. The resolver's source-fallback is transitional with a sunset. Full reasoning: `docs/superpowers/specs/2026-05-27-product-first-url-resolution-design.md`; build steps: `docs/superpowers/plans/2026-05-27-product-first-url-resolution.md`.
+
 ## Changelog range API (Context7-style slicing)
 
 `GET /v1/sources/:slug/changelog` accepts `?offset=<chars>` plus one of `?limit=<chars>` (char mode) or `?tokens=<n>` (token mode, cl100k*base via `js-tiktoken/lite`). Slicing is heading-aware — start snaps forward to the next `##` heading (offset=0 preserved so preamble is kept). In char mode, end snaps to the \_last* heading inside `(start, start+limit]`, overshooting to the next heading when a single section is bigger than `limit`. In token mode, we walk forward section-by-section and stop at the last heading that keeps the slice ≤ `tokens`, with the same overshoot rule. `tokens` takes precedence over `limit` when both are passed.

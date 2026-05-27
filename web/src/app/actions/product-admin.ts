@@ -40,7 +40,7 @@ export async function renameProductAction(input: {
     return { ok: false, error: `API ${res.status}: ${text || res.statusText}` };
   }
 
-  revalidatePath(`/${input.orgSlug}/product/${input.productSlug}`);
+  revalidatePath(`/${input.orgSlug}/${input.productSlug}`);
   revalidatePath(`/${input.orgSlug}`);
   return { ok: true };
 }

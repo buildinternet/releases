@@ -97,6 +97,7 @@ import type {
 } from "./schemas/sources.js";
 import type {
   ProductRowSchema,
+  ProductCreateResponseSchema,
   ProductListItemSchema,
   ProductListResponseSchema,
   ProductDetailSourceSchema,
@@ -317,6 +318,7 @@ export {
 } from "./schemas/sources.js";
 export {
   ProductRowSchema,
+  ProductCreateResponseSchema,
   ProductListItemSchema,
   ProductListResponseSchema,
   ProductDetailSourceSchema,
@@ -450,6 +452,8 @@ export {
   UpdatePlaybookNotesBodySchema,
   UpdatePlaybookNotesResponseSchema,
 } from "./schemas/overviews.js";
+export { ResolveResponseSchema } from "./schemas/resolve.js";
+export type { ResolveResponse } from "./schemas/resolve.js";
 
 // ── Media ──
 
@@ -984,6 +988,7 @@ export interface SourceReleasesResponse {
 // `Category` lives in @buildinternet/releases-core/categories — import it from
 // there. CategorySchema is re-exported here for OpenAPI / Zod consumers only.
 export type ProductRow = z.infer<typeof ProductRowSchema>;
+export type ProductCreateResponse = z.infer<typeof ProductCreateResponseSchema>;
 export type ProductListItem = z.infer<typeof ProductListItemSchema>;
 export type ProductListResponse = z.infer<typeof ProductListResponseSchema>;
 export type ProductDetailSource = z.infer<typeof ProductDetailSourceSchema>;
