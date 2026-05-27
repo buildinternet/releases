@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import type {
   SourceDetail,
   OrgDetail,
+  ProductDetail,
   OrgReleasesFeedResponse,
   CollectionDetail,
   CollectionReleasesResponse,
@@ -10,6 +11,7 @@ import type {
 import {
   sourceToAtom,
   orgReleasesToAtom,
+  productReleasesToAtom,
   collectionReleasesToAtom,
   categoryReleasesToAtom,
 } from "@/lib/atom";
@@ -121,5 +123,26 @@ export function orgAtomResponse(
     { baseUrl },
   );
   const lastModified = feed.releases[0]?.publishedAt ?? org.lastFetchedAt ?? null;
+  return atomResponse(request, body, { lastModified });
+}
+
+/** Render a product's aggregated release feed (its sources) into an Atom response. */
+export function productAtomResponse(
+  request: NextRequest,
+  orgSlug: string,
+  product: Pick<ProductDetail, "slug" | "name">,
+  feed: OrgReleasesFeedResponse,
+): NextResponse {
+  const baseUrl = getBaseUrl(request);
+  const body = productReleasesToAtom(
+    {
+      orgSlug,
+      productSlug: product.slug,
+      productName: product.name,
+      releases: feed.releases,
+    },
+    { baseUrl },
+  );
+  const lastModified = feed.releases[0]?.publishedAt ?? null;
   return atomResponse(request, body, { lastModified });
 }

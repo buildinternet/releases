@@ -131,7 +131,7 @@ function buildEntry(input: EntryInput, baseUrl: string): { xml: string; updated:
 // ── Feed assembly ────────────────────────────────────────────────────
 
 interface FeedShell {
-  scope: "org" | "source" | "collection" | "category";
+  scope: "org" | "source" | "collection" | "category" | "product";
   slug: string;
   title: string;
   subtitle?: string;
@@ -250,6 +250,46 @@ export function orgReleasesToAtom(
       authorName: params.orgName,
       entries,
       pinnedEntry: overviewEntry,
+    },
+    opts,
+  );
+}
+
+/** Atom feed for a product — aggregated releases across the product's sources. */
+export function productReleasesToAtom(
+  params: {
+    orgSlug: string;
+    productSlug: string;
+    productName: string;
+    releases: OrgReleaseItem[];
+  },
+  opts: AtomFeedOptions,
+): string {
+  // The human page lives at the bare canonical `/[org]/[slug]` (post-#1190),
+  // but the feed is served at the `/product/` machine path: bare
+  // `/[org]/[slug].atom` routes to the SOURCE formatter via the static
+  // route-map, so `self` must point at `/product/` to stay fetchable.
+  const productPage = `${opts.baseUrl}/${params.orgSlug}/${params.productSlug}`;
+  const feedPath = `${opts.baseUrl}/${params.orgSlug}/product/${params.productSlug}`;
+
+  const entries: EntryInput[] = params.releases.map((release) => ({
+    release,
+    sourceSlug: release.source.slug,
+    sourceName: release.source.name,
+    orgName: params.productName,
+    linkHref: release.id ? `${opts.baseUrl}/release/${release.id}` : release.url,
+  }));
+
+  return buildFeed(
+    {
+      scope: "product",
+      slug: `${params.orgSlug}/${params.productSlug}`,
+      title: `${params.productName} release notes`,
+      subtitle: `${params.productName} release notes and changelog`,
+      selfUrl: `${feedPath}.atom`,
+      alternateUrl: productPage,
+      authorName: params.productName,
+      entries,
     },
     opts,
   );
