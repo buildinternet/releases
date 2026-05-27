@@ -380,6 +380,15 @@ v1.use("/status/fetch-log", cacheControl(15));
 v1.use("/status/usage", cacheControl(30));
 v1.use("/products", cacheControl(60, { staleWhileRevalidate: 30, isPublic: true }));
 v1.use("/products/:slug", cacheControl(60, { staleWhileRevalidate: 30, isPublic: true }));
+v1.use("/products/:slug/activity", cacheControl(120, { staleWhileRevalidate: 60, isPublic: true }));
+v1.use(
+  "/orgs/:orgSlug/products/:productSlug/activity",
+  cacheControl(120, { staleWhileRevalidate: 60, isPublic: true }),
+);
+v1.use(
+  "/orgs/:orgSlug/products/:productSlug/*",
+  cacheControl(60, { staleWhileRevalidate: 30, isPublic: true }),
+);
 v1.use("/sitemap", cacheControl(600, { staleWhileRevalidate: 600, isPublic: true }));
 // /lookups GET endpoints — pure resolution primitives backed by indexed
 // columns; cheap to compute, safe to cache. POST /v1/lookups (the on-demand

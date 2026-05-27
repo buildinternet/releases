@@ -112,6 +112,8 @@ import type {
   ProductTagsListResponseSchema,
   ProductTagsBodySchema,
   ProductTagsMutationResponseSchema,
+  ProductActivityResponseSchema,
+  ProductHeatmapResponseSchema,
 } from "./schemas/products.js";
 import type {
   ReleaseLatestSourceSchema,
@@ -333,6 +335,8 @@ export {
   ProductTagsListResponseSchema,
   ProductTagsBodySchema,
   ProductTagsMutationResponseSchema,
+  ProductActivityResponseSchema,
+  ProductHeatmapResponseSchema,
 } from "./schemas/products.js";
 export {
   LookupStatusSchema,
@@ -1000,6 +1004,8 @@ export type ProductDeleteResponse = z.infer<typeof ProductDeleteResponseSchema>;
 export type ProductTagsListResponse = z.infer<typeof ProductTagsListResponseSchema>;
 export type ProductTagsBody = z.infer<typeof ProductTagsBodySchema>;
 export type ProductTagsMutationResponse = z.infer<typeof ProductTagsMutationResponseSchema>;
+export type ProductActivityResponse = z.infer<typeof ProductActivityResponseSchema>;
+export type ProductHeatmapResponse = z.infer<typeof ProductHeatmapResponseSchema>;
 
 // ── Taxonomy (categories + tags) ──
 

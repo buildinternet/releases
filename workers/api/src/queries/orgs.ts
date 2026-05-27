@@ -341,6 +341,129 @@ export async function getOrgHeatmapData(
   return { rows, total };
 }
 
+/**
+ * Same shape as `getOrgActivityData` but scoped to a product's sources via
+ * `product_id`. The caller resolves the sourceIds list first and passes it in.
+ */
+export async function getProductActivityData(
+  db: D1Db,
+  productId: string,
+  sourceIds: string[],
+  from: string,
+  toExclusive: string,
+): Promise<{
+  bucketRows: OrgActivityBucketRow[];
+  statsRows: OrgSourceStatsRow[];
+  latestVersionRows: SourceVersionRow[];
+  earliestVersionRows: SourceVersionRow[];
+}> {
+  const [bucketRows, statsRows, latestVersionRows, earliestVersionRows] = await Promise.all([
+    db.all<OrgActivityBucketRow>(sql`
+      WITH bucketed AS (
+        SELECT
+          s.id AS source_id,
+          s.slug AS source_slug,
+          strftime('%Y-%m-%d', r.published_at, 'weekday 0', '-6 days') AS week_start,
+          COUNT(*) AS cnt,
+          MIN(CASE WHEN r.version IS NOT NULL AND (r.prerelease IS NULL OR r.prerelease = 0)
+                   THEN r.published_at || '|' || r.version END) AS earliest_tagged,
+          MAX(CASE WHEN r.version IS NOT NULL AND (r.prerelease IS NULL OR r.prerelease = 0)
+                   THEN r.published_at || '|' || r.version END) AS latest_tagged
+        FROM releases_visible r
+        INNER JOIN sources_active s ON s.id = r.source_id
+        WHERE
+          s.product_id = ${productId}
+          AND r.published_at IS NOT NULL
+          AND r.published_at >= ${from}
+          AND r.published_at < ${toExclusive}
+        GROUP BY s.id, week_start
+      )
+      SELECT source_id, week_start, cnt,
+        CASE WHEN earliest_tagged IS NOT NULL
+          THEN SUBSTR(earliest_tagged, INSTR(earliest_tagged, '|') + 1)
+          ELSE NULL END AS earliest_version,
+        CASE WHEN latest_tagged IS NOT NULL
+          THEN SUBSTR(latest_tagged, INSTR(latest_tagged, '|') + 1)
+          ELSE NULL END AS latest_version
+      FROM bucketed
+      ORDER BY source_slug, week_start
+    `),
+
+    db.all<OrgSourceStatsRow>(sql`
+      SELECT
+        s.id AS source_id,
+        COUNT(*) AS total,
+        MIN(r.published_at) AS oldest,
+        MAX(r.published_at) AS latest_date
+      FROM releases_visible r
+      INNER JOIN sources_active s ON s.id = r.source_id
+      WHERE
+        s.product_id = ${productId}
+        AND r.published_at IS NOT NULL
+        AND r.published_at >= ${from}
+        AND r.published_at < ${toExclusive}
+      GROUP BY s.id
+    `),
+
+    db.all<SourceVersionRow>(sql`
+      SELECT r.source_id, r.version
+      FROM releases_visible r
+      INNER JOIN (
+        SELECT source_id, MAX(published_at) AS max_date
+        FROM releases_visible
+        WHERE source_id IN ${sourceIds}
+          AND published_at IS NOT NULL
+          AND published_at >= ${from}
+          AND published_at < ${toExclusive}
+          AND (prerelease IS NULL OR prerelease = 0)
+        GROUP BY source_id
+      ) latest ON r.source_id = latest.source_id AND r.published_at = latest.max_date
+    `),
+
+    db.all<SourceVersionRow>(sql`
+      SELECT r.source_id, r.version
+      FROM releases_visible r
+      INNER JOIN (
+        SELECT source_id, MIN(published_at) AS min_date
+        FROM releases_visible
+        WHERE source_id IN ${sourceIds}
+          AND published_at IS NOT NULL
+          AND published_at >= ${from}
+          AND published_at < ${toExclusive}
+          AND (prerelease IS NULL OR prerelease = 0)
+        GROUP BY source_id
+      ) earliest ON r.source_id = earliest.source_id AND r.published_at = earliest.min_date
+    `),
+  ]);
+
+  return { bucketRows, statsRows, latestVersionRows, earliestVersionRows };
+}
+
+export async function getProductHeatmapData(
+  db: D1Db,
+  productId: string,
+  from: string,
+  toExclusive: string,
+): Promise<{ rows: OrgHeatmapRow[]; total: number }> {
+  const rows = await db.all<OrgHeatmapRow>(sql`
+    SELECT
+      DATE(r.published_at) AS date,
+      COUNT(*) AS cnt
+    FROM releases_visible r
+    INNER JOIN sources_active s ON s.id = r.source_id
+    WHERE
+      s.product_id = ${productId}
+      AND r.published_at IS NOT NULL
+      AND r.published_at >= ${from}
+      AND r.published_at < ${toExclusive}
+    GROUP BY DATE(r.published_at)
+    ORDER BY date
+  `);
+
+  const total = rows.reduce((sum, r) => sum + r.cnt, 0);
+  return { rows, total };
+}
+
 export type OrgReleaseRow = {
   id: string;
   version: string | null;

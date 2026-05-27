@@ -50,6 +50,11 @@ const ALLOWLIST = new Set<string>([
   "GET /orgs/:orgSlug/sources/:sourceSlug/activity",
   "GET /orgs/:orgSlug/sources/:sourceSlug/heatmap",
   "GET /orgs/:orgSlug/sources/:sourceSlug/changelog",
+  // Product activity/heatmap (same hide: hideInProduction pattern as org/source counterparts):
+  "GET /products/:slug/activity",
+  "GET /products/:slug/heatmap",
+  "GET /orgs/:orgSlug/products/:productSlug/activity",
+  "GET /orgs/:orgSlug/products/:productSlug/heatmap",
   // Admin/internal GET routes hidden from production spec (Phase 2 extension):
   "GET /orgs/:slug/catalog", // web-frontend aggregation payload, not shaped for general API consumers
   "GET /orgs/:slug/ignored-urls", // operator-facing ignore-list management

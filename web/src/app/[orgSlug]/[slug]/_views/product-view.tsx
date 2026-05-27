@@ -1,10 +1,14 @@
 import Link from "next/link";
+import { daysAgoIso } from "@buildinternet/releases-core/dates";
 import {
   api,
   type ProductDetail,
   type OrgReleasesFeedResponse,
   type OverviewPageItem,
+  type OrgActivity,
+  type OrgHeatmap,
 } from "@/lib/api";
+import { tryFetch } from "@/lib/ssr-fetch";
 import type { SourceType } from "@buildinternet/releases-core/source-enums";
 import { Header } from "@/components/header";
 import { Sidebar } from "@/components/sidebar";
@@ -12,6 +16,7 @@ import { CliCommand } from "@/components/cli-command";
 import { JsonLd } from "@/components/json-ld";
 import { OrgReleaseList } from "@/components/org-release-list";
 import { OverviewView } from "@/components/overview-view";
+import { ReleaseTimeline } from "@/components/release-timeline";
 import { taxonomySidebarSections } from "@/components/taxonomy-chips";
 import { buildReleaseItemListJsonLd } from "@/lib/schema-org";
 import { AppIcon } from "@/components/app-icon";
@@ -31,11 +36,21 @@ export async function ProductView({
 }) {
   const productSlug = product.slug;
   const adminEnabled = isLocalAdminEnabled();
+  const productRef = { orgSlug, productSlug };
+  const activityFrom = daysAgoIso(365 * 2).slice(0, 10);
 
-  // Initial feed rows (product-scoped) + overview, both best-effort; run in parallel.
-  const [releasesResult, overviewResult] = await Promise.allSettled([
+  // Initial feed rows (product-scoped), overview, activity, heatmap — all best-effort.
+  const [releasesResult, overviewResult, activityResult, heatmapResult] = await Promise.allSettled([
     api.orgReleases(orgSlug, { product: productSlug }),
     api.productOverview(product.id),
+    tryFetch(api.productActivity(productRef, activityFrom), {
+      route: `/${orgSlug}/${productSlug}`,
+      event: "product-activity-fetch-failed",
+    }),
+    tryFetch(api.productHeatmap(productRef), {
+      route: `/${orgSlug}/${productSlug}`,
+      event: "product-heatmap-fetch-failed",
+    }),
   ]);
   const initialReleases: OrgReleasesFeedResponse =
     releasesResult.status === "fulfilled"
@@ -43,6 +58,31 @@ export async function ProductView({
       : { releases: [], pagination: { nextCursor: null, limit: 20 } };
   const overview: OverviewPageItem | null =
     overviewResult.status === "fulfilled" ? overviewResult.value : null;
+
+  // Adapt ProductActivityResponse → OrgActivity for ReleaseTimeline reuse.
+  // The component only reads range, sources, and aggregateWeekly; the org/product
+  // identity field is not accessed by the component itself.
+  const rawActivity = activityResult.status === "fulfilled" ? activityResult.value.data : null;
+  const activity: OrgActivity | null = rawActivity
+    ? {
+        org: { slug: rawActivity.product.slug, name: rawActivity.product.name },
+        range: rawActivity.range,
+        sources: rawActivity.sources,
+        aggregateWeekly: rawActivity.aggregateWeekly,
+      }
+    : null;
+
+  const rawHeatmap = heatmapResult.status === "fulfilled" ? heatmapResult.value.data : null;
+  // OrgHeatmap and ProductHeatmapResponse share the same structural shape (range,
+  // dailyCounts, total) — the org/product identity key is not read by ReleaseHeatmap.
+  const heatmap: OrgHeatmap | null = rawHeatmap
+    ? {
+        org: { slug: rawHeatmap.product.slug, name: rawHeatmap.product.name },
+        range: rawHeatmap.range,
+        dailyCounts: rawHeatmap.dailyCounts,
+        total: rawHeatmap.total,
+      }
+    : null;
 
   const appEntries = product.sources
     .map((s) => {
@@ -139,9 +179,19 @@ export async function ProductView({
           </div>
         )}
 
+        {activity && (
+          <ReleaseTimeline
+            activity={activity}
+            heatmap={heatmap}
+            orgSlug={orgSlug}
+            sources={[]}
+            products={[]}
+            overview={overview ?? undefined}
+          />
+        )}
         <div className="flex flex-col md:flex-row gap-10 mt-6 pb-6">
           <div className="flex-1 min-w-0">
-            {overview && <OverviewView page={overview} />}
+            {!activity && overview && <OverviewView page={overview} />}
             <OrgReleaseList
               orgSlug={orgSlug}
               product={productSlug}
