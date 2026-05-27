@@ -1985,6 +1985,7 @@ export async function search(
     sourceSlug: string;
     sourceName: string;
     orgSlug: string | null;
+    productSlug: string | null;
   };
   type HybridSection = {
     mode: "hybrid";
@@ -2104,7 +2105,8 @@ export async function search(
                  r.title_generated as titleGenerated,
                  r.title_short as titleShort,
                  r.published_at as publishedAt,
-                 o.slug as orgSlug
+                 o.slug as orgSlug,
+                 p.slug as productSlug
           FROM releases_fts
           JOIN releases r ON r.rowid = releases_fts.rowid
           JOIN sources s ON s.id = r.source_id
@@ -2254,6 +2256,7 @@ export async function search(
             `- [release] **${r.title}**`,
             `  id: ${r.id}`,
             `  source: ${r.source.name} (${srcCoord}) | ${r.publishedAt ?? "N/A"}`,
+            r.productSlug && r.orgSlug ? `  product: ${r.orgSlug}/${r.productSlug}` : null,
             r.version ? `  version: ${r.version}` : null,
             `  ${r.summary}`,
           ]
@@ -2280,8 +2283,10 @@ export async function search(
     for (const r of releaseResult.rows) {
       const titleLine = formatReleaseTitle(r);
       const srcCoord = r.orgSlug ? `${r.orgSlug}/${r.sourceSlug}` : r.sourceSlug;
+      const productLine =
+        r.productSlug && r.orgSlug ? `\n  product: ${r.orgSlug}/${r.productSlug}` : "";
       lines.push(
-        `- [release] ${titleLine}\n  id: ${r.id}\n  source: ${r.sourceName} (${srcCoord}) | ${r.publishedAt ?? "N/A"}\n  ${r.summary}`,
+        `- [release] ${titleLine}\n  id: ${r.id}\n  source: ${r.sourceName} (${srcCoord}) | ${r.publishedAt ?? "N/A"}${productLine}\n  ${r.summary}`,
       );
     }
     sections.push(lines.join("\n"));
