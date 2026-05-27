@@ -17,8 +17,12 @@ export const MODEL = "claude-haiku-4-5";
  *  against the occasional page that inlines a huge nav tree or comment thread. */
 export const MAX_INPUT_CHARS = 60_000;
 
-/** Articles rarely exceed a few thousand tokens of clean body. */
-export const MAX_OUTPUT_TOKENS = 4000;
+/** Output ceiling for the verbatim article body. Most articles fit easily, but
+ *  long monthly changelog / patch-notes pages (e.g. Discord) can run tens of
+ *  thousands of characters; 8192 tokens (~32K chars) covers the common cases.
+ *  Anything still longer is handled by the truncation salvage in `extractArticle`
+ *  rather than being discarded. */
+export const MAX_OUTPUT_TOKENS = 8192;
 
 export interface ArticleExtractUsage {
   input: number;
@@ -74,11 +78,17 @@ export async function extractArticle(
     .map((b) => b.text)
     .join("");
 
-  let content = "";
-  try {
-    content = extractTagged(raw, "article").trim();
-  } catch {
-    content = "";
+  let content = extractTagged(raw, "article").trim();
+  // Salvage a truncated body: a long article can exhaust the output token cap
+  // before the model emits the closing </article>, so the strict pair-match
+  // above returns "" and would discard a full body of good content. When the
+  // opening tag is present but the closing one never arrived, keep the emitted
+  // prefix — a partial body still clears the enrichment improvement bar, where
+  // "" never could. An explicit empty <article></article> (the JS-shell / index
+  // signal) has its closing tag, so it stays empty and is not salvaged.
+  if (!content && !/<\/article>/i.test(raw)) {
+    const open = raw.match(/<article>([\s\S]*)/i);
+    if (open) content = open[1].trim();
   }
 
   return {
