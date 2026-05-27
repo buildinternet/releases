@@ -60,7 +60,7 @@ export async function ProductView({
     ...taxonomySidebarSections({ category: product.category, tags: product.tags }),
   ];
 
-  const productUrl = `https://releases.sh/${orgSlug}/product/${productSlug}`;
+  const productUrl = `https://releases.sh/${orgSlug}/${productSlug}`;
   const releaseListId = `${productUrl}#releases`;
   const jsonLd = {
     "@context": "https://schema.org",

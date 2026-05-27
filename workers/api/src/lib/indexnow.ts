@@ -109,7 +109,7 @@ export function buildUrls(baseUrl: string, source: IndexNowSource): string[] {
   const root = baseUrl.replace(/\/$/, "");
   const out = [`${root}/${source.orgSlug}`, `${root}/${source.orgSlug}/${source.slug}`];
   if (source.productSlug) {
-    out.push(`${root}/${source.orgSlug}/product/${source.productSlug}`);
+    out.push(`${root}/${source.orgSlug}/${source.productSlug}`);
   }
   return out;
 }

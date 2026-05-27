@@ -592,7 +592,7 @@ describe("orgToMarkdown", () => {
 
   it("adds canonical URL to Product tags when baseUrl provided", () => {
     const md = orgToMarkdown(fullOrg, { baseUrl: "https://releases.sh" });
-    expect(md).toContain('canonical="https://releases.sh/vercel/product/nextjs"');
+    expect(md).toContain('canonical="https://releases.sh/vercel/nextjs"');
   });
 
   it("omits Product canonical when baseUrl is missing", () => {

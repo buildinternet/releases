@@ -260,7 +260,7 @@ export function orgToMarkdown(org: FormatOrgDetail, opts: OrgMarkdownOptions = {
   // ── Products ──
   if (org.products.length > 0) {
     for (const product of org.products) {
-      const canonical = opts.baseUrl ? `${opts.baseUrl}/${org.slug}/product/${product.slug}` : null;
+      const canonical = opts.baseUrl ? `${opts.baseUrl}/${org.slug}/${product.slug}` : null;
       lines.push(
         `<Product${attr("name", product.name)}${attr("slug", product.slug)}${attr("sources", product.sourceCount)}${product.url ? attr("url", product.url) : ""}${attr("canonical", canonical)} />`,
       );
@@ -381,7 +381,7 @@ export function productToMarkdown(
   if (product.category) lines.push(yamlLine("category", product.category));
   lines.push(yamlLine("source_count", product.sources.length));
   if (opts.baseUrl) {
-    lines.push(yamlLine("canonical", `${opts.baseUrl}/${orgSlug}/product/${product.slug}`));
+    lines.push(yamlLine("canonical", `${opts.baseUrl}/${orgSlug}/${product.slug}`));
   }
   lines.push("---");
   lines.push("");
@@ -532,8 +532,8 @@ export function collectionToMarkdown(
         lines.push(`- [${member.name}](${url})${tail}`);
       } else {
         const url = opts.baseUrl
-          ? `${opts.baseUrl}/${member.org.slug}/product/${member.slug}`
-          : `/${member.org.slug}/product/${member.slug}`;
+          ? `${opts.baseUrl}/${member.org.slug}/${member.slug}`
+          : `/${member.org.slug}/${member.slug}`;
         lines.push(`- [${member.name}](${url}) (product · ${member.org.name})`);
       }
     }
@@ -647,8 +647,7 @@ export function searchToMarkdown(results: UnifiedSearchResponse, opts: FormatOpt
     lines.push("");
     for (const p of results.catalog) {
       const orgInfo = p.orgSlug ? ` (${p.orgName})` : "";
-      const viewSlug =
-        p.entryType === "source" && p.sourceSlug ? p.sourceSlug : `product/${p.slug}`;
+      const viewSlug = p.entryType === "source" && p.sourceSlug ? p.sourceSlug : p.slug;
       const url =
         opts.baseUrl && p.orgSlug ? ` — [view](${opts.baseUrl}/${p.orgSlug}/${viewSlug})` : "";
       lines.push(

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { TaxonomyOrg, TaxonomyProduct } from "@buildinternet/releases-api-types";
+import { productPath } from "@/lib/links";
 import { OrgAvatar } from "./org-avatar";
 
 interface TaxonomyListProps {
@@ -61,7 +62,7 @@ export function TaxonomyList({ orgs, products }: TaxonomyListProps) {
             {products.map((product) => (
               <Link
                 key={`${product.orgSlug}/${product.slug}`}
-                href={`/${product.orgSlug}/product/${product.slug}`}
+                href={productPath(product.orgSlug, product.slug)}
                 className="block p-3 rounded-lg border border-stone-200 dark:border-stone-800 hover:bg-stone-50 dark:hover:bg-stone-900 transition-colors"
               >
                 <div className="text-sm font-medium text-stone-900 dark:text-stone-100">

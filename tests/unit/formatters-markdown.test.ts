@@ -275,7 +275,7 @@ describe("searchToMarkdown", () => {
   it("includes view links when baseUrl is provided", () => {
     const md = searchToMarkdown(searchResults, { baseUrl: "https://releases.sh" });
     expect(md).toContain("[view](https://releases.sh/meta)");
-    expect(md).toContain("[view](https://releases.sh/meta/product/react)");
+    expect(md).toContain("[view](https://releases.sh/meta/react)");
     expect(md).toContain("[view](https://releases.sh/meta/react-native)");
   });
 
@@ -353,7 +353,7 @@ describe("productToMarkdown", () => {
     const md = productToMarkdown(fullProduct, "vercel", { baseUrl: "https://releases.sh" });
     expect(md).toContain("name: Next.js");
     expect(md).toContain("organization_slug: vercel");
-    expect(md).toContain("canonical: https://releases.sh/vercel/product/next-js");
+    expect(md).toContain("canonical: https://releases.sh/vercel/next-js");
     expect(md).toContain("# Next.js");
     expect(md).toContain("React framework for production");
     expect(md).toContain("- [Next.js](https://releases.sh/vercel/next-js) — `github`");
