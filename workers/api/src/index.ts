@@ -338,6 +338,7 @@ v1.use(
   varyOnAccept(),
 );
 v1.use("/orgs/:slug/activity", cacheControl(120, { staleWhileRevalidate: 60, isPublic: true }));
+v1.use("/orgs/:slug/heatmap", cacheControl(120, { staleWhileRevalidate: 60, isPublic: true }));
 v1.use(
   "/orgs/:slug/releases",
   cacheControl(60, { staleWhileRevalidate: 30, isPublic: true }),
@@ -369,6 +370,7 @@ v1.use(
   varyOnAccept(),
 );
 v1.use("/sources/:slug/activity", cacheControl(120, { staleWhileRevalidate: 60, isPublic: true }));
+v1.use("/sources/:slug/heatmap", cacheControl(120, { staleWhileRevalidate: 60, isPublic: true }));
 v1.use("/search", cacheControl(30, { staleWhileRevalidate: 30, isPublic: true }), varyOnAccept());
 v1.use("/related/*", cacheControl(300, { staleWhileRevalidate: 60, isPublic: true }));
 v1.use(
@@ -381,6 +383,7 @@ v1.use("/status/usage", cacheControl(30));
 v1.use("/products", cacheControl(60, { staleWhileRevalidate: 30, isPublic: true }));
 v1.use("/products/:slug", cacheControl(60, { staleWhileRevalidate: 30, isPublic: true }));
 v1.use("/products/:slug/activity", cacheControl(120, { staleWhileRevalidate: 60, isPublic: true }));
+v1.use("/products/:slug/heatmap", cacheControl(120, { staleWhileRevalidate: 60, isPublic: true }));
 v1.use(
   "/orgs/:orgSlug/products/:productSlug/activity",
   cacheControl(120, { staleWhileRevalidate: 60, isPublic: true }),
