@@ -9,33 +9,33 @@ import { getSource } from "../_lib/source-data";
 export async function generateMetadata({
   params,
 }: {
-  params: Promise<{ orgSlug: string; sourceSlug: string }>;
+  params: Promise<{ orgSlug: string; slug: string }>;
 }): Promise<Metadata> {
-  const { orgSlug, sourceSlug } = await params;
+  const { orgSlug, slug } = await params;
   try {
-    const source = await getSource(orgSlug, sourceSlug);
+    const source = await getSource(orgSlug, slug);
     const orgName = source.org?.name ?? orgSlug;
     return {
       title: `${source.name} Highlights — ${orgName}`,
       description: `Curated highlights and monthly summaries for ${source.name} by ${orgName}.`,
-      openGraph: { type: "website", url: `/${orgSlug}/${sourceSlug}/highlights` },
-      alternates: { canonical: `/${orgSlug}/${sourceSlug}/highlights` },
+      openGraph: { type: "website", url: `/${orgSlug}/${slug}/highlights` },
+      alternates: { canonical: `/${orgSlug}/${slug}/highlights` },
     };
   } catch {
-    return { title: sourceSlug };
+    return { title: slug };
   }
 }
 
 export default async function SourceHighlightsPage({
   params,
 }: {
-  params: Promise<{ orgSlug: string; sourceSlug: string }>;
+  params: Promise<{ orgSlug: string; slug: string }>;
 }) {
-  const { orgSlug, sourceSlug } = await params;
+  const { orgSlug, slug } = await params;
 
   let source;
   try {
-    source = await getSource(orgSlug, sourceSlug);
+    source = await getSource(orgSlug, slug);
   } catch (err) {
     if (err instanceof ApiSetupError) throw err;
     notFound();
@@ -44,7 +44,7 @@ export default async function SourceHighlightsPage({
   const hasContent = !!(source.summaries?.rolling || source.summaries?.monthly?.length);
   if (!hasContent) notFound();
 
-  const sourceUrl = `https://releases.sh/${orgSlug}/${sourceSlug}`;
+  const sourceUrl = `https://releases.sh/${orgSlug}/${slug}`;
   const pageUrl = `${sourceUrl}/highlights`;
   const jsonLd = {
     "@context": "https://schema.org",

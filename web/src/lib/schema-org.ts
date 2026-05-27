@@ -92,7 +92,7 @@ const SITE_URL = "https://releases.sh";
  * (e.g. /highlights or /changelog). The org breadcrumb is included only when
  * the source has a resolved org.
  *
- * Pure helper (no route coupling), shared by both the `[orgSlug]/[sourceSlug]`
+ * Pure helper (no route coupling), shared by both the `[orgSlug]/[slug]`
  * and ID-keyed `/sources/[id]` source surfaces.
  */
 export function sourceBreadcrumbItems(
