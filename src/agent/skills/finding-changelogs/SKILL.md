@@ -256,3 +256,5 @@ Organizations can have multiple distinct products (e.g., Vercel → Next.js, Tur
 Use product and org management operations to organize what you find. CLI: `releases admin product create`, `releases admin org tag add`, `releases categories`. Typed tools: `manage_product`, `manage_org` — each carries the valid category list in its description (also provided in your system prompt).
 
 Don't force product groupings when sources are ambiguous — leave them at the org level and note suggestions in the state file.
+
+When a company is multi-product (you found a multi-product `changelog.json`, or distinct product changelogs/repos), carry that grouping into onboarding by tagging each source with its `productName`/`productSlug` (see _Grouping sources into products_ in `managing-sources`). Index only the org's own products, not ecosystem/community plugins.

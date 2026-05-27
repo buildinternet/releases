@@ -16,6 +16,17 @@ export interface AgentDiscoveredSource {
   fetched?: boolean;
   releasesFetched?: number;
   contentDepth?: "full" | "summary-only";
+  /**
+   * Canonical product name this source belongs to (same naming rules as sources —
+   * no org prefix). Only set when the org ships 2+ genuinely distinct products.
+   * Leave unset to attach the source directly to the org (the default).
+   */
+  productName?: string;
+  /**
+   * Stable kebab-case product slug, per-org unique.
+   * Only set alongside productName when the org ships 2+ genuinely distinct products.
+   */
+  productSlug?: string;
 }
 
 export interface DiscoveryState {
