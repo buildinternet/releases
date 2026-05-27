@@ -9,6 +9,7 @@ import type { ReleaseItem } from "@/lib/api";
 import Image from "next/image";
 import { FallbackImage } from "./fallback-image";
 import { releaseThumbUrl, IMG_TRANSFORM_ON } from "@/lib/media";
+import { appStoreIconUrl, type AppRowInfo } from "@/lib/app-source";
 import { EXTERNAL_UGC_REL, isOptimizableImage } from "@/lib/sanitize";
 import { SourceTypeIcon } from "./source-type-icon";
 import { markdownComponents, collapsedMarkdownComponents } from "./markdown-components";
@@ -142,10 +143,12 @@ export function ReleaseListItem({
   release,
   hideDate,
   sourceByline,
+  appStore,
 }: {
   release: ReleaseItem;
   hideDate?: boolean;
   sourceByline?: { name: string; slug: string; orgSlug?: string; type?: string };
+  appStore?: AppRowInfo | null;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [isOverflowing, setIsOverflowing] = useState(false);
@@ -234,133 +237,254 @@ export function ReleaseListItem({
       <div className="absolute left-[100px] top-0 bottom-0 w-px bg-stone-200 dark:bg-stone-800" />
       {/* Content */}
       <div className="flex-1 min-w-0 border-b border-stone-200 dark:border-stone-800 last:border-b-0 py-4 pl-5">
-        <div className="flex items-baseline gap-1.5 mb-1">
-          <h2 id={titleId} className={headingClasses}>
-            {release.id ? (
-              <ViewTransition name={`rel-${release.id}`} default="none">
-                <Link
-                  href={`/release/${release.id}`}
-                  className="hover:underline underline-offset-2"
-                >
-                  {heading}
-                </Link>
-              </ViewTransition>
-            ) : (
-              heading
-            )}
-          </h2>
-          {release.url && (
-            <a
-              href={release.url}
-              target="_blank"
-              rel={EXTERNAL_UGC_REL}
-              aria-label="Open original source"
-              className="text-stone-400 dark:text-stone-500 hover:text-stone-700 dark:hover:text-stone-300 text-xs inline-flex items-center justify-center w-7 h-7 -my-2 -mx-1 rounded"
-            >
-              ↗
-            </a>
-          )}
-          <RollupBadge type={release.type} />
-          <ClusterChip count={release.coverageCount} />
-          {release.prerelease && (
-            <span
-              title="Pre-release (beta, rc, nightly, preview)"
-              className="text-[10px] uppercase tracking-wide text-stone-500 dark:text-stone-400 bg-stone-100 dark:bg-stone-800 rounded px-1.5 py-0.5 leading-none"
-            >
-              pre
-            </span>
-          )}
-        </div>
-        {subtitleText && (
-          <div className="text-sm text-stone-600 dark:text-stone-400 mb-1">{subtitleText}</div>
-        )}
-        <div
-          className={`group relative${isOverflowing ? " cursor-pointer" : ""}`}
-          onClick={() => isOverflowing && setExpanded(!expanded)}
-          {...(isOverflowing
-            ? {
-                role: "button",
-                tabIndex: 0,
-                "aria-expanded": expanded,
-                "aria-label": expanded ? "Collapse release notes" : "Expand release notes",
-                onKeyDown: (e: React.KeyboardEvent<HTMLDivElement>) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    setExpanded(!expanded);
-                  }
-                },
+        {appStore && (
+          <div
+            className="group relative cursor-pointer"
+            role="button"
+            tabIndex={0}
+            aria-expanded={expanded}
+            aria-label={expanded ? "Collapse release notes" : "Expand release notes"}
+            onClick={() => setExpanded(!expanded)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                setExpanded(!expanded);
               }
-            : {})}
-        >
-          {expanded ? (
-            <div className={markdownClasses}>
-              <ReactMarkdown
-                remarkPlugins={remarkPlugins}
-                rehypePlugins={[rehypeShikiPlugin]}
-                components={markdownComponents}
+            }}
+          >
+            <div className="flex items-center gap-3">
+              {appStore.iconUrl ? (
+                <FallbackImage
+                  src={appStoreIconUrl(appStore.iconUrl, 96)}
+                  alt=""
+                  width={36}
+                  height={36}
+                  className="rounded-[9px] border border-stone-200 dark:border-stone-800 shrink-0"
+                />
+              ) : (
+                <div className="w-9 h-9 rounded-[9px] bg-stone-200 dark:bg-stone-700 flex items-center justify-center text-stone-500 dark:text-stone-300 font-semibold shrink-0">
+                  {appStore.appName.charAt(0)}
+                </div>
+              )}
+              <div className="min-w-0 flex-1">
+                <div className="flex items-baseline gap-1.5">
+                  <h2 id={titleId} className={headingClasses}>
+                    {release.id ? (
+                      <Link
+                        href={`/release/${release.id}`}
+                        className="hover:underline underline-offset-2"
+                      >
+                        {appStore.appName}
+                        {release.version && (
+                          <span className="ml-1.5 font-normal text-stone-500 dark:text-stone-400">
+                            v{release.version}
+                          </span>
+                        )}
+                      </Link>
+                    ) : (
+                      <>
+                        {appStore.appName}
+                        {release.version && (
+                          <span className="ml-1.5 font-normal text-stone-500 dark:text-stone-400">
+                            v{release.version}
+                          </span>
+                        )}
+                      </>
+                    )}
+                  </h2>
+                  {release.url && (
+                    <a
+                      href={release.url}
+                      target="_blank"
+                      rel={EXTERNAL_UGC_REL}
+                      aria-label="Open original source"
+                      onClick={(e) => e.stopPropagation()}
+                      className="text-stone-400 dark:text-stone-500 hover:text-stone-700 dark:hover:text-stone-300 text-xs"
+                    >
+                      ↗
+                    </a>
+                  )}
+                </div>
+                <div className="text-[13px] text-stone-500 dark:text-stone-400">
+                  Available for {appStore.label}
+                </div>
+              </div>
+              <svg
+                className={`ml-auto shrink-0 h-4 w-4 text-stone-400 dark:text-stone-500 transition-transform ${
+                  expanded ? "rotate-180" : ""
+                }`}
+                viewBox="0 0 20 20"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                aria-hidden="true"
               >
-                {markdownContent}
-              </ReactMarkdown>
-              <MediaGallery
-                media={release.media}
-                content={markdownContent}
-                onPreview={(src, alt) => setPreview({ src, alt })}
-              />
+                <path d="M6 8l4 4 4-4" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
             </div>
-          ) : (
-            <>
-              <div className="flex gap-3">
-                <div
-                  ref={contentRef}
-                  className="relative max-h-[4.5em] overflow-hidden flex-1 min-w-0"
-                >
-                  <div
-                    className={`${markdownClasses} text-stone-500 dark:text-stone-400 [&_strong]:text-stone-500 dark:[&_strong]:text-stone-400`}
-                  >
+            {expanded && (
+              <div className="mt-2 pl-12">
+                {markdownContent.trim() ? (
+                  <div className={markdownClasses}>
                     <ReactMarkdown
                       remarkPlugins={remarkPlugins}
                       rehypePlugins={[rehypeShikiPlugin]}
-                      components={collapsedMarkdownComponents}
+                      components={markdownComponents}
                     >
                       {markdownContent}
                     </ReactMarkdown>
                   </div>
-                  {isOverflowing && (
-                    <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-6 bg-gradient-to-t from-stone-50 dark:from-stone-950 to-transparent" />
-                  )}
-                </div>
-                {thumbnail && (
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setPreview({
-                        src: thumbnail.r2Url ?? thumbnail.url,
-                        alt: thumbnail.alt || "",
-                      });
-                    }}
-                    className="shrink-0 cursor-zoom-in"
-                    aria-label="Preview image"
+                ) : (
+                  <p className="text-[13px] italic text-stone-400 dark:text-stone-500 m-0">
+                    No release notes provided.
+                  </p>
+                )}
+                {release.url && (
+                  <a
+                    href={release.url}
+                    target="_blank"
+                    rel={EXTERNAL_UGC_REL}
+                    onClick={(e) => e.stopPropagation()}
+                    className="inline-block mt-2 text-[12px] text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-300"
                   >
-                    <FallbackImage
-                      src={releaseThumbUrl(thumbnail.r2Url ?? thumbnail.url, 240)}
-                      alt={thumbnail.alt || ""}
-                      width={120}
-                      height={72}
-                      className="rounded-md object-cover w-[120px] h-[72px] border border-stone-200 dark:border-stone-800"
-                      unoptimized={IMG_TRANSFORM_ON || undefined}
-                    />
-                  </button>
+                    View on the App Store ↗
+                  </a>
                 )}
               </div>
-              {isOverflowing && (
-                <div className="text-xs text-stone-500 dark:text-stone-400 mt-1 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
-                  Show more
-                </div>
+            )}
+          </div>
+        )}
+        {!appStore && (
+          <>
+            <div className="flex items-baseline gap-1.5 mb-1">
+              <h2 id={titleId} className={headingClasses}>
+                {release.id ? (
+                  <ViewTransition name={`rel-${release.id}`} default="none">
+                    <Link
+                      href={`/release/${release.id}`}
+                      className="hover:underline underline-offset-2"
+                    >
+                      {heading}
+                    </Link>
+                  </ViewTransition>
+                ) : (
+                  heading
+                )}
+              </h2>
+              {release.url && (
+                <a
+                  href={release.url}
+                  target="_blank"
+                  rel={EXTERNAL_UGC_REL}
+                  aria-label="Open original source"
+                  className="text-stone-400 dark:text-stone-500 hover:text-stone-700 dark:hover:text-stone-300 text-xs inline-flex items-center justify-center w-7 h-7 -my-2 -mx-1 rounded"
+                >
+                  ↗
+                </a>
               )}
-            </>
-          )}
-        </div>
+              <RollupBadge type={release.type} />
+              <ClusterChip count={release.coverageCount} />
+              {release.prerelease && (
+                <span
+                  title="Pre-release (beta, rc, nightly, preview)"
+                  className="text-[10px] uppercase tracking-wide text-stone-500 dark:text-stone-400 bg-stone-100 dark:bg-stone-800 rounded px-1.5 py-0.5 leading-none"
+                >
+                  pre
+                </span>
+              )}
+            </div>
+            {subtitleText && (
+              <div className="text-sm text-stone-600 dark:text-stone-400 mb-1">{subtitleText}</div>
+            )}
+            <div
+              className={`group relative${isOverflowing ? " cursor-pointer" : ""}`}
+              onClick={() => isOverflowing && setExpanded(!expanded)}
+              {...(isOverflowing
+                ? {
+                    role: "button",
+                    tabIndex: 0,
+                    "aria-expanded": expanded,
+                    "aria-label": expanded ? "Collapse release notes" : "Expand release notes",
+                    onKeyDown: (e: React.KeyboardEvent<HTMLDivElement>) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        setExpanded(!expanded);
+                      }
+                    },
+                  }
+                : {})}
+            >
+              {expanded ? (
+                <div className={markdownClasses}>
+                  <ReactMarkdown
+                    remarkPlugins={remarkPlugins}
+                    rehypePlugins={[rehypeShikiPlugin]}
+                    components={markdownComponents}
+                  >
+                    {markdownContent}
+                  </ReactMarkdown>
+                  <MediaGallery
+                    media={release.media}
+                    content={markdownContent}
+                    onPreview={(src, alt) => setPreview({ src, alt })}
+                  />
+                </div>
+              ) : (
+                <>
+                  <div className="flex gap-3">
+                    <div
+                      ref={contentRef}
+                      className="relative max-h-[4.5em] overflow-hidden flex-1 min-w-0"
+                    >
+                      <div
+                        className={`${markdownClasses} text-stone-500 dark:text-stone-400 [&_strong]:text-stone-500 dark:[&_strong]:text-stone-400`}
+                      >
+                        <ReactMarkdown
+                          remarkPlugins={remarkPlugins}
+                          rehypePlugins={[rehypeShikiPlugin]}
+                          components={collapsedMarkdownComponents}
+                        >
+                          {markdownContent}
+                        </ReactMarkdown>
+                      </div>
+                      {isOverflowing && (
+                        <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-6 bg-gradient-to-t from-stone-50 dark:from-stone-950 to-transparent" />
+                      )}
+                    </div>
+                    {thumbnail && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setPreview({
+                            src: thumbnail.r2Url ?? thumbnail.url,
+                            alt: thumbnail.alt || "",
+                          });
+                        }}
+                        className="shrink-0 cursor-zoom-in"
+                        aria-label="Preview image"
+                      >
+                        <FallbackImage
+                          src={releaseThumbUrl(thumbnail.r2Url ?? thumbnail.url, 240)}
+                          alt={thumbnail.alt || ""}
+                          width={120}
+                          height={72}
+                          className="rounded-md object-cover w-[120px] h-[72px] border border-stone-200 dark:border-stone-800"
+                          unoptimized={IMG_TRANSFORM_ON || undefined}
+                        />
+                      </button>
+                    )}
+                  </div>
+                  {isOverflowing && (
+                    <div className="text-xs text-stone-500 dark:text-stone-400 mt-1 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+                      Show more
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </>
+        )}
       </div>
       {preview && <Lightbox src={preview.src} alt={preview.alt} onClose={() => setPreview(null)} />}
     </article>
