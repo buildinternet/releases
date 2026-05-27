@@ -1016,23 +1016,32 @@ async function embedProductSideEffect(
 
 // ── Product activity + heatmap ──
 
+function isValidCalendarDate(s: string): boolean {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+  if (!m) return false;
+  const y = Number(m[1]),
+    mo = Number(m[2]),
+    d = Number(m[3]);
+  const dt = new Date(Date.UTC(y, mo - 1, d));
+  return dt.getUTCFullYear() === y && dt.getUTCMonth() === mo - 1 && dt.getUTCDate() === d;
+}
+
 const getProductActivityHandler = async (c: import("hono").Context<Env>) => {
   const db = createDb(c.env.DB);
   const product = await resolveProductFromContext(c, db);
   if (!product) return c.json({ error: "not_found", message: "Product not found" }, 404);
 
   // Validate date params
-  const dateRe = /^\d{4}-\d{2}-\d{2}$/;
   const fromParam = c.req.query("from");
   const toParam = c.req.query("to");
 
-  if (fromParam && !dateRe.test(fromParam)) {
+  if (fromParam && !isValidCalendarDate(fromParam)) {
     return c.json(
       { error: "bad_request", message: "Invalid date format for 'from'. Use YYYY-MM-DD." },
       400,
     );
   }
-  if (toParam && !dateRe.test(toParam)) {
+  if (toParam && !isValidCalendarDate(toParam)) {
     return c.json(
       { error: "bad_request", message: "Invalid date format for 'to'. Use YYYY-MM-DD." },
       400,
@@ -1044,10 +1053,10 @@ const getProductActivityHandler = async (c: import("hono").Context<Env>) => {
 
   // Fetch all active sources for this product
   const productSources = await db
-    .select({ id: sources.id, slug: sources.slug, name: sources.name })
-    .from(sources)
-    .where(eq(sources.productId, product.id))
-    .orderBy(sources.name);
+    .select({ id: sourcesActive.id, slug: sourcesActive.slug, name: sourcesActive.name })
+    .from(sourcesActive)
+    .where(eq(sourcesActive.productId, product.id))
+    .orderBy(sourcesActive.name);
 
   if (productSources.length === 0) {
     const today = new Date().toISOString().slice(0, 10);
@@ -1092,7 +1101,7 @@ const getProductActivityHandler = async (c: import("hono").Context<Env>) => {
     statsRows,
     latestVersionRows: versionRows,
     earliestVersionRows,
-  } = await getProductActivityData(db, product.id, sourceIds, from, toExclusive);
+  } = await getProductActivityData(db, product.id, from, toExclusive);
 
   const latestVersionBySource = new Map<string, string | null>();
   for (const row of versionRows) {

@@ -348,7 +348,6 @@ export async function getOrgHeatmapData(
 export async function getProductActivityData(
   db: D1Db,
   productId: string,
-  sourceIds: string[],
   from: string,
   toExclusive: string,
 ): Promise<{
@@ -409,14 +408,15 @@ export async function getProductActivityData(
       SELECT r.source_id, r.version
       FROM releases_visible r
       INNER JOIN (
-        SELECT source_id, MAX(published_at) AS max_date
-        FROM releases_visible
-        WHERE source_id IN ${sourceIds}
-          AND published_at IS NOT NULL
-          AND published_at >= ${from}
-          AND published_at < ${toExclusive}
-          AND (prerelease IS NULL OR prerelease = 0)
-        GROUP BY source_id
+        SELECT r2.source_id, MAX(r2.published_at) AS max_date
+        FROM releases_visible r2
+        INNER JOIN sources_active s2 ON s2.id = r2.source_id
+        WHERE s2.product_id = ${productId}
+          AND r2.published_at IS NOT NULL
+          AND r2.published_at >= ${from}
+          AND r2.published_at < ${toExclusive}
+          AND (r2.prerelease IS NULL OR r2.prerelease = 0)
+        GROUP BY r2.source_id
       ) latest ON r.source_id = latest.source_id AND r.published_at = latest.max_date
     `),
 
@@ -424,14 +424,15 @@ export async function getProductActivityData(
       SELECT r.source_id, r.version
       FROM releases_visible r
       INNER JOIN (
-        SELECT source_id, MIN(published_at) AS min_date
-        FROM releases_visible
-        WHERE source_id IN ${sourceIds}
-          AND published_at IS NOT NULL
-          AND published_at >= ${from}
-          AND published_at < ${toExclusive}
-          AND (prerelease IS NULL OR prerelease = 0)
-        GROUP BY source_id
+        SELECT r2.source_id, MIN(r2.published_at) AS min_date
+        FROM releases_visible r2
+        INNER JOIN sources_active s2 ON s2.id = r2.source_id
+        WHERE s2.product_id = ${productId}
+          AND r2.published_at IS NOT NULL
+          AND r2.published_at >= ${from}
+          AND r2.published_at < ${toExclusive}
+          AND (r2.prerelease IS NULL OR r2.prerelease = 0)
+        GROUP BY r2.source_id
       ) earliest ON r.source_id = earliest.source_id AND r.published_at = earliest.min_date
     `),
   ]);
