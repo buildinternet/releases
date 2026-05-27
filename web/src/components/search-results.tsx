@@ -52,7 +52,7 @@ import { LookupRail } from "./lookup-rail";
 import { RollupBadge } from "./rollup-badge";
 import { Highlight, rehypeHighlightTokens, tokenizeQuery } from "./highlight";
 import { formatDate } from "@/lib/formatters";
-import { productPath, sourcePath } from "@/lib/links";
+import { productPath, sourcePath, sourceOrProductPath } from "@/lib/links";
 
 type SearchFilter = "all" | "orgs" | "products" | "collections" | "releases";
 
@@ -178,6 +178,7 @@ function ResultCard({
   sourceName,
   sourceSlug,
   orgSlug,
+  productSlug,
   orgName,
   sourceType,
   children,
@@ -193,6 +194,7 @@ function ResultCard({
   sourceName: string;
   sourceSlug: string;
   orgSlug: string | null;
+  productSlug?: string | null;
   orgName?: string | null;
   sourceType?: string;
   children: React.ReactNode;
@@ -230,7 +232,7 @@ function ResultCard({
         {sourceType && <SourceTypeIcon type={sourceType} size={12} />}
         {orgSlug ? (
           <Link
-            href={`/${orgSlug}/${sourceSlug}`}
+            href={sourceOrProductPath({ orgSlug, sourceSlug, productSlug })}
             className="text-stone-500 dark:text-stone-400 font-medium hover:text-stone-700 dark:hover:text-stone-300"
           >
             <Highlight text={sourceName} tokens={tokens} />
@@ -304,6 +306,7 @@ function ReleaseResultCard({ hit, tokens }: { hit: SearchReleaseHit; tokens: str
       sourceName={hit.sourceName}
       sourceSlug={hit.sourceSlug}
       orgSlug={hit.orgSlug}
+      productSlug={hit.productSlug ?? null}
       orgName={hit.orgName}
       sourceType={hit.sourceType}
       thumbnail={thumbnail}

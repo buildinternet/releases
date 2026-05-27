@@ -30,6 +30,8 @@ export interface RawSearchReleaseRow {
   sourceType: string;
   orgSlug: string | null;
   orgName: string | null;
+  /** Owning product's slug (for product-aware byline links); null for orphan sources. */
+  productSlug: string | null;
   version: string | null;
   title: string;
   summary: string;
@@ -154,7 +156,7 @@ export async function searchReleasesFts(
   const ftsQuery = toFtsMatchQuery(query);
   return db.all<RawSearchReleaseRow>(sql`
     SELECT r.id as id, s.slug as sourceSlug, s.name as sourceName, s.type as sourceType,
-           o.slug as orgSlug, o.name as orgName,
+           o.slug as orgSlug, o.name as orgName, p.slug as productSlug,
            r.version, r.title,
            COALESCE(r.summary, SUBSTR(r.content, 1, 150)) as summary,
            r.title_generated as titleGenerated,
@@ -207,7 +209,7 @@ export async function searchReleasesFromMatchedEntities(
 
   return db.all<RawSearchReleaseRow>(sql`
     SELECT r.id as id, s.slug as sourceSlug, s.name as sourceName, s.type as sourceType,
-           o.slug as orgSlug, o.name as orgName,
+           o.slug as orgSlug, o.name as orgName, p.slug as productSlug,
            r.version, r.title,
            COALESCE(r.summary, SUBSTR(r.content, 1, 150)) as summary,
            r.title_generated as titleGenerated,

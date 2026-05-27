@@ -75,7 +75,7 @@ function deriveClientKind(userAgent: string | null): string | null {
  * r2Url for each media item — so the web can render release hits with the
  * same markdown + thumbnail treatment used in org/source feeds.
  */
-function hydrateReleaseHit(
+export function hydrateReleaseHit(
   row: RawSearchReleaseRow,
   mediaOrigin: string,
   score?: number,
@@ -101,6 +101,7 @@ function hydrateReleaseHit(
     sourceType: row.sourceType,
     orgSlug: row.orgSlug,
     orgName: row.orgName,
+    productSlug: row.productSlug ?? null,
     version: row.version,
     title: row.title,
     summary: row.summary,
@@ -561,6 +562,7 @@ searchRoutes.get(
             sourceSlug: h.release.source.slug,
             sourceName: h.release.source.name,
             sourceType: h.release.source.type,
+            productSlug: h.release.productSlug,
             orgSlug: h.release.orgSlug,
             orgName: h.release.orgName,
             version: h.release.version,

@@ -68,6 +68,9 @@ export const SearchReleaseHitSchema = z.object({
   sourceType: z.string().optional(),
   orgSlug: z.string().nullable(),
   orgName: z.string().nullable().optional(),
+  /** Owning product slug — present when the source belongs to a product. Lets
+   *  the web byline link to the product page instead of the source. */
+  productSlug: z.string().nullable().optional(),
   version: z.string().nullable(),
   title: z.string(),
   summary: z.string(),
