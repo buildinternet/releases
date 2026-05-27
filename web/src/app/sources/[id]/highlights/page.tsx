@@ -1,51 +1,55 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { ApiSetupError } from "@/lib/api";
+import { ApiNotFoundError } from "@/lib/api";
 import { JsonLd } from "@/components/json-ld";
 import { HighlightsView } from "@/components/highlights-view";
 import { buildSourceEntityJsonLd, sourceBreadcrumbItems } from "@/lib/schema-org";
-import { getSource } from "../_lib/source-data";
+import { getSourceById } from "../_lib/source-by-id";
 
 export async function generateMetadata({
   params,
 }: {
-  params: Promise<{ orgSlug: string; sourceSlug: string }>;
+  params: Promise<{ id: string }>;
 }): Promise<Metadata> {
-  const { orgSlug, sourceSlug } = await params;
+  const { id } = await params;
   try {
-    const source = await getSource(orgSlug, sourceSlug);
-    const orgName = source.org?.name ?? orgSlug;
+    const source = await getSourceById(id);
+    const orgName = source.org?.name ?? id;
     return {
       title: `${source.name} Highlights — ${orgName}`,
       description: `Curated highlights and monthly summaries for ${source.name} by ${orgName}.`,
-      openGraph: { type: "website", url: `/${orgSlug}/${sourceSlug}/highlights` },
-      alternates: { canonical: `/${orgSlug}/${sourceSlug}/highlights` },
+      openGraph: { type: "website", url: `/sources/${id}/highlights` },
+      alternates: { canonical: `/sources/${id}/highlights` },
     };
   } catch {
-    return { title: sourceSlug };
+    return { title: id };
   }
 }
 
-export default async function SourceHighlightsPage({
+export default async function SourceByIdHighlightsPage({
   params,
 }: {
-  params: Promise<{ orgSlug: string; sourceSlug: string }>;
+  params: Promise<{ id: string }>;
 }) {
-  const { orgSlug, sourceSlug } = await params;
+  const { id } = await params;
 
   let source;
   try {
-    source = await getSource(orgSlug, sourceSlug);
+    source = await getSourceById(id);
   } catch (err) {
-    if (err instanceof ApiSetupError) throw err;
-    notFound();
+    if (err instanceof ApiNotFoundError) notFound();
+    throw err;
   }
 
   const hasContent = !!(source.summaries?.rolling || source.summaries?.monthly?.length);
   if (!hasContent) notFound();
 
-  const sourceUrl = `https://releases.sh/${orgSlug}/${sourceSlug}`;
-  const pageUrl = `${sourceUrl}/highlights`;
+  // TODO(#1190): after PR-2 cutover, member-source entity URL should be /sources/:id (bare /{org}/{slug} will resolve to the product)
+  const sourceUrl = source.org
+    ? `https://releases.sh/${source.org.slug}/${source.slug}`
+    : `https://releases.sh/sources/${id}`;
+  const pageUrl = `https://releases.sh/sources/${id}/highlights`;
+
   const jsonLd = {
     "@context": "https://schema.org",
     "@graph": [

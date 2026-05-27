@@ -5,8 +5,10 @@ import { usePathname } from "next/navigation";
 import { tabButtonClass } from "@/lib/styles";
 
 interface SourceTabsProps {
-  orgSlug: string;
-  sourceSlug: string;
+  /** Explicit base path (e.g. `/sources/src_…`). Takes precedence over orgSlug/sourceSlug when provided. */
+  base?: string;
+  orgSlug?: string;
+  sourceSlug?: string;
   hasHighlights: boolean;
   hasChangelog?: boolean;
 }
@@ -20,13 +22,14 @@ function resolveActiveTab(pathname: string, base: string): SourceTab {
 }
 
 export function SourceTabs({
+  base: baseProp,
   orgSlug,
   sourceSlug,
   hasHighlights,
   hasChangelog = false,
 }: SourceTabsProps) {
   const pathname = usePathname() ?? "";
-  const base = `/${orgSlug}/${sourceSlug}`;
+  const base = baseProp ?? `/${orgSlug}/${sourceSlug}`;
   const activeTab = resolveActiveTab(pathname, base);
 
   // TODO: revisit default tab once Highlights has a regular publishing rhythm —
