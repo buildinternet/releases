@@ -17,6 +17,7 @@ import {
 } from "@/lib/cadence";
 import { HoverCard } from "@/components/hover-card";
 import type { SourceListItem } from "@/lib/api";
+import { sourceOrProductPath } from "@/lib/links";
 
 export interface SourceCadenceData {
   releaseCount: number;
@@ -145,7 +146,11 @@ export function SourceCard({
   cadence?: SourceCadenceData;
   showProductBadge?: boolean;
 }) {
-  const href = orgSlug ? `/${orgSlug}/${source.slug}` : `/source/${source.slug}`;
+  const href = sourceOrProductPath({
+    orgSlug: orgSlug ?? null,
+    sourceSlug: source.slug,
+    productSlug: source.productSlug,
+  });
   const transitionName = `src-${orgSlug ?? "_"}-${source.slug}`;
   const cadenceInfo = cadence ? getCadenceInfo(cadence.avgReleasesPerWeek) : null;
   const color = cadence ? getProductColor(cadence.colorIndex) : undefined;

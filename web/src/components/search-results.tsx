@@ -52,6 +52,7 @@ import { LookupRail } from "./lookup-rail";
 import { RollupBadge } from "./rollup-badge";
 import { Highlight, rehypeHighlightTokens, tokenizeQuery } from "./highlight";
 import { formatDate } from "@/lib/formatters";
+import { productPath, sourcePath } from "@/lib/links";
 
 type SearchFilter = "all" | "orgs" | "products" | "collections" | "releases";
 
@@ -90,10 +91,6 @@ function interleaveRankedHits(
   return merged;
 }
 
-function sourceHref(orgSlug: string | null, sourceSlug: string): string {
-  return orgSlug ? `/${orgSlug}/${sourceSlug}` : `/source/${sourceSlug}`;
-}
-
 function releaseHref(hit: SearchReleaseHit): string {
   return `/release/${hit.id}`;
 }
@@ -102,7 +99,7 @@ function chunkDeepLink(hit: SearchChunkHit): string {
   // Heading-aware slicer on the server snaps the offset forward to the
   // nearest `##` heading, so this URL lands the user on the correct
   // section even if `offset` points mid-paragraph.
-  const base = sourceHref(hit.orgSlug, hit.sourceSlug);
+  const base = sourcePath(hit.orgSlug, hit.sourceSlug);
   return `${base}/changelog?offset=${hit.offset}#chunk`;
 }
 
@@ -481,12 +478,8 @@ export function SearchResults({
                 {results.catalog.map((p: SearchCatalogHit) => {
                   const href =
                     p.entryType === "source" && p.sourceSlug
-                      ? p.orgSlug
-                        ? `/${p.orgSlug}/${p.sourceSlug}`
-                        : `/source/${p.sourceSlug}`
-                      : p.orgSlug
-                        ? `/${p.orgSlug}/product/${p.slug}`
-                        : `/product/${p.slug}`;
+                      ? sourcePath(p.orgSlug, p.sourceSlug)
+                      : productPath(p.orgSlug, p.slug);
                   return (
                     <Link
                       key={p.slug}

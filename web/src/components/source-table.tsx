@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { SourceListItem, OrgDetail } from "@/lib/api";
+import { productPath, sourceOrProductPath } from "@/lib/links";
 import { formatRelativeDate } from "@/lib/formatters";
 import { Sparkline } from "@/components/sparkline";
 import { partitionSdkSources, sdkPreview } from "@/lib/sdk-grouping";
@@ -133,7 +134,11 @@ export function SourceTable({
         <td className={`${indent ? "pl-7 pr-3" : "px-3"} py-3 max-w-0`}>
           <div className="flex items-center gap-2 min-w-0">
             <Link
-              href={`/${orgSlug}/${source.slug}`}
+              href={sourceOrProductPath({
+                orgSlug,
+                sourceSlug: source.slug,
+                productSlug: source.productSlug,
+              })}
               className="text-stone-800 dark:text-stone-200 font-medium hover:text-stone-900 dark:hover:text-stone-100 truncate min-w-0"
             >
               {source.name}
@@ -154,7 +159,16 @@ export function SourceTable({
         </td>
         {hasProducts && (
           <td className="px-3 py-3 text-stone-500 dark:text-stone-400 text-[13px] hidden sm:table-cell whitespace-nowrap">
-            {source.productSlug ? (productMap.get(source.productSlug) ?? "—") : "—"}
+            {source.productSlug ? (
+              <Link
+                href={productPath(orgSlug, source.productSlug)}
+                className="hover:text-stone-700 dark:hover:text-stone-300"
+              >
+                {productMap.get(source.productSlug) ?? source.productSlug}
+              </Link>
+            ) : (
+              "—"
+            )}
           </td>
         )}
         <td className="px-3 py-3 text-right font-mono tabular-nums text-stone-700 dark:text-stone-300 whitespace-nowrap">

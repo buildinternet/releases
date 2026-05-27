@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { OrgDetail } from "@/lib/api";
+import { productPath } from "@/lib/links";
 
 /**
  * Hub product cards on the org Overview page. Renders only when the org has
@@ -24,7 +25,7 @@ export function ProductGrid({
         {products.map((p) => (
           <Link
             key={p.slug}
-            href={`/${orgSlug}/product/${p.slug}`}
+            href={productPath(orgSlug, p.slug)}
             className="flex items-center justify-between rounded-lg border border-stone-200 dark:border-stone-800 hover:border-stone-300 dark:hover:border-stone-700 bg-white dark:bg-stone-900 px-3 py-2.5 transition-colors"
           >
             <span className="text-sm font-medium text-stone-800 dark:text-stone-200 truncate">
