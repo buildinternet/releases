@@ -158,6 +158,7 @@ sitemapRoutes.get(
         ? []
         : [
             {
+              id: s.id,
               orgSlug: orgIdToSlug.get(s.orgId)!,
               slug: s.slug,
               latestDate: latestBySource.get(s.id) ?? null,

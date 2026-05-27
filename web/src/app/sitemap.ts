@@ -4,6 +4,7 @@ import { CATEGORIES } from "@buildinternet/releases-core/categories";
 import { adminDocs, statusDashboard } from "@/flags";
 import { getStaticBaseUrl } from "@/lib/base-url";
 import { docsManifest } from "@/lib/docs-manifest";
+import { buildEntitySitemapEntries } from "@/lib/sitemap-entries";
 
 // Render on-demand (not during `next build`) so a cold worker / slow D1 can't
 // time out the Vercel export. The API response already carries Cache-Control,
@@ -87,41 +88,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       ];
     });
 
-    const productEntries: MetadataRoute.Sitemap = data.products.map((p) => ({
-      url: `${BASE_URL}/${p.orgSlug}/product/${p.slug}`,
-      lastModified: now,
-      changeFrequency: "daily",
-      priority: 0.7,
-    }));
-
-    const sourceEntries: MetadataRoute.Sitemap = data.sources.flatMap((s) => {
-      const lastModified = s.latestDate ? new Date(s.latestDate) : now;
-      const entries: MetadataRoute.Sitemap = [
-        {
-          url: `${BASE_URL}/${s.orgSlug}/${s.slug}`,
-          lastModified,
-          changeFrequency: "daily" as const,
-          priority: 0.7,
-        },
-      ];
-      if (s.hasHighlights) {
-        entries.push({
-          url: `${BASE_URL}/${s.orgSlug}/${s.slug}/highlights`,
-          lastModified,
-          changeFrequency: "weekly" as const,
-          priority: 0.6,
-        });
-      }
-      if (s.hasChangelog) {
-        entries.push({
-          url: `${BASE_URL}/${s.orgSlug}/${s.slug}/changelog`,
-          lastModified,
-          changeFrequency: "weekly" as const,
-          priority: 0.6,
-        });
-      }
-      return entries;
-    });
+    // Products + sources (incl. #1190 shadow routing) come from the pure helper.
+    const entityEntries = buildEntitySitemapEntries(data, BASE_URL);
 
     const collectionEntries: MetadataRoute.Sitemap = (data.collections ?? []).map((co) => ({
       url: `${BASE_URL}/collections/${co.slug}`,
@@ -137,13 +105,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.5,
     }));
 
-    dynamicEntries = [
-      ...orgEntries,
-      ...productEntries,
-      ...sourceEntries,
-      ...collectionEntries,
-      ...categoryEntries,
-    ];
+    dynamicEntries = [...orgEntries, ...entityEntries, ...collectionEntries, ...categoryEntries];
   } catch (err) {
     if (!(err instanceof ApiSetupError)) throw err;
   }
