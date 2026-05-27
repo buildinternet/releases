@@ -1843,15 +1843,23 @@ sourceRoutes.post(
 // Registered at both `/sources/:slug` (id-or-slug, id preferred) and
 // `/orgs/:orgSlug/sources/:sourceSlug` (org-scoped, both segments id-or-slug).
 // `resolveSourceFromContext` picks the right resolver from the matched params.
-const getSourceDetailHandler = async (c: import("hono").Context<Env>) => {
-  const cursorParam = c.req.query("cursor") ?? null;
-  const limit = parseLimitParam(c.req.query("limit"), 20, 100);
-  const includeCoverage = parseBoolParam(c.req.query("include_coverage"));
-  const includePrereleases = parseBoolParam(c.req.query("include_prereleases"));
-  const db = createDb(c.env.DB);
+export interface SourceDetailOpts {
+  cursor: string | null;
+  limit: number;
+  includeCoverage: boolean;
+  includePrereleases: boolean;
+  /** Raw D1 binding — required by `getSourceReleasesFeed` which takes a D1Database, not a drizzle instance. */
+  d1: D1Database;
+  /** Value of the MEDIA_ORIGIN env binding (pass `""` when absent). */
+  mediaOrigin: string;
+}
 
-  const src = await resolveSourceFromContext(c, db);
-  if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
+export async function buildSourceDetailPayload(
+  db: ReturnType<typeof createDb>,
+  src: typeof sources.$inferSelect,
+  opts: SourceDetailOpts,
+) {
+  const { cursor: cursorParam, limit, includeCoverage, includePrereleases, d1, mediaOrigin } = opts;
 
   const cursor = parseFeedCursor(cursorParam);
   const isFirstPage = cursorParam === null;
@@ -1914,7 +1922,7 @@ const getSourceDetailHandler = async (c: import("hono").Context<Env>) => {
     changelogExistsRows,
     latestByDateRows,
   ] = await Promise.all([
-    getSourceReleasesFeed(c.env.DB, src.id, cursor, limit + 1, {
+    getSourceReleasesFeed(d1, src.id, cursor, limit + 1, {
       includeCoverage,
       includePrereleases,
     }),
@@ -1963,7 +1971,6 @@ const getSourceDetailHandler = async (c: import("hono").Context<Env>) => {
   const nextCursor =
     hasMore && pageRows.length > 0 ? buildFeedCursor(pageRows[pageRows.length - 1]!) : null;
 
-  const mediaOrigin = c.env.MEDIA_ORIGIN ?? "";
   const releasesFormatted = pageRows.map((r) => ({
     id: r.id,
     version: r.version,
@@ -2021,7 +2028,7 @@ const getSourceDetailHandler = async (c: import("hono").Context<Env>) => {
 
   const parsedMeta = JSON.parse(src.metadata || "{}");
 
-  const result = {
+  return {
     id: src.id,
     slug: src.slug,
     name: src.name,
@@ -2066,12 +2073,29 @@ const getSourceDetailHandler = async (c: import("hono").Context<Env>) => {
       })),
     },
   };
+}
+
+const getSourceDetailHandler = async (c: import("hono").Context<Env>) => {
+  const opts: SourceDetailOpts = {
+    cursor: c.req.query("cursor") ?? null,
+    limit: parseLimitParam(c.req.query("limit"), 20, 100),
+    includeCoverage: parseBoolParam(c.req.query("include_coverage")),
+    includePrereleases: parseBoolParam(c.req.query("include_prereleases")),
+    d1: c.env.DB,
+    mediaOrigin: c.env.MEDIA_ORIGIN ?? "",
+  };
+  const db = createDb(c.env.DB);
+
+  const src = await resolveSourceFromContext(c, db);
+  if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
+
+  const payload = await buildSourceDetailPayload(db, src, opts);
 
   if (wantsMarkdown(c)) {
-    return markdownResponse(c, sourceToMarkdown(result as any));
+    return markdownResponse(c, sourceToMarkdown(payload as any));
   }
 
-  return c.json(result);
+  return c.json(payload);
 };
 const getSourceDetailRoute = describeRoute({
   tags: ["Sources"],
