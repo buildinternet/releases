@@ -1,5 +1,39 @@
 import type { Sandbox } from "@cloudflare/sandbox";
 
+/**
+ * A single discovered source as emitted by the discovery agent in its
+ * `releases_report_state` output (the JSON state-file contract).
+ *
+ * Matches `AgentDiscoveredSource` in `src/agent/discovery.ts` — additive
+ * optional fields are backward-compatible; both files must stay in sync.
+ */
+export interface AgentDiscoveredSource {
+  url: string;
+  type: "github" | "scrape" | "feed";
+  slug: string;
+  label: string;
+  confidence: "high" | "medium" | "low";
+  validated: boolean;
+  validationError?: string;
+  releaseCount?: number;
+  duplicateOf?: string;
+  approved?: boolean;
+  fetched?: boolean;
+  releasesFetched?: number;
+  contentDepth?: "full" | "summary-only";
+  /**
+   * Canonical product name this source belongs to (same naming rules as sources —
+   * no org prefix). Only set when the org ships 2+ genuinely distinct products.
+   * Leave unset to attach the source directly to the org (the default).
+   */
+  productName?: string;
+  /**
+   * Stable kebab-case product slug, per-org unique.
+   * Only set alongside productName when the org ships 2+ genuinely distinct products.
+   */
+  productSlug?: string;
+}
+
 export interface OnboardRequest {
   company: string;
   domain?: string;

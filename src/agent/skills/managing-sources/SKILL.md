@@ -66,6 +66,20 @@ Rules, in priority order:
 
 When in doubt: would a developer reading this name on its own (with the org already shown above) recognize what it is? If yes, strip. If no, keep the prefix.
 
+### Grouping sources into products
+
+**Grouping sources into products.** Most companies are single-product — leave `productSlug`/`productName` unset and sources attach directly to the org (the default).
+
+Only when a company ships **2 or more genuinely distinct products** — each with its own identity and release cadence (Vercel → Next.js, Turborepo, SWR; Datadog → APM, RUM, Browser SDK) — tag each discovered source with the product it belongs to: `productName` (canonical name, same naming rules as sources — no org prefix) and `productSlug` (stable kebab-case, per-org unique).
+
+A product is a distinct offering, **not**:
+
+- the company/engineering blog, newsroom, or all-in-one changelog → leave org-direct (untagged)
+- the docs site or marketing feed → org-direct
+- every individual GitHub repo by default — only repos that are themselves a recognized product
+
+If you can't name 2+ distinct products with confidence, tag nothing. Spurious products are worse than none.
+
 ### Organization descriptions
 
 When creating an org, include a brief one-sentence product description. This grounds AI summaries for lesser-known products, and it's also the primary signal for the entity vector index — the `search` tool's catalog path matches on description + category, not just name. A good description noticeably improves recall.
