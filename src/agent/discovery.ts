@@ -70,16 +70,5 @@ export function buildDiscoveryPrompt(
   if (options.domain) hints.push(`Their website is ${options.domain}.`);
   if (options.githubOrg) hints.push(`Their GitHub organization is ${options.githubOrg}.`);
   const hintStr = hints.length > 0 ? " " + hints.join(" ") : "";
-  return `Find and evaluate changelog sources for "${options.company}".${hintStr} Check what we already have, discover new sources, validate them with dry-run fetches, then do a real fetch (--max 50) for each validated source to seed initial releases. For feed sources, note in the state file whether content appears sparse (short summaries) so crawl mode can be enabled after fetching.
-
-Grouping sources into products. Most companies are single-product — leave \`productSlug\`/\`productName\` unset and sources attach directly to the org (the default).
-
-Only when a company ships 2 or more genuinely distinct products — each with its own identity and release cadence (Vercel → Next.js, Turborepo, SWR; Datadog → APM, RUM, Browser SDK) — tag each discovered source with the product it belongs to: \`productName\` (canonical name, same naming rules as sources — no org prefix) and \`productSlug\` (stable kebab-case, per-org unique).
-
-A product is a distinct offering, not:
-- the company/engineering blog, newsroom, or all-in-one changelog → leave org-direct (untagged)
-- the docs site or marketing feed → org-direct
-- every individual GitHub repo by default — only repos that are themselves a recognized product
-
-If you can't name 2+ distinct products with confidence, tag nothing. Spurious products are worse than none.`;
+  return `Find and evaluate changelog sources for "${options.company}".${hintStr} Check what we already have, discover new sources, validate them with dry-run fetches, then do a real fetch (--max 50) for each validated source to seed initial releases. For feed sources, note in the state file whether content appears sparse (short summaries) so crawl mode can be enabled after fetching.`;
 }

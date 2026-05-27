@@ -12,7 +12,7 @@ The product layer turns on at **2+ products per org**, but products are hand-cur
 - **Signal = the discovery agent groups.** It already enumerates a company's sources and has the web context to know "Vercel → Next.js, Turborepo, SWR." It tags each discovered source with the product it belongs to. (Rejected: one-product-per-source same-slug wrapping — creates ~239 trivial products, cuts against the #1190 lean precedent. Rejected: deterministic repo/domain heuristic — can't tell "blog + docs + flagship repo = one product" from three products.)
 - **Onboarding only.** No backfill of the 62 existing productless orgs. Validate on new data first.
 - **Provenance deferred.** `products` has no `discovery` column (only name/slug/orgId/kind). Marking auto-products `discovery='agent'` would need a schema edit + paired migration (CI gate). Out of scope; add when backfill/curation tooling lands.
-- **Grouping discipline lives in the skills, not just the prompt.** The discovery _workers_ load skills, so the guidance must be in `managing-sources` + `finding-changelogs` (which exist in **both** the monorepo and the CLI), reinforced by the `discovery.ts` prompt.
+- **Grouping discipline lives in the skills, NOT the discovery prompt.** The discovery _workers_ load skills, so the guidance belongs in `managing-sources` + `finding-changelogs` (which exist in **both** the monorepo and the CLI). `buildDiscoveryPrompt` in `discovery.ts` stays high-level / orchestration-only — it isn't the place for operational detail at this level.
 
 ## Representation — per-source product tag
 
@@ -35,7 +35,7 @@ The discovery output is a **JSON state-file contract** — `AgentDiscoveredSourc
 ### Monorepo PR (`buildinternet/releases`)
 
 1. **Discovery types** — add `productName?`/`productSlug?` to `AgentDiscoveredSource` in `src/agent/discovery.ts` and thread through `workers/discovery/src/types.ts` (and `managed-discovery.ts` if it reshapes the output).
-2. **Discovery prompt** (`src/agent/discovery.ts`) — add the _Grouping sources into products_ block (verbatim below) near where org/source structure is instructed. Auto-deploys to the managed discovery agent on merge.
+2. **Discovery prompt** (`src/agent/discovery.ts`) — **unchanged.** Do NOT add grouping guidance to `buildDiscoveryPrompt`; the prompt stays high-level / orchestration-only. The grouping rules live in the skills (below), which the discovery worker loads.
 3. **Skills** (`src/agent/skills/`) — add the grouping guidance to `managing-sources/SKILL.md` (operational) and `finding-changelogs/SKILL.md` (discovery-side). Auto-deploy on merge.
 
 ### CLI PR (`buildinternet/releases-cli`, separate, + changeset)
@@ -46,7 +46,9 @@ The discovery output is a **JSON state-file contract** — `AgentDiscoveredSourc
 
 ## Exact wording
 
-### Discovery prompt + `managing-sources` (new subsection "### Grouping sources into products")
+### `managing-sources` (new subsection "### Grouping sources into products")
+
+> _(This is the canonical home for the grouping guidance — it is NOT added to the discovery prompt.)_
 
 > **Grouping sources into products.** Most companies are single-product — leave `productSlug`/`productName` unset and sources attach directly to the org (the default).
 >
