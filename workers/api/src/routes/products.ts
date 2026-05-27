@@ -353,14 +353,10 @@ async function migrateOrgToProduct(
   return { sourcesMoved: movedSources.length, accountsMoved: accountsToMove.length };
 }
 
-// Get product by id (preferred) or slug. Registered at both the bare
-// `/products/:identifier` path and the org-scoped `/orgs/:orgSlug/products/:productSlug`.
-const getProductDetailHandler = async (c: import("hono").Context<Env>) => {
-  const db = createDb(c.env.DB);
-
-  const product = await resolveProductFromContext(c, db);
-  if (!product) return c.json({ error: "not_found", message: "Product not found" }, 404);
-
+export async function buildProductDetailPayload(
+  db: ReturnType<typeof createDb>,
+  product: typeof products.$inferSelect,
+) {
   const [productSources, tagRows, aliasRows] = await Promise.all([
     db
       .select({
@@ -388,12 +384,21 @@ const getProductDetailHandler = async (c: import("hono").Context<Env>) => {
       .orderBy(domainAliases.domain),
   ]);
 
-  return c.json({
+  return {
     ...product,
     sources: productSources,
     tags: tagRows.map((t) => t.name),
     aliases: aliasRows.map((a) => a.domain),
-  });
+  };
+}
+
+// Get product by id (preferred) or slug. Registered at both the bare
+// `/products/:identifier` path and the org-scoped `/orgs/:orgSlug/products/:productSlug`.
+const getProductDetailHandler = async (c: import("hono").Context<Env>) => {
+  const db = createDb(c.env.DB);
+  const product = await resolveProductFromContext(c, db);
+  if (!product) return c.json({ error: "not_found", message: "Product not found" }, 404);
+  return c.json(await buildProductDetailPayload(db, product));
 };
 const getProductDetailRoute = describeRoute({
   tags: ["Products"],
