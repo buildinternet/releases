@@ -27,6 +27,13 @@ export const ProductRowSchema = z.object({
   deletedAt: z.string().nullable(),
 });
 
+/** 201 body of POST /v1/products — ProductRow plus an optional non-blocking
+ *  warning emitted when the new slug shadows an existing same-org source (#1190). */
+export const ProductCreateResponseSchema = ProductRowSchema.extend({
+  warning: z.string().optional(),
+});
+export type ProductCreateResponse = z.infer<typeof ProductCreateResponseSchema>;
+
 /**
  * Per-product row returned by `GET /v1/products`. Adds `sourceCount` to
  * the row shape but omits the internal `embeddedAt` / `deletedAt` columns

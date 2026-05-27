@@ -23,6 +23,7 @@ import {
   ProductListResponseSchema,
   ProductDetailSchema,
   ProductRowSchema,
+  ProductCreateResponseSchema,
   CreateProductBodySchema,
   UpdateProductBodySchema,
   AdoptProductBodySchema,
@@ -53,6 +54,19 @@ import { buildListResponse, parseListPagination } from "../lib/pagination.js";
 import { IN_ARRAY_CHUNK_SIZE } from "../lib/d1-limits.js";
 
 export const productRoutes = new Hono<Env>();
+
+async function detectSourceSlugShadow(
+  db: ReturnType<typeof createDb>,
+  orgId: string,
+  slug: string,
+): Promise<boolean> {
+  const [row] = await db
+    .select({ id: sources.id })
+    .from(sources)
+    .where(and(eq(sources.orgId, orgId), eq(sources.slug, slug)))
+    .limit(1);
+  return Boolean(row);
+}
 
 // List products, optionally filtered by orgId and/or kind
 productRoutes.get(
@@ -444,7 +458,7 @@ productRoutes.post(
     responses: {
       201: {
         description: "Product created",
-        content: { "application/json": { schema: resolver(ProductRowSchema) } },
+        content: { "application/json": { schema: resolver(ProductCreateResponseSchema) } },
       },
       400: {
         description: "Missing required fields or invalid category",
@@ -512,6 +526,16 @@ productRoutes.post(
       );
     }
 
+    const shadowed = await detectSourceSlugShadow(db, org.id, slug);
+    if (shadowed) {
+      logEvent("warn", {
+        component: "products",
+        event: "slug-shadows-source",
+        orgId: org.id,
+        slug,
+      });
+    }
+
     try {
       const [created] = await db
         .insert(products)
@@ -536,7 +560,15 @@ productRoutes.post(
       }
 
       c.executionCtx.waitUntil(embedProductSideEffect(c.env, db, created.id));
-      return c.json(created, 201);
+      return c.json(
+        shadowed
+          ? {
+              ...created,
+              warning: `Product slug "${slug}" shadows an existing source in this org; the product will win the bare URL.`,
+            }
+          : created,
+        201,
+      );
     } catch (err) {
       if (isConflictError(err)) {
         return c.json(

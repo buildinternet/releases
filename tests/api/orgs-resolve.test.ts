@@ -2,7 +2,7 @@ import { beforeEach, afterEach, describe, it, expect } from "bun:test";
 import { organizations, products, sources } from "@buildinternet/releases-core/schema";
 import { productRoutes } from "../../workers/api/src/routes/products.js";
 import { createTestDb, type TestDatabase } from "../db-helper.js";
-import { makeCaller } from "./route-test-helpers.js";
+import { makeCaller, makeJsonCaller } from "./route-test-helpers.js";
 
 let testDb: TestDatabase;
 beforeEach(() => {
@@ -13,6 +13,7 @@ afterEach(() => {
 });
 const makeEnv = () => ({ DB: testDb.db as unknown as never });
 const call = makeCaller(productRoutes, makeEnv);
+const callJson = makeJsonCaller(productRoutes, makeEnv);
 
 async function seed() {
   await testDb.db.insert(organizations).values({
@@ -78,5 +79,51 @@ describe("GET /v1/orgs/:org/resolve/:slug", () => {
     await seed();
     const res = await call("/orgs/ghost/resolve/turborepo");
     expect(res.status).toBe(404);
+  });
+});
+
+describe("POST /v1/products shadow guard", () => {
+  it("warns but still creates when the new product slug shadows an existing source", async () => {
+    await testDb.db.insert(organizations).values({
+      id: "org_acme",
+      name: "Acme",
+      slug: "acme",
+      discovery: "curated",
+    });
+    await testDb.db.insert(sources).values({
+      id: "src_cli",
+      name: "Acme CLI",
+      slug: "acme-cli",
+      orgId: "org_acme",
+      type: "github",
+      url: "https://github.com/acme/cli",
+      metadata: "{}",
+    });
+    const res = await callJson("/products", "POST", {
+      name: "Acme CLI",
+      slug: "acme-cli",
+      orgSlug: "acme",
+    });
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body.slug).toBe("acme-cli");
+    expect(body.warning).toContain("shadow");
+  });
+
+  it("omits the warning when there is no shadowed source", async () => {
+    await testDb.db.insert(organizations).values({
+      id: "org_beta",
+      name: "Beta",
+      slug: "beta",
+      discovery: "curated",
+    });
+    const res = await callJson("/products", "POST", {
+      name: "Beta SDK",
+      slug: "beta-sdk",
+      orgSlug: "beta",
+    });
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body.warning).toBeUndefined();
   });
 });
