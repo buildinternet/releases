@@ -288,6 +288,14 @@ const NESTED_RESERVED = [
   // Source sub-tabs at `/{org}/{src}/{slug}` — added in #875.
   "highlights",
   "changelog",
+  // Static second-segment routes that bare `/{org}/{slug}` = product introduces
+  // (#1190). `product` is the redirect prefix; `playbook`/`fetch-log` are org
+  // tabs; `products` is defensive. A product/source slug matching any would be
+  // shadowed by the static route.
+  "product",
+  "products",
+  "playbook",
+  "fetch-log",
 ] as const;
 
 export const RESERVED_ROOT_SLUGS: ReadonlySet<string> = new Set(ROOT_RESERVED);
