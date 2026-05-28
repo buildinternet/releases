@@ -482,6 +482,8 @@ export type OrgReleaseRow = {
   source_name: string;
   source_type: string;
   source_metadata: string | null;
+  product_slug: string | null;
+  product_name: string | null;
   type: ReleaseType;
   coverage_count: number;
   content_chars: number | null;
@@ -574,6 +576,7 @@ export async function getOrgReleasesFeed(
            r.content_chars, r.content_tokens,
            s.slug AS source_slug, s.name AS source_name, s.type AS source_type,
            s.metadata AS source_metadata,
+           p.slug AS product_slug, p.name AS product_name,
            ${COVERAGE_COUNT_EXPR} AS coverage_count
     FROM ${releasesTable} r
     INNER JOIN sources_active s ON s.id = r.source_id

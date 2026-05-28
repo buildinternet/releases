@@ -117,6 +117,7 @@ import type {
 } from "./schemas/products.js";
 import type {
   ReleaseLatestSourceSchema,
+  ReleaseLatestProductSchema,
   ReleaseLatestItemSchema,
   ReleaseLatestResponseSchema,
   ReleaseCoverageRowSchema,
@@ -366,6 +367,7 @@ export {
 } from "./schemas/taxonomy.js";
 export {
   ReleaseLatestSourceSchema,
+  ReleaseLatestProductSchema,
   ReleaseLatestItemSchema,
   ReleaseLatestResponseSchema,
   ReleaseCoverageRowSchema,
@@ -705,6 +707,7 @@ export type LinkReleaseCoverageResponse = z.infer<typeof LinkReleaseCoverageResp
 export type UnlinkReleaseCoverageResponse = z.infer<typeof UnlinkReleaseCoverageResponseSchema>;
 
 export type ReleaseLatestSource = z.infer<typeof ReleaseLatestSourceSchema>;
+export type ReleaseLatestProduct = z.infer<typeof ReleaseLatestProductSchema>;
 export type ReleaseLatestItem = z.infer<typeof ReleaseLatestItemSchema>;
 export type ReleaseLatestResponse = z.infer<typeof ReleaseLatestResponseSchema>;
 
@@ -1106,6 +1109,12 @@ export interface LatestRelease {
    */
   contentChars?: number | null;
   contentTokens?: number | null;
+  /**
+   * Owning product, when the release's source is grouped under a product.
+   * `null` / `undefined` when the source has no `product_id`. Additive — older
+   * API responses omit this field; treat `undefined` as `null`. #1217.
+   */
+  product?: { slug: string; name: string } | null;
 }
 
 // ── Stats ──
