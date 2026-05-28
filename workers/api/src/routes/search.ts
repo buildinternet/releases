@@ -42,7 +42,7 @@ import {
 import {
   organizationsActive,
   sources,
-  products,
+  productsActive,
   type SearchSurface,
 } from "@buildinternet/releases-core/schema";
 import { parseCoordinate } from "@buildinternet/releases-core/lookup-coordinate";
@@ -203,9 +203,9 @@ async function resolveProductScope(
 
   if (isTypedId) {
     const [row] = await db
-      .select({ id: products.id, slug: products.slug, orgId: products.orgId })
-      .from(products)
-      .where(eq(products.id, input))
+      .select({ id: productsActive.id, slug: productsActive.slug, orgId: productsActive.orgId })
+      .from(productsActive)
+      .where(eq(productsActive.id, input))
       .limit(1);
     productRow = row ?? null;
   } else {
@@ -221,9 +221,9 @@ async function resolveProductScope(
       .limit(1);
     if (orgRow) {
       const [row] = await db
-        .select({ id: products.id, slug: products.slug, orgId: products.orgId })
-        .from(products)
-        .where(and(eq(products.slug, productSlugPart), eq(products.orgId, orgRow.id)))
+        .select({ id: productsActive.id, slug: productsActive.slug, orgId: productsActive.orgId })
+        .from(productsActive)
+        .where(and(eq(productsActive.slug, productSlugPart), eq(productsActive.orgId, orgRow.id)))
         .limit(1);
       productRow = row ?? null;
     }
