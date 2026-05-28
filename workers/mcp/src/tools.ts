@@ -596,19 +596,28 @@ export async function getLatestReleases(
   if (!window.ok) return text(window.message);
   const includeCoverage = params.include_coverage === true;
 
-  let sourceFilter: string | undefined;
+  // `product` resolves a product (or source) identifier to one or more source
+  // IDs.  `resolveEntityToSourceIds` handles all identifier forms:
+  //   • `prod_…` typed ID → all sources under the product
+  //   • `src_…` typed ID → single source
+  //   • `orgSlug/productSlug` coordinate → product first, then source fallback
+  // This mirrors the REST ?product= expansion in `getOrgReleasesFeed` so an
+  // MCP caller gets the same cross-source product feed as the web frontend.
+  let productSourceIds: string[] | undefined;
   if (params.product) {
     if (isBareSlug(params.product)) {
       return text(
-        `Bare slug "${params.product}" is ambiguous — source slugs are org-scoped.\n` +
+        `Bare slug "${params.product}" is ambiguous — identifiers are org-scoped.\n` +
           `Use an org-scoped identifier instead:\n` +
-          `  • ID:         src_<id>\n` +
-          `  • Coordinate: <orgSlug>/<sourceSlug>  (e.g. "vercel/next-js")`,
+          `  • Product ID:  prod_<id>\n` +
+          `  • Source ID:   src_<id>\n` +
+          `  • Coordinate:  <orgSlug>/<productSlug>  (e.g. "vercel/next-js")`,
       );
     }
-    const source = await resolveSource(db, params.product);
-    if (!source) return text(`No product found with slug "${params.product}"`);
-    sourceFilter = source.id;
+    const resolved = await resolveEntityToSourceIds(db, params.product);
+    if (!resolved || resolved.length === 0)
+      return text(`No product or source found matching "${params.product}"`);
+    productSourceIds = resolved;
   }
 
   let orgSourceIds: string[] | undefined;
@@ -634,7 +643,9 @@ export async function getLatestReleases(
     sql`(${releasesTable.suppressed} IS NULL OR ${releasesTable.suppressed} = 0)`,
     or(lte(releasesTable.publishedAt, cutoff), isNull(releasesTable.publishedAt)),
   ];
-  if (sourceFilter) conditions.push(eq(releasesTable.sourceId, sourceFilter));
+  // Product filter: inArray covers single-source (src_… or one-source product)
+  // and multi-source products equally — mirrors the REST `?product=` expansion.
+  if (productSourceIds) conditions.push(inArray(releasesTable.sourceId, productSourceIds));
   if (orgSourceIds) conditions.push(inArray(releasesTable.sourceId, orgSourceIds));
   if (params.type) conditions.push(eq(releasesTable.type, params.type));
   // Time window on published_at. `gte`/`lte` against the ISO text column drop
