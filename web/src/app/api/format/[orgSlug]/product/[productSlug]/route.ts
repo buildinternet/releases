@@ -28,21 +28,32 @@ export async function GET(
     return productAtomResponse(request, orgSlug, product, feed);
   }
 
-  let product;
+  // Both the markdown and JSON adapters embed the product's cross-source
+  // release feed (mirroring the org + source adapters). The markdown preview
+  // shows fewer entries than the JSON payload, matching the org/source split.
+  let product, feed;
   try {
-    product = await api.productDetail({ orgSlug, productSlug });
+    [product, feed] = await Promise.all([
+      api.productDetail({ orgSlug, productSlug }),
+      api.orgReleases(orgSlug, { product: productSlug, limit: format === "md" ? 10 : 20 }),
+    ]);
   } catch (err) {
     return formatErrorResponse(err, "Product not found");
   }
 
   if (format === "md") {
-    return markdownResponse(productToMarkdown(product, orgSlug, { baseUrl: getBaseUrl(request) }), {
-      cache: "semi-static",
-    });
+    return markdownResponse(
+      productToMarkdown(product, orgSlug, {
+        baseUrl: getBaseUrl(request),
+        recentReleases: feed.releases,
+      }),
+      { cache: "dynamic" },
+    );
   }
 
   // Default (json): the API's public-read endpoint already gates admin-only
   // fields, so the product detail is safe to serve verbatim — mirrors the org
-  // format route.
-  return NextResponse.json(product);
+  // format route. `releases` + `pagination` are attached the same way the
+  // source detail carries them inline.
+  return NextResponse.json({ ...product, releases: feed.releases, pagination: feed.pagination });
 }

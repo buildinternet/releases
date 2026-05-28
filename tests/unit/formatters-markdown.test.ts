@@ -370,4 +370,23 @@ describe("productToMarkdown", () => {
     expect(md).not.toContain("url:");
     expect(md).not.toContain("category:");
   });
+
+  it("embeds a recent releases preview when releases are supplied", () => {
+    const md = productToMarkdown(fullProduct, "vercel", {
+      baseUrl: "https://releases.sh",
+      recentReleases: feedReleases,
+    });
+    expect(md).toContain("## Recent Releases");
+    expect(md).toContain('<Release source="next-js" version="15.0.0"');
+    expect(md).toContain('canonical="https://releases.sh/release/rel_001"');
+    expect(md).toContain('truncated="true"');
+    // Summary, not full content, in the preview blocks.
+    expect(md).toContain("Major release");
+    expect(md).not.toContain("Full content for v15.");
+  });
+
+  it("omits the recent releases section when no releases are supplied", () => {
+    const md = productToMarkdown(fullProduct, "vercel", { baseUrl: "https://releases.sh" });
+    expect(md).not.toContain("## Recent Releases");
+  });
 });

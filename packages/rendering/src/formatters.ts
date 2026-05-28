@@ -182,6 +182,42 @@ export interface OrgMarkdownOptions extends FormatOptions {
   recentReleases?: OrgReleaseItem[];
 }
 
+/**
+ * Renders a cross-source "Recent Releases" preview as truncated `<Release>`
+ * blocks (summary only, with a `canonical` URL for the full content). Shared
+ * by the org and product markdown adapters, both of which aggregate releases
+ * across multiple sources.
+ */
+function pushRecentReleasesSection(
+  lines: string[],
+  releases: OrgReleaseItem[],
+  opts: FormatOptions,
+): void {
+  if (releases.length === 0) return;
+  lines.push("## Recent Releases");
+  lines.push("");
+  lines.push(
+    "_Summaries below — fetch the release's `canonical` URL for full content, or `url` for the original source._",
+  );
+  lines.push("");
+  for (const release of releases) {
+    const dateStr = formatIsoDate(release.publishedAt);
+    const canonical = opts.baseUrl && release.id ? `${opts.baseUrl}/release/${release.id}` : null;
+    lines.push(
+      `<Release${attr("source", release.source.slug)}${attr("version", release.version)}${attr("date", dateStr)}${attr("published", release.publishedAt)}${attr("url", release.url)}${attr("canonical", canonical)} truncated="true">`,
+    );
+    if (release.title && release.title !== release.version) {
+      lines.push(`### ${release.title}`);
+      lines.push("");
+    }
+    if (release.summary) {
+      lines.push(release.summary);
+    }
+    lines.push("</Release>");
+    lines.push("");
+  }
+}
+
 export function orgToMarkdown(org: FormatOrgDetail, opts: OrgMarkdownOptions = {}): string {
   const lines: string[] = [];
 
@@ -278,31 +314,7 @@ export function orgToMarkdown(org: FormatOrgDetail, opts: OrgMarkdownOptions = {
   lines.push("");
 
   // ── Recent Releases (cross-source preview) ──
-  const recent = opts.recentReleases ?? [];
-  if (recent.length > 0) {
-    lines.push("## Recent Releases");
-    lines.push("");
-    lines.push(
-      "_Summaries below — fetch the release's `canonical` URL for full content, or `url` for the original source._",
-    );
-    lines.push("");
-    for (const release of recent) {
-      const dateStr = formatIsoDate(release.publishedAt);
-      const canonical = opts.baseUrl && release.id ? `${opts.baseUrl}/release/${release.id}` : null;
-      lines.push(
-        `<Release${attr("source", release.source.slug)}${attr("version", release.version)}${attr("date", dateStr)}${attr("published", release.publishedAt)}${attr("url", release.url)}${attr("canonical", canonical)} truncated="true">`,
-      );
-      if (release.title && release.title !== release.version) {
-        lines.push(`### ${release.title}`);
-        lines.push("");
-      }
-      if (release.summary) {
-        lines.push(release.summary);
-      }
-      lines.push("</Release>");
-      lines.push("");
-    }
-  }
+  pushRecentReleasesSection(lines, opts.recentReleases ?? [], opts);
 
   // ── Fetch-more guidance ──
   if (org.sources.length > 0) {
@@ -366,10 +378,15 @@ export function releaseToMarkdown(release: ReleaseDetail, opts: FormatOptions = 
 
 // ── Product → Markdown ─────────────────────────────────────────────
 
+export interface ProductMarkdownOptions extends FormatOptions {
+  /** Most recent releases across the product's sources, rendered as a preview. */
+  recentReleases?: OrgReleaseItem[];
+}
+
 export function productToMarkdown(
   product: ProductDetail,
   orgSlug: string,
-  opts: FormatOptions = {},
+  opts: ProductMarkdownOptions = {},
 ): string {
   const lines: string[] = [];
 
@@ -406,6 +423,9 @@ export function productToMarkdown(
     }
   }
   lines.push("");
+
+  // ── Recent Releases (cross-source preview) ──
+  pushRecentReleasesSection(lines, opts.recentReleases ?? [], opts);
 
   if (product.tags.length > 0) {
     lines.push(`**Tags:** ${product.tags.map((t) => `\`${t}\``).join(", ")}`);
