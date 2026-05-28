@@ -83,10 +83,9 @@ describe("parseReleaseContent boilerplate-fallback guard", () => {
     expect(result.title).toBe("Chrome 148 for Android stability and performance improvements");
   });
 
-  it("keeps the summary when <empty>false</empty> even if the text looks fallback-ish", () => {
-    // Defensive: if the model's structured signal says "I have real content",
-    // trust it over a coincidental string match. This release legitimately
-    // talks about releases not describing changes.
+  it("keeps a real summary when <empty>false</empty>", () => {
+    // Baseline: a normal summary with the model's "I have real content" verdict
+    // passes through untouched.
     const raw = `<empty>false</empty>
 <title>Foo v1.0 ships</title>
 <title_short>Foo v1.0 ships</title_short>
@@ -94,6 +93,21 @@ describe("parseReleaseContent boilerplate-fallback guard", () => {
     const result = parseReleaseContent(raw, "end_turn");
     expect(result.summary).toBe("Foo v1.0 ships.");
     expect(result.titleShort).toBe("Foo v1.0 ships");
+  });
+
+  it("nulls the summary sentinel even when <empty>false</empty> contradicts it", () => {
+    // The model occasionally emits <empty>false</empty> while still writing the
+    // reserved fallback summary sentinel (e.g. App Store "Squashed some bugs"
+    // notes — see rel_RMbU6OaPS6S86pmbIb7nK). The sentinel is never a real
+    // summary, so it must be scrubbed regardless of the structured verdict.
+    const raw = `<empty>false</empty>
+<title>Claude by Anthropic 1.260521.1 bug fixes and improvements</title>
+<title_short>Bug fixes and improvements</title_short>
+<summary>Release notes do not describe the change.</summary>`;
+    const result = parseReleaseContent(raw, "end_turn");
+    expect(result.summary).toBeNull();
+    expect(result.titleShort).toBeNull();
+    expect(result.title).toBe("Claude by Anthropic 1.260521.1 bug fixes and improvements");
   });
 
   it("trusts <empty>false</empty> over a coincidental fallback short title", () => {

@@ -464,3 +464,64 @@ describe("fetchEligibleReleases — suppressed exclusion", () => {
     expect(rows.length).toBe(0);
   });
 });
+
+describe("fetchEligibleReleases — per-source summarize opt-out", () => {
+  let tdb: TestDatabase;
+
+  beforeAll(() => {
+    tdb = createTestDb();
+  });
+
+  beforeEach(() => {
+    clearAllTables(tdb.db);
+  });
+
+  afterAll(() => {
+    tdb.cleanup();
+  });
+
+  it("excludes rows when source.metadata.summarize = false", async () => {
+    tdb.db
+      .insert(organizations)
+      .values(makeOrg({ autoGenerateContent: true }))
+      .run();
+    tdb.db
+      .insert(sources)
+      .values(makeSource({ metadata: JSON.stringify({ summarize: false }) }))
+      .run();
+    tdb.db.insert(releases).values(makeRelease()).run();
+
+    const rows = await fetchEligibleReleases(asDb(tdb.db), { cutoffIso: "2026-04-01T00:00:00Z" });
+    expect(rows.length).toBe(0);
+  });
+
+  it("keeps rows when source.metadata.summarize = true (explicit)", async () => {
+    tdb.db
+      .insert(organizations)
+      .values(makeOrg({ autoGenerateContent: true }))
+      .run();
+    tdb.db
+      .insert(sources)
+      .values(makeSource({ metadata: JSON.stringify({ summarize: true }) }))
+      .run();
+    tdb.db.insert(releases).values(makeRelease()).run();
+
+    const rows = await fetchEligibleReleases(asDb(tdb.db), { cutoffIso: "2026-04-01T00:00:00Z" });
+    expect(rows.length).toBe(1);
+  });
+
+  it("keeps rows when metadata has no summarize key", async () => {
+    tdb.db
+      .insert(organizations)
+      .values(makeOrg({ autoGenerateContent: true }))
+      .run();
+    tdb.db
+      .insert(sources)
+      .values(makeSource({ metadata: JSON.stringify({ feedUrl: "https://x/feed" }) }))
+      .run();
+    tdb.db.insert(releases).values(makeRelease()).run();
+
+    const rows = await fetchEligibleReleases(asDb(tdb.db), { cutoffIso: "2026-04-01T00:00:00Z" });
+    expect(rows.length).toBe(1);
+  });
+});
