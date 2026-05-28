@@ -105,6 +105,7 @@ import { processMediaForR2, selectExistingReleaseUrls } from "../lib/media-inges
 import { fetchOne, embedReleasesForSource } from "../cron/poll-fetch.js";
 import { getSourceMeta, isGitHubFetched } from "@releases/adapters/feed.js";
 import { isAppStoreFetched } from "@releases/adapters/source-meta";
+import { appStoreSourceInfo } from "@releases/adapters/appstore";
 import { sanitizeVersion } from "@releases/adapters/extract/shared.js";
 import {
   discoverChangelogPaths,
@@ -2820,6 +2821,7 @@ sourceRoutes.get(
         sourceName: sourcesActive.name,
         sourceSlug: sourcesActive.slug,
         sourceType: sourcesActive.type,
+        sourceMetadata: sourcesActive.metadata,
         orgSlug: organizationsActive.slug,
         orgName: organizationsActive.name,
       })
@@ -2830,8 +2832,13 @@ sourceRoutes.get(
 
     if (rows.length === 0) return c.json({ error: "not_found", message: "Release not found" }, 404);
 
-    const { release, sourceName, sourceSlug, sourceType, orgSlug, orgName } = rows[0];
+    const { release, sourceName, sourceSlug, sourceType, sourceMetadata, orgSlug, orgName } =
+      rows[0];
     const org = orgSlug && orgName ? { slug: orgSlug, name: orgName } : null;
+    const appStore = appStoreSourceInfo(
+      sourceType ?? "",
+      (sourceMetadata as string | null) ?? null,
+    );
     const mediaOrigin = c.env.MEDIA_ORIGIN ?? "";
 
     const media = parseReleaseMedia(release.media as string | null, mediaOrigin);
@@ -2852,6 +2859,7 @@ sourceRoutes.get(
       sourceType,
       org,
       composition,
+      appStore,
     };
 
     if (wantsMarkdown(c)) {
