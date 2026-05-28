@@ -234,6 +234,12 @@ export type SearchCounts = {
   chunkHits?: number;
   collectionHits?: number;
   degraded?: boolean;
+  /**
+   * Resolved product coordinate (`orgSlug/productSlug`) echoed from the
+   * `search` function when a `product` filter was applied and matched. Picked
+   * up by `withSearchLog` in `mcp-agent.ts` and embedded on `_meta.search`.
+   */
+  product?: string;
 };
 
 export type SearchToolReturn = { result: ToolResult; counts: SearchCounts };
@@ -421,6 +427,18 @@ async function callAnthropic(
 export function isBareSlug(identifier: string): boolean {
   const t = identifier.trim();
   return getEntityType(t) === "unknown" && !t.includes("/");
+}
+
+/**
+ * Build an `IN (...)` value list from a `product`-scope source-ID set, chunked
+ * at 90 IDs to stay inside D1's 100-bound limit. Callers guard the empty case
+ * before reaching here (an empty product short-circuits to no hits).
+ */
+function sourceIdInList(sourceIds: string[]) {
+  return sql`(${sql.join(
+    sourceIds.slice(0, 90).map((id) => sql`${id}`),
+    sql`, `,
+  )})`;
 }
 
 /**
@@ -1803,6 +1821,7 @@ export async function search(
     organization?: string;
     domain?: string;
     entity?: string;
+    product?: string;
     limit?: number;
     mode?: SearchMode;
     include_coverage?: boolean;
@@ -1925,6 +1944,53 @@ export async function search(
     }
   }
 
+  // `product` scopes release results to a specific product's sources.
+  // Mirrors the REST `?product=` expansion but lives as its own param so
+  // callers don't have to use `entity` (which also accepts sources). Bare
+  // slugs are rejected; unknown products return a "not found" message.
+  // When both `entity` and `product` are supplied, `entity` takes precedence
+  // (it's the more general narrowing param — the caller specified it first).
+  let productSourceIds: string[] | null = null;
+  let productEcho: string | undefined;
+  if (params.product && !entitySourceIds) {
+    if (isBareSlug(params.product)) {
+      return {
+        result: text(
+          `Bare slug "${params.product}" is ambiguous — product slugs are org-scoped.\n` +
+            `Use an org-scoped identifier instead:\n` +
+            `  • ID:         prod_<id>\n` +
+            `  • Coordinate: <orgSlug>/<productSlug>  (e.g. "vercel/next-js")`,
+        ),
+        counts: empty,
+      };
+    }
+    const prod = await resolveProduct(db, params.product);
+    if (!prod) {
+      return {
+        result: text(`No product found matching "${params.product}"`),
+        counts: empty,
+      };
+    }
+    const srcRows = await db
+      .select({ id: sources.id })
+      .from(sources)
+      .where(eq(sources.productId, prod.id));
+    productSourceIds = srcRows.map((r) => r.id);
+    // Resolve org slug for the echo coordinate.
+    const [orgRow] = await db
+      .select({ slug: organizationsActive.slug })
+      .from(organizationsActive)
+      .where(eq(organizationsActive.id, prod.orgId))
+      .limit(1);
+    if (orgRow) productEcho = `${orgRow.slug}/${prod.slug}`;
+    if (productSourceIds.length === 0) {
+      return {
+        result: text(`Product "${params.product}" has no sources yet.`),
+        counts: empty,
+      };
+    }
+  }
+
   // Org-match is needed for member-rollup collections too, so we run it
   // whenever either `orgs` or `collections` is requested. The "orgs" output
   // section still respects `wanted.has("orgs")` — see the rendering block
@@ -1955,6 +2021,22 @@ export async function search(
 
   const catalogP: Promise<SearchCatalogHit[]> = wanted.has("catalog")
     ? (async () => {
+        // When productSourceIds is set (empty or non-empty), short-circuit the
+        // catalog query to avoid building invalid `IN ()` SQL fragments.
+        if (productSourceIds !== null && productSourceIds.length === 0)
+          return foldSourcesIntoCatalog([], []);
+        const productScopeClause =
+          productSourceIds && productSourceIds.length > 0
+            ? sql`AND EXISTS (
+                SELECT 1 FROM sources_active sa
+                WHERE sa.product_id = p.id
+                  AND sa.id IN ${sourceIdInList(productSourceIds)}
+              )`
+            : sql``;
+        const sourceScopeClause =
+          productSourceIds && productSourceIds.length > 0
+            ? sql`AND s.id IN ${sourceIdInList(productSourceIds)}`
+            : sql``;
         const [productRows, sourceRows] = await Promise.all([
           db.all<SearchCatalogHit>(sql`
             SELECT DISTINCT p.slug, p.name, o.slug as orgSlug, o.name as orgName,
@@ -1965,6 +2047,7 @@ export async function search(
             WHERE (${likeContains(sql`p.name`, q)} OR ${likeContains(sql`p.slug`, q)} OR ${likeContains(sql`da.domain`, q)})
               ${orgScope ? sql`AND p.org_id = ${orgScope.id}` : sql``}
               ${params.kind ? sql`AND p.kind = ${params.kind}` : sql``}
+              ${productScopeClause}
             ORDER BY p.name LIMIT ${limit}
           `),
           db.all<RawSourceHit>(sql`
@@ -1977,6 +2060,7 @@ export async function search(
             WHERE (${likeContains(sql`s.name`, q)} OR ${likeContains(sql`s.slug`, q)} OR ${likeContains(sql`s.url`, q)})
               ${orgScope ? sql`AND s.org_id = ${orgScope.id}` : sql``}
               ${params.kind ? sql`AND s.kind = ${params.kind}` : sql``}
+              ${sourceScopeClause}
             ORDER BY s.name LIMIT ${limit}
           `),
         ]);
@@ -2075,8 +2159,10 @@ export async function search(
   const releasesP: Promise<ReleaseSection> = wanted.has("releases")
     ? (async () => {
         // Entity filter narrows further than org filter; org filter expands
-        // to every source under the org.
-        let sourceIds = entitySourceIds ?? undefined;
+        // to every source under the org. Product filter sits between: it
+        // applies when entity is unset, taking precedence over org when both
+        // happen to be present (product is more specific).
+        let sourceIds = entitySourceIds ?? productSourceIds ?? undefined;
         if (!sourceIds && orgScope) {
           const rows = await db
             .select({ id: sources.id })
@@ -2326,6 +2412,7 @@ export async function search(
     chunkHits,
     collectionHits: collectionsHits.length,
     degraded: hadDegradeNotice,
+    ...(productEcho ? { product: productEcho } : {}),
   };
 
   return { result: text(sections.join("\n\n")), counts };

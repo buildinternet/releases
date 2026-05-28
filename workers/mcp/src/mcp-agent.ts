@@ -288,6 +288,7 @@ export function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServ
       mode?: SearchMode;
       organization?: string;
       entity?: string;
+      product?: string;
       limit?: number;
       kind?: Kind;
       type?: string[];
@@ -313,6 +314,10 @@ export function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServ
           degraded,
           kind: params.kind,
           type: params.type,
+          // Echo the resolved product coordinate when a product filter was
+          // applied. The search function resolves the raw input to a canonical
+          // orgSlug/productSlug coordinate and stores it in `counts.product`.
+          product: counts.product,
         });
         out.result._meta = { ...out.result._meta, search: searchMeta };
         return out.result;
@@ -454,6 +459,12 @@ export function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServ
           .optional()
           .describe(
             "Scope release results to one catalog entry. Accepts a prod_ id (expands to every source under the product), a src_ id, or an org-scoped coordinate in the form orgSlug/slug (e.g. 'vercel/nextjs'). Bare slugs without an org prefix are not accepted.",
+          ),
+        product: z
+          .string()
+          .optional()
+          .describe(
+            "Scope release results to a specific product's sources. Accepts a prod_ id or an org-scoped coordinate in the form orgSlug/productSlug (e.g. 'vercel/next-js'). Bare slugs without an org prefix are not accepted. When both `entity` and `product` are supplied, `entity` takes precedence. The resolved product coordinate is echoed on `_meta.search.product`.",
           ),
         limit: z.number().optional().describe("Max results per section (default 20)"),
         mode: z
