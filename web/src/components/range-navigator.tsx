@@ -189,6 +189,7 @@ interface RootProps {
   onValueChange?: (range: [Date, Date]) => void;
   children: ReactNode;
   className?: string;
+  bare?: boolean;
 }
 
 function Root({
@@ -202,6 +203,7 @@ function Root({
   onValueChange,
   children,
   className,
+  bare = false,
 }: RootProps) {
   const totalMs = max.getTime() - min.getTime();
 
@@ -255,7 +257,11 @@ function Root({
     >
       <div
         data-slot="range-navigator"
-        className={`bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-lg px-5 py-4 mb-5 ${className ?? ""}`}
+        className={
+          bare
+            ? (className ?? "")
+            : `bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-lg px-5 py-4 mb-5 ${className ?? ""}`
+        }
         role="region"
         aria-label="Release timeline range selector"
       >

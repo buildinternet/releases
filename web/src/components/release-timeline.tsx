@@ -434,39 +434,36 @@ export function ReleaseTimeline({
     </div>
   );
 
-  const timelineCard = inHeatmapView ? (
+  const timelineCard = (
     <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-lg px-5 py-4 mb-5">
       {toolbar}
       <div className="mt-4">
-        <ReleaseHeatmap
-          heatmap={heatmap!}
-          trackingSince={trackingSince}
-          highlightDays={heatmapHighlightDays}
-          bare
-        />
+        {inHeatmapView ? (
+          <ReleaseHeatmap
+            heatmap={heatmap!}
+            trackingSince={trackingSince}
+            highlightDays={heatmapHighlightDays}
+            bare
+          />
+        ) : (
+          <RangeNavigator.Root
+            bare
+            min={rangeStart}
+            max={rangeEnd}
+            buckets={aggregateBuckets}
+            sourceBuckets={sourceBuckets}
+            productBuckets={productBuckets}
+            value={brushRange}
+            onValueChange={setBrushRange}
+          >
+            <RangeNavigator.Header />
+            <RangeNavigator.DetailChart />
+            <RangeNavigator.Overview />
+            <RangeNavigator.QuickRanges defaultPreset="3 months" />
+          </RangeNavigator.Root>
+        )}
       </div>
       <div className="mt-3 pt-3 border-t border-stone-200 dark:border-stone-800">{statsRow}</div>
-    </div>
-  ) : (
-    <div className="mb-2">
-      {toolbar}
-      <div className="mt-3">
-        <RangeNavigator.Root
-          min={rangeStart}
-          max={rangeEnd}
-          buckets={aggregateBuckets}
-          sourceBuckets={sourceBuckets}
-          productBuckets={productBuckets}
-          value={brushRange}
-          onValueChange={setBrushRange}
-        >
-          <RangeNavigator.Header />
-          <RangeNavigator.DetailChart />
-          <RangeNavigator.Overview />
-          <RangeNavigator.QuickRanges defaultPreset="3 months" />
-        </RangeNavigator.Root>
-      </div>
-      <div className="mt-3 mb-5">{statsRow}</div>
     </div>
   );
 
