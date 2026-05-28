@@ -257,6 +257,15 @@ export function OrgReleaseList({
                 i > 0 &&
                 release.publishedAt?.slice(0, 10) === releases[i - 1].publishedAt?.slice(0, 10)
               }
+              appStore={
+                release.source.appStore
+                  ? {
+                      label: release.source.appStore.platform === "macos" ? "macOS" : "iOS",
+                      iconUrl: release.source.appStore.iconUrl,
+                      appName: release.source.name,
+                    }
+                  : null
+              }
               sourceByline={
                 multipleSourcesExist
                   ? {
