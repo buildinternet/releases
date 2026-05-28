@@ -3,6 +3,7 @@ import { api, type ProductDetail } from "@/lib/api";
 import { ATOM_DEFAULT_MAX_ENTRIES } from "@/lib/atom";
 import { productAtomResponse } from "@/lib/atom-response";
 import { getBaseUrl } from "@/lib/base-url";
+import { formatErrorResponse } from "@/lib/format-error";
 import { productToMarkdown } from "@/lib/formatters";
 import { markdownResponse } from "@/lib/markdown-response";
 import type { Format } from "@/lib/request";
@@ -21,7 +22,16 @@ export async function productFormatResponse(
   format: Format,
 ): Promise<Response> {
   const limit = format === "atom" ? ATOM_DEFAULT_MAX_ENTRIES : format === "md" ? 10 : 20;
-  const feed = await api.orgReleases(orgSlug, { product: product.slug, limit });
+
+  let feed;
+  try {
+    feed = await api.orgReleases(orgSlug, { product: product.slug, limit });
+  } catch (err) {
+    // The product was already resolved by the caller, so only the feed fetch
+    // can fail here — map upstream failures to the shared format-route error
+    // (404 for a genuine not-found, else 502) instead of leaking a raw 500.
+    return formatErrorResponse(err, "Product not found");
+  }
 
   if (format === "atom") {
     return productAtomResponse(request, orgSlug, product, feed);
