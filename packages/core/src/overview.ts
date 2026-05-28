@@ -44,52 +44,157 @@ export const PER_KIND_FAMILY_CAPS: Partial<Record<Kind, number>> = {
   sdk: 10,
 };
 
+/** Recency comparator for releases: newest first, null/empty dates sort last. */
+function byRecencyDesc(a: Release, b: Release): number {
+  return (b.publishedAt ?? "").localeCompare(a.publishedAt ?? "");
+}
+
+/** A release tagged with its owning product (null for direct org sources). */
+type TaggedRelease = { release: Release; productId: string | null };
+
 /**
  * Select releases to feed into overview regeneration. Pure: input arrays must
  * each be sorted by `publishedAt` desc; output is the merged, capped, limited,
  * resorted slice plus the pre-cap total for reporting.
  */
 export function selectReleasesForOverview(
-  perSource: Array<{ type: Source["type"]; kind?: Kind | null; releases: Release[] }>,
+  perSource: Array<{
+    type: Source["type"];
+    kind?: Kind | null;
+    productId?: string | null;
+    releases: Release[];
+  }>,
   limit: number = OVERVIEW_RELEASE_LIMIT,
 ): { releases: Release[]; totalAvailable: number } {
   const totalAvailable = perSource.reduce((n, s) => n + s.releases.length, 0);
 
   // 1. Per-source cap by adapter type (unchanged): a single noisy repo can't
-  //    contribute more than its type's cap.
-  const perSourceCapped = perSource.map(({ type, kind, releases }) => ({
+  //    contribute more than its type's cap. `productId` rides along so the
+  //    per-product budget (step 3) can group survivors by their owning product.
+  const perSourceCapped = perSource.map(({ type, kind, productId, releases }) => ({
     kind: kind ?? null,
+    productId: productId ?? null,
     releases: releases.slice(0, PER_SOURCE_CAPS[type] ?? 20),
   }));
 
   // 2. Per-kind family cap: pool releases of a capped kind across all its
   //    sources, keep the most-recent N. Other kinds (and untagged sources)
-  //    pass through untouched.
-  const familyPools = new Map<Kind, Release[]>();
-  const passthrough: Release[] = [];
-  for (const { kind, releases } of perSourceCapped) {
+  //    pass through untouched. Each surviving release keeps its product tag.
+  const familyPools = new Map<Kind, TaggedRelease[]>();
+  const passthrough: TaggedRelease[] = [];
+  for (const { kind, productId, releases } of perSourceCapped) {
+    const tagged = releases.map((release) => ({ release, productId }));
     if (kind && kind in PER_KIND_FAMILY_CAPS) {
       const pool = familyPools.get(kind) ?? [];
-      pool.push(...releases);
+      pool.push(...tagged);
       familyPools.set(kind, pool);
     } else {
-      passthrough.push(...releases);
+      passthrough.push(...tagged);
     }
   }
-  const familyCapped: Release[] = [];
+  const familyCapped: TaggedRelease[] = [];
   for (const [kind, pool] of familyPools) {
     const cap = PER_KIND_FAMILY_CAPS[kind]!;
-    const mostRecent = pool
-      .toSorted((a, b) => (b.publishedAt ?? "").localeCompare(a.publishedAt ?? ""))
-      .slice(0, cap);
+    const mostRecent = pool.toSorted((a, b) => byRecencyDesc(a.release, b.release)).slice(0, cap);
     familyCapped.push(...mostRecent);
   }
 
-  // 3. Merge, global recency sort, global limit (unchanged semantics).
-  const sorted = [...passthrough, ...familyCapped].toSorted((a, b) =>
-    (b.publishedAt ?? "").localeCompare(a.publishedAt ?? ""),
-  );
+  // 3. Per-product budget: bucket the post-cap releases by `productId` (product-
+  //    less direct sources share one "no product" bucket) and split the global
+  //    limit evenly across buckets, redistributing the unused slots of any
+  //    bucket holding fewer releases than its share. This stops a single
+  //    high-cadence product (e.g. a daily changelog) from consuming most of the
+  //    limit on recency alone. With a single bucket it is a no-op: that bucket
+  //    is allotted min(limit, size), identical to the pre-budget behavior.
+  const budgeted = budgetByProduct([...passthrough, ...familyCapped], limit);
+
+  // 4. Global recency sort + global limit (the limit is a safety net; step 3
+  //    already holds the total at or under `limit`).
+  const sorted = budgeted.map((t) => t.release).toSorted(byRecencyDesc);
   return { releases: sorted.slice(0, limit), totalAvailable };
+}
+
+/**
+ * Split `limit` slots across product buckets. Product-less releases (null
+ * `productId`) share a single bucket. Each bucket gets a fair share of the
+ * limit (see {@link distributeBudget}); within a bucket the most-recent
+ * releases are kept. Returns the kept tagged releases; the caller does the
+ * final global sort. A no-op short-circuit returns the input untouched when it
+ * already fits under the limit.
+ */
+function budgetByProduct(tagged: TaggedRelease[], limit: number): TaggedRelease[] {
+  if (tagged.length <= limit) return tagged;
+
+  // Bucket by product, preserving first-seen order for determinism. A null
+  // productId collapses to one shared "no product" bucket.
+  const NO_PRODUCT = Symbol("no-product");
+  const buckets = new Map<string | symbol, TaggedRelease[]>();
+  for (const t of tagged) {
+    const key = t.productId ?? NO_PRODUCT;
+    const list = buckets.get(key) ?? [];
+    list.push(t);
+    buckets.set(key, list);
+  }
+
+  const bucketLists = [...buckets.values()].map((list) =>
+    list.toSorted((a, b) => byRecencyDesc(a.release, b.release)),
+  );
+  const allocations = distributeBudget(
+    bucketLists.map((b) => b.length),
+    limit,
+  );
+
+  const kept: TaggedRelease[] = [];
+  bucketLists.forEach((bucket, i) => kept.push(...bucket.slice(0, allocations[i] ?? 0)));
+  return kept;
+}
+
+/**
+ * Max-min fair allocation of `limit` units across buckets with the given
+ * capacities. Each round splits the unallocated remainder evenly across buckets
+ * that still have spare capacity; buckets that fill up release their excess into
+ * the next round. Any final remainder (fewer units than still-open buckets) is
+ * handed out one unit at a time to the buckets with the most spare capacity, so
+ * the tail favors larger buckets rather than starving them. Total allocated ==
+ * min(limit, sum(capacities)).
+ */
+function distributeBudget(capacities: number[], limit: number): number[] {
+  const n = capacities.length;
+  const alloc = Array.from<number>({ length: n }).fill(0);
+  let remaining = limit;
+
+  while (remaining > 0) {
+    const open: number[] = [];
+    for (let i = 0; i < n; i++) if (alloc[i] < capacities[i]) open.push(i);
+    if (open.length === 0) break;
+    const share = Math.floor(remaining / open.length);
+    if (share === 0) break;
+    let progressed = false;
+    for (const i of open) {
+      const give = Math.min(share, capacities[i] - alloc[i]);
+      if (give > 0) {
+        alloc[i] += give;
+        remaining -= give;
+        progressed = true;
+      }
+    }
+    if (!progressed) break;
+  }
+
+  // Remainder pass: fewer slots than open buckets. Give to the buckets with the
+  // most spare capacity first (bucket index breaks ties for determinism).
+  if (remaining > 0) {
+    const order: number[] = [];
+    for (let i = 0; i < n; i++) if (alloc[i] < capacities[i]) order.push(i);
+    order.sort((a, b) => capacities[b] - alloc[b] - (capacities[a] - alloc[a]) || a - b);
+    for (const i of order) {
+      if (remaining === 0) break;
+      alloc[i] += 1;
+      remaining -= 1;
+    }
+  }
+
+  return alloc;
 }
 
 export interface OverviewMeta {

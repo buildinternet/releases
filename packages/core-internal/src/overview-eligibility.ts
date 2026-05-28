@@ -332,6 +332,8 @@ export async function fetchOverviewInputsForOrg(
       { kind: s.kind as Kind | null },
       s.productId ? { kind: (productKindById.get(s.productId) ?? null) as Kind | null } : null,
     ),
+    // Group key for the per-product budget step in selectReleasesForOverview.
+    productId: s.productId,
     releases: releasesBySource.get(s.id) ?? [],
   }));
 

@@ -138,4 +138,76 @@ describe("selectReleasesForOverview", () => {
     );
     expect(releases.length).toBe(3);
   });
+
+  it("budgets the limit across products so a high-cadence product can't dominate", () => {
+    // 3 products, each a single source with 30 releases (capped to 20), plus a
+    // direct (no-product) source. Date bases descend so without budgeting the
+    // newest product (p1) would take its full 20 and the oldest direct source
+    // would be crowded out entirely.
+    const perSource = [
+      { type: "scrape" as const, productId: "prod_1", releases: mkBatch("p1", 30, "2026-05-01") },
+      { type: "scrape" as const, productId: "prod_2", releases: mkBatch("p2", 30, "2026-04-01") },
+      { type: "scrape" as const, productId: "prod_3", releases: mkBatch("p3", 30, "2026-03-01") },
+      { type: "feed" as const, releases: mkBatch("direct", 30, "2026-02-01") },
+    ];
+    const { releases } = selectReleasesForOverview(perSource, 50);
+
+    const count = (p: string) => releases.filter((r) => r.id.startsWith(`rel_${p}_`)).length;
+    expect(releases.length).toBe(50);
+    // 4 buckets, even split of 50 → 12–13 each. No bucket near its 20 cap.
+    for (const p of ["p1", "p2", "p3", "direct"]) {
+      expect(count(p)).toBeGreaterThanOrEqual(12);
+      expect(count(p)).toBeLessThanOrEqual(13);
+    }
+    // The high-cadence (newest) product is held to a fair share, not 20.
+    expect(count("p1")).toBeLessThanOrEqual(13);
+    // The oldest direct source survives instead of being crowded out.
+    expect(count("direct")).toBeGreaterThanOrEqual(12);
+  });
+
+  it("redistributes a small product's unused slots to larger products", () => {
+    const perSource = [
+      { type: "scrape" as const, productId: "prod_1", releases: mkBatch("p1", 30, "2026-05-01") },
+      { type: "scrape" as const, productId: "prod_2", releases: mkBatch("p2", 30, "2026-04-01") },
+      // Small product: only 4 releases — below its fair share of ~12.
+      {
+        type: "scrape" as const,
+        productId: "prod_small",
+        releases: mkBatch("small", 4, "2026-03-01"),
+      },
+      { type: "feed" as const, releases: mkBatch("direct", 30, "2026-02-01") },
+    ];
+    const { releases } = selectReleasesForOverview(perSource, 50);
+
+    const count = (p: string) => releases.filter((r) => r.id.startsWith(`rel_${p}_`)).length;
+    expect(releases.length).toBe(50);
+    // The small product contributes all 4 of its releases, nothing padded.
+    expect(count("small")).toBe(4);
+    // Its freed slots flow to the other three, lifting them above the naive
+    // even split of 12.
+    for (const p of ["p1", "p2", "direct"]) {
+      expect(count(p)).toBeGreaterThanOrEqual(13);
+    }
+  });
+
+  it("pools product-less direct sources into a single bucket", () => {
+    // One product (the OLDEST source) competes against TWO newer direct sources.
+    // Under pure recency the product would be crowded out (only ~10 of its
+    // releases reach the top 50). With one shared no-product bucket there are
+    // exactly 2 buckets [product=20-cap, direct=40-pool]: the product's fair
+    // share (25) exceeds its capacity so it keeps all 20, and the pooled direct
+    // sources take 30. (If each direct source had its own bucket there'd be 3
+    // equal buckets and the product would be squeezed to 17.)
+    const perSource = [
+      { type: "scrape" as const, productId: "prod_1", releases: mkBatch("p1", 30, "2026-02-01") },
+      { type: "feed" as const, releases: mkBatch("directA", 30, "2026-05-01") },
+      { type: "feed" as const, releases: mkBatch("directB", 30, "2026-04-01") },
+    ];
+    const { releases } = selectReleasesForOverview(perSource, 50);
+
+    const count = (p: string) => releases.filter((r) => r.id.startsWith(`rel_${p}_`)).length;
+    expect(releases.length).toBe(50);
+    expect(count("p1")).toBe(20);
+    expect(count("directA") + count("directB")).toBe(30);
+  });
 });
