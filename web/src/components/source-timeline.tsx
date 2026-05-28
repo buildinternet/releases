@@ -161,41 +161,34 @@ export function SourceTimeline({ activity, heatmap, trackingSince }: SourceTimel
     </div>
   );
 
-  if (inHeatmapView) {
-    return (
-      <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-lg px-5 py-4 mb-5">
-        {toolbar}
-        <div className="mt-4">
+  return (
+    <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-lg px-5 py-4 mb-5">
+      {toolbar}
+      <div className="mt-4">
+        {inHeatmapView ? (
           <ReleaseHeatmap
             heatmap={heatmap!}
             trackingSince={trackingSince}
             highlightDays={heatmapHighlightDays}
             bare
           />
-        </div>
-        <div className="mt-3 pt-3 border-t border-stone-200 dark:border-stone-800">{statsRow}</div>
+        ) : (
+          <RangeNavigator.Root
+            bare
+            min={rangeStart}
+            max={rangeEnd}
+            buckets={buckets}
+            value={brushRange}
+            onValueChange={setBrushRange}
+          >
+            <RangeNavigator.Header />
+            <RangeNavigator.DetailChart />
+            <RangeNavigator.Overview />
+            <RangeNavigator.QuickRanges defaultPreset="3 months" />
+          </RangeNavigator.Root>
+        )}
       </div>
-    );
-  }
-
-  return (
-    <div className="mb-2">
-      {toolbar}
-      <div className="mt-3">
-        <RangeNavigator.Root
-          min={rangeStart}
-          max={rangeEnd}
-          buckets={buckets}
-          value={brushRange}
-          onValueChange={setBrushRange}
-        >
-          <RangeNavigator.Header />
-          <RangeNavigator.DetailChart />
-          <RangeNavigator.Overview />
-          <RangeNavigator.QuickRanges defaultPreset="3 months" />
-        </RangeNavigator.Root>
-      </div>
-      <div className="mt-3 mb-5">{statsRow}</div>
+      <div className="mt-3 pt-3 border-t border-stone-200 dark:border-stone-800">{statsRow}</div>
     </div>
   );
 }

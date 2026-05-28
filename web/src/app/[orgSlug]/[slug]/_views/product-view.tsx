@@ -24,6 +24,7 @@ import { getAppInfo, type AppInfo } from "@/lib/app-source";
 import { sourceIdPath } from "@/lib/links";
 import { ProductAdminMenu } from "@/components/product-admin-menu";
 import { isLocalAdminEnabled } from "@/lib/local-admin-flag";
+import { formatSourceDate, shortUrl } from "@/lib/source-display";
 
 export async function ProductView({
   orgSlug,
@@ -95,8 +96,15 @@ export async function ProductView({
     new Set(product.sources.map((s) => s.type)),
   ) as SourceType[];
 
+  const latestPublishedAt = initialReleases.releases[0]?.publishedAt ?? null;
+  const primaryItems = [
+    ...(latestPublishedAt ? [{ label: "Latest", value: formatSourceDate(latestPublishedAt) }] : []),
+    ...(product.url
+      ? [{ label: "Website", value: shortUrl(product.url), externalLink: product.url }]
+      : []),
+  ];
   const sidebarSections = [
-    { items: [{ label: "Sources", value: product.sources.length, large: true }] },
+    ...(primaryItems.length > 0 ? [{ items: primaryItems }] : []),
     ...taxonomySidebarSections({ category: product.category, tags: product.tags }),
   ];
 
@@ -179,18 +187,18 @@ export async function ProductView({
           </div>
         )}
 
-        {activity && (
-          <ReleaseTimeline
-            activity={activity}
-            heatmap={heatmap}
-            orgSlug={orgSlug}
-            sources={[]}
-            products={[]}
-            overview={overview ?? undefined}
-          />
-        )}
         <div className="flex flex-col md:flex-row gap-10 mt-6 pb-6">
           <div className="flex-1 min-w-0">
+            {activity && (
+              <ReleaseTimeline
+                activity={activity}
+                heatmap={heatmap}
+                orgSlug={orgSlug}
+                sources={[]}
+                products={[]}
+                overview={overview ?? undefined}
+              />
+            )}
             {!activity && overview && <OverviewView page={overview} />}
             <OrgReleaseList
               orgSlug={orgSlug}
