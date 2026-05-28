@@ -246,6 +246,9 @@ export function ReleaseListItem({
             aria-label={expanded ? "Collapse release notes" : "Expand release notes"}
             onClick={() => setExpanded(!expanded)}
             onKeyDown={(e) => {
+              // Only toggle when the wrapper itself is focused — don't hijack
+              // Enter/Space on nested links (source link, App Store link, notes).
+              if (e.target !== e.currentTarget) return;
               if (e.key === "Enter" || e.key === " ") {
                 e.preventDefault();
                 setExpanded(!expanded);

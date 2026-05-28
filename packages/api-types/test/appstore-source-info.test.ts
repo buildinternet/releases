@@ -23,7 +23,10 @@ describe("OrgReleaseItem source.appStore", () => {
   });
 
   it("accepts a source with no appStore (non-app source)", () => {
-    const r = OrgReleaseItemSchema.safeParse(base);
+    const r = OrgReleaseItemSchema.safeParse({
+      ...base,
+      source: { slug: "acme-feed", name: "Acme", type: "feed" },
+    });
     expect(r.success).toBe(true);
   });
 

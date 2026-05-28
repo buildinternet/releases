@@ -65,16 +65,22 @@ source.appStore?: { platform: "ios" | "macos"; iconUrl: string | null }
 
 **Touch points:**
 
-- `packages/api-types` — extend the `source` shape on `OrgReleaseItem` and `ReleaseLatestItem`
-  (source of truth for the wire).
-- API handlers that build those items — `workers/api/src/routes/orgs.ts` (org releases feed) and
-  `workers/api/src/routes/releases.ts` (latest feed): select `sources.metadata` if not already
-  selected, parse via `getSourceMeta`, and attach `appStore` for appstore sources.
-- `web/src/lib/api.ts` — mirror the new field on the consumer types (`LatestReleaseItem` and the
-  org release item type).
+- `packages/api-types` — extend the `source` shape on `OrgReleaseItem` (org feed) and add a flat
+  `appStore` to the release-detail payload (`ReleaseDetailResponseSchema` + the `ReleaseDetail`
+  interface). Source of truth for the wire. **Not** `ReleaseLatestItem` — its only consumer is the
+  homepage "shipping now" ticker, which is out of scope (see below). Thread it there only when the
+  ticker adopts the treatment.
+- API handlers that build those items — `workers/api/src/routes/orgs.ts` (org releases feed) and the
+  release-detail handler in `workers/api/src/routes/sources.ts`: select `sources.metadata` and parse
+  it (pure helper `appStoreSourceInfo`, `@releases/adapters/appstore`) to attach `appStore` for
+  appstore sources. The latest-feed handler (`workers/api/src/routes/releases.ts`) is left unchanged
+  for the same out-of-scope reason.
+- `web/src/lib/api.ts` — the org-feed (`OrgReleaseItem`) and release-detail (`ReleaseDetail`)
+  consumer types are re-exported from `@buildinternet/releases-api-types`, so they pick up the field
+  automatically; no manual mirror needed. (`LatestReleaseItem` is a separate hand-rolled web type for
+  the ticker — intentionally not touched.)
 
-No DB schema change. No migration. (Confirm whether any of these handlers already select
-`sources.metadata`; if so, only the mapping is new.)
+No DB schema change. No migration.
 
 ### Rendering: `web/src/components/release-item.tsx`
 
