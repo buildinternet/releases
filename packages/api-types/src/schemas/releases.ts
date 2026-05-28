@@ -27,6 +27,11 @@ export const ReleaseLatestSourceSchema = z.object({
   orgSlug: z.string().nullable(),
 });
 
+export const ReleaseLatestProductSchema = z.object({
+  slug: z.string(),
+  name: z.string(),
+});
+
 export const ReleaseLatestItemSchema = z.object({
   id: z.string(),
   version: z.string().nullable(),
@@ -39,6 +44,12 @@ export const ReleaseLatestItemSchema = z.object({
   url: z.string().nullable(),
   media: z.array(MediaItemSchema),
   source: ReleaseLatestSourceSchema,
+  /**
+   * Owning product, when the release's source is grouped under a product.
+   * `null` when the source has no `product_id`. Additive — older API responses
+   * omit this field; treat `undefined` as `null`. #1217.
+   */
+  product: ReleaseLatestProductSchema.nullable().optional(),
   coverageCount: z.number().int().min(0).optional(),
   // Cached release-body size hint — see {@link ReleaseItemSchema} for the
   // same fields on the org / collection feeds. #958.

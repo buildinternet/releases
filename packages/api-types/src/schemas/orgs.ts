@@ -342,6 +342,12 @@ export const OrgReleaseItemSchema = ReleaseItemSchema.extend({
     type: z.string(),
     appStore: AppStoreSourceInfoSchema.optional(),
   }),
+  /**
+   * Owning product, when the release's source is grouped under a product.
+   * `null` when the source has no `product_id`. Additive — older API responses
+   * omit this field; treat `undefined` as `null`. #1217.
+   */
+  product: z.object({ slug: z.string(), name: z.string() }).nullable().optional(),
 });
 
 /** Cursor pagination shape for the org releases feed. */

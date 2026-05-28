@@ -1857,6 +1857,9 @@ orgRoutes.get(
           type: r.source_type,
           appStore: appStore ?? undefined,
         },
+        product: r.product_slug
+          ? { slug: r.product_slug, name: r.product_name ?? r.product_slug }
+          : null,
         coverageCount: r.coverage_count,
         contentChars: r.content_chars,
         contentTokens: r.content_tokens,
