@@ -276,11 +276,20 @@ export async function fetchOverviewInputsForOrg(
       ),
     );
 
+  // Fetched before the empty-sources early return so the existing overview is
+  // still reported for an org whose sources are all hidden/paused — matches the
+  // route handler this helper mirrors. (The batch-overview workflow never hits
+  // the empty-sources branch: candidates require ≥1 active source.)
+  const [existing] = await db
+    .select({ content: knowledgePages.content })
+    .from(knowledgePages)
+    .where(and(eq(knowledgePages.scope, "org"), eq(knowledgePages.orgId, org.id)));
+
   if (activeSources.length === 0) {
     return {
       org,
       sources: [],
-      existingContent: null,
+      existingContent: existing?.content ?? null,
       selected: [],
       totalAvailable: 0,
       windowDays,
@@ -330,11 +339,6 @@ export async function fetchOverviewInputsForOrg(
     releasesPerSource,
     limit,
   );
-
-  const [existing] = await db
-    .select({ content: knowledgePages.content })
-    .from(knowledgePages)
-    .where(and(eq(knowledgePages.scope, "org"), eq(knowledgePages.orgId, org.id)));
 
   return {
     org,

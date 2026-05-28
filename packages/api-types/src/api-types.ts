@@ -120,6 +120,7 @@ import type {
   ReleaseLatestProductSchema,
   ReleaseLatestItemSchema,
   ReleaseLatestResponseSchema,
+  ReleaseCoverageSiblingSchema,
   ReleaseCoverageRowSchema,
   ReleaseCoverageResponseSchema,
   LinkReleaseCoverageBodySchema,
@@ -370,6 +371,7 @@ export {
   ReleaseLatestProductSchema,
   ReleaseLatestItemSchema,
   ReleaseLatestResponseSchema,
+  ReleaseCoverageSiblingSchema,
   ReleaseCoverageRowSchema,
   ReleaseCoverageResponseSchema,
   LinkReleaseCoverageBodySchema,
@@ -700,6 +702,7 @@ export interface ReleaseDetail {
   appStore?: { platform: "ios" | "macos"; iconUrl: string | null } | null;
 }
 
+export type ReleaseCoverageSibling = z.infer<typeof ReleaseCoverageSiblingSchema>;
 export type ReleaseCoverageRow = z.infer<typeof ReleaseCoverageRowSchema>;
 export type ReleaseCoverageResponse = z.infer<typeof ReleaseCoverageResponseSchema>;
 export type LinkReleaseCoverageBody = z.infer<typeof LinkReleaseCoverageBodySchema>;

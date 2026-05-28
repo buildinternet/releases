@@ -491,6 +491,21 @@ describe("fetchOverviewInputsForOrg", () => {
     expect(out!.existingContent).toBeNull();
   });
 
+  it("reports existing overview content even when the org has no active sources", async () => {
+    // Org with a stored overview but every source hidden/paused/removed: the
+    // existing content must still surface (the empty-sources early return reads
+    // knowledge_pages before bailing), so `GET …/overview/inputs` keeps its
+    // pre-delegation behavior.
+    tdb.db.insert(organizations).values(makeOrg()).run();
+    tdb.db.insert(knowledgePages).values(makeOverview()).run();
+
+    const out = await fetchOverviewInputsForOrg(asDb(tdb.db), "org_elig_01");
+    expect(out).not.toBeNull();
+    expect(out!.sources.length).toBe(0);
+    expect(out!.selected.length).toBe(0);
+    expect(out!.existingContent).toBe("existing overview body");
+  });
+
   it("hydrates org + sources + recent releases", async () => {
     tdb.db.insert(organizations).values(makeOrg()).run();
     tdb.db.insert(sources).values(makeSource()).run();

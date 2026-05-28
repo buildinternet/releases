@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { api, type ReleaseCoverageResponse, type ReleaseDetail } from "@/lib/api";
+import { api, type ReleaseCoverageResponse, type ReleaseCoverageSibling } from "@/lib/api";
 import { formatDate } from "@/lib/formatters";
 
 interface AlsoCoveredByProps {
@@ -24,32 +24,18 @@ export async function AlsoCoveredBy({ anchorReleaseId }: AlsoCoveredByProps) {
     return null;
   }
 
-  // v1: when we're on a coverage row, show just the canonical. Fetching
-  // the canonical's full sibling list would cost another round-trip per
-  // render — the user can click through to see the rest of the cluster.
-  const siblingIds =
+  // Sibling display fields ride along on the coverage response (one query),
+  // so there's no per-sibling round-trip here. v1 product scope: when we're on
+  // a coverage row, show just the canonical — the user clicks through to see
+  // the rest of the cluster.
+  const siblings: (ReleaseCoverageSibling | null | undefined)[] =
     coverage.role === "canonical"
-      ? coverage.covers.map((c) => c.coverageId)
+      ? coverage.covers.map((c) => c.sibling)
       : coverage.role === "coverage"
-        ? [coverage.canonical.canonicalId]
+        ? [coverage.canonical.sibling]
         : [];
 
-  if (siblingIds.length === 0) return null;
-
-  const siblings = await Promise.all(
-    siblingIds.map(async (id) => {
-      try {
-        return await api.release(id);
-      } catch (err) {
-        console.error(
-          `[also-covered-by] sibling fetch failed id=${id}:`,
-          err instanceof Error ? err.message : err,
-        );
-        return null;
-      }
-    }),
-  );
-  const items = siblings.filter((r): r is ReleaseDetail => r !== null);
+  const items = siblings.filter((s): s is ReleaseCoverageSibling => s != null);
   if (items.length === 0) return null;
 
   const heading =
@@ -75,7 +61,7 @@ export async function AlsoCoveredBy({ anchorReleaseId }: AlsoCoveredByProps) {
   );
 }
 
-function CoverageItem({ item }: { item: ReleaseDetail }) {
+function CoverageItem({ item }: { item: ReleaseCoverageSibling }) {
   const heading = item.version ?? item.title;
   const byline = item.org?.name ? `${item.org.name} · ${item.sourceName}` : item.sourceName;
 
