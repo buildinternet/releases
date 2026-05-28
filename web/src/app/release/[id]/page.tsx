@@ -87,7 +87,6 @@ export default async function ReleaseDetailPage({ params }: { params: Promise<{ 
     : `/source/${release.sourceSlug}`;
 
   const appStore = release.appStore ?? null;
-  const appLabel = appStore ? (appStore.platform === "macos" ? "macOS" : "iOS") : null;
   // App Store screenshots are store marketing, not release content — drop them.
   const media = appStore ? [] : (release.media ?? []);
 
@@ -205,7 +204,7 @@ export default async function ReleaseDetailPage({ params }: { params: Promise<{ 
                     className="rounded-[4px]"
                   />
                 )}
-                Available for {appLabel}
+                Available for {appStore.platform === "macos" ? "macOS" : "iOS"}
               </span>
             )}
             {release.url && (

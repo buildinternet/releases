@@ -2835,10 +2835,7 @@ sourceRoutes.get(
     const { release, sourceName, sourceSlug, sourceType, sourceMetadata, orgSlug, orgName } =
       rows[0];
     const org = orgSlug && orgName ? { slug: orgSlug, name: orgName } : null;
-    const appStore = appStoreSourceInfo(
-      sourceType ?? "",
-      (sourceMetadata as string | null) ?? null,
-    );
+    const appStore = appStoreSourceInfo(sourceType ?? "", sourceMetadata);
     const mediaOrigin = c.env.MEDIA_ORIGIN ?? "";
 
     const media = parseReleaseMedia(release.media as string | null, mediaOrigin);

@@ -165,9 +165,7 @@ export default async function SourceByIdPage({
   };
 
   const appInfo = getAppInfo(source);
-  const appStore = appInfo
-    ? { label: appInfo.label, iconUrl: appInfo.iconUrl, appName: source.name }
-    : null;
+  const appStore = appInfo ? { ...appInfo, appName: source.name } : null;
 
   return (
     <>

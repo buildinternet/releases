@@ -1855,7 +1855,7 @@ orgRoutes.get(
           slug: r.source_slug,
           name: r.source_name,
           type: r.source_type,
-          ...(appStore ? { appStore } : {}),
+          appStore: appStore ?? undefined,
         },
         coverageCount: r.coverage_count,
         contentChars: r.content_chars,
