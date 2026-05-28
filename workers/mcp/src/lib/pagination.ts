@@ -210,6 +210,12 @@ export interface McpSearchMeta {
    * sections searched).
    */
   type?: string[];
+  /**
+   * Echo of the resolved product identifier (`orgSlug/productSlug`) when a
+   * `product` filter was applied and matched. Omitted when no product filter
+   * was passed.
+   */
+  product?: string;
 }
 
 export function buildSearchMeta(opts: {
@@ -219,6 +225,7 @@ export function buildSearchMeta(opts: {
   degraded?: boolean;
   kind?: Kind;
   type?: string[];
+  product?: string;
 }): McpSearchMeta {
   const { mode, limit, counts } = opts;
   const sections = [
@@ -256,5 +263,6 @@ export function buildSearchMeta(opts: {
   // unfiltered case.
   if (opts.kind) meta.kind = opts.kind;
   if (opts.type && opts.type.length > 0) meta.type = opts.type;
+  if (opts.product) meta.product = opts.product;
   return meta;
 }

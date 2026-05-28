@@ -1,4 +1,4 @@
-import { asc, eq, or, sql } from "drizzle-orm";
+import { asc, eq, inArray, or, sql } from "drizzle-orm";
 import {
   domainAliases,
   organizationsActive,
@@ -75,6 +75,17 @@ type ScopeOpts = {
   kind?: string;
   since?: string;
   until?: string;
+  /**
+   * Narrow release hits to these specific source IDs. Used by the
+   * `?product=` filter on `/v1/search` — the route pre-resolves the product
+   * to its source list and passes the IDs through here so both the FTS path
+   * and the entity-enrichment path stay scoped.
+   *
+   * Chunked at 90 IDs per `IN` clause to stay inside D1's 100-bound limit.
+   * When the array is empty (product has no sources) the query returns no
+   * release hits — mirrors the "no matching org sources" behaviour.
+   */
+  sourceIds?: string[];
 };
 
 export async function searchOrgs(
@@ -110,6 +121,22 @@ export async function searchProducts(
   limit: number,
   opts: ScopeOpts = {},
 ): Promise<SearchCatalogHit[]> {
+  // When sourceIds is an empty array the caller has a product with no sources;
+  // return no hits to avoid an invalid `IN ()` clause.
+  if (opts.sourceIds && opts.sourceIds.length === 0) return [];
+  // When narrowing by sourceIds, restrict to products that own any of those
+  // sources (via an EXISTS subquery against sources_active).
+  const sourceIdExistsClause =
+    opts.sourceIds && opts.sourceIds.length > 0
+      ? sql`AND EXISTS (
+          SELECT 1 FROM sources_active sa
+          WHERE sa.product_id = p.id
+            AND sa.id IN (${sql.join(
+              opts.sourceIds.slice(0, 90).map((id) => sql`${id}`),
+              sql`, `,
+            )})
+        )`
+      : sql``;
   return db.all<SearchCatalogHit>(sql`
     SELECT DISTINCT p.slug, p.name, o.slug as orgSlug, o.name as orgName, p.category,
            'product' as entryType, p.kind
@@ -120,6 +147,7 @@ export async function searchProducts(
       OR ${likeContains(sql`da.domain`, query)})
       ${opts.orgId ? sql`AND o.id = ${opts.orgId}` : sql``}
       ${opts.kind ? sql`AND p.kind = ${opts.kind}` : sql``}
+      ${sourceIdExistsClause}
     ORDER BY p.name LIMIT ${limit}
   `);
 }
@@ -130,6 +158,16 @@ export async function searchSources(
   limit: number,
   opts: ScopeOpts = {},
 ): Promise<RawSourceHit[]> {
+  // When sourceIds is an empty array the caller has a product with no sources;
+  // short-circuit to avoid an invalid `IN ()` clause.
+  if (opts.sourceIds && opts.sourceIds.length === 0) return [];
+  const sourceIdClause =
+    opts.sourceIds && opts.sourceIds.length > 0
+      ? sql`AND s.id IN (${sql.join(
+          opts.sourceIds.slice(0, 90).map((id) => sql`${id}`),
+          sql`, `,
+        )})`
+      : sql``;
   return db.all<RawSourceHit>(sql`
     SELECT s.slug, s.name, s.type, o.slug as orgSlug, o.name as orgName,
            p.slug as productSlug, p.name as productName, p.category as productCategory,
@@ -142,6 +180,7 @@ export async function searchSources(
         OR ${likeContains(sql`s.url`, query)})
       ${opts.orgId ? sql`AND s.org_id = ${opts.orgId}` : sql``}
       ${opts.kind ? sql`AND s.kind = ${opts.kind}` : sql``}
+      ${sourceIdClause}
     ORDER BY s.name LIMIT ${limit}
   `);
 }
@@ -153,6 +192,16 @@ export async function searchReleasesFts(
   offset: number,
   opts: { includeCoverage?: boolean } & ScopeOpts = {},
 ): Promise<RawSearchReleaseRow[]> {
+  // When sourceIds is an empty array the caller has a product with no sources;
+  // short-circuit to avoid an invalid `IN ()` clause and return no hits.
+  if (opts.sourceIds && opts.sourceIds.length === 0) return [];
+  const sourceIdClause =
+    opts.sourceIds && opts.sourceIds.length > 0
+      ? sql`AND r.source_id IN (${sql.join(
+          opts.sourceIds.slice(0, 90).map((id) => sql`${id}`),
+          sql`, `,
+        )})`
+      : sql``;
   const ftsQuery = toFtsMatchQuery(query);
   return db.all<RawSearchReleaseRow>(sql`
     SELECT r.id as id, s.slug as sourceSlug, s.name as sourceName, s.type as sourceType,
@@ -176,6 +225,7 @@ export async function searchReleasesFts(
       AND (r.suppressed IS NULL OR r.suppressed = 0)
       ${opts.includeCoverage ? sql`` : sql`AND r.id IN (SELECT id FROM releases_visible)`}
       ${opts.orgId ? sql`AND s.org_id = ${opts.orgId}` : sql``}
+      ${sourceIdClause}
       ${opts.kind ? sql`AND COALESCE(s.kind, p.kind) = ${opts.kind}` : sql``}
       ${opts.since ? sql`AND r.published_at >= ${opts.since}` : sql``}
       ${opts.until ? sql`AND r.published_at <= ${opts.until}` : sql``}
@@ -190,6 +240,16 @@ export async function searchReleasesFromMatchedEntities(
   limit: number,
   opts: { includeCoverage?: boolean } & ScopeOpts = {},
 ): Promise<RawSearchReleaseRow[]> {
+  // When sourceIds is an empty array the caller has a product with no sources;
+  // short-circuit to avoid an invalid `IN ()` clause and return no hits.
+  if (opts.sourceIds && opts.sourceIds.length === 0) return [];
+  const sourceIdClause =
+    opts.sourceIds && opts.sourceIds.length > 0
+      ? sql`AND r.source_id IN (${sql.join(
+          opts.sourceIds.slice(0, 90).map((id) => sql`${id}`),
+          sql`, `,
+        )})`
+      : sql``;
   const conditions = [];
   if (orgSlugs.length > 0)
     conditions.push(
@@ -226,6 +286,7 @@ export async function searchReleasesFromMatchedEntities(
     WHERE (s.is_hidden = 0 OR s.is_hidden IS NULL)
       AND (r.suppressed IS NULL OR r.suppressed = 0)
       AND (${sql.join(conditions, sql` OR `)})
+      ${sourceIdClause}
       ${opts.kind ? sql`AND COALESCE(s.kind, p.kind) = ${opts.kind}` : sql``}
       ${opts.since ? sql`AND r.published_at >= ${opts.since}` : sql``}
       ${opts.until ? sql`AND r.published_at <= ${opts.until}` : sql``}

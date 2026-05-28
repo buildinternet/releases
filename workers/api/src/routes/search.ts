@@ -42,11 +42,12 @@ import {
 import {
   organizationsActive,
   sources,
+  products,
   type SearchSurface,
 } from "@buildinternet/releases-core/schema";
 import { parseCoordinate } from "@buildinternet/releases-core/lookup-coordinate";
 import { normalizeDomain } from "@buildinternet/releases-core/domain";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { runLookup } from "./lookups.js";
 import { embedSourceSideEffect } from "./sources.js";
 
@@ -172,6 +173,86 @@ async function resolveDomainScope(
   return { kind: "miss", domain };
 }
 
+/**
+ * Resolve a `?product=` filter to the set of source IDs that belong to that
+ * product. Accepts a `prod_…` typed ID or an `orgSlug/productSlug` coordinate.
+ *
+ * Bare slugs (no `/`, no `prod_` prefix) are rejected with `invalid` because
+ * product slugs are org-scoped (#690) and an unqualified slug is ambiguous.
+ * An unrecognized-but-valid identifier returns `miss` — the response envelope
+ * carries an empty product result rather than aborting with a 404, mirroring
+ * how the `?domain=` miss case returns an empty envelope with `domainStatus:
+ * "not_found"` instead of 404. Callers that want a strict 404 on miss should
+ * check the resolution kind before proceeding.
+ */
+async function resolveProductScope(
+  db: ReturnType<typeof createDb>,
+  raw: string,
+): Promise<
+  | { kind: "invalid" }
+  | { kind: "miss"; product: string }
+  | { kind: "hit"; sourceIds: string[]; productSlug: string; orgSlug: string }
+> {
+  const input = raw.trim();
+  // Bare slugs are ambiguous — reject them with a clear error.
+  const isTypedId = input.startsWith("prod_");
+  const isCoordinate = !isTypedId && input.includes("/");
+  if (!isTypedId && !isCoordinate) return { kind: "invalid" };
+
+  let productRow: { id: string; slug: string; orgId: string } | null = null;
+
+  if (isTypedId) {
+    const [row] = await db
+      .select({ id: products.id, slug: products.slug, orgId: products.orgId })
+      .from(products)
+      .where(eq(products.id, input))
+      .limit(1);
+    productRow = row ?? null;
+  } else {
+    // Coordinate: "orgSlug/productSlug"
+    const slashIdx = input.indexOf("/");
+    const orgSlugPart = input.slice(0, slashIdx);
+    const productSlugPart = input.slice(slashIdx + 1);
+    if (!orgSlugPart || !productSlugPart) return { kind: "invalid" };
+    const [orgRow] = await db
+      .select({ id: organizationsActive.id, slug: organizationsActive.slug })
+      .from(organizationsActive)
+      .where(eq(organizationsActive.slug, orgSlugPart))
+      .limit(1);
+    if (orgRow) {
+      const [row] = await db
+        .select({ id: products.id, slug: products.slug, orgId: products.orgId })
+        .from(products)
+        .where(and(eq(products.slug, productSlugPart), eq(products.orgId, orgRow.id)))
+        .limit(1);
+      productRow = row ?? null;
+    }
+  }
+
+  if (!productRow) return { kind: "miss", product: input };
+
+  // Resolve the owning org slug for echo on the response.
+  const [orgRow] = await db
+    .select({ slug: organizationsActive.slug })
+    .from(organizationsActive)
+    .where(eq(organizationsActive.id, productRow.orgId))
+    .limit(1);
+  const orgSlug = orgRow?.slug ?? productRow.orgId;
+
+  // Expand the product to all of its source IDs.
+  const sourceRows = await db
+    .select({ id: sources.id })
+    .from(sources)
+    .where(eq(sources.productId, productRow.id));
+
+  return {
+    kind: "hit",
+    sourceIds: sourceRows.map((r) => r.id),
+    productSlug: productRow.slug,
+    orgSlug,
+  };
+}
+
 searchRoutes.get(
   "/search",
   describeRoute({
@@ -215,6 +296,14 @@ searchRoutes.get(
         required: false,
         schema: { type: "string" },
         description: "Narrow results to the org owning this domain.",
+      },
+      {
+        name: "product",
+        in: "query",
+        required: false,
+        schema: { type: "string" },
+        description:
+          'Narrow release and catalog hits to a specific product\'s sources. Accepts a `prod_…` typed ID or an `orgSlug/productSlug` coordinate (e.g. `vercel/next-js`). Bare slugs (no `/` prefix) are rejected as ambiguous. Unknown products return an empty envelope with `productStatus: "not_found"`. Composes with `domain`, `kind`, `since`, and `until`.',
       },
       {
         name: "include_coverage",
@@ -339,6 +428,33 @@ searchRoutes.get(
     const scopeOrgId = domainResolution?.kind === "hit" ? domainResolution.orgId : undefined;
     const domainMissed = domainResolution?.kind === "miss";
 
+    // Optional `?product=` narrows release and catalog hits to the sources
+    // belonging to one product. Bare slugs are rejected because product slugs
+    // are org-scoped (#690). Unknown products return an empty envelope with
+    // `productStatus: "not_found"` — matching how domain miss works.
+    const rawProduct = c.req.query("product");
+    const productResolution = rawProduct ? await resolveProductScope(db, rawProduct) : null;
+    if (productResolution?.kind === "invalid") {
+      return c.json(
+        {
+          error: "bad_request",
+          message:
+            "product query param must be a typed ID (prod_…) or an org-scoped coordinate (orgSlug/productSlug)",
+        },
+        400,
+      );
+    }
+    // Source IDs from the product resolution. When set, all release/catalog
+    // queries narrow to these source IDs only.
+    const productSourceIds =
+      productResolution?.kind === "hit" ? productResolution.sourceIds : undefined;
+    const productMissed = productResolution?.kind === "miss";
+    // Echo shape for the response `_meta` / top-level envelope.
+    const productEcho =
+      productResolution?.kind === "hit"
+        ? `${productResolution.orgSlug}/${productResolution.productSlug}`
+        : undefined;
+
     // Trigger embedding as a side effect when a new source was just indexed.
     // The try/catch guards against test environments that have no ExecutionContext.
     function maybeEmbed(lookup: Awaited<ReturnType<typeof runLookup>> | null): void {
@@ -359,6 +475,43 @@ searchRoutes.get(
         query: q,
         domain: domainResolution.domain,
         domainStatus: "not_found" as const,
+        orgs: [],
+        catalog: [],
+        sources: [],
+        releases: [],
+        collections: [],
+        ...(mode !== "lexical" ? { chunks: [], mode, degraded: false } : {}),
+        lookup: null,
+      };
+      c.executionCtx.waitUntil(
+        logSearch(c.env, {
+          surface,
+          clientKind,
+          authed,
+          query: q,
+          mode: mode === "lexical" ? "lexical" : mode,
+          orgHits: 0,
+          catalogHits: 0,
+          releaseHits: 0,
+          chunkHits: 0,
+          collectionHits: 0,
+          durationMs: Date.now() - startedAt,
+          anonId,
+          userAgent,
+        }),
+      );
+      if (wantsMarkdown(c)) return markdownResponse(c, searchToMarkdown(result));
+      return c.json(result);
+    }
+
+    // Product miss → empty result envelope with productStatus: "not_found".
+    // No GitHub on-demand lookup — product misses are precise identifiers, not
+    // coordinate probes.
+    if (productMissed) {
+      const result = {
+        query: q,
+        product: rawProduct!,
+        productStatus: "not_found" as const,
         orgs: [],
         catalog: [],
         sources: [],
@@ -420,8 +573,16 @@ searchRoutes.get(
             },
           ])
         : searchOrgs(db, q, limit, { orgId: scopeOrgId, includeEmpty }),
-      searchProducts(db, q, limit, { orgId: scopeOrgId, kind: kindFilter }),
-      searchSources(db, q, limit, { orgId: scopeOrgId, kind: kindFilter }),
+      searchProducts(db, q, limit, {
+        orgId: scopeOrgId,
+        kind: kindFilter,
+        sourceIds: productSourceIds,
+      }),
+      searchSources(db, q, limit, {
+        orgId: scopeOrgId,
+        kind: kindFilter,
+        sourceIds: productSourceIds,
+      }),
       // Direct LIKE match on collection name/slug/description — runs in
       // every mode. Independent of `?domain=`: collections are cross-org
       // by design, so a domain-scoped query still surfaces a relevant
@@ -438,9 +599,13 @@ searchRoutes.get(
     );
 
     // Pre-compute the source-id list when narrowing — needed for the hybrid
-    // path's `orgSourceIds` filter.
+    // path's `orgSourceIds` filter. When both domain (org scope) and product
+    // scope are active, the product scope is more specific and wins.
     let scopeSourceIds: string[] | undefined;
-    if (scopeOrgId) {
+    if (productSourceIds) {
+      // Product scope is already a pre-resolved source-ID list.
+      scopeSourceIds = productSourceIds;
+    } else if (scopeOrgId) {
       const rows = await db
         .select({ id: sources.id })
         .from(sources)
@@ -455,6 +620,7 @@ searchRoutes.get(
       const ftsRows = await searchReleasesFts(db, q, limit, offset, {
         includeCoverage,
         orgId: scopeOrgId,
+        sourceIds: productSourceIds,
         kind: kindFilter,
         since,
         until,
@@ -466,7 +632,7 @@ searchRoutes.get(
           orgs.map((o) => o.slug),
           catalog.filter((p) => p.entryType !== "source").map((p) => p.slug),
           limit,
-          { includeCoverage, kind: kindFilter, since, until },
+          { includeCoverage, sourceIds: productSourceIds, kind: kindFilter, since, until },
         );
       }
       const releases = rawReleases.map((row) => hydrateReleaseHit(row, mediaOrigin));
@@ -475,9 +641,15 @@ searchRoutes.get(
       // question about one repo, so only entity matches (org / catalog
       // source) suppress it. Tangential FTS hits on a single segment token
       // (e.g. "shopify" in another org's release body) don't. Skip when
-      // narrowing by domain — the caller has already specified an entity.
+      // narrowing by domain or product — the caller has already specified an entity.
       let lookup: Awaited<ReturnType<typeof runLookup>> | null = null;
-      if (coordinate && !scopeOrgId && orgs.length === 0 && catalog.length === 0) {
+      if (
+        coordinate &&
+        !scopeOrgId &&
+        !productSourceIds &&
+        orgs.length === 0 &&
+        catalog.length === 0
+      ) {
         lookup = await runLookup(c.env, db, coordinate);
         maybeEmbed(lookup);
       }
@@ -493,6 +665,7 @@ searchRoutes.get(
         ...(domainResolution
           ? { domain: domainResolution.domain, domainStatus: "matched" as const }
           : {}),
+        ...(productEcho ? { product: productEcho, productStatus: "matched" as const } : {}),
         orgs,
         catalog,
         sources: [],
@@ -602,10 +775,16 @@ searchRoutes.get(
       }));
 
     // On-demand GitHub lookup: same gate as the lexical branch — entity
-    // matches suppress it, release/chunk hits don't. Domain narrowing also
-    // suppresses (the caller has already named an entity).
+    // matches suppress it, release/chunk hits don't. Domain or product
+    // narrowing also suppresses (the caller has already named an entity).
     let lookup: Awaited<ReturnType<typeof runLookup>> | null = null;
-    if (coordinate && !scopeOrgId && orgs.length === 0 && catalog.length === 0) {
+    if (
+      coordinate &&
+      !scopeOrgId &&
+      !productSourceIds &&
+      orgs.length === 0 &&
+      catalog.length === 0
+    ) {
       lookup = await runLookup(c.env, db, coordinate);
       maybeEmbed(lookup);
     }
@@ -630,6 +809,7 @@ searchRoutes.get(
       ...(domainResolution
         ? { domain: domainResolution.domain, domainStatus: "matched" as const }
         : {}),
+      ...(productEcho ? { product: productEcho, productStatus: "matched" as const } : {}),
       orgs,
       catalog,
       sources: [],
