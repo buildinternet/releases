@@ -15,6 +15,7 @@ import { organizations, products, releases, sources } from "@buildinternet/relea
 import type { Source } from "@buildinternet/releases-core/schema";
 import type { ReleaseComposition } from "@buildinternet/releases-core/composition";
 import { buildCompositionMetadataSet } from "@releases/core-internal/composition-metadata";
+import { summarizeNotOptedOut } from "@releases/core-internal/eligibility";
 import { releaseCoverage } from "@releases/db/schema-coverage.js";
 import { SOURCE_DELETED_SENTINEL, recordWorkflowFailure } from "./_shared.js";
 import { logEvent } from "@releases/lib/log-event";
@@ -182,7 +183,11 @@ const MAX_AUTOGEN_BODY_CHARS = 50_000;
 /**
  * Per-org opt-in: when the source's org has `auto_generate_content = true`
  * and the source isn't hidden, run freshly-inserted releases through Haiku
- * 4.5 to populate `title_generated` / `title_short` / `summary`.
+ * 4.5 to populate `title_generated` / `title_short` / `summary`. A source can
+ * opt out individually via `metadata.summarize = false` (see
+ * `summarizeNotOptedOut`) — useful for App Store apps whose notes are always
+ * boilerplate. The opt-out lives in the SELECT predicate so it holds for the
+ * partial-source `regenerate` caller in routes/workflows.ts too.
  *
  * Per-row exceptions log + continue so a single bad call can't pin the
  * workflow into a retry storm. The step itself only throws on outer-loop
@@ -241,6 +246,7 @@ export async function generateContentForReleases(
         and(
           inArray(releases.id, chunk),
           eq(organizations.autoGenerateContent, true),
+          summarizeNotOptedOut(),
           sql`${releaseCoverage.coverageId} IS NULL`,
         ),
       );

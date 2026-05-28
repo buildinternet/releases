@@ -45,8 +45,24 @@ export interface EligibleRow {
 const DEFAULT_MAX_ROWS = 500;
 
 /**
+ * Per-source opt-out predicate for AI content generation: a source whose
+ * `metadata.summarize === false` is skipped even when its org has
+ * `autoGenerateContent` on (e.g. App Store apps whose release notes are always
+ * boilerplate like "Bug fixes and improvements"). `json_extract` returns 0 for
+ * JSON `false`, 1 for `true`, and NULL when the key is absent — so only an
+ * explicit `false` is excluded; absent / true sources stay eligible.
+ *
+ * Shared with `generateContentForReleases` (poll-and-fetch.ts) so the live cron
+ * path and the batch path apply the same gate.
+ */
+export function summarizeNotOptedOut() {
+  return sql`(json_extract(${sources.metadata}, '$.summarize') IS NULL OR json_extract(${sources.metadata}, '$.summarize') != 0)`;
+}
+
+/**
  * Fetch releases that are eligible for batch content generation:
  *   - Org has auto_generate_content = true
+ *   - Source has not opted out via metadata.summarize = false
  *   - Release is not suppressed
  *   - published_at >= cutoffIso
  *   - title_short IS NULL (not yet summarized)
@@ -99,6 +115,7 @@ export async function fetchEligibleReleases(
       .where(
         and(
           eq(organizations.autoGenerateContent, true),
+          summarizeNotOptedOut(),
           eq(releases.suppressed, false),
           eq(sources.isHidden, false),
           gte(releases.publishedAt, cutoffIso),
@@ -146,6 +163,7 @@ export async function fetchEligibleReleases(
       .where(
         and(
           eq(organizations.autoGenerateContent, true),
+          summarizeNotOptedOut(),
           eq(releases.suppressed, false),
           eq(sources.isHidden, false),
           gte(releases.publishedAt, cutoffIso),

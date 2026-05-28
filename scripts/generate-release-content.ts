@@ -156,6 +156,7 @@ async function fetchReleases(): Promise<ReleaseRow[]> {
     WHERE r.suppressed = 0
       ${orgClause}
       AND r.fetched_at >= '${cutoffIso}'
+      AND (json_extract(s.metadata, '$.summarize') IS NULL OR json_extract(s.metadata, '$.summarize') != 0)
     ORDER BY o.slug, r.fetched_at DESC;
   `.trim();
 

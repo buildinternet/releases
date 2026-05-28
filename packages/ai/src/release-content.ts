@@ -485,17 +485,24 @@ export function parseReleaseContent(
   const titleShort = extractTagged(raw, "title_short") || null;
 
   // <empty>true</empty> is the primary boilerplate signal — when present, we
-  // discard summary + title_short regardless of their text. <empty>false</empty>
-  // means trust the model: keep the content even if the short title coincidentally
-  // matches a boilerplate constant. Only when the tag is absent (older cached
-  // prompt, output truncated) do we fall back to string-matching the in-prompt
-  // sentinels as defense-in-depth.
+  // discard summary + title_short regardless of their text.
+  //
+  // The fallback SUMMARY sentinel ("Release notes do not describe the change.")
+  // is reserved: the prompt only ever instructs the model to emit it for empty
+  // bodies, so it is never a legitimate summary. Treat it as a discard signal
+  // unconditionally — the model sometimes emits <empty>false</empty> while still
+  // writing the sentinel (a self-contradiction). Trusting the tag there leaked
+  // the sentinel into the stored summary and rendered it on the release page.
+  //
+  // A boilerplate SHORT TITLE ("Dependency update") CAN be a legitimate headline,
+  // so it only counts as a discard signal when the <empty> tag is absent (older
+  // cached prompt / truncated output) and there's no structured verdict to trust.
   const emptyTag = readEmptyTag(raw);
   const isFallbackSummary = summary.trim().toLowerCase() === EMPTY_BODY_FALLBACK.toLowerCase();
   const isFallbackShort =
     titleShort !== null && BOILERPLATE_SHORT_TITLES.has(titleShort.trim().toLowerCase());
   const discard =
-    emptyTag === "true" || (emptyTag === null && (isFallbackSummary || isFallbackShort));
+    emptyTag === "true" || isFallbackSummary || (emptyTag === null && isFallbackShort);
 
   return {
     title: extractTagged(raw, "title") || null,

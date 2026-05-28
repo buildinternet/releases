@@ -144,8 +144,17 @@ export interface SourceMetadata {
   // Per-source AI guidance
   parseInstructions?: string; // freeform text appended to AI parsing prompts
 
-  // Summary generation
-  summarize?: boolean; // false = opt-out of AI summaries
+  /**
+   * Per-source opt-out from AI content generation (`title_generated` /
+   * `title_short` / `summary`). Set `false` to skip a source even when its org
+   * has `auto_generate_content = true` — useful for App Store apps and similar
+   * sources whose release notes are always boilerplate ("Bug fixes and
+   * improvements"). Absent / `true` keeps the source eligible. Enforced in the
+   * row-selection queries via `summarizeNotOptedOut`
+   * (`@releases/core-internal/eligibility`), shared by the live cron path
+   * (`generateContentForReleases`) and the batch path (`fetchEligibleReleases`).
+   */
+  summarize?: boolean;
 
   // Page HEAD / body-hash change-detection fields for scrape-no-feed and
   // agent sources (#517). Validator choice is driven by the playbook's
