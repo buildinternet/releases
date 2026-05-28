@@ -19,13 +19,25 @@ export async function generateMetadata({
     const resolved = await getResolved(orgSlug, slug);
     if (resolved.kind === "product") {
       const product = resolved.product;
-      // Product canonical is the BARE form now (links.ts is flipped).
+      // Product canonical is the BARE form now (links.ts is flipped). The
+      // bare `.atom` route resolves product-first (#1210), so advertise the
+      // product's cross-source feed the same way the source branch does.
       return {
         title: `${product.name} Release Notes & Changelog`,
         description:
           product.description ?? `Release notes, changelog, and updates for ${product.name}.`,
         openGraph: { type: "website", url: `/${orgSlug}/${slug}` },
-        alternates: { canonical: `/${orgSlug}/${slug}` },
+        alternates: {
+          canonical: `/${orgSlug}/${slug}`,
+          types: {
+            "application/atom+xml": [
+              {
+                url: `/${orgSlug}/${slug}.atom`,
+                title: `${product.name} release notes`,
+              },
+            ],
+          },
+        },
       };
     }
     const source = resolved.source;
