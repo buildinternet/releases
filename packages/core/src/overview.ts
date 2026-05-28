@@ -126,14 +126,13 @@ function budgetByProduct(tagged: TaggedRelease[], limit: number): TaggedRelease[
   if (tagged.length <= limit) return tagged;
 
   // Bucket by product, preserving first-seen order for determinism. A null
-  // productId collapses to one shared "no product" bucket.
-  const NO_PRODUCT = Symbol("no-product");
-  const buckets = new Map<string | symbol, TaggedRelease[]>();
+  // productId is itself the key, so all product-less direct sources collapse
+  // into one shared "no product" bucket.
+  const buckets = new Map<string | null, TaggedRelease[]>();
   for (const t of tagged) {
-    const key = t.productId ?? NO_PRODUCT;
-    const list = buckets.get(key) ?? [];
+    const list = buckets.get(t.productId) ?? [];
     list.push(t);
-    buckets.set(key, list);
+    buckets.set(t.productId, list);
   }
 
   const bucketLists = [...buckets.values()].map((list) =>
@@ -157,6 +156,8 @@ function budgetByProduct(tagged: TaggedRelease[], limit: number): TaggedRelease[
  * handed out one unit at a time to the buckets with the most spare capacity, so
  * the tail favors larger buckets rather than starving them. Total allocated ==
  * min(limit, sum(capacities)).
+ *
+ * e.g. distributeBudget([20, 20, 20, 15], 50) → [13, 13, 12, 12].
  */
 function distributeBudget(capacities: number[], limit: number): number[] {
   const n = capacities.length;
@@ -168,17 +169,14 @@ function distributeBudget(capacities: number[], limit: number): number[] {
     for (let i = 0; i < n; i++) if (alloc[i] < capacities[i]) open.push(i);
     if (open.length === 0) break;
     const share = Math.floor(remaining / open.length);
-    if (share === 0) break;
-    let progressed = false;
+    if (share === 0) break; // remainder smaller than the open-bucket count
+    // Every open bucket has spare capacity and share >= 1, so each give is >= 1
+    // and `remaining` strictly decreases — the loop always makes progress.
     for (const i of open) {
       const give = Math.min(share, capacities[i] - alloc[i]);
-      if (give > 0) {
-        alloc[i] += give;
-        remaining -= give;
-        progressed = true;
-      }
+      alloc[i] += give;
+      remaining -= give;
     }
-    if (!progressed) break;
   }
 
   // Remainder pass: fewer slots than open buckets. Give to the buckets with the
