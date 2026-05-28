@@ -128,8 +128,8 @@ the detail page consumes.
 - **api-types / handler:** an appstore source emits `source.appStore = { platform, iconUrl }`;
   a non-appstore source omits the block. Platform and icon read from `source.metadata.appStore`.
 - **`ReleaseListItem`:** appstore release renders the compact branch (icon + "{AppName} v{version}"
-  + "Available for iOS", no thumbnail, no media gallery); empty/whitespace notes → "No release
-  notes provided."; expanding reveals notes + App Store link; a non-appstore release is unchanged.
+  - "Available for iOS", no thumbnail, no media gallery); empty/whitespace notes → "No release
+    notes provided."; expanding reveals notes + App Store link; a non-appstore release is unchanged.
 - **Detail page:** appstore release suppresses screenshots and shows the app icon + platform byline.
 
 ## Out of scope / follow-ups

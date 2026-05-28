@@ -15,6 +15,7 @@
 ## File Structure
 
 **API contract (`packages/api-types/`)**
+
 - `src/schemas/shared.ts` — new `AppStoreSourceInfoSchema` (single source of truth for the `{platform, iconUrl}` shape).
 - `src/schemas/orgs.ts` — `OrgReleaseItemSchema.source` gains optional `appStore`.
 - `src/schemas/releases.ts` — `ReleaseDetailResponseSchema` gains nullable/optional `appStore`.
@@ -22,19 +23,23 @@
 - `test/appstore-source-info.test.ts` — schema parse tests.
 
 **Server helper (`packages/adapters/`)**
+
 - `src/appstore.ts` — new pure `appStoreSourceInfo(type, metadataJson)` returning `{platform, iconUrl} | null`.
 - `src/appstore.test.ts` — helper unit tests.
 
 **Org feed (`workers/api/`)**
+
 - `src/queries/orgs.ts` — `OrgReleaseRow` type + the feed SELECT gain `source_metadata`.
 - `src/routes/orgs.ts` — the feed item `.map` attaches `appStore`.
 - `test/org-feed-appstore-metadata.test.ts` — query returns `source_metadata`.
 
 **Detail handler (`workers/api/`)**
+
 - `src/routes/sources.ts` — `GET /v1/releases/:id` selects `sources.metadata` and attaches `appStore`.
 - `test/release-detail-appstore.test.ts` — handler surfaces `appStore`.
 
 **Web (`web/`)**
+
 - `src/lib/app-source.ts` — new `AppRowInfo` type + `appStoreIconUrl(url, px)` mzstatic resizer.
 - `src/lib/app-source.test.ts` — `appStoreIconUrl` tests.
 - `src/components/release-item.tsx` — `ReleaseListItem` gains an `appStore` prop + compact branch.
@@ -50,6 +55,7 @@
 ## Task 1: API contract — `AppStoreSourceInfo` schema + wire fields
 
 **Files:**
+
 - Modify: `packages/api-types/src/schemas/shared.ts`
 - Modify: `packages/api-types/src/schemas/orgs.ts:337-339`
 - Modify: `packages/api-types/src/schemas/releases.ts:140-163`
@@ -77,7 +83,10 @@ describe("OrgReleaseItem source.appStore", () => {
   it("accepts an appStore block on the source", () => {
     const r = OrgReleaseItemSchema.safeParse({
       ...base,
-      source: { ...base.source, appStore: { platform: "ios", iconUrl: "https://x/1024x1024bb.png" } },
+      source: {
+        ...base.source,
+        appStore: { platform: "ios", iconUrl: "https://x/1024x1024bb.png" },
+      },
     });
     expect(r.success).toBe(true);
   });
@@ -164,7 +173,9 @@ In `packages/api-types/src/api-types.ts`, add to the `ReleaseDetail` interface (
 Also export the inferred type — in `packages/api-types/src/api-types.ts` near the other `z.infer` exports (e.g. `OrgReleaseItem` at ~line 527), add:
 
 ```ts
-export type AppStoreSourceInfo = import("zod").z.infer<typeof import("./schemas/shared.js").AppStoreSourceInfoSchema>;
+export type AppStoreSourceInfo = import("zod").z.infer<
+  typeof import("./schemas/shared.js").AppStoreSourceInfoSchema
+>;
 ```
 
 (If the file already imports the schema namespace, prefer a direct `z.infer<typeof AppStoreSourceInfoSchema>` matching the existing pattern in that file rather than the inline `import(...)` form.)
@@ -191,6 +202,7 @@ git commit -m "feat(api-types): thread appStore {platform,iconUrl} onto org-feed
 ## Task 2: Server helper `appStoreSourceInfo` (pure)
 
 **Files:**
+
 - Modify: `packages/adapters/src/appstore.ts`
 - Test: `packages/adapters/src/appstore.test.ts`
 
@@ -204,7 +216,12 @@ import { appStoreSourceInfo } from "./appstore";
 
 describe("appStoreSourceInfo", () => {
   const meta = JSON.stringify({
-    appStore: { trackId: "1", storefront: "us", platform: "macos", artworkUrl: "https://is1-ssl.mzstatic.com/a/1024x1024bb.png" },
+    appStore: {
+      trackId: "1",
+      storefront: "us",
+      platform: "macos",
+      artworkUrl: "https://is1-ssl.mzstatic.com/a/1024x1024bb.png",
+    },
   });
 
   it("returns platform + iconUrl for an appstore source", () => {
@@ -287,6 +304,7 @@ git commit -m "feat(adapters): appStoreSourceInfo pure helper (type + metadata -
 ## Task 3: Org feed — select `source_metadata` + attach `appStore`
 
 **Files:**
+
 - Modify: `workers/api/src/queries/orgs.ts:468-489` (row type) and `:570-575` (SELECT)
 - Modify: `workers/api/src/routes/orgs.ts:1837-1858` (feed item map)
 - Test: `workers/api/test/org-feed-appstore-metadata.test.ts`
@@ -316,7 +334,9 @@ describe("getOrgReleasesFeed appstore metadata", () => {
     applyMigrations(sqlite);
     d1 = makeD1Shim(sqlite);
 
-    await db.insert(organizations).values({ id: "org_a", slug: "notion", name: "Notion", category: "cloud" });
+    await db
+      .insert(organizations)
+      .values({ id: "org_a", slug: "notion", name: "Notion", category: "cloud" });
     await db.insert(sources).values({
       id: "src_app",
       slug: "notion-ios",
@@ -325,7 +345,12 @@ describe("getOrgReleasesFeed appstore metadata", () => {
       url: "https://apps.apple.com/us/app/id1232780281",
       orgId: "org_a",
       metadata: JSON.stringify({
-        appStore: { trackId: "1232780281", storefront: "us", platform: "ios", artworkUrl: "https://is1-ssl.mzstatic.com/a/1024x1024bb.png" },
+        appStore: {
+          trackId: "1232780281",
+          storefront: "us",
+          platform: "ios",
+          artworkUrl: "https://is1-ssl.mzstatic.com/a/1024x1024bb.png",
+        },
       }),
     });
     await db.insert(releases).values({
@@ -358,8 +383,8 @@ Expected: FAIL — `rows[0].source_metadata` is `undefined` (column not selected
 In `workers/api/src/queries/orgs.ts`, in the `OrgReleaseRow` type (lines 468-489), add after `source_type: string;`:
 
 ```ts
-  source_type: string;
-  source_metadata: string | null;
+source_type: string;
+source_metadata: string | null;
 ```
 
 - [ ] **Step 4: Add `s.metadata` to the SELECT**
@@ -403,32 +428,32 @@ Then in the feed item map (lines 1837-1858), change the `source` object:
 Hoisted form (preferred) — inside the `.map((r) => { ... })`:
 
 ```ts
-    const releasesFormatted = pageRows.map((r) => {
-      const appStore = appStoreSourceInfo(r.source_type, r.source_metadata);
-      return {
-        id: r.id,
-        version: r.version,
-        type: r.type,
-        title: r.title,
-        summary: r.summary ?? (r.content.length > 150 ? r.content.slice(0, 150) + "..." : r.content),
-        titleGenerated: r.title_generated,
-        titleShort: r.title_short,
-        content: hydrateMediaUrls(r.content, mediaOrigin),
-        publishedAt: r.published_at,
-        url: r.url,
-        media: parseReleaseMedia(r.media, mediaOrigin),
-        prerelease: r.prerelease === 1,
-        source: {
-          slug: r.source_slug,
-          name: r.source_name,
-          type: r.source_type,
-          ...(appStore ? { appStore } : {}),
-        },
-        coverageCount: r.coverage_count,
-        contentChars: r.content_chars,
-        contentTokens: r.content_tokens,
-      };
-    });
+const releasesFormatted = pageRows.map((r) => {
+  const appStore = appStoreSourceInfo(r.source_type, r.source_metadata);
+  return {
+    id: r.id,
+    version: r.version,
+    type: r.type,
+    title: r.title,
+    summary: r.summary ?? (r.content.length > 150 ? r.content.slice(0, 150) + "..." : r.content),
+    titleGenerated: r.title_generated,
+    titleShort: r.title_short,
+    content: hydrateMediaUrls(r.content, mediaOrigin),
+    publishedAt: r.published_at,
+    url: r.url,
+    media: parseReleaseMedia(r.media, mediaOrigin),
+    prerelease: r.prerelease === 1,
+    source: {
+      slug: r.source_slug,
+      name: r.source_name,
+      type: r.source_type,
+      ...(appStore ? { appStore } : {}),
+    },
+    coverageCount: r.coverage_count,
+    contentChars: r.content_chars,
+    contentTokens: r.content_tokens,
+  };
+});
 ```
 
 - [ ] **Step 7: Type-check the worker**
@@ -448,6 +473,7 @@ git commit -m "feat(api): attach source.appStore on the org releases feed"
 ## Task 4: Web helper `appStoreIconUrl` (mzstatic resizer)
 
 **Files:**
+
 - Modify: `web/src/lib/app-source.ts`
 - Test: `web/src/lib/app-source.test.ts`
 
@@ -472,7 +498,9 @@ describe("appStoreIconUrl", () => {
   });
 
   it("returns the url unchanged when it does not match the mzstatic pattern", () => {
-    expect(appStoreIconUrl("https://example.com/icon.png", 96)).toBe("https://example.com/icon.png");
+    expect(appStoreIconUrl("https://example.com/icon.png", 96)).toBe(
+      "https://example.com/icon.png",
+    );
   });
 });
 ```
@@ -536,6 +564,7 @@ git commit -m "feat(web): appStoreIconUrl mzstatic resizer + AppRowInfo type"
 ## Task 5: `ReleaseListItem` compact App Store branch
 
 **Files:**
+
 - Modify: `web/src/components/release-item.tsx`
 
 No unit harness for `.tsx`; verified by `tsc` (Step 4) and manual check (Task 9).
@@ -569,128 +598,130 @@ export function ReleaseListItem({
 In the content container `<div className="flex-1 min-w-0 border-b border-stone-200 dark:border-stone-800 last:border-b-0 py-4 pl-5">` (line 236), wrap the **existing** children (from the heading row `<div className="flex items-baseline gap-1.5 mb-1">` at line 237 through the end of the collapsible `<div>` that closes at line 363) in `{!appStore && (<> ... </>)}`, and insert the App Store block immediately **before** it:
 
 ```tsx
-      <div className="flex-1 min-w-0 border-b border-stone-200 dark:border-stone-800 last:border-b-0 py-4 pl-5">
-        {appStore && (
-          <div
-            className="group relative cursor-pointer"
-            role="button"
-            tabIndex={0}
-            aria-expanded={expanded}
-            aria-label={expanded ? "Collapse release notes" : "Expand release notes"}
-            onClick={() => setExpanded(!expanded)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                setExpanded(!expanded);
-              }
-            }}
-          >
-            <div className="flex items-center gap-3">
-              {appStore.iconUrl ? (
-                <FallbackImage
-                  src={appStoreIconUrl(appStore.iconUrl, 96)}
-                  alt=""
-                  width={36}
-                  height={36}
-                  className="rounded-[9px] border border-stone-200 dark:border-stone-800 shrink-0"
-                />
-              ) : (
-                <div className="w-9 h-9 rounded-[9px] bg-stone-200 dark:bg-stone-700 flex items-center justify-center text-stone-500 dark:text-stone-300 font-semibold shrink-0">
-                  {appStore.appName.charAt(0)}
-                </div>
-              )}
-              <div className="min-w-0 flex-1">
-                <div className="flex items-baseline gap-1.5">
-                  <h2 id={titleId} className={headingClasses}>
-                    {release.id ? (
-                      <Link href={`/release/${release.id}`} className="hover:underline underline-offset-2">
-                        {appStore.appName}
-                        {release.version && (
-                          <span className="ml-1.5 font-normal text-stone-500 dark:text-stone-400">
-                            v{release.version}
-                          </span>
-                        )}
-                      </Link>
-                    ) : (
-                      <>
-                        {appStore.appName}
-                        {release.version && (
-                          <span className="ml-1.5 font-normal text-stone-500 dark:text-stone-400">
-                            v{release.version}
-                          </span>
-                        )}
-                      </>
-                    )}
-                  </h2>
-                  {release.url && (
-                    <a
-                      href={release.url}
-                      target="_blank"
-                      rel={EXTERNAL_UGC_REL}
-                      aria-label="Open original source"
-                      onClick={(e) => e.stopPropagation()}
-                      className="text-stone-400 dark:text-stone-500 hover:text-stone-700 dark:hover:text-stone-300 text-xs"
-                    >
-                      ↗
-                    </a>
-                  )}
-                </div>
-                <div className="text-[13px] text-stone-500 dark:text-stone-400">
-                  Available for {appStore.label}
-                </div>
-              </div>
-              <svg
-                className={`ml-auto shrink-0 h-4 w-4 text-stone-400 dark:text-stone-500 transition-transform ${expanded ? "rotate-180" : ""}`}
-                viewBox="0 0 20 20"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                aria-hidden="true"
-              >
-                <path d="M6 8l4 4 4-4" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </div>
-            {expanded && (
-              <div className="mt-2 pl-12">
-                {markdownContent.trim() ? (
-                  <div className={markdownClasses}>
-                    <ReactMarkdown
-                      remarkPlugins={remarkPlugins}
-                      rehypePlugins={[rehypeShikiPlugin]}
-                      components={markdownComponents}
-                    >
-                      {markdownContent}
-                    </ReactMarkdown>
-                  </div>
-                ) : (
-                  <p className="text-[13px] italic text-stone-400 dark:text-stone-500 m-0">
-                    No release notes provided.
-                  </p>
-                )}
-                {release.url && (
-                  <a
-                    href={release.url}
-                    target="_blank"
-                    rel={EXTERNAL_UGC_REL}
-                    onClick={(e) => e.stopPropagation()}
-                    className="inline-block mt-2 text-[12px] text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-300"
-                  >
-                    View on the App Store ↗
-                  </a>
-                )}
-              </div>
-            )}
+<div className="flex-1 min-w-0 border-b border-stone-200 dark:border-stone-800 last:border-b-0 py-4 pl-5">
+  {appStore && (
+    <div
+      className="group relative cursor-pointer"
+      role="button"
+      tabIndex={0}
+      aria-expanded={expanded}
+      aria-label={expanded ? "Collapse release notes" : "Expand release notes"}
+      onClick={() => setExpanded(!expanded)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          setExpanded(!expanded);
+        }
+      }}
+    >
+      <div className="flex items-center gap-3">
+        {appStore.iconUrl ? (
+          <FallbackImage
+            src={appStoreIconUrl(appStore.iconUrl, 96)}
+            alt=""
+            width={36}
+            height={36}
+            className="rounded-[9px] border border-stone-200 dark:border-stone-800 shrink-0"
+          />
+        ) : (
+          <div className="w-9 h-9 rounded-[9px] bg-stone-200 dark:bg-stone-700 flex items-center justify-center text-stone-500 dark:text-stone-300 font-semibold shrink-0">
+            {appStore.appName.charAt(0)}
           </div>
         )}
-        {!appStore && (
-          <>
-            {/* ...existing heading row (line 237) through the collapsible div (line 363)... */}
-          </>
-        )}
+        <div className="min-w-0 flex-1">
+          <div className="flex items-baseline gap-1.5">
+            <h2 id={titleId} className={headingClasses}>
+              {release.id ? (
+                <Link
+                  href={`/release/${release.id}`}
+                  className="hover:underline underline-offset-2"
+                >
+                  {appStore.appName}
+                  {release.version && (
+                    <span className="ml-1.5 font-normal text-stone-500 dark:text-stone-400">
+                      v{release.version}
+                    </span>
+                  )}
+                </Link>
+              ) : (
+                <>
+                  {appStore.appName}
+                  {release.version && (
+                    <span className="ml-1.5 font-normal text-stone-500 dark:text-stone-400">
+                      v{release.version}
+                    </span>
+                  )}
+                </>
+              )}
+            </h2>
+            {release.url && (
+              <a
+                href={release.url}
+                target="_blank"
+                rel={EXTERNAL_UGC_REL}
+                aria-label="Open original source"
+                onClick={(e) => e.stopPropagation()}
+                className="text-stone-400 dark:text-stone-500 hover:text-stone-700 dark:hover:text-stone-300 text-xs"
+              >
+                ↗
+              </a>
+            )}
+          </div>
+          <div className="text-[13px] text-stone-500 dark:text-stone-400">
+            Available for {appStore.label}
+          </div>
+        </div>
+        <svg
+          className={`ml-auto shrink-0 h-4 w-4 text-stone-400 dark:text-stone-500 transition-transform ${expanded ? "rotate-180" : ""}`}
+          viewBox="0 0 20 20"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          aria-hidden="true"
+        >
+          <path d="M6 8l4 4 4-4" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
       </div>
+      {expanded && (
+        <div className="mt-2 pl-12">
+          {markdownContent.trim() ? (
+            <div className={markdownClasses}>
+              <ReactMarkdown
+                remarkPlugins={remarkPlugins}
+                rehypePlugins={[rehypeShikiPlugin]}
+                components={markdownComponents}
+              >
+                {markdownContent}
+              </ReactMarkdown>
+            </div>
+          ) : (
+            <p className="text-[13px] italic text-stone-400 dark:text-stone-500 m-0">
+              No release notes provided.
+            </p>
+          )}
+          {release.url && (
+            <a
+              href={release.url}
+              target="_blank"
+              rel={EXTERNAL_UGC_REL}
+              onClick={(e) => e.stopPropagation()}
+              className="inline-block mt-2 text-[12px] text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-300"
+            >
+              View on the App Store ↗
+            </a>
+          )}
+        </div>
+      )}
+    </div>
+  )}
+  {!appStore && (
+    <>{/* ...existing heading row (line 237) through the collapsible div (line 363)... */}</>
+  )}
+</div>
 ```
 
 Notes for the implementer:
+
 - `headingClasses`, `markdownClasses`, `markdownContent`, `expanded`/`setExpanded`, `titleId`, `remarkPlugins`, `rehypeShikiPlugin`, `markdownComponents`, `ReactMarkdown`, `Link`, `FallbackImage`, `EXTERNAL_UGC_REL` are all already defined/imported in this file — reuse them.
 - The `↗` glyph matches the existing external-link affordance already used in this component (line 260); kept for visual consistency with adjacent standard rows. (Broader ↗ cleanup is out of scope.)
 - Do NOT render `release.media` / `MediaGallery` in the appstore branch — screenshots are intentionally dropped.
@@ -717,6 +748,7 @@ git commit -m "feat(web): compact App Store branch in ReleaseListItem"
 ## Task 6: Wire `OrgReleaseList` per-row appStore
 
 **Files:**
+
 - Modify: `web/src/components/org-release-list.tsx:252-270`
 
 - [ ] **Step 1: Pass `appStore` derived from the row's source**
@@ -724,35 +756,36 @@ git commit -m "feat(web): compact App Store branch in ReleaseListItem"
 In `web/src/components/org-release-list.tsx`, change the `ReleaseListItem` invocation (lines 252-270) to add the `appStore` prop:
 
 ```tsx
-          {releases.map((release, i) => (
-            <ReleaseListItem
-              key={release.id ?? i}
-              release={release}
-              hideDate={
-                i > 0 &&
-                release.publishedAt?.slice(0, 10) === releases[i - 1].publishedAt?.slice(0, 10)
-              }
-              appStore={
-                release.source.appStore
-                  ? {
-                      label: release.source.appStore.platform === "macos" ? "macOS" : "iOS",
-                      iconUrl: release.source.appStore.iconUrl,
-                      appName: release.source.name,
-                    }
-                  : null
-              }
-              sourceByline={
-                multipleSourcesExist
-                  ? {
-                      name: release.source.name,
-                      slug: release.source.slug,
-                      orgSlug,
-                      type: release.source.type,
-                    }
-                  : undefined
-              }
-            />
-          ))}
+{
+  releases.map((release, i) => (
+    <ReleaseListItem
+      key={release.id ?? i}
+      release={release}
+      hideDate={
+        i > 0 && release.publishedAt?.slice(0, 10) === releases[i - 1].publishedAt?.slice(0, 10)
+      }
+      appStore={
+        release.source.appStore
+          ? {
+              label: release.source.appStore.platform === "macos" ? "macOS" : "iOS",
+              iconUrl: release.source.appStore.iconUrl,
+              appName: release.source.name,
+            }
+          : null
+      }
+      sourceByline={
+        multipleSourcesExist
+          ? {
+              name: release.source.name,
+              slug: release.source.slug,
+              orgSlug,
+              type: release.source.type,
+            }
+          : undefined
+      }
+    />
+  ));
+}
 ```
 
 (`release.source.appStore` is now typed via the api-types change in Task 1, since `OrgReleaseItem` is re-exported from `@buildinternet/releases-api-types`.)
@@ -774,6 +807,7 @@ git commit -m "feat(web): render appstore rows in the org releases feed"
 ## Task 7: Wire `SourceReleaseList` + source page
 
 **Files:**
+
 - Modify: `web/src/components/source-release-list.tsx`
 - Modify: `web/src/app/sources/[id]/page.tsx`
 
@@ -810,17 +844,18 @@ export function SourceReleaseList({
 ```
 
 ```tsx
-          {releases.map((release, i) => (
-            <ReleaseListItem
-              key={release.id ?? i}
-              release={release}
-              appStore={appStore ?? null}
-              hideDate={
-                i > 0 &&
-                release.publishedAt?.slice(0, 10) === releases[i - 1].publishedAt?.slice(0, 10)
-              }
-            />
-          ))}
+{
+  releases.map((release, i) => (
+    <ReleaseListItem
+      key={release.id ?? i}
+      release={release}
+      appStore={appStore ?? null}
+      hideDate={
+        i > 0 && release.publishedAt?.slice(0, 10) === releases[i - 1].publishedAt?.slice(0, 10)
+      }
+    />
+  ));
+}
 ```
 
 - [ ] **Step 2: Derive `appStore` on the source page and pass it down**
@@ -834,22 +869,22 @@ import { getAppInfo } from "@/lib/app-source";
 Before the `return` / the `<SourceReleaseList ... />` render (around line 166-174), compute:
 
 ```tsx
-  const appInfo = getAppInfo(source);
-  const appStore = appInfo
-    ? { label: appInfo.label, iconUrl: appInfo.iconUrl, appName: source.name }
-    : null;
+const appInfo = getAppInfo(source);
+const appStore = appInfo
+  ? { label: appInfo.label, iconUrl: appInfo.iconUrl, appName: source.name }
+  : null;
 ```
 
 Then pass it:
 
 ```tsx
-      <SourceReleaseList
-        orgSlug={orgSlug}
-        sourceSlug={source.slug}
-        initialReleases={source.releases}
-        initialCursor={initialCursor}
-        appStore={appStore}
-      />
+<SourceReleaseList
+  orgSlug={orgSlug}
+  sourceSlug={source.slug}
+  initialReleases={source.releases}
+  initialCursor={initialCursor}
+  appStore={appStore}
+/>
 ```
 
 Verification note: `getAppInfo(source)` needs `source.type` + `source.metadata`. Confirm the `source` object fetched by this page includes `metadata` (the sibling `sources/[id]/layout.tsx:125` already calls `getAppInfo(source)`, so the fetched shape carries it). If `tsc` reports `metadata` missing on `source`, add it to the fetch/type used by `page.tsx` to match `layout.tsx`.
@@ -871,6 +906,7 @@ git commit -m "feat(web): render appstore rows on the standalone source page"
 ## Task 8: Release detail page — thread appStore, suppress screenshots, platform byline
 
 **Files:**
+
 - Modify: `workers/api/src/routes/sources.ts` (`GET /v1/releases/:id`, ~lines 2795-2862)
 - Modify: `web/src/app/release/[id]/page.tsx`
 - Test: `workers/api/test/release-detail-appstore.test.ts`
@@ -888,7 +924,9 @@ import { createTestDb, createTestApp } from "./setup";
 describe("GET /v1/releases/:id appstore", () => {
   it("surfaces appStore {platform,iconUrl} for an appstore release", async () => {
     const db = createTestDb();
-    await db.insert(organizations).values({ id: "org_a", slug: "notion", name: "Notion", category: "cloud" });
+    await db
+      .insert(organizations)
+      .values({ id: "org_a", slug: "notion", name: "Notion", category: "cloud" });
     await db.insert(sources).values({
       id: "src_app",
       slug: "notion-ios",
@@ -897,7 +935,12 @@ describe("GET /v1/releases/:id appstore", () => {
       url: "https://apps.apple.com/us/app/id1",
       orgId: "org_a",
       metadata: JSON.stringify({
-        appStore: { trackId: "1", storefront: "us", platform: "ios", artworkUrl: "https://is1-ssl.mzstatic.com/a/1024x1024bb.png" },
+        appStore: {
+          trackId: "1",
+          storefront: "us",
+          platform: "ios",
+          artworkUrl: "https://is1-ssl.mzstatic.com/a/1024x1024bb.png",
+        },
       }),
     });
     await db.insert(releases).values({
@@ -914,12 +957,17 @@ describe("GET /v1/releases/:id appstore", () => {
     const res = await app(new Request("http://x/v1/releases/rel_app"));
     expect(res.status).toBe(200);
     const body = (await res.json()) as { appStore?: unknown };
-    expect(body.appStore).toEqual({ platform: "ios", iconUrl: "https://is1-ssl.mzstatic.com/a/1024x1024bb.png" });
+    expect(body.appStore).toEqual({
+      platform: "ios",
+      iconUrl: "https://is1-ssl.mzstatic.com/a/1024x1024bb.png",
+    });
   });
 
   it("omits appStore (null) for a non-appstore release", async () => {
     const db = createTestDb();
-    await db.insert(organizations).values({ id: "org_b", slug: "acme", name: "Acme", category: "cloud" });
+    await db
+      .insert(organizations)
+      .values({ id: "org_b", slug: "acme", name: "Acme", category: "cloud" });
     await db.insert(sources).values({
       id: "src_feed",
       slug: "acme-feed",
@@ -976,23 +1024,23 @@ In the `GET /releases/:id` handler, add `sourceMetadata` to the select:
 Update the destructure and result:
 
 ```ts
-    const { release, sourceName, sourceSlug, sourceType, sourceMetadata, orgSlug, orgName } = rows[0];
+const { release, sourceName, sourceSlug, sourceType, sourceMetadata, orgSlug, orgName } = rows[0];
 ```
 
 ```ts
-    const appStore = appStoreSourceInfo(sourceType ?? "", (sourceMetadata as string | null) ?? null);
-    // ... existing `const { metadata: _metadata, ...releaseRest } = release;` etc ...
-    const result = {
-      ...releaseRest,
-      content: hydratedContent,
-      media,
-      sourceName,
-      sourceSlug,
-      sourceType,
-      org,
-      composition,
-      appStore,
-    };
+const appStore = appStoreSourceInfo(sourceType ?? "", (sourceMetadata as string | null) ?? null);
+// ... existing `const { metadata: _metadata, ...releaseRest } = release;` etc ...
+const result = {
+  ...releaseRest,
+  content: hydratedContent,
+  media,
+  sourceName,
+  sourceSlug,
+  sourceType,
+  org,
+  composition,
+  appStore,
+};
 ```
 
 - [ ] **Step 4: Run handler test to verify it passes**
@@ -1012,29 +1060,31 @@ import { appStoreIconUrl } from "@/lib/app-source";
 Replace the `const media = release.media ?? [];` line (line 87) with:
 
 ```ts
-  const appStore = release.appStore ?? null;
-  const appLabel = appStore ? (appStore.platform === "macos" ? "macOS" : "iOS") : null;
-  // App Store screenshots are store marketing, not release content — drop them.
-  const media = appStore ? [] : (release.media ?? []);
+const appStore = release.appStore ?? null;
+const appLabel = appStore ? (appStore.platform === "macos" ? "macOS" : "iOS") : null;
+// App Store screenshots are store marketing, not release content — drop them.
+const media = appStore ? [] : (release.media ?? []);
 ```
 
 In the byline row (lines 184-191), after the `sourceName` `<span>` (closing at line 191), add:
 
 ```tsx
-            {appStore && (
-              <span className="flex items-center gap-1.5">
-                {appStore.iconUrl && (
-                  <FallbackImage
-                    src={appStoreIconUrl(appStore.iconUrl, 64)}
-                    alt=""
-                    width={16}
-                    height={16}
-                    className="rounded-[4px]"
-                  />
-                )}
-                Available for {appLabel}
-              </span>
-            )}
+{
+  appStore && (
+    <span className="flex items-center gap-1.5">
+      {appStore.iconUrl && (
+        <FallbackImage
+          src={appStoreIconUrl(appStore.iconUrl, 64)}
+          alt=""
+          width={16}
+          height={16}
+          className="rounded-[4px]"
+        />
+      )}
+      Available for {appLabel}
+    </span>
+  );
+}
 ```
 
 (The `<ReleaseContent ... media={media} />` call at line 240 needs no change — `media` is now `[]` for appstore, so its `MediaGallery` renders nothing.)
@@ -1075,11 +1125,12 @@ Expected: clean. (If `format:check` flags the new files, run `bun run format` an
 - [ ] **Step 4: Manual browser check (no component test harness)**
 
 Start the web + api dev servers (`bun run dev:web`, `bun run dev:api`) and, for an org with an appstore source (e.g. a tracked iOS/macOS app), open the org **Releases** tab. Verify:
-  - The appstore row shows the app icon + "{AppName} v{version}" + "Available for iOS" (or macOS), with no screenshot thumbnail.
-  - Clicking the row expands to the release notes (or "No release notes provided.") + a "View on the App Store ↗" link, then collapses.
-  - A non-appstore row in the same feed is visually unchanged.
-  - The standalone source page (`/sources/<id>`) for that app renders the same compact row.
-  - The release detail page (`/release/<id>`) for an appstore release shows the "Available for …" byline and no App Store screenshots.
+
+- The appstore row shows the app icon + "{AppName} v{version}" + "Available for iOS" (or macOS), with no screenshot thumbnail.
+- Clicking the row expands to the release notes (or "No release notes provided.") + a "View on the App Store ↗" link, then collapses.
+- A non-appstore row in the same feed is visually unchanged.
+- The standalone source page (`/sources/<id>`) for that app renders the same compact row.
+- The release detail page (`/release/<id>`) for an appstore release shows the "Available for …" byline and no App Store screenshots.
 
 - [ ] **Step 5: Final review against the spec**
 
@@ -1090,6 +1141,7 @@ Re-read `docs/superpowers/specs/2026-05-27-mobile-appstore-feed-row-design.md` a
 ## Self-Review (completed during planning)
 
 **Spec coverage:**
+
 - Trigger `source.type === "appstore"` → Tasks 2/3/8 (`appStoreSourceInfo` gates on it).
 - Option B layout (app name + version heading, platform byline, icon) → Task 5.
 - Screenshots dropped in feed rows → Task 5 (no media render in branch). Dropped on detail → Task 8 (`media = []`).
