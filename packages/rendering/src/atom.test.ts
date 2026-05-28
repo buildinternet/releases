@@ -6,11 +6,18 @@ const BASE = "https://releases.sh";
 
 function makeSource(): SourceDetail {
   return {
+    id: "src_next",
     slug: "next-releases",
     name: "Next.js",
     type: "github",
     url: "https://github.com/vercel/next.js",
-    org: { slug: "vercel", name: "Vercel" },
+    orgId: "org_vercel",
+    productId: null,
+    productSlug: null,
+    isHidden: false,
+    isPrimary: true,
+    metadata: "{}",
+    org: { id: "org_vercel", slug: "vercel", name: "Vercel" },
     releaseCount: 2,
     releasesLast30Days: 1,
     avgReleasesPerWeek: 0.5,
@@ -40,7 +47,7 @@ function makeSource(): SourceDetail {
         url: "https://github.com/vercel/next.js/releases/tag/v14.3.1",
       },
     ],
-    pagination: { page: 1, pageSize: 20, totalPages: 1, totalItems: 2 },
+    pagination: { nextCursor: null, limit: 20 },
     summaries: { rolling: null, monthly: [] },
   };
 }
