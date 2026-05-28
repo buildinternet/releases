@@ -156,6 +156,98 @@ productRoutes.get(
   },
 );
 
+// List one org's products — the canonical org-scoped form of GET /products?orgId=
+// (#1225). `:slug` resolves a slug or org_… id; results are always scoped to it.
+productRoutes.get(
+  "/orgs/:slug/products",
+  describeRoute({
+    tags: ["Products"],
+    summary: "List an organization's products",
+    description:
+      "Org-scoped product list — the canonical nested form of `GET /products?orgId=`. `:slug` accepts an org slug or `org_…` id. Returns the paginated `{items, pagination}` envelope. Filter by `?kind=` to narrow to a specific entity kind (direct match on the product's own kind).",
+    parameters: [
+      {
+        name: "slug",
+        in: "path",
+        required: true,
+        schema: { type: "string" },
+        description: "Organization slug or `org_…` id.",
+      },
+      {
+        name: "kind",
+        in: "query",
+        required: false,
+        schema: { type: "string", enum: KIND_VALUES as unknown as string[] },
+        description: `Filter by entity kind. Direct match on the row's own kind — no inheritance from a parent. One of: ${KIND_VALUES.join(", ")}.`,
+      },
+    ],
+    responses: {
+      200: {
+        description: "Products list",
+        content: { "application/json": { schema: resolver(ProductListResponseSchema) } },
+      },
+      400: {
+        description: "Invalid kind value",
+        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      },
+      404: {
+        description: "Organization not found",
+        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      },
+    },
+  }),
+  async (c) => {
+    const db = createDb(c.env.DB);
+    const slug = c.req.param("slug");
+    const pagination = parseListPagination(new URL(c.req.url).searchParams);
+
+    const kind = parseKindParam(c.req.query("kind"));
+    if (kind === null)
+      return c.json(
+        {
+          error: "bad_request",
+          message: `Invalid kind. Expected one of: ${KIND_VALUES.join(", ")}`,
+        },
+        400,
+      );
+
+    const [org] = await db
+      .select({ id: organizations.id })
+      .from(organizations)
+      .where(orgWhere(slug));
+    if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
+
+    const where = and(
+      eq(productsActive.orgId, org.id),
+      ...(kind ? [eq(productsActive.kind, kind)] : []),
+    );
+
+    const [rows, totalRow] = await Promise.all([
+      db
+        .select({
+          id: productsActive.id,
+          name: productsActive.name,
+          slug: productsActive.slug,
+          orgId: productsActive.orgId,
+          url: productsActive.url,
+          description: productsActive.description,
+          createdAt: productsActive.createdAt,
+          category: productsActive.category,
+          kind: productsActive.kind,
+          sourceCount: sql<number>`(SELECT COUNT(*) FROM sources_active s WHERE s.product_id = products_active.id)`,
+        })
+        .from(productsActive)
+        .where(where)
+        .orderBy(productsActive.name, productsActive.id)
+        .limit(pagination.pageSize)
+        .offset(pagination.offset),
+      db.select({ n: count() }).from(productsActive).where(where),
+    ]);
+
+    return c.json(buildListResponse(rows, pagination, Number(totalRow[0]?.n ?? 0)));
+  },
+);
+
 // Adopt: migrate an org into a product under another org (must be before /:identifier)
 productRoutes.post(
   "/products/adopt",
