@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { describeRoute, resolver } from "hono-openapi";
 import { hideInProduction } from "../openapi.js";
-import { and, count, eq, inArray, max, min, sql } from "drizzle-orm";
+import { and, count, eq, inArray, max, min, sql, type SQL } from "drizzle-orm";
 import { parseKindParam, KIND_VALUES } from "@buildinternet/releases-core/kinds";
 import { createDb } from "../db.js";
 import {
@@ -74,6 +74,41 @@ async function detectSourceSlugShadow(
   return Boolean(row);
 }
 
+/**
+ * Shared product-list query for the bare `GET /products` collection and the
+ * org-scoped `GET /orgs/:slug/products`. The two routes differ only in how they
+ * build `where`; the projection, `sourceCount` subquery, ordering, pagination,
+ * and parallel count are identical — so they live here, in one place.
+ */
+async function queryProductList(
+  db: ReturnType<typeof createDb>,
+  where: SQL | undefined,
+  pagination: ReturnType<typeof parseListPagination>,
+) {
+  const [rows, totalRow] = await Promise.all([
+    db
+      .select({
+        id: productsActive.id,
+        name: productsActive.name,
+        slug: productsActive.slug,
+        orgId: productsActive.orgId,
+        url: productsActive.url,
+        description: productsActive.description,
+        createdAt: productsActive.createdAt,
+        category: productsActive.category,
+        kind: productsActive.kind,
+        sourceCount: sql<number>`(SELECT COUNT(*) FROM sources_active s WHERE s.product_id = products_active.id)`,
+      })
+      .from(productsActive)
+      .where(where)
+      .orderBy(productsActive.name, productsActive.id)
+      .limit(pagination.pageSize)
+      .offset(pagination.offset),
+    db.select({ n: count() }).from(productsActive).where(where),
+  ]);
+  return buildListResponse(rows, pagination, Number(totalRow[0]?.n ?? 0));
+}
+
 // List products, optionally filtered by orgId and/or kind
 productRoutes.get(
   "/products",
@@ -130,29 +165,7 @@ productRoutes.get(
     ];
     const where = conditions.length > 0 ? and(...conditions) : undefined;
 
-    const [rows, totalRow] = await Promise.all([
-      db
-        .select({
-          id: productsActive.id,
-          name: productsActive.name,
-          slug: productsActive.slug,
-          orgId: productsActive.orgId,
-          url: productsActive.url,
-          description: productsActive.description,
-          createdAt: productsActive.createdAt,
-          category: productsActive.category,
-          kind: productsActive.kind,
-          sourceCount: sql<number>`(SELECT COUNT(*) FROM sources_active s WHERE s.product_id = products_active.id)`,
-        })
-        .from(productsActive)
-        .where(where)
-        .orderBy(productsActive.name, productsActive.id)
-        .limit(pagination.pageSize)
-        .offset(pagination.offset),
-      db.select({ n: count() }).from(productsActive).where(where),
-    ]);
-
-    return c.json(buildListResponse(rows, pagination, Number(totalRow[0]?.n ?? 0)));
+    return c.json(await queryProductList(db, where, pagination));
   },
 );
 
@@ -222,29 +235,7 @@ productRoutes.get(
       ...(kind ? [eq(productsActive.kind, kind)] : []),
     );
 
-    const [rows, totalRow] = await Promise.all([
-      db
-        .select({
-          id: productsActive.id,
-          name: productsActive.name,
-          slug: productsActive.slug,
-          orgId: productsActive.orgId,
-          url: productsActive.url,
-          description: productsActive.description,
-          createdAt: productsActive.createdAt,
-          category: productsActive.category,
-          kind: productsActive.kind,
-          sourceCount: sql<number>`(SELECT COUNT(*) FROM sources_active s WHERE s.product_id = products_active.id)`,
-        })
-        .from(productsActive)
-        .where(where)
-        .orderBy(productsActive.name, productsActive.id)
-        .limit(pagination.pageSize)
-        .offset(pagination.offset),
-      db.select({ n: count() }).from(productsActive).where(where),
-    ]);
-
-    return c.json(buildListResponse(rows, pagination, Number(totalRow[0]?.n ?? 0)));
+    return c.json(await queryProductList(db, where, pagination));
   },
 );
 
