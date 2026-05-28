@@ -523,7 +523,7 @@ export function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServ
           .string()
           .optional()
           .describe(
-            "Filter to a specific source. Accepts a src_ id or an org-scoped coordinate in the form orgSlug/sourceSlug (e.g. 'vercel/next-js'). Bare slugs without an org prefix are not accepted.",
+            "Filter to a product's cross-source release feed. Accepts a prod_ id (expands to ALL sources under the product), a src_ id (single source), or an org-scoped coordinate in the form orgSlug/productSlug (e.g. 'vercel/next-js'). Bare slugs without an org prefix are not accepted. Mirrors the REST ?product= expansion — multi-source products (e.g. Next.js with GitHub releases + blog) return releases from all of their sources interleaved.",
           ),
         organization: z
           .string()
