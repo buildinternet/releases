@@ -73,6 +73,7 @@ import { wantsMarkdown, markdownResponse } from "../middleware/content-negotiati
 import { isValidBearerAuth } from "../middleware/auth.js";
 import { orgToMarkdown, orgReleaseFeedToMarkdown } from "@releases/rendering/formatters.js";
 import { assemblePlaybook } from "@releases/ai-internal/playbook";
+import { appStoreSourceInfo } from "@releases/adapters/appstore";
 import type { Env } from "../index.js";
 import {
   getOrgsWithStats,
@@ -1834,28 +1835,33 @@ orgRoutes.get(
     }
 
     const mediaOrigin = c.env.MEDIA_ORIGIN ?? "";
-    const releasesFormatted = pageRows.map((r) => ({
-      id: r.id,
-      version: r.version,
-      type: r.type,
-      title: r.title,
-      summary: r.summary ?? (r.content.length > 150 ? r.content.slice(0, 150) + "..." : r.content),
-      titleGenerated: r.title_generated,
-      titleShort: r.title_short,
-      content: hydrateMediaUrls(r.content, mediaOrigin),
-      publishedAt: r.published_at,
-      url: r.url,
-      media: parseReleaseMedia(r.media, mediaOrigin),
-      prerelease: r.prerelease === 1,
-      source: {
-        slug: r.source_slug,
-        name: r.source_name,
-        type: r.source_type,
-      },
-      coverageCount: r.coverage_count,
-      contentChars: r.content_chars,
-      contentTokens: r.content_tokens,
-    }));
+    const releasesFormatted = pageRows.map((r) => {
+      const appStore = appStoreSourceInfo(r.source_type, r.source_metadata);
+      return {
+        id: r.id,
+        version: r.version,
+        type: r.type,
+        title: r.title,
+        summary:
+          r.summary ?? (r.content.length > 150 ? r.content.slice(0, 150) + "..." : r.content),
+        titleGenerated: r.title_generated,
+        titleShort: r.title_short,
+        content: hydrateMediaUrls(r.content, mediaOrigin),
+        publishedAt: r.published_at,
+        url: r.url,
+        media: parseReleaseMedia(r.media, mediaOrigin),
+        prerelease: r.prerelease === 1,
+        source: {
+          slug: r.source_slug,
+          name: r.source_name,
+          type: r.source_type,
+          appStore: appStore ?? undefined,
+        },
+        coverageCount: r.coverage_count,
+        contentChars: r.content_chars,
+        contentTokens: r.content_tokens,
+      };
+    });
 
     const pagination = { nextCursor, limit };
 

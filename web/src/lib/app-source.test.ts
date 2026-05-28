@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { getAppInfo } from "./app-source";
+import { getAppInfo, appStoreIconUrl } from "./app-source";
 
 const meta = (o: unknown) => JSON.stringify(o);
 
@@ -51,5 +51,25 @@ describe("getAppInfo", () => {
         metadata: meta({ appStore: { platform: 123, artworkUrl: false } }),
       }),
     ).toEqual({ platform: "ios", label: "iOS", iconUrl: null });
+  });
+});
+
+describe("appStoreIconUrl", () => {
+  it("rewrites the mzstatic dimension suffix to the requested size", () => {
+    expect(appStoreIconUrl("https://is1-ssl.mzstatic.com/a/1024x1024bb.png", 96)).toBe(
+      "https://is1-ssl.mzstatic.com/a/96x96bb.png",
+    );
+  });
+
+  it("preserves the file extension (jpg)", () => {
+    expect(appStoreIconUrl("https://is1-ssl.mzstatic.com/a/512x512bb.jpg", 72)).toBe(
+      "https://is1-ssl.mzstatic.com/a/72x72bb.jpg",
+    );
+  });
+
+  it("returns the url unchanged when it does not match the mzstatic pattern", () => {
+    expect(appStoreIconUrl("https://example.com/icon.png", 96)).toBe(
+      "https://example.com/icon.png",
+    );
   });
 });

@@ -155,3 +155,28 @@ export async function fetchAppStore(source: Source): Promise<RawRelease[]> {
   if (!listing) return [];
   return mapListingToRawReleases(listing, coord);
 }
+
+/**
+ * Parse the read-surface app info (platform + icon) from a source row's `type`
+ * + raw `metadata` JSON. Returns null for non-appstore sources. Defensive
+ * against null/missing/malformed metadata — an appstore source with
+ * unparseable metadata still yields `{ platform: "ios", iconUrl: null }` so the
+ * UI degrades to a generic app row. Mirrors the web-side `getAppInfo`
+ * (web/src/lib/app-source.ts) and feeds the wire `AppStoreSourceInfoSchema`.
+ */
+export function appStoreSourceInfo(
+  type: string,
+  metadataJson: string | null,
+): { platform: "ios" | "macos"; iconUrl: string | null } | null {
+  if (type !== "appstore") return null;
+  let appStore: Record<string, unknown> | undefined;
+  try {
+    const block = (JSON.parse(metadataJson ?? "{}") as { appStore?: unknown } | null)?.appStore;
+    if (block && typeof block === "object") appStore = block as Record<string, unknown>;
+  } catch {
+    appStore = undefined;
+  }
+  const platform = appStore?.platform === "macos" ? "macos" : "ios";
+  const iconUrl = typeof appStore?.artworkUrl === "string" ? appStore.artworkUrl : null;
+  return { platform, iconUrl };
+}

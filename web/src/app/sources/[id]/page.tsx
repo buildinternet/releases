@@ -11,6 +11,7 @@ import {
   currentPeriod,
 } from "@/lib/schema-org";
 import { getSourceById } from "./_lib/source-by-id";
+import { getAppInfo } from "@/lib/app-source";
 
 const LEGACY_SOURCE_TABS = new Set(["highlights", "changelog"]);
 
@@ -163,6 +164,9 @@ export default async function SourceByIdPage({
     ],
   };
 
+  const appInfo = getAppInfo(source);
+  const appStore = appInfo ? { ...appInfo, appName: source.name } : null;
+
   return (
     <>
       <JsonLd data={jsonLd} />
@@ -171,6 +175,7 @@ export default async function SourceByIdPage({
         sourceSlug={source.slug}
         initialReleases={source.releases}
         initialCursor={initialCursor}
+        appStore={appStore}
       />
       <RelatedRails
         anchorReleaseId={source.releases[0]?.id ?? null}

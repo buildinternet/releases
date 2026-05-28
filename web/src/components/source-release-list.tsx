@@ -3,6 +3,7 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { ReleaseListItem } from "./release-item";
 import type { ReleaseItem } from "@/lib/api";
+import type { AppRowInfo } from "@/lib/app-source";
 import { useDebounced } from "@/hooks/use-debounced";
 import { useInfiniteScroll } from "@/hooks/use-infinite-scroll";
 import { InfiniteScrollTrigger } from "./infinite-scroll-trigger";
@@ -12,6 +13,8 @@ interface SourceReleaseListProps {
   sourceSlug: string;
   initialReleases: ReleaseItem[];
   initialCursor: string | null;
+  /** App Store display info when this source is an appstore app; null otherwise. */
+  appStore?: AppRowInfo | null;
 }
 
 /**
@@ -25,6 +28,7 @@ export function SourceReleaseList({
   sourceSlug,
   initialReleases,
   initialCursor,
+  appStore,
 }: SourceReleaseListProps) {
   const [includePrereleases, setIncludePrereleases] = useState(false);
   const [searchInput, setSearchInput] = useState("");
@@ -164,6 +168,7 @@ export function SourceReleaseList({
             <ReleaseListItem
               key={release.id ?? i}
               release={release}
+              appStore={appStore ?? null}
               hideDate={
                 i > 0 &&
                 release.publishedAt?.slice(0, 10) === releases[i - 1].publishedAt?.slice(0, 10)

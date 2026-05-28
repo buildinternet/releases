@@ -694,6 +694,8 @@ export interface ReleaseDetail {
   type?: ReleaseType;
   /** Per-category item counts from the AI release-content pass. See {@link ReleaseComposition}. */
   composition?: ReleaseComposition | null;
+  /** App Store platform + icon, present only when `sourceType === "appstore"`. */
+  appStore?: { platform: "ios" | "macos"; iconUrl: string | null } | null;
 }
 
 export type ReleaseCoverageRow = z.infer<typeof ReleaseCoverageRowSchema>;

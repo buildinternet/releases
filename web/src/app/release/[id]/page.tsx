@@ -21,6 +21,8 @@ import { AI_SUMMARY_DISCLAIMER } from "@/lib/copy";
 import { RollupBadge } from "@/components/rollup-badge";
 import { CompositionChip } from "@/components/composition-chip";
 import { ReleaseAdminMenu } from "@/components/release-admin-menu";
+import { FallbackImage } from "@/components/fallback-image";
+import { appStoreIconUrl } from "@/lib/app-source";
 
 export async function generateMetadata({
   params,
@@ -84,7 +86,9 @@ export default async function ReleaseDetailPage({ params }: { params: Promise<{ 
     ? `/${release.org.slug}/${release.sourceSlug}`
     : `/source/${release.sourceSlug}`;
 
-  const media = release.media ?? [];
+  const appStore = release.appStore ?? null;
+  // App Store screenshots are store marketing, not release content — drop them.
+  const media = appStore ? [] : (release.media ?? []);
 
   const repoUrl = release.sourceType === "github" ? githubRepoUrlFor(release.url) : null;
   const detailRemarkPlugins = createRemarkPlugins({ repoUrl });
@@ -189,6 +193,20 @@ export default async function ReleaseDetailPage({ params }: { params: Promise<{ 
                 {release.sourceName}
               </Link>
             </span>
+            {appStore && (
+              <span className="flex items-center gap-1.5">
+                {appStore.iconUrl && (
+                  <FallbackImage
+                    src={appStoreIconUrl(appStore.iconUrl, 64)}
+                    alt=""
+                    width={16}
+                    height={16}
+                    className="rounded-[4px]"
+                  />
+                )}
+                Available for {appStore.platform === "macos" ? "macOS" : "iOS"}
+              </span>
+            )}
             {release.url && (
               <a
                 href={release.url}
