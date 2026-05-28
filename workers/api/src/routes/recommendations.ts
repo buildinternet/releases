@@ -11,7 +11,7 @@ import {
 } from "@buildinternet/releases-core/schema";
 import { newRecommendationId } from "@buildinternet/releases-core/id";
 import { createDb } from "../db.js";
-import { sanitizeString } from "../lib/sanitize.js";
+import { sanitizeString, sanitizeText, stripControl } from "../lib/sanitize.js";
 import { notifyRecommendation } from "../lib/recommendation-email.js";
 import type { Env } from "../index.js";
 
@@ -24,19 +24,6 @@ const MAX_USER_AGENT = 500;
 const MAX_BODY_BYTES = 64 * 1024;
 const RATE_LIMIT_WINDOW_SECONDS = 60;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-function isControlChar(code: number): boolean {
-  if (code === 0x09 || code === 0x0a) return false;
-  return code <= 0x1f || (code >= 0x7f && code <= 0x9f);
-}
-
-function stripControl(s: string): string {
-  let out = "";
-  for (const ch of s) {
-    if (!isControlChar(ch.charCodeAt(0))) out += ch;
-  }
-  return out;
-}
 
 function getDb(c: any): ReturnType<typeof createDb> {
   return c.get("db") ?? createDb(c.env.DB);
@@ -178,8 +165,8 @@ recommendationRoutes.post("/recommendations", async (c) => {
     contactEmail,
     status: "new",
     archived: false,
-    surface: sanitizeString(body.surface, 32) ?? "web",
-    userAgent: sanitizeString(c.req.header("user-agent"), MAX_USER_AGENT),
+    surface: sanitizeText(body.surface, 32) ?? "web",
+    userAgent: sanitizeText(c.req.header("user-agent"), MAX_USER_AGENT),
   };
 
   const db = getDb(c);

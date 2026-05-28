@@ -84,6 +84,29 @@ describe("POST /v1/recommendations", () => {
     expect(await db.select().from(recommendations)).toHaveLength(0);
   });
 
+  it("strips control chars from the user-agent header and the surface field", async () => {
+    const { db, fetch } = await makeApp();
+    const ESC = String.fromCharCode(0x1b);
+    const BELL = String.fromCharCode(0x07);
+    const res = await fetch(
+      new Request("http://x/v1/recommendations", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "user-agent": `Mozilla${ESC}[2J${BELL}/5.0`,
+        },
+        body: JSON.stringify({
+          url: "https://example.com/releases",
+          surface: `cli${ESC}]0;pwned`,
+        }),
+      }),
+    );
+    expect(res.status).toBe(202);
+    const [row] = await db.select().from(recommendations);
+    expect(row!.userAgent).toBe("Mozilla[2J/5.0");
+    expect(row!.surface).toBe("cli]0;pwned");
+  });
+
   it("returns 429 when the shared public feedback limiter rejects", async () => {
     const { db, fetch } = await makeApp(undefined, {
       FEEDBACK_RATE_LIMITER: { limit: async () => ({ success: false }) },

@@ -17,7 +17,7 @@ import {
 } from "@buildinternet/releases-core/schema";
 import { newFeedbackId } from "@buildinternet/releases-core/id";
 import { createDb } from "../db.js";
-import { sanitizeString } from "../lib/sanitize.js";
+import { sanitizeString, sanitizeText, stripControl } from "../lib/sanitize.js";
 import { notifyFeedback } from "../lib/feedback-email.js";
 import type { Env } from "../index.js";
 
@@ -30,23 +30,6 @@ const MAX_CONTACT = 200;
 // rejecting absurd payloads before we parse them.
 const MAX_BODY_BYTES = 64 * 1024;
 const RATE_LIMIT_WINDOW_SECONDS = 60;
-
-// Strip C0/C1 control chars (incl. ESC = 0x1b, which begins ANSI escape
-// sequences) except tab (0x09) and newline (0x0a), so stored feedback can't
-// inject terminal escapes when an operator views it via `admin feedback list`
-// or a future web surface renders it. Char-code filter (not a control-char
-// regex literal) keeps raw control bytes out of this source file.
-function isControlChar(code: number): boolean {
-  if (code === 0x09 || code === 0x0a) return false; // allow tab + newline
-  return code <= 0x1f || (code >= 0x7f && code <= 0x9f);
-}
-function stripControl(s: string): string {
-  let out = "";
-  for (const ch of s) {
-    if (!isControlChar(ch.charCodeAt(0))) out += ch;
-  }
-  return out;
-}
 
 // Matches the test-injection pattern in workers/api/src/routes/admin-cron-runs.ts;
 // real routes get a fresh drizzle handle, tests inject their own via c.set("db", ...).
@@ -123,13 +106,13 @@ feedbackRoutes.post("/feedback", async (c) => {
     type: coerceType(body.type),
     status: "new",
     archived: false,
-    cliVersion: sanitizeString(body.cliVersion, 32),
+    cliVersion: sanitizeText(body.cliVersion, 32),
     clientKind: coerceClientKind(body.clientKind),
-    anonId: sanitizeString(body.anonId, 64),
-    os: sanitizeString(body.os, 64),
-    arch: sanitizeString(body.arch, 64),
-    runtime: sanitizeString(body.runtime, 64),
-    surface: sanitizeString(body.surface, 32) ?? "cli",
+    anonId: sanitizeText(body.anonId, 64),
+    os: sanitizeText(body.os, 64),
+    arch: sanitizeText(body.arch, 64),
+    runtime: sanitizeText(body.runtime, 64),
+    surface: sanitizeText(body.surface, 32) ?? "cli",
   };
 
   await db.insert(feedback).values(row);

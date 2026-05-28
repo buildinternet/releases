@@ -173,6 +173,34 @@ describe("POST /v1/feedback", () => {
     expect(rows[0]!.message).toContain("red");
   });
 
+  it("strips control characters from caller-supplied device-metadata fields", async () => {
+    const db = mkDb();
+    const fetch = await makeApp(db);
+    const ESC = String.fromCharCode(0x1b);
+    const BELL = String.fromCharCode(0x07);
+    await fetch(
+      post({
+        message: "valid message body here",
+        cliVersion: `0.43.0${ESC}[2J`,
+        anonId: `anon${BELL}id`,
+        os: `darwin${ESC}]0;pwned${BELL}`,
+        arch: `arm64${ESC}[31m`,
+        runtime: `bun-1.3${BELL}`,
+        surface: `cli${ESC}[0m`,
+      }),
+    );
+    const rows = await db.select().from(feedback);
+    expect(hasDisallowedControl(rows[0]!.cliVersion ?? "")).toBe(false);
+    expect(hasDisallowedControl(rows[0]!.anonId ?? "")).toBe(false);
+    expect(hasDisallowedControl(rows[0]!.os ?? "")).toBe(false);
+    expect(hasDisallowedControl(rows[0]!.arch ?? "")).toBe(false);
+    expect(hasDisallowedControl(rows[0]!.runtime ?? "")).toBe(false);
+    expect(hasDisallowedControl(rows[0]!.surface)).toBe(false);
+    // Surrounding non-control content is preserved.
+    expect(rows[0]!.cliVersion).toContain("0.43.0");
+    expect(rows[0]!.surface).toContain("cli");
+  });
+
   it("preserves newlines and tabs in the message", async () => {
     const db = mkDb();
     const fetch = await makeApp(db);
