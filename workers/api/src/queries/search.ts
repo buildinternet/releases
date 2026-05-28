@@ -1,4 +1,4 @@
-import { asc, eq, inArray, or, sql } from "drizzle-orm";
+import { asc, eq, or, sql } from "drizzle-orm";
 import {
   domainAliases,
   organizationsActive,
@@ -88,6 +88,18 @@ type ScopeOpts = {
   sourceIds?: string[];
 };
 
+/**
+ * Build an `IN (...)` value list from a `sourceIds` scope, chunked at 90 IDs
+ * to stay inside D1's 100-bound limit. Callers guard the empty-array case
+ * before reaching here (an empty product returns no hits, not `IN ()`).
+ */
+function sourceIdInList(sourceIds: string[]) {
+  return sql`(${sql.join(
+    sourceIds.slice(0, 90).map((id) => sql`${id}`),
+    sql`, `,
+  )})`;
+}
+
 export async function searchOrgs(
   db: D1Db,
   query: string,
@@ -131,10 +143,7 @@ export async function searchProducts(
       ? sql`AND EXISTS (
           SELECT 1 FROM sources_active sa
           WHERE sa.product_id = p.id
-            AND sa.id IN (${sql.join(
-              opts.sourceIds.slice(0, 90).map((id) => sql`${id}`),
-              sql`, `,
-            )})
+            AND sa.id IN ${sourceIdInList(opts.sourceIds)}
         )`
       : sql``;
   return db.all<SearchCatalogHit>(sql`
@@ -163,10 +172,7 @@ export async function searchSources(
   if (opts.sourceIds && opts.sourceIds.length === 0) return [];
   const sourceIdClause =
     opts.sourceIds && opts.sourceIds.length > 0
-      ? sql`AND s.id IN (${sql.join(
-          opts.sourceIds.slice(0, 90).map((id) => sql`${id}`),
-          sql`, `,
-        )})`
+      ? sql`AND s.id IN ${sourceIdInList(opts.sourceIds)}`
       : sql``;
   return db.all<RawSourceHit>(sql`
     SELECT s.slug, s.name, s.type, o.slug as orgSlug, o.name as orgName,
@@ -197,10 +203,7 @@ export async function searchReleasesFts(
   if (opts.sourceIds && opts.sourceIds.length === 0) return [];
   const sourceIdClause =
     opts.sourceIds && opts.sourceIds.length > 0
-      ? sql`AND r.source_id IN (${sql.join(
-          opts.sourceIds.slice(0, 90).map((id) => sql`${id}`),
-          sql`, `,
-        )})`
+      ? sql`AND r.source_id IN ${sourceIdInList(opts.sourceIds)}`
       : sql``;
   const ftsQuery = toFtsMatchQuery(query);
   return db.all<RawSearchReleaseRow>(sql`
@@ -245,10 +248,7 @@ export async function searchReleasesFromMatchedEntities(
   if (opts.sourceIds && opts.sourceIds.length === 0) return [];
   const sourceIdClause =
     opts.sourceIds && opts.sourceIds.length > 0
-      ? sql`AND r.source_id IN (${sql.join(
-          opts.sourceIds.slice(0, 90).map((id) => sql`${id}`),
-          sql`, `,
-        )})`
+      ? sql`AND r.source_id IN ${sourceIdInList(opts.sourceIds)}`
       : sql``;
   const conditions = [];
   if (orgSlugs.length > 0)

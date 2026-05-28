@@ -430,6 +430,18 @@ export function isBareSlug(identifier: string): boolean {
 }
 
 /**
+ * Build an `IN (...)` value list from a `product`-scope source-ID set, chunked
+ * at 90 IDs to stay inside D1's 100-bound limit. Callers guard the empty case
+ * before reaching here (an empty product short-circuits to no hits).
+ */
+function sourceIdInList(sourceIds: string[]) {
+  return sql`(${sql.join(
+    sourceIds.slice(0, 90).map((id) => sql`${id}`),
+    sql`, `,
+  )})`;
+}
+
+/**
  * Parse an `org/slug` coordinate into its two parts.  Returns `null` when
  * the string doesn't contain exactly one `/` separator.
  */
@@ -2018,18 +2030,12 @@ export async function search(
             ? sql`AND EXISTS (
                 SELECT 1 FROM sources_active sa
                 WHERE sa.product_id = p.id
-                  AND sa.id IN (${sql.join(
-                    productSourceIds.slice(0, 90).map((id) => sql`${id}`),
-                    sql`, `,
-                  )})
+                  AND sa.id IN ${sourceIdInList(productSourceIds)}
               )`
             : sql``;
         const sourceScopeClause =
           productSourceIds && productSourceIds.length > 0
-            ? sql`AND s.id IN (${sql.join(
-                productSourceIds.slice(0, 90).map((id) => sql`${id}`),
-                sql`, `,
-              )})`
+            ? sql`AND s.id IN ${sourceIdInList(productSourceIds)}`
             : sql``;
         const [productRows, sourceRows] = await Promise.all([
           db.all<SearchCatalogHit>(sql`
