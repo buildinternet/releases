@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
 import { Suspense } from "react";
-import { ApiSetupError } from "@/lib/api";
+import { ApiSetupError, ApiNotFoundError } from "@/lib/api";
 import { JsonLd } from "@/components/json-ld";
 import { ChangelogView, ChangelogSkeleton } from "@/components/changelog-view";
 import { buildSourceEntityJsonLd, sourceBreadcrumbItems } from "@/lib/schema-org";
 import { getSource } from "../_lib/source-data";
+import { getResolved } from "../_lib/resolve";
 
 export async function generateMetadata({
   params,
@@ -61,6 +62,24 @@ export default async function SourceChangelogPage({
     source = await getSource(orgSlug, slug);
   } catch (err) {
     if (err instanceof ApiSetupError) throw err;
+    if (!(err instanceof ApiNotFoundError)) throw err;
+    // No source owns this slug. After the product-first flip a product can
+    // share this URL space, so a bare `/{org}/{product}/changelog` bookmark
+    // used to dead-end in a 404. A product spans many sources (no single
+    // CHANGELOG.md to render), so send those to the product page instead.
+    source = null;
+  }
+
+  if (!source) {
+    let isProduct = false;
+    try {
+      const resolved = await getResolved(orgSlug, slug);
+      isProduct = resolved.kind === "product";
+    } catch (err) {
+      if (err instanceof ApiSetupError) throw err;
+      // Resolves to nothing (or an unexpected read failure): fall through to 404.
+    }
+    if (isProduct) permanentRedirect(`/${orgSlug}/${slug}`);
     notFound();
   }
 
