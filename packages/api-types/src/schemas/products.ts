@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { KIND_VALUES } from "@buildinternet/releases-core/kinds";
-import { CategorySchema, ListResponseSchema } from "./shared.js";
-import { SourceTypeSchema } from "./sources.js";
+import { CategorySchema, ListResponseSchema, ReleaseItemSchema } from "./shared.js";
+import { SourceTypeSchema, SourceFeedPaginationSchema } from "./sources.js";
 
 /**
  * Raw `products` table row, returned by `POST /v1/products` and
@@ -72,11 +72,20 @@ export const ProductDetailSourceSchema = z.object({
 /**
  * Returned by `GET /v1/products/:identifier` (and the org-scoped twin).
  * Spreads the raw product row and adds `sources`, `tags`, `aliases`.
+ *
+ * `releases` and `pagination` are populated only by the web format adapter
+ * (the `.json` / `.md` product route — see PR #1207), NOT by the bare product
+ * detail endpoint. They are optional so bare endpoint consumers see a valid
+ * `ProductDetail` without the embedded feed.
  */
 export const ProductDetailSchema = ProductRowSchema.extend({
   sources: z.array(ProductDetailSourceSchema),
   tags: z.array(z.string()),
   aliases: z.array(z.string()),
+  /** Embedded release feed — set by the web format adapter (PR #1207), absent on bare product detail. */
+  releases: z.array(ReleaseItemSchema).optional(),
+  /** Cursor pagination for the embedded release feed — set by the web format adapter (PR #1207), absent on bare product detail. */
+  pagination: SourceFeedPaginationSchema.optional(),
 });
 
 /**
