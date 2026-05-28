@@ -3,7 +3,13 @@ import { describeRoute, resolver } from "hono-openapi";
 import { hideInProduction } from "../openapi.js";
 import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { createDb } from "../db.js";
-import { releases, organizations, sources } from "@buildinternet/releases-core/schema";
+import {
+  releases,
+  organizations,
+  organizationsActive,
+  sources,
+  sourcesActive,
+} from "@buildinternet/releases-core/schema";
 import { SOURCE_TYPES } from "@buildinternet/releases-core/source-enums";
 import { releaseCoverage } from "@releases/db/schema-coverage.js";
 import type { Env } from "../index.js";
@@ -30,6 +36,7 @@ import {
   UnlinkReleaseCoverageResponseSchema,
   ReleasesWithMediaResponseSchema,
   ErrorResponseSchema,
+  type ReleaseCoverageSibling,
 } from "@buildinternet/releases-api-types";
 import { validateJson } from "../lib/validate.js";
 
@@ -359,7 +366,12 @@ releaseRoutes.get(
       .where(eq(releaseCoverage.coverageId, id))
       .limit(1);
     if (asCoverage) {
-      return c.json({ role: "coverage", canonical: asCoverage, covers: [] });
+      const siblings = await fetchCoverageSiblings(db, [asCoverage.canonicalId]);
+      return c.json({
+        role: "coverage",
+        canonical: { ...asCoverage, sibling: siblings.get(asCoverage.canonicalId) ?? null },
+        covers: [],
+      });
     }
 
     const covers = await db
@@ -367,12 +379,80 @@ releaseRoutes.get(
       .from(releaseCoverage)
       .where(eq(releaseCoverage.canonicalId, id));
     if (covers.length > 0) {
-      return c.json({ role: "canonical", canonical: null, covers });
+      const siblings = await fetchCoverageSiblings(
+        db,
+        covers.map((r) => r.coverageId),
+      );
+      return c.json({
+        role: "canonical",
+        canonical: null,
+        covers: covers.map((r) => ({
+          coverageId: r.coverageId,
+          canonicalId: r.canonicalId,
+          reason: r.reason,
+          decidedBy: r.decidedBy,
+          decidedAt: r.decidedAt,
+          sibling: siblings.get(r.coverageId) ?? null,
+        })),
+      });
     }
 
     return c.json({ role: "standalone", canonical: null, covers: [] });
   },
 );
+
+/**
+ * Load display fields for a set of coverage counterpart releases in one query,
+ * keyed by release id. Replaces the web layer's per-sibling `GET /releases/:id`
+ * fan-out on the release detail page (one round-trip per cluster member).
+ *
+ * Deliberately reads `releases` (not `releases_visible`): coverage-side rows are
+ * excluded from that view, so the canonical's rollups would 404 through the
+ * detail endpoint — yet a cluster view's job is to show them. Suppressed rows
+ * are still dropped, and the inner join to `sources_active` drops rows whose
+ * source was soft-deleted, matching `GET /releases/:id`. Coverage clusters are
+ * tiny (a launch covered by a handful of posts), so a single `IN (...)` stays
+ * well under D1's 100-bind cap.
+ */
+async function fetchCoverageSiblings(
+  db: ReturnType<typeof createDb>,
+  ids: string[],
+): Promise<Map<string, ReleaseCoverageSibling>> {
+  const map = new Map<string, ReleaseCoverageSibling>();
+  if (ids.length === 0) return map;
+
+  const rows = await db
+    .select({
+      id: releases.id,
+      version: releases.version,
+      title: releases.title,
+      publishedAt: releases.publishedAt,
+      sourceName: sourcesActive.name,
+      orgSlug: organizationsActive.slug,
+      orgName: organizationsActive.name,
+    })
+    .from(releases)
+    .innerJoin(sourcesActive, eq(releases.sourceId, sourcesActive.id))
+    .leftJoin(organizationsActive, eq(sourcesActive.orgId, organizationsActive.id))
+    .where(
+      and(
+        inArray(releases.id, ids),
+        sql`(${releases.suppressed} IS NULL OR ${releases.suppressed} = 0)`,
+      ),
+    );
+
+  for (const r of rows) {
+    map.set(r.id, {
+      id: r.id,
+      version: r.version,
+      title: r.title,
+      sourceName: r.sourceName,
+      publishedAt: r.publishedAt,
+      org: r.orgSlug && r.orgName ? { slug: r.orgSlug, name: r.orgName } : null,
+    });
+  }
+  return map;
+}
 
 releaseRoutes.post(
   "/releases/:id/coverage",

@@ -1,22 +1,14 @@
 import { Hono } from "hono";
 import { describeRoute, resolver } from "hono-openapi";
 import { hideInProduction } from "../openapi.js";
-import { and, desc, eq, gte, isNull, ne, or } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { createDb } from "../db.js";
-import {
-  knowledgePages,
-  organizationsPublic,
-  products,
-  releases,
-  sourcesActive,
-} from "@buildinternet/releases-core/schema";
-import { daysAgoIso } from "@buildinternet/releases-core/dates";
-import { resolveSourceKind, type Kind } from "@buildinternet/releases-core/kinds";
+import { organizationsPublic } from "@buildinternet/releases-core/schema";
 import {
   OVERVIEW_RELEASE_LIMIT,
   OVERVIEW_WINDOW_DAYS,
-  selectReleasesForOverview,
 } from "@buildinternet/releases-core/overview";
+import { fetchOverviewInputsForOrg } from "@releases/core-internal/overview-eligibility";
 import { authMiddleware } from "../middleware/auth.js";
 import { hydrateMediaUrls, parseReleaseMedia } from "../utils.js";
 import {
@@ -106,71 +98,14 @@ app.get(
       .where(orgIdMatch);
     if (!org) return c.json({ error: "not_found" }, 404);
 
-    // Active sources only — skip hidden + paused.
-    const activeSources = await db
-      .select({
-        id: sourcesActive.id,
-        slug: sourcesActive.slug,
-        name: sourcesActive.name,
-        type: sourcesActive.type,
-        kind: sourcesActive.kind,
-        productId: sourcesActive.productId,
-      })
-      .from(sourcesActive)
-      .where(
-        and(
-          eq(sourcesActive.orgId, org.id),
-          // is_hidden / fetch_priority are nullable — three-valued SQL logic
-          // would drop legacy NULL rows from a bare eq/ne, so OR in the IS NULL
-          // case so they count as visible / not-paused.
-          or(eq(sourcesActive.isHidden, false), isNull(sourcesActive.isHidden)),
-          or(ne(sourcesActive.fetchPriority, "paused"), isNull(sourcesActive.fetchPriority)),
-        ),
-      );
-
-    const orgProducts = await db
-      .select({ id: products.id, kind: products.kind })
-      .from(products)
-      .where(eq(products.orgId, org.id));
-    const productKindById = new Map(orgProducts.map((p) => [p.id, p.kind]));
-
-    const cutoff = daysAgoIso(windowDays);
-
-    const releasesPerSource = await Promise.all(
-      activeSources.map(async (s) => {
-        const rows = await db
-          .select()
-          .from(releases)
-          .where(
-            and(
-              eq(releases.sourceId, s.id),
-              gte(releases.publishedAt, cutoff),
-              eq(releases.suppressed, false),
-            ),
-          )
-          .orderBy(desc(releases.publishedAt));
-        return {
-          type: s.type,
-          kind: resolveSourceKind(
-            { kind: s.kind as Kind | null },
-            s.productId
-              ? { kind: (productKindById.get(s.productId) ?? null) as Kind | null }
-              : null,
-          ),
-          releases: rows,
-        };
-      }),
-    );
-
-    const { releases: selected, totalAvailable } = selectReleasesForOverview(
-      releasesPerSource,
-      limit,
-    );
-
-    const [existing] = await db
-      .select({ content: knowledgePages.content })
-      .from(knowledgePages)
-      .where(and(eq(knowledgePages.scope, "org"), eq(knowledgePages.orgId, org.id)));
+    // Assemble sources + recent releases via the shared helper, which pulls
+    // every active source's releases in one chunked IN-bound query instead of
+    // a SELECT per source. Same selection + projection the batch-overview
+    // workflow uses, so the route and the workflow stay aligned.
+    const inputs = await fetchOverviewInputsForOrg(db, org.id, { windowDays, limit });
+    // `org` was just resolved against the same view by id, so a null here is
+    // unreachable — the guard only narrows the helper's `… | null` return.
+    if (!inputs) return c.json({ error: "not_found" }, 404);
 
     if (checkOnly) {
       // Pre-flight payload — orchestrators use this to decide whether to dispatch
@@ -179,11 +114,11 @@ app.get(
       // the model.
       return c.json({
         orgSlug: org.slug,
-        selected: selected.length,
-        totalAvailable,
-        hasExistingContent: !!existing?.content,
-        wouldRegenerate: selected.length > 0,
-        windowDays,
+        selected: inputs.selected.length,
+        totalAvailable: inputs.totalAvailable,
+        hasExistingContent: !!inputs.existingContent,
+        wouldRegenerate: inputs.selected.length > 0,
+        windowDays: inputs.windowDays,
       });
     }
 
@@ -191,7 +126,7 @@ app.get(
     // the generated overview. Raw `/_media/{key}` prefixes would render broken
     // in the web because the overview read path doesn't re-hydrate.
     const mediaOrigin = c.env.MEDIA_ORIGIN ?? "";
-    const selectedShaped = selected.map((r) => ({
+    const selectedShaped = inputs.selected.map((r) => ({
       id: r.id,
       version: r.version,
       title: r.title,
@@ -201,16 +136,15 @@ app.get(
       media: parseReleaseMedia(r.media, mediaOrigin),
     }));
 
+    // `org` (not `inputs.org`) carries `discovery`, which the full response
+    // schema requires; the helper's org projection omits it.
     return c.json({
       org,
-      // Project to the documented response shape — `kind`/`productId` are
-      // selected only to resolve each source's kind for overview selection,
-      // not exposed on the wire.
-      sources: activeSources.map(({ id, slug, name, type }) => ({ id, slug, name, type })),
-      existingContent: existing?.content ?? null,
+      sources: inputs.sources,
+      existingContent: inputs.existingContent,
       selected: selectedShaped,
-      totalAvailable,
-      windowDays,
+      totalAvailable: inputs.totalAvailable,
+      windowDays: inputs.windowDays,
     });
   },
 );

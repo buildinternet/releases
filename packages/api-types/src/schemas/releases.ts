@@ -63,8 +63,30 @@ export const ReleaseLatestResponseSchema = z.object({
 });
 
 /**
+ * Display fields for the counterpart release a coverage row points at —
+ * the canonical for a `coverage`-role response, or each rolled-up coverage
+ * release for a `canonical`-role response. Lets `GET /releases/:id/coverage`
+ * render a cluster without a follow-up `GET /releases/:id` per sibling.
+ * `null` when the counterpart is suppressed or its source was removed.
+ *
+ * Coverage-side rows are surfaced here on purpose, even though the
+ * `releases_visible` view (and thus `GET /releases/:id`) hides them — a
+ * cluster view's whole job is to show its members.
+ */
+export const ReleaseCoverageSiblingSchema = z.object({
+  id: z.string(),
+  version: z.string().nullable(),
+  title: z.string(),
+  sourceName: z.string(),
+  publishedAt: z.string().nullable(),
+  org: z.object({ slug: z.string(), name: z.string() }).nullable(),
+});
+
+/**
  * Single row of the `release_coverage` join table. Drives the
- * GET /releases/:id/coverage response.
+ * GET /releases/:id/coverage response. `sibling` carries the counterpart
+ * release's display fields (see {@link ReleaseCoverageSiblingSchema}); it is
+ * optional so an older server that doesn't populate it still validates.
  */
 export const ReleaseCoverageRowSchema = z.object({
   coverageId: z.string(),
@@ -72,6 +94,7 @@ export const ReleaseCoverageRowSchema = z.object({
   reason: z.string().nullable(),
   decidedBy: z.string(),
   decidedAt: z.string(),
+  sibling: ReleaseCoverageSiblingSchema.nullable().optional(),
 });
 
 /**
