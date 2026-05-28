@@ -39,21 +39,26 @@ export const metadata: Metadata = {
  * cleaned one-line excerpt underneath, and `--json` returns the slim release
  * shape (nested `source`/`org`, derived `excerpt`, `contentChars`; storage
  * internals dropped). Block 2 drills into a hit: its `get` card names the owning
- * org, prints a human date, and labels the AI summary. The relative ages ("1y",
- * "2w") are a capture-time snapshot. Block 2 omits only the real `get` output's
- * trailing "Next steps:" hint, which points at the deprecated top-level
- * `releases release get`. Edit here when refreshing.
+ * org, prints a human date, and labels the AI summary. The relative ages
+ * ("1y", "3w") are a capture-time snapshot. Re-synced against releases-cli
+ * v0.50.0: block 1 shows 3 representative hits from the `search` result set
+ * (human + `--json`), trimmed for demo clarity; block 2's `get` matches live
+ * stdout, omitting only the trailing "Next steps:" hint (it points at the
+ * deprecated top-level `releases release get` alias). Block 3 is `releases get`
+ * on an org coordinate — the release rows are space-aligned (the CLI uses tabs
+ * which expand past the 83-char demo width) and dates are shortened to
+ * YYYY-MM-DD; IDs and values are real. Edit here when refreshing.
  */
 const DEMO_SESSION: TerminalBlock[] = [
   {
-    command: 'releases search "webhooks" --type releases',
+    command: 'releases search "webhooks" --type releases --limit 3',
     output: `Releases
 Axiom/Changelog           Custom webhooks            1y  rel_YqORWhmpDZmlpyarFGtg0
                           Axiom introduces custom webhooks.
-Google/API Release Notes  Webhooks Support Launched  2w  rel_vpnvlVinttqFUfgIlDlVZ
+Google/API Release Notes  Webhooks Support Launched  3w  rel_vpnvlVinttqFUfgIlDlVZ
                           Event-driven webhooks support is now available in the Ge…
-Resend Changelog          New Contact Webhooks       1y  rel_q3UEtvayJ4I-kbzRJfSir
-                          Receive real-time notifications when contacts are create…
+Resend Changelog          New Domain Webhooks        1y  rel_ieyxLxD5eFh5IWDxB-bLp
+                          Receive real-time notifications when domains are created…
 
 3 result(s) found.`,
     json: `{
@@ -80,14 +85,14 @@ Resend Changelog          New Contact Webhooks       1y  rel_q3UEtvayJ4I-kbzRJfS
       "contentChars": 132
     },
     {
-      "id": "rel_q3UEtvayJ4I-kbzRJfSir",
-      "title": "New Contact Webhooks",
-      "summary": "Receive real-time notifications when contacts are created, updated, or deleted.",
-      "excerpt": "Receive real-time notifications when contacts are created, updated, or deleted.",
-      "publishedAt": "2024-07-17T00:00:00.000Z",
+      "id": "rel_ieyxLxD5eFh5IWDxB-bLp",
+      "title": "New Domain Webhooks",
+      "summary": "Receive real-time notifications when domains are created, updated, or deleted.",
+      "excerpt": "Receive real-time notifications when domains are created, updated, or deleted.",
+      "publishedAt": "2024-11-22T00:00:00.000Z",
       "source": { "slug": "resend-changelog", "name": "Resend Changelog" },
       "org": { "slug": "resend", "name": "Resend" },
-      "contentChars": 79
+      "contentChars": 78
     }
   ],
   "mode": "hybrid",
@@ -117,6 +122,54 @@ Event-driven webhooks support is now available in the Gemini API, replacing poll
   "org": { "slug": "google", "name": "Google" },
   "contentChars": 132,
   "contentTokens": 24
+}`,
+  },
+  {
+    command: "releases get cursor",
+    output: `Cursor (cursor)
+  Domain:      cursor.com
+  Category:    developer-tools
+  Sources:     1 active
+
+Latest 3 releases (most recent first):
+rel_AFeJanUKy9UaqZK4BEKbQ  Shared Canvases                     2026-05-20
+rel_5XLlX1ezHI4B18Zi7vBBk  Cursor in Jira                      2026-05-19
+rel_T9JQ7UI6usAaYrKnI2Z2B  Full-screen Tabs and Compact Chats 2026-05-13`,
+    json: `{
+  "id": "org_keFBTgO7XcFJzGNl-g0W5",
+  "slug": "cursor",
+  "name": "Cursor",
+  "domain": "cursor.com",
+  "category": "developer-tools",
+  "sourceCount": 1,
+  "releaseCount": 53,
+  "releasesLast30Days": 14,
+  "releases": [
+    {
+      "id": "rel_AFeJanUKy9UaqZK4BEKbQ",
+      "title": "Shared Canvases",
+      "version": null,
+      "publishedAt": "2026-05-20T00:00:00.000Z",
+      "sourceName": "Cursor Changelog",
+      "contentChars": 560
+    },
+    {
+      "id": "rel_5XLlX1ezHI4B18Zi7vBBk",
+      "title": "Cursor in Jira",
+      "version": null,
+      "publishedAt": "2026-05-19T00:00:00.000Z",
+      "sourceName": "Cursor Changelog",
+      "contentChars": 734
+    },
+    {
+      "id": "rel_T9JQ7UI6usAaYrKnI2Z2B",
+      "title": "Full-screen Tabs and Compact Chats",
+      "version": null,
+      "publishedAt": "2026-05-13T00:00:00.000Z",
+      "sourceName": "Cursor Changelog",
+      "contentChars": 2638
+    }
+  ]
 }`,
   },
 ];
