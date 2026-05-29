@@ -29,6 +29,8 @@ export function formatAggregateReleaseRow(
   r: AggregateReleaseRow,
   mediaOrigin: string,
 ): CollectionReleaseItem {
+  const product =
+    r.product_slug && r.product_name ? { slug: r.product_slug, name: r.product_name } : null;
   return {
     id: r.id,
     version: r.version,
@@ -44,8 +46,11 @@ export function formatAggregateReleaseRow(
     prerelease: r.prerelease === 1,
     source: { slug: r.source_slug, name: r.source_name, type: r.source_type },
     org: { slug: r.org_slug, name: r.org_name },
-    product:
-      r.product_slug && r.product_name ? { slug: r.product_slug, name: r.product_name } : null,
+    product,
+    // Resolved grouping identity — COALESCE(product, source). Lets the web feed
+    // key/label SDK-cluster rollups without reconstructing it. #1234
+    groupSlug: product?.slug ?? r.source_slug,
+    groupName: product?.name ?? r.source_name,
     coverageCount: r.coverage_count,
     composition: parseCompositionFromMetadata(r.metadata ?? null),
   };

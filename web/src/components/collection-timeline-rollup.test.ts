@@ -181,4 +181,42 @@ describe("rollupTags", () => {
     expect(byKey["::vercel-cli"]).toBeDefined();
     expect(byKey["::turborepo"]).toBeDefined();
   });
+
+  // #1234: the API now emits a resolved groupSlug/groupName (COALESCE(product,
+  // source)). rollupTags prefers them over re-deriving product ?? source, so
+  // two distinct sources sharing a server group key collapse into one bucket.
+  test("prefers server groupSlug/groupName over product/source when present", () => {
+    const tags: RollupCandidate[] = [
+      {
+        version: "v1",
+        title: "v1",
+        url: "https://example.com/a",
+        source: { slug: "src-a", name: "Source A", type: "github" },
+        product: null,
+        org: { slug: "acme", name: "acme" },
+        groupSlug: "unified",
+        groupName: "Unified Group",
+      },
+      {
+        version: "v2",
+        title: "v2",
+        url: "https://example.com/b",
+        source: { slug: "src-b", name: "Source B", type: "github" },
+        product: null,
+        org: { slug: "acme", name: "acme" },
+        groupSlug: "unified",
+        groupName: "Unified Group",
+      },
+    ];
+
+    const out = rollupTags(tags);
+
+    expect(out).toHaveLength(1);
+    expect(out[0].kind).toBe("rollup");
+    const rollup = out[0] as Extract<TagListItem<RollupCandidate>, { kind: "rollup" }>;
+    // Both sources collapse into ONE bucket because they share the server group.
+    expect(rollup.groupKey).toBe("acme::unified");
+    expect(rollup.label).toBe("Unified Group");
+    expect(rollup.releases).toHaveLength(2);
+  });
 });
