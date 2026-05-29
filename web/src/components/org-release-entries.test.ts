@@ -97,4 +97,41 @@ describe("buildFeedEntries", () => {
 
     expect(rollupLabels(entries)).toEqual(["turborepo", "vercel-cli"]);
   });
+
+  // App Store same-day version rollup (#1236): appstore rows join the per-day
+  // rollup pass alongside GitHub tags.
+  test("collapses a same-day cluster of one app's versions into a rollup", () => {
+    const entries = buildFeedEntries([
+      rel({ source: "slack-ios", version: "25.5.2", product: "slack", type: "appstore" }),
+      rel({ source: "slack-ios", version: "25.5.1", product: "slack", type: "appstore" }),
+    ]);
+
+    expect(entries).toHaveLength(1);
+    expect(entries[0].kind).toBe("rollup");
+    if (entries[0].kind === "rollup") {
+      expect(entries[0].item.releases).toHaveLength(2);
+      expect(entries[0].item.groupKey).toBe("::slack-ios");
+    }
+  });
+
+  test("leaves a lone same-day app version as a flat row", () => {
+    const entries = buildFeedEntries([
+      rel({ source: "slack-ios", version: "25.5.2", product: "slack", type: "appstore" }),
+    ]);
+    expect(entries).toHaveLength(1);
+    expect(entries[0].kind).toBe("row");
+  });
+
+  test("rolls up appstore and GitHub clusters on the same day as distinct rows", () => {
+    const entries = buildFeedEntries([
+      rel({ source: "slack-ios", version: "25.5.2", product: "slack", type: "appstore" }),
+      rel({ source: "slack-ios", version: "25.5.1", product: "slack", type: "appstore" }),
+      rel({ source: "slack-sdk", version: "v3.0.0" }),
+      rel({ source: "slack-sdk", version: "v2.9.0" }),
+    ]);
+
+    // appstore keyed per-source, github keyed source — two independent rollups,
+    // each landing at its newest member in published-desc order.
+    expect(rollupLabels(entries)).toEqual(["slack-ios", "slack-sdk"]);
+  });
 });

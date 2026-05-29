@@ -30,6 +30,27 @@ export function isTag(r: { source: { type: string } }): boolean {
   return r.source.type === "github";
 }
 
+// App Store sources roll up too (#1236), but keyed per-source rather than by
+// product — see `rollupGroup`. Distinct from `isTag`: appstore is not a GitHub
+// tag and stays out of the collections post/tag split.
+export function isAppStore(r: { source: { type: string } }): boolean {
+  return r.source.type === "appstore";
+}
+
+// How a row joins a rollup bucket. App Store apps key per-source (#1236): a
+// product can hold both an iOS and a macOS source, distinct platforms that must
+// not merge into one rollup — this overrides even the server-resolved groupSlug
+// (#1234), which COALESCEs an app source up to its product. Every other row
+// prefers the server-resolved identity, falling back to product ?? source on
+// older API responses. Slug and label are derived together so they can't drift.
+function rollupGroup(r: RollupCandidate): { slug: string; label: string } {
+  if (isAppStore(r)) return { slug: r.source.slug, label: r.source.name };
+  return {
+    slug: r.groupSlug ?? r.product?.slug ?? r.source.slug,
+    label: r.groupName ?? r.product?.name ?? r.source.name,
+  };
+}
+
 export type TagListItem<R = CollectionReleaseItem> =
   | { kind: "single"; release: R }
   | {
@@ -55,11 +76,11 @@ export function rollupTags<R extends RollupCandidate>(tags: R[]): TagListItem<R>
   const buckets = new Map<string, { label: string; releases: R[] }>();
 
   for (const r of tags) {
-    const groupSlug = r.groupSlug ?? r.product?.slug ?? r.source.slug;
-    const k = `${r.org?.slug ?? ""}::${groupSlug}`;
+    const { slug, label } = rollupGroup(r);
+    const k = `${r.org?.slug ?? ""}::${slug}`;
     let bucket = buckets.get(k);
     if (!bucket) {
-      bucket = { label: r.groupName ?? r.product?.name ?? r.source.name, releases: [] };
+      bucket = { label, releases: [] };
       buckets.set(k, bucket);
     }
     bucket.releases.push(r);
