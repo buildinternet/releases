@@ -251,6 +251,15 @@
       "binding": "BATCH_OVERVIEW_WORKFLOW",
       "class_name": "BatchOverviewWorkflow",
     },
+    {
+      // Triggered by inbound Firecrawl webhook (POST /v1/sources/:slug/firecrawl/ingest)
+      // when a monitored source page has changed. Scrapes via Firecrawl, extracts,
+      // inserts, embeds, and optionally summarizes. Phase 2 of the Firecrawl
+      // monitoring integration.
+      "name": "firecrawl-ingest",
+      "binding": "FIRECRAWL_INGEST_WORKFLOW",
+      "class_name": "FirecrawlIngestWorkflow",
+    },
   ],
   "routes": [{ "pattern": "api.releases.sh", "custom_domain": true }],
   "triggers": {
@@ -539,6 +548,11 @@
           "name": "batch-overview-staging",
           "binding": "BATCH_OVERVIEW_WORKFLOW",
           "class_name": "BatchOverviewWorkflow",
+        },
+        {
+          "name": "firecrawl-ingest-staging",
+          "binding": "FIRECRAWL_INGEST_WORKFLOW",
+          "class_name": "FirecrawlIngestWorkflow",
         },
       ],
       // Empty cron list. Without this override, Wrangler inherits the

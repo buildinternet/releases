@@ -145,7 +145,7 @@ export function jitterMsForSource(sourceId: string, windowMs: number): number {
  * need them (none of them here land in the workflow's persisted state because
  * the returned object only flows through closures).
  */
-async function resolveFetchEnv(env: PollAndFetchWorkflowEnv): Promise<FetchOneEnv> {
+export async function resolveFetchEnv(env: PollAndFetchWorkflowEnv): Promise<FetchOneEnv> {
   const githubToken = (await getSecret(env.GITHUB_TOKEN).catch(() => null)) ?? undefined;
   return {
     GITHUB_TOKEN: githubToken,

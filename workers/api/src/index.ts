@@ -38,6 +38,7 @@ export { PollFetchSummaryWorkflow } from "./workflows/poll-fetch-summary.js";
 export { OnboardSourceWorkflow } from "./workflows/onboard-source.js";
 export { BatchSummarizeWorkflow } from "./workflows/batch-summarize.js";
 export { BatchOverviewWorkflow } from "./workflows/batch-overview.js";
+export { FirecrawlIngestWorkflow } from "./workflows/firecrawl-ingest.js";
 
 /** Cloudflare Secrets Store binding — call .get() to retrieve the secret value. */
 type SecretBinding = { get(): Promise<string> };
