@@ -85,6 +85,12 @@ export interface FirecrawlIngestParams {
   checkId: string;
   /** Firecrawl event status (e.g. "new", "changed"). */
   status: string;
+  /**
+   * Pre-extracted added content from the webhook's diff, set on `changed`
+   * events. When present the workflow extracts just this delta and skips the
+   * full-page re-scrape; absent on `new`/baseline events, which scrape the page.
+   */
+  delta?: string;
 }
 
 export type FirecrawlIngestEnv = PollAndFetchWorkflowEnv & {
@@ -101,7 +107,7 @@ export class FirecrawlIngestWorkflow extends WorkflowEntrypoint<
 > {
   async run(event: WorkflowEvent<FirecrawlIngestParams>, step: WorkflowStep): Promise<void> {
     const env = this.env;
-    const { sourceId, url, checkId, status } = event.payload;
+    const { sourceId, url, checkId, status, delta } = event.payload;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- drizzle override pattern; same as poll-and-fetch
     const db: any = env._drizzleOverride ?? drizzle(env.DB);
 
@@ -126,8 +132,15 @@ export class FirecrawlIngestWorkflow extends WorkflowEntrypoint<
     // so an outage (out-of-credits, auth, 5xx) is recorded in the source's own
     // health. See resilience option B.
     try {
-      // ── Step 2: scrape ──────────────────────────────────────────────────────
-      const markdown = await step.do("scrape", RETRY_FETCH, async () => {
+      // ── Step 2: resolve body (diff delta, else scrape the full page) ─────────
+      // Named "resolve-body", not "scrape": on a `changed` event we return the
+      // delta and never call Firecrawl, so the dashboard shouldn't imply a
+      // (billed) scrape happened.
+      const markdown = await step.do("resolve-body", RETRY_FETCH, async () => {
+        // `changed` events arrive with the diff delta already in hand — extract
+        // just that and skip the paid, full-page Firecrawl scrape. Only the
+        // one-time `new`/baseline event (no delta) actually hits Firecrawl.
+        if (delta) return delta;
         let client: FirecrawlClient;
         if (env._firecrawlClientOverride) {
           client = env._firecrawlClientOverride;
@@ -158,6 +171,18 @@ export class FirecrawlIngestWorkflow extends WorkflowEntrypoint<
           agentModel: FIRECRAWL_EXTRACT_MODEL,
           logger: workerLogger,
         });
+        // No silent caps: when the input exceeded the recent-window budget (the
+        // one-time baseline scrape, or a rare oversized diff), record how much
+        // we trimmed so an operator can backfill if older entries are wanted.
+        if (result.droppedChars > 0) {
+          logEvent("info", {
+            component: "firecrawl-ingest-workflow",
+            event: "input-windowed",
+            sourceId,
+            checkId,
+            droppedChars: result.droppedChars,
+          });
+        }
         return result.releases;
       });
 

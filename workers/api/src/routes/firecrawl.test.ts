@@ -90,6 +90,7 @@ const makeWebhookBody = (
     url?: string;
     status?: string;
     judgment?: { meaningful?: boolean; confidence?: string };
+    diff?: { text?: string; json?: unknown };
   }>,
 ) =>
   JSON.stringify({
@@ -276,6 +277,80 @@ describe("POST /v1/integrations/firecrawl/webhook", () => {
     );
     expect(res.status).toBe(200);
     expect(spawns).toHaveLength(0);
+  });
+
+  it("10. passes the diff's added content as the `delta` workflow param on a changed event", async () => {
+    const diffText = [
+      "--- previous",
+      "+++ current",
+      "@@ -1,1 +1,4 @@",
+      " # Release Notes",
+      "+## March 1, 2026",
+      "+- Shipped feature Z",
+    ].join("\n");
+
+    const res = await webhookFetchApi(
+      new Request("http://test/v1/integrations/firecrawl/webhook", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Firecrawl-Token": "testhook" },
+        body: makeWebhookBody("src_fc", [
+          {
+            checkId: "c10",
+            url: "https://acme.example.com/changelog",
+            status: "changed",
+            judgment: { meaningful: true, confidence: "high" },
+            diff: { text: diffText },
+          },
+        ]),
+      }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(spawns).toHaveLength(1);
+    // Only the added lines reach the workflow — the page is never re-scraped.
+    expect(spawns[0].params.delta).toBe("## March 1, 2026\n- Shipped feature Z");
+  });
+
+  it("11. omits `delta` on a new event so the workflow scrapes the baseline page", async () => {
+    const res = await webhookFetchApi(
+      new Request("http://test/v1/integrations/firecrawl/webhook", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Firecrawl-Token": "testhook" },
+        body: makeWebhookBody("src_fc", [
+          { checkId: "c11", url: "https://acme.example.com/changelog", status: "new" },
+        ]),
+      }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(spawns).toHaveLength(1);
+    expect(spawns[0].params.delta).toBeUndefined();
+  });
+
+  it("12. omits `delta` when a changed event's diff adds nothing (falls back to re-scrape)", async () => {
+    const removalOnly = ["--- previous", "+++ current", "@@ -1,2 +1,1 @@", " keep", "-gone"].join(
+      "\n",
+    );
+
+    const res = await webhookFetchApi(
+      new Request("http://test/v1/integrations/firecrawl/webhook", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Firecrawl-Token": "testhook" },
+        body: makeWebhookBody("src_fc", [
+          {
+            checkId: "c12",
+            url: "https://acme.example.com/changelog",
+            status: "changed",
+            judgment: { meaningful: true, confidence: "high" },
+            diff: { text: removalOnly },
+          },
+        ]),
+      }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(spawns).toHaveLength(1);
+    expect(spawns[0].params.delta).toBeUndefined();
   });
 
   it("9. idempotency: skips spawn when checkId+url already in cache", async () => {

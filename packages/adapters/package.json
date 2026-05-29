@@ -16,6 +16,8 @@
     "./appstore": "./src/appstore.ts",
     "./feed": "./src/feed.ts",
     "./feed-depth": "./src/feed-depth.ts",
+    "./firecrawl": "./src/firecrawl.ts",
+    "./firecrawl-diff": "./src/firecrawl-diff.ts",
     "./extract": "./src/extract/index.ts",
     "./extract/shared": "./src/extract/shared.ts",
     "./extract/types": "./src/extract/types.ts",

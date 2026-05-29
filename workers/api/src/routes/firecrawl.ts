@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 import { sources } from "@buildinternet/releases-core/schema";
 import { getSourceMeta } from "@releases/adapters/source-meta.js";
 import { createFirecrawlClient, type FirecrawlClient } from "@releases/adapters/firecrawl.js";
+import { addedContentFromDiff } from "@releases/adapters/firecrawl-diff.js";
 import { constantTimeEqual } from "@buildinternet/releases-core/api-token";
 import { getSecret } from "@releases/lib/secrets";
 import { logEvent } from "@releases/lib/log-event";
@@ -31,7 +32,7 @@ const postFirecrawlSyncRoute = describeRoute({
   tags: ["Sources"],
   summary: "Sync a source's Firecrawl monitor",
   description:
-    "Admin-only. Reconciles the Firecrawl monitor for the source (typed `src_…` ID) to match its desired state: the body (`enabled`, `schedule`, `proxy`, `goal`) is merged into `metadata.firecrawl`, then enabling creates/updates the monitor and disabling deletes it. Auth inherited from `publicReadAuthMiddleware`'s non-SAFE_METHODS branch — Bearer token required.",
+    "Admin-only. Reconciles the Firecrawl monitor for the source (typed `src_…` ID): the body (`enabled`, `schedule`, `proxy`, `goal`) is merged into `metadata.firecrawl`, then enabling creates the monitor and disabling deletes it. `schedule`/`proxy`/`goal` are applied when the monitor is first created; on an existing monitor only the webhook (URL + token + sourceId) is reconciled, so frequency/proxy/goal changes made in the Firecrawl dashboard are authoritative and never overwritten. Auth inherited from `publicReadAuthMiddleware`'s non-SAFE_METHODS branch — Bearer token required.",
   security: [{ bearerAuth: [] }],
   responses: {
     200: {
@@ -146,6 +147,7 @@ interface FirecrawlPageEvent {
     url?: string;
     status?: string;
     judgment?: { meaningful?: boolean; confidence?: string };
+    diff?: { text?: string; json?: unknown };
   }>;
 }
 
@@ -211,10 +213,15 @@ firecrawlRoutes.post("/integrations/firecrawl/webhook", async (c) => {
     await env.LATEST_CACHE?.put(key, "1", { expirationTtl: 3600 });
 
     if (env.FIRECRAWL_INGEST_WORKFLOW) {
+      // On a `changed` event Firecrawl hands us the diff; extracting just the
+      // added lines keeps steady-state ingests small and skips the (paid) full
+      // re-scrape. `new`/baseline events (and any diff that adds nothing) carry
+      // no delta, so the workflow scrapes the page and windows it at extract time.
+      const delta = addedContentFromDiff(page.diff?.text ?? "") || undefined;
       try {
         await env.FIRECRAWL_INGEST_WORKFLOW.create({
           id: `fc-${checkId}`,
-          params: { sourceId, url, checkId, status },
+          params: { sourceId, url, checkId, status, delta },
         });
       } catch (err) {
         // Deterministic id means a duplicate-instance error = it's already
