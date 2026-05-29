@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 import { sources } from "@buildinternet/releases-core/schema";
 import { getSourceMeta } from "@releases/adapters/source-meta.js";
 import { createFirecrawlClient, type FirecrawlClient } from "@releases/adapters/firecrawl.js";
+import { constantTimeEqual } from "@buildinternet/releases-core/api-token";
 import { getSecret } from "@releases/lib/secrets";
 import { logEvent } from "@releases/lib/log-event";
 import { createDb } from "../db.js";
@@ -129,3 +130,111 @@ firecrawlRoutes.post(
     return c.json(finalMeta);
   },
 );
+
+// ---------------------------------------------------------------------------
+// Phase 2: inbound webhook receiver
+// The `integrations` namespace is in neither `publicReadRoutes` nor
+// `adminRoutes`, so no middleware runs — the handler self-authenticates via
+// a constant-time token comparison to prevent timing-oracle attacks.
+// ---------------------------------------------------------------------------
+
+interface FirecrawlPageEvent {
+  type?: string;
+  metadata?: { sourceId?: string };
+  data?: Array<{
+    checkId?: string;
+    url?: string;
+    status?: string;
+    judgment?: { meaningful?: boolean; confidence?: string };
+  }>;
+}
+
+firecrawlRoutes.post("/integrations/firecrawl/webhook", async (c) => {
+  const env = c.env as Env["Bindings"];
+
+  // Auth: verify token BEFORE any DB work so we never leak whether a source
+  // exists to an unauthenticated caller.
+  const secret = await getSecret(env.FIRECRAWL_WEBHOOK_SECRET);
+  const token = c.req.header("X-Firecrawl-Token") ?? "";
+  if (!secret || !constantTimeEqual(token, secret)) {
+    return c.json({ error: "unauthorized" }, 401);
+  }
+
+  const body = (await c.req.json().catch(() => ({}))) as FirecrawlPageEvent;
+  const sourceId = body.metadata?.sourceId;
+  if (!sourceId) return c.json({ ok: true, skipped: "no_source_id" });
+
+  const db = createDb(env.DB);
+  const [source] = await db.select().from(sources).where(eq(sources.id, sourceId)).limit(1);
+  const fc = source ? getSourceMeta(source).firecrawl : undefined;
+  if (!source || !fc?.enabled) {
+    logEvent("info", {
+      component: "firecrawl-webhook",
+      event: "skip-unknown-source",
+      sourceId,
+    });
+    return c.json({ ok: true, skipped: "unknown_or_disabled" });
+  }
+
+  for (const page of body.data ?? []) {
+    const { checkId, url, status, judgment } = page;
+    if (!checkId || !url || !status) continue;
+
+    // Idempotency: skip if this checkId+url combo was already processed.
+    const key = `firecrawl:webhook:${checkId}:${url}`;
+    if (env.LATEST_CACHE && (await env.LATEST_CACHE.get(key))) continue;
+
+    // Cost gate.
+    // `new` — always ingest (first time we've seen the page, data has value).
+    // `changed` — ingest when judging is off, judgment is absent (fail-open —
+    //   never silently drop a real change), or judgment says meaningful.
+    // `same` / `removed` / `error` — no-op.
+    const judgeOn = fc.judgeEnabled !== false;
+    const meaningful = judgment?.meaningful;
+    const enqueue =
+      status === "new" ||
+      (status === "changed" && (!judgeOn || meaningful === true || meaningful === undefined));
+
+    if (!enqueue) {
+      logEvent("info", {
+        component: "firecrawl-webhook",
+        event: "gate-skip",
+        sourceId,
+        status,
+        meaningful: meaningful ?? null,
+      });
+      continue;
+    }
+
+    await env.LATEST_CACHE?.put(key, "1", { expirationTtl: 3600 });
+
+    if (env.FIRECRAWL_INGEST_WORKFLOW) {
+      try {
+        await env.FIRECRAWL_INGEST_WORKFLOW.create({
+          id: `fc-${checkId}`,
+          params: { sourceId, url, checkId, status },
+        });
+      } catch (err) {
+        // Deterministic id means a duplicate-instance error = it's already
+        // running/ran — non-fatal. Log and continue.
+        logEvent("warn", {
+          component: "firecrawl-webhook",
+          event: "spawn-failed",
+          sourceId,
+          checkId,
+          err: err instanceof Error ? { name: err.name, message: err.message } : String(err),
+        });
+      }
+    }
+
+    logEvent("info", {
+      component: "firecrawl-webhook",
+      event: "enqueued",
+      sourceId,
+      checkId,
+      status,
+    });
+  }
+
+  return c.json({ ok: true });
+});
