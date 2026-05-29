@@ -15,13 +15,18 @@ it("derives a spec from source + metadata with defaults applied", () => {
     webhookUrl: "https://api.releases.sh/v1/integrations/firecrawl/webhook",
     webhookSecret: "shh",
   });
-  expect(spec.targets).toEqual([{ type: "scrape", url: baseSource.url }]);
-  expect(spec.schedule).toBe("every 6 hours");
-  expect(spec.proxy).toBe("auto");
+  expect(spec.targets).toEqual([
+    {
+      type: "scrape",
+      urls: [baseSource.url],
+      scrapeOptions: { formats: ["markdown"], proxy: "auto" },
+    },
+  ]);
+  expect(spec.schedule).toEqual({ text: "every 6 hours", timezone: "UTC" });
   expect(spec.judgeEnabled).toBe(true);
-  expect(spec.webhook.metadata.sourceId).toBe("src_123");
-  expect(spec.webhook.headers["X-Firecrawl-Token"]).toBe("shh");
-  expect(spec.webhook.events).toEqual(["monitor.page"]);
+  expect(spec.webhook?.metadata?.sourceId).toBe("src_123");
+  expect(spec.webhook?.headers?.["X-Firecrawl-Token"]).toBe("shh");
+  expect(spec.webhook?.events).toEqual(["monitor.page"]);
 });
 
 it("anchors the monitor name to the immutable source id, not the per-org slug", () => {
@@ -47,8 +52,8 @@ it("honors explicit schedule/proxy/goal overrides", () => {
     }),
   } as typeof baseSource;
   const spec = deriveMonitorSpec(src, { webhookUrl: "u", webhookSecret: "s" });
-  expect(spec.schedule).toBe("daily");
-  expect(spec.proxy).toBe("enhanced");
+  expect(spec.schedule).toEqual({ text: "daily", timezone: "UTC" });
+  expect(spec.targets[0]?.scrapeOptions?.proxy).toBe("enhanced");
   expect(spec.goal).toBe("x");
   expect(spec.judgeEnabled).toBe(false);
 });

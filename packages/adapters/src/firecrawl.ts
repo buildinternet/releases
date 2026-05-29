@@ -1,31 +1,17 @@
 import { FirecrawlError } from "@releases/lib/errors";
+import type { CreateMonitorRequest, Monitor, UpdateMonitorRequest } from "@mendable/firecrawl-js";
 
 const BASE = "https://api.firecrawl.dev/v2";
 
 export type FirecrawlProxy = "basic" | "enhanced" | "auto";
 
-export interface FirecrawlMonitorSpec {
-  name: string;
-  schedule: string; // cron or natural-language; 15-min minimum
-  targets: Array<{ type: "scrape" | "crawl"; url: string }>;
-  proxy: FirecrawlProxy;
-  goal?: string;
-  judgeEnabled: boolean;
-  webhook: {
-    url: string;
-    headers: Record<string, string>;
-    metadata: Record<string, string>;
-    // Firecrawl's wire values are the fully-qualified event names (see
-    // docs/features/monitoring webhook config). Earlier drafts used the bare
-    // "page" shorthand, which the monitor API does not subscribe to.
-    events: Array<"monitor.page" | "monitor.check.completed">;
-  };
-}
+// Monitor request/response shapes reuse the official SDK's types rather than
+// hand-rolled interfaces, so tsc validates them against the live v2 API. The
+// imports are `import type` (erased at build), so the SDK and its axios runtime
+// never enter the Worker bundle — the tiny fetch client below is what runs. #1248
+export type FirecrawlMonitorSpec = CreateMonitorRequest;
 
-export interface FirecrawlMonitor {
-  id: string;
-  [k: string]: unknown;
-}
+export type FirecrawlMonitor = Monitor;
 
 export interface FirecrawlClientOpts {
   apiKey: string;
@@ -80,7 +66,7 @@ export function createFirecrawlClient(opts: FirecrawlClientOpts) {
       if (!json?.monitor) throw new Error(`Firecrawl getMonitor ${id} returned no monitor`);
       return json.monitor;
     },
-    async updateMonitor(id: string, spec: FirecrawlMonitorSpec): Promise<void> {
+    async updateMonitor(id: string, spec: UpdateMonitorRequest): Promise<void> {
       await call(f, key, "PUT", `/monitor/${id}`, spec);
     },
     async deleteMonitor(id: string): Promise<void> {

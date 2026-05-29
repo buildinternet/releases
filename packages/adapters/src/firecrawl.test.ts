@@ -3,9 +3,14 @@ import { createFirecrawlClient, type FirecrawlMonitorSpec } from "./firecrawl.js
 
 const spec: FirecrawlMonitorSpec = {
   name: "test-monitor",
-  schedule: "every 6 hours",
-  targets: [{ type: "scrape", url: "https://example.com/changelog" }],
-  proxy: "auto",
+  schedule: { text: "every 6 hours", timezone: "UTC" },
+  targets: [
+    {
+      type: "scrape",
+      urls: ["https://example.com/changelog"],
+      scrapeOptions: { formats: ["markdown"], proxy: "auto" },
+    },
+  ],
   goal: "Detect new releases",
   judgeEnabled: true,
   webhook: {

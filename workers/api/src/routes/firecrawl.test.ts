@@ -14,7 +14,8 @@ const fakeClient: FirecrawlClient = {
   },
   deleteMonitor: async () => {},
   updateMonitor: async () => {},
-  getMonitor: async () => ({ id: "mon_seeded" }),
+  // getMonitor isn't exercised by the sync route; stub satisfies the type only.
+  getMonitor: (async () => ({ id: "mon_seeded" })) as unknown as FirecrawlClient["getMonitor"],
   runMonitor: async () => {},
   scrapeOnce: async () => "",
 };
@@ -339,7 +340,7 @@ describe("POST /v1/sources/:slug/firecrawl/sync", () => {
     );
 
     expect(res.status).toBe(200);
-    expect(capturedSpec?.webhook.url).toBe(
+    expect(capturedSpec?.webhook?.url).toBe(
       "https://api.releases.sh/v1/integrations/firecrawl/webhook",
     );
   });

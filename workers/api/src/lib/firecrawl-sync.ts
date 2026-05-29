@@ -15,9 +15,16 @@ export function deriveMonitorSpec(
   const fc = getSourceMeta(source).firecrawl ?? { enabled: false };
   return {
     name: `releases:${source.id}`,
-    schedule: fc.schedule ?? DEFAULT_SCHEDULE,
-    targets: [{ type: "scrape", url: source.url }],
-    proxy: fc.proxy ?? "auto",
+    // Natural-language schedule → schedule.text; Firecrawl normalizes to cron.
+    schedule: { text: fc.schedule ?? DEFAULT_SCHEDULE, timezone: "UTC" },
+    // Scrape targets use `urls`; the proxy tier lives in scrapeOptions, not top-level.
+    targets: [
+      {
+        type: "scrape",
+        urls: [source.url],
+        scrapeOptions: { formats: ["markdown"], proxy: fc.proxy ?? "auto" },
+      },
+    ],
     goal: fc.goal ?? DEFAULT_GOAL,
     judgeEnabled: fc.judgeEnabled ?? true,
     webhook: {
