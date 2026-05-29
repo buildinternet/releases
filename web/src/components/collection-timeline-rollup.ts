@@ -26,10 +26,20 @@ export function isTag(r: { source: { type: string } }): boolean {
 }
 
 // App Store sources roll up too (#1236), but keyed per-source rather than by
-// product — see the key branch in `rollupTags`. Distinct from `isTag`: appstore
-// is not a GitHub tag and stays out of the collections post/tag split.
+// product — see `rollupGroup`. Distinct from `isTag`: appstore is not a GitHub
+// tag and stays out of the collections post/tag split.
 export function isAppStore(r: { source: { type: string } }): boolean {
   return r.source.type === "appstore";
+}
+
+// How a row joins a rollup bucket. App Store apps key per-source (#1236): a
+// product can hold both an iOS and a macOS source, and those are distinct
+// platforms that must not merge into one rollup. Every other source keys on
+// product when bound, so a monorepo's same-day package bumps unify under the
+// product. Slug and label are derived together so they can never drift.
+function rollupGroup(r: RollupCandidate): { slug: string; label: string } {
+  if (isAppStore(r)) return { slug: r.source.slug, label: r.source.name };
+  return { slug: r.product?.slug ?? r.source.slug, label: r.product?.name ?? r.source.name };
 }
 
 export type TagListItem<R = CollectionReleaseItem> =
@@ -57,16 +67,10 @@ export function rollupTags<R extends RollupCandidate>(tags: R[]): TagListItem<R>
   const buckets = new Map<string, { label: string; releases: R[] }>();
 
   for (const r of tags) {
-    // App Store apps key per-source (#1236): a product can hold both an iOS and
-    // a macOS source, and those are distinct platforms that must not merge into
-    // one rollup. Every other source keys on product when bound, so a monorepo's
-    // same-day package bumps unify under the product.
-    const appStore = isAppStore(r);
-    const groupSlug = appStore ? r.source.slug : (r.product?.slug ?? r.source.slug);
-    const k = `${r.org?.slug ?? ""}::${groupSlug}`;
+    const { slug, label } = rollupGroup(r);
+    const k = `${r.org?.slug ?? ""}::${slug}`;
     let bucket = buckets.get(k);
     if (!bucket) {
-      const label = appStore ? r.source.name : (r.product?.name ?? r.source.name);
       bucket = { label, releases: [] };
       buckets.set(k, bucket);
     }
