@@ -27,13 +27,14 @@ import {
   extractMediaFromMarkdown,
 } from "@releases/adapters/feed.js";
 import type { SourceMetadata, ChangeStatus } from "@releases/adapters/feed.js";
-import { isAppStoreFetched } from "@releases/adapters/source-meta";
+import { isAppStoreFetched, isVideoFetched } from "@releases/adapters/source-meta";
 import {
   resolveAppStore,
   appStoreCoordFromSource,
   mapListingToRawReleases,
 } from "@releases/adapters/appstore";
 import { refreshAppStoreListing } from "../lib/appstore-materialize.js";
+import { fetchAndParseVideoFeed, resolveVideoProvider } from "@releases/adapters/video";
 import { loadFetchQuirks, type FetchQuirk } from "@releases/ai-internal/playbook";
 import { FeedHttpError } from "@releases/lib/errors";
 import { contentHash } from "@releases/adapters/content-hash";
@@ -190,6 +191,18 @@ export async function pollAndFetch(
         return true;
       }
       if (s.type === "appstore") return true;
+      if (isVideoFetched(s)) {
+        const m = getSourceMeta(s);
+        if (!m.feedUrl) {
+          logEvent("warn", {
+            component: "cron-poll-fetch",
+            event: "skip-video-broken-metadata",
+            sourceSlug: s.slug,
+          });
+          return false;
+        }
+        return true;
+      }
       return s.type === "github";
     });
 
@@ -1294,6 +1307,55 @@ export async function fetchOne(
       rawReleases = listing ? mapListingToRawReleases(listing, coord!) : [];
       if (!dryRun && listing) {
         await refreshAppStoreListing(db, source, listing);
+      }
+    } else if (isVideoFetched(source)) {
+      if (!meta.feedUrl || !meta.video?.provider) {
+        const dur = Date.now() - start;
+        await db
+          .insert(fetchLog)
+          .values({
+            sourceId: source.id,
+            sessionId,
+            releasesFound: 0,
+            releasesInserted: 0,
+            durationMs: dur,
+            status: "error",
+            error: "Missing feedUrl or video.provider in source metadata",
+          })
+          .catch(() => {});
+        return {
+          releasesFound: 0,
+          releasesInserted: 0,
+          durationMs: dur,
+          status: "error",
+          error: "Missing feedUrl or video.provider in source metadata",
+        };
+      }
+      const conditionalHeaders: Record<string, string> = {};
+      if (meta.feedEtag) conditionalHeaders["If-None-Match"] = meta.feedEtag;
+      if (meta.feedLastModified) conditionalHeaders["If-Modified-Since"] = meta.feedLastModified;
+
+      const provider = resolveVideoProvider(meta.video.provider);
+      const botFetch = opts?.signedFetch ?? (await makeBotFetch(env));
+      const result = await fetchAndParseVideoFeed(
+        meta.feedUrl,
+        provider,
+        Object.keys(conditionalHeaders).length > 0 ? conditionalHeaders : undefined,
+        botFetch,
+      );
+      rawReleases = result.releases.slice(0, maxEntries);
+
+      if (!dryRun) {
+        const metaUpdates: Partial<SourceMetadata> = {};
+        if (result.etag) metaUpdates.feedEtag = result.etag;
+        if (result.lastModified) metaUpdates.feedLastModified = result.lastModified;
+        if (Object.keys(metaUpdates).length > 0) {
+          const merged = { ...meta, ...metaUpdates };
+          await db
+            .update(sources)
+            .set({ metadata: JSON.stringify(merged) })
+            .where(eq(sources.id, source.id));
+        }
       }
     } else {
       if (!meta.feedUrl || !meta.feedType) {

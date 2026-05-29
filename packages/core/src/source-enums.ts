@@ -7,7 +7,7 @@
  * SQL constraints either way, so they stay in sync by convention.
  */
 
-export const SOURCE_TYPES = ["github", "scrape", "feed", "agent", "appstore"] as const;
+export const SOURCE_TYPES = ["github", "scrape", "feed", "agent", "appstore", "video"] as const;
 export type SourceType = (typeof SOURCE_TYPES)[number];
 
 export const SOURCE_DISCOVERY = ["curated", "agent", "on_demand"] as const;

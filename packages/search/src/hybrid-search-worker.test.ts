@@ -1,5 +1,5 @@
 import { test, expect } from "bun:test";
-import { recencyBoost } from "./hybrid-search-worker.js";
+import { recencyBoost, videoInfoFromMetadata } from "./hybrid-search-worker.js";
 
 const DAY_MS = 86_400_000;
 
@@ -34,4 +34,35 @@ test("recencyBoost: both inputs at 1.0 disables tiered behavior", () => {
   for (const ageDays of [0, 14, 30, 60, 90, 365]) {
     expect(recencyBoost(ageDays * DAY_MS, 1, 1)).toBe(1);
   }
+});
+
+// ── videoInfoFromMetadata ─────────────────────────────────────────────
+
+test("videoInfoFromMetadata: video source with valid provider returns provider", () => {
+  const meta = JSON.stringify({ video: { provider: "youtube" } });
+  expect(videoInfoFromMetadata("video", meta)).toEqual({ provider: "youtube" });
+  expect(videoInfoFromMetadata("video", JSON.stringify({ video: { provider: "vimeo" } }))).toEqual({
+    provider: "vimeo",
+  });
+  expect(videoInfoFromMetadata("video", JSON.stringify({ video: { provider: "wistia" } }))).toEqual(
+    { provider: "wistia" },
+  );
+});
+
+test("videoInfoFromMetadata: wrong source type returns null", () => {
+  const meta = JSON.stringify({ video: { provider: "youtube" } });
+  expect(videoInfoFromMetadata("github", meta)).toBeNull();
+  expect(videoInfoFromMetadata("appstore", meta)).toBeNull();
+  expect(videoInfoFromMetadata("feed", meta)).toBeNull();
+});
+
+test("videoInfoFromMetadata: missing metadata returns null", () => {
+  expect(videoInfoFromMetadata("video", null)).toBeNull();
+  expect(videoInfoFromMetadata("video", "{}")).toBeNull();
+  expect(videoInfoFromMetadata("video", JSON.stringify({ video: {} }))).toBeNull();
+});
+
+test("videoInfoFromMetadata: unrecognised provider returns null", () => {
+  const meta = JSON.stringify({ video: { provider: "twitch" } });
+  expect(videoInfoFromMetadata("video", meta)).toBeNull();
 });

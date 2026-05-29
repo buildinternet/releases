@@ -1,6 +1,11 @@
 import { z } from "zod";
 import { KIND_VALUES } from "@buildinternet/releases-core/kinds";
-import { AppStoreSourceInfoSchema, MediaItemSchema, ReleaseTypeSchema } from "./shared.js";
+import {
+  AppStoreSourceInfoSchema,
+  MediaItemSchema,
+  ReleaseTypeSchema,
+  VideoSourceInfoSchema,
+} from "./shared.js";
 import { SourceTypeSchema } from "./sources.js";
 import { LookupStatusSchema } from "./lookups.js";
 
@@ -71,6 +76,11 @@ export const SearchReleaseHitSchema = z.object({
    * otherwise. Powers the compact app-update treatment on the search card. #1206
    */
   appStore: AppStoreSourceInfoSchema.nullable().optional(),
+  /**
+   * Video provider tag for `type: "video"` sources, absent otherwise. Powers
+   * the thumbnail-forward video row on search cards. #video
+   */
+  video: VideoSourceInfoSchema.nullable().optional(),
   orgSlug: z.string().nullable(),
   orgName: z.string().nullable().optional(),
   /** Owning product slug — present when the source belongs to a product. Lets

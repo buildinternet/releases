@@ -80,6 +80,10 @@ const ALLOWLIST = new Set<string>([
   "POST /orgs/:slug/overview",
   "POST /sources",
   "POST /sources/appstore",
+  // Write (Bearer required); annotated with describeRoute but hidden in prod
+  // (hideInProduction), same as POST /sources/appstore above. Materializes a
+  // video source from a YouTube channel/playlist URL.
+  "POST /sources/video",
   "PATCH /sources/:slug",
   "PATCH /orgs/:orgSlug/sources/:sourceSlug",
   "DELETE /sources/:slug",

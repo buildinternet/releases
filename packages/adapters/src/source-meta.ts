@@ -222,6 +222,23 @@ export interface SourceMetadata {
   };
 
   /**
+   * Video source routing + provider identity (#video). Present only on
+   * `type: "video"` sources. `feedUrl`/`feedType` (above) hold the provider's
+   * Atom/RSS endpoint so polling reuses the feed machinery; this block carries
+   * the provider discriminator and resolved channel identity for display.
+   */
+  video?: {
+    provider: "youtube" | "vimeo" | "wistia";
+    channel?: {
+      id?: string;
+      handle?: string;
+      title?: string;
+      playlistId?: string;
+      playlistTitle?: string;
+    };
+  };
+
+  /**
    * Firecrawl monitoring opt-in. Present on sources whose fetch is delegated
    * to Firecrawl's external scrape + change-detection (anti-bot escape hatch
    * for sources our own pipeline can't reach). Desired-state source of truth;
@@ -268,6 +285,42 @@ export function isGitHubFetched(source: Source, meta?: SourceMetadata): boolean 
  */
 export function isAppStoreFetched(source: Source): boolean {
   return source.type === "appstore";
+}
+
+/**
+ * True when a source is fetched via the video adapter. Like `isAppStoreFetched`,
+ * the type is the only signal — there's no metadata-override form.
+ */
+export function isVideoFetched(source: Source): boolean {
+  return source.type === "video";
+}
+
+/**
+ * Video provider tag from a source's `metadata` JSON. Returns null for
+ * non-`video` sources or when no provider is recorded. Mirrors
+ * `appStoreSourceInfo`; the search package keeps its own copy to avoid a dep.
+ *
+ * `metadata.video.channel.*` is stored but intentionally not threaded onto this
+ * wire shape yet (the thumbnail and watch URL reuse the release's existing
+ * `media[]` / `url`); widen `VideoSourceInfoSchema` and this return type
+ * together when a consumer needs the channel identity.
+ */
+export function videoSourceInfo(
+  type: string,
+  metadataJson: string | null,
+): { provider: "youtube" | "vimeo" | "wistia" } | null {
+  if (type !== "video") return null;
+  try {
+    const block = (JSON.parse(metadataJson ?? "{}") as { video?: { provider?: unknown } } | null)
+      ?.video;
+    const provider = block?.provider;
+    if (provider === "youtube" || provider === "vimeo" || provider === "wistia") {
+      return { provider };
+    }
+  } catch {
+    // fall through
+  }
+  return null;
 }
 
 /**

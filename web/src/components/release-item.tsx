@@ -10,6 +10,7 @@ import Image from "next/image";
 import { FallbackImage } from "./fallback-image";
 import { releaseThumbUrl, IMG_TRANSFORM_ON } from "@/lib/media";
 import { appStoreIconUrl, type AppRowInfo } from "@/lib/app-source";
+import type { VideoRowInfo } from "@/lib/video-source";
 import { EXTERNAL_UGC_REL, isOptimizableImage } from "@/lib/sanitize";
 import { deriveFeedTitle } from "@/lib/release-title";
 import { markdownComponents, collapsedMarkdownComponents } from "./markdown-components";
@@ -145,11 +146,13 @@ export function ReleaseListItem({
   hideDate,
   sourceByline,
   appStore,
+  video,
 }: {
   release: ReleaseItem;
   hideDate?: boolean;
   sourceByline?: { name: string; slug: string; orgSlug?: string };
   appStore?: AppRowInfo | null;
+  video?: VideoRowInfo | null;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [isOverflowing, setIsOverflowing] = useState(false);
@@ -355,7 +358,100 @@ export function ReleaseListItem({
             )}
           </div>
         )}
-        {!appStore && (
+        {video && !appStore && (
+          <div
+            className="group relative cursor-pointer"
+            role="button"
+            tabIndex={0}
+            aria-expanded={expanded}
+            aria-label={expanded ? "Collapse release notes" : "Expand release notes"}
+            onClick={() => setExpanded(!expanded)}
+            onKeyDown={(e) => {
+              // Only toggle when the wrapper itself is focused — don't hijack
+              // Enter/Space on nested links (watch link, notes).
+              if (e.target !== e.currentTarget) return;
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                setExpanded(!expanded);
+              }
+            }}
+          >
+            <div className="flex items-start gap-3">
+              {thumbnail && (
+                <div className="shrink-0">
+                  <FallbackImage
+                    src={releaseThumbUrl(thumbnail.r2Url ?? thumbnail.url, 320)}
+                    alt={thumbnail.alt || ""}
+                    width={160}
+                    height={90}
+                    className="rounded-md object-cover w-[160px] h-[90px] border border-stone-200 dark:border-stone-800"
+                    unoptimized={IMG_TRANSFORM_ON || undefined}
+                  />
+                </div>
+              )}
+              <div className="min-w-0 flex-1">
+                <h2 id={titleId} className={headingClasses}>
+                  {release.id ? (
+                    <Link
+                      href={`/release/${release.id}`}
+                      className="hover:underline underline-offset-2"
+                    >
+                      {headingInner}
+                    </Link>
+                  ) : (
+                    headingInner
+                  )}
+                </h2>
+                <div className="text-[13px] text-stone-500 dark:text-stone-400">
+                  Watch on {video.label}
+                </div>
+              </div>
+              <svg
+                className={`ml-auto shrink-0 h-4 w-4 text-stone-400 dark:text-stone-500 transition-transform ${
+                  expanded ? "rotate-180" : ""
+                }`}
+                viewBox="0 0 20 20"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                aria-hidden="true"
+              >
+                <path d="M6 8l4 4 4-4" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </div>
+            {expanded && (
+              <div className={`mt-2 ${thumbnail ? "pl-[172px]" : ""}`}>
+                {markdownContent.trim() ? (
+                  <div className={markdownClasses}>
+                    <ReactMarkdown
+                      remarkPlugins={remarkPlugins}
+                      rehypePlugins={[rehypeShikiPlugin]}
+                      components={markdownComponents}
+                    >
+                      {markdownContent}
+                    </ReactMarkdown>
+                  </div>
+                ) : (
+                  <p className="text-[13px] italic text-stone-400 dark:text-stone-500 m-0">
+                    No description provided.
+                  </p>
+                )}
+                {release.url && (
+                  <a
+                    href={release.url}
+                    target="_blank"
+                    rel={EXTERNAL_UGC_REL}
+                    onClick={(e) => e.stopPropagation()}
+                    className="inline-block mt-2 text-[12px] text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-300"
+                  >
+                    Watch on {video.label}
+                  </a>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+        {!appStore && !video && (
           <>
             <div className="flex items-baseline gap-1.5 mb-1">
               <h2 id={titleId} className={headingClasses}>

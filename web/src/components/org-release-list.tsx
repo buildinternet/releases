@@ -11,6 +11,7 @@ import { buildFeedEntries, entryDayKey, type RollupItem } from "./org-release-en
 import { Caret } from "./caret";
 import { AppStoreIcon } from "./app-store-icon";
 import { appRowInfoFromWire } from "@/lib/app-source";
+import { videoRowInfoFromWire } from "@/lib/video-source";
 import { formatDate, pluralReleases } from "@/lib/formatters";
 
 interface OrgReleaseListProps {
@@ -280,6 +281,7 @@ export function OrgReleaseList({
                 release={release}
                 hideDate={!showDate}
                 appStore={appRowInfoFromWire(release.source.appStore, release.source.name)}
+                video={videoRowInfoFromWire(release.source.video)}
                 sourceByline={
                   multipleSourcesExist
                     ? {
@@ -394,6 +396,7 @@ function ReleaseRollupRow({
             release={r}
             hideDate
             appStore={appRowInfoFromWire(r.source.appStore, r.source.name)}
+            video={videoRowInfoFromWire(r.source.video)}
             sourceByline={
               multipleSourcesExist
                 ? { name: r.source.name, slug: r.source.slug, orgSlug }

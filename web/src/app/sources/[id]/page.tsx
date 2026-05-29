@@ -12,6 +12,7 @@ import {
 } from "@/lib/schema-org";
 import { getSourceById } from "./_lib/source-by-id";
 import { getAppInfo } from "@/lib/app-source";
+import { getVideoInfo } from "@/lib/video-source";
 
 const LEGACY_SOURCE_TABS = new Set(["highlights", "changelog"]);
 
@@ -166,6 +167,7 @@ export default async function SourceByIdPage({
 
   const appInfo = getAppInfo(source);
   const appStore = appInfo ? { ...appInfo, appName: source.name } : null;
+  const videoInfo = getVideoInfo(source);
 
   return (
     <>
@@ -176,6 +178,7 @@ export default async function SourceByIdPage({
         initialReleases={source.releases}
         initialCursor={initialCursor}
         appStore={appStore}
+        video={videoInfo}
       />
       <RelatedRails
         anchorReleaseId={source.releases[0]?.id ?? null}

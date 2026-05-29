@@ -48,6 +48,7 @@ import {
 import { parseCoordinate } from "@buildinternet/releases-core/lookup-coordinate";
 import { normalizeDomain } from "@buildinternet/releases-core/domain";
 import { appStoreSourceInfo } from "@releases/adapters/appstore";
+import { videoSourceInfo } from "@releases/adapters/source-meta";
 import { eq, and } from "drizzle-orm";
 import { runLookup } from "./lookups.js";
 import { embedSourceSideEffect } from "./sources.js";
@@ -83,6 +84,7 @@ export function hydrateReleaseHit(
   // resolve below so both paths emit the same wire field. #1206
   row: RawSearchReleaseRow & {
     appStore?: { platform: "ios" | "macos"; iconUrl: string | null } | null;
+    video?: { provider: "youtube" | "vimeo" | "wistia" } | null;
   },
   mediaOrigin: string,
   score?: number,
@@ -107,6 +109,7 @@ export function hydrateReleaseHit(
     sourceName: row.sourceName,
     sourceType: row.sourceType,
     appStore: row.appStore ?? appStoreSourceInfo(row.sourceType, row.sourceMetadata ?? null),
+    video: row.video ?? videoSourceInfo(row.sourceType, row.sourceMetadata ?? null),
     orgSlug: row.orgSlug,
     orgName: row.orgName,
     productSlug: row.productSlug ?? null,
@@ -743,6 +746,7 @@ searchRoutes.get(
             sourceName: h.release.source.name,
             sourceType: h.release.source.type,
             appStore: h.release.source.appStore,
+            video: h.release.source.video,
             productSlug: h.release.productSlug,
             orgSlug: h.release.orgSlug,
             orgName: h.release.orgName,
