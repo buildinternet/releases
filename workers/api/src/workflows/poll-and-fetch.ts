@@ -86,16 +86,18 @@ export type PollAndFetchParams = {
  * plenty of room to ride out Voyage rate limits. Fetch retries cover transient
  * 5xx / network blips; permanent 4xx surfaces as NonRetryableError downstream.
  */
-const RETRY_POLL = {
+// Exported so sibling workflows (e.g. FirecrawlIngestWorkflow) reuse the same
+// retry policies instead of re-declaring identical constants.
+export const RETRY_POLL = {
   retries: { limit: 2, delay: "5 seconds", backoff: "exponential" },
 } satisfies WorkflowStepConfig;
 
-const RETRY_FETCH = {
+export const RETRY_FETCH = {
   retries: { limit: 3, delay: "30 seconds", backoff: "exponential" },
   timeout: "5 minutes",
 } satisfies WorkflowStepConfig;
 
-const RETRY_EMBED = {
+export const RETRY_EMBED = {
   retries: { limit: 5, delay: "30 seconds", backoff: "exponential" },
   timeout: "5 minutes",
 } satisfies WorkflowStepConfig;
@@ -103,7 +105,7 @@ const RETRY_EMBED = {
 // Per-row failures are caught + logged inside the step body, so retries are
 // conservative; the `title_generated IS NULL` predicate on the UPDATE
 // makes a step-level retry safe.
-const RETRY_GENERATE = {
+export const RETRY_GENERATE = {
   retries: { limit: 1, delay: "30 seconds", backoff: "exponential" },
   timeout: "10 minutes",
 } satisfies WorkflowStepConfig;
@@ -145,7 +147,7 @@ export function jitterMsForSource(sourceId: string, windowMs: number): number {
  * need them (none of them here land in the workflow's persisted state because
  * the returned object only flows through closures).
  */
-async function resolveFetchEnv(env: PollAndFetchWorkflowEnv): Promise<FetchOneEnv> {
+export async function resolveFetchEnv(env: PollAndFetchWorkflowEnv): Promise<FetchOneEnv> {
   const githubToken = (await getSecret(env.GITHUB_TOKEN).catch(() => null)) ?? undefined;
   return {
     GITHUB_TOKEN: githubToken,
@@ -433,6 +435,21 @@ export class PollAndFetchWorkflow extends WorkflowEntrypoint<
         if (!row) throw new NonRetryableError(SOURCE_DELETED_SENTINEL);
         return row;
       });
+
+      // Defense-in-depth: queryDueSources already excludes firecrawl-owned
+      // sources from the fan-out, but guard here too so a manual trigger or
+      // a future regression in the exclusion predicate can't cause
+      // double-ingest. Firecrawl sources are ingested via the inbound webhook
+      // + FirecrawlIngestWorkflow exclusively.
+      if (getSourceMeta(source).firecrawl?.enabled) {
+        logEvent("info", {
+          component: "poll-and-fetch-workflow",
+          event: "firecrawl-owned-skip",
+          sourceId: source.id,
+          slug: source.slug,
+        });
+        return;
+      }
 
       const now = new Date();
       const changeDetectEnabled = env.SCRAPE_CHANGE_DETECT_ENABLED === "true";

@@ -283,10 +283,24 @@ export async function queryDueSources(
   const nowIso = now.toISOString();
   const backoffReady = sql`(${sourcesVisible.nextFetchAfter} IS NULL OR ${sourcesVisible.nextFetchAfter} <= ${nowIso})`;
 
+  // Firecrawl-owned sources are ingested via the inbound webhook + workflow, not
+  // the poll cron — exclude them from BOTH the inline and workflow fan-out paths
+  // (this query gates both). enabled === true → json_extract returns 1; absent → NULL.
+  const notFirecrawl = sql`(json_extract(${sourcesVisible.metadata}, '$.firecrawl.enabled') IS NULL OR json_extract(${sourcesVisible.metadata}, '$.firecrawl.enabled') != 1)`;
+
   return db
     .select()
     .from(sourcesVisible)
-    .where(and(pollable, notPaused, orgNotFetchPaused, backoffReady, or(...tierConditions)));
+    .where(
+      and(
+        pollable,
+        notPaused,
+        orgNotFetchPaused,
+        backoffReady,
+        notFirecrawl,
+        or(...tierConditions),
+      ),
+    );
 }
 
 // ── Poll one source ──
@@ -1051,6 +1065,182 @@ async function classifyMarketingForReleases(
   return result;
 }
 
+export interface IngestResult {
+  insertedIds: string[];
+  found: number;
+  inserted: number;
+  visiblePublishRows: InsertedReleaseRow[];
+}
+
+export async function ingestRawReleases(
+  db: ReturnType<typeof drizzle>,
+  source: Source,
+  rawReleases: RawRelease[],
+  env: FetchOneEnv,
+  // The cron `fetchOne` may have mutated its in-memory `meta` earlier in the
+  // same fire (e.g. `meta.feedContentDepth = "summary-only"` so this batch
+  // enriches with no one-fire delay). Accept that object so the mutation is
+  // visible to `buildEnrichMap` below; callers with no prior mutation (the
+  // Firecrawl ingest workflow) omit it and get a fresh parse.
+  meta: ReturnType<typeof getSourceMeta> = getSourceMeta(source),
+): Promise<IngestResult> {
+  const marketingMap =
+    meta.marketingFilter === true
+      ? await classifyMarketingForReleases(db, source, meta, rawReleases, env)
+      : new Map<number, MarketingClassifierResult>();
+
+  const enrichMap = await buildEnrichMap(db, source, meta, rawReleases, env);
+
+  // Media pre-pass. Always unwrap Next.js/Vercel optimizer proxy URLs so
+  // downstream readers see the underlying CDN asset. When ingest-time R2
+  // upload is enabled (#1177) and the bucket is bound, additionally drop junk
+  // (favicons / avatars / pixels) and mirror survivors into `released-media`
+  // so reads resolve a same-origin `r2Url`. Sequential per release (the
+  // helper bounds image concurrency within); fail-open — any image-level
+  // failure keeps the third-party URL. Flag-off / unbound bucket = today's
+  // verbatim behavior.
+  const r2UploadEnabled = env.MEDIA_R2_UPLOAD_ENABLED === "true" && env.MEDIA != null;
+  // Mirror media only for releases the insert below will actually create —
+  // existing URLs are skipped by onConflictDoNothing, so their media JSON is
+  // discarded and re-fetching their images every fire would be pure waste.
+  // Only queried when R2 upload is on; the normalize pass always runs.
+  const existingMediaUrls = r2UploadEnabled
+    ? await selectExistingReleaseUrls(
+        db,
+        source.id,
+        rawReleases.map((r) => r.url),
+      )
+    : new Set<string>();
+  const mediaJsonByIndex: string[] = [];
+  for (let index = 0; index < rawReleases.length; index++) {
+    const raw = rawReleases[index]!;
+    const enrich = enrichMap.get(index);
+    // Keep feed-provided media; backfill from the enriched article only when
+    // the feed item carried none (spec: article media only when feed is empty).
+    const rawMedia =
+      raw.media && raw.media.length > 0 ? raw.media : (enrich?.media ?? raw.media ?? []);
+    // oxlint-disable-next-line no-map-spread -- copy-on-write required; m is an adapter-returned object
+    const base = rawMedia.map((m) => ({ ...m, url: normalizeMediaUrl(m.url) }));
+    let finalMedia = base;
+    const isNewRelease = raw.url == null || !existingMediaUrls.has(raw.url);
+    if (r2UploadEnabled && isNewRelease && base.length > 0) {
+      // oxlint-disable-next-line no-await-in-loop -- sequential per release; helper bounds image concurrency internally
+      finalMedia = await processMediaForR2(filterJunkMedia(base), {
+        db,
+        bucket: env.MEDIA!,
+        sourceId: source.id,
+      });
+    }
+    mediaJsonByIndex[index] = JSON.stringify(finalMedia);
+  }
+
+  const rows = rawReleases.map((raw, index) => {
+    const enrich = enrichMap.get(index);
+    const content = enrich?.content ?? raw.content;
+    const size = computeContentSize(content);
+    const verdict = marketingMap.get(index);
+    return {
+      sourceId: source.id,
+      version: raw.version ?? null,
+      versionSort: computeVersionSort(raw.version),
+      title: raw.title,
+      content,
+      url: raw.url ?? null,
+      contentHash: contentHash({ ...raw, content }),
+      contentChars: size.contentChars,
+      contentTokens: size.contentTokens,
+      publishedAt: raw.publishedAt?.toISOString() ?? null,
+      prerelease: raw.prerelease ?? isPrereleaseVersion(raw.version),
+      media: mediaJsonByIndex[index]!,
+      ...(enrich ? { metadata: JSON.stringify({ enrichment: enrich.marker }) } : {}),
+      suppressed: verdict?.isMarketing === true,
+      suppressedReason: verdict?.isMarketing ? `marketing_classifier:${verdict.reason}` : null,
+    };
+  });
+
+  let inserted = 0;
+  const publishRows: InsertedReleaseRow[] = [];
+  const clusterRows: Array<{ id: string; version: string | null; content: string }> = [];
+  const suppressedIds = new Set<string>();
+  for (let i = 0; i < rows.length; i += RELEASES_BATCH_CHUNK_SIZE) {
+    const chunk = rows.slice(i, i + RELEASES_BATCH_CHUNK_SIZE);
+    // Build publish rows from the RETURNING set (not zipped against
+    // `chunk`) because onConflictDoNothing skips conflicting rows and
+    // RETURNING omits them, so index alignment would drift.
+    // oxlint-disable-next-line no-await-in-loop -- D1 chunked insert (100 bind param limit)
+    const result = await db.insert(releases).values(chunk).onConflictDoNothing().returning({
+      id: releases.id,
+      title: releases.title,
+      version: releases.version,
+      publishedAt: releases.publishedAt,
+      media: releases.media,
+      content: releases.content,
+      contentChars: releases.contentChars,
+      contentTokens: releases.contentTokens,
+      suppressed: releases.suppressed,
+    });
+    inserted += result.length;
+    for (const r of result) {
+      const { content, suppressed, ...publishRow } = r;
+      if (suppressed === true) suppressedIds.add(r.id);
+      publishRows.push(publishRow);
+      clusterRows.push({ id: r.id, version: r.version, content });
+    }
+  }
+  const insertedIds = publishRows.map((r) => r.id).filter((id) => !suppressedIds.has(id));
+
+  // Detect changesets cascade rows and demote them to coverage so they
+  // stay out of the default feed, the live tail, and per-source IndexNow
+  // counts. Synchronous: coverage state must be visible to the publish
+  // path below.
+  const cascadeResult = await clusterAndPersistCascades(db, clusterRows, {
+    component: "poll-fetch",
+    sourceId: source.id,
+  });
+  const visiblePublishRows =
+    cascadeResult.coverageIds.size > 0 || suppressedIds.size > 0
+      ? publishRows.filter((r) => !cascadeResult.coverageIds.has(r.id) && !suppressedIds.has(r.id))
+      : publishRows;
+
+  if (visiblePublishRows.length > 0 && env.RELEASE_HUB) {
+    await publishReleaseEvents(
+      {
+        RELEASE_HUB: env.RELEASE_HUB,
+        WEBHOOK_DELIVERY_QUEUE: env.WEBHOOK_DELIVERY_QUEUE,
+        DB: env.DB,
+      },
+      {
+        src: { name: source.name, slug: source.slug, orgId: source.orgId, sourceId: source.id },
+        inserted: visiblePublishRows,
+      },
+    );
+  }
+
+  // Fire-and-forget IndexNow ping for the org/source/product surfaces whose
+  // lastmod just shifted. Skips itself when INDEXNOW_ENABLED is unset, so
+  // staging and dev are no-ops by default. Per-release URLs are intentionally
+  // out of scope — see https://github.com/buildinternet/releases/issues/649.
+  if (visiblePublishRows.length > 0) {
+    await notifyIndexNowForSource(
+      env,
+      {
+        resolveOrgSlug: (id) => resolveOrgSlug(db, id),
+        resolveProductSlug: (id) => resolveProductSlug(db, id),
+      },
+      {
+        slug: source.slug,
+        orgId: source.orgId,
+        productId: source.productId,
+        isHidden: source.isHidden,
+        discovery: source.discovery,
+      },
+      visiblePublishRows.length,
+    );
+  }
+
+  return { insertedIds, found: rawReleases.length, inserted, visiblePublishRows };
+}
+
 export async function fetchOne(
   db: ReturnType<typeof drizzle>,
   source: Source,
@@ -1305,161 +1495,7 @@ export async function fetchOne(
       return await delegateScrapeToDiscovery(db, source, env);
     }
 
-    const marketingMap =
-      meta.marketingFilter === true
-        ? await classifyMarketingForReleases(db, source, meta, rawReleases, env)
-        : new Map<number, MarketingClassifierResult>();
-
-    const enrichMap = await buildEnrichMap(db, source, meta, rawReleases, env);
-
-    // Media pre-pass. Always unwrap Next.js/Vercel optimizer proxy URLs so
-    // downstream readers see the underlying CDN asset. When ingest-time R2
-    // upload is enabled (#1177) and the bucket is bound, additionally drop junk
-    // (favicons / avatars / pixels) and mirror survivors into `released-media`
-    // so reads resolve a same-origin `r2Url`. Sequential per release (the
-    // helper bounds image concurrency within); fail-open — any image-level
-    // failure keeps the third-party URL. Flag-off / unbound bucket = today's
-    // verbatim behavior.
-    const r2UploadEnabled = env.MEDIA_R2_UPLOAD_ENABLED === "true" && env.MEDIA != null;
-    // Mirror media only for releases the insert below will actually create —
-    // existing URLs are skipped by onConflictDoNothing, so their media JSON is
-    // discarded and re-fetching their images every fire would be pure waste.
-    // Only queried when R2 upload is on; the normalize pass always runs.
-    const existingMediaUrls = r2UploadEnabled
-      ? await selectExistingReleaseUrls(
-          db,
-          source.id,
-          rawReleases.map((r) => r.url),
-        )
-      : new Set<string>();
-    const mediaJsonByIndex: string[] = [];
-    for (let index = 0; index < rawReleases.length; index++) {
-      const raw = rawReleases[index]!;
-      const enrich = enrichMap.get(index);
-      // Keep feed-provided media; backfill from the enriched article only when
-      // the feed item carried none (spec: article media only when feed is empty).
-      const rawMedia =
-        raw.media && raw.media.length > 0 ? raw.media : (enrich?.media ?? raw.media ?? []);
-      // oxlint-disable-next-line no-map-spread -- copy-on-write required; m is an adapter-returned object
-      const base = rawMedia.map((m) => ({ ...m, url: normalizeMediaUrl(m.url) }));
-      let finalMedia = base;
-      const isNewRelease = raw.url == null || !existingMediaUrls.has(raw.url);
-      if (r2UploadEnabled && isNewRelease && base.length > 0) {
-        // oxlint-disable-next-line no-await-in-loop -- sequential per release; helper bounds image concurrency internally
-        finalMedia = await processMediaForR2(filterJunkMedia(base), {
-          db,
-          bucket: env.MEDIA!,
-          sourceId: source.id,
-        });
-      }
-      mediaJsonByIndex[index] = JSON.stringify(finalMedia);
-    }
-
-    const rows = rawReleases.map((raw, index) => {
-      const enrich = enrichMap.get(index);
-      const content = enrich?.content ?? raw.content;
-      const size = computeContentSize(content);
-      const verdict = marketingMap.get(index);
-      return {
-        sourceId: source.id,
-        version: raw.version ?? null,
-        versionSort: computeVersionSort(raw.version),
-        title: raw.title,
-        content,
-        url: raw.url ?? null,
-        contentHash: contentHash({ ...raw, content }),
-        contentChars: size.contentChars,
-        contentTokens: size.contentTokens,
-        publishedAt: raw.publishedAt?.toISOString() ?? null,
-        prerelease: raw.prerelease ?? isPrereleaseVersion(raw.version),
-        media: mediaJsonByIndex[index]!,
-        ...(enrich ? { metadata: JSON.stringify({ enrichment: enrich.marker }) } : {}),
-        suppressed: verdict?.isMarketing === true,
-        suppressedReason: verdict?.isMarketing ? `marketing_classifier:${verdict.reason}` : null,
-      };
-    });
-
-    let inserted = 0;
-    const publishRows: InsertedReleaseRow[] = [];
-    const clusterRows: Array<{ id: string; version: string | null; content: string }> = [];
-    const suppressedIds = new Set<string>();
-    for (let i = 0; i < rows.length; i += RELEASES_BATCH_CHUNK_SIZE) {
-      const chunk = rows.slice(i, i + RELEASES_BATCH_CHUNK_SIZE);
-      // Build publish rows from the RETURNING set (not zipped against
-      // `chunk`) because onConflictDoNothing skips conflicting rows and
-      // RETURNING omits them, so index alignment would drift.
-      // oxlint-disable-next-line no-await-in-loop -- D1 chunked insert (100 bind param limit)
-      const result = await db.insert(releases).values(chunk).onConflictDoNothing().returning({
-        id: releases.id,
-        title: releases.title,
-        version: releases.version,
-        publishedAt: releases.publishedAt,
-        media: releases.media,
-        content: releases.content,
-        contentChars: releases.contentChars,
-        contentTokens: releases.contentTokens,
-        suppressed: releases.suppressed,
-      });
-      inserted += result.length;
-      for (const r of result) {
-        const { content, suppressed, ...publishRow } = r;
-        if (suppressed === true) suppressedIds.add(r.id);
-        publishRows.push(publishRow);
-        clusterRows.push({ id: r.id, version: r.version, content });
-      }
-    }
-    const insertedIds = publishRows.map((r) => r.id).filter((id) => !suppressedIds.has(id));
-
-    // Detect changesets cascade rows and demote them to coverage so they
-    // stay out of the default feed, the live tail, and per-source IndexNow
-    // counts. Synchronous: coverage state must be visible to the publish
-    // path below.
-    const cascadeResult = await clusterAndPersistCascades(db, clusterRows, {
-      component: "poll-fetch",
-      sourceId: source.id,
-    });
-    const visiblePublishRows =
-      cascadeResult.coverageIds.size > 0 || suppressedIds.size > 0
-        ? publishRows.filter(
-            (r) => !cascadeResult.coverageIds.has(r.id) && !suppressedIds.has(r.id),
-          )
-        : publishRows;
-
-    if (visiblePublishRows.length > 0 && env.RELEASE_HUB) {
-      await publishReleaseEvents(
-        {
-          RELEASE_HUB: env.RELEASE_HUB,
-          WEBHOOK_DELIVERY_QUEUE: env.WEBHOOK_DELIVERY_QUEUE,
-          DB: env.DB,
-        },
-        {
-          src: { name: source.name, slug: source.slug, orgId: source.orgId, sourceId: source.id },
-          inserted: visiblePublishRows,
-        },
-      );
-    }
-
-    // Fire-and-forget IndexNow ping for the org/source/product surfaces whose
-    // lastmod just shifted. Skips itself when INDEXNOW_ENABLED is unset, so
-    // staging and dev are no-ops by default. Per-release URLs are intentionally
-    // out of scope — see https://github.com/buildinternet/releases/issues/649.
-    if (visiblePublishRows.length > 0) {
-      await notifyIndexNowForSource(
-        env,
-        {
-          resolveOrgSlug: (id) => resolveOrgSlug(db, id),
-          resolveProductSlug: (id) => resolveProductSlug(db, id),
-        },
-        {
-          slug: source.slug,
-          orgId: source.orgId,
-          productId: source.productId,
-          isHidden: source.isHidden,
-          discovery: source.discovery,
-        },
-        visiblePublishRows.length,
-      );
-    }
+    const { insertedIds, inserted } = await ingestRawReleases(db, source, rawReleases, env, meta);
 
     // Embed newly-inserted releases as a best-effort side effect. Failure
     // never aborts the fetch. Runs inline rather than in waitUntil because

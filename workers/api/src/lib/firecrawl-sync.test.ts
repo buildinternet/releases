@@ -21,7 +21,7 @@ it("derives a spec from source + metadata with defaults applied", () => {
   expect(spec.judgeEnabled).toBe(true);
   expect(spec.webhook.metadata.sourceId).toBe("src_123");
   expect(spec.webhook.headers["X-Firecrawl-Token"]).toBe("shh");
-  expect(spec.webhook.events).toEqual(["page"]);
+  expect(spec.webhook.events).toEqual(["monitor.page"]);
 });
 
 it("anchors the monitor name to the immutable source id, not the per-org slug", () => {

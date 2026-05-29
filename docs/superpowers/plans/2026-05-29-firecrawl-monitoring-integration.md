@@ -802,63 +802,372 @@ git commit -m "feat(api): POST /v1/sources/:slug/firecrawl/sync admin endpoint"
 
 ---
 
-## Phase 2 — Ingest (outline; expand to bite-sized steps after Phase 0 confirms premise)
+## Phase 2 — Ingest
 
-**Why outlined, not bite-sized yet:** Phase 2 is gated on Phase 0 (no point detailing ingest if Firecrawl can't reach OpenAI). It also requires reading the exact scrape-body→records extraction signature — `extractFromBody` (referenced in `AGENTS.md` under "Extract tier"; the code-explorer found `fetchOne`'s _feed_ branch uses `fetchAndParseFeed`, but the _scrape_ branch uses the AI extract path). **First action of Phase 2:** read `workers/api/src/cron/extract.ts` (and `extract-with-tools.ts`) to pin `extractFromBody`'s real signature, then expand the tasks below.
+**Recon done (2026-05-29) — corrections to the original outline baked into the tasks below:**
 
-### Task 7: Extract shared ingest helper from `fetchOne`
+1. **`fetchOne` does NOT call `extractFromBody`.** `extractFromBody` lives in `packages/adapters/src/extract/extract-from-body.ts` (the discovery/CLI path); the API cron only handles feed/github/appstore. The Firecrawl workflow calls `extractFromBody` itself, mirroring the **crawl branch** of `workers/discovery/src/scrape-fetch.ts:670-720`: `extractFromBody({ body, systemPrompt, userMessage, sourceUrl, fetchUrl, useToolLoop }, deps)` → `mapEntries(result.entries, { sourceUrl })`. `extractFromBody` uses only `deps.anthropicClient` / `deps.agentModel` / `deps.logger` (not `deps.repo`), so the worker builds **minimal deps**, no HTTP `ExtractRepo`.
+2. **`fetch_log` has NO `path` column** (`packages/core/src/schema.ts:477-505`; `FETCH_LOG_STATUSES = ["success","error","no_change","dry_run","blocked"]`). `sessionId` is the correlation id; "from Firecrawl" observability lives in `logEvent` `component`, not a column.
+3. **The `monitor.page` webhook payload is nested and carries a diff, not guaranteed full markdown.** Shape: `{ success, type: "monitor.page", id, webhookId, metadata: { sourceId }, data: [ { monitorId, checkId, url, status: "new"|"changed"|"same"|"removed"|"error", isMeaningful, judgment: { meaningful, confidence, reason, meaningfulChanges }, diff: { text, json }, previousScrapeId, currentScrapeId } ] }`. Because the payload may only carry a diff, **the workflow re-scrapes via `client.scrapeOnce(url)`** (Phase-0-validated to return full markdown) rather than trusting the webhook to deliver full content. Workflow params stay small: `{ sourceId, url, checkId, status }` — no markdown blob through Workflow param serialization.
+4. **`deriveMonitorSpec` currently emits `events: ["page"]`** but the docs show the wire value is `"monitor.page"` (Task 15 reconciles this; the receiver stays tolerant of both).
+5. **`ingestRawReleases` lifts the contiguous tail** of `fetchOne` (`poll-fetch.ts:1308-1462`) rather than re-implementing a lean insert — every extra in that block (marketing classifier, enrich map, R2 media, coverage cascade, IndexNow) is already conditionally gated by source metadata and **no-ops for a Firecrawl source**, so reuse = zero drift + zero duplication. `embedReleasesForSource` / `generateContentForReleases` / `fetch_log` / changelog refresh stay in `fetchOne` and become separate workflow steps.
 
-Lift the tail of `fetchOne` (`poll-fetch.ts`) into a reusable function:
+**Confirmed handles:** `RELEASES_BATCH_CHUNK_SIZE = 5` (`workers/api/src/lib/d1-limits.ts`). `FIRECRAWL_INGEST_WORKFLOW?: Workflow` already on `Env.Bindings` (`index.ts:231`, Phase 1). `constantTimeEqual` exported from `@buildinternet/releases-core/api-token`. KV namespace `LATEST_CACHE`. `firecrawlRoutes` mounted at `workers/api/src/v1-routes.ts:105` via `v1.route("/", firecrawlRoutes)`. `integrations` is in neither `publicReadRoutes` nor `adminRoutes` (`route-namespaces.ts`). Workflow test harness `mkFakeStep` in `tests/api/_workflow-test-helpers.ts`; `_drizzleOverride` escape hatch on the workflow env.
+
+### Task 7: `ingestRawReleases` — lift the contiguous insert/publish tail of `fetchOne`
+
+**Files:**
+
+- Modify: `workers/api/src/cron/poll-fetch.ts` (extract a new exported function; refactor `fetchOne` to call it)
+- Test: `workers/api/src/cron/poll-fetch.test.ts` (or `tests/api/ingest-raw-releases.test.ts` if no sibling exists — confirm at execution time)
+
+- [ ] **Step 1: Read the exact block to lift.** Re-read `poll-fetch.ts:1308-1462` (marketing map → enrich map → media pre-pass → `rows` build → chunked `db.insert(releases).onConflictDoNothing().returning(...)` → `clusterAndPersistCascades` → `visiblePublishRows` → `publishReleaseEvents` → `notifyIndexNowForSource`). Note every local it reads (`meta`, `source`, `env`, `rawReleases`) and every module-local helper it calls (all stay in-module, so the lift keeps the same imports).
+
+- [ ] **Step 2: Write the failing test.** Seed a `createTestDb()` with an org + scrape source. Call `ingestRawReleases(db, source, [rawA, rawB], env, { })` with a minimal `env` (`{ DB, RELEASE_HUB: undefined }` so publish is skipped). Assert it returns `{ found: 2, inserted: 2, insertedIds: [<2 ids>], visiblePublishRows: [...] }` and that a second call with the same `url`s returns `inserted: 0` (dedup via `onConflictDoNothing`). Run: `bun test <file>` — expect FAIL (`ingestRawReleases` not exported).
+
+- [ ] **Step 3: Implement the lift.** Add to `poll-fetch.ts`:
 
 ```ts
-// signature to implement (in poll-fetch.ts or a new cron/ingest-core.ts)
+export interface IngestResult {
+  insertedIds: string[];
+  found: number;
+  inserted: number;
+  visiblePublishRows: InsertedReleaseRow[];
+}
+
+/**
+ * The insert+publish tail shared by the cron `fetchOne` and the Firecrawl
+ * ingest workflow. Takes RawRelease[] already in hand and runs:
+ * marketing classify → enrich → media pre-pass → build rows → chunked
+ * onConflictDoNothing insert → coverage cascade → publish → IndexNow.
+ * Every "extra" (marketing/enrich/R2/coverage) is metadata-gated and no-ops
+ * for sources that don't opt in, so this is safe to reuse verbatim. Embed,
+ * fetch_log, and CHANGELOG refresh are the CALLER's responsibility.
+ */
 export async function ingestRawReleases(
   db: ReturnType<typeof drizzle>,
   source: Source,
   rawReleases: RawRelease[],
   env: FetchOneEnv,
-  opts: { sessionId: string; path: string /* "firecrawl" */ },
-): Promise<{ insertedIds: string[]; found: number; inserted: number }>;
+): Promise<IngestResult> {
+  const meta = getSourceMeta(source);
+  // ... exact body lifted from lines 1308-1462 ...
+  return { insertedIds, found: rawReleases.length, inserted, visiblePublishRows };
+}
 ```
 
-It runs: `selectNewReleaseIndices` → build rows → chunked `db.insert(releases).onConflictDoNothing().returning(...)` (use the existing `RELEASES_BATCH_CHUNK_SIZE`) → `publishReleaseEvents` → return ids. The cron `fetchOne` is refactored to call it (proves no drift). `embedReleasesForSource` + `generateContentForReleases` stay as separate workflow steps. TDD: add a test that the helper inserts new rows and dedups existing ones against a `createTestDb()` instance.
+Then replace `fetchOne`'s lines 1308-1462 with `const { insertedIds, found, inserted, visiblePublishRows } = await ingestRawReleases(db, source, rawReleases, env);`. Keep `fetchOne`'s embed (1464-1479), `db.batch` fetch_log (1481-1506), and changelog refresh (1508+) exactly as-is — they read `inserted`/`insertedIds` which are now destructured from the return.
 
-### Task 8: `extractFromBody` wrapper for markdown → `RawRelease[]`
+- [ ] **Step 4: Run the full worker suite (regression guard).** Run: `bun test workers/api && cd workers/api && npx tsc --noEmit`. The existing `tests/api/poll-and-fetch-workflow.test.ts` exercises `fetchOne`'s tail — it must stay green. Expect PASS.
 
-Wrap the confirmed `extractFromBody` so the workflow can turn Firecrawl markdown into `RawRelease[]` for a source with no feed. Reuse the existing extract-tier gate (one-shot vs toolloop). TDD with a small fixed markdown fixture + a stubbed Anthropic client returning a known tool payload.
+- [ ] **Step 5: Commit.**
+
+```bash
+git add workers/api/src/cron/poll-fetch.ts workers/api/src/cron/poll-fetch.test.ts
+git commit -m "refactor(api): extract ingestRawReleases from fetchOne tail (no behavior change)"
+```
+
+### Task 8: `extractFirecrawlMarkdown` — markdown → `RawRelease[]`
+
+**Files:**
+
+- Create: `workers/api/src/lib/firecrawl-extract.ts`
+- Test: `workers/api/src/lib/firecrawl-extract.test.ts`
+
+- [ ] **Step 1: Read the model.** Read `workers/discovery/src/scrape-fetch.ts:670-720` (crawl branch), `packages/adapters/src/extract/run-agent.ts` (the standard single-page extraction system prompt + `userMessage` it builds — use that, NOT `CRAWL_SYSTEM_PROMPT`, since a Firecrawl source is a single changelog page, not `# <url>`-delimited multi-page crawl output), and `mapEntries`/`MappedEntry` in `packages/adapters/src/extract/shared.ts:304`. Confirm the standard extraction prompt export name.
+
+- [ ] **Step 2: Write the failing test.** Stub an Anthropic-shaped client whose `messages.stream(...).finalMessage()` resolves to a message with one `tool_use` block (`name: "extract_releases"`, `input: { releases: [{ title: "v1.2.0", content: "...", version: "v1.2.0" }] }`). Inject it via a `deps` override seam. Assert `extractFirecrawlMarkdown(markdown, source, { anthropicClient, agentModel: "claude-sonnet-4-6", logger })` returns a `RawRelease[]` of length 1 with `title === "v1.2.0"` and a resolved `url`. Run: expect FAIL.
+
+- [ ] **Step 3: Implement.**
+
+```ts
+// workers/api/src/lib/firecrawl-extract.ts
+import type { Source } from "@buildinternet/releases-core/schema";
+import type { RawRelease } from "@releases/adapters/types.js";
+import { extractFromBody, mapEntries, <STANDARD_EXTRACTION_SYSTEM_PROMPT> } from "@releases/adapters/extract";
+import type { ExtractDeps } from "@releases/adapters/extract";
+
+export async function extractFirecrawlMarkdown(
+  markdown: string,
+  source: Source,
+  deps: Pick<ExtractDeps, "anthropicClient" | "agentModel" | "logger"> & { useToolLoop?: boolean },
+): Promise<{ releases: RawRelease[]; totalInput: number; totalOutput: number; mode: string }> {
+  const result = await extractFromBody(
+    {
+      body: markdown,
+      systemPrompt: <STANDARD_EXTRACTION_SYSTEM_PROMPT>,
+      userMessage: `Extract every release, version announcement, or changelog entry from this page (source URL: ${source.url}).`,
+      sourceUrl: source.url,
+      fetchUrl: source.url,
+      useToolLoop: deps.useToolLoop ?? false,
+    },
+    // extractFromBody only reads anthropicClient/agentModel/logger; supply a
+    // minimal deps object (cloudflare:null, no repo) cast to ExtractDeps.
+    { anthropicClient: deps.anthropicClient, agentModel: deps.agentModel, logger: deps.logger } as ExtractDeps,
+  );
+  const releases = mapEntries(result.entries, { sourceUrl: source.url }) as RawRelease[];
+  return { releases, totalInput: result.totalInput, totalOutput: result.totalOutput, mode: result.mode };
+}
+```
+
+> **Execution note:** if `extractFromBody` turns out to dereference `deps.repo` / `deps.cloudflare` on some path, add the minimal no-op (`repo: { peekContentHash: async () => false, commitContentHash: async () => {}, updateSourceMeta: async () => {}, getOrgPlaybook: async () => null, logUsage: async () => {} }`, `cloudflare: null`). Confirm by reading `extract-with-tools.ts` (the tool-loop tier) — the one-shot tier (`runOneShot`) does not.
+
+- [ ] **Step 4: Run test + type-check.** `bun test workers/api/src/lib/firecrawl-extract.test.ts && cd workers/api && npx tsc --noEmit`. Expect PASS.
+
+- [ ] **Step 5: Commit.** `git commit -m "feat(api): extractFirecrawlMarkdown — markdown → RawRelease[] via extractFromBody"`
 
 ### Task 9: `FirecrawlIngestWorkflow`
 
-New `workers/api/src/workflows/firecrawl-ingest.ts`, `WorkflowEntrypoint<FirecrawlIngestEnv, FirecrawlIngestParams>` with params `{ sourceId, url, markdown, checkId, status, judgment? }`. Steps (each `step.do` with a retry config mirroring `RETRY_FETCH`/`RETRY_EMBED` in `poll-and-fetch.ts`):
+**Files:**
 
-1. `load-source` — `db.select().from(sources).where(eq(sources.id, sourceId))`; bail via `NonRetryableError` if missing or `!firecrawl.enabled`.
-2. `extract` — `extractFromBody`-wrapper(markdown) → `RawRelease[]`.
-3. `dedup-insert` — `ingestRawReleases(...)` with `path: "firecrawl"`.
-4. `embed-summarize` — `embedReleasesForSource` + `generateContentForReleases` (only when `insertedIds.length > 0`).
-5. `bookkeep` — `fetch_log` insert (`status`, `releasesFound`, `releasesInserted`) + source-counter update (`lastFetchedAt`, clear backoff) + stamp `metadata.firecrawl.lastCheckId`/`lastChangeAt`, via `db.batch([...])`.
+- Create: `workers/api/src/workflows/firecrawl-ingest.ts`
+- Modify: `workers/api/src/index.ts` (export the class)
+- Modify: `workers/api/wrangler.jsonc` (`workflows` array — prod + staging)
+- Test: `tests/api/firecrawl-ingest-workflow.test.ts`
 
-Export from `index.ts` (`export { FirecrawlIngestWorkflow } from "./workflows/firecrawl-ingest.js";`). Add the wrangler `workflows` array entry: `{ "name": "firecrawl-ingest", "binding": "FIRECRAWL_INGEST_WORKFLOW", "class_name": "FirecrawlIngestWorkflow" }` (prod + staging). TDD: in-process workflow test mirroring `tests/api/poll-and-fetch-workflow.test.ts` (`mkFakeStep`, `_drizzleOverride`).
+- [ ] **Step 1: Read the model.** Read `workers/api/src/workflows/poll-and-fetch.ts` for the class shape, `RETRY_FETCH`/`RETRY_EMBED`/`RETRY_GENERATE` constants, `NonRetryableError` import (`cloudflare:workflows`), the `buildAnthropicClient({ apiKey, ...(await resolveGatewayOpts(env)) })` pattern (line 273), `embedReleasesForSource`, and `generateContentForReleases`. Read `tests/api/_workflow-test-helpers.ts` (`mkFakeStep`) and `tests/api/poll-and-fetch-workflow.test.ts` for the harness.
+
+- [ ] **Step 2: Write the failing workflow test.** Mirror `poll-and-fetch-workflow.test.ts`: in-memory SQLite via `tests/db-helper.ts`, `applyMigrations`, seed org + a source with `metadata.firecrawl.enabled = true`. Build env with `_drizzleOverride: db`, a fake firecrawl client (`scrapeOnce: async () => "# v1.0\nNotes"`), `FIRECRAWL_API_KEY: { get: async () => "k" }`, `ANTHROPIC_API_KEY: { get: async () => "a" }`, and a stubbed extract. Run `wf.run(event, mkFakeStep(...).step)` with params `{ sourceId, url, checkId: "chk_1", status: "new" }`. Assert a release row was inserted and a `fetch_log` row with `status: "success"` exists. Add a second case: `status: "changed"` with `scrapeOnce` returning identical content ⇒ `inserted: 0` ⇒ `fetch_log` `status: "no_change"`. Run: expect FAIL.
+
+- [ ] **Step 3: Implement the workflow.**
+
+```ts
+// workers/api/src/workflows/firecrawl-ingest.ts
+import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
+import { NonRetryableError } from "cloudflare:workflows";
+// ... drizzle, schema, getSecret, buildAnthropicClient, resolveGatewayOpts,
+//     createFirecrawlClient, extractFirecrawlMarkdown, ingestRawReleases,
+//     embedReleasesForSource, generateContentForReleases, logEvent, getSourceMeta ...
+
+export interface FirecrawlIngestParams {
+  sourceId: string;
+  url: string;
+  checkId: string;
+  status: string;
+}
+
+export class FirecrawlIngestWorkflow extends WorkflowEntrypoint<FirecrawlIngestEnv, FirecrawlIngestParams> {
+  async run(event: WorkflowEvent<FirecrawlIngestParams>, step: WorkflowStep): Promise<void> {
+    const { sourceId, url, checkId, status } = event.payload;
+    const db = drizzle((this.env._drizzleOverride as D1Database) ?? this.env.DB);
+    const start = Date.now();
+
+    // 1. load-source — bail (NonRetryableError) if missing or firecrawl disabled.
+    const source = await step.do("load-source", RETRY_POLL, async () => {
+      const [s] = await db.select().from(sources).where(eq(sources.id, sourceId)).limit(1);
+      if (!s) throw new NonRetryableError(`firecrawl: source ${sourceId} not found`);
+      if (!getSourceMeta(s).firecrawl?.enabled) throw new NonRetryableError(`firecrawl: ${sourceId} not enabled`);
+      return s;
+    });
+
+    // 2. scrape — fresh full markdown (webhook only carried a diff).
+    const markdown = await step.do("scrape", RETRY_FETCH, async () => {
+      const apiKey = await getSecret(this.env.FIRECRAWL_API_KEY);
+      if (!apiKey) throw new NonRetryableError("firecrawl: FIRECRAWL_API_KEY unbound");
+      const client = this.env._firecrawlClientOverride ?? createFirecrawlClient({ apiKey });
+      const md = await client.scrapeOnce(url, { proxy: getSourceMeta(source).firecrawl?.proxy });
+      if (!md) throw new Error(`firecrawl: empty scrape for ${url}`);
+      return md;
+    });
+
+    // 3. extract — markdown → RawRelease[].
+    const rawReleases = await step.do("extract", RETRY_FETCH, async () => {
+      const apiKey = await getSecret(this.env.ANTHROPIC_API_KEY);
+      if (!apiKey) throw new NonRetryableError("firecrawl: ANTHROPIC_API_KEY unbound");
+      const client = buildAnthropicClient({ apiKey, ...(await resolveGatewayOpts(this.env)) });
+      const { releases } = await extractFirecrawlMarkdown(markdown, source, {
+        anthropicClient: client, agentModel: <DEFAULT_AGENT_MODEL>, logger: <workerLogger>,
+      });
+      return releases;
+    });
+
+    // 4. dedup-insert
+    const ingest = await step.do("dedup-insert", RETRY_FETCH, async () =>
+      ingestRawReleases(db, source, rawReleases, this.env as FetchOneEnv),
+    );
+
+    // 5. embed-summarize (only when something was inserted)
+    if (ingest.insertedIds.length > 0) {
+      await step.do("embed", RETRY_EMBED, async () => { await embedReleasesForSource(db, source, ingest.insertedIds, this.env); });
+      await step.do("summarize", RETRY_GENERATE, async () => { await generateContentForReleases(db, source, ingest.insertedIds, this.env); });
+    }
+
+    // 6. bookkeep — fetch_log + source counters + firecrawl.lastCheckId/lastChangeAt, one db.batch.
+    await step.do("bookkeep", RETRY_POLL, async () => {
+      const meta = getSourceMeta(source);
+      const nextMeta = { ...meta, firecrawl: { ...meta.firecrawl!, lastCheckId: checkId, lastChangeAt: new Date().toISOString() } };
+      await db.batch([
+        db.insert(fetchLog).values({
+          sourceId, sessionId: `firecrawl:${checkId}`,
+          releasesFound: ingest.found, releasesInserted: ingest.inserted,
+          durationMs: Date.now() - start,
+          status: ingest.inserted > 0 ? "success" : "no_change",
+        }),
+        db.update(sources).set({
+          lastFetchedAt: new Date().toISOString(),
+          consecutiveNoChange: 0, consecutiveErrors: 0, nextFetchAfter: null, changeDetectedAt: null,
+          metadata: JSON.stringify(nextMeta),
+        }).where(eq(sources.id, sourceId)),
+      ] as [any, ...any[]]);
+    });
+
+    logEvent("info", { component: "firecrawl-ingest-workflow", event: "ingested", sourceId, checkId, status, found: ingest.found, inserted: ingest.inserted });
+  }
+}
+```
+
+> Confirm exact signatures of `generateContentForReleases`, `embedReleasesForSource`, `resolveGatewayOpts`, and the `DEFAULT_AGENT_MODEL` / `workerLogger` to use, by reading `poll-and-fetch.ts`. The `_firecrawlClientOverride` / `_drizzleOverride` seams on the env mirror the existing test seams.
+
+- [ ] **Step 4: Export + register.** In `index.ts` add `export { FirecrawlIngestWorkflow } from "./workflows/firecrawl-ingest.js";`. In `wrangler.jsonc` `workflows` array add `{ "name": "firecrawl-ingest", "binding": "FIRECRAWL_INGEST_WORKFLOW", "class_name": "FirecrawlIngestWorkflow" }` to the **prod** block and `{ "name": "firecrawl-ingest-staging", "binding": "FIRECRAWL_INGEST_WORKFLOW", "class_name": "FirecrawlIngestWorkflow" }` to **staging** (mirror the `poll-and-fetch` entries' naming).
+
+- [ ] **Step 5: Run test + type-check.** `bun test tests/api/firecrawl-ingest-workflow.test.ts && cd workers/api && npx tsc --noEmit`. Expect PASS.
+
+- [ ] **Step 6: Commit.** `git commit -m "feat(api): FirecrawlIngestWorkflow — scrape → extract → ingest → embed/summarize"`
 
 ### Task 10: Inbound receiver `POST /v1/integrations/firecrawl/webhook`
 
-Add to `workers/api/src/routes/firecrawl.ts`. The route is mounted via `mountV1Routes`; because `integrations` is in **neither** `publicReadRoutes` nor `adminRoutes`, no auth middleware runs — the handler self-authenticates:
+**Files:**
 
-1. Constant-time compare `c.req.header("X-Firecrawl-Token")` vs `getSecret(env.FIRECRAWL_WEBHOOK_SECRET)` (use `crypto.subtle.timingSafeEqual` over encoded bytes, or a length-checked constant-time compare). Fail → 401.
-2. Parse `monitor.page` payload (confirm field names against Firecrawl events doc — `markdown`, `status`, `judgment`, `checkId`, `metadata.sourceId`).
-3. Resolve `metadata.sourceId`. Unknown / `!firecrawl.enabled` → 200 + log (no 4xx).
-4. KV idempotency guard on `checkId + url` (short TTL) — skip if seen.
-5. **Gate:** `status === "new"` ⇒ enqueue; `status === "changed"` ⇒ enqueue iff `judgment?.meaningful === true` OR `judgment` absent/`judgeEnabled` false (fail-open); else log `gate-skip-*` and 200.
-6. `env.FIRECRAWL_INGEST_WORKFLOW.create({ id: \`fc-${checkId}-${hash(url)}\`, params: {...} })`; return 200.
+- Modify: `workers/api/src/routes/firecrawl.ts` (add the receiver route to the existing `firecrawlRoutes`)
+- Test: `workers/api/src/routes/firecrawl.test.ts` (add gate-matrix + auth cases)
 
-TDD: route test covering the **gate matrix** (`new`/`changed`×{meaningful,absent,low-confidence}/`same`/`error`/`removed`) with a fake workflow binding `{ create: async () => {} }` recording spawns, plus auth (good/bad/missing token).
+**Auth:** `integrations` is in neither `publicReadRoutes` nor `adminRoutes`, so no middleware runs — the handler self-authenticates. The path is `/v1/integrations/firecrawl/webhook` (the route string on `firecrawlRoutes` is `/integrations/firecrawl/webhook`, since it mounts at `/`).
+
+- [ ] **Step 1: Write the failing tests.** Mount `firecrawlRoutes` on a bare Hono app (mirror the Phase 1 test). Inject `FIRECRAWL_WEBHOOK_SECRET: { get: async () => "hook" }`, `LATEST_CACHE` fake (`{ get: async () => null, put: async () => {} }`), and `FIRECRAWL_INGEST_WORKFLOW: { create: async (o) => spawns.push(o) }`. Seed an enabled source. Cases:
+  - missing/incorrect `X-Firecrawl-Token` → 401, no spawn.
+  - valid token + `data:[{status:"new",...}]` → 200, one spawn with params `{ sourceId, url, checkId, status:"new" }`.
+  - `status:"changed"` + `judgment.meaningful:true` → spawn; `meaningful:false` → no spawn (200); `judgment` absent → spawn (fail-open).
+  - `status:"same"` / `"removed"` / `"error"` → no spawn (200).
+  - unknown `metadata.sourceId` → 200, no spawn.
+  - duplicate `checkId+url` (KV `get` returns truthy) → 200, no spawn.
+  - Run: expect FAIL.
+
+- [ ] **Step 2: Implement the receiver.** Add to `firecrawl.ts`:
+
+```ts
+import { constantTimeEqual } from "@buildinternet/releases-core/api-token";
+
+interface FirecrawlPageEvent {
+  type?: string;
+  metadata?: { sourceId?: string };
+  data?: Array<{
+    checkId?: string;
+    url?: string;
+    status?: string;
+    judgment?: { meaningful?: boolean; confidence?: string };
+  }>;
+}
+
+firecrawlRoutes.post("/integrations/firecrawl/webhook", async (c) => {
+  const env = c.env as Env["Bindings"] & { _firecrawlClientOverride?: FirecrawlClient };
+  const secret = await getSecret(env.FIRECRAWL_WEBHOOK_SECRET);
+  const token = c.req.header("X-Firecrawl-Token") ?? "";
+  if (!secret || !constantTimeEqual(token, secret)) return c.json({ error: "unauthorized" }, 401);
+
+  const body = (await c.req.json().catch(() => ({}))) as FirecrawlPageEvent;
+  const sourceId = body.metadata?.sourceId;
+  if (!sourceId) return c.json({ ok: true, skipped: "no_source_id" });
+
+  const db = createDb(env.DB);
+  const [source] = await db.select().from(sources).where(eq(sources.id, sourceId)).limit(1);
+  const fc = source ? getSourceMeta(source).firecrawl : undefined;
+  if (!source || !fc?.enabled) {
+    logEvent("info", { component: "firecrawl-webhook", event: "skip-unknown-source", sourceId });
+    return c.json({ ok: true, skipped: "unknown_or_disabled" });
+  }
+
+  for (const page of body.data ?? []) {
+    const { checkId, url, status, judgment } = page;
+    if (!checkId || !url || !status) continue;
+
+    // idempotency
+    const key = `firecrawl:webhook:${checkId}:${url}`;
+    if (env.LATEST_CACHE && (await env.LATEST_CACHE.get(key))) continue;
+
+    // gate
+    const judgeOn = fc.judgeEnabled !== false;
+    const meaningful = judgment?.meaningful;
+    const enqueue =
+      status === "new" ||
+      (status === "changed" && (!judgeOn || meaningful === true || meaningful === undefined));
+    if (!enqueue) {
+      logEvent("info", {
+        component: "firecrawl-webhook",
+        event: "gate-skip",
+        sourceId,
+        status,
+        meaningful: meaningful ?? null,
+      });
+      continue;
+    }
+
+    await env.LATEST_CACHE?.put(key, "1", { expirationTtl: 3600 });
+    if (env.FIRECRAWL_INGEST_WORKFLOW) {
+      await env.FIRECRAWL_INGEST_WORKFLOW.create({
+        id: `fc-${checkId}`,
+        params: { sourceId, url, checkId, status },
+      });
+    }
+    logEvent("info", {
+      component: "firecrawl-webhook",
+      event: "enqueued",
+      sourceId,
+      checkId,
+      status,
+    });
+  }
+  return c.json({ ok: true });
+});
+```
+
+> Confirm `env.FIRECRAWL_INGEST_WORKFLOW.create(...)`'s exact option shape against how `POLL_AND_FETCH_WORKFLOW.create` is called elsewhere (`{ id, params }`). Confirm `createDb`/`getSourceMeta`/`sources`/`eq` are already imported in `firecrawl.ts` (they are, from Phase 1).
+
+- [ ] **Step 3: Run test + type-check.** `bun test workers/api/src/routes/firecrawl.test.ts && cd workers/api && npx tsc --noEmit`. Expect PASS.
+
+- [ ] **Step 4: OpenAPI coverage.** The receiver is under `integrations` (not a `publicReadRoutes` prefix), so it is **out of scope** for the coverage gate — no `describeRoute`, no ALLOWLIST entry needed. Confirm `bun run scripts/check-openapi-coverage.ts` (or the CI step) still passes.
+
+- [ ] **Step 5: Commit.** `git commit -m "feat(api): POST /v1/integrations/firecrawl/webhook receiver + gate"`
 
 ### Task 11: Poll-fetch exclusion
 
-In `pollAndFetch` (`poll-fetch.ts`) eligibility, add `!getSourceMeta(source).firecrawl?.enabled` to the predicate that decides whether a source is due, so firecrawl-owned sources are never double-fetched by cron. TDD: unit test that a firecrawl-enabled source is excluded from the due set.
+**Files:**
 
-### Task 12: End-to-end verification
+- Modify: `workers/api/src/cron/poll-fetch.ts` (the `fetchable` filter, ~lines 161-194)
+- Modify: `workers/api/src/workflows/poll-and-fetch.ts` (the `run` body, after the `changed` check)
+- Test: `workers/api/src/cron/poll-fetch.test.ts`
 
-Deploy; `runMonitor` on the OpenAI source; confirm a release row appears, `fetch_log` shows a `path="firecrawl"` row, and Axiom shows `firecrawl-webhook` + `firecrawl-ingest-workflow` events.
+- [ ] **Step 1: Write the failing test.** Build a `pollResults`-shaped input with two changed sources, one with `metadata.firecrawl.enabled = true`. Assert the firecrawl one is absent from `fetchable`. Run: expect FAIL.
+
+- [ ] **Step 2: Implement.** At the top of the `fetchable` filter callback in `pollAndFetch`, add:
+
+```ts
+const m = getSourceMeta(s);
+if (m.firecrawl?.enabled) return false; // Firecrawl webhook drives ingest — never cron-fetch
+```
+
+And in `PollAndFetchWorkflow.run` (after the `pollResult.changed` gate, before the `fetch-and-persist` step), add the same guard returning early (mirror how a not-changed source short-circuits — log `firecrawl-owned-skip` and return). Confirm the exact early-return shape by reading the surrounding lines.
+
+- [ ] **Step 3: Run the full worker suite.** `bun test workers/api && cd workers/api && npx tsc --noEmit`. Expect PASS.
+
+- [ ] **Step 4: Commit.** `git commit -m "feat(api): exclude Firecrawl-owned sources from poll-fetch cron"`
+
+### Task 12: Reconcile monitor `events` wire value
+
+**Files:**
+
+- Modify: `packages/adapters/src/firecrawl.ts` (the `events` type), `workers/api/src/lib/firecrawl-sync.ts` (`deriveMonitorSpec`)
+- Test: `workers/api/src/lib/firecrawl-sync.test.ts`
+
+- [ ] **Step 1.** Widen `FirecrawlMonitorSpec.webhook.events` to `Array<"monitor.page" | "monitor.check.completed">` and change `deriveMonitorSpec` to emit `events: ["monitor.page"]`. Update the Phase 1 assertion in `firecrawl-sync.test.ts` (`expect(spec.webhook.events).toEqual(["monitor.page"])`). The receiver (Task 10) does not branch on `type`, so it stays compatible either way.
+
+- [ ] **Step 2: Run + commit.** `bun test workers/api/src/lib/firecrawl-sync.test.ts && cd workers/api && npx tsc --noEmit` → `git commit -m "fix(firecrawl): emit monitor.page webhook event (wire value)"`
+
+### Task 13: End-to-end verification (manual / operator — no code)
+
+- [ ] **Step 1:** Deploy the branch to prod via GHA dispatch (`gh workflow run deploy-workers.yml --ref firecrawl-monitoring-phase-2 -f worker=api -f environment=production`).
+- [ ] **Step 2:** `POST /v1/sources/<openai-src-id>/firecrawl/sync { "enabled": true }` with an admin token; confirm `monitorId` is stamped.
+- [ ] **Step 3:** `runMonitor` (force a check) OR wait for the schedule. Confirm in Axiom: a `firecrawl-webhook` `enqueued` event, then a `firecrawl-ingest-workflow` `ingested` event, then a `fetch_log` row (`sessionId` `firecrawl:<checkId>`). Confirm a release row appears for the OpenAI source.
+- [ ] **Step 4:** Confirm the source is no longer picked up by the hourly poll-fetch cron (no duplicate `fetch_log` rows from the cron path).
 
 ---
 

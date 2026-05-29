@@ -12,7 +12,7 @@ const spec: FirecrawlMonitorSpec = {
     url: "https://api.example.com/hook",
     headers: { "X-Firecrawl-Token": "secret" },
     metadata: { sourceId: "src_123" },
-    events: ["page"],
+    events: ["monitor.page"],
   },
 };
 

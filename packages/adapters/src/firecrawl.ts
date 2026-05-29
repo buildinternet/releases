@@ -15,7 +15,10 @@ export interface FirecrawlMonitorSpec {
     url: string;
     headers: Record<string, string>;
     metadata: Record<string, string>;
-    events: Array<"page" | "check.completed">;
+    // Firecrawl's wire values are the fully-qualified event names (see
+    // docs/features/monitoring webhook config). Earlier drafts used the bare
+    // "page" shorthand, which the monitor API does not subscribe to.
+    events: Array<"monitor.page" | "monitor.check.completed">;
   };
 }
 
