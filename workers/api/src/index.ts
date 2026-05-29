@@ -223,6 +223,12 @@ export type Env = {
     // Floor length (chars) below which a feed item's content is considered thin.
     // Mirrors FetchOneEnv.FEED_THIN_CHARS; default 600 when absent.
     FEED_THIN_CHARS?: string;
+    // Firecrawl integration. FIRECRAWL_API_KEY gates the monitor-sync helper;
+    // FIRECRAWL_WEBHOOK_SECRET is used in Phase 2 to verify inbound webhook
+    // payloads. FIRECRAWL_INGEST_WORKFLOW is bound in wrangler in Phase 2.
+    FIRECRAWL_API_KEY?: SecretBinding;
+    FIRECRAWL_WEBHOOK_SECRET?: SecretBinding;
+    FIRECRAWL_INGEST_WORKFLOW?: Workflow; // bound in wrangler in Phase 2
   };
   Variables: {
     auth?: AuthContext;
