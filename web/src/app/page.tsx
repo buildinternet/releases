@@ -11,7 +11,7 @@ import { SetupMessage } from "@/components/setup-message";
 import { OrgTable } from "@/components/org-table";
 import { InstallStepsInline, InstallStepsSidebar } from "@/components/install-steps";
 import { ShippingNowTicker } from "@/components/shipping-now-ticker";
-import { TerminalSession, type TerminalBlock } from "@/components/terminal-session";
+import { TerminalSession, type TerminalTab } from "@/components/terminal-session";
 import {
   FeaturedCollections,
   FeaturedCollectionsCollapsible,
@@ -24,35 +24,144 @@ export const metadata: Metadata = {
 };
 
 /**
- * Curated `releases` CLI transcript shown in the home-page terminal demo.
- * Faithful to the live CLI: real commands, values, IDs, and AI summaries, so the
- * demo never invents a format the CLI doesn't actually print. Block 1 is a
- * cross-vendor `search` ("who shipped webhooks") whose hits carry a content
- * excerpt; block 2 drills into one of those hits by ID to show its record + AI
- * summary. The Humans view dims the `rel_…` handles the CLI prints; the Agents
- * view appends `--json` and shows the real structured payload (full content
- * included).
+ * Curated `releases` CLI transcripts behind the home-page demo's use-case tabs.
+ * Faithful to the live CLI: real commands, values, IDs, and AI summaries — the
+ * demo never invents a format the CLI doesn't actually print. Each tab is a
+ * distinct workflow; the Humans view dims the `rel_…` handles, the Agents view
+ * appends `--json` and shows the structured payload (slimmed to the essential
+ * fields for demo clarity, the way the CLI's own `--json` drops storage
+ * internals).
  *
- * Reflects the reworked CLI output (buildinternet/releases-cli#215, refined in
- * #222): `search` renders one aligned row per hit — identity (`Org/Source`, or
- * a package-qualified version) · title · relative age · dimmed `rel_…` — with a
- * cleaned one-line excerpt underneath, and `--json` returns the slim release
- * shape (nested `source`/`org`, derived `excerpt`, `contentChars`; storage
- * internals dropped). Block 2 drills into a hit: its `get` card names the owning
- * org, prints a human date, and labels the AI summary. The relative ages
- * ("1y", "3w") are a capture-time snapshot. Re-synced against releases-cli
- * v0.50.0: block 1 shows 3 representative hits from the `search` result set
- * (human + `--json`), trimmed for demo clarity; block 2's `get` matches live
- * stdout, omitting only the trailing "Next steps:" hint (it points at the
- * deprecated top-level `releases release get` alias). Block 3 is `releases get`
- * on an org coordinate — the release rows are space-aligned (the CLI uses tabs
- * which expand past the 83-char demo width) and dates are shortened to
- * YYYY-MM-DD; IDs and values are real. Edit here when refreshing.
+ *  - "Check product updates" — `releases get <product>` (Next.js): one product's
+ *    latest releases. Captured from releases-cli; release rows are space-aligned
+ *    and dates shortened to YYYY-MM-DD (the CLI uses tabs that expand past the
+ *    83-char demo width).
+ *  - "Track a company" — `releases get <org>` (Vercel): an org's activity across
+ *    its six sources and two products, showing the company-vs-product contrast.
+ *  - "Search across vendors" — cross-vendor `search "webhooks"` then a `get
+ *    rel_…` drill-in into one hit (record + AI summary). The relative ages
+ *    ("1y", "3w") are a capture-time snapshot.
+ *
+ * Re-capture tabs 1 & 2 with the `releases` CLI when refreshing so the format
+ * never drifts from real stdout.
  */
-const DEMO_SESSION: TerminalBlock[] = [
+const DEMO_TABS: TerminalTab[] = [
   {
-    command: 'releases search "webhooks" --type releases --limit 3',
-    output: `Releases
+    id: "product",
+    label: "Check product updates",
+    blocks: [
+      {
+        command: "releases get nextjs",
+        output: `Next.js by Vercel (vercel/nextjs)
+  URL:      https://nextjs.org
+  Category: framework
+  About:    React framework for production
+  Tags:     react, ssr
+  Sources:  next-js
+
+Latest 3 releases (most recent first):
+rel_UTc0qrP0xbCO3xCI7rkBS  v15.5.18  2026-05-07
+rel_Vwfyzuh36yWITvNxJ8cZ9  v16.2.6   2026-05-07
+rel_1QpKqJ0E7JCIgHxkl2DGS  v16.2.5   2026-05-06`,
+        json: `{
+  "id": "prod_JoRuQm6EnVccYeDh_NTEz",
+  "name": "Next.js",
+  "slug": "nextjs",
+  "orgSlug": "vercel",
+  "url": "https://nextjs.org",
+  "category": "framework",
+  "kind": "sdk",
+  "sourceCount": 1,
+  "releases": [
+    {
+      "id": "rel_UTc0qrP0xbCO3xCI7rkBS",
+      "title": "v15.5.18",
+      "version": "v15.5.18",
+      "publishedAt": "2026-05-07T20:18:27.000Z",
+      "sourceName": "Next.js"
+    },
+    {
+      "id": "rel_Vwfyzuh36yWITvNxJ8cZ9",
+      "title": "v16.2.6",
+      "version": "v16.2.6",
+      "publishedAt": "2026-05-07T20:16:51.000Z",
+      "sourceName": "Next.js"
+    },
+    {
+      "id": "rel_1QpKqJ0E7JCIgHxkl2DGS",
+      "title": "v16.2.5",
+      "version": "v16.2.5",
+      "publishedAt": "2026-05-06T18:54:20.000Z",
+      "sourceName": "Next.js"
+    }
+  ]
+}`,
+      },
+    ],
+  },
+  {
+    id: "company",
+    label: "Track a company",
+    blocks: [
+      {
+        command: "releases get vercel",
+        output: `Vercel (vercel)
+  Domain:      vercel.com
+  Category:    cloud
+  Sources:     6 active
+  Products:    Next.js (nextjs), Turborepo (turborepo)
+
+Latest 3 releases (most recent first):
+rel_f-_EUoCYDOCIvAdk4u7KR  ai@6.0.193              2026-05-28
+rel_34oH4s7v1BkhjJG4Nmb7X  @vercel/python@6.44.0   2026-05-28
+rel_sWKjqqfAsQYbLkeAKgDno  @vercel/express@0.1.94  2026-05-28`,
+        json: `{
+  "id": "org_qsyZSlC_PRGFDYIGsMfzp",
+  "slug": "vercel",
+  "name": "Vercel",
+  "domain": "vercel.com",
+  "category": "cloud",
+  "sourceCount": 6,
+  "releaseCount": 4690,
+  "releasesLast30Days": 1898,
+  "products": [
+    { "slug": "nextjs", "name": "Next.js" },
+    { "slug": "turborepo", "name": "Turborepo" }
+  ],
+  "releases": [
+    {
+      "id": "rel_f-_EUoCYDOCIvAdk4u7KR",
+      "title": "ai@6.0.193",
+      "version": "ai@6.0.193",
+      "publishedAt": "2026-05-28T23:37:36.000Z",
+      "sourceName": "AI SDK"
+    },
+    {
+      "id": "rel_34oH4s7v1BkhjJG4Nmb7X",
+      "title": "@vercel/python@6.44.0",
+      "version": "@vercel/python@6.44.0",
+      "publishedAt": "2026-05-28T23:01:15.000Z",
+      "sourceName": "Vercel CLI"
+    },
+    {
+      "id": "rel_sWKjqqfAsQYbLkeAKgDno",
+      "title": "@vercel/express@0.1.94",
+      "version": "@vercel/express@0.1.94",
+      "publishedAt": "2026-05-28T23:00:48.000Z",
+      "sourceName": "Vercel CLI"
+    }
+  ]
+}`,
+      },
+    ],
+  },
+  {
+    id: "search",
+    label: "Search across vendors",
+    blocks: [
+      {
+        command: 'releases search "webhooks" --type releases --limit 3',
+        output: `Releases
 Axiom/Changelog           Custom webhooks            1y  rel_YqORWhmpDZmlpyarFGtg0
                           Axiom introduces custom webhooks.
 Google/API Release Notes  Webhooks Support Launched  3w  rel_vpnvlVinttqFUfgIlDlVZ
@@ -61,7 +170,7 @@ Resend Changelog          New Domain Webhooks        1y  rel_ieyxLxD5eFh5IWDxB-b
                           Receive real-time notifications when domains are created…
 
 3 result(s) found.`,
-    json: `{
+        json: `{
   "query": "webhooks",
   "releases": [
     {
@@ -98,10 +207,10 @@ Resend Changelog          New Domain Webhooks        1y  rel_ieyxLxD5eFh5IWDxB-b
   "mode": "hybrid",
   "degraded": false
 }`,
-  },
-  {
-    command: "releases get rel_vpnvlVinttqFUfgIlDlVZ",
-    output: `Webhooks Support Launched
+      },
+      {
+        command: "releases get rel_vpnvlVinttqFUfgIlDlVZ",
+        output: `Webhooks Support Launched
   ID:        rel_vpnvlVinttqFUfgIlDlVZ
   Org:       Google (google)
   Source:    API Release Notes (api-release-notes)
@@ -111,7 +220,7 @@ Resend Changelog          New Domain Webhooks        1y  rel_ieyxLxD5eFh5IWDxB-b
 
 AI summary
 Event-driven webhooks support is now available in the Gemini API, replacing polling workflows for the Batch API and long-running operations.`,
-    json: `{
+        json: `{
   "id": "rel_vpnvlVinttqFUfgIlDlVZ",
   "title": "Webhooks Support Launched",
   "summary": "Event-driven webhooks support is now available in the Gemini API, replacing polling workflows for the Batch API and long-running operations.",
@@ -123,54 +232,8 @@ Event-driven webhooks support is now available in the Gemini API, replacing poll
   "contentChars": 132,
   "contentTokens": 24
 }`,
-  },
-  {
-    command: "releases get cursor",
-    output: `Cursor (cursor)
-  Domain:      cursor.com
-  Category:    developer-tools
-  Sources:     1 active
-
-Latest 3 releases (most recent first):
-rel_AFeJanUKy9UaqZK4BEKbQ  Shared Canvases                     2026-05-20
-rel_5XLlX1ezHI4B18Zi7vBBk  Cursor in Jira                      2026-05-19
-rel_T9JQ7UI6usAaYrKnI2Z2B  Full-screen Tabs and Compact Chats 2026-05-13`,
-    json: `{
-  "id": "org_keFBTgO7XcFJzGNl-g0W5",
-  "slug": "cursor",
-  "name": "Cursor",
-  "domain": "cursor.com",
-  "category": "developer-tools",
-  "sourceCount": 1,
-  "releaseCount": 53,
-  "releasesLast30Days": 14,
-  "releases": [
-    {
-      "id": "rel_AFeJanUKy9UaqZK4BEKbQ",
-      "title": "Shared Canvases",
-      "version": null,
-      "publishedAt": "2026-05-20T00:00:00.000Z",
-      "sourceName": "Cursor Changelog",
-      "contentChars": 560
-    },
-    {
-      "id": "rel_5XLlX1ezHI4B18Zi7vBBk",
-      "title": "Cursor in Jira",
-      "version": null,
-      "publishedAt": "2026-05-19T00:00:00.000Z",
-      "sourceName": "Cursor Changelog",
-      "contentChars": 734
-    },
-    {
-      "id": "rel_T9JQ7UI6usAaYrKnI2Z2B",
-      "title": "Full-screen Tabs and Compact Chats",
-      "version": null,
-      "publishedAt": "2026-05-13T00:00:00.000Z",
-      "sourceName": "Cursor Changelog",
-      "contentChars": 2638
-    }
-  ]
-}`,
+      },
+    ],
   },
 ];
 
@@ -287,7 +350,7 @@ export default async function HomePage({
           the `aria-label` already frames it as an example for assistive tech. */}
       <div data-nosnippet className="max-w-3xl mx-auto px-6 pb-12">
         <TerminalSession
-          blocks={DEMO_SESSION}
+          tabs={DEMO_TABS}
           maxHeight="20rem"
           animate
           ariaLabel="Example releases CLI session"

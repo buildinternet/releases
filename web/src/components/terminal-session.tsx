@@ -24,8 +24,12 @@ export type TerminalBlock = {
 export type TerminalTab = { id: string; label: string; blocks: TerminalBlock[] };
 
 type TerminalSessionProps = {
-  /** Ordered command/output pairs that make up the session transcript. */
-  blocks: TerminalBlock[];
+  /**
+   * Ordered command/output pairs that make up the session transcript. Optional
+   * when `tabs` is provided (each tab carries its own blocks); supply one or the
+   * other.
+   */
+  blocks?: TerminalBlock[];
   /**
    * Optional use-case tabs. When provided, a tab row replaces the traffic-light
    * chrome and the component renders the active tab's transcript; the `blocks`
@@ -80,7 +84,7 @@ type Reveal = {
  * blocks a `json` to surface a Humans/Agents toggle.
  */
 export function TerminalSession({
-  blocks,
+  blocks = [],
   tabs,
   className,
   maxHeight,
