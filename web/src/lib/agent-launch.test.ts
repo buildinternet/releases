@@ -15,7 +15,7 @@ describe("agent-launch", () => {
   test("cursor deep link encodes the stdio config as base64", () => {
     const prefix = "cursor://anysphere.cursor-deeplink/mcp/install?name=releases&config=";
     expect(cursorMcpHref.startsWith(prefix)).toBe(true);
-    const config = JSON.parse(atob(cursorMcpHref.slice(prefix.length)));
+    const config = JSON.parse(atob(decodeURIComponent(cursorMcpHref.slice(prefix.length))));
     expect(config).toEqual({ command: "npx", args: ["mcp-remote", MCP_REMOTE_URL] });
   });
 

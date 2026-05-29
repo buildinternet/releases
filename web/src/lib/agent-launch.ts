@@ -14,9 +14,13 @@ export const stdioConfig = {
   args: ["mcp-remote", MCP_REMOTE_URL],
 } as const;
 
-/** Cursor MCP deep link — opens Cursor and prompts to add the server. */
-export const cursorMcpHref = `cursor://anysphere.cursor-deeplink/mcp/install?name=releases&config=${btoa(
-  JSON.stringify(stdioConfig),
+/**
+ * Cursor MCP deep link — opens Cursor and prompts to add the server. The base64
+ * config is URL-encoded because standard base64 can contain `+`/`/`/`=`, which
+ * are unsafe in a query string (matches how `vscodeMcpHref` encodes its payload).
+ */
+export const cursorMcpHref = `cursor://anysphere.cursor-deeplink/mcp/install?name=releases&config=${encodeURIComponent(
+  btoa(JSON.stringify(stdioConfig)),
 )}`;
 
 /** VS Code MCP deep link. */

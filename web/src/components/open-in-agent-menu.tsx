@@ -92,7 +92,7 @@ function AgentDropdown({ target, className }: { target: AgentTarget; className?:
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        aria-haspopup="menu"
+        aria-haspopup="true"
         aria-expanded={open}
         aria-label="Open in agent"
         title="Open in agent"
@@ -101,15 +101,13 @@ function AgentDropdown({ target, className }: { target: AgentTarget; className?:
         <span className="text-stone-600 dark:text-stone-300">
           <RememberedIcon />
         </span>
+        <span>Open in</span>
         <span className="text-stone-400 dark:text-stone-500">
           <Caret open={open} />
         </span>
       </button>
       {open && (
-        <div
-          role="menu"
-          className="absolute right-0 top-full z-20 mt-1 w-52 overflow-hidden rounded-md border border-stone-200 bg-white shadow-lg dark:border-stone-800 dark:bg-stone-950"
-        >
+        <div className="absolute right-0 top-full z-20 mt-1 w-52 overflow-hidden rounded-md border border-stone-200 bg-white shadow-lg dark:border-stone-800 dark:bg-stone-950">
           <div className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-stone-400 dark:text-stone-500">
             Open in…
           </div>
@@ -154,7 +152,6 @@ function AgentLaunchItem({
       ? "flex w-full items-center gap-2 px-3 py-2 text-[13px] text-stone-700 hover:bg-stone-50 dark:text-stone-200 dark:hover:bg-stone-800"
       : "inline-flex items-center gap-2 rounded-md border border-stone-200 bg-white px-3 py-2 text-[13px] font-medium text-stone-800 shadow-sm transition-colors hover:border-stone-300 hover:bg-stone-50 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-100 dark:hover:border-stone-600 dark:hover:bg-stone-800";
 
-  const role = variant === "menu" ? "menuitem" : undefined;
   const content = (
     <>
       <span className="shrink-0 text-stone-600 dark:text-stone-300">
@@ -169,7 +166,6 @@ function AgentLaunchItem({
     return (
       <a
         href={action.href}
-        role={role}
         onClick={() => {
           onPick?.(agent.id);
           closeMenu?.();
@@ -185,7 +181,6 @@ function AgentLaunchItem({
   return (
     <button
       type="button"
-      role={role}
       onClick={() => {
         copy(action.command);
         onPick?.(agent.id);
