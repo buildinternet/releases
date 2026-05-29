@@ -35,10 +35,17 @@ it("drops file headers, hunk headers, context, and removed lines", () => {
 });
 
 it("keeps added content that itself begins with dashes", () => {
-  // A removed-line prefix is a single '-'; an added line whose content starts
-  // with '--' must not be mistaken for a '---' file header.
+  // Inside a hunk a leading '+' is the add marker; the rest is content. An added
+  // line whose content starts with '--' must not be mistaken for a '---' header.
   const diff = ["@@ -0,0 +1,2 @@", "+-- a comment", "+- a bullet"].join("\n");
   expect(addedContentFromDiff(diff)).toBe(["-- a comment", "- a bullet"].join("\n"));
+});
+
+it("keeps added content that itself begins with plus signs", () => {
+  // Symmetric to the dash case: an added line whose content starts with '++'
+  // renders as '+++…' and must not be mistaken for a '+++' file header.
+  const diff = ["@@ -0,0 +1,2 @@", "+++ a comment", "++ a bullet"].join("\n");
+  expect(addedContentFromDiff(diff)).toBe(["++ a comment", "+ a bullet"].join("\n"));
 });
 
 it("returns empty string when there is nothing added", () => {
