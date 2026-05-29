@@ -1,6 +1,6 @@
 import type { Source } from "@buildinternet/releases-core/schema";
 import { getSourceMeta } from "@releases/adapters/source-meta.js";
-import { FirecrawlError } from "@releases/adapters/firecrawl.js";
+import { FirecrawlError } from "@releases/lib/errors";
 import type { FirecrawlClient, FirecrawlMonitorSpec } from "@releases/adapters/firecrawl.js";
 import type { SourceMetadata } from "@releases/adapters/source-meta.js";
 
@@ -53,7 +53,7 @@ export async function syncFirecrawlMonitor(
   if (fc.monitorId) {
     try {
       await client.updateMonitor(fc.monitorId, spec);
-      return { firecrawl: { ...fc, enabled: true, monitorId: fc.monitorId } };
+      return { firecrawl: { ...fc, enabled: true } };
     } catch (err) {
       // Self-heal: a 404 means the monitor was deleted upstream (e.g. via the
       // Firecrawl dashboard) — fall through to recreate and re-stamp the new id.

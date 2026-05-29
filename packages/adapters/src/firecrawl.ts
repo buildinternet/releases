@@ -1,3 +1,5 @@
+import { FirecrawlError } from "@releases/lib/errors";
+
 const BASE = "https://api.firecrawl.dev/v2";
 
 export type FirecrawlProxy = "basic" | "enhanced" | "auto";
@@ -25,24 +27,6 @@ export interface FirecrawlMonitor {
 export interface FirecrawlClientOpts {
   apiKey: string;
   fetch?: typeof fetch;
-}
-
-/**
- * Thrown by the client on a non-2xx response (or a 2xx with a non-JSON body).
- * Carries the HTTP `status` so callers can branch — e.g. the reconcile helper
- * treats a 404 on `updateMonitor` as "monitor deleted upstream" and recreates.
- */
-export class FirecrawlError extends Error {
-  constructor(
-    readonly status: number,
-    readonly method: string,
-    readonly path: string,
-    readonly body: string,
-    message?: string,
-  ) {
-    super(message ?? `Firecrawl ${method} ${path} failed: ${status} ${body.slice(0, 300)}`);
-    this.name = "FirecrawlError";
-  }
 }
 
 async function call(
