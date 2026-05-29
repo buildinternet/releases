@@ -283,10 +283,24 @@ export async function queryDueSources(
   const nowIso = now.toISOString();
   const backoffReady = sql`(${sourcesVisible.nextFetchAfter} IS NULL OR ${sourcesVisible.nextFetchAfter} <= ${nowIso})`;
 
+  // Firecrawl-owned sources are ingested via the inbound webhook + workflow, not
+  // the poll cron — exclude them from BOTH the inline and workflow fan-out paths
+  // (this query gates both). enabled === true → json_extract returns 1; absent → NULL.
+  const notFirecrawl = sql`(json_extract(${sourcesVisible.metadata}, '$.firecrawl.enabled') IS NULL OR json_extract(${sourcesVisible.metadata}, '$.firecrawl.enabled') != 1)`;
+
   return db
     .select()
     .from(sourcesVisible)
-    .where(and(pollable, notPaused, orgNotFetchPaused, backoffReady, or(...tierConditions)));
+    .where(
+      and(
+        pollable,
+        notPaused,
+        orgNotFetchPaused,
+        backoffReady,
+        notFirecrawl,
+        or(...tierConditions),
+      ),
+    );
 }
 
 // ── Poll one source ──

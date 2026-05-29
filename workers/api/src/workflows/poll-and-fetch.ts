@@ -434,6 +434,21 @@ export class PollAndFetchWorkflow extends WorkflowEntrypoint<
         return row;
       });
 
+      // Defense-in-depth: queryDueSources already excludes firecrawl-owned
+      // sources from the fan-out, but guard here too so a manual trigger or
+      // a future regression in the exclusion predicate can't cause
+      // double-ingest. Firecrawl sources are ingested via the inbound webhook
+      // + FirecrawlIngestWorkflow exclusively.
+      if (getSourceMeta(source).firecrawl?.enabled) {
+        logEvent("info", {
+          component: "poll-and-fetch-workflow",
+          event: "firecrawl-owned-skip",
+          sourceId: source.id,
+          slug: source.slug,
+        });
+        return;
+      }
+
       const now = new Date();
       const changeDetectEnabled = env.SCRAPE_CHANGE_DETECT_ENABLED === "true";
 
