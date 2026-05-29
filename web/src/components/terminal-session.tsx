@@ -399,7 +399,10 @@ function TabBar({
             role="tab"
             id={`terminal-tab-${tab.id}`}
             aria-selected={selected}
-            aria-controls={`terminal-tabpanel-${tab.id}`}
+            // Only the active panel is rendered, so reference it only from the
+            // selected tab — inactive tabs omit aria-controls rather than point
+            // at an absent element (it's optional in the WAI-ARIA tabs pattern).
+            aria-controls={selected ? `terminal-tabpanel-${tab.id}` : undefined}
             tabIndex={selected ? 0 : -1}
             onClick={() => onSelect(i)}
             className={`shrink-0 rounded-md px-2.5 py-1 font-mono text-[12px] whitespace-nowrap transition-colors ${
