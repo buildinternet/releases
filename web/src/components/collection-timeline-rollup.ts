@@ -12,50 +12,39 @@ export type TagListItem =
   | { kind: "single"; release: CollectionReleaseItem }
   | {
       kind: "rollup";
-      /** `org::(product|source)` — stable identity for the bucket. */
+      /**
+       * `org::(product|source)` — the bucket identity. Unique within a
+       * day×org tag list, so it doubles as the row's React key.
+       */
       groupKey: string;
       /** Display name: product name when bound, else the source name. */
       label: string;
-      orgSlug: string;
       /** All releases in the bucket, newest-first (input order). */
       releases: CollectionReleaseItem[];
-      rollupId: string;
     };
 
 // Within a day's worth of GitHub tags for one org, collapse 2+ releases that
 // share a group (product when bound, else source) into a single rollup. Lone
-// tags stay as singles. Buckets preserve first-appearance order, which is the
+// tags stay as singles. The Map preserves first-appearance order, which is the
 // feed's published-desc order, so the most recently active group leads and
 // singles interleave naturally.
-export function rollupTags(tags: CollectionReleaseItem[], scopeKey: string): TagListItem[] {
-  const buckets = new Map<
-    string,
-    { label: string; orgSlug: string; releases: CollectionReleaseItem[] }
-  >();
-  const order: string[] = [];
+export function rollupTags(tags: CollectionReleaseItem[]): TagListItem[] {
+  const buckets = new Map<string, { label: string; releases: CollectionReleaseItem[] }>();
 
   for (const r of tags) {
     const groupSlug = r.product?.slug ?? r.source.slug;
     const k = `${r.org.slug}::${groupSlug}`;
     let bucket = buckets.get(k);
     if (!bucket) {
-      bucket = { label: r.product?.name ?? r.source.name, orgSlug: r.org.slug, releases: [] };
+      bucket = { label: r.product?.name ?? r.source.name, releases: [] };
       buckets.set(k, bucket);
-      order.push(k);
     }
     bucket.releases.push(r);
   }
 
-  return order.map((k) => {
-    const b = buckets.get(k)!;
-    if (b.releases.length < 2) return { kind: "single", release: b.releases[0] };
-    return {
-      kind: "rollup",
-      groupKey: k,
-      label: b.label,
-      orgSlug: b.orgSlug,
-      releases: b.releases,
-      rollupId: `rollup:${scopeKey}:${k}`,
-    };
-  });
+  return [...buckets].map(([groupKey, b]) =>
+    b.releases.length < 2
+      ? { kind: "single", release: b.releases[0] }
+      : { kind: "rollup", groupKey, label: b.label, releases: b.releases },
+  );
 }

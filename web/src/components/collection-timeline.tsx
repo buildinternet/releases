@@ -431,12 +431,7 @@ function DaySection({
       </div>
       <div className="flex flex-col gap-4 mt-4">
         {orgGroups.map((g) => (
-          <OrgSection
-            key={g.orgSlug}
-            group={g}
-            scopeKey={day.key}
-            orgMeta={orgsBySlug.get(g.orgSlug)}
-          />
+          <OrgSection key={g.orgSlug} group={g} orgMeta={orgsBySlug.get(g.orgSlug)} />
         ))}
       </div>
     </section>
@@ -445,19 +440,20 @@ function DaySection({
 
 function OrgSection({
   group,
-  scopeKey,
   orgMeta,
 }: {
   group: { orgSlug: string; orgName: string; releases: CollectionReleaseItem[] };
-  scopeKey: string;
   orgMeta?: CollectionMemberOrg;
 }) {
-  const posts = group.releases.filter((r) => !isTag(r));
-  const tags = group.releases.filter((r) => isTag(r));
-  const tagItems = useMemo(
-    () => rollupTags(tags, `${scopeKey}:${group.orgSlug}`),
-    [tags, scopeKey, group.orgSlug],
-  );
+  // Partition once into posts (hero) and tags (commit-log rollup). Memoized so
+  // the derived arrays keep a stable reference — otherwise the `tagItems` memo
+  // below would re-run every render on a fresh `filter` result.
+  const { posts, tags } = useMemo(() => {
+    const split = { posts: [] as CollectionReleaseItem[], tags: [] as CollectionReleaseItem[] };
+    for (const r of group.releases) (isTag(r) ? split.tags : split.posts).push(r);
+    return split;
+  }, [group.releases]);
+  const tagItems = useMemo(() => rollupTags(tags), [tags]);
 
   return (
     <div>
@@ -499,7 +495,7 @@ function OrgSection({
 function tagKey(item: TagListItem) {
   if (item.kind === "single")
     return `s:${item.release.id ?? item.release.url ?? item.release.title}`;
-  return item.rollupId;
+  return `r:${item.groupKey}`;
 }
 
 // ── Post hero ──────────────────────────────────────────────────

@@ -55,7 +55,7 @@ describe("rollupTags", () => {
       }),
     ];
 
-    const out = rollupTags(tags, "2026-05-28:vercel");
+    const out = rollupTags(tags);
 
     expect(out).toHaveLength(1);
     expect(out[0].kind).toBe("rollup");
@@ -71,7 +71,7 @@ describe("rollupTags", () => {
       rel({ org: "vercel", source: "turborepo", product: "turborepo", version: "v2.9.15" }),
     ];
 
-    const out = rollupTags(tags, "2026-05-28:vercel");
+    const out = rollupTags(tags);
 
     expect(out).toHaveLength(1);
     const rollup = out[0] as Extract<TagListItem, { kind: "rollup" }>;
@@ -85,7 +85,7 @@ describe("rollupTags", () => {
       rel({ org: "vercel", source: "turborepo", product: "turborepo", version: "v2.9.16" }),
     ];
 
-    const out = rollupTags(tags, "2026-05-28:vercel");
+    const out = rollupTags(tags);
 
     expect(out).toHaveLength(1);
     expect(out[0].kind).toBe("single");
@@ -108,7 +108,7 @@ describe("rollupTags", () => {
       rel({ org: "vercel", source: "turborepo", product: "turborepo", version: "v2.9.15" }),
     ];
 
-    const out = rollupTags(tags, "2026-05-28:vercel");
+    const out = rollupTags(tags);
     const rollups = rollupsOf(out);
 
     expect(rollups).toHaveLength(3);
@@ -124,7 +124,7 @@ describe("rollupTags", () => {
       rel({ org: "vercel", source: "vercel-cli", sourceName: "Vercel CLI", version: "vercel@53" }),
     ];
 
-    const out = rollupTags(tags, "2026-05-28:vercel");
+    const out = rollupTags(tags);
     const labels = rollupsOf(out).map((r) => r.label);
 
     // AI SDK appears first in the input, so its bucket leads.
