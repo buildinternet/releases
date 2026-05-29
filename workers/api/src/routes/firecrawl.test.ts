@@ -14,7 +14,8 @@ const fakeClient: FirecrawlClient = {
   },
   deleteMonitor: async () => {},
   updateMonitor: async () => {},
-  getMonitor: async () => ({ id: "mon_seeded" }),
+  // getMonitor isn't exercised by the sync route; stub satisfies the type only.
+  getMonitor: (async () => ({ id: "mon_seeded" })) as unknown as FirecrawlClient["getMonitor"],
   runMonitor: async () => {},
   scrapeOnce: async () => "",
 };
