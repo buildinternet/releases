@@ -25,6 +25,33 @@ describe("products.avatar_url", () => {
   });
 });
 
+describe("GET /v1/products list surfaces avatarUrl", () => {
+  it("includes avatarUrl in list items (e.g. an App Store app icon)", async () => {
+    const db = createTestDb();
+    await db.insert(organizations).values({ id: "org_c", name: "Gamma", slug: "gamma" });
+    await db.insert(products).values({
+      id: "prod_c",
+      name: "C",
+      slug: "c",
+      orgId: "org_c",
+      avatarUrl: "https://cdn.example/c.png",
+    });
+    await db.insert(products).values({ id: "prod_d", name: "D", slug: "d", orgId: "org_c" });
+    const fetch = createTestApp(db, [productRoutes], { env: {} });
+
+    const res = await fetch(new Request("https://x.test/v1/products?orgId=org_c"));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      items: Array<{ slug: string; avatarUrl?: string | null }>;
+    };
+    const withIcon = body.items.find((p) => p.slug === "c");
+    const withoutIcon = body.items.find((p) => p.slug === "d");
+    expect(withIcon?.avatarUrl).toBe("https://cdn.example/c.png");
+    // Present-but-null for products with no avatar — distinct from "field absent".
+    expect(withoutIcon?.avatarUrl ?? null).toBeNull();
+  });
+});
+
 describe("PATCH /v1/products avatarUrl", () => {
   it("sets and returns avatarUrl", async () => {
     const db = createTestDb();
