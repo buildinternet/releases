@@ -1,5 +1,10 @@
 import type { ReleaseComposition } from "@buildinternet/releases-api-types";
-import { compositionItems, label, CompositionBar, CompositionTooltip } from "./composition-shared";
+import {
+  compositionItems,
+  compositionSummary,
+  CompositionBar,
+  CompositionTooltip,
+} from "./composition-shared";
 
 /**
  * Compact, legend-free composition micro-bar for dense release feeds (org /
@@ -21,8 +26,6 @@ export function CompactComposition({
   const items = compositionItems(composition);
   if (items.length === 0) return null;
 
-  const summary = items.map((i) => label(i.count, i.cat)).join(", ");
-
   return (
     <span className={`group/composition relative inline-flex items-center ${className ?? ""}`}>
       {/* Micro-bar — solid color segments, no legend, no texture. The
@@ -34,7 +37,7 @@ export function CompactComposition({
         height={5}
         gap="1.2px"
         minWidth="2px"
-        ariaLabel={`Release composition: ${summary}`}
+        ariaLabel={`Release composition: ${compositionSummary(items)}`}
       />
 
       <CompositionTooltip items={items} align="right" />

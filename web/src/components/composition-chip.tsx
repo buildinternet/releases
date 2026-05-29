@@ -2,6 +2,7 @@ import type { ReleaseComposition } from "@buildinternet/releases-api-types";
 import {
   compositionItems,
   label,
+  compositionSummary,
   Glyph,
   CompositionBar,
   CompositionTooltip,
@@ -29,9 +30,14 @@ export function CompositionChip({
   if (items.length === 0) return null;
 
   return (
-    <span className={`group/composition relative inline-flex ${className ?? ""}`}>
-      {/* The decorative bar + glyphs are aria-hidden; the legend's plain text
-          ("6 features", …) is what a screen reader reads. */}
+    // Focusable so keyboard users can reveal the tooltip (group-focus-within).
+    // aria-label gives a clean focus announcement and keeps the tooltip text
+    // out of the accessible name; the bar + glyphs stay decorative.
+    <span
+      className={`group/composition relative inline-flex rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-stone-400 dark:focus-visible:ring-stone-500 ${className ?? ""}`}
+      tabIndex={0}
+      aria-label={`Release composition: ${compositionSummary(items)}`}
+    >
       <span className="inline-flex items-center gap-[11px]">
         {/* Proportional bar — textured segments, sized by share. */}
         <CompositionBar items={items} width={96} height={8} gap="1.5px" minWidth="3px" textured />

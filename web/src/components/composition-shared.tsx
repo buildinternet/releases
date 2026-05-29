@@ -77,6 +77,11 @@ export function label(count: number, cat: CatMeta): string {
   return `${count} ${count === 1 ? cat.one : cat.many}`;
 }
 
+/** Plain-text summary of the breakdown, e.g. "6 features, 1 enhancement, 1 fix". */
+export function compositionSummary(items: CompItem[]): string {
+  return items.map((i) => label(i.count, i.cat)).join(", ");
+}
+
 /** Texture overlay painted over a segment's solid color. */
 function patternStyle(pattern: CatMeta["pattern"]): CSSProperties {
   if (pattern === "stripes") {
@@ -197,7 +202,7 @@ export function CompositionTooltip({
   return (
     <span
       role="tooltip"
-      className={`pointer-events-none absolute bottom-[calc(100%+9px)] ${align === "right" ? "right-0" : "left-0"} z-50 flex w-max max-w-[300px] translate-y-[3px] flex-col gap-[7px] rounded-[9px] border border-[#2a2e36] bg-[#16181d] px-[13px] py-[11px] text-left opacity-0 shadow-[0_8px_24px_rgba(0,0,0,0.35)] transition-[opacity,transform] duration-[120ms] ease-out group-hover/composition:translate-y-0 group-hover/composition:opacity-100`}
+      className={`pointer-events-none absolute bottom-[calc(100%+9px)] ${align === "right" ? "right-0" : "left-0"} z-50 flex w-max max-w-[300px] translate-y-[3px] flex-col gap-[7px] rounded-[9px] border border-[#2a2e36] bg-[#16181d] px-[13px] py-[11px] text-left opacity-0 shadow-[0_8px_24px_rgba(0,0,0,0.35)] transition-[opacity,transform] duration-[120ms] ease-out group-hover/composition:translate-y-0 group-hover/composition:opacity-100 group-focus-within/composition:translate-y-0 group-focus-within/composition:opacity-100`}
     >
       <span className="font-mono text-[10px] font-medium uppercase tracking-[0.08em] text-[#6f7480]">
         This release
