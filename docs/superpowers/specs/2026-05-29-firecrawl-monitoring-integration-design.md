@@ -204,7 +204,7 @@ dropped real releases.
 
 Two secrets, both bound via Secrets Store in `workers/api/wrangler.jsonc`:
 
-- `FIRECRAWL_API_TOKEN` — already present in root `.env` + CF Secrets Store. Used only by
+- `FIRECRAWL_API_KEY` — already present in root `.env` + CF Secrets Store. Used only by
   the sync helper for monitor management (`/v2/monitor*`).
 - `FIRECRAWL_WEBHOOK_SECRET` — **new.** A random secret we generate, store in CF Secrets
   Store, and set on every monitor's webhook `headers["X-Firecrawl-Token"]` at create time;
@@ -274,8 +274,14 @@ from the App Store source-type work (#1160).
 
 ## Open risks / things to validate
 
-1. **Firecrawl clearing CF managed challenge** — Phase 0 settles it. The entire premise
-   for OpenAI rests on this.
+1. **Firecrawl clearing CF managed challenge** — ✅ **RESOLVED (2026-05-29 spike).**
+   `POST /v2/scrape { url: help.openai.com/.../chatgpt-release-notes, formats:["markdown"],
+proxy:"auto" }` returned HTTP 200 / `success:true`, page `statusCode:200`, title
+   "ChatGPT — Release Notes | OpenAI Help Center", and **155,598 chars** of current
+   markdown (dated entries, "Updated: 26 minutes ago") in 650ms. The premise holds for the
+   OpenAI sources. `proxy:"auto"` was sufficient and fast — actual per-check credit cost
+   should be observed once a real monitor runs (it may land on the cheaper `basic` tier
+   rather than `enhanced`).
 2. **Exact `monitor.page` payload field names** (`markdown` vs `content`, `judgment`
    shape, `checkId` location) — pinned against Firecrawl's events doc in Phase 2; the
    client types are finalized then.

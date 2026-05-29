@@ -22,14 +22,14 @@
 | `packages/adapters/src/source-meta.ts`          | Add `firecrawl` block to `SourceMetadata`.                                                               | 1                       |
 | `workers/api/src/lib/firecrawl-sync.ts`         | `deriveMonitorSpec` (pure) + `syncFirecrawlMonitor` (reconcile).                                         | 1                       |
 | `workers/api/src/lib/firecrawl-sync.test.ts`    | Unit tests for spec derivation + reconcile.                                                              | 1                       |
-| `workers/api/wrangler.jsonc`                    | Add `FIRECRAWL_API_TOKEN` + `FIRECRAWL_WEBHOOK_SECRET` Secrets Store bindings (prod + staging).          | 1                       |
+| `workers/api/wrangler.jsonc`                    | Add `FIRECRAWL_API_KEY` + `FIRECRAWL_WEBHOOK_SECRET` Secrets Store bindings (prod + staging).            | 1                       |
 | `workers/api/src/routes/firecrawl.ts`           | `POST /v1/sources/:slug/firecrawl/sync` (admin) + `POST /v1/integrations/firecrawl/webhook` (self-auth). | 1 (sync) / 2 (receiver) |
 | `workers/api/src/routes/firecrawl.test.ts`      | Route tests (auth + gate matrix).                                                                        | 1 / 2                   |
 | `workers/api/src/workflows/firecrawl-ingest.ts` | `FirecrawlIngestWorkflow` + extracted ingest helpers.                                                    | 2                       |
 | `workers/api/src/cron/poll-fetch.ts`            | Add `!firecrawl?.enabled` to poll eligibility; export shared ingest helpers.                             | 2                       |
 | `workers/api/src/index.ts`                      | Export `FirecrawlIngestWorkflow`; mount firecrawl routes.                                                | 1 / 2                   |
 
-`Env.Bindings` (in `index.ts`) gains `FIRECRAWL_API_TOKEN?: SecretBinding`, `FIRECRAWL_WEBHOOK_SECRET?: SecretBinding`, `FIRECRAWL_INGEST_WORKFLOW?: Workflow`.
+`Env.Bindings` (in `index.ts`) gains `FIRECRAWL_API_KEY?: SecretBinding`, `FIRECRAWL_WEBHOOK_SECRET?: SecretBinding`, `FIRECRAWL_INGEST_WORKFLOW?: Workflow`.
 
 ---
 
@@ -45,8 +45,8 @@
 
 ```ts
 // scripts/firecrawl-spike.ts — throwaway, delete after Phase 0
-const KEY = process.env.FIRECRAWL_API_TOKEN;
-if (!KEY) throw new Error("FIRECRAWL_API_TOKEN not set");
+const KEY = process.env.FIRECRAWL_API_KEY;
+if (!KEY) throw new Error("FIRECRAWL_API_KEY not set");
 
 // The canonical blocked source. Confirm the exact URL from the paused source row first.
 const URL = "https://help.openai.com/en/articles/6825453-chatgpt-release-notes";
@@ -582,9 +582,9 @@ In the `"secrets_store_secrets"` array, after the `WEBHOOK_HMAC_MASTER` entry, a
 
 ```jsonc
     {
-      "binding": "FIRECRAWL_API_TOKEN",
+      "binding": "FIRECRAWL_API_KEY",
       "store_id": "a887a71cab084105b79706df23380723",
-      "secret_name": "FIRECRAWL_API_TOKEN",
+      "secret_name": "FIRECRAWL_API_KEY",
     },
     {
       "binding": "FIRECRAWL_WEBHOOK_SECRET",
@@ -600,7 +600,7 @@ Add the **same two entries** to the `secrets_store_secrets` array inside the `"e
 In `workers/api/src/index.ts`, in the `Env` `Bindings` type (where `ANTHROPIC_API_KEY?: SecretBinding;` lives), add:
 
 ```ts
-  FIRECRAWL_API_TOKEN?: SecretBinding;
+  FIRECRAWL_API_KEY?: SecretBinding;
   FIRECRAWL_WEBHOOK_SECRET?: SecretBinding;
   FIRECRAWL_INGEST_WORKFLOW?: Workflow; // bound in Phase 2
 ```
@@ -614,10 +614,10 @@ Expected: PASS (the `Workflow` type is already imported for `POLL_AND_FETCH_WORK
 
 ```bash
 git add workers/api/wrangler.jsonc workers/api/src/index.ts
-git commit -m "chore(api): bind FIRECRAWL_API_TOKEN + FIRECRAWL_WEBHOOK_SECRET (prod + staging)"
+git commit -m "chore(api): bind FIRECRAWL_API_KEY + FIRECRAWL_WEBHOOK_SECRET (prod + staging)"
 ```
 
-> **Operator action (not a code step):** the user adds the two secret _values_ to CF Secrets Store (`FIRECRAWL_API_TOKEN` already exists; generate `FIRECRAWL_WEBHOOK_SECRET` via `openssl rand -hex 32`). Per global rules, the agent does not edit `.env` or push secret material.
+> **Operator action (not a code step):** the user adds the two secret _values_ to CF Secrets Store (`FIRECRAWL_API_KEY` already exists; generate `FIRECRAWL_WEBHOOK_SECRET` via `openssl rand -hex 32`). Per global rules, the agent does not edit `.env` or push secret material.
 
 ### Task 5: `POST /v1/sources/:slug/firecrawl/sync` admin route
 
@@ -651,7 +651,7 @@ it("sync enables a monitor and persists monitorId", async () => {
   app.route("/v1", firecrawlRoutes);
   const env = {
     DB: testDb.db,
-    FIRECRAWL_API_TOKEN: mockSecret("fc-key"),
+    FIRECRAWL_API_KEY: mockSecret("fc-key"),
     FIRECRAWL_WEBHOOK_SECRET: mockSecret("hook-secret"),
     WEB_BASE_URL: "https://api.releases.sh",
     // inject a fake firecrawl client factory — see Step 3 for the seam
@@ -708,8 +708,8 @@ function webhookUrl(env: Record<string, unknown>): string {
 
 async function firecrawlClient(env: Record<string, unknown>): Promise<FirecrawlClient> {
   if (env._firecrawlClientOverride) return env._firecrawlClientOverride as FirecrawlClient;
-  const apiKey = await getSecret(env.FIRECRAWL_API_TOKEN as { get(): Promise<string> } | undefined);
-  if (!apiKey) throw new Error("FIRECRAWL_API_TOKEN not bound");
+  const apiKey = await getSecret(env.FIRECRAWL_API_KEY as { get(): Promise<string> } | undefined);
+  if (!apiKey) throw new Error("FIRECRAWL_API_KEY not bound");
   return createFirecrawlClient({ apiKey });
 }
 
