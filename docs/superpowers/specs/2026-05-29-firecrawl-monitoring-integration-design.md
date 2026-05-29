@@ -291,3 +291,52 @@ proxy:"auto" }` returned HTTP 200 / `success:true`, page `statusCode:200`, title
 4. **Whole-page re-extraction tokens** — we re-extract the full page markdown on each
    meaningful change (dedup drops already-seen rows). Bounded by the judgment gate + our
    existing extract-tier toolloop for large bodies.
+
+## Catalog & credit dimensioning (prod snapshot 2026-05-29)
+
+How broadly Firecrawl helps, and what it costs. Pulled from the live prod catalog
+(317 sources). The benefit is narrow by design — GitHub / RSS-feed / App Store sources
+are free and easy to fetch ourselves, so Firecrawl only earns its keep on hard `scrape`
+(and the lone `agent`) sources.
+
+**Catalog composition:**
+
+| Type       | Count     | Firecrawl benefit                |
+| ---------- | --------- | -------------------------------- |
+| `github`   | 194 (61%) | none — GitHub API                |
+| `scrape`   | 57 (18%)  | only the hard subset (see below) |
+| `feed`     | 55 (17%)  | none — RSS/Atom/JSON             |
+| `appstore` | 10 (3%)   | none — iTunes API                |
+| `agent`    | 1 (<1%)   | candidate                        |
+| **Total**  | **317**   |                                  |
+
+**Beneficiary tiers:**
+
+- **Conservative (build for this): ~14 sources** — the set our own pipeline genuinely
+  cannot handle: 11 paused `scrape` sources without a discovered feed (5× `help.openai.com`
+  release-note pages + chatgpt-macos, x.ai/news, perplexity, amplitude, firebase, replit),
+  2 active render-required (fly.io, granola), 1 `agent` (posthog). Six share the
+  `help.openai.com` domain — the clearest immediate win.
+- **Upper bound: ~50 sources** — every `scrape` source without a feed (includes the 9
+  already on Cloudflare crawl that work today but could move).
+- **Zero benefit: 259 sources** — GitHub / feed / App Store.
+
+**Credit model.** `credits/month = sources × checks_per_month × credits_per_check`, where
+`checks_per_month = 30 × 24 / cadence_hours` (daily = 30, every-12h = 60, every-6h = 120).
+Change-judging adds ~1 credit per _changed_ page (only fires on real changes — a few per
+month per source), negligible against per-check cost. Table assumes `enhanced` proxy
+(5 cr/check), the safe worst case for anti-bot sources:
+
+| Sources           | Daily (30) | Every 12h (60) | Every 6h (120) |
+| ----------------- | ---------- | -------------- | -------------- |
+| 14 (conservative) | **~2,100** | 4,200          | 8,400          |
+| 50 (upper bound)  | ~7,500     | 15,000         | 30,000         |
+| 100 (growth)      | ~15,000    | 30,000         | 60,000         |
+
+**Marginal cost per added source:** ~150 cr/mo (daily, `enhanced`) down to ~30 cr/mo if a
+source clears on `basic`. The Phase 0 OpenAI spike cleared on `proxy:"auto"` in 650ms,
+which suggests several of these may land on the cheaper tier — so the conservative
+**~2,100 credits/month** at a daily cadence is a ceiling, not a floor, for the starter set.
+
+**Recommended planning number:** daily cadence, conservative 14-source set ≈ **2,100
+credits/month**; expanding to the full ~50-source upper bound ≈ **7,500 credits/month**.
