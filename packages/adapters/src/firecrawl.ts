@@ -56,15 +56,17 @@ export function createFirecrawlClient(opts: FirecrawlClientOpts) {
   const key = opts.apiKey;
   return {
     async createMonitor(spec: FirecrawlMonitorSpec): Promise<string> {
-      const json = (await call(f, key, "POST", "/monitor", spec)) as { monitor?: { id?: string } };
-      const id = json?.monitor?.id;
+      // v2 wraps the created Monitor in `{ success, data }` (the id is `data.id`,
+      // top-level on the Monitor), not `{ monitor: { id } }`.
+      const json = (await call(f, key, "POST", "/monitor", spec)) as { data?: { id?: string } };
+      const id = json?.data?.id;
       if (!id) throw new Error("Firecrawl createMonitor returned no monitor id");
       return id;
     },
     async getMonitor(id: string): Promise<FirecrawlMonitor> {
-      const json = (await call(f, key, "GET", `/monitor/${id}`)) as { monitor?: FirecrawlMonitor };
-      if (!json?.monitor) throw new Error(`Firecrawl getMonitor ${id} returned no monitor`);
-      return json.monitor;
+      const json = (await call(f, key, "GET", `/monitor/${id}`)) as { data?: FirecrawlMonitor };
+      if (!json?.data) throw new Error(`Firecrawl getMonitor ${id} returned no monitor`);
+      return json.data;
     },
     async updateMonitor(id: string, spec: UpdateMonitorRequest): Promise<void> {
       await call(f, key, "PUT", `/monitor/${id}`, spec);

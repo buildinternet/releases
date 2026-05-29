@@ -25,7 +25,7 @@ it("createMonitor POSTs the spec and returns the monitor id", async () => {
   const calls: Array<{ url: string; init: RequestInit }> = [];
   const fakeFetch = (async (url: string, init: RequestInit) => {
     calls.push({ url, init });
-    return new Response(JSON.stringify({ success: true, monitor: { id: "mon_abc" } }), {
+    return new Response(JSON.stringify({ success: true, data: { id: "mon_abc" } }), {
       status: 200,
     });
   }) as unknown as typeof fetch;
