@@ -19,6 +19,7 @@ import { memberKey } from "@/lib/member-key";
 import { tabButtonClass } from "@/lib/styles";
 import { useInfiniteScroll } from "@/hooks/use-infinite-scroll";
 import { InfiniteScrollTrigger } from "./infinite-scroll-trigger";
+import { isTag, rollupTags, type TagListItem } from "./collection-timeline-rollup";
 
 interface CollectionTimelineProps {
   /**
@@ -49,14 +50,6 @@ function memberAvatar(m: CollectionMember) {
 }
 
 type TypeFilter = "all" | "tag" | "post";
-
-// GitHub releases are tag drops; everything else (RSS, scrape, agent, atom)
-// is treated as a marketing post and gets the richer hero treatment. The
-// server understands these as `source_type` values directly — see
-// `sourceTypesForFilter` below.
-function isTag(r: CollectionReleaseItem): boolean {
-  return r.source.type === "github";
-}
 
 // Map the UI's tag/post toggle to the set of `source_type` values the server
 // accepts. Kept here so the renderer's tag/post split (everything-but-github
@@ -405,69 +398,6 @@ function groupByOrg(releases: CollectionReleaseItem[]) {
   return [...map.values()];
 }
 
-type TagListItem =
-  | { kind: "single"; release: CollectionReleaseItem }
-  | {
-      kind: "rollup";
-      productSlug: string;
-      productName: string;
-      orgSlug: string;
-      latest: CollectionReleaseItem;
-      older: CollectionReleaseItem[];
-      rollupId: string;
-    };
-
-// Within a list of tag releases, collapse 2+ same-product tags into a
-// rollup. Posts and lone tags stay as singles.
-function rollupSameProduct(tags: CollectionReleaseItem[], scopeKey: string): TagListItem[] {
-  const buckets = new Map<
-    string,
-    { productSlug: string; productName: string; orgSlug: string; releases: CollectionReleaseItem[] }
-  >();
-  const order: string[] = [];
-  const singles: TagListItem[] = [];
-
-  for (const r of tags) {
-    if (r.product) {
-      const k = `${r.org.slug}::${r.product.slug}`;
-      if (!buckets.has(k)) {
-        buckets.set(k, {
-          productSlug: r.product.slug,
-          productName: r.product.name,
-          orgSlug: r.org.slug,
-          releases: [],
-        });
-        order.push(k);
-      }
-      buckets.get(k)!.releases.push(r);
-    } else {
-      singles.push({ kind: "single", release: r });
-    }
-  }
-
-  const out: TagListItem[] = [];
-  for (const k of order) {
-    const b = buckets.get(k)!;
-    if (b.releases.length >= 2) {
-      const [latest, ...older] = b.releases;
-      out.push({
-        kind: "rollup",
-        productSlug: b.productSlug,
-        productName: b.productName,
-        orgSlug: b.orgSlug,
-        latest,
-        older,
-        rollupId: `rollup:${scopeKey}:${k}`,
-      });
-    } else {
-      out.push({ kind: "single", release: b.releases[0] });
-    }
-  }
-  // Append no-product singles after rollups so contiguous product groups
-  // surface together.
-  return [...out, ...singles];
-}
-
 // ── Day section ─────────────────────────────────────────────────
 
 function DaySection({
@@ -525,7 +455,7 @@ function OrgSection({
   const posts = group.releases.filter((r) => !isTag(r));
   const tags = group.releases.filter((r) => isTag(r));
   const tagItems = useMemo(
-    () => rollupSameProduct(tags, `${scopeKey}:${group.orgSlug}`),
+    () => rollupTags(tags, `${scopeKey}:${group.orgSlug}`),
     [tags, scopeKey, group.orgSlug],
   );
 
@@ -674,44 +604,47 @@ function TagItem({ item, index }: { item: TagListItem; index: number }) {
     );
   }
 
+  // Summary-header rollup: one line per group (product-or-source) with the
+  // newest few version tags inline, expanding to every release in the bucket.
+  // Replaces the older "promote newest row + N-earlier toggle" so all rollups
+  // — product- and source-keyed — read the same. The day-section header above
+  // already supplies the date, so the label stays date-free.
+  const pills = item.releases.slice(0, 3);
+  const overflow = item.releases.length - pills.length;
+
   return (
-    <>
-      <div className={topBorder}>
-        <CommitLogRow release={item.latest} />
-      </div>
-      <div className="border-t border-dashed border-stone-200 dark:border-stone-800 bg-stone-50/60 dark:bg-stone-950/40">
-        <button
-          type="button"
-          onClick={() => setOpen((v) => !v)}
-          className={`flex items-center gap-2 w-full text-left py-1.5 px-3 text-[12px] ${subduedLinkClass}`}
-        >
-          <Caret open={open} />
-          <span>
-            {open
-              ? `Hide ${item.older.length} earlier ${item.productName} ${pluralReleases(item.older.length)}`
-              : `${item.older.length} earlier ${item.productName} ${pluralReleases(item.older.length)} today`}
+    <div className={topBorder}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className={`flex items-center gap-2 w-full text-left py-2.5 px-3 ${subduedLinkClass}`}
+      >
+        <Caret open={open} />
+        <span className="text-[12.5px] font-medium text-stone-700 dark:text-stone-200">
+          {item.label}
+        </span>
+        <span className="text-[12px] text-stone-400 dark:text-stone-500 font-mono tabular-nums">
+          · {item.releases.length} {pluralReleases(item.releases.length)}
+        </span>
+        {!open && (
+          <span className="inline-flex items-center gap-1 ml-1 flex-wrap min-w-0">
+            {pills.map((r) => (
+              <span
+                key={r.id ?? r.url ?? r.title}
+                className="font-mono text-[10.5px] px-1.5 py-px rounded bg-stone-100 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 text-stone-500 dark:text-stone-400 whitespace-nowrap"
+              >
+                {r.version ?? r.title}
+              </span>
+            ))}
+            {overflow > 0 && (
+              <span className="text-[11px] text-stone-400 dark:text-stone-500">+{overflow}</span>
+            )}
           </span>
-          {!open && (
-            <span className="inline-flex items-center gap-1 ml-1 flex-wrap">
-              {item.older.slice(0, 4).map((r) => (
-                <span
-                  key={r.id ?? r.url ?? r.title}
-                  className="font-mono text-[10.5px] px-1.5 py-px rounded bg-stone-100 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 text-stone-500 dark:text-stone-400 whitespace-nowrap"
-                >
-                  {r.version ?? r.title}
-                </span>
-              ))}
-              {item.older.length > 4 && (
-                <span className="text-[11px] text-stone-400 dark:text-stone-500">
-                  +{item.older.length - 4}
-                </span>
-              )}
-            </span>
-          )}
-        </button>
-      </div>
+        )}
+      </button>
       {open &&
-        item.older.map((r) => (
+        item.releases.map((r) => (
           <div
             key={r.id ?? r.url ?? r.title}
             className="border-t border-stone-200 dark:border-stone-800 border-l-2 border-l-stone-300 dark:border-l-stone-700"
@@ -719,7 +652,7 @@ function TagItem({ item, index }: { item: TagListItem; index: number }) {
             <CommitLogRow release={r} />
           </div>
         ))}
-    </>
+    </div>
   );
 }
 
