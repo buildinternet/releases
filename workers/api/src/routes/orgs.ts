@@ -75,6 +75,7 @@ import { isValidBearerAuth } from "../middleware/auth.js";
 import { orgToMarkdown, orgReleaseFeedToMarkdown } from "@releases/rendering/formatters.js";
 import { assemblePlaybook } from "@releases/ai-internal/playbook";
 import { appStoreSourceInfo } from "@releases/adapters/appstore";
+import { videoSourceInfo } from "@releases/adapters/source-meta";
 import type { Env } from "../index.js";
 import {
   getOrgsWithStats,
@@ -1838,6 +1839,7 @@ orgRoutes.get(
     const mediaOrigin = c.env.MEDIA_ORIGIN ?? "";
     const releasesFormatted = pageRows.map((r) => {
       const appStore = appStoreSourceInfo(r.source_type, r.source_metadata);
+      const video = videoSourceInfo(r.source_type, r.source_metadata) ?? undefined;
       const product = r.product_slug
         ? { slug: r.product_slug, name: r.product_name ?? r.product_slug }
         : null;
@@ -1860,6 +1862,7 @@ orgRoutes.get(
           name: r.source_name,
           type: r.source_type,
           appStore: appStore ?? undefined,
+          video,
         },
         product,
         // Resolved grouping identity — COALESCE(product, source). Lets the web

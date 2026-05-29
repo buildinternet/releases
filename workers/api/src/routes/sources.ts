@@ -104,7 +104,7 @@ import { filterJunkMedia } from "@releases/rendering/media-filter.js";
 import { processMediaForR2, selectExistingReleaseUrls } from "../lib/media-ingest.js";
 import { fetchOne, embedReleasesForSource } from "../cron/poll-fetch.js";
 import { getSourceMeta, isGitHubFetched } from "@releases/adapters/feed.js";
-import { isAppStoreFetched } from "@releases/adapters/source-meta";
+import { isAppStoreFetched, isVideoFetched, videoSourceInfo } from "@releases/adapters/source-meta";
 import { appStoreSourceInfo } from "@releases/adapters/appstore";
 import { sanitizeVersion } from "@releases/adapters/extract/shared.js";
 import {
@@ -147,6 +147,7 @@ import { classifyDbError } from "@releases/lib/db-errors";
 import { getSecret } from "@releases/lib/secrets";
 import { classifyRepoStatus } from "../lib/github-repo-status.js";
 import { materializeAppStoreSource } from "../lib/appstore-materialize.js";
+import { materializeVideoSource } from "../lib/video-materialize.js";
 
 export const sourceRoutes = new Hono<Env>();
 
@@ -602,6 +603,7 @@ sourceRoutes.post("/sources/:slug/fetch", postSourceFetchRoute, async (c) => {
     src.type === "feed" ||
     isGitHubFetched(src, meta) ||
     isAppStoreFetched(src) ||
+    isVideoFetched(src) ||
     (src.type === "scrape" && meta.feedUrl != null)
   ) {
     // Feed, GitHub, App Store, and scrape sources with a discovered feedUrl: fetch server-side
@@ -2254,6 +2256,87 @@ sourceRoutes.post(
 );
 
 sourceRoutes.post(
+  "/sources/video",
+  describeRoute({
+    hide: hideInProduction,
+    tags: ["Sources"],
+    summary: "Materialize a video source (YouTube channel/playlist)",
+    description:
+      "Resolves a YouTube channel or playlist URL into its Atom feed and creates a `video` source under the given org, backfilling current videos as releases (description-only, summarizer-cleaned, marketing-filtered). `orgSlug` or `orgId` is required. Idempotent on the resolved feed URL. Write — requires a Bearer token.",
+    security: [{ bearerAuth: [] }],
+    responses: {
+      200: { description: "A video source already existed for this feed" },
+      201: { description: "Video source materialized" },
+      400: { description: "Missing/unrecognized url, or orgSlug/orgId not supplied" },
+      404: { description: "Org not found" },
+      502: { description: "Could not fetch the video feed (private or temporarily unavailable)" },
+    },
+  }),
+  async (c) => {
+    const body = (await c.req.json().catch(() => null)) as {
+      url?: string;
+      orgSlug?: string;
+      orgId?: string;
+      productId?: string;
+    } | null;
+
+    if (!body?.url) {
+      return c.json({ error: "bad_request", message: "url is required" }, 400);
+    }
+    if (!body.orgSlug && !body.orgId) {
+      return c.json({ error: "bad_request", message: "orgSlug or orgId is required" }, 400);
+    }
+
+    const db = createDb(c.env.DB);
+    const result = await materializeVideoSource(
+      db,
+      {
+        RELEASES_INDEX: c.env.RELEASES_INDEX,
+        CHANGELOG_CHUNKS_INDEX: c.env.CHANGELOG_CHUNKS_INDEX,
+        EMBEDDING_PROVIDER: c.env.EMBEDDING_PROVIDER,
+        VOYAGE_API_KEY: c.env.VOYAGE_API_KEY,
+        OPENAI_API_KEY: c.env.OPENAI_API_KEY,
+        ANTHROPIC_API_KEY: c.env.ANTHROPIC_API_KEY,
+        ANTHROPIC_BASE_URL: c.env.ANTHROPIC_BASE_URL,
+        AI_GATEWAY_TOKEN: c.env.AI_GATEWAY_TOKEN,
+        RELEASE_HUB: c.env.RELEASE_HUB,
+        WEBHOOK_DELIVERY_QUEUE: c.env.WEBHOOK_DELIVERY_QUEUE,
+        DB: c.env.DB,
+        DISCOVERY_WORKER: c.env.DISCOVERY_WORKER,
+        MEDIA_R2_UPLOAD_ENABLED: c.env.MEDIA_R2_UPLOAD_ENABLED,
+        MEDIA: c.env.MEDIA,
+      },
+      { url: body.url, orgSlug: body.orgSlug, orgId: body.orgId, productId: body.productId },
+    );
+
+    if (result.status === "bad_request") {
+      return c.json(
+        { error: "bad_request", message: "Could not resolve a video feed from that URL" },
+        400,
+      );
+    }
+    if (result.status === "org_not_found") {
+      return c.json({ error: "not_found", message: "Org not found" }, 404);
+    }
+    if (result.status === "feed_unavailable") {
+      return c.json(
+        {
+          error: "feed_unavailable",
+          message: "Could not fetch the video feed (it may be private or temporarily unavailable)",
+        },
+        502,
+      );
+    }
+    try {
+      c.executionCtx.waitUntil(embedSourceSideEffect(c.env, db, result.source.id));
+    } catch {
+      // no ExecutionContext in tests — embedding is best-effort
+    }
+    return c.json(result, result.status === "existing" ? 200 : 201);
+  },
+);
+
+sourceRoutes.post(
   "/sources",
   describeRoute({
     hide: hideInProduction,
@@ -2836,6 +2919,7 @@ sourceRoutes.get(
       rows[0];
     const org = orgSlug && orgName ? { slug: orgSlug, name: orgName } : null;
     const appStore = appStoreSourceInfo(sourceType ?? "", sourceMetadata);
+    const video = videoSourceInfo(sourceType ?? "", sourceMetadata);
     const mediaOrigin = c.env.MEDIA_ORIGIN ?? "";
 
     const media = parseReleaseMedia(release.media as string | null, mediaOrigin);
@@ -2857,6 +2941,7 @@ sourceRoutes.get(
       org,
       composition,
       appStore,
+      video,
     };
 
     if (wantsMarkdown(c)) {

@@ -191,6 +191,8 @@ export interface HybridReleaseHit {
        * Lets the web search card render the compact app-update treatment. #1206
        */
       appStore: { platform: "ios" | "macos"; iconUrl: string | null } | null;
+      /** Video provider tag for `type: "video"` sources, null otherwise. #video */
+      video: { provider: "youtube" | "vimeo" | "wistia" } | null;
     };
     /** Owning product slug — null for orphan sources; powers product-aware byline links. */
     productSlug: string | null;
@@ -710,6 +712,31 @@ function appStoreInfoFromMetadata(
   return { platform, iconUrl };
 }
 
+/**
+ * Video provider tag from a source's `metadata` JSON. Returns null for
+ * non-`video` sources, unparseable metadata, or missing/invalid provider.
+ * Mirrors `videoSourceInfo` in packages/adapters/src/source-meta.ts —
+ * duplicated here to keep the search package's dep graph at `releases-core`
+ * only (same reason `appStoreInfoFromMetadata` is self-contained).
+ */
+export function videoInfoFromMetadata(
+  type: string,
+  metadataJson: string | null,
+): { provider: "youtube" | "vimeo" | "wistia" } | null {
+  if (type !== "video") return null;
+  try {
+    const block = (JSON.parse(metadataJson ?? "{}") as { video?: { provider?: unknown } } | null)
+      ?.video;
+    const provider = block?.provider;
+    if (provider === "youtube" || provider === "vimeo" || provider === "wistia") {
+      return { provider };
+    }
+  } catch {
+    // fall through
+  }
+  return null;
+}
+
 async function buildReleaseHits(
   db: WorkerD1Db,
   entries: Array<{ id: string; score: number }>,
@@ -756,6 +783,7 @@ async function buildReleaseHits(
           name: row.sourceName,
           type: row.sourceType,
           appStore: appStoreInfoFromMetadata(row.sourceType, row.sourceMetadata),
+          video: videoInfoFromMetadata(row.sourceType, row.sourceMetadata),
         },
         productSlug: row.productSlug,
         orgSlug: row.orgSlug,

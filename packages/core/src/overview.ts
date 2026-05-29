@@ -27,6 +27,7 @@ export const PER_SOURCE_CAPS: Record<Source["type"], number> = {
   feed: 20,
   agent: 20,
   appstore: 20,
+  video: 20,
 };
 
 /**

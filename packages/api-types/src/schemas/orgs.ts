@@ -7,6 +7,7 @@ import {
   OverviewPageItemSchema,
   PaginationSchema,
   ReleaseItemSchema,
+  VideoSourceInfoSchema,
 } from "./shared.js";
 import { SourceListItemSchema } from "./sources.js";
 import { ProductListItemSchema } from "./products.js";
@@ -341,6 +342,7 @@ export const OrgReleaseItemSchema = ReleaseItemSchema.extend({
     name: z.string(),
     type: z.string(),
     appStore: AppStoreSourceInfoSchema.optional(),
+    video: VideoSourceInfoSchema.optional(),
   }),
   /**
    * Owning product, when the release's source is grouped under a product.

@@ -22,6 +22,12 @@ export const AppStoreSourceInfoSchema = z.object({
   iconUrl: z.string().nullable(),
 });
 
+/** Video provider tag, present only when `sourceType === "video"`. Thumbnail
+ * and watch URL reuse the release's existing `media[]` / `url`. */
+export const VideoSourceInfoSchema = z.object({
+  provider: z.enum(["youtube", "vimeo", "wistia"]),
+});
+
 export const PaginationSchema = z.object({
   page: z.number().int().min(1),
   pageSize: z.number().int().min(1),

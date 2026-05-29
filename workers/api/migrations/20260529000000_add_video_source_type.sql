@@ -1,0 +1,10 @@
+-- Marker migration (no DDL): adds the "video" value to SOURCE_TYPES in
+-- packages/core/src/source-enums.ts and the inline type-enum literals in
+-- packages/core/src/schema.ts (sources table + sources_active/sources_visible
+-- views). sources.type is a free-form TEXT column with no CHECK constraint
+-- (see 20260520010000_squashed_baseline.sql), so storing a new type value
+-- requires no schema change — this file exists only to pair the schema.ts edit
+-- with a migration per the CI "schema-change" gate.
+--
+-- The `video` source type indexes launch videos (YouTube first) via the
+-- provider's Atom feed. See docs/superpowers/specs/2026-05-29-video-source-type-design.md.

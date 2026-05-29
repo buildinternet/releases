@@ -200,4 +200,5 @@ enum SourceType {
   feed
   github
   scrape
+  video
 }

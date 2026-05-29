@@ -5,6 +5,7 @@ import { SourceReleaseList } from "@/components/source-release-list";
 import { RelatedRail } from "@/components/related-rail";
 import { buildReleaseItemListJsonLd, buildSourceEntityJsonLd } from "@/lib/schema-org";
 import { getAppInfo } from "@/lib/app-source";
+import { getVideoInfo } from "@/lib/video-source";
 
 /**
  * Two rails under the release list:
@@ -59,6 +60,12 @@ export function SourceView({ orgSlug, source }: { orgSlug: string; source: Sourc
     ? { label: appInfo.label, iconUrl: appInfo.iconUrl, appName: source.name }
     : null;
 
+  // Video sources render a thumbnail-forward row with a "Watch on {provider}"
+  // subline. Every release on a source page is the same provider, so one
+  // VideoRowInfo applies to the whole list. getVideoInfo returns null for
+  // non-video sources.
+  const videoInfo = getVideoInfo(source);
+
   const sourceUrl = `https://releases.sh/${orgSlug}/${sourceSlug}`;
   const releaseListId = `${sourceUrl}#releases`;
   const jsonLd = {
@@ -99,6 +106,7 @@ export function SourceView({ orgSlug, source }: { orgSlug: string; source: Sourc
         initialReleases={source.releases}
         initialCursor={initialCursor}
         appStore={appStore}
+        video={videoInfo}
       />
       <RelatedRails
         anchorReleaseId={source.releases[0]?.id ?? null}

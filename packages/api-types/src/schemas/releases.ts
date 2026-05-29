@@ -5,6 +5,7 @@ import {
   MediaItemSchema,
   ReleaseCompositionSchema,
   ReleaseTypeSchema,
+  VideoSourceInfoSchema,
 } from "./shared.js";
 
 // ReleaseCompositionSchema lives in ./shared.js (single source of truth) — both
@@ -200,6 +201,7 @@ export const ReleaseDetailResponseSchema = z.object({
   org: ReleaseDetailOrgSchema.nullable(),
   composition: ReleaseCompositionSchema.nullable(),
   appStore: AppStoreSourceInfoSchema.nullable().optional(),
+  video: VideoSourceInfoSchema.nullable().optional(),
 });
 
 /**

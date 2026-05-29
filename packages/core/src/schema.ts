@@ -311,7 +311,9 @@ export const sources = sqliteTable(
     id: text("id").primaryKey().$defaultFn(newSourceId),
     name: text("name").notNull(),
     slug: text("slug").notNull(),
-    type: text("type", { enum: ["github", "scrape", "feed", "agent", "appstore"] }).notNull(),
+    type: text("type", {
+      enum: ["github", "scrape", "feed", "agent", "appstore", "video"],
+    }).notNull(),
     url: text("url").notNull(),
     orgId: text("org_id")
       .notNull()
@@ -1007,7 +1009,9 @@ export const sourcesActive = sqliteView("sources_active", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   slug: text("slug").notNull(),
-  type: text("type", { enum: ["github", "scrape", "feed", "agent", "appstore"] }).notNull(),
+  type: text("type", {
+    enum: ["github", "scrape", "feed", "agent", "appstore", "video"],
+  }).notNull(),
   url: text("url").notNull(),
   orgId: text("org_id").notNull(),
   productId: text("product_id"),
@@ -1067,7 +1071,9 @@ export const sourcesVisible = sqliteView("sources_visible", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   slug: text("slug").notNull(),
-  type: text("type", { enum: ["github", "scrape", "feed", "agent", "appstore"] }).notNull(),
+  type: text("type", {
+    enum: ["github", "scrape", "feed", "agent", "appstore", "video"],
+  }).notNull(),
   url: text("url").notNull(),
   orgId: text("org_id").notNull(),
   productId: text("product_id"),

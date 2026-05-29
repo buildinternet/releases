@@ -703,6 +703,8 @@ export interface ReleaseDetail {
   composition?: ReleaseComposition | null;
   /** App Store platform + icon, present only when `sourceType === "appstore"`. */
   appStore?: { platform: "ios" | "macos"; iconUrl: string | null } | null;
+  /** Video provider tag, present only when `sourceType === "video"`. */
+  video?: { provider: "youtube" | "vimeo" | "wistia" } | null;
 }
 
 export type ReleaseCoverageSibling = z.infer<typeof ReleaseCoverageSiblingSchema>;
