@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { type CollectionReleaseItem } from "@/lib/api";
 import {
+  isAppStore,
   isTag,
   rollupTags,
   type RollupCandidate,
@@ -153,6 +154,125 @@ describe("rollupTags", () => {
     expect(isTag(rel({ org: "cf", source: "cf-changelog", type: "feed" }))).toBe(false);
     expect(isTag(rel({ org: "cf", source: "blog", type: "scrape" }))).toBe(false);
     expect(isTag(rel({ org: "cf", source: "discovery", type: "agent" }))).toBe(false);
+  });
+
+  // App Store same-day version rollup (#1236). Unlike SDK tags (keyed
+  // product ?? source so a monorepo's package bumps unify), an appstore source
+  // is keyed per-source so the two platforms of one product never merge.
+  describe("App Store (#1236)", () => {
+    test("collapses 2+ versions of one app, keyed per-source even under a product", () => {
+      const tags = [
+        rel({
+          org: "slack",
+          source: "slack-ios",
+          sourceName: "Slack",
+          product: "slack",
+          version: "25.5.2",
+          type: "appstore",
+        }),
+        rel({
+          org: "slack",
+          source: "slack-ios",
+          sourceName: "Slack",
+          product: "slack",
+          version: "25.5.1",
+          type: "appstore",
+        }),
+      ];
+
+      const out = rollupTags(tags);
+
+      expect(out).toHaveLength(1);
+      const rollup = out[0] as Extract<TagListItem, { kind: "rollup" }>;
+      expect(rollup.kind).toBe("rollup");
+      // Per-source key (not the product) so iOS/macOS stay distinct; label is
+      // the app name (source name), not the product name.
+      expect(rollup.groupKey).toBe("slack::slack-ios");
+      expect(rollup.label).toBe("Slack");
+      expect(rollup.releases).toHaveLength(2);
+    });
+
+    test("keeps iOS and macOS of one product as two separate buckets", () => {
+      const tags = [
+        rel({
+          org: "slack",
+          source: "slack-ios",
+          sourceName: "Slack",
+          product: "slack",
+          version: "25.5.2",
+          type: "appstore",
+        }),
+        rel({
+          org: "slack",
+          source: "slack-ios",
+          sourceName: "Slack",
+          product: "slack",
+          version: "25.5.1",
+          type: "appstore",
+        }),
+        rel({
+          org: "slack",
+          source: "slack-macos",
+          sourceName: "Slack",
+          product: "slack",
+          version: "25.5.2",
+          type: "appstore",
+        }),
+        rel({
+          org: "slack",
+          source: "slack-macos",
+          sourceName: "Slack",
+          product: "slack",
+          version: "25.5.1",
+          type: "appstore",
+        }),
+      ];
+
+      const rollups = rollupsOf(rollupTags(tags));
+
+      expect(rollups).toHaveLength(2);
+      expect(rollups.map((r) => r.groupKey).sort()).toEqual([
+        "slack::slack-ios",
+        "slack::slack-macos",
+      ]);
+    });
+
+    test("does not merge an app's versions with a same-org GitHub cluster", () => {
+      const tags = [
+        rel({
+          org: "shopify",
+          source: "shopify-ios",
+          sourceName: "Shopify",
+          product: "shopify",
+          version: "9.0.0",
+          type: "appstore",
+        }),
+        rel({
+          org: "shopify",
+          source: "shopify-ios",
+          sourceName: "Shopify",
+          product: "shopify",
+          version: "8.9.0",
+          type: "appstore",
+        }),
+        rel({ org: "shopify", source: "cli", sourceName: "Shopify CLI", version: "3.0.1" }),
+        rel({ org: "shopify", source: "cli", sourceName: "Shopify CLI", version: "3.0.0" }),
+      ];
+
+      const rollups = rollupsOf(rollupTags(tags));
+
+      expect(rollups).toHaveLength(2);
+      const byKey = Object.fromEntries(rollups.map((r) => [r.groupKey, r.label]));
+      expect(byKey["shopify::shopify-ios"]).toBe("Shopify");
+      expect(byKey["shopify::cli"]).toBe("Shopify CLI");
+    });
+
+    test("isAppStore identifies appstore sources; appstore is not a GitHub tag", () => {
+      expect(isAppStore(rel({ org: "slack", source: "slack-ios", type: "appstore" }))).toBe(true);
+      expect(isAppStore(rel({ org: "cf", source: "workerd", type: "github" }))).toBe(false);
+      expect(isAppStore(rel({ org: "cf", source: "blog", type: "feed" }))).toBe(false);
+      expect(isTag(rel({ org: "slack", source: "slack-ios", type: "appstore" }))).toBe(false);
+    });
   });
 
   // The org releases feed (#1233) reuses rollupTags on OrgReleaseItem rows,
