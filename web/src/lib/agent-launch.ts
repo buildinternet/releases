@@ -29,15 +29,28 @@ export const CLAUDE_CODE_MCP_CMD = `claude mcp add --transport http releases ${M
 export const CODEX_MCP_CMD = `codex mcp add releases --url ${MCP_REMOTE_URL}`;
 
 /**
- * Paste-into-your-agent CLI setup prompt — identical for every agent
- * (browse.sh-faithful). Points at the public `llms.txt` (served via the
- * Next.js rewrite to `/api/llms`) and the agent skill.
+ * The setup instruction handed to an agent for the CLI target — as a prompt
+ * deeplink where the agent supports one, or copied to the clipboard otherwise.
+ * Points at the public `llms.txt` (served via the Next.js rewrite to
+ * `/api/llms`) and the agent skill.
  */
 export const CLI_SETUP_PROMPT =
   "Set up the releases.sh CLI so you can look up product changelogs and release notes on demand. " +
   "Run: npm install -g @buildinternet/releases. " +
   "Then read https://releases.sh/llms.txt and follow it to set up the skill " +
   "(npx skills add buildinternet/releases-cli).";
+
+const encodedCliPrompt = encodeURIComponent(CLI_SETUP_PROMPT);
+
+/**
+ * Prompt deeplinks — open the agent with `CLI_SETUP_PROMPT` pre-filled (never
+ * auto-sent). Only Cursor and Claude Code publish a documented prompt scheme;
+ * VS Code and Codex fall back to copy.
+ *   Cursor:      https://cursor.com/docs/integrations/deeplinks
+ *   Claude Code: https://code.claude.com/docs/en/deep-links (v2.1.91+)
+ */
+export const cursorCliHref = `cursor://anysphere.cursor-deeplink/prompt?text=${encodedCliPrompt}`;
+export const claudeCodeCliHref = `claude-cli://open?q=${encodedCliPrompt}`;
 
 export type AgentId = "cursor" | "vscode" | "claude-code" | "codex";
 
@@ -60,32 +73,37 @@ export type Agent = {
   cli: AgentAction;
 };
 
-const cliAction: AgentAction = { kind: "copy", command: CLI_SETUP_PROMPT };
+/** CLI fallback for agents with no prompt scheme — copy the setup prompt. */
+const cliCopy: AgentAction = { kind: "copy", command: CLI_SETUP_PROMPT };
 
+// Per agent, each target either launches (deeplink) or copies, depending on
+// which schemes that agent actually publishes:
+//   - cli target:  Cursor + Claude Code launch via prompt deeplink; the rest copy.
+//   - mcp target:  Cursor + VS Code launch via MCP-install deeplink; the rest copy.
 export const AGENTS: readonly Agent[] = [
   {
     id: "cursor",
     label: "Cursor",
     mcp: { kind: "deeplink", href: cursorMcpHref },
-    cli: cliAction,
+    cli: { kind: "deeplink", href: cursorCliHref },
   },
   {
     id: "vscode",
     label: "VS Code",
     mcp: { kind: "deeplink", href: vscodeMcpHref },
-    cli: cliAction,
+    cli: cliCopy,
   },
   {
     id: "claude-code",
     label: "Claude Code",
     mcp: { kind: "copy", command: CLAUDE_CODE_MCP_CMD },
-    cli: cliAction,
+    cli: { kind: "deeplink", href: claudeCodeCliHref },
   },
   {
     id: "codex",
     label: "Codex",
     mcp: { kind: "copy", command: CODEX_MCP_CMD },
-    cli: cliAction,
+    cli: cliCopy,
   },
 ];
 

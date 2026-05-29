@@ -7,33 +7,45 @@
 ## Summary
 
 Add a browse.sh-style **"Open in ▽"** control next to our install commands. Clicking
-an agent (Cursor, Claude Code, Codex, VS Code) launches that agent set up to use
-releases.sh — either by **adding the MCP server** (when the control is attached to the
-MCP command) or by **copying a paste-into-your-agent CLI setup prompt** (when attached to
-a CLI command). One reusable component, parameterized by which command it sits on.
+an agent (Cursor, Claude Code, Codex, VS Code) sets that agent up to use releases.sh —
+either by **adding the MCP server** (when the control is attached to the MCP command) or by
+**handing the agent a CLI setup prompt** (when attached to a CLI command). Each agent
+either **launches** (a real URI-scheme deeplink that opens the app with the action
+pre-filled) or **copies** (clipboard, with explicit "Copied" feedback), depending on which
+schemes that agent actually publishes. One reusable component, parameterized by which
+command it sits on.
 
 ## Background: what browse.sh actually does
 
-Instrumenting browse.sh's dropdown (patching `navigator.clipboard.writeText` and clicking
-each agent) showed that **every agent copies the identical text**:
+browse.sh's dropdown items are real `<a href>` **prompt deeplinks**, not clipboard copies.
+Opening the menu and reading the live hrefs shows one anchor per agent, each carrying the
+same setup prompt URL-encoded into an app scheme:
 
-> Add Browse CLI as a skill: `https://browse.sh/`. Run: `npm i -g browse`. Then read
-> `https://browse.sh/llms.txt` and follow it to set up the skill.
+- Cursor → `cursor://anysphere.cursor-deeplink/prompt?text=Set%20up%20the%20Browse%20CLI…`
+- Codex → `codex://new?prompt=…`
+- Conductor → `conductor://prompt=…`
+- Claude Code → `claude-cli://open?q=…`
 
-So browse.sh's "Open in [agent]" is a **copy-a-setup-prompt** pattern, not a deep-link
-pattern. The agent list + checkmark are cosmetic (remembered preference); the copied text
-does not change per agent. browse.sh is CLI-only, so it only has the CLI variant.
+(An earlier pass mis-instrumented this by patching `clipboard.writeText`; the decisive tell
+is that hovering an item shows an app-intent URL in the status bar — i.e. it's an anchor.)
+The prompt text is identical across agents; only the scheme differs. browse.sh is CLI-only,
+so it only has the CLI variant, and it ships a deeplink even for agents whose scheme is
+unverified.
 
 We have more surface than browse.sh — a CLI **and** a remote MCP server with native install
-affordances — so we do **both**, each on its own command, and the MCP variant uses real
-agent-native installs where they exist.
+affordances — so we do **both** targets, and within each target an agent launches via
+deeplink where a documented scheme exists and copies otherwise.
 
 ## Goals
 
 - A reusable "Open in [agent]" control matching the screenshot's form factor.
-- CLI command → copy a single setup prompt (browse.sh-faithful, identical for all agents).
-- MCP command → agent-native add: real deep link for Cursor/VS Code, copy-command for
-  Claude Code/Codex.
+- Every item visibly _does something_: a launch item is an `<a href>` (shows its app URL on
+  hover, opens the app on click); a copy item shows an explicit "Copied" label.
+- **CLI command** → launch the agent with the setup prompt pre-filled where a prompt scheme
+  exists (Cursor, Claude Code), copy the prompt otherwise (VS Code, Codex). The prompt text
+  is identical regardless of delivery (browse.sh-faithful).
+- **MCP command** → add the server: real deeplink for Cursor/VS Code, copy the `mcp add`
+  command for Claude Code/Codex.
 - Placement: homepage install block + the two docs pages (`/docs/installation`, `/docs/api/mcp`).
 - Consolidate the existing 3 ad-hoc MCP buttons (`mcp-install-buttons.tsx`) into this one
   component, sharing a single deep-link encoder.
@@ -43,7 +55,11 @@ agent-native installs where they exist.
 - Entity-page (org/source/product) placement. (Component is reusable; add later.)
 - Search-results placement.
 - The catalog-row "scoped prompt" variant (e.g. "show what {org} shipped").
-- Per-agent customization of the CLI prompt (identical text for now, like browse.sh).
+- Per-agent customization of the CLI prompt _text_ (identical for all agents; only the
+  delivery mechanism — deeplink vs copy — varies).
+- Shipping unverified app schemes. Codex's `codex://` (which browse.sh uses) is unconfirmed,
+  so Codex copies rather than launching; flip it to a deeplink later if the scheme is
+  verified. VS Code has no prompt/chat scheme at all (only file/settings/MCP-install).
 - A global toast system (copy feedback is inline).
 - Adding/keeping a VS Code Insiders entry (dropped; trivially re-addable via the registry).
 

@@ -190,7 +190,7 @@ function AgentLaunchItem({
         copy(action.command);
         onPick?.(agent.id);
       }}
-      title={copied ? "Copied — paste it in your terminal" : action.command}
+      title={copied ? "Copied to clipboard" : action.command}
       className={rowClass}
     >
       {content}
@@ -198,14 +198,28 @@ function AgentLaunchItem({
   );
 }
 
-/** Right-aligned trailing status: the copied state wins, else the remembered check. */
+/**
+ * Right-aligned trailing status. A fresh copy shows an explicit "Copied" label
+ * (the only feedback for copy rows, so it must be unmissable); otherwise the
+ * remembered agent gets a subtle check.
+ */
 function Trailing({ copied, remembered }: { copied: boolean; remembered: boolean }) {
-  if (!copied && !remembered) return null;
-  return (
-    <span className="ml-auto shrink-0 text-stone-400 dark:text-stone-500">
-      <CopyIcon copied size={14} />
-    </span>
-  );
+  if (copied) {
+    return (
+      <span className="ml-auto inline-flex shrink-0 items-center gap-1 text-[12px] font-medium text-emerald-600 dark:text-emerald-400">
+        <CopyIcon copied size={14} />
+        Copied
+      </span>
+    );
+  }
+  if (remembered) {
+    return (
+      <span className="ml-auto shrink-0 text-stone-400 dark:text-stone-500">
+        <CopyIcon copied size={14} />
+      </span>
+    );
+  }
+  return null;
 }
 
 /** Monochrome agent marks (currentColor) keyed by agent id. */

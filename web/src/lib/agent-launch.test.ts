@@ -5,6 +5,8 @@ import {
   CLI_SETUP_PROMPT,
   CODEX_MCP_CMD,
   MCP_REMOTE_URL,
+  claudeCodeCliHref,
+  cursorCliHref,
   cursorMcpHref,
   vscodeMcpHref,
 } from "./agent-launch";
@@ -47,10 +49,27 @@ describe("agent-launch", () => {
     expect(byId.codex.mcp).toEqual({ kind: "copy", command: CODEX_MCP_CMD });
   });
 
-  test("every agent copies the same CLI setup prompt (browse.sh-faithful)", () => {
-    for (const agent of AGENTS) {
-      expect(agent.cli).toEqual({ kind: "copy", command: CLI_SETUP_PROMPT });
-    }
+  test("CLI target launches where a prompt scheme exists, copies otherwise", () => {
+    const byId = Object.fromEntries(AGENTS.map((a) => [a.id, a]));
+    // Cursor + Claude Code have documented prompt deeplinks → launch.
+    expect(byId.cursor.cli).toEqual({ kind: "deeplink", href: cursorCliHref });
+    expect(byId["claude-code"].cli).toEqual({ kind: "deeplink", href: claudeCodeCliHref });
+    // VS Code + Codex have no prompt scheme → copy the same setup prompt.
+    expect(byId.vscode.cli).toEqual({ kind: "copy", command: CLI_SETUP_PROMPT });
+    expect(byId.codex.cli).toEqual({ kind: "copy", command: CLI_SETUP_PROMPT });
+  });
+
+  test("prompt deeplinks carry the URL-encoded CLI setup prompt", () => {
+    const cursorPrefix = "cursor://anysphere.cursor-deeplink/prompt?text=";
+    expect(cursorCliHref.startsWith(cursorPrefix)).toBe(true);
+    expect(decodeURIComponent(cursorCliHref.slice(cursorPrefix.length))).toBe(CLI_SETUP_PROMPT);
+
+    const claudePrefix = "claude-cli://open?q=";
+    expect(claudeCodeCliHref.startsWith(claudePrefix)).toBe(true);
+    expect(decodeURIComponent(claudeCodeCliHref.slice(claudePrefix.length))).toBe(CLI_SETUP_PROMPT);
+  });
+
+  test("the CLI setup prompt names the install command, llms.txt, and skill", () => {
     expect(CLI_SETUP_PROMPT).toContain("npm install -g @buildinternet/releases");
     expect(CLI_SETUP_PROMPT).toContain("https://releases.sh/llms.txt");
     expect(CLI_SETUP_PROMPT).toContain("npx skills add buildinternet/releases-cli");
