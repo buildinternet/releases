@@ -234,8 +234,12 @@ export default async function ReleaseDetailPage({ params }: { params: Promise<{ 
               </span>
             )}
           </div>
-          <CompositionChip composition={release.composition} className="mt-3" />
-          <CliCommand identifier={release.id} />
+          {/* Composition legend + copy-command stack vertically — both are
+              inline-flex, so without a block wrapper they collide on one line. */}
+          <div className="mt-3 flex flex-col items-start gap-3">
+            <CompositionChip composition={release.composition} />
+            <CliCommand identifier={release.id} className="" />
+          </div>
         </div>
 
         {/* Content */}
