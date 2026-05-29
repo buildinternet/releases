@@ -15,6 +15,11 @@ export type RollupCandidate = {
   source: { slug: string; name: string; type: string };
   product?: { slug: string; name: string } | null;
   org?: { slug: string; name: string };
+  // Server-resolved grouping identity — COALESCE(product, source) (#1234).
+  // Preferred when present; absent on older API responses, where we fall back
+  // to deriving it from product ?? source below.
+  groupSlug?: string;
+  groupName?: string;
 };
 
 // GitHub releases are tag drops; everything else (RSS, scrape, agent, atom)
@@ -50,11 +55,11 @@ export function rollupTags<R extends RollupCandidate>(tags: R[]): TagListItem<R>
   const buckets = new Map<string, { label: string; releases: R[] }>();
 
   for (const r of tags) {
-    const groupSlug = r.product?.slug ?? r.source.slug;
+    const groupSlug = r.groupSlug ?? r.product?.slug ?? r.source.slug;
     const k = `${r.org?.slug ?? ""}::${groupSlug}`;
     let bucket = buckets.get(k);
     if (!bucket) {
-      bucket = { label: r.product?.name ?? r.source.name, releases: [] };
+      bucket = { label: r.groupName ?? r.product?.name ?? r.source.name, releases: [] };
       buckets.set(k, bucket);
     }
     bucket.releases.push(r);

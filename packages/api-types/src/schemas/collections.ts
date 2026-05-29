@@ -107,6 +107,16 @@ export const CollectionReleaseItemSchema = ReleaseItemSchema.extend({
    * typecheck — clients should treat missing and `null` identically.
    */
   product: z.object({ slug: z.string(), name: z.string() }).nullable().optional(),
+  /**
+   * Server-resolved grouping identity — `COALESCE(product.slug, source.slug)` /
+   * `COALESCE(product.name, source.name)`. The web release feeds key and label
+   * SDK/package-cluster rollups on these instead of reconstructing
+   * `product ?? source` client-side. Optional on the wire: older workers omit
+   * them, so clients must fall back to deriving from `product ?? source`. Never
+   * null when present (`source` is always set). #1234
+   */
+  groupSlug: z.string().optional(),
+  groupName: z.string().optional(),
 });
 
 /** Cursor pagination shape matches `/v1/orgs/:slug/releases`. */

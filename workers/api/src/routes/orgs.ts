@@ -1838,6 +1838,9 @@ orgRoutes.get(
     const mediaOrigin = c.env.MEDIA_ORIGIN ?? "";
     const releasesFormatted = pageRows.map((r) => {
       const appStore = appStoreSourceInfo(r.source_type, r.source_metadata);
+      const product = r.product_slug
+        ? { slug: r.product_slug, name: r.product_name ?? r.product_slug }
+        : null;
       return {
         id: r.id,
         version: r.version,
@@ -1858,9 +1861,11 @@ orgRoutes.get(
           type: r.source_type,
           appStore: appStore ?? undefined,
         },
-        product: r.product_slug
-          ? { slug: r.product_slug, name: r.product_name ?? r.product_slug }
-          : null,
+        product,
+        // Resolved grouping identity — COALESCE(product, source). Lets the web
+        // feed key/label SDK-cluster rollups without reconstructing it. #1234
+        groupSlug: product?.slug ?? r.source_slug,
+        groupName: product?.name ?? r.source_name,
         coverageCount: r.coverage_count,
         contentChars: r.content_chars,
         contentTokens: r.content_tokens,
