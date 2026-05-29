@@ -84,6 +84,9 @@ const ALLOWLIST = new Set<string>([
   "PATCH /orgs/:orgSlug/sources/:sourceSlug",
   "DELETE /sources/:slug",
   "POST /sources/:slug/fetch",
+  // Admin-only Firecrawl monitor sync (Bearer required via the publicReadRoutes
+  // `sources` prefix); operator/agent-internal, not a stable public surface.
+  "POST /sources/:slug/firecrawl/sync",
   "POST /sources/:slug/releases/batch",
   "POST /orgs/:orgSlug/sources/:sourceSlug/releases/batch",
   "DELETE /sources/:slug/releases",
