@@ -23,6 +23,7 @@ import { CompositionChip } from "@/components/composition-chip";
 import { ReleaseAdminMenu } from "@/components/release-admin-menu";
 import { FallbackImage } from "@/components/fallback-image";
 import { appStoreIconUrl } from "@/lib/app-source";
+import { deriveFeedTitle } from "@/lib/release-title";
 
 export async function generateMetadata({
   params,
@@ -32,7 +33,11 @@ export async function generateMetadata({
   const { id } = await params;
   try {
     const release = await api.release(id);
-    const heading = release.version ?? release.title;
+    const { descriptive, versionLabel } = deriveFeedTitle(release);
+    const heading = descriptive ?? versionLabel ?? release.title;
+    // Keep the version discoverable in the title tag for version-specific search
+    // even when the descriptive headline leads.
+    const titleHeading = descriptive && versionLabel ? `${heading} (${versionLabel})` : heading;
     const rawDesc = release.summary ?? release.content ?? "";
     const stripped = rawDesc
       .replace(/[#*[\]`>_~]/g, "")
@@ -40,7 +45,7 @@ export async function generateMetadata({
       .trim();
     const description = stripped.length > 160 ? stripped.slice(0, 157) + "..." : stripped;
     return {
-      title: `${heading} — ${release.sourceName}`,
+      title: `${titleHeading} — ${release.sourceName}`,
       description: description || `${heading} release notes for ${release.sourceName}`,
       openGraph: {
         type: "article",
@@ -93,14 +98,16 @@ export default async function ReleaseDetailPage({ params }: { params: Promise<{ 
   const repoUrl = release.sourceType === "github" ? githubRepoUrlFor(release.url) : null;
   const detailRemarkPlugins = createRemarkPlugins({ repoUrl });
 
-  const hasVersion = !!release.version;
-  const titleMatchesVersion =
-    release.title === release.version ||
-    release.title === release.version?.replace(/^v/, "") ||
-    release.version === release.title?.replace(/^v/, "");
-
-  const heading = hasVersion ? release.version : release.title;
-  const showSubtitle = hasVersion && release.title && !titleMatchesVersion;
+  // Title hierarchy mirrors the feed (#feed-title): the descriptive title leads
+  // the H1 and the version is demoted to a subtitle. The org/source already
+  // appears in the breadcrumb and byline, so the heading doesn't repeat the
+  // product name. See web/src/lib/release-title.ts.
+  const { descriptive, versionLabel } = deriveFeedTitle(release);
+  const heading = descriptive ?? versionLabel ?? release.title;
+  // Breadcrumb crumb stays tight: the version when present, else the heading.
+  const crumbLabel = versionLabel ?? heading;
+  // Version subtitle, shown only when the descriptive title is leading the H1.
+  const showVersionSubtitle = !!descriptive && !!versionLabel;
   const trimmedSummary = release.summary?.trim();
   const hasBody = release.content?.trim();
   const adminEnabled = isLocalAdminEnabled();
@@ -118,11 +125,11 @@ export default async function ReleaseDetailPage({ params }: { params: Promise<{ 
             item: `https://releases.sh/${release.org.slug}`,
           },
           { "@type": "ListItem", position: 3, name: release.sourceName, item: sourceUrl },
-          { "@type": "ListItem", position: 4, name: heading ?? "Release", item: releaseUrl },
+          { "@type": "ListItem", position: 4, name: crumbLabel || "Release", item: releaseUrl },
         ]
       : [
           { "@type": "ListItem", position: 2, name: release.sourceName, item: sourceUrl },
-          { "@type": "ListItem", position: 3, name: heading ?? "Release", item: releaseUrl },
+          { "@type": "ListItem", position: 3, name: crumbLabel || "Release", item: releaseUrl },
         ]),
   ];
   const jsonLd = {
@@ -169,7 +176,7 @@ export default async function ReleaseDetailPage({ params }: { params: Promise<{ 
             {release.sourceName}
           </Link>
           <span className="mx-1.5">/</span>
-          <span className="text-stone-600 dark:text-stone-300 font-medium">{heading}</span>
+          <span className="text-stone-600 dark:text-stone-300 font-medium">{crumbLabel}</span>
         </div>
 
         {/* Header */}
@@ -182,8 +189,8 @@ export default async function ReleaseDetailPage({ params }: { params: Promise<{ 
             </ViewTransition>
             <RollupBadge type={release.type} />
           </div>
-          {showSubtitle && (
-            <p className="text-lg text-stone-600 dark:text-stone-400 mt-1">{release.title}</p>
+          {showVersionSubtitle && (
+            <p className="text-lg text-stone-600 dark:text-stone-400 mt-1">{versionLabel}</p>
           )}
           <div className="flex items-center gap-3 mt-3 text-[13px] text-stone-400 dark:text-stone-500">
             {release.publishedAt && <span>{formatDate(release.publishedAt)}</span>}

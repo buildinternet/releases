@@ -272,7 +272,6 @@ export function OrgReleaseList({
                       name: release.source.name,
                       slug: release.source.slug,
                       orgSlug,
-                      type: release.source.type,
                     }
                   : undefined
               }

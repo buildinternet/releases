@@ -292,8 +292,9 @@ function ReleaseResultCard({ hit, tokens }: { hit: SearchReleaseHit; tokens: str
     return { src: item.r2Url ?? item.url, alt: item.alt || "" };
   }, [hit.media]);
 
-  // Prefer version as the card heading to match how feed items read;
-  // fall back to title when version is absent.
+  // Search cards lead with the version (falling back to title when absent).
+  // This intentionally differs from the chronological feed, which now leads
+  // with the descriptive title — search results read as version-keyed lookups.
   const heading = hit.version || hit.title;
   const rehypePlugins = useMarkdownHighlight(tokens);
 
