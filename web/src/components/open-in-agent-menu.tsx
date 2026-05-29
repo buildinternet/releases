@@ -151,26 +151,29 @@ function AgentLaunchItem({
       ? "flex w-full items-center gap-2 px-3 py-2 text-[13px] text-stone-700 hover:bg-stone-50 dark:text-stone-200 dark:hover:bg-stone-800"
       : "inline-flex items-center gap-2 rounded-md border border-stone-200 bg-white px-3 py-2 text-[13px] font-medium text-stone-800 shadow-sm transition-colors hover:border-stone-300 hover:bg-stone-50 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-100 dark:hover:border-stone-600 dark:hover:bg-stone-800";
 
-  const iconSpan = (
-    <span className="shrink-0 text-stone-600 dark:text-stone-300">
-      <Icon />
-    </span>
+  const role = variant === "menu" ? "menuitem" : undefined;
+  const content = (
+    <>
+      <span className="shrink-0 text-stone-600 dark:text-stone-300">
+        <Icon />
+      </span>
+      <span className="truncate">{agent.label}</span>
+      <Trailing copied={copied} remembered={variant === "menu" && remembered} />
+    </>
   );
 
   if (action.kind === "deeplink") {
     return (
       <a
         href={action.href}
-        role={variant === "menu" ? "menuitem" : undefined}
+        role={role}
         onClick={() => {
           onPick?.(agent.id);
           closeMenu?.();
         }}
         className={rowClass}
       >
-        {iconSpan}
-        <span className="truncate">{agent.label}</span>
-        {variant === "menu" && remembered && <CheckMark />}
+        {content}
       </a>
     );
   }
@@ -179,7 +182,7 @@ function AgentLaunchItem({
   return (
     <button
       type="button"
-      role={variant === "menu" ? "menuitem" : undefined}
+      role={role}
       onClick={() => {
         copy(action.command);
         onPick?.(agent.id);
@@ -187,17 +190,16 @@ function AgentLaunchItem({
       title={copied ? "Copied — paste it in your terminal" : action.command}
       className={rowClass}
     >
-      {iconSpan}
-      <span className="truncate">{agent.label}</span>
-      <span className="ml-auto shrink-0 text-stone-400 dark:text-stone-500">
-        {copied ? (
-          <CopyIcon copied size={14} />
-        ) : variant === "menu" && remembered ? (
-          <CheckMark />
-        ) : null}
-      </span>
+      {content}
     </button>
   );
+}
+
+/** Right-aligned trailing status: the copied state wins, else the remembered check. */
+function Trailing({ copied, remembered }: { copied: boolean; remembered: boolean }) {
+  const inner = copied ? <CopyIcon copied size={14} /> : remembered ? <CheckMark /> : null;
+  if (!inner) return null;
+  return <span className="ml-auto shrink-0 text-stone-400 dark:text-stone-500">{inner}</span>;
 }
 
 function Chevron({ open }: { open: boolean }) {
@@ -231,7 +233,7 @@ function CheckMark() {
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"
-      className="ml-auto shrink-0 text-stone-500 dark:text-stone-400"
+      className="shrink-0"
     >
       <polyline points="3.5 8.5 6.5 11.5 12.5 4.5" />
     </svg>
