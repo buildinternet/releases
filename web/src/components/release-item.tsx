@@ -16,6 +16,7 @@ import { markdownComponents, collapsedMarkdownComponents } from "./markdown-comp
 import { formatDate } from "@/lib/formatters";
 import { RollupBadge } from "./rollup-badge";
 import { ClusterChip } from "./cluster-chip";
+import { CompactComposition } from "./compact-composition";
 
 /** Strip a leading markdown heading that duplicates the release title,
  *  and empty artifacts left by HTML-to-markdown conversion. */
@@ -392,6 +393,10 @@ export function ReleaseListItem({
                   pre
                 </span>
               )}
+              <CompactComposition
+                composition={release.composition}
+                className="ml-auto self-center"
+              />
             </div>
             {(showMetaName || showMetaVersion) && (
               <div className="text-sm text-stone-600 dark:text-stone-400 mb-1">

@@ -55,6 +55,12 @@ export type AggregateReleaseRow = {
   product_name: string | null;
   /** Number of demoted siblings rolling up via `release_coverage` (0 when standalone). */
   coverage_count: number;
+  /**
+   * Raw `releases.metadata` JSON blob, selected only so the feed mapper can
+   * parse out `composition` for the compact micro-bar. Optional because not
+   * every cross-org query selects it; the mapper degrades to no bar when absent.
+   */
+  metadata?: string | null;
 };
 
 /**

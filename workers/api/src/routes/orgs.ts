@@ -46,6 +46,7 @@ import {
   collectionMembers,
 } from "@buildinternet/releases-core/schema";
 import { daysAgoIso } from "@buildinternet/releases-core/dates";
+import { parseCompositionFromMetadata } from "@buildinternet/releases-core/composition";
 import { parseKindParam, KIND_VALUES, isValidKind } from "@buildinternet/releases-core/kinds";
 import { resolveCategoryInput } from "../lib/category-alias.js";
 import { parseSourceTypesLenient } from "../lib/source-types.js";
@@ -1863,6 +1864,7 @@ orgRoutes.get(
         coverageCount: r.coverage_count,
         contentChars: r.content_chars,
         contentTokens: r.content_tokens,
+        composition: parseCompositionFromMetadata(r.metadata),
       };
     });
 

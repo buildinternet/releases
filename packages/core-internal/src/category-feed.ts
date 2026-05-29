@@ -58,7 +58,7 @@ export async function getCategoryReleasesFeed(
         : sql`AND o.slug IN ${orgSlugs}`;
 
   return db.all<CategoryReleaseRow>(sql`
-    SELECT r.id, r.version, r.title, r.content, r.summary,
+    SELECT r.id, r.version, r.title, r.content, r.summary, r.metadata,
            r.title_generated, r.title_short, r.type,
            r.published_at, r.fetched_at, r.url, r.media, r.prerelease,
            s.slug AS source_slug, s.name AS source_name, s.type AS source_type,
