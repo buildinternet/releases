@@ -25,6 +25,7 @@ import { scrapeAgentSweep } from "./cron/scrape-agent-sweep.js";
 import { forceDrainSweep } from "./cron/force-drain-sweep.js";
 import { sweepSearchQueries } from "./cron/sweep-search-queries.js";
 import { sweepTombstones } from "./cron/sweep-tombstones.js";
+import { scanStaleFirecrawlSources } from "./cron/firecrawl-staleness.js";
 import { sendAlert, type AlertEnv } from "./lib/send-alert.js";
 import { logEvent } from "@releases/lib/log-event";
 import { dbErrorLogFields } from "@releases/lib/db-errors";
@@ -230,6 +231,9 @@ export type Env = {
     FIRECRAWL_API_KEY?: SecretBinding;
     FIRECRAWL_WEBHOOK_SECRET?: SecretBinding;
     FIRECRAWL_INGEST_WORKFLOW?: Workflow; // bound in wrangler in Phase 2
+    // Hours since a firecrawl source's last run before the hourly staleness
+    // scan flags it (monitor stopped delivering). Default 48. See option A.
+    FIRECRAWL_STALE_HOURS?: string;
   };
   Variables: {
     auth?: AuthContext;
@@ -675,6 +679,23 @@ export default {
       );
       return;
     }
+    // Resilience: on every hourly fire, flag firecrawl-owned sources whose
+    // monitor has stopped delivering (out of credits / suspended / failing
+    // workflow). Cheap scan over the ~handful of firecrawl sources; emits warn
+    // events on the `firecrawl-staleness` component. No-ops when CRON_ENABLED is
+    // "false". See resilience option A.
+    ctx.waitUntil(
+      loggedDispatch(
+        "firecrawl-staleness-cron",
+        scanStaleFirecrawlSources({
+          DB: env.DB,
+          CRON_ENABLED: env.CRON_ENABLED,
+          FIRECRAWL_STALE_HOURS: env.FIRECRAWL_STALE_HOURS,
+        }),
+        alertEnv,
+      ),
+    );
+
     // Feature-flag the Workflows-based poll-and-fetch path. When flipped,
     // the cron fans out one workflow instance per due source so a single
     // transient failure (usually a Voyage 429 mid-embed) no longer silently

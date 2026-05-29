@@ -9,6 +9,7 @@ import {
   type FirecrawlIngestEnv,
 } from "../../workers/api/src/workflows/firecrawl-ingest";
 import { mkFakeStep } from "./_workflow-test-helpers";
+import { FirecrawlError } from "@releases/lib/errors";
 
 function mkDb() {
   const sqlite = new Database(":memory:");
@@ -194,5 +195,45 @@ describe("FirecrawlIngestWorkflow", () => {
     expect(thrown).toBeDefined();
     const logs = db.select().from(fetchLog).all();
     expect(logs).toHaveLength(0);
+  });
+
+  it("scrape failure (out of credits) records an error fetch_log row + bumps consecutiveErrors", async () => {
+    const db = mkDb();
+    const env = mkEnv(db, {
+      _firecrawlClientOverride: {
+        scrapeOnce: async () => {
+          throw new FirecrawlError(402, "POST", "/v2/scrape", "insufficient credits");
+        },
+        createMonitor: async () => "m",
+        getMonitor: async () => ({ id: "m" }),
+        updateMonitor: async () => {},
+        deleteMonitor: async () => {},
+        runMonitor: async () => {},
+      },
+    });
+
+    const { thrown } = await runWorkflow(env, {
+      sourceId: "src_fc1",
+      url: "https://acme.com/changelog",
+      checkId: "chk_5",
+      status: "changed",
+    });
+
+    // Re-thrown so the instance is still marked failed for the CF dashboard.
+    expect(thrown).toBeDefined();
+
+    // The failure is recorded in the source's own health instead of being
+    // invisible: an error fetch_log row + a bumped consecutiveErrors counter.
+    const logs = db.select().from(fetchLog).where(eq(fetchLog.sourceId, "src_fc1")).all();
+    expect(logs).toHaveLength(1);
+    expect(logs[0].status).toBe("error");
+    expect(logs[0].sessionId).toBe("firecrawl:chk_5");
+
+    const [src] = db.select().from(sources).where(eq(sources.id, "src_fc1")).all();
+    expect(src.consecutiveErrors).toBe(1);
+
+    // Nothing was inserted.
+    const rows = db.select().from(releases).where(eq(releases.sourceId, "src_fc1")).all();
+    expect(rows).toHaveLength(0);
   });
 });
