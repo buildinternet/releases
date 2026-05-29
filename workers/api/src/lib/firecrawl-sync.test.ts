@@ -1,5 +1,6 @@
 import { expect, it } from "bun:test";
-import { deriveMonitorSpec } from "./firecrawl-sync.js";
+import { deriveMonitorSpec, syncFirecrawlMonitor } from "./firecrawl-sync.js";
+import type { FirecrawlClient } from "@releases/adapters/firecrawl.js";
 
 const baseSource = {
   id: "src_123",
@@ -55,4 +56,104 @@ it("is deterministic — same input yields identical spec", () => {
   const a = deriveMonitorSpec(baseSource, { webhookUrl: "u", webhookSecret: "s" });
   const b = deriveMonitorSpec(baseSource, { webhookUrl: "u", webhookSecret: "s" });
   expect(JSON.stringify(a)).toBe(JSON.stringify(b));
+});
+
+function fakeClient(over: Partial<FirecrawlClient> = {}): FirecrawlClient {
+  return {
+    createMonitor: async () => "mon_new",
+    getMonitor: async () => ({ id: "mon_existing" }),
+    updateMonitor: async () => {},
+    deleteMonitor: async () => {},
+    runMonitor: async () => {},
+    scrapeOnce: async () => "",
+    ...over,
+  } as FirecrawlClient;
+}
+
+const syncOpts = { webhookUrl: "u", webhookSecret: "s" };
+
+it("creates a monitor when enabled and no monitorId", async () => {
+  const src = {
+    id: "src_1",
+    slug: "s",
+    url: "https://x.com",
+    metadata: JSON.stringify({ firecrawl: { enabled: true } }),
+  } as any;
+  let created = false;
+  const patch = await syncFirecrawlMonitor(
+    src,
+    fakeClient({
+      createMonitor: async () => {
+        created = true;
+        return "mon_new";
+      },
+    }),
+    syncOpts,
+  );
+  expect(created).toBe(true);
+  expect(patch.firecrawl?.monitorId).toBe("mon_new");
+  expect(patch.firecrawl?.enabled).toBe(true);
+});
+
+it("deletes and clears monitorId when disabled", async () => {
+  const src = {
+    id: "src_1",
+    slug: "s",
+    url: "https://x.com",
+    metadata: JSON.stringify({ firecrawl: { enabled: false, monitorId: "mon_existing" } }),
+  } as any;
+  let deleted: string | null = null;
+  const patch = await syncFirecrawlMonitor(
+    src,
+    fakeClient({
+      deleteMonitor: async (id: string) => {
+        deleted = id;
+      },
+    }),
+    syncOpts,
+  );
+  expect(deleted!).toBe("mon_existing");
+  expect(patch.firecrawl?.monitorId).toBeUndefined();
+});
+
+it("updates the monitor when enabled with an existing id", async () => {
+  const src = {
+    id: "src_1",
+    slug: "s",
+    url: "https://x.com",
+    metadata: JSON.stringify({ firecrawl: { enabled: true, monitorId: "mon_existing" } }),
+  } as any;
+  let updated: string | null = null;
+  const patch = await syncFirecrawlMonitor(
+    src,
+    fakeClient({
+      updateMonitor: async (id: string) => {
+        updated = id;
+      },
+    }),
+    syncOpts,
+  );
+  expect(updated!).toBe("mon_existing");
+  expect(patch.firecrawl?.monitorId).toBe("mon_existing");
+});
+
+it("no-ops when disabled and no monitorId", async () => {
+  const src = {
+    id: "src_1",
+    slug: "s",
+    url: "https://x.com",
+    metadata: JSON.stringify({ firecrawl: { enabled: false } }),
+  } as any;
+  let calledDelete = false;
+  const patch = await syncFirecrawlMonitor(
+    src,
+    fakeClient({
+      deleteMonitor: async () => {
+        calledDelete = true;
+      },
+    }),
+    syncOpts,
+  );
+  expect(calledDelete).toBe(false);
+  expect(patch.firecrawl?.monitorId).toBeUndefined();
 });

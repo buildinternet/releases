@@ -1,6 +1,7 @@
 import type { Source } from "@buildinternet/releases-core/schema";
 import { getSourceMeta } from "@releases/adapters/source-meta.js";
-import type { FirecrawlMonitorSpec } from "@releases/adapters/firecrawl.js";
+import type { FirecrawlClient, FirecrawlMonitorSpec } from "@releases/adapters/firecrawl.js";
+import type { SourceMetadata } from "@releases/adapters/source-meta.js";
 
 const DEFAULT_SCHEDULE = "every 6 hours";
 const DEFAULT_GOAL =
@@ -25,4 +26,33 @@ export function deriveMonitorSpec(
       events: ["page"],
     },
   };
+}
+
+/**
+ * Reconcile a single source's Firecrawl monitor to match its desired state.
+ * Idempotent + keyed on deriveMonitorSpec — a future reconcile sweep is just a
+ * loop over this. Returns a metadata patch the caller persists (merge into the
+ * existing metadata; only the `firecrawl` key is authoritative here).
+ */
+export async function syncFirecrawlMonitor(
+  source: Source,
+  client: FirecrawlClient,
+  opts: { webhookUrl: string; webhookSecret: string },
+): Promise<Pick<SourceMetadata, "firecrawl">> {
+  const meta = getSourceMeta(source);
+  const fc = meta.firecrawl ?? { enabled: false };
+
+  if (!fc.enabled) {
+    if (fc.monitorId) await client.deleteMonitor(fc.monitorId);
+    const { monitorId: _drop, ...rest } = fc;
+    return { firecrawl: { ...rest, enabled: false } };
+  }
+
+  const spec = deriveMonitorSpec(source, opts);
+  if (fc.monitorId) {
+    await client.updateMonitor(fc.monitorId, spec);
+    return { firecrawl: { ...fc, enabled: true, monitorId: fc.monitorId } };
+  }
+  const monitorId = await client.createMonitor(spec);
+  return { firecrawl: { ...fc, enabled: true, monitorId } };
 }
