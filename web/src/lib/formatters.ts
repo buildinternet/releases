@@ -17,6 +17,13 @@ export type {
 } from "@releases/rendering/formatters";
 
 /**
+ * Pluralize the word "release" for a count (e.g. "1 release", "3 releases").
+ */
+export function pluralReleases(n: number): string {
+  return n === 1 ? "release" : "releases";
+}
+
+/**
  * Format an ISO date string to a human-readable date.
  * Always uses UTC to avoid timezone-related display issues
  * (e.g., dates appearing in the future for western timezone viewers).

@@ -20,6 +20,8 @@ import { tabButtonClass } from "@/lib/styles";
 import { useInfiniteScroll } from "@/hooks/use-infinite-scroll";
 import { InfiniteScrollTrigger } from "./infinite-scroll-trigger";
 import { isTag, rollupTags, type TagListItem } from "./collection-timeline-rollup";
+import { Caret } from "./caret";
+import { pluralReleases } from "@/lib/formatters";
 
 interface CollectionTimelineProps {
   /**
@@ -87,10 +89,6 @@ const preBadgeClass =
 
 function findThumbnail(release: CollectionReleaseItem) {
   return release.media?.find((m) => m.type === "image" || m.type === "gif") ?? null;
-}
-
-function pluralReleases(n: number): string {
-  return n === 1 ? "release" : "releases";
 }
 
 export function CollectionTimeline({
@@ -730,28 +728,6 @@ function CommitLogRow({ release }: { release: CollectionReleaseItem }) {
 }
 
 // ── Small icons ────────────────────────────────────────────────
-
-function Caret({ open }: { open: boolean }) {
-  return (
-    <svg
-      width="9"
-      height="9"
-      viewBox="0 0 9 9"
-      fill="none"
-      aria-hidden="true"
-      className="flex-none transition-transform"
-      style={{ transform: open ? "rotate(90deg)" : "none" }}
-    >
-      <path
-        d="M2.5 1.5 L6 4.5 L2.5 7.5"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
 
 function ExternalLinkIcon({ size = 12 }: { size?: number }) {
   return (
