@@ -26,14 +26,16 @@ export async function extractFirecrawlMarkdown(
   source: Source,
   deps: FirecrawlExtractDeps,
 ): Promise<FirecrawlExtractResult> {
-  // extractFromBody's one-shot path only reads anthropicClient/agentModel/logger;
-  // supply the rest as inert no-ops so the deps object is type-complete.
+  // extractFromBody only reads anthropicClient/agentModel/logger; the rest are
+  // inert fillers so the deps object is type-complete. The tool-loop gate is
+  // `opts.useToolLoop` (passed below), NOT `deps.extractToolLoopEnabled` —
+  // extractFromBody ignores the latter (only run-direct-fetch reads it).
   const extractDeps: ExtractDeps = {
     anthropicClient: deps.anthropicClient,
     agentModel: deps.agentModel,
     logger: deps.logger,
     cloudflare: null,
-    extractToolLoopEnabled: deps.useToolLoop ?? false,
+    extractToolLoopEnabled: false,
     repo: {
       peekContentHash: async () => false,
       commitContentHash: async () => {},

@@ -252,7 +252,7 @@
       "class_name": "BatchOverviewWorkflow",
     },
     {
-      // Triggered by inbound Firecrawl webhook (POST /v1/sources/:slug/firecrawl/ingest)
+      // Triggered by inbound Firecrawl webhook (POST /v1/integrations/firecrawl/webhook)
       // when a monitored source page has changed. Scrapes via Firecrawl, extracts,
       // inserts, embeds, and optionally summarizes. Phase 2 of the Firecrawl
       // monitoring integration.

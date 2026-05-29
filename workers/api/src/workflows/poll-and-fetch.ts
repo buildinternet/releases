@@ -86,16 +86,18 @@ export type PollAndFetchParams = {
  * plenty of room to ride out Voyage rate limits. Fetch retries cover transient
  * 5xx / network blips; permanent 4xx surfaces as NonRetryableError downstream.
  */
-const RETRY_POLL = {
+// Exported so sibling workflows (e.g. FirecrawlIngestWorkflow) reuse the same
+// retry policies instead of re-declaring identical constants.
+export const RETRY_POLL = {
   retries: { limit: 2, delay: "5 seconds", backoff: "exponential" },
 } satisfies WorkflowStepConfig;
 
-const RETRY_FETCH = {
+export const RETRY_FETCH = {
   retries: { limit: 3, delay: "30 seconds", backoff: "exponential" },
   timeout: "5 minutes",
 } satisfies WorkflowStepConfig;
 
-const RETRY_EMBED = {
+export const RETRY_EMBED = {
   retries: { limit: 5, delay: "30 seconds", backoff: "exponential" },
   timeout: "5 minutes",
 } satisfies WorkflowStepConfig;
@@ -103,7 +105,7 @@ const RETRY_EMBED = {
 // Per-row failures are caught + logged inside the step body, so retries are
 // conservative; the `title_generated IS NULL` predicate on the UPDATE
 // makes a step-level retry safe.
-const RETRY_GENERATE = {
+export const RETRY_GENERATE = {
   retries: { limit: 1, delay: "30 seconds", backoff: "exponential" },
   timeout: "10 minutes",
 } satisfies WorkflowStepConfig;

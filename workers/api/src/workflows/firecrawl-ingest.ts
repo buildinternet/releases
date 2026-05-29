@@ -1,6 +1,6 @@
 /**
  * Workflow triggered when Firecrawl detects a change on a monitored source
- * (inbound webhook → POST /v1/sources/:slug/firecrawl/ingest). Re-scrapes the
+ * (inbound webhook → POST /v1/integrations/firecrawl/webhook). Re-scrapes the
  * page via Firecrawl, extracts releases, inserts them through the standard
  * ingest tail (dedup → coverage → publish → IndexNow), then embeds and
  * optionally summarizes the new rows. See Phase 2 of the Firecrawl monitoring
@@ -8,7 +8,7 @@
  */
 
 import { WorkflowEntrypoint } from "cloudflare:workers";
-import type { WorkflowEvent, WorkflowStep, WorkflowStepConfig } from "cloudflare:workers";
+import type { WorkflowEvent, WorkflowStep } from "cloudflare:workers";
 import { NonRetryableError } from "cloudflare:workflows";
 import { drizzle } from "drizzle-orm/d1";
 import { eq } from "drizzle-orm";
@@ -25,6 +25,10 @@ import { buildAnthropicClient } from "@releases/lib/anthropic-client.js";
 import { extractFirecrawlMarkdown } from "../lib/firecrawl-extract.js";
 import { ingestRawReleases, embedReleasesForSource, type FetchOneEnv } from "../cron/poll-fetch.js";
 import {
+  RETRY_POLL,
+  RETRY_FETCH,
+  RETRY_EMBED,
+  RETRY_GENERATE,
   resolveFetchEnv,
   generateContentForReleases,
   type PollAndFetchWorkflowEnv,
@@ -33,29 +37,6 @@ import {
 // Agent model for Firecrawl extraction. Matches DEFAULT_AGENT_MODEL in the
 // discovery worker so extraction quality is consistent across ingest paths.
 const FIRECRAWL_EXTRACT_MODEL = "claude-sonnet-4-6";
-
-/**
- * Retry policies — mirrors the values in poll-and-fetch.ts; module-private
- * there so we define our own here with the same values.
- */
-const RETRY_POLL = {
-  retries: { limit: 2, delay: "5 seconds", backoff: "exponential" },
-} satisfies WorkflowStepConfig;
-
-const RETRY_FETCH = {
-  retries: { limit: 3, delay: "30 seconds", backoff: "exponential" },
-  timeout: "5 minutes",
-} satisfies WorkflowStepConfig;
-
-const RETRY_EMBED = {
-  retries: { limit: 5, delay: "30 seconds", backoff: "exponential" },
-  timeout: "5 minutes",
-} satisfies WorkflowStepConfig;
-
-const RETRY_GENERATE = {
-  retries: { limit: 1, delay: "30 seconds", backoff: "exponential" },
-  timeout: "10 minutes",
-} satisfies WorkflowStepConfig;
 
 /** Minimal logger passed to extractFirecrawlMarkdown. */
 const workerLogger = {
@@ -129,13 +110,14 @@ export class FirecrawlIngestWorkflow extends WorkflowEntrypoint<
 
     // ── Step 2: scrape ──────────────────────────────────────────────────────
     const markdown = await step.do("scrape", RETRY_FETCH, async () => {
-      const client: FirecrawlClient = env._firecrawlClientOverride
-        ? env._firecrawlClientOverride
-        : await (async () => {
-            const apiKey = await getSecret(env.FIRECRAWL_API_KEY);
-            if (!apiKey) throw new NonRetryableError("FIRECRAWL_API_KEY is not configured");
-            return createFirecrawlClient({ apiKey });
-          })();
+      let client: FirecrawlClient;
+      if (env._firecrawlClientOverride) {
+        client = env._firecrawlClientOverride;
+      } else {
+        const apiKey = await getSecret(env.FIRECRAWL_API_KEY);
+        if (!apiKey) throw new NonRetryableError("FIRECRAWL_API_KEY is not configured");
+        client = createFirecrawlClient({ apiKey });
+      }
       const sourceMeta = getSourceMeta(source);
       const md = await client.scrapeOnce(url, { proxy: sourceMeta.firecrawl?.proxy });
       if (!md) throw new Error(`empty scrape result for ${url}`);

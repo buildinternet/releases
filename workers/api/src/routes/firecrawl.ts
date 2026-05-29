@@ -176,6 +176,9 @@ firecrawlRoutes.post("/integrations/firecrawl/webhook", async (c) => {
     return c.json({ ok: true, skipped: "unknown_or_disabled" });
   }
 
+  // Static per-source toggle — compute once, not per page.
+  const judgeOn = fc.judgeEnabled !== false;
+
   for (const page of body.data ?? []) {
     const { checkId, url, status, judgment } = page;
     if (!checkId || !url || !status) continue;
@@ -189,7 +192,6 @@ firecrawlRoutes.post("/integrations/firecrawl/webhook", async (c) => {
     // `changed` — ingest when judging is off, judgment is absent (fail-open —
     //   never silently drop a real change), or judgment says meaningful.
     // `same` / `removed` / `error` — no-op.
-    const judgeOn = fc.judgeEnabled !== false;
     const meaningful = judgment?.meaningful;
     const enqueue =
       status === "new" ||
