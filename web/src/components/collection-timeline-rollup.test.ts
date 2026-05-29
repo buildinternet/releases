@@ -135,5 +135,6 @@ describe("rollupTags", () => {
     expect(isTag(rel({ org: "cf", source: "workerd", type: "github" }))).toBe(true);
     expect(isTag(rel({ org: "cf", source: "cf-changelog", type: "feed" }))).toBe(false);
     expect(isTag(rel({ org: "cf", source: "blog", type: "scrape" }))).toBe(false);
+    expect(isTag(rel({ org: "cf", source: "discovery", type: "agent" }))).toBe(false);
   });
 });
