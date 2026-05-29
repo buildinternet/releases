@@ -64,6 +64,7 @@ import type {
   SourceDetailSchema,
   SourceFeedPaginationSchema,
   SourceMutationResponseSchema,
+  AppStoreMaterializeResponseSchema,
   SourceOrgRefSchema,
   SourcePatchInputSchema,
   CreateSourceBodySchema,
@@ -289,6 +290,7 @@ export {
   SourceDetailSchema,
   SourceFeedPaginationSchema,
   SourceMutationResponseSchema,
+  AppStoreMaterializeResponseSchema,
   SourceOrgRefSchema,
   SourcePatchInputSchema,
   CreateSourceBodySchema,
@@ -548,6 +550,7 @@ export type SourceChangelogResponse = z.infer<typeof SourceChangelogResponseSche
 export type SourceDetail = z.infer<typeof SourceDetailSchema>;
 export type SourceFeedPagination = z.infer<typeof SourceFeedPaginationSchema>;
 export type SourceMutationResponse = z.infer<typeof SourceMutationResponseSchema>;
+export type AppStoreMaterializeResponse = z.infer<typeof AppStoreMaterializeResponseSchema>;
 export type SourceOrgRef = z.infer<typeof SourceOrgRefSchema>;
 export type SourceActivityResponse = z.infer<typeof SourceActivityResponseSchema>;
 export type SourceHeatmapResponse = z.infer<typeof SourceHeatmapResponseSchema>;

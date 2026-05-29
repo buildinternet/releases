@@ -38,6 +38,8 @@ export type ProductCreateResponse = z.infer<typeof ProductCreateResponseSchema>;
  * Per-product row returned by `GET /v1/products`. Adds `sourceCount` to
  * the row shape but omits the internal `embeddedAt` / `deletedAt` columns
  * (the list handler explicitly selects only the user-facing fields).
+ * `avatarUrl` (the product icon, e.g. an App Store app icon) is included so
+ * list surfaces can render the avatar without a per-row detail round-trip.
  */
 export const ProductListItemSchema = z.object({
   id: z.string(),
@@ -48,6 +50,7 @@ export const ProductListItemSchema = z.object({
   description: z.string().nullable(),
   category: CategorySchema.nullable(),
   kind: z.enum(KIND_VALUES).nullable().optional(),
+  avatarUrl: z.string().nullable().optional(),
   createdAt: z.string(),
   sourceCount: z.number().int().min(0),
 });

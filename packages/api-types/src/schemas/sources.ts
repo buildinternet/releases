@@ -194,6 +194,38 @@ export const SourceMutationResponseSchema = z.looseObject({
   kind: z.enum(KIND_VALUES).nullable().optional(),
 });
 
+/**
+ * Response from `POST /v1/sources/appstore` — materializes an App Store listing
+ * into a curated Org → Product → Source → first Release (modeled on the GitHub
+ * coordinate `LookupResponse`).
+ *
+ * Unlike `SourceMutationResponse`, the `source` here is the **bare inserted (or
+ * idempotently looked-up) drizzle row** the materialize handler returns verbatim:
+ * no resolved `org { id, slug, name }` block and no `productSlug`. `loose` so the
+ * untyped timestamp/counter columns on the row pass through.
+ *
+ * `status: "indexed"` is a brand-new source (HTTP 201); `"existing"` is the
+ * idempotent hit on a prior materialize of the same trackId (HTTP 200).
+ */
+export const AppStoreMaterializeResponseSchema = z.object({
+  status: z.enum(["indexed", "existing"]),
+  source: z.looseObject({
+    id: z.string(),
+    slug: z.string(),
+    name: z.string(),
+    type: SourceTypeSchema,
+    url: z.string(),
+    orgId: z.string().nullable(),
+    productId: z.string().nullable(),
+    metadata: z.string().nullable(),
+    kind: z.enum(KIND_VALUES).nullable().optional(),
+    discovery: SourceDiscoverySchema.optional(),
+    isHidden: z.boolean().nullable().optional(),
+    createdAt: z.string().optional(),
+  }),
+  releaseCount: z.number(),
+});
+
 /** Body accepted by `PATCH /v1/sources/:slug`. */
 export const SourcePatchInputSchema = z.object({
   name: z.string().optional(),
