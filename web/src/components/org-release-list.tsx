@@ -7,6 +7,9 @@ import type { SourceType } from "@buildinternet/releases-core/source-enums";
 import { useDebounced } from "@/hooks/use-debounced";
 import { useInfiniteScroll } from "@/hooks/use-infinite-scroll";
 import { InfiniteScrollTrigger } from "./infinite-scroll-trigger";
+import { buildFeedEntries, entryDayKey, type RollupItem } from "./org-release-entries";
+import { Caret } from "./caret";
+import { formatDate, pluralReleases } from "@/lib/formatters";
 
 interface OrgReleaseListProps {
   orgSlug: string;
@@ -177,6 +180,12 @@ export function OrgReleaseList({
   const showSourceTypeTabs = filterTabs.length > 0;
   const showFilterRow = showSourceTypeTabs || availableSourceTypes.length > 0;
 
+  // Collapse same-day monorepo package-bump clusters into rollups (#1233).
+  const entries = useMemo(() => buildFeedEntries(releases), [releases]);
+  // Precompute each entry's day once so the date-rail `hideDate` check is a
+  // cheap index compare instead of re-deriving the day twice per row.
+  const dayKeys = useMemo(() => entries.map(entryDayKey), [entries]);
+
   return (
     <div>
       {showFilterRow && (
@@ -249,34 +258,46 @@ export function OrgReleaseList({
         </div>
       ) : (
         <>
-          {releases.map((release, i) => (
-            <ReleaseListItem
-              key={release.id ?? i}
-              release={release}
-              hideDate={
-                i > 0 &&
-                release.publishedAt?.slice(0, 10) === releases[i - 1].publishedAt?.slice(0, 10)
-              }
-              appStore={
-                release.source.appStore
-                  ? {
-                      label: release.source.appStore.platform === "macos" ? "macOS" : "iOS",
-                      iconUrl: release.source.appStore.iconUrl,
-                      appName: release.source.name,
-                    }
-                  : null
-              }
-              sourceByline={
-                multipleSourcesExist
-                  ? {
-                      name: release.source.name,
-                      slug: release.source.slug,
-                      orgSlug,
-                    }
-                  : undefined
-              }
-            />
-          ))}
+          {entries.map((entry, i) => {
+            const showDate = i === 0 || dayKeys[i] !== dayKeys[i - 1];
+            if (entry.kind === "rollup") {
+              return (
+                <ReleaseRollupRow
+                  key={`rollup:${entry.item.groupKey}:${i}`}
+                  item={entry.item}
+                  hideDate={!showDate}
+                  orgSlug={orgSlug}
+                  multipleSourcesExist={multipleSourcesExist}
+                />
+              );
+            }
+            const release = entry.release;
+            return (
+              <ReleaseListItem
+                key={release.id ?? `row:${i}`}
+                release={release}
+                hideDate={!showDate}
+                appStore={
+                  release.source.appStore
+                    ? {
+                        label: release.source.appStore.platform === "macos" ? "macOS" : "iOS",
+                        iconUrl: release.source.appStore.iconUrl,
+                        appName: release.source.name,
+                      }
+                    : null
+                }
+                sourceByline={
+                  multipleSourcesExist
+                    ? {
+                        name: release.source.name,
+                        slug: release.source.slug,
+                        orgSlug,
+                      }
+                    : undefined
+                }
+              />
+            );
+          })}
           {cursor && (
             <InfiniteScrollTrigger
               triggerRef={triggerRef}
@@ -288,5 +309,97 @@ export function OrgReleaseList({
         </>
       )}
     </div>
+  );
+}
+
+// Collapsed cluster row for a same-day product/source bucket of 2+ GitHub tags.
+// Mirrors the collection feed's summary-header `TagItem` (caret + label + count
+// + inline version pills) but wraps it in the org feed's date-rail chrome so it
+// reads as one more row on the timeline. Expanded, it emits the bucket's
+// releases as ordinary `ReleaseListItem` siblings — they share the feed's rail
+// geometry, so the timeline line and dots stay continuous instead of nesting.
+function ReleaseRollupRow({
+  item,
+  hideDate,
+  orgSlug,
+  multipleSourcesExist,
+}: {
+  item: RollupItem;
+  hideDate?: boolean;
+  orgSlug: string;
+  multipleSourcesExist: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const newest = item.releases[0];
+  const count = item.releases.length;
+  const pills = item.releases.slice(0, 3);
+  const overflow = count - pills.length;
+
+  return (
+    <>
+      <article className="group/item flex gap-0 relative">
+        {/* Left rail: date + timeline dot (mirrors ReleaseListItem) */}
+        <div className="w-[100px] shrink-0 relative flex flex-col items-end pr-5 pt-5 gap-1">
+          {!hideDate && (
+            <time
+              dateTime={newest.publishedAt ?? undefined}
+              className="text-[12px] text-stone-400 dark:text-stone-500 whitespace-nowrap tabular-nums"
+            >
+              {formatDate(newest.publishedAt)}
+            </time>
+          )}
+          <div className="absolute right-0 top-[22px] w-[7px] h-[7px] rounded-full bg-stone-300 dark:bg-stone-600 translate-x-[3px] z-10" />
+        </div>
+        {/* Timeline line */}
+        <div className="absolute left-[100px] top-0 bottom-0 w-px bg-stone-200 dark:bg-stone-800" />
+        {/* Content: summary header */}
+        <div className="flex-1 min-w-0 border-b border-stone-200 dark:border-stone-800 last:border-b-0 py-4 pl-5">
+          <button
+            type="button"
+            onClick={() => setOpen((v) => !v)}
+            aria-expanded={open}
+            className="flex items-center gap-2 w-full text-left text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-200"
+          >
+            <Caret open={open} />
+            <span className="font-semibold text-[15px] text-stone-900 dark:text-stone-100">
+              {item.label}
+            </span>
+            <span className="text-[12px] text-stone-400 dark:text-stone-500 font-mono tabular-nums">
+              · {count} {pluralReleases(count)}
+            </span>
+            {!open && (
+              <span className="inline-flex items-center gap-1 ml-1 flex-wrap min-w-0">
+                {pills.map((r, i) => (
+                  <span
+                    key={r.id ?? r.url ?? i}
+                    className="font-mono text-[10.5px] px-1.5 py-px rounded bg-stone-100 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 text-stone-500 dark:text-stone-400 whitespace-nowrap"
+                  >
+                    {r.version ?? r.title}
+                  </span>
+                ))}
+                {overflow > 0 && (
+                  <span className="text-[11px] text-stone-400 dark:text-stone-500">
+                    +{overflow}
+                  </span>
+                )}
+              </span>
+            )}
+          </button>
+        </div>
+      </article>
+      {open &&
+        item.releases.map((r, i) => (
+          <ReleaseListItem
+            key={r.id ?? `${item.groupKey}:${i}`}
+            release={r}
+            hideDate
+            sourceByline={
+              multipleSourcesExist
+                ? { name: r.source.name, slug: r.source.slug, orgSlug }
+                : undefined
+            }
+          />
+        ))}
+    </>
   );
 }

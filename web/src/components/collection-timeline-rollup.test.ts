@@ -1,6 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { type CollectionReleaseItem } from "@/lib/api";
-import { isTag, rollupTags, type TagListItem } from "./collection-timeline-rollup";
+import {
+  isTag,
+  rollupTags,
+  type RollupCandidate,
+  type TagListItem,
+} from "./collection-timeline-rollup";
 
 // Minimal fixture — rollupTags only reads org/source/product/version, so we
 // cast a partial rather than enumerate every ReleaseItem field.
@@ -30,6 +35,18 @@ function rel(opts: {
 
 function rollupsOf(items: TagListItem[]) {
   return items.filter((i): i is Extract<TagListItem, { kind: "rollup" }> => i.kind === "rollup");
+}
+
+// The org releases feed (#1233) hands rollupTags `OrgReleaseItem` rows, which
+// carry no `org` block. This fixture mirrors that minimal shape.
+function orgFeedRel(source: string, version: string, product?: string): RollupCandidate {
+  return {
+    version,
+    title: version,
+    url: `https://example.com/${source}/${version}`,
+    source: { slug: source, name: source, type: "github" },
+    product: product ? { slug: product, name: product } : null,
+  };
 }
 
 describe("rollupTags", () => {
@@ -136,5 +153,32 @@ describe("rollupTags", () => {
     expect(isTag(rel({ org: "cf", source: "cf-changelog", type: "feed" }))).toBe(false);
     expect(isTag(rel({ org: "cf", source: "blog", type: "scrape" }))).toBe(false);
     expect(isTag(rel({ org: "cf", source: "discovery", type: "agent" }))).toBe(false);
+  });
+
+  // The org releases feed (#1233) reuses rollupTags on OrgReleaseItem rows,
+  // which carry no `org` block (every row shares the page's one org). The
+  // bucket key's org segment is empty, so grouping falls back to product/source.
+  test("groups org-feed rows (no `org` block) by product ?? source", () => {
+    const tags = [
+      orgFeedRel("vercel-cli", "vercel@54.6.1"),
+      orgFeedRel("vercel-cli", "@vercel/node@5.8.6"),
+      orgFeedRel("turborepo", "v2.9.16", "turborepo"),
+      orgFeedRel("turborepo", "v2.9.15", "turborepo"),
+      orgFeedRel("vercel-ai-sdk", "ai@6"),
+    ];
+
+    const out = rollupTags(tags);
+    const rollups = out.filter((i) => i.kind === "rollup");
+    const singles = out.filter((i) => i.kind === "single");
+
+    // vercel-cli (×2) and turborepo (×2) roll up; the lone ai-sdk tag stays single.
+    expect(rollups).toHaveLength(2);
+    expect(singles).toHaveLength(1);
+    const byKey = Object.fromEntries(
+      rollups.map((r) => [(r as Extract<typeof r, { kind: "rollup" }>).groupKey, r] as const),
+    );
+    // Empty org segment in the key (no `org` block) — grouping is by source/product alone.
+    expect(byKey["::vercel-cli"]).toBeDefined();
+    expect(byKey["::turborepo"]).toBeDefined();
   });
 });
