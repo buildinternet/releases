@@ -339,7 +339,7 @@ describe("POST /v1/sources/:slug/firecrawl/sync", () => {
     );
 
     expect(res.status).toBe(200);
-    expect(capturedSpec?.webhook.url).toBe(
+    expect(capturedSpec?.webhook?.url).toBe(
       "https://api.releases.sh/v1/integrations/firecrawl/webhook",
     );
   });

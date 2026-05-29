@@ -1,26 +1,20 @@
 import { FirecrawlError } from "@releases/lib/errors";
+import type { CreateMonitorRequest } from "@mendable/firecrawl-js";
 
 const BASE = "https://api.firecrawl.dev/v2";
 
 export type FirecrawlProxy = "basic" | "enhanced" | "auto";
 
-export interface FirecrawlMonitorSpec {
-  name: string;
-  schedule: string; // cron or natural-language; 15-min minimum
-  targets: Array<{ type: "scrape" | "crawl"; url: string }>;
-  proxy: FirecrawlProxy;
-  goal?: string;
-  judgeEnabled: boolean;
-  webhook: {
-    url: string;
-    headers: Record<string, string>;
-    metadata: Record<string, string>;
-    // Firecrawl's wire values are the fully-qualified event names (see
-    // docs/features/monitoring webhook config). Earlier drafts used the bare
-    // "page" shorthand, which the monitor API does not subscribe to.
-    events: Array<"monitor.page" | "monitor.check.completed">;
-  };
-}
+// The monitor request shape is the official SDK's type, not a hand-rolled
+// interface. We keep the tiny fetch-based client below — the SDK's runtime
+// transport is axios, unwanted weight/compat risk in a Worker bundle — but
+// borrow its types so the body we POST is compile-time-validated against the
+// live v2 API. `import type` is erased at build, so @mendable/firecrawl-js (and
+// its axios dependency) never enter the Worker bundle. A prior hand-rolled
+// shape silently drifted from the API (bare-string schedule, `url` vs `urls`,
+// top-level proxy) and only surfaced when a live create would 400; these types
+// prevent that class of bug. See issue #1248.
+export type FirecrawlMonitorSpec = CreateMonitorRequest;
 
 export interface FirecrawlMonitor {
   id: string;

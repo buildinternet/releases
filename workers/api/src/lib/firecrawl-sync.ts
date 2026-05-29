@@ -15,9 +15,20 @@ export function deriveMonitorSpec(
   const fc = getSourceMeta(source).firecrawl ?? { enabled: false };
   return {
     name: `releases:${source.id}`,
-    schedule: fc.schedule ?? DEFAULT_SCHEDULE,
-    targets: [{ type: "scrape", url: source.url }],
-    proxy: fc.proxy ?? "auto",
+    // v2 wants a schedule object (one of cron|text, plus timezone), not a bare
+    // string. `fc.schedule` is natural-language, so it maps to `text`; Firecrawl
+    // normalizes it to cron server-side.
+    schedule: { text: fc.schedule ?? DEFAULT_SCHEDULE, timezone: "UTC" },
+    // Scrape targets take `urls` (array), and the proxy tier lives in
+    // `scrapeOptions` (which mirrors the /v2/scrape body) — there is no
+    // top-level monitor `proxy` field.
+    targets: [
+      {
+        type: "scrape",
+        urls: [source.url],
+        scrapeOptions: { formats: ["markdown"], proxy: fc.proxy ?? "auto" },
+      },
+    ],
     goal: fc.goal ?? DEFAULT_GOAL,
     judgeEnabled: fc.judgeEnabled ?? true,
     webhook: {
