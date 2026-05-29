@@ -11,7 +11,7 @@ import { FallbackImage } from "./fallback-image";
 import { releaseThumbUrl, IMG_TRANSFORM_ON } from "@/lib/media";
 import { appStoreIconUrl, type AppRowInfo } from "@/lib/app-source";
 import { EXTERNAL_UGC_REL, isOptimizableImage } from "@/lib/sanitize";
-import { SourceTypeIcon } from "./source-type-icon";
+import { deriveFeedTitle } from "@/lib/release-title";
 import { markdownComponents, collapsedMarkdownComponents } from "./markdown-components";
 import { formatDate } from "@/lib/formatters";
 import { RollupBadge } from "./rollup-badge";
@@ -147,19 +147,13 @@ export function ReleaseListItem({
 }: {
   release: ReleaseItem;
   hideDate?: boolean;
-  sourceByline?: { name: string; slug: string; orgSlug?: string; type?: string };
+  sourceByline?: { name: string; slug: string; orgSlug?: string };
   appStore?: AppRowInfo | null;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [isOverflowing, setIsOverflowing] = useState(false);
   const [preview, setPreview] = useState<{ src: string; alt: string } | null>(null);
   const contentRef = useRef<HTMLDivElement>(null);
-  const hasVersion = !!release.version;
-  const titleMatchesVersion =
-    release.title === release.version ||
-    release.title === release.version?.replace(/^v/, "") ||
-    release.version === release.title?.replace(/^v/, "");
-
   const markdownContent = useMemo(
     () => stripLeadingTitle(release.content || release.summary, release.title),
     [release.content, release.summary, release.title],
@@ -170,21 +164,40 @@ export function ReleaseListItem({
     [release.media],
   );
 
-  // Primary heading: version if available, otherwise title
-  const heading = hasVersion ? release.version : release.title;
+  // Feed title hierarchy (#feed-title): lead with a descriptive headline and
+  // demote the version, instead of using a bare `v2.1.154` (which loses product
+  // context). When the row has nothing more descriptive than its version, fall
+  // back to a product+version headline. The product/source name is shown only
+  // when the feed mixes sources (`sourceByline` is set) — folding the old
+  // left-rail byline into an inline meta line. App Store rows keep their own
+  // layout below. See `.context/2026-05-29-feed-version-title-hierarchy.md`.
+  const { descriptive, versionLabel } = deriveFeedTitle(release);
 
-  // Show subtitle title only when we have a version AND title is different from it
-  const showSubtitle = hasVersion && release.title && !titleMatchesVersion;
+  // Bold heading: the descriptive title when we have one; otherwise the version,
+  // led by the product name (with the version dimmed after it, matching the App
+  // Store row pattern) on multi-source feeds, or standing alone on a single-
+  // source page whose header already names the product. `release.title` is the
+  // last-resort fallback for the degenerate empty-title, no-version row.
+  const headingInner = descriptive ? (
+    descriptive
+  ) : versionLabel ? (
+    sourceByline ? (
+      <>
+        {sourceByline.name}{" "}
+        <span className="font-normal text-stone-500 dark:text-stone-400">{versionLabel}</span>
+      </>
+    ) : (
+      versionLabel
+    )
+  ) : (
+    release.title
+  );
 
-  // Prefer the AI-generated smart-brevity headline as the subtitle when
-  // present (#852, renamed in #860); fall back to the raw title in the
-  // version-prominent case. `titleShort` is more informative than the raw
-  // title for most sources, so showing it whenever populated is a strict
-  // improvement.
-  const subtitleText =
-    release.titleShort?.trim() ||
-    release.titleGenerated?.trim() ||
-    (showSubtitle ? release.title : null);
+  // Demoted meta line under a descriptive heading: the source name (linked,
+  // multi-source feeds only) and the version, joined by a dot. The version shows
+  // only when it isn't already in the version-fallback heading.
+  const showMetaVersion = !!descriptive && !!versionLabel;
+  const showMetaName = !!sourceByline && (!!descriptive || !versionLabel);
 
   useEffect(() => {
     const el = contentRef.current;
@@ -213,22 +226,6 @@ export function ReleaseListItem({
           >
             {formatDate(release.publishedAt)}
           </time>
-        )}
-        {sourceByline && (
-          <div className="text-[11px] text-stone-400 dark:text-stone-500 inline-flex items-center gap-1 text-right leading-tight">
-            {sourceByline.type && <SourceTypeIcon type={sourceByline.type} size={11} />}
-            {sourceByline.orgSlug ? (
-              <Link
-                href={`/${sourceByline.orgSlug}/${sourceByline.slug}`}
-                className="hover:text-stone-700 dark:hover:text-stone-300"
-                onClick={(e) => e.stopPropagation()}
-              >
-                {sourceByline.name}
-              </Link>
-            ) : (
-              <span>{sourceByline.name}</span>
-            )}
-          </div>
         )}
         {/* Dot on timeline */}
         <div className="absolute right-0 top-[22px] w-[7px] h-[7px] rounded-full bg-stone-300 dark:bg-stone-600 translate-x-[3px] z-10" />
@@ -367,11 +364,11 @@ export function ReleaseListItem({
                       href={`/release/${release.id}`}
                       className="hover:underline underline-offset-2"
                     >
-                      {heading}
+                      {headingInner}
                     </Link>
                   </ViewTransition>
                 ) : (
-                  heading
+                  headingInner
                 )}
               </h2>
               {release.url && (
@@ -396,8 +393,25 @@ export function ReleaseListItem({
                 </span>
               )}
             </div>
-            {subtitleText && (
-              <div className="text-sm text-stone-600 dark:text-stone-400 mb-1">{subtitleText}</div>
+            {(showMetaName || showMetaVersion) && (
+              <div className="text-sm text-stone-600 dark:text-stone-400 mb-1">
+                {showMetaName &&
+                  sourceByline &&
+                  (sourceByline.orgSlug ? (
+                    <Link
+                      href={`/${sourceByline.orgSlug}/${sourceByline.slug}`}
+                      className="hover:text-stone-700 dark:hover:text-stone-300"
+                    >
+                      {sourceByline.name}
+                    </Link>
+                  ) : (
+                    sourceByline.name
+                  ))}
+                {showMetaName && showMetaVersion && (
+                  <span className="text-stone-400 dark:text-stone-600"> · </span>
+                )}
+                {showMetaVersion && versionLabel}
+              </div>
             )}
             <div
               className={`group relative${isOverflowing ? " cursor-pointer" : ""}`}
