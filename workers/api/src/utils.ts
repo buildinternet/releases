@@ -8,6 +8,7 @@ import {
 } from "@buildinternet/releases-core/schema";
 import { toSlug } from "@buildinternet/releases-core/slug";
 import { resolveDateParam } from "@buildinternet/releases-core/dates";
+import { parseCompositionFromMetadata } from "@buildinternet/releases-core/composition";
 import {
   hydrateMediaUrls,
   normalizeMediaUrl,
@@ -46,6 +47,7 @@ export function formatAggregateReleaseRow(
     product:
       r.product_slug && r.product_name ? { slug: r.product_slug, name: r.product_name } : null,
     coverageCount: r.coverage_count,
+    composition: parseCompositionFromMetadata(r.metadata ?? null),
   };
 }
 

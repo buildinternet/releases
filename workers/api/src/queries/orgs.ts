@@ -488,6 +488,8 @@ export type OrgReleaseRow = {
   coverage_count: number;
   content_chars: number | null;
   content_tokens: number | null;
+  /** Raw `releases.metadata` JSON blob — parsed into `composition` by the route mapper. */
+  metadata: string | null;
 };
 
 /** Uses raw D1 prepare/bind instead of Drizzle because cursor WHERE fragments are dynamic strings. */
@@ -573,7 +575,7 @@ export async function getOrgReleasesFeed(
     SELECT r.id, r.version, r.title, r.content, r.summary,
            r.title_generated, r.title_short, r.type,
            r.published_at, r.fetched_at, r.url, r.media, r.prerelease,
-           r.content_chars, r.content_tokens,
+           r.content_chars, r.content_tokens, r.metadata,
            s.slug AS source_slug, s.name AS source_name, s.type AS source_type,
            s.metadata AS source_metadata,
            p.slug AS product_slug, p.name AS product_name,

@@ -224,7 +224,6 @@ export default async function ReleaseDetailPage({ params }: { params: Promise<{ 
                 View original ↗
               </a>
             )}
-            <CompositionChip composition={release.composition} />
             {adminEnabled && (
               <span className="ml-auto">
                 <ReleaseAdminMenu
@@ -235,6 +234,7 @@ export default async function ReleaseDetailPage({ params }: { params: Promise<{ 
               </span>
             )}
           </div>
+          <CompositionChip composition={release.composition} className="mt-3" />
           <CliCommand identifier={release.id} />
         </div>
 
