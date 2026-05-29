@@ -220,6 +220,24 @@ export interface SourceMetadata {
     minOsVersion?: string;
     artworkUrl?: string;
   };
+
+  /**
+   * Firecrawl monitoring opt-in. Present on sources whose fetch is delegated
+   * to Firecrawl's external scrape + change-detection (anti-bot escape hatch
+   * for sources our own pipeline can't reach). Desired-state source of truth;
+   * the monitor spec is derived from this + source.url. See
+   * docs/superpowers/specs/2026-05-29-firecrawl-monitoring-integration-design.md
+   */
+  firecrawl?: {
+    enabled: boolean; // opt-in master switch
+    monitorId?: string; // stamped after create; cleared on delete
+    schedule?: string; // cron or natural-language; default "every 6 hours"
+    proxy?: "basic" | "enhanced" | "auto"; // default "auto"
+    goal?: string; // natural-language judge goal
+    judgeEnabled?: boolean; // default true; false = always extract (gate off)
+    lastCheckId?: string; // observability
+    lastChangeAt?: string; // observability (ISO)
+  };
 }
 
 /** Parse the JSON metadata blob from a source row. */
