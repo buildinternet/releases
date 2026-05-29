@@ -108,10 +108,14 @@ export function TerminalSession({
   // When `tabs` is provided, the active tab drives everything below; the
   // `blocks` prop is the single-transcript fallback. `tabs[activeTab]` is a
   // stable reference, so `activeBlocks` is safe in effect deps.
-  const activeTabMeta = tabs && tabs.length > 0 ? tabs[activeTab] : undefined;
-  const activeBlocks = activeTabMeta ? activeTabMeta.blocks : blocks;
+  const activeTabMeta = tabs?.[activeTab];
+  const activeBlocks = activeTabMeta?.blocks ?? blocks;
   const hasJson = activeBlocks.some((b) => b.json != null);
   const agentMode = view === "agents";
+
+  // With tabs, the active tab's tabpanel is already named by its tab button, so
+  // the section stays unlabeled — avoids a redundant region landmark wrapping it.
+  const sectionLabel = activeTabMeta ? undefined : ariaLabel;
 
   const fullText = activeBlocks
     .map((b) => {
@@ -207,7 +211,7 @@ export function TerminalSession({
 
   return (
     <section
-      aria-label={activeTabMeta ? `${activeTabMeta.label} — ${ariaLabel}` : ariaLabel}
+      aria-label={sectionLabel}
       className={`group relative overflow-hidden rounded-lg border border-stone-200 bg-stone-100 shadow-sm dark:border-stone-800 dark:bg-[oklch(0.268_0.007_286.3)] ${className ?? ""}`}
     >
       {tabs && tabs.length > 0 ? (
