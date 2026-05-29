@@ -15,6 +15,11 @@ export type RollupCandidate = {
   source: { slug: string; name: string; type: string };
   product?: { slug: string; name: string } | null;
   org?: { slug: string; name: string };
+  // Server-resolved grouping identity — COALESCE(product, source) (#1234).
+  // Preferred when present; absent on older API responses, where we fall back
+  // to deriving it from product ?? source below.
+  groupSlug?: string;
+  groupName?: string;
 };
 
 // GitHub releases are tag drops; everything else (RSS, scrape, agent, atom)
@@ -33,13 +38,17 @@ export function isAppStore(r: { source: { type: string } }): boolean {
 }
 
 // How a row joins a rollup bucket. App Store apps key per-source (#1236): a
-// product can hold both an iOS and a macOS source, and those are distinct
-// platforms that must not merge into one rollup. Every other source keys on
-// product when bound, so a monorepo's same-day package bumps unify under the
-// product. Slug and label are derived together so they can never drift.
+// product can hold both an iOS and a macOS source, distinct platforms that must
+// not merge into one rollup — this overrides even the server-resolved groupSlug
+// (#1234), which COALESCEs an app source up to its product. Every other row
+// prefers the server-resolved identity, falling back to product ?? source on
+// older API responses. Slug and label are derived together so they can't drift.
 function rollupGroup(r: RollupCandidate): { slug: string; label: string } {
   if (isAppStore(r)) return { slug: r.source.slug, label: r.source.name };
-  return { slug: r.product?.slug ?? r.source.slug, label: r.product?.name ?? r.source.name };
+  return {
+    slug: r.groupSlug ?? r.product?.slug ?? r.source.slug,
+    label: r.groupName ?? r.product?.name ?? r.source.name,
+  };
 }
 
 export type TagListItem<R = CollectionReleaseItem> =

@@ -97,5 +97,20 @@ describe("release feed composition", () => {
         formatAggregateReleaseRow({ ...baseRow, metadata: "not json" }, "").composition,
       ).toBeNull();
     });
+
+    it("emits groupSlug/groupName from the source when there's no product (#1234)", () => {
+      const item = formatAggregateReleaseRow(baseRow, "");
+      expect(item.groupSlug).toBe("codex-changelog");
+      expect(item.groupName).toBe("Codex Changelog");
+    });
+
+    it("emits groupSlug/groupName from the product when the source is bound (#1234)", () => {
+      const item = formatAggregateReleaseRow(
+        { ...baseRow, product_slug: "codex-cli", product_name: "Codex CLI" },
+        "",
+      );
+      expect(item.groupSlug).toBe("codex-cli");
+      expect(item.groupName).toBe("Codex CLI");
+    });
   });
 });

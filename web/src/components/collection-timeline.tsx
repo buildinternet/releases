@@ -653,9 +653,10 @@ function TagItem({ item, index }: { item: TagListItem; index: number }) {
 function CommitLogRow({ release }: { release: CollectionReleaseItem }) {
   const [expanded, setExpanded] = useState(false);
   const versionLabel = release.version ?? release.title;
-  // Fall back to source name when an org/source isn't bound to a product
-  // (single-product orgs and standalone sources). Beats an empty dash.
-  const productLabel = release.product?.name ?? release.source.name;
+  // Prefer the server-resolved group name (#1234); fall back to deriving it
+  // from product ?? source for older API responses that omit `groupName`.
+  // Falling back to the source name beats an empty dash for standalone sources.
+  const productLabel = release.groupName ?? release.product?.name ?? release.source.name;
   const body = release.content || release.summary || "";
   const hasBody = body.trim().length > 0;
   const thumbnail = findThumbnail(release);

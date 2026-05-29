@@ -273,6 +273,38 @@ describe("rollupTags", () => {
       expect(isAppStore(rel({ org: "cf", source: "blog", type: "feed" }))).toBe(false);
       expect(isTag(rel({ org: "slack", source: "slack-ios", type: "appstore" }))).toBe(false);
     });
+
+    // The API COALESCEs an app source's groupSlug (#1234) up to its product, so
+    // in prod both platforms arrive with groupSlug="slack". App Store keying
+    // must override that and stay per-source, or iOS+macOS would merge.
+    test("keys per-source even when the server groupSlug coalesces to the product", () => {
+      const platform = (sourceSlug: string, version: string): RollupCandidate => ({
+        version,
+        title: version,
+        url: `https://apps.apple.com/${sourceSlug}/${version}`,
+        source: { slug: sourceSlug, name: "Slack", type: "appstore" },
+        product: { slug: "slack", name: "Slack" },
+        org: { slug: "slack", name: "Slack" },
+        groupSlug: "slack",
+        groupName: "Slack",
+      });
+      const tags: RollupCandidate[] = [
+        platform("slack-ios", "25.5.2"),
+        platform("slack-ios", "25.5.1"),
+        platform("slack-macos", "25.5.2"),
+        platform("slack-macos", "25.5.1"),
+      ];
+
+      const rollups = rollupTags(tags).filter(
+        (i): i is Extract<TagListItem<RollupCandidate>, { kind: "rollup" }> => i.kind === "rollup",
+      );
+
+      // Two buckets despite the shared server group "slack".
+      expect(rollups.map((r) => r.groupKey).sort()).toEqual([
+        "slack::slack-ios",
+        "slack::slack-macos",
+      ]);
+    });
   });
 
   // The org releases feed (#1233) reuses rollupTags on OrgReleaseItem rows,
@@ -300,5 +332,43 @@ describe("rollupTags", () => {
     // Empty org segment in the key (no `org` block) — grouping is by source/product alone.
     expect(byKey["::vercel-cli"]).toBeDefined();
     expect(byKey["::turborepo"]).toBeDefined();
+  });
+
+  // #1234: the API now emits a resolved groupSlug/groupName (COALESCE(product,
+  // source)). rollupTags prefers them over re-deriving product ?? source, so
+  // two distinct sources sharing a server group key collapse into one bucket.
+  test("prefers server groupSlug/groupName over product/source when present", () => {
+    const tags: RollupCandidate[] = [
+      {
+        version: "v1",
+        title: "v1",
+        url: "https://example.com/a",
+        source: { slug: "src-a", name: "Source A", type: "github" },
+        product: null,
+        org: { slug: "acme", name: "acme" },
+        groupSlug: "unified",
+        groupName: "Unified Group",
+      },
+      {
+        version: "v2",
+        title: "v2",
+        url: "https://example.com/b",
+        source: { slug: "src-b", name: "Source B", type: "github" },
+        product: null,
+        org: { slug: "acme", name: "acme" },
+        groupSlug: "unified",
+        groupName: "Unified Group",
+      },
+    ];
+
+    const out = rollupTags(tags);
+
+    expect(out).toHaveLength(1);
+    expect(out[0].kind).toBe("rollup");
+    const rollup = out[0] as Extract<TagListItem<RollupCandidate>, { kind: "rollup" }>;
+    // Both sources collapse into ONE bucket because they share the server group.
+    expect(rollup.groupKey).toBe("acme::unified");
+    expect(rollup.label).toBe("Unified Group");
+    expect(rollup.releases).toHaveLength(2);
   });
 });

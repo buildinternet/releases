@@ -174,11 +174,14 @@ describe("GET /v1/orgs/:slug/releases — product field", () => {
     const res = await callOrg("/orgs/beta/releases");
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
-      releases: Array<{ title: string; product: unknown }>;
+      releases: Array<{ title: string; product: unknown; groupSlug?: string; groupName?: string }>;
     };
     const rel = body.releases.find((r) => r.title === "Beta no-product");
     expect(rel).toBeDefined();
     expect(rel!.product).toBeNull();
+    // #1234: group identity falls back to the source when there's no product.
+    expect(rel!.groupSlug).toBe("beta-no-prod");
+    expect(rel!.groupName).toBe("beta-no-prod");
   });
 
   it("returns product: { slug, name } when the source belongs to a product", async () => {
@@ -195,10 +198,18 @@ describe("GET /v1/orgs/:slug/releases — product field", () => {
     const res = await callOrg("/orgs/gamma/releases");
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
-      releases: Array<{ title: string; product: { slug: string; name: string } | null }>;
+      releases: Array<{
+        title: string;
+        product: { slug: string; name: string } | null;
+        groupSlug?: string;
+        groupName?: string;
+      }>;
     };
     const rel = body.releases.find((r) => r.title === "Gamma product release");
     expect(rel).toBeDefined();
     expect(rel!.product).toEqual({ slug: "gamma-prod", name: "gamma-prod-product" });
+    // #1234: group identity prefers the product when the source is bound to one.
+    expect(rel!.groupSlug).toBe("gamma-prod");
+    expect(rel!.groupName).toBe("gamma-prod-product");
   });
 });

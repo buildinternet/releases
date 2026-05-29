@@ -348,6 +348,16 @@ export const OrgReleaseItemSchema = ReleaseItemSchema.extend({
    * omit this field; treat `undefined` as `null`. #1217.
    */
   product: z.object({ slug: z.string(), name: z.string() }).nullable().optional(),
+  /**
+   * Server-resolved grouping identity — `COALESCE(product.slug, source.slug)` /
+   * `COALESCE(product.name, source.name)`. The web releases feed keys and labels
+   * SDK/package-cluster rollups on these instead of reconstructing
+   * `product ?? source` client-side. Optional on the wire: older workers omit
+   * them, so clients must fall back to deriving from `product ?? source`. Never
+   * null when present (`source` is always set). #1234
+   */
+  groupSlug: z.string().optional(),
+  groupName: z.string().optional(),
 });
 
 /** Cursor pagination shape for the org releases feed. */
