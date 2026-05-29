@@ -1,5 +1,6 @@
 import { expect, it } from "bun:test";
 import { deriveMonitorSpec, syncFirecrawlMonitor } from "./firecrawl-sync.js";
+import { FirecrawlError } from "@releases/adapters/firecrawl.js";
 import type { FirecrawlClient } from "@releases/adapters/firecrawl.js";
 
 const baseSource = {
@@ -156,4 +157,55 @@ it("no-ops when disabled and no monitorId", async () => {
   );
   expect(calledDelete).toBe(false);
   expect(patch.firecrawl?.monitorId).toBeUndefined();
+});
+
+it("recreates the monitor when update returns 404 (stale id) and re-stamps the new id", async () => {
+  const src = {
+    id: "src_1",
+    slug: "s",
+    url: "https://x.com",
+    metadata: JSON.stringify({ firecrawl: { enabled: true, monitorId: "mon_stale" } }),
+  } as any;
+  let createdId: string | null = null;
+  const patch = await syncFirecrawlMonitor(
+    src,
+    fakeClient({
+      updateMonitor: async () => {
+        throw new FirecrawlError(404, "PUT", "/monitor/mon_stale", "not found");
+      },
+      createMonitor: async () => {
+        createdId = "mon_recreated";
+        return createdId;
+      },
+    }),
+    syncOpts,
+  );
+  expect(createdId!).toBe("mon_recreated");
+  expect(patch.firecrawl?.monitorId).toBe("mon_recreated");
+});
+
+it("rethrows a non-404 update error without recreating", async () => {
+  const src = {
+    id: "src_1",
+    slug: "s",
+    url: "https://x.com",
+    metadata: JSON.stringify({ firecrawl: { enabled: true, monitorId: "mon_x" } }),
+  } as any;
+  let created = false;
+  await expect(
+    syncFirecrawlMonitor(
+      src,
+      fakeClient({
+        updateMonitor: async () => {
+          throw new FirecrawlError(500, "PUT", "/monitor/mon_x", "server error");
+        },
+        createMonitor: async () => {
+          created = true;
+          return "nope";
+        },
+      }),
+      syncOpts,
+    ),
+  ).rejects.toThrow();
+  expect(created).toBe(false);
 });

@@ -52,7 +52,7 @@ sources without rework.
 
 ## Architecture
 
-```
+```text
 [Admin]  POST /v1/sources/:slug/firecrawl/sync { enabled, schedule?, proxy?, goal? }
    └─ merge into source.metadata.firecrawl
    └─ syncFirecrawlMonitor → Firecrawl POST/PUT/DELETE /v2/monitor

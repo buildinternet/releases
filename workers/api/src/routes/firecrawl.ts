@@ -31,12 +31,34 @@ firecrawlRoutes.post("/sources/:slug/firecrawl/sync", async (c) => {
   const source = await resolveSourceFromContext(c, db);
   if (!source) return c.json({ error: "not_found" }, 404);
 
-  const body = (await c.req.json().catch(() => ({}))) as {
+  let raw: unknown;
+  try {
+    raw = await c.req.json();
+  } catch {
+    return c.json(
+      { error: "bad_request", detail: "invalid JSON body (send {} to sync current state)" },
+      400,
+    );
+  }
+  const body = (raw ?? {}) as {
     enabled?: boolean;
     schedule?: string;
     proxy?: "basic" | "enhanced" | "auto";
     goal?: string;
   };
+  // Validate types before they reach metadata / the monitor spec — e.g. a stray
+  // `proxy: 123` would otherwise be stored and shipped to Firecrawl verbatim.
+  if (body.enabled !== undefined && typeof body.enabled !== "boolean")
+    return c.json({ error: "bad_request", detail: "enabled must be a boolean" }, 400);
+  if (body.schedule !== undefined && typeof body.schedule !== "string")
+    return c.json({ error: "bad_request", detail: "schedule must be a string" }, 400);
+  if (body.goal !== undefined && typeof body.goal !== "string")
+    return c.json({ error: "bad_request", detail: "goal must be a string" }, 400);
+  if (body.proxy !== undefined && !["basic", "enhanced", "auto"].includes(body.proxy))
+    return c.json(
+      { error: "bad_request", detail: "proxy must be one of basic|enhanced|auto" },
+      400,
+    );
 
   const meta = getSourceMeta(source);
   const merged = {
@@ -66,16 +88,27 @@ firecrawlRoutes.post("/sources/:slug/firecrawl/sync", async (c) => {
     client = createFirecrawlClient({ apiKey });
   }
 
+  const hadMonitor = Boolean(meta.firecrawl?.monitorId);
   const patch = await syncFirecrawlMonitor(sourceForSync, client, {
     webhookUrl: webhookUrl(env),
     webhookSecret: secret,
   });
 
   const finalMeta = { ...merged, ...patch };
-  await db
-    .update(sources)
-    .set({ metadata: JSON.stringify(finalMeta) })
-    .where(eq(sources.id, source.id));
+  try {
+    await db
+      .update(sources)
+      .set({ metadata: JSON.stringify(finalMeta) })
+      .where(eq(sources.id, source.id));
+  } catch (err) {
+    // Compensation: if we just minted a NEW monitor but failed to persist its
+    // id, delete it — an orphaned monitor keeps scraping (and billing Firecrawl
+    // credits) with no local handle to find it again. Best-effort; rethrow the
+    // original failure either way.
+    const newId = finalMeta.firecrawl?.monitorId;
+    if (!hadMonitor && newId) await client.deleteMonitor(newId).catch(() => {});
+    throw err;
+  }
 
   logEvent("info", {
     component: "firecrawl-sync",

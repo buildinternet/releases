@@ -27,6 +27,24 @@ export interface FirecrawlClientOpts {
   fetch?: typeof fetch;
 }
 
+/**
+ * Thrown by the client on a non-2xx response (or a 2xx with a non-JSON body).
+ * Carries the HTTP `status` so callers can branch — e.g. the reconcile helper
+ * treats a 404 on `updateMonitor` as "monitor deleted upstream" and recreates.
+ */
+export class FirecrawlError extends Error {
+  constructor(
+    readonly status: number,
+    readonly method: string,
+    readonly path: string,
+    readonly body: string,
+    message?: string,
+  ) {
+    super(message ?? `Firecrawl ${method} ${path} failed: ${status} ${body.slice(0, 300)}`);
+    this.name = "FirecrawlError";
+  }
+}
+
 async function call(
   f: typeof fetch,
   apiKey: string,
@@ -44,13 +62,17 @@ async function call(
   });
   const text = await res.text().catch(() => "");
   if (!res.ok) {
-    throw new Error(`Firecrawl ${method} ${path} failed: ${res.status} ${text.slice(0, 300)}`);
+    throw new FirecrawlError(res.status, method, path, text);
   }
   if (!text.trim()) return {};
   try {
     return JSON.parse(text);
   } catch {
-    throw new Error(
+    throw new FirecrawlError(
+      res.status,
+      method,
+      path,
+      text,
       `Firecrawl ${method} ${path} returned non-JSON 2xx body: ${text.slice(0, 200)}`,
     );
   }

@@ -101,4 +101,32 @@ describe("POST /v1/sources/:slug/firecrawl/sync", () => {
     const json = (await res.json()) as { error: string };
     expect(json.error).toBe("not_found");
   });
+
+  it("rejects a malformed JSON body with 400", async () => {
+    const res = await fetchApi(
+      new Request("http://test/v1/sources/src_1/firecrawl/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{",
+      }),
+    );
+
+    expect(res.status).toBe(400);
+    const json = (await res.json()) as { error: string };
+    expect(json.error).toBe("bad_request");
+  });
+
+  it("rejects invalid field types with 400", async () => {
+    const res = await fetchApi(
+      new Request("http://test/v1/sources/src_1/firecrawl/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled: "yes", proxy: 123 }),
+      }),
+    );
+
+    expect(res.status).toBe(400);
+    const json = (await res.json()) as { error: string };
+    expect(json.error).toBe("bad_request");
+  });
 });

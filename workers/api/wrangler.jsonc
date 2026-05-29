@@ -627,16 +627,12 @@
           "store_id": "a887a71cab084105b79706df23380723",
           "secret_name": "WEB_BOT_AUTH_PRIVATE_KEY",
         },
-        {
-          "binding": "FIRECRAWL_API_KEY",
-          "store_id": "a887a71cab084105b79706df23380723",
-          "secret_name": "FIRECRAWL_API_KEY",
-        },
-        {
-          "binding": "FIRECRAWL_WEBHOOK_SECRET",
-          "store_id": "a887a71cab084105b79706df23380723",
-          "secret_name": "FIRECRAWL_WEBHOOK_SECRET",
-        },
+        // Firecrawl monitor management is intentionally prod-only. Staging shares
+        // the prod Secrets Store, so binding the same FIRECRAWL_* secrets here
+        // would let a staging sync clobber prod monitors (same monitor name) and
+        // repoint their webhooks at staging. Staging is a read-surface with no
+        // crons or webhooks (see AGENTS.md), so POST /sources/:slug/firecrawl/sync
+        // correctly returns api_key_unbound (500) here.
       ],
     },
   },
