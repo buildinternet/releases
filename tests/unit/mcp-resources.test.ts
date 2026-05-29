@@ -120,6 +120,9 @@ describe("MCP resources + completion", () => {
       const resourceDomains = first._meta?.ui?.csp?.resourceDomains ?? [];
       expect(resourceDomains).toContain("https://media.releases.sh");
       expect(resourceDomains).toContain("https://github.com");
+      // The GitHub-handle fallback (github.com/{handle}.png) 302s to
+      // avatars.githubusercontent.com, so the redirect target must be allowed too.
+      expect(resourceDomains).toContain("https://*.githubusercontent.com");
     } finally {
       await link.close();
     }
