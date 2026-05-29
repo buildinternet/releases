@@ -16,6 +16,23 @@ export const UI_RESOURCE_MIME_TYPE = "text/html;profile=mcp-app";
 /** Stable URIs paired with tool `_meta.ui.resourceUri` values. */
 export const RELEASE_FEED_UI_URI = "ui://releases/release-feed.html";
 
+/**
+ * External origins the release-feed UI iframe needs to load images from.
+ * MCP App hosts (claude.ai is the first web host) sandbox the UI iframe under
+ * a CSP that blocks ALL external resources unless the resource declares them
+ * via `_meta.ui.csp`. `resourceDomains` maps to `img-src` (plus script/style/
+ * font/media-src) per the MCP Apps spec. Without this, org avatars served from
+ * media.releases.sh — and the `github.com/{handle}.png` fallback in
+ * `OrgAvatar`, which redirects to avatars.githubusercontent.com — render as
+ * broken images. The bundled JS/CSS are inlined into the HTML shell, so the
+ * iframe needs no script/style origins beyond inline.
+ */
+export const RELEASE_FEED_RESOURCE_DOMAINS = [
+  "https://media.releases.sh",
+  "https://github.com",
+  "https://*.githubusercontent.com",
+];
+
 /** Completion-only: `resources/list` is intentionally empty. See docs/architecture/mcp.md. */
 
 type ReadResult = {
@@ -113,6 +130,15 @@ export function registerResources(server: McpServer, db: D1Db, mediaOrigin: stri
           uri: RELEASE_FEED_UI_URI,
           mimeType: UI_RESOURCE_MIME_TYPE,
           text: releaseFeedHtml,
+          // Host iframes sandbox under a deny-by-default CSP; declare the
+          // origins our avatars load from so they aren't blocked as img-src.
+          _meta: {
+            ui: {
+              csp: {
+                resourceDomains: RELEASE_FEED_RESOURCE_DOMAINS,
+              },
+            },
+          },
         },
       ],
     }),

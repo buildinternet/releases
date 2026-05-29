@@ -104,6 +104,27 @@ describe("MCP resources + completion", () => {
     }
   });
 
+  it("declares a resource-domain CSP so the host iframe can load org avatars", async () => {
+    // The MCP App host (claude.ai) sandboxes the UI iframe under a CSP that
+    // blocks ALL external resources by default. Without declaring our avatar
+    // origins under `_meta.ui.csp.resourceDomains` (which maps to `img-src`),
+    // org avatars from media.releases.sh / GitHub render as broken images.
+    const link = await linkResources(fixture.db);
+    try {
+      const result = await link.client.readResource({
+        uri: "ui://releases/release-feed.html",
+      });
+      const first = result.contents[0] as {
+        _meta?: { ui?: { csp?: { resourceDomains?: string[] } } };
+      };
+      const resourceDomains = first._meta?.ui?.csp?.resourceDomains ?? [];
+      expect(resourceDomains).toContain("https://media.releases.sh");
+      expect(resourceDomains).toContain("https://github.com");
+    } finally {
+      await link.close();
+    }
+  });
+
   it("lists only the MCP App UI resources — entity discovery is completion-only", async () => {
     // The four entity resource templates (org / catalog / product / source) are
     // intentionally absent from `resources/list` — the catalog scales beyond

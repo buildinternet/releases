@@ -140,11 +140,26 @@ function stripMarkdown(md: string): string {
 /**
  * Company icon. Mirrors the web `OrgAvatar`: stored avatar first, GitHub-handle
  * PNG as fallback, monogram circle when neither resolves.
+ *
+ * The host iframe runs under a deny-by-default CSP; we declare our avatar
+ * origins via the UI resource's `_meta.ui.csp.resourceDomains` so images load.
+ * The `onError` chain is defense-in-depth: if a candidate is still blocked or
+ * 404s, we advance to the next source and ultimately the monogram, so a load
+ * failure degrades gracefully instead of showing a broken-image placeholder.
  */
 function OrgAvatar({ org, size = 18 }: { org: OrgIdentity | null; size?: number }) {
-  const src =
-    org?.avatarUrl ??
-    (org?.githubHandle ? `https://github.com/${org.githubHandle}.png?size=${size * 2}` : null);
+  const candidates = useMemo(() => {
+    const list: string[] = [];
+    if (org?.avatarUrl) list.push(org.avatarUrl);
+    if (org?.githubHandle) list.push(`https://github.com/${org.githubHandle}.png?size=${size * 2}`);
+    return list;
+  }, [org?.avatarUrl, org?.githubHandle, size]);
+
+  const [failedCount, setFailedCount] = useState(0);
+  // Reset the failure cursor when the candidate set changes (row recycling).
+  useEffect(() => setFailedCount(0), [candidates]);
+
+  const src = candidates[failedCount] ?? null;
   if (!src) {
     const letter = (org?.name ?? "?").charAt(0).toUpperCase();
     return (
@@ -166,6 +181,7 @@ function OrgAvatar({ org, size = 18 }: { org: OrgIdentity | null; size?: number 
       height={size}
       loading="lazy"
       aria-hidden="true"
+      onError={() => setFailedCount((n) => n + 1)}
     />
   );
 }
