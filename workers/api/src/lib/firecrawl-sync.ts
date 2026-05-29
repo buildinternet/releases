@@ -24,7 +24,7 @@ export function deriveMonitorSpec(
       url: opts.webhookUrl,
       headers: { "X-Firecrawl-Token": opts.webhookSecret },
       metadata: { sourceId: source.id },
-      events: ["page"],
+      events: ["monitor.page"],
     },
   };
 }
