@@ -137,6 +137,42 @@ it("updates the monitor when enabled with an existing id", async () => {
   expect(patch.firecrawl?.monitorId).toBe("mon_existing");
 });
 
+it("on update sends ONLY the app-owned webhook — never the dashboard-tunable fields", async () => {
+  // The Firecrawl dashboard is a second writer: an operator can retune frequency,
+  // proxy, or goal there. PATCH merges, so we reconcile only the webhook (URL +
+  // X-Firecrawl-Token + sourceId + events) and leave schedule/proxy/goal/targets
+  // exactly as the dashboard has them — sync must never fight dashboard config.
+  const src = makeSource({
+    enabled: true,
+    monitorId: "mon_existing",
+    schedule: "every 6 hours",
+    proxy: "enhanced",
+    goal: "old goal",
+  });
+  let sentSpec: Record<string, unknown> | undefined;
+  await syncFirecrawlMonitor(
+    src,
+    fakeClient({
+      updateMonitor: async (_id: string, spec: Record<string, unknown>) => {
+        sentSpec = spec;
+      },
+    }),
+    syncOpts,
+  );
+  const webhook = sentSpec?.webhook as {
+    metadata?: { sourceId?: string };
+    headers?: Record<string, string>;
+  };
+  expect(webhook?.metadata?.sourceId).toBe("src_1");
+  expect(webhook?.headers?.["X-Firecrawl-Token"]).toBe("s");
+  // Nothing that would clobber operator changes in the dashboard.
+  expect(sentSpec?.schedule).toBeUndefined();
+  expect(sentSpec?.proxy).toBeUndefined();
+  expect(sentSpec?.goal).toBeUndefined();
+  expect(sentSpec?.targets).toBeUndefined();
+  expect(sentSpec?.judgeEnabled).toBeUndefined();
+});
+
 it("no-ops when disabled and no monitorId", async () => {
   const src = makeSource({ enabled: false });
   let calledDelete = false;
@@ -160,7 +196,7 @@ it("recreates the monitor when update returns 404 (stale id) and re-stamps the n
     src,
     fakeClient({
       updateMonitor: async () => {
-        throw new FirecrawlError(404, "PUT", "/monitor/mon_stale", "not found");
+        throw new FirecrawlError(404, "PATCH", "/monitor/mon_stale", "not found");
       },
       createMonitor: async () => {
         createdId = "mon_recreated";
@@ -181,7 +217,7 @@ it("rethrows a non-404 update error without recreating", async () => {
       src,
       fakeClient({
         updateMonitor: async () => {
-          throw new FirecrawlError(500, "PUT", "/monitor/mon_x", "server error");
+          throw new FirecrawlError(500, "PATCH", "/monitor/mon_x", "server error");
         },
         createMonitor: async () => {
           created = true;

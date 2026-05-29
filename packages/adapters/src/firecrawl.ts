@@ -69,7 +69,9 @@ export function createFirecrawlClient(opts: FirecrawlClientOpts) {
       return json.data;
     },
     async updateMonitor(id: string, spec: UpdateMonitorRequest): Promise<void> {
-      await call(f, key, "PUT", `/monitor/${id}`, spec);
+      // v2 update is PATCH with partial-merge semantics — only the fields sent
+      // are changed, omitted ones are left untouched. (A PUT 405s here.)
+      await call(f, key, "PATCH", `/monitor/${id}`, spec);
     },
     async deleteMonitor(id: string): Promise<void> {
       await call(f, key, "DELETE", `/monitor/${id}`);

@@ -59,7 +59,12 @@ export async function syncFirecrawlMonitor(
   const spec = deriveMonitorSpec(source, opts);
   if (fc.monitorId) {
     try {
-      await client.updateMonitor(fc.monitorId, spec);
+      // Reconcile ONLY the app-owned webhook (URL + X-Firecrawl-Token + sourceId
+      // + events). The PATCH merges, so schedule / proxy / goal / targets stay
+      // exactly as the operator set them on the Firecrawl dashboard — sync never
+      // fights dashboard config. Those tuning fields are established at create
+      // time (below) and are dashboard-authoritative thereafter.
+      await client.updateMonitor(fc.monitorId, { webhook: spec.webhook });
       return { firecrawl: { ...fc, enabled: true } };
     } catch (err) {
       // Self-heal: a 404 means the monitor was deleted upstream (e.g. via the

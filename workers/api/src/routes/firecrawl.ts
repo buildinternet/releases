@@ -32,7 +32,7 @@ const postFirecrawlSyncRoute = describeRoute({
   tags: ["Sources"],
   summary: "Sync a source's Firecrawl monitor",
   description:
-    "Admin-only. Reconciles the Firecrawl monitor for the source (typed `src_…` ID) to match its desired state: the body (`enabled`, `schedule`, `proxy`, `goal`) is merged into `metadata.firecrawl`, then enabling creates/updates the monitor and disabling deletes it. Auth inherited from `publicReadAuthMiddleware`'s non-SAFE_METHODS branch — Bearer token required.",
+    "Admin-only. Reconciles the Firecrawl monitor for the source (typed `src_…` ID): the body (`enabled`, `schedule`, `proxy`, `goal`) is merged into `metadata.firecrawl`, then enabling creates the monitor and disabling deletes it. `schedule`/`proxy`/`goal` are applied when the monitor is first created; on an existing monitor only the webhook (URL + token + sourceId) is reconciled, so frequency/proxy/goal changes made in the Firecrawl dashboard are authoritative and never overwritten. Auth inherited from `publicReadAuthMiddleware`'s non-SAFE_METHODS branch — Bearer token required.",
   security: [{ bearerAuth: [] }],
   responses: {
     200: {
