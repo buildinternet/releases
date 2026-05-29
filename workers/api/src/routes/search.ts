@@ -47,6 +47,7 @@ import {
 } from "@buildinternet/releases-core/schema";
 import { parseCoordinate } from "@buildinternet/releases-core/lookup-coordinate";
 import { normalizeDomain } from "@buildinternet/releases-core/domain";
+import { appStoreSourceInfo } from "@releases/adapters/appstore";
 import { eq, and } from "drizzle-orm";
 import { runLookup } from "./lookups.js";
 import { embedSourceSideEffect } from "./sources.js";
@@ -77,7 +78,12 @@ function deriveClientKind(userAgent: string | null): string | null {
  * same markdown + thumbnail treatment used in org/source feeds.
  */
 export function hydrateReleaseHit(
-  row: RawSearchReleaseRow,
+  // Hybrid hits arrive with `appStore` already resolved by `buildReleaseHits`;
+  // lexical FTS rows carry raw `sourceMetadata` instead. Accept either and
+  // resolve below so both paths emit the same wire field. #1206
+  row: RawSearchReleaseRow & {
+    appStore?: { platform: "ios" | "macos"; iconUrl: string | null } | null;
+  },
   mediaOrigin: string,
   score?: number,
 ): SearchReleaseHit {
@@ -100,6 +106,7 @@ export function hydrateReleaseHit(
     sourceSlug: row.sourceSlug,
     sourceName: row.sourceName,
     sourceType: row.sourceType,
+    appStore: row.appStore ?? appStoreSourceInfo(row.sourceType, row.sourceMetadata ?? null),
     orgSlug: row.orgSlug,
     orgName: row.orgName,
     productSlug: row.productSlug ?? null,
@@ -735,6 +742,7 @@ searchRoutes.get(
             sourceSlug: h.release.source.slug,
             sourceName: h.release.source.name,
             sourceType: h.release.source.type,
+            appStore: h.release.source.appStore,
             productSlug: h.release.productSlug,
             orgSlug: h.release.orgSlug,
             orgName: h.release.orgName,

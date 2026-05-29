@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { KIND_VALUES } from "@buildinternet/releases-core/kinds";
-import { MediaItemSchema, ReleaseTypeSchema } from "./shared.js";
+import { AppStoreSourceInfoSchema, MediaItemSchema, ReleaseTypeSchema } from "./shared.js";
 import { SourceTypeSchema } from "./sources.js";
 import { LookupStatusSchema } from "./lookups.js";
 
@@ -66,6 +66,11 @@ export const SearchReleaseHitSchema = z.object({
   // without re-validating; legacy rows occasionally drift from the
   // canonical four-value set. Used by the web byline icon.
   sourceType: z.string().optional(),
+  /**
+   * App Store platform + icon for `type: "appstore"` sources, null/absent
+   * otherwise. Powers the compact app-update treatment on the search card. #1206
+   */
+  appStore: AppStoreSourceInfoSchema.nullable().optional(),
   orgSlug: z.string().nullable(),
   orgName: z.string().nullable().optional(),
   /** Owning product slug — present when the source belongs to a product. Lets

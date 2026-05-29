@@ -181,7 +181,17 @@ export interface HybridReleaseHit {
     content: string;
     /** JSON-encoded MediaItem[] or null — route parses + resolves r2Url. */
     media: string | null;
-    source: { id: string; slug: string; name: string; type: string };
+    source: {
+      id: string;
+      slug: string;
+      name: string;
+      type: string;
+      /**
+       * App Store platform + icon for `type: "appstore"` sources, null otherwise.
+       * Lets the web search card render the compact app-update treatment. #1206
+       */
+      appStore: { platform: "ios" | "macos"; iconUrl: string | null } | null;
+    };
     /** Owning product slug — null for orphan sources; powers product-aware byline links. */
     productSlug: string | null;
     orgSlug: string | null;
@@ -306,6 +316,8 @@ interface RawReleaseRow {
   sourceSlug: string;
   sourceName: string;
   sourceType: string;
+  /** Raw source.metadata JSON — parsed for App Store icon/platform (#1206). */
+  sourceMetadata: string | null;
   /** Source's own kind — used for COALESCE(sourceKind, productKind) filtering. */
   sourceKind: string | null;
   /** Parent product's kind — fallback when sourceKind is null. */
@@ -348,6 +360,7 @@ async function hydrateReleases(
                s.slug as sourceSlug,
                s.name as sourceName,
                s.type as sourceType,
+               s.metadata as sourceMetadata,
                s.kind as sourceKind,
                p.kind as productKind,
                p.slug as productSlug,
@@ -674,6 +687,29 @@ async function runHybridSearchInternal(
   };
 }
 
+/**
+ * App Store platform + icon from a source's `metadata` JSON. Returns null for
+ * non-`appstore` sources or unparseable metadata. Mirrors `appStoreSourceInfo`
+ * in packages/adapters/src/appstore.ts and `getAppInfo` in web — duplicated
+ * here to keep the search package's dep graph at `releases-core` only. #1206
+ */
+function appStoreInfoFromMetadata(
+  type: string,
+  metadataJson: string | null,
+): { platform: "ios" | "macos"; iconUrl: string | null } | null {
+  if (type !== "appstore") return null;
+  let appStore: Record<string, unknown> | undefined;
+  try {
+    const block = (JSON.parse(metadataJson ?? "{}") as { appStore?: unknown } | null)?.appStore;
+    if (block && typeof block === "object") appStore = block as Record<string, unknown>;
+  } catch {
+    appStore = undefined;
+  }
+  const platform = appStore?.platform === "macos" ? "macos" : "ios";
+  const iconUrl = typeof appStore?.artworkUrl === "string" ? appStore.artworkUrl : null;
+  return { platform, iconUrl };
+}
+
 async function buildReleaseHits(
   db: WorkerD1Db,
   entries: Array<{ id: string; score: number }>,
@@ -719,6 +755,7 @@ async function buildReleaseHits(
           slug: row.sourceSlug,
           name: row.sourceName,
           type: row.sourceType,
+          appStore: appStoreInfoFromMetadata(row.sourceType, row.sourceMetadata),
         },
         productSlug: row.productSlug,
         orgSlug: row.orgSlug,

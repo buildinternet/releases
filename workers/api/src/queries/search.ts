@@ -28,6 +28,8 @@ export interface RawSearchReleaseRow {
   sourceSlug: string;
   sourceName: string;
   sourceType: string;
+  /** Raw source.metadata JSON — parsed into the App Store icon/platform (#1206). */
+  sourceMetadata?: string | null;
   orgSlug: string | null;
   orgName: string | null;
   /** Owning product's slug (for product-aware byline links); null for orphan sources. */
@@ -208,6 +210,7 @@ export async function searchReleasesFts(
   const ftsQuery = toFtsMatchQuery(query);
   return db.all<RawSearchReleaseRow>(sql`
     SELECT r.id as id, s.slug as sourceSlug, s.name as sourceName, s.type as sourceType,
+           s.metadata as sourceMetadata,
            o.slug as orgSlug, o.name as orgName, p.slug as productSlug,
            r.version, r.title,
            COALESCE(r.summary, SUBSTR(r.content, 1, 150)) as summary,
@@ -269,6 +272,7 @@ export async function searchReleasesFromMatchedEntities(
 
   return db.all<RawSearchReleaseRow>(sql`
     SELECT r.id as id, s.slug as sourceSlug, s.name as sourceName, s.type as sourceType,
+           s.metadata as sourceMetadata,
            o.slug as orgSlug, o.name as orgName, p.slug as productSlug,
            r.version, r.title,
            COALESCE(r.summary, SUBSTR(r.content, 1, 150)) as summary,

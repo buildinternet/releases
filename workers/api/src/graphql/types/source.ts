@@ -1,5 +1,15 @@
 import { builder } from "../builder.js";
 import { SourceTypeEnum } from "./enums.js";
+import { appStoreSourceInfo } from "@releases/adapters/appstore";
+
+builder.objectType("AppStoreInfo", {
+  description:
+    "App Store platform + icon for a `type: appstore` source. Lets clients render the compact app-update treatment (icon + 'Available for iOS/macOS').",
+  fields: (t) => ({
+    platform: t.exposeString("platform"),
+    iconUrl: t.exposeString("iconUrl", { nullable: true }),
+  }),
+});
 
 export const SourceType = builder.objectType("Source", {
   description: "A changelog source (github / scrape / feed / agent).",
@@ -14,6 +24,13 @@ export const SourceType = builder.objectType("Source", {
     medianGapDays: t.exposeFloat("medianGapDays", { nullable: true }),
     discovery: t.exposeString("discovery"),
     createdAt: t.expose("createdAt", { type: "DateTime" }),
+
+    appStore: t.field({
+      type: "AppStoreInfo",
+      nullable: true,
+      description: "Platform + icon for App Store sources; null for all other source types. #1206",
+      resolve: (s) => appStoreSourceInfo(s.type, s.metadata),
+    }),
 
     org: t.field({
       type: "Org",

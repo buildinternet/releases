@@ -4,6 +4,7 @@ import { JsonLd } from "@/components/json-ld";
 import { SourceReleaseList } from "@/components/source-release-list";
 import { RelatedRail } from "@/components/related-rail";
 import { buildReleaseItemListJsonLd, buildSourceEntityJsonLd } from "@/lib/schema-org";
+import { getAppInfo } from "@/lib/app-source";
 
 /**
  * Two rails under the release list:
@@ -49,6 +50,15 @@ export function SourceView({ orgSlug, source }: { orgSlug: string; source: Sourc
   const sourceSlug = source.slug;
   const initialCursor = source.pagination.nextCursor;
 
+  // App Store sources render the compact app-update row (icon + "{App} v{ver}"
+  // + "Available for iOS/macOS") instead of the standard version/notes layout.
+  // Every release on a source page is the same app, so one AppRowInfo applies
+  // to the whole list. getAppInfo returns null for non-app sources. #1206
+  const appInfo = getAppInfo(source);
+  const appStore = appInfo
+    ? { label: appInfo.label, iconUrl: appInfo.iconUrl, appName: source.name }
+    : null;
+
   const sourceUrl = `https://releases.sh/${orgSlug}/${sourceSlug}`;
   const releaseListId = `${sourceUrl}#releases`;
   const jsonLd = {
@@ -88,6 +98,7 @@ export function SourceView({ orgSlug, source }: { orgSlug: string; source: Sourc
         sourceSlug={sourceSlug}
         initialReleases={source.releases}
         initialCursor={initialCursor}
+        appStore={appStore}
       />
       <RelatedRails
         anchorReleaseId={source.releases[0]?.id ?? null}

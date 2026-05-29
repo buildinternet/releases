@@ -135,6 +135,39 @@ describe("GraphQL spike", () => {
     expect(result.data?.org).toEqual({ id: "org_a", name: "Acme", slug: "acme" });
   });
 
+  it("resolves Source.appStore from metadata for App Store sources, null otherwise (#1206)", async () => {
+    await h.db.insert(sources).values({
+      id: "src_app",
+      name: "Acme App",
+      slug: "acme-app",
+      type: "appstore",
+      url: "https://apps.apple.com/app/id1",
+      orgId: "org_a",
+      metadata: JSON.stringify({
+        appStore: { platform: "macos", artworkUrl: "https://mzstatic.test/1024x1024bb.png" },
+      }),
+    });
+
+    const result = await graphql({
+      schema,
+      source: `query {
+        app: source(id: "src_app") { type appStore { platform iconUrl } }
+        gh: source(id: "src_a1_1") { type appStore { platform iconUrl } }
+      }`,
+      contextValue: ctx(h.db),
+    });
+    expect(result.errors).toBeUndefined();
+    const data = result.data as {
+      app: { type: string; appStore: { platform: string; iconUrl: string | null } | null };
+      gh: { type: string; appStore: { platform: string; iconUrl: string | null } | null };
+    };
+    expect(data.app.appStore).toEqual({
+      platform: "macos",
+      iconUrl: "https://mzstatic.test/1024x1024bb.png",
+    });
+    expect(data.gh.appStore).toBeNull();
+  });
+
   it("resolves a deeply nested query in O(layers) SELECTs, not O(rows)", async () => {
     const query = `
       query {

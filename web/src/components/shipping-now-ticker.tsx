@@ -5,6 +5,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { HomepageTickerQuery } from "@/lib/graphql/__generated__/graphql";
 import { formatRelativeDate } from "@/lib/formatters";
 import { OrgAvatar } from "./org-avatar";
+import { FallbackImage } from "./fallback-image";
+import { appStoreIconUrl } from "@/lib/app-source";
 
 export type TickerRelease = HomepageTickerQuery["latestReleases"]["items"][number];
 type Slide = { release: TickerRelease; relative: string | null; extraCount: number };
@@ -28,8 +30,13 @@ function dedupKey(r: TickerRelease): string {
  *
  * A populated `titleShort` (#852, renamed in #860) is by definition a generated
  * headline — short-circuit the bare-version filter when it's present.
+ *
+ * App Store updates short-circuit too: with the compact icon + app-name +
+ * version treatment, a bare-version title ("5.0.0") still reads as a complete,
+ * recognizable unit, so the bare-version drop doesn't apply to them. #1206
  */
 function isMeaningfulRelease(r: TickerRelease): boolean {
+  if (r.source.appStore) return true;
   if (r.titleShort?.trim() || r.titleGenerated?.trim()) return true;
   const title = (r.title ?? "").trim();
   if (!title) return false;
@@ -75,13 +82,26 @@ function Card({ slide }: { slide: Slide }) {
       className="snap-start flex-none basis-[88%] sm:basis-[calc(33.333%-0.5rem)] lg:basis-[calc(25%-0.5625rem)] flex flex-col gap-2 p-4 rounded-lg border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 hover:border-stone-300 dark:hover:border-stone-700 hover:shadow-sm transition-all shadow-[0_1px_2px_rgba(0,0,0,0.02)]"
     >
       <div className="flex items-center gap-2 min-w-0">
-        {release.source.org.avatarUrl && (
-          <OrgAvatar
-            avatarUrl={release.source.org.avatarUrl}
-            githubHandle={null}
-            name={release.source.org.name}
-            size={18}
+        {/* App Store releases lead with the app icon (more recognizable than
+            the org avatar for an app update); everything else uses the org
+            avatar. #1206 */}
+        {release.source.appStore?.iconUrl ? (
+          <FallbackImage
+            src={appStoreIconUrl(release.source.appStore.iconUrl, 48)}
+            alt=""
+            width={18}
+            height={18}
+            className="rounded-[5px] border border-stone-200 dark:border-stone-800 shrink-0"
           />
+        ) : (
+          release.source.org.avatarUrl && (
+            <OrgAvatar
+              avatarUrl={release.source.org.avatarUrl}
+              githubHandle={null}
+              name={release.source.org.name}
+              size={18}
+            />
+          )
         )}
         <span className="font-medium text-[13px] text-stone-900 dark:text-stone-100 truncate flex-1">
           {release.source.org.name}
