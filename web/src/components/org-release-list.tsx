@@ -9,6 +9,8 @@ import { useInfiniteScroll } from "@/hooks/use-infinite-scroll";
 import { InfiniteScrollTrigger } from "./infinite-scroll-trigger";
 import { buildFeedEntries, entryDayKey, type RollupItem } from "./org-release-entries";
 import { Caret } from "./caret";
+import { AppStoreIcon } from "./app-store-icon";
+import { appRowInfoFromWire } from "@/lib/app-source";
 import { formatDate, pluralReleases } from "@/lib/formatters";
 
 interface OrgReleaseListProps {
@@ -277,15 +279,7 @@ export function OrgReleaseList({
                 key={release.id ?? `row:${i}`}
                 release={release}
                 hideDate={!showDate}
-                appStore={
-                  release.source.appStore
-                    ? {
-                        label: release.source.appStore.platform === "macos" ? "macOS" : "iOS",
-                        iconUrl: release.source.appStore.iconUrl,
-                        appName: release.source.name,
-                      }
-                    : null
-                }
+                appStore={appRowInfoFromWire(release.source.appStore, release.source.name)}
                 sourceByline={
                   multipleSourcesExist
                     ? {
@@ -334,6 +328,9 @@ function ReleaseRollupRow({
   const count = item.releases.length;
   const pills = item.releases.slice(0, 3);
   const overflow = count - pills.length;
+  // App Store rollups (keyed per-source, #1236) get the app icon on the
+  // collapsed header so the cluster reads as "this app" at a glance. #1206
+  const appInfo = appRowInfoFromWire(newest.source.appStore, newest.source.name);
 
   return (
     <>
@@ -361,6 +358,9 @@ function ReleaseRollupRow({
             className="flex items-center gap-2 w-full text-left text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-200"
           >
             <Caret open={open} />
+            {appInfo && (
+              <AppStoreIcon iconUrl={appInfo.iconUrl} appName={appInfo.appName} size={20} />
+            )}
             <span className="font-semibold text-[15px] text-stone-900 dark:text-stone-100">
               {item.label}
             </span>
@@ -393,6 +393,7 @@ function ReleaseRollupRow({
             key={r.id ?? `${item.groupKey}:${i}`}
             release={r}
             hideDate
+            appStore={appRowInfoFromWire(r.source.appStore, r.source.name)}
             sourceByline={
               multipleSourcesExist
                 ? { name: r.source.name, slug: r.source.slug, orgSlug }

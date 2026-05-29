@@ -48,6 +48,8 @@ const searchPreviewComponents: Record<string, any> = {
 /* eslint-enable @typescript-eslint/no-explicit-any */
 import { SourceTypeIcon } from "./source-type-icon";
 import { FallbackImage } from "./fallback-image";
+import { AppStoreIcon } from "./app-store-icon";
+import { appRowInfoFromWire, type AppRowInfo } from "@/lib/app-source";
 import { LookupRail } from "./lookup-rail";
 import { RollupBadge } from "./rollup-badge";
 import { Highlight, rehypeHighlightTokens, tokenizeQuery } from "./highlight";
@@ -184,6 +186,8 @@ function ResultCard({
   children,
   thumbnail,
   tokens,
+  appStore,
+  version,
 }: {
   kindLabel?: string;
   title: string;
@@ -200,6 +204,11 @@ function ResultCard({
   children: React.ReactNode;
   thumbnail?: { src: string; alt: string } | null;
   tokens: string[];
+  // App Store hits render a leading app icon, an inline version suffix, and an
+  // "Available for iOS/macOS" descriptor in the byline — the compact treatment
+  // matching the feed row and source page. Null for non-app hits. #1206
+  appStore?: AppRowInfo | null;
+  version?: string | null;
 }) {
   return (
     <div className="group/item border-b border-stone-200 dark:border-stone-800 last:border-b-0 py-4">
@@ -209,11 +218,24 @@ function ResultCard({
             {kindLabel}
           </span>
         )}
+        {appStore && (
+          <AppStoreIcon
+            iconUrl={appStore.iconUrl}
+            appName={appStore.appName}
+            size={20}
+            className="self-center"
+          />
+        )}
         <Link
           href={titleHref}
           className="font-semibold text-[15px] text-stone-900 dark:text-stone-100 hover:underline min-w-0 truncate"
         >
           <Highlight text={title} tokens={tokens} />
+          {appStore && version && (
+            <span className="ml-1.5 font-normal text-stone-500 dark:text-stone-400">
+              v{version}
+            </span>
+          )}
         </Link>
         {externalUrl && (
           <a
@@ -258,6 +280,12 @@ function ResultCard({
             </Link>
           </>
         )}
+        {appStore && (
+          <>
+            <span className="text-stone-300 dark:text-stone-700">·</span>
+            <span>Available for {appStore.label}</span>
+          </>
+        )}
         {date && (
           <>
             <span className="text-stone-300 dark:text-stone-700">·</span>
@@ -292,10 +320,12 @@ function ReleaseResultCard({ hit, tokens }: { hit: SearchReleaseHit; tokens: str
     return { src: item.r2Url ?? item.url, alt: item.alt || "" };
   }, [hit.media]);
 
-  // Search cards lead with the version (falling back to title when absent).
-  // This intentionally differs from the chronological feed, which now leads
-  // with the descriptive title — search results read as version-keyed lookups.
-  const heading = hit.version || hit.title;
+  // App Store hits lead with the app name + an inline version and the
+  // "Available for iOS/macOS" descriptor; non-app hits lead with the version
+  // (falling back to title). This intentionally differs from the chronological
+  // feed, which leads with the descriptive title — search reads as a lookup.
+  const appStore = appRowInfoFromWire(hit.appStore, hit.sourceName);
+  const heading = appStore ? appStore.appName : hit.version || hit.title;
   const rehypePlugins = useMarkdownHighlight(tokens);
 
   return (
@@ -312,6 +342,8 @@ function ReleaseResultCard({ hit, tokens }: { hit: SearchReleaseHit; tokens: str
       sourceType={hit.sourceType}
       thumbnail={thumbnail}
       tokens={tokens}
+      appStore={appStore}
+      version={hit.version}
     >
       <div className={resultMarkdownClasses}>
         <ReactMarkdown

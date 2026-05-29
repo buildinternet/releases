@@ -26,13 +26,14 @@ export type HomepageTickerQuery = {
       source: {
         org: { slug: string; name: string; avatarUrl: string | null };
         product: { slug: string } | null;
+        appStore: { platform: string; iconUrl: string | null } | null;
       };
     }>;
   };
 };
 
 export const HomepageTickerDocument = {
-  __meta__: { hash: "sha256:cf3093a1a676964141b246d500a724dde1cad18715150b46a1e2574913073b10" },
+  __meta__: { hash: "sha256:fef21aa9d5b2da3d691c2f53f699fe0fb00c2d32886372936ca7a94b36644a60" },
   kind: "Document",
   definitions: [
     {
@@ -121,6 +122,17 @@ export const HomepageTickerDocument = {
                                 kind: "SelectionSet",
                                 selections: [
                                   { kind: "Field", name: { kind: "Name", value: "slug" } },
+                                ],
+                              },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "appStore" },
+                              selectionSet: {
+                                kind: "SelectionSet",
+                                selections: [
+                                  { kind: "Field", name: { kind: "Name", value: "platform" } },
+                                  { kind: "Field", name: { kind: "Name", value: "iconUrl" } },
                                 ],
                               },
                             },

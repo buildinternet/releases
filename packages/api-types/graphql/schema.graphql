@@ -1,6 +1,14 @@
 # GENERATED — do not edit by hand.
 # Regenerate with: bun workers/api/scripts/print-graphql-schema.ts
 
+"""
+App Store platform + icon for a `type: appstore` source. Lets clients render the compact app-update treatment (icon + 'Available for iOS/macOS').
+"""
+type AppStoreInfo {
+  iconUrl: String
+  platform: String!
+}
+
 scalar DateTime
 
 scalar JSON
@@ -160,6 +168,10 @@ enum ReleaseType {
 
 """A changelog source (github / scrape / feed / agent)."""
 type Source {
+  """
+  Platform + icon for App Store sources; null for all other source types. #1206
+  """
+  appStore: AppStoreInfo
   createdAt: DateTime!
   discovery: String!
   fetchPriority: String

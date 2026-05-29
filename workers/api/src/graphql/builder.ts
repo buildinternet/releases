@@ -13,6 +13,9 @@ export type GraphQLContext = {
 
 export type OrgConnection = { items: Org[]; pagination: Pagination };
 export type ReleaseFeed = { items: Release[]; nextCursor: string | null };
+/** App Store platform + icon for `type: appstore` sources. Shape mirrors
+ *  `appStoreSourceInfo` in packages/adapters and `AppStoreSourceInfoSchema`. */
+export type AppStoreInfo = { platform: "ios" | "macos"; iconUrl: string | null };
 
 export const builder = new SchemaBuilder<{
   Context: GraphQLContext;
@@ -27,6 +30,7 @@ export const builder = new SchemaBuilder<{
     Source: Source;
     Release: Release;
     Media: MediaItem;
+    AppStoreInfo: AppStoreInfo;
     Pagination: Pagination;
     OrgConnection: OrgConnection;
     ReleaseFeed: ReleaseFeed;
