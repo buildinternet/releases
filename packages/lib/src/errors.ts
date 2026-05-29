@@ -75,3 +75,22 @@ export class FeedHttpError extends Error {
     this.name = "FeedHttpError";
   }
 }
+
+/**
+ * Thrown by the Firecrawl client on a non-2xx response (or a 2xx with a
+ * non-JSON body). Carries the HTTP `status` so callers can branch — e.g. the
+ * monitor reconcile helper treats a 404 on `updateMonitor` as "monitor deleted
+ * upstream" and recreates it, but lets transient 5xx errors propagate.
+ */
+export class FirecrawlError extends Error {
+  constructor(
+    public status: number,
+    public method: string,
+    public path: string,
+    public body: string,
+    message?: string,
+  ) {
+    super(message ?? `Firecrawl ${method} ${path} failed: ${status} ${body.slice(0, 300)}`);
+    this.name = "FirecrawlError";
+  }
+}
