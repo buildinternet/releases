@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 import { sources } from "@buildinternet/releases-core/schema";
 import { getSourceMeta } from "@releases/adapters/source-meta.js";
 import { createFirecrawlClient, type FirecrawlClient } from "@releases/adapters/firecrawl.js";
+import { addedContentFromDiff } from "@releases/adapters/firecrawl-diff.js";
 import { constantTimeEqual } from "@buildinternet/releases-core/api-token";
 import { getSecret } from "@releases/lib/secrets";
 import { logEvent } from "@releases/lib/log-event";
@@ -146,6 +147,7 @@ interface FirecrawlPageEvent {
     url?: string;
     status?: string;
     judgment?: { meaningful?: boolean; confidence?: string };
+    diff?: { text?: string; json?: unknown };
   }>;
 }
 
@@ -211,10 +213,15 @@ firecrawlRoutes.post("/integrations/firecrawl/webhook", async (c) => {
     await env.LATEST_CACHE?.put(key, "1", { expirationTtl: 3600 });
 
     if (env.FIRECRAWL_INGEST_WORKFLOW) {
+      // On a `changed` event Firecrawl hands us the diff; extracting just the
+      // added lines keeps steady-state ingests small and skips the (paid) full
+      // re-scrape. `new`/baseline events (and any diff that adds nothing) carry
+      // no delta, so the workflow scrapes the page and windows it at extract time.
+      const delta = addedContentFromDiff(page.diff?.text ?? "") || undefined;
       try {
         await env.FIRECRAWL_INGEST_WORKFLOW.create({
           id: `fc-${checkId}`,
-          params: { sourceId, url, checkId, status },
+          params: { sourceId, url, checkId, status, delta },
         });
       } catch (err) {
         // Deterministic id means a duplicate-instance error = it's already
