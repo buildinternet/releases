@@ -5,6 +5,7 @@ import { CommandSyntax } from "@/components/command-syntax";
 import { CopyIcon } from "@/components/copy-icon";
 import { JsonSyntax } from "@/components/json-syntax";
 import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
+import { nextTabIndex } from "@/components/terminal-tab-nav";
 
 export type TerminalBlock = {
   /** Shown after a `$ ` prompt and highlighted via {@link CommandSyntax}. */
@@ -19,9 +20,23 @@ export type TerminalBlock = {
   json?: string;
 };
 
+/** One use-case tab: a label and its own command/output transcript. */
+export type TerminalTab = { id: string; label: string; blocks: TerminalBlock[] };
+
 type TerminalSessionProps = {
-  /** Ordered command/output pairs that make up the session transcript. */
-  blocks: TerminalBlock[];
+  /**
+   * Ordered command/output pairs that make up the session transcript. Optional
+   * when `tabs` is provided (each tab carries its own blocks); supply one or the
+   * other.
+   */
+  blocks?: TerminalBlock[];
+  /**
+   * Optional use-case tabs. When provided, a tab row replaces the traffic-light
+   * chrome and the component renders the active tab's transcript; the `blocks`
+   * prop is ignored. The Humans/Agents toggle and replay operate on the active
+   * tab.
+   */
+  tabs?: TerminalTab[];
   className?: string;
   /**
    * CSS length (e.g. `"26rem"`) capping the transcript height and enabling
@@ -69,7 +84,8 @@ type Reveal = {
  * blocks a `json` to surface a Humans/Agents toggle.
  */
 export function TerminalSession({
-  blocks,
+  blocks = [],
+  tabs,
   className,
   maxHeight,
   showChrome = true,
@@ -78,6 +94,7 @@ export function TerminalSession({
   animate = false,
 }: TerminalSessionProps) {
   const { copied, copy } = useCopyToClipboard();
+  const [activeTab, setActiveTab] = useState(0);
   const scrollerRef = useRef<HTMLDivElement>(null);
   const [view, setView] = useState<View>("human");
   const [reveal, setReveal] = useState<Reveal>(() => ({
@@ -88,10 +105,19 @@ export function TerminalSession({
     done: !animate,
   }));
 
-  const hasJson = blocks.some((b) => b.json != null);
+  // When `tabs` is provided, the active tab drives everything below; the
+  // `blocks` prop is the single-transcript fallback. `tabs[activeTab]` is a
+  // stable reference, so `activeBlocks` is safe in effect deps.
+  const activeTabMeta = tabs?.[activeTab];
+  const activeBlocks = activeTabMeta?.blocks ?? blocks;
+  const hasJson = activeBlocks.some((b) => b.json != null);
   const agentMode = view === "agents";
 
-  const fullText = blocks
+  // With tabs, the active tab's tabpanel is already named by its tab button, so
+  // the section stays unlabeled — avoids a redundant region landmark wrapping it.
+  const sectionLabel = activeTabMeta ? undefined : ariaLabel;
+
+  const fullText = activeBlocks
     .map((b) => {
       if (agentMode && b.json != null) return `$ ${b.command} --json\n${b.json}`;
       return b.command ? `$ ${b.command}\n${b.output}` : b.output;
@@ -112,6 +138,13 @@ export function TerminalSession({
     setReveal((r) => ({ ...r, done: true }));
   }, []);
 
+  // Switching use-case tabs snaps the new transcript to its final state (no
+  // re-typing) and preserves the Humans/Agents selection.
+  const switchTab = useCallback((next: number) => {
+    setActiveTab(next);
+    setReveal((r) => ({ ...r, done: true }));
+  }, []);
+
   // Honor reduced-motion: jump straight to the fully-revealed state.
   useEffect(() => {
     if (!animate) return;
@@ -124,7 +157,7 @@ export function TerminalSession({
   // Humans view animates; the Agents view always shows its full JSON.
   useEffect(() => {
     if (reveal.done || agentMode) return;
-    const block = blocks[reveal.block];
+    const block = activeBlocks[reveal.block];
     if (!block) {
       setReveal((r) => ({ ...r, done: true }));
       return;
@@ -144,7 +177,7 @@ export function TerminalSession({
     } else if (reveal.outLines < outputLineCount) {
       delay = LINE_MS;
       next = { ...reveal, outLines: reveal.outLines + 1 };
-    } else if (reveal.block + 1 < blocks.length) {
+    } else if (reveal.block + 1 < activeBlocks.length) {
       delay = BETWEEN_MS;
       next = { block: reveal.block + 1, phase: "cmd", cmdChars: 0, outLines: 0, done: false };
     } else {
@@ -154,7 +187,7 @@ export function TerminalSession({
 
     const id = setTimeout(() => setReveal(next), delay);
     return () => clearTimeout(id);
-  }, [reveal, blocks, agentMode]);
+  }, [reveal, activeBlocks, agentMode]);
 
   // Keep the active line in view while revealing.
   useEffect(() => {
@@ -178,18 +211,22 @@ export function TerminalSession({
 
   return (
     <section
-      aria-label={ariaLabel}
+      aria-label={sectionLabel}
       className={`group relative overflow-hidden rounded-lg border border-stone-200 bg-stone-100 shadow-sm dark:border-stone-800 dark:bg-[oklch(0.268_0.007_286.3)] ${className ?? ""}`}
     >
-      {showChrome && (
-        <div
-          aria-hidden
-          className="flex items-center gap-2 border-b border-stone-200/70 px-4 py-3 dark:border-stone-800/60"
-        >
-          <span className="h-3 w-3 rounded-full bg-stone-300 dark:bg-stone-600" />
-          <span className="h-3 w-3 rounded-full bg-stone-300 dark:bg-stone-600" />
-          <span className="h-3 w-3 rounded-full bg-stone-300 dark:bg-stone-600" />
-        </div>
+      {tabs && tabs.length > 0 ? (
+        <TabBar tabs={tabs} active={activeTab} onSelect={switchTab} />
+      ) : (
+        showChrome && (
+          <div
+            aria-hidden
+            className="flex items-center gap-2 border-b border-stone-200/70 px-4 py-3 dark:border-stone-800/60"
+          >
+            <span className="h-3 w-3 rounded-full bg-stone-300 dark:bg-stone-600" />
+            <span className="h-3 w-3 rounded-full bg-stone-300 dark:bg-stone-600" />
+            <span className="h-3 w-3 rounded-full bg-stone-300 dark:bg-stone-600" />
+          </div>
+        )
       )}
 
       {copyable && (
@@ -203,9 +240,16 @@ export function TerminalSession({
         </button>
       )}
 
-      <div ref={scrollerRef} className="overflow-auto" style={scrollerStyle}>
+      <div
+        ref={scrollerRef}
+        className="overflow-auto"
+        style={scrollerStyle}
+        role={activeTabMeta ? "tabpanel" : undefined}
+        id={activeTabMeta ? `terminal-tabpanel-${activeTabMeta.id}` : undefined}
+        aria-labelledby={activeTabMeta ? `terminal-tab-${activeTabMeta.id}` : undefined}
+      >
         <pre className="m-0 !bg-transparent p-4 pr-12 font-mono text-[13px] leading-relaxed whitespace-pre-wrap break-words text-stone-600 dark:text-stone-300">
-          {blocks.map((block, bi) => {
+          {activeBlocks.map((block, bi) => {
             if (agentMode) {
               return (
                 <Fragment key={bi}>
@@ -312,6 +356,66 @@ export function TerminalSession({
         </div>
       )}
     </section>
+  );
+}
+
+/**
+ * Use-case tab row that replaces the traffic-light chrome. Presentation +
+ * keyboard navigation only (WAI-ARIA tabs pattern); the parent owns active
+ * state. Scrolls horizontally rather than wrapping on narrow viewports.
+ */
+function TabBar({
+  tabs,
+  active,
+  onSelect,
+}: {
+  tabs: TerminalTab[];
+  active: number;
+  onSelect: (i: number) => void;
+}) {
+  const refs = useRef<(HTMLButtonElement | null)[]>([]);
+  return (
+    <div
+      role="tablist"
+      aria-label="Use cases"
+      className="flex items-center gap-1 overflow-x-auto border-b border-stone-200/70 px-2 py-1.5 dark:border-stone-800/60"
+      onKeyDown={(e) => {
+        const next = nextTabIndex(active, e.key, tabs.length);
+        if (next == null) return;
+        e.preventDefault();
+        onSelect(next);
+        refs.current[next]?.focus();
+      }}
+    >
+      {tabs.map((tab, i) => {
+        const selected = i === active;
+        return (
+          <button
+            key={tab.id}
+            ref={(el) => {
+              refs.current[i] = el;
+            }}
+            type="button"
+            role="tab"
+            id={`terminal-tab-${tab.id}`}
+            aria-selected={selected}
+            // Only the active panel is rendered, so reference it only from the
+            // selected tab — inactive tabs omit aria-controls rather than point
+            // at an absent element (it's optional in the WAI-ARIA tabs pattern).
+            aria-controls={selected ? `terminal-tabpanel-${tab.id}` : undefined}
+            tabIndex={selected ? 0 : -1}
+            onClick={() => onSelect(i)}
+            className={`shrink-0 rounded-md px-2.5 py-1 font-mono text-[12px] whitespace-nowrap transition-colors ${
+              selected
+                ? "bg-white text-stone-900 shadow-sm dark:bg-stone-700 dark:text-stone-100"
+                : "text-stone-500 hover:text-stone-800 dark:text-stone-400 dark:hover:text-stone-200"
+            }`}
+          >
+            {tab.label}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
