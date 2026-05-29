@@ -4,6 +4,7 @@ import { useState } from "react";
 import { CommandSyntax } from "@/components/command-syntax";
 import { CopyIcon } from "@/components/copy-icon";
 import { OpenInAgentMenu } from "@/components/open-in-agent-menu";
+import { resolveTarget } from "@/lib/agent-launch";
 import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
 
 type TabId = (typeof tabs)[number]["id"];
@@ -74,7 +75,7 @@ export function InstallTabs() {
             <CopyIcon copied={copied} />
           </span>
         </button>
-        <OpenInAgentMenu target={active === "mcp" ? "mcp" : "cli"} className="shrink-0" />
+        <OpenInAgentMenu target={resolveTarget(active)} className="shrink-0" />
       </div>
     </div>
   );

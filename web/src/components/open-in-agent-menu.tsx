@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Caret } from "@/components/caret";
 import { CopyIcon } from "@/components/copy-icon";
 import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
 import {
@@ -100,7 +101,9 @@ function AgentDropdown({ target, className }: { target: AgentTarget; className?:
         <span className="text-stone-600 dark:text-stone-300">
           <RememberedIcon />
         </span>
-        <Chevron open={open} />
+        <span className="text-stone-400 dark:text-stone-500">
+          <Caret open={open} />
+        </span>
       </button>
       {open && (
         <div
@@ -197,46 +200,11 @@ function AgentLaunchItem({
 
 /** Right-aligned trailing status: the copied state wins, else the remembered check. */
 function Trailing({ copied, remembered }: { copied: boolean; remembered: boolean }) {
-  const inner = copied ? <CopyIcon copied size={14} /> : remembered ? <CheckMark /> : null;
-  if (!inner) return null;
-  return <span className="ml-auto shrink-0 text-stone-400 dark:text-stone-500">{inner}</span>;
-}
-
-function Chevron({ open }: { open: boolean }) {
+  if (!copied && !remembered) return null;
   return (
-    <svg
-      width="12"
-      height="12"
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-      className={`text-stone-400 transition-transform dark:text-stone-500 ${open ? "rotate-180" : ""}`}
-    >
-      <polyline points="4 6 8 10 12 6" />
-    </svg>
-  );
-}
-
-function CheckMark() {
-  return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-      className="shrink-0"
-    >
-      <polyline points="3.5 8.5 6.5 11.5 12.5 4.5" />
-    </svg>
+    <span className="ml-auto shrink-0 text-stone-400 dark:text-stone-500">
+      <CopyIcon copied size={14} />
+    </span>
   );
 }
 

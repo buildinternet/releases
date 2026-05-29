@@ -25,9 +25,8 @@ export const vscodeMcpHref = `vscode:mcp/install?${encodeURIComponent(
 )}`;
 
 /** Terminal commands for agents that add MCP via CLI rather than a URI scheme. */
-export const CLAUDE_CODE_MCP_CMD =
-  "claude mcp add --transport http releases https://mcp.releases.sh/mcp";
-export const CODEX_MCP_CMD = "codex mcp add releases --url https://mcp.releases.sh/mcp";
+export const CLAUDE_CODE_MCP_CMD = `claude mcp add --transport http releases ${MCP_REMOTE_URL}`;
+export const CODEX_MCP_CMD = `codex mcp add releases --url ${MCP_REMOTE_URL}`;
 
 /**
  * Paste-into-your-agent CLI setup prompt — identical for every agent
@@ -43,6 +42,11 @@ export const CLI_SETUP_PROMPT =
 export type AgentId = "cursor" | "vscode" | "claude-code" | "codex";
 
 export type AgentTarget = "cli" | "mcp";
+
+/** Map an install-tab / section id to a launcher target: MCP for the MCP tab, CLI otherwise. */
+export function resolveTarget(id: string): AgentTarget {
+  return id === "mcp" ? "mcp" : "cli";
+}
 
 /** How a given agent handles a given target. */
 export type AgentAction =
