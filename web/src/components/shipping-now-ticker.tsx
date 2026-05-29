@@ -5,8 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { HomepageTickerQuery } from "@/lib/graphql/__generated__/graphql";
 import { formatRelativeDate } from "@/lib/formatters";
 import { OrgAvatar } from "./org-avatar";
-import { FallbackImage } from "./fallback-image";
-import { appStoreIconUrl } from "@/lib/app-source";
+import { AppStoreIcon } from "./app-store-icon";
 
 export type TickerRelease = HomepageTickerQuery["latestReleases"]["items"][number];
 type Slide = { release: TickerRelease; relative: string | null; extraCount: number };
@@ -86,23 +85,19 @@ function Card({ slide }: { slide: Slide }) {
             the org avatar for an app update); everything else uses the org
             avatar. #1206 */}
         {release.source.appStore?.iconUrl ? (
-          <FallbackImage
-            src={appStoreIconUrl(release.source.appStore.iconUrl, 48)}
-            alt=""
-            width={18}
-            height={18}
-            className="rounded-[5px] border border-stone-200 dark:border-stone-800 shrink-0"
+          <AppStoreIcon
+            iconUrl={release.source.appStore.iconUrl}
+            appName={release.source.org.name}
+            size={18}
           />
-        ) : (
-          release.source.org.avatarUrl && (
-            <OrgAvatar
-              avatarUrl={release.source.org.avatarUrl}
-              githubHandle={null}
-              name={release.source.org.name}
-              size={18}
-            />
-          )
-        )}
+        ) : release.source.org.avatarUrl ? (
+          <OrgAvatar
+            avatarUrl={release.source.org.avatarUrl}
+            githubHandle={null}
+            name={release.source.org.name}
+            size={18}
+          />
+        ) : null}
         <span className="font-medium text-[13px] text-stone-900 dark:text-stone-100 truncate flex-1">
           {release.source.org.name}
         </span>

@@ -23,6 +23,26 @@ export interface AppRowInfo {
   appName: string;
 }
 
+/**
+ * Build an {@link AppRowInfo} from the wire-shape `appStore` block
+ * (`{ platform, iconUrl }`, already resolved server-side by `appStoreSourceInfo`)
+ * plus the source/app name. Returns null when the block is absent so callers
+ * gate app-only treatment with `appRowInfoFromWire(...)`. Used by the org feed,
+ * rollup header, and search card — all of which receive the resolved block
+ * rather than raw metadata, so `getAppInfo` (which parses metadata) doesn't fit.
+ */
+export function appRowInfoFromWire(
+  appStore: { platform: "ios" | "macos"; iconUrl: string | null } | null | undefined,
+  appName: string,
+): AppRowInfo | null {
+  if (!appStore) return null;
+  return {
+    label: appStore.platform === "macos" ? "macOS" : "iOS",
+    iconUrl: appStore.iconUrl,
+    appName,
+  };
+}
+
 interface AppSourceLike {
   type: string;
   metadata?: string | null;

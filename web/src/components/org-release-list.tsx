@@ -9,20 +9,9 @@ import { useInfiniteScroll } from "@/hooks/use-infinite-scroll";
 import { InfiniteScrollTrigger } from "./infinite-scroll-trigger";
 import { buildFeedEntries, entryDayKey, type RollupItem } from "./org-release-entries";
 import { Caret } from "./caret";
-import { FallbackImage } from "./fallback-image";
-import { appStoreIconUrl, type AppRowInfo } from "@/lib/app-source";
+import { AppStoreIcon } from "./app-store-icon";
+import { appRowInfoFromWire } from "@/lib/app-source";
 import { formatDate, pluralReleases } from "@/lib/formatters";
-
-// Map a feed item's source.appStore (platform + icon) into the AppRowInfo the
-// compact App Store row expects. Returns null for non-app sources. #1206
-function appRowInfoFor(source: OrgReleaseItem["source"]): AppRowInfo | null {
-  if (!source.appStore) return null;
-  return {
-    label: source.appStore.platform === "macos" ? "macOS" : "iOS",
-    iconUrl: source.appStore.iconUrl,
-    appName: source.name,
-  };
-}
 
 interface OrgReleaseListProps {
   orgSlug: string;
@@ -290,7 +279,7 @@ export function OrgReleaseList({
                 key={release.id ?? `row:${i}`}
                 release={release}
                 hideDate={!showDate}
-                appStore={appRowInfoFor(release.source)}
+                appStore={appRowInfoFromWire(release.source.appStore, release.source.name)}
                 sourceByline={
                   multipleSourcesExist
                     ? {
@@ -341,7 +330,7 @@ function ReleaseRollupRow({
   const overflow = count - pills.length;
   // App Store rollups (keyed per-source, #1236) get the app icon on the
   // collapsed header so the cluster reads as "this app" at a glance. #1206
-  const appInfo = appRowInfoFor(newest.source);
+  const appInfo = appRowInfoFromWire(newest.source.appStore, newest.source.name);
 
   return (
     <>
@@ -369,20 +358,9 @@ function ReleaseRollupRow({
             className="flex items-center gap-2 w-full text-left text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-200"
           >
             <Caret open={open} />
-            {appInfo &&
-              (appInfo.iconUrl ? (
-                <FallbackImage
-                  src={appStoreIconUrl(appInfo.iconUrl, 48)}
-                  alt=""
-                  width={20}
-                  height={20}
-                  className="rounded-[5px] border border-stone-200 dark:border-stone-800 shrink-0"
-                />
-              ) : (
-                <div className="w-5 h-5 rounded-[5px] bg-stone-200 dark:bg-stone-700 flex items-center justify-center text-[10px] font-semibold text-stone-500 dark:text-stone-300 shrink-0">
-                  {item.label.charAt(0)}
-                </div>
-              ))}
+            {appInfo && (
+              <AppStoreIcon iconUrl={appInfo.iconUrl} appName={appInfo.appName} size={20} />
+            )}
             <span className="font-semibold text-[15px] text-stone-900 dark:text-stone-100">
               {item.label}
             </span>
@@ -415,7 +393,7 @@ function ReleaseRollupRow({
             key={r.id ?? `${item.groupKey}:${i}`}
             release={r}
             hideDate
-            appStore={appRowInfoFor(r.source)}
+            appStore={appRowInfoFromWire(r.source.appStore, r.source.name)}
             sourceByline={
               multipleSourcesExist
                 ? { name: r.source.name, slug: r.source.slug, orgSlug }

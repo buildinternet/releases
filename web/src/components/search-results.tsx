@@ -48,7 +48,8 @@ const searchPreviewComponents: Record<string, any> = {
 /* eslint-enable @typescript-eslint/no-explicit-any */
 import { SourceTypeIcon } from "./source-type-icon";
 import { FallbackImage } from "./fallback-image";
-import { appStoreIconUrl, type AppRowInfo } from "@/lib/app-source";
+import { AppStoreIcon } from "./app-store-icon";
+import { appRowInfoFromWire, type AppRowInfo } from "@/lib/app-source";
 import { LookupRail } from "./lookup-rail";
 import { RollupBadge } from "./rollup-badge";
 import { Highlight, rehypeHighlightTokens, tokenizeQuery } from "./highlight";
@@ -217,20 +218,14 @@ function ResultCard({
             {kindLabel}
           </span>
         )}
-        {appStore &&
-          (appStore.iconUrl ? (
-            <FallbackImage
-              src={appStoreIconUrl(appStore.iconUrl, 48)}
-              alt=""
-              width={20}
-              height={20}
-              className="self-center rounded-[5px] border border-stone-200 dark:border-stone-800 shrink-0"
-            />
-          ) : (
-            <div className="self-center w-5 h-5 rounded-[5px] bg-stone-200 dark:bg-stone-700 flex items-center justify-center text-[10px] font-semibold text-stone-500 dark:text-stone-300 shrink-0">
-              {appStore.appName.charAt(0)}
-            </div>
-          ))}
+        {appStore && (
+          <AppStoreIcon
+            iconUrl={appStore.iconUrl}
+            appName={appStore.appName}
+            size={20}
+            className="self-center"
+          />
+        )}
         <Link
           href={titleHref}
           className="font-semibold text-[15px] text-stone-900 dark:text-stone-100 hover:underline min-w-0 truncate"
@@ -329,13 +324,7 @@ function ReleaseResultCard({ hit, tokens }: { hit: SearchReleaseHit; tokens: str
   // "Available for iOS/macOS" descriptor; non-app hits lead with the version
   // (falling back to title). This intentionally differs from the chronological
   // feed, which leads with the descriptive title — search reads as a lookup.
-  const appStore: AppRowInfo | null = hit.appStore
-    ? {
-        label: hit.appStore.platform === "macos" ? "macOS" : "iOS",
-        iconUrl: hit.appStore.iconUrl,
-        appName: hit.sourceName,
-      }
-    : null;
+  const appStore = appRowInfoFromWire(hit.appStore, hit.sourceName);
   const heading = appStore ? appStore.appName : hit.version || hit.title;
   const rehypePlugins = useMarkdownHighlight(tokens);
 
