@@ -311,6 +311,45 @@ describe("POST /v1/integrations/firecrawl/webhook", () => {
     expect(spawns[0].params.delta).toBe("## March 1, 2026\n- Shipped feature Z");
   });
 
+  it("10b. passes a delta for Firecrawl's live hunkless diff (no @@ headers)", async () => {
+    // The live monitor.page webhook sends a whole-document diff with no @@ hunk
+    // headers and no ---/+++ file headers (every line prefixed space/+/-). The
+    // receiver must still extract the added lines rather than fall back to a
+    // full-page re-scrape. Shape mirrors the real OpenAI release-notes payload.
+    const diffText = [
+      " # ChatGPT — Release Notes",
+      "-Updated: 7 hours ago",
+      "+Updated: 5 hours ago",
+      "+# May 29, 2026",
+      "+## Codex updates: Computer use on Windows",
+      " # May 28, 2026",
+    ].join("\n");
+
+    const res = await webhookFetchApi(
+      new Request("http://test/v1/integrations/firecrawl/webhook", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Firecrawl-Token": "testhook" },
+        body: makeWebhookBody("src_fc", [
+          {
+            checkId: "c10b",
+            url: "https://acme.example.com/changelog",
+            status: "changed",
+            judgment: { meaningful: true, confidence: "high" },
+            diff: { text: diffText },
+          },
+        ]),
+      }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(spawns).toHaveLength(1);
+    expect(spawns[0].params.delta).toBe(
+      ["Updated: 5 hours ago", "# May 29, 2026", "## Codex updates: Computer use on Windows"].join(
+        "\n",
+      ),
+    );
+  });
+
   it("11. omits `delta` on a new event so the workflow scrapes the baseline page", async () => {
     const res = await webhookFetchApi(
       new Request("http://test/v1/integrations/firecrawl/webhook", {
