@@ -116,11 +116,13 @@ export async function runSourceBackfill(
   return report;
 }
 
-/** Hard ceiling on extraction windows when the body came from a Firecrawl
- *  `scrapeOnce` (~106s). The single scrape is the long pole; bounding the
- *  windows on top of it keeps a default run under a normal client timeout.
- *  Supplied-markdown / plain-fetch paths have no scrape and are not clamped —
- *  they remain the path for arbitrarily-deep histories. See issue #1271. */
+/** Upper bound on extraction windows for the Firecrawl auto-scrape path.
+ *  Backfill cost is dominated by sequential Haiku extraction (~1.8s/entry),
+ *  NOT the scrape (~0.2s); a window-count ceiling cannot bound a dense page's
+ *  total time — it exists only as a sane default ceiling.  Supplied-markdown
+ *  and plain-fetch paths are unclamped and remain the route for
+ *  arbitrarily-deep histories.  Consumed inside `BackfillSourceWorkflow`'s
+ *  `plan-windows` step.  See issue #1281. */
 export const FIRECRAWL_BACKFILL_MAX_WINDOWS = 8;
 
 /** The window budget actually handed to extraction: clamped to the hard
