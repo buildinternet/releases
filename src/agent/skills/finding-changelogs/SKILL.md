@@ -207,6 +207,8 @@ For static providers, the adapter automatically uses Cloudflare's crawl API with
 
 **If a fast fetch returns incomplete content**, the adapter falls back to full rendering automatically. If you notice this happening repeatedly for a source, set `--render` to force headless rendering and note the reason in the playbook.
 
+**Rendering can't clear a bot challenge.** If a page sits behind a Cloudflare _Managed Challenge_, browser rendering fails too (symptom: `no_change` / 0 releases on a page that's clearly updating) — `--render` won't fix it. The external **Firecrawl monitoring** backend can fetch these instead; it's enabled per source via the admin API (`POST /v1/sources/:slug/firecrawl/sync { enabled: true }`), backend-only. See `docs/architecture/firecrawl-monitoring.md`.
+
 The agent's role is to evaluate content completeness after the first fetch — check that releases have titles, dates, and content. If they do, the fast path is working. If releases are empty or missing, the page likely needs JS rendering.
 
 ## Source Selection and Scope
