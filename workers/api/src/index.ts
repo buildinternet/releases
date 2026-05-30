@@ -62,6 +62,10 @@ export type Env = {
     MEDIA_ORIGIN?: string;
     /** Ingest-time R2 media upload kill switch (#1177); default off. */
     MEDIA_R2_UPLOAD_ENABLED?: string;
+    /** Raw page snapshots for durable backfill (#1281); pointer in source_raw_snapshots. */
+    RAW_SNAPSHOTS?: R2Bucket;
+    /** Routes deep Firecrawl backfills to BackfillSourceWorkflow (#1281); default off. */
+    BACKFILL_WORKFLOW_ENABLED?: string;
     CACHE_DISABLED?: string;
     GITHUB_TOKEN?: SecretBinding;
     CRON_ENABLED?: string;
