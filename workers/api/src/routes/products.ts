@@ -18,7 +18,7 @@ import {
 } from "@buildinternet/releases-core/schema";
 import { toSlug } from "@buildinternet/releases-core/slug";
 import { isReservedSlug } from "@buildinternet/releases-core/reserved-slugs";
-import { resolveCategoryInput } from "../lib/category-alias.js";
+import { resolveCategoryInput } from "@releases/core-internal/category-alias";
 import { validateJson } from "../lib/validate.js";
 import {
   ProductListResponseSchema,

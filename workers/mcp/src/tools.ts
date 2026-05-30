@@ -29,7 +29,7 @@ import { daysAgoIso, nowIso, timeAgo, resolveDateParam } from "@buildinternet/re
 import { toFtsMatchQuery } from "@buildinternet/releases-core/fts";
 import { likeContains } from "@buildinternet/releases-core/sql-like";
 import type { Kind } from "@buildinternet/releases-core/kinds";
-import { isValidCategory } from "@buildinternet/releases-core/categories";
+import { resolveCategoryInput } from "@releases/core-internal/category-alias";
 import { normalizeDomain } from "@buildinternet/releases-core/domain";
 import { getEntityType, normalizeReleaseId } from "@buildinternet/releases-core/id";
 import {
@@ -840,10 +840,14 @@ export async function listOrganizations(
   // #746: default `false` — orgs with no indexed releases are stubs we hide
   // from the public catalog. Opt in via `include_empty: true` to see them.
   const includeEmpty = params.include_empty === true;
-  // Optional category filter. Validate against the canonical enum and ignore
-  // anything else (fail-open to unfiltered) — aliases aren't resolved here.
-  const category =
-    params.category && isValidCategory(params.category) ? params.category : undefined;
+  // Optional category filter. Resolve aliases (e.g. "e-commerce" → "commerce")
+  // to their canonical slug via the shared resolver, matching the REST
+  // `/v1/orgs?category=` read filter (#1277); unknown values fail open to
+  // unfiltered.
+  const categoryResolved = params.category
+    ? await resolveCategoryInput(db, params.category)
+    : undefined;
+  const category = categoryResolved?.ok ? categoryResolved.slug : undefined;
 
   let fromWhere = sql`FROM organizations o`;
   let distinct = false;

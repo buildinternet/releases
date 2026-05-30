@@ -19,7 +19,7 @@ import {
   parseCategoryAliases,
   type Category,
 } from "@buildinternet/releases-core/categories";
-import { loadAliasMap } from "../lib/category-alias.js";
+import { loadAliasMap } from "@releases/core-internal/category-alias";
 import { getCategoryReleasesFeed } from "@releases/core-internal/category-feed";
 import {
   buildFeedCursor,

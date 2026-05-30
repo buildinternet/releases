@@ -48,7 +48,7 @@ import {
 import { daysAgoIso } from "@buildinternet/releases-core/dates";
 import { parseCompositionFromMetadata } from "@buildinternet/releases-core/composition";
 import { parseKindParam, KIND_VALUES, isValidKind } from "@buildinternet/releases-core/kinds";
-import { resolveCategoryInput } from "../lib/category-alias.js";
+import { resolveCategoryInput } from "@releases/core-internal/category-alias";
 import { parseSourceTypesLenient } from "../lib/source-types.js";
 import { toSlug } from "@buildinternet/releases-core/slug";
 import { isReservedSlug } from "@buildinternet/releases-core/reserved-slugs";
