@@ -7,8 +7,21 @@ import { Database } from "bun:sqlite";
 import { drizzle } from "drizzle-orm/bun-sqlite";
 import { applyMigrations, ensureBatchShim } from "../../../tests/db-helper.js";
 import { organizations, sources } from "@buildinternet/releases-core/schema";
+import type { FirecrawlClient } from "@releases/adapters/firecrawl.js";
 
-const { scanStaleFirecrawlSources } = await import("../src/cron/firecrawl-staleness.js");
+const { scanStaleFirecrawlSources, cronIntervalHours } =
+  await import("../src/cron/firecrawl-staleness.js");
+
+// Minimal client whose getMonitor returns a fixed schedule (or throws). Cast to
+// FirecrawlClient — the scan only ever calls getMonitor.
+const clientWithCron = (cron: string): FirecrawlClient =>
+  ({ getMonitor: async () => ({ schedule: { cron } }) }) as unknown as FirecrawlClient;
+const clientThatThrows = (): FirecrawlClient =>
+  ({
+    getMonitor: async () => {
+      throw new Error("boom");
+    },
+  }) as unknown as FirecrawlClient;
 
 const HOUR = 3600_000;
 const iso = (msAgo: number) => new Date(Date.now() - msAgo).toISOString();
@@ -25,7 +38,7 @@ beforeEach(() => {
 
 function seed(opts: {
   id: string;
-  firecrawl?: { enabled: boolean } | null;
+  firecrawl?: { enabled: boolean; monitorId?: string } | null;
   lastFetchedAt?: string | null;
   createdAt?: string;
 }) {
@@ -95,5 +108,83 @@ describe("scanStaleFirecrawlSources", () => {
     // Disabled cron → no-op without touching the DB.
     const off = await scanStaleFirecrawlSources({ ...baseEnv(), CRON_ENABLED: "false" });
     expect(off).toEqual({ scanned: 0, stale: 0 });
+  });
+
+  it("raises the threshold to 2x the monitor's live cadence for slow schedules", async () => {
+    // 72h since the last fetch: past the 48h floor, but well within a weekly
+    // monitor's 2×168h = 336h window.
+    seed({
+      id: "weekly",
+      firecrawl: { enabled: true, monitorId: "mon_weekly" },
+      lastFetchedAt: iso(72 * HOUR),
+    });
+
+    // Floor only (no client): flagged at 48h.
+    const floor = await scanStaleFirecrawlSources(baseEnv());
+    expect(floor.stale).toBe(1);
+
+    // Live weekly schedule (cron "0 0 * * 0" → 168h → 336h threshold): not stale.
+    const withSchedule = await scanStaleFirecrawlSources({
+      ...baseEnv(),
+      _firecrawlClientOverride: clientWithCron("0 0 * * 0"),
+    });
+    expect(withSchedule.stale).toBe(0);
+  });
+
+  it("falls back to the floor when the schedule read fails (never suppresses a warning)", async () => {
+    seed({
+      id: "broken",
+      firecrawl: { enabled: true, monitorId: "mon_x" },
+      lastFetchedAt: iso(72 * HOUR),
+    });
+
+    const res = await scanStaleFirecrawlSources({
+      ...baseEnv(),
+      _firecrawlClientOverride: clientThatThrows(),
+    });
+    // getMonitor threw → floor (48h) applies → still flagged.
+    expect(res.stale).toBe(1);
+  });
+
+  it("does not read the schedule for sources fresh against the floor", async () => {
+    seed({
+      id: "fresh",
+      firecrawl: { enabled: true, monitorId: "mon_fresh" },
+      lastFetchedAt: iso(1 * HOUR),
+    });
+
+    let calls = 0;
+    const counting = {
+      getMonitor: async () => {
+        calls++;
+        return { schedule: { cron: "0 0 * * 0" } };
+      },
+    } as unknown as FirecrawlClient;
+
+    const res = await scanStaleFirecrawlSources({
+      ...baseEnv(),
+      _firecrawlClientOverride: counting,
+    });
+    expect(res.stale).toBe(0);
+    // Within the floor window → skipped before any (paid) getMonitor call.
+    expect(calls).toBe(0);
+  });
+});
+
+describe("cronIntervalHours", () => {
+  it("maps the cron shapes Firecrawl emits to coarse hours", () => {
+    expect(cronIntervalHours("0 */6 * * *")).toBe(6);
+    expect(cronIntervalHours("0 0 * * *")).toBe(24);
+    expect(cronIntervalHours("0 0 * * 0")).toBe(24 * 7);
+    expect(cronIntervalHours("0 0 1 * *")).toBe(24 * 30);
+    expect(cronIntervalHours("*/30 * * * *")).toBe(0.5);
+    expect(cronIntervalHours("0 * * * *")).toBe(1);
+  });
+
+  it("returns null for unparseable / missing crons", () => {
+    expect(cronIntervalHours(undefined)).toBeNull();
+    expect(cronIntervalHours(null)).toBeNull();
+    expect(cronIntervalHours("")).toBeNull();
+    expect(cronIntervalHours("not a cron")).toBeNull();
   });
 });
