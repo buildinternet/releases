@@ -26,7 +26,7 @@ see below):
 
 | Environment | App name                    | `app_id`                               |
 | ----------- | --------------------------- | -------------------------------------- |
-| Production  | `releases-platform`         | `2cf02390-91c1-477a-91c1-571d07b987ef` |
+| Production  | `releases-platform`         | `2cf02390-e39a-477a-91c1-571d07b987ef` |
 | Staging     | `releases-platform-staging` | `548a95f1-4f8c-402d-8aa2-1b861523d377` |
 
 Both app IDs were supplied by the operator and go verbatim into the worker
