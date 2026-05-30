@@ -61,6 +61,8 @@ export const publicRateLimitMiddleware: MiddlewareHandler<Env> = async (c, next)
   // is off or the binding is absent). Nothing to enforce when both are off (the
   // default) — bail before resolving identity so a token-authenticated read
   // doesn't pay a DB lookup.
+  // TOKEN_RATE_LIMIT_ENABLED is intentionally a plain env var — not a Tier-1
+  // Flagship flag, so it stays a raw check (no registry entry / binding path).
   const tokenLimiter =
     c.env.TOKEN_RATE_LIMIT_ENABLED === "true" ? c.env.TOKEN_RATE_LIMITER : undefined;
   const ipLimiter = (await flag(c.env.FLAGS, c.env.RATE_LIMIT_ENABLED, FLAGS.rateLimitEnabled))

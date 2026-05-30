@@ -8,7 +8,8 @@ type Env = { Bindings: { CACHE_DISABLED?: string; FLAGS?: FlagshipBinding } };
  * Cloudflare handles gzip/brotli compression at the edge automatically —
  * this middleware sets Cache-Control so the CDN can also cache responses.
  *
- * Set the CACHE_DISABLED env var to any truthy value to skip (e.g. for local dev).
+ * Set the CACHE_DISABLED env var to "true" to skip (e.g. for local dev), or flip
+ * the `cache-disabled` Flagship flag.
  */
 export function cacheControl(
   maxAge: number,
