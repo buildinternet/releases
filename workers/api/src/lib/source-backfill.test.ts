@@ -1,6 +1,12 @@
 import { describe, it, expect } from "bun:test";
 import type { RawRelease } from "@releases/adapters/types.js";
-import { runSourceBackfill, type SourceBackfillDeps } from "./source-backfill.js";
+import {
+  runSourceBackfill,
+  effectiveBackfillWindows,
+  firecrawlCapGuidance,
+  FIRECRAWL_BACKFILL_MAX_WINDOWS,
+  type SourceBackfillDeps,
+} from "./source-backfill.js";
 
 const SOURCE = { id: "src_1", slug: "acme" };
 
@@ -85,5 +91,67 @@ describe("runSourceBackfill", () => {
 
     expect(enrichCalls).toBe(0);
     expect(report.inserted).toBe(0);
+  });
+});
+
+describe("effectiveBackfillWindows", () => {
+  it("clamps the firecrawl path to the hard ceiling", () => {
+    expect(effectiveBackfillWindows("firecrawl", 50)).toBe(FIRECRAWL_BACKFILL_MAX_WINDOWS);
+    expect(effectiveBackfillWindows("firecrawl", 200)).toBe(FIRECRAWL_BACKFILL_MAX_WINDOWS);
+  });
+
+  it("leaves a firecrawl request below the ceiling untouched", () => {
+    expect(effectiveBackfillWindows("firecrawl", 3)).toBe(3);
+  });
+
+  it("never clamps supplied or fetch paths", () => {
+    expect(effectiveBackfillWindows("supplied", 50)).toBe(50);
+    expect(effectiveBackfillWindows("fetch", 200)).toBe(200);
+  });
+});
+
+describe("firecrawlCapGuidance", () => {
+  it("returns guidance when the firecrawl ceiling capped a deeper request", () => {
+    const msg = firecrawlCapGuidance({
+      via: "firecrawl",
+      cappedAtWindow: true,
+      effectiveMaxWindows: 8,
+      requestedMaxWindows: 50,
+    });
+    expect(msg).toContain("8 windows");
+    expect(msg).toContain("markdown");
+  });
+
+  it("returns undefined when the run finished within the ceiling (no tail)", () => {
+    expect(
+      firecrawlCapGuidance({
+        via: "firecrawl",
+        cappedAtWindow: false,
+        effectiveMaxWindows: 8,
+        requestedMaxWindows: 50,
+      }),
+    ).toBeUndefined();
+  });
+
+  it("returns undefined when the request was already at/under the ceiling", () => {
+    expect(
+      firecrawlCapGuidance({
+        via: "firecrawl",
+        cappedAtWindow: true,
+        effectiveMaxWindows: 5,
+        requestedMaxWindows: 5,
+      }),
+    ).toBeUndefined();
+  });
+
+  it("returns undefined for non-firecrawl paths even when capped", () => {
+    expect(
+      firecrawlCapGuidance({
+        via: "supplied",
+        cappedAtWindow: true,
+        effectiveMaxWindows: 50,
+        requestedMaxWindows: 50,
+      }),
+    ).toBeUndefined();
   });
 });

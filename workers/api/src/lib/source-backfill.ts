@@ -39,6 +39,9 @@ export interface SourceBackfillReport {
   /** Rows actually inserted (0 on dryRun). */
   inserted: number;
   dryRun: boolean;
+  /** Set only when the Firecrawl ceiling reduced a deeper request and the run
+   *  was capped with untouched tail — tells the caller how to backfill deeper. */
+  guidance?: string;
 }
 
 /** Collapse rows sharing a synthesized dedup URL, keeping the first occurrence.
@@ -106,4 +109,32 @@ export async function runSourceBackfill(
   report.found = result.found;
   report.inserted = result.inserted;
   return report;
+}
+
+/** Hard ceiling on extraction windows when the body came from a Firecrawl
+ *  `scrapeOnce` (~106s). The single scrape is the long pole; bounding the
+ *  windows on top of it keeps a default run under a normal client timeout.
+ *  Supplied-markdown / plain-fetch paths have no scrape and are not clamped —
+ *  they remain the path for arbitrarily-deep histories. See issue #1271. */
+export const FIRECRAWL_BACKFILL_MAX_WINDOWS = 8;
+
+/** The window budget actually handed to extraction: clamped to the hard
+ *  ceiling on the firecrawl path, passed through verbatim otherwise. */
+export function effectiveBackfillWindows(via: BackfillBodyVia, requested: number): number {
+  return via === "firecrawl" ? Math.min(requested, FIRECRAWL_BACKFILL_MAX_WINDOWS) : requested;
+}
+
+/** Human/agent-facing hint, set only when the firecrawl ceiling actually
+ *  reduced a deeper request AND the run stopped with untouched tail. No silent
+ *  caps: the caller is told the page wasn't fully covered and how to go deeper. */
+export function firecrawlCapGuidance(input: {
+  via: BackfillBodyVia;
+  cappedAtWindow: boolean;
+  effectiveMaxWindows: number;
+  requestedMaxWindows: number;
+}): string | undefined {
+  if (input.via !== "firecrawl") return undefined;
+  if (!input.cappedAtWindow) return undefined;
+  if (input.effectiveMaxWindows >= input.requestedMaxWindows) return undefined;
+  return `Capped at ${input.effectiveMaxWindows} windows to fit the Firecrawl scrape budget. Re-run with \`markdown\` supplied (render the page yourself) to backfill deeper history.`;
 }
