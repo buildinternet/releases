@@ -1,4 +1,5 @@
 import type { MiddlewareHandler } from "hono";
+import { FLAGS, flag, type FlagshipBinding } from "@releases/lib/flags";
 
 /**
  * When `INDEXING_DISABLED` is truthy (set in `[env.staging]`), short-circuit
@@ -10,10 +11,10 @@ import type { MiddlewareHandler } from "hono";
  * surface that a plain robots.txt wouldn't.
  */
 export function blockIndexing(): MiddlewareHandler<{
-  Bindings: { INDEXING_DISABLED?: string };
+  Bindings: { INDEXING_DISABLED?: string; FLAGS?: FlagshipBinding };
 }> {
   return async (c, next) => {
-    if (c.env.INDEXING_DISABLED !== "true") {
+    if (!(await flag(c.env.FLAGS, c.env.INDEXING_DISABLED, FLAGS.indexingDisabled))) {
       await next();
       return;
     }

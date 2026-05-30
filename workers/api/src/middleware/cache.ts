@@ -1,6 +1,7 @@
 import type { MiddlewareHandler } from "hono";
+import { FLAGS, flag, type FlagshipBinding } from "@releases/lib/flags";
 
-type Env = { Bindings: { CACHE_DISABLED?: string } };
+type Env = { Bindings: { CACHE_DISABLED?: string; FLAGS?: FlagshipBinding } };
 
 /**
  * Cache-Control middleware for read endpoints.
@@ -22,8 +23,8 @@ export function cacheControl(
   return async (c, next) => {
     await next();
 
-    // Skip if caching is disabled via env var
-    if (c.env.CACHE_DISABLED) return;
+    // Skip if caching is disabled (Flagship `cache-disabled` → CACHE_DISABLED var).
+    if (await flag(c.env.FLAGS, c.env.CACHE_DISABLED, FLAGS.cacheDisabled)) return;
 
     // Only cache successful GET responses that don't already have Cache-Control
     if (c.req.method !== "GET") return;
