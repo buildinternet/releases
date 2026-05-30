@@ -212,12 +212,14 @@ firecrawlRoutes.post("/integrations/firecrawl/webhook", async (c) => {
 
     await env.LATEST_CACHE?.put(key, "1", { expirationTtl: 3600 });
 
+    // On a `changed` event Firecrawl hands us the diff; extracting just the
+    // added lines keeps steady-state ingests small and skips the (paid) full
+    // re-scrape. `new`/baseline events (and any diff that adds nothing) carry
+    // no delta, so the workflow scrapes the page and windows it at extract time.
+    const diffTextLen = page.diff?.text?.length ?? 0;
+    const delta = addedContentFromDiff(page.diff?.text ?? "") || undefined;
+
     if (env.FIRECRAWL_INGEST_WORKFLOW) {
-      // On a `changed` event Firecrawl hands us the diff; extracting just the
-      // added lines keeps steady-state ingests small and skips the (paid) full
-      // re-scrape. `new`/baseline events (and any diff that adds nothing) carry
-      // no delta, so the workflow scrapes the page and windows it at extract time.
-      const delta = addedContentFromDiff(page.diff?.text ?? "") || undefined;
       try {
         await env.FIRECRAWL_INGEST_WORKFLOW.create({
           id: `fc-${checkId}`,
@@ -242,6 +244,14 @@ firecrawlRoutes.post("/integrations/firecrawl/webhook", async (c) => {
       sourceId,
       checkId,
       status,
+      // Diagnostics for the diff → delta fast path. `path: "rescrape"` with
+      // diffTextLen > 0 means the diff carried no extractable added content, so
+      // the workflow falls back to a full-page re-scrape + window — the signal
+      // that an unexpected diff shape (or genuinely added-nothing change) is in
+      // play, queryable in one shot instead of pulling the raw payload.
+      diffTextLen,
+      deltaLen: delta?.length ?? 0,
+      path: delta ? "delta" : "rescrape",
     });
   }
 
