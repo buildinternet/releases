@@ -82,6 +82,10 @@ export const organizations = sqliteTable(
     // Distinct from fetchPaused (ingest-only) and deletedAt (soft-delete).
     // Toggle via PATCH /v1/orgs/:slug { isHidden: true }. Default false.
     isHidden: integer("is_hidden", { mode: "boolean" }).notNull().default(false),
+    // Editorial "promote on the home page" flag. When true, the org appears in the
+    // home page's featured rail; the full A–Z list lives at /catalog regardless.
+    // Toggle via PATCH /v1/orgs/:slug { featured: true }. Default false.
+    featured: integer("featured", { mode: "boolean" }).notNull().default(false),
     // Soft-delete tombstone (#666). Read paths exclude rows where deleted_at
     // IS NOT NULL via notDeleted helpers in queries/shared.ts. On tombstone,
     // the route handler renames slug + domain to mangled forms (slug + "--" +

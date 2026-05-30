@@ -11,9 +11,9 @@ export async function getOrgsWithStats(
   cutoff30d: string,
   q?: string,
   pagination?: { limit: number; offset: number },
-  opts: { includeEmpty?: boolean; category?: string } = {},
+  opts: { includeEmpty?: boolean; category?: string; featured?: boolean } = {},
 ): Promise<OrgListRow[]> {
-  const where = orgListWhere(q, opts.category);
+  const where = orgListWhere(q, opts.category, opts.featured);
   const page = pagination ? sql`LIMIT ${pagination.limit} OFFSET ${pagination.offset}` : sql``;
   // Drop orgs that haven't produced any visible releases yet (#746). Applied
   // post-aggregate via HAVING so the search-term filter still matches the
@@ -22,7 +22,7 @@ export async function getOrgsWithStats(
 
   return db.all<OrgListRow>(sql`
     SELECT
-      o.id, o.slug, o.name, o.domain, o.description, o.category, o.avatar_url,
+      o.id, o.slug, o.name, o.domain, o.description, o.category, o.avatar_url, o.featured,
       COUNT(DISTINCT s.id) AS source_count,
       COUNT(r.id) AS release_count,
       MAX(CASE WHEN r.published_at IS NOT NULL THEN r.published_at END) AS last_activity,
@@ -32,7 +32,7 @@ export async function getOrgsWithStats(
     LEFT JOIN sources_active s ON s.org_id = o.id
     LEFT JOIN releases_visible r ON r.source_id = s.id
     ${where}
-    GROUP BY o.id, o.slug, o.name, o.domain, o.description, o.category, o.avatar_url
+    GROUP BY o.id, o.slug, o.name, o.domain, o.description, o.category, o.avatar_url, o.featured
     ${having}
     ORDER BY o.name, o.id
     ${page}
@@ -48,9 +48,9 @@ export async function getOrgsWithStats(
 export async function countOrgsForList(
   db: D1Db,
   q?: string,
-  opts: { includeEmpty?: boolean; category?: string } = {},
+  opts: { includeEmpty?: boolean; category?: string; featured?: boolean } = {},
 ): Promise<{ totalItems: number; emptyOrgCount: number }> {
-  const where = orgListWhere(q, opts.category);
+  const where = orgListWhere(q, opts.category, opts.featured);
   // Two SUMs over the same per-org aggregate: orgs WITH ≥1 visible release vs
   // orgs WITHOUT. `totalItems` picks whichever bucket(s) match the current
   // filter; `emptyOrgCount` is always the empty bucket so the toggle CTA can
@@ -76,13 +76,15 @@ export async function countOrgsForList(
   };
 }
 
-function orgListWhere(q?: string, category?: string) {
+function orgListWhere(q?: string, category?: string, featured?: boolean) {
   // Hidden orgs ("don't feature") never appear in the directory listing,
   // regardless of the empty-org toggle. is_hidden is NOT NULL so `= 0` is safe.
   const conds = [sql`o.is_hidden = 0`];
   // Caller validates `category` against the canonical enum, so an exact match
   // on the stored slug is enough (no alias resolution at the filter layer).
   if (category) conds.push(sql`o.category = ${category}`);
+  // When featured=true, restrict to orgs editorially promoted for the home page.
+  if (featured === true) conds.push(sql`o.featured = 1`);
   if (q) {
     const lower = q.toLowerCase();
     conds.push(
