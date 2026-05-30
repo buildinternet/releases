@@ -6,6 +6,7 @@
   "exports": {
     "./types": "./src/types.ts",
     "./source-meta": "./src/source-meta.ts",
+    "./fetch-plan": "./src/fetch-plan.ts",
     "./user-agent": "./src/user-agent.ts",
     "./content-hash": "./src/content-hash.ts",
     "./github": "./src/github.ts",

@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { and, asc, desc, eq, sql, gte, lte, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, sql, gte, lte, type SQL } from "drizzle-orm";
 import { createDb } from "../db.js";
 import {
   FETCH_LOG_STATUSES,
@@ -13,6 +13,7 @@ import type { Env } from "../index.js";
 import { getStatusHub, parseEnumParam, parseSortDir } from "../utils.js";
 import { nullsLastOrderBy } from "../queries/shared.js";
 import { encodeCursor, decodeCursor } from "./fetch-log-cursor.js";
+import { describeFetchPlan, computeFetchState } from "@releases/adapters/fetch-plan";
 
 export const statusRoutes = new Hono<Env>();
 
@@ -125,6 +126,46 @@ statusRoutes.get("/status/fetch-log", async (c) => {
   }
 
   return c.json({ entries, nextCursor, totalCount, statusCounts });
+});
+
+// Dev-only operator view: per-source fetch strategy, interval, and live timing
+// state for an org. Reachable only through the flag-gated /api/proxy and the
+// dev-gated Fetch Log tab (NODE_ENV check on the page). Mirrors the plain-route
+// shape of /status/fetch-log — not part of the published api-types wire protocol.
+statusRoutes.get("/status/fetch-plan", async (c) => {
+  const db = createDb(c.env.DB);
+  const org = c.req.query("org");
+  if (!org) return c.json({ error: "missing_org" }, 400);
+
+  const [orgRow] = await db
+    .select({ id: organizations.id })
+    .from(organizations)
+    .where(eq(organizations.slug, org))
+    .limit(1);
+  if (!orgRow) return c.json({ sources: [] });
+
+  // Exclude soft-deleted (tombstoned) sources (#666) so the panel matches normal
+  // read-path behavior; hidden sources are kept — they still carry fetch config.
+  const rows = await db
+    .select()
+    .from(sources)
+    .where(and(eq(sources.orgId, orgRow.id), isNull(sources.deletedAt)))
+    .orderBy(asc(sources.name));
+
+  const now = new Date();
+  const result = rows.map((s) => {
+    const plan = describeFetchPlan(s);
+    return {
+      id: s.id,
+      slug: s.slug,
+      name: s.name,
+      type: s.type,
+      fetchPriority: s.fetchPriority ?? "normal",
+      plan,
+      state: computeFetchState(s, plan, now),
+    };
+  });
+  return c.json({ sources: result });
 });
 
 statusRoutes.get("/status/usage", async (c) => {
