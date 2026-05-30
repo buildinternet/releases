@@ -63,7 +63,10 @@ export function dedupeByUrl(rows: RawRelease[]): RawRelease[] {
   return out;
 }
 
-export function dateRange(rows: RawRelease[]): { from: string | null; to: string | null } {
+export function dateRange(rows: ReadonlyArray<{ publishedAt?: Date | null }>): {
+  from: string | null;
+  to: string | null;
+} {
   let from: number | null = null;
   let to: number | null = null;
   for (const r of rows) {

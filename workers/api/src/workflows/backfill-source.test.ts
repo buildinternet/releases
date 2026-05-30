@@ -21,6 +21,15 @@ const MULTI_WINDOW_MARKDOWN = Array.from(
     `## Entry ${i}\n\nChangelog body text for entry number ${i} describing assorted fixes and features in adequate detail.`,
 ).join("\n\n");
 
+// Larger fixture (~4000 entries → well over FIRECRAWL_BACKFILL_MAX_WINDOWS=8
+// windows) so a firecrawl request deeper than the ceiling caps the run with an
+// untouched tail, exercising the firecrawlCapGuidance branch in finalize.
+const DEEP_MARKDOWN = Array.from(
+  { length: 4000 },
+  (_, i) =>
+    `## Entry ${i}\n\nChangelog body text for entry number ${i} describing assorted fixes and features in adequate detail.`,
+).join("\n\n");
+
 function fakeR2() {
   const store = new Map<string, string>();
   return {
@@ -59,9 +68,10 @@ function mkDb(): any {
  * Per-window extract override that returns 2 distinct entries per window,
  * keyed by window index so totals add up distinctly.
  */
-let windowCallCount = 0;
 function makeWindowExtractOverride() {
-  windowCallCount = 0;
+  // Per-override window counter, scoped to the closure so it can't leak across
+  // runs/envs (each mkEnv() builds a fresh override with its own count).
+  let windowCallCount = 0;
   const override = async (_markdown: string, _source: Source): Promise<RawRelease[]> => {
     const n = windowCallCount++;
     return [
@@ -306,5 +316,39 @@ describe("BackfillSourceWorkflow", () => {
     const report = result as Record<string, unknown>;
     expect(report.via).toBe("supplied");
     expect(report.dryRun).toBe(true);
+  });
+
+  it("firecrawl cap: deep doc + maxWindows over the ceiling → cappedAtWindow + guidance", async () => {
+    const db = mkDb();
+    const r2 = fakeR2();
+    // Firecrawl scrape returns the deep (>8-window) fixture; request 20 windows.
+    // The firecrawl ceiling (FIRECRAWL_BACKFILL_MAX_WINDOWS=8) clamps the run,
+    // so it stops with an untouched tail (cappedAtWindow) and 8 < 20 → guidance.
+    const env = mkEnv(db, r2, {
+      _firecrawlClientOverride: {
+        scrapeOnce: async () => DEEP_MARKDOWN,
+        createMonitor: async () => "m",
+        getMonitor: async () => ({ id: "m" }),
+        updateMonitor: async () => {},
+        deleteMonitor: async () => {},
+        runMonitor: async () => {},
+      },
+    });
+
+    const { result, thrown } = await runWorkflow(env, {
+      sourceId: "src_x",
+      dryRun: true,
+      maxWindows: 20,
+    });
+
+    expect(thrown).toBeUndefined();
+    const report = result as Record<string, unknown>;
+    expect(report.via).toBe("firecrawl");
+    expect(report.cappedAtWindow).toBe(true);
+    // Clamped to the firecrawl ceiling (8 windows), not the requested 20.
+    expect(report.windows).toBe(8);
+    expect(typeof report.guidance).toBe("string");
+    expect((report.guidance as string).length).toBeGreaterThan(0);
+    expect(report.guidance as string).toContain("8 windows");
   });
 });

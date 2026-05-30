@@ -306,19 +306,23 @@ export class BackfillSourceWorkflow extends WorkflowEntrypoint<
     // Aggregate counts, compute date range, embed + generate content for new rows.
     const report = await step.do("finalize", RETRY_POLL, async () => {
       const allExtracted = windowResults.reduce((n, r) => n + r.extracted, 0);
-      const allDeduped = windowResults.reduce((n, r) => n + r.deduped, 0);
       const allFound = windowResults.reduce((n, r) => n + r.found, 0);
       const allInserted = windowResults.reduce((n, r) => n + r.inserted, 0);
-      const allInsertedIds = windowResults.flatMap((r) => r.insertedIds);
 
-      // Compute date range from all per-window entries
-      const allEntries = windowResults.flatMap((r) =>
-        r.entries.map((e) => ({
-          publishedAt: e.publishedAt ? new Date(e.publishedAt) : undefined,
-        })),
+      // Aggregate globally-unique across windows: a URL straddling a slice
+      // boundary appears in two adjacent windows, so per-window sums/flattens
+      // would double-count. `deduped` is the unique-URL count over all windows,
+      // and inserted ids are de-duplicated before embed/generate.
+      const allInsertedIds = [...new Set(windowResults.flatMap((r) => r.insertedIds))];
+      const allUniqueUrls = new Set(
+        windowResults.flatMap((r) => r.entries.map((e) => e.url ?? "")).filter(Boolean),
       );
+
+      // Compute date range from all per-window entries.
       const dr = dateRange(
-        allEntries.map((e) => ({ publishedAt: e.publishedAt ?? null }) as RawRelease),
+        windowResults.flatMap((r) =>
+          r.entries.map((e) => ({ publishedAt: e.publishedAt ? new Date(e.publishedAt) : null })),
+        ),
       );
 
       const guidance = firecrawlCapGuidance({
@@ -335,7 +339,7 @@ export class BackfillSourceWorkflow extends WorkflowEntrypoint<
         cappedAtWindow,
         droppedChars,
         extracted: allExtracted,
-        deduped: allDeduped,
+        deduped: allUniqueUrls.size,
         dateRange: dr,
         found: allFound,
         inserted: allInserted,
