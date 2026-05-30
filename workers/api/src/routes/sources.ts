@@ -148,6 +148,7 @@ import { getSecret } from "@releases/lib/secrets";
 import { classifyRepoStatus } from "../lib/github-repo-status.js";
 import { materializeAppStoreSource } from "../lib/appstore-materialize.js";
 import { materializeVideoSource } from "../lib/video-materialize.js";
+import { normalizeMediaBind } from "../lib/media-bind.js";
 import { FLAGS, flag } from "@releases/lib/flags";
 
 export const sourceRoutes = new Hono<Env>();
@@ -722,7 +723,9 @@ const postReleasesBatchHandler = async (c: import("hono").Context<Env>) => {
     const r2UploadEnabled =
       (await flag(c.env.FLAGS, c.env.MEDIA_R2_UPLOAD_ENABLED, FLAGS.mediaR2UploadEnabled)) &&
       c.env.MEDIA != null;
-    const mediaJsonByIndex = body.releases.map((r) => r.media ?? "[]");
+    // Coerce array/object media to a JSON string so a non-primitive bind can't
+    // 500 the chunked, non-transactional insert mid-batch. See media-bind.ts.
+    const mediaJsonByIndex = body.releases.map((r) => normalizeMediaBind(r.media));
     if (r2UploadEnabled) {
       // Skip releases whose URL already exists: RELEASE_URL_UPSERT never updates
       // the `media` column on conflict, so mirroring their images to R2 would
