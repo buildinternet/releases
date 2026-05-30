@@ -29,6 +29,7 @@ import { daysAgoIso, nowIso, timeAgo, resolveDateParam } from "@buildinternet/re
 import { toFtsMatchQuery } from "@buildinternet/releases-core/fts";
 import { likeContains } from "@buildinternet/releases-core/sql-like";
 import type { Kind } from "@buildinternet/releases-core/kinds";
+import { isValidCategory } from "@buildinternet/releases-core/categories";
 import { normalizeDomain } from "@buildinternet/releases-core/domain";
 import { getEntityType, normalizeReleaseId } from "@buildinternet/releases-core/id";
 import {
@@ -821,7 +822,12 @@ export async function getLatestReleases(
 
 export async function listOrganizations(
   db: D1Db,
-  params: { query?: string; platform?: string; include_empty?: boolean } & McpPaginationInput,
+  params: {
+    query?: string;
+    platform?: string;
+    include_empty?: boolean;
+    category?: string;
+  } & McpPaginationInput,
 ): Promise<ToolResult> {
   const pagination = parseMcpPagination(params);
 
@@ -834,6 +840,10 @@ export async function listOrganizations(
   // #746: default `false` — orgs with no indexed releases are stubs we hide
   // from the public catalog. Opt in via `include_empty: true` to see them.
   const includeEmpty = params.include_empty === true;
+  // Optional category filter. Validate against the canonical enum and ignore
+  // anything else (fail-open to unfiltered) — aliases aren't resolved here.
+  const category =
+    params.category && isValidCategory(params.category) ? params.category : undefined;
 
   let fromWhere = sql`FROM organizations o`;
   let distinct = false;
@@ -880,10 +890,25 @@ export async function listOrganizations(
   // un-distinct no-q/no-platform branch), the filter needs to lead with
   // `WHERE` instead of `AND`.
   const havingFrag = includeEmpty ? sql`` : sql`AND ${ORG_HAS_VISIBLE_RELEASE}`;
-  const filteredFromWhere =
-    !distinct && !includeEmpty
-      ? sql`FROM organizations o WHERE ${ORG_HAS_VISIBLE_RELEASE}`
-      : sql`${fromWhere} ${havingFrag}`;
+  // Category filter is independent — appended after the empty-org fragment.
+  // The `AND` connector is always correct here because filteredFromWhere always
+  // contains a WHERE by the time categoryFrag is appended (either from the
+  // q/platform branches above or from the no-distinct arm below). The only
+  // exception is the un-distinct+includeEmpty arm where no WHERE exists yet —
+  // that arm's filteredFromWhere is built specially below.
+  const categoryFrag = category ? sql`AND o.category = ${category}` : sql``;
+  let filteredFromWhere: SQL<unknown>;
+  if (!distinct && !includeEmpty && category) {
+    // No WHERE yet from q/platform, no empty-org filter — category must lead.
+    filteredFromWhere = sql`FROM organizations o WHERE ${ORG_HAS_VISIBLE_RELEASE} ${categoryFrag}`;
+  } else if (!distinct && !includeEmpty) {
+    filteredFromWhere = sql`FROM organizations o WHERE ${ORG_HAS_VISIBLE_RELEASE}`;
+  } else if (!distinct && includeEmpty && category) {
+    // No WHERE yet from q/platform, empty-org filter off — category must lead.
+    filteredFromWhere = sql`FROM organizations o WHERE o.category = ${category}`;
+  } else {
+    filteredFromWhere = sql`${fromWhere} ${havingFrag} ${categoryFrag}`;
+  }
 
   const distinctKw = distinct ? sql`DISTINCT` : sql``;
   type Row = { name: string; slug: string; domain: string | null };

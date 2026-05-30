@@ -692,6 +692,12 @@ export async function createServer(env: Env, ctx?: ExecutionContext, opts?: Crea
           .describe(
             "Include orgs with zero indexed releases. Default false — empty orgs are stubs from in-flight discovery or broken parsers and surface as noise on the public catalog.",
           ),
+        category: z
+          .string()
+          .optional()
+          .describe(
+            "Filter to a single canonical category slug (e.g. `ai`, `devops`). Invalid values are ignored (unfiltered).",
+          ),
       }),
     },
     async (params) => listOrganizations(db, params),

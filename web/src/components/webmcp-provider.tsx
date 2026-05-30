@@ -138,6 +138,11 @@ export function WebMcpProvider({ apiBaseUrl }: { apiBaseUrl: string }) {
               description:
                 "Include orgs with zero indexed releases. Default false — empty orgs are stubs from in-flight discovery or broken parsers and surface as noise.",
             },
+            category: {
+              type: "string",
+              description:
+                "Filter to a single canonical category slug (e.g. `ai`, `devops`). Invalid values are ignored (unfiltered).",
+            },
           },
         },
         annotations: { readOnlyHint: true },
@@ -147,6 +152,8 @@ export function WebMcpProvider({ apiBaseUrl }: { apiBaseUrl: string }) {
           if (typeof input.limit === "number" && input.limit > 0)
             qs.set("limit", String(input.limit));
           if (input.include_empty === true) qs.set("includeEmpty", "true");
+          if (typeof input.category === "string" && input.category)
+            qs.set("category", input.category);
           const suffix = qs.toString();
           return apiFetch(`/v1/orgs${suffix ? `?${suffix}` : ""}`);
         },
