@@ -220,6 +220,58 @@ describe("extractFromBody — guidance plumbing", () => {
   });
 });
 
+describe("extractFromBody — deterministic extraction", () => {
+  test("oneshot path requests temperature 0 so forced tool extraction is reproducible", async () => {
+    // Regression: with no temperature the SDK defaults to 1.0, and the forced
+    // extract_releases tool call intermittently returns `releases: []` on the
+    // same input (observed 1-in-4 on the OpenAI changelog). temperature 0 makes
+    // the parse deterministic. See firecrawl ingest go-live debugging.
+    const captured: Anthropic.MessageCreateParams[] = [];
+    const client: Pick<Anthropic, "messages"> = {
+      messages: {
+        stream: ((params: Anthropic.MessageCreateParams) => {
+          captured.push(params);
+          return {
+            finalMessage: async () =>
+              ({
+                id: "msg_1",
+                type: "message",
+                role: "assistant",
+                model: "claude-sonnet-4-6",
+                content: [
+                  { type: "tool_use", id: "t1", name: "extract_releases", input: { releases: [] } },
+                ],
+                stop_reason: "tool_use",
+                stop_sequence: null,
+                usage: {
+                  input_tokens: 100,
+                  output_tokens: 10,
+                  cache_read_input_tokens: 0,
+                  cache_creation_input_tokens: 0,
+                },
+              }) as Anthropic.Message,
+          } as never;
+        }) as never,
+      } as never,
+    };
+
+    await extractFromBody(
+      {
+        body: SMALL_BODY,
+        systemPrompt: "test",
+        userMessage: "Extract from:",
+        sourceUrl: "https://x.test",
+        fetchUrl: "https://x.test/feed.json",
+        useToolLoop: false,
+      },
+      makeDeps(client),
+    );
+
+    expect(captured.length).toBe(1);
+    expect(captured[0]!.temperature).toBe(0);
+  });
+});
+
 describe("extractFromBody — fallback paths", () => {
   test("mode: fallback_to_oneshot + fallbackReason: max_rounds when tool-loop exhausts budget", async () => {
     const keepQueryingResponse = {

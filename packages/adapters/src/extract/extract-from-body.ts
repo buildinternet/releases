@@ -18,6 +18,7 @@ import {
   DEFAULT_MAX_OUTPUT_TOKENS,
   HUGE_BODY_MAX_OUTPUT_TOKENS,
   MAX_BODY_CHARS_TOOLLOOP,
+  EXTRACTION_TEMPERATURE,
   type ExtractionGuidance,
 } from "./shared.js";
 import { extractWithTools, LoopFallbackError } from "./extract-with-tools.js";
@@ -91,6 +92,9 @@ async function runOneShot(
   const stream = anthropicClient.messages.stream({
     model: agentModel,
     max_tokens: isHuge ? HUGE_BODY_MAX_OUTPUT_TOKENS : DEFAULT_MAX_OUTPUT_TOKENS,
+    // Deterministic parse — see EXTRACTION_TEMPERATURE (why 0; why short-lived).
+    // oxlint-disable-next-line no-deprecated -- supported on current extract models; see note
+    temperature: EXTRACTION_TEMPERATURE,
     system: systemBlocks,
     tools: [extractReleasesToolFull],
     tool_choice: { type: "tool", name: "extract_releases" },
