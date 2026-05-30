@@ -221,3 +221,57 @@ export function buildFeedPageJsonLd(
     ],
   };
 }
+
+/** Subset of an org needed for the catalog `ItemList`. */
+type CatalogOrgInput = { slug: string; name: string };
+
+/**
+ * Builds the JSON-LD `@graph` for the A-to-Z org catalog page (`/catalog`):
+ * a `CollectionPage`, a `BreadcrumbList` (Home → page), and an `ItemList` of
+ * `Organization` nodes (one per tracked org, linking to its releases.sh page).
+ * Mirrors {@link buildFeedPageJsonLd} so catalog structured data stays
+ * consistent with the feed pages and shares the canonical {@link SITE_URL}.
+ * `orgs` should be passed in display order so the list mirrors the page.
+ */
+export function buildOrgCatalogJsonLd(
+  orgs: readonly CatalogOrgInput[],
+  opts: { path: string; name: string; description: string },
+): Record<string, unknown> {
+  const pageUrl = `${SITE_URL}${opts.path}`;
+  const pageNodeId = `${pageUrl}#page`;
+  const listId = `${pageUrl}#orgs`;
+  return {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "CollectionPage",
+        "@id": pageNodeId,
+        name: opts.name,
+        url: pageUrl,
+        description: opts.description,
+        mainEntity: { "@id": listId },
+      },
+      {
+        "@type": "BreadcrumbList",
+        itemListElement: [
+          { "@type": "ListItem", position: 1, name: "Home", item: SITE_URL },
+          { "@type": "ListItem", position: 2, name: opts.name, item: pageUrl },
+        ],
+      },
+      {
+        "@type": "ItemList",
+        "@id": listId,
+        name: opts.name,
+        numberOfItems: orgs.length,
+        itemListElement: orgs.map((org, index) => {
+          const orgUrl = `${SITE_URL}/${org.slug}`;
+          return {
+            "@type": "ListItem",
+            position: index + 1,
+            item: { "@type": "Organization", "@id": orgUrl, name: org.name, url: orgUrl },
+          };
+        }),
+      },
+    ],
+  };
+}
