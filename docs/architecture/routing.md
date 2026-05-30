@@ -34,11 +34,16 @@ Post-#698 the bare form rejects bare _slugs_ with `400 bare_slug_rejected` (thro
 
 ## The `/v1/lookups` resolver family
 
-Mixed auth: the GETs are public-read; the on-demand POST stays auth-gated via `publicReadAuthMiddleware`'s SAFE_METHODS check.
+The whole `lookups` namespace lives in `publicReadRoutes` (`workers/api/src/route-namespaces.ts`), so auth is gated by method, not by route:
+
+- **Public-read (no auth, rate-limited, cacheable):** `GET /v1/lookups/source-by-slug`, `GET /v1/lookups/product-by-slug`, `GET /v1/lookups/by-domain` — pure resolution primitives.
+- **Write (Bearer required):** `POST /v1/lookups` (the on-demand GitHub indexer) — gated by `publicReadAuthMiddleware`'s non-SAFE_METHODS branch.
+
+None of the lookup routes are `adminRoutes`-protected.
 
 ### Slug resolvers (#698)
 
-`GET /v1/lookups/source-by-slug?slug=…` and `GET /v1/lookups/product-by-slug?slug=…` return the canonical home (`{sourceId|productId, sourceSlug|productSlug, orgSlug}`) for old bookmarks and slug-only callers. They pick the oldest match by `(createdAt, id)` and carry `Sunset: Sun, 01 Nov 2026 00:00:00 GMT` (auth-gated under `adminRoutes`).
+`GET /v1/lookups/source-by-slug?slug=…` and `GET /v1/lookups/product-by-slug?slug=…` return the canonical home (`{sourceId|productId, sourceSlug|productSlug, orgSlug}`) for old bookmarks and slug-only callers. They pick the oldest match by `(createdAt, id)` and carry `Sunset: Sun, 01 Nov 2026 00:00:00 GMT` (a deprecation signal — these are migration aids, not auth-gated; see auth note above).
 
 ### Domain resolution
 
