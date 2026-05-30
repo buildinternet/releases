@@ -37,6 +37,9 @@
       "database_id": "73be1562-d900-4e25-a62b-650ab74488b7",
     },
   ],
+  // Cloudflare Flagship feature flags. Prod and staging each have their own
+  // app; absence in local dev is safe — flag() falls back to the wrangler var.
+  "flagship": [{ "binding": "FLAGS", "app_id": "2cf02390-e39a-477a-91c1-571d07b987ef" }],
   // Vectorize indexes for semantic search. Same indexes as the API worker — MCP
   // only reads from them. Provision via scripts/create-vectorize-indexes.sh.
   "vectorize": [
@@ -114,6 +117,8 @@
           "database_id": "68d44939-feab-4fcb-8f4f-19778ca1dee8",
         },
       ],
+      // Flagship staging app (separate from prod so flag states are isolated).
+      "flagship": [{ "binding": "FLAGS", "app_id": "548a95f1-4f8c-402d-8aa2-1b861523d377" }],
       "services": [{ "binding": "API", "service": "releases-api-staging" }],
       "kv_namespaces": [{ "binding": "EMBED_CACHE", "id": "7737ccafd37a43fc9d2365c9a2d7ebca" }],
       "secrets_store_secrets": [

@@ -14,6 +14,7 @@
     "./vector-search": "./src/vector-search.ts"
   },
   "dependencies": {
-    "@buildinternet/releases-core": "workspace:*"
+    "@buildinternet/releases-core": "workspace:*",
+    "@releases/lib": "workspace:*"
   }
 }

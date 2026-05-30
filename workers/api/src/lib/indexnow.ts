@@ -17,6 +17,7 @@
  */
 
 import { logEvent } from "@releases/lib/log-event";
+import type { FlagshipBinding } from "@releases/lib/flags";
 
 interface SecretBindingLike {
   get(): Promise<string | undefined>;
@@ -27,6 +28,8 @@ export interface IndexNowEnv {
   INDEXING_DISABLED?: string;
   INDEXNOW_KEY?: SecretBindingLike;
   WEB_BASE_URL?: string;
+  /** Flagship binding forwarded by the worker; resolves flag live when present. */
+  FLAGS?: FlagshipBinding;
 }
 
 export interface IndexNowSource {

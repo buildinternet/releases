@@ -31,6 +31,7 @@ import { scopeSatisfies, type ApiScope } from "@buildinternet/releases-core/api-
 import { parseCoordinate } from "@buildinternet/releases-core/lookup-coordinate";
 import type { LookupResultPayload } from "@buildinternet/releases-api-types";
 import { getSecret, getSecretWithFallback } from "@releases/lib/secrets";
+import type { FlagshipBinding } from "@releases/lib/flags";
 
 /**
  * Render the lookup payload as a markdown rail appended to the tool's text
@@ -120,6 +121,7 @@ export interface Env {
    * matching `X-Releases-Staging-Key` header. See workers/mcp/src/index.ts.
    */
   STAGING_ACCESS_KEY?: SecretBinding;
+  FLAGS?: FlagshipBinding;
 }
 
 /**

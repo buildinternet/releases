@@ -10,6 +10,7 @@
     "./config": "./src/config.ts",
     "./db-errors": "./src/db-errors.ts",
     "./errors": "./src/errors.ts",
+    "./flags": "./src/flags.ts",
     "./legacy-env": "./src/legacy-env.ts",
     "./log-event": "./src/log-event.ts",
     "./logger": "./src/logger.ts",

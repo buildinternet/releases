@@ -21,6 +21,7 @@ import {
 } from "@buildinternet/releases-core/schema";
 import { dbErrorLogFields } from "@releases/lib/db-errors";
 import { logEvent } from "@releases/lib/log-event";
+import type { FlagshipBinding } from "@releases/lib/flags";
 
 export const MAX_QUERY_LEN = 200;
 const MAX_STR = 200;
@@ -36,6 +37,8 @@ export interface SearchLogEnv {
    * redeploying. Default (unset) leaves logging enabled.
    */
   SEARCH_QUERY_LOG_DISABLED?: string;
+  /** Flagship binding forwarded by the worker; resolves the kill switch live. */
+  FLAGS?: FlagshipBinding;
 }
 
 /** Trim, slice to `max`, and treat the empty string as null. */

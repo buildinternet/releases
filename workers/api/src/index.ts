@@ -30,6 +30,7 @@ import { sendAlert, type AlertEnv } from "./lib/send-alert.js";
 import { logEvent } from "@releases/lib/log-event";
 import { dbErrorLogFields } from "@releases/lib/db-errors";
 import { getSecret, getSecretWithFallback } from "@releases/lib/secrets";
+import type { FlagshipBinding } from "@releases/lib/flags";
 
 export { StatusHub } from "./status-hub.js";
 export { ReleaseHub } from "./release-hub.js";
@@ -234,6 +235,9 @@ export type Env = {
     // Hours since a firecrawl source's last run before the hourly staleness
     // scan flags it (monitor stopped delivering). Default 48. See option A.
     FIRECRAWL_STALE_HOURS?: string;
+    // Cloudflare Flagship binding (prod + staging apps; absent in local dev /
+    // tests → flag() falls back to the wrangler var). See @releases/lib/flags.
+    FLAGS?: FlagshipBinding;
   };
   Variables: {
     auth?: AuthContext;
