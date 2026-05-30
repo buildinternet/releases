@@ -4,9 +4,12 @@ import { api, ApiSetupError } from "@/lib/api";
 import { Header } from "@/components/header";
 import { PageHeader } from "@/components/page-header";
 import { SetupMessage } from "@/components/setup-message";
+import { isValidCategory } from "@buildinternet/releases-core/categories";
 import { JsonLd } from "@/components/json-ld";
 import { OrgCatalog } from "@/components/org-catalog";
+import { CategoryFilter } from "@/components/category-filter";
 import { groupOrgsByLetter } from "@/lib/group-orgs";
+import { catalogHref } from "@/lib/catalog-href";
 import { buildOrgCatalogJsonLd } from "@/lib/schema-org";
 
 const TITLE = "Catalog";
@@ -36,14 +39,17 @@ export const metadata: Metadata = {
 export default async function CatalogPage({
   searchParams,
 }: {
-  searchParams: Promise<{ empty?: string }>;
+  searchParams: Promise<{ empty?: string; category?: string }>;
 }) {
-  const { empty } = await searchParams;
+  const { empty, category: categoryParam } = await searchParams;
   const includeEmpty = empty === "1";
+  // Validate against the canonical enum so a garbage param doesn't highlight a
+  // chip; the API ignores invalid values the same way (fail-open).
+  const category = categoryParam && isValidCategory(categoryParam) ? categoryParam : null;
 
   let orgsResult: Awaited<ReturnType<typeof api.orgs>>;
   try {
-    orgsResult = await api.orgs({ includeEmpty });
+    orgsResult = await api.orgs({ includeEmpty, category: category ?? undefined });
   } catch (err) {
     if (err instanceof ApiSetupError) {
       return (
@@ -77,15 +83,19 @@ export default async function CatalogPage({
           description={DESCRIPTION}
         />
 
+        <CategoryFilter activeCategory={category} includeEmpty={includeEmpty} />
+
         {groups.length > 0 ? (
           <OrgCatalog groups={groups} />
         ) : (
-          <p className="text-sm text-stone-500 dark:text-stone-400">No organizations yet.</p>
+          <p className="text-sm text-stone-500 dark:text-stone-400">
+            {category ? "No organizations in this category yet." : "No organizations yet."}
+          </p>
         )}
 
         {emptyOrgCount > 0 && (
           <Link
-            href={includeEmpty ? "/catalog" : "/catalog?empty=1"}
+            href={catalogHref({ category, includeEmpty: !includeEmpty })}
             className="mt-6 inline-block text-[12px] text-stone-400 underline decoration-stone-300 underline-offset-2 hover:text-stone-600 dark:text-stone-500 dark:decoration-stone-600 dark:hover:text-stone-300"
           >
             {includeEmpty

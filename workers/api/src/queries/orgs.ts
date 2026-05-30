@@ -11,9 +11,9 @@ export async function getOrgsWithStats(
   cutoff30d: string,
   q?: string,
   pagination?: { limit: number; offset: number },
-  opts: { includeEmpty?: boolean } = {},
+  opts: { includeEmpty?: boolean; category?: string } = {},
 ): Promise<OrgListRow[]> {
-  const where = orgListWhere(q);
+  const where = orgListWhere(q, opts.category);
   const page = pagination ? sql`LIMIT ${pagination.limit} OFFSET ${pagination.offset}` : sql``;
   // Drop orgs that haven't produced any visible releases yet (#746). Applied
   // post-aggregate via HAVING so the search-term filter still matches the
@@ -48,9 +48,9 @@ export async function getOrgsWithStats(
 export async function countOrgsForList(
   db: D1Db,
   q?: string,
-  opts: { includeEmpty?: boolean } = {},
+  opts: { includeEmpty?: boolean; category?: string } = {},
 ): Promise<{ totalItems: number; emptyOrgCount: number }> {
-  const where = orgListWhere(q);
+  const where = orgListWhere(q, opts.category);
   // Two SUMs over the same per-org aggregate: orgs WITH ≥1 visible release vs
   // orgs WITHOUT. `totalItems` picks whichever bucket(s) match the current
   // filter; `emptyOrgCount` is always the empty bucket so the toggle CTA can
@@ -76,13 +76,20 @@ export async function countOrgsForList(
   };
 }
 
-function orgListWhere(q?: string) {
+function orgListWhere(q?: string, category?: string) {
   // Hidden orgs ("don't feature") never appear in the directory listing,
   // regardless of the empty-org toggle. is_hidden is NOT NULL so `= 0` is safe.
-  const hidden = sql`o.is_hidden = 0`;
-  if (!q) return sql`WHERE ${hidden}`;
-  const lower = q.toLowerCase();
-  return sql`WHERE ${hidden} AND (${likeContains(sql`lower(o.name)`, lower)} OR ${likeContains(sql`lower(o.slug)`, lower)})`;
+  const conds = [sql`o.is_hidden = 0`];
+  // Caller validates `category` against the canonical enum, so an exact match
+  // on the stored slug is enough (no alias resolution at the filter layer).
+  if (category) conds.push(sql`o.category = ${category}`);
+  if (q) {
+    const lower = q.toLowerCase();
+    conds.push(
+      sql`(${likeContains(sql`lower(o.name)`, lower)} OR ${likeContains(sql`lower(o.slug)`, lower)})`,
+    );
+  }
+  return sql`WHERE ${sql.join(conds, sql` AND `)}`;
 }
 
 export async function getOrgSourcesWithStats(db: D1Db, orgId: string): Promise<SourceWithStats[]> {
