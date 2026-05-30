@@ -55,6 +55,17 @@ async function seed(db: D1Db) {
       metadata: JSON.stringify({ feedUrl: "https://a.test/feed", feedType: "rss" }),
       fetchPriority: "paused",
     },
+    {
+      id: "src_deleted",
+      orgId: "org_a",
+      slug: "acme-deleted--src_deleted",
+      name: "Acme Deleted",
+      url: "https://a.test/d",
+      type: "feed",
+      metadata: JSON.stringify({ feedUrl: "https://a.test/d/feed", feedType: "rss" }),
+      fetchPriority: "normal",
+      deletedAt: "2026-01-01T00:00:00.000Z",
+    },
   ]);
 }
 
@@ -67,7 +78,9 @@ describe("GET /v1/status/fetch-plan", () => {
     const res = await fetch(new Request("https://x.test/v1/status/fetch-plan?org=acme"));
     expect(res.status).toBe(200);
     const body = (await res.json()) as { sources: PlanRow[] };
+    // Tombstoned source (src_deleted) is excluded → only the 2 live sources.
     expect(body.sources).toHaveLength(2);
+    expect(body.sources.find((s) => s.slug.startsWith("acme-deleted"))).toBeUndefined();
 
     const fc = body.sources.find((s) => s.slug === "acme-firecrawl")!;
     expect(fc.plan.strategy).toBe("firecrawl");

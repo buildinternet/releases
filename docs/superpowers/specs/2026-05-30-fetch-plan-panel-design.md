@@ -72,7 +72,8 @@ poll cron.
   `firecrawl.enabled` → GitHub (`isGitHubFetched`) → appstore → video → feed (`feedUrl`)
   → crawl (`crawlEnabled`) → scrape / agent. Feed label refines by `feedType`
   (RSS/Atom/JSON Feed) when available.
-- `computeFetchState(source: Source, now: Date): FetchState` where
+- `computeFetchState(source: Source, plan: FetchPlan, now: Date): FetchState` (takes the
+  precomputed plan so the endpoint resolves the plan once) where
   ```ts
   interface FetchState {
     lastPolledAt: string | null;
@@ -110,9 +111,16 @@ interface FetchPlanResponse {
 Sorted by name. No pagination — an org's source count is small. An in-process worker
 route test covers the response shape and one firecrawl + one paused row.
 
-### 3. Wire schema — `packages/api-types`
+### 3. Wire shape — local, not `packages/api-types`
 
-Add `FetchPlanRow` / `FetchPlanResponse` (additive). Consumed by the web hook.
+`FetchPlanRow` / `FetchPlanResponse` are **dev-only local types**, NOT added to
+`packages/api-types`. `/status/*` is a dev/operator surface (the tab is `notFound`
+outside dev; the proxy is flag-gated) and is deliberately off the published wire
+protocol — same convention as `/status/fetch-log`, whose response type lives locally
+in `fetch-log-shared.tsx`. The canonical types live in
+`packages/adapters/src/fetch-plan.ts` (worker side); the web hook
+(`use-fetch-plan.ts`) hand-mirrors them, since `web` doesn't depend on
+`@releases/adapters`.
 
 ### 4. Web — summary panel above the log
 
@@ -201,7 +209,6 @@ exposure of fetch internals or write paths.
 - `workers/api/src/cron/poll-fetch.ts` (import `TIER_INTERVALS` from adapters)
 - `workers/api/src/routes/status.ts` (+ `GET /status/fetch-plan`)
 - `workers/api/test/…` (+ route test)
-- `packages/api-types/src/…` (+ `FetchPlanRow` / `FetchPlanResponse`)
 - `web/src/app/actions/source-admin.ts` (+ two actions)
 - `web/src/components/org-fetch-log-view.tsx` (mount the panel)
 - `packages/adapters/package.json` (add `"./fetch-plan": "./src/fetch-plan.ts"` — the

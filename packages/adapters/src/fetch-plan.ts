@@ -140,12 +140,16 @@ export function computeFetchState(source: Source, plan: FetchPlan, now: Date): F
     return { lastPolledAt, nextDueAt: null, backedOff: false, paused: plan.paused };
   }
 
-  const tierDueMs = lastPolledAt
-    ? Date.parse(lastPolledAt) + plan.intervalHours * 3_600_000
-    : now.getTime(); // never polled → due now
-  const backoffMs = source.nextFetchAfter ? Date.parse(source.nextFetchAfter) : null;
+  // Guard against malformed timestamps: a NaN from Date.parse would make
+  // new Date(nextDueMs).toISOString() throw and 500 the whole response.
+  const parsedLastPolledMs = lastPolledAt ? Date.parse(lastPolledAt) : NaN;
+  const tierBaseMs = Number.isFinite(parsedLastPolledMs) ? parsedLastPolledMs : now.getTime();
+  const tierDueMs = tierBaseMs + plan.intervalHours * 3_600_000;
+
+  const parsedBackoffMs = source.nextFetchAfter ? Date.parse(source.nextFetchAfter) : NaN;
+  const backoffMs = Number.isFinite(parsedBackoffMs) ? parsedBackoffMs : null;
   const backedOff = backoffMs != null && backoffMs > tierDueMs;
-  const nextDueMs = backedOff ? backoffMs! : tierDueMs;
+  const nextDueMs = backedOff ? backoffMs : tierDueMs;
 
   return {
     lastPolledAt,

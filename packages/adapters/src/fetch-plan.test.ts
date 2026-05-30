@@ -154,4 +154,15 @@ describe("computeFetchState", () => {
     expect(state.backedOff).toBe(true);
     expect(state.nextDueAt).toBe("2026-01-02T06:00:00.000Z");
   });
+
+  it("malformed timestamps fall back to due-now instead of throwing", () => {
+    const s = mkSource({ fetchPriority: "normal", lastPolledAt: "not-a-date" });
+    let state: ReturnType<typeof computeFetchState> | undefined;
+    expect(() => {
+      state = computeFetchState(s, describeFetchPlan(s), now);
+    }).not.toThrow();
+    // Invalid lastPolledAt → treated as never-polled (due now + 4h tier).
+    expect(state!.nextDueAt).toBe("2026-01-02T04:00:00.000Z");
+    expect(state!.backedOff).toBe(false);
+  });
 });

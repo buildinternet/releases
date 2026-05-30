@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { and, asc, desc, eq, sql, gte, lte, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, sql, gte, lte, type SQL } from "drizzle-orm";
 import { createDb } from "../db.js";
 import {
   FETCH_LOG_STATUSES,
@@ -144,10 +144,12 @@ statusRoutes.get("/status/fetch-plan", async (c) => {
     .limit(1);
   if (!orgRow) return c.json({ sources: [] });
 
+  // Exclude soft-deleted (tombstoned) sources (#666) so the panel matches normal
+  // read-path behavior; hidden sources are kept — they still carry fetch config.
   const rows = await db
     .select()
     .from(sources)
-    .where(eq(sources.orgId, orgRow.id))
+    .where(and(eq(sources.orgId, orgRow.id), isNull(sources.deletedAt)))
     .orderBy(asc(sources.name));
 
   const now = new Date();
