@@ -114,6 +114,17 @@ Axiom (`releases-cloudflare-logs`), JSON in `body`:
 
 The full-page **fallback** path runs the extract over many entries at once; under output pressure Haiku may **condense** an entry's body (paraphrase, drop links) rather than preserve it verbatim. The delta path (one entry, small input) preserves much better. There is no release content-PATCH API, and the batch upsert only backfills `content` when the existing value is empty (`RELEASE_URL_UPSERT`), so correcting an already-stored row is a manual fix: a direct D1 `UPDATE` of `content` + `content_hash` (recompute via `contentHash()` in `packages/adapters/src/content-hash.ts`) + `content_chars`/`content_tokens` (`computeContentSize()` in `@buildinternet/releases-core/tokens`), then re-embed via `POST /v1/workflows/embed-releases`.
 
+## Full-history backfill (`POST /v1/workflows/backfill-source`)
+
+The steady-state ingest windows a baseline scrape to the recent `DEFAULT_CHANGELOG_SLICE_TOKENS` slice (`extractFirecrawlMarkdown`), so older history is dropped on onboard. To recover it, an operator or local sub-agent POSTs `{ sourceId, markdown?, maxWindows?, dryRun? }` to `/v1/workflows/backfill-source` (admin-gated, sibling of `enrich-feed-content`).
+
+- **Body acquisition ladder:** supplied `markdown` (any scrape source, incl. JS/CF-blocked pages the worker can't fetch) → Firecrawl `scrapeOnce` (when `metadata.firecrawl.enabled`) → plain `fetch` + `htmlToMarkdown`.
+- **Extraction:** `extractChangelogAllWindows` loops `sliceChangelog` over the whole document (Haiku 4.5, temp 0, one-shot per window), bounded by `maxWindows` (default 50, max 200). `cappedAtWindow` / `droppedChars` report any untouched tail — no silent caps.
+- **Dedup contract:** reuses the exact prod `extractFromBody` + `mapEntries`, so synthesized `${sourceUrl}#${slug(version ?? title)}` URLs match already-stored rows. `RELEASE_URL_UPSERT` no-ops them; an in-memory dedup collapses within-batch duplicates (a single D1 `ON CONFLICT` can't touch one `(source_id, url)` twice). Re-running is idempotent.
+- **`dryRun` (default true):** returns `windows`, `extracted`, `deduped`, `dateRange` without writing. A real run upserts via `ingestRawReleases`, then embeds + regenerates summaries (summary calls chunked at 20 to clear the `MAX_AUTOGEN_ROWS_PER_FIRE` autogen cap).
+
+It is cheap (Haiku temp-0, bounded) and **not** wired into any cron — it runs only when explicitly POSTed, the mechanism a local agent uses to backfill at first-ingest time without a bespoke script. See `docs/superpowers/specs/2026-05-30-backfill-source-primitive-design.md`.
+
 ## Further reading
 
 - Design + plan (dated, historical): `docs/superpowers/specs/2026-05-29-firecrawl-monitoring-integration-design.md` and `docs/superpowers/plans/2026-05-29-firecrawl-monitoring-integration.md`. These predate the live-API findings — the webhook delivers a diff (not markdown), and `diff.text` is hunkless; see the correction notes at the top of each.
