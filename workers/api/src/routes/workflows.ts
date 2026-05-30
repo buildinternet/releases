@@ -44,7 +44,12 @@ import {
   type EntityKind,
 } from "@releases/search/embed-entities.js";
 import { embedAndUpsertChangelogFile } from "@releases/search/embed-changelog-pipeline.js";
-import { applyOnDiff, setChunkVectorIds } from "../cron/poll-fetch.js";
+import {
+  applyOnDiff,
+  setChunkVectorIds,
+  ingestRawReleases,
+  embedReleasesForSource,
+} from "../cron/poll-fetch.js";
 import { buildEmbedConfig } from "@releases/search/embed-config.js";
 import { logEvent } from "@releases/lib/log-event";
 import { dbErrorLogFields } from "@releases/lib/db-errors";
@@ -54,6 +59,21 @@ import { clusterAndPersistCascades, DECIDED_BY_CHANGESETS } from "../lib/cluster
 import { clusterChangesets } from "@releases/core-internal/changesets-cluster";
 import { releaseCoverage } from "@releases/db/schema-coverage.js";
 import { IN_ARRAY_CHUNK_SIZE } from "../lib/d1-limits.js";
+import type { Source } from "@buildinternet/releases-core/schema";
+import type { RawRelease } from "@releases/adapters/types.js";
+import { getSourceMeta, htmlToMarkdown } from "@releases/adapters/feed.js";
+import { createFirecrawlClient } from "@releases/adapters/firecrawl.js";
+import { RELEASES_BOT_UA } from "@releases/adapters/user-agent";
+import { getSecret } from "@releases/lib/secrets";
+import { FirecrawlError } from "@releases/lib/errors";
+import { buildAnthropicClient } from "@releases/lib/anthropic-client.js";
+import { extractChangelogAllWindows } from "../lib/firecrawl-extract.js";
+import {
+  runSourceBackfill,
+  type BackfillBodyVia,
+  type SourceBackfillDeps,
+  type SourceBackfillExtractResult,
+} from "../lib/source-backfill.js";
 
 export const workflowsRoutes = new Hono<Env>();
 
@@ -1808,4 +1828,229 @@ workflowsRoutes.post("/workflows/enrich-feed-content", async (c) => {
   );
 
   return c.json({ source: { id: src.id, slug: src.slug }, ...report });
+});
+
+// ── POST /workflows/backfill-source ──────────────────────────────────────────
+//
+// Operator/agent-triggered full-history backfill for a windowed scrape source.
+// Acquires the full page (supplied markdown / Firecrawl / plain fetch), loops
+// extraction over every window, dedups by synthesized url, then upserts via the
+// standard ingest tail and (inline) embeds + regenerates summaries. dryRun
+// (default) previews counts + date range without writing. Idempotent.
+//
+// Body: { sourceId?, sourceSlug?, markdown?, maxWindows?, dryRun? }
+
+const BACKFILL_DEFAULT_MAX_WINDOWS = 50;
+const BACKFILL_MAX_MAX_WINDOWS = 200;
+// Per-call summary chunk. generateContentForReleases bails entirely above
+// MAX_AUTOGEN_ROWS_PER_FIRE (20) in poll-and-fetch.ts; chunk under it so a
+// large backfill still gets every row summarized.
+const BACKFILL_SUMMARY_CHUNK = 20;
+// Matches FirecrawlIngestWorkflow's FIRECRAWL_EXTRACT_MODEL: cheap, deterministic.
+const BACKFILL_EXTRACT_MODEL = "claude-haiku-4-5-20251001";
+
+const backfillLogger = {
+  info: (msg: string) =>
+    logEvent("info", { component: "backfill-source", event: "extract-info", message: msg }),
+  warn: (msg: string) =>
+    logEvent("warn", { component: "backfill-source", event: "extract-warn", message: msg }),
+  debug: (msg: string) =>
+    logEvent("info", { component: "backfill-source", event: "extract-debug", message: msg }),
+  error: (msg: string) =>
+    logEvent("error", { component: "backfill-source", event: "extract-error", message: msg }),
+};
+
+interface BackfillSourceBody {
+  sourceId?: string;
+  sourceSlug?: string;
+  markdown?: string;
+  maxWindows?: number;
+  dryRun?: boolean;
+}
+
+// TEST-ONLY hook (kept off the production Env type): inject the all-windows
+// extraction result instead of calling Anthropic. Read via a local cast.
+type BackfillExtractOverride = (
+  markdown: string,
+  source: Source,
+) => Promise<SourceBackfillExtractResult>;
+
+workflowsRoutes.post("/workflows/backfill-source", async (c) => {
+  const db = createDb(c.env.DB);
+  const body = await c.req.json<BackfillSourceBody>().catch(() => ({}) as BackfillSourceBody);
+
+  const ident = body.sourceId?.trim() || body.sourceSlug?.trim();
+  if (!ident) {
+    return c.json({ error: "bad_request", message: "Provide `sourceId` or `sourceSlug`" }, 400);
+  }
+  if (!isSourceId(ident)) {
+    return c.json(
+      {
+        error: "bare_slug_rejected",
+        message:
+          "Pass a typed source ID (src_…). Bare slugs are ambiguous across orgs — resolve via /v1/orgs/{orgSlug}/sources/{sourceSlug} or /v1/lookups/source-by-slug first.",
+      },
+      400,
+    );
+  }
+
+  const [src] = await db.select().from(sources).where(sourceMatchByIdOrSlug(ident));
+  if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
+  if (src.type !== "scrape") {
+    return c.json(
+      {
+        error: "bad_request",
+        message: `Backfill supports scrape sources; this source is type=${src.type}`,
+      },
+      400,
+    );
+  }
+
+  const rawMax = Number(body.maxWindows ?? BACKFILL_DEFAULT_MAX_WINDOWS);
+  const maxWindows = Number.isFinite(rawMax)
+    ? Math.min(Math.max(Math.floor(rawMax), 1), BACKFILL_MAX_MAX_WINDOWS)
+    : BACKFILL_DEFAULT_MAX_WINDOWS;
+  const dryRun = body.dryRun !== false; // default to a dry run for safety
+  const suppliedMarkdown =
+    typeof body.markdown === "string" && body.markdown.trim().length > 0 ? body.markdown : null;
+  const meta = getSourceMeta(src);
+
+  // ── Body acquisition (errors mapped to HTTP here) ──────────────────────────
+  let resolved: { markdown: string; via: BackfillBodyVia };
+  if (suppliedMarkdown) {
+    resolved = { markdown: suppliedMarkdown, via: "supplied" };
+  } else if (meta.firecrawl?.enabled) {
+    const apiKey = await getSecret(c.env.FIRECRAWL_API_KEY);
+    if (!apiKey) {
+      return c.json(
+        { error: "service_unavailable", message: "FIRECRAWL_API_KEY not configured" },
+        503,
+      );
+    }
+    try {
+      const client = createFirecrawlClient({ apiKey });
+      const md = await client.scrapeOnce(src.url, { proxy: meta.firecrawl?.proxy });
+      if (!md) {
+        return c.json(
+          { error: "bad_gateway", message: `Empty Firecrawl scrape for ${src.url}` },
+          502,
+        );
+      }
+      resolved = { markdown: md, via: "firecrawl" };
+    } catch (err) {
+      const status = err instanceof FirecrawlError ? err.status : null;
+      return c.json(
+        {
+          error: "bad_gateway",
+          message: `Firecrawl scrape failed${status ? ` (${status})` : ""}`,
+          firecrawlStatus: status,
+        },
+        502,
+      );
+    }
+  } else {
+    try {
+      const res = await fetch(src.url, { headers: { "User-Agent": RELEASES_BOT_UA } });
+      const md = res.ok ? htmlToMarkdown(await res.text()) : "";
+      if (!md.trim()) {
+        return c.json(
+          {
+            error: "bad_request",
+            message: `Could not fetch a usable body for ${src.url}. Supply \`markdown\` or enable Firecrawl on this source.`,
+          },
+          400,
+        );
+      }
+      resolved = { markdown: md, via: "fetch" };
+    } catch {
+      return c.json(
+        {
+          error: "bad_request",
+          message: `Could not fetch ${src.url}. Supply \`markdown\` or enable Firecrawl on this source.`,
+        },
+        400,
+      );
+    }
+  }
+
+  // ── Extraction (override in tests; else Haiku t0 all-windows) ──────────────
+  const override = (c.env as { _backfillExtractOverride?: BackfillExtractOverride })
+    ._backfillExtractOverride;
+  let anthropicClient: ReturnType<typeof buildAnthropicClient> | null = null;
+  if (!override) {
+    const apiKey = await getAnthropicKey(c.env);
+    if (!apiKey) {
+      return c.json(
+        { error: "service_unavailable", message: "ANTHROPIC_API_KEY not configured" },
+        503,
+      );
+    }
+    anthropicClient = buildAnthropicClient({ apiKey, ...(await resolveGatewayOpts(c.env)) });
+  }
+  const extract = async (markdown: string): Promise<SourceBackfillExtractResult> => {
+    if (override) return override(markdown, src);
+    const r = await extractChangelogAllWindows(
+      markdown,
+      src,
+      {
+        anthropicClient: anthropicClient!,
+        agentModel: BACKFILL_EXTRACT_MODEL,
+        logger: backfillLogger,
+      },
+      { maxWindows },
+    );
+    return {
+      releases: r.releases,
+      windows: r.windows,
+      cappedAtWindow: r.cappedAtWindow,
+      droppedChars: r.droppedChars,
+    };
+  };
+
+  // ── Ingest + enrich deps (lazy import only on the write path) ──────────────
+  const deps: SourceBackfillDeps = {
+    resolveBody: async () => resolved,
+    extract,
+    ingest: async () => {
+      throw new Error("ingest unavailable on dryRun");
+    },
+    embedAndGenerate: async () => {},
+  };
+  if (!dryRun) {
+    // poll-and-fetch.js pulls `cloudflare:workers` — import it only here so the
+    // Bun-loaded OpenAPI coverage check / route smoke tests never trip on it.
+    const { resolveFetchEnv, generateContentForReleases } =
+      await import("../workflows/poll-and-fetch.js");
+    const fetchEnv = await resolveFetchEnv(c.env as never);
+    deps.ingest = (rows: RawRelease[]) =>
+      ingestRawReleases(db as never, src as never, rows, fetchEnv);
+    deps.embedAndGenerate = async (ids: string[]) => {
+      if (c.env.RELEASES_INDEX) {
+        await embedReleasesForSource(db as never, src as never, ids, fetchEnv, {
+          throwOnError: false,
+        });
+      }
+      for (let i = 0; i < ids.length; i += BACKFILL_SUMMARY_CHUNK) {
+        // oxlint-disable-next-line no-await-in-loop -- bounded chunks under the autogen row cap
+        await generateContentForReleases(
+          db as never,
+          c.env as never,
+          src as never,
+          ids.slice(i, i + BACKFILL_SUMMARY_CHUNK),
+        );
+      }
+    };
+  }
+
+  const report = await runSourceBackfill({ id: src.id, slug: src.slug }, { dryRun }, deps);
+  if (report.cappedAtWindow || report.droppedChars > 0) {
+    logEvent("info", {
+      component: "backfill-source",
+      event: "windowed-cap",
+      sourceId: src.id,
+      windows: report.windows,
+      droppedChars: report.droppedChars,
+    });
+  }
+  return c.json(report);
 });
