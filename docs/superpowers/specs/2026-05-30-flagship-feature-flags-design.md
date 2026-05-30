@@ -190,6 +190,14 @@ export async function flags<K extends FlagDef>(
 }
 ```
 
+> **Implementation note (signature changed):** the shipped helper is
+> `flag(binding, varValue, def)` — the caller passes the specific var _value_
+> (`env.CACHE_DISABLED`) rather than the whole env object, because worker `Env`
+> interfaces hold non-string bindings and aren't assignable to a string-record.
+> The `flags()` batch helper sketched above was **not** built (see Hot-path
+> handling). The plan's "Key refinements" section is authoritative for the final
+> shapes: `docs/superpowers/plans/2026-05-30-flagship-feature-flags.md`.
+
 **Fallback semantics, restated:** the value handed to `getBooleanValue` as its
 default is the env-var-derived boolean. So when a flag has not been created/enabled
 in the Flagship dashboard, evaluation returns the var value — i.e. **landing the
