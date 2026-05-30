@@ -695,6 +695,7 @@ export default {
           DB: env.DB,
           CRON_ENABLED: env.CRON_ENABLED,
           FIRECRAWL_STALE_HOURS: env.FIRECRAWL_STALE_HOURS,
+          FIRECRAWL_API_KEY: env.FIRECRAWL_API_KEY,
         }),
         alertEnv,
       ),
