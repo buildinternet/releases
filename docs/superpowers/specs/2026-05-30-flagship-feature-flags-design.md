@@ -52,7 +52,7 @@ Both app IDs were supplied by the operator and go verbatim into the worker
 ## Non-goals
 
 - Tier 2 numeric tunables (spend caps, jitter window, search-ranking knobs).
-  Flagship's `getNumberValue` would fit them, but they change rarely; out of scope
+  Flagship's `getNumberValue` would fit them, but they rarely change; out of scope
   here. The helper is designed so adding them later is additive.
 - Secrets (API keys, signing keys) — Flagship does not store secrets; they stay in
   Secrets Store / wrangler secrets.
@@ -180,7 +180,12 @@ export async function flag(
   }
 }
 
-/** Batch-evaluate several flags (one binding round of work per request). */
+/**
+ * Batch-evaluate several flags (one binding round of work per request).
+ * NOTE: sketched here but NOT shipped — see the Hot-path handling section. Each
+ * hot middleware reads a distinct flag, so per-site `flag(...)` is already minimal
+ * and batching only added an ordering dependency.
+ */
 export async function flags<K extends FlagDef>(
   binding: FlagshipBinding | undefined,
   env: FlagEnv,

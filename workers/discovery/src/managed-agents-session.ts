@@ -502,6 +502,13 @@ export class ManagedAgentsSession extends DurableObject<Env> {
       const anthropicBaseURL = this.env.ANTHROPIC_BASE_URL;
 
       const signedFetch = await buildDiscoverySignedFetch(this.env);
+      // Resolve once per session (mirrors signedFetch above) rather than per
+      // scrape call inside the closure below.
+      const extractToolLoopEnabled = await flag(
+        this.env.FLAGS,
+        this.env.EXTRACT_TOOLLOOP_ENABLED,
+        FLAGS.extractToolLoopEnabled,
+      );
 
       const scrapeHandler =
         cfAccountId && cfApiToken
@@ -516,11 +523,7 @@ export class ManagedAgentsSession extends DurableObject<Env> {
                   apiFetcher: fetcher,
                   apiKey: releasesApiKey ?? "",
                   sessionId,
-                  extractToolLoopEnabled: await flag(
-                    this.env.FLAGS,
-                    this.env.EXTRACT_TOOLLOOP_ENABLED,
-                    FLAGS.extractToolLoopEnabled,
-                  ),
+                  extractToolLoopEnabled,
                   signedFetch,
                 },
                 sourceIdentifier,
