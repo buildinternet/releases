@@ -26,7 +26,7 @@ function stubEnv(overrides: Partial<Env> = {}): Env {
 }
 
 async function listTools(env: Env) {
-  const server = createServer(env);
+  const server = await createServer(env);
   const [clientT, serverT] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: "test", version: "0.0.0" });
   await Promise.all([server.connect(serverT), client.connect(clientT)]);

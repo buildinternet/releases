@@ -39,7 +39,7 @@ async function callSearchTool(
   query: string,
   opts: { authScopes?: string[]; authToken?: string | null } = {},
 ): Promise<unknown> {
-  const server = createServer(env, undefined, opts);
+  const server = await createServer(env, undefined, opts);
   const [clientT, serverT] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: "test", version: "0.0.0" });
   await Promise.all([server.connect(serverT), client.connect(clientT)]);

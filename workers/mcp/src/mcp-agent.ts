@@ -31,7 +31,7 @@ import { scopeSatisfies, type ApiScope } from "@buildinternet/releases-core/api-
 import { parseCoordinate } from "@buildinternet/releases-core/lookup-coordinate";
 import type { LookupResultPayload } from "@buildinternet/releases-api-types";
 import { getSecret, getSecretWithFallback } from "@releases/lib/secrets";
-import type { FlagshipBinding } from "@releases/lib/flags";
+import { FLAGS, flag, type FlagshipBinding } from "@releases/lib/flags";
 
 /**
  * Render the lookup payload as a markdown rail appended to the tool's text
@@ -224,7 +224,7 @@ export interface CreateServerOptions {
   authToken?: string | null;
 }
 
-export function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServerOptions) {
+export async function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServerOptions) {
   const server = new McpServer(
     {
       name: "releases",
@@ -249,6 +249,7 @@ export function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServ
   const requestClientKind = deriveMcpClientKind(requestUserAgent);
   const authScopes = opts?.authScopes ?? ["read"];
   const authToken = opts?.authToken ?? null;
+  const aiToolsEnabled = await flag(env.FLAGS, env.ENABLE_AI_TOOLS, FLAGS.enableAiTools);
 
   /**
    * Wrap a tool handler so it returns a scope error unless the caller's scopes
@@ -816,7 +817,7 @@ export function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServ
     withMedia(async (params) => getRelease(db, params)),
   );
 
-  if (env.ENABLE_AI_TOOLS === "true") {
+  if (aiToolsEnabled) {
     server.registerTool(
       "summarize_changes",
       {
@@ -871,7 +872,7 @@ export function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServ
   }
 
   registerResources(server, db, mediaOrigin);
-  registerPrompts(server, db, { aiTools: env.ENABLE_AI_TOOLS === "true" });
+  registerPrompts(server, db, { aiTools: aiToolsEnabled });
 
   return server;
 }

@@ -1,6 +1,7 @@
 import { getSecret, getSecretWithFallback } from "@releases/lib/secrets";
 import { isApiTokenShaped, ROOT_SCOPE } from "@buildinternet/releases-core/api-token";
 import { verifyApiToken } from "@releases/core-internal/api-token-store";
+import { FLAGS, flag } from "@releases/lib/flags";
 import { createDb } from "./db.js";
 import type { Env } from "./mcp-agent.js";
 
@@ -35,7 +36,7 @@ function bearer(request: Request): string {
 async function resolveIdentity(presented: string, env: Env): Promise<McpIdentity> {
   if (!presented) return ANONYMOUS;
   if (isApiTokenShaped(presented)) {
-    if (env.API_TOKENS_DISABLED === "true") return ANONYMOUS;
+    if (await flag(env.FLAGS, env.API_TOKENS_DISABLED, FLAGS.apiTokensDisabled)) return ANONYMOUS;
     const res = await verifyApiToken(createDb(env.DB), presented);
     if (res.ok)
       return { kind: "token", scopes: res.scopes, tokenId: res.tokenId, token: presented };
