@@ -4,7 +4,7 @@
 
 **Goal:** Add a reusable, admin-triggered full-history backfill for windowed scrape/Firecrawl sources via `POST /v1/workflows/backfill-source`, plus fix the latent `/releases/batch` media-bind bug.
 
-**Architecture:** A synchronous endpoint mirroring `enrich-feed-content`. The whole ingest pipeline already runs in-worker (`FirecrawlIngestWorkflow`); the only new behavior is *loop-all-windows* extraction. A new `extractChangelogAllWindows()` primitive loops `sliceChangelog` over the whole document; a DI core `runSourceBackfill()` dedups by synthesized URL and feeds `ingestRawReleases` → inline embed + summary regen. Body comes from (1) agent-supplied `markdown`, (2) Firecrawl `scrapeOnce`, or (3) plain fetch + `htmlToMarkdown`.
+**Architecture:** A synchronous endpoint mirroring `enrich-feed-content`. The whole ingest pipeline already runs in-worker (`FirecrawlIngestWorkflow`); the only new behavior is _loop-all-windows_ extraction. A new `extractChangelogAllWindows()` primitive loops `sliceChangelog` over the whole document; a DI core `runSourceBackfill()` dedups by synthesized URL and feeds `ingestRawReleases` → inline embed + summary regen. Body comes from (1) agent-supplied `markdown`, (2) Firecrawl `scrapeOnce`, or (3) plain fetch + `htmlToMarkdown`.
 
 **Tech Stack:** Bun, TypeScript (strict), Cloudflare Worker + Hono, Drizzle/D1, Anthropic SDK (Haiku 4.5 temp-0), `bun test` with `bun:sqlite` fixtures.
 
@@ -48,6 +48,7 @@ Expected: PASS (3 tests). This is the file Task 1 extends.
 ## Task 1: `extractChangelogAllWindows` primitive
 
 **Files:**
+
 - Modify: `workers/api/src/lib/firecrawl-extract.ts`
 - Test: `workers/api/src/lib/firecrawl-extract.test.ts`
 
@@ -56,15 +57,19 @@ Expected: PASS (3 tests). This is the file Task 1 extends.
 Append to `workers/api/src/lib/firecrawl-extract.test.ts` (after the existing `describe` block). It adds a counting fake client (distinct version per window) and imports the new function — update the import on line 3 to include it:
 
 Change line 3 from:
+
 ```ts
 import { extractFirecrawlMarkdown } from "./firecrawl-extract.js";
 ```
+
 to:
+
 ```ts
 import { extractFirecrawlMarkdown, extractChangelogAllWindows } from "./firecrawl-extract.js";
 ```
 
 Then append:
+
 ```ts
 // Fake whose every extract call returns a distinct version, so accumulation
 // across windows is observable (N windows -> N pre-dedup releases).
@@ -166,6 +171,7 @@ Expected: FAIL — `extractChangelogAllWindows` is not exported (import error / 
 - [ ] **Step 3: Implement `extractChangelogAllWindows`**
 
 Append to `workers/api/src/lib/firecrawl-extract.ts` (after `extractFirecrawlMarkdown`):
+
 ```ts
 export interface ExtractAllWindowsResult {
   /** mapEntries output across all processed windows, PRE-dedup. */
@@ -262,6 +268,7 @@ Expected: PASS (6 tests: 3 existing + 3 new).
 
 Run: `cd workers/api && npx tsc --noEmit && cd ../..`
 Expected: no errors.
+
 ```bash
 git add workers/api/src/lib/firecrawl-extract.ts workers/api/src/lib/firecrawl-extract.test.ts
 git commit -m "feat(backfill): add extractChangelogAllWindows loop-all-windows primitive"
@@ -272,12 +279,14 @@ git commit -m "feat(backfill): add extractChangelogAllWindows loop-all-windows p
 ## Task 2: `runSourceBackfill` core
 
 **Files:**
+
 - Create: `workers/api/src/lib/source-backfill.ts`
 - Test: `workers/api/src/lib/source-backfill.test.ts`
 
 - [ ] **Step 1: Write the failing tests**
 
 Create `workers/api/src/lib/source-backfill.test.ts`:
+
 ```ts
 import { describe, it, expect } from "bun:test";
 import type { RawRelease } from "@releases/adapters/types.js";
@@ -378,6 +387,7 @@ Expected: FAIL — module `./source-backfill.js` not found.
 - [ ] **Step 3: Implement the core**
 
 Create `workers/api/src/lib/source-backfill.ts`:
+
 ```ts
 import type { RawRelease } from "@releases/adapters/types.js";
 // Type-only: erased at compile time, so this does NOT pull poll-fetch's runtime
@@ -499,6 +509,7 @@ Expected: PASS (3 tests).
 
 Run: `cd workers/api && npx tsc --noEmit && cd ../..`
 Expected: no errors.
+
 ```bash
 git add workers/api/src/lib/source-backfill.ts workers/api/src/lib/source-backfill.test.ts
 git commit -m "feat(backfill): add runSourceBackfill DI core with url dedup"
@@ -509,6 +520,7 @@ git commit -m "feat(backfill): add runSourceBackfill DI core with url dedup"
 ## Task 3: `normalizeMediaBind` helper + batch-route fix
 
 **Files:**
+
 - Create: `workers/api/src/lib/media-bind.ts`
 - Test: `workers/api/src/lib/media-bind.test.ts`
 - Modify: `workers/api/src/routes/sources.ts`
@@ -516,6 +528,7 @@ git commit -m "feat(backfill): add runSourceBackfill DI core with url dedup"
 - [ ] **Step 1: Write the failing tests**
 
 Create `workers/api/src/lib/media-bind.test.ts`:
+
 ```ts
 import { describe, it, expect } from "bun:test";
 import { normalizeMediaBind } from "./media-bind.js";
@@ -552,6 +565,7 @@ Expected: FAIL — module `./media-bind.js` not found.
 - [ ] **Step 3: Implement the helper**
 
 Create `workers/api/src/lib/media-bind.ts`:
+
 ```ts
 /**
  * Normalize a release's `media` field to a JSON string safe to bind to D1.
@@ -578,25 +592,30 @@ Expected: PASS (4 tests).
 - [ ] **Step 5: Use the helper in the batch route**
 
 In `workers/api/src/routes/sources.ts`, add the import near the other `../lib/*` imports (top of file):
+
 ```ts
 import { normalizeMediaBind } from "../lib/media-bind.js";
 ```
 
 Then replace the `mediaJsonByIndex` line (currently `sources.ts:725`):
+
 ```ts
-    const mediaJsonByIndex = body.releases.map((r) => r.media ?? "[]");
+const mediaJsonByIndex = body.releases.map((r) => r.media ?? "[]");
 ```
+
 with:
+
 ```ts
-    // Coerce array/object media to a JSON string so a non-primitive bind can't
-    // 500 the chunked, non-transactional insert mid-batch. See media-bind.ts.
-    const mediaJsonByIndex = body.releases.map((r) => normalizeMediaBind(r.media));
+// Coerce array/object media to a JSON string so a non-primitive bind can't
+// 500 the chunked, non-transactional insert mid-batch. See media-bind.ts.
+const mediaJsonByIndex = body.releases.map((r) => normalizeMediaBind(r.media));
 ```
 
 - [ ] **Step 6: Type-check and commit**
 
 Run: `cd workers/api && npx tsc --noEmit && cd ../..`
 Expected: no errors.
+
 ```bash
 git add workers/api/src/lib/media-bind.ts workers/api/src/lib/media-bind.test.ts workers/api/src/routes/sources.ts
 git commit -m "fix(sources): stringify array-valued media before D1 bind in /releases/batch"
@@ -607,12 +626,14 @@ git commit -m "fix(sources): stringify array-valued media before D1 bind in /rel
 ## Task 4: `POST /v1/workflows/backfill-source` route + smoke tests
 
 **Files:**
+
 - Modify: `workers/api/src/routes/workflows.ts`
 - Test: `workers/api/test/workflows-backfill.test.ts`
 
 - [ ] **Step 1: Write the failing smoke tests**
 
 Create `workers/api/test/workflows-backfill.test.ts`:
+
 ```ts
 // Smoke tests for POST /v1/workflows/backfill-source.
 //
@@ -761,6 +782,7 @@ Expected: FAIL — route not registered (bare-slug test 404s instead of 400, or 
 - [ ] **Step 3: Add imports to `workflows.ts`**
 
 In `workers/api/src/routes/workflows.ts`, add these imports (group with the existing `@releases/*` / `../lib/*` / `../cron/*` imports near the top):
+
 ```ts
 import type { Source } from "@buildinternet/releases-core/schema";
 import type { RawRelease } from "@releases/adapters/types.js";
@@ -779,13 +801,16 @@ import {
   type SourceBackfillExtractResult,
 } from "../lib/source-backfill.js";
 ```
+
 Notes:
+
 - `ingestRawReleases` / `embedReleasesForSource` come from `../cron/poll-fetch.js`, which is already top-level-imported in this file (line ~47) and is Bun-safe. `resolveFetchEnv` + `generateContentForReleases` live in `../workflows/poll-and-fetch.js`, which pulls `cloudflare:workers` — those MUST stay lazy-imported (Step 4), only on the non-dryRun path, so the Bun-loaded smoke tests never trigger that import.
 - `getAnthropicKey`, `resolveGatewayOpts`, `createDb`, `sources`, `isSourceId`, `sourceMatchByIdOrSlug`, `parsePositiveInt`, `logEvent` are already imported.
 
 - [ ] **Step 4: Add the route handler to `workflows.ts`**
 
 Append after the `enrich-feed-content` handler (end of file):
+
 ```ts
 // ── POST /workflows/backfill-source ──────────────────────────────────────────
 //
@@ -834,9 +859,7 @@ type BackfillExtractOverride = (
 
 workflowsRoutes.post("/workflows/backfill-source", async (c) => {
   const db = createDb(c.env.DB);
-  const body = await c.req
-    .json<BackfillSourceBody>()
-    .catch(() => ({}) as BackfillSourceBody);
+  const body = await c.req.json<BackfillSourceBody>().catch(() => ({}) as BackfillSourceBody);
 
   const ident = body.sourceId?.trim() || body.sourceSlug?.trim();
   if (!ident) {
@@ -890,7 +913,10 @@ workflowsRoutes.post("/workflows/backfill-source", async (c) => {
       const client = createFirecrawlClient({ apiKey });
       const md = await client.scrapeOnce(src.url, { proxy: meta.firecrawl?.proxy });
       if (!md) {
-        return c.json({ error: "bad_gateway", message: `Empty Firecrawl scrape for ${src.url}` }, 502);
+        return c.json(
+          { error: "bad_gateway", message: `Empty Firecrawl scrape for ${src.url}` },
+          502,
+        );
       }
       resolved = { markdown: md, via: "firecrawl" };
     } catch (err) {
@@ -948,7 +974,11 @@ workflowsRoutes.post("/workflows/backfill-source", async (c) => {
     const r = await extractChangelogAllWindows(
       markdown,
       src,
-      { anthropicClient: anthropicClient!, agentModel: BACKFILL_EXTRACT_MODEL, logger: backfillLogger },
+      {
+        anthropicClient: anthropicClient!,
+        agentModel: BACKFILL_EXTRACT_MODEL,
+        logger: backfillLogger,
+      },
       { maxWindows },
     );
     return {
@@ -971,11 +1001,11 @@ workflowsRoutes.post("/workflows/backfill-source", async (c) => {
   if (!dryRun) {
     // poll-and-fetch.js pulls `cloudflare:workers` — import it only here so the
     // Bun-loaded OpenAPI coverage check / route smoke tests never trip on it.
-    const { resolveFetchEnv, generateContentForReleases } = await import(
-      "../workflows/poll-and-fetch.js"
-    );
+    const { resolveFetchEnv, generateContentForReleases } =
+      await import("../workflows/poll-and-fetch.js");
     const fetchEnv = await resolveFetchEnv(c.env as never);
-    deps.ingest = (rows: RawRelease[]) => ingestRawReleases(db as never, src as never, rows, fetchEnv);
+    deps.ingest = (rows: RawRelease[]) =>
+      ingestRawReleases(db as never, src as never, rows, fetchEnv);
     deps.embedAndGenerate = async (ids: string[]) => {
       if (c.env.RELEASES_INDEX) {
         await embedReleasesForSource(db as never, src as never, ids, fetchEnv, {
@@ -1017,6 +1047,7 @@ Expected: PASS (5 tests).
 
 Run: `cd workers/api && npx tsc --noEmit && cd ../..`
 Expected: no errors.
+
 ```bash
 git add workers/api/src/routes/workflows.ts workers/api/test/workflows-backfill.test.ts
 git commit -m "feat(backfill): add POST /v1/workflows/backfill-source endpoint"
@@ -1027,12 +1058,14 @@ git commit -m "feat(backfill): add POST /v1/workflows/backfill-source endpoint"
 ## Task 5: Docs
 
 **Files:**
+
 - Modify: `docs/architecture/firecrawl-monitoring.md`
 - Modify: `AGENTS.md`
 
 - [ ] **Step 1: Add a backfill section to the firecrawl architecture doc**
 
 Append to `docs/architecture/firecrawl-monitoring.md`:
+
 ```markdown
 ## Full-history backfill (`POST /v1/workflows/backfill-source`)
 
@@ -1063,6 +1096,7 @@ POSTs `{ sourceId, markdown?, maxWindows?, dryRun? }` to
 - [ ] **Step 2: Add a one-line convention pointer to AGENTS.md**
 
 In `AGENTS.md`, under the Conventions list (near the Firecrawl monitoring bullet), add:
+
 ```markdown
 - **Full-history backfill** for windowed scrape sources: `POST /v1/workflows/backfill-source { sourceId, markdown?, maxWindows?, dryRun? }` loops extraction over every window and upserts idempotently (dedup-safe via the prod `extractFromBody`+`mapEntries` slugs). Body comes from supplied markdown → Firecrawl → plain fetch. See [firecrawl-monitoring.md](docs/architecture/firecrawl-monitoring.md).
 ```

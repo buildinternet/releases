@@ -55,7 +55,7 @@ flowchart TD
   GEN --> REP2[report: found, inserted, ...]
 ```
 
-The full pipeline already exists in-worker (`FirecrawlIngestWorkflow`). The only missing behavior is *loop-all-windows* extraction; everything downstream (`ingestRawReleases`, `embedReleasesForSource`, `generateContentForReleases`, `RELEASE_URL_UPSERT`) is reused verbatim. Reusing the exact prod `extractFromBody` + `mapEntries` is the dedup-correctness contract (below) — that is why extraction stays server-side rather than free-handed by the agent.
+The full pipeline already exists in-worker (`FirecrawlIngestWorkflow`). The only missing behavior is _loop-all-windows_ extraction; everything downstream (`ingestRawReleases`, `embedReleasesForSource`, `generateContentForReleases`, `RELEASE_URL_UPSERT`) is reused verbatim. Reusing the exact prod `extractFromBody` + `mapEntries` is the dedup-correctness contract (below) — that is why extraction stays server-side rather than free-handed by the agent.
 
 ## Components
 
@@ -102,12 +102,12 @@ Unresolvable/empty body → `400`; non-scrape → `400`; missing source → `404
 
 ## Acceptance criteria mapping
 
-| Issue acceptance | Covered by |
-| --- | --- |
-| Full-history backfill via one admin call, no local script | `POST /v1/workflows/backfill-source` |
-| `dryRun` reports counts + date range | `SourceBackfillReport` on `dryRun: true` |
-| Re-running idempotent (no dupes) | `RELEASE_URL_UPSERT` + reused `mapEntries` slugs + in-memory dedup |
-| `media`-bearing rows insert without error | `ingestRawReleases` (stringifies) on the backfill path; `normalizeMediaBind` for the legacy batch path |
+| Issue acceptance                                          | Covered by                                                                                             |
+| --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| Full-history backfill via one admin call, no local script | `POST /v1/workflows/backfill-source`                                                                   |
+| `dryRun` reports counts + date range                      | `SourceBackfillReport` on `dryRun: true`                                                               |
+| Re-running idempotent (no dupes)                          | `RELEASE_URL_UPSERT` + reused `mapEntries` slugs + in-memory dedup                                     |
+| `media`-bearing rows insert without error                 | `ingestRawReleases` (stringifies) on the backfill path; `normalizeMediaBind` for the legacy batch path |
 
 ## Open follow-ups (out of this PR)
 
