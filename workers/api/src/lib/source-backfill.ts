@@ -39,8 +39,10 @@ export interface SourceBackfillReport {
   /** Rows actually inserted (0 on dryRun). */
   inserted: number;
   dryRun: boolean;
-  /** Set only when the Firecrawl ceiling reduced a deeper request and the run
-   *  was capped with untouched tail — tells the caller how to backfill deeper. */
+  /** Caller hint, set ONLY when the Firecrawl ceiling reduced a deeper request
+   *  and the run was capped with untouched tail. Populated by the route handler
+   *  (via firecrawlCapGuidance), NOT by runSourceBackfill — it's a route-layer
+   *  concern since only the route knows the acquisition `via` and the clamp. */
   guidance?: string;
 }
 

@@ -1881,7 +1881,8 @@ type BackfillExtractOverride = (
 
 // TEST-ONLY hook: inject the resolved body, bypassing the acquisition ladder
 // (supplied / firecrawl / fetch) so the firecrawl `via` can be exercised in a
-// unit test without a live Firecrawl scrape.
+// unit test without a live Firecrawl scrape. As the first branch, it also
+// supersedes any `markdown` supplied in the request body.
 type BackfillBodyOverride = { markdown: string; via: BackfillBodyVia };
 
 workflowsRoutes.post("/workflows/backfill-source", async (c) => {
