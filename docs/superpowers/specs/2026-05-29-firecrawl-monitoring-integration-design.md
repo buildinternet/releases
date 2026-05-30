@@ -4,6 +4,13 @@
 **Status:** Approved design, pre-implementation
 **Author:** Zach Dunn (with Claude)
 
+> **⚠️ Correction (2026-05-30, post-implementation).** Two assumptions in the diagrams below were wrong once tested against the live Firecrawl API:
+>
+> 1. The `monitor.page` webhook delivers a **diff, not markdown** — there is no `markdown` field in the payload. The flow diagrams here show `monitor.page { …, markdown, … }` and `extract(markdown)`; the implemented workflow extracts the diff delta and only re-scrapes the full page on a `new`/baseline event.
+> 2. **`diff.text` is a hunkless whole-document diff** — no `@@` hunk headers, no `---`/`+++` file headers — not the textbook unified diff Firecrawl's docs imply. Parse it only via `addedContentFromDiff` (#1262).
+>
+> The living reference is **[docs/architecture/firecrawl-monitoring.md](../../architecture/firecrawl-monitoring.md)**; this document is kept as the historical design record.
+
 ## Problem
 
 A curated set of high-value changelog sources — OpenAI release notes the canonical

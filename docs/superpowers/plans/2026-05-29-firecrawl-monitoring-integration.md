@@ -10,6 +10,8 @@
 
 **Gating:** Phase 0 is a spike that proves Firecrawl clears the managed challenge on the real OpenAI URL. **Phases 1–2 only proceed if Phase 0 succeeds.** Phase 2 tasks are expanded to bite-sized steps after Phase 0 confirms the premise and the scrape-extract path (`extractFromBody`) signature is read at execution time (see note in Phase 2).
 
+> **⚠️ Correction (2026-05-30, post-implementation).** Tested against the live Firecrawl API: (1) the `monitor.page` webhook carries a **diff, not markdown** — the Task 8/9 pseudocode and the architecture summary above show `extract(markdown)`/`scrape → extract`, but the implemented workflow extracts the webhook's diff delta and only re-scrapes on a `new`/baseline event (the "monitor.page payload" note later in this plan gets this right). (2) **`diff.text` is a hunkless whole-document diff** — no `@@` hunk headers, no `---`/`+++` file headers, contrary to the unified-diff shape the parser originally assumed — so it must be parsed via `addedContentFromDiff` (#1262). The living reference is **[docs/architecture/firecrawl-monitoring.md](../../architecture/firecrawl-monitoring.md)**.
+
 ---
 
 ## File structure
