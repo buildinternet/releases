@@ -20,7 +20,6 @@ import type { FirecrawlClient } from "@releases/adapters/firecrawl.js";
 import { RELEASES_BOT_UA } from "@releases/adapters/user-agent";
 import { logEvent } from "@releases/lib/log-event";
 import { getSecret } from "@releases/lib/secrets";
-import { FirecrawlError } from "@releases/lib/errors";
 import { getAnthropicKey, resolveGatewayOpts } from "../lib/anthropic.js";
 import { buildAnthropicClient } from "@releases/lib/anthropic-client.js";
 import { planWindowOffsets } from "../lib/firecrawl-extract.js";
@@ -39,8 +38,6 @@ import { ingestRawReleases, embedReleasesForSource, type FetchOneEnv } from "../
 import {
   RETRY_POLL,
   RETRY_FETCH,
-  RETRY_EMBED,
-  RETRY_GENERATE,
   resolveFetchEnv,
   generateContentForReleases,
   type PollAndFetchWorkflowEnv,
@@ -149,6 +146,15 @@ export class BackfillSourceWorkflow extends WorkflowEntrypoint<
     // return only the small pointer object — never pass the full body through
     // step state, which has size limits and makes replay expensive.
     const { r2Key, via } = await step.do("resolve-and-save-raw", RETRY_FETCH, async () => {
+      // Saving the raw body to R2 is intrinsic to this durable path: every
+      // window step re-loads from R2 so the (large) body never lands in
+      // Cloudflare step state. Prod binds `released-raw`, staging reuses
+      // `released-media`, tests inject a fake — so the binding is always
+      // present in any real path. Bail loudly if it isn't.
+      if (!env.RAW_SNAPSHOTS) {
+        throw new NonRetryableError("RAW_SNAPSHOTS binding is required for BackfillSourceWorkflow");
+      }
+
       let body: string;
       let resolvedVia: BackfillBodyVia;
 
@@ -183,54 +189,25 @@ export class BackfillSourceWorkflow extends WorkflowEntrypoint<
         }
       }
 
-      if (!env.RAW_SNAPSHOTS) {
-        // R2 binding absent (e.g. staging without the bucket). Still run the
-        // workflow but skip the persistence step — return a sentinel key so
-        // plan-windows can proceed with the full in-memory body.
-        return { r2Key: null as string | null, via: resolvedVia, body };
-      }
-
+      // Save to R2 (content-addressed, dedup-safe) and return ONLY the small
+      // pointer — never the full body through step state.
       const snap = await saveRawSnapshot(
         { R2: env.RAW_SNAPSHOTS, db },
         { sourceId, body, format: "markdown" },
       );
-      return { r2Key: snap.r2Key, via: resolvedVia, body: null as string | null };
+      return { r2Key: snap.r2Key, via: resolvedVia };
     });
 
     // ── Step 3: plan-windows ────────────────────────────────────────────────
-    // Load raw body from R2 (or use the in-memory fallback), then compute the
-    // per-window offsets without any LLM calls.
+    // Load raw body from R2 (always present — r2Key is non-null past step 2),
+    // then compute the per-window offsets without any LLM calls.
     const { offsets, cappedAtWindow, droppedChars } = await step.do(
       "plan-windows",
       RETRY_POLL,
       async () => {
-        let raw: string;
-        if (r2Key) {
-          const loaded = await loadRawSnapshot({ R2: env.RAW_SNAPSHOTS! }, r2Key);
-          if (!loaded) throw new Error(`R2 snapshot missing for key ${r2Key}`);
-          raw = loaded;
-        } else {
-          // R2 absent path: re-acquire — step is retryable so this is safe.
-          const meta = getSourceMeta(source);
-          if (suppliedMarkdown?.trim()) {
-            raw = suppliedMarkdown;
-          } else if (meta.firecrawl?.enabled) {
-            let client: FirecrawlClient;
-            if (env._firecrawlClientOverride) {
-              client = env._firecrawlClientOverride;
-            } else {
-              const apiKey = await getSecret(env.FIRECRAWL_API_KEY);
-              if (!apiKey) throw new NonRetryableError("FIRECRAWL_API_KEY is not configured");
-              client = createFirecrawlClient({ apiKey });
-            }
-            const md = await client.scrapeOnce(source.url, { proxy: meta.firecrawl?.proxy });
-            if (!md) throw new Error(`empty Firecrawl scrape for ${source.url}`);
-            raw = md;
-          } else {
-            const res = await fetch(source.url, { headers: { "User-Agent": RELEASES_BOT_UA } });
-            raw = res.ok ? htmlToMarkdown(await res.text()) : "";
-          }
-        }
+        const raw = await loadRawSnapshot({ R2: env.RAW_SNAPSHOTS! }, r2Key);
+        // Null here is a transient R2 read blip — throw a plain (retryable) Error.
+        if (!raw) throw new Error(`R2 snapshot missing for key ${r2Key}`);
         const effectiveMax = effectiveBackfillWindows(via, maxWindows);
         return planWindowOffsets(raw, { maxWindows: effectiveMax });
       },
@@ -247,34 +224,10 @@ export class BackfillSourceWorkflow extends WorkflowEntrypoint<
         `extract-window-${i}`,
         RETRY_FETCH,
         async (): Promise<WindowStepResult> => {
-          // Load raw body inside the step (idempotent via R2)
-          let raw: string;
-          if (r2Key) {
-            const loaded = await loadRawSnapshot({ R2: env.RAW_SNAPSHOTS! }, r2Key);
-            if (!loaded) throw new Error(`R2 snapshot missing for key ${r2Key}`);
-            raw = loaded;
-          } else {
-            // R2 absent — re-acquire inline (retryable step)
-            const meta = getSourceMeta(source);
-            if (suppliedMarkdown?.trim()) {
-              raw = suppliedMarkdown;
-            } else if (meta.firecrawl?.enabled) {
-              let client: FirecrawlClient;
-              if (env._firecrawlClientOverride) {
-                client = env._firecrawlClientOverride;
-              } else {
-                const apiKey = await getSecret(env.FIRECRAWL_API_KEY);
-                if (!apiKey) throw new NonRetryableError("FIRECRAWL_API_KEY is not configured");
-                client = createFirecrawlClient({ apiKey });
-              }
-              const md = await client.scrapeOnce(source.url, { proxy: meta.firecrawl?.proxy });
-              if (!md) throw new Error(`empty Firecrawl scrape for ${source.url}`);
-              raw = md;
-            } else {
-              const res = await fetch(source.url, { headers: { "User-Agent": RELEASES_BOT_UA } });
-              raw = res.ok ? htmlToMarkdown(await res.text()) : "";
-            }
-          }
+          // Load raw body from R2 (idempotent; r2Key is always present here).
+          // Null is a transient R2 read blip — throw a plain (retryable) Error.
+          const raw = await loadRawSnapshot({ R2: env.RAW_SNAPSHOTS! }, r2Key);
+          if (!raw) throw new Error(`R2 snapshot missing for key ${r2Key}`);
 
           const sliced = sliceChangelog(raw, { tokens: DEFAULT_CHANGELOG_SLICE_TOKENS, offset });
 
