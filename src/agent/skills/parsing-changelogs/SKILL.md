@@ -15,6 +15,7 @@ The fetch pipeline follows this priority order:
 2. **Markdown fetch** — if `metadata.markdownUrl` is set, fetch raw markdown instead of rendered HTML.
 3. **Fast fetch (static providers)** — for providers known to serve pre-rendered HTML (Docusaurus, VitePress, WordPress, Ghost, Mintlify), fetch without headless browser rendering. Uses Cloudflare crawl API with `render: false`. ~10-30x faster than full rendering. Controlled by provider `staticContent` hint or per-source `renderRequired` metadata.
 4. **Cloudflare rendering** — for JS-heavy pages (React SPAs, Notion, etc.), use Cloudflare's browser rendering API to get the fully-rendered HTML. Fallback when fast fetch returns no content.
+5. **Firecrawl monitoring** — for sources behind a Cloudflare _Managed Challenge_ that blocks even browser rendering (some vendor help/docs pages, e.g. OpenAI's), an external Firecrawl monitor scrapes the page on a schedule and POSTs changes to the backend, which extracts them through the same parse pipeline. This is a backend-only fetch backend, not a CLI fetch path: it's enabled per source via `metadata.firecrawl` through the admin API (`POST /v1/sources/:slug/firecrawl/sync { enabled: true }`), **not** via metadata edits (that only patches the DB column and skips monitor creation). See `docs/architecture/firecrawl-monitoring.md`.
 
 After fetching content, the pipeline parses it:
 
