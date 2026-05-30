@@ -139,6 +139,14 @@ orgRoutes.get(
         description:
           "Include orgs that have zero indexed releases. Default `false` — empty orgs are stubs from in-flight discovery or broken parsers and surface as noise on the public catalog.",
       },
+      {
+        name: "featured",
+        in: "query",
+        required: false,
+        schema: { type: "boolean" },
+        description:
+          "Filter to editorially featured orgs only (home-page rail). Default unfiltered.",
+      },
     ],
     responses: {
       200: {
@@ -162,6 +170,8 @@ orgRoutes.get(
       ? await resolveCategoryInput(db, categoryParam)
       : undefined;
     const category = categoryResolved?.ok ? categoryResolved.slug : undefined;
+    // Optional featured filter — narrows to editorially promoted orgs for the home page.
+    const featured = parseBoolParam(c.req.query("featured"));
 
     const [rows, counts] = await Promise.all([
       getOrgsWithStats(
@@ -172,9 +182,9 @@ orgRoutes.get(
           limit: pagination.pageSize,
           offset: pagination.offset,
         },
-        { includeEmpty, category },
+        { includeEmpty, category, featured },
       ),
-      countOrgsForList(db, qParam ?? undefined, { includeEmpty, category }),
+      countOrgsForList(db, qParam ?? undefined, { includeEmpty, category, featured }),
     ]);
     const sparklineRows = await getOrgSparklines(
       db,
@@ -208,6 +218,7 @@ orgRoutes.get(
       description: row.description,
       category: row.category,
       avatarUrl: row.avatar_url,
+      featured: Boolean(row.featured),
       sourceCount: row.source_count,
       releaseCount: row.release_count,
       recentReleaseCount: row.recent_release_count,
@@ -607,6 +618,7 @@ orgRoutes.patch(
       fetchPaused?: boolean;
       isHidden?: boolean;
       autoGenerateContent?: boolean;
+      featured?: boolean;
     } = { ...c.req.valid("json") };
 
     if (body.category !== undefined && body.category !== null) {
@@ -662,6 +674,7 @@ orgRoutes.patch(
     if (body.isHidden !== undefined) updates.isHidden = body.isHidden;
     if (body.autoGenerateContent !== undefined)
       updates.autoGenerateContent = body.autoGenerateContent;
+    if (body.featured !== undefined) updates.featured = body.featured;
 
     const [updated] = await db
       .update(organizations)

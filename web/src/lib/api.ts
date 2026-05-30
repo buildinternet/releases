@@ -337,11 +337,12 @@ export const api = {
     return body.releases ?? [];
   },
   orgs: async (
-    opts: { includeEmpty?: boolean; category?: string } = {},
+    opts: { includeEmpty?: boolean; category?: string; featured?: boolean } = {},
   ): Promise<{ items: OrgListItem[]; emptyOrgCount: number }> => {
     const params = new URLSearchParams();
     if (opts.includeEmpty) params.set("includeEmpty", "true");
     if (opts.category) params.set("category", opts.category);
+    if (opts.featured) params.set("featured", "true");
     const qs = params.toString();
     type OrgsBody =
       | (ListResponse<OrgListItem> & { meta?: { emptyOrgCount?: number } })

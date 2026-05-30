@@ -237,40 +237,37 @@ Event-driven webhooks support is now available in the Gemini API, replacing poll
   },
 ];
 
-/**
- * `?empty=1` opts into orgs that are in the registry but have not produced any
- * indexed releases yet (#746). Default hides them — they're curator stubs from
- * in-flight discovery or broken parsers and look like noise on the catalog.
- * The toggle below the table labels itself with `meta.emptyOrgCount`.
- */
-export default async function HomePage({
-  searchParams,
-}: {
-  searchParams: Promise<{ empty?: string }>;
-}) {
-  const { empty } = await searchParams;
-  const includeEmpty = empty === "1";
-
+export default async function HomePage() {
   let stats: Awaited<ReturnType<typeof api.stats>> | undefined;
-  let orgsResult: Awaited<ReturnType<typeof api.orgs>> | undefined;
+  let orgsForTable: Awaited<ReturnType<typeof api.orgs>>["items"] = [];
   let latest: TickerItem[] = [];
   let featuredCollections: CollectionListItem[] = [];
   try {
-    const [tickerResult, fetchedStats, fetchedOrgs, fetchedFeatured] = await Promise.all([
+    const [tickerResult, fetchedStats, featuredOrgsResult, fetchedFeatured] = await Promise.all([
       tryFetch(graphqlRequest(HomepageTickerDocument, { limit: 40, exclude: ["github"] }), {
         route: "/",
         event: "homepage-ticker-fetch-failed",
       }),
       api.stats(),
-      api.orgs({ includeEmpty }),
+      api.orgs({ featured: true }),
       // Promo block is non-essential — a collections hiccup must never break
       // the homepage, so degrade to an empty (hidden) block on failure.
       api.collections({ featured: true }).catch(() => [] as CollectionListItem[]),
     ]);
     stats = fetchedStats;
-    orgsResult = fetchedOrgs;
     latest = tickerResult.data?.latestReleases.items ?? [];
     featuredCollections = fetchedFeatured;
+
+    // Fallback: if no orgs have been editorially featured yet (true on first
+    // deploy), fall back to the regular org list so the home page never renders
+    // a blank table. Once orgs are curated via PATCH /v1/orgs/:slug { featured:
+    // true } this branch will stop executing.
+    if (featuredOrgsResult.items.length > 0) {
+      orgsForTable = featuredOrgsResult.items;
+    } else {
+      const allOrgsResult = await api.orgs({ includeEmpty: false });
+      orgsForTable = allOrgsResult.items;
+    }
   } catch (err) {
     if (err instanceof ApiSetupError) {
       return (
@@ -282,8 +279,6 @@ export default async function HomePage({
     }
     throw err;
   }
-  const orgs = orgsResult?.items ?? [];
-  const emptyOrgCount = orgsResult?.emptyOrgCount ?? 0;
 
   const jsonLd = {
     "@context": "https://schema.org",
@@ -364,17 +359,13 @@ export default async function HomePage({
         </aside>
         <div className="xl:order-1 max-w-4xl xl:max-w-none w-full mx-auto">
           <FeaturedCollectionsCollapsible collections={featuredCollections} />
-          {orgs.length > 0 && <OrgTable orgs={orgs} />}
-          {emptyOrgCount > 0 && (
-            <Link
-              href={includeEmpty ? "/" : "/?empty=1"}
-              className="mt-6 inline-block text-[12px] text-stone-400 dark:text-stone-500 underline decoration-stone-300 dark:decoration-stone-600 underline-offset-2 hover:text-stone-600 dark:hover:text-stone-300"
-            >
-              {includeEmpty
-                ? "Hide empty orgs"
-                : `Show ${emptyOrgCount} ${emptyOrgCount === 1 ? "org" : "orgs"} with no indexed releases yet`}
-            </Link>
-          )}
+          {orgsForTable.length > 0 && <OrgTable orgs={orgsForTable} />}
+          <Link
+            href="/catalog"
+            className="mt-6 inline-block text-[12px] text-stone-400 dark:text-stone-500 underline decoration-stone-300 dark:decoration-stone-600 underline-offset-2 hover:text-stone-600 dark:hover:text-stone-300"
+          >
+            Browse all {stats?.orgs ?? 0} orgs →
+          </Link>
         </div>
       </div>
     </div>

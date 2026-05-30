@@ -21,6 +21,7 @@ export const OrgListItemSchema = z.object({
   description: z.string().nullable(),
   category: CategorySchema.nullable(),
   avatarUrl: z.string().nullable(),
+  featured: z.boolean(),
   sourceCount: z.number().int().min(0),
   releaseCount: z.number().int().min(0),
   recentReleaseCount: z.number().int().min(0),
@@ -109,6 +110,8 @@ export const UpdateOrgBodySchema = z.object({
   isHidden: z.boolean().optional(),
   /** Admin-only: opt the org into automatic AI content — org overviews AND per-release summaries (single backend flag `auto_generate_content`). */
   autoGenerateContent: z.boolean().optional(),
+  /** Admin-only: promote this org on the home-page featured rail. */
+  featured: z.boolean().optional(),
 });
 
 // Org detail's products query selects a strict subset of `ProductListItem` —
