@@ -136,3 +136,27 @@ describe("GET /v1/orgs — featured filter", () => {
     expect(listBody.items.every((o) => o.featured === true)).toBe(true);
   });
 });
+
+describe("GET /v1/orgs/:slug — featured in detail response", () => {
+  it("returns featured=true when org is featured", async () => {
+    const db = mkDb();
+    await seed(db);
+
+    const res = await mkApp(db)(new Request("https://x.test/v1/orgs/featured-co"));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { slug: string; featured: boolean };
+    expect(body.slug).toBe("featured-co");
+    expect(body.featured).toBe(true);
+  });
+
+  it("returns featured=false when org is not featured", async () => {
+    const db = mkDb();
+    await seed(db);
+
+    const res = await mkApp(db)(new Request("https://x.test/v1/orgs/regular-co"));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { slug: string; featured: boolean };
+    expect(body.slug).toBe("regular-co");
+    expect(body.featured).toBe(false);
+  });
+});

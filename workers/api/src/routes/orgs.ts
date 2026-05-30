@@ -442,6 +442,7 @@ orgRoutes.get(
       avatarUrl: org.avatarUrl,
       isHidden: org.isHidden,
       autoGenerateContent: org.autoGenerateContent,
+      featured: org.featured,
       fetchPaused: org.fetchPaused,
       discovery: org.discovery,
       tags: tagRows.map((t) => t.name),

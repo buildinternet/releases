@@ -104,6 +104,7 @@ export default async function OrgLayout({
               name={org.name}
               isHidden={org.isHidden ?? false}
               autoGenerateContent={org.autoGenerateContent ?? false}
+              featured={org.featured ?? false}
               discovery={org.discovery}
               fetchPaused={org.fetchPaused}
             />
