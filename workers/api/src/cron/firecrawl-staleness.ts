@@ -48,6 +48,13 @@ export interface FirecrawlStalenessEnv {
 
 const DEFAULT_STALE_HOURS = 48;
 
+/** A bare integer token within [lo, hi] — no lists, ranges, steps, or names. */
+function isIntInRange(token: string, lo: number, hi: number): boolean {
+  if (!/^\d+$/.test(token)) return false;
+  const n = Number(token);
+  return n >= lo && n <= hi;
+}
+
 /**
  * Approximate the firing interval (in hours) of a normalized 5-field cron, for
  * sizing the staleness threshold. Firecrawl returns the normalized `cron` on
@@ -62,15 +69,26 @@ export function cronIntervalHours(cron: string | undefined | null): number | nul
   if (parts.length !== 5) return null;
   const [min, hour, dom, , dow] = parts;
 
-  // "*/N * * * *" — every N minutes.
+  // Only the exact token shapes Firecrawl normalizes to are recognized: each of
+  // min/hour is `*`, a `*/N` step, or a single in-range integer; dom/dow is `*`
+  // or a single integer. Lists, ranges, and names (`1,3`, `15-45`, `MON`) fall
+  // through to null so the caller uses the floor instead of a mis-inferred
+  // cadence.
   const everyMin = /^\*\/(\d+)$/.exec(min);
+  const everyHour = /^\*\/(\d+)$/.exec(hour);
+  const minOk = min === "*" || everyMin !== null || isIntInRange(min, 0, 59);
+  const hourOk = hour === "*" || everyHour !== null || isIntInRange(hour, 0, 23);
+  const domOk = dom === "*" || isIntInRange(dom, 1, 31);
+  const dowOk = dow === "*" || isIntInRange(dow, 0, 7);
+  if (!minOk || !hourOk || !domOk || !dowOk) return null;
+
+  // "*/N * * * *" — every N minutes.
   if (everyMin && hour === "*") return Math.max(1, Number(everyMin[1])) / 60;
 
   // "M * * * *" — hourly (any minute, every hour).
   if (hour === "*") return 1;
 
   // "M */N * * *" — every N hours.
-  const everyHour = /^\*\/(\d+)$/.exec(hour);
   if (everyHour) return Math.max(1, Number(everyHour[1]));
 
   // Fixed minute+hour from here down. A restricted day-of-week → weekly cadence;
@@ -86,7 +104,7 @@ export function cronIntervalHours(cron: string | undefined | null): number | nul
  * unparseable cron) falls back to the floor — we never *suppress* a staleness
  * warning just because the schedule couldn't be read.
  */
-async function thresholdHours(
+export async function thresholdHours(
   client: FirecrawlClient | undefined,
   monitorId: string | null | undefined,
   floorHours: number,
@@ -96,8 +114,13 @@ async function thresholdHours(
     const monitor = await client.getMonitor(monitorId);
     const interval = cronIntervalHours(monitor.schedule?.cron);
     if (interval == null) return { hours: floorHours, basis: "floor" };
-    // 2× headroom so one late/missed run doesn't flag; never below the floor.
-    return { hours: Math.max(floorHours, interval * 2), basis: "schedule" };
+    // 2× headroom so one late/missed run doesn't flag. The schedule only ever
+    // *raises* the window: when the doubled cadence doesn't clear the floor the
+    // floor wins, so `basis` reflects what actually drove `hours`.
+    const windowHours = interval * 2;
+    return windowHours > floorHours
+      ? { hours: windowHours, basis: "schedule" }
+      : { hours: floorHours, basis: "floor" };
   } catch {
     return { hours: floorHours, basis: "floor" };
   }
@@ -140,11 +163,21 @@ export async function scanStaleFirecrawlSources(
     .where(sql`json_extract(${sources.metadata}, '$.firecrawl.enabled') = 1`);
 
   // Resolve the client once. Absent key → schedule reads are skipped and every
-  // source falls back to the floor (the original fixed-window behavior).
+  // source falls back to the floor (the original fixed-window behavior). A
+  // Secrets Store blip (getSecret throws after retry) must NOT abort the scan —
+  // catch it and degrade to floor-only rather than emitting zero warnings.
   let client = env._firecrawlClientOverride;
   if (!client && env.FIRECRAWL_API_KEY) {
-    const apiKey = await getSecret(env.FIRECRAWL_API_KEY);
-    if (apiKey) client = createFirecrawlClient({ apiKey });
+    try {
+      const apiKey = await getSecret(env.FIRECRAWL_API_KEY);
+      if (apiKey) client = createFirecrawlClient({ apiKey });
+    } catch (err) {
+      logEvent("warn", {
+        component: "firecrawl-staleness",
+        event: "client-init-failed",
+        err: err instanceof Error ? { name: err.name, message: err.message } : String(err),
+      });
+    }
   }
 
   let stale = 0;

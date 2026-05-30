@@ -9,7 +9,7 @@ import { applyMigrations, ensureBatchShim } from "../../../tests/db-helper.js";
 import { organizations, sources } from "@buildinternet/releases-core/schema";
 import type { FirecrawlClient } from "@releases/adapters/firecrawl.js";
 
-const { scanStaleFirecrawlSources, cronIntervalHours } =
+const { scanStaleFirecrawlSources, cronIntervalHours, thresholdHours } =
   await import("../src/cron/firecrawl-staleness.js");
 
 // Minimal client whose getMonitor returns a fixed schedule (or throws). Cast to
@@ -169,6 +169,54 @@ describe("scanStaleFirecrawlSources", () => {
     // Within the floor window → skipped before any (paid) getMonitor call.
     expect(calls).toBe(0);
   });
+
+  it("degrades to floor-only when the API-key secret resolution throws", async () => {
+    seed({
+      id: "stale",
+      firecrawl: { enabled: true, monitorId: "mon_x" },
+      lastFetchedAt: iso(72 * HOUR),
+    });
+
+    // A Secrets Store blip: getSecret retries then throws. The scan must still
+    // complete (floor applies) rather than aborting and emitting no warnings.
+    const FIRECRAWL_API_KEY = {
+      get: async () => {
+        throw new Error("secrets store unavailable");
+      },
+    };
+
+    const res = await scanStaleFirecrawlSources({ ...baseEnv(), FIRECRAWL_API_KEY });
+    expect(res).toEqual({ scanned: 1, stale: 1 });
+  });
+});
+
+describe("thresholdHours", () => {
+  it("reports basis 'schedule' only when 2x cadence clears the floor", async () => {
+    // Weekly cadence (168h → 336h) exceeds the 48h floor → schedule drives it.
+    expect(await thresholdHours(clientWithCron("0 0 * * 0"), "mon", 48)).toEqual({
+      hours: 336,
+      basis: "schedule",
+    });
+
+    // 6h cadence (→ 12h) is below the floor → the floor wins, so the basis must
+    // say "floor" to match the emitted hours.
+    expect(await thresholdHours(clientWithCron("0 */6 * * *"), "mon", 48)).toEqual({
+      hours: 48,
+      basis: "floor",
+    });
+  });
+
+  it("falls back to the floor with no client, no monitor id, or a read error", async () => {
+    expect(await thresholdHours(undefined, "mon", 48)).toEqual({ hours: 48, basis: "floor" });
+    expect(await thresholdHours(clientWithCron("0 0 * * 0"), null, 48)).toEqual({
+      hours: 48,
+      basis: "floor",
+    });
+    expect(await thresholdHours(clientThatThrows(), "mon", 48)).toEqual({
+      hours: 48,
+      basis: "floor",
+    });
+  });
 });
 
 describe("cronIntervalHours", () => {
@@ -186,5 +234,14 @@ describe("cronIntervalHours", () => {
     expect(cronIntervalHours(null)).toBeNull();
     expect(cronIntervalHours("")).toBeNull();
     expect(cronIntervalHours("not a cron")).toBeNull();
+  });
+
+  it("returns null for lists, ranges, names, and out-of-range fields", () => {
+    expect(cronIntervalHours("0 0 * * 1,3")).toBeNull(); // day-of-week list
+    expect(cronIntervalHours("15-45 * * * *")).toBeNull(); // minute range
+    expect(cronIntervalHours("0 0 * * MON")).toBeNull(); // named day
+    expect(cronIntervalHours("0 0 1-15 * *")).toBeNull(); // day-of-month range
+    expect(cronIntervalHours("99 0 * * *")).toBeNull(); // minute out of range
+    expect(cronIntervalHours("0 25 * * *")).toBeNull(); // hour out of range
   });
 });
