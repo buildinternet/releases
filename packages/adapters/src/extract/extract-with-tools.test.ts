@@ -75,6 +75,71 @@ describe("extractWithTools — happy path", () => {
   });
 });
 
+describe("extractWithTools — deterministic extraction", () => {
+  test("tool-loop rounds request temperature 0 so extraction is reproducible", async () => {
+    // Same determinism rationale as the oneshot path (see extract-from-body):
+    // at the SDK default (1.0) a forced/structured tool extraction can vary on
+    // identical input. The large-body tool loop must be deterministic too.
+    const captured: Anthropic.MessageCreateParams[] = [];
+    const client: Pick<Anthropic, "messages"> = {
+      messages: {
+        stream: ((params: Anthropic.MessageCreateParams) => {
+          captured.push(params);
+          return {
+            finalMessage: async () =>
+              ({
+                id: "msg_1",
+                type: "message",
+                role: "assistant",
+                model: "claude-sonnet-4-6",
+                content: [
+                  {
+                    type: "tool_use",
+                    id: "t1",
+                    name: "extract_releases",
+                    input: {
+                      releases: [
+                        {
+                          title: "v1.0",
+                          content: "initial",
+                          isBreaking: false,
+                          publishedAt: "2026-04-01",
+                          url: "https://x.test/r/1",
+                        },
+                      ],
+                    },
+                  },
+                ],
+                stop_reason: "tool_use",
+                stop_sequence: null,
+                usage: {
+                  input_tokens: 100,
+                  output_tokens: 10,
+                  cache_read_input_tokens: 0,
+                  cache_creation_input_tokens: 0,
+                },
+              }) as Anthropic.Message,
+          } as never;
+        }) as never,
+      } as never,
+    };
+
+    await extractWithTools(
+      {
+        body: JSON.stringify({ nodes: [{ title: "v1.0" }] }),
+        systemPrompt: "test",
+        userMessage: "Extract from:",
+        sourceUrl: "https://x.test",
+        fetchUrl: "https://x.test/feed.json",
+      },
+      makeDeps(client),
+    );
+
+    expect(captured.length).toBeGreaterThanOrEqual(1);
+    expect(captured.every((p) => p.temperature === 0)).toBe(true);
+  });
+});
+
 describe("extractWithTools — multi-round", () => {
   test("handles a query_json round followed by extract_releases", async () => {
     const client = mockAnthropicClient([

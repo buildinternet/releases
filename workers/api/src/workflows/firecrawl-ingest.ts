@@ -35,9 +35,14 @@ import {
   type PollAndFetchWorkflowEnv,
 } from "./poll-and-fetch.js";
 
-// Agent model for Firecrawl extraction. Matches DEFAULT_AGENT_MODEL in the
-// discovery worker so extraction quality is consistent across ingest paths.
-const FIRECRAWL_EXTRACT_MODEL = "claude-sonnet-4-6";
+// Model for Firecrawl extraction. Matches the standard cron ingest model
+// (config.ingestModel default) rather than the heavier discovery agentModel:
+// in steady state the workflow extracts only the diff delta (a few new
+// entries), and even a baseline scrape is windowed to a recent slice, so the
+// input is small and structured — Haiku parses it reliably at a fraction of
+// Sonnet's cost. Extraction runs at temperature 0 (see extract-from-body) for
+// reproducible parses.
+const FIRECRAWL_EXTRACT_MODEL = "claude-haiku-4-5-20251001";
 
 // record-failure writes a fetch_log row + bumps consecutiveErrors — neither is
 // idempotent, so it runs as a single best-effort attempt (no retries). Retrying

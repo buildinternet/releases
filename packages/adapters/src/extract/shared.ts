@@ -278,6 +278,27 @@ export const HUGE_BODY_TOKEN_THRESHOLD = 100_000;
 export const DEFAULT_MAX_OUTPUT_TOKENS = 16_384;
 export const HUGE_BODY_MAX_OUTPUT_TOKENS = 32_000;
 
+/**
+ * Sampling temperature for every changelog-extraction model call (the oneshot
+ * path in `extract-from-body` and both rounds of the large-body tool loop in
+ * `extract-with-tools`).
+ *
+ * WHY 0: extraction is a parse, not a generation — the same page must always
+ * yield the same entries. At the SDK default (1.0) a forced/structured
+ * `extract_releases` tool call intermittently returns `releases: []` on
+ * identical input (measured ~1-in-4 on the OpenAI changelog), silently dropping
+ * a whole fetch. Steady-state ingest masks this via poll-retry cadence; a
+ * one-shot backfill has nothing to hide behind, which is how it surfaced. 0
+ * removes the variance (0 misses across 5+5 validation runs).
+ *
+ * SHORT-LIVED: the Anthropic SDK marks `temperature` as deprecated — models
+ * released after Opus 4.6 don't support it (they reject non-1.0 with a 400) and
+ * are deterministic enough not to need it. The extract models we ship today
+ * (Sonnet 4.6, Haiku 4.5) accept it. When extraction moves to a newer model,
+ * delete this knob; the forward-compatible successor is a retry-on-empty guard.
+ */
+export const EXTRACTION_TEMPERATURE = 0;
+
 export function buildBodyGuardrail(approxTokens: number): string {
   const rounded = Math.round(approxTokens / 1000) * 1000;
   return `Response body is approximately ${rounded.toLocaleString()} tokens — large enough that you cannot emit a full detail body for every historical entry within the output budget. Focus ONLY on the most recent entries (the top of the changelog or items with the latest dates). Older entries are likely already stored. Be aggressively concise: short content bodies, no quoted descriptions, summarize bullet lists into 1-2 sentences. If the source uses weekly/monthly rollups, prefer ONE entry per recent rollup over many per-item entries.`;

@@ -8,6 +8,7 @@ import {
   TOOLLOOP_SYSTEM_PROMPT,
   MAX_ROUNDS,
   MAX_TOTAL_TOOL_CHARS,
+  EXTRACTION_TEMPERATURE,
 } from "./shared.js";
 import { handleGetSlice, handleQueryJson } from "./tool-handlers.js";
 import type { ExtractDeps, ExtractedEntry } from "./types.js";
@@ -110,6 +111,9 @@ export async function extractWithTools(
     const stream = deps.anthropicClient.messages.stream({
       model: deps.agentModel,
       max_tokens: 16_384,
+      // Deterministic parse — see EXTRACTION_TEMPERATURE (why 0; why short-lived).
+      // oxlint-disable-next-line no-deprecated -- supported on current extract models; see note
+      temperature: EXTRACTION_TEMPERATURE,
       system: systemBlocks,
       tools,
       messages,
@@ -226,6 +230,9 @@ export async function extractWithTools(
   const forceStream = deps.anthropicClient.messages.stream({
     model: deps.agentModel,
     max_tokens: 16_384,
+    // Deterministic parse — see EXTRACTION_TEMPERATURE (why 0; why short-lived).
+    // oxlint-disable-next-line no-deprecated -- supported on current extract models; see note
+    temperature: EXTRACTION_TEMPERATURE,
     system: systemBlocks,
     tools,
     messages,
