@@ -3,11 +3,16 @@ import { isHtmlRequest, renderLandingPage } from "./landing.js";
 import { createServer, type Env } from "./mcp-agent.js";
 import { resolveMcpAuth } from "./auth.js";
 import { touchLastUsed } from "@releases/core-internal/api-token-store";
+import { FLAGS, flag } from "@releases/lib/flags";
 import { createDb } from "./db.js";
 
-async function handle(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+async function handle(
+  request: Request,
+  env: Env,
+  ctx: ExecutionContext,
+  noIndex: boolean,
+): Promise<Response> {
   const url = new URL(request.url);
-  const noIndex = env.INDEXING_DISABLED === "true";
 
   if (noIndex && request.method === "GET" && url.pathname === "/robots.txt") {
     return new Response("User-agent: *\nDisallow: /\n", {
@@ -53,7 +58,7 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
     });
   }
 
-  const server = createServer(env, ctx, {
+  const server = await createServer(env, ctx, {
     userAgent: request.headers.get("user-agent"),
     authScopes: identity.scopes,
     authToken: identity.token,
@@ -63,8 +68,11 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext) {
-    const response = await handle(request, env, ctx);
-    if (env.INDEXING_DISABLED !== "true") return response;
+    // Resolve the indexing flag once per request; reused for the /robots.txt
+    // short-circuit inside handle() and the X-Robots-Tag stamp below.
+    const noIndex = await flag(env.FLAGS, env.INDEXING_DISABLED, FLAGS.indexingDisabled);
+    const response = await handle(request, env, ctx, noIndex);
+    if (!noIndex) return response;
     // Rewrap so the headers bag is mutable — createMcpHandler may return a
     // Response with sealed headers.
     const tagged = new Response(response.body, response);

@@ -1,5 +1,6 @@
 import type { Context, MiddlewareHandler } from "hono";
 import type { Env } from "../index.js";
+import { FLAGS, flag } from "@releases/lib/flags";
 import { logEvent } from "@releases/lib/log-event";
 import { SAFE_METHODS, isTrustedProxy, resolveAuthIdentity } from "./auth.js";
 
@@ -60,9 +61,13 @@ export const publicRateLimitMiddleware: MiddlewareHandler<Env> = async (c, next)
   // is off or the binding is absent). Nothing to enforce when both are off (the
   // default) — bail before resolving identity so a token-authenticated read
   // doesn't pay a DB lookup.
+  // TOKEN_RATE_LIMIT_ENABLED is intentionally a plain env var — not a Tier-1
+  // Flagship flag, so it stays a raw check (no registry entry / binding path).
   const tokenLimiter =
     c.env.TOKEN_RATE_LIMIT_ENABLED === "true" ? c.env.TOKEN_RATE_LIMITER : undefined;
-  const ipLimiter = c.env.RATE_LIMIT_ENABLED === "true" ? c.env.PUBLIC_RATE_LIMITER : undefined;
+  const ipLimiter = (await flag(c.env.FLAGS, c.env.RATE_LIMIT_ENABLED, FLAGS.rateLimitEnabled))
+    ? c.env.PUBLIC_RATE_LIMITER
+    : undefined;
   if (!tokenLimiter && !ipLimiter) return next();
 
   const identity = await resolveAuthIdentity(c);

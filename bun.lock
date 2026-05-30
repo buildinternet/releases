@@ -120,6 +120,7 @@
       "version": "0.0.0",
       "dependencies": {
         "@buildinternet/releases-core": "workspace:*",
+        "@releases/lib": "workspace:*",
       },
     },
     "web": {

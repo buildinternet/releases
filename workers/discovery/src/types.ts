@@ -1,4 +1,5 @@
 import type { Sandbox } from "@cloudflare/sandbox";
+import type { FlagshipBinding } from "@releases/lib/flags";
 
 export interface OnboardRequest {
   company: string;
@@ -138,4 +139,5 @@ export interface Env {
    * stopped at ~3.5h. Bump after a week of real-traffic data.
    */
   MA_DAILY_SPEND_CAP_GLOBAL_CENTS?: string;
+  FLAGS?: FlagshipBinding;
 }

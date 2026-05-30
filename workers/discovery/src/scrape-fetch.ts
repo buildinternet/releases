@@ -74,8 +74,8 @@ export interface ScrapeEnv {
   apiFetcher: { fetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response> };
   apiKey: string;
   sessionId?: string;
-  /** "true" to enable tool-loop extraction for large bodies globally. */
-  extractToolLoopEnabled?: string;
+  /** `true` to enable tool-loop extraction for large bodies globally. */
+  extractToolLoopEnabled?: boolean;
   /** Signed outbound fetch for third-party content; falls back to global fetch. */
   signedFetch?: typeof fetch;
 }
@@ -492,7 +492,7 @@ export async function scrapeFetch(env: ScrapeEnv, sourceIdentifier: string): Pro
     apiFetcher: env.apiFetcher,
     apiKey: env.apiKey,
     sessionId: env.sessionId,
-    extractToolLoopEnabled: (env.extractToolLoopEnabled ?? "false") === "true",
+    extractToolLoopEnabled: env.extractToolLoopEnabled ?? false,
   });
 
   const meta = getSourceMeta(source);

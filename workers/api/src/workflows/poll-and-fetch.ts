@@ -37,6 +37,7 @@ import { getAnthropicKey, resolveGatewayOpts, type AnthropicEnv } from "../lib/a
 import { buildAnthropicClient } from "@releases/lib/anthropic-client.js";
 import { IN_ARRAY_CHUNK_SIZE } from "../lib/d1-limits.js";
 import { makeBotFetch } from "../lib/web-bot-auth-fetch.js";
+import { FLAGS, flag } from "@releases/lib/flags";
 
 /**
  * Environment for the workflow. Bindings follow the same shape as the API
@@ -164,6 +165,7 @@ export async function resolveFetchEnv(env: PollAndFetchWorkflowEnv): Promise<Fet
     WEB_BOT_AUTH_PRIVATE_KEY: env.WEB_BOT_AUTH_PRIVATE_KEY,
     MEDIA_R2_UPLOAD_ENABLED: env.MEDIA_R2_UPLOAD_ENABLED,
     MEDIA: env.MEDIA,
+    FLAGS: env.FLAGS,
   };
 }
 
@@ -452,7 +454,11 @@ export class PollAndFetchWorkflow extends WorkflowEntrypoint<
       }
 
       const now = new Date();
-      const changeDetectEnabled = env.SCRAPE_CHANGE_DETECT_ENABLED === "true";
+      const changeDetectEnabled = await flag(
+        env.FLAGS,
+        env.SCRAPE_CHANGE_DETECT_ENABLED,
+        FLAGS.scrapeChangeDetectEnabled,
+      );
 
       // Poll phase: HEAD check (feed sources) or mark-changed (github). For
       // scrape-no-feed / agent sources the flag opens a quirks-driven detector

@@ -148,6 +148,7 @@ import { getSecret } from "@releases/lib/secrets";
 import { classifyRepoStatus } from "../lib/github-repo-status.js";
 import { materializeAppStoreSource } from "../lib/appstore-materialize.js";
 import { materializeVideoSource } from "../lib/video-materialize.js";
+import { FLAGS, flag } from "@releases/lib/flags";
 
 export const sourceRoutes = new Hono<Env>();
 
@@ -639,6 +640,7 @@ sourceRoutes.post("/sources/:slug/fetch", postSourceFetchRoute, async (c) => {
         DISCOVERY_WORKER: c.env.DISCOVERY_WORKER,
         MEDIA_R2_UPLOAD_ENABLED: c.env.MEDIA_R2_UPLOAD_ENABLED,
         MEDIA: c.env.MEDIA,
+        FLAGS: c.env.FLAGS,
       },
       { sessionId, dryRun, maxEntries: maxParsed ?? undefined, skipDelegation },
     );
@@ -717,7 +719,9 @@ const postReleasesBatchHandler = async (c: import("hono").Context<Env>) => {
     // so reads resolve a same-origin `r2Url`. Sequential per release (the
     // helper bounds image concurrency within); fail-open. Flag-off / unbound
     // bucket => the agent-provided media JSON is stored verbatim, as today.
-    const r2UploadEnabled = c.env.MEDIA_R2_UPLOAD_ENABLED === "true" && c.env.MEDIA != null;
+    const r2UploadEnabled =
+      (await flag(c.env.FLAGS, c.env.MEDIA_R2_UPLOAD_ENABLED, FLAGS.mediaR2UploadEnabled)) &&
+      c.env.MEDIA != null;
     const mediaJsonByIndex = body.releases.map((r) => r.media ?? "[]");
     if (r2UploadEnabled) {
       // Skip releases whose URL already exists: RELEASE_URL_UPSERT never updates
@@ -2305,6 +2309,7 @@ sourceRoutes.post(
         DISCOVERY_WORKER: c.env.DISCOVERY_WORKER,
         MEDIA_R2_UPLOAD_ENABLED: c.env.MEDIA_R2_UPLOAD_ENABLED,
         MEDIA: c.env.MEDIA,
+        FLAGS: c.env.FLAGS,
       },
       { url: body.url, orgSlug: body.orgSlug, orgId: body.orgId, productId: body.productId },
     );
@@ -2508,7 +2513,10 @@ sourceRoutes.post(
       c.executionCtx.waitUntil(embedSourceSideEffect(c.env, db, source.id));
     };
 
-    if (c.env.ONBOARD_USE_WORKFLOW === "true" && c.env.ONBOARD_SOURCE_WORKFLOW) {
+    if (
+      (await flag(c.env.FLAGS, c.env.ONBOARD_USE_WORKFLOW, FLAGS.onboardUseWorkflow)) &&
+      c.env.ONBOARD_SOURCE_WORKFLOW
+    ) {
       const skipBackfill = c.req.header("x-onboard-mode") === "manual";
       const workflow = c.env.ONBOARD_SOURCE_WORKFLOW;
       // Fire-and-forget: control-plane RPC must not block the response.

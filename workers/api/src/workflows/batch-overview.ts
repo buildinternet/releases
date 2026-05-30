@@ -54,6 +54,7 @@ import {
 } from "@releases/core-internal/overview-eligibility";
 import { upsertOrgOverview } from "@releases/core-internal/overview-upsert";
 import { getAnthropicKey, resolveGatewayOpts, type AnthropicEnv } from "../lib/anthropic.js";
+import { FLAGS, flag, type FlagshipBinding } from "@releases/lib/flags";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -63,6 +64,7 @@ export type BatchOverviewWorkflowEnv = AnthropicEnv & {
   BATCH_OVERVIEW_ENABLED?: string;
   /** Per-run budget ceiling in USD (string, parsed to float). Default $5. */
   BATCH_OVERVIEW_MAX_COST_USD?: string;
+  FLAGS?: FlagshipBinding;
 };
 
 export type BatchOverviewParams = {
@@ -143,7 +145,10 @@ export class BatchOverviewWorkflow extends WorkflowEntrypoint<
         estCostUsd: number;
         skippedEnabled: boolean;
       }> => {
-        if (trigger === "cron" && env.BATCH_OVERVIEW_ENABLED !== "true") {
+        if (
+          trigger === "cron" &&
+          !(await flag(env.FLAGS, env.BATCH_OVERVIEW_ENABLED, FLAGS.batchOverviewEnabled))
+        ) {
           logEvent("info", {
             component: "batch-overview",
             event: "disabled",

@@ -30,6 +30,7 @@ import { sendAlert, type AlertEnv } from "./lib/send-alert.js";
 import { logEvent } from "@releases/lib/log-event";
 import { dbErrorLogFields } from "@releases/lib/db-errors";
 import { getSecret, getSecretWithFallback } from "@releases/lib/secrets";
+import { FLAGS, flag, type FlagshipBinding } from "@releases/lib/flags";
 
 export { StatusHub } from "./status-hub.js";
 export { ReleaseHub } from "./release-hub.js";
@@ -234,6 +235,9 @@ export type Env = {
     // Hours since a firecrawl source's last run before the hourly staleness
     // scan flags it (monitor stopped delivering). Default 48. See option A.
     FIRECRAWL_STALE_HOURS?: string;
+    // Cloudflare Flagship binding (prod + staging apps; absent in local dev /
+    // tests → flag() falls back to the wrangler var). See @releases/lib/flags.
+    FLAGS?: FlagshipBinding;
   };
   Variables: {
     auth?: AuthContext;
@@ -576,7 +580,7 @@ export default {
       // instance so no instance is spawned when the feature is off. The admin
       // POST trigger bypasses the flag and runs unconditionally.
       // The collect-eligible step also checks the flag as defense-in-depth.
-      if (env.BATCH_SUMMARIZE_ENABLED !== "true") {
+      if (!(await flag(env.FLAGS, env.BATCH_SUMMARIZE_ENABLED, FLAGS.batchSummarizeEnabled))) {
         logEvent("info", {
           component: "batch-summarize-cron",
           event: "disabled",
@@ -628,7 +632,7 @@ export default {
       // the inline sweep — the workflow resolves secrets + runs the same
       // pipeline step-by-step so a partial failure doesn't strand the
       // tail of the dispatch list. See issue #482.
-      if (env.SCRAPE_AGENT_USE_WORKFLOW === "true") {
+      if (await flag(env.FLAGS, env.SCRAPE_AGENT_USE_WORKFLOW, FLAGS.scrapeAgentUseWorkflow)) {
         if (!env.SCRAPE_AGENT_WORKFLOW) {
           logEvent("warn", { component: "scrape-agent-cron", event: "workflow-binding-missing" });
           return;
@@ -700,7 +704,7 @@ export default {
     // the cron fans out one workflow instance per due source so a single
     // transient failure (usually a Voyage 429 mid-embed) no longer silently
     // drops vectors. See issue #486.
-    if (env.POLL_FETCH_USE_WORKFLOW === "true") {
+    if (await flag(env.FLAGS, env.POLL_FETCH_USE_WORKFLOW, FLAGS.pollFetchUseWorkflow)) {
       if (!env.POLL_AND_FETCH_WORKFLOW) {
         logEvent("warn", { component: "poll-fetch-cron", event: "workflow-binding-missing" });
         return;
@@ -733,6 +737,7 @@ export default {
           // !== "true") would fetch unsigned even when signing is enabled.
           WEB_BOT_AUTH_ENABLED: env.WEB_BOT_AUTH_ENABLED,
           WEB_BOT_AUTH_PRIVATE_KEY: env.WEB_BOT_AUTH_PRIVATE_KEY,
+          FLAGS: env.FLAGS,
         }),
         alertEnv,
       ),
@@ -804,7 +809,11 @@ async function fanOutPollAndFetch(env: Env["Bindings"], scheduledTime: number): 
 
   try {
     const due = await queryDueSources(db, new Date(), {
-      changeDetectEnabled: env.SCRAPE_CHANGE_DETECT_ENABLED === "true",
+      changeDetectEnabled: await flag(
+        env.FLAGS,
+        env.SCRAPE_CHANGE_DETECT_ENABLED,
+        FLAGS.scrapeChangeDetectEnabled,
+      ),
     });
     candidates = due.length;
     if (due.length === 0) {

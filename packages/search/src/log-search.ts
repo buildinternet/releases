@@ -21,6 +21,7 @@ import {
 } from "@buildinternet/releases-core/schema";
 import { dbErrorLogFields } from "@releases/lib/db-errors";
 import { logEvent } from "@releases/lib/log-event";
+import { FLAGS, flag, type FlagshipBinding } from "@releases/lib/flags";
 
 export const MAX_QUERY_LEN = 200;
 const MAX_STR = 200;
@@ -36,6 +37,8 @@ export interface SearchLogEnv {
    * redeploying. Default (unset) leaves logging enabled.
    */
   SEARCH_QUERY_LOG_DISABLED?: string;
+  /** Flagship binding forwarded by the worker; resolves the kill switch live. */
+  FLAGS?: FlagshipBinding;
 }
 
 /** Trim, slice to `max`, and treat the empty string as null. */
@@ -118,7 +121,7 @@ export function prepareSearchLogRow(input: LogSearchInput): NewSearchQuery | nul
 }
 
 export async function logSearch(env: SearchLogEnv, input: LogSearchInput): Promise<void> {
-  if (env.SEARCH_QUERY_LOG_DISABLED === "true") return;
+  if (await flag(env.FLAGS, env.SEARCH_QUERY_LOG_DISABLED, FLAGS.searchQueryLogDisabled)) return;
   const row = prepareSearchLogRow(input);
   if (!row) return;
   await writeRow(env, row);
@@ -211,7 +214,7 @@ export function prepareMcpSearchLogRow(input: McpLogSearchInput): NewSearchQuery
 }
 
 export async function logMcpSearch(env: SearchLogEnv, input: McpLogSearchInput): Promise<void> {
-  if (env.SEARCH_QUERY_LOG_DISABLED === "true") return;
+  if (await flag(env.FLAGS, env.SEARCH_QUERY_LOG_DISABLED, FLAGS.searchQueryLogDisabled)) return;
   const row = prepareMcpSearchLogRow(input);
   if (!row) return;
   await writeRow(env, row);

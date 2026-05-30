@@ -5,10 +5,12 @@ import {
 } from "@buildinternet/releases-core/web-bot-auth";
 import { logEvent } from "@releases/lib/log-event";
 import { getSecret } from "@releases/lib/secrets";
+import { FLAGS, flag, type FlagshipBinding } from "@releases/lib/flags";
 
 export interface WebBotAuthEnv {
   WEB_BOT_AUTH_ENABLED?: string;
   WEB_BOT_AUTH_PRIVATE_KEY?: { get(): Promise<string> };
+  FLAGS?: FlagshipBinding;
 }
 
 /**
@@ -21,7 +23,7 @@ export interface WebBotAuthEnv {
  * returns global `fetch`.
  */
 export async function makeBotFetch(env: WebBotAuthEnv): Promise<typeof fetch> {
-  if (env.WEB_BOT_AUTH_ENABLED !== "true") return fetch;
+  if (!(await flag(env.FLAGS, env.WEB_BOT_AUTH_ENABLED, FLAGS.webBotAuthEnabled))) return fetch;
   try {
     const raw = await getSecret(env.WEB_BOT_AUTH_PRIVATE_KEY);
     if (!raw) {

@@ -16,6 +16,7 @@ import { getSecret } from "@releases/lib/secrets";
 import { buildAnthropicClient } from "@releases/lib/anthropic-client.js";
 import { getAnthropicKey, resolveGatewayOpts, type AnthropicEnv } from "../lib/anthropic.js";
 import { makeBotFetch } from "../lib/web-bot-auth-fetch.js";
+import { FLAGS, flag, type FlagshipBinding } from "@releases/lib/flags";
 import { IN_ARRAY_CHUNK_SIZE } from "../lib/d1-limits.js";
 import { releases } from "@buildinternet/releases-core/schema";
 import type { drizzle } from "drizzle-orm/d1";
@@ -215,6 +216,7 @@ interface EnrichNewThinEnv {
   FEED_ENRICH_ENABLED?: string;
   FEED_ENRICH_MAX_PER_FIRE?: string;
   FEED_THIN_CHARS?: string;
+  FLAGS?: FlagshipBinding;
 }
 
 /**
@@ -232,7 +234,7 @@ export async function enrichNewThinItems(
   deps: { enrichFn: (item: EnrichItem) => Promise<EnrichResult> },
 ): Promise<Map<number, EnrichOutcome>> {
   const out = new Map<number, EnrichOutcome>();
-  if (env.FEED_ENRICH_ENABLED !== "true") return out;
+  if (!(await flag(env.FLAGS, env.FEED_ENRICH_ENABLED, FLAGS.feedEnrichEnabled))) return out;
   if (meta.feedContentDepth !== "summary-only") return out;
 
   const thinChars = parsePositiveInt(env.FEED_THIN_CHARS, DEFAULT_FEED_THIN_CHARS);

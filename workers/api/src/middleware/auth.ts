@@ -1,4 +1,5 @@
 import type { Context, MiddlewareHandler } from "hono";
+import { FLAGS, flag } from "@releases/lib/flags";
 import { getSecret, getSecretWithFallback } from "@releases/lib/secrets";
 import {
   type ApiScope,
@@ -38,7 +39,8 @@ function bearer(c: Context<Env>): string {
  */
 async function resolveAuth(c: Context<Env>, presented: string): Promise<ResolvedAuth> {
   if (isApiTokenShaped(presented)) {
-    if (c.env.API_TOKENS_DISABLED === "true") return { kind: "none", skip: false };
+    if (await flag(c.env.FLAGS, c.env.API_TOKENS_DISABLED, FLAGS.apiTokensDisabled))
+      return { kind: "none", skip: false };
     const result = await verifyApiToken(createDb(c.env.DB), presented);
     if (result.ok) return { kind: "token", tokenId: result.tokenId, scopes: result.scopes };
     return { kind: "none", skip: false };

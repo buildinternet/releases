@@ -48,6 +48,7 @@ import {
 } from "@releases/core-internal/batch-run";
 import { fetchEligibleReleases } from "@releases/core-internal/eligibility";
 import { getAnthropicKey, resolveGatewayOpts, type AnthropicEnv } from "../lib/anthropic.js";
+import { FLAGS, flag, type FlagshipBinding } from "@releases/lib/flags";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -60,6 +61,7 @@ export type BatchSummarizeWorkflowEnv = AnthropicEnv & {
    * If the estimated cost exceeds this, the workflow aborts with NonRetryableError.
    */
   BATCH_SUMMARIZE_MAX_COST_USD?: string;
+  FLAGS?: FlagshipBinding;
 };
 
 export type BatchSummarizeParams = {
@@ -160,7 +162,10 @@ export class BatchSummarizeWorkflow extends WorkflowEntrypoint<
         skippedEnabled: boolean;
       }> => {
         // Feature gate: cron fires check the env var; admin POST is always on.
-        if (trigger === "cron" && env.BATCH_SUMMARIZE_ENABLED !== "true") {
+        if (
+          trigger === "cron" &&
+          !(await flag(env.FLAGS, env.BATCH_SUMMARIZE_ENABLED, FLAGS.batchSummarizeEnabled))
+        ) {
           logEvent("info", {
             component: "batch-summarize",
             event: "disabled",
