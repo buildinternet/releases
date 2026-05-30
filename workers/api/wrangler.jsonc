@@ -275,6 +275,14 @@
       "binding": "FIRECRAWL_INGEST_WORKFLOW",
       "class_name": "FirecrawlIngestWorkflow",
     },
+    {
+      // Full-history backfill for windowed scrape sources (#1281). Saves raw body
+      // to R2 once, then extracts each window as its own resumable step. Triggered
+      // by POST /v1/workflows/backfill-source when BACKFILL_WORKFLOW_ENABLED=true.
+      "name": "backfill-source",
+      "binding": "BACKFILL_SOURCE_WORKFLOW",
+      "class_name": "BackfillSourceWorkflow",
+    },
   ],
   "routes": [{ "pattern": "api.releases.sh", "custom_domain": true }],
   "triggers": {
@@ -575,6 +583,11 @@
           "name": "firecrawl-ingest-staging",
           "binding": "FIRECRAWL_INGEST_WORKFLOW",
           "class_name": "FirecrawlIngestWorkflow",
+        },
+        {
+          "name": "backfill-source-staging",
+          "binding": "BACKFILL_SOURCE_WORKFLOW",
+          "class_name": "BackfillSourceWorkflow",
         },
       ],
       // Empty cron list. Without this override, Wrangler inherits the

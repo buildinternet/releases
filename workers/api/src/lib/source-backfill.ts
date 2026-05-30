@@ -49,7 +49,7 @@ export interface SourceBackfillReport {
 /** Collapse rows sharing a synthesized dedup URL, keeping the first occurrence.
  *  A single D1 `INSERT ... ON CONFLICT` cannot touch the same `(source_id, url)`
  *  twice, so within-batch dupes must be removed before ingest chunks them. */
-function dedupeByUrl(rows: RawRelease[]): RawRelease[] {
+export function dedupeByUrl(rows: RawRelease[]): RawRelease[] {
   const seen = new Set<string>();
   const out: RawRelease[] = [];
   for (const r of rows) {
@@ -63,7 +63,7 @@ function dedupeByUrl(rows: RawRelease[]): RawRelease[] {
   return out;
 }
 
-function dateRange(rows: RawRelease[]): { from: string | null; to: string | null } {
+export function dateRange(rows: RawRelease[]): { from: string | null; to: string | null } {
   let from: number | null = null;
   let to: number | null = null;
   for (const r of rows) {
