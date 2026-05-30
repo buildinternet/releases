@@ -141,7 +141,7 @@ export function WebMcpProvider({ apiBaseUrl }: { apiBaseUrl: string }) {
             category: {
               type: "string",
               description:
-                "Filter to a single canonical category slug (e.g. `ai`, `devops`). Invalid values are ignored (unfiltered).",
+                "Filter to a single category slug (e.g. `ai`, `devops`). Aliases (e.g. `e-commerce`) resolve to their canonical category (`commerce`); unknown values are ignored (unfiltered).",
             },
           },
         },

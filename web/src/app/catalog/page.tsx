@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { api, ApiSetupError } from "@/lib/api";
+import { permanentRedirect } from "next/navigation";
+import { api, ApiNotFoundError, ApiSetupError } from "@/lib/api";
 import { Header } from "@/components/header";
 import { PageHeader } from "@/components/page-header";
 import { SetupMessage } from "@/components/setup-message";
@@ -43,22 +44,51 @@ export default async function CatalogPage({
 }) {
   const { empty, category: categoryParam } = await searchParams;
   const includeEmpty = empty === "1";
-  // Validate against the canonical enum so a garbage param doesn't highlight a
-  // chip; the API ignores invalid values the same way (fail-open).
-  const category = categoryParam && isValidCategory(categoryParam) ? categoryParam : null;
+
+  const setupView = (err: ApiSetupError) => (
+    <div className="min-h-screen">
+      <Header />
+      <SetupMessage message={err.message} steps={err.setup} />
+    </div>
+  );
+
+  // Resolve the inbound category param so an aliased URL (?category=e-commerce)
+  // filters like its canonical sibling (?category=commerce), matching the REST
+  // /v1/orgs read filter (#1276). A canonical slug is taken as-is — the common
+  // case (chips link canonical), so no extra round-trip. A non-canonical value
+  // might be an alias: the category-detail endpoint 301s an alias to its
+  // canonical slug and fetch() follows, so `detail.slug` is always canonical (it
+  // also drives the chip highlight + redirect below). Unknown values 404 from
+  // the API → fail open to the unfiltered catalog, mirroring the read filter's
+  // own fail-open on garbage values.
+  let category: string | null = null;
+  if (categoryParam) {
+    if (isValidCategory(categoryParam)) {
+      category = categoryParam;
+    } else {
+      try {
+        category = (await api.categoryDetail(categoryParam)).slug;
+      } catch (err) {
+        if (err instanceof ApiSetupError) return setupView(err);
+        if (!(err instanceof ApiNotFoundError)) throw err;
+      }
+    }
+  }
+
+  // Aliased inbound URL → 308 permanent redirect to the canonical category, so
+  // search engines consolidate on the canonical ?category= URL (the API itself
+  // 301s the alias). permanentRedirect matches the canonical-URL redirects used
+  // by the org/source pages; kept outside any try/catch so the framework's
+  // redirect signal isn't swallowed.
+  if (category && category !== categoryParam) {
+    permanentRedirect(catalogHref({ category, includeEmpty }));
+  }
 
   let orgsResult: Awaited<ReturnType<typeof api.orgs>>;
   try {
     orgsResult = await api.orgs({ includeEmpty, category: category ?? undefined });
   } catch (err) {
-    if (err instanceof ApiSetupError) {
-      return (
-        <div className="min-h-screen">
-          <Header />
-          <SetupMessage message={err.message} steps={err.setup} />
-        </div>
-      );
-    }
+    if (err instanceof ApiSetupError) return setupView(err);
     throw err;
   }
 

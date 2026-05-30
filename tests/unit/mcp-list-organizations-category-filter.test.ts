@@ -6,7 +6,7 @@
  * the schema review.
  */
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
-import { organizations, sources, releases } from "@buildinternet/releases-core/schema";
+import { organizations, sources, releases, categories } from "@buildinternet/releases-core/schema";
 import { newOrgId, newSourceId, newReleaseId } from "@buildinternet/releases-core/id";
 import { createTestDb, type TestDatabase } from "../db-helper.js";
 import { asD1 } from "../mcp-test-helpers.js";
@@ -167,5 +167,47 @@ describe("MCP list_organizations — category filter", () => {
       kind: "page",
       totalItems: 1,
     });
+  });
+
+  it("(f) resolves a category alias to its canonical slug (REST read parity, #1277)", async () => {
+    await seed(testDb.db);
+
+    // A customized `commerce` category whose overlay row carries the alias
+    // "e-commerce" — the same shape the REST `/v1/orgs?category=` filter resolves.
+    await testDb.db
+      .insert(categories)
+      .values({ slug: "commerce", aliases: JSON.stringify(["e-commerce"]) });
+
+    const commerceOrg = newOrgId();
+    const commerceSrc = newSourceId();
+    await testDb.db
+      .insert(organizations)
+      .values({ id: commerceOrg, name: "Commerce Co", slug: "commerce-co", category: "commerce" });
+    await testDb.db.insert(sources).values({
+      id: commerceSrc,
+      orgId: commerceOrg,
+      name: "Commerce Co Releases",
+      slug: "commerce-co-releases",
+      type: "scrape",
+      url: "https://commerce-co.example/changelog",
+      discovery: "curated",
+    });
+    await testDb.db.insert(releases).values({
+      id: newReleaseId(),
+      sourceId: commerceSrc,
+      title: "Commerce Co 1.0",
+      content: "first commerce release",
+      publishedAt: "2026-04-01T00:00:00Z",
+    });
+
+    const db = asD1(testDb.db);
+
+    // The aliased input resolves to "commerce" and filters to that org only.
+    const result = await listOrganizations(db, { category: "e-commerce" });
+    const text = bodyText(result);
+    expect(text).toContain("Commerce Co");
+    expect(text).not.toContain("AI Corp");
+    expect(text).not.toContain("Devops Inc");
+    expect(result._meta?.pagination).toMatchObject({ totalItems: 1 });
   });
 });
