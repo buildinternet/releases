@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { redirect } from "next/navigation";
+import { permanentRedirect } from "next/navigation";
 import { api, ApiNotFoundError, ApiSetupError } from "@/lib/api";
 import { Header } from "@/components/header";
 import { PageHeader } from "@/components/page-header";
@@ -75,11 +75,13 @@ export default async function CatalogPage({
     }
   }
 
-  // Aliased inbound URL → 301 to the canonical category for SEO + URL-bar
-  // consistency, mirroring the /categories/[slug] alias redirect. Kept outside
-  // any try/catch so the framework's redirect signal isn't swallowed.
+  // Aliased inbound URL → 308 permanent redirect to the canonical category, so
+  // search engines consolidate on the canonical ?category= URL (the API itself
+  // 301s the alias). permanentRedirect matches the canonical-URL redirects used
+  // by the org/source pages; kept outside any try/catch so the framework's
+  // redirect signal isn't swallowed.
   if (category && category !== categoryParam) {
-    redirect(catalogHref({ category, includeEmpty }));
+    permanentRedirect(catalogHref({ category, includeEmpty }));
   }
 
   let orgsResult: Awaited<ReturnType<typeof api.orgs>>;
