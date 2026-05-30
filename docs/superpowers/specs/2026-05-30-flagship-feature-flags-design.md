@@ -112,8 +112,8 @@ export const FLAGS = {
     default: false,
   },
   feedEnrichEnabled: { key: "feed-enrich-enabled", env: "FEED_ENRICH_ENABLED", default: false },
-  scrapeChangeDetect: {
-    key: "scrape-change-detect",
+  scrapeChangeDetectEnabled: {
+    key: "scrape-change-detect-enabled",
     env: "SCRAPE_CHANGE_DETECT_ENABLED",
     default: false,
   },
@@ -148,7 +148,7 @@ export const FLAGS = {
   cacheDisabled: { key: "cache-disabled", env: "CACHE_DISABLED", default: false },
   indexingDisabled: { key: "indexing-disabled", env: "INDEXING_DISABLED", default: false },
   extractToolLoopEnabled: {
-    key: "extract-tool-loop-enabled",
+    key: "extract-toolloop-enabled",
     env: "EXTRACT_TOOLLOOP_ENABLED",
     default: false,
   },
@@ -288,24 +288,21 @@ inbound requests).
 ### Hot-path handling
 
 The four hot flags (`rateLimitEnabled`, `apiTokensDisabled`, `cacheDisabled`,
-`indexingDisabled`) run on most inbound API requests. Rather than scatter awaits
-across separate middlewares, one early middleware batch-resolves them once and
-stashes them on the Hono context:
+`indexingDisabled`) run on most inbound API requests. Each is read by a **distinct**
+middleware, so every middleware resolves its own flag directly with a single
+`await flag(...)` — there is exactly one eval per flag per request regardless, and
+Flagship binding lookups are in-process (not a network round-trip per call).
 
-```ts
-// one early api middleware
-const [rateLimit, apiTokens, cache, indexing] = await flags(c.env.FLAGS, c.env, [
-  FLAGS.rateLimitEnabled,
-  FLAGS.apiTokensDisabled,
-  FLAGS.cacheDisabled,
-  FLAGS.indexingDisabled,
-]);
-c.set("flags", { rateLimit, apiTokens, cache, indexing });
-```
+> **Implementation note:** an earlier draft of this section batch-resolved all four
+> into one early middleware and stashed them on the Hono context via
+> `c.set("flags", …)`. That was dropped during implementation: because each hot
+> middleware reads a _different_ flag, batching saved no evaluations and only added
+> an ordering dependency (every reader would depend on the batch middleware running
+> first). Direct per-middleware `await flag(...)` is simpler and equivalent.
 
-Downstream middleware/handlers read `c.get("flags").cache` synchronously. One eval
-batch per request; binding lookups are in-process. The MCP worker's
-`apiTokensDisabled` / `indexingDisabled` resolve at its request boundary similarly.
+The MCP worker's `apiTokensDisabled` / `indexingDisabled` resolve at its request
+boundary the same way — the indexing flag is resolved once in `fetch()` and threaded
+into `handle()` so it isn't evaluated twice per request.
 
 ## Rollout plan
 
