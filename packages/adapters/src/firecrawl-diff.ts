@@ -19,16 +19,30 @@
  *
  * We parse `diff.text` (the stable unified-diff contract) rather than the
  * `diff.json` AST the webhook also carries — Firecrawl doesn't pin that AST's
- * shape, so the text format is the safer thing to depend on. Assumes a
- * single-file diff (true for the scrape-target monitors that feed this).
+ * shape, and in practice it has arrived empty (`{ files: [] }`), so the text
+ * format is the only thing to depend on. Assumes a single-file diff (true for
+ * the scrape-target monitors that feed this).
+ *
+ * Two diff shapes are handled. Firecrawl's published example is a textbook
+ * unified diff with `@@` hunk headers, but the *live* `monitor.page` webhook
+ * instead sends a HUNKLESS whole-document diff: no `@@` headers and no `---`/
+ * `+++` file headers, just every page line prefixed with a space (context),
+ * `+` (added) or `-` (removed). When no `@@` header is present the entire body
+ * is treated as one implicit hunk; the file-header skip only matters for the
+ * `@@`-bearing variant, where a preamble actually exists. (Confirmed against
+ * the real wire payload, 2026-05-30 — the `@@`-only parser silently returned ""
+ * on every change, forcing a full-page re-scrape fallback.)
  *
  * Returns "" when the diff adds nothing (e.g. a pure deletion, or an empty diff).
  */
 export function addedContentFromDiff(diffText: string): string {
   if (!diffText) return "";
+  const lines = diffText.split("\n");
+  // Hunkless diffs (Firecrawl's live format) have no `@@` anchor and no file
+  // headers, so the whole body is the hunk — start collecting immediately.
+  let inHunk = !lines.some((line) => line.startsWith("@@"));
   const added: string[] = [];
-  let inHunk = false;
-  for (const line of diffText.split("\n")) {
+  for (const line of lines) {
     if (line.startsWith("@@")) {
       inHunk = true;
       continue;

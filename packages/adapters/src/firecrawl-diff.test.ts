@@ -56,3 +56,48 @@ it("returns empty string when there is nothing added", () => {
     ),
   ).toBe("");
 });
+
+it("extracts added lines from a hunkless full-document diff (live monitor.page format)", () => {
+  // Firecrawl's live monitor.page webhook does NOT send the documented unified
+  // diff: there are no @@ hunk headers and no ---/+++ file headers. The whole
+  // page is one diff body where every line is prefixed with a single space
+  // (context), '+' (added) or '-' (removed). Shape captured verbatim from monitor
+  // 019e75bb… check 019e7778… (the OpenAI ChatGPT release-notes change, 2026-05-30).
+  const diff = [
+    " # ChatGPT — Release Notes",
+    " ",
+    "-Updated: 7 hours ago",
+    "+Updated: 5 hours ago",
+    " ",
+    "+# May 29, 2026",
+    "+",
+    "+## Codex updates: Computer use on Windows",
+    " ",
+    " # May 28, 2026",
+  ].join("\n");
+
+  // The changed "Updated: N hours ago" stamp is itself a '+' line so it leaks
+  // through (downstream extraction ignores non-release prose). The blank line
+  // between the two timestamps is a dropped *context* line, so it does not; the
+  // blank inside the new entry is a '+' line, so it does.
+  expect(addedContentFromDiff(diff)).toBe(
+    [
+      "Updated: 5 hours ago",
+      "# May 29, 2026",
+      "",
+      "## Codex updates: Computer use on Windows",
+    ].join("\n"),
+  );
+});
+
+it("returns empty for a hunkless diff that only removes or keeps lines", () => {
+  const diff = [" # Pricing", "-Starter — $19/mo", " Pro — $99/mo"].join("\n");
+  expect(addedContentFromDiff(diff)).toBe("");
+});
+
+it("treats a leading '+' line in a hunkless diff as added content, not a file header", () => {
+  // Without an @@ anchor there is no preamble to skip, so a '+++…' line is an
+  // added line whose body starts with '++', mirroring the in-hunk behavior above.
+  const diff = ["+++ added heading", " context"].join("\n");
+  expect(addedContentFromDiff(diff)).toBe("++ added heading");
+});
