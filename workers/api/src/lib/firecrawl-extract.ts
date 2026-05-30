@@ -102,6 +102,40 @@ export interface ExtractAllWindowsResult {
  *  can't loop unbounded. Overridable per call. */
 const DEFAULT_MAX_WINDOWS = 50;
 
+export interface WindowPlan {
+  /** Starting char offset for each window, in document order. Always starts with 0. */
+  offsets: number[];
+  /** True when `maxWindows` stopped the walk before reaching the end of the document. */
+  cappedAtWindow: boolean;
+  /** Chars in the untouched tail when capped; 0 when the whole document was covered. */
+  droppedChars: number;
+}
+
+/**
+ * LLM-free window offset walk: precompute the per-window starting offsets that
+ * `extractChangelogAllWindows` would use, without making any Anthropic calls.
+ * A durable workflow can call this once to plan the window set, then dispatch
+ * each `offsets[i]` as its own step.
+ */
+export function planWindowOffsets(
+  markdown: string,
+  opts: { maxWindows?: number } = {},
+): WindowPlan {
+  const maxWindows = Math.max(1, opts.maxWindows ?? DEFAULT_MAX_WINDOWS);
+  const offsets: number[] = [];
+  let offset: number | null = 0;
+  let lastProcessedEnd = 0;
+  while (offset !== null && offsets.length < maxWindows) {
+    const sliced = sliceChangelog(markdown, { tokens: DEFAULT_CHANGELOG_SLICE_TOKENS, offset });
+    offsets.push(sliced.offset);
+    lastProcessedEnd = sliced.offset + sliced.content.length;
+    offset = sliced.nextOffset;
+  }
+  const cappedAtWindow = offset !== null;
+  const droppedChars = cappedAtWindow ? Math.max(0, markdown.length - lastProcessedEnd) : 0;
+  return { offsets, cappedAtWindow, droppedChars };
+}
+
 /**
  * Full-history variant of {@link extractFirecrawlMarkdown}: instead of slicing
  * to the recent window and dropping the tail, walk the whole document one
