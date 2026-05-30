@@ -53,6 +53,7 @@ import {
 import { buildEmbedConfig } from "@releases/search/embed-config.js";
 import { logEvent } from "@releases/lib/log-event";
 import { dbErrorLogFields } from "@releases/lib/db-errors";
+import { flag, FLAGS } from "@releases/lib/flags";
 import type { VectorizeIndex } from "@releases/search/vector-search.js";
 import type { Env } from "../index.js";
 import { clusterAndPersistCascades, DECIDED_BY_CHANGESETS } from "../lib/cluster-cascades.js";
@@ -1925,6 +1926,38 @@ workflowsRoutes.post("/workflows/backfill-source", async (c) => {
     typeof body.markdown === "string" && body.markdown.trim().length > 0 ? body.markdown : null;
   const meta = getSourceMeta(src);
 
+  // Deep Firecrawl backfills are extraction-bound (minutes); route them to the
+  // durable BackfillSourceWorkflow so they survive client disconnect. Supplied-
+  // markdown / plain-fetch stay synchronous (fast path). Flag off → unchanged.
+  const wantsWorkflow =
+    !suppliedMarkdown &&
+    meta.firecrawl?.enabled === true &&
+    !!c.env.BACKFILL_SOURCE_WORKFLOW &&
+    (await flag(c.env.FLAGS, c.env.BACKFILL_WORKFLOW_ENABLED, FLAGS.backfillWorkflow));
+  if (wantsWorkflow) {
+    const scheduledTime = Date.now();
+    const instance = await c.env.BACKFILL_SOURCE_WORKFLOW!.create({
+      id: `backfill-${src.id}-${scheduledTime}`,
+      params: { sourceId: src.id, maxWindows, dryRun },
+    });
+    const instanceId: string = (instance as unknown as { id: string }).id;
+    logEvent("info", {
+      component: "backfill-source",
+      event: "workflow-dispatch",
+      sourceId: src.id,
+      instanceId,
+      dryRun,
+    });
+    return c.json(
+      {
+        instanceId,
+        async: true,
+        statusUrl: `${c.env.ADMIN_BASE_URL ?? ""}/v1/workflows/backfill-source/status/${instanceId}`,
+      },
+      202,
+    );
+  }
+
   // ── Body acquisition (errors mapped to HTTP here) ──────────────────────────
   const bodyOverride = (c.env as { _backfillBodyOverride?: BackfillBodyOverride })
     ._backfillBodyOverride;
@@ -2078,4 +2111,37 @@ workflowsRoutes.post("/workflows/backfill-source", async (c) => {
     });
   }
   return c.json(guidance ? { ...report, guidance } : report);
+});
+
+// ── GET /workflows/backfill-source/status/:instanceId ────────────────────────
+//
+// Resolves the `statusUrl` returned by the POST trigger above. Thin pass-through
+// to Cloudflare's `WorkflowInstance.status()` so operators can poll workflow
+// state without dashboard access. Mirrors batch-summarize/status exactly.
+
+workflowsRoutes.get("/workflows/backfill-source/status/:instanceId", async (c) => {
+  const binding = c.env.BACKFILL_SOURCE_WORKFLOW;
+  if (!binding) {
+    return c.json(
+      { error: "service_unavailable", message: "BACKFILL_SOURCE_WORKFLOW binding not configured" },
+      503,
+    );
+  }
+  const instanceId = c.req.param("instanceId");
+  try {
+    const instance = await binding.get(instanceId);
+    const status = await instance.status();
+    return c.json({ instanceId, ...status });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (WORKFLOW_NOT_FOUND_RE.test(message))
+      return c.json({ error: "instance_not_found", message }, 404);
+    logEvent("error", {
+      component: "workflows-backfill-status",
+      event: "lookup-failed",
+      instanceId,
+      err: err instanceof Error ? err : String(err),
+    });
+    return c.json({ error: "internal_error", message }, 500);
+  }
 });
