@@ -70,6 +70,8 @@ import { buildAnthropicClient } from "@releases/lib/anthropic-client.js";
 import { extractChangelogAllWindows } from "../lib/firecrawl-extract.js";
 import {
   runSourceBackfill,
+  effectiveBackfillWindows,
+  firecrawlCapGuidance,
   type BackfillBodyVia,
   type SourceBackfillDeps,
   type SourceBackfillExtractResult,
@@ -1869,11 +1871,18 @@ interface BackfillSourceBody {
 }
 
 // TEST-ONLY hook (kept off the production Env type): inject the all-windows
-// extraction result instead of calling Anthropic. Read via a local cast.
+// extraction result instead of calling Anthropic. Receives the *effective*
+// (post-clamp) window budget so a test can assert the firecrawl ceiling.
 type BackfillExtractOverride = (
   markdown: string,
   source: Source,
+  maxWindows: number,
 ) => Promise<SourceBackfillExtractResult>;
+
+// TEST-ONLY hook: inject the resolved body, bypassing the acquisition ladder
+// (supplied / firecrawl / fetch) so the firecrawl `via` can be exercised in a
+// unit test without a live Firecrawl scrape.
+type BackfillBodyOverride = { markdown: string; via: BackfillBodyVia };
 
 workflowsRoutes.post("/workflows/backfill-source", async (c) => {
   const db = createDb(c.env.DB);
@@ -1916,8 +1925,12 @@ workflowsRoutes.post("/workflows/backfill-source", async (c) => {
   const meta = getSourceMeta(src);
 
   // ── Body acquisition (errors mapped to HTTP here) ──────────────────────────
+  const bodyOverride = (c.env as { _backfillBodyOverride?: BackfillBodyOverride })
+    ._backfillBodyOverride;
   let resolved: { markdown: string; via: BackfillBodyVia };
-  if (suppliedMarkdown) {
+  if (bodyOverride) {
+    resolved = bodyOverride;
+  } else if (suppliedMarkdown) {
     resolved = { markdown: suppliedMarkdown, via: "supplied" };
   } else if (meta.firecrawl?.enabled) {
     const apiKey = await getSecret(c.env.FIRECRAWL_API_KEY);
@@ -1973,6 +1986,11 @@ workflowsRoutes.post("/workflows/backfill-source", async (c) => {
     }
   }
 
+  // Hard-cap the firecrawl path: the ~106s scrape is the long pole, so bound the
+  // windows on top of it to keep a default run under a client timeout. Supplied/
+  // fetch bodies have no scrape and keep the full 1–200 budget.
+  const effectiveMaxWindows = effectiveBackfillWindows(resolved.via, maxWindows);
+
   // ── Extraction (override in tests; else Haiku t0 all-windows) ──────────────
   const override = (c.env as { _backfillExtractOverride?: BackfillExtractOverride })
     ._backfillExtractOverride;
@@ -1988,7 +2006,7 @@ workflowsRoutes.post("/workflows/backfill-source", async (c) => {
     anthropicClient = buildAnthropicClient({ apiKey, ...(await resolveGatewayOpts(c.env)) });
   }
   const extract = async (markdown: string): Promise<SourceBackfillExtractResult> => {
-    if (override) return override(markdown, src);
+    if (override) return override(markdown, src, effectiveMaxWindows);
     const r = await extractChangelogAllWindows(
       markdown,
       src,
@@ -1997,7 +2015,7 @@ workflowsRoutes.post("/workflows/backfill-source", async (c) => {
         agentModel: BACKFILL_EXTRACT_MODEL,
         logger: backfillLogger,
       },
-      { maxWindows },
+      { maxWindows: effectiveMaxWindows },
     );
     return {
       releases: r.releases,
@@ -2043,6 +2061,12 @@ workflowsRoutes.post("/workflows/backfill-source", async (c) => {
   }
 
   const report = await runSourceBackfill({ id: src.id, slug: src.slug }, { dryRun }, deps);
+  const guidance = firecrawlCapGuidance({
+    via: resolved.via,
+    cappedAtWindow: report.cappedAtWindow,
+    effectiveMaxWindows,
+    requestedMaxWindows: maxWindows,
+  });
   if (report.cappedAtWindow || report.droppedChars > 0) {
     logEvent("info", {
       component: "backfill-source",
@@ -2052,5 +2076,5 @@ workflowsRoutes.post("/workflows/backfill-source", async (c) => {
       droppedChars: report.droppedChars,
     });
   }
-  return c.json(report);
+  return c.json(guidance ? { ...report, guidance } : report);
 });

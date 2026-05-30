@@ -134,4 +134,53 @@ describe("POST /v1/workflows/backfill-source", () => {
     expect(body.dateRange.from).toBe("2024-01-01T00:00:00.000Z");
     expect(body.dateRange.to).toBe("2024-03-01T00:00:00.000Z");
   });
+
+  it("does not clamp the supplied-markdown path and emits no guidance", async () => {
+    const db = mkDb();
+    await seedScrapeSource(db);
+    let seenMaxWindows = -1;
+    const override = async (_md: string, _src: unknown, maxWindows: number) => {
+      seenMaxWindows = maxWindows;
+      return { releases: [], windows: 1, cappedAtWindow: false, droppedChars: 0 };
+    };
+    const fetch = mkApp(db, { _backfillExtractOverride: override });
+
+    const res = await post(fetch, {
+      sourceId: "src_scrape",
+      markdown: "# v1\nstuff",
+      maxWindows: 50,
+      dryRun: true,
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { via: string; guidance?: string };
+    expect(body.via).toBe("supplied");
+    expect(seenMaxWindows).toBe(50);
+    expect(body.guidance).toBeUndefined();
+  });
+
+  it("clamps the firecrawl path to the hard ceiling and emits guidance", async () => {
+    const db = mkDb();
+    await seedScrapeSource(db);
+    let seenMaxWindows = -1;
+    const override = async (_md: string, _src: unknown, maxWindows: number) => {
+      seenMaxWindows = maxWindows;
+      // Report a capped run with untouched tail so guidance fires.
+      return { releases: [], windows: maxWindows, cappedAtWindow: true, droppedChars: 999 };
+    };
+    const fetch = mkApp(db, {
+      _backfillExtractOverride: override,
+      _backfillBodyOverride: { markdown: "# lots of history", via: "firecrawl" },
+    });
+
+    const res = await post(fetch, {
+      sourceId: "src_scrape",
+      maxWindows: 50,
+      dryRun: true,
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { via: string; guidance?: string };
+    expect(body.via).toBe("firecrawl");
+    expect(seenMaxWindows).toBe(8);
+    expect(body.guidance).toContain("8 windows");
+  });
 });
