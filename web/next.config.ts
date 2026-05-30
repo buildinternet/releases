@@ -84,9 +84,12 @@ const nextConfig: NextConfig = {
             // `/docs/api/rest`. The same origin is used by the API worker at
             // `workers/api/src/openapi.ts`. style-src adds it too because
             // Scalar injects its stylesheet from the same CDN.
+            // `frame-src` allows the YouTube video embeds (the release-detail
+            // click-to-play facade and YouTube links in changelog body copy);
+            // without it they fall back to default-src 'self' and are blocked.
             key: "Content-Security-Policy",
             value:
-              "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' https: data:; media-src 'self' https:; font-src 'self' https: data:; connect-src 'self' https: wss:; frame-ancestors 'none'",
+              "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' https: data:; media-src 'self' https:; font-src 'self' https: data:; connect-src 'self' https: wss:; frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com; frame-ancestors 'none'",
           },
         ],
       },

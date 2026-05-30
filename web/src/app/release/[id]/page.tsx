@@ -24,6 +24,8 @@ import { ReleaseAdminMenu } from "@/components/release-admin-menu";
 import { FallbackImage } from "@/components/fallback-image";
 import { appStoreIconUrl } from "@/lib/app-source";
 import { deriveFeedTitle } from "@/lib/release-title";
+import { VideoEmbed } from "@/components/video-embed";
+import { resolveVideoEmbed } from "@/lib/video-source";
 
 export async function generateMetadata({
   params,
@@ -92,8 +94,16 @@ export default async function ReleaseDetailPage({ params }: { params: Promise<{ 
     : `/source/${release.sourceSlug}`;
 
   const appStore = release.appStore ?? null;
-  // App Store screenshots are store marketing, not release content — drop them.
-  const media = appStore ? [] : (release.media ?? []);
+  // Video embed: dispatch on the wire `video` facet to a playable URL + label
+  // (provider routing lives in resolveVideoEmbed), and pick the thumbnail for
+  // the click-to-play facade.
+  const videoEmbed = resolveVideoEmbed(release.video, release.url, release.media);
+  const videoThumb = videoEmbed
+    ? (release.media?.find((m) => m.type === "image" || m.type === "gif")?.url ?? null)
+    : null;
+  // App Store screenshots are store marketing; for an embedded video the player
+  // replaces the (single) thumbnail item — drop the media gallery in both cases.
+  const media = appStore || videoEmbed ? [] : (release.media ?? []);
 
   const repoUrl = release.sourceType === "github" ? githubRepoUrlFor(release.url) : null;
   const detailRemarkPlugins = createRemarkPlugins({ repoUrl });
@@ -244,6 +254,16 @@ export default async function ReleaseDetailPage({ params }: { params: Promise<{ 
 
         {/* Content */}
         <div className="pb-12">
+          {videoEmbed && (
+            <div className="mb-6">
+              <VideoEmbed
+                embedUrl={videoEmbed.embedUrl}
+                thumbnailUrl={videoThumb}
+                title={heading}
+                providerLabel={videoEmbed.label}
+              />
+            </div>
+          )}
           {trimmedSummary && hasBody && (
             <aside className="bg-stone-50 dark:bg-stone-900/50 border border-stone-200 dark:border-stone-800 rounded-lg p-5 mb-6">
               <div className="text-[11px] uppercase tracking-wide text-stone-400 dark:text-stone-500 font-medium mb-3">

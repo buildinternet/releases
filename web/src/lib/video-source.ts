@@ -56,3 +56,77 @@ export function getVideoInfo(source: VideoSourceLike): VideoRowInfo | null {
   }
   return null;
 }
+
+/**
+ * Matches the 11-char YouTube video id in the URL shapes we encounter: the
+ * watch URL (`?v=ID`), the share URL (`youtu.be/ID`), the embed URL
+ * (`/embed/ID`), a `/shorts/ID` URL, and the thumbnail path
+ * (`i.ytimg.com/vi/ID/…`). The fixed-width `[A-Za-z0-9_-]{11}` window plus the
+ * trailing delimiter assertion keeps the `v=` arm from over-matching.
+ */
+const YOUTUBE_ID =
+  /(?:v=|\/embed\/|\/shorts\/|\/vi\/|youtu\.be\/)([A-Za-z0-9_-]{11})(?:[^A-Za-z0-9_-]|$)/;
+
+function youtubeIdFrom(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const match = value.match(YOUTUBE_ID);
+  return match ? match[1] : null;
+}
+
+/**
+ * Resolve a YouTube video id from a release. The watch URL (`release.url`) is
+ * the primary source; the stored thumbnail (`/vi/<id>/…`) is the fallback for
+ * the rare row whose URL was rewritten. Returns null when no id is recoverable,
+ * so callers gate the embed with `if (youtubeVideoId(...))`.
+ */
+export function youtubeVideoId(
+  url: string | null | undefined,
+  media?: ReadonlyArray<{ url: string }> | null,
+): string | null {
+  const fromUrl = youtubeIdFrom(url);
+  if (fromUrl) return fromUrl;
+  if (media) {
+    for (const item of media) {
+      const id = youtubeIdFrom(item?.url);
+      if (id) return id;
+    }
+  }
+  return null;
+}
+
+/**
+ * Privacy-friendly embed URL for the click-to-play facade: the
+ * `youtube-nocookie.com` host, autoplaying once the user opts in by clicking.
+ */
+export function youtubeEmbedUrl(videoId: string): string {
+  return `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&rel=0`;
+}
+
+export interface VideoEmbedInfo {
+  /** Provider-agnostic player URL for the `<VideoEmbed>` facade iframe. */
+  embedUrl: string;
+  /** Platform label shown on the facade chip (e.g. "YouTube"). */
+  label: VideoRowInfo["label"];
+}
+
+/**
+ * Resolve a playable embed for a release, dispatching on the wire `video`
+ * facet's provider. Centralizes provider routing so the page stays declarative
+ * and new providers (Vimeo/Wistia) plug in here rather than in the view.
+ * Returns null when the source isn't a (recognised) video or no id is
+ * recoverable, so callers gate with `if (resolveVideoEmbed(...))`.
+ */
+export function resolveVideoEmbed(
+  video: { provider: "youtube" | "vimeo" | "wistia" } | null | undefined,
+  url: string | null | undefined,
+  media?: ReadonlyArray<{ url: string }> | null,
+): VideoEmbedInfo | null {
+  const info = videoRowInfoFromWire(video);
+  if (!info) return null;
+  if (info.provider === "youtube") {
+    const videoId = youtubeVideoId(url, media);
+    return videoId ? { embedUrl: youtubeEmbedUrl(videoId), label: info.label } : null;
+  }
+  // vimeo / wistia: facet recognised but no player wired yet.
+  return null;
+}
