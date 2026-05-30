@@ -36,6 +36,7 @@ import { logEvent } from "@releases/lib/log-event.js";
 import { getSecret, getSecretWithFallback } from "@releases/lib/secrets";
 import { signingFetchFromRawKey } from "@releases/core-internal/web-bot-auth-sign";
 import { recordSessionSpend } from "./spend-cap.js";
+import { FLAGS, flag } from "@releases/lib/flags";
 
 /**
  * Signing fetch for the scrape path; global fetch when disabled, unkeyed, or
@@ -44,7 +45,7 @@ import { recordSessionSpend } from "./spend-cap.js";
  * behave consistently.
  */
 async function buildDiscoverySignedFetch(env: Env): Promise<typeof fetch> {
-  if (env.WEB_BOT_AUTH_ENABLED !== "true") return fetch;
+  if (!(await flag(env.FLAGS, env.WEB_BOT_AUTH_ENABLED, FLAGS.webBotAuthEnabled))) return fetch;
   try {
     const raw = (await getSecret(env.WEB_BOT_AUTH_PRIVATE_KEY).catch(() => null)) ?? "";
     if (!raw) {
@@ -515,7 +516,11 @@ export class ManagedAgentsSession extends DurableObject<Env> {
                   apiFetcher: fetcher,
                   apiKey: releasesApiKey ?? "",
                   sessionId,
-                  extractToolLoopEnabled: this.env.EXTRACT_TOOLLOOP_ENABLED,
+                  extractToolLoopEnabled: await flag(
+                    this.env.FLAGS,
+                    this.env.EXTRACT_TOOLLOOP_ENABLED,
+                    FLAGS.extractToolLoopEnabled,
+                  ),
                   signedFetch,
                 },
                 sourceIdentifier,

@@ -10,6 +10,7 @@ import { logEvent } from "@releases/lib/log-event.js";
 import { getSecret, getSecretWithFallback } from "@releases/lib/secrets";
 import { checkSpendCap } from "./spend-cap.js";
 import { WorkerEntrypoint } from "cloudflare:workers";
+import { FLAGS, flag } from "@releases/lib/flags";
 
 export { Sandbox } from "@cloudflare/sandbox";
 export { ManagedAgentsSession } from "./managed-agents-session.js";
@@ -40,13 +41,14 @@ async function maSessionsDisabled(
 ): Promise<{ disabled: false } | { disabled: true; via: "kv" | "env" }> {
   try {
     if (env.LATEST_CACHE) {
-      const flag = await env.LATEST_CACHE.get("ma:sessions:disabled");
-      if (flag) return { disabled: true, via: "kv" };
+      const kvFlag = await env.LATEST_CACHE.get("ma:sessions:disabled");
+      if (kvFlag) return { disabled: true, via: "kv" };
     }
   } catch {
     // KV unreachable — fall through to env-flag fallback.
   }
-  if (env.MA_SESSIONS_DISABLED === "true") return { disabled: true, via: "env" };
+  if (await flag(env.FLAGS, env.MA_SESSIONS_DISABLED, FLAGS.maSessionsDisabled))
+    return { disabled: true, via: "env" };
   return { disabled: false };
 }
 
