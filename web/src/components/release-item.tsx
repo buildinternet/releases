@@ -18,6 +18,7 @@ import { formatDate } from "@/lib/formatters";
 import { RollupBadge } from "./rollup-badge";
 import { ClusterChip } from "./cluster-chip";
 import { CompactComposition } from "./compact-composition";
+import { PlayBadge } from "./play-badge";
 
 /** Strip a leading markdown heading that duplicates the release title,
  *  and empty artifacts left by HTML-to-markdown conversion. */
@@ -167,6 +168,24 @@ export function ReleaseListItem({
     () => release.media?.find((m) => m.type === "image" || m.type === "gif") ?? null,
     [release.media],
   );
+
+  // Video rows: the thumbnail + play badge link out to the source video (the
+  // play affordance should play, not toggle the row). Defined once so the
+  // linked and (url-less) plain variants don't duplicate the image markup.
+  const videoThumbnailInner =
+    video && thumbnail ? (
+      <>
+        <FallbackImage
+          src={releaseThumbUrl(thumbnail.r2Url ?? thumbnail.url, 320)}
+          alt={thumbnail.alt || ""}
+          width={160}
+          height={90}
+          className="rounded-md object-cover w-[160px] h-[90px] border border-stone-200 dark:border-stone-800"
+          unoptimized={IMG_TRANSFORM_ON || undefined}
+        />
+        <PlayBadge size="sm" />
+      </>
+    ) : null;
 
   // Feed title hierarchy (#feed-title): lead with a descriptive headline and
   // demote the version, instead of using a bare `v2.1.154` (which loses product
@@ -377,18 +396,21 @@ export function ReleaseListItem({
             }}
           >
             <div className="flex items-start gap-3">
-              {thumbnail && (
-                <div className="shrink-0">
-                  <FallbackImage
-                    src={releaseThumbUrl(thumbnail.r2Url ?? thumbnail.url, 320)}
-                    alt={thumbnail.alt || ""}
-                    width={160}
-                    height={90}
-                    className="rounded-md object-cover w-[160px] h-[90px] border border-stone-200 dark:border-stone-800"
-                    unoptimized={IMG_TRANSFORM_ON || undefined}
-                  />
-                </div>
-              )}
+              {thumbnail &&
+                (release.url ? (
+                  <a
+                    href={release.url}
+                    target="_blank"
+                    rel={EXTERNAL_UGC_REL}
+                    onClick={(e) => e.stopPropagation()}
+                    aria-label={`Watch on ${video.label}`}
+                    className="group relative shrink-0"
+                  >
+                    {videoThumbnailInner}
+                  </a>
+                ) : (
+                  <div className="relative shrink-0">{videoThumbnailInner}</div>
+                ))}
               <div className="min-w-0 flex-1">
                 <h2 id={titleId} className={headingClasses}>
                   {release.id ? (
