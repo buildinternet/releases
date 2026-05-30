@@ -48,7 +48,6 @@ import {
 import { daysAgoIso } from "@buildinternet/releases-core/dates";
 import { parseCompositionFromMetadata } from "@buildinternet/releases-core/composition";
 import { parseKindParam, KIND_VALUES, isValidKind } from "@buildinternet/releases-core/kinds";
-import { isValidCategory } from "@buildinternet/releases-core/categories";
 import { resolveCategoryInput } from "../lib/category-alias.js";
 import { parseSourceTypesLenient } from "../lib/source-types.js";
 import { toSlug } from "@buildinternet/releases-core/slug";
@@ -156,10 +155,13 @@ orgRoutes.get(
     // Default off — orgs without indexed releases are stubs; admin surfaces
     // see them through `/v1/admin/*`, not this public catalog route.
     const includeEmpty = parseBoolParam(c.req.query("includeEmpty"));
-    // Optional category filter. Validate against the canonical enum and ignore
-    // anything else (fail-open to unfiltered) — aliases aren't resolved here.
+    // Optional category filter. Aliases (e.g. "e-commerce" → "commerce") are
+    // resolved to their canonical slug; unknown values fail-open to unfiltered.
     const categoryParam = c.req.query("category");
-    const category = categoryParam && isValidCategory(categoryParam) ? categoryParam : undefined;
+    const categoryResolved = categoryParam
+      ? await resolveCategoryInput(db, categoryParam)
+      : undefined;
+    const category = categoryResolved?.ok ? categoryResolved.slug : undefined;
 
     const [rows, counts] = await Promise.all([
       getOrgsWithStats(
