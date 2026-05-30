@@ -121,6 +121,7 @@ export interface Env {
    * matching `X-Releases-Staging-Key` header. See workers/mcp/src/index.ts.
    */
   STAGING_ACCESS_KEY?: SecretBinding;
+  /** Cloudflare Flagship binding; resolves flags live when present. */
   FLAGS?: FlagshipBinding;
 }
 
