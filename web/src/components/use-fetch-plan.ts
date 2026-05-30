@@ -37,6 +37,8 @@ export interface FetchPlanRow {
   slug: string;
   name: string;
   type: string;
+  /** Current tier the priority dropdown binds to (the value setFetchPriorityAction writes). */
+  fetchPriority: "normal" | "low" | "paused";
   plan: FetchPlan;
   state: FetchState;
 }

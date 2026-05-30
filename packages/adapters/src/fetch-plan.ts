@@ -51,8 +51,16 @@ export interface FetchState {
   paused: boolean;
 }
 
+const FEED_LABELS: Record<string, string> = {
+  rss: "RSS feed",
+  atom: "Atom feed",
+  jsonfeed: "JSON Feed",
+};
+
 function resolveStrategy(source: Source, meta: SourceMetadata): FetchStrategy {
   // Precedence mirrors queryDueSources / the fetch dispatcher in poll-fetch.ts.
+  // This describes the source's CONFIGURED strategy, not flag-gated poll
+  // eligibility (e.g. scrape/agent sources only poll when SCRAPE_CHANGE_DETECT_ENABLED).
   if (isGitHubFetched(source, meta)) return "github";
   if (isAppStoreFetched(source)) return "appstore";
   if (isVideoFetched(source)) return "video";
@@ -71,11 +79,7 @@ function strategyLabel(strategy: FetchStrategy, meta: SourceMetadata): string {
     case "video":
       return "Video feed";
     case "feed":
-      return meta.feedType === "atom"
-        ? "Atom feed"
-        : meta.feedType === "jsonfeed"
-          ? "JSON Feed"
-          : "RSS feed";
+      return FEED_LABELS[meta.feedType ?? "rss"] ?? "RSS feed";
     case "crawl":
       return "Multi-page crawl";
     case "agent":

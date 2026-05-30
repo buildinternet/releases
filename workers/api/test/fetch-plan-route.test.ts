@@ -25,6 +25,7 @@ function mkApp(db: D1Db) {
 
 interface PlanRow {
   slug: string;
+  fetchPriority: string;
   plan: { strategy: string; intervalLabel: string; cadence: string; paused: boolean };
   state: { nextDueAt: string | null; paused: boolean };
 }
@@ -72,12 +73,14 @@ describe("GET /v1/status/fetch-plan", () => {
     expect(fc.plan.strategy).toBe("firecrawl");
     expect(fc.plan.intervalLabel).toBe("every 12 hours");
     expect(fc.plan.cadence).toBe("firecrawl-webhook");
+    expect(fc.fetchPriority).toBe("normal");
     expect(fc.state.nextDueAt).toBeNull();
 
     const paused = body.sources.find((s) => s.slug === "acme-paused")!;
     expect(paused.plan.strategy).toBe("feed");
     expect(paused.plan.intervalLabel).toBe("paused");
     expect(paused.plan.paused).toBe(true);
+    expect(paused.fetchPriority).toBe("paused");
     expect(paused.state.nextDueAt).toBeNull();
   });
 

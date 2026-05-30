@@ -1,12 +1,22 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { setFetchPriorityAction, syncFirecrawlAction } from "@/app/actions/source-admin";
+import {
+  setFetchPriorityAction,
+  syncFirecrawlAction,
+  type ActionResult,
+} from "@/app/actions/source-admin";
 import { useFetchPlan, type FetchPlanRow } from "./use-fetch-plan";
 
-const PRIORITIES = ["normal", "low", "paused"] as const;
-
-type ActionResult = { ok: true } | { ok: false; error: string };
+// Single source of truth for the priority dropdown: drives both the option list
+// and the `Priority` union, so a tier can't be added in one place and missed in
+// the other. Labels mirror the server's TIER_INTERVALS.
+const TIERS = [
+  { value: "normal", label: "every 4 hours" },
+  { value: "low", label: "every 24 hours" },
+  { value: "paused", label: "paused" },
+] as const;
+type Priority = (typeof TIERS)[number]["value"];
 
 function relative(iso: string | null, now: number): string {
   if (!iso) return "—";
@@ -62,7 +72,7 @@ function PlanRowItem({
     });
   }
 
-  function onPriorityChange(priority: (typeof PRIORITIES)[number]) {
+  function onPriorityChange(priority: Priority) {
     run(() => setFetchPriorityAction({ orgSlug, sourceSlug: row.slug, priority }));
   }
 
@@ -103,14 +113,16 @@ function PlanRowItem({
           row.plan.intervalLabel
         ) : (
           <select
-            value={row.plan.paused ? "paused" : row.plan.intervalHours === 24 ? "low" : "normal"}
+            value={row.fetchPriority}
             disabled={pending}
-            onChange={(e) => onPriorityChange(e.target.value as (typeof PRIORITIES)[number])}
+            onChange={(e) => onPriorityChange(e.target.value as Priority)}
             className="bg-transparent border border-stone-200 dark:border-stone-700 rounded px-1 py-0.5 disabled:opacity-40"
           >
-            <option value="normal">every 4 hours</option>
-            <option value="low">every 24 hours</option>
-            <option value="paused">paused</option>
+            {TIERS.map((t) => (
+              <option key={t.value} value={t.value}>
+                {t.label}
+              </option>
+            ))}
           </select>
         )}
       </div>

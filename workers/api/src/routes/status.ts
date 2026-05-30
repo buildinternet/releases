@@ -158,6 +158,7 @@ statusRoutes.get("/status/fetch-plan", async (c) => {
       slug: s.slug,
       name: s.name,
       type: s.type,
+      fetchPriority: s.fetchPriority ?? "normal",
       plan,
       state: computeFetchState(s, plan, now),
     };

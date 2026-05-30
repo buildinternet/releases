@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { webApiHeaders } from "@/lib/api";
 import { adminActionEnv } from "@/lib/admin-action";
 
-type ActionResult = { ok: true } | { ok: false; error: string };
+export type ActionResult = { ok: true } | { ok: false; error: string };
 
 /**
  * Shallow-merge a patch into the source's `metadata` blob via
