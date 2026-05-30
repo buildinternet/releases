@@ -17,8 +17,7 @@
  */
 
 import { logEvent } from "@releases/lib/log-event";
-import { FLAGS, flag } from "@releases/lib/flags";
-import type { FlagshipBinding } from "@releases/lib/flags";
+import { FLAGS, flag, type FlagshipBinding } from "@releases/lib/flags";
 
 interface SecretBindingLike {
   get(): Promise<string | undefined>;

@@ -5,8 +5,7 @@ import {
 } from "@buildinternet/releases-core/web-bot-auth";
 import { logEvent } from "@releases/lib/log-event";
 import { getSecret } from "@releases/lib/secrets";
-import { FLAGS, flag } from "@releases/lib/flags";
-import type { FlagshipBinding } from "@releases/lib/flags";
+import { FLAGS, flag, type FlagshipBinding } from "@releases/lib/flags";
 
 export interface WebBotAuthEnv {
   WEB_BOT_AUTH_ENABLED?: string;

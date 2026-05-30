@@ -30,8 +30,7 @@ import { sendAlert, type AlertEnv } from "./lib/send-alert.js";
 import { logEvent } from "@releases/lib/log-event";
 import { dbErrorLogFields } from "@releases/lib/db-errors";
 import { getSecret, getSecretWithFallback } from "@releases/lib/secrets";
-import { FLAGS, flag } from "@releases/lib/flags";
-import type { FlagshipBinding } from "@releases/lib/flags";
+import { FLAGS, flag, type FlagshipBinding } from "@releases/lib/flags";
 
 export { StatusHub } from "./status-hub.js";
 export { ReleaseHub } from "./release-hub.js";

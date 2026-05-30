@@ -112,7 +112,7 @@ export async function flag(
   const fb = fallbackOf(varValue, def);
   if (!binding) return fb;
   try {
-    return await binding.getBooleanValue(def.key, fb, {});
+    return await binding.getBooleanValue(def.key, fb);
   } catch {
     return fb;
   }

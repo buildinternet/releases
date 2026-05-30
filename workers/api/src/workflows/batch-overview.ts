@@ -54,8 +54,7 @@ import {
 } from "@releases/core-internal/overview-eligibility";
 import { upsertOrgOverview } from "@releases/core-internal/overview-upsert";
 import { getAnthropicKey, resolveGatewayOpts, type AnthropicEnv } from "../lib/anthropic.js";
-import { FLAGS, flag } from "@releases/lib/flags";
-import type { FlagshipBinding } from "@releases/lib/flags";
+import { FLAGS, flag, type FlagshipBinding } from "@releases/lib/flags";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 

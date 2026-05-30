@@ -38,7 +38,6 @@ import { buildAnthropicClient } from "@releases/lib/anthropic-client.js";
 import { IN_ARRAY_CHUNK_SIZE } from "../lib/d1-limits.js";
 import { makeBotFetch } from "../lib/web-bot-auth-fetch.js";
 import { FLAGS, flag } from "@releases/lib/flags";
-import type { FlagshipBinding } from "@releases/lib/flags";
 
 /**
  * Environment for the workflow. Bindings follow the same shape as the API
@@ -72,7 +71,6 @@ export type PollAndFetchWorkflowEnv = InvalidationEnv &
     /** Ingest-time R2 media upload (#1177): kill switch + `released-media` bucket. */
     MEDIA_R2_UPLOAD_ENABLED?: string;
     MEDIA?: R2Bucket;
-    FLAGS?: FlagshipBinding;
     /** TEST-ONLY: bypass drizzle(env.DB) and use the provided instance directly. */
     _drizzleOverride?: unknown;
   };

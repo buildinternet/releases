@@ -8,8 +8,7 @@
 
 import { logEvent } from "@releases/lib/log-event";
 import { purgeKeysForHomepageTicker } from "../graphql/persisted.js";
-import { FLAGS, flag } from "@releases/lib/flags";
-import type { FlagshipBinding } from "@releases/lib/flags";
+import { FLAGS, flag, type FlagshipBinding } from "@releases/lib/flags";
 
 export interface LatestCacheBinding {
   get(key: string, type: "json"): Promise<unknown>;
