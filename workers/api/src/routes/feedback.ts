@@ -20,6 +20,7 @@ import { createDb } from "../db.js";
 import { sanitizeString, sanitizeText, stripControl } from "../lib/sanitize.js";
 import { notifyFeedback } from "../lib/feedback-email.js";
 import type { Env } from "../index.js";
+import { FLAGS, flag } from "@releases/lib/flags";
 
 export const feedbackRoutes = new Hono<Env>();
 
@@ -48,7 +49,7 @@ function coerceClientKind(v: unknown): string {
 }
 
 feedbackRoutes.post("/feedback", async (c) => {
-  if (c.env.FEEDBACK_DISABLED === "true") {
+  if (await flag(c.env.FLAGS, c.env.FEEDBACK_DISABLED, FLAGS.feedbackDisabled)) {
     return c.json({ error: "feedback_disabled" }, 503);
   }
 

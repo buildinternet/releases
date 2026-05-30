@@ -17,6 +17,7 @@
  */
 
 import { logEvent } from "@releases/lib/log-event";
+import { FLAGS, flag } from "@releases/lib/flags";
 import type { FlagshipBinding } from "@releases/lib/flags";
 
 interface SecretBindingLike {
@@ -64,8 +65,10 @@ export async function submitToIndexNow(
 ): Promise<SubmitResult> {
   const sourceSlug = opts.source.slug;
 
-  if (env.INDEXNOW_ENABLED !== "true") return logSkip(sourceSlug, "flag_off");
-  if (env.INDEXING_DISABLED === "true") return logSkip(sourceSlug, "indexing_disabled");
+  if (!(await flag(env.FLAGS, env.INDEXNOW_ENABLED, FLAGS.indexnowEnabled)))
+    return logSkip(sourceSlug, "flag_off");
+  if (await flag(env.FLAGS, env.INDEXING_DISABLED, FLAGS.indexingDisabled))
+    return logSkip(sourceSlug, "indexing_disabled");
   if (!env.INDEXNOW_KEY) return logSkip(sourceSlug, "no_key_binding");
   if (opts.nReleases <= 0) return logSkip(sourceSlug, "no_releases");
   if (opts.source.isHidden) return logSkip(sourceSlug, "source_hidden");
@@ -144,8 +147,10 @@ export async function notifyIndexNowForSource(
   // Run every gate that doesn't need slug lookups before touching D1, so
   // disabled / hidden / no-op publishes don't burn a query per release.
   const sourceSlug = source.slug;
-  if (env.INDEXNOW_ENABLED !== "true") return logSkip(sourceSlug, "flag_off");
-  if (env.INDEXING_DISABLED === "true") return logSkip(sourceSlug, "indexing_disabled");
+  if (!(await flag(env.FLAGS, env.INDEXNOW_ENABLED, FLAGS.indexnowEnabled)))
+    return logSkip(sourceSlug, "flag_off");
+  if (await flag(env.FLAGS, env.INDEXING_DISABLED, FLAGS.indexingDisabled))
+    return logSkip(sourceSlug, "indexing_disabled");
   if (!env.INDEXNOW_KEY) return logSkip(sourceSlug, "no_key_binding");
   if (nReleases <= 0) return logSkip(sourceSlug, "no_releases");
   if (source.isHidden) return logSkip(sourceSlug, "source_hidden");

@@ -8,6 +8,8 @@
 
 import { logEvent } from "@releases/lib/log-event";
 import { purgeKeysForHomepageTicker } from "../graphql/persisted.js";
+import { FLAGS, flag } from "@releases/lib/flags";
+import type { FlagshipBinding } from "@releases/lib/flags";
 
 export interface LatestCacheBinding {
   get(key: string, type: "json"): Promise<unknown>;
@@ -135,6 +137,7 @@ export async function withLatestCache<T>(
 export interface InvalidationEnv {
   LATEST_CACHE?: LatestCacheBinding;
   INVALIDATION_ENABLED?: string;
+  FLAGS?: FlagshipBinding;
 }
 
 /**
@@ -164,7 +167,7 @@ export async function invalidateLatestCache(
   const keys = [...CACHEABLE_DEFAULT_SHAPES.map(defaultShapeKey), ...purgeKeysForHomepageTicker()];
   const logCtx = { cacheKeys: keys, cause: meta.cause, nReleases: meta.nReleases };
 
-  if (env.INVALIDATION_ENABLED !== "true") {
+  if (!(await flag(env.FLAGS, env.INVALIDATION_ENABLED, FLAGS.invalidationEnabled))) {
     logEvent("info", {
       component: "invalidation",
       event: "skipped",

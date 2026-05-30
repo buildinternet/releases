@@ -79,6 +79,7 @@ async function resolveFetchEnv(env: OnboardSourceWorkflowEnv): Promise<FetchOneE
     DISCOVERY_WORKER: env.DISCOVERY_WORKER,
     MEDIA_R2_UPLOAD_ENABLED: env.MEDIA_R2_UPLOAD_ENABLED,
     MEDIA: env.MEDIA,
+    FLAGS: env.FLAGS,
   };
 }
 

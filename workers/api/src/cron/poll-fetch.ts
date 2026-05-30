@@ -75,6 +75,7 @@ import { resolveOrgSlug, resolveProductSlug } from "../lib/slug-lookups.js";
 import { logEvent } from "@releases/lib/log-event";
 import { classifyDbError, dbErrorLogFields } from "@releases/lib/db-errors";
 import { makeBotFetch } from "../lib/web-bot-auth-fetch.js";
+import { FLAGS, flag } from "@releases/lib/flags";
 import {
   classifyMarketing,
   type MarketingClassifierResult,
@@ -119,7 +120,11 @@ export async function pollAndFetch(
 
   const db = drizzle(env.DB);
   const now = new Date();
-  const changeDetectEnabled = env.SCRAPE_CHANGE_DETECT_ENABLED === "true";
+  const changeDetectEnabled = await flag(
+    env.FLAGS,
+    env.SCRAPE_CHANGE_DETECT_ENABLED,
+    FLAGS.scrapeChangeDetectEnabled,
+  );
 
   // Query sources due for a poll
   const dueSources = await queryDueSources(db, now, { changeDetectEnabled });
@@ -1112,7 +1117,9 @@ export async function ingestRawReleases(
   // helper bounds image concurrency within); fail-open — any image-level
   // failure keeps the third-party URL. Flag-off / unbound bucket = today's
   // verbatim behavior.
-  const r2UploadEnabled = env.MEDIA_R2_UPLOAD_ENABLED === "true" && env.MEDIA != null;
+  const r2UploadEnabled =
+    (await flag(env.FLAGS, env.MEDIA_R2_UPLOAD_ENABLED, FLAGS.mediaR2UploadEnabled)) &&
+    env.MEDIA != null;
   // Mirror media only for releases the insert below will actually create —
   // existing URLs are skipped by onConflictDoNothing, so their media JSON is
   // discarded and re-fetching their images every fire would be pure waste.
@@ -2355,7 +2362,10 @@ async function buildEnrichMap(
   rawReleases: readonly RawRelease[],
   env: FetchOneEnv,
 ): Promise<Map<number, EnrichOutcome>> {
-  if (env.FEED_ENRICH_ENABLED !== "true" || meta.feedContentDepth !== "summary-only") {
+  if (
+    !(await flag(env.FLAGS, env.FEED_ENRICH_ENABLED, FLAGS.feedEnrichEnabled)) ||
+    meta.feedContentDepth !== "summary-only"
+  ) {
     return new Map();
   }
   const thinChars = parsePositiveInt(env.FEED_THIN_CHARS, DEFAULT_FEED_THIN_CHARS);

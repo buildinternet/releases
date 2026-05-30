@@ -14,6 +14,7 @@ import { createDb } from "../db.js";
 import { sanitizeString, sanitizeText, stripControl } from "../lib/sanitize.js";
 import { notifyRecommendation } from "../lib/recommendation-email.js";
 import type { Env } from "../index.js";
+import { FLAGS, flag } from "@releases/lib/flags";
 
 export const recommendationRoutes = new Hono<Env>();
 
@@ -98,7 +99,7 @@ async function readJsonBody(
 }
 
 recommendationRoutes.post("/recommendations", async (c) => {
-  if (c.env.RECOMMENDATIONS_DISABLED === "true") {
+  if (await flag(c.env.FLAGS, c.env.RECOMMENDATIONS_DISABLED, FLAGS.recommendationsDisabled)) {
     return c.json({ error: "recommendations_disabled" }, 503);
   }
 
