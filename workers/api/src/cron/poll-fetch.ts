@@ -28,6 +28,7 @@ import {
 } from "@releases/adapters/feed.js";
 import type { SourceMetadata, ChangeStatus } from "@releases/adapters/feed.js";
 import { isAppStoreFetched, isVideoFetched } from "@releases/adapters/source-meta";
+import { TIER_INTERVALS } from "@releases/adapters/fetch-plan";
 import {
   resolveAppStore,
   appStoreCoordFromSource,
@@ -92,13 +93,11 @@ import {
 } from "./feed-enrich.js";
 
 // ── Tier intervals (hours) ──
+// `TIER_INTERVALS` is sourced from @releases/adapters/fetch-plan (imported above)
+// so the dev fetch-plan endpoint's displayed cadence can't drift from what this
+// cron actually enforces.
 
-type PollTier = "normal" | "low";
-
-const TIER_INTERVALS: Record<PollTier, number> = {
-  normal: 4,
-  low: 24,
-};
+type PollTier = keyof typeof TIER_INTERVALS;
 
 const POLL_CONCURRENCY = 5;
 const FETCH_CONCURRENCY = 3;
