@@ -181,8 +181,8 @@ export const FLAGS = {
     default: false,
   },
   feedEnrichEnabled: { key: "feed-enrich-enabled", env: "FEED_ENRICH_ENABLED", default: false },
-  scrapeChangeDetect: {
-    key: "scrape-change-detect",
+  scrapeChangeDetectEnabled: {
+    key: "scrape-change-detect-enabled",
     env: "SCRAPE_CHANGE_DETECT_ENABLED",
     default: false,
   },
@@ -217,7 +217,7 @@ export const FLAGS = {
   cacheDisabled: { key: "cache-disabled", env: "CACHE_DISABLED", default: false },
   indexingDisabled: { key: "indexing-disabled", env: "INDEXING_DISABLED", default: false },
   extractToolLoopEnabled: {
-    key: "extract-tool-loop-enabled",
+    key: "extract-toolloop-enabled",
     env: "EXTRACT_TOOLLOOP_ENABLED",
     default: false,
   },
@@ -625,7 +625,7 @@ Replace each guard (the `env` here is the worker `Env`):
 - Line 579: `if (!(await flag(env.FLAGS, env.BATCH_SUMMARIZE_ENABLED, FLAGS.batchSummarizeEnabled))) {`
 - Line 631: `if (await flag(env.FLAGS, env.SCRAPE_AGENT_USE_WORKFLOW, FLAGS.scrapeAgentUseWorkflow)) {`
 - Line 703: `if (await flag(env.FLAGS, env.POLL_FETCH_USE_WORKFLOW, FLAGS.pollFetchUseWorkflow)) {`
-- Line 807: `const changeDetectEnabled = await flag(env.FLAGS, env.SCRAPE_CHANGE_DETECT_ENABLED, FLAGS.scrapeChangeDetect);`
+- Line 807: `const changeDetectEnabled = await flag(env.FLAGS, env.SCRAPE_CHANGE_DETECT_ENABLED, FLAGS.scrapeChangeDetectEnabled);`
 
 For the object literals that forward strings into a `FetchOneEnv`-shaped payload (lines ~721, ~730, ~734 build a config object), add `FLAGS: env.FLAGS,` alongside the forwarded string fields so the downstream decision sites can read the binding. (The forwarded string fields may stay; they’re harmless documentation now that decisions use `FLAGS`.)
 
@@ -642,14 +642,14 @@ Add the helper import to each file.
 
 - [ ] **Step 3: `workers/api/src/workflows/poll-and-fetch.ts`**
 
-- Line 455: `const changeDetectEnabled = await flag(env.FLAGS, env.SCRAPE_CHANGE_DETECT_ENABLED, FLAGS.scrapeChangeDetect);`
+- Line 455: `const changeDetectEnabled = await flag(env.FLAGS, env.SCRAPE_CHANGE_DETECT_ENABLED, FLAGS.scrapeChangeDetectEnabled);`
 - In the `FetchOneEnv` builder around lines 163–165 (which forwards `WEB_BOT_AUTH_ENABLED` and `MEDIA_R2_UPLOAD_ENABLED` strings), add `FLAGS: env.FLAGS,` so `fetchOne`’s decision sites can read the binding.
 
 Add the helper import.
 
 - [ ] **Step 4: `workers/api/src/cron/poll-fetch.ts`**
 
-- Line 122: `const changeDetectEnabled = await flag(env.FLAGS, env.SCRAPE_CHANGE_DETECT_ENABLED, FLAGS.scrapeChangeDetect);`
+- Line 122: `const changeDetectEnabled = await flag(env.FLAGS, env.SCRAPE_CHANGE_DETECT_ENABLED, FLAGS.scrapeChangeDetectEnabled);`
 - Line 1115: `const r2UploadEnabled = (await flag(env.FLAGS, env.MEDIA_R2_UPLOAD_ENABLED, FLAGS.mediaR2UploadEnabled)) && env.MEDIA != null;`
 - Line 2358: `if (!(await flag(env.FLAGS, env.FEED_ENRICH_ENABLED, FLAGS.feedEnrichEnabled)) || meta.feedContentDepth !== "summary-only") {`
 
