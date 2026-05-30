@@ -432,6 +432,8 @@ export const OrgDetailSchema = z.object({
   isHidden: z.boolean().optional(),
   /** Admin display flag: org is opted into automatic overviews + per-release summaries. Optional on the wire for older workers mid-deploy. */
   autoGenerateContent: z.boolean().optional(),
+  /** Admin display flag: org is promoted on the home-page featured rail. Optional on the wire for older workers mid-deploy. */
+  featured: z.boolean().optional(),
   /** Admin display flag: all ingest paused for this org. */
   fetchPaused: z.boolean().optional(),
   /** How the org row was created. `on_demand` orgs are excluded from overview generation regardless of `autoGenerateContent`. */

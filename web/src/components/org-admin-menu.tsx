@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   setOrgHiddenAction,
   setOrgAutoGenerateContentAction,
+  setOrgFeaturedAction,
   renameOrgAction,
 } from "@/app/actions/org-admin";
 
@@ -13,6 +14,7 @@ export function OrgAdminMenu({
   name,
   isHidden,
   autoGenerateContent,
+  featured,
   discovery,
   fetchPaused,
 }: {
@@ -20,6 +22,7 @@ export function OrgAdminMenu({
   name: string;
   isHidden: boolean;
   autoGenerateContent: boolean;
+  featured: boolean;
   discovery?: string;
   fetchPaused?: boolean;
 }) {
@@ -139,6 +142,27 @@ export function OrgAdminMenu({
                 className="w-full px-2 py-1 rounded border border-stone-300 dark:border-stone-700 bg-stone-50 hover:bg-stone-100 dark:bg-stone-900 dark:hover:bg-stone-800 text-stone-700 dark:text-stone-200 disabled:opacity-50"
               >
                 {pending ? "Saving…" : isHidden ? "Unhide from listings" : "Hide from listings"}
+              </button>
+            </div>
+
+            <div className="space-y-2 border-t border-stone-200 dark:border-stone-800 pt-3">
+              <div className="font-medium text-stone-700 dark:text-stone-200">
+                Featured on home page
+              </div>
+              <p className="text-[12px] text-stone-500 dark:text-stone-400">
+                {featured
+                  ? "Shown in the curated org rail on the home page. The full A–Z list lives at /catalog regardless."
+                  : "Not featured. The home page shows a curated rail; un-featured orgs still appear in the full catalog and search."}
+              </p>
+              <button
+                type="button"
+                onClick={() =>
+                  run(() => setOrgFeaturedAction({ slug: orgSlug, featured: !featured }))
+                }
+                disabled={pending}
+                className="w-full px-2 py-1 rounded border border-stone-300 dark:border-stone-700 bg-stone-50 hover:bg-stone-100 dark:bg-stone-900 dark:hover:bg-stone-800 text-stone-700 dark:text-stone-200 disabled:opacity-50"
+              >
+                {pending ? "Saving…" : featured ? "Remove from featured" : "Add to featured"}
               </button>
             </div>
 
