@@ -171,10 +171,18 @@ describe("cacheControl", () => {
     expect(res.headers.get("Cache-Control")).toBe("public, max-age=120");
   });
 
-  it("skips caching when CACHE_DISABLED is set", async () => {
+  it('skips caching when CACHE_DISABLED is "true"', async () => {
+    const { app } = createApp(60);
+    const res = await app.request("/test", { method: "GET" }, { CACHE_DISABLED: "true" });
+    expect(res.headers.get("Cache-Control")).toBeNull();
+  });
+
+  it('does NOT disable caching for non-"true" CACHE_DISABLED values', async () => {
+    // The flag now resolves via `flag()` with strict `=== "true"` semantics, so a
+    // stray truthy string ("1", "false", …) no longer disables the cache.
     const { app } = createApp(60);
     const res = await app.request("/test", { method: "GET" }, { CACHE_DISABLED: "1" });
-    expect(res.headers.get("Cache-Control")).toBeNull();
+    expect(res.headers.get("Cache-Control")).toBe("private, max-age=60");
   });
 
   it("does NOT overwrite existing Cache-Control headers", async () => {
