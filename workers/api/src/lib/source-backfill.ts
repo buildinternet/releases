@@ -135,6 +135,8 @@ export function firecrawlCapGuidance(input: {
 }): string | undefined {
   if (input.via !== "firecrawl") return undefined;
   if (!input.cappedAtWindow) return undefined;
+  // effectiveMaxWindows <= requestedMaxWindows by construction (Math.min); they
+  // are equal only when the request was already within the ceiling (no cap).
   if (input.effectiveMaxWindows >= input.requestedMaxWindows) return undefined;
   return `Capped at ${input.effectiveMaxWindows} windows to fit the Firecrawl scrape budget. Re-run with \`markdown\` supplied (render the page yourself) to backfill deeper history.`;
 }

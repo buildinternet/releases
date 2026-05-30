@@ -104,6 +104,12 @@ describe("effectiveBackfillWindows", () => {
     expect(effectiveBackfillWindows("firecrawl", 3)).toBe(3);
   });
 
+  it("passes through a firecrawl request exactly at the ceiling", () => {
+    expect(effectiveBackfillWindows("firecrawl", FIRECRAWL_BACKFILL_MAX_WINDOWS)).toBe(
+      FIRECRAWL_BACKFILL_MAX_WINDOWS,
+    );
+  });
+
   it("never clamps supplied or fetch paths", () => {
     expect(effectiveBackfillWindows("supplied", 50)).toBe(50);
     expect(effectiveBackfillWindows("fetch", 200)).toBe(200);
