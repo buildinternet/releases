@@ -307,7 +307,7 @@ Use `--render` when you know a source needs JavaScript execution. Use `--no-rend
 
 After adding a new scrape source with an unknown provider, check the first fetch results. If content is complete, consider setting `--no-render` and noting the provider behavior in the playbook.
 
-**Blocked by a Cloudflare Managed Challenge?** `--render`/`--no-render` only choose *how* we fetch — they don't help when the page returns a bot challenge that fails browser rendering itself (symptom: persistent `no_change` / 0 releases on a page that clearly updates, e.g. some vendor help pages). For those, the external **Firecrawl monitoring** backend can fetch the page instead. It's enabled per source via the admin API (`POST /v1/sources/:slug/firecrawl/sync { enabled: true }`), backend-only — not via a metadata edit (which skips monitor creation). See `docs/architecture/firecrawl-monitoring.md`.
+**Blocked by a Cloudflare Managed Challenge?** `--render`/`--no-render` only choose _how_ we fetch — they don't help when the page returns a bot challenge that fails browser rendering itself (symptom: persistent `no_change` / 0 releases on a page that clearly updates, e.g. some vendor help pages). For those, the external **Firecrawl monitoring** backend can fetch the page instead. It's enabled per source via the admin API (`POST /v1/sources/:slug/firecrawl/sync { enabled: true }`), backend-only — not via a metadata edit (which skips monitor creation). See `docs/architecture/firecrawl-monitoring.md`.
 
 ## On-Demand Sources
 
