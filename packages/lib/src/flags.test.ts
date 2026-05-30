@@ -1,9 +1,19 @@
 import { describe, expect, it } from "bun:test";
 import { FLAGS, flag, type FlagshipBinding } from "./flags.js";
 
-/** Stub binding that always returns `value`, ignoring the default. */
-function bindingReturning(value: boolean): FlagshipBinding {
-  return { getBooleanValue: async () => value };
+interface RecordingBinding extends FlagshipBinding {
+  lastCall?: { key: string; defaultValue: boolean };
+}
+
+/** Stub binding that records its last call and always returns `value`. */
+function bindingReturning(value: boolean): RecordingBinding {
+  const binding: RecordingBinding = {
+    getBooleanValue: async (key, defaultValue) => {
+      binding.lastCall = { key, defaultValue };
+      return value;
+    },
+  };
+  return binding;
 }
 
 /** Stub binding that throws on eval. */
@@ -18,6 +28,17 @@ describe("flag()", () => {
     // Flagship says true even though the var is unset and default is false.
     expect(await flag(bindingReturning(true), undefined, FLAGS.pollFetchUseWorkflow)).toBe(true);
     expect(await flag(bindingReturning(false), "true", FLAGS.pollFetchUseWorkflow)).toBe(false);
+  });
+
+  it("consults Flagship with the flag key and the computed fallback as defaultValue", async () => {
+    const stub = bindingReturning(false);
+    await flag(stub, "true", FLAGS.pollFetchUseWorkflow);
+    expect(stub.lastCall).toEqual({ key: "poll-fetch-use-workflow", defaultValue: true });
+
+    // Var unset → the hardcoded default flows through as the defaultValue.
+    const stub2 = bindingReturning(false);
+    await flag(stub2, undefined, FLAGS.pollFetchUseWorkflow);
+    expect(stub2.lastCall).toEqual({ key: "poll-fetch-use-workflow", defaultValue: false });
   });
 
   it("falls back to the var value when the binding is absent", async () => {

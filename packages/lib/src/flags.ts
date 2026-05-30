@@ -32,6 +32,7 @@ export interface FlagDef {
 /**
  * Registry of every Tier-1 flag. Single source of truth: the same `key`s must be
  * created in both the prod and staging Flagship apps before a flag is relied on.
+ * Kill-switch flags whose absence should mean "feature on" must set `default: true`.
  */
 export const FLAGS = {
   pollFetchUseWorkflow: {
@@ -51,8 +52,8 @@ export const FLAGS = {
     default: false,
   },
   feedEnrichEnabled: { key: "feed-enrich-enabled", env: "FEED_ENRICH_ENABLED", default: false },
-  scrapeChangeDetect: {
-    key: "scrape-change-detect",
+  scrapeChangeDetectEnabled: {
+    key: "scrape-change-detect-enabled",
     env: "SCRAPE_CHANGE_DETECT_ENABLED",
     default: false,
   },
@@ -87,7 +88,7 @@ export const FLAGS = {
   cacheDisabled: { key: "cache-disabled", env: "CACHE_DISABLED", default: false },
   indexingDisabled: { key: "indexing-disabled", env: "INDEXING_DISABLED", default: false },
   extractToolLoopEnabled: {
-    key: "extract-tool-loop-enabled",
+    key: "extract-toolloop-enabled",
     env: "EXTRACT_TOOLLOOP_ENABLED",
     default: false,
   },
