@@ -337,13 +337,16 @@ export const api = {
     return body.releases ?? [];
   },
   orgs: async (
-    opts: { includeEmpty?: boolean } = {},
+    opts: { includeEmpty?: boolean; category?: string } = {},
   ): Promise<{ items: OrgListItem[]; emptyOrgCount: number }> => {
-    const qs = opts.includeEmpty ? "?includeEmpty=true" : "";
+    const params = new URLSearchParams();
+    if (opts.includeEmpty) params.set("includeEmpty", "true");
+    if (opts.category) params.set("category", opts.category);
+    const qs = params.toString();
     type OrgsBody =
       | (ListResponse<OrgListItem> & { meta?: { emptyOrgCount?: number } })
       | OrgListItem[];
-    const body = await fetchApi<OrgsBody>(`/v1/orgs${qs}`);
+    const body = await fetchApi<OrgsBody>(`/v1/orgs${qs ? `?${qs}` : ""}`);
     if (Array.isArray(body)) return { items: body, emptyOrgCount: 0 };
     return { items: body?.items ?? [], emptyOrgCount: body?.meta?.emptyOrgCount ?? 0 };
   },
