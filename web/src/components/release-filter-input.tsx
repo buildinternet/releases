@@ -107,22 +107,26 @@ export function ReleaseFilterInput({
           {showTimeRange ? (
             <>
               <SectionHeader>Time range</SectionHeader>
-              {TIME_RANGES.map((opt) => {
-                const active = (since ?? "") === opt.value;
-                return (
-                  <button
-                    key={opt.value || "all"}
-                    type="button"
-                    role="menuitemradio"
-                    aria-checked={active}
-                    onClick={() => onSinceChange?.(opt.value)}
-                    className="flex w-full items-center gap-2 px-3 py-1.5 text-[12px] text-stone-600 hover:bg-stone-50 dark:text-stone-300 dark:hover:bg-stone-800"
-                  >
-                    <span>{opt.label}</span>
-                    {active && <CheckMark className="ml-auto text-stone-500 dark:text-stone-300" />}
-                  </button>
-                );
-              })}
+              <div role="group" aria-label="Time range">
+                {TIME_RANGES.map((opt) => {
+                  const active = (since ?? "") === opt.value;
+                  return (
+                    <button
+                      key={opt.value || "all"}
+                      type="button"
+                      role="menuitemradio"
+                      aria-checked={active}
+                      onClick={() => onSinceChange?.(opt.value)}
+                      className="flex w-full items-center gap-2 px-3 py-1.5 text-[12px] text-stone-600 hover:bg-stone-50 dark:text-stone-300 dark:hover:bg-stone-800"
+                    >
+                      <span>{opt.label}</span>
+                      {active && (
+                        <CheckMark className="ml-auto text-stone-500 dark:text-stone-300" />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
               <div className="my-1 border-t border-stone-100 dark:border-stone-800" />
             </>
           ) : (
