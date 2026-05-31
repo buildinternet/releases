@@ -32,6 +32,23 @@ function relative(iso: string | null, now: number): string {
   return past ? `${label} ago` : `in ${label}`;
 }
 
+function StarvedBadge({ staleHours }: { staleHours: number | null }) {
+  const label =
+    staleHours == null
+      ? "stale"
+      : staleHours >= 48
+        ? `${Math.round(staleHours / 24)}d stale`
+        : `${Math.round(staleHours)}h stale`;
+  return (
+    <span
+      className="ml-1.5 text-[10px] font-sans uppercase tracking-wide text-red-500"
+      title="Queued for the managed scrape sweep but not fetched within the staleness window — the sweep isn't draining it. Usually a change-detector that flaps every poll, a binding session cap, or a page better served by Firecrawl or a feed URL. Check this source's config."
+    >
+      starved · {label}
+    </span>
+  );
+}
+
 function NextDueCell({ row, now }: { row: FetchPlanRow; now: number }) {
   if (row.plan.cadence === "firecrawl-webhook")
     return <span className="text-stone-400">webhook</span>;
@@ -94,6 +111,7 @@ function PlanRowItem({
         <a href={`/source/${row.slug}`} className="hover:underline">
           {row.name}
         </a>
+        {row.sweep.starved && <StarvedBadge staleHours={row.sweep.staleHours} />}
         {err && <div className="text-[10px] font-sans text-red-500 mt-0.5">{err}</div>}
       </div>
       <div className="text-stone-500 flex items-center gap-2">

@@ -68,8 +68,8 @@ export type OrgGroup = {
 
 /**
  * Group candidates by `orgId`. Preserves input order within each group
- * (the SQL caller orders by `changeDetectedAt ASC` so oldest flags drain
- * first within the org).
+ * (the SQL caller orders by `lastFetchedAt ASC` so the most-stale sources
+ * drain first within the org).
  */
 export function groupByOrg(rows: Candidate[]): Map<string, OrgGroup> {
   const groups = new Map<string, OrgGroup>();
@@ -147,9 +147,11 @@ type CandidateQueryResult = {
 };
 
 /**
- * Query flagged scrape-no-feed and agent sources. Returns up to `cap` rows;
- * if more than `cap` matched, runs a follow-up COUNT(*) to populate
- * skippedOverCap. Most sweeps take the fast path (no count query).
+ * Query flagged scrape-no-feed and agent sources, most-stale first
+ * (`lastFetchedAt ASC`). Returns up to `cap` rows; if more than `cap` matched,
+ * runs a follow-up COUNT(*) to populate skippedOverCap. Most sweeps take the
+ * fast path (no count query). Firecrawl-owned sources are excluded — their
+ * monitor owns the fetch.
  *
  * Agent sources (#517) join the sweep once the `SCRAPE_CHANGE_DETECT_ENABLED`
  * cron pipeline flags them. The /update dispatcher handles both types
@@ -164,6 +166,10 @@ export async function queryCandidates(
     ne(sources.fetchPriority, "paused"),
     isNotNull(sources.changeDetectedAt),
     sql`(json_extract(${sources.metadata}, '$.feedUrl') IS NULL OR ${sources.metadata} IS NULL)`,
+    // Exclude Firecrawl-owned sources — their monitor fetches them, and the poll
+    // cron drops them the same way (queryDueSources `notFirecrawl`). Without this
+    // a source could be double-fetched by both the monitor and this sweep.
+    sql`(json_extract(${sources.metadata}, '$.firecrawl.enabled') IS NULL OR json_extract(${sources.metadata}, '$.firecrawl.enabled') != 1)`,
     or(eq(sources.isHidden, false), isNull(sources.isHidden)),
     // Exclude sources whose org has fetch_paused = true (#1057).
     or(eq(organizations.fetchPaused, false), isNull(organizations.fetchPaused)),
@@ -182,7 +188,13 @@ export async function queryCandidates(
     .from(sources)
     .innerJoin(organizations, eq(organizations.id, sources.orgId))
     .where(whereClause)
-    .orderBy(asc(sources.changeDetectedAt))
+    // Order by actual staleness — the source we've gone longest WITHOUT fetching
+    // wins (never-fetched, i.e. NULL, sorts first in SQLite ASC), with
+    // `changeDetectedAt` as a stable tiebreaker. Ordering by `changeDetectedAt`
+    // instead starved any source whose change-validator flaps every poll: each
+    // poll re-stamps `changeDetectedAt = now`, perpetually sorting it to the back
+    // of a capped queue so it never drains (sweep-starvation incident 2026-05-31).
+    .orderBy(asc(sources.lastFetchedAt), asc(sources.changeDetectedAt))
     .limit(params.cap + 1);
 
   let skippedOverCap = 0;

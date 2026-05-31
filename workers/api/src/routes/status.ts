@@ -13,7 +13,11 @@ import type { Env } from "../index.js";
 import { getStatusHub, parseEnumParam, parseSortDir } from "../utils.js";
 import { nullsLastOrderBy } from "../queries/shared.js";
 import { encodeCursor, decodeCursor } from "./fetch-log-cursor.js";
-import { describeFetchPlan, computeFetchState } from "@releases/adapters/fetch-plan";
+import {
+  describeFetchPlan,
+  computeFetchState,
+  computeSweepHealth,
+} from "@releases/adapters/fetch-plan";
 
 export const statusRoutes = new Hono<Env>();
 
@@ -163,6 +167,7 @@ statusRoutes.get("/status/fetch-plan", async (c) => {
       fetchPriority: s.fetchPriority ?? "normal",
       plan,
       state: computeFetchState(s, plan, now),
+      sweep: computeSweepHealth(s, plan, now),
     };
   });
   return c.json({ sources: result });
