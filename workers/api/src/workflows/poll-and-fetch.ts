@@ -68,6 +68,19 @@ export type PollAndFetchWorkflowEnv = InvalidationEnv &
     DISCOVERY_WORKER?: import("../cron/poll-fetch.js").DiscoveryWorkerRpc;
     WEB_BOT_AUTH_ENABLED?: string;
     WEB_BOT_AUTH_PRIVATE_KEY?: { get(): Promise<string> };
+    /**
+     * Ingest-time feed-content enrichment (mirrors `FetchOneEnv`): the kill switch
+     * + tuning knobs, plus the Cloudflare Browser-Rendering creds enrichment
+     * escalates to when the cheap fetch is still thin. `resolveFetchEnv` forwards
+     * these into the `FetchOneEnv` it hands `fetchOne`; without them the workflow
+     * ingest path cannot run enrichment or the marketing classifier (the Anthropic
+     * key + gateway opts ride on the `AnthropicEnv` intersection above).
+     */
+    FEED_ENRICH_ENABLED?: string;
+    FEED_ENRICH_MAX_PER_FIRE?: string;
+    FEED_THIN_CHARS?: string;
+    CLOUDFLARE_ACCOUNT_ID?: { get(): Promise<string> };
+    CLOUDFLARE_API_TOKEN?: { get(): Promise<string> };
     /** Ingest-time R2 media upload (#1177): kill switch + `released-media` bucket. */
     MEDIA_R2_UPLOAD_ENABLED?: string;
     MEDIA?: R2Bucket;
@@ -166,6 +179,19 @@ export async function resolveFetchEnv(env: PollAndFetchWorkflowEnv): Promise<Fet
     MEDIA_R2_UPLOAD_ENABLED: env.MEDIA_R2_UPLOAD_ENABLED,
     MEDIA: env.MEDIA,
     FLAGS: env.FLAGS,
+    // Anthropic key + gateway opts (ingest-time enrichment / marketing classifier
+    // build their client from these) and the feed-enrich tuning + render creds.
+    // Omitting these silently no-ops enrichment on the workflow path — the
+    // FEED_ENRICH_ENABLED var goes unseen so the flag falls back to its `false`
+    // default, and getAnthropicKey returns null so buildEnrichDeps bails.
+    ANTHROPIC_API_KEY: env.ANTHROPIC_API_KEY,
+    ANTHROPIC_BASE_URL: env.ANTHROPIC_BASE_URL,
+    AI_GATEWAY_TOKEN: env.AI_GATEWAY_TOKEN,
+    FEED_ENRICH_ENABLED: env.FEED_ENRICH_ENABLED,
+    FEED_ENRICH_MAX_PER_FIRE: env.FEED_ENRICH_MAX_PER_FIRE,
+    FEED_THIN_CHARS: env.FEED_THIN_CHARS,
+    CLOUDFLARE_ACCOUNT_ID: env.CLOUDFLARE_ACCOUNT_ID,
+    CLOUDFLARE_API_TOKEN: env.CLOUDFLARE_API_TOKEN,
   };
 }
 
