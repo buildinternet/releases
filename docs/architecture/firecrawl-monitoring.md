@@ -85,6 +85,8 @@ This is the load-bearing, easy-to-get-wrong detail. Firecrawl's **published docs
 
 **Cost gate** (in the receiver, before spawn): `new` always ingests; `changed` ingests when the judge is off, judgment is absent, or `judgment.meaningful === true` (fail-open — never silently drop a real change); `same`/`removed`/`error` are no-ops. KV idempotency on `(checkId + url)` via `LATEST_CACHE`.
 
+**Spawn ordering & redelivery (#1287).** Cross-request dedup is anchored by the deterministic Workflow instance id `fc-${checkId}` and DB-level `RELEASE_URL_UPSERT`; the `LATEST_CACHE` key is a fast-path optimization, **not** the source of truth. The receiver therefore writes the KV key **only after** a confirmed durable spawn — never before — so a transient `create()` failure can't lock out a retry. `create()` throws both on a duplicate instance id (redelivery / double-fire — benign, work already durable) and on a transient API failure, with no stable error code to tell them apart, so the catch probes `FIRECRAWL_INGEST_WORKFLOW.get(id)` (resolves iff the instance exists): exists → benign duplicate (`spawn-duplicate`), seal the KV key and return `200`; absent → genuine failure (`spawn-failed`, error-level), leave the KV key clean and return `503`. **Firecrawl retries webhook delivery on any non-2xx (and on timeout/network error): 1 min, then 5 min, then 15 min, 3 attempts total, then marks the delivery failed** — so the `503` triggers a redelivery, on which already-spawned pages short-circuit on their KV key (or the duplicate-instance path) and only the failed page is reprocessed. The endpoint must respond within Firecrawl's 10 s window; the `get()` probe runs only on the rare error path, so the happy path is one `create()` call.
+
 **Failure handling**: the pipeline is wrapped so a terminal failure writes an `error` `fetch_log` row and bumps `consecutiveErrors` (single-attempt, no retry — writes aren't idempotent), classified by `FirecrawlError.status`: `402` → `credits-exhausted`, `401`/`403` → `auth-failed`, else `ingest-failed`.
 
 ## Poll-fetch exclusion & resilience
@@ -102,7 +104,7 @@ Because a hard-blocked source has **no in-repo fetch fallback** (that's why it's
 
 Axiom (`releases-cloudflare-logs`), JSON in `body`:
 
-- `firecrawl-webhook` — `enqueued` (carries `diffTextLen`, `deltaLen`, `path: "delta"|"rescrape"`), `gate-skip`, `skip-unknown-source`, `spawn-failed`.
+- `firecrawl-webhook` — `enqueued` (carries `diffTextLen`, `deltaLen`, `path: "delta"|"rescrape"`), `gate-skip`, `skip-unknown-source`, `spawn-duplicate` (info — duplicate instance id, work already durable), `spawn-failed` (error — genuine `create()` failure; the response is `503` and the KV gate is left clean so Firecrawl redelivers).
 - `firecrawl-ingest-workflow` — `ingested` (`found`, `inserted`), `input-windowed` (`droppedChars`), `credits-exhausted`/`auth-failed`/`ingest-failed`.
 - `firecrawl-staleness` — `scan-complete` (`scanned`, `stale`).
 

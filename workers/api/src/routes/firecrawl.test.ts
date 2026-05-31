@@ -421,6 +421,98 @@ describe("POST /v1/integrations/firecrawl/webhook", () => {
     expect(res.status).toBe(200);
     expect(spawns).toHaveLength(0);
   });
+
+  // ── Spawn-failure handling (#1287) ───────────────────────────────────────
+  // The KV idempotency key must be written ONLY after a durable spawn, and the
+  // catch must distinguish a benign duplicate-instance error (the work is
+  // already durable) from a genuine transient create() failure (must stay
+  // retryable). create() exposes no stable error code, so the handler probes
+  // FIRECRAWL_INGEST_WORKFLOW.get(): it resolves iff the instance exists.
+
+  it("13. transient spawn failure leaves the KV key clean and returns 503", async () => {
+    const app = new Hono();
+    app.route("/v1", firecrawlRoutes);
+    const failingFetchApi = (req: Request) =>
+      app.fetch(
+        req,
+        makeEnv({
+          FIRECRAWL_INGEST_WORKFLOW: {
+            // create() throws (CF Workflows API blip) and the instance never
+            // came into existence, so get() also throws.
+            create: async () => {
+              throw new Error("workflows API unavailable");
+            },
+            get: async () => {
+              throw new Error("instance.not_found");
+            },
+          },
+        }) as never,
+      );
+
+    const res = await failingFetchApi(
+      new Request("http://test/v1/integrations/firecrawl/webhook", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Firecrawl-Token": "testhook" },
+        body: makeWebhookBody("src_fc", [
+          { checkId: "c13", url: "https://acme.example.com/changelog", status: "new" },
+        ]),
+      }),
+    );
+
+    // Non-2xx so Firecrawl redelivers (it retries on non-2xx).
+    expect(res.status).toBe(503);
+    // The dedup gate must NOT be poisoned — a retry can re-process the event.
+    expect(cacheStore["firecrawl:webhook:c13:https://acme.example.com/changelog"]).toBeUndefined();
+  });
+
+  it("14. duplicate-instance error is benign: seals the KV key and returns 200", async () => {
+    const app = new Hono();
+    app.route("/v1", firecrawlRoutes);
+    const duplicateFetchApi = (req: Request) =>
+      app.fetch(
+        req,
+        makeEnv({
+          FIRECRAWL_INGEST_WORKFLOW: {
+            // create() throws because the deterministic id already exists, but
+            // get() resolves — the instance is real and the work is durable.
+            create: async () => {
+              throw new Error("instance with id fc-c14 already exists");
+            },
+            get: async () => ({ id: "fc-c14" }),
+          },
+        }) as never,
+      );
+
+    const res = await duplicateFetchApi(
+      new Request("http://test/v1/integrations/firecrawl/webhook", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Firecrawl-Token": "testhook" },
+        body: makeWebhookBody("src_fc", [
+          { checkId: "c14", url: "https://acme.example.com/changelog", status: "new" },
+        ]),
+      }),
+    );
+
+    expect(res.status).toBe(200);
+    // The work exists, so the KV gate is sealed to short-circuit future redeliveries.
+    expect(cacheStore["firecrawl:webhook:c14:https://acme.example.com/changelog"]).toBe("1");
+  });
+
+  it("15. KV key is written only after a successful spawn", async () => {
+    const res = await webhookFetchApi(
+      new Request("http://test/v1/integrations/firecrawl/webhook", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Firecrawl-Token": "testhook" },
+        body: makeWebhookBody("src_fc", [
+          { checkId: "c15", url: "https://acme.example.com/changelog", status: "new" },
+        ]),
+      }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(spawns).toHaveLength(1);
+    expect(cacheStore["firecrawl:webhook:c15:https://acme.example.com/changelog"]).toBe("1");
+  });
 });
 
 describe("POST /v1/sources/:slug/firecrawl/sync", () => {

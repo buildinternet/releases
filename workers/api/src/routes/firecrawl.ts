@@ -181,6 +181,11 @@ firecrawlRoutes.post("/integrations/firecrawl/webhook", async (c) => {
   // Static per-source toggle — compute once, not per page.
   const judgeOn = fc.judgeEnabled !== false;
 
+  // Set when a page's spawn genuinely failed (not a benign duplicate). Such a
+  // page leaves its KV gate clean; we return a non-2xx at the end so Firecrawl
+  // redelivers the batch (it retries on non-2xx with 1m/5m/15m backoff, 3x).
+  let retryable = false;
+
   for (const page of body.data ?? []) {
     const { checkId, url, status, judgment } = page;
     if (!checkId || !url || !status) continue;
@@ -210,8 +215,6 @@ firecrawlRoutes.post("/integrations/firecrawl/webhook", async (c) => {
       continue;
     }
 
-    await env.LATEST_CACHE?.put(key, "1", { expirationTtl: 3600 });
-
     // On a `changed` event Firecrawl hands us the diff; extracting just the
     // added lines keeps steady-state ingests small and skips the (paid) full
     // re-scrape. `new`/baseline events (and any diff that adds nothing) carry
@@ -219,24 +222,54 @@ firecrawlRoutes.post("/integrations/firecrawl/webhook", async (c) => {
     const diffTextLen = page.diff?.text?.length ?? 0;
     const delta = addedContentFromDiff(page.diff?.text ?? "") || undefined;
 
-    if (env.FIRECRAWL_INGEST_WORKFLOW) {
-      try {
-        await env.FIRECRAWL_INGEST_WORKFLOW.create({
-          id: `fc-${checkId}`,
-          params: { sourceId, url, checkId, status, delta },
-        });
-      } catch (err) {
-        // Deterministic id means a duplicate-instance error = it's already
-        // running/ran — non-fatal. Log and continue.
-        logEvent("warn", {
+    // No binding (pre-Phase-2 deploy state) → nothing to enqueue. Skip without
+    // writing the KV gate so a later deploy can still process a redelivery.
+    if (!env.FIRECRAWL_INGEST_WORKFLOW) continue;
+
+    try {
+      await env.FIRECRAWL_INGEST_WORKFLOW.create({
+        id: `fc-${checkId}`,
+        params: { sourceId, url, checkId, status, delta },
+      });
+    } catch (err) {
+      // create() throws BOTH when the deterministic id already exists
+      // (redelivery / double-fire — benign, the work is already durable) AND on
+      // a transient API failure (CF Workflows blip, quota), with no stable error
+      // code to tell them apart. Probe with get(): it resolves iff the instance
+      // exists. Exists → benign duplicate; fall through and seal the KV gate.
+      // Absent → the spawn truly failed; leave the gate clean and flag the batch
+      // retryable so we return a non-2xx and Firecrawl redelivers. Without this
+      // the old code swallowed every error, returned 200, and the KV key written
+      // up front locked out any retry of this (checkId,url) for the TTL (#1287).
+      const instanceExists = await env.FIRECRAWL_INGEST_WORKFLOW.get(`fc-${checkId}`)
+        .then(() => true)
+        .catch(() => false);
+      if (!instanceExists) {
+        retryable = true;
+        logEvent("error", {
           component: "firecrawl-webhook",
           event: "spawn-failed",
           sourceId,
           checkId,
           err: err instanceof Error ? { name: err.name, message: err.message } : String(err),
         });
+        continue;
       }
+      logEvent("info", {
+        component: "firecrawl-webhook",
+        event: "spawn-duplicate",
+        sourceId,
+        checkId,
+      });
     }
+
+    // Idempotency gate: written ONLY after a confirmed durable spawn (fresh or
+    // pre-existing), never on a transient failure (those `continue` above), so a
+    // failed spawn can be retried instead of being silently locked out for the
+    // KV TTL. Cross-request dedup is anchored by the deterministic instance id
+    // `fc-${checkId}` and DB-level RELEASE_URL_UPSERT — this key is a fast-path
+    // optimization, not the source of truth.
+    await env.LATEST_CACHE?.put(key, "1", { expirationTtl: 3600 });
 
     logEvent("info", {
       component: "firecrawl-webhook",
@@ -254,6 +287,12 @@ firecrawlRoutes.post("/integrations/firecrawl/webhook", async (c) => {
       path: delta ? "delta" : "rescrape",
     });
   }
+
+  // A genuine spawn failure on any page → tell Firecrawl the batch wasn't fully
+  // handled so it redelivers. Pages that DID spawn already wrote their KV gate
+  // (and hold a durable instance id), so the redelivery skips them and only the
+  // failed page is reprocessed.
+  if (retryable) return c.json({ ok: false, error: "spawn_failed" }, 503);
 
   return c.json({ ok: true });
 });
