@@ -513,6 +513,34 @@ describe("POST /v1/integrations/firecrawl/webhook", () => {
     expect(spawns).toHaveLength(1);
     expect(cacheStore["firecrawl:webhook:c15:https://acme.example.com/changelog"]).toBe("1");
   });
+
+  it("16. crawl monitor: two pages in one check (shared checkId, distinct urls) spawn distinct workflow instances", async () => {
+    // A crawl check can report several changed pages in one webhook, all sharing
+    // the check id. The workflow instance id must be unique per (checkId, url) —
+    // the same granularity as the KV gate — or the real CF Workflows binding
+    // rejects the second page's create() as a duplicate of the first and the
+    // page is silently dropped (#1302).
+    const url1 = "https://acme.example.com/changelog/2026/05/15/a";
+    const url2 = "https://acme.example.com/changelog/2026/05/16/b";
+    const res = await webhookFetchApi(
+      new Request("http://test/v1/integrations/firecrawl/webhook", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Firecrawl-Token": "testhook" },
+        body: makeWebhookBody("src_fc", [
+          { checkId: "cc", url: url1, status: "new" },
+          { checkId: "cc", url: url2, status: "new" },
+        ]),
+      }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(spawns).toHaveLength(2);
+    // Distinct instance ids → a real binding spawns both, not one.
+    expect(spawns[0].id).not.toBe(spawns[1].id);
+    const urls = spawns.map((s) => s.params.url);
+    expect(urls).toContain(url1);
+    expect(urls).toContain(url2);
+  });
 });
 
 describe("POST /v1/sources/:slug/firecrawl/sync", () => {
@@ -531,6 +559,24 @@ describe("POST /v1/sources/:slug/firecrawl/sync", () => {
     const json = (await res.json()) as { firecrawl: { monitorId: string; enabled: boolean } };
     expect(json.firecrawl.monitorId).toBe("mon_seeded");
     expect(json.firecrawl.enabled).toBe(true);
+  });
+
+  it("onboards a crawl-target monitor when body.target is 'crawl'", async () => {
+    // The unlock: an operator enables a multi-page changelog as a crawl monitor
+    // in one call. body.target is merged into metadata.firecrawl.target, and the
+    // created monitor spec carries a crawl target rather than a scrape target.
+    const res = await fetchApi(
+      new Request("http://test/v1/sources/src_1/firecrawl/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled: true, target: "crawl" }),
+      }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(capturedSpec?.targets[0].type).toBe("crawl");
+    const json = (await res.json()) as { firecrawl: { target?: string } };
+    expect(json.firecrawl.target).toBe("crawl");
   });
 
   it("stamps the webhook URL on the API origin, not the web frontend", async () => {

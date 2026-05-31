@@ -8,23 +8,49 @@ const DEFAULT_SCHEDULE = "every 6 hours";
 const DEFAULT_GOAL =
   "Detect new product releases, version announcements, or changelog entries on this page.";
 
+// Crawl-target defaults. A crawl monitor runs a full crawl of the index URL on
+// every check (more credits than a single-URL scrape), so the page `limit` is
+// deliberately modest — newest entry pages surface first in link-discovery
+// order, so a small window keeps a daily-cadence monitor fresh without crawling
+// deep history (use the backfill workflow for that). Depth mirrors the in-repo
+// crawl adapter's `depth: 2` (index → entry pages).
+const DEFAULT_CRAWL_LIMIT = 25;
+const DEFAULT_CRAWL_DEPTH = 2;
+
 export function deriveMonitorSpec(
   source: Source,
   opts: { webhookUrl: string; webhookSecret: string },
 ): FirecrawlMonitorSpec {
   const fc = getSourceMeta(source).firecrawl ?? { enabled: false };
+  const proxy = fc.proxy ?? "auto";
+  // A `crawl` monitor watches a multi-page changelog: Firecrawl crawls the index
+  // (`source.url`) each check and reports each discovered per-entry page on its
+  // own URL. Scrape targets use `urls: [url]`; crawl targets use a single `url`
+  // plus `crawlOptions`. Both apply `scrapeOptions` (markdown + proxy) per page.
+  const target: FirecrawlMonitorSpec["targets"][number] =
+    fc.target === "crawl"
+      ? {
+          type: "crawl",
+          url: source.url,
+          crawlOptions: {
+            limit: fc.crawl?.limit ?? DEFAULT_CRAWL_LIMIT,
+            maxDiscoveryDepth: fc.crawl?.maxDiscoveryDepth ?? DEFAULT_CRAWL_DEPTH,
+            ...(fc.crawl?.includePaths ? { includePaths: fc.crawl.includePaths } : {}),
+            ...(fc.crawl?.excludePaths ? { excludePaths: fc.crawl.excludePaths } : {}),
+            ...(fc.crawl?.sitemap ? { sitemap: fc.crawl.sitemap } : {}),
+          },
+          scrapeOptions: { formats: ["markdown"], proxy },
+        }
+      : {
+          type: "scrape",
+          urls: [source.url],
+          scrapeOptions: { formats: ["markdown"], proxy },
+        };
   return {
     name: `releases:${source.id}`,
     // Natural-language schedule → schedule.text; Firecrawl normalizes to cron.
     schedule: { text: fc.schedule ?? DEFAULT_SCHEDULE, timezone: "UTC" },
-    // Scrape targets use `urls`; the proxy tier lives in scrapeOptions, not top-level.
-    targets: [
-      {
-        type: "scrape",
-        urls: [source.url],
-        scrapeOptions: { formats: ["markdown"], proxy: fc.proxy ?? "auto" },
-      },
-    ],
+    targets: [target],
     goal: fc.goal ?? DEFAULT_GOAL,
     judgeEnabled: fc.judgeEnabled ?? true,
     webhook: {

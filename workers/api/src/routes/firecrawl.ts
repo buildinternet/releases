@@ -23,6 +23,13 @@ const SyncFirecrawlBodySchema = z.object({
   schedule: z.string().optional(),
   proxy: z.enum(["basic", "enhanced", "auto"]).optional(),
   goal: z.string().optional(),
+  // "crawl" makes this a multi-page changelog monitor (Firecrawl crawls the
+  // index each check and reports each discovered entry page). Set at create
+  // time only — switching an existing monitor's target requires disable +
+  // re-enable (delete + recreate), since the live target is dashboard-authoritative.
+  // Crawl-option tuning (limit/depth/include/exclude paths) lives in
+  // metadata.firecrawl.crawl, set via PATCH /v1/sources/:id/metadata.
+  target: z.enum(["scrape", "crawl"]).optional(),
 });
 
 // Admin/operator endpoint — hidden from the public OpenAPI spec like its sibling
@@ -32,7 +39,7 @@ const postFirecrawlSyncRoute = describeRoute({
   tags: ["Sources"],
   summary: "Sync a source's Firecrawl monitor",
   description:
-    "Admin-only. Reconciles the Firecrawl monitor for the source (typed `src_…` ID): the body (`enabled`, `schedule`, `proxy`, `goal`) is merged into `metadata.firecrawl`, then enabling creates the monitor and disabling deletes it. `schedule`/`proxy`/`goal` are applied when the monitor is first created; on an existing monitor only the webhook (URL + token + sourceId) is reconciled, so frequency/proxy/goal changes made in the Firecrawl dashboard are authoritative and never overwritten. Auth inherited from `publicReadAuthMiddleware`'s non-SAFE_METHODS branch — Bearer token required.",
+    "Admin-only. Reconciles the Firecrawl monitor for the source (typed `src_…` ID): the body (`enabled`, `schedule`, `proxy`, `goal`, `target`) is merged into `metadata.firecrawl`, then enabling creates the monitor and disabling deletes it. `target` is `scrape` (default — watch the single `source.url`) or `crawl` (watch a multi-page changelog: Firecrawl crawls the index each check and reports each discovered entry page on its own URL). `schedule`/`proxy`/`goal`/`target` are applied when the monitor is first created; on an existing monitor only the webhook (URL + token + sourceId) is reconciled, so frequency/proxy/goal changes made in the Firecrawl dashboard are authoritative and never overwritten. Switching an existing monitor's `target` between scrape and crawl requires disabling (deletes the monitor) then re-enabling. Auth inherited from `publicReadAuthMiddleware`'s non-SAFE_METHODS branch — Bearer token required.",
   security: [{ bearerAuth: [] }],
   responses: {
     200: {
@@ -78,6 +85,7 @@ firecrawlRoutes.post(
         ...(body.schedule !== undefined ? { schedule: body.schedule } : {}),
         ...(body.proxy !== undefined ? { proxy: body.proxy } : {}),
         ...(body.goal !== undefined ? { goal: body.goal } : {}),
+        ...(body.target !== undefined ? { target: body.target } : {}),
       },
     };
     const sourceForSync = { ...source, metadata: JSON.stringify(merged) };
@@ -138,6 +146,28 @@ firecrawlRoutes.post(
 // `adminRoutes`, so no middleware runs — the handler self-authenticates via
 // a constant-time token comparison to prevent timing-oracle attacks.
 // ---------------------------------------------------------------------------
+
+/**
+ * Deterministic Workflow instance id for one webhook page. Keyed on (checkId,
+ * url) — the same granularity as the KV idempotency gate — so a crawl check that
+ * reports several pages under one checkId spawns a distinct instance per page. A
+ * bare `fc-${checkId}` would collide across a crawl check's pages, and the real
+ * CF Workflows binding rejects a duplicate id, so all but the first page would be
+ * silently dropped. Still fully deterministic per (checkId, url), so a Firecrawl
+ * webhook redelivery resolves to the same id and short-circuits on the
+ * duplicate-instance path (#1287). The url is folded into a short stable hash to
+ * stay within CF's instance-id charset/length limits.
+ */
+function fcInstanceId(checkId: string, url: string): string {
+  // FNV-1a 32-bit — small, pure, deterministic; collisions across the handful of
+  // pages sharing a checkId are astronomically unlikely.
+  let h = 0x811c9dc5;
+  for (let i = 0; i < url.length; i++) {
+    h ^= url.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return `fc-${checkId}-${(h >>> 0).toString(36)}`;
+}
 
 interface FirecrawlPageEvent {
   type?: string;
@@ -226,9 +256,13 @@ firecrawlRoutes.post("/integrations/firecrawl/webhook", async (c) => {
     // writing the KV gate so a later deploy can still process a redelivery.
     if (!env.FIRECRAWL_INGEST_WORKFLOW) continue;
 
+    // Unique per (checkId, url) so a crawl check's multiple pages each spawn
+    // their own instance instead of colliding on a shared checkId.
+    const instanceId = fcInstanceId(checkId, url);
+
     try {
       await env.FIRECRAWL_INGEST_WORKFLOW.create({
-        id: `fc-${checkId}`,
+        id: instanceId,
         params: { sourceId, url, checkId, status, delta },
       });
     } catch (err) {
@@ -241,7 +275,7 @@ firecrawlRoutes.post("/integrations/firecrawl/webhook", async (c) => {
       // retryable so we return a non-2xx and Firecrawl redelivers. Without this
       // the old code swallowed every error, returned 200, and the KV key written
       // up front locked out any retry of this (checkId,url) for the TTL (#1287).
-      const instanceExists = await env.FIRECRAWL_INGEST_WORKFLOW.get(`fc-${checkId}`)
+      const instanceExists = await env.FIRECRAWL_INGEST_WORKFLOW.get(instanceId)
         .then(() => true)
         .catch(() => false);
       if (!instanceExists) {

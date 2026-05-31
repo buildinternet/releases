@@ -110,6 +110,71 @@ describe("FirecrawlIngestWorkflow", () => {
     expect(logs[0].sessionId).toBe("firecrawl:chk_1");
   });
 
+  it("crawl monitor: threads the per-page url into extraction so the release lands on the discovered page URL", async () => {
+    const db = mkDb();
+    // A crawl-target monitor: Firecrawl reports each discovered entry page on its
+    // own URL, distinct from the index (source.url).
+    db.update(sources)
+      .set({ metadata: JSON.stringify({ firecrawl: { enabled: true, target: "crawl" } }) })
+      .where(eq(sources.id, "src_fc1"))
+      .run();
+
+    const pageUrl = "https://acme.com/changelog/2026/05/15/entry";
+    let seenPageUrl: string | undefined = "UNSET";
+    const env = mkEnv(db, {
+      _extractOverride: async (_md: string, _src: unknown, pUrl?: string) => {
+        seenPageUrl = pUrl;
+        return [{ title: "Entry", content: "Shipped X.", url: pUrl ?? "x", version: "" }];
+      },
+    });
+
+    const { thrown } = await runWorkflow(env, {
+      sourceId: "src_fc1",
+      url: pageUrl,
+      checkId: "chk_crawl",
+      status: "new",
+    });
+
+    expect(thrown).toBeUndefined();
+    // The workflow threads the per-page url through to extraction (gap #2).
+    expect(seenPageUrl).toBe(pageUrl);
+
+    // The release is attributed to the discovered page's bare URL.
+    const rows = db.select().from(releases).where(eq(releases.sourceId, "src_fc1")).all();
+    expect(rows).toHaveLength(1);
+    expect(rows[0].url).toBe(pageUrl);
+  });
+
+  it("scrape monitor: does NOT thread a pageUrl (keeps source.url anchor attribution)", async () => {
+    const db = mkDb();
+    // Default source has firecrawl.enabled with no target → scrape monitor.
+    let seenPageUrl: string | undefined = "UNSET";
+    const env = mkEnv(db, {
+      _extractOverride: async (_md: string, _src: unknown, pUrl?: string) => {
+        seenPageUrl = pUrl;
+        return [
+          {
+            title: "v1.0.0",
+            content: "Initial release.",
+            url: "https://acme.com/changelog#v1-0-0",
+            version: "v1.0.0",
+          },
+        ];
+      },
+    });
+
+    const { thrown } = await runWorkflow(env, {
+      sourceId: "src_fc1",
+      url: "https://acme.com/changelog",
+      checkId: "chk_scrape",
+      status: "new",
+    });
+
+    expect(thrown).toBeUndefined();
+    // A scrape monitor must not force bare attribution — pageUrl stays undefined.
+    expect(seenPageUrl).toBeUndefined();
+  });
+
   it("no_change: duplicate URL → fetch_log status=no_change with 0 inserted", async () => {
     const db = mkDb();
 

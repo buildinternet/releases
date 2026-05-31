@@ -103,8 +103,9 @@ export type FirecrawlIngestEnv = PollAndFetchWorkflowEnv & {
   FIRECRAWL_API_KEY?: { get(): Promise<string> };
   /** TEST-ONLY: inject a pre-built FirecrawlClient instead of constructing one. */
   _firecrawlClientOverride?: FirecrawlClient;
-  /** TEST-ONLY: inject an extraction function instead of calling the LLM. */
-  _extractOverride?: (markdown: string, source: Source) => Promise<RawRelease[]>;
+  /** TEST-ONLY: inject an extraction function instead of calling the LLM.
+   *  `pageUrl` is the per-page attribution URL for crawl monitors (else undefined). */
+  _extractOverride?: (markdown: string, source: Source, pageUrl?: string) => Promise<RawRelease[]>;
 };
 
 export class FirecrawlIngestWorkflow extends WorkflowEntrypoint<
@@ -129,6 +130,15 @@ export class FirecrawlIngestWorkflow extends WorkflowEntrypoint<
       }
       return row;
     });
+
+    // Crawl monitors report each discovered entry page on its OWN URL (distinct
+    // from the index source.url), so attribute extracted releases to that bare
+    // per-page URL — matching the in-repo crawl adapter's scheme so re-ingest
+    // dedups instead of duplicating. Scrape monitors watch the single
+    // source.url, so attributeUrl stays undefined and extraction keeps its
+    // `${source.url}#${slug}` anchors (changing those would break existing
+    // scrape-monitor dedup). See gap #2 of issue #1302.
+    const attributeUrl = getSourceMeta(source).firecrawl?.target === "crawl" ? url : undefined;
 
     // Everything past load-source depends on Firecrawl + Anthropic being
     // reachable. The happy-path `bookkeep` step is what records the run
@@ -164,7 +174,7 @@ export class FirecrawlIngestWorkflow extends WorkflowEntrypoint<
       // ── Step 3: extract ─────────────────────────────────────────────────────
       const rawReleases = await step.do("extract", RETRY_FETCH, async () => {
         if (env._extractOverride) {
-          return env._extractOverride(markdown, source);
+          return env._extractOverride(markdown, source, attributeUrl);
         }
         const apiKey = await getAnthropicKey(env);
         if (!apiKey) throw new NonRetryableError("ANTHROPIC_API_KEY is not configured");
@@ -172,12 +182,17 @@ export class FirecrawlIngestWorkflow extends WorkflowEntrypoint<
           apiKey,
           ...(await resolveGatewayOpts(env)),
         });
-        const result = await extractFirecrawlMarkdown(markdown, source, {
-          anthropicClient,
-          agentModel: FIRECRAWL_EXTRACT_MODEL,
-          logger: workerLogger,
-          logUsageFn: (entry) => logUsage(db, { ...entry, sourceId }, "firecrawl-ingest"),
-        });
+        const result = await extractFirecrawlMarkdown(
+          markdown,
+          source,
+          {
+            anthropicClient,
+            agentModel: FIRECRAWL_EXTRACT_MODEL,
+            logger: workerLogger,
+            logUsageFn: (entry) => logUsage(db, { ...entry, sourceId }, "firecrawl-ingest"),
+          },
+          { pageUrl: attributeUrl },
+        );
         // No silent caps: when the input exceeded the recent-window budget (the
         // one-time baseline scrape, or a rare oversized diff), record how much
         // we trimmed so an operator can backfill if older entries are wanted.

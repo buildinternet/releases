@@ -58,6 +58,67 @@ it("honors explicit schedule/proxy/goal overrides", () => {
   expect(spec.judgeEnabled).toBe(false);
 });
 
+it("emits a crawl target when firecrawl.target is 'crawl'", () => {
+  // A multi-page changelog (an index linking to per-entry pages) is monitored
+  // with a `crawl` target: Firecrawl runs a full crawl of source.url each check
+  // and reports each discovered page's own URL. The crawl target carries
+  // crawlOptions (limit/depth) plus scrapeOptions (markdown + proxy) applied per
+  // discovered page.
+  const src = {
+    ...baseSource,
+    url: "https://docs.replit.com/updates",
+    metadata: JSON.stringify({ firecrawl: { enabled: true, target: "crawl" } }),
+  } as typeof baseSource;
+  const spec = deriveMonitorSpec(src, { webhookUrl: "u", webhookSecret: "s" });
+  expect(spec.targets).toHaveLength(1);
+  const target = spec.targets[0];
+  expect(target.type).toBe("crawl");
+  // Crawl targets carry a single `url`, not a `urls` array.
+  expect((target as { url?: string }).url).toBe("https://docs.replit.com/updates");
+  expect((target as { urls?: string[] }).urls).toBeUndefined();
+  // Per-page scrape still asks for markdown + the configured proxy.
+  expect(target.scrapeOptions).toEqual({ formats: ["markdown"], proxy: "auto" });
+  // Sensible crawl defaults so a monitor discovers recent entry pages.
+  const crawlOptions = (target as { crawlOptions?: Record<string, unknown> }).crawlOptions;
+  expect(crawlOptions?.limit).toBeGreaterThan(0);
+  expect(crawlOptions?.maxDiscoveryDepth).toBeGreaterThan(0);
+});
+
+it("honors explicit crawl option overrides (limit/depth/include/exclude paths)", () => {
+  const src = {
+    ...baseSource,
+    url: "https://docs.replit.com/updates",
+    metadata: JSON.stringify({
+      firecrawl: {
+        enabled: true,
+        target: "crawl",
+        crawl: {
+          limit: 50,
+          maxDiscoveryDepth: 3,
+          includePaths: ["^/updates/"],
+          excludePaths: ["^/updates/tags/"],
+          sitemap: "include",
+        },
+      },
+    }),
+  } as typeof baseSource;
+  const spec = deriveMonitorSpec(src, { webhookUrl: "u", webhookSecret: "s" });
+  const crawlOptions = (spec.targets[0] as { crawlOptions?: Record<string, unknown> }).crawlOptions;
+  expect(crawlOptions).toMatchObject({
+    limit: 50,
+    maxDiscoveryDepth: 3,
+    includePaths: ["^/updates/"],
+    excludePaths: ["^/updates/tags/"],
+    sitemap: "include",
+  });
+});
+
+it("defaults to a scrape target when firecrawl.target is unset or 'scrape'", () => {
+  const spec = deriveMonitorSpec(baseSource, { webhookUrl: "u", webhookSecret: "s" });
+  expect(spec.targets[0].type).toBe("scrape");
+  expect((spec.targets[0] as { urls?: string[] }).urls).toEqual([baseSource.url]);
+});
+
 it("is deterministic — same input yields identical spec", () => {
   const a = deriveMonitorSpec(baseSource, { webhookUrl: "u", webhookSecret: "s" });
   const b = deriveMonitorSpec(baseSource, { webhookUrl: "u", webhookSecret: "s" });
