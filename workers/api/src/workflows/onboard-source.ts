@@ -15,6 +15,7 @@ import { eq } from "drizzle-orm";
 import { sources } from "@buildinternet/releases-core/schema";
 import type { Source } from "@buildinternet/releases-core/schema";
 import { SOURCE_DELETED_SENTINEL, recordWorkflowFailure } from "./_shared.js";
+import { buildFetchOneEnv } from "./_fetch-env.js";
 import { regeneratePlaybook } from "../playbook-regen.js";
 import { embedSourceSideEffect } from "../routes/sources.js";
 import { fetchOne, embedReleasesForSource, type FetchOneEnv } from "../cron/poll-fetch.js";
@@ -23,7 +24,6 @@ import type { AnthropicEnv } from "../lib/anthropic.js";
 import { invalidateLatestCache, type InvalidationEnv } from "../lib/latest-cache.js";
 import { logEvent } from "@releases/lib/log-event";
 import { dbErrorLogFields } from "@releases/lib/db-errors";
-import { getSecret } from "@releases/lib/secrets";
 
 export type OnboardSourceWorkflowEnv = InvalidationEnv &
   AnthropicEnv & {
@@ -81,37 +81,8 @@ const RETRY_FETCH = {
   timeout: "5 minutes",
 } satisfies WorkflowStepConfig;
 
-export async function resolveFetchEnv(env: OnboardSourceWorkflowEnv): Promise<FetchOneEnv> {
-  const githubToken = (await getSecret(env.GITHUB_TOKEN).catch(() => null)) ?? undefined;
-  return {
-    GITHUB_TOKEN: githubToken,
-    RELEASES_INDEX: env.RELEASES_INDEX,
-    CHANGELOG_CHUNKS_INDEX: env.CHANGELOG_CHUNKS_INDEX,
-    EMBEDDING_PROVIDER: env.EMBEDDING_PROVIDER,
-    VOYAGE_API_KEY: env.VOYAGE_API_KEY,
-    OPENAI_API_KEY: env.OPENAI_API_KEY,
-    RELEASE_HUB: env.RELEASE_HUB,
-    WEBHOOK_DELIVERY_QUEUE: env.WEBHOOK_DELIVERY_QUEUE,
-    DB: env.DB,
-    DISCOVERY_WORKER: env.DISCOVERY_WORKER,
-    MEDIA_R2_UPLOAD_ENABLED: env.MEDIA_R2_UPLOAD_ENABLED,
-    MEDIA: env.MEDIA,
-    FLAGS: env.FLAGS,
-    // See PollAndFetchWorkflowEnv.resolveFetchEnv: forward the Anthropic key +
-    // gateway opts, feed-enrich tuning, signed-fetch bot auth, and render creds so
-    // the onboarding backfill's fetchOne can run enrichment / the marketing
-    // classifier instead of silently no-opping on a stripped env.
-    ANTHROPIC_API_KEY: env.ANTHROPIC_API_KEY,
-    ANTHROPIC_BASE_URL: env.ANTHROPIC_BASE_URL,
-    AI_GATEWAY_TOKEN: env.AI_GATEWAY_TOKEN,
-    FEED_ENRICH_ENABLED: env.FEED_ENRICH_ENABLED,
-    FEED_ENRICH_MAX_PER_FIRE: env.FEED_ENRICH_MAX_PER_FIRE,
-    FEED_THIN_CHARS: env.FEED_THIN_CHARS,
-    WEB_BOT_AUTH_ENABLED: env.WEB_BOT_AUTH_ENABLED,
-    WEB_BOT_AUTH_PRIVATE_KEY: env.WEB_BOT_AUTH_PRIVATE_KEY,
-    CLOUDFLARE_ACCOUNT_ID: env.CLOUDFLARE_ACCOUNT_ID,
-    CLOUDFLARE_API_TOKEN: env.CLOUDFLARE_API_TOKEN,
-  };
+export function resolveFetchEnv(env: OnboardSourceWorkflowEnv): Promise<FetchOneEnv> {
+  return buildFetchOneEnv(env);
 }
 
 export class OnboardSourceWorkflow extends WorkflowEntrypoint<

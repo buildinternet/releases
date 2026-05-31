@@ -18,9 +18,9 @@ import { buildCompositionMetadataSet } from "@releases/core-internal/composition
 import { summarizeNotOptedOut } from "@releases/core-internal/eligibility";
 import { releaseCoverage } from "@releases/db/schema-coverage.js";
 import { SOURCE_DELETED_SENTINEL, recordWorkflowFailure } from "./_shared.js";
+import { buildFetchOneEnv } from "./_fetch-env.js";
 import { logEvent } from "@releases/lib/log-event";
 import { dbErrorLogFields } from "@releases/lib/db-errors";
-import { getSecret } from "@releases/lib/secrets";
 import { summarizeRelease } from "@releases/ai-internal/release-content";
 import {
   fetchOne,
@@ -156,43 +156,13 @@ export function jitterMsForSource(sourceId: string, windowMs: number): number {
 }
 
 /**
- * Resolve the FetchOneEnv slice — embedding + GitHub + vector bindings — once
- * and cache it across steps. Secrets are fetched lazily inside steps that
- * need them (none of them here land in the workflow's persisted state because
- * the returned object only flows through closures).
+ * Project this workflow's env down to the `FetchOneEnv` slice via the shared
+ * {@link buildFetchOneEnv} (single source of truth for the forwarded bindings).
+ * The result only flows through step closures, so it never lands in the
+ * workflow's persisted state.
  */
-export async function resolveFetchEnv(env: PollAndFetchWorkflowEnv): Promise<FetchOneEnv> {
-  const githubToken = (await getSecret(env.GITHUB_TOKEN).catch(() => null)) ?? undefined;
-  return {
-    GITHUB_TOKEN: githubToken,
-    RELEASES_INDEX: env.RELEASES_INDEX,
-    CHANGELOG_CHUNKS_INDEX: env.CHANGELOG_CHUNKS_INDEX,
-    EMBEDDING_PROVIDER: env.EMBEDDING_PROVIDER,
-    VOYAGE_API_KEY: env.VOYAGE_API_KEY,
-    OPENAI_API_KEY: env.OPENAI_API_KEY,
-    RELEASE_HUB: env.RELEASE_HUB,
-    WEBHOOK_DELIVERY_QUEUE: env.WEBHOOK_DELIVERY_QUEUE,
-    DB: env.DB,
-    DISCOVERY_WORKER: env.DISCOVERY_WORKER,
-    WEB_BOT_AUTH_ENABLED: env.WEB_BOT_AUTH_ENABLED,
-    WEB_BOT_AUTH_PRIVATE_KEY: env.WEB_BOT_AUTH_PRIVATE_KEY,
-    MEDIA_R2_UPLOAD_ENABLED: env.MEDIA_R2_UPLOAD_ENABLED,
-    MEDIA: env.MEDIA,
-    FLAGS: env.FLAGS,
-    // Anthropic key + gateway opts (ingest-time enrichment / marketing classifier
-    // build their client from these) and the feed-enrich tuning + render creds.
-    // Omitting these silently no-ops enrichment on the workflow path — the
-    // FEED_ENRICH_ENABLED var goes unseen so the flag falls back to its `false`
-    // default, and getAnthropicKey returns null so buildEnrichDeps bails.
-    ANTHROPIC_API_KEY: env.ANTHROPIC_API_KEY,
-    ANTHROPIC_BASE_URL: env.ANTHROPIC_BASE_URL,
-    AI_GATEWAY_TOKEN: env.AI_GATEWAY_TOKEN,
-    FEED_ENRICH_ENABLED: env.FEED_ENRICH_ENABLED,
-    FEED_ENRICH_MAX_PER_FIRE: env.FEED_ENRICH_MAX_PER_FIRE,
-    FEED_THIN_CHARS: env.FEED_THIN_CHARS,
-    CLOUDFLARE_ACCOUNT_ID: env.CLOUDFLARE_ACCOUNT_ID,
-    CLOUDFLARE_API_TOKEN: env.CLOUDFLARE_API_TOKEN,
-  };
+export function resolveFetchEnv(env: PollAndFetchWorkflowEnv): Promise<FetchOneEnv> {
+  return buildFetchOneEnv(env);
 }
 
 /**
