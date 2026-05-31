@@ -59,7 +59,7 @@ export function SearchBar({
 
   const placeholder = sourceCount
     ? `Search ${sourceCount.toLocaleString()} sources — "react", "vercel cli", "postgres 16"...`
-    : `Search organizations, products, and releases...`;
+    : `Search products and releases...`;
 
   return (
     <form onSubmit={handleSubmit} className={className}>
@@ -82,7 +82,7 @@ export function SearchBar({
           name="q"
           type="search"
           role="searchbox"
-          aria-label="Search organizations, products, and releases"
+          aria-label="Search products and releases"
           defaultValue={defaultValue}
           onChange={(e) => updateUrl(e.target.value)}
           placeholder={placeholder}

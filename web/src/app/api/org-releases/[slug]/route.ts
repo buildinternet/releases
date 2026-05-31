@@ -9,6 +9,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ slug
   const cursor = req.nextUrl.searchParams.get("cursor") ?? "";
   const sourceType = req.nextUrl.searchParams.get("source_type") ?? "";
   const includePrereleases = req.nextUrl.searchParams.get("include_prereleases") ?? "";
+  const since = req.nextUrl.searchParams.get("since") ?? "";
   const q = req.nextUrl.searchParams.get("q") ?? "";
   const product = req.nextUrl.searchParams.get("product") ?? "";
 
@@ -16,6 +17,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ slug
   if (cursor) qs.set("cursor", cursor);
   if (sourceType) qs.set("source_type", sourceType);
   if (includePrereleases) qs.set("include_prereleases", includePrereleases);
+  if (since) qs.set("since", since);
   if (q) qs.set("q", q);
   if (product) qs.set("product", product);
 

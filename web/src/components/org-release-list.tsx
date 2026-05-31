@@ -9,6 +9,7 @@ import { useInfiniteScroll } from "@/hooks/use-infinite-scroll";
 import { InfiniteScrollTrigger } from "./infinite-scroll-trigger";
 import { buildFeedEntries, entryDayKey, type RollupItem } from "./org-release-entries";
 import { Caret } from "./caret";
+import { ReleaseFilterInput } from "./release-filter-input";
 import { AppStoreIcon } from "./app-store-icon";
 import { appRowInfoFromWire } from "@/lib/app-source";
 import { videoRowInfoFromWire } from "@/lib/video-source";
@@ -47,6 +48,9 @@ export function OrgReleaseList({
 }: OrgReleaseListProps) {
   const [filterGroup, setFilterGroup] = useState<FilterGroup>("all");
   const [includePrereleases, setIncludePrereleases] = useState(false);
+  // Relative time window forwarded as `?since=` (`""` = all time). The org feed
+  // API parses the shorthand and filters `published_at` server-side.
+  const [since, setSince] = useState("");
   // `searchInput` is the live <input> value; `search` is the debounced copy
   // that drives the fetch. Splitting the two avoids firing a request on every
   // keystroke while keeping the input visually responsive.
@@ -95,12 +99,13 @@ export function OrgReleaseList({
       const types = FILTER_GROUPS[filterGroup].types;
       if (types.length > 0) params.set("source_type", types.join(","));
       if (includePrereleases) params.set("include_prereleases", "true");
+      if (since) params.set("since", since);
       if (trimmedSearch) params.set("q", trimmedSearch);
       if (product) params.set("product", product);
       for (const [k, v] of Object.entries(extra)) params.set(k, v);
       return params.toString();
     },
-    [filterGroup, includePrereleases, trimmedSearch, product],
+    [filterGroup, includePrereleases, since, trimmedSearch, product],
   );
 
   // Flip `pristine` once the debounced search query lands so the fetch effect
@@ -193,53 +198,46 @@ export function OrgReleaseList({
     <div>
       {showFilterRow && (
         <div className="mt-3 mb-3 space-y-2">
-          <input
-            type="search"
+          <ReleaseFilterInput
             value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-            placeholder="Filter releases…"
-            aria-label="Filter releases"
-            className="w-full text-[12px] px-2 py-1 rounded-md bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 text-stone-700 dark:text-stone-200 placeholder:text-stone-400 dark:placeholder:text-stone-500 focus:outline-none focus:border-stone-300 dark:focus:border-stone-600"
+            onValueChange={setSearchInput}
+            includePrereleases={includePrereleases}
+            onIncludePrereleasesChange={(checked) => {
+              setPristine(false);
+              setIncludePrereleases(checked);
+            }}
+            since={since}
+            onSinceChange={(value) => {
+              setPristine(false);
+              setSince(value);
+            }}
           />
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-            <div className="flex items-center gap-1 shrink-0">
-              {showSourceTypeTabs &&
-                filterTabs.map((tab) => {
-                  const active = filterGroup === tab.value;
-                  return (
-                    <button
-                      key={tab.value}
-                      type="button"
-                      aria-pressed={active}
-                      onClick={() => {
-                        setPristine(false);
-                        setFilterGroup(tab.value);
-                      }}
-                      className={
-                        "text-[12px] px-2 py-1 rounded-md transition-colors whitespace-nowrap " +
-                        (active
-                          ? "bg-stone-100 dark:bg-stone-800 text-stone-900 dark:text-stone-100 font-medium"
-                          : "text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-200")
-                      }
-                    >
-                      {tab.label}
-                    </button>
-                  );
-                })}
+          {showSourceTypeTabs && (
+            <div className="flex items-center gap-1">
+              {filterTabs.map((tab) => {
+                const active = filterGroup === tab.value;
+                return (
+                  <button
+                    key={tab.value}
+                    type="button"
+                    aria-pressed={active}
+                    onClick={() => {
+                      setPristine(false);
+                      setFilterGroup(tab.value);
+                    }}
+                    className={
+                      "text-[12px] px-2 py-1 rounded-md transition-colors whitespace-nowrap " +
+                      (active
+                        ? "bg-stone-100 dark:bg-stone-800 text-stone-900 dark:text-stone-100 font-medium"
+                        : "text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-200")
+                    }
+                  >
+                    {tab.label}
+                  </button>
+                );
+              })}
             </div>
-            <label className="flex items-center gap-2 text-[12px] text-stone-500 dark:text-stone-400 cursor-pointer select-none ml-auto shrink-0">
-              <input
-                type="checkbox"
-                checked={includePrereleases}
-                onChange={(e) => {
-                  setPristine(false);
-                  setIncludePrereleases(e.target.checked);
-                }}
-                className="h-3.5 w-3.5 accent-stone-700 dark:accent-stone-300"
-              />
-              <span>Show prereleases</span>
-            </label>
-          </div>
+          )}
         </div>
       )}
 

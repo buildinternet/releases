@@ -8,6 +8,7 @@ import type { VideoRowInfo } from "@/lib/video-source";
 import { useDebounced } from "@/hooks/use-debounced";
 import { useInfiniteScroll } from "@/hooks/use-infinite-scroll";
 import { InfiniteScrollTrigger } from "./infinite-scroll-trigger";
+import { ReleaseFilterInput } from "./release-filter-input";
 
 interface SourceReleaseListProps {
   orgSlug: string;
@@ -127,27 +128,16 @@ export function SourceReleaseList({
 
   return (
     <div>
-      <div className="mt-3 mb-3 space-y-2">
-        <input
-          type="search"
+      <div className="mt-3 mb-3">
+        <ReleaseFilterInput
           value={searchInput}
-          onChange={(e) => setSearchInput(e.target.value)}
-          placeholder="Filter releases…"
-          aria-label="Filter releases"
-          className="w-full text-[12px] px-2 py-1 rounded-md bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 text-stone-700 dark:text-stone-200 placeholder:text-stone-400 dark:placeholder:text-stone-500 focus:outline-none focus:border-stone-300 dark:focus:border-stone-600"
+          onValueChange={setSearchInput}
+          includePrereleases={includePrereleases}
+          onIncludePrereleasesChange={(checked) => {
+            setPristine(false);
+            setIncludePrereleases(checked);
+          }}
         />
-        <label className="flex items-center gap-2 text-[12px] text-stone-500 dark:text-stone-400 cursor-pointer select-none">
-          <input
-            type="checkbox"
-            checked={includePrereleases}
-            onChange={(e) => {
-              setPristine(false);
-              setIncludePrereleases(e.target.checked);
-            }}
-            className="h-3.5 w-3.5 accent-stone-700 dark:accent-stone-300"
-          />
-          <span>Show prereleases</span>
-        </label>
       </div>
 
       {fetchError && releases.length > 0 && (
