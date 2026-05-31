@@ -212,6 +212,40 @@ export interface EnrichOutcome {
   marker: EnrichmentMarker;
 }
 
+/**
+ * Number of consecutive all-fail enrichment fires after which the source's
+ * circuit breaker trips and enrichment is skipped on subsequent cron fires.
+ * Stored in `source.metadata.enrichment.consecutiveFailures`; reset to 0 on
+ * any success. Three failures covers transient issues (network blip, model
+ * hiccup) while bounding spend on structurally-broken sources.
+ */
+export const ENRICH_CONSECUTIVE_FAILURE_LIMIT = 3;
+
+/**
+ * Returns true when the source's enrichment circuit breaker has tripped —
+ * i.e. the consecutive-failure counter has reached or exceeded the limit.
+ * Callers should skip enrichment entirely when this returns true.
+ */
+export function isEnrichmentCircuitOpen(meta: SourceMetadata): boolean {
+  const failures = meta.enrichment?.consecutiveFailures ?? 0;
+  return failures >= ENRICH_CONSECUTIVE_FAILURE_LIMIT;
+}
+
+/**
+ * Derives the next `enrichment` metadata block after an attempt.
+ * - On failure: increments `consecutiveFailures` (starts from 0 if absent).
+ * - On success: resets `consecutiveFailures` to 0.
+ */
+export function nextEnrichmentMetadata(
+  current: SourceMetadata["enrichment"],
+  succeeded: boolean,
+): NonNullable<SourceMetadata["enrichment"]> {
+  if (succeeded) {
+    return { consecutiveFailures: 0 };
+  }
+  return { consecutiveFailures: (current?.consecutiveFailures ?? 0) + 1 };
+}
+
 interface EnrichNewThinEnv {
   FEED_ENRICH_ENABLED?: string;
   FEED_ENRICH_MAX_PER_FIRE?: string;
@@ -236,6 +270,9 @@ export async function enrichNewThinItems(
   const out = new Map<number, EnrichOutcome>();
   if (!(await flag(env.FLAGS, env.FEED_ENRICH_ENABLED, FLAGS.feedEnrichEnabled))) return out;
   if (meta.feedContentDepth !== "summary-only") return out;
+  // Circuit breaker: skip sources that have failed N consecutive times to
+  // prevent burning Haiku calls on structurally-broken sources every cron fire.
+  if (isEnrichmentCircuitOpen(meta)) return out;
 
   const thinChars = parsePositiveInt(env.FEED_THIN_CHARS, DEFAULT_FEED_THIN_CHARS);
   const cap = parsePositiveInt(env.FEED_ENRICH_MAX_PER_FIRE, DEFAULT_ENRICH_MAX_PER_FIRE);
