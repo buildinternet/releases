@@ -124,3 +124,20 @@ export const FETCH_LOG_FILTER_BUTTONS: { value: FetchLogStatusFilter; label: str
   { value: "no_change", label: "No change" },
   { value: "dry_run", label: "Dry runs" },
 ];
+
+/** Relative time: "5m ago" / "in 3h" / "—". Shared by the fetch-plan panel and the workflow drawer. */
+export function relativeTime(iso: string | null, now: number = Date.now()): string {
+  if (!iso) return "—";
+  const ts = Date.parse(iso);
+  if (Number.isNaN(ts)) return "—";
+  const diffMs = ts - now;
+  const past = diffMs < 0;
+  const mins = Math.round(Math.abs(diffMs) / 60_000);
+  const label =
+    mins < 60
+      ? `${mins}m`
+      : mins < 1440
+        ? `${Math.round(mins / 60)}h`
+        : `${Math.round(mins / 1440)}d`;
+  return past ? `${label} ago` : `in ${label}`;
+}
