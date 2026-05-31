@@ -36,6 +36,9 @@ const CHALLENGE_MARKDOWN =
 
 mock.module("@releases/adapters/cloudflare", () => ({
   fetchCloudflareMarkdown: async () => CHALLENGE_MARKDOWN,
+  // scrape-fetch statically imports this for the render:false fallback (#1298);
+  // BR returns the challenge page here (non-null), so the fallback never runs.
+  fetchCloudflareMarkdownFast: async () => null,
 }));
 
 mock.module("@releases/adapters/crawl", () => ({

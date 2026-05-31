@@ -18,7 +18,10 @@
 
 import type { Source } from "@buildinternet/releases-core/schema";
 import { CategorizedError, type ErrorCategory } from "@releases/lib/errors";
-import { fetchCloudflareMarkdown } from "@releases/adapters/cloudflare";
+import {
+  fetchCloudflareMarkdown,
+  fetchCloudflareMarkdownFast,
+} from "@releases/adapters/cloudflare";
 import { isCloudflareChallengePage } from "@releases/adapters/cf-challenge";
 import { startCrawl, pollCrawlResults } from "@releases/adapters/crawl";
 import { getSourceMeta } from "@releases/adapters/source-meta";
@@ -618,6 +621,29 @@ async function runScrapePath(
       env.cloudflareAccountId,
       env.cloudflareApiToken,
     );
+  }
+
+  // Headless Browser Rendering returns empty on pages it can't hydrate — huge
+  // SSR docs that time out, or markup the /markdown converter chokes on — even
+  // when the origin serves perfectly good static HTML to a plain GET (e.g.
+  // amplitude/product-updates: BR-empty, but a render:false fetch returns the
+  // full dated changelog). Fall back to a non-headless render:false fetch
+  // before declaring the source unreachable. See #1298.
+  if (!markdown) {
+    const fallback = await fetchCloudflareMarkdownFast(source.url, {
+      accountId: env.cloudflareAccountId,
+      apiToken: env.cloudflareApiToken,
+    });
+    if (fallback) {
+      markdown = fallback;
+      logEvent("info", {
+        component: "scrape-fetch",
+        event: "plain-fetch-fallback",
+        sourceSlug: source.slug,
+        sourceUrl: source.url,
+        mdLen: fallback.length,
+      });
+    }
   }
 
   if (!markdown) {

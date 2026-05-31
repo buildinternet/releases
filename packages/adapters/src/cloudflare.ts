@@ -1,5 +1,5 @@
 import { logger } from "@buildinternet/releases-lib/logger";
-import { startCrawl, pollCrawlResults } from "./crawl.js";
+import { startCrawl, pollCrawlResults, type CrawlAuth } from "./crawl.js";
 import { RELEASES_BOT_UA } from "@releases/adapters/user-agent";
 
 /** Resource types to block when rendering pages via Cloudflare Browser Rendering. */
@@ -55,11 +55,17 @@ export function fetchCloudflareMarkdown(
  * Fetch markdown from a URL without headless browser rendering.
  * Reuses startCrawl/pollCrawlResults from crawl.ts with render: false.
  * Returns the first page's markdown, or null on any failure.
+ *
+ * Pass `auth` in worker contexts — workers have no `process.env`-backed
+ * `config`, so the crawl helpers can't self-resolve the account/token there.
  */
-export async function fetchCloudflareMarkdownFast(url: string): Promise<string | null> {
+export async function fetchCloudflareMarkdownFast(
+  url: string,
+  auth?: CrawlAuth,
+): Promise<string | null> {
   try {
-    const jobId = await startCrawl(url, { render: false, limit: 1 });
-    const pages = await pollCrawlResults(jobId);
+    const jobId = await startCrawl(url, { render: false, limit: 1 }, auth);
+    const pages = await pollCrawlResults(jobId, auth);
     return pages[0]?.markdown ?? null;
   } catch (err) {
     logger.debug(`Fast markdown fetch failed for ${url}: ${err}`);
