@@ -579,6 +579,37 @@ describe("POST /v1/sources/:slug/firecrawl/sync", () => {
     expect(json.firecrawl.target).toBe("crawl");
   });
 
+  it("does NOT switch target on a source that already has a live monitor", async () => {
+    // The live monitor's target is fixed at create + dashboard-authoritative, and
+    // the ingest workflow reads metadata.firecrawl.target at runtime to decide
+    // attribution. Persisting a target that disagrees with the live monitor would
+    // mis-attribute every ingest, so a target change on an existing monitor is
+    // ignored — switching requires disable (clears monitorId) + re-enable.
+    await testDatabase.db.insert(sources).values({
+      id: "src_mon",
+      orgId: "org_1",
+      name: "Has Monitor",
+      slug: "has-monitor",
+      type: "scrape",
+      url: "https://acme.example.com/notes",
+      metadata: JSON.stringify({
+        firecrawl: { enabled: true, monitorId: "mon_live", target: "scrape" },
+      }),
+    });
+
+    const res = await fetchApi(
+      new Request("http://test/v1/sources/src_mon/firecrawl/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled: true, target: "crawl" }),
+      }),
+    );
+
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as { firecrawl: { target?: string } };
+    expect(json.firecrawl.target).toBe("scrape");
+  });
+
   it("stamps the webhook URL on the API origin, not the web frontend", async () => {
     // The test env sets no ADMIN_BASE_URL, so the fallback applies. Locks the
     // host against a regression to WEB_BASE_URL (https://releases.sh), which

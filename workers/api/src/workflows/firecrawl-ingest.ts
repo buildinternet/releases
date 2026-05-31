@@ -119,7 +119,9 @@ export class FirecrawlIngestWorkflow extends WorkflowEntrypoint<
     const db: any = env._drizzleOverride ?? drizzle(env.DB);
 
     // ── Step 1: load-source ─────────────────────────────────────────────────
-    const source = await step.do("load-source", RETRY_POLL, async () => {
+    // Returns the row plus its derived per-page attribution URL so the source
+    // metadata is parsed once here, not re-parsed outside the step.
+    const { source, attributeUrl } = await step.do("load-source", RETRY_POLL, async () => {
       const [row]: Source[] = await db.select().from(sources).where(eq(sources.id, sourceId));
       if (!row) throw new NonRetryableError(`source ${sourceId} not found`);
       const meta = getSourceMeta(row);
@@ -128,17 +130,16 @@ export class FirecrawlIngestWorkflow extends WorkflowEntrypoint<
           `source ${sourceId} does not have firecrawl.enabled — refusing ingest`,
         );
       }
-      return row;
+      // Crawl monitors report each discovered entry page on its OWN URL (distinct
+      // from the index source.url), so attribute extracted releases to that bare
+      // per-page URL — matching the in-repo crawl adapter's scheme so re-ingest
+      // dedups instead of duplicating. Scrape monitors watch the single
+      // source.url, so attributeUrl stays undefined and extraction keeps its
+      // `${source.url}#${slug}` anchors (changing those would break existing
+      // scrape-monitor dedup). See gap #2 of issue #1302.
+      const pageUrl = meta.firecrawl.target === "crawl" ? url : undefined;
+      return { source: row, attributeUrl: pageUrl };
     });
-
-    // Crawl monitors report each discovered entry page on its OWN URL (distinct
-    // from the index source.url), so attribute extracted releases to that bare
-    // per-page URL — matching the in-repo crawl adapter's scheme so re-ingest
-    // dedups instead of duplicating. Scrape monitors watch the single
-    // source.url, so attributeUrl stays undefined and extraction keeps its
-    // `${source.url}#${slug}` anchors (changing those would break existing
-    // scrape-monitor dedup). See gap #2 of issue #1302.
-    const attributeUrl = getSourceMeta(source).firecrawl?.target === "crawl" ? url : undefined;
 
     // Everything past load-source depends on Firecrawl + Anthropic being
     // reachable. The happy-path `bookkeep` step is what records the run

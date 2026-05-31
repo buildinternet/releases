@@ -77,6 +77,9 @@ firecrawlRoutes.post(
     const body = c.req.valid("json");
 
     const meta = getSourceMeta(source);
+    // Whether a live Firecrawl monitor already exists for this source. Also
+    // gates the orphan-compensation path in the persist catch below.
+    const hadMonitor = Boolean(meta.firecrawl?.monitorId);
     const merged = {
       ...meta,
       firecrawl: {
@@ -85,7 +88,16 @@ firecrawlRoutes.post(
         ...(body.schedule !== undefined ? { schedule: body.schedule } : {}),
         ...(body.proxy !== undefined ? { proxy: body.proxy } : {}),
         ...(body.goal !== undefined ? { goal: body.goal } : {}),
-        ...(body.target !== undefined ? { target: body.target } : {}),
+        // `target` drives RUNTIME attribution — the ingest workflow reads
+        // `metadata.firecrawl.target` on every webhook to decide bare per-page
+        // vs. `${source.url}#${slug}` URLs — so it must stay consistent with the
+        // LIVE monitor's actual target. The live target is fixed at create and
+        // dashboard-authoritative thereafter (a PATCH never changes it), so only
+        // accept a target change when no monitor exists yet. Switching an
+        // existing monitor's target requires disable (clears monitorId) +
+        // re-enable, which recreates with the new target. Persisting a target
+        // that disagreed with the live monitor would mis-attribute every ingest.
+        ...(body.target !== undefined && !hadMonitor ? { target: body.target } : {}),
       },
     };
     const sourceForSync = { ...source, metadata: JSON.stringify(merged) };
@@ -105,7 +117,6 @@ firecrawlRoutes.post(
       client = createFirecrawlClient({ apiKey });
     }
 
-    const hadMonitor = Boolean(meta.firecrawl?.monitorId);
     const patch = await syncFirecrawlMonitor(sourceForSync, client, {
       webhookUrl: webhookUrl(env),
       webhookSecret: secret,
