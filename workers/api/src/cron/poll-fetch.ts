@@ -707,7 +707,8 @@ export function shouldDelegateToCrawl(
   if (source.type !== "scrape") return false;
   if (meta.crawlEnabled !== true) return false;
   if (rawReleases.length === 0) return false;
-  if (meta.feedContentDepth === "summary-only") return true;
+  if (meta.feedContentDepth === "summary-only" || meta.feedContentDepth === "anchor-fragment")
+    return true;
   // Treat an all-empty-content batch the same as an explicit summary-only
   // tag: the feed didn't actually deliver bodies, regardless of what it
   // self-described as. Whitespace-only counts as empty.
@@ -1449,16 +1450,17 @@ export async function fetchOne(
         if (!meta.feedContentDepth) {
           const thinChars = parsePositiveInt(env.FEED_THIN_CHARS, DEFAULT_FEED_THIN_CHARS);
           const depth = assessFeedDepth(rawReleases, { thinChars });
-          if (depth === "summary-only") {
-            metaUpdates.feedContentDepth = "summary-only";
+          if (depth === "summary-only" || depth === "anchor-fragment") {
+            metaUpdates.feedContentDepth = depth;
             // Reflect the just-detected value in the in-memory meta so this same
             // run's buildEnrichMap enriches the batch (no one-fire delay). Only
             // set it here; clearing stays future work per the comment above.
-            meta.feedContentDepth = "summary-only";
+            meta.feedContentDepth = depth;
             logEvent("info", {
               component: "cron-poll-fetch",
               event: "feed-depth-detected",
               sourceSlug: source.slug,
+              depth,
               feedItemCount: rawReleases.length,
             });
           }
