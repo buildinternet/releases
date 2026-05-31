@@ -126,7 +126,7 @@ Runs via `runSourceBackfill` in a single request. Supplied `markdown` (any scrap
 
 ### Path B — deep Firecrawl (durable, gated by `BACKFILL_WORKFLOW_ENABLED`)
 
-When the source has `metadata.firecrawl.enabled`, no `markdown` is supplied, and the `BACKFILL_WORKFLOW_ENABLED` flag is on with the `BACKFILL_WORKFLOW` binding present, the route hands off to `BackfillSourceWorkflow` and returns `202 { instanceId, statusUrl, async: true }` immediately. Poll `GET /v1/workflows/backfill-source/status/:instanceId` for the report; dry-run counts come from the instance's `status().output`. Flag default **off** — behavior is 100% the existing synchronous path until deliberately enabled. See issue #1281.
+When the source has `metadata.firecrawl.enabled`, no `markdown` is supplied, and the `BACKFILL_WORKFLOW_ENABLED` flag is on with the `BACKFILL_SOURCE_WORKFLOW` binding present, the route hands off to `BackfillSourceWorkflow` and returns `202 { instanceId, statusUrl, async: true }` immediately. Poll `GET /v1/workflows/backfill-source/status/:instanceId` for the report; dry-run counts come from the instance's `status().output`. Flag default **off** — behavior is 100% the existing synchronous path until deliberately enabled. See issue #1281.
 
 **Durable design.** Each `BackfillSourceWorkflow` instance runs as resumable Cloudflare Workflow steps:
 

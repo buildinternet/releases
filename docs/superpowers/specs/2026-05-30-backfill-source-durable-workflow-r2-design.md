@@ -7,7 +7,7 @@
 
 ## Root-cause correction (the premise that motivated this)
 
-#1271/#1280 capped the Firecrawl backfill at 8 windows, justified by _"the ~106s `scrapeOnce` is the long pole."_ **That premise is false.** The Firecrawl dashboard shows each scrape completes in **~0.1–0.2s** (1 credit). The real cost is **sequential Haiku extraction**, scaling with the number of entries written out at **~1.8s/entry**:
+`#1271`/`#1280` capped the Firecrawl backfill at 8 windows, justified by _"the ~106s `scrapeOnce` is the long pole."_ **That premise is false.** The Firecrawl dashboard shows each scrape completes in **~0.1–0.2s** (1 credit). The real cost is **sequential Haiku extraction**, scaling with the number of entries written out at **~1.8s/entry**:
 
 | Entries                            | Time | per-entry |
 | ---------------------------------- | ---- | --------- |

@@ -150,7 +150,11 @@ export async function extractChangelogAllWindows(
   deps: FirecrawlExtractDeps,
   opts: { maxWindows?: number } = {},
 ): Promise<ExtractAllWindowsResult> {
-  const maxWindows = Math.max(1, opts.maxWindows ?? DEFAULT_MAX_WINDOWS);
+  // Single source of truth for the window walk: `planWindowOffsets` (LLM-free)
+  // owns offset chaining + cap/dropped-tail accounting. We re-slice each planned
+  // offset and extract it, so this path stays in lockstep with the workflow's
+  // per-step path, which dispatches the very same offsets.
+  const plan = planWindowOffsets(markdown, opts);
 
   const extractDeps: ExtractDeps = {
     anthropicClient: deps.anthropicClient,
@@ -168,13 +172,10 @@ export async function extractChangelogAllWindows(
   };
 
   const releases: RawRelease[] = [];
-  let offset: number | null = 0;
-  let windows = 0;
   let totalInput = 0;
   let totalOutput = 0;
-  let lastProcessedEnd = 0;
 
-  while (offset !== null && windows < maxWindows) {
+  for (const offset of plan.offsets) {
     const sliced = sliceChangelog(markdown, {
       tokens: DEFAULT_CHANGELOG_SLICE_TOKENS,
       offset,
@@ -193,13 +194,14 @@ export async function extractChangelogAllWindows(
     releases.push(...(mapEntries(result.entries, { sourceUrl: source.url }) as RawRelease[]));
     totalInput += result.totalInput;
     totalOutput += result.totalOutput;
-    windows++;
-    lastProcessedEnd = sliced.offset + sliced.content.length;
-    offset = sliced.nextOffset;
   }
 
-  const cappedAtWindow = offset !== null;
-  const droppedChars = cappedAtWindow ? Math.max(0, markdown.length - lastProcessedEnd) : 0;
-
-  return { releases, windows, cappedAtWindow, droppedChars, totalInput, totalOutput };
+  return {
+    releases,
+    windows: plan.offsets.length,
+    cappedAtWindow: plan.cappedAtWindow,
+    droppedChars: plan.droppedChars,
+    totalInput,
+    totalOutput,
+  };
 }

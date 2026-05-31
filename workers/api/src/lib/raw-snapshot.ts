@@ -1,6 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import { sha256Hex } from "@releases/core-internal/hash";
 import { sourceRawSnapshots } from "@buildinternet/releases-core/schema";
+import type { createDb } from "../db.js";
 
 interface R2Like {
   put(key: string, value: ArrayBuffer | string): Promise<unknown>;
@@ -13,7 +14,7 @@ export type RawFormat = "markdown" | "html";
 const EXT: Record<RawFormat, string> = { markdown: "md", html: "html" };
 
 export async function saveRawSnapshot(
-  deps: { R2: R2Like; db: any },
+  deps: { R2: R2Like; db: ReturnType<typeof createDb> },
   input: { sourceId: string; body: string; format: RawFormat },
 ): Promise<{ r2Key: string; contentHash: string; bytes: number }> {
   const hash = sha256Hex(input.body);
@@ -37,13 +38,21 @@ export async function saveRawSnapshot(
     );
 
   if (existing.length === 0) {
-    await deps.db.insert(sourceRawSnapshots).values({
-      sourceId: input.sourceId,
-      r2Key,
-      contentHash: hash,
-      format: input.format,
-      bytes,
-    });
+    // `onConflictDoNothing` closes the select→insert race: a concurrent save of
+    // the same (sourceId, contentHash) — e.g. two backfills on one source — hits
+    // the `uq_raw_snapshots_source_hash` unique index and is silently absorbed
+    // instead of throwing. The return values are derived locally, so a conflict
+    // needs no re-query.
+    await deps.db
+      .insert(sourceRawSnapshots)
+      .values({
+        sourceId: input.sourceId,
+        r2Key,
+        contentHash: hash,
+        format: input.format,
+        bytes,
+      })
+      .onConflictDoNothing();
   }
 
   return { r2Key, contentHash: hash, bytes };
