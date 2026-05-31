@@ -69,6 +69,8 @@ import {
   mergeEnrichmentMarker,
   hasStoredMedia,
   selectEnrichCandidates,
+  BATCH_ENRICH_DEFAULT_LIMIT,
+  BATCH_ENRICH_MAX_LIMIT,
 } from "../lib/enrich-apply.js";
 import type { Source } from "@buildinternet/releases-core/schema";
 import type { RawRelease } from "@releases/adapters/types.js";
@@ -1858,8 +1860,10 @@ workflowsRoutes.post("/workflows/batch-enrich", async (c) => {
     );
   }
 
-  const rawLimit = Number(body.limit ?? 100);
-  const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(Math.floor(rawLimit), 1), 500) : 100;
+  const rawLimit = Number(body.limit ?? BATCH_ENRICH_DEFAULT_LIMIT);
+  const limit = Number.isFinite(rawLimit)
+    ? Math.min(Math.max(Math.floor(rawLimit), 1), BATCH_ENRICH_MAX_LIMIT)
+    : BATCH_ENRICH_DEFAULT_LIMIT;
   const dryRun = body.dryRun !== false; // default to a dry run for safety
   const maxCostUsd =
     typeof body.maxCostUsd === "number" && body.maxCostUsd > 0 ? body.maxCostUsd : undefined;
@@ -1902,9 +1906,19 @@ workflowsRoutes.get("/workflows/batch-enrich/status/:instanceId", async (c) => {
   try {
     const instance = await c.env.BATCH_ENRICH_WORKFLOW.get(instanceId);
     const status = await instance.status();
-    return c.json({ instanceId, status });
-  } catch {
-    return c.json({ error: "not_found", message: `No workflow instance ${instanceId}` }, 404);
+    return c.json({ instanceId, ...status });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (WORKFLOW_NOT_FOUND_RE.test(message)) {
+      return c.json({ error: "instance_not_found", message }, 404);
+    }
+    logEvent("error", {
+      component: "workflows-batch-enrich-status",
+      event: "lookup-failed",
+      instanceId,
+      err: err instanceof Error ? err : String(err),
+    });
+    return c.json({ error: "internal_error", message }, 500);
   }
 });
 

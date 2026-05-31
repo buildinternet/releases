@@ -30,6 +30,15 @@ type BatchCreateParams = Anthropic.Messages.Batches.BatchCreateParams;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- drizzle generic param isn't exposed uniformly across runtimes
 type AnyDb = DrizzleD1Database<any>;
 
+/**
+ * Candidate-limit bounds for the batch-enrich backfill, shared by the dispatch
+ * route (`POST /v1/workflows/batch-enrich`) and the workflow's own defensive
+ * re-clamp so the `[1, MAX]` window is a single source of truth. MAX also bounds
+ * the per-item fetch step count well under Cloudflare's per-instance cap.
+ */
+export const BATCH_ENRICH_DEFAULT_LIMIT = 100;
+export const BATCH_ENRICH_MAX_LIMIT = 500;
+
 /** A page fetched in the workflow's fetch phase, ready for batch extraction. */
 export interface EnrichBatchItem {
   /** The release row id — used as the batch `custom_id` so results map back. */

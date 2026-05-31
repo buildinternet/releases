@@ -30,7 +30,7 @@ import type { WorkflowEvent, WorkflowStep, WorkflowStepConfig } from "cloudflare
 import { NonRetryableError } from "cloudflare:workflows";
 import type Anthropic from "@anthropic-ai/sdk";
 import { drizzle } from "drizzle-orm/d1";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { sources } from "@buildinternet/releases-core/schema";
 import type { Source } from "@buildinternet/releases-core/schema";
 import { getSourceMeta } from "@releases/adapters/source-meta.js";
@@ -57,11 +57,13 @@ import {
 import type { FlagshipBinding } from "@releases/lib/flags";
 import { getAnthropicKey, resolveGatewayOpts } from "../lib/anthropic.js";
 import { logUsage } from "../lib/usage-log.js";
-import { parsePositiveInt } from "../cron/feed-enrich.js";
+import { parsePositiveInt, nextEnrichmentMetadata } from "../cron/feed-enrich.js";
 import {
   selectEnrichCandidates,
   buildEnrichBatchRequests,
   applyExtractedContent,
+  BATCH_ENRICH_DEFAULT_LIMIT,
+  BATCH_ENRICH_MAX_LIMIT,
   type EnrichCandidateRow,
 } from "../lib/enrich-apply.js";
 import { saveRawSnapshot, loadRawSnapshot } from "../lib/raw-snapshot.js";
@@ -115,9 +117,6 @@ interface FetchStepResult {
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const DEFAULT_LIMIT = 100;
-/** Bounds the per-item fetch step count well under Cloudflare's per-instance cap. */
-const MAX_LIMIT = 500;
 const DEFAULT_MAX_COST_USD = 10;
 /** Chunk under generateContentForReleases' MAX_AUTOGEN_ROWS_PER_FIRE (20). */
 const REGEN_CHUNK = 20;
@@ -170,8 +169,8 @@ export class BatchEnrichWorkflow extends WorkflowEntrypoint<
     const db: any = env._drizzleOverride ?? drizzle(env.DB);
 
     const thinChars = parsePositiveInt(env.FEED_THIN_CHARS, DEFAULT_FEED_THIN_CHARS);
-    const rawLimit = event.payload.limit ?? DEFAULT_LIMIT;
-    const limit = Math.min(Math.max(Math.floor(rawLimit), 1), MAX_LIMIT);
+    const rawLimit = event.payload.limit ?? BATCH_ENRICH_DEFAULT_LIMIT;
+    const limit = Math.min(Math.max(Math.floor(rawLimit), 1), BATCH_ENRICH_MAX_LIMIT);
 
     // ── Step 1: collect-candidates ─────────────────────────────────────────
     const { candidates, estCostUsd } = await step.do(
@@ -284,13 +283,15 @@ export class BatchEnrichWorkflow extends WorkflowEntrypoint<
       async (): Promise<{ anthropicBatchId: string } | null> => {
         if (okItems.length === 0) return null;
 
-        const items = [];
-        for (const item of okItems) {
-          // oxlint-disable-next-line no-await-in-loop -- bounded by candidate limit
-          const markdown = await loadRawSnapshot({ R2: env.RAW_SNAPSHOTS! }, item.r2Key!);
-          if (!markdown) continue; // transient R2 miss — drop this item, others proceed
-          items.push({ releaseId: item.releaseId, title: item.title, markdown });
-        }
+        // Independent, content-addressed R2 reads — fetch them concurrently.
+        const loaded = await Promise.all(
+          okItems.map(async (item) => {
+            const markdown = await loadRawSnapshot({ R2: env.RAW_SNAPSHOTS! }, item.r2Key!);
+            // null = transient R2 miss → drop this item, others proceed.
+            return markdown ? { releaseId: item.releaseId, title: item.title, markdown } : null;
+          }),
+        );
+        const items = loaded.filter((x): x is NonNullable<typeof x> => x !== null);
         if (items.length === 0) return null;
 
         const client = await resolveAnthropicClient(env);
@@ -328,14 +329,15 @@ export class BatchEnrichWorkflow extends WorkflowEntrypoint<
           string,
           { input: number; output: number; cacheRead: number; cacheCreate: number; count: number }
         >();
-        let finalCounts = { succeeded: 0, errored: 0, expired: 0, canceled: 0 };
+        // Latest request_counts from the batch; mutated in place each poll tick
+        // and reused for the finalize record (holds the final counts on break).
+        const counts = { succeeded: 0, errored: 0, expired: 0, canceled: 0 };
 
         if (submitResult) {
           const { anthropicBatchId } = submitResult;
           const client = await resolveAnthropicClient(env);
 
           let ended = false;
-          let lastCounts: typeof finalCounts | null = null;
           for (let i = 0; i < MAX_POLL_ITERATIONS; i++) {
             // oxlint-disable-next-line no-await-in-loop -- intentional poll loop inside a workflow step
             await step.sleep("between-polls", "60 seconds");
@@ -343,20 +345,17 @@ export class BatchEnrichWorkflow extends WorkflowEntrypoint<
             const cur = await client.messages.batches.retrieve(anthropicBatchId);
             const rc = cur.request_counts;
             const changed =
-              !lastCounts ||
-              rc.succeeded !== lastCounts.succeeded ||
-              rc.errored !== lastCounts.errored ||
-              rc.expired !== lastCounts.expired ||
-              rc.canceled !== lastCounts.canceled;
+              rc.succeeded !== counts.succeeded ||
+              rc.errored !== counts.errored ||
+              rc.expired !== counts.expired ||
+              rc.canceled !== counts.canceled;
             if (changed) {
-              lastCounts = {
-                succeeded: rc.succeeded,
-                errored: rc.errored,
-                expired: rc.expired,
-                canceled: rc.canceled,
-              };
+              counts.succeeded = rc.succeeded;
+              counts.errored = rc.errored;
+              counts.expired = rc.expired;
+              counts.canceled = rc.canceled;
               // oxlint-disable-next-line no-await-in-loop -- delta-guarded progress write
-              await recordBatchProgress(db, anthropicBatchId, lastCounts).catch((err) => {
+              await recordBatchProgress(db, anthropicBatchId, counts).catch((err) => {
                 logEvent("warn", {
                   component: "batch-enrich",
                   event: "progress-update-failed",
@@ -368,12 +367,6 @@ export class BatchEnrichWorkflow extends WorkflowEntrypoint<
             }
             if (cur.processing_status === BATCH_ENDED_STATUS) {
               ended = true;
-              finalCounts = {
-                succeeded: rc.succeeded,
-                errored: rc.errored,
-                expired: rc.expired,
-                canceled: rc.canceled,
-              };
               break;
             }
           }
@@ -438,10 +431,16 @@ export class BatchEnrichWorkflow extends WorkflowEntrypoint<
 
         // Regenerate summary/title per source, and reset the enrichment circuit
         // breaker for sources that actually enriched (forward cron resumes).
-        const enrichedBySource = groupBySource(candidates, applied.enrichedIds);
+        const enrichedBySource = groupBySource(sourceOf, applied.enrichedIds);
+        const srcRows: Source[] = enrichedBySource.size
+          ? await db
+              .select()
+              .from(sources)
+              .where(inArray(sources.id, [...enrichedBySource.keys()]))
+          : [];
+        const srcById = new Map(srcRows.map((s) => [s.id, s]));
         for (const [sourceId, ids] of enrichedBySource) {
-          // oxlint-disable-next-line no-await-in-loop -- per-source, bounded by sourceIds.length
-          const [src]: Source[] = await db.select().from(sources).where(eq(sources.id, sourceId));
+          const src = srcById.get(sourceId);
           if (!src) continue;
           for (let off = 0; off < ids.length; off += REGEN_CHUNK) {
             // oxlint-disable-next-line no-await-in-loop -- chunked under the autogen row cap
@@ -503,7 +502,7 @@ export class BatchEnrichWorkflow extends WorkflowEntrypoint<
           await recordBatchFinalize(db, submitResult.anthropicBatchId, {
             status: applied.enriched > 0 ? BATCH_ENDED_STATUS : "failed",
             endedAt: new Date().toISOString(),
-            counts: finalCounts,
+            counts,
             actualCostUsd: actualCostUsd > 0 ? actualCostUsd : null,
             errorSummary:
               applied.skipped > 0 ? { skipped: applied.skipped, enriched: applied.enriched } : null,
@@ -553,12 +552,11 @@ async function resolveAnthropicClient(env: BatchEnrichWorkflowEnv): Promise<Anth
   return buildAnthropicClient({ apiKey, ...(await resolveGatewayOpts(env)) });
 }
 
-/** Group enriched release ids by their owning source, preserving candidate order. */
+/** Group enriched release ids by their owning source, preserving id order. */
 function groupBySource(
-  candidates: ReadonlyArray<EnrichCandidateRow>,
+  sourceOf: ReadonlyMap<string, string>,
   enrichedIds: ReadonlyArray<string>,
 ): Map<string, string[]> {
-  const sourceOf = new Map(candidates.map((c) => [c.id, c.sourceId]));
   const out = new Map<string, string[]>();
   for (const id of enrichedIds) {
     const sourceId = sourceOf.get(id);
@@ -572,14 +570,15 @@ function groupBySource(
 
 /**
  * Reset the per-source enrichment circuit breaker (`metadata.enrichment
- * .consecutiveFailures`) to 0 after a successful backfill, merging against the
- * freshly-read row so a concurrent metadata edit isn't clobbered.
+ * .consecutiveFailures`) to 0 after a successful backfill. Reuses
+ * `nextEnrichmentMetadata` (success → 0) so the marker shape stays identical to
+ * the forward path; skips the write when the breaker is already clear.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- drizzle override pattern
 async function resetEnrichmentBreaker(db: any, src: Source): Promise<void> {
   const meta = getSourceMeta(src);
   if ((meta.enrichment?.consecutiveFailures ?? 0) === 0) return;
-  const merged = { ...meta, enrichment: { ...meta.enrichment, consecutiveFailures: 0 } };
+  const merged = { ...meta, enrichment: nextEnrichmentMetadata(meta.enrichment, true) };
   await db
     .update(sources)
     .set({ metadata: JSON.stringify(merged) })
