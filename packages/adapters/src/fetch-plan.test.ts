@@ -3,6 +3,8 @@ import type { Source } from "@buildinternet/releases-core/schema";
 import {
   describeFetchPlan,
   computeFetchState,
+  computeSweepHealth,
+  SWEEP_STARVED_THRESHOLD_HOURS,
   TIER_INTERVALS,
   FIRECRAWL_DEFAULT_SCHEDULE,
 } from "./fetch-plan.js";
@@ -164,5 +166,96 @@ describe("computeFetchState", () => {
     // Invalid lastPolledAt → treated as never-polled (due now + 4h tier).
     expect(state!.nextDueAt).toBe("2026-01-02T04:00:00.000Z");
     expect(state!.backedOff).toBe(false);
+  });
+});
+
+describe("computeSweepHealth", () => {
+  const NOW = new Date("2026-05-31T12:00:00.000Z");
+  const hoursAgo = (h: number) => new Date(NOW.getTime() - h * 3_600_000).toISOString();
+  const planFor = (s: Source) => describeFetchPlan(s);
+  const health = (s: Source) => computeSweepHealth(s, planFor(s), NOW);
+
+  it("flags a queued scrape source not fetched within the threshold as starved", () => {
+    const s = mkSource({
+      type: "scrape",
+      changeDetectedAt: hoursAgo(1), // flag re-stamped recently (flapping validator)
+      lastFetchedAt: hoursAgo(SWEEP_STARVED_THRESHOLD_HOURS + 24),
+    });
+    const h = health(s);
+    expect(h.sweepDriven).toBe(true);
+    expect(h.starved).toBe(true);
+    expect(h.flaggedAt).toBe(hoursAgo(1));
+  });
+
+  it("does not flag a queued source fetched recently", () => {
+    const s = mkSource({
+      type: "scrape",
+      changeDetectedAt: hoursAgo(1),
+      lastFetchedAt: hoursAgo(2),
+    });
+    expect(health(s).starved).toBe(false);
+  });
+
+  it("does not flag a stale source that isn't queued for the sweep", () => {
+    const s = mkSource({
+      type: "scrape",
+      changeDetectedAt: null,
+      lastFetchedAt: hoursAgo(SWEEP_STARVED_THRESHOLD_HOURS + 24),
+    });
+    const h = health(s);
+    expect(h.starved).toBe(false);
+    expect(h.flaggedAt).toBeNull();
+  });
+
+  it("includes agent-type sources", () => {
+    const s = mkSource({
+      type: "agent",
+      changeDetectedAt: hoursAgo(1),
+      lastFetchedAt: hoursAgo(SWEEP_STARVED_THRESHOLD_HOURS + 1),
+    });
+    const h = health(s);
+    expect(h.sweepDriven).toBe(true);
+    expect(h.starved).toBe(true);
+  });
+
+  it("never starves a Firecrawl-owned source (not sweep-driven)", () => {
+    const s = mkSource({
+      type: "scrape",
+      metadata: { firecrawl: { enabled: true, schedule: "every 24 hours" } },
+      changeDetectedAt: hoursAgo(1),
+      lastFetchedAt: hoursAgo(SWEEP_STARVED_THRESHOLD_HOURS + 100),
+    });
+    const h = health(s);
+    expect(h.sweepDriven).toBe(false);
+    expect(h.starved).toBe(false);
+  });
+
+  it("never starves a paused source", () => {
+    const s = mkSource({
+      type: "scrape",
+      fetchPriority: "paused",
+      changeDetectedAt: hoursAgo(1),
+      lastFetchedAt: hoursAgo(SWEEP_STARVED_THRESHOLD_HOURS + 100),
+    });
+    expect(health(s).starved).toBe(false);
+  });
+
+  it("uses createdAt as the clock for a never-fetched source", () => {
+    const freshlyCreated = mkSource({
+      type: "scrape",
+      changeDetectedAt: hoursAgo(1),
+      lastFetchedAt: null,
+      createdAt: hoursAgo(1),
+    });
+    // Just created and flagged → not starved yet.
+    expect(health(freshlyCreated).starved).toBe(false);
+
+    const longStranded = mkSource({
+      type: "scrape",
+      changeDetectedAt: hoursAgo(1),
+      lastFetchedAt: null,
+      createdAt: hoursAgo(SWEEP_STARVED_THRESHOLD_HOURS + 100),
+    });
+    expect(health(longStranded).starved).toBe(true);
   });
 });

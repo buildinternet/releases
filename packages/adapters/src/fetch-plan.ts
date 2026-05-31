@@ -132,6 +132,58 @@ export function describeFetchPlan(source: Source): FetchPlan {
   };
 }
 
+/**
+ * A scrape/agent source flagged for the managed sweep but not fetched within
+ * this many hours is treated as "starved" — surfaced so an operator can check
+ * its config. The sweep runs daily, so 48h means it has sat through ~2 sweeps
+ * without draining.
+ */
+export const SWEEP_STARVED_THRESHOLD_HOURS = 48;
+
+export interface SweepHealth {
+  /** True for scrape/agent-no-feed sources that depend on the managed sweep. */
+  sweepDriven: boolean;
+  /** `changeDetectedAt` — set means the source is queued for the next sweep. */
+  flaggedAt: string | null;
+  /** ISO time of the last successful fetch (null = never fetched). */
+  lastFetchedAt: string | null;
+  /** Hours since the last fetch (or createdAt when never fetched); null if unparseable. */
+  staleHours: number | null;
+  /**
+   * Queued for the sweep (`flaggedAt` set) yet not fetched within
+   * `SWEEP_STARVED_THRESHOLD_HOURS`. A strong hint the sweep isn't draining it —
+   * e.g. a change-validator that flaps every poll (so the flag is perpetually
+   * re-stamped to "now") or a binding session cap — so the source likely needs
+   * a config change (a stabler detector, Firecrawl, or a feed URL).
+   */
+  starved: boolean;
+}
+
+/**
+ * Pure sweep-health resolver for the dev fetch-plan panel. Distinguishes a
+ * source that's merely queued from one that's queued-and-stuck, the latter
+ * being the actionable "needs configuration" signal.
+ */
+export function computeSweepHealth(source: Source, plan: FetchPlan, now: Date): SweepHealth {
+  const sweepDriven = !plan.paused && (plan.strategy === "scrape" || plan.strategy === "agent");
+  const flaggedAt = source.changeDetectedAt ?? null;
+  const lastFetchedAt = source.lastFetchedAt ?? null;
+
+  // Never-fetched sources fall back to createdAt as the clock so a freshly
+  // added source isn't reported starved before it's had a chance to drain.
+  const clock = lastFetchedAt ?? source.createdAt;
+  const parsedMs = clock ? Date.parse(clock) : NaN;
+  const staleHours = Number.isFinite(parsedMs) ? (now.getTime() - parsedMs) / 3_600_000 : null;
+
+  const starved =
+    sweepDriven &&
+    flaggedAt != null &&
+    staleHours != null &&
+    staleHours > SWEEP_STARVED_THRESHOLD_HOURS;
+
+  return { sweepDriven, flaggedAt, lastFetchedAt, staleHours, starved };
+}
+
 export function computeFetchState(source: Source, plan: FetchPlan, now: Date): FetchState {
   const lastPolledAt = source.lastPolledAt ?? null;
 

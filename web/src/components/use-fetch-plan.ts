@@ -32,6 +32,14 @@ export interface FetchState {
   paused: boolean;
 }
 
+export interface SweepHealth {
+  sweepDriven: boolean;
+  flaggedAt: string | null;
+  lastFetchedAt: string | null;
+  staleHours: number | null;
+  starved: boolean;
+}
+
 export interface FetchPlanRow {
   id: string;
   slug: string;
@@ -41,6 +49,7 @@ export interface FetchPlanRow {
   fetchPriority: "normal" | "low" | "paused";
   plan: FetchPlan;
   state: FetchState;
+  sweep: SweepHealth;
 }
 
 interface State {
