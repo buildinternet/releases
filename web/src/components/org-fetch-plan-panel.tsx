@@ -7,6 +7,7 @@ import {
   type ActionResult,
 } from "@/app/actions/source-admin";
 import { useFetchPlan, type FetchPlanRow } from "./use-fetch-plan";
+import { relativeTime } from "./fetch-log-shared";
 
 // Single source of truth for the priority dropdown: drives both the option list
 // and the `Priority` union, so a tier can't be added in one place and missed in
@@ -17,20 +18,6 @@ const TIERS = [
   { value: "paused", label: "paused" },
 ] as const;
 type Priority = (typeof TIERS)[number]["value"];
-
-function relative(iso: string | null, now: number): string {
-  if (!iso) return "—";
-  const diffMs = Date.parse(iso) - now;
-  const past = diffMs < 0;
-  const mins = Math.round(Math.abs(diffMs) / 60_000);
-  const label =
-    mins < 60
-      ? `${mins}m`
-      : mins < 1440
-        ? `${Math.round(mins / 60)}h`
-        : `${Math.round(mins / 1440)}d`;
-  return past ? `${label} ago` : `in ${label}`;
-}
 
 function StarvedBadge({ staleHours }: { staleHours: number | null }) {
   const label =
@@ -55,7 +42,7 @@ function NextDueCell({ row, now }: { row: FetchPlanRow; now: number }) {
   if (row.plan.paused) return <span className="text-stone-400">—</span>;
   return (
     <span className="text-stone-500">
-      {relative(row.state.nextDueAt, now)}
+      {relativeTime(row.state.nextDueAt, now)}
       {row.state.backedOff && (
         <span className="ml-1.5 text-[10px] font-sans uppercase tracking-wide text-amber-500">
           backed off
@@ -70,11 +57,13 @@ function PlanRowItem({
   orgSlug,
   now,
   onChanged,
+  onSelectSource,
 }: {
   row: FetchPlanRow;
   orgSlug: string;
   now: number;
   onChanged: () => void;
+  onSelectSource?: (id: string) => void;
 }) {
   const [pending, startTransition] = useTransition();
   const [err, setErr] = useState<string | null>(null);
@@ -108,9 +97,20 @@ function PlanRowItem({
   return (
     <div className="grid grid-cols-[2fr_1.5fr_1.2fr_1fr_1fr] px-4 py-2.5 text-xs border-b border-stone-100 dark:border-stone-800 last:border-b-0 items-center">
       <div className="text-stone-900 dark:text-stone-100">
-        <a href={`/source/${row.slug}`} className="hover:underline">
+        <a
+          href={`/source/${row.slug}`}
+          className="hover:underline text-stone-900 dark:text-stone-100"
+        >
           {row.name}
         </a>
+        <button
+          type="button"
+          onClick={() => onSelectSource?.(row.id)}
+          className="ml-2 text-[10px] font-sans px-1.5 py-0.5 rounded border border-stone-200 dark:border-stone-700 hover:bg-stone-50 dark:hover:bg-stone-800"
+          title="Show ingestion workflow"
+        >
+          Flow
+        </button>
         {row.sweep.starved && <StarvedBadge staleHours={row.sweep.staleHours} />}
         {err && <div className="text-[10px] font-sans text-red-500 mt-0.5">{err}</div>}
       </div>
@@ -144,7 +144,7 @@ function PlanRowItem({
           </select>
         )}
       </div>
-      <div className="text-stone-400">{relative(row.state.lastPolledAt, now)}</div>
+      <div className="text-stone-400">{relativeTime(row.state.lastPolledAt, now)}</div>
       <div>
         <NextDueCell row={row} now={now} />
       </div>
@@ -152,7 +152,13 @@ function PlanRowItem({
   );
 }
 
-export function OrgFetchPlanPanel({ orgSlug }: { orgSlug: string }) {
+export function OrgFetchPlanPanel({
+  orgSlug,
+  onSelectSource,
+}: {
+  orgSlug: string;
+  onSelectSource?: (id: string) => void;
+}) {
   const { rows, loading, error, refetch } = useFetchPlan(orgSlug);
   const now = Date.now();
 
@@ -180,7 +186,14 @@ export function OrgFetchPlanPanel({ orgSlug }: { orgSlug: string }) {
           <div>Next due</div>
         </div>
         {rows.map((row) => (
-          <PlanRowItem key={row.id} row={row} orgSlug={orgSlug} now={now} onChanged={refetch} />
+          <PlanRowItem
+            key={row.id}
+            row={row}
+            orgSlug={orgSlug}
+            now={now}
+            onChanged={refetch}
+            onSelectSource={onSelectSource}
+          />
         ))}
       </div>
     </div>

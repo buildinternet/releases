@@ -18,6 +18,7 @@ import {
   computeFetchState,
   computeSweepHealth,
 } from "@releases/adapters/fetch-plan";
+import { describeWorkflowStages } from "@releases/adapters/workflow-stages";
 
 export const statusRoutes = new Hono<Env>();
 
@@ -29,6 +30,11 @@ statusRoutes.get("/status/ws", async (c) => {
 });
 
 const FETCH_LOG_SORT_FIELDS = ["createdAt", "durationMs"] as const;
+
+// Window for correlating usage_log rows to a fetch run (usage_log has no
+// fetchLogId — only sourceId + createdAt). Tunable.
+const AI_PASS_WINDOW_MS = 5 * 60_000;
+const SPARKLINE_N = 10;
 
 statusRoutes.get("/status/fetch-log", async (c) => {
   const db = createDb(c.env.DB);
@@ -171,6 +177,99 @@ statusRoutes.get("/status/fetch-plan", async (c) => {
     };
   });
   return c.json({ sources: result });
+});
+
+// Dev-only: per-source ingestion-pipeline topology + derived run state for the
+// Fetch Log workflow drawer. Same /api/proxy + dev-gating as /status/fetch-plan;
+// not part of the published api-types wire protocol.
+statusRoutes.get("/status/source-workflow", async (c) => {
+  const db = createDb(c.env.DB);
+  const sourceId = c.req.query("sourceId");
+  if (!sourceId) return c.json({ error: "missing_sourceId" }, 400);
+
+  const [sourceRows, recent] = await Promise.all([
+    db
+      .select()
+      .from(sources)
+      .where(and(eq(sources.id, sourceId), isNull(sources.deletedAt)))
+      .limit(1),
+    db
+      .select({
+        status: fetchLog.status,
+        releasesFound: fetchLog.releasesFound,
+        releasesInserted: fetchLog.releasesInserted,
+        durationMs: fetchLog.durationMs,
+        error: fetchLog.error,
+        createdAt: fetchLog.createdAt,
+      })
+      .from(fetchLog)
+      .where(eq(fetchLog.sourceId, sourceId))
+      .orderBy(desc(fetchLog.createdAt), desc(fetchLog.id))
+      .limit(SPARKLINE_N),
+  ]);
+  const source = sourceRows[0];
+  if (!source) return c.json({ error: "not_found" }, 404);
+
+  const now = new Date();
+  const plan = describeFetchPlan(source);
+  const state = computeFetchState(source, plan, now);
+  const sweep = computeSweepHealth(source, plan, now);
+  const stages = describeWorkflowStages(source);
+
+  const lastRun = recent[0] ?? null;
+  const sparkline = recent.map((r) => r.status).reverse(); // oldest→newest
+
+  let aiPasses: {
+    operation: string;
+    count: number;
+    inputTokens: number;
+    outputTokens: number;
+  }[] = [];
+  const lastRunMs = lastRun ? Date.parse(lastRun.createdAt) : NaN;
+  if (lastRun && Number.isFinite(lastRunMs)) {
+    const lo = new Date(lastRunMs - AI_PASS_WINDOW_MS).toISOString();
+    const hi = new Date(lastRunMs + AI_PASS_WINDOW_MS).toISOString();
+    const rows = await db
+      .select({
+        operation: usageLog.operation,
+        count: sql<number>`count(*)`,
+        inputTokens: sql<number>`coalesce(sum(${usageLog.inputTokens}), 0)`,
+        outputTokens: sql<number>`coalesce(sum(${usageLog.outputTokens}), 0)`,
+      })
+      .from(usageLog)
+      .where(
+        and(
+          eq(usageLog.sourceId, sourceId),
+          gte(usageLog.createdAt, lo),
+          lte(usageLog.createdAt, hi),
+        ),
+      )
+      .groupBy(usageLog.operation)
+      .orderBy(asc(usageLog.operation));
+    aiPasses = rows.map((r) => ({
+      operation: r.operation,
+      count: Number(r.count),
+      inputTokens: Number(r.inputTokens),
+      outputTokens: Number(r.outputTokens),
+    }));
+  }
+
+  return c.json({
+    source: {
+      id: source.id,
+      slug: source.slug,
+      name: source.name,
+      type: source.type,
+      strategyLabel: plan.strategyLabel,
+    },
+    plan,
+    state,
+    sweep,
+    stages,
+    lastRun,
+    aiPasses,
+    sparkline,
+  });
 });
 
 statusRoutes.get("/status/usage", async (c) => {

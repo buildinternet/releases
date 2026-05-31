@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { type FetchLogStatusFilter } from "./fetch-log-shared";
 import { FetchLogList } from "./fetch-log-list";
 import { OrgFetchPlanPanel } from "./org-fetch-plan-panel";
+import { SourceWorkflowDrawer } from "./source-workflow-drawer";
 import { useFetchLog, type FetchLogSortField } from "./use-fetch-log";
 import type { SortState } from "./sort-header";
 
@@ -17,11 +18,13 @@ function formatTime(iso: string): string {
 }
 
 export function OrgFetchLogView({ orgSlug }: { orgSlug: string }) {
+  const [selectedSourceId, setSelectedSourceId] = useState<string | null>(null);
   const [filter, setFilter] = useState<FetchLogStatusFilter>("all");
   const [sort, setSort] = useState<SortState<FetchLogSortField>>({
     field: "createdAt",
     dir: "desc",
   });
+  const handleClose = useCallback(() => setSelectedSourceId(null), []);
   const { entries, totalCount, statusCounts, hasMore, loading, error, loadMore } = useFetchLog({
     org: orgSlug,
     status: filter,
@@ -66,8 +69,9 @@ export function OrgFetchLogView({ orgSlug }: { orgSlug: string }) {
 
   return (
     <div className="mt-5">
-      <OrgFetchPlanPanel orgSlug={orgSlug} />
+      <OrgFetchPlanPanel orgSlug={orgSlug} onSelectSource={setSelectedSourceId} />
       {logBody}
+      <SourceWorkflowDrawer sourceId={selectedSourceId} onClose={handleClose} />
     </div>
   );
 }

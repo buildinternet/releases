@@ -126,3 +126,7 @@ On the read side, `releaseThumbUrl` (`web/src/lib/media.ts`) only routes **same-
 The `released-media` R2 bucket also holds org avatars (`orgs/{slug}.{ext}`, written by `scripts/upload-org-avatars.ts`) and handles ad-hoc uploads via the auth-gated `PUT /v1/media/:key` endpoint in `workers/api/src/routes/media.ts`.
 
 `FallbackImage` / `FallbackPlainImage` in `web/src/components/fallback-image.tsx` show an "Image unavailable" placeholder when a third-party URL fails to load.
+
+## Fetch Log workflow drawer (dev-only)
+
+On the dev-gated Fetch Log tab, clicking a Fetch Plan row opens a per-source ingestion-pipeline drawer: an adaptive vertical stage list (topology from `describeWorkflowStages` in `@releases/adapters/workflow-stages`) annotated with current state and last-run outcome derived from `fetch_log` + `usage_log` + `sources` via `GET /v1/status/source-workflow`. Phase 1 is derived-data only; per-stage timing instrumentation is a documented Phase 2. Spec: `docs/superpowers/specs/2026-05-31-per-source-workflow-viz-design.md`.
