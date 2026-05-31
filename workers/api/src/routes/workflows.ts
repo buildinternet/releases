@@ -5,6 +5,11 @@ import { computeContentSize } from "@buildinternet/releases-core/tokens";
 import { contentHash } from "@releases/adapters/content-hash";
 import { normalizeMediaUrl } from "@releases/rendering/media-url.js";
 import {
+  runMediaBackfill,
+  MEDIA_BACKFILL_DEFAULT_LIMIT,
+  MEDIA_BACKFILL_MAX_LIMIT,
+} from "../lib/media-backfill.js";
+import {
   enrichFeedItem,
   buildEnrichDeps,
   parsePositiveInt,
@@ -1831,6 +1836,82 @@ workflowsRoutes.post("/workflows/enrich-feed-content", async (c) => {
   );
 
   return c.json({ source: { id: src.id, slug: src.slug }, ...report });
+});
+
+// ── POST /workflows/backfill-media ───────────────────────────────────────────
+//
+// Operator-triggered R2 backfill for releases stored before (or while)
+// ingest-time R2 mirroring (`MEDIA_R2_UPLOAD_ENABLED`) was off, so their `media`
+// still points at third-party URLs with no `r2Key`. The standard ingest upsert
+// never touches `media` on conflict (RELEASE_URL_UPSERT) and the ingest media
+// pre-pass skips already-stored URLs, so re-fetching a source can NOT backfill
+// existing rows — this route is the only path that does.
+//
+// It re-runs the exact ingest mirror (`processMediaForR2`: junk filter →
+// content-type/size gate → R2 put → registry insert → stamp `r2Key`) and writes
+// the stamped media JSON back. Bounded per call; `remaining` reports how many
+// rows still need backfill so the operator can loop. `dryRun` (default) reports
+// the pending count without writing. Idempotent: a mirrored row has `r2Key` and
+// drops out of the candidate filter.
+//
+// Body: { sourceId?, all?, limit?, dryRun? }
+
+interface BackfillMediaBody {
+  sourceId?: string;
+  all?: boolean;
+  limit?: number;
+  dryRun?: boolean;
+}
+
+workflowsRoutes.post("/workflows/backfill-media", async (c) => {
+  const db = createDb(c.env.DB);
+  const body = await c.req.json<BackfillMediaBody>().catch(() => ({}) as BackfillMediaBody);
+
+  const bucket = c.env.MEDIA;
+  if (!bucket) {
+    return c.json({ error: "service_unavailable", message: "MEDIA bucket not bound" }, 503);
+  }
+
+  // Scope to a typed source ID, or require an explicit `all: true` to sweep every
+  // source — so a dropped/typo'd `sourceId` can't silently backfill everything.
+  const ident = body.sourceId?.trim();
+  if (!ident && body.all !== true) {
+    return c.json(
+      { error: "bad_request", message: "Provide a typed `sourceId` (src_…) or `all: true`" },
+      400,
+    );
+  }
+  if (ident && !isSourceId(ident)) {
+    return c.json(
+      {
+        error: "bare_slug_rejected",
+        message:
+          "Pass a typed source ID (src_…). Resolve a slug via /v1/orgs/{orgSlug}/sources/{sourceSlug} first.",
+      },
+      400,
+    );
+  }
+
+  const rawLimit = Number(body.limit ?? MEDIA_BACKFILL_DEFAULT_LIMIT);
+  const limit = Number.isFinite(rawLimit)
+    ? Math.min(Math.max(Math.floor(rawLimit), 1), MEDIA_BACKFILL_MAX_LIMIT)
+    : MEDIA_BACKFILL_DEFAULT_LIMIT;
+  const dryRun = body.dryRun !== false; // default to a dry run for safety
+
+  const report = await runMediaBackfill(db, bucket, {
+    sourceId: ident || undefined,
+    limit,
+    dryRun,
+  });
+
+  logEvent("info", {
+    component: "backfill-media",
+    event: "done",
+    sourceId: ident ?? null,
+    all: body.all === true,
+    ...report,
+  });
+  return c.json({ scope: ident ?? "all", ...report });
 });
 
 // ── POST /workflows/backfill-source ──────────────────────────────────────────
