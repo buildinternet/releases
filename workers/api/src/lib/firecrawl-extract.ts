@@ -11,10 +11,54 @@ import {
   type ExtractDeps,
 } from "@releases/adapters/extract";
 
+/** Minimal usage payload passed to `logUsageFn`. */
+export interface FirecrawlExtractUsageEntry {
+  operation: string;
+  model: string;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+}
+
 export interface FirecrawlExtractDeps {
   anthropicClient: ExtractDeps["anthropicClient"];
   agentModel: string;
   logger: ExtractDeps["logger"];
+  /**
+   * Optional callback invoked after each extraction call with token-usage data.
+   * Fail-open: errors thrown here are silently swallowed by the callers so a
+   * DB write failure never aborts an extraction.
+   */
+  logUsageFn?: (entry: FirecrawlExtractUsageEntry) => Promise<void>;
+}
+
+/** Token-usage subset every extraction result exposes — the bits we log. */
+interface ExtractUsageResult {
+  totalInput: number;
+  totalOutput: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+}
+
+/**
+ * Forward one extraction's token usage to `deps.logUsageFn` (if wired) as a
+ * `firecrawl-extract` row. Fail-open: a logging error never aborts extraction.
+ */
+async function reportUsage(deps: FirecrawlExtractDeps, result: ExtractUsageResult): Promise<void> {
+  if (!deps.logUsageFn) return;
+  try {
+    await deps.logUsageFn({
+      operation: "firecrawl-extract",
+      model: deps.agentModel,
+      inputTokens: result.totalInput,
+      outputTokens: result.totalOutput,
+      cacheReadTokens: result.cacheReadTokens,
+      cacheWriteTokens: result.cacheWriteTokens,
+    });
+  } catch {
+    // fail-open
+  }
 }
 
 export interface FirecrawlExtractResult {
@@ -73,6 +117,8 @@ export async function extractFirecrawlMarkdown(
     },
     extractDeps,
   );
+
+  await reportUsage(deps, result);
 
   const releases = mapEntries(result.entries, { sourceUrl: source.url }) as RawRelease[];
 
@@ -194,6 +240,8 @@ export async function extractChangelogAllWindows(
     releases.push(...(mapEntries(result.entries, { sourceUrl: source.url }) as RawRelease[]));
     totalInput += result.totalInput;
     totalOutput += result.totalOutput;
+    // oxlint-disable-next-line no-await-in-loop -- one write per window; bounded by maxWindows
+    await reportUsage(deps, result);
   }
 
   return {

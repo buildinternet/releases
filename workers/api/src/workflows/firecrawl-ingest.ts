@@ -24,6 +24,7 @@ import { FirecrawlError } from "@releases/lib/errors";
 import { getAnthropicKey, resolveGatewayOpts } from "../lib/anthropic.js";
 import { buildAnthropicClient } from "@releases/lib/anthropic-client.js";
 import { extractFirecrawlMarkdown } from "../lib/firecrawl-extract.js";
+import { logUsage } from "../lib/usage-log.js";
 import { ingestRawReleases, embedReleasesForSource, type FetchOneEnv } from "../cron/poll-fetch.js";
 import {
   RETRY_POLL,
@@ -175,6 +176,7 @@ export class FirecrawlIngestWorkflow extends WorkflowEntrypoint<
           anthropicClient,
           agentModel: FIRECRAWL_EXTRACT_MODEL,
           logger: workerLogger,
+          logUsageFn: (entry) => logUsage(db, { ...entry, sourceId }, "firecrawl-ingest"),
         });
         // No silent caps: when the input exceeded the recent-window budget (the
         // one-time baseline scrape, or a rare oversized diff), record how much

@@ -2370,7 +2370,7 @@ async function buildEnrichMap(
     return new Map();
   }
   const thinChars = parsePositiveInt(env.FEED_THIN_CHARS, DEFAULT_FEED_THIN_CHARS);
-  const deps = await buildEnrichDeps(env, thinChars);
+  const deps = await buildEnrichDeps(env, thinChars, db);
   if (!deps) return new Map();
 
   return enrichNewThinItems(db, source, meta, rawReleases, env, {

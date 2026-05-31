@@ -23,6 +23,7 @@ import { getSecret } from "@releases/lib/secrets";
 import { getAnthropicKey, resolveGatewayOpts } from "../lib/anthropic.js";
 import { buildAnthropicClient } from "@releases/lib/anthropic-client.js";
 import { planWindowOffsets } from "../lib/firecrawl-extract.js";
+import { logUsage } from "../lib/usage-log.js";
 import {
   sliceChangelog,
   DEFAULT_CHANGELOG_SLICE_TOKENS,
@@ -264,6 +265,21 @@ export class BackfillSourceWorkflow extends WorkflowEntrypoint<
                 fetchUrl: source.url,
               },
               extractDeps,
+            );
+            // Persist usage for this window. Fail-open: a write error must not
+            // abort the backfill step (Cloudflare would retry the whole window).
+            await logUsage(
+              db,
+              {
+                operation: "firecrawl-extract",
+                model: BACKFILL_EXTRACT_MODEL,
+                inputTokens: result.totalInput,
+                outputTokens: result.totalOutput,
+                cacheReadTokens: result.cacheReadTokens,
+                cacheWriteTokens: result.cacheWriteTokens,
+                sourceId,
+              },
+              "backfill-source-workflow",
             );
             entries = mapEntries(result.entries, { sourceUrl: source.url }) as RawRelease[];
           }

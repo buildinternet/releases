@@ -21,7 +21,7 @@ import { SOURCE_DELETED_SENTINEL, recordWorkflowFailure } from "./_shared.js";
 import { buildFetchOneEnv } from "./_fetch-env.js";
 import { logEvent } from "@releases/lib/log-event";
 import { dbErrorLogFields } from "@releases/lib/db-errors";
-import { summarizeRelease } from "@releases/ai-internal/release-content";
+import { summarizeRelease, MODEL as SUMMARIZE_MODEL } from "@releases/ai-internal/release-content";
 import {
   fetchOne,
   pollOne,
@@ -36,6 +36,7 @@ import { invalidateLatestCache, type InvalidationEnv } from "../lib/latest-cache
 import { getAnthropicKey, resolveGatewayOpts, type AnthropicEnv } from "../lib/anthropic.js";
 import { buildAnthropicClient } from "@releases/lib/anthropic-client.js";
 import { IN_ARRAY_CHUNK_SIZE } from "../lib/d1-limits.js";
+import { logUsage } from "../lib/usage-log.js";
 import { makeBotFetch } from "../lib/web-bot-auth-fetch.js";
 import { FLAGS, flag } from "@releases/lib/flags";
 
@@ -324,6 +325,26 @@ export async function generateContentForReleases(
         result.usage.output +
         result.usage.cacheCreate +
         result.usage.cacheRead;
+      // Only log rows we actually summarized; skipped rows short-circuit
+      // before the model call so they consumed no tokens. logUsage is
+      // fail-open, so a write error never aborts the summarization loop.
+      if (!result.skipped) {
+        // eslint-disable-next-line no-await-in-loop -- one write per row; bounded by MAX_AUTOGEN_ROWS_PER_FIRE
+        await logUsage(
+          db,
+          {
+            operation: "summarize",
+            model: SUMMARIZE_MODEL,
+            inputTokens: result.usage.input,
+            outputTokens: result.usage.output,
+            cacheReadTokens: result.usage.cacheRead,
+            cacheWriteTokens: result.usage.cacheCreate,
+            sourceId: source.id,
+            releaseCount: 1,
+          },
+          "poll-and-fetch",
+        );
+      }
       if (result.skipped) {
         skippedEmpty++;
         continue;

@@ -10,7 +10,11 @@ import { and, eq, inArray } from "drizzle-orm";
 import { htmlToMarkdown, extractMediaFromMarkdown } from "@releases/adapters/feed.js";
 import { RELEASES_BOT_UA } from "@releases/adapters/user-agent";
 import { fetchCloudflareMarkdown } from "@releases/adapters/cloudflare";
-import { extractArticle, MODEL as ARTICLE_MODEL } from "@releases/ai-internal/article-extract";
+import {
+  extractArticle,
+  MODEL as ARTICLE_MODEL,
+  type ArticleExtractUsage,
+} from "@releases/ai-internal/article-extract";
 import { logEvent } from "@releases/lib/log-event";
 import { getSecret } from "@releases/lib/secrets";
 import { buildAnthropicClient } from "@releases/lib/anthropic-client.js";
@@ -18,6 +22,7 @@ import { getAnthropicKey, resolveGatewayOpts, type AnthropicEnv } from "../lib/a
 import { makeBotFetch } from "../lib/web-bot-auth-fetch.js";
 import { FLAGS, flag, type FlagshipBinding } from "@releases/lib/flags";
 import { IN_ARRAY_CHUNK_SIZE } from "../lib/d1-limits.js";
+import { logUsage, type UsageLogDb } from "../lib/usage-log.js";
 import { releases, sources } from "@buildinternet/releases-core/schema";
 import { getSourceMeta } from "@releases/adapters/source-meta.js";
 import type { drizzle } from "drizzle-orm/d1";
@@ -138,13 +143,29 @@ export async function enrichFeedItem(item: EnrichItem, deps: EnrichDeps): Promis
 /** Wrap an `extractArticle` call into the `extractArticleFn` shape, pulling media
  *  from the AI-cleaned article body — not the raw page — so nav / sidebar /
  *  "more posts" thumbnails don't attach to the release. `extractArticle`
- *  preserves in-body image markdown, so the body is the right scope. */
+ *  preserves in-body image markdown, so the body is the right scope.
+ *
+ * @param runExtract  The underlying extraction function (returns content + usage).
+ * @param onUsage     Optional callback invoked after each successful extraction with
+ *                    the token usage and model. Fail-open: errors are swallowed.
+ */
 export function makeExtractArticleFn(
-  runExtract: (markdown: string, title: string) => Promise<{ content: string }>,
+  runExtract: (
+    markdown: string,
+    title: string,
+  ) => Promise<{ content: string; usage?: ArticleExtractUsage }>,
+  onUsage?: (usage: ArticleExtractUsage, model: string) => Promise<void>,
 ): EnrichDeps["extractArticleFn"] {
   return async ({ markdown, title }) => {
-    const { content } = await runExtract(markdown, title);
-    return { content, media: extractMediaFromMarkdown(content) };
+    const result = await runExtract(markdown, title);
+    if (onUsage && result.usage) {
+      try {
+        await onUsage(result.usage, ARTICLE_MODEL);
+      } catch {
+        // fail-open: usage log write must not break enrichment
+      }
+    }
+    return { content: result.content, media: extractMediaFromMarkdown(result.content) };
   };
 }
 
@@ -164,10 +185,15 @@ export interface EnrichDepsEnv extends AnthropicEnv {
  * caller decides how to react (cron → skip silently; admin route → 503). Shared
  * by the forward path (`buildEnrichMap`) and the backfill route so the plumbing
  * lives in one place.
+ *
+ * @param db  Optional DB handle used to persist `usage_log` rows. When omitted
+ *            (e.g. during unit tests that build `EnrichDeps` directly), no rows
+ *            are written and enrichment is unaffected (fail-open).
  */
 export async function buildEnrichDeps(
   env: EnrichDepsEnv,
   thinChars: number,
+  db?: UsageLogDb,
 ): Promise<EnrichDeps | null> {
   const apiKey = await getAnthropicKey(env);
   if (!apiKey) return null;
@@ -182,10 +208,27 @@ export async function buildEnrichDeps(
       ? (url: string) => fetchCloudflareMarkdown(url, accountId, apiToken)
       : null;
 
-  const extractArticleFn = makeExtractArticleFn(async (markdown, title) => {
-    const { content } = await extractArticle(client, { markdown, title, model: ARTICLE_MODEL });
-    return { content };
-  });
+  const extractArticleFn = makeExtractArticleFn(
+    async (markdown, title) => {
+      const result = await extractArticle(client, { markdown, title, model: ARTICLE_MODEL });
+      return { content: result.content, usage: result.usage };
+    },
+    db
+      ? (usage, model) =>
+          logUsage(
+            db,
+            {
+              operation: "enrich-extract",
+              model,
+              inputTokens: usage.input,
+              outputTokens: usage.output,
+              cacheReadTokens: usage.cacheRead,
+              cacheWriteTokens: usage.cacheCreate,
+            },
+            "feed-enrich",
+          )
+      : undefined,
+  );
 
   const fetchImpl = await makeBotFetch(env);
   return { thinChars, extractArticleFn, renderFn, logEvent, fetchImpl };
