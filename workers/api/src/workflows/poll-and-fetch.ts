@@ -18,9 +18,9 @@ import { buildCompositionMetadataSet } from "@releases/core-internal/composition
 import { summarizeNotOptedOut } from "@releases/core-internal/eligibility";
 import { releaseCoverage } from "@releases/db/schema-coverage.js";
 import { SOURCE_DELETED_SENTINEL, recordWorkflowFailure } from "./_shared.js";
+import { buildFetchOneEnv } from "./_fetch-env.js";
 import { logEvent } from "@releases/lib/log-event";
 import { dbErrorLogFields } from "@releases/lib/db-errors";
-import { getSecret } from "@releases/lib/secrets";
 import { summarizeRelease } from "@releases/ai-internal/release-content";
 import {
   fetchOne,
@@ -68,6 +68,19 @@ export type PollAndFetchWorkflowEnv = InvalidationEnv &
     DISCOVERY_WORKER?: import("../cron/poll-fetch.js").DiscoveryWorkerRpc;
     WEB_BOT_AUTH_ENABLED?: string;
     WEB_BOT_AUTH_PRIVATE_KEY?: { get(): Promise<string> };
+    /**
+     * Ingest-time feed-content enrichment (mirrors `FetchOneEnv`): the kill switch
+     * + tuning knobs, plus the Cloudflare Browser-Rendering creds enrichment
+     * escalates to when the cheap fetch is still thin. `resolveFetchEnv` forwards
+     * these into the `FetchOneEnv` it hands `fetchOne`; without them the workflow
+     * ingest path cannot run enrichment or the marketing classifier (the Anthropic
+     * key + gateway opts ride on the `AnthropicEnv` intersection above).
+     */
+    FEED_ENRICH_ENABLED?: string;
+    FEED_ENRICH_MAX_PER_FIRE?: string;
+    FEED_THIN_CHARS?: string;
+    CLOUDFLARE_ACCOUNT_ID?: { get(): Promise<string> };
+    CLOUDFLARE_API_TOKEN?: { get(): Promise<string> };
     /** Ingest-time R2 media upload (#1177): kill switch + `released-media` bucket. */
     MEDIA_R2_UPLOAD_ENABLED?: string;
     MEDIA?: R2Bucket;
@@ -143,30 +156,13 @@ export function jitterMsForSource(sourceId: string, windowMs: number): number {
 }
 
 /**
- * Resolve the FetchOneEnv slice — embedding + GitHub + vector bindings — once
- * and cache it across steps. Secrets are fetched lazily inside steps that
- * need them (none of them here land in the workflow's persisted state because
- * the returned object only flows through closures).
+ * Project this workflow's env down to the `FetchOneEnv` slice via the shared
+ * {@link buildFetchOneEnv} (single source of truth for the forwarded bindings).
+ * The result only flows through step closures, so it never lands in the
+ * workflow's persisted state.
  */
-export async function resolveFetchEnv(env: PollAndFetchWorkflowEnv): Promise<FetchOneEnv> {
-  const githubToken = (await getSecret(env.GITHUB_TOKEN).catch(() => null)) ?? undefined;
-  return {
-    GITHUB_TOKEN: githubToken,
-    RELEASES_INDEX: env.RELEASES_INDEX,
-    CHANGELOG_CHUNKS_INDEX: env.CHANGELOG_CHUNKS_INDEX,
-    EMBEDDING_PROVIDER: env.EMBEDDING_PROVIDER,
-    VOYAGE_API_KEY: env.VOYAGE_API_KEY,
-    OPENAI_API_KEY: env.OPENAI_API_KEY,
-    RELEASE_HUB: env.RELEASE_HUB,
-    WEBHOOK_DELIVERY_QUEUE: env.WEBHOOK_DELIVERY_QUEUE,
-    DB: env.DB,
-    DISCOVERY_WORKER: env.DISCOVERY_WORKER,
-    WEB_BOT_AUTH_ENABLED: env.WEB_BOT_AUTH_ENABLED,
-    WEB_BOT_AUTH_PRIVATE_KEY: env.WEB_BOT_AUTH_PRIVATE_KEY,
-    MEDIA_R2_UPLOAD_ENABLED: env.MEDIA_R2_UPLOAD_ENABLED,
-    MEDIA: env.MEDIA,
-    FLAGS: env.FLAGS,
-  };
+export function resolveFetchEnv(env: PollAndFetchWorkflowEnv): Promise<FetchOneEnv> {
+  return buildFetchOneEnv(env);
 }
 
 /**

@@ -15,34 +15,51 @@ import { eq } from "drizzle-orm";
 import { sources } from "@buildinternet/releases-core/schema";
 import type { Source } from "@buildinternet/releases-core/schema";
 import { SOURCE_DELETED_SENTINEL, recordWorkflowFailure } from "./_shared.js";
+import { buildFetchOneEnv } from "./_fetch-env.js";
 import { regeneratePlaybook } from "../playbook-regen.js";
 import { embedSourceSideEffect } from "../routes/sources.js";
 import { fetchOne, embedReleasesForSource, type FetchOneEnv } from "../cron/poll-fetch.js";
 import { getSourceMeta, isGitHubFetched } from "@releases/adapters/feed.js";
+import type { AnthropicEnv } from "../lib/anthropic.js";
 import { invalidateLatestCache, type InvalidationEnv } from "../lib/latest-cache.js";
 import { logEvent } from "@releases/lib/log-event";
 import { dbErrorLogFields } from "@releases/lib/db-errors";
-import { getSecret } from "@releases/lib/secrets";
 
-export type OnboardSourceWorkflowEnv = InvalidationEnv & {
-  DB: D1Database;
-  GITHUB_TOKEN?: { get(): Promise<string> };
-  RELEASES_INDEX?: unknown;
-  ENTITIES_INDEX?: unknown;
-  CHANGELOG_CHUNKS_INDEX?: unknown;
-  EMBEDDING_PROVIDER?: string;
-  VOYAGE_API_KEY?: { get(): Promise<string> };
-  OPENAI_API_KEY?: { get(): Promise<string> };
-  RELEASE_HUB?: DurableObjectNamespace;
-  WEBHOOK_DELIVERY_QUEUE?: Queue<unknown>;
-  /** Service binding used to delegate summary-only feeds to discovery's crawl path (RPC). */
-  DISCOVERY_WORKER?: import("../cron/poll-fetch.js").DiscoveryWorkerRpc;
-  /** Ingest-time R2 media upload (#1177): kill switch + `released-media` bucket. */
-  MEDIA_R2_UPLOAD_ENABLED?: string;
-  MEDIA?: R2Bucket;
-  /** TEST-ONLY: bypass drizzle(env.DB) and use the provided instance directly. */
-  _drizzleOverride?: unknown;
-};
+export type OnboardSourceWorkflowEnv = InvalidationEnv &
+  AnthropicEnv & {
+    DB: D1Database;
+    GITHUB_TOKEN?: { get(): Promise<string> };
+    RELEASES_INDEX?: unknown;
+    ENTITIES_INDEX?: unknown;
+    CHANGELOG_CHUNKS_INDEX?: unknown;
+    EMBEDDING_PROVIDER?: string;
+    VOYAGE_API_KEY?: { get(): Promise<string> };
+    OPENAI_API_KEY?: { get(): Promise<string> };
+    RELEASE_HUB?: DurableObjectNamespace;
+    WEBHOOK_DELIVERY_QUEUE?: Queue<unknown>;
+    /** Service binding used to delegate summary-only feeds to discovery's crawl path (RPC). */
+    DISCOVERY_WORKER?: import("../cron/poll-fetch.js").DiscoveryWorkerRpc;
+    /**
+     * Ingest-time feed-content enrichment (mirrors `FetchOneEnv` /
+     * `PollAndFetchWorkflowEnv`): kill switch + tuning knobs, the signed-fetch
+     * bot-auth bindings, and the Cloudflare Browser-Rendering creds. The
+     * onboarding backfill runs `fetchOne` over a brand-new source where every
+     * item is fresh, so enrichment matters here too — `resolveFetchEnv` must
+     * forward these or the backfill stores summary-only feed items un-enriched.
+     */
+    FEED_ENRICH_ENABLED?: string;
+    FEED_ENRICH_MAX_PER_FIRE?: string;
+    FEED_THIN_CHARS?: string;
+    WEB_BOT_AUTH_ENABLED?: string;
+    WEB_BOT_AUTH_PRIVATE_KEY?: { get(): Promise<string> };
+    CLOUDFLARE_ACCOUNT_ID?: { get(): Promise<string> };
+    CLOUDFLARE_API_TOKEN?: { get(): Promise<string> };
+    /** Ingest-time R2 media upload (#1177): kill switch + `released-media` bucket. */
+    MEDIA_R2_UPLOAD_ENABLED?: string;
+    MEDIA?: R2Bucket;
+    /** TEST-ONLY: bypass drizzle(env.DB) and use the provided instance directly. */
+    _drizzleOverride?: unknown;
+  };
 
 export type OnboardSourceParams = {
   sourceId: string;
@@ -64,23 +81,8 @@ const RETRY_FETCH = {
   timeout: "5 minutes",
 } satisfies WorkflowStepConfig;
 
-async function resolveFetchEnv(env: OnboardSourceWorkflowEnv): Promise<FetchOneEnv> {
-  const githubToken = (await getSecret(env.GITHUB_TOKEN).catch(() => null)) ?? undefined;
-  return {
-    GITHUB_TOKEN: githubToken,
-    RELEASES_INDEX: env.RELEASES_INDEX,
-    CHANGELOG_CHUNKS_INDEX: env.CHANGELOG_CHUNKS_INDEX,
-    EMBEDDING_PROVIDER: env.EMBEDDING_PROVIDER,
-    VOYAGE_API_KEY: env.VOYAGE_API_KEY,
-    OPENAI_API_KEY: env.OPENAI_API_KEY,
-    RELEASE_HUB: env.RELEASE_HUB,
-    WEBHOOK_DELIVERY_QUEUE: env.WEBHOOK_DELIVERY_QUEUE,
-    DB: env.DB,
-    DISCOVERY_WORKER: env.DISCOVERY_WORKER,
-    MEDIA_R2_UPLOAD_ENABLED: env.MEDIA_R2_UPLOAD_ENABLED,
-    MEDIA: env.MEDIA,
-    FLAGS: env.FLAGS,
-  };
+export function resolveFetchEnv(env: OnboardSourceWorkflowEnv): Promise<FetchOneEnv> {
+  return buildFetchOneEnv(env);
 }
 
 export class OnboardSourceWorkflow extends WorkflowEntrypoint<
