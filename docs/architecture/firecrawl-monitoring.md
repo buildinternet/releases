@@ -118,13 +118,34 @@ The full-page **fallback** path runs the extract over many entries at once; unde
 
 The steady-state ingest windows a baseline scrape to the recent `DEFAULT_CHANGELOG_SLICE_TOKENS` slice (`extractFirecrawlMarkdown`), so older history is dropped on onboard. To recover it, an operator or local sub-agent POSTs `{ sourceId, markdown?, maxWindows?, dryRun? }` to `/v1/workflows/backfill-source` (admin-gated, sibling of `enrich-feed-content`).
 
-- **Body acquisition ladder:** supplied `markdown` (any scrape source, incl. JS/CF-blocked pages the worker can't fetch) → Firecrawl `scrapeOnce` (when `metadata.firecrawl.enabled`) → plain `fetch` + `htmlToMarkdown`.
-- **Extraction:** `extractChangelogAllWindows` loops `sliceChangelog` over the whole document (Haiku 4.5, temp 0, one-shot per window), bounded by `maxWindows` (default 50, max 200). **The Firecrawl auto-scrape path is additionally hard-capped at `FIRECRAWL_BACKFILL_MAX_WINDOWS` (8):** the ~106s `scrapeOnce` is the long pole, so the window budget on top of it is bounded to keep a default run under a client timeout. Supplied-markdown and plain-fetch bodies have no scrape and keep the full 1–200 budget — **supplied markdown is the path for arbitrarily-deep histories** (a local agent renders the page; the worker does cheap Haiku extraction over the supplied text). When the firecrawl ceiling reduces a deeper request and the run stops with untouched tail, the report carries a `guidance` string telling the caller to supply `markdown` to go deeper. `cappedAtWindow` / `droppedChars` report any untouched tail — no silent caps.
-- **Dedup contract:** reuses the exact prod `extractFromBody` + `mapEntries`, so synthesized `${sourceUrl}#${slug(version ?? title)}` URLs match already-stored rows. `RELEASE_URL_UPSERT` no-ops them; an in-memory dedup collapses within-batch duplicates (a single D1 `ON CONFLICT` can't touch one `(source_id, url)` twice). Re-running is idempotent.
-- **Durability:** the endpoint runs synchronously in one request, so a caller that disconnects mid-run cancels the work. This is safe by construction: the write path upserts idempotently (`RELEASE_URL_UPSERT` on matching `mapEntries` slugs), embeds with `throwOnError:false`, and leaves missing summaries for the autogen drain — so a partial run **self-heals on re-run**. The Firecrawl cap above keeps the default (dry-run) path returning well within a timeout; a durable `BackfillSourceWorkflow` was evaluated (issue #1271) and deferred as a future escalation only if real Firecrawl-auto deep histories prove necessary.
-- **`dryRun` (default true):** returns `windows`, `extracted`, `deduped`, `dateRange` (and `guidance` when capped) without writing. A real run upserts via `ingestRawReleases`, then embeds + regenerates summaries (summary calls chunked at 20 to clear the `MAX_AUTOGEN_ROWS_PER_FIRE` autogen cap).
+**Corrected cost model.** The Firecrawl scrape itself is fast (~0.2s). The long pole is sequential Haiku extraction at ~1.8s per extracted entry — a dense source (~200 entries) takes ~6 min total. `FIRECRAWL_BACKFILL_MAX_WINDOWS` (8) is a sane upper-bound ceiling, not a durability mechanism; it cannot bound a dense page's total extraction time.
 
-It is cheap (Haiku temp-0, bounded) and **not** wired into any cron — it runs only when explicitly POSTed, the mechanism a local agent uses to backfill at first-ingest time without a bespoke script. See `docs/superpowers/specs/2026-05-30-backfill-source-primitive-design.md`.
+### Path A — supplied markdown / plain fetch (synchronous)
+
+Runs via `runSourceBackfill` in a single request. Supplied `markdown` (any scrape source, incl. JS/CF-blocked pages the worker can't fetch) → plain `fetch` + `htmlToMarkdown`. No scrape cost; unclamped window budget (1–200). This is the path for arbitrarily-deep histories — a local agent renders the page and the worker does cheap Haiku extraction over the supplied text. A partial run self-heals on re-run (writes are idempotent; missing summaries drain via autogen).
+
+### Path B — deep Firecrawl (durable, gated by `BACKFILL_WORKFLOW_ENABLED`)
+
+When the source has `metadata.firecrawl.enabled`, no `markdown` is supplied, and the `BACKFILL_WORKFLOW_ENABLED` flag is on with the `BACKFILL_SOURCE_WORKFLOW` binding present, the route hands off to `BackfillSourceWorkflow` and returns `202 { instanceId, statusUrl, async: true }` immediately. Poll `GET /v1/workflows/backfill-source/status/:instanceId` for the report; dry-run counts come from the instance's `status().output`. Flag default **off** — behavior is 100% the existing synchronous path until deliberately enabled. See issue #1281.
+
+**Durable design.** Each `BackfillSourceWorkflow` instance runs as resumable Cloudflare Workflow steps:
+
+1. **`scrape`** — `client.scrapeOnce(url)` (~0.2s); raw markdown saved to R2 (`released-raw` bucket) keyed by content-hash; a `source_raw_snapshots` pointer row is inserted. All subsequent steps receive the small R2 key, not the multi-MB body (avoids the CF step-state size limit; no re-scrape on resume).
+2. **`plan-windows`** — `sliceChangelog` precomputes all window slice offsets without the LLM. Applies `FIRECRAWL_BACKFILL_MAX_WINDOWS` (8) ceiling; sets `cappedAtWindow` if tail was truncated.
+3. **`extract-window-{i}`** (one step per window) — loads raw from R2 → slices to this window → Haiku 4.5 extraction → `ingestRawReleases` (idempotent upsert). A failure or client disconnect resumes from the failed window; completed windows are already durably written (`RELEASE_URL_UPSERT`).
+4. **`finalize`** — aggregates globally-unique counts and date range across windows, runs embed + summary regeneration, assembles the `SourceBackfillReport` (including `guidance` when the cap bit is set).
+
+**Raw snapshot storage.** Raw bodies live in a dedicated prod R2 bucket, **`released-raw`** (binding `RAW_SNAPSHOTS`), kept separate from the permanent/public `released-media` because raw is ephemeral: it is content-hash keyed at `sources/{sourceId}/raw/{hash}.md` (`.html` when an HTML original exists) and expired by a 90-day R2 lifecycle rule. A `source_raw_snapshots` row points D1 at each object (unique on `(source_id, content_hash)`, so an unchanged page does not re-store). The bucket is fronted by the public domain `raw.releases.sh`, but the workflow only ever reads/writes it through the `RAW_SNAPSHOTS` binding server-side — nothing in the browser fetches it, so no CORS/CSP allow-list entry is required. Staging binds `released-media` for `RAW_SNAPSHOTS` and never runs the workflow.
+
+### Shared properties (both paths)
+
+- **Body acquisition ladder (Path A):** supplied `markdown` → plain `fetch` + `htmlToMarkdown`. (Path B uses Firecrawl `scrapeOnce`.)
+- **Extraction:** `extractChangelogAllWindows` / per-step `extractFromBody` — Haiku 4.5, temp 0, one-shot per window.
+- **Dedup contract:** reuses the exact prod `extractFromBody` + `mapEntries` slugs (`${sourceUrl}#${slug(version ?? title)}`). `RELEASE_URL_UPSERT` no-ops already-stored rows; in-memory dedup collapses within-batch duplicates. Re-running is idempotent.
+- **`dryRun` (default true):** returns `windows`, `extracted`, `deduped`, `dateRange` (and `guidance` when capped) without writing.
+- **`guidance`:** set when the Firecrawl ceiling reduced a deeper request and the run stopped with untouched tail — tells the caller to supply `markdown` to go deeper.
+
+Not wired into any cron — runs only when explicitly POSTed. See `docs/superpowers/specs/2026-05-30-backfill-source-durable-workflow-r2-design.md` (durable path) and `docs/superpowers/specs/2026-05-30-backfill-source-primitive-design.md` (original synchronous design).
 
 ## Further reading
 

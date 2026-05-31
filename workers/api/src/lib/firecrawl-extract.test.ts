@@ -1,6 +1,10 @@
 import { describe, it, expect } from "bun:test";
 import type { Source } from "@buildinternet/releases-core/schema";
-import { extractFirecrawlMarkdown, extractChangelogAllWindows } from "./firecrawl-extract.js";
+import {
+  extractFirecrawlMarkdown,
+  extractChangelogAllWindows,
+  planWindowOffsets,
+} from "./firecrawl-extract.js";
 
 // Minimal fake Anthropic client whose messages.stream() returns the expected
 // shape. `calls` records the user-message content actually sent to the model so
@@ -205,5 +209,47 @@ describe("extractChangelogAllWindows", () => {
     expect(result.cappedAtWindow).toBe(false);
     expect(result.droppedChars).toBe(0);
     expect(result.releases.length).toBe(1);
+  });
+});
+
+// DEFAULT_CHANGELOG_SLICE_TOKENS = 10_000; tokens ≈ chars/4, so ~40_000 chars
+// per window. Build a fixture that reliably spans multiple windows by repeating
+// a short section ~2000 times (same shape as deepChangelog above, ~200KB).
+const multiWindowMarkdown = Array.from(
+  { length: 2000 },
+  (_, i) =>
+    `## Entry ${i}\n\nChangelog body text for entry number ${i} describing assorted fixes and features in adequate detail.`,
+).join("\n\n");
+
+describe("planWindowOffsets", () => {
+  it("returns multiple ascending offsets starting at 0 for a multi-window doc", () => {
+    const plan = planWindowOffsets(multiWindowMarkdown);
+
+    expect(plan.offsets.length).toBeGreaterThan(1);
+    expect(plan.offsets[0]).toBe(0);
+    // Offsets must be strictly ascending
+    for (let i = 1; i < plan.offsets.length; i++) {
+      expect(plan.offsets[i]).toBeGreaterThan(plan.offsets[i - 1]);
+    }
+    expect(plan.cappedAtWindow).toBe(false);
+    expect(plan.droppedChars).toBe(0);
+  });
+
+  it("caps at maxWindows=1 and reports droppedChars > 0", () => {
+    const plan = planWindowOffsets(multiWindowMarkdown, { maxWindows: 1 });
+
+    expect(plan.offsets.length).toBe(1);
+    expect(plan.offsets[0]).toBe(0);
+    expect(plan.cappedAtWindow).toBe(true);
+    expect(plan.droppedChars).toBeGreaterThan(0);
+  });
+
+  it("handles a tiny single-window doc: length 1, uncapped, droppedChars 0", () => {
+    const plan = planWindowOffsets("# v1.2.0\nAdded X.");
+
+    expect(plan.offsets.length).toBe(1);
+    expect(plan.offsets[0]).toBe(0);
+    expect(plan.cappedAtWindow).toBe(false);
+    expect(plan.droppedChars).toBe(0);
   });
 });

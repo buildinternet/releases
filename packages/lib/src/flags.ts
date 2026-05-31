@@ -92,6 +92,11 @@ export const FLAGS = {
     env: "EXTRACT_TOOLLOOP_ENABLED",
     default: false,
   },
+  backfillWorkflow: {
+    key: "backfill-workflow-enabled",
+    env: "BACKFILL_WORKFLOW_ENABLED",
+    default: false,
+  },
 } as const satisfies Record<string, FlagDef>;
 
 /** Layered fallback: var value if set, else the hardcoded default. */

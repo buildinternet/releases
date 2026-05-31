@@ -41,6 +41,7 @@ export { OnboardSourceWorkflow } from "./workflows/onboard-source.js";
 export { BatchSummarizeWorkflow } from "./workflows/batch-summarize.js";
 export { BatchOverviewWorkflow } from "./workflows/batch-overview.js";
 export { FirecrawlIngestWorkflow } from "./workflows/firecrawl-ingest.js";
+export { BackfillSourceWorkflow } from "./workflows/backfill-source.js";
 
 /** Cloudflare Secrets Store binding — call .get() to retrieve the secret value. */
 type SecretBinding = { get(): Promise<string> };
@@ -62,6 +63,10 @@ export type Env = {
     MEDIA_ORIGIN?: string;
     /** Ingest-time R2 media upload kill switch (#1177); default off. */
     MEDIA_R2_UPLOAD_ENABLED?: string;
+    /** Raw page snapshots for durable backfill (#1281); pointer in source_raw_snapshots. */
+    RAW_SNAPSHOTS?: R2Bucket;
+    /** Routes deep Firecrawl backfills to BackfillSourceWorkflow (#1281); default off. */
+    BACKFILL_WORKFLOW_ENABLED?: string;
     CACHE_DISABLED?: string;
     GITHUB_TOKEN?: SecretBinding;
     CRON_ENABLED?: string;
@@ -232,6 +237,9 @@ export type Env = {
     FIRECRAWL_API_KEY?: SecretBinding;
     FIRECRAWL_WEBHOOK_SECRET?: SecretBinding;
     FIRECRAWL_INGEST_WORKFLOW?: Workflow; // bound in wrangler in Phase 2
+    // Durable backfill workflow (#1281). Routes POST /v1/workflows/backfill-source
+    // to a resumable BackfillSourceWorkflow instance when BACKFILL_WORKFLOW_ENABLED=true.
+    BACKFILL_SOURCE_WORKFLOW?: Workflow;
     // Hours since a firecrawl source's last run before the hourly staleness
     // scan flags it (monitor stopped delivering). Default 48. See option A.
     FIRECRAWL_STALE_HOURS?: string;

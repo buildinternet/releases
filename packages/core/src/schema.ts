@@ -34,6 +34,7 @@ import {
   newApiTokenId,
   newFeedbackId,
   newRecommendationId,
+  newRawSnapshotId,
 } from "./id.js";
 import { PRINCIPAL_TYPES } from "./api-token.js";
 
@@ -901,6 +902,29 @@ export const sourceChangelogFiles = sqliteTable(
 
 export type SourceChangelogFile = typeof sourceChangelogFiles.$inferSelect;
 export type NewSourceChangelogFile = typeof sourceChangelogFiles.$inferInsert;
+
+export const sourceRawSnapshots = sqliteTable(
+  "source_raw_snapshots",
+  {
+    id: text("id").primaryKey().$defaultFn(newRawSnapshotId),
+    sourceId: text("source_id")
+      .notNull()
+      .references(() => sources.id, { onDelete: "cascade" }),
+    r2Key: text("r2_key").notNull(),
+    contentHash: text("content_hash").notNull(),
+    format: text("format").notNull(), // "markdown" | "html"
+    bytes: integer("bytes").notNull(),
+    createdAt: text("created_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
+  },
+  (table) => [
+    index("idx_raw_snapshots_source").on(table.sourceId, table.createdAt),
+    uniqueIndex("uq_raw_snapshots_source_hash").on(table.sourceId, table.contentHash),
+  ],
+);
+
+export type SourceRawSnapshot = typeof sourceRawSnapshots.$inferSelect;
 
 export const sourceChangelogChunks = sqliteTable(
   "source_changelog_chunks",

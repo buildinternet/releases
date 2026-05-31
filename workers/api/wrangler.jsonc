@@ -133,6 +133,11 @@
     "FEED_ENRICH_ENABLED": "true",
     "FEED_ENRICH_MAX_PER_FIRE": "10",
     "FEED_THIN_CHARS": "600",
+    // Routes deep Firecrawl backfills to BackfillSourceWorkflow (#1281). Default
+    // off → POST /v1/workflows/backfill-source stays fully synchronous. Flip to
+    // "true" (or the Flagship key backfill-workflow-enabled) once released-raw
+    // exists and BackfillSourceWorkflow is bound.
+    "BACKFILL_WORKFLOW_ENABLED": "false",
     // Discriminator read by /v1/graphql to gate GraphiQL + introspection.
     // Production deploys advertise "production"; the staging block overrides
     // to "staging".
@@ -190,6 +195,13 @@
     {
       "binding": "MEDIA",
       "bucket_name": "released-media",
+    },
+    {
+      // Raw page snapshots for durable backfill (#1281). One-time prereq before
+      // deploy: `wrangler r2 bucket create released-raw` + a 90-day lifecycle
+      // (expire) rule — raw is ephemeral/audit, unlike permanent public media.
+      "binding": "RAW_SNAPSHOTS",
+      "bucket_name": "released-raw",
     },
   ],
   "queues": {
@@ -262,6 +274,14 @@
       "name": "firecrawl-ingest",
       "binding": "FIRECRAWL_INGEST_WORKFLOW",
       "class_name": "FirecrawlIngestWorkflow",
+    },
+    {
+      // Full-history backfill for windowed scrape sources (#1281). Saves raw body
+      // to R2 once, then extracts each window as its own resumable step. Triggered
+      // by POST /v1/workflows/backfill-source when BACKFILL_WORKFLOW_ENABLED=true.
+      "name": "backfill-source",
+      "binding": "BACKFILL_SOURCE_WORKFLOW",
+      "class_name": "BackfillSourceWorkflow",
     },
   ],
   "routes": [{ "pattern": "api.releases.sh", "custom_domain": true }],
@@ -500,7 +520,12 @@
       ],
       // Prod R2 bucket is read-shared; staging writes go nowhere destructive
       // because CRON_ENABLED=false prevents the ingest paths that call put().
-      "r2_buckets": [{ "binding": "MEDIA", "bucket_name": "released-media" }],
+      // RAW_SNAPSHOTS reuses released-media in staging (no dedicated released-raw
+      // bucket there) — staging never runs the backfill workflow, so it's unused.
+      "r2_buckets": [
+        { "binding": "MEDIA", "bucket_name": "released-media" },
+        { "binding": "RAW_SNAPSHOTS", "bucket_name": "released-media" },
+      ],
       "queues": {
         "producers": [{ "binding": "WEBHOOK_DELIVERY_QUEUE", "queue": "webhook-delivery" }],
       },
@@ -558,6 +583,11 @@
           "name": "firecrawl-ingest-staging",
           "binding": "FIRECRAWL_INGEST_WORKFLOW",
           "class_name": "FirecrawlIngestWorkflow",
+        },
+        {
+          "name": "backfill-source-staging",
+          "binding": "BACKFILL_SOURCE_WORKFLOW",
+          "class_name": "BackfillSourceWorkflow",
         },
       ],
       // Empty cron list. Without this override, Wrangler inherits the

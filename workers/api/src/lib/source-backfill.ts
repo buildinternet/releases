@@ -49,7 +49,7 @@ export interface SourceBackfillReport {
 /** Collapse rows sharing a synthesized dedup URL, keeping the first occurrence.
  *  A single D1 `INSERT ... ON CONFLICT` cannot touch the same `(source_id, url)`
  *  twice, so within-batch dupes must be removed before ingest chunks them. */
-function dedupeByUrl(rows: RawRelease[]): RawRelease[] {
+export function dedupeByUrl(rows: RawRelease[]): RawRelease[] {
   const seen = new Set<string>();
   const out: RawRelease[] = [];
   for (const r of rows) {
@@ -63,7 +63,10 @@ function dedupeByUrl(rows: RawRelease[]): RawRelease[] {
   return out;
 }
 
-function dateRange(rows: RawRelease[]): { from: string | null; to: string | null } {
+export function dateRange(rows: ReadonlyArray<{ publishedAt?: Date | null }>): {
+  from: string | null;
+  to: string | null;
+} {
   let from: number | null = null;
   let to: number | null = null;
   for (const r of rows) {
@@ -113,11 +116,13 @@ export async function runSourceBackfill(
   return report;
 }
 
-/** Hard ceiling on extraction windows when the body came from a Firecrawl
- *  `scrapeOnce` (~106s). The single scrape is the long pole; bounding the
- *  windows on top of it keeps a default run under a normal client timeout.
- *  Supplied-markdown / plain-fetch paths have no scrape and are not clamped —
- *  they remain the path for arbitrarily-deep histories. See issue #1271. */
+/** Upper bound on extraction windows for the Firecrawl auto-scrape path.
+ *  Backfill cost is dominated by sequential Haiku extraction (~1.8s/entry),
+ *  NOT the scrape (~0.2s); a window-count ceiling cannot bound a dense page's
+ *  total time — it exists only as a sane default ceiling.  Supplied-markdown
+ *  and plain-fetch paths are unclamped and remain the route for
+ *  arbitrarily-deep histories.  Consumed inside `BackfillSourceWorkflow`'s
+ *  `plan-windows` step.  See issue #1281. */
 export const FIRECRAWL_BACKFILL_MAX_WINDOWS = 8;
 
 /** The window budget actually handed to extraction: clamped to the hard
