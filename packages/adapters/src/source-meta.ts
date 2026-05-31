@@ -97,7 +97,20 @@ export interface SourceMetadata {
 
   // Content depth assessment — set during onboarding. If "summary-only",
   // prefer enabling crawlEnabled so per-release pages are fetched during parse.
-  feedContentDepth?: "full" | "summary-only";
+  // "anchor-fragment" means the feed's item URLs are all #section anchors on one
+  // shared page; enrichment cannot isolate entries, so it must not be attempted.
+  feedContentDepth?: "full" | "summary-only" | "anchor-fragment";
+
+  /**
+   * Enrichment circuit-breaker state. Stored here (not a schema column) so it
+   * survives source-metadata updates without a migration. The counter is
+   * incremented on each all-fail cron fire and reset to 0 on any success.
+   * When `consecutiveFailures` >= `ENRICH_CONSECUTIVE_FAILURE_LIMIT` the
+   * enricher skips the source entirely.
+   */
+  enrichment?: {
+    consecutiveFailures: number;
+  };
 
   /**
    * Optional allowlist of feed `<category>` values (or JSON-feed `tags`).

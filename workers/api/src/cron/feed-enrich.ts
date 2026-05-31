@@ -23,7 +23,8 @@ import { makeBotFetch } from "../lib/web-bot-auth-fetch.js";
 import { FLAGS, flag, type FlagshipBinding } from "@releases/lib/flags";
 import { IN_ARRAY_CHUNK_SIZE } from "../lib/d1-limits.js";
 import { logUsage, type UsageLogDb } from "../lib/usage-log.js";
-import { releases } from "@buildinternet/releases-core/schema";
+import { releases, sources } from "@buildinternet/releases-core/schema";
+import { getSourceMeta } from "@releases/adapters/source-meta.js";
 import type { drizzle } from "drizzle-orm/d1";
 import type { Source } from "@buildinternet/releases-core/schema";
 import type { SourceMetadata } from "@releases/adapters/feed.js";
@@ -255,6 +256,40 @@ export interface EnrichOutcome {
   marker: EnrichmentMarker;
 }
 
+/**
+ * Number of consecutive all-fail enrichment fires after which the source's
+ * circuit breaker trips and enrichment is skipped on subsequent cron fires.
+ * Stored in `source.metadata.enrichment.consecutiveFailures`; reset to 0 on
+ * any success. Three failures covers transient issues (network blip, model
+ * hiccup) while bounding spend on structurally-broken sources.
+ */
+export const ENRICH_CONSECUTIVE_FAILURE_LIMIT = 3;
+
+/**
+ * Returns true when the source's enrichment circuit breaker has tripped —
+ * i.e. the consecutive-failure counter has reached or exceeded the limit.
+ * Callers should skip enrichment entirely when this returns true.
+ */
+export function isEnrichmentCircuitOpen(meta: SourceMetadata): boolean {
+  const failures = meta.enrichment?.consecutiveFailures ?? 0;
+  return failures >= ENRICH_CONSECUTIVE_FAILURE_LIMIT;
+}
+
+/**
+ * Derives the next `enrichment` metadata block after an attempt.
+ * - On failure: increments `consecutiveFailures` (starts from 0 if absent).
+ * - On success: resets `consecutiveFailures` to 0.
+ */
+export function nextEnrichmentMetadata(
+  current: SourceMetadata["enrichment"],
+  succeeded: boolean,
+): NonNullable<SourceMetadata["enrichment"]> {
+  if (succeeded) {
+    return { consecutiveFailures: 0 };
+  }
+  return { consecutiveFailures: (current?.consecutiveFailures ?? 0) + 1 };
+}
+
 interface EnrichNewThinEnv {
   FEED_ENRICH_ENABLED?: string;
   FEED_ENRICH_MAX_PER_FIRE?: string;
@@ -279,6 +314,9 @@ export async function enrichNewThinItems(
   const out = new Map<number, EnrichOutcome>();
   if (!(await flag(env.FLAGS, env.FEED_ENRICH_ENABLED, FLAGS.feedEnrichEnabled))) return out;
   if (meta.feedContentDepth !== "summary-only") return out;
+  // Circuit breaker: skip sources that have failed N consecutive times to
+  // prevent burning Haiku calls on structurally-broken sources every cron fire.
+  if (isEnrichmentCircuitOpen(meta)) return out;
 
   const thinChars = parsePositiveInt(env.FEED_THIN_CHARS, DEFAULT_FEED_THIN_CHARS);
   const cap = parsePositiveInt(env.FEED_ENRICH_MAX_PER_FIRE, DEFAULT_ENRICH_MAX_PER_FIRE);
@@ -301,6 +339,12 @@ export async function enrichNewThinItems(
   }
 
   const fresh = candidates.filter(({ raw }) => !existing.has(raw.url!)).slice(0, cap);
+  // No fresh items this fire → no enrichment attempt was made. Leave the
+  // circuit-breaker counter untouched: a source that simply had nothing new
+  // and thin to enrich must not accrue "failures".
+  if (fresh.length === 0) return out;
+
+  let anySuccess = false;
   for (const { raw, index } of fresh) {
     const attemptedAt = new Date().toISOString();
     // oxlint-disable-next-line no-await-in-loop -- bounded by `cap`; sequential keeps cost predictable
@@ -312,6 +356,7 @@ export async function enrichNewThinItems(
     // Treat enriched-without-content as a failure (mirrors runEnrichBackfill):
     // only mark succeeded when there's a real body to apply.
     if (res.status === "enriched" && res.content) {
+      anySuccess = true;
       out.set(index, {
         content: res.content,
         media: res.media,
@@ -321,5 +366,51 @@ export async function enrichNewThinItems(
       out.set(index, { marker: { attemptedAt, succeeded: false } });
     }
   }
+
+  // Persist the per-source breaker state. Any success this fire resets the
+  // counter to 0 (and clears any tripped state); an all-fail fire increments
+  // it. The write only runs when at least one attempt was made (guarded
+  // above), so a source with nothing to enrich never trips the breaker. Merge
+  // against the freshly-read row so a concurrent metadata edit isn't clobbered
+  // wholesale; fail-open — a write error must not lose the enriched bodies the
+  // caller is about to apply.
+  try {
+    await persistEnrichmentBreakerState(db, source.id, anySuccess);
+  } catch (err) {
+    logEvent("warn", {
+      component: "feed-enrich",
+      event: "breaker-writeback-failed",
+      sourceId: source.id,
+      err,
+    });
+  }
   return out;
+}
+
+/**
+ * Re-read the source's current metadata, fold in the next `enrichment` block
+ * (increment on all-fail, reset on any success), and write it back to the
+ * `sources` row. Re-reading inside the function keeps the merge against the
+ * latest persisted metadata rather than the possibly-stale in-memory copy the
+ * caller held, so an unrelated metadata field written earlier in the same fire
+ * isn't dropped.
+ */
+async function persistEnrichmentBreakerState(
+  db: ReturnType<typeof drizzle>,
+  sourceId: string,
+  succeeded: boolean,
+): Promise<void> {
+  const [row] = await db
+    .select({ metadata: sources.metadata })
+    .from(sources)
+    .where(eq(sources.id, sourceId));
+  const current = row ? getSourceMeta({ metadata: row.metadata } as Source) : {};
+  const merged: SourceMetadata = {
+    ...current,
+    enrichment: nextEnrichmentMetadata(current.enrichment, succeeded),
+  };
+  await db
+    .update(sources)
+    .set({ metadata: JSON.stringify(merged) })
+    .where(eq(sources.id, sourceId));
 }
