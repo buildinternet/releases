@@ -65,6 +65,13 @@ import { clusterAndPersistCascades, DECIDED_BY_CHANGESETS } from "../lib/cluster
 import { clusterChangesets } from "@releases/core-internal/changesets-cluster";
 import { releaseCoverage } from "@releases/db/schema-coverage.js";
 import { IN_ARRAY_CHUNK_SIZE } from "../lib/d1-limits.js";
+import {
+  mergeEnrichmentMarker,
+  hasStoredMedia,
+  selectEnrichCandidates,
+  BATCH_ENRICH_DEFAULT_LIMIT,
+  BATCH_ENRICH_MAX_LIMIT,
+} from "../lib/enrich-apply.js";
 import type { Source } from "@buildinternet/releases-core/schema";
 import type { RawRelease } from "@releases/adapters/types.js";
 import { getSourceMeta, htmlToMarkdown } from "@releases/adapters/feed.js";
@@ -1639,71 +1646,19 @@ export interface EnrichBackfillReport {
   dryRun: boolean;
 }
 
-/** Merge an enrichment marker into a release's existing metadata JSON, preserving
- *  any other top-level keys. Tolerates null / malformed metadata. */
-function mergeEnrichmentMarker(
-  existing: string | null,
-  enrichment: { attemptedAt: string; succeeded: boolean; via?: "fetch" | "render" },
-): string {
-  let base: Record<string, unknown> = {};
-  if (existing) {
-    try {
-      const parsed = JSON.parse(existing);
-      if (parsed && typeof parsed === "object") base = parsed as Record<string, unknown>;
-    } catch {
-      // malformed metadata — start fresh rather than throw
-    }
-  }
-  return JSON.stringify({ ...base, enrichment });
-}
-
-/** True when a release's stored media JSON holds at least one entry. */
-function hasStoredMedia(raw: string | null): boolean {
-  if (!raw) return false;
-  try {
-    const arr = JSON.parse(raw);
-    return Array.isArray(arr) && arr.length > 0;
-  } catch {
-    return false;
-  }
-}
-
 export async function runEnrichBackfill(
   db: ReturnType<typeof createDb>,
   sourceId: string,
   opts: EnrichBackfillOpts,
   deps: EnrichBackfillDeps,
 ): Promise<EnrichBackfillReport> {
-  // Thin releases that haven't been successfully enriched: either no prior
-  // attempt, or a failed one (so transient failures stay retryable; a successful
-  // enrichment is never re-run).
-  const candidates = await db
-    .select({
-      id: releases.id,
-      title: releases.title,
-      version: releases.version,
-      publishedAt: releases.publishedAt,
-      content: releases.content,
-      url: releases.url,
-      media: releases.media,
-      metadata: releases.metadata,
-    })
-    .from(releases)
-    .where(
-      and(
-        eq(releases.sourceId, sourceId),
-        sql`${releases.url} IS NOT NULL`,
-        // Not yet attempted, or a prior attempt failed — retry transient failures.
-        sql`(json_extract(${releases.metadata}, '$.enrichment') IS NULL OR json_extract(${releases.metadata}, '$.enrichment.succeeded') = 0)`,
-        // Thin only: teaser-as-content (content == summary), or no summary AND a
-        // short body. The length guard keeps full-body summary-less releases out,
-        // so they don't burn a fetch+extract before the improvement bar no-ops
-        // them. (`releases` has no thinChars column; gate on the env value.)
-        sql`(${releases.content} = ${releases.summary} OR (${releases.summary} IS NULL AND length(${releases.content}) <= ${opts.thinChars}))`,
-      ),
-    )
-    .orderBy(sql`${releases.publishedAt} DESC`)
-    .limit(opts.limit);
+  // Thin releases that haven't been successfully enriched (shared with the async
+  // BatchEnrichWorkflow so the candidate filter stays in one place).
+  const candidates = await selectEnrichCandidates(db, {
+    sourceIds: [sourceId],
+    limit: opts.limit,
+    thinChars: opts.thinChars,
+  });
 
   const report: EnrichBackfillReport = {
     scanned: candidates.length,
@@ -1837,6 +1792,134 @@ workflowsRoutes.post("/workflows/enrich-feed-content", async (c) => {
   );
 
   return c.json({ source: { id: src.id, slug: src.slug }, ...report });
+});
+
+// ── POST /workflows/batch-enrich ─────────────────────────────────────────────
+//
+// Async, batched sibling of /workflows/enrich-feed-content for the render-heavy
+// / JS-shell summary-only sources that the synchronous route can't finish before
+// a client disconnect (#1296). Dispatches a durable BatchEnrichWorkflow: per-item
+// Browser-Rendering fetch (→ R2) then ONE Anthropic Message Batch for extraction.
+// Backfill-only; the steady-state forward path stays synchronous.
+//
+// Body: { sourceIds: string[] (typed src_…), limit?, dryRun?, maxCostUsd? }
+// Returns: 202 { instanceId, async, statusUrl }
+
+interface BatchEnrichBody {
+  sourceIds?: unknown;
+  limit?: number;
+  dryRun?: boolean;
+  maxCostUsd?: number;
+}
+
+workflowsRoutes.post("/workflows/batch-enrich", async (c) => {
+  const db = createDb(c.env.DB);
+  const body = await c.req.json<BatchEnrichBody>().catch(() => ({}) as BatchEnrichBody);
+
+  const sourceIds = Array.isArray(body.sourceIds)
+    ? body.sourceIds.map((s) => String(s).trim()).filter(Boolean)
+    : [];
+  if (sourceIds.length === 0) {
+    return c.json(
+      {
+        error: "bad_request",
+        message: "Provide a non-empty `sourceIds` array of typed source IDs (src_…)",
+      },
+      400,
+    );
+  }
+  // Bare slugs are ambiguous across orgs (per-org slug uniqueness) — require typed IDs.
+  const bareSlug = sourceIds.find((id) => !isSourceId(id));
+  if (bareSlug) {
+    return c.json(
+      {
+        error: "bare_slug_rejected",
+        message: `'${bareSlug}' is not a typed source ID. Pass src_… ids; resolve slugs via /v1/lookups/source-by-slug first.`,
+      },
+      400,
+    );
+  }
+
+  const existing = await db
+    .select({ id: sources.id })
+    .from(sources)
+    .where(inArray(sources.id, sourceIds));
+  const found = new Set(existing.map((r) => r.id));
+  const missing = sourceIds.filter((id) => !found.has(id));
+  if (missing.length > 0) {
+    return c.json(
+      { error: "not_found", message: `Source(s) not found: ${missing.join(", ")}` },
+      404,
+    );
+  }
+
+  if (!c.env.BATCH_ENRICH_WORKFLOW) {
+    return c.json(
+      { error: "service_unavailable", message: "BATCH_ENRICH_WORKFLOW binding not configured" },
+      503,
+    );
+  }
+
+  const rawLimit = Number(body.limit ?? BATCH_ENRICH_DEFAULT_LIMIT);
+  const limit = Number.isFinite(rawLimit)
+    ? Math.min(Math.max(Math.floor(rawLimit), 1), BATCH_ENRICH_MAX_LIMIT)
+    : BATCH_ENRICH_DEFAULT_LIMIT;
+  const dryRun = body.dryRun !== false; // default to a dry run for safety
+  const maxCostUsd =
+    typeof body.maxCostUsd === "number" && body.maxCostUsd > 0 ? body.maxCostUsd : undefined;
+
+  const scheduledTime = Date.now();
+  const instance = await c.env.BATCH_ENRICH_WORKFLOW.create({
+    id: `batch-enrich-${scheduledTime}`,
+    params: { sourceIds, limit, dryRun, ...(maxCostUsd !== undefined ? { maxCostUsd } : {}) },
+  });
+  const instanceId: string = (instance as unknown as { id: string }).id;
+
+  logEvent("info", {
+    component: "batch-enrich",
+    event: "workflow-dispatch",
+    sourceIds,
+    instanceId,
+    limit,
+    dryRun,
+  });
+
+  return c.json(
+    {
+      instanceId,
+      async: true,
+      statusUrl: `${c.env.ADMIN_BASE_URL ?? ""}/v1/workflows/batch-enrich/status/${instanceId}`,
+    },
+    202,
+  );
+});
+
+// ── GET /workflows/batch-enrich/status/:instanceId ───────────────────────────
+workflowsRoutes.get("/workflows/batch-enrich/status/:instanceId", async (c) => {
+  if (!c.env.BATCH_ENRICH_WORKFLOW) {
+    return c.json(
+      { error: "service_unavailable", message: "BATCH_ENRICH_WORKFLOW binding not configured" },
+      503,
+    );
+  }
+  const instanceId = c.req.param("instanceId");
+  try {
+    const instance = await c.env.BATCH_ENRICH_WORKFLOW.get(instanceId);
+    const status = await instance.status();
+    return c.json({ instanceId, ...status });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (WORKFLOW_NOT_FOUND_RE.test(message)) {
+      return c.json({ error: "instance_not_found", message }, 404);
+    }
+    logEvent("error", {
+      component: "workflows-batch-enrich-status",
+      event: "lookup-failed",
+      instanceId,
+      err: err instanceof Error ? err : String(err),
+    });
+    return c.json({ error: "internal_error", message }, 500);
+  }
 });
 
 // ── POST /workflows/backfill-media ───────────────────────────────────────────
