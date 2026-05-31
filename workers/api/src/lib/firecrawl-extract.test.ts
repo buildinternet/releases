@@ -119,6 +119,44 @@ describe("extractFirecrawlMarkdown", () => {
     expect(calls[0].body).toContain("## Entry 0");
     expect(calls[0].body).not.toContain("## Entry 599");
   });
+
+  it("attributes releases to the BARE per-page URL when pageUrl is set (crawl monitor)", async () => {
+    // A crawl monitor scrapes a single discovered per-entry page. Existing
+    // crawl-ingested rows use the BARE page URL with no #anchor (e.g. replit's
+    // https://docs.replit.com/updates/.../changelog). We must produce the exact
+    // same scheme so re-ingest no-ops on UNIQUE(source_id, url) instead of
+    // duplicating — NOT the `${sourceUrl}#${slug}` anchor mapEntries synthesizes
+    // for single-page scrape monitors.
+    const { client } = makeFakeAnthropicClient();
+    const pageUrl = "https://docs.replit.com/updates/2026/05/15/changelog";
+    const { releases } = await extractFirecrawlMarkdown(
+      "# Update\nShipped X.",
+      fakeSource,
+      {
+        anthropicClient: client as never,
+        agentModel: "claude-haiku-4-5-20251001",
+        logger: fakeLogger,
+      },
+      { pageUrl },
+    );
+
+    expect(releases).toHaveLength(1);
+    expect(releases[0].url).toBe(pageUrl);
+    expect(releases[0].url).not.toContain("#");
+  });
+
+  it("keeps source.url anchor attribution when pageUrl is absent (scrape monitor)", async () => {
+    const { client } = makeFakeAnthropicClient();
+    const { releases } = await extractFirecrawlMarkdown("# v1.2.0\nAdded X.", fakeSource, {
+      anthropicClient: client as never,
+      agentModel: "claude-haiku-4-5-20251001",
+      logger: fakeLogger,
+    });
+
+    expect(releases).toHaveLength(1);
+    // Unchanged behavior: a synthesized #anchor hanging off source.url.
+    expect(releases[0].url).toMatch(/^https:\/\/acme\.com\/changelog#/);
+  });
 });
 
 // Fake whose every extract call returns a distinct version, so accumulation

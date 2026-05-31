@@ -70,10 +70,24 @@ export interface FirecrawlExtractResult {
   droppedChars: number;
 }
 
+export interface ExtractFirecrawlOptions {
+  /**
+   * Per-page canonical URL for a CRAWL monitor. Firecrawl crawls the index
+   * (`source.url`) and reports each discovered entry page on its own URL; this
+   * is that page's URL. When set, every extracted release is attributed to this
+   * BARE URL (no synthesized `#anchor`) — exactly the scheme the in-repo crawl
+   * adapter stores (`scrape-fetch.ts` per-page attribution), so a crawl monitor's
+   * re-ingest dedups on `UNIQUE(source_id, url)` against existing crawl rows.
+   * Omitted for SCRAPE monitors, which keep `${source.url}#${slug}` attribution.
+   */
+  pageUrl?: string;
+}
+
 export async function extractFirecrawlMarkdown(
   markdown: string,
   source: Source,
   deps: FirecrawlExtractDeps,
+  opts: ExtractFirecrawlOptions = {},
 ): Promise<FirecrawlExtractResult> {
   // Bound the extraction input to a recent window before the one-shot extract.
   // Firecrawl's `changed` events hand us a small diff delta (well under budget,
@@ -121,6 +135,15 @@ export async function extractFirecrawlMarkdown(
   await reportUsage(deps, result);
 
   const releases = mapEntries(result.entries, { sourceUrl: source.url }) as RawRelease[];
+
+  // Crawl monitor: this body is a single discovered entry page, so attribute
+  // every extracted release to that page's BARE canonical URL. This mirrors the
+  // crawl adapter (one discovered page → one bare-URL release row) and is what
+  // makes a crawl monitor's re-ingest dedup against existing crawl rows rather
+  // than minting `${source.url}#${slug}` anchors that would never match.
+  if (opts.pageUrl) {
+    for (const release of releases) release.url = opts.pageUrl;
+  }
 
   return {
     releases,

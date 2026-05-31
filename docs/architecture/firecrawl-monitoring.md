@@ -28,16 +28,26 @@ sequenceDiagram
 
 ## Monitor lifecycle (admin)
 
-`POST /v1/sources/:slug/firecrawl/sync` — body `{ enabled: boolean, schedule?, proxy?: "auto"|"basic"|"stealth"|"enhanced", goal? }`. Takes a typed `src_…` ID (via `resolveSourceFromContext`), admin-gated through `publicReadAuthMiddleware`'s non-SAFE_METHODS branch, hidden from the prod OpenAPI spec. Enabling creates the monitor; disabling deletes it. Implemented in `workers/api/src/routes/firecrawl.ts` + `workers/api/src/lib/firecrawl-sync.ts`.
+`POST /v1/sources/:slug/firecrawl/sync` — body `{ enabled: boolean, schedule?, proxy?: "auto"|"basic"|"stealth"|"enhanced", goal?, target?: "scrape"|"crawl" }`. Takes a typed `src_…` ID (via `resolveSourceFromContext`), admin-gated through `publicReadAuthMiddleware`'s non-SAFE_METHODS branch, hidden from the prod OpenAPI spec. Enabling creates the monitor; disabling deletes it. Implemented in `workers/api/src/routes/firecrawl.ts` + `workers/api/src/lib/firecrawl-sync.ts`.
 
 `deriveMonitorSpec` is a pure, reconcile-safe spec builder:
 
 - `name` = `releases:<source.id>` (keyed on the id, not slug — slugs aren't globally unique post-#690).
-- `schedule` — `{ text, timezone: "UTC" }`, default `every 6 hours`; `targets: [{ type: "scrape", urls: [url], scrapeOptions: { formats: ["markdown"], proxy } }]` (proxy default `auto`).
+- `schedule` — `{ text, timezone: "UTC" }`, default `every 6 hours`.
+- `targets` — for a **scrape** monitor (`target` unset/`"scrape"`, the default), `[{ type: "scrape", urls: [url], scrapeOptions: { formats: ["markdown"], proxy } }]`. For a **crawl** monitor (`target: "crawl"`), `[{ type: "crawl", url, crawlOptions: { limit, maxDiscoveryDepth, … }, scrapeOptions: { formats: ["markdown"], proxy } }]` (proxy default `auto`). See [Crawl-target monitors](#crawl-target-monitors-multi-page-sources).
 - `webhook` — `url` from **`ADMIN_BASE_URL`** (`api.releases.sh`, the API worker — _not_ the public web origin), `headers: { "X-Firecrawl-Token": <FIRECRAWL_WEBHOOK_SECRET> }`, `metadata: { sourceId }`, `events: ["monitor.page"]`.
 - `goal` — default "Detect new product releases…"; drives the AI change judge.
 
-**Create vs. update is asymmetric.** `createMonitor` sends the full spec. `updateMonitor` (a `PATCH`) reconciles **only the app-owned webhook** (URL + token + sourceId). `schedule`/`proxy`/`goal` are sent once at create and are **dashboard-authoritative thereafter** — an operator tuning cadence/proxy in the Firecrawl dashboard sticks, and a later `sync` can never revert it. A `404` on update self-heals by recreating with the full spec. `monitorId` / `lastCheckId` / `lastChangeAt` are stamped on `metadata.firecrawl`.
+**Create vs. update is asymmetric.** `createMonitor` sends the full spec. `updateMonitor` (a `PATCH`) reconciles **only the app-owned webhook** (URL + token + sourceId). `schedule`/`proxy`/`goal`/`targets` are sent once at create and are **dashboard-authoritative thereafter** — an operator tuning cadence/proxy in the Firecrawl dashboard sticks, and a later `sync` can never revert it. A `404` on update self-heals by recreating with the full spec. `monitorId` / `lastCheckId` / `lastChangeAt` are stamped on `metadata.firecrawl`.
+
+## Crawl-target monitors (multi-page sources)
+
+A `scrape` monitor watches one URL. Some changelogs are **multi-page** — an index that links to a separate page per entry (replit's `docs.replit.com/updates`, docker-desktop release notes, langfuse, resend, …). For these, `metadata.firecrawl.target: "crawl"` makes the monitor a **crawl target**: Firecrawl runs a full crawl of `source.url` on every check, diffs all discovered pages, and the `monitor.page` webhook reports **each page on its own canonical URL** with a per-page `status`/`diff`/`judgment`. The receiver already fans out per page (`for (const page of body.data)`), so each new/changed page becomes its own ingest.
+
+- **Onboard:** `POST /v1/sources/:id/firecrawl/sync { enabled: true, target: "crawl" }`. Crawl-option tuning (`limit`, `maxDiscoveryDepth`, `includePaths`, `excludePaths`, `sitemap` — Firecrawl path-regexes, _not_ the Cloudflare URL-globs the in-repo crawl adapter uses) lives in `metadata.firecrawl.crawl`, set via `PATCH /v1/sources/:id/metadata`. Defaults: `limit` 25, `maxDiscoveryDepth` 2 (`deriveMonitorSpec`). A crawl monitor runs a full crawl per check (more credits than a single-URL scrape), so reserve it for genuinely multi-page sources and keep the cadence at the 24h default unless the source is high-velocity.
+- **Switching target type** scrape↔crawl on an existing monitor is **not** a PATCH (targets are dashboard-authoritative after create). Disable (deletes the monitor) then re-enable with the new `target` (recreates).
+- **Per-page attribution + dedup.** Each crawl-page workflow attributes its extracted release(s) to the **bare per-page URL** Firecrawl reports — `extractFirecrawlMarkdown`'s `pageUrl` option overrides mapEntries' `${source.url}#${slug}` anchor synthesis. This matches the in-repo crawl adapter's scheme (`scrape-fetch.ts` per-page attribution: one discovered page → one bare-URL row), so a crawl monitor re-ingesting an unchanged page no-ops on `UNIQUE(source_id, url)` instead of duplicating against existing crawl-ingested rows. **Before enabling a crawl monitor on a source that already has crawl-ingested history, dry-run and diff the produced URLs against the stored `releases[].url` (`GET /v1/orgs/:org/sources/:slug`)** — the two crawl backends must agree on the exact canonical URL string (trailing slash, query params) for dedup to land.
+- **Instance-id fan-out.** The workflow instance id is `fc-${checkId}-${hash(url)}` (keyed on `(checkId, url)`, the same granularity as the KV gate), so a crawl check that reports several pages under one `checkId` spawns a distinct workflow per page rather than colliding on a shared `fc-${checkId}` (which the CF Workflows binding would reject as a duplicate, silently dropping all but the first page). Still deterministic per `(checkId, url)`, so webhook redelivery short-circuits on the duplicate-instance path (#1287).
 
 ## Webhook wire format
 
@@ -153,4 +163,4 @@ Not wired into any cron — runs only when explicitly POSTed. See `docs/superpow
 
 - Design + plan (dated, historical): `docs/superpowers/specs/2026-05-29-firecrawl-monitoring-integration-design.md` and `docs/superpowers/plans/2026-05-29-firecrawl-monitoring-integration.md`. These predate the live-API findings — the webhook delivers a diff (not markdown), and `diff.text` is hunkless; see the correction notes at the top of each.
 - [extract.md](extract.md) — the shared `extractFromBody` two-tier extraction path this reuses.
-- Key PRs: monitor lifecycle + receiver #1243/#1246, incremental extraction + dashboard-authoritative sync #1252, extraction determinism (temp 0) + Haiku #1255, hunkless-diff parser fix + `enqueued` diagnostics #1262.
+- Key PRs: monitor lifecycle + receiver #1243/#1246, incremental extraction + dashboard-authoritative sync #1252, extraction determinism (temp 0) + Haiku #1255, hunkless-diff parser fix + `enqueued` diagnostics #1262, crawl-target monitors for multi-page sources #1302.

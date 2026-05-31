@@ -265,6 +265,30 @@ export interface SourceMetadata {
     proxy?: "basic" | "enhanced" | "auto"; // default "auto"
     goal?: string; // natural-language judge goal
     judgeEnabled?: boolean; // default true; false = always extract (gate off)
+    /**
+     * Monitor target type. `"scrape"` (default) watches the single `source.url`.
+     * `"crawl"` watches a multi-page changelog: Firecrawl runs a full crawl of
+     * `source.url` on each check and reports each discovered per-entry page's own
+     * URL, so each new/changed page is ingested attributed to its own canonical
+     * URL (dedup-clean against existing crawl-ingested rows). The target type is
+     * set at monitor-create only and is dashboard-authoritative after — switching
+     * an existing monitor between scrape and crawl requires disable + re-enable
+     * (delete + recreate), not a PATCH. See docs/architecture/firecrawl-monitoring.md.
+     */
+    target?: "scrape" | "crawl";
+    /**
+     * Crawl-target tuning, applied only when `target === "crawl"` at create time.
+     * `includePaths`/`excludePaths` are Firecrawl path-regexes (NOT the Cloudflare
+     * URL-glob patterns used by the in-repo crawl adapter). Defaults mirror the
+     * crawl adapter's intent: a modest page `limit` and shallow `maxDiscoveryDepth`.
+     */
+    crawl?: {
+      limit?: number;
+      maxDiscoveryDepth?: number;
+      includePaths?: string[];
+      excludePaths?: string[];
+      sitemap?: "skip" | "include" | "only";
+    };
     lastCheckId?: string; // observability
     lastChangeAt?: string; // observability (ISO)
   };
