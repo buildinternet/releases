@@ -141,6 +141,6 @@ When iterating on a new migration against staging, use `bunx wrangler d1 migrati
 
 The project was originally called "Released"; the rename to "Releases" leaves the Cloudflare resource names deliberately unchanged:
 
-- **Cloudflare resources** keep their old names: D1 database `released-db` and R2 bucket `released-media`. Renaming these is a live migration, not a text change.
+- **Cloudflare resources** keep the `released-` prefix: D1 database `released-db`, and R2 buckets `released-media` (permanent, public media) and `released-raw` (ephemeral raw-page snapshots for backfill — content-hash keyed, 90-day lifecycle, public domain `raw.releases.sh`; see [firecrawl-monitoring.md](docs/architecture/firecrawl-monitoring.md)). The first two predate the rename, so renaming them is a live migration, not a text change; new resources (`released-raw`) keep the prefix for consistency.
 
 Everything else — env vars (`RELEASES_*`), copy, prompts, display names, webhook headers (`X-Releases-*`), package/workspace names, the `~/.releases` data dir, localStorage keys — uses the new name.

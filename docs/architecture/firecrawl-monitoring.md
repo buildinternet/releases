@@ -135,6 +135,8 @@ When the source has `metadata.firecrawl.enabled`, no `markdown` is supplied, and
 3. **`extract-window-{i}`** (one step per window) — loads raw from R2 → slices to this window → Haiku 4.5 extraction → `ingestRawReleases` (idempotent upsert). A failure or client disconnect resumes from the failed window; completed windows are already durably written (`RELEASE_URL_UPSERT`).
 4. **`finalize`** — aggregates globally-unique counts and date range across windows, runs embed + summary regeneration, assembles the `SourceBackfillReport` (including `guidance` when the cap bit is set).
 
+**Raw snapshot storage.** Raw bodies live in a dedicated prod R2 bucket, **`released-raw`** (binding `RAW_SNAPSHOTS`), kept separate from the permanent/public `released-media` because raw is ephemeral: it is content-hash keyed at `sources/{sourceId}/raw/{hash}.md` (`.html` when an HTML original exists) and expired by a 90-day R2 lifecycle rule. A `source_raw_snapshots` row points D1 at each object (unique on `(source_id, content_hash)`, so an unchanged page does not re-store). The bucket is fronted by the public domain `raw.releases.sh`, but the workflow only ever reads/writes it through the `RAW_SNAPSHOTS` binding server-side — nothing in the browser fetches it, so no CORS/CSP allow-list entry is required. Staging binds `released-media` for `RAW_SNAPSHOTS` and never runs the workflow.
+
 ### Shared properties (both paths)
 
 - **Body acquisition ladder (Path A):** supplied `markdown` → plain `fetch` + `htmlToMarkdown`. (Path B uses Firecrawl `scrapeOnce`.)
