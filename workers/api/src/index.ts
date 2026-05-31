@@ -42,6 +42,7 @@ export { BatchSummarizeWorkflow } from "./workflows/batch-summarize.js";
 export { BatchOverviewWorkflow } from "./workflows/batch-overview.js";
 export { FirecrawlIngestWorkflow } from "./workflows/firecrawl-ingest.js";
 export { BackfillSourceWorkflow } from "./workflows/backfill-source.js";
+export { BatchEnrichWorkflow } from "./workflows/batch-enrich.js";
 
 /** Cloudflare Secrets Store binding — call .get() to retrieve the secret value. */
 type SecretBinding = { get(): Promise<string> };
@@ -102,6 +103,12 @@ export type Env = {
     BATCH_OVERVIEW_ENABLED?: string;
     BATCH_OVERVIEW_MAX_COST_USD?: string;
     BATCH_OVERVIEW_WORKFLOW?: Workflow;
+    // Batch feed-content enrichment backfill (#1296). Admin POST trigger only;
+    // BATCH_ENRICH_ENABLED is reserved for a future cron path. Drains the
+    // render-heavy / JS-shell summary-only sources the sync route can't finish.
+    BATCH_ENRICH_ENABLED?: string;
+    BATCH_ENRICH_MAX_COST_USD?: string;
+    BATCH_ENRICH_WORKFLOW?: Workflow;
     // Feature flag: when "true", poll-and-fetch widens its candidate set to
     // include scrape/agent sources with no feedUrl and routes them through
     // change-detector branches defined in the org playbook's `fetchQuirks`

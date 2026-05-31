@@ -60,6 +60,30 @@ export function buildArticleInput(args: { markdown: string; title: string }): st
   return `Article title: ${args.title}\n\nPage markdown:\n${md}`;
 }
 
+/**
+ * Turn the model's raw text response into the article body. Shared by the
+ * synchronous `extractArticle` one-shot and the async Message Batches enrichment
+ * path so both apply identical parse + salvage semantics.
+ *
+ * - Normal case: the trimmed content of the `<article>…</article>` pair.
+ * - JS-shell / index signal: an explicit empty `<article></article>` (closing
+ *   tag present) stays empty — the caller's cue the page had no real body.
+ * - Truncation salvage: a long article can exhaust the output token cap before
+ *   the model emits the closing `</article>`, so the strict pair-match returns
+ *   "" and would discard a full body of good content. When the opening tag is
+ *   present but the closing one never arrived, keep the emitted prefix — a
+ *   partial body still clears the enrichment improvement bar, where "" never
+ *   could.
+ */
+export function parseArticleResponse(raw: string): string {
+  let content = extractTagged(raw, "article").trim();
+  if (!content && !/<\/article>/i.test(raw)) {
+    const open = raw.match(/<article>([\s\S]*)/i);
+    if (open) content = open[1].trim();
+  }
+  return content;
+}
+
 export async function extractArticle(
   client: Anthropic,
   args: { markdown: string; title: string; model?: string },
@@ -78,18 +102,7 @@ export async function extractArticle(
     .map((b) => b.text)
     .join("");
 
-  let content = extractTagged(raw, "article").trim();
-  // Salvage a truncated body: a long article can exhaust the output token cap
-  // before the model emits the closing </article>, so the strict pair-match
-  // above returns "" and would discard a full body of good content. When the
-  // opening tag is present but the closing one never arrived, keep the emitted
-  // prefix — a partial body still clears the enrichment improvement bar, where
-  // "" never could. An explicit empty <article></article> (the JS-shell / index
-  // signal) has its closing tag, so it stays empty and is not salvaged.
-  if (!content && !/<\/article>/i.test(raw)) {
-    const open = raw.match(/<article>([\s\S]*)/i);
-    if (open) content = open[1].trim();
-  }
+  const content = parseArticleResponse(raw);
 
   return {
     content,

@@ -122,6 +122,13 @@
     // and the operator's Monday top-off runs.
     "BATCH_OVERVIEW_ENABLED": "false",
     "BATCH_OVERVIEW_MAX_COST_USD": "5",
+    // Batch feed-content enrichment backfill (#1296). Admin POST trigger only
+    // (POST /v1/workflows/batch-enrich) runs unconditionally; BATCH_ENRICH_ENABLED
+    // is reserved for a future cron path. The pre-fetch cost estimate (bounded by
+    // the per-item input cap × batch discount) must stay under the ceiling or the
+    // workflow aborts before submitting.
+    "BATCH_ENRICH_ENABLED": "false",
+    "BATCH_ENRICH_MAX_COST_USD": "10",
     // Public web origin used to build canonical URLs for IndexNow pings (#649).
     "WEB_BASE_URL": "https://releases.sh",
     // IndexNow ingest pings (#649). On in prod; staging stays off. The
@@ -287,6 +294,15 @@
       "name": "backfill-source",
       "binding": "BACKFILL_SOURCE_WORKFLOW",
       "class_name": "BackfillSourceWorkflow",
+    },
+    {
+      // Batched feed-content enrichment backfill (#1296). Per-item Browser-
+      // Rendering fetch (→ R2) then ONE Anthropic Message Batch for extraction.
+      // Admin POST trigger only (POST /v1/workflows/batch-enrich); drains the
+      // render-heavy / JS-shell summary-only sources the sync route can't finish.
+      "name": "batch-enrich",
+      "binding": "BATCH_ENRICH_WORKFLOW",
+      "class_name": "BatchEnrichWorkflow",
     },
   ],
   "routes": [{ "pattern": "api.releases.sh", "custom_domain": true }],
@@ -593,6 +609,11 @@
           "name": "backfill-source-staging",
           "binding": "BACKFILL_SOURCE_WORKFLOW",
           "class_name": "BackfillSourceWorkflow",
+        },
+        {
+          "name": "batch-enrich-staging",
+          "binding": "BATCH_ENRICH_WORKFLOW",
+          "class_name": "BatchEnrichWorkflow",
         },
       ],
       // Empty cron list. Without this override, Wrangler inherits the

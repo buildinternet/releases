@@ -23,6 +23,7 @@ import { makeBotFetch } from "../lib/web-bot-auth-fetch.js";
 import { FLAGS, flag, type FlagshipBinding } from "@releases/lib/flags";
 import { IN_ARRAY_CHUNK_SIZE } from "../lib/d1-limits.js";
 import { logUsage, type UsageLogDb } from "../lib/usage-log.js";
+import { enrichmentFloor } from "../lib/enrich-apply.js";
 import { releases, sources } from "@buildinternet/releases-core/schema";
 import { getSourceMeta } from "@releases/adapters/source-meta.js";
 import type { drizzle } from "drizzle-orm/d1";
@@ -70,9 +71,8 @@ export interface EnrichItem {
   summary: string;
 }
 
-function bar(summary: string, thinChars: number): number {
-  return Math.max(thinChars, Math.ceil(summary.length * 1.5));
-}
+/** Local alias for the canonical improvement bar (see `enrichmentFloor`). */
+const bar = enrichmentFloor;
 
 export async function enrichFeedItem(item: EnrichItem, deps: EnrichDeps): Promise<EnrichResult> {
   // Chokepoint for both the forward path and the backfill route — skip before
