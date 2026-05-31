@@ -12,7 +12,7 @@ import type { WorkflowEvent, WorkflowStep, WorkflowStepConfig } from "cloudflare
 import { NonRetryableError } from "cloudflare:workflows";
 import { drizzle } from "drizzle-orm/d1";
 import { eq } from "drizzle-orm";
-import { sources, fetchLog } from "@buildinternet/releases-core/schema";
+import { sources, fetchLog, usageLog } from "@buildinternet/releases-core/schema";
 import type { Source } from "@buildinternet/releases-core/schema";
 import { getSourceMeta } from "@releases/adapters/feed.js";
 import { createFirecrawlClient } from "@releases/adapters/firecrawl.js";
@@ -175,6 +175,21 @@ export class FirecrawlIngestWorkflow extends WorkflowEntrypoint<
           anthropicClient,
           agentModel: FIRECRAWL_EXTRACT_MODEL,
           logger: workerLogger,
+          logUsageFn: async (entry) => {
+            try {
+              await db.insert(usageLog).values({
+                operation: entry.operation,
+                model: entry.model,
+                inputTokens: entry.inputTokens,
+                outputTokens: entry.outputTokens,
+                cacheReadTokens: entry.cacheReadTokens,
+                cacheWriteTokens: entry.cacheWriteTokens,
+                sourceId,
+              });
+            } catch {
+              // fail-open
+            }
+          },
         });
         // No silent caps: when the input exceeded the recent-window budget (the
         // one-time baseline scrape, or a rare oversized diff), record how much

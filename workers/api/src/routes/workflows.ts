@@ -1809,7 +1809,7 @@ workflowsRoutes.post("/workflows/enrich-feed-content", async (c) => {
   const dryRun = body.dryRun !== false; // default to a dry run for safety
   const thinChars = parsePositiveInt(c.env.FEED_THIN_CHARS, 600);
 
-  const deps = await buildEnrichDeps(c.env, thinChars);
+  const deps = await buildEnrichDeps(c.env, thinChars, db);
   if (!deps)
     return c.json(
       { error: "service_unavailable", message: "ANTHROPIC_API_KEY not configured" },
@@ -2129,6 +2129,21 @@ workflowsRoutes.post("/workflows/backfill-source", async (c) => {
         anthropicClient: anthropicClient!,
         agentModel: BACKFILL_EXTRACT_MODEL,
         logger: backfillLogger,
+        logUsageFn: async (entry) => {
+          try {
+            await db.insert(usageLog).values({
+              operation: entry.operation,
+              model: entry.model,
+              inputTokens: entry.inputTokens,
+              outputTokens: entry.outputTokens,
+              cacheReadTokens: entry.cacheReadTokens,
+              cacheWriteTokens: entry.cacheWriteTokens,
+              sourceId: src.id,
+            });
+          } catch {
+            // fail-open
+          }
+        },
       },
       { maxWindows: effectiveMaxWindows },
     );

@@ -11,7 +11,7 @@ import type { WorkflowEvent, WorkflowStep } from "cloudflare:workers";
 import { NonRetryableError } from "cloudflare:workflows";
 import { drizzle } from "drizzle-orm/d1";
 import { eq } from "drizzle-orm";
-import { sources } from "@buildinternet/releases-core/schema";
+import { sources, usageLog } from "@buildinternet/releases-core/schema";
 import type { Source } from "@buildinternet/releases-core/schema";
 import type { RawRelease } from "@releases/adapters/types.js";
 import { getSourceMeta, htmlToMarkdown } from "@releases/adapters/feed.js";
@@ -265,6 +265,21 @@ export class BackfillSourceWorkflow extends WorkflowEntrypoint<
               },
               extractDeps,
             );
+            // Persist usage for this window. Fail-open: a write error must not
+            // abort the backfill step (Cloudflare would retry the whole window).
+            try {
+              await db.insert(usageLog).values({
+                operation: "firecrawl-extract",
+                model: BACKFILL_EXTRACT_MODEL,
+                inputTokens: result.totalInput,
+                outputTokens: result.totalOutput,
+                cacheReadTokens: result.cacheReadTokens,
+                cacheWriteTokens: result.cacheWriteTokens,
+                sourceId: sourceId,
+              });
+            } catch {
+              // fail-open
+            }
             entries = mapEntries(result.entries, { sourceUrl: source.url }) as RawRelease[];
           }
 
