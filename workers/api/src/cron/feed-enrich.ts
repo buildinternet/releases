@@ -22,7 +22,8 @@ import { getAnthropicKey, resolveGatewayOpts, type AnthropicEnv } from "../lib/a
 import { makeBotFetch } from "../lib/web-bot-auth-fetch.js";
 import { FLAGS, flag, type FlagshipBinding } from "@releases/lib/flags";
 import { IN_ARRAY_CHUNK_SIZE } from "../lib/d1-limits.js";
-import { releases, usageLog } from "@buildinternet/releases-core/schema";
+import { logUsage, type UsageLogDb } from "../lib/usage-log.js";
+import { releases } from "@buildinternet/releases-core/schema";
 import type { drizzle } from "drizzle-orm/d1";
 import type { Source } from "@buildinternet/releases-core/schema";
 import type { SourceMetadata } from "@releases/adapters/feed.js";
@@ -176,12 +177,6 @@ export interface EnrichDepsEnv extends AnthropicEnv {
   WEB_BOT_AUTH_PRIVATE_KEY?: { get(): Promise<string> };
 }
 
-/** Minimal DB interface needed for usage logging inside `buildEnrichDeps`. */
-interface UsageLogDb {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  insert(table: any): { values(row: unknown): Promise<unknown> };
-}
-
 /**
  * Assemble the runtime `EnrichDeps` from worker env: build the Anthropic client,
  * resolve the (cached) Cloudflare creds for render escalation, and wire the
@@ -218,24 +213,19 @@ export async function buildEnrichDeps(
       return { content: result.content, usage: result.usage };
     },
     db
-      ? async (usage, model) => {
-          try {
-            await db.insert(usageLog).values({
+      ? (usage, model) =>
+          logUsage(
+            db,
+            {
               operation: "enrich-extract",
               model,
               inputTokens: usage.input,
               outputTokens: usage.output,
               cacheReadTokens: usage.cacheRead,
               cacheWriteTokens: usage.cacheCreate,
-            });
-          } catch (err) {
-            logEvent("warn", {
-              component: "feed-enrich",
-              event: "usage-log-failed",
-              err: err instanceof Error ? err : String(err),
-            });
-          }
-        }
+            },
+            "feed-enrich",
+          )
       : undefined,
   );
 

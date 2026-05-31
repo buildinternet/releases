@@ -11,7 +11,7 @@ import type { WorkflowEvent, WorkflowStep } from "cloudflare:workers";
 import { NonRetryableError } from "cloudflare:workflows";
 import { drizzle } from "drizzle-orm/d1";
 import { eq } from "drizzle-orm";
-import { sources, usageLog } from "@buildinternet/releases-core/schema";
+import { sources } from "@buildinternet/releases-core/schema";
 import type { Source } from "@buildinternet/releases-core/schema";
 import type { RawRelease } from "@releases/adapters/types.js";
 import { getSourceMeta, htmlToMarkdown } from "@releases/adapters/feed.js";
@@ -23,6 +23,7 @@ import { getSecret } from "@releases/lib/secrets";
 import { getAnthropicKey, resolveGatewayOpts } from "../lib/anthropic.js";
 import { buildAnthropicClient } from "@releases/lib/anthropic-client.js";
 import { planWindowOffsets } from "../lib/firecrawl-extract.js";
+import { logUsage } from "../lib/usage-log.js";
 import {
   sliceChangelog,
   DEFAULT_CHANGELOG_SLICE_TOKENS,
@@ -267,19 +268,19 @@ export class BackfillSourceWorkflow extends WorkflowEntrypoint<
             );
             // Persist usage for this window. Fail-open: a write error must not
             // abort the backfill step (Cloudflare would retry the whole window).
-            try {
-              await db.insert(usageLog).values({
+            await logUsage(
+              db,
+              {
                 operation: "firecrawl-extract",
                 model: BACKFILL_EXTRACT_MODEL,
                 inputTokens: result.totalInput,
                 outputTokens: result.totalOutput,
                 cacheReadTokens: result.cacheReadTokens,
                 cacheWriteTokens: result.cacheWriteTokens,
-                sourceId: sourceId,
-              });
-            } catch {
-              // fail-open
-            }
+                sourceId,
+              },
+              "backfill-source-workflow",
+            );
             entries = mapEntries(result.entries, { sourceUrl: source.url }) as RawRelease[];
           }
 

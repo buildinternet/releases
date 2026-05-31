@@ -74,6 +74,7 @@ import { getSecret } from "@releases/lib/secrets";
 import { FirecrawlError } from "@releases/lib/errors";
 import { buildAnthropicClient } from "@releases/lib/anthropic-client.js";
 import { extractChangelogAllWindows } from "../lib/firecrawl-extract.js";
+import { logUsage } from "../lib/usage-log.js";
 import {
   runSourceBackfill,
   effectiveBackfillWindows,
@@ -2129,21 +2130,7 @@ workflowsRoutes.post("/workflows/backfill-source", async (c) => {
         anthropicClient: anthropicClient!,
         agentModel: BACKFILL_EXTRACT_MODEL,
         logger: backfillLogger,
-        logUsageFn: async (entry) => {
-          try {
-            await db.insert(usageLog).values({
-              operation: entry.operation,
-              model: entry.model,
-              inputTokens: entry.inputTokens,
-              outputTokens: entry.outputTokens,
-              cacheReadTokens: entry.cacheReadTokens,
-              cacheWriteTokens: entry.cacheWriteTokens,
-              sourceId: src.id,
-            });
-          } catch {
-            // fail-open
-          }
-        },
+        logUsageFn: (entry) => logUsage(db, { ...entry, sourceId: src.id }, "backfill-source"),
       },
       { maxWindows: effectiveMaxWindows },
     );

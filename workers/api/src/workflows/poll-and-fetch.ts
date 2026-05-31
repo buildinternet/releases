@@ -11,13 +11,7 @@ import type { WorkflowEvent, WorkflowStep, WorkflowStepConfig } from "cloudflare
 import { NonRetryableError } from "cloudflare:workflows";
 import { drizzle } from "drizzle-orm/d1";
 import { and, eq, inArray, sql } from "drizzle-orm";
-import {
-  organizations,
-  products,
-  releases,
-  sources,
-  usageLog,
-} from "@buildinternet/releases-core/schema";
+import { organizations, products, releases, sources } from "@buildinternet/releases-core/schema";
 import type { Source } from "@buildinternet/releases-core/schema";
 import type { ReleaseComposition } from "@buildinternet/releases-core/composition";
 import { buildCompositionMetadataSet } from "@releases/core-internal/composition-metadata";
@@ -42,6 +36,7 @@ import { invalidateLatestCache, type InvalidationEnv } from "../lib/latest-cache
 import { getAnthropicKey, resolveGatewayOpts, type AnthropicEnv } from "../lib/anthropic.js";
 import { buildAnthropicClient } from "@releases/lib/anthropic-client.js";
 import { IN_ARRAY_CHUNK_SIZE } from "../lib/d1-limits.js";
+import { logUsage } from "../lib/usage-log.js";
 import { makeBotFetch } from "../lib/web-bot-auth-fetch.js";
 import { FLAGS, flag } from "@releases/lib/flags";
 
@@ -330,13 +325,14 @@ export async function generateContentForReleases(
         result.usage.output +
         result.usage.cacheCreate +
         result.usage.cacheRead;
-      // Persist usage regardless of skipped — even a skipped row consumed
-      // input tokens for the empty-content check. Fail-open: a write error
-      // must not abort the summarization loop.
+      // Only log rows we actually summarized; skipped rows short-circuit
+      // before the model call so they consumed no tokens. logUsage is
+      // fail-open, so a write error never aborts the summarization loop.
       if (!result.skipped) {
-        try {
-          // eslint-disable-next-line no-await-in-loop -- one write per row; bounded by MAX_AUTOGEN_ROWS_PER_FIRE
-          await db.insert(usageLog).values({
+        // eslint-disable-next-line no-await-in-loop -- one write per row; bounded by MAX_AUTOGEN_ROWS_PER_FIRE
+        await logUsage(
+          db,
+          {
             operation: "summarize",
             model: SUMMARIZE_MODEL,
             inputTokens: result.usage.input,
@@ -345,10 +341,9 @@ export async function generateContentForReleases(
             cacheWriteTokens: result.usage.cacheCreate,
             sourceId: source.id,
             releaseCount: 1,
-          });
-        } catch {
-          // fail-open
-        }
+          },
+          "poll-and-fetch",
+        );
       }
       if (result.skipped) {
         skippedEmpty++;
