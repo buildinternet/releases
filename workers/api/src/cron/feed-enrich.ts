@@ -18,7 +18,8 @@ import { getAnthropicKey, resolveGatewayOpts, type AnthropicEnv } from "../lib/a
 import { makeBotFetch } from "../lib/web-bot-auth-fetch.js";
 import { FLAGS, flag, type FlagshipBinding } from "@releases/lib/flags";
 import { IN_ARRAY_CHUNK_SIZE } from "../lib/d1-limits.js";
-import { releases } from "@buildinternet/releases-core/schema";
+import { releases, sources } from "@buildinternet/releases-core/schema";
+import { getSourceMeta } from "@releases/adapters/source-meta.js";
 import type { drizzle } from "drizzle-orm/d1";
 import type { Source } from "@buildinternet/releases-core/schema";
 import type { SourceMetadata } from "@releases/adapters/feed.js";
@@ -295,6 +296,12 @@ export async function enrichNewThinItems(
   }
 
   const fresh = candidates.filter(({ raw }) => !existing.has(raw.url!)).slice(0, cap);
+  // No fresh items this fire → no enrichment attempt was made. Leave the
+  // circuit-breaker counter untouched: a source that simply had nothing new
+  // and thin to enrich must not accrue "failures".
+  if (fresh.length === 0) return out;
+
+  let anySuccess = false;
   for (const { raw, index } of fresh) {
     const attemptedAt = new Date().toISOString();
     // oxlint-disable-next-line no-await-in-loop -- bounded by `cap`; sequential keeps cost predictable
@@ -306,6 +313,7 @@ export async function enrichNewThinItems(
     // Treat enriched-without-content as a failure (mirrors runEnrichBackfill):
     // only mark succeeded when there's a real body to apply.
     if (res.status === "enriched" && res.content) {
+      anySuccess = true;
       out.set(index, {
         content: res.content,
         media: res.media,
@@ -315,5 +323,51 @@ export async function enrichNewThinItems(
       out.set(index, { marker: { attemptedAt, succeeded: false } });
     }
   }
+
+  // Persist the per-source breaker state. Any success this fire resets the
+  // counter to 0 (and clears any tripped state); an all-fail fire increments
+  // it. The write only runs when at least one attempt was made (guarded
+  // above), so a source with nothing to enrich never trips the breaker. Merge
+  // against the freshly-read row so a concurrent metadata edit isn't clobbered
+  // wholesale; fail-open — a write error must not lose the enriched bodies the
+  // caller is about to apply.
+  try {
+    await persistEnrichmentBreakerState(db, source.id, anySuccess);
+  } catch (err) {
+    logEvent("warn", {
+      component: "feed-enrich",
+      event: "breaker-writeback-failed",
+      sourceId: source.id,
+      err,
+    });
+  }
   return out;
+}
+
+/**
+ * Re-read the source's current metadata, fold in the next `enrichment` block
+ * (increment on all-fail, reset on any success), and write it back to the
+ * `sources` row. Re-reading inside the function keeps the merge against the
+ * latest persisted metadata rather than the possibly-stale in-memory copy the
+ * caller held, so an unrelated metadata field written earlier in the same fire
+ * isn't dropped.
+ */
+async function persistEnrichmentBreakerState(
+  db: ReturnType<typeof drizzle>,
+  sourceId: string,
+  succeeded: boolean,
+): Promise<void> {
+  const [row] = await db
+    .select({ metadata: sources.metadata })
+    .from(sources)
+    .where(eq(sources.id, sourceId));
+  const current = row ? getSourceMeta({ metadata: row.metadata } as Source) : {};
+  const merged: SourceMetadata = {
+    ...current,
+    enrichment: nextEnrichmentMetadata(current.enrichment, succeeded),
+  };
+  await db
+    .update(sources)
+    .set({ metadata: JSON.stringify(merged) })
+    .where(eq(sources.id, sourceId));
 }
