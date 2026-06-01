@@ -6,8 +6,14 @@ export type Incremental<T> =
   | T
   | { [P in keyof T]?: P extends " $fragmentName" | "__typename" ? T[P] : never };
 import { TypedDocumentNode as DocumentNode } from "@graphql-typed-document-node/core";
+/** App Store platform for an appstore source. */
+export type AppStorePlatform = "ios" | "macos";
+
 /** How a source is ingested: GitHub releases API, scraped HTML, parsed feed, or AI agent. */
 export type SourceType = "agent" | "appstore" | "feed" | "github" | "scrape" | "video";
+
+/** Provider for a video source. */
+export type VideoProvider = "vimeo" | "wistia" | "youtube";
 
 export type HomepageTickerQueryVariables = Exact<{
   limit: number;
@@ -26,8 +32,8 @@ export type HomepageTickerQuery = {
       source: {
         org: { slug: string; name: string; avatarUrl: string | null };
         product: { slug: string } | null;
-        appStore: { platform: string; iconUrl: string | null } | null;
-        video: { provider: string } | null;
+        appStore: { platform: AppStorePlatform; iconUrl: string | null } | null;
+        video: { provider: VideoProvider } | null;
       };
     }>;
   };

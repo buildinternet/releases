@@ -6,7 +6,13 @@ App Store platform + icon for a `type: appstore` source. Lets clients render the
 """
 type AppStoreInfo {
   iconUrl: String
-  platform: String!
+  platform: AppStorePlatform!
+}
+
+"""App Store platform for an appstore source."""
+enum AppStorePlatform {
+  ios
+  macos
 }
 
 scalar DateTime
@@ -210,5 +216,12 @@ enum SourceType {
 Video provider for a `type: video` source. Lets clients render the compact video treatment (play badge + 'Watch on YouTube/Vimeo/Wistia').
 """
 type VideoInfo {
-  provider: String!
+  provider: VideoProvider!
+}
+
+"""Provider for a video source."""
+enum VideoProvider {
+  vimeo
+  wistia
+  youtube
 }
