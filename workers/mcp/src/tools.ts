@@ -494,21 +494,14 @@ export function ambiguousEntityToolResult(err: AmbiguousEntityError): ToolResult
 }
 
 /**
- * Enrich slug-matched source/product rows with their org slug to form
- * {@link AmbiguousCandidate}s, sorted by `org/slug` for a stable echo.
+ * Map slug-matched rows (each `org`-joined in the enumeration query) into
+ * sorted {@link AmbiguousCandidate}s for an {@link AmbiguousEntityError}.
  */
-async function buildAmbiguousCandidates(
-  db: D1Db,
-  rows: { id: string; slug: string; orgId: string }[],
-): Promise<AmbiguousCandidate[]> {
-  const orgIds = [...new Set(rows.map((r) => r.orgId))];
-  const orgRows = await db
-    .select({ id: organizations.id, slug: organizations.slug })
-    .from(organizations)
-    .where(inArray(organizations.id, orgIds));
-  const orgSlug = new Map(orgRows.map((o) => [o.id, o.slug]));
-  return rows
-    .map((r) => ({ orgSlug: orgSlug.get(r.orgId) ?? "?", slug: r.slug, id: r.id }))
+function toAmbiguousCandidates(
+  matches: { row: { id: string; slug: string }; orgSlug: string | null }[],
+): AmbiguousCandidate[] {
+  return matches
+    .map((m) => ({ orgSlug: m.orgSlug ?? "?", slug: m.row.slug, id: m.row.id }))
     .toSorted((a, b) => `${a.orgSlug}/${a.slug}`.localeCompare(`${b.orgSlug}/${b.slug}`));
 }
 
@@ -538,15 +531,20 @@ export async function resolveSource(db: D1Db, identifier: string) {
 
   // Bare slug fallback. Source slugs are unique per-org but NOT globally
   // (#690), so enumerate every org's match instead of `.limit(1)`-ing onto an
-  // arbitrary one: 0 → null, 1 → resolve, >1 → throw so the tool surfaces the
-  // org/slug + src_… candidates rather than silently resolving the wrong org
-  // (#1324, mirroring releases-cli#267). Callers still short-circuit bare slugs
-  // with isBareSlug() for a friendlier hint; this is the safety net so
-  // correctness no longer depends on every caller remembering that guard.
-  const matches = await db.select().from(sources).where(eq(sources.slug, id));
+  // arbitrary one — org-joined so an ambiguous result can echo org/slug + src_…
+  // candidates: 0 → null, 1 → resolve, >1 → throw rather than silently
+  // resolving the wrong org (#1324, mirroring releases-cli#267). Callers still
+  // short-circuit bare slugs with isBareSlug() for a friendlier hint; this is
+  // the safety net so correctness no longer depends on every caller remembering
+  // that guard.
+  const matches = await db
+    .select({ row: sources, orgSlug: organizations.slug })
+    .from(sources)
+    .leftJoin(organizations, eq(sources.orgId, organizations.id))
+    .where(eq(sources.slug, id));
   if (matches.length === 0) return null;
-  if (matches.length === 1) return matches[0];
-  throw new AmbiguousEntityError("source", id, await buildAmbiguousCandidates(db, matches));
+  if (matches.length === 1) return matches[0].row;
+  throw new AmbiguousEntityError("source", id, toAmbiguousCandidates(matches));
 }
 
 export async function resolveProduct(db: D1Db, identifier: string) {
@@ -575,10 +573,14 @@ export async function resolveProduct(db: D1Db, identifier: string) {
 
   // Bare slug fallback — see resolveSource for the per-org ambiguity rationale
   // (#1324). 0 → null, 1 → resolve, >1 → throw with prod_… candidates.
-  const matches = await db.select().from(products).where(eq(products.slug, id));
+  const matches = await db
+    .select({ row: products, orgSlug: organizations.slug })
+    .from(products)
+    .leftJoin(organizations, eq(products.orgId, organizations.id))
+    .where(eq(products.slug, id));
   if (matches.length === 0) return null;
-  if (matches.length === 1) return matches[0];
-  throw new AmbiguousEntityError("product", id, await buildAmbiguousCandidates(db, matches));
+  if (matches.length === 1) return matches[0].row;
+  throw new AmbiguousEntityError("product", id, toAmbiguousCandidates(matches));
 }
 
 /**
