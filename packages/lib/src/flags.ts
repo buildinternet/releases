@@ -97,6 +97,11 @@ export const FLAGS = {
     env: "BACKFILL_WORKFLOW_ENABLED",
     default: false,
   },
+  rawSnapshotCapture: {
+    key: "raw-snapshot-capture-enabled",
+    env: "RAW_SNAPSHOT_CAPTURE_ENABLED",
+    default: false,
+  },
 } as const satisfies Record<string, FlagDef>;
 
 /** Layered fallback: var value if set, else the hardcoded default. */

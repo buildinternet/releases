@@ -93,6 +93,10 @@ const ALLOWLIST = new Set<string>([
   "POST /sources/:slug/firecrawl/sync",
   "POST /sources/:slug/releases/batch",
   "POST /orgs/:orgSlug/sources/:sourceSlug/releases/batch",
+  // Raw-snapshot capture (#1283); Bearer required, hide: hideInProduction like
+  // releases/batch above. Discovery worker POSTs the scraped body here.
+  "POST /sources/:slug/raw-snapshot",
+  "POST /orgs/:orgSlug/sources/:sourceSlug/raw-snapshot",
   "DELETE /sources/:slug/releases",
   "POST /sources/:slug/content-hash",
   "POST /orgs/:orgSlug/sources/:sourceSlug/content-hash",

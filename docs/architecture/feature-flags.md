@@ -1,6 +1,6 @@
 # Feature flags (Cloudflare Flagship)
 
-The 21 Tier-1 boolean operational flags (kill switches + rollout/rollback gates) are
+The 22 Tier-1 boolean operational flags (kill switches + rollout/rollback gates) are
 evaluated at runtime through the `FLAGS` Flagship binding, with the wrangler var kept as
 an automatic fallback. Evaluation order is **Flagship value → wrangler var (`=== "true"`)
 → hardcoded default**, failing open to the var on any error.
@@ -42,21 +42,22 @@ Default = current prod value. Note the polarity split: `*-enabled` flags are **o
 
 ### Disabled in prod (default `false`)
 
-| Flag key                    | Default | What it controls                                                                                                 |
-| --------------------------- | ------- | ---------------------------------------------------------------------------------------------------------------- |
-| `rate-limit-enabled`        | `false` | Public read-path rate limiting. Off = no limiting.                                                               |
-| `invalidation-enabled`      | `false` | Cache-invalidation workflow. Off = not running.                                                                  |
-| `batch-overview-enabled`    | `false` | Batch org-overview (AI knowledge-page) generation workflow. Off = manual/agent-driven only.                      |
-| `media-r2-upload-enabled`   | `false` | Mirrors release media to the R2 bucket at ingest. Off = third-party media URLs stored verbatim.                  |
-| `extract-toolloop-enabled`  | `false` | Multi-round tool-use extraction path for large bodies (>50K tokens). Off = one-shot inline extraction only.      |
-| `enable-ai-tools`           | `false` | Gates the MCP AI-generation tools. Off = those tools not exposed.                                                |
-| `feedback-disabled`         | `false` | Kill switch for the feedback endpoints. `false` = feedback **enabled**.                                          |
-| `recommendations-disabled`  | `false` | Kill switch for recommendations. `false` = recommendations **active**.                                           |
-| `search-query-log-disabled` | `false` | Kill switch for search-query logging (`search_queries` table). `false` = logging **active**.                     |
-| `api-tokens-disabled`       | `false` | Kill switch for scoped `relk_` API-token auth. `false` = tokens **active**.                                      |
-| `cache-disabled`            | `false` | Kill switch for `Cache-Control` response headers. `false` = caching **active**.                                  |
-| `ma-sessions-disabled`      | `false` | Incident kill switch for managed-agent discovery sessions. `false` = sessions **allowed**.                       |
-| `indexing-disabled`         | `false` | When `true`, stamps `X-Robots-Tag: noindex` + `Disallow: /` (how staging is gated). `false` in prod = indexable. |
+| Flag key                       | Default | What it controls                                                                                                                                                                                                                                              |
+| ------------------------------ | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `rate-limit-enabled`           | `false` | Public read-path rate limiting. Off = no limiting.                                                                                                                                                                                                            |
+| `invalidation-enabled`         | `false` | Cache-invalidation workflow. Off = not running.                                                                                                                                                                                                               |
+| `batch-overview-enabled`       | `false` | Batch org-overview (AI knowledge-page) generation workflow. Off = manual/agent-driven only.                                                                                                                                                                   |
+| `media-r2-upload-enabled`      | `false` | Mirrors release media to the R2 bucket at ingest. Off = third-party media URLs stored verbatim.                                                                                                                                                               |
+| `extract-toolloop-enabled`     | `false` | Multi-round tool-use extraction path for large bodies (>50K tokens). Off = one-shot inline extraction only.                                                                                                                                                   |
+| `raw-snapshot-capture-enabled` | `false` | Steady-state scrape path captures the scraped markdown as a raw snapshot (#1283) for cheap re-extraction (#1284). Off = only deep-Firecrawl backfills + the Firecrawl webhook persist raw. Read by the **discovery worker** (`RAW_SNAPSHOT_CAPTURE_ENABLED`). |
+| `enable-ai-tools`              | `false` | Gates the MCP AI-generation tools. Off = those tools not exposed.                                                                                                                                                                                             |
+| `feedback-disabled`            | `false` | Kill switch for the feedback endpoints. `false` = feedback **enabled**.                                                                                                                                                                                       |
+| `recommendations-disabled`     | `false` | Kill switch for recommendations. `false` = recommendations **active**.                                                                                                                                                                                        |
+| `search-query-log-disabled`    | `false` | Kill switch for search-query logging (`search_queries` table). `false` = logging **active**.                                                                                                                                                                  |
+| `api-tokens-disabled`          | `false` | Kill switch for scoped `relk_` API-token auth. `false` = tokens **active**.                                                                                                                                                                                   |
+| `cache-disabled`               | `false` | Kill switch for `Cache-Control` response headers. `false` = caching **active**.                                                                                                                                                                               |
+| `ma-sessions-disabled`         | `false` | Incident kill switch for managed-agent discovery sessions. `false` = sessions **allowed**.                                                                                                                                                                    |
+| `indexing-disabled`            | `false` | When `true`, stamps `X-Robots-Tag: noindex` + `Disallow: /` (how staging is gated). `false` in prod = indexable.                                                                                                                                              |
 
 ## Adding a flag
 

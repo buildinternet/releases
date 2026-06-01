@@ -509,6 +509,11 @@ export class ManagedAgentsSession extends DurableObject<Env> {
         this.env.EXTRACT_TOOLLOOP_ENABLED,
         FLAGS.extractToolLoopEnabled,
       );
+      const captureRawSnapshots = await flag(
+        this.env.FLAGS,
+        this.env.RAW_SNAPSHOT_CAPTURE_ENABLED,
+        FLAGS.rawSnapshotCapture,
+      );
 
       const scrapeHandler =
         cfAccountId && cfApiToken
@@ -524,6 +529,7 @@ export class ManagedAgentsSession extends DurableObject<Env> {
                   apiKey: releasesApiKey ?? "",
                   sessionId,
                   extractToolLoopEnabled,
+                  captureRawSnapshots,
                   signedFetch,
                 },
                 sourceIdentifier,

@@ -95,6 +95,13 @@ export interface Env {
   MEMORY_STORE_TOOL_NOTES_ID?: string;
   /** "true" to enable tool-loop extraction for large bodies globally. */
   EXTRACT_TOOLLOOP_ENABLED?: string;
+  /**
+   * "true" to capture the scraped markdown body as a raw snapshot (#1283).
+   * Resolved once per session against the FLAGS binding and threaded into
+   * ScrapeEnv.captureRawSnapshots; when on, runScrapePath POSTs the body to the
+   * API worker's raw-snapshot endpoint for later re-extraction (#1284).
+   */
+  RAW_SNAPSHOT_CAPTURE_ENABLED?: string;
   /** "true" to sign outbound scrape-path content fetches with Web Bot Auth headers. */
   WEB_BOT_AUTH_ENABLED?: string;
   /** Secrets Store binding for the Ed25519 private JWK used by Web Bot Auth signing. */

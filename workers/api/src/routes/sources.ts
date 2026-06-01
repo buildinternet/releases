@@ -74,6 +74,7 @@ import {
   DeleteSourceReleasesResponseSchema,
   InsertReleaseResponseSchema,
   BatchReleasesResponseSchema,
+  RawSnapshotResponseSchema,
   OversizedChangelogFilesResponseSchema,
   FetchableSourcesResponseSchema,
   FeedSourcesResponseSchema,
@@ -102,6 +103,7 @@ import { authMiddleware } from "../middleware/auth.js";
 import { sourceToMarkdown, releaseToMarkdown } from "@releases/rendering/formatters.js";
 import { filterJunkMedia } from "@releases/rendering/media-filter.js";
 import { processMediaForR2, selectExistingReleaseUrls } from "../lib/media-ingest.js";
+import { saveRawSnapshot, type RawFormat } from "../lib/raw-snapshot.js";
 import { fetchOne, embedReleasesForSource } from "../cron/poll-fetch.js";
 import { getSourceMeta, isGitHubFetched } from "@releases/adapters/feed.js";
 import { isAppStoreFetched, isVideoFetched, videoSourceInfo } from "@releases/adapters/source-meta";
@@ -1022,6 +1024,97 @@ sourceRoutes.post(
   "/orgs/:orgSlug/sources/:sourceSlug/releases/batch",
   postReleasesBatchRoute,
   postReleasesBatchHandler,
+);
+
+// ── Persist a raw page snapshot (#1283) ──
+//
+// Universal raw capture for the steady-state scrape path. The discovery worker
+// has no D1/R2, so after it acquires the markdown body it POSTs it here (behind
+// the `raw-snapshot-capture-enabled` flag) and the API worker content-addresses
+// it into `released-raw` + a `source_raw_snapshots` pointer row. Captured bodies
+// feed cheap re-extraction (`POST /v1/workflows/reextract-source`, #1284) when
+// extraction logic improves — no re-scrape, no Firecrawl credits.
+//
+// Best-effort by contract: a missing bucket returns `stored:false` rather than
+// an error, so a capture failure can never break ingest.
+const postRawSnapshotHandler = async (c: import("hono").Context<Env>) => {
+  const db = createDb(c.env.DB);
+  const src = await resolveSourceFromContext(c, db);
+  if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
+  // Scrape-only: snapshots are produced by (and re-extractable from) the scrape
+  // path. The discovery worker only POSTs here for scrape sources; the guard
+  // keeps the endpoint scoped and matches backfill/reextract-source.
+  if (src.type !== "scrape") {
+    return c.json(
+      {
+        error: "bad_request",
+        message: `Raw-snapshot capture supports scrape sources; this source is type=${src.type}`,
+      },
+      400,
+    );
+  }
+
+  const parsed = await c.req
+    .json<{ body?: unknown; format?: unknown }>()
+    .catch(() => ({}) as { body?: unknown; format?: unknown });
+
+  const rawBody = typeof parsed.body === "string" ? parsed.body : "";
+  if (rawBody.trim().length === 0) {
+    return c.json({ error: "bad_request", message: "`body` must be a non-empty string" }, 400);
+  }
+
+  const fmtInput = parsed.format ?? "markdown";
+  let format: RawFormat;
+  if (fmtInput === "markdown") {
+    format = "markdown";
+  } else if (fmtInput === "html") {
+    format = "html";
+  } else {
+    return c.json({ error: "bad_request", message: '`format` must be "markdown" or "html"' }, 400);
+  }
+
+  if (!c.env.RAW_SNAPSHOTS) {
+    return c.json({ stored: false, reason: "no_binding" });
+  }
+
+  const snap = await saveRawSnapshot(
+    { R2: c.env.RAW_SNAPSHOTS, db },
+    { sourceId: src.id, body: rawBody, format },
+  );
+  return c.json({
+    stored: snap.created,
+    r2Key: snap.r2Key,
+    contentHash: snap.contentHash,
+    bytes: snap.bytes,
+  });
+};
+const postRawSnapshotRoute = describeRoute({
+  hide: hideInProduction,
+  tags: ["Sources"],
+  summary: "Persist a raw page snapshot",
+  description:
+    'Content-addresses the supplied raw body (markdown or html) into the `released-raw` bucket and records a `source_raw_snapshots` pointer row, keyed by `(source, contentHash)` so an unchanged body never re-stores. Used by the discovery worker to capture the scraped body for later re-extraction (#1283/#1284). Body: `{ body: string, format?: "markdown" | "html" }` (default `markdown`). Returns `{ stored, r2Key, contentHash, bytes }`; `stored` is `false` on a content-hash dedup hit or when the bucket is unbound (best-effort — capture never errors ingest). Auth inherited from `publicReadAuthMiddleware`\'s non-SAFE_METHODS branch — Bearer token required.',
+  security: [{ bearerAuth: [] }],
+  responses: {
+    200: {
+      description: "Snapshot stored (or deduped); pointer + R2 key returned",
+      content: { "application/json": { schema: resolver(RawSnapshotResponseSchema) } },
+    },
+    400: {
+      description: "Missing/empty body or unsupported format",
+      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+    },
+    404: {
+      description: "Source not found",
+      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+    },
+  },
+});
+sourceRoutes.post("/sources/:slug/raw-snapshot", postRawSnapshotRoute, postRawSnapshotHandler);
+sourceRoutes.post(
+  "/orgs/:orgSlug/sources/:sourceSlug/raw-snapshot",
+  postRawSnapshotRoute,
+  postRawSnapshotHandler,
 );
 
 // ── Delete all releases for a source (for --force re-fetch) ──

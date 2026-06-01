@@ -52,6 +52,8 @@ describe("saveRawSnapshot / loadRawSnapshot", () => {
     expect(result.r2Key).toBe(`sources/src_x/raw/${result.contentHash}.md`);
     expect(result.contentHash).toMatch(/^[0-9a-f]{64}$/);
     expect(result.bytes).toBe(new TextEncoder().encode(body).length);
+    // First save records a new pointer row.
+    expect(result.created).toBe(true);
 
     // R2 store holds the body
     expect(R2.store.get(result.r2Key)).toBe(body);
@@ -92,6 +94,10 @@ describe("saveRawSnapshot / loadRawSnapshot", () => {
     // Same r2Key returned both times
     expect(second.r2Key).toBe(first.r2Key);
     expect(second.contentHash).toBe(first.contentHash);
+
+    // `created` distinguishes the new store from the dedup hit.
+    expect(first.created).toBe(true);
+    expect(second.created).toBe(false);
 
     // Still exactly one D1 row
     const rows = await db

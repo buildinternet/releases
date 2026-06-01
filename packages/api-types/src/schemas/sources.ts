@@ -559,6 +559,24 @@ export const BatchReleasesResponseSchema = z.object({
   total: z.number().int().min(0),
 });
 
+// ── Raw page snapshot (POST /sources/:slug/raw-snapshot) ──
+
+/**
+ * Response for `POST /v1/sources/:slug/raw-snapshot` (#1283). On a store or a
+ * content-hash dedup hit, all fields are present; `stored` is `false` for the
+ * dedup case. When the `RAW_SNAPSHOTS` bucket is unbound the capture soft-fails
+ * with `{ stored: false, reason: "no_binding" }` and the snapshot fields are
+ * omitted — capture is best-effort and never errors ingest.
+ */
+export const RawSnapshotResponseSchema = z.object({
+  stored: z.boolean(),
+  r2Key: z.string().optional(),
+  contentHash: z.string().optional(),
+  bytes: z.number().int().min(0).optional(),
+  // Only set on the soft-fail path; bounded so consumers can branch on it.
+  reason: z.enum(["no_binding"]).optional(),
+});
+
 // ── Oversized changelog files (GET /sources/changelog-files/oversized) ──
 
 /**
