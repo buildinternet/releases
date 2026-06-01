@@ -49,7 +49,9 @@ const searchPreviewComponents: Record<string, any> = {
 import { SourceTypeIcon } from "./source-type-icon";
 import { FallbackImage } from "./fallback-image";
 import { AppStoreIcon } from "./app-store-icon";
+import { PlayBadge } from "./play-badge";
 import { appRowInfoFromWire, type AppRowInfo } from "@/lib/app-source";
+import { videoRowInfoFromWire, type VideoRowInfo } from "@/lib/video-source";
 import { LookupRail } from "./lookup-rail";
 import { RollupBadge } from "./rollup-badge";
 import { Highlight, rehypeHighlightTokens, tokenizeQuery } from "./highlight";
@@ -187,6 +189,7 @@ function ResultCard({
   thumbnail,
   tokens,
   appStore,
+  video,
   version,
 }: {
   kindLabel?: string;
@@ -208,6 +211,10 @@ function ResultCard({
   // "Available for iOS/macOS" descriptor in the byline — the compact treatment
   // matching the feed row and source page. Null for non-app hits. #1206
   appStore?: AppRowInfo | null;
+  // Video hits overlay a play badge on the thumbnail and add a "Watch on
+  // {provider}" descriptor in the byline, mirroring the feed video row. Null
+  // for non-video hits. #1206
+  video?: VideoRowInfo | null;
   version?: string | null;
 }) {
   return (
@@ -286,6 +293,12 @@ function ResultCard({
             <span>Available for {appStore.label}</span>
           </>
         )}
+        {video && (
+          <>
+            <span className="text-stone-300 dark:text-stone-700">·</span>
+            <span>Watch on {video.label}</span>
+          </>
+        )}
         {date && (
           <>
             <span className="text-stone-300 dark:text-stone-700">·</span>
@@ -295,15 +308,30 @@ function ResultCard({
       </div>
       <div className="flex gap-3">
         <div className="flex-1 min-w-0 max-h-[4.5em] overflow-hidden">{children}</div>
-        {thumbnail && (
-          <FallbackImage
-            src={thumbnail.src}
-            alt={thumbnail.alt}
-            width={120}
-            height={72}
-            className="rounded-md object-cover w-[120px] h-[72px] border border-stone-200 dark:border-stone-800 shrink-0"
-          />
-        )}
+        {thumbnail &&
+          (video ? (
+            // Video hits overlay a play badge so the still reads as playable,
+            // matching the feed video row. The card itself links to the
+            // release page (the byline carries "Watch on {provider}"). #1206
+            <div className="group relative shrink-0">
+              <FallbackImage
+                src={thumbnail.src}
+                alt={thumbnail.alt}
+                width={120}
+                height={72}
+                className="rounded-md object-cover w-[120px] h-[72px] border border-stone-200 dark:border-stone-800"
+              />
+              <PlayBadge size="sm" />
+            </div>
+          ) : (
+            <FallbackImage
+              src={thumbnail.src}
+              alt={thumbnail.alt}
+              width={120}
+              height={72}
+              className="rounded-md object-cover w-[120px] h-[72px] border border-stone-200 dark:border-stone-800 shrink-0"
+            />
+          ))}
       </div>
     </div>
   );
@@ -321,11 +349,14 @@ function ReleaseResultCard({ hit, tokens }: { hit: SearchReleaseHit; tokens: str
   }, [hit.media]);
 
   // App Store hits lead with the app name + an inline version and the
-  // "Available for iOS/macOS" descriptor; non-app hits lead with the version
-  // (falling back to title). This intentionally differs from the chronological
-  // feed, which leads with the descriptive title — search reads as a lookup.
+  // "Available for iOS/macOS" descriptor; video hits lead with the (descriptive)
+  // video title and carry a "Watch on {provider}" descriptor; other hits lead
+  // with the version (falling back to title). This intentionally differs from
+  // the chronological feed, which leads with the descriptive title — search
+  // reads as a lookup.
   const appStore = appRowInfoFromWire(hit.appStore, hit.sourceName);
-  const heading = appStore ? appStore.appName : hit.version || hit.title;
+  const video = videoRowInfoFromWire(hit.video);
+  const heading = appStore ? appStore.appName : video ? hit.title : hit.version || hit.title;
   const rehypePlugins = useMarkdownHighlight(tokens);
 
   return (
@@ -343,6 +374,7 @@ function ReleaseResultCard({ hit, tokens }: { hit: SearchReleaseHit; tokens: str
       thumbnail={thumbnail}
       tokens={tokens}
       appStore={appStore}
+      video={video}
       version={hit.version}
     >
       <div className={resultMarkdownClasses}>

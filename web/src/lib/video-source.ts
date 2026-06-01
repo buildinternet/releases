@@ -19,16 +19,23 @@ const VIDEO_LABELS: Record<"youtube" | "vimeo" | "wistia", "YouTube" | "Vimeo" |
 
 /**
  * Build a {@link VideoRowInfo} from the wire-shape `video` block
- * (`{ provider }`, already resolved server-side by `videoSourceInfo`)
- * Returns null when the block is absent so callers gate video-only treatment
- * with `videoRowInfoFromWire(...)`. Mirrors `appRowInfoFromWire` in
- * `@/lib/app-source`.
+ * (`{ provider }`, already resolved server-side by `videoSourceInfo`).
+ * Returns null when the block is absent or carries an unrecognised provider,
+ * so callers gate video-only treatment with `videoRowInfoFromWire(...)`.
+ * Mirrors `appRowInfoFromWire` in `@/lib/app-source`.
+ *
+ * The param is widened to `{ provider: string }` because the GraphQL ticker
+ * path types `provider` as a plain string (`t.exposeString`), unlike the REST
+ * schemas' narrow enum; validating here keeps that caller honest.
  */
 export function videoRowInfoFromWire(
-  video: { provider: "youtube" | "vimeo" | "wistia" } | null | undefined,
+  video: { provider: string } | null | undefined,
 ): VideoRowInfo | null {
-  if (!video) return null;
-  return { provider: video.provider, label: VIDEO_LABELS[video.provider] };
+  const provider = video?.provider;
+  if (provider === "youtube" || provider === "vimeo" || provider === "wistia") {
+    return { provider, label: VIDEO_LABELS[provider] };
+  }
+  return null;
 }
 
 interface VideoSourceLike {

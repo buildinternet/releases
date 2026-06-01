@@ -77,6 +77,13 @@ describe("videoRowInfoFromWire", () => {
     expect(videoRowInfoFromWire(null)).toBeNull();
     expect(videoRowInfoFromWire(undefined)).toBeNull();
   });
+
+  it("returns null for an unrecognised provider", () => {
+    // The GraphQL ticker path types `provider` as a plain string, so the
+    // helper must reject anything outside the known set rather than emit a
+    // label-less row. #1206
+    expect(videoRowInfoFromWire({ provider: "tiktok" })).toBeNull();
+  });
 });
 
 describe("getVideoInfo", () => {
