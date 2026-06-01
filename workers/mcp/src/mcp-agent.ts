@@ -18,6 +18,8 @@ import {
   getCollectionReleases,
   summarizeChanges,
   compareProducts,
+  AmbiguousEntityError,
+  ambiguousEntityToolResult,
   type SearchToolReturn,
   type ToolResult,
 } from "./tools.js";
@@ -266,7 +268,16 @@ export async function createServer(env: Env, ctx?: ExecutionContext, opts?: Crea
   /** Hydrate portable /_media/ URLs in tool text output. */
   function withMedia<T>(handler: (params: T) => Promise<ToolResult>) {
     return async (params: T): Promise<ToolResult> => {
-      const result = await handler(params);
+      let result: ToolResult;
+      try {
+        result = await handler(params);
+      } catch (err) {
+        // Defensive net for the resolver's bare-slug ambiguity throw (#1324):
+        // every handler should reject bare slugs with isBareSlug() first, but
+        // if one ever forgets, surface the candidate list instead of a 500.
+        if (err instanceof AmbiguousEntityError) return ambiguousEntityToolResult(err);
+        throw err;
+      }
       if (mediaOrigin && result.content[0]?.text) {
         result.content[0].text = hydrateMediaUrls(result.content[0].text, mediaOrigin);
       }
@@ -325,6 +336,12 @@ export async function createServer(env: Env, ctx?: ExecutionContext, opts?: Crea
         });
         out.result._meta = { ...out.result._meta, search: searchMeta };
         return out.result;
+      } catch (err) {
+        // Defensive net for the resolver's bare-slug ambiguity throw (#1324),
+        // mirroring withMedia: search guards bare `entity`/`product` up front,
+        // but surface the candidate list rather than a 500 if that's bypassed.
+        if (err instanceof AmbiguousEntityError) return ambiguousEntityToolResult(err);
+        throw err;
       } finally {
         const log = logMcpSearch(env, {
           command,
