@@ -907,6 +907,7 @@ export type OverviewPlanAction = "missing" | "refresh" | "skip";
 export interface OverviewManifestRow {
   orgSlug: string;
   orgName: string;
+  orgCreatedAt: string;
   discovery: "curated" | "agent" | "on_demand";
   overviewUpdatedAt: string | null;
   overviewGeneratedAt: string | null;

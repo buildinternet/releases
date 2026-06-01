@@ -44,6 +44,7 @@ interface ManifestQueryRow {
   id: string;
   slug: string;
   name: string;
+  org_created_at: string;
   discovery: "curated" | "agent" | "on_demand";
   overview_updated_at: string | null;
   overview_generated_at: string | null;
@@ -81,6 +82,7 @@ adminOverviewsRoutes.get("/admin/overviews", async (c) => {
       o.id,
       o.slug,
       o.name,
+      o.created_at AS org_created_at,
       o.discovery,
       kp.updated_at AS overview_updated_at,
       kp.generated_at AS overview_generated_at,
@@ -94,14 +96,14 @@ adminOverviewsRoutes.get("/admin/overviews", async (c) => {
       END) AS releases_since_overview,
       COUNT(CASE WHEN r.published_at >= ${cutoff30d} THEN 1 END) AS recent_release_count,
       COUNT(DISTINCT s.id) AS active_source_count
-    FROM organizations_active o
+    FROM organizations_public o
     LEFT JOIN knowledge_pages kp
       ON kp.org_id = o.id AND kp.scope = 'org'
     LEFT JOIN sources_active s
       ON s.org_id = o.id
     LEFT JOIN releases_visible r
       ON r.source_id = s.id
-    GROUP BY o.id, o.slug, o.name, o.discovery,
+    GROUP BY o.id, o.slug, o.name, o.created_at, o.discovery,
              kp.updated_at, kp.generated_at, kp.last_contributing_release_at
     ORDER BY o.name, o.id
   `);
@@ -129,6 +131,7 @@ adminOverviewsRoutes.get("/admin/overviews", async (c) => {
     const out: OverviewManifestRow = {
       orgSlug: row.slug,
       orgName: row.name,
+      orgCreatedAt: row.org_created_at,
       discovery: row.discovery,
       overviewUpdatedAt: row.overview_updated_at,
       overviewGeneratedAt: row.overview_generated_at,
