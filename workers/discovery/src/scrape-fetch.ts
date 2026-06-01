@@ -731,15 +731,10 @@ async function runScrapePath(
     return `Blocked [bot_challenge]: ${errMsg}`;
   }
 
-  // Capture the exact body extraction is about to consume (#1283), so it can be
-  // re-extracted cheaply later (#1284) when parse logic improves — no re-scrape.
-  // Fire-and-forget so the snapshot POST + R2 write stay off the extraction
-  // critical path: gated + best-effort (`captureRawSnapshot` swallows its own
-  // errors, so the floating promise never rejects), and the multi-second
-  // extraction that follows keeps the request alive long enough for it to land
-  // (same in-flight-promise pattern as `knownReleasesPromise`). No
-  // `ctx.waitUntil` is available in this RPC, so a bare floating promise is the
-  // mechanism here.
+  // Fire-and-forget: keep the snapshot POST + R2 write off the extraction
+  // critical path. `captureRawSnapshot` swallows its own errors (floating
+  // promise never rejects), and the multi-second extraction keeps the request
+  // alive long enough for it to land. No `ctx.waitUntil` in this RPC.
   void captureRawSnapshot(env, source, markdown);
 
   const knownReleases = await knownReleasesPromise;
