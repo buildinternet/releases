@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { EXTERNAL_UGC_REL, isSafeHref, isSafeImgSrc } from "@/lib/sanitize";
+import { youtubeEmbedUrl, youtubeVideoId } from "@/lib/video-source";
 import { FallbackPlainImage } from "./fallback-image";
 
 interface MarkdownComponentOptions {
@@ -62,13 +63,16 @@ export function createMarkdownComponents(opts: MarkdownComponentOptions = {}): R
       const children = props.children;
       if (!isSafeHref(href)) return <>{children}</>;
 
-      // YouTube embed
-      const ytMatch = href.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&?]+)/);
-      if (ytMatch) {
+      // YouTube embed. Shared id regex + `youtube-nocookie` host (see
+      // @/lib/video-source); `autoplay: false` because this iframe renders
+      // inline in body copy rather than behind the detail page's click-to-play
+      // facade, so it must not start playing on load.
+      const ytId = youtubeVideoId(href);
+      if (ytId) {
         return (
           <div className={`aspect-video ${videoClass}`}>
             <iframe
-              src={`https://www.youtube.com/embed/${ytMatch[1]}`}
+              src={youtubeEmbedUrl(ytId, { autoplay: false })}
               className="w-full h-full rounded-md"
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
               allowFullScreen

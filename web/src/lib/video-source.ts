@@ -95,11 +95,14 @@ export function youtubeVideoId(
 }
 
 /**
- * Privacy-friendly embed URL for the click-to-play facade: the
- * `youtube-nocookie.com` host, autoplaying once the user opts in by clicking.
+ * Privacy-friendly embed URL on the `youtube-nocookie.com` host. Defaults to
+ * autoplay for the click-to-play facade (the user has already opted in by
+ * clicking); pass `{ autoplay: false }` for inline body-copy embeds that render
+ * directly on load and must not start playing on their own.
  */
-export function youtubeEmbedUrl(videoId: string): string {
-  return `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&rel=0`;
+export function youtubeEmbedUrl(videoId: string, opts?: { autoplay?: boolean }): string {
+  const params = opts?.autoplay === false ? "?rel=0" : "?autoplay=1&rel=0";
+  return `https://www.youtube-nocookie.com/embed/${videoId}${params}`;
 }
 
 export interface VideoEmbedInfo {
