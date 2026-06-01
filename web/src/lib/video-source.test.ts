@@ -57,6 +57,12 @@ describe("youtubeEmbedUrl", () => {
       "https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?autoplay=1&rel=0",
     );
   });
+
+  it("omits autoplay for inline embeds", () => {
+    expect(youtubeEmbedUrl("dQw4w9WgXcQ", { autoplay: false })).toBe(
+      "https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?rel=0",
+    );
+  });
 });
 
 describe("videoRowInfoFromWire", () => {
