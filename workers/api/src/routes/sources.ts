@@ -2672,6 +2672,7 @@ const patchSourceHandler = async (c: import("hono").Context<Env>) => {
     "changeDetectedAt",
     "lastPolledAt",
     "kind",
+    "discovery",
   ] as const;
 
   const updates: Record<string, unknown> = {};
@@ -2733,6 +2734,7 @@ const patchSourceHandler = async (c: import("hono").Context<Env>) => {
   if (body.changeDetectedAt !== undefined) updates.changeDetectedAt = body.changeDetectedAt;
   if (body.lastPolledAt !== undefined) updates.lastPolledAt = body.lastPolledAt;
   if ("kind" in body) updates.kind = body.kind ?? null;
+  if (body.discovery !== undefined) updates.discovery = body.discovery;
 
   if (Object.keys(updates).length === 0) {
     const bodyKeys = Object.keys(body);
