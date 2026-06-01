@@ -37,10 +37,12 @@ function dedupKey(r: TickerRelease): string {
  *
  * Video releases short-circuit for the same reason: the play chip + provider
  * label ("Watch on YouTube") makes the card a complete unit even when the
- * video title is terse. #1206
+ * video title is terse. Gate on the resolved provider (what `Card` actually
+ * renders), not the raw facet — a truthy-but-unrecognised provider shows no
+ * chip, so it shouldn't bypass the bare-version drop. #1206
  */
 function isMeaningfulRelease(r: TickerRelease): boolean {
-  if (r.source.appStore || r.source.video) return true;
+  if (r.source.appStore || videoRowInfoFromWire(r.source.video)) return true;
   if (r.titleShort?.trim() || r.titleGenerated?.trim()) return true;
   const title = (r.title ?? "").trim();
   if (!title) return false;
