@@ -1,0 +1,11 @@
+{
+  "input": {
+    "orgSlug": "acme",
+    "sourceName": "Acme Internal",
+    "productName": null,
+    "title": "Automated release 2026.05.31",
+    "version": null,
+    "url": "https://acme.com/changelog/2026-05-31"
+  },
+  "spec": { "expectDiscarded": true }
+}

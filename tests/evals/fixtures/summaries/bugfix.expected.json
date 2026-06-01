@@ -1,0 +1,11 @@
+{
+  "input": {
+    "orgSlug": "acme",
+    "sourceName": "Acme App",
+    "productName": null,
+    "title": "1.9.4",
+    "version": "1.9.4",
+    "url": "https://acme.com/changelog/1-9-4"
+  },
+  "spec": { "expectDiscarded": false }
+}

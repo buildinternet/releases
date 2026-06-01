@@ -1,0 +1,11 @@
+{
+  "input": {
+    "orgSlug": "acme",
+    "sourceName": "Acme SDK",
+    "productName": null,
+    "title": "v5.0.0",
+    "version": "5.0.0",
+    "url": "https://acme.com/changelog/5-0-0"
+  },
+  "spec": { "expectDiscarded": false }
+}
