@@ -1,0 +1,11 @@
+{
+  "input": {
+    "orgSlug": "acme",
+    "sourceName": "Acme Editor",
+    "productName": null,
+    "title": "The most powerful release yet!",
+    "version": null,
+    "url": "https://acme.com/blog/powerful-release"
+  },
+  "spec": { "expectDiscarded": false, "forbidInSummary": ["thrilled", "game-changing"] }
+}

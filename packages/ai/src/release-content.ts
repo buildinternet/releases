@@ -31,7 +31,7 @@ export const MAX_OUTPUT_TOKENS = 280;
 // In-prompt sentinel emitted by the model when the body is boilerplate-only.
 // The empty-body short-circuit (isEmptyContent) is a separate path — those
 // rows skip the model entirely and return all-null fields.
-const EMPTY_BODY_FALLBACK = "Release notes do not describe the change.";
+export const EMPTY_BODY_FALLBACK = "Release notes do not describe the change.";
 
 // Boilerplate short titles authorized by <title_short_format> rule 8.
 const BOILERPLATE_SHORT_TITLES = new Set(["dependency update", "internal release"]);

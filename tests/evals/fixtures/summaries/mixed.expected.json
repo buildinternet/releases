@@ -1,0 +1,11 @@
+{
+  "input": {
+    "orgSlug": "acme",
+    "sourceName": "Acme Cloud",
+    "productName": null,
+    "title": "2026.5",
+    "version": "2026.5",
+    "url": "https://acme.com/changelog/2026-5"
+  },
+  "spec": { "expectDiscarded": false }
+}

@@ -1,0 +1,11 @@
+{
+  "input": {
+    "orgSlug": "acme",
+    "sourceName": "Acme Docs",
+    "productName": null,
+    "title": "New guide: streaming responses",
+    "version": null,
+    "url": "https://acme.com/blog/streaming-guide"
+  },
+  "spec": { "expectDiscarded": false }
+}
