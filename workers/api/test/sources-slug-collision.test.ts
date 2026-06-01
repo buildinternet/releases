@@ -176,3 +176,87 @@ describe("POST /v1/sources — slug auto-suffix on collision", () => {
     expect(body3.slug).toBe("release-notes-3");
   });
 });
+
+describe("GET /v1/sources?slug= — exact-slug filter (#264)", () => {
+  type Row = { id: string; slug: string; orgSlug: string };
+
+  const seedTwoOrgsWithBlog = async (db: ReturnType<typeof mkDb>) => {
+    await db.insert(organizations).values([
+      { id: "org_a", slug: "org-a", name: "Org A", category: "cloud" },
+      { id: "org_b", slug: "org-b", name: "Org B", category: "cloud" },
+    ]);
+    const fetch = mkApp(db);
+    for (const orgSlug of ["org-a", "org-b"] as const) {
+      // oxlint-disable-next-line no-await-in-loop -- sequential inserts keep the test deterministic
+      const r = await fetch(
+        new Request("https://x.test/v1/sources", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: "Blog",
+            url: `https://${orgSlug}.test/blog`,
+            orgSlug,
+          }),
+        }),
+      );
+      expect(r.status).toBe(201);
+      expect(((await r.json()) as { slug: string }).slug).toBe("blog");
+    }
+    return fetch;
+  };
+
+  it("returns every org's source for a slug shared across orgs", async () => {
+    const db = mkDb();
+    const fetch = await seedTwoOrgsWithBlog(db);
+
+    const res = await fetch(new Request("https://x.test/v1/sources?slug=blog"));
+    expect(res.status).toBe(200);
+    const rows = (await res.json()) as Row[];
+    expect(rows.map((r) => r.slug).sort()).toEqual(["blog", "blog"]);
+    expect(rows.map((r) => r.orgSlug).sort()).toEqual(["org-a", "org-b"]);
+  });
+
+  it("matches the slug exactly — not as a substring", async () => {
+    const db = mkDb();
+    const fetch = await seedTwoOrgsWithBlog(db);
+    // A distinct source whose slug merely *contains* "blog".
+    const extra = await fetch(
+      new Request("https://x.test/v1/sources", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "Blogging Tips",
+          url: "https://org-a.test/blogging-tips",
+          orgSlug: "org-a",
+        }),
+      }),
+    );
+    expect(extra.status).toBe(201);
+    expect(((await extra.json()) as { slug: string }).slug).toBe("blogging-tips");
+
+    const res = await fetch(new Request("https://x.test/v1/sources?slug=blog"));
+    const rows = (await res.json()) as Row[];
+    expect(rows.every((r) => r.slug === "blog")).toBe(true);
+    expect(rows.length).toBe(2);
+  });
+
+  it("composes with ?orgSlug= to resolve a single source", async () => {
+    const db = mkDb();
+    const fetch = await seedTwoOrgsWithBlog(db);
+
+    const res = await fetch(new Request("https://x.test/v1/sources?slug=blog&orgSlug=org-a"));
+    const rows = (await res.json()) as Row[];
+    expect(rows.length).toBe(1);
+    expect(rows[0]!.orgSlug).toBe("org-a");
+  });
+
+  it("returns an empty array when no source matches the slug", async () => {
+    const db = mkDb();
+    await seedTwoOrgsWithBlog(db);
+    const fetch = mkApp(db);
+
+    const res = await fetch(new Request("https://x.test/v1/sources?slug=nonexistent"));
+    expect(res.status).toBe(200);
+    expect((await res.json()) as Row[]).toEqual([]);
+  });
+});

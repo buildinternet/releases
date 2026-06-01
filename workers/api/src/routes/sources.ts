@@ -212,7 +212,7 @@ sourceRoutes.get(
     tags: ["Sources"],
     summary: "List sources",
     description:
-      "Returns a bare array by default; pass `?envelope=true` for the paginated `{items, pagination}` shape. Filter by `?orgId=`, `?orgSlug=`, `?productSlug=`, `?type=`, `?has_feed=`, `?stale=`, `?category=`, `?kind=`, `?independent=true`, `?hasChangelog=false` (sources with no tracked CHANGELOG file), `?minRels30d=N` (sources with at least N visible releases in the last 30 days). Free-text search via `?q=`.",
+      "Returns a bare array by default; pass `?envelope=true` for the paginated `{items, pagination}` shape. Filter by `?orgId=`, `?orgSlug=`, `?slug=` (exact source slug — one row per org that has a source with this slug, for detecting an ambiguous bare slug across orgs; distinct from the `?q=` substring search), `?productSlug=`, `?type=`, `?has_feed=`, `?stale=`, `?category=`, `?kind=`, `?independent=true`, `?hasChangelog=false` (sources with no tracked CHANGELOG file), `?minRels30d=N` (sources with at least N visible releases in the last 30 days). Free-text search via `?q=`.",
     parameters: [
       {
         name: "kind",
@@ -242,6 +242,11 @@ sourceRoutes.get(
     const hasFeed = c.req.query("has_feed") === "true";
     // Accept both ?q= (server-side search alias) and legacy ?query=
     const queryText = c.req.query("q") ?? c.req.query("query");
+    // Exact-slug filter. Slugs are unique per-org but not globally, so this
+    // returns one row per org that has a source with this slug — the set a
+    // client needs to detect a cross-org ambiguous bare slug (#264). Distinct
+    // from `?q=`, which is a substring search over name/slug/url.
+    const slugFilter = c.req.query("slug")?.trim();
     const includeHidden = c.req.query("include_hidden") === "true";
     const categoryFilter = c.req.query("category");
 
@@ -360,6 +365,10 @@ sourceRoutes.get(
           likeContains(sql`lower(${sources.url})`, lower),
         )!,
       );
+    }
+
+    if (slugFilter) {
+      conditions.push(eq(sources.slug, slugFilter));
     }
 
     if (categoryFilter) {
