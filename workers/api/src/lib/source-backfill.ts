@@ -3,7 +3,7 @@ import type { RawRelease } from "@releases/adapters/types.js";
 // deps into the route module's import graph.
 import type { IngestResult } from "../cron/poll-fetch.js";
 
-export type BackfillBodyVia = "supplied" | "firecrawl" | "fetch";
+export type BackfillBodyVia = "supplied" | "firecrawl" | "fetch" | "snapshot";
 
 export interface SourceBackfillExtractResult {
   releases: RawRelease[];

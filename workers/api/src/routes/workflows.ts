@@ -29,6 +29,7 @@ import {
   sourcesVisible,
   sourceChangelogFiles,
   sourceChangelogChunks,
+  sourceRawSnapshots,
   collections,
   collectionMembers,
   usageLog,
@@ -89,7 +90,9 @@ import {
   type BackfillBodyVia,
   type SourceBackfillDeps,
   type SourceBackfillExtractResult,
+  type SourceBackfillReport,
 } from "../lib/source-backfill.js";
+import { loadRawSnapshot } from "../lib/raw-snapshot.js";
 
 export const workflowsRoutes = new Hono<Env>();
 
@@ -2051,6 +2054,108 @@ type BackfillExtractOverride = (
 // supersedes any `markdown` supplied in the request body.
 type BackfillBodyOverride = { markdown: string; via: BackfillBodyVia };
 
+// Shared tail for windowed backfill (#1281) + re-extract (#1284): given a
+// resolved body, run identical extract → ingest → embed machinery. Factored out
+// so re-extraction reuses the exact same logic instead of forking it. Returns
+// `{ ok: false }` when the Anthropic key is missing (caller maps to 503) so the
+// HTTP concern stays in the route. Test override (`_backfillExtractOverride`)
+// bypasses Anthropic for both routes.
+async function executeWindowedBackfill(
+  c: import("hono").Context<Env>,
+  db: ReturnType<typeof createDb>,
+  src: Source,
+  resolved: { markdown: string; via: BackfillBodyVia },
+  opts: { maxWindows: number; dryRun: boolean },
+): Promise<{ ok: false } | { ok: true; report: SourceBackfillReport; guidance?: string }> {
+  const { maxWindows, dryRun } = opts;
+  // Firecrawl is the only via clamped (scrape long-pole); supplied/fetch/snapshot
+  // keep the full 1–200 window budget.
+  const effectiveMaxWindows = effectiveBackfillWindows(resolved.via, maxWindows);
+
+  // ── Extraction (override in tests; else Haiku t0 all-windows) ──────────────
+  const override = (c.env as { _backfillExtractOverride?: BackfillExtractOverride })
+    ._backfillExtractOverride;
+  let anthropicClient: ReturnType<typeof buildAnthropicClient> | null = null;
+  if (!override) {
+    const apiKey = await getAnthropicKey(c.env);
+    if (!apiKey) return { ok: false };
+    anthropicClient = buildAnthropicClient({ apiKey, ...(await resolveGatewayOpts(c.env)) });
+  }
+  const extract = async (markdown: string): Promise<SourceBackfillExtractResult> => {
+    if (override) return override(markdown, src, effectiveMaxWindows);
+    const r = await extractChangelogAllWindows(
+      markdown,
+      src,
+      {
+        anthropicClient: anthropicClient!,
+        agentModel: BACKFILL_EXTRACT_MODEL,
+        logger: backfillLogger,
+        logUsageFn: (entry) => logUsage(db, { ...entry, sourceId: src.id }, "backfill-source"),
+      },
+      { maxWindows: effectiveMaxWindows },
+    );
+    return {
+      releases: r.releases,
+      windows: r.windows,
+      cappedAtWindow: r.cappedAtWindow,
+      droppedChars: r.droppedChars,
+    };
+  };
+
+  // ── Ingest + enrich deps (lazy import only on the write path) ──────────────
+  const deps: SourceBackfillDeps = {
+    resolveBody: async () => resolved,
+    extract,
+    ingest: async () => {
+      throw new Error("ingest unavailable on dryRun");
+    },
+    embedAndGenerate: async () => {},
+  };
+  if (!dryRun) {
+    // poll-and-fetch.js pulls `cloudflare:workers` — import it only here so the
+    // Bun-loaded OpenAPI coverage check / route smoke tests never trip on it.
+    const { resolveFetchEnv, generateContentForReleases } =
+      await import("../workflows/poll-and-fetch.js");
+    const fetchEnv = await resolveFetchEnv(c.env as never);
+    deps.ingest = (rows: RawRelease[]) =>
+      ingestRawReleases(db as never, src as never, rows, fetchEnv);
+    deps.embedAndGenerate = async (ids: string[]) => {
+      if (c.env.RELEASES_INDEX) {
+        await embedReleasesForSource(db as never, src as never, ids, fetchEnv, {
+          throwOnError: false,
+        });
+      }
+      for (let i = 0; i < ids.length; i += BACKFILL_SUMMARY_CHUNK) {
+        // oxlint-disable-next-line no-await-in-loop -- bounded chunks under the autogen row cap
+        await generateContentForReleases(
+          db as never,
+          c.env as never,
+          src as never,
+          ids.slice(i, i + BACKFILL_SUMMARY_CHUNK),
+        );
+      }
+    };
+  }
+
+  const report = await runSourceBackfill({ id: src.id, slug: src.slug }, { dryRun }, deps);
+  const guidance = firecrawlCapGuidance({
+    via: resolved.via,
+    cappedAtWindow: report.cappedAtWindow,
+    effectiveMaxWindows,
+    requestedMaxWindows: maxWindows,
+  });
+  if (report.cappedAtWindow || report.droppedChars > 0) {
+    logEvent("info", {
+      component: "backfill-source",
+      event: "windowed-cap",
+      sourceId: src.id,
+      windows: report.windows,
+      droppedChars: report.droppedChars,
+    });
+  }
+  return guidance ? { ok: true, report, guidance } : { ok: true, report };
+}
+
 workflowsRoutes.post("/workflows/backfill-source", async (c) => {
   const db = createDb(c.env.DB);
   const body = await c.req.json<BackfillSourceBody>().catch(() => ({}) as BackfillSourceBody);
@@ -2185,98 +2290,14 @@ workflowsRoutes.post("/workflows/backfill-source", async (c) => {
     }
   }
 
-  // Hard-cap the firecrawl path: the ~106s scrape is the long pole, so bound the
-  // windows on top of it to keep a default run under a client timeout. Supplied/
-  // fetch bodies have no scrape and keep the full 1–200 budget.
-  const effectiveMaxWindows = effectiveBackfillWindows(resolved.via, maxWindows);
-
-  // ── Extraction (override in tests; else Haiku t0 all-windows) ──────────────
-  const override = (c.env as { _backfillExtractOverride?: BackfillExtractOverride })
-    ._backfillExtractOverride;
-  let anthropicClient: ReturnType<typeof buildAnthropicClient> | null = null;
-  if (!override) {
-    const apiKey = await getAnthropicKey(c.env);
-    if (!apiKey) {
-      return c.json(
-        { error: "service_unavailable", message: "ANTHROPIC_API_KEY not configured" },
-        503,
-      );
-    }
-    anthropicClient = buildAnthropicClient({ apiKey, ...(await resolveGatewayOpts(c.env)) });
-  }
-  const extract = async (markdown: string): Promise<SourceBackfillExtractResult> => {
-    if (override) return override(markdown, src, effectiveMaxWindows);
-    const r = await extractChangelogAllWindows(
-      markdown,
-      src,
-      {
-        anthropicClient: anthropicClient!,
-        agentModel: BACKFILL_EXTRACT_MODEL,
-        logger: backfillLogger,
-        logUsageFn: (entry) => logUsage(db, { ...entry, sourceId: src.id }, "backfill-source"),
-      },
-      { maxWindows: effectiveMaxWindows },
+  const result = await executeWindowedBackfill(c, db, src, resolved, { maxWindows, dryRun });
+  if (!result.ok) {
+    return c.json(
+      { error: "service_unavailable", message: "ANTHROPIC_API_KEY not configured" },
+      503,
     );
-    return {
-      releases: r.releases,
-      windows: r.windows,
-      cappedAtWindow: r.cappedAtWindow,
-      droppedChars: r.droppedChars,
-    };
-  };
-
-  // ── Ingest + enrich deps (lazy import only on the write path) ──────────────
-  const deps: SourceBackfillDeps = {
-    resolveBody: async () => resolved,
-    extract,
-    ingest: async () => {
-      throw new Error("ingest unavailable on dryRun");
-    },
-    embedAndGenerate: async () => {},
-  };
-  if (!dryRun) {
-    // poll-and-fetch.js pulls `cloudflare:workers` — import it only here so the
-    // Bun-loaded OpenAPI coverage check / route smoke tests never trip on it.
-    const { resolveFetchEnv, generateContentForReleases } =
-      await import("../workflows/poll-and-fetch.js");
-    const fetchEnv = await resolveFetchEnv(c.env as never);
-    deps.ingest = (rows: RawRelease[]) =>
-      ingestRawReleases(db as never, src as never, rows, fetchEnv);
-    deps.embedAndGenerate = async (ids: string[]) => {
-      if (c.env.RELEASES_INDEX) {
-        await embedReleasesForSource(db as never, src as never, ids, fetchEnv, {
-          throwOnError: false,
-        });
-      }
-      for (let i = 0; i < ids.length; i += BACKFILL_SUMMARY_CHUNK) {
-        // oxlint-disable-next-line no-await-in-loop -- bounded chunks under the autogen row cap
-        await generateContentForReleases(
-          db as never,
-          c.env as never,
-          src as never,
-          ids.slice(i, i + BACKFILL_SUMMARY_CHUNK),
-        );
-      }
-    };
   }
-
-  const report = await runSourceBackfill({ id: src.id, slug: src.slug }, { dryRun }, deps);
-  const guidance = firecrawlCapGuidance({
-    via: resolved.via,
-    cappedAtWindow: report.cappedAtWindow,
-    effectiveMaxWindows,
-    requestedMaxWindows: maxWindows,
-  });
-  if (report.cappedAtWindow || report.droppedChars > 0) {
-    logEvent("info", {
-      component: "backfill-source",
-      event: "windowed-cap",
-      sourceId: src.id,
-      windows: report.windows,
-      droppedChars: report.droppedChars,
-    });
-  }
-  return c.json(guidance ? { ...report, guidance } : report);
+  return c.json(result.guidance ? { ...result.report, guidance: result.guidance } : result.report);
 });
 
 // ── GET /workflows/backfill-source/status/:instanceId ────────────────────────
@@ -2310,4 +2331,139 @@ workflowsRoutes.get("/workflows/backfill-source/status/:instanceId", async (c) =
     });
     return c.json({ error: "internal_error", message }, 500);
   }
+});
+
+// ── POST /workflows/reextract-source ─────────────────────────────────────────
+//
+// Re-extract releases from a stored raw snapshot (#1284) — no live scrape, no
+// Firecrawl credits, deterministic input. Resolves the source (typed `src_` id),
+// picks the snapshot (explicit `snapshotId` or the latest by capture time),
+// loads the body from `released-raw`, then runs the SAME windowed extract/ingest
+// machinery as backfill-source with via="snapshot" (full window budget — the
+// body is pre-loaded, so there's no Firecrawl scrape to bound). Idempotent via
+// the standard URL upsert; `dryRun` (default true) previews counts without
+// writing. Pairs with universal raw capture (#1283).
+//
+// Body: { sourceId, snapshotId?, maxWindows?, dryRun? }
+interface ReextractSourceBody {
+  sourceId?: string;
+  snapshotId?: string;
+  maxWindows?: number;
+  dryRun?: boolean;
+}
+
+workflowsRoutes.post("/workflows/reextract-source", async (c) => {
+  const db = createDb(c.env.DB);
+  const body = await c.req.json<ReextractSourceBody>().catch(() => ({}) as ReextractSourceBody);
+
+  const ident = body.sourceId?.trim();
+  if (!ident) {
+    return c.json({ error: "bad_request", message: "Provide `sourceId`" }, 400);
+  }
+  if (!isSourceId(ident)) {
+    return c.json(
+      {
+        error: "bare_slug_rejected",
+        message:
+          "Pass a typed source ID (src_…). Bare slugs are ambiguous across orgs — resolve via /v1/orgs/{orgSlug}/sources/{sourceSlug} or /v1/lookups/source-by-slug first.",
+      },
+      400,
+    );
+  }
+
+  const [src] = await db.select().from(sources).where(sourceMatchByIdOrSlug(ident));
+  if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
+  if (src.type !== "scrape") {
+    return c.json(
+      {
+        error: "bad_request",
+        message: `Re-extract supports scrape sources; this source is type=${src.type}`,
+      },
+      400,
+    );
+  }
+
+  // Resolve the snapshot: the explicit one (scoped to this source so a stray id
+  // can't reach another source's body) or the most recent capture.
+  const snapId = body.snapshotId?.trim();
+  const [snap] = snapId
+    ? await db
+        .select()
+        .from(sourceRawSnapshots)
+        .where(and(eq(sourceRawSnapshots.id, snapId), eq(sourceRawSnapshots.sourceId, src.id)))
+        .limit(1)
+    : await db
+        .select()
+        .from(sourceRawSnapshots)
+        .where(eq(sourceRawSnapshots.sourceId, src.id))
+        .orderBy(desc(sourceRawSnapshots.createdAt))
+        .limit(1);
+  if (!snap) {
+    return c.json(
+      {
+        error: snapId ? "snapshot_not_found" : "no_snapshot",
+        message: snapId
+          ? `No snapshot ${snapId} for source ${src.id}`
+          : `No raw snapshot stored for source ${src.id}. Enable capture (raw-snapshot-capture-enabled) or run a Firecrawl backfill first.`,
+      },
+      404,
+    );
+  }
+
+  if (!c.env.RAW_SNAPSHOTS) {
+    return c.json(
+      { error: "service_unavailable", message: "RAW_SNAPSHOTS bucket not configured" },
+      503,
+    );
+  }
+  const markdown = await loadRawSnapshot({ R2: c.env.RAW_SNAPSHOTS }, snap.r2Key);
+  if (markdown === null) {
+    return c.json(
+      {
+        error: "snapshot_expired",
+        message: `Snapshot body gone from R2 (${snap.r2Key}); likely past the 90-day lifecycle. Re-scrape to capture a fresh snapshot.`,
+      },
+      410,
+    );
+  }
+
+  const rawMax = Number(body.maxWindows ?? BACKFILL_DEFAULT_MAX_WINDOWS);
+  const maxWindows = Number.isFinite(rawMax)
+    ? Math.min(Math.max(Math.floor(rawMax), 1), BACKFILL_MAX_MAX_WINDOWS)
+    : BACKFILL_DEFAULT_MAX_WINDOWS;
+  const dryRun = body.dryRun !== false; // default to a dry run for safety
+
+  const result = await executeWindowedBackfill(
+    c,
+    db,
+    src,
+    { markdown, via: "snapshot" },
+    { maxWindows, dryRun },
+  );
+  if (!result.ok) {
+    return c.json(
+      { error: "service_unavailable", message: "ANTHROPIC_API_KEY not configured" },
+      503,
+    );
+  }
+  logEvent("info", {
+    component: "reextract-source",
+    event: "completed",
+    sourceId: src.id,
+    snapshotId: snap.id,
+    extracted: result.report.extracted,
+    inserted: result.report.inserted,
+    dryRun,
+  });
+  return c.json({
+    ...result.report,
+    ...(result.guidance ? { guidance: result.guidance } : {}),
+    snapshot: {
+      id: snap.id,
+      contentHash: snap.contentHash,
+      capturedAt: snap.createdAt,
+      bytes: snap.bytes,
+      format: snap.format,
+    },
+  });
 });

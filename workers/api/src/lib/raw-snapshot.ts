@@ -16,7 +16,7 @@ const EXT: Record<RawFormat, string> = { markdown: "md", html: "html" };
 export async function saveRawSnapshot(
   deps: { R2: R2Like; db: ReturnType<typeof createDb> },
   input: { sourceId: string; body: string; format: RawFormat },
-): Promise<{ r2Key: string; contentHash: string; bytes: number }> {
+): Promise<{ r2Key: string; contentHash: string; bytes: number; created: boolean }> {
   const hash = sha256Hex(input.body);
   const r2Key = `sources/${input.sourceId}/raw/${hash}.${EXT[input.format]}`;
   const bytes = new TextEncoder().encode(input.body).length;
@@ -26,7 +26,9 @@ export async function saveRawSnapshot(
     await deps.R2.put(r2Key, input.body);
   }
 
-  // Only insert a D1 pointer row if one doesn't exist for (sourceId, contentHash)
+  // Only insert a D1 pointer row if one doesn't exist for (sourceId, contentHash).
+  // `created` reflects whether this call recorded a NEW snapshot vs. hit the
+  // content-hash dedup — the raw-snapshot route surfaces it as `stored`.
   const existing = await deps.db
     .select({ id: sourceRawSnapshots.id })
     .from(sourceRawSnapshots)
@@ -37,7 +39,8 @@ export async function saveRawSnapshot(
       ),
     );
 
-  if (existing.length === 0) {
+  const created = existing.length === 0;
+  if (created) {
     // `onConflictDoNothing` closes the select→insert race: a concurrent save of
     // the same (sourceId, contentHash) — e.g. two backfills on one source — hits
     // the `uq_raw_snapshots_source_hash` unique index and is silently absorbed
@@ -55,7 +58,7 @@ export async function saveRawSnapshot(
       .onConflictDoNothing();
   }
 
-  return { r2Key, contentHash: hash, bytes };
+  return { r2Key, contentHash: hash, bytes, created };
 }
 
 export async function loadRawSnapshot(deps: { R2: R2Like }, r2Key: string): Promise<string | null> {

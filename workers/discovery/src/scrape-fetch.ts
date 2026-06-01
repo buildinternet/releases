@@ -79,6 +79,13 @@ export interface ScrapeEnv {
   sessionId?: string;
   /** `true` to enable tool-loop extraction for large bodies globally. */
   extractToolLoopEnabled?: boolean;
+  /**
+   * `true` to capture the scraped markdown body as a raw snapshot (#1283).
+   * The discovery worker has no D1/R2, so `runScrapePath` POSTs the body to the
+   * API worker's raw-snapshot endpoint for later re-extraction (#1284).
+   * Resolved per session from the `raw-snapshot-capture-enabled` flag.
+   */
+  captureRawSnapshots?: boolean;
   /** Signed outbound fetch for third-party content; falls back to global fetch. */
   signedFetch?: typeof fetch;
 }
@@ -555,6 +562,44 @@ async function runAgentPath(
   return finalize(env, source, result.releases, start);
 }
 
+/**
+ * Best-effort raw-snapshot capture (#1283). The discovery worker has no D1/R2,
+ * so it POSTs the scraped body to the API worker, which content-addresses it
+ * into `released-raw` (dedup on unchanged bodies) for later re-extraction
+ * (#1284). Gated by `env.captureRawSnapshots` (the `raw-snapshot-capture-enabled`
+ * flag, resolved once per session). Never throws — a capture failure must not
+ * abort the extraction it precedes.
+ */
+export async function captureRawSnapshot(
+  env: ScrapeEnv,
+  source: Source,
+  body: string,
+): Promise<void> {
+  if (!env.captureRawSnapshots || body.trim().length === 0) return;
+  try {
+    const res = await env.apiFetcher.fetch(`https://api${sourceSubpath(source, "raw-snapshot")}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${env.apiKey}` },
+      body: JSON.stringify({ body, format: "markdown" }),
+    });
+    if (!res.ok) {
+      logEvent("warn", {
+        component: "scrape-fetch",
+        event: "raw-snapshot-capture-failed",
+        sourceSlug: source.slug,
+        status: res.status,
+      });
+    }
+  } catch (err) {
+    logEvent("warn", {
+      component: "scrape-fetch",
+      event: "raw-snapshot-capture-error",
+      sourceSlug: source.slug,
+      err: err instanceof Error ? err : String(err),
+    });
+  }
+}
+
 // ── Scrape path (handles type=scrape sources) ────────────────────
 
 async function runScrapePath(
@@ -685,6 +730,11 @@ async function runScrapePath(
     });
     return `Blocked [bot_challenge]: ${errMsg}`;
   }
+
+  // Capture the exact body extraction is about to consume (#1283), so it can be
+  // re-extracted cheaply later (#1284) when parse logic improves — no re-scrape.
+  // One internal POST ahead of the multi-second extraction; gated + best-effort.
+  await captureRawSnapshot(env, source, markdown);
 
   const knownReleases = await knownReleasesPromise;
 
