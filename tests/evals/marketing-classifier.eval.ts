@@ -17,7 +17,7 @@ import {
 import { gradeBinary, type BinaryCase, type BinaryPrediction } from "./graders";
 import { saveRun } from "./results";
 
-const ACCURACY_FLOOR = 0.85; // headroom for 1-run noise on ~12 cases
+const ACCURACY_FLOOR = 0.85; // headroom for 1-run noise across the fixture set
 const MAX_FALSE_POSITIVES = 0; // no real release should be hidden
 const RUNS_PER_CASE = 1; // raise + majority-vote as the fixture set grows
 
