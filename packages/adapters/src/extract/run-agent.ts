@@ -93,6 +93,8 @@ export async function runAgentExtraction(
         fallbackReason: null,
         cacheReadTokens: 0,
         cacheWriteTokens: 0,
+        // web_fetch is an agentic loop, so it runs on the agentic model.
+        modelUsed: agentModel,
       };
     } catch (err) {
       throw new AdapterError(
@@ -147,6 +149,7 @@ export async function runAgentExtraction(
             result.toolRounds = cfResult.toolRounds;
             result.toolChars = cfResult.toolChars;
             result.fallbackReason = cfResult.fallbackReason;
+            result.modelUsed = cfResult.modelUsed;
             pendingContentHash = contentHash;
           }
           // If web_fetch beat Cloudflare we deliberately leave pendingContentHash
@@ -167,7 +170,7 @@ export async function runAgentExtraction(
 
   await repo.logUsage({
     operation: "agent-ingest",
-    model: agentModel,
+    model: result.modelUsed,
     inputTokens: result.totalInput,
     outputTokens: result.totalOutput,
     sourceSlug: source.slug,

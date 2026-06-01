@@ -57,8 +57,22 @@ export interface UsageEntry {
  */
 export interface ExtractDeps {
   anthropicClient: Anthropic;
-  /** Model ID for the full-extraction path (Sonnet-class). */
+  /**
+   * Model ID for the AGENTIC extraction paths (Sonnet-class): the web_fetch
+   * loop (run-agent) and the large-body tool-use loop (extract-with-tools).
+   * These are multi-turn tool loops where a Haiku-class model degrades, so
+   * they stay on a stronger model regardless of `oneShotModel`.
+   */
   agentModel: string;
+  /**
+   * Model ID for the SINGLE-CALL body extraction (`extract-from-body` runOneShot:
+   * crawl one-shot, direct-fetch, seed/Cloudflare-render fallback). A single
+   * forced-tool-call SDK request — Haiku-class parses these reliably at ~⅓ the
+   * cost, so this defaults to Haiku in the worker. Falls back to `agentModel`
+   * when unset (preserves the historical Sonnet behavior for callers that don't
+   * set it, e.g. unit tests).
+   */
+  oneShotModel?: string;
   /** Model ID for the incremental parse (Haiku-class). Optional — callers may
    *  opt into the incremental strategy and supply this separately. */
   incrementalModel?: string;

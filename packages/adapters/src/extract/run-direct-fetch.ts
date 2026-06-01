@@ -46,7 +46,7 @@ export async function runDirectFetchExtraction(
   opts: DirectFetchOptions,
   deps: ExtractDeps,
 ): Promise<DirectFetchResult> {
-  const { logger, repo, agentModel } = deps;
+  const { logger, repo } = deps;
 
   const headers: Record<string, string> = {
     "User-Agent": RELEASES_BOT_UA,
@@ -121,7 +121,7 @@ export async function runDirectFetchExtraction(
 
   await repo.logUsage({
     operation: "agent-ingest",
-    model: agentModel,
+    model: result.modelUsed,
     inputTokens: result.totalInput,
     outputTokens: result.totalOutput,
     sourceSlug: source.slug,
