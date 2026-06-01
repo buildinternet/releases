@@ -186,8 +186,6 @@ export async function runAgentExtraction(
         toolRounds: null,
         toolChars: null,
         fallbackReason: null,
-        cacheReadTokens: 0,
-        cacheWriteTokens: 0,
         // web_fetch is an agentic loop, so it runs on the agentic model.
         modelUsed: agentModel,
       };
@@ -351,7 +349,13 @@ async function runWebFetchLoop(
   sourceUrl: string,
   guidance: ExtractionGuidance | undefined,
   deps: ExtractDeps,
-): Promise<{ entries: ExtractedEntry[]; totalInput: number; totalOutput: number }> {
+): Promise<{
+  entries: ExtractedEntry[];
+  totalInput: number;
+  totalOutput: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+}> {
   const { anthropicClient, agentModel, logger } = deps;
   const sourceDomain = new URL(sourceUrl).hostname;
 
@@ -383,6 +387,8 @@ async function runWebFetchLoop(
 
   let totalInput = 0;
   let totalOutput = 0;
+  let totalCacheRead = 0;
+  let totalCacheWrite = 0;
   let entries: ExtractedEntry[] | null = null;
   const maxContinuations = 5;
   let continuations = 0;
@@ -414,6 +420,8 @@ async function runWebFetchLoop(
 
     const usage = response.usage as unknown as Record<string, number>;
     const cacheRead = usage.cache_read_input_tokens ?? 0;
+    totalCacheRead += cacheRead;
+    totalCacheWrite += usage.cache_creation_input_tokens ?? 0;
     if (cacheRead > 0) {
       logger.debug(`Cache hit: ${cacheRead} tokens read from cache`);
     }
@@ -468,5 +476,11 @@ async function runWebFetchLoop(
     break;
   }
 
-  return { entries: entries ?? [], totalInput, totalOutput };
+  return {
+    entries: entries ?? [],
+    totalInput,
+    totalOutput,
+    cacheReadTokens: totalCacheRead,
+    cacheWriteTokens: totalCacheWrite,
+  };
 }

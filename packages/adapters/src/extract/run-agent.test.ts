@@ -25,8 +25,8 @@ function makeResult(over: Partial<ExtractFromBodyResult> = {}): ExtractFromBodyR
 const webFetchUsage = {
   totalInput: 1200,
   totalOutput: 300,
-  cacheReadTokens: 0,
-  cacheWriteTokens: 0,
+  cacheReadTokens: 600,
+  cacheWriteTokens: 120,
   entryCount: 1,
 };
 
@@ -55,6 +55,9 @@ describe("buildAgentUsageRows", () => {
     expect(rows[0]!.model).toBe(AGENT_MODEL);
     expect(rows[0]!.inputTokens).toBe(1200);
     expect(rows[0]!.outputTokens).toBe(300);
+    // web_fetch cache tokens must survive into the agent row (not be zeroed).
+    expect(rows[0]!.cacheReadTokens).toBe(600);
+    expect(rows[0]!.cacheWriteTokens).toBe(120);
     // Row 2: Cloudflare one-shot spend under its own (Haiku) model.
     expect(rows[1]!.model).toBe(ONESHOT_MODEL);
     expect(rows[1]!.inputTokens).toBe(8000);
