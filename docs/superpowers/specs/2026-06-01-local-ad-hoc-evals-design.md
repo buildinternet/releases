@@ -50,7 +50,7 @@ flowchart TD
 
 File layout (all new unless noted):
 
-```
+```text
 tests/evals/
   marketing-classifier.eval.ts
   release-summary.eval.ts
@@ -154,7 +154,3 @@ Out (fast-follows, noted not built): mining real labeled fixtures from prod `sup
 - **Fixture realism.** Hand-authored marketing fixtures may not match prod's hard cases. Accepted for v1 (determinism + no prod coupling); prod-mining is the first fast-follow.
 - **Haiku non-determinism at the boundary.** A fixture near the real/marketing boundary may flip run-to-run. Mitigation: keep v1 fixtures clearly-labeled (save genuinely ambiguous cases for when `RUNS_PER_CASE` > 1), and size `ACCURACY_FLOOR` with margin.
 - **Judge cost/noise.** Tier 2 is opt-in precisely because Sonnet grading costs money and adds variance; it is never part of the default gate.
-
-```
-
-```
