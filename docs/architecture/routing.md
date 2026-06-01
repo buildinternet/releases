@@ -25,7 +25,7 @@ Per-org slug uniqueness for sources and products is enforced by `idx_sources_org
 
 Source and product detail endpoints are **dual-registered** — the legacy bare form (`/v1/sources/:slug`, `/v1/products/:slug`) and the canonical org-scoped form (`/v1/orgs/:orgSlug/sources/:sourceSlug`, `/v1/orgs/:orgSlug/products/:productSlug`) share a single handler.
 
-Post-#698 the bare form rejects bare _slugs_ with `400 bare_slug_rejected` (thrown as `BareSlugRejected` from `resolveSourceFromContext` / `resolveProductFromContext`); only typed IDs work on the bare path because IDs stay globally unique. Prefer the org-scoped path. The OSS CLI's `findSource`/`findProduct` already branch on identifier shape (typed-ID → bare path, `org/slug` → split locally, bare slug → resolver round-trip).
+Post-#698 the bare form rejects bare _slugs_ with `400 bare_slug_rejected` (thrown as `BareSlugRejected` from `resolveSourceFromContext` / `resolveProductFromContext`); only typed IDs work on the bare path because IDs stay globally unique. Prefer the org-scoped path. The OSS CLI's `findSource`/`findProduct` already branch on identifier shape (typed-ID → bare path, `org/slug` → split locally, bare slug → resolve). For a **bare source slug**, `findSource` enumerates `GET /v1/sources?slug=…` (exact-slug filter, all orgs) and resolves only when exactly one source matches; >1 throws `AmbiguousSourceError` listing the `org/slug` + `src_…` candidates instead of silently picking the oldest, since per-org uniqueness (#690) means a bare slug isn't a globally unambiguous handle (releases-cli#264).
 
 **Creation requires an org.** `POST /v1/sources` and `POST /v1/products` both require `orgId` or `orgSlug` — silent orphan creation is gone. Resolution-failure responses differ:
 
@@ -43,7 +43,7 @@ None of the lookup routes are `adminRoutes`-protected.
 
 ### Slug resolvers (#698)
 
-`GET /v1/lookups/source-by-slug?slug=…` and `GET /v1/lookups/product-by-slug?slug=…` return the canonical home (`{sourceId|productId, sourceSlug|productSlug, orgSlug}`) for old bookmarks and slug-only callers. They pick the oldest match by `(createdAt, id)` and carry `Sunset: Sun, 01 Nov 2026 00:00:00 GMT` (a deprecation signal — these are migration aids, not auth-gated; see auth note above).
+`GET /v1/lookups/source-by-slug?slug=…` and `GET /v1/lookups/product-by-slug?slug=…` return the canonical home (`{sourceId|productId, sourceSlug|productSlug, orgSlug}`) for old bookmarks and slug-only callers. They pick the oldest match by `(createdAt, id)` and carry `Sunset: Sun, 01 Nov 2026 00:00:00 GMT` (a deprecation signal — these are migration aids, not auth-gated; see auth note above). The oldest-match tie-break makes these unsuitable for disambiguating a bare slug that exists under multiple orgs; the CLI's `findSource` no longer routes through `source-by-slug` and instead enumerates the exact-slug `GET /v1/sources?slug=…` filter to detect that ambiguity (releases-cli#264, above).
 
 ### Domain resolution
 
