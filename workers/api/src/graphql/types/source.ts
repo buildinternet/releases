@@ -1,5 +1,5 @@
 import { builder } from "../builder.js";
-import { SourceTypeEnum } from "./enums.js";
+import { SourceTypeEnum, VideoProviderEnum, AppStorePlatformEnum } from "./enums.js";
 import { appStoreSourceInfo } from "@releases/adapters/appstore";
 import { videoSourceInfo } from "@releases/adapters/source-meta";
 
@@ -7,7 +7,7 @@ builder.objectType("AppStoreInfo", {
   description:
     "App Store platform + icon for a `type: appstore` source. Lets clients render the compact app-update treatment (icon + 'Available for iOS/macOS').",
   fields: (t) => ({
-    platform: t.exposeString("platform"),
+    platform: t.field({ type: AppStorePlatformEnum, resolve: (s) => s.platform }),
     iconUrl: t.exposeString("iconUrl", { nullable: true }),
   }),
 });
@@ -16,7 +16,7 @@ builder.objectType("VideoInfo", {
   description:
     "Video provider for a `type: video` source. Lets clients render the compact video treatment (play badge + 'Watch on YouTube/Vimeo/Wistia').",
   fields: (t) => ({
-    provider: t.exposeString("provider"),
+    provider: t.field({ type: VideoProviderEnum, resolve: (s) => s.provider }),
   }),
 });
 

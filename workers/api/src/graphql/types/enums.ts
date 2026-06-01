@@ -48,3 +48,19 @@ export const ReleaseTypeEnum = builder.enumType("ReleaseType", {
     [K in ReleaseType]: { value: K };
   },
 });
+
+const VIDEO_PROVIDERS = ["youtube", "vimeo", "wistia"] as const;
+export const VideoProviderEnum = builder.enumType("VideoProvider", {
+  description: "Provider for a video source.",
+  values: Object.fromEntries(VIDEO_PROVIDERS.map((v) => [v, { value: v }])) as {
+    [K in (typeof VIDEO_PROVIDERS)[number]]: { value: K };
+  },
+});
+
+const APP_STORE_PLATFORMS = ["ios", "macos"] as const;
+export const AppStorePlatformEnum = builder.enumType("AppStorePlatform", {
+  description: "App Store platform for an appstore source.",
+  values: Object.fromEntries(APP_STORE_PLATFORMS.map((v) => [v, { value: v }])) as {
+    [K in (typeof APP_STORE_PLATFORMS)[number]]: { value: K };
+  },
+});
