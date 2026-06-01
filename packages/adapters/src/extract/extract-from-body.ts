@@ -47,6 +47,10 @@ export interface ExtractFromBodyResult {
   fallbackReason: UsageFallbackReason | null;
   cacheReadTokens: number;
   cacheWriteTokens: number;
+  /** The model that actually produced these entries — `oneShotModel` for the
+   *  single-call path, `agentModel` for the tool-loop. Callers log this to
+   *  `usage_log` so cost attribution reflects the real model, not a default. */
+  modelUsed: string;
 }
 
 const MAX_BODY_CHARS = 400_000;
@@ -62,8 +66,12 @@ async function runOneShot(
   hitMaxTokens: boolean;
   cacheReadTokens: number;
   cacheWriteTokens: number;
+  modelUsed: string;
 }> {
   const { anthropicClient, agentModel, logger } = deps;
+  // Single forced-tool-call extraction — Haiku-class is reliable and ~⅓ the
+  // cost here. Falls back to agentModel when oneShotModel is unset.
+  const model = deps.oneShotModel ?? agentModel;
 
   const content =
     opts.body.length > MAX_BODY_CHARS
@@ -90,7 +98,7 @@ async function runOneShot(
   }
 
   const stream = anthropicClient.messages.stream({
-    model: agentModel,
+    model,
     max_tokens: isHuge ? HUGE_BODY_MAX_OUTPUT_TOKENS : DEFAULT_MAX_OUTPUT_TOKENS,
     // Deterministic parse — see EXTRACTION_TEMPERATURE (why 0; why short-lived).
     // oxlint-disable-next-line no-deprecated -- supported on current extract models; see note
@@ -125,6 +133,7 @@ async function runOneShot(
       hitMaxTokens,
       cacheReadTokens,
       cacheWriteTokens,
+      modelUsed: model,
     };
   }
 
@@ -137,6 +146,7 @@ async function runOneShot(
       hitMaxTokens,
       cacheReadTokens,
       cacheWriteTokens,
+      modelUsed: model,
     };
   }
 
@@ -147,6 +157,7 @@ async function runOneShot(
     hitMaxTokens,
     cacheReadTokens,
     cacheWriteTokens,
+    modelUsed: model,
   };
 }
 
@@ -192,6 +203,8 @@ export async function extractFromBody(
         fallbackReason: null,
         cacheReadTokens: result.cacheReadTokens,
         cacheWriteTokens: result.cacheWriteTokens,
+        // Tool-loop runs on the agentic (Sonnet-class) model, not oneShotModel.
+        modelUsed: deps.agentModel,
       };
     } catch (err) {
       const isLoopErr = err instanceof LoopFallbackError;
@@ -217,6 +230,10 @@ export async function extractFromBody(
         toolRounds: partial?.toolRounds ?? null,
         toolChars: partial?.toolChars ?? null,
         fallbackReason: reason,
+        // Entries came from the one-shot retry; report its model. Token totals
+        // above still fold in the partial tool-loop spend (a Sonnet/Haiku mix),
+        // but the `mode` flags this as a fallback so rollups can read it as such.
+        modelUsed: oneshot.modelUsed,
       };
     }
   }

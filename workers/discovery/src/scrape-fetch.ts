@@ -722,7 +722,7 @@ async function runScrapePath(
     // before the max_tokens throw, so even a maxed-out run is attributable.
     await deps.repo.logUsage({
       operation: "agent-ingest",
-      model: deps.agentModel,
+      model: result.modelUsed,
       inputTokens: result.totalInput,
       outputTokens: result.totalOutput,
       sourceSlug: source.slug,

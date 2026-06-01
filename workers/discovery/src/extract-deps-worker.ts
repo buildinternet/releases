@@ -17,6 +17,8 @@ export interface WorkerDepsEnv {
   cloudflareAccountId?: string;
   cloudflareApiToken?: string;
   agentModel?: string;
+  /** Override for the single-call body-extraction model (see DEFAULT_ONESHOT_MODEL). */
+  oneShotModel?: string;
   incrementalModel?: string;
   apiFetcher: { fetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response> };
   apiKey: string;
@@ -24,8 +26,23 @@ export interface WorkerDepsEnv {
   extractToolLoopEnabled?: boolean;
 }
 
-/** Default model for agent-style extraction in workers. Sonnet-class. */
+/**
+ * Default model for the AGENTIC extraction paths (web_fetch loop, large-body
+ * tool-use loop). Sonnet-class — these are multi-turn tool loops where Haiku
+ * degrades, and they run on small inputs (the loop slices the body) so the
+ * cost is already low.
+ */
 const DEFAULT_AGENT_MODEL = "claude-sonnet-4-6";
+
+/**
+ * Default model for the SINGLE-CALL body extraction (crawl one-shot,
+ * direct-fetch, seed/Cloudflare-render fallback). These inline the whole body
+ * into one forced-tool-call request — the largest, most expensive extraction
+ * we run (crawl bodies hit 100K+ tokens). Haiku-class parses them reliably at
+ * ~⅓ the cost; the agentic loops above stay on Sonnet. Override per env via
+ * `oneShotModel`.
+ */
+const DEFAULT_ONESHOT_MODEL = "claude-haiku-4-5-20251001";
 
 /**
  * Build an org-scoped sub-resource path for a source. We pass `source.id`
@@ -151,6 +168,7 @@ export function buildWorkerExtractDeps(env: WorkerDepsEnv): ExtractDeps {
   return {
     anthropicClient: anthropicClient as unknown as ExtractDeps["anthropicClient"],
     agentModel: env.agentModel ?? DEFAULT_AGENT_MODEL,
+    oneShotModel: env.oneShotModel ?? DEFAULT_ONESHOT_MODEL,
     incrementalModel: env.incrementalModel,
     logger: workerLogger,
     cloudflare,

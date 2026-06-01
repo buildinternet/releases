@@ -6,7 +6,7 @@ import type { ExtractDeps, ExtractLogger } from "./types.js";
 
 const silentLogger: ExtractLogger = { info: () => {}, warn: () => {}, debug: () => {} };
 
-function makeDeps(client: unknown): ExtractDeps {
+function makeDeps(client: unknown, overrides?: Partial<ExtractDeps>): ExtractDeps {
   return {
     anthropicClient: client as never,
     agentModel: "claude-sonnet-4-6",
@@ -14,7 +14,40 @@ function makeDeps(client: unknown): ExtractDeps {
     cloudflare: null,
     repo: {} as never,
     extractToolLoopEnabled: false,
+    ...overrides,
   };
+}
+
+/** Capturing client: records each stream() params object and replays a fixed
+ *  extract_releases response. Lets tests assert which `model` each call used. */
+function capturingClient(params: Anthropic.MessageCreateParams[]) {
+  return {
+    messages: {
+      stream: ((p: Anthropic.MessageCreateParams) => {
+        params.push(p);
+        return {
+          finalMessage: async () =>
+            ({
+              id: "msg_1",
+              type: "message",
+              role: "assistant",
+              model: "x",
+              content: [
+                { type: "tool_use", id: "t1", name: "extract_releases", input: { releases: [] } },
+              ],
+              stop_reason: "tool_use",
+              stop_sequence: null,
+              usage: {
+                input_tokens: 100,
+                output_tokens: 10,
+                cache_read_input_tokens: 0,
+                cache_creation_input_tokens: 0,
+              },
+            }) as Anthropic.Message,
+        } as never;
+      }) as never,
+    } as never,
+  } as Pick<Anthropic, "messages">;
 }
 
 /** A small body well under the 50K-token threshold. */
@@ -155,6 +188,67 @@ describe("extractFromBody — tier gate: toolloop", () => {
     expect(result.fallbackReason).toBeNull();
     expect(result.entries).toHaveLength(1);
     expect(result.entries[0]!.title).toBe("v2.0");
+  });
+});
+
+describe("extractFromBody — model selection", () => {
+  test("one-shot path uses oneShotModel and reports it as modelUsed", async () => {
+    const params: Anthropic.MessageCreateParams[] = [];
+    const result = await extractFromBody(
+      {
+        body: SMALL_BODY,
+        systemPrompt: "test",
+        userMessage: "Extract from:",
+        sourceUrl: "https://x.test",
+        fetchUrl: "https://x.test/feed.json",
+        useToolLoop: false,
+      },
+      makeDeps(capturingClient(params), { oneShotModel: "claude-haiku-4-5-20251001" }),
+    );
+
+    expect(params).toHaveLength(1);
+    expect(params[0]!.model).toBe("claude-haiku-4-5-20251001");
+    expect(result.modelUsed).toBe("claude-haiku-4-5-20251001");
+  });
+
+  test("one-shot falls back to agentModel when oneShotModel is unset (back-compat)", async () => {
+    const params: Anthropic.MessageCreateParams[] = [];
+    const result = await extractFromBody(
+      {
+        body: SMALL_BODY,
+        systemPrompt: "test",
+        userMessage: "Extract from:",
+        sourceUrl: "https://x.test",
+        fetchUrl: "https://x.test/feed.json",
+        useToolLoop: false,
+      },
+      makeDeps(capturingClient(params)), // no oneShotModel
+    );
+
+    expect(params[0]!.model).toBe("claude-sonnet-4-6");
+    expect(result.modelUsed).toBe("claude-sonnet-4-6");
+  });
+
+  test("tool-loop path stays on agentModel even when oneShotModel is Haiku", async () => {
+    const params: Anthropic.MessageCreateParams[] = [];
+    const result = await extractFromBody(
+      {
+        body: LARGE_BODY,
+        systemPrompt: "test",
+        userMessage: "Extract from:",
+        sourceUrl: "https://x.test",
+        fetchUrl: "https://x.test/feed.json",
+        useToolLoop: true,
+      },
+      makeDeps(capturingClient(params), { oneShotModel: "claude-haiku-4-5-20251001" }),
+    );
+
+    // Agentic loop must not be downgraded — every call runs on agentModel.
+    // Guard against a vacuous `.every` pass: assert calls were actually made.
+    expect(params.length).toBeGreaterThan(0);
+    expect(params.every((p) => p.model === "claude-sonnet-4-6")).toBe(true);
+    expect(result.mode).toBe("toolloop");
+    expect(result.modelUsed).toBe("claude-sonnet-4-6");
   });
 });
 

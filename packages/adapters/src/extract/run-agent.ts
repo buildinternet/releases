@@ -21,7 +21,7 @@ import {
   type ExtractionGuidance,
   type MappedEntry,
 } from "./shared.js";
-import type { ExtractDeps, ExtractedEntry } from "./types.js";
+import type { ExtractDeps, ExtractedEntry, UsageEntry } from "./types.js";
 
 export interface AgentExtractionOptions {
   guidance?: ExtractionGuidance;
@@ -38,6 +38,94 @@ export interface AgentExtractionResult {
 /** Threshold below which we suspect web_fetch missed content */
 const MIN_EXPECTED_ENTRIES = 3;
 
+/** web_fetch spend captured before the Cloudflare fallback folds into `result`. */
+interface WebFetchUsageSnapshot {
+  totalInput: number;
+  totalOutput: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  entryCount: number;
+}
+
+/**
+ * Build the `usage_log` row(s) for an agent extraction. The web_fetch loop
+ * (agentModel) and the Cloudflare fallback (oneShotModel) can run on different
+ * models; when BOTH spent tokens, attribute each to its own model so the cost
+ * split is honest. Otherwise — jsRendered (no web_fetch), CF skipped/empty, or
+ * both on the same model — emit one combined row from `result`.
+ *
+ * Exported for unit testing: `runAgentExtraction` itself does live network +
+ * SDK I/O, so the attribution logic is isolated here.
+ */
+export function buildAgentUsageRows(args: {
+  sourceSlug: string;
+  agentModel: string;
+  result: ExtractFromBodyResult;
+  webFetchUsage: WebFetchUsageSnapshot | null;
+  cfResult: ExtractFromBodyResult | null;
+}): UsageEntry[] {
+  const { sourceSlug, agentModel, result, webFetchUsage, cfResult } = args;
+  const cfSpent = cfResult !== null && (cfResult.totalInput > 0 || cfResult.totalOutput > 0);
+  const webSpent =
+    webFetchUsage !== null && (webFetchUsage.totalInput > 0 || webFetchUsage.totalOutput > 0);
+
+  if (
+    cfResult !== null &&
+    webFetchUsage !== null &&
+    cfSpent &&
+    webSpent &&
+    cfResult.modelUsed !== agentModel
+  ) {
+    return [
+      {
+        operation: "agent-ingest",
+        model: agentModel,
+        inputTokens: webFetchUsage.totalInput,
+        outputTokens: webFetchUsage.totalOutput,
+        sourceSlug,
+        releaseCount: webFetchUsage.entryCount,
+        extractionMode: "oneshot",
+        toolRounds: null,
+        toolChars: null,
+        fallbackReason: null,
+        cacheReadTokens: webFetchUsage.cacheReadTokens,
+        cacheWriteTokens: webFetchUsage.cacheWriteTokens,
+      },
+      {
+        operation: "agent-ingest",
+        model: cfResult.modelUsed,
+        inputTokens: cfResult.totalInput,
+        outputTokens: cfResult.totalOutput,
+        sourceSlug,
+        releaseCount: cfResult.entries.length,
+        extractionMode: cfResult.mode,
+        toolRounds: cfResult.toolRounds,
+        toolChars: cfResult.toolChars,
+        fallbackReason: cfResult.fallbackReason,
+        cacheReadTokens: cfResult.cacheReadTokens,
+        cacheWriteTokens: cfResult.cacheWriteTokens,
+      },
+    ];
+  }
+
+  return [
+    {
+      operation: "agent-ingest",
+      model: result.modelUsed,
+      inputTokens: result.totalInput,
+      outputTokens: result.totalOutput,
+      sourceSlug,
+      releaseCount: result.entries.length,
+      extractionMode: result.mode,
+      toolRounds: result.toolRounds,
+      toolChars: result.toolChars,
+      fallbackReason: result.fallbackReason,
+      cacheReadTokens: result.cacheReadTokens,
+      cacheWriteTokens: result.cacheWriteTokens,
+    },
+  ];
+}
+
 export async function runAgentExtraction(
   source: Source,
   opts: AgentExtractionOptions,
@@ -51,6 +139,13 @@ export async function runAgentExtraction(
   // Tracks the content hash from any Cloudflare-rendered body, recorded
   // after extraction so a failed run doesn't lock out retries.
   let pendingContentHash: string | null = null;
+  // The Cloudflare-fallback extraction (if it runs) and a snapshot of the
+  // web_fetch spend taken before its tokens are folded into `result`. The
+  // web_fetch loop (agentModel) and the CF one-shot (oneShotModel) can be
+  // different models, so these let the usage log attribute each call's spend
+  // to its own model rather than lumping both under one.
+  let cfResult: ExtractFromBodyResult | null = null;
+  let webFetchUsage: WebFetchUsageSnapshot | null = null;
   const jsRendered = await isJsRenderedPage(source.url);
 
   if (jsRendered) {
@@ -91,8 +186,8 @@ export async function runAgentExtraction(
         toolRounds: null,
         toolChars: null,
         fallbackReason: null,
-        cacheReadTokens: 0,
-        cacheWriteTokens: 0,
+        // web_fetch is an agentic loop, so it runs on the agentic model.
+        modelUsed: agentModel,
       };
     } catch (err) {
       throw new AdapterError(
@@ -100,6 +195,14 @@ export async function runAgentExtraction(
         `Agent extraction failed for ${source.url}: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
+
+    webFetchUsage = {
+      totalInput: result.totalInput,
+      totalOutput: result.totalOutput,
+      cacheReadTokens: result.cacheReadTokens,
+      cacheWriteTokens: result.cacheWriteTokens,
+      entryCount: result.entries.length,
+    };
 
     logger.info(
       `web_fetch found ${result.entries.length} entries (${result.totalInput.toLocaleString()} input + ${result.totalOutput.toLocaleString()} output tokens)`,
@@ -118,7 +221,7 @@ export async function runAgentExtraction(
         }
 
         try {
-          const cfResult = await extractFromBody(
+          cfResult = await extractFromBody(
             {
               body: markdown,
               systemPrompt: CLOUDFLARE_SYSTEM_PROMPT,
@@ -129,9 +232,10 @@ export async function runAgentExtraction(
             },
             deps,
           );
-          // Always account for the Cloudflare call's spend in the usage log,
-          // regardless of which result wins — otherwise usage_log under-reports
-          // when web_fetch beats Cloudflare and we discard cfResult.entries.
+          // Fold the Cloudflare spend into `result` so the single-row usage path
+          // (same model, or no split) and the info log below stay accurate. When
+          // the two calls used different models, the usage-log block splits them
+          // back out by model using `webFetchUsage` + `cfResult`.
           result.totalInput += cfResult.totalInput;
           result.totalOutput += cfResult.totalOutput;
           result.cacheReadTokens += cfResult.cacheReadTokens;
@@ -147,6 +251,7 @@ export async function runAgentExtraction(
             result.toolRounds = cfResult.toolRounds;
             result.toolChars = cfResult.toolChars;
             result.fallbackReason = cfResult.fallbackReason;
+            result.modelUsed = cfResult.modelUsed;
             pendingContentHash = contentHash;
           }
           // If web_fetch beat Cloudflare we deliberately leave pendingContentHash
@@ -165,20 +270,16 @@ export async function runAgentExtraction(
     await repo.commitContentHash(source, pendingContentHash);
   }
 
-  await repo.logUsage({
-    operation: "agent-ingest",
-    model: agentModel,
-    inputTokens: result.totalInput,
-    outputTokens: result.totalOutput,
-    sourceSlug: source.slug,
-    releaseCount: result.entries.length,
-    extractionMode: result.mode,
-    toolRounds: result.toolRounds,
-    toolChars: result.toolChars,
-    fallbackReason: result.fallbackReason,
-    cacheReadTokens: result.cacheReadTokens,
-    cacheWriteTokens: result.cacheWriteTokens,
-  });
+  // 1 or 2 independent usage rows (see buildAgentUsageRows) — write concurrently.
+  await Promise.all(
+    buildAgentUsageRows({
+      sourceSlug: source.slug,
+      agentModel,
+      result,
+      webFetchUsage,
+      cfResult,
+    }).map((row) => repo.logUsage(row)),
+  );
 
   logger.info(
     `Extract mode=${result.mode} rounds=${result.toolRounds ?? "-"} ` +
@@ -248,7 +349,13 @@ async function runWebFetchLoop(
   sourceUrl: string,
   guidance: ExtractionGuidance | undefined,
   deps: ExtractDeps,
-): Promise<{ entries: ExtractedEntry[]; totalInput: number; totalOutput: number }> {
+): Promise<{
+  entries: ExtractedEntry[];
+  totalInput: number;
+  totalOutput: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+}> {
   const { anthropicClient, agentModel, logger } = deps;
   const sourceDomain = new URL(sourceUrl).hostname;
 
@@ -280,6 +387,8 @@ async function runWebFetchLoop(
 
   let totalInput = 0;
   let totalOutput = 0;
+  let totalCacheRead = 0;
+  let totalCacheWrite = 0;
   let entries: ExtractedEntry[] | null = null;
   const maxContinuations = 5;
   let continuations = 0;
@@ -311,6 +420,8 @@ async function runWebFetchLoop(
 
     const usage = response.usage as unknown as Record<string, number>;
     const cacheRead = usage.cache_read_input_tokens ?? 0;
+    totalCacheRead += cacheRead;
+    totalCacheWrite += usage.cache_creation_input_tokens ?? 0;
     if (cacheRead > 0) {
       logger.debug(`Cache hit: ${cacheRead} tokens read from cache`);
     }
@@ -365,5 +476,11 @@ async function runWebFetchLoop(
     break;
   }
 
-  return { entries: entries ?? [], totalInput, totalOutput };
+  return {
+    entries: entries ?? [],
+    totalInput,
+    totalOutput,
+    cacheReadTokens: totalCacheRead,
+    cacheWriteTokens: totalCacheWrite,
+  };
 }
