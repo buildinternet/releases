@@ -573,7 +573,8 @@ export const RawSnapshotResponseSchema = z.object({
   r2Key: z.string().optional(),
   contentHash: z.string().optional(),
   bytes: z.number().int().min(0).optional(),
-  reason: z.string().optional(),
+  // Only set on the soft-fail path; bounded so consumers can branch on it.
+  reason: z.enum(["no_binding"]).optional(),
 });
 
 // ── Oversized changelog files (GET /sources/changelog-files/oversized) ──

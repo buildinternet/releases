@@ -1,4 +1,3 @@
-import { and, eq } from "drizzle-orm";
 import { sha256Hex } from "@releases/core-internal/hash";
 import { sourceRawSnapshots } from "@buildinternet/releases-core/schema";
 import type { createDb } from "../db.js";
@@ -26,39 +25,26 @@ export async function saveRawSnapshot(
     await deps.R2.put(r2Key, input.body);
   }
 
-  // Only insert a D1 pointer row if one doesn't exist for (sourceId, contentHash).
-  // `created` reflects whether this call recorded a NEW snapshot vs. hit the
-  // content-hash dedup — the raw-snapshot route surfaces it as `stored`.
-  const existing = await deps.db
-    .select({ id: sourceRawSnapshots.id })
-    .from(sourceRawSnapshots)
-    .where(
-      and(
-        eq(sourceRawSnapshots.sourceId, input.sourceId),
-        eq(sourceRawSnapshots.contentHash, hash),
-      ),
-    );
+  // Insert the D1 pointer row, deduped at the DB on the
+  // `uq_raw_snapshots_source_hash` (source_id, content_hash) unique index:
+  // `onConflictDoNothing` absorbs a concurrent save of the same body (e.g. two
+  // backfills on one source) instead of throwing. `created` is derived from the
+  // RETURNING rows — empty on a conflict no-op — so it's correct under that race
+  // (a pre-insert read would let both racers report `created: true`). The
+  // raw-snapshot route surfaces this as `stored`.
+  const insertedRows = await deps.db
+    .insert(sourceRawSnapshots)
+    .values({
+      sourceId: input.sourceId,
+      r2Key,
+      contentHash: hash,
+      format: input.format,
+      bytes,
+    })
+    .onConflictDoNothing()
+    .returning({ id: sourceRawSnapshots.id });
 
-  const created = existing.length === 0;
-  if (created) {
-    // `onConflictDoNothing` closes the select→insert race: a concurrent save of
-    // the same (sourceId, contentHash) — e.g. two backfills on one source — hits
-    // the `uq_raw_snapshots_source_hash` unique index and is silently absorbed
-    // instead of throwing. The return values are derived locally, so a conflict
-    // needs no re-query.
-    await deps.db
-      .insert(sourceRawSnapshots)
-      .values({
-        sourceId: input.sourceId,
-        r2Key,
-        contentHash: hash,
-        format: input.format,
-        bytes,
-      })
-      .onConflictDoNothing();
-  }
-
-  return { r2Key, contentHash: hash, bytes, created };
+  return { r2Key, contentHash: hash, bytes, created: insertedRows.length > 0 };
 }
 
 export async function loadRawSnapshot(deps: { R2: R2Like }, r2Key: string): Promise<string | null> {

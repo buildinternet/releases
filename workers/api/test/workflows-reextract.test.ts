@@ -222,20 +222,34 @@ describe("POST /v1/workflows/reextract-source", () => {
     expect(sink.markdown).toBe("# OLD body");
   });
 
-  it("404s a snapshotId that belongs to a different source", async () => {
+  it("404s a snapshotId that exists but belongs to a different source", async () => {
     const db = mkDb();
     await seedScrapeSource(db);
-    await seedSnapshot(db, {
-      id: "raw_new",
-      r2Key: "sources/src_scrape/raw/new.md",
-      contentHash: "hnew",
+    // A second scrape source under the same org, with its own snapshot.
+    await db.insert(sources).values({
+      id: "src_other",
+      orgId: "org_a",
+      slug: "other-blog",
+      name: "Other Blog",
+      type: "scrape",
+      url: "https://other.test/changelog",
+    });
+    await db.insert(sourceRawSnapshots).values({
+      id: "raw_other",
+      sourceId: "src_other",
+      r2Key: "sources/src_other/raw/other.md",
+      contentHash: "hother",
+      format: "markdown",
       bytes: 3,
       createdAt: "2024-06-01T00:00:00.000Z",
     });
-    const R2 = fakeR2({ "sources/src_scrape/raw/new.md": "# NEW body" });
+    const R2 = fakeR2({ "sources/src_other/raw/other.md": "# OTHER body" });
+    // raw_other exists, but is scoped to src_other — re-extracting it via
+    // src_scrape must 404 (the `eq(sourceId)` clause), never reach another
+    // source's body.
     const res = await post(mkApp(db, { RAW_SNAPSHOTS: R2 }), {
       sourceId: "src_scrape",
-      snapshotId: "raw_does_not_exist",
+      snapshotId: "raw_other",
     });
     expect(res.status).toBe(404);
   });

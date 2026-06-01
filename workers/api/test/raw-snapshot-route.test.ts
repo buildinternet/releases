@@ -104,6 +104,20 @@ describe("POST /orgs/:org/sources/:src/raw-snapshot (#1283)", () => {
     expect(res.status).toBe(404);
   });
 
+  it("400 for a non-scrape source", async () => {
+    await db.insert(sources).values({
+      id: "src_gh",
+      orgId: ORG,
+      slug: "acme-gh",
+      name: "Acme GH",
+      type: "github",
+      url: "https://github.com/acme/acme",
+    });
+    const res = await post({ body: "x" }, `/v1/orgs/${ORG}/sources/src_gh/raw-snapshot`);
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: string }).error).toBe("bad_request");
+  });
+
   it("soft-fails with stored:false when RAW_SNAPSHOTS is unbound", async () => {
     const noR2 = createTestApp(db, sourceRoutes, { env: {} });
     const res = await noR2(

@@ -1041,6 +1041,18 @@ const postRawSnapshotHandler = async (c: import("hono").Context<Env>) => {
   const db = createDb(c.env.DB);
   const src = await resolveSourceFromContext(c, db);
   if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
+  // Scrape-only: snapshots are produced by (and re-extractable from) the scrape
+  // path. The discovery worker only POSTs here for scrape sources; the guard
+  // keeps the endpoint scoped and matches backfill/reextract-source.
+  if (src.type !== "scrape") {
+    return c.json(
+      {
+        error: "bad_request",
+        message: `Raw-snapshot capture supports scrape sources; this source is type=${src.type}`,
+      },
+      400,
+    );
+  }
 
   const parsed = await c.req
     .json<{ body?: unknown; format?: unknown }>()
