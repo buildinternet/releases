@@ -244,6 +244,8 @@ describe("extractFromBody — model selection", () => {
     );
 
     // Agentic loop must not be downgraded — every call runs on agentModel.
+    // Guard against a vacuous `.every` pass: assert calls were actually made.
+    expect(params.length).toBeGreaterThan(0);
     expect(params.every((p) => p.model === "claude-sonnet-4-6")).toBe(true);
     expect(result.mode).toBe("toolloop");
     expect(result.modelUsed).toBe("claude-sonnet-4-6");
