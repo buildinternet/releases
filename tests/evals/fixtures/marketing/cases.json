@@ -130,5 +130,49 @@
       "hint": null
     },
     "expected": { "isMarketing": true, "reason": "localized_marketing" }
+  },
+  {
+    "id": "prod-dbt-fivetran-merger",
+    "input": {
+      "sourceName": "dbt Blog",
+      "title": "Fivetran + dbt Labs Complete Merger to Create the Data Infrastructure for Trusted AI Agents",
+      "content": "OAKLAND, Calif. — June 1, 2026 — Fivetran, the data foundation for AI, today announced the completion of its merger with dbt Labs, combining the two companies under one roof.",
+      "url": "https://www.getdbt.com/blog/fivetran-dbt-labs-complete-merger-to-create-the-data-infrastructure-for-trusted-ai-agents",
+      "hint": null
+    },
+    "expected": { "isMarketing": true, "reason": "partner_announcement" }
+  },
+  {
+    "id": "prod-dbt-developer-agent-preview",
+    "input": {
+      "sourceName": "dbt Blog",
+      "title": "The dbt Developer Agent is now in Preview: the coding agent for analytics engineering",
+      "content": "dbt Developer Agent is now available in Preview—grounded in your dbt project so you ship faster without breaking downstream.",
+      "url": "https://www.getdbt.com/blog/the-dbt-developer-agent-is-now-in-preview",
+      "hint": null
+    },
+    "expected": { "isMarketing": false }
+  },
+  {
+    "id": "prod-notion-claude-case-study",
+    "input": {
+      "sourceName": "Product Launches",
+      "title": "How Notion built with Claude Managed Agents",
+      "content": "Eric Liu from Notion shows how to delegate work to Claude directly inside a workspace. Engineers ship code with it; other teams build websites and presentations.",
+      "url": "https://www.youtube.com/watch?v=45hPRdfDEsI",
+      "hint": null
+    },
+    "expected": { "isMarketing": true, "reason": "case_study" }
+  },
+  {
+    "id": "prod-anthropic-managed-agents-launch",
+    "input": {
+      "sourceName": "Product Launches",
+      "title": "Introducing Claude Managed Agents",
+      "content": "Claude Managed Agents is a suite of composable APIs for building and deploying agents at scale. Out of the box, it includes native MCP, tool integrations, memory, and all the infrastructure you need to ship fast.",
+      "url": "https://www.youtube.com/watch?v=I1BvAHOsjBU",
+      "hint": null
+    },
+    "expected": { "isMarketing": false }
   }
 ]
