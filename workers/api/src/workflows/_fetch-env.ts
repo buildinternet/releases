@@ -44,12 +44,43 @@ export interface WorkflowFetchEnv extends InvalidationEnv, AnthropicEnv {
 }
 
 /**
+ * The forwarded fields whose silent omission disables an ingest-time AI pass:
+ * the Anthropic client inputs (enrichment + marketing classifier), the
+ * feed-enrich tuning vars, and the Browser-Rendering creds enrichment escalates
+ * with. This is the exact set the original drop no-opped, and the set the
+ * `*-resolve-env` regression tests pin.
+ */
+type AiCriticalFetchKeys =
+  | "ANTHROPIC_API_KEY"
+  | "ANTHROPIC_BASE_URL"
+  | "AI_GATEWAY_TOKEN"
+  | "FEED_ENRICH_ENABLED"
+  | "FEED_ENRICH_MAX_PER_FIRE"
+  | "FEED_THIN_CHARS"
+  | "CLOUDFLARE_ACCOUNT_ID"
+  | "CLOUDFLARE_API_TOKEN";
+
+/**
+ * `FetchOneEnv` with the AI-critical keys promoted from optional to required —
+ * `-?` forces each KEY to appear in the builder's return literal (dropping a
+ * line is a compile error), while `| undefined` preserves fail-open: the binding
+ * itself may still resolve to undefined at runtime. Note this is deliberately
+ * NOT `Required<Pick<…>>`, which would strip `undefined` from the VALUE and
+ * reject the genuinely-optional source bindings the builder forwards.
+ */
+type GuardedFetchOneEnv = FetchOneEnv & {
+  [K in AiCriticalFetchKeys]-?: FetchOneEnv[K] | undefined;
+};
+
+/**
  * Project a workflow env down to the `FetchOneEnv` slice. The only async work is
  * resolving the GitHub token secret; everything else is a binding hand-off. Keep
  * the field list exhaustive — a dropped binding silently no-ops the corresponding
- * ingest-time AI pass (see the module header).
+ * ingest-time AI pass (see the module header). The {@link GuardedFetchOneEnv}
+ * return type turns dropping one of the AI-critical bindings into a compile
+ * error rather than a silent prod regression.
  */
-export async function buildFetchOneEnv(env: WorkflowFetchEnv): Promise<FetchOneEnv> {
+export async function buildFetchOneEnv(env: WorkflowFetchEnv): Promise<GuardedFetchOneEnv> {
   const githubToken = (await getSecret(env.GITHUB_TOKEN).catch(() => null)) ?? undefined;
   return {
     GITHUB_TOKEN: githubToken,
