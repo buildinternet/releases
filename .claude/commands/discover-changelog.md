@@ -155,13 +155,12 @@ The full structure and "verified vs compilation" distinction is in the Playbooks
 
 ### Step 9: Regenerate the Overview
 
-Once releases are in, kick the overview so the org has an AI-generated summary:
+Sources were already fetched in Step 6, so all that's left is the overview. Overview regeneration is **agent-driven** — there is no `org refresh` (or any one-shot CLI) command; the CLI exposes only a data-only input builder and a dumb upsert, and the agent is the generator. Regenerate by following the **`regenerating-overviews`** skill (monorepo-internal), which carries the prompt and the gating rules:
 
-```bash
-releases admin org refresh <slug> --skip-overview   # if you already fetched
-# …or do fetch + overview in one shot:
-releases admin org refresh <slug>
-```
+- **Skip** if `org.discovery === 'on_demand'` or there are no releases in the window — don't generate from existing content alone.
+- Otherwise the flow is: `releases admin overview inputs <slug> --json --max-content-chars 1000` → generate the body via an Anthropic call → `releases admin overview update <slug> --body-file <path> [--citations-file <path>]`.
+
+For a batch sweep across many orgs, `releases admin overview batch` triggers the server-side `BatchOverviewWorkflow` instead.
 
 ## Tips
 
