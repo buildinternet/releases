@@ -20,6 +20,9 @@ query HomepageTicker($limit: Int!, $exclude: [SourceType!]!) {
           platform
           iconUrl
         }
+        video {
+          provider
+        }
       }
     }
   }

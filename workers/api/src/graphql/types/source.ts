@@ -1,6 +1,7 @@
 import { builder } from "../builder.js";
 import { SourceTypeEnum } from "./enums.js";
 import { appStoreSourceInfo } from "@releases/adapters/appstore";
+import { videoSourceInfo } from "@releases/adapters/source-meta";
 
 builder.objectType("AppStoreInfo", {
   description:
@@ -8,6 +9,14 @@ builder.objectType("AppStoreInfo", {
   fields: (t) => ({
     platform: t.exposeString("platform"),
     iconUrl: t.exposeString("iconUrl", { nullable: true }),
+  }),
+});
+
+builder.objectType("VideoInfo", {
+  description:
+    "Video provider for a `type: video` source. Lets clients render the compact video treatment (play badge + 'Watch on YouTube/Vimeo/Wistia').",
+  fields: (t) => ({
+    provider: t.exposeString("provider"),
   }),
 });
 
@@ -30,6 +39,13 @@ export const SourceType = builder.objectType("Source", {
       nullable: true,
       description: "Platform + icon for App Store sources; null for all other source types. #1206",
       resolve: (s) => appStoreSourceInfo(s.type, s.metadata),
+    }),
+
+    video: t.field({
+      type: "VideoInfo",
+      nullable: true,
+      description: "Provider for video sources; null for all other source types. #1206",
+      resolve: (s) => videoSourceInfo(s.type, s.metadata),
     }),
 
     org: t.field({

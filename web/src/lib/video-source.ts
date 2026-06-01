@@ -5,30 +5,45 @@
  * a thumbnail-forward video row. Returns `null` for absent/null facets so
  * callers gate video-only treatment with `if (videoRowInfoFromWire(...))`.
  */
+type VideoProvider = "youtube" | "vimeo" | "wistia";
+
 export interface VideoRowInfo {
-  provider: "youtube" | "vimeo" | "wistia";
+  provider: VideoProvider;
   /** Human-readable platform label shown on the "Watch on …" line. */
   label: "YouTube" | "Vimeo" | "Wistia";
 }
 
-const VIDEO_LABELS: Record<"youtube" | "vimeo" | "wistia", "YouTube" | "Vimeo" | "Wistia"> = {
+const VIDEO_LABELS: Record<VideoProvider, "YouTube" | "Vimeo" | "Wistia"> = {
   youtube: "YouTube",
   vimeo: "Vimeo",
   wistia: "Wistia",
 };
 
+/** Narrow an arbitrary value to a known {@link VideoProvider}. Shared by the
+ *  wire and metadata parsers so the recognised set lives in one place. */
+function isVideoProvider(provider: unknown): provider is VideoProvider {
+  return provider === "youtube" || provider === "vimeo" || provider === "wistia";
+}
+
 /**
  * Build a {@link VideoRowInfo} from the wire-shape `video` block
- * (`{ provider }`, already resolved server-side by `videoSourceInfo`)
- * Returns null when the block is absent so callers gate video-only treatment
- * with `videoRowInfoFromWire(...)`. Mirrors `appRowInfoFromWire` in
- * `@/lib/app-source`.
+ * (`{ provider }`, already resolved server-side by `videoSourceInfo`).
+ * Returns null when the block is absent or carries an unrecognised provider,
+ * so callers gate video-only treatment with `videoRowInfoFromWire(...)`.
+ * Mirrors `appRowInfoFromWire` in `@/lib/app-source`.
+ *
+ * The param is widened to `{ provider: string }` because the GraphQL ticker
+ * path types `provider` as a plain string (`t.exposeString`), unlike the REST
+ * schemas' narrow enum; validating here keeps that caller honest.
  */
 export function videoRowInfoFromWire(
-  video: { provider: "youtube" | "vimeo" | "wistia" } | null | undefined,
+  video: { provider: string } | null | undefined,
 ): VideoRowInfo | null {
-  if (!video) return null;
-  return { provider: video.provider, label: VIDEO_LABELS[video.provider] };
+  const provider = video?.provider;
+  if (isVideoProvider(provider)) {
+    return { provider, label: VIDEO_LABELS[provider] };
+  }
+  return null;
 }
 
 interface VideoSourceLike {
@@ -48,7 +63,7 @@ export function getVideoInfo(source: VideoSourceLike): VideoRowInfo | null {
     const block = (JSON.parse(source.metadata ?? "{}") as { video?: { provider?: unknown } } | null)
       ?.video;
     const provider = block?.provider;
-    if (provider === "youtube" || provider === "vimeo" || provider === "wistia") {
+    if (isVideoProvider(provider)) {
       return { provider, label: VIDEO_LABELS[provider] };
     }
   } catch {

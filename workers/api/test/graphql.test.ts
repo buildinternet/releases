@@ -168,6 +168,34 @@ describe("GraphQL spike", () => {
     expect(data.gh.appStore).toBeNull();
   });
 
+  it("resolves Source.video from metadata for video sources, null otherwise (#1206)", async () => {
+    await h.db.insert(sources).values({
+      id: "src_video",
+      name: "Acme Channel",
+      slug: "acme-channel",
+      type: "video",
+      url: "https://youtube.com/@acme",
+      orgId: "org_a",
+      metadata: JSON.stringify({ video: { provider: "youtube" } }),
+    });
+
+    const result = await graphql({
+      schema,
+      source: `query {
+        vid: source(id: "src_video") { type video { provider } }
+        gh: source(id: "src_a1_1") { type video { provider } }
+      }`,
+      contextValue: ctx(h.db),
+    });
+    expect(result.errors).toBeUndefined();
+    const data = result.data as {
+      vid: { type: string; video: { provider: string } | null };
+      gh: { type: string; video: { provider: string } | null };
+    };
+    expect(data.vid.video).toEqual({ provider: "youtube" });
+    expect(data.gh.video).toBeNull();
+  });
+
   it("resolves a deeply nested query in O(layers) SELECTs, not O(rows)", async () => {
     const query = `
       query {

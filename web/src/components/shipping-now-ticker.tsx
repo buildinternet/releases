@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { HomepageTickerQuery } from "@/lib/graphql/__generated__/graphql";
 import { formatRelativeDate } from "@/lib/formatters";
+import { videoRowInfoFromWire } from "@/lib/video-source";
 import { OrgAvatar } from "./org-avatar";
 import { AppStoreIcon } from "./app-store-icon";
 
@@ -33,9 +34,15 @@ function dedupKey(r: TickerRelease): string {
  * App Store updates short-circuit too: with the compact icon + app-name +
  * version treatment, a bare-version title ("5.0.0") still reads as a complete,
  * recognizable unit, so the bare-version drop doesn't apply to them. #1206
+ *
+ * Video releases short-circuit for the same reason: the play chip + provider
+ * label ("Watch on YouTube") makes the card a complete unit even when the
+ * video title is terse. Gate on the resolved provider (what `Card` actually
+ * renders), not the raw facet — a truthy-but-unrecognised provider shows no
+ * chip, so it shouldn't bypass the bare-version drop. #1206
  */
 function isMeaningfulRelease(r: TickerRelease): boolean {
-  if (r.source.appStore) return true;
+  if (r.source.appStore || videoRowInfoFromWire(r.source.video)) return true;
   if (r.titleShort?.trim() || r.titleGenerated?.trim()) return true;
   const title = (r.title ?? "").trim();
   if (!title) return false;
@@ -72,8 +79,27 @@ function ActivityIcon() {
   );
 }
 
+// Small filled play triangle for the inline video chip — same glyph as
+// `PlayBadge`, sized down to ride alongside the version badge. SVG, not an
+// emoji (per the web UI convention).
+function PlayGlyph() {
+  return (
+    <svg
+      width="9"
+      height="9"
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      aria-hidden="true"
+      className="translate-x-[0.5px]"
+    >
+      <path d="M8 5v14l11-7z" />
+    </svg>
+  );
+}
+
 function Card({ slide }: { slide: Slide }) {
   const { release, relative, extraCount } = slide;
+  const video = videoRowInfoFromWire(release.source.video);
   return (
     <Link
       href={`/release/${release.id}`}
@@ -111,6 +137,15 @@ function Card({ slide }: { slide: Slide }) {
         {pickLabel(release)}
       </p>
       <div className="flex items-center gap-2 min-w-0">
+        {/* Video releases lead the meta row with a play chip + provider so the
+            card reads as watchable; the version (rare on video sources) still
+            follows when present. #1206 */}
+        {video && (
+          <span className="inline-flex items-center gap-1 text-[11px] text-stone-500 dark:text-stone-400 bg-stone-100 dark:bg-stone-800 px-1.5 py-0.5 rounded whitespace-nowrap">
+            <PlayGlyph />
+            {video.label}
+          </span>
+        )}
         {release.version && (
           <span className="font-mono text-[11px] text-stone-500 dark:text-stone-400 bg-stone-100 dark:bg-stone-800 px-1.5 py-0.5 rounded whitespace-nowrap max-w-full truncate">
             {release.version}

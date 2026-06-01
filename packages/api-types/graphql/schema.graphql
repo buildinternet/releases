@@ -189,6 +189,9 @@ type Source {
   slug: String!
   type: SourceType!
   url: String!
+
+  """Provider for video sources; null for all other source types. #1206"""
+  video: VideoInfo
 }
 
 """
@@ -201,4 +204,11 @@ enum SourceType {
   github
   scrape
   video
+}
+
+"""
+Video provider for a `type: video` source. Lets clients render the compact video treatment (play badge + 'Watch on YouTube/Vimeo/Wistia').
+"""
+type VideoInfo {
+  provider: String!
 }
