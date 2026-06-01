@@ -197,6 +197,11 @@ export const AGENT_TOOLS = [
           enum: ["normal", "low", "paused"],
           description: "Fetch priority tier (edit only)",
         },
+        discovery: {
+          type: "string",
+          enum: ["curated", "agent", "on_demand"],
+          description: "Promote/demote discovery status (edit only)",
+        },
       },
       required: ["action"],
     },
@@ -251,6 +256,11 @@ export const AGENT_TOOLS = [
           description: "Platform name for link_account (github, x, linkedin, etc.)",
         },
         handle: { type: "string", description: "Account handle for link_account" },
+        discovery: {
+          type: "string",
+          enum: ["curated", "agent", "on_demand"],
+          description: "Promote/demote discovery status (edit only)",
+        },
       },
       required: ["action"],
     },
@@ -582,6 +592,7 @@ export function createTypedExecutor(opts: APIClientOptions) {
           if (input.name) body.name = input.name;
           if (input.url) body.url = input.url;
           if (input.type) body.type = input.type;
+          if (input.discovery) body.discovery = input.discovery;
           const result = await api("PATCH", built.path, body);
           if (!result.startsWith("Error")) {
             return result + `\n\n[Playbook has been auto-regenerated to reflect this change.]`;
@@ -683,6 +694,7 @@ export function createTypedExecutor(opts: APIClientOptions) {
           if (input.domain) body.domain = input.domain;
           if (input.description) body.description = input.description;
           if (input.category) body.category = input.category;
+          if (input.discovery) body.discovery = input.discovery;
           return api("PATCH", `/orgs/${encodeURIComponent(slug)}`, body);
         }
 

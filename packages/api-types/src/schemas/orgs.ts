@@ -112,6 +112,8 @@ export const UpdateOrgBodySchema = z.object({
   autoGenerateContent: z.boolean().optional(),
   /** Admin-only: promote this org on the home-page featured rail. */
   featured: z.boolean().optional(),
+  /** Admin-only: promote or demote the org's discovery status (curated/agent/on_demand). */
+  discovery: z.enum(["curated", "agent", "on_demand"]).optional(),
 });
 
 // Org detail's products query selects a strict subset of `ProductListItem` —

@@ -246,6 +246,8 @@ export const SourcePatchInputSchema = z.object({
   changeDetectedAt: z.string().nullable().optional(),
   lastPolledAt: z.string().nullable().optional(),
   kind: z.enum(KIND_VALUES).nullable().optional(),
+  /** Admin-only: promote or demote the source's discovery status (curated/agent/on_demand). */
+  discovery: SourceDiscoverySchema.optional(),
 });
 
 /** Body accepted by `POST /v1/sources`. */

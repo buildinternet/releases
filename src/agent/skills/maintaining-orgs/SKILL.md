@@ -22,7 +22,7 @@ There is intentionally **no single-command "refresh in one step"** today. Compos
 - After onboarding: first full fetch + overview for a newly added org
 - Spot checks: "is Stripe up to date?"
 
-> **On-demand orgs** (`discovery = 'on_demand'`) are hidden stubs materialized by the on-demand lookup endpoint. They get embeddings and cron fetches but no overviews or summarization. The `releases admin overview plan` / `overview list` endpoints already filter to curated orgs server-side via the `organizations_active` view, so manifest-driven sweeps don't need a separate filter pass. To promote an on-demand org to curated, use `releases admin org update <slug> --discovery curated`.
+> **On-demand orgs** (`discovery = 'on_demand'`) are hidden stubs materialized by the on-demand lookup endpoint. They get embeddings and cron fetches but no overviews or summarization. The `releases admin overview plan` / `overview list` endpoints already filter to curated orgs server-side via the `organizations_public` view (which excludes `on_demand`), so manifest-driven sweeps don't need a separate filter pass. To promote an on-demand org to curated, use `releases admin org update <slug> --discovery curated`.
 
 ## Single Org Update
 

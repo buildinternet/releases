@@ -620,6 +620,7 @@ orgRoutes.patch(
       isHidden?: boolean;
       autoGenerateContent?: boolean;
       featured?: boolean;
+      discovery?: "curated" | "agent" | "on_demand";
     } = { ...c.req.valid("json") };
 
     if (body.category !== undefined && body.category !== null) {
@@ -676,6 +677,7 @@ orgRoutes.patch(
     if (body.autoGenerateContent !== undefined)
       updates.autoGenerateContent = body.autoGenerateContent;
     if (body.featured !== undefined) updates.featured = body.featured;
+    if (body.discovery !== undefined) updates.discovery = body.discovery;
 
     const [updated] = await db
       .update(organizations)
