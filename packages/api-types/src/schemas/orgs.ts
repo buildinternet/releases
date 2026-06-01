@@ -115,8 +115,8 @@ export const UpdateOrgBodySchema = z.object({
 });
 
 // Org detail's products query selects a strict subset of `ProductListItem` —
-// no category/orgId/createdAt because the parent already names the org and
-// the org detail UI doesn't surface those columns.
+// no category/orgId because the parent already names the org; createdAt is
+// included for age-based filtering by consumers.
 const OrgDetailProductSchema = ProductListItemSchema.pick({
   id: true,
   slug: true,
@@ -125,6 +125,7 @@ const OrgDetailProductSchema = ProductListItemSchema.pick({
   description: true,
   sourceCount: true,
   kind: true,
+  createdAt: true,
 }).extend({
   releaseCount: z.number().int().min(0),
 });

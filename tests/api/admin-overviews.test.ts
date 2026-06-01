@@ -271,4 +271,52 @@ describe("GET /v1/admin/overviews", () => {
     expect(body.pagination.page).toBe(2);
     expect(body.pagination.totalItems).toBe(4);
   });
+
+  it("excludes on_demand orgs from the manifest (#1316 Bug 1)", async () => {
+    const now = Date.now();
+    await seedOrg(db, {
+      slug: "curated-org",
+      discovery: "curated",
+      releaseDates: [new Date(now - 1 * DAY_MS).toISOString()],
+    });
+    await seedOrg(db, {
+      slug: "agent-org",
+      discovery: "agent",
+      releaseDates: [new Date(now - 1 * DAY_MS).toISOString()],
+    });
+    await seedOrg(db, {
+      slug: "on-demand-org",
+      discovery: "on_demand",
+      releaseDates: [new Date(now - 1 * DAY_MS).toISOString()],
+    });
+
+    const app = mkApp(db);
+    const res = await app.request("/admin/overviews");
+    expect(res.status).toBe(200);
+
+    const body = (await res.json()) as OverviewManifestResponse;
+    const slugs = body.items.map((r) => r.orgSlug);
+    expect(slugs).toContain("curated-org");
+    expect(slugs).toContain("agent-org");
+    expect(slugs).not.toContain("on-demand-org");
+  });
+
+  it("populates orgCreatedAt on returned rows (#1315)", async () => {
+    const now = Date.now();
+    await seedOrg(db, {
+      slug: "dated-org",
+      releaseDates: [new Date(now - 1 * DAY_MS).toISOString()],
+    });
+
+    const app = mkApp(db);
+    const res = await app.request("/admin/overviews");
+    expect(res.status).toBe(200);
+
+    const body = (await res.json()) as OverviewManifestResponse;
+    expect(body.items).toHaveLength(1);
+    const row = body.items[0] as OverviewManifestRow;
+    expect(row.orgCreatedAt).toBeDefined();
+    expect(typeof row.orgCreatedAt).toBe("string");
+    expect(row.orgCreatedAt.length).toBeGreaterThan(0);
+  });
 });
