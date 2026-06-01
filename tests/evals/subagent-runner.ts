@@ -82,6 +82,7 @@ function prepMarketing() {
 function loadSummaryFixtures(dir: string): SummaryFixture[] {
   return readdirSync(dir)
     .filter((f) => f.endsWith(".md"))
+    .sort((a, b) => a.localeCompare(b))
     .map((mdFile) => {
       const name = basename(mdFile, ".md");
       const meta = JSON.parse(readFileSync(join(dir, `${name}.expected.json`), "utf8")) as {
