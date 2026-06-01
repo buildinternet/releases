@@ -308,30 +308,21 @@ function ResultCard({
       </div>
       <div className="flex gap-3">
         <div className="flex-1 min-w-0 max-h-[4.5em] overflow-hidden">{children}</div>
-        {thumbnail &&
-          (video ? (
-            // Video hits overlay a play badge so the still reads as playable,
-            // matching the feed video row. The card itself links to the
-            // release page (the byline carries "Watch on {provider}"). #1206
-            <div className="group relative shrink-0">
-              <FallbackImage
-                src={thumbnail.src}
-                alt={thumbnail.alt}
-                width={120}
-                height={72}
-                className="rounded-md object-cover w-[120px] h-[72px] border border-stone-200 dark:border-stone-800"
-              />
-              <PlayBadge size="sm" />
-            </div>
-          ) : (
+        {thumbnail && (
+          // Video hits overlay a play badge so the still reads as playable,
+          // matching the feed video row. The card itself links to the release
+          // page (the byline carries "Watch on {provider}"). #1206
+          <div className={video ? "group relative shrink-0" : "shrink-0"}>
             <FallbackImage
               src={thumbnail.src}
               alt={thumbnail.alt}
               width={120}
               height={72}
-              className="rounded-md object-cover w-[120px] h-[72px] border border-stone-200 dark:border-stone-800 shrink-0"
+              className="rounded-md object-cover w-[120px] h-[72px] border border-stone-200 dark:border-stone-800"
             />
-          ))}
+            {video && <PlayBadge size="sm" />}
+          </div>
+        )}
       </div>
     </div>
   );

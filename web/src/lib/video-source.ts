@@ -5,17 +5,25 @@
  * a thumbnail-forward video row. Returns `null` for absent/null facets so
  * callers gate video-only treatment with `if (videoRowInfoFromWire(...))`.
  */
+type VideoProvider = "youtube" | "vimeo" | "wistia";
+
 export interface VideoRowInfo {
-  provider: "youtube" | "vimeo" | "wistia";
+  provider: VideoProvider;
   /** Human-readable platform label shown on the "Watch on …" line. */
   label: "YouTube" | "Vimeo" | "Wistia";
 }
 
-const VIDEO_LABELS: Record<"youtube" | "vimeo" | "wistia", "YouTube" | "Vimeo" | "Wistia"> = {
+const VIDEO_LABELS: Record<VideoProvider, "YouTube" | "Vimeo" | "Wistia"> = {
   youtube: "YouTube",
   vimeo: "Vimeo",
   wistia: "Wistia",
 };
+
+/** Narrow an arbitrary value to a known {@link VideoProvider}. Shared by the
+ *  wire and metadata parsers so the recognised set lives in one place. */
+function isVideoProvider(provider: unknown): provider is VideoProvider {
+  return provider === "youtube" || provider === "vimeo" || provider === "wistia";
+}
 
 /**
  * Build a {@link VideoRowInfo} from the wire-shape `video` block
@@ -32,7 +40,7 @@ export function videoRowInfoFromWire(
   video: { provider: string } | null | undefined,
 ): VideoRowInfo | null {
   const provider = video?.provider;
-  if (provider === "youtube" || provider === "vimeo" || provider === "wistia") {
+  if (isVideoProvider(provider)) {
     return { provider, label: VIDEO_LABELS[provider] };
   }
   return null;
@@ -55,7 +63,7 @@ export function getVideoInfo(source: VideoSourceLike): VideoRowInfo | null {
     const block = (JSON.parse(source.metadata ?? "{}") as { video?: { provider?: unknown } } | null)
       ?.video;
     const provider = block?.provider;
-    if (provider === "youtube" || provider === "vimeo" || provider === "wistia") {
+    if (isVideoProvider(provider)) {
       return { provider, label: VIDEO_LABELS[provider] };
     }
   } catch {
