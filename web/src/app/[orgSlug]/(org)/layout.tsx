@@ -11,6 +11,7 @@ import { CliCommand } from "@/components/cli-command";
 import { taxonomySidebarSections, TaxonomyChips } from "@/components/taxonomy-chips";
 import { OrgAdminMenu } from "@/components/org-admin-menu";
 import { isLocalAdminEnabled } from "@/lib/local-admin-flag";
+import { domainHref } from "@/lib/source-display";
 import { getOrg, getOrgCollections } from "../_lib/org-data";
 
 export default async function OrgLayout({
@@ -42,18 +43,11 @@ export default async function OrgLayout({
   const hasFetchLog = process.env.NODE_ENV === "development";
   const adminEnabled = isLocalAdminEnabled();
 
-  const domainHref = org.domain
-    ? /^https?:\/\//i.test(org.domain)
-      ? org.domain
-      : `https://${org.domain}`
-    : null;
-
   const sidebarSections = [
     {
-      items:
-        org.domain && domainHref
-          ? [{ label: "Domain", value: org.domain, externalLink: domainHref }]
-          : [],
+      items: org.domain
+        ? [{ label: "Domain", value: org.domain, externalLink: domainHref(org.domain) }]
+        : [],
     },
     ...taxonomySidebarSections({ category: org.category, tags: org.tags }),
     ...(collections.length > 0
