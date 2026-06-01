@@ -42,9 +42,18 @@ export default async function OrgLayout({
   const hasFetchLog = process.env.NODE_ENV === "development";
   const adminEnabled = isLocalAdminEnabled();
 
+  const domainHref = org.domain
+    ? /^https?:\/\//i.test(org.domain)
+      ? org.domain
+      : `https://${org.domain}`
+    : null;
+
   const sidebarSections = [
     {
-      items: org.domain ? [{ label: "Domain", value: org.domain }] : [],
+      items:
+        org.domain && domainHref
+          ? [{ label: "Domain", value: org.domain, externalLink: domainHref }]
+          : [],
     },
     ...taxonomySidebarSections({ category: org.category, tags: org.tags }),
     ...(collections.length > 0

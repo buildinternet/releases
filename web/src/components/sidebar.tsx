@@ -91,7 +91,7 @@ export function Sidebar({
                 <a
                   href={item.externalLink}
                   target="_blank"
-                  rel="noopener noreferrer"
+                  rel="nofollow noopener noreferrer"
                   className="text-sm font-medium text-stone-900 dark:text-stone-100 hover:text-stone-600 dark:hover:text-stone-300"
                 >
                   {item.value}
