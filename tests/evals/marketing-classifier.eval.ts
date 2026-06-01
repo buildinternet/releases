@@ -11,10 +11,11 @@ import { join } from "path";
 import Anthropic from "@anthropic-ai/sdk";
 import {
   classifyMarketing,
+  MODEL,
   type MarketingClassifierInput,
 } from "@releases/ai-internal/marketing-classifier";
 import { gradeBinary, type BinaryCase, type BinaryPrediction } from "./graders";
-import { saveResults } from "./helpers";
+import { saveRun } from "./results";
 
 const ACCURACY_FLOOR = 0.85; // headroom for 1-run noise on ~12 cases
 const MAX_FALSE_POSITIVES = 0; // no real release should be hidden
@@ -74,20 +75,21 @@ async function main() {
     `\n${pass ? "PASS" : "FAIL"} (floor ${ACCURACY_FLOOR}, max FP ${MAX_FALSE_POSITIVES})\n`,
   );
 
-  saveResults(
-    [
-      {
-        fixture: "marketing",
-        passed: pass,
-        releaseCountMatch: true,
-        expectedCount: result.total,
-        actualCount: result.total,
-        releases: [],
-        score: result.accuracy,
-      },
-    ],
-    join(dir, "runs", `marketing-${Date.now()}.json`),
-  );
+  const file = saveRun({
+    eval: "marketing",
+    model: MODEL,
+    pass,
+    summary: {
+      accuracy: result.accuracy,
+      correct: result.correct,
+      total: result.total,
+      falsePositives: result.falsePositives,
+      falseNegatives: result.falseNegatives,
+      gate: { floor: ACCURACY_FLOOR, maxFalsePositives: MAX_FALSE_POSITIVES },
+    },
+    cases: result.perCase,
+  });
+  console.error(`results: ${file}`);
 
   process.exit(pass ? 0 : 1);
 }

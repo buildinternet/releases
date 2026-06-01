@@ -49,6 +49,17 @@ repo-coupled halves — composing the prompt, grading — bracket it):
 
 3. The Workflow returns `{ pass, accuracy, falsePositives, falseNegatives, misses, perCase }`.
 
+4. **Persist** (optional) — write that returned JSON to a file and save it into the
+   shared results dir alongside the bun evals:
+
+   ```bash
+   bun tests/evals/subagent-runner.ts save marketing <workflow-result.json>
+   # -> tests/evals/results/marketing-subagent-<timestamp>.json (+ -latest.json)
+   ```
+
+All eval results land in the gitignored **`tests/evals/results/`** dir (overridable
+via `RELEASES_EVAL_DIR`). See `tests/evals/results.ts`.
+
 ## Scope
 
 Only the marketing classifier is wired today. The summary eval can follow the

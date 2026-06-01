@@ -45,7 +45,7 @@ flowchart TD
     SE --> GR
     SE -. "--judge" .-> RUB
     RUB --> AI
-    GR --> REP["helpers.ts: PASS/FAIL + score %<br/>gitignored runs/*.json"]
+    GR --> REP["PASS/FAIL + score %<br/>saveRun -> gitignored tests/evals/results/"]
 ```
 
 File layout (all new unless noted):
@@ -55,13 +55,13 @@ tests/evals/
   marketing-classifier.eval.ts
   release-summary.eval.ts
   graders.ts
-  helpers.ts                          # existing — reuse printResults/saveResults
+  results.ts                          # saveRun() -> tests/evals/results/
+  helpers.ts                          # existing — reuse printResults
   fixtures/
     marketing/cases.json
-    marketing/runs/.gitignore         # *.json (mirror tool-ux)
     summaries/<name>.md
     summaries/<name>.expected.json
-    summaries/runs/.gitignore
+  results/                            # gitignored since #81; <eval>-<ts>.json + <eval>-latest.json
 src/shared/rubrics/
   release-summary.md                  # new; tier-2 only
 package.json                          # + eval:marketing, eval:summary scripts
@@ -130,7 +130,7 @@ Two small pure functions next to the existing `helpers.ts`:
 - `gradeBinary(cases, predictions) → { accuracy, falsePositives, falseNegatives, perCase[] }`.
 - `gradeStructural(spec, result) → { passed, fields: FieldResult[] }`, reusing the existing `FieldResult`/`printResults` shape so output looks like the current evals.
 
-Reporting goes through the existing `helpers.ts` `printResults` / `saveResults`; JSON snapshots land in the gitignored `runs/` dirs.
+Reporting prints PASS/FAIL to stderr; each run is persisted via `saveRun()` (`results.ts`) to the gitignored `tests/evals/results/` dir — one `<eval>-<timestamp>.json` (stamped with git SHA + model + gate) plus a `<eval>-latest.json` pointer. `RELEASES_EVAL_DIR` relocates it.
 
 ## Thresholds (starting values, tune as fixtures grow)
 

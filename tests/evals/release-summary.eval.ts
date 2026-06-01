@@ -9,11 +9,13 @@ import Anthropic from "@anthropic-ai/sdk";
 import {
   summarizeRelease,
   EMPTY_BODY_FALLBACK,
+  MODEL as SUMMARY_MODEL,
   type SummarizeReleaseInput,
 } from "@releases/ai-internal/release-content";
 import { buildGraderPrompt } from "@releases/ai-internal/grader-prompt";
 import { gradeStructural, type StructuralSpec } from "./graders";
 import type { FieldResult } from "./helpers";
+import { saveRun } from "./results";
 
 const TITLE_SHORT_MAX_CHARS = 120;
 const JUDGE_MODEL = "claude-sonnet-4-6";
@@ -88,6 +90,8 @@ async function main() {
   console.error(`Release summary eval${useJudge ? " (+ judge)" : ""}: ${fixtures.length} fixtures`);
   console.error("=".repeat(60));
 
+  const runCases: Array<{ name: string; passed: boolean; fields: FieldResult[] }> = [];
+
   for (const f of fixtures) {
     let fields: FieldResult[];
     let passed: boolean;
@@ -124,6 +128,7 @@ async function main() {
     }
 
     allPassed = allPassed && passed;
+    runCases.push({ name: f.name, passed, fields });
     console.error(`  ${passed ? "PASS" : "FAIL"}  ${f.name}`);
     for (const fld of fields) {
       if (!fld.passed) {
@@ -134,7 +139,20 @@ async function main() {
     }
   }
 
-  console.error(`\n${allPassed ? "PASS" : "FAIL"}\n`);
+  const file = saveRun({
+    eval: "summary",
+    model: SUMMARY_MODEL,
+    pass: allPassed,
+    summary: {
+      total: runCases.length,
+      passed: runCases.filter((c) => c.passed).length,
+      judge: useJudge,
+      judgeModel: useJudge ? JUDGE_MODEL : null,
+    },
+    cases: runCases,
+  });
+  console.error(`\n${allPassed ? "PASS" : "FAIL"}`);
+  console.error(`results: ${file}\n`);
   process.exit(allPassed ? 0 : 1);
 }
 

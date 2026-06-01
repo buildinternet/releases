@@ -22,8 +22,10 @@ import { join } from "path";
 import {
   SYSTEM_PROMPT,
   buildClassifierInput,
+  MODEL,
   type MarketingClassifierInput,
 } from "@releases/ai-internal/marketing-classifier";
+import { saveRun } from "./results";
 
 export const ACCURACY_FLOOR = 0.85;
 export const MAX_FALSE_POSITIVES = 0;
@@ -54,10 +56,48 @@ function prepMarketing() {
   );
 }
 
-const [cmd, kind] = process.argv.slice(2);
+/**
+ * Persist a Workflow result (the JSON the eval-marketing-subagents Workflow
+ * returns) into the shared results dir, alongside the bun evals.
+ */
+function saveSubagentResult(resultPath: string) {
+  const r = JSON.parse(readFileSync(resultPath, "utf8")) as {
+    pass: boolean;
+    accuracy: number;
+    correct: number;
+    total: number;
+    falsePositives: number;
+    falseNegatives: number;
+    gate?: unknown;
+    perCase?: unknown[];
+  };
+  const file = saveRun({
+    eval: "marketing-subagent",
+    model: MODEL,
+    pass: r.pass,
+    summary: {
+      accuracy: r.accuracy,
+      correct: r.correct,
+      total: r.total,
+      falsePositives: r.falsePositives,
+      falseNegatives: r.falseNegatives,
+      gate: r.gate ?? null,
+    },
+    cases: r.perCase ?? [],
+  });
+  console.error(`results: ${file}`);
+}
+
+const [cmd, kind, arg] = process.argv.slice(2);
 if (cmd === "prep" && kind === "marketing") {
   prepMarketing();
+} else if (cmd === "save" && kind === "marketing") {
+  if (!arg) {
+    console.error("usage: subagent-runner.ts save marketing <workflow-result.json>");
+    process.exit(2);
+  }
+  saveSubagentResult(arg);
 } else {
-  console.error("usage: subagent-runner.ts prep marketing");
+  console.error("usage: subagent-runner.ts <prep|save> marketing [workflow-result.json]");
   process.exit(2);
 }
