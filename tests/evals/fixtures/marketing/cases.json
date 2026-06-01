@@ -1,0 +1,134 @@
+[
+  {
+    "id": "clickhouse-version-release",
+    "input": {
+      "sourceName": "ClickHouse Blog",
+      "title": "ClickHouse Release 26.4",
+      "content": "New JSON data type GA, faster S3 reads, 40 bug fixes. Upgrade notes inside.",
+      "url": "https://clickhouse.com/blog/clickhouse-release-26-04",
+      "hint": null
+    },
+    "expected": { "isMarketing": false }
+  },
+  {
+    "id": "nextjs-feature-ga",
+    "input": {
+      "sourceName": "Next.js Blog",
+      "title": "Partial Prerendering is now stable",
+      "content": "PPR graduates to stable in 15.5. How to adopt, config flags, and migration steps.",
+      "url": "https://nextjs.org/blog/next-15-5",
+      "hint": null
+    },
+    "expected": { "isMarketing": false }
+  },
+  {
+    "id": "stripe-bugfix",
+    "input": {
+      "sourceName": "Stripe Changelog",
+      "title": "Fixed incorrect tax rounding on multi-currency invoices",
+      "content": "Invoices with mixed currencies could round tax to the wrong minor unit. Resolved for all accounts.",
+      "url": "https://stripe.com/changelog/2026-05-20",
+      "hint": null
+    },
+    "expected": { "isMarketing": false }
+  },
+  {
+    "id": "cloudflare-security-advisory",
+    "input": {
+      "sourceName": "Cloudflare Blog",
+      "title": "Security advisory: WAF bypass via crafted header",
+      "content": "We patched a bypass affecting custom rules. No customer action required; details and timeline below.",
+      "url": "https://blog.cloudflare.com/security-advisory-waf",
+      "hint": null
+    },
+    "expected": { "isMarketing": false }
+  },
+  {
+    "id": "supabase-integration-capability",
+    "input": {
+      "sourceName": "Supabase Blog",
+      "title": "Foreign data wrappers: query Stripe from Postgres",
+      "content": "New FDW ships today. Create a wrapper, map columns, and query external APIs as tables.",
+      "url": "https://supabase.com/blog/fdw-stripe",
+      "hint": null
+    },
+    "expected": { "isMarketing": false }
+  },
+  {
+    "id": "clickhouse-event-with-launch",
+    "input": {
+      "sourceName": "ClickHouse Blog",
+      "title": "ClickHouse at FOSDEM: announcing ClickPipes GA",
+      "content": "At our FOSDEM booth we launched ClickPipes GA — managed ingestion from Kafka with exactly-once delivery, available now.",
+      "url": "https://clickhouse.com/blog/fosdem-clickpipes-ga",
+      "hint": null
+    },
+    "expected": { "isMarketing": false }
+  },
+  {
+    "id": "vendor-customer-case-study",
+    "input": {
+      "sourceName": "Acme Blog",
+      "title": "How Globex cut infra costs 60% with Acme",
+      "content": "Globex migrated 200 services to Acme and reduced spend dramatically. Read their story.",
+      "url": "https://acme.com/blog/globex",
+      "hint": null
+    },
+    "expected": { "isMarketing": true, "reason": "case_study" }
+  },
+  {
+    "id": "monthly-newsletter",
+    "input": {
+      "sourceName": "Acme Blog",
+      "title": "Acme April 2026 newsletter",
+      "content": "A roundup of what we shipped, upcoming webinars, and community highlights this month.",
+      "url": "https://acme.com/blog/april-2026-newsletter",
+      "hint": null
+    },
+    "expected": { "isMarketing": true, "reason": "newsletter" }
+  },
+  {
+    "id": "event-recap-no-news",
+    "input": {
+      "sourceName": "Acme Blog",
+      "title": "Recap: our week at KubeCon 2026",
+      "content": "Great conversations at the booth, packed talks, and swag galore. Thanks for stopping by!",
+      "url": "https://acme.com/blog/kubecon-2026-recap",
+      "hint": null
+    },
+    "expected": { "isMarketing": true, "reason": "event_recap" }
+  },
+  {
+    "id": "partner-announcement",
+    "input": {
+      "sourceName": "Acme Blog",
+      "title": "Acme joins the AWS ISV Accelerate Program",
+      "content": "We are proud to announce our membership and a new strategic partnership with AWS.",
+      "url": "https://acme.com/blog/aws-isv-accelerate",
+      "hint": null
+    },
+    "expected": { "isMarketing": true, "reason": "partner_announcement" }
+  },
+  {
+    "id": "positioning-piece",
+    "input": {
+      "sourceName": "Acme Blog",
+      "title": "Why AI is reshaping the database market",
+      "content": "A thought-leadership look at where data infrastructure is heading over the next decade.",
+      "url": "https://acme.com/blog/ai-reshaping-databases",
+      "hint": null
+    },
+    "expected": { "isMarketing": true, "reason": "positioning_piece" }
+  },
+  {
+    "id": "localized-marketing",
+    "input": {
+      "sourceName": "Acme Blog",
+      "title": "Globexがアクメで60%コスト削減した方法",
+      "content": "Globexの導入事例の日本語版です。",
+      "url": "https://acme.com/blog/globex-jp",
+      "hint": null
+    },
+    "expected": { "isMarketing": true, "reason": "localized_marketing" }
+  }
+]
