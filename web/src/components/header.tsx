@@ -8,12 +8,12 @@ import { GITHUB_REPO_URL, visibleNavItems } from "./nav-items";
 export function Header() {
   return (
     <header
-      className="relative border-b border-stone-200 dark:border-stone-800 px-6 py-4 flex items-center justify-between gap-6"
+      className="relative z-40 border-b border-stone-200 dark:border-stone-800 px-6 py-4 flex items-center gap-4 sm:gap-6"
       style={{ viewTransitionName: "site-header" }}
     >
       <Link
         href="/"
-        className="font-bold text-base sm:text-lg tracking-tight text-stone-900 dark:text-stone-100 flex items-center gap-2"
+        className="font-bold text-base sm:text-lg tracking-tight text-stone-900 dark:text-stone-100 flex shrink-0 items-center gap-2"
       >
         <svg viewBox="0 0 64 64" aria-hidden="true" className="h-5 w-5 shrink-0">
           <rect
@@ -46,12 +46,12 @@ export function Header() {
           preview
         </span>
       </Link>
-      <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-[420px] px-6 [&>*]:pointer-events-auto">
-        <SearchBar className="hidden lg:block w-full" autoFocus={false} />
-        <SearchTrigger className="hidden sm:flex lg:hidden mx-auto w-fit" />
+      <div className="flex min-w-0 flex-1 justify-center">
+        <SearchBar className="hidden lg:block w-full max-w-[420px]" autoFocus={false} />
+        <SearchTrigger className="hidden sm:flex lg:hidden w-fit" />
       </div>
       <MobileNav />
-      <nav className="hidden sm:flex items-center gap-5 text-sm text-stone-500 dark:text-stone-400">
+      <nav className="hidden sm:flex shrink-0 items-center gap-5 text-sm text-stone-500 dark:text-stone-400">
         {visibleNavItems().map((item) => (
           <Link
             key={item.href}

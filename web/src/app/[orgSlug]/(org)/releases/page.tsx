@@ -4,6 +4,7 @@ import { api, ApiSetupError, ApiNotFoundError, type OrgReleasesFeedResponse } fr
 import { OrgReleaseList } from "@/components/org-release-list";
 import { JsonLd } from "@/components/json-ld";
 import { buildReleaseItemListJsonLd, currentPeriod, lastModifiedAt } from "@/lib/schema-org";
+import { domainHref } from "@/lib/source-display";
 import { getOrg } from "../../_lib/org-data";
 
 export async function generateMetadata({
@@ -72,7 +73,7 @@ export default async function OrgReleasesPage({
           "@id": orgNodeId,
           name: org.name,
           url: orgUrl,
-          ...(org.domain ? { sameAs: [`https://${org.domain}`] } : {}),
+          ...(org.domain ? { sameAs: [domainHref(org.domain)] } : {}),
         },
       },
       {

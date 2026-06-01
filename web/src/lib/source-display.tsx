@@ -10,6 +10,11 @@ export function formatSourceDate(iso: string | null) {
   });
 }
 
+/** Bare hostname (or already-schemed URL) → absolute https URL for an external link. */
+export function domainHref(domain: string): string {
+  return /^https?:\/\//i.test(domain) ? domain : `https://${domain}`;
+}
+
 export function shortUrl(url: string) {
   try {
     const u = new URL(url);

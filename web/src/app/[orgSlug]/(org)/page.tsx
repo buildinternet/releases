@@ -8,6 +8,7 @@ import { OverviewView } from "@/components/overview-view";
 import { JsonLd } from "@/components/json-ld";
 import { ProductGrid } from "@/components/product-grid";
 import { currentPeriod, lastModifiedAt } from "@/lib/schema-org";
+import { domainHref } from "@/lib/source-display";
 import { getOrg } from "../_lib/org-data";
 
 const LEGACY_ORG_TABS = new Set(["releases", "sources", "playbook", "fetch-log"]);
@@ -93,7 +94,7 @@ export default async function OrgOverviewPage({
         name: org.name,
         url: orgUrl,
         ...(org.avatarUrl ? { logo: org.avatarUrl, image: org.avatarUrl } : {}),
-        ...(org.domain ? { sameAs: [`https://${org.domain}`] } : {}),
+        ...(org.domain ? { sameAs: [domainHref(org.domain)] } : {}),
         ...(lastModified ? { dateModified: lastModified } : {}),
       },
       {
