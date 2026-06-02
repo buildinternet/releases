@@ -100,6 +100,48 @@ export const extractReleasesToolFull: Anthropic.Tool = {
   },
 };
 
+/**
+ * Crawl-target variant of {@link extractReleasesToolFull}. Identical shape and
+ * tool name (`extract_releases`, so `tool_choice` + response parsing are
+ * unchanged) — the ONLY difference is the `content` field description, which
+ * instructs verbatim preservation instead of summarization. The base tool's
+ * `content` says "summarize long entries", which directly contradicts
+ * CRAWL_PAGE_SYSTEM_PROMPT ("Do NOT summarize") and pulls the model back toward
+ * condensing a per-post body. Used by the Firecrawl crawl-target extraction
+ * path (one page = one full post). See issue #1343.
+ */
+export const extractReleasesToolCrawl: Anthropic.Tool = {
+  name: "extract_releases",
+  description:
+    "Call this tool with the structured release entries you extracted from the changelog page(s).",
+  input_schema: {
+    type: "object" as const,
+    properties: {
+      releases: {
+        type: "array" as const,
+        items: {
+          type: "object" as const,
+          properties: {
+            ...releaseItemProperties,
+            content: {
+              type: "string" as const,
+              description:
+                "Full post body in markdown — preserve it verbatim. Do NOT summarize, condense, or paraphrase: the page is one post and its body is the canonical release content. Include only images that are part of the post body (screenshots, product images, diagrams) as markdown image links. Remove image references for site chrome — author avatars, navigation logos, footer icons, social badges, and tracking pixels.",
+            },
+            url: {
+              type: "string" as const,
+              description:
+                "URL to the individual entry page. Extract from <a href> links on the page. If no individual page exists, omit.",
+            },
+          },
+          required: [...releaseItemRequired],
+        },
+      },
+    },
+    required: ["releases"],
+  },
+};
+
 /** Incremental tool: only extract releases not in the known list; also reports
  *  when the sliced content didn't include changelog body (retry upstream). */
 export const extractReleasesToolIncremental: Anthropic.Tool = {
@@ -388,6 +430,28 @@ Extract one release per "# <url>" heading. Use the URL in the heading as the rel
 If a "# <url>" section is the index page (e.g. ends in /changelog and contains many child links), skip it — its per-post children are already enumerated.
 
 ${CRAWL_EXTRACTION_RULES}`;
+
+export const CRAWL_PAGE_EXTRACTION_RULES = `Rules:
+- CONTENT: preserve the full post body markdown verbatim. Do NOT summarize, condense, or paraphrase. Strip only site chrome (header/footer nav, login/signup CTAs, share widgets, cookie banners, related-post lists).
+- Media: include screenshots, product images, diagrams, and videos that appear in the body as markdown image links. Exclude author avatars, navigation logos, footer icons, social badges, tracking pixels.
+- Dates: ISO 8601. For month-only dates (e.g. "April 2026"), use the first of the month: 2026-04-01. For quarter or season headings (e.g. "Q3 2025", "Fall 2025"), use the first day of the period (Q3 → 2025-07-01, Fall → 2025-09-01). For year-only dates, use January 1. If no date is recoverable, omit publishedAt.
+- Mark isBreaking only if the entry mentions breaking or backwards-incompatible changes.
+- Always call the extract_releases tool with your results.`;
+
+/**
+ * Single-post counterpart to {@link CRAWL_SYSTEM_PROMPT}. The Firecrawl
+ * crawl-target path extracts ONE discovered post at a time (one webhook page =
+ * one `/p/` URL, no `"# <url>"` heading wrapper), so it can't reuse the
+ * multi-page crawl prompt verbatim. Same body-preserving intent ("Do NOT
+ * summarize"), authored for a single page's markdown. Scrape-target monitors
+ * keep CLOUDFLARE_SYSTEM_PROMPT — condensing many entries off one index page is
+ * correct there. See issue #1343.
+ */
+export const CRAWL_PAGE_SYSTEM_PROMPT = `You are a changelog parser. The user message contains the full rendered markdown of a SINGLE release/changelog post — one entry's own page. Extract it using the extract_releases tool.
+
+This page is already one release's worth of content, so you normally return exactly one entry whose content is the full post body. Preserve that body verbatim — light cleanup of navigation chrome (header/footer nav, login links, share buttons, social embed widgets, cookie banners) only. Do NOT summarize, condense, or paraphrase: the post body is the canonical release body. If the page genuinely contains several distinct dated entries, extract each — but never condense any of them.
+
+${CRAWL_PAGE_EXTRACTION_RULES}`;
 
 export const TOOLLOOP_SYSTEM_PROMPT = `You are a changelog parser operating in tool-use mode. The body of a URL is NOT included in this conversation — it is available through tools.
 

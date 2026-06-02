@@ -124,7 +124,14 @@ Axiom (`releases-cloudflare-logs`), JSON in `body`:
 
 ## Content-fidelity caveat
 
-The full-page **fallback** path runs the extract over many entries at once; under output pressure Haiku may **condense** an entry's body (paraphrase, drop links) rather than preserve it verbatim. The delta path (one entry, small input) preserves much better. There is no release content-PATCH API, and the batch upsert only backfills `content` when the existing value is empty (`RELEASE_URL_UPSERT`), so correcting an already-stored row is a manual fix: a direct D1 `UPDATE` of `content` + `content_hash` (recompute via `contentHash()` in `packages/adapters/src/content-hash.ts`) + `content_chars`/`content_tokens` (`computeContentSize()` in `@buildinternet/releases-core/tokens`), then re-embed via `POST /v1/workflows/embed-releases`.
+**Per-post fidelity is a prompt-selection concern.** `extractFirecrawlMarkdown` branches the extraction system prompt on the monitor's target, keyed off the crawl-vs-scrape signal it already has in hand as `pageUrl`:
+
+- **Crawl-target** monitors ingest each discovered page as one full per-post body, so they use the body-preserving `CRAWL_PAGE_SYSTEM_PROMPT` (single-post counterpart of the in-repo crawl adapter's `CRAWL_SYSTEM_PROMPT` — _"Do NOT summarize"_). The post body is the canonical release body and is preserved verbatim. See issue #1343.
+- **Scrape-target** monitors watch a single multi-entry index page, where extracting + condensing many entries off one page is correct, so they keep the summarizing `CLOUDFLARE_SYSTEM_PROMPT`.
+
+(An earlier version of this caveat attributed the "content isn't verbatim" behavior to generic Haiku output pressure on the full-page path. For crawl monitors the real root cause was the hard-coded summarizing prompt; selecting the right prompt per target is the fidelity lever.)
+
+A residual condensation risk remains on the **scrape** path's full-page baseline scrape: the windowing guardrail and the shared `content` tool-field both ask the model to be concise, so a very large multi-entry page can still paraphrase. There is no release content-PATCH API, and the batch upsert only backfills `content` when the existing value is empty (`RELEASE_URL_UPSERT`), so correcting an already-stored row is a manual fix: a direct D1 `UPDATE` of `content` + `content_hash` (recompute via `contentHash()` in `packages/adapters/src/content-hash.ts`) + `content_chars`/`content_tokens` (`computeContentSize()` in `@buildinternet/releases-core/tokens`), then re-embed via `POST /v1/workflows/embed-releases`. The separate "inline images collected into a bottom gallery" behavior is tracked in #1342.
 
 ## Full-history backfill (`POST /v1/workflows/backfill-source`)
 

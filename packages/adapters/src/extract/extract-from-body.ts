@@ -11,6 +11,7 @@ import type { UsageExtractionMode, UsageFallbackReason } from "@buildinternet/re
 import type { ExtractDeps, ExtractedEntry } from "./types.js";
 import {
   extractReleasesToolFull,
+  extractReleasesToolCrawl,
   buildBodyGuardrail,
   withGuidance,
   LARGE_BODY_TOKEN_THRESHOLD,
@@ -32,6 +33,14 @@ export interface ExtractFromBodyOpts {
   sourceUrl: string;
   fetchUrl: string;
   useToolLoop?: boolean;
+  /**
+   * Select the body-preserving `extract_releases` tool schema
+   * (`extractReleasesToolCrawl`) instead of the default summarizing one. Set by
+   * crawl-target callers whose system prompt demands verbatim per-post bodies,
+   * so the tool's `content` description doesn't contradict the prompt. Applies
+   * to the one-shot tier (the only tier crawl-target ingest uses). See #1343.
+   */
+  preserveBody?: boolean;
 }
 
 export interface ExtractFromBodyResult {
@@ -97,6 +106,10 @@ async function runOneShot(
     systemBlocks.push({ type: "text", text: buildBodyGuardrail(approxTokens) });
   }
 
+  // Both tools are named `extract_releases`, so tool_choice + response parsing
+  // are identical; the crawl variant only swaps the `content` field to demand a
+  // verbatim body, matching a body-preserving system prompt.
+  const tool = opts.preserveBody ? extractReleasesToolCrawl : extractReleasesToolFull;
   const stream = anthropicClient.messages.stream({
     model,
     max_tokens: isHuge ? HUGE_BODY_MAX_OUTPUT_TOKENS : DEFAULT_MAX_OUTPUT_TOKENS,
@@ -104,7 +117,7 @@ async function runOneShot(
     // oxlint-disable-next-line no-deprecated -- supported on current extract models; see note
     temperature: EXTRACTION_TEMPERATURE,
     system: systemBlocks,
-    tools: [extractReleasesToolFull],
+    tools: [tool],
     tool_choice: { type: "tool", name: "extract_releases" },
     messages: [{ role: "user", content: `${opts.userMessage}\n\n${content}` }],
   });
