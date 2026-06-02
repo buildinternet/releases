@@ -59,11 +59,12 @@ const WORKER_AGENT_NAME = "Releases Worker Agent";
 
 // Live agent `name` field per (env, kind). Production discovery/worker carry
 // the legacy "Released" naming (created pre-rename, only ever updated since);
-// staging and both coordinators use the current "Releases" naming. `name` is
-// preserved on update, so these matter only for a re-provision (create) — but
-// the YAML is meant to mirror live state. The production discovery/worker names
-// are taken from the Console (that workspace isn't reachable via `ant auth
-// login`); confirm them with the verify step before any `create`.
+// the prod coordinator and all three staging agents use the current "Releases"
+// naming, with staging suffixed " (Staging)". The render-then-apply path feeds
+// `name` to `ant beta:agents update`, so these are applied (and rename the live
+// agent) on every deploy — keep them matching the intended live names. The
+// production discovery/worker names were confirmed against live via the verify
+// step (`verify --env production` is all-match).
 const AGENT_NAMES: Record<AgentEnv, Record<AgentKind, string>> = {
   production: {
     discovery: "Released Discovery Agent",
@@ -73,7 +74,7 @@ const AGENT_NAMES: Record<AgentEnv, Record<AgentKind, string>> = {
   staging: {
     discovery: "Releases Discovery Agent (Staging)",
     worker: "Releases Worker Agent (Staging)",
-    coordinator: "Releases Discovery Coordinator",
+    coordinator: "Releases Discovery Coordinator (Staging)",
   },
 };
 
