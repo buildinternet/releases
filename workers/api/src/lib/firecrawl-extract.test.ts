@@ -1,6 +1,11 @@
 import { describe, it, expect } from "bun:test";
 import type { Source } from "@buildinternet/releases-core/schema";
-import { CLOUDFLARE_SYSTEM_PROMPT, CRAWL_PAGE_SYSTEM_PROMPT } from "@releases/adapters/extract";
+import {
+  CLOUDFLARE_SYSTEM_PROMPT,
+  CRAWL_PAGE_SYSTEM_PROMPT,
+  extractReleasesToolFull,
+  extractReleasesToolCrawl,
+} from "@releases/adapters/extract";
 import {
   extractFirecrawlMarkdown,
   extractChangelogAllWindows,
@@ -8,18 +13,24 @@ import {
 } from "./firecrawl-extract.js";
 
 // Minimal fake Anthropic client whose messages.stream() returns the expected
-// shape. `calls` records the user-message content AND the system prompt actually
-// sent to the model so tests can assert what body (full vs. windowed) reached
-// extraction and which prompt (summarizing vs. body-preserving) was selected.
+// shape. `calls` records the user-message content, the system prompt, AND the
+// tools actually sent to the model so tests can assert what body (full vs.
+// windowed) reached extraction and which prompt + tool schema (summarizing vs.
+// body-preserving) was selected.
 function makeFakeAnthropicClient() {
-  const calls: Array<{ body: string; system: string }> = [];
+  const calls: Array<{ body: string; system: string; tools: unknown[] }> = [];
   const client = {
     messages: {
       stream: (args: {
         messages: Array<{ role: string; content: string }>;
         system: Array<{ text: string }>;
+        tools: unknown[];
       }) => {
-        calls.push({ body: args.messages[0].content, system: args.system[0].text });
+        calls.push({
+          body: args.messages[0].content,
+          system: args.system[0].text,
+          tools: args.tools,
+        });
         return {
           finalMessage: async () => ({
             content: [
@@ -195,6 +206,38 @@ describe("extractFirecrawlMarkdown", () => {
     });
 
     expect(calls[0].system).toBe(CLOUDFLARE_SYSTEM_PROMPT);
+  });
+
+  it("uses the body-preserving extract_releases tool for a crawl-target page", async () => {
+    // The prompt alone isn't enough: the tool schema's `content` field also
+    // instructs the model. CRAWL_PAGE_SYSTEM_PROMPT says "do NOT summarize", so
+    // the tool must carry a matching verbatim content description — otherwise the
+    // schema pulls the model back toward condensing. See #1343 review.
+    const { client, calls } = makeFakeAnthropicClient();
+    await extractFirecrawlMarkdown(
+      "# Post\nFull post body to preserve.",
+      fakeSource,
+      {
+        anthropicClient: client as never,
+        agentModel: "claude-haiku-4-5-20251001",
+        logger: fakeLogger,
+      },
+      { pageUrl: "https://product.beehiiv.com/p/beehiiv-mcp-v2" },
+    );
+
+    expect(calls[0].tools[0]).toBe(extractReleasesToolCrawl);
+    expect(calls[0].tools[0]).not.toBe(extractReleasesToolFull);
+  });
+
+  it("uses the standard (summarizing) extract_releases tool for a scrape monitor", async () => {
+    const { client, calls } = makeFakeAnthropicClient();
+    await extractFirecrawlMarkdown("# v1.2.0\nAdded X.", fakeSource, {
+      anthropicClient: client as never,
+      agentModel: "claude-haiku-4-5-20251001",
+      logger: fakeLogger,
+    });
+
+    expect(calls[0].tools[0]).toBe(extractReleasesToolFull);
   });
 });
 

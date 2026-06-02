@@ -100,6 +100,48 @@ export const extractReleasesToolFull: Anthropic.Tool = {
   },
 };
 
+/**
+ * Crawl-target variant of {@link extractReleasesToolFull}. Identical shape and
+ * tool name (`extract_releases`, so `tool_choice` + response parsing are
+ * unchanged) — the ONLY difference is the `content` field description, which
+ * instructs verbatim preservation instead of summarization. The base tool's
+ * `content` says "summarize long entries", which directly contradicts
+ * CRAWL_PAGE_SYSTEM_PROMPT ("Do NOT summarize") and pulls the model back toward
+ * condensing a per-post body. Used by the Firecrawl crawl-target extraction
+ * path (one page = one full post). See issue #1343.
+ */
+export const extractReleasesToolCrawl: Anthropic.Tool = {
+  name: "extract_releases",
+  description:
+    "Call this tool with the structured release entries you extracted from the changelog page(s).",
+  input_schema: {
+    type: "object" as const,
+    properties: {
+      releases: {
+        type: "array" as const,
+        items: {
+          type: "object" as const,
+          properties: {
+            ...releaseItemProperties,
+            content: {
+              type: "string" as const,
+              description:
+                "Full post body in markdown — preserve it verbatim. Do NOT summarize, condense, or paraphrase: the page is one post and its body is the canonical release content. Include only images that are part of the post body (screenshots, product images, diagrams) as markdown image links. Remove image references for site chrome — author avatars, navigation logos, footer icons, social badges, and tracking pixels.",
+            },
+            url: {
+              type: "string" as const,
+              description:
+                "URL to the individual entry page. Extract from <a href> links on the page. If no individual page exists, omit.",
+            },
+          },
+          required: [...releaseItemRequired],
+        },
+      },
+    },
+    required: ["releases"],
+  },
+};
+
 /** Incremental tool: only extract releases not in the known list; also reports
  *  when the sliced content didn't include changelog body (retry upstream). */
 export const extractReleasesToolIncremental: Anthropic.Tool = {
