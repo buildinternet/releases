@@ -16,6 +16,7 @@ import { stagingAccessGate } from "./middleware/staging-access.js";
 import { mountV1Routes } from "./v1-routes.js";
 import { publicReadRoutes, adminRoutes } from "./route-namespaces.js";
 import { graphqlRoutes } from "./graphql/handler.js";
+import { healthRoutes } from "./routes/health.js";
 import { BareSlugRejected } from "./utils.js";
 import { pollAndFetch, queryDueSources } from "./cron/poll-fetch.js";
 import { drizzle } from "drizzle-orm/d1";
@@ -512,6 +513,10 @@ v1.get("/", (c) => {
 });
 
 app.route("/v1", v1);
+
+// Top-level liveness/readiness probe (status.releases.sh). Outside /v1 so it
+// skips the per-route public-read auth + rate-limit middleware.
+app.route("/", healthRoutes);
 
 app.get("/", (c) => {
   setServiceDescLink(c);

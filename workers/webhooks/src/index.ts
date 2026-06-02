@@ -56,6 +56,37 @@ function syntheticAttempt(
 }
 
 export default {
+  /**
+   * Minimal HTTP surface. This worker is primarily the queue consumer below and
+   * has no inbound HTTP routes, so any request used to throw (1101 → 500). Expose
+   * a basic liveness endpoint for uptime monitoring (status.releases.sh) plus a
+   * deny-all robots.txt. Every response carries `X-Robots-Tag: noindex` so this
+   * machine endpoint is never indexed.
+   */
+  async fetch(req: Request): Promise<Response> {
+    const url = new URL(req.url);
+    const noindex = {
+      "X-Robots-Tag": "noindex, nofollow",
+      "X-Content-Type-Options": "nosniff",
+    };
+    if (req.method === "GET" && url.pathname === "/robots.txt") {
+      return new Response("User-agent: *\nDisallow: /\n", {
+        headers: {
+          "Content-Type": "text/plain; charset=utf-8",
+          "Cache-Control": "public, max-age=3600",
+          ...noindex,
+        },
+      });
+    }
+    if (req.method === "GET" && (url.pathname === "/health" || url.pathname === "/")) {
+      return Response.json(
+        { ok: true, service: "releases-webhooks" },
+        { headers: { "Cache-Control": "no-store", ...noindex } },
+      );
+    }
+    return Response.json({ error: "not_found" }, { status: 404, headers: noindex });
+  },
+
   async queue(
     batch: MessageBatch<DeliveryMessage>,
     env: Env,

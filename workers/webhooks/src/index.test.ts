@@ -78,6 +78,34 @@ describe("queue handler", () => {
   });
 });
 
+describe("fetch handler (health + robots)", () => {
+  it("serves /health 200 with noindex header", async () => {
+    const res = await worker.fetch(new Request("https://webhooks.releases.sh/health"));
+    expect(res.status).toBe(200);
+    expect(res.headers.get("X-Robots-Tag")).toBe("noindex, nofollow");
+    expect(((await res.json()) as { ok?: boolean }).ok).toBe(true);
+  });
+
+  it("serves / 200 (no longer 500) with noindex", async () => {
+    const res = await worker.fetch(new Request("https://webhooks.releases.sh/"));
+    expect(res.status).toBe(200);
+    expect(res.headers.get("X-Robots-Tag")).toBe("noindex, nofollow");
+  });
+
+  it("serves a deny-all robots.txt", async () => {
+    const res = await worker.fetch(new Request("https://webhooks.releases.sh/robots.txt"));
+    expect(res.status).toBe(200);
+    expect(res.headers.get("X-Robots-Tag")).toBe("noindex, nofollow");
+    expect(await res.text()).toContain("Disallow: /");
+  });
+
+  it("404s unknown paths with noindex (no unhandled 500)", async () => {
+    const res = await worker.fetch(new Request("https://webhooks.releases.sh/nope"));
+    expect(res.status).toBe(404);
+    expect(res.headers.get("X-Robots-Tag")).toBe("noindex, nofollow");
+  });
+});
+
 function fakeCtx(): ExecutionContext {
   return {
     waitUntil: () => {},
