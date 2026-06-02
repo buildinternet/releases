@@ -62,6 +62,16 @@ const PROJECT_ROOT = resolve(import.meta.dir, "..");
 const SKILLS_DIR = resolve(PROJECT_ROOT, "src/agent/skills");
 
 type DeployEnv = "production" | "staging";
+type AgentKind = "discovery" | "worker" | "coordinator";
+
+// Render-then-apply path. When set, existing agents are updated by feeding the
+// committed managed-agents/<kind>.<env>.agent.yaml to `ant beta:agents update`
+// instead of POSTing a JS-built payload via fetch. Default off — the fetch path
+// stays the rollback. Enabled in CI via the workflow's apply_via_ant dispatch
+// input (or `--apply-via-ant` locally). The committed YAML is guaranteed current
+// by the CI render `--check` drift gate. See docs/architecture/agents.md.
+const APPLY_VIA_ANT =
+  process.env.AGENT_APPLY_VIA_ANT === "1" || process.argv.includes("--apply-via-ant");
 
 function configPathFor(env: DeployEnv): string {
   return env === "staging"
@@ -383,6 +393,57 @@ async function updateAgent(
   return (await res.json()) as { version: number };
 }
 
+/**
+ * Apply an existing agent by feeding its committed YAML to `ant beta:agents
+ * update` (the render-then-apply path; gated by APPLY_VIA_ANT). The YAML is the
+ * full body — name, model, system, tools, mcp_servers, skills, and the
+ * coordinator's multiagent roster — so unlike the fetch `updateAgent` it also
+ * (idempotently) re-asserts name + roster; both are no-ops when unchanged, and
+ * the API re-resolves the roster's worker reference to its current version.
+ *
+ * `ant` authenticates from ANTHROPIC_API_KEY (same key the fetch path uses) and
+ * prints an auth-source note to stderr, so only stdout is parsed. This path uses
+ * the YAML's model verbatim and ignores RELEASES_*_AGENT_MODEL overrides — CI
+ * never sets them, and the committed YAML is kept current by the render
+ * `--check` drift gate.
+ */
+function antUpdateAgent(
+  kind: AgentKind,
+  env: DeployEnv,
+  agentId: string,
+  version: number,
+): { version: number } {
+  const yamlPath = resolve(PROJECT_ROOT, "managed-agents", `${kind}.${env}.agent.yaml`);
+  const body = readFileSync(yamlPath, "utf8");
+  const res = Bun.spawnSync(
+    [
+      "ant",
+      "beta:agents",
+      "update",
+      "--agent-id",
+      agentId,
+      "--version",
+      String(version),
+      "--format",
+      "json",
+    ],
+    { stdin: Buffer.from(body) },
+  );
+  const stdout = res.stdout.toString().trim();
+  let parsed: { id?: string; version?: number; error?: unknown; type?: string };
+  try {
+    parsed = JSON.parse(stdout);
+  } catch {
+    throw new Error(
+      `ant update ${agentId}: unparseable response (exit ${res.exitCode}): ${stdout || res.stderr.toString()}`,
+    );
+  }
+  if (res.exitCode !== 0 || parsed.error || parsed.type === "error" || !parsed.id) {
+    throw new Error(`ant update ${agentId} failed: ${stdout}`);
+  }
+  return { version: parsed.version as number };
+}
+
 // ── Memory stores ───────────────────────────────────────────────
 
 interface ApiMemoryStore {
@@ -601,6 +662,7 @@ async function main() {
 
   interface AgentSyncParams {
     label: string;
+    kind: AgentKind;
     agentId: string;
     prompt: string;
     model: string;
@@ -618,7 +680,7 @@ async function main() {
    * for zero local state drift.
    */
   async function syncAgentConfig(params: AgentSyncParams): Promise<void> {
-    const { label, agentId: id, prompt, model, remoteAgent, onSuccess } = params;
+    const { label, kind, agentId: id, prompt, model, remoteAgent, onSuccess } = params;
     const tools = [...AGENT_TOOLS, buildMcpToolset()];
     const mcpServers = [buildMcpServerDefinition(deployEnv)];
     const payload: {
@@ -651,9 +713,13 @@ async function main() {
       console.log(`  Model: up to date (${model})`);
     }
 
-    console.log(`Updating ${label.toLowerCase()}: ${changes.join(", ")}...`);
+    console.log(
+      `Updating ${label.toLowerCase()}${APPLY_VIA_ANT ? " (via ant)" : ""}: ${changes.join(", ")}...`,
+    );
     if (!dryRun) {
-      const updated = await updateAgent(apiKey, id, remoteAgent.version, payload);
+      const updated = APPLY_VIA_ANT
+        ? antUpdateAgent(kind, deployEnv, id, remoteAgent.version)
+        : await updateAgent(apiKey, id, remoteAgent.version, payload);
       onSuccess();
       saveConfig(configPath, config);
       console.log(`✓ ${label} updated to v${updated.version}`);
@@ -672,6 +738,7 @@ async function main() {
 
     await syncAgentConfig({
       label: "Discovery agent",
+      kind: "discovery",
       agentId,
       prompt: discoveryPrompt,
       model:
@@ -699,6 +766,7 @@ async function main() {
       const workerAgent = await getAgent(apiKey, workerAgentId);
       await syncAgentConfig({
         label: "Worker agent",
+        kind: "worker",
         agentId: workerAgentId,
         prompt: workerPrompt,
         model: workerModel,
@@ -786,14 +854,13 @@ async function main() {
       } else {
         console.log(`  Model: up to date (${coordinatorModel})`);
       }
-      console.log(`Updating coordinator agent: ${changes.join(", ")}...`);
+      console.log(
+        `Updating coordinator agent${APPLY_VIA_ANT ? " (via ant)" : ""}: ${changes.join(", ")}...`,
+      );
       if (!dryRun) {
-        const updated = await updateAgent(
-          apiKey,
-          coordinatorAgentId,
-          coordinatorAgent.version,
-          payload,
-        );
+        const updated = APPLY_VIA_ANT
+          ? antUpdateAgent("coordinator", deployEnv, coordinatorAgentId, coordinatorAgent.version)
+          : await updateAgent(apiKey, coordinatorAgentId, coordinatorAgent.version, payload);
         config.coordinatorAgentId = coordinatorAgentId;
         saveConfig(configPath, config);
         console.log(`✓ Coordinator agent updated to v${updated.version}`);
