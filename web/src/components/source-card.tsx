@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { RepoStars } from "@/components/repo-stars";
 import { ViewTransition } from "react";
 import { SourceTypeIcon } from "./source-type-icon";
 import { AppIcon } from "@/components/app-icon";
@@ -207,6 +208,7 @@ export function SourceCard({
           {shortUrl(source.url)}
         </div>
       )}
+      {source.type === "github" && <RepoStars stars={source.stars} className="mt-1.5 text-xs" />}
       {!cadence && (source.latestVersion || source.latestDate || source.releaseCount > 0) && (
         <div className="text-xs text-stone-400 dark:text-stone-500 mt-0.5">
           {source.latestVersion && <>Latest: {source.latestVersion}</>}

@@ -202,6 +202,14 @@ export async function runLookup(
   let insertedSource: typeof sources.$inferSelect | undefined;
   let sourceId: string;
 
+  // Fresh stargazer count from this probe, written on whichever path creates or
+  // refreshes the source row so a re-lookup shows stars immediately rather than
+  // waiting for the next poll-fetch cron.
+  const starsFields = {
+    stargazersCount: probe.stargazersCount,
+    starsFetchedAt: probe.stargazersCount != null ? new Date().toISOString() : null,
+  };
+
   if (existingStub) {
     // Refresh in place: keep id/orgId/slug, update metadata to reflect the
     // fresh probe result. emptyResult flips false here when the repo now
@@ -209,10 +217,10 @@ export async function runLookup(
     sourceId = existingStub.id;
     const [updated] = await db
       .update(sources)
-      .set({ metadata: newMeta })
+      .set({ metadata: newMeta, ...starsFields })
       .where(eq(sources.id, sourceId))
       .returning();
-    insertedSource = updated ?? { ...existingStub, metadata: newMeta };
+    insertedSource = updated ?? { ...existingStub, metadata: newMeta, ...starsFields };
   } else {
     // Org reuse: attach to an existing curated/agent org if relatedOrg matched.
     // Otherwise insert a hidden on-demand org, falling back on slug collision.
@@ -271,6 +279,7 @@ export async function runLookup(
           discovery: "on_demand",
           isHidden: true,
           metadata: newMeta,
+          ...starsFields,
         })
         .returning();
       insertedSource = row;
@@ -419,7 +428,12 @@ lookupRoutes.post(
         // No ExecutionContext in test environments — embedding is best-effort.
       }
     }
-    return c.json(result);
+    // Map stargazersCount → stars on the wire shape so it matches LookupSourceSchema.
+    // Destructure the internal column out so the camelCase `stargazersCount` never
+    // leaks through the looseObject schema onto this public response.
+    if (!result.source) return c.json(result);
+    const { stargazersCount, ...sourceForWire } = result.source;
+    return c.json({ ...result, source: { ...sourceForWire, stars: stargazersCount ?? null } });
   },
 );
 

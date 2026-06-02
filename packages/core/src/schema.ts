@@ -350,6 +350,11 @@ export const sources = sqliteTable(
       .notNull()
       .default("curated"),
     kind: text("kind"),
+    // GitHub stargazer count, refreshed on each GitHub poll + at on-demand
+    // materialization. Null = never fetched. `stars_fetched_at` records the
+    // last refresh. Indexed for a future "most-starred" sort.
+    stargazersCount: integer("stargazers_count"),
+    starsFetchedAt: text("stars_fetched_at"),
     deletedAt: text("deleted_at"),
   },
   (table) => [
@@ -375,6 +380,9 @@ export const sources = sqliteTable(
     index("idx_sources_kind")
       .on(table.kind)
       .where(sql`${table.kind} IS NOT NULL`),
+    index("idx_sources_stargazers_count")
+      .on(table.stargazersCount)
+      .where(sql`${table.stargazersCount} IS NOT NULL`),
   ],
 );
 
@@ -1060,6 +1068,8 @@ export const sourcesActive = sqliteView("sources_active", {
   embeddedAt: text("embedded_at"),
   discovery: text("discovery", { enum: ["curated", "agent", "on_demand"] }).notNull(),
   kind: text("kind"),
+  stargazersCount: integer("stargazers_count"),
+  starsFetchedAt: text("stars_fetched_at"),
   deletedAt: text("deleted_at"),
 }).existing();
 
@@ -1122,6 +1132,8 @@ export const sourcesVisible = sqliteView("sources_visible", {
   embeddedAt: text("embedded_at"),
   discovery: text("discovery", { enum: ["curated", "agent", "on_demand"] }).notNull(),
   kind: text("kind"),
+  stargazersCount: integer("stargazers_count"),
+  starsFetchedAt: text("stars_fetched_at"),
   deletedAt: text("deleted_at"),
 }).existing();
 

@@ -38,6 +38,8 @@ export const LookupSourceSchema = z.looseObject({
   isHidden: z.boolean().nullable().optional(),
   discovery: z.enum(["curated", "agent", "on_demand"]).optional(),
   metadata: z.string().nullable(),
+  stars: z.number().int().min(0).nullable().optional(),
+  starsFetchedAt: z.string().nullable().optional(),
   createdAt: z.string().optional(),
 });
 

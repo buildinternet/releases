@@ -144,6 +144,10 @@ function toLookupPayload(
           name: lookup.source.name,
           url: lookup.source.url,
           discovery: lookup.source.discovery ?? "curated",
+          // `runLookup` returns the raw drizzle row, so the stargazer count
+          // arrives as `stargazersCount`; map it to the `stars` wire field
+          // (same projection the thick POST /v1/lookups handler performs).
+          stars: lookup.source.stargazersCount ?? null,
         }
       : undefined,
     releases: lookup.releases?.map((r) => ({

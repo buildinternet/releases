@@ -1304,11 +1304,16 @@ export async function fetchOne(
 
   try {
     let rawReleases: RawRelease[];
+    let repoStars: number | null = null;
 
     if (isGitHubFetched(source, meta)) {
-      rawReleases = await fetchGitHub(source, env.GITHUB_TOKEN, {
-        repoUrl: effectiveGitHubUrl(source, meta),
-      });
+      const repoUrl = effectiveGitHubUrl(source, meta);
+      const [releases, stars] = await Promise.all([
+        fetchGitHub(source, env.GITHUB_TOKEN, { repoUrl }),
+        fetchRepoStars(repoUrl, env.GITHUB_TOKEN),
+      ]);
+      rawReleases = releases;
+      repoStars = stars;
     } else if (isAppStoreFetched(source)) {
       const coord = appStoreCoordFromSource(source);
       const listing = coord ? await resolveAppStore(coord) : null;
@@ -1622,6 +1627,14 @@ export async function fetchOne(
           consecutiveErrors: 0,
           nextFetchAfter: null,
           changeDetectedAt: null,
+          // GitHub stargazer refresh — captured in parallel with the releases
+          // fetch above; folded into this atomic update so it runs on both the
+          // inline-cron and Workflow ingest paths. Spreads nothing when the
+          // best-effort star fetch returned null.
+          ...(repoStars != null && {
+            stargazersCount: repoStars,
+            starsFetchedAt: new Date().toISOString(),
+          }),
         })
         .where(eq(sources.id, source.id)),
     ];
@@ -2083,6 +2096,27 @@ async function fetchGitHub(
       media: rel.body ? extractMediaFromMarkdown(rel.body) : undefined,
     };
   });
+}
+
+/**
+ * Best-effort GitHub stargazer count for a repo URL. One extra `/repos`
+ * call per github poll (the releases fetch hits a different endpoint).
+ * Returns null on ANY failure — a star count must never fail a release fetch.
+ */
+async function fetchRepoStars(repoUrl: string, token?: string): Promise<number | null> {
+  const parsed = parseOwnerRepo(repoUrl);
+  if (!parsed) return null;
+  const { apiHeaders } = buildGitHubHeaders(token, RELEASES_BOT_UA);
+  try {
+    const res = await fetch(`https://api.github.com/repos/${parsed.owner}/${parsed.repo}`, {
+      headers: apiHeaders,
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { stargazers_count?: number };
+    return typeof data.stargazers_count === "number" ? data.stargazers_count : null;
+  } catch {
+    return null;
+  }
 }
 
 // ── Embedding side effects ──

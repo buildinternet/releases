@@ -50,6 +50,11 @@ export const SourceListItemSchema = z.object({
   productName: z.string().nullable().optional(),
   productSlug: z.string().nullable().optional(),
   kind: z.enum(KIND_VALUES).nullable().optional(),
+  // GitHub stargazer count. `nullable().optional()` (the house idiom for these
+  // shapes): non-github sources and older responses omit it; a fetched row may
+  // carry `null`. Consumers treat null/undefined as "unknown".
+  stars: z.number().int().min(0).nullable().optional(),
+  starsFetchedAt: z.string().nullable().optional(),
 });
 
 /**
@@ -84,6 +89,11 @@ export const SourceWithOrgSchema = z.object({
   medianGapDays: z.number().nullable(),
   lastRetieredAt: z.string().nullable(),
   kind: z.enum(KIND_VALUES).nullable().optional(),
+  // GitHub stargazer count. `nullable().optional()` (the house idiom for these
+  // shapes): non-github sources and older responses omit it; a fetched row may
+  // carry `null`. Consumers treat null/undefined as "unknown".
+  stars: z.number().int().min(0).nullable().optional(),
+  starsFetchedAt: z.string().nullable().optional(),
 });
 
 export const SourceListResponseSchema = ListResponseSchema(SourceWithOrgSchema);
@@ -161,6 +171,11 @@ export const SourceDetailSchema = z.object({
   pagination: SourceFeedPaginationSchema,
   summaries: SourceDetailSummariesSchema,
   kind: z.enum(KIND_VALUES).nullable().optional(),
+  // GitHub stargazer count. `nullable().optional()` (the house idiom for these
+  // shapes): non-github sources and older responses omit it; a fetched row may
+  // carry `null`. Consumers treat null/undefined as "unknown".
+  stars: z.number().int().min(0).nullable().optional(),
+  starsFetchedAt: z.string().nullable().optional(),
 });
 
 /**

@@ -176,10 +176,13 @@ export async function searchSources(
     opts.sourceIds && opts.sourceIds.length > 0
       ? sql`AND s.id IN ${sourceIdInList(opts.sourceIds)}`
       : sql``;
+  // `s.stargazers_count as stars` is selected for the SearchSourceHit shape;
+  // catalog-hit surfacing of stars is deferred with the search-results render
+  // (foldSourcesIntoCatalog drops it today).
   return db.all<RawSourceHit>(sql`
     SELECT s.slug, s.name, s.type, o.slug as orgSlug, o.name as orgName,
            p.slug as productSlug, p.name as productName, p.category as productCategory,
-           s.kind as entityKind
+           s.kind as entityKind, s.stargazers_count as stars
     FROM sources_active s
     LEFT JOIN organizations_active o ON o.id = s.org_id
     LEFT JOIN products_active p ON p.id = s.product_id
