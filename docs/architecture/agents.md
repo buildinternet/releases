@@ -48,7 +48,14 @@ bun scripts/verify-managed-agents.ts --env staging   # diff committed YAML again
 - **`verify`** retrieves each live agent via `ant beta:agents retrieve` and classifies every field diff: `match`, `api-default` (server-injected toolset defaults like `configs: []` / `permission_policy` — benign), `source-ahead` (the live agent predates a merged change; a redeploy reconciles it), or `MISMATCH` (a renderer bug or unexplained live drift — the only thing that fails the run). It's an on-demand check, not a CI gate.
 - **Workspace caveat:** `ant`'s default OAuth login resolves to the Rally "Default" workspace, which holds the **staging** agents and both coordinators but not the **prod** discovery/worker agents (they live in a sibling Rally workspace, the one the CI `ANTHROPIC_API_KEY` is scoped to). Bind to that workspace — or export its API key — before running `verify --env production`, or those two agents report `UNREACHABLE`.
 
-This is a source mirror plus drift detector; applying the YAML to Anthropic still goes through `scripts/sync-agent-skills.ts`. Switching the apply path to `ant beta:agents update --version` is a separate, later step.
+### Applying: fetch path vs. render-then-apply (`ant`)
+
+The deploy (`scripts/sync-agent-skills.ts`) has two ways to push an existing agent's config:
+
+- **Fetch path (default).** Builds the update body in JS from the same source the renderer uses and `POST`s it to `/v1/agents/{id}`. This is the historical, always-on path.
+- **Render-then-apply via `ant` (opt-in).** When `AGENT_APPLY_VIA_ANT=1` (or `--apply-via-ant` locally), each agent's committed `managed-agents/<kind>.<env>.agent.yaml` is fed verbatim to `ant beta:agents update --agent-id <id> --version <current>` — so the committed YAML is the literal deploy artifact. Because the YAML is the full body, this path also (idempotently) re-asserts `name` and the coordinator's `multiagent` roster; the API re-resolves the roster's worker reference to its current version. It uses the YAML's model verbatim, ignoring `RELEASES_*_AGENT_MODEL` overrides (CI never sets them), and relies on the render `--check` drift gate keeping the YAML current. Skills and memory stores stay on the fetch path regardless.
+
+The deploy workflow exposes this as the `apply_via_ant` `workflow_dispatch` input (default off); when on, it installs the `ant` CLI (pinned, conditional so default deploys never depend on it). Rollout is staging-first: dispatch `environment=staging, apply_via_ant=true`, then `verify --env staging`, before considering it for prod. The fetch path remains the rollback.
 
 ### Per-session cost observability
 
