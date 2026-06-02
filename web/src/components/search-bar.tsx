@@ -2,24 +2,32 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { setPendingQuery, useSearch } from "./search-provider";
 
 const MOBILE_QUERY = "(max-width: 640px)";
 
 export function SearchBar({
-  defaultValue,
   className,
   sourceCount,
   autoFocus = true,
 }: {
-  defaultValue?: string;
   className?: string;
   sourceCount?: number;
   autoFocus?: boolean;
 }) {
+  const search = useSearch();
   const router = useRouter();
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [isMac, setIsMac] = useState(false);
+
+  // Launcher mode (no provider — e.g. the header on a non-search page): hold the
+  // text locally so the box shows everything typed, stash it for the handoff,
+  // and route to /search on the first keystroke. The provider then adopts the
+  // latest stashed text on mount, so nothing is lost across the navigation.
+  const [launchValue, setLaunchValue] = useState("");
+  const navigatedRef = useRef(false);
+
+  const value = search ? search.query : launchValue;
 
   useEffect(() => {
     if (typeof navigator === "undefined") return;
@@ -32,29 +40,38 @@ export function SearchBar({
     if (!autoFocus) return;
     const mql = window.matchMedia(MOBILE_QUERY);
     if (!mql.matches) {
-      inputRef.current?.focus();
+      const input = inputRef.current;
+      if (input) {
+        input.focus();
+        // Place the caret after any seeded text instead of selecting it, so
+        // continuing to type appends rather than replaces.
+        const end = input.value.length;
+        input.setSelectionRange(end, end);
+      }
     }
   }, [autoFocus]);
 
-  function updateUrl(value: string) {
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => {
-      debounceRef.current = null;
-      const url = value.trim() ? `/search?q=${encodeURIComponent(value.trim())}` : "/search";
-      router.replace(url, { scroll: false });
-    }, 300);
+  function handleChange(next: string) {
+    if (search) {
+      search.setQuery(next);
+      return;
+    }
+    setLaunchValue(next);
+    setPendingQuery(next);
+    if (!navigatedRef.current) {
+      navigatedRef.current = true;
+      router.push("/search");
+    }
   }
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (debounceRef.current) {
-      clearTimeout(debounceRef.current);
-      debounceRef.current = null;
+    if (search) {
+      // Already live on the search page — Enter just keeps the current results.
+      return;
     }
-    const input = e.currentTarget.elements.namedItem("q") as HTMLInputElement;
-    const value = input.value.trim();
-    const url = value ? `/search?q=${encodeURIComponent(value)}` : "/search";
-    router.replace(url, { scroll: false });
+    setPendingQuery(launchValue);
+    router.push("/search");
   }
 
   const placeholder = sourceCount
@@ -83,8 +100,8 @@ export function SearchBar({
           type="search"
           role="searchbox"
           aria-label="Search products and releases"
-          defaultValue={defaultValue}
-          onChange={(e) => updateUrl(e.target.value)}
+          value={value}
+          onChange={(e) => handleChange(e.target.value)}
           placeholder={placeholder}
           autoComplete="off"
           spellCheck={false}
