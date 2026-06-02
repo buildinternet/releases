@@ -8,9 +8,24 @@ interface OrgAvatarProps {
   size?: number;
 }
 
+/**
+ * Resolve an org's avatar image URL: the explicit avatar, else a GitHub avatar
+ * from the handle (requested at 2× the render size for crispness), else null.
+ * Shared so callers that pre-resolve (e.g. threading a single URL through props)
+ * stay in sync with {@link OrgAvatar}'s own fallback.
+ */
+export function orgAvatarSrc(
+  avatarUrl: string | null,
+  githubHandle: string | null,
+  size = 24,
+): string | null {
+  return (
+    avatarUrl ?? (githubHandle ? `https://github.com/${githubHandle}.png?size=${size * 2}` : null)
+  );
+}
+
 export function OrgAvatar({ avatarUrl, githubHandle, name, size = 24 }: OrgAvatarProps) {
-  const src =
-    avatarUrl ?? (githubHandle ? `https://github.com/${githubHandle}.png?size=${size * 2}` : null);
+  const src = orgAvatarSrc(avatarUrl, githubHandle, size);
 
   if (!src) {
     return (

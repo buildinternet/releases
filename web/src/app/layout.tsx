@@ -7,6 +7,7 @@ import { ViewTransition } from "react";
 import { ThemeProvider } from "@/components/theme-provider";
 import { WebMcpProvider } from "@/components/webmcp-provider";
 import { SearchHotkey } from "@/components/search-hotkey";
+import { LightboxProvider } from "@/components/lightbox";
 import { Footer } from "@/components/footer";
 import "./globals.css";
 import { apiBaseUrl } from "@/lib/env";
@@ -67,11 +68,13 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       <body className="font-sans bg-stone-50 dark:bg-stone-950 text-stone-900 dark:text-stone-100 antialiased min-h-screen flex flex-col">
         <ThemeProvider>
           <SearchHotkey />
-          <ViewTransition default="auto">
-            <main id="main" className="flex-1 flex flex-col">
-              {children}
-            </main>
-          </ViewTransition>
+          <LightboxProvider>
+            <ViewTransition default="auto">
+              <main id="main" className="flex-1 flex flex-col">
+                {children}
+              </main>
+            </ViewTransition>
+          </LightboxProvider>
           <Footer />
         </ThemeProvider>
         <WebMcpProvider apiBaseUrl={PUBLIC_API_URL} />

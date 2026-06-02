@@ -107,6 +107,7 @@ export function SourceView({ orgSlug, source }: { orgSlug: string; source: Sourc
         initialCursor={initialCursor}
         appStore={appStore}
         video={videoInfo}
+        sourceName={source.name}
       />
       <RelatedRails
         anchorReleaseId={source.releases[0]?.id ?? null}

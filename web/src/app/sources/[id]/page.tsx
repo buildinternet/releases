@@ -179,6 +179,7 @@ export default async function SourceByIdPage({
         initialCursor={initialCursor}
         appStore={appStore}
         video={videoInfo}
+        sourceName={source.name}
       />
       <RelatedRails
         anchorReleaseId={source.releases[0]?.id ?? null}
