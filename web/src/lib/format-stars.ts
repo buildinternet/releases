@@ -9,6 +9,8 @@ export function formatStars(count: number): string {
     const fixed = value >= 100 ? String(Math.round(value)) : value.toFixed(1).replace(/\.0$/, "");
     return `${fixed}${suffix}`;
   };
-  if (count < 1_000_000) return compact(count / 1000, "k");
+  // Cut over to "M" at 999,500 so the 999.5k–999.9k window rounds to "1M"
+  // instead of the odd "1000k".
+  if (count < 999_500) return compact(count / 1000, "k");
   return compact(count / 1_000_000, "M");
 }

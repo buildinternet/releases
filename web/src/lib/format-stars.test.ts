@@ -15,4 +15,8 @@ describe("formatStars", () => {
   test("compacts millions", () => {
     expect(formatStars(1_500_000)).toBe("1.5M");
   });
+  test("rolls the high-thousands boundary up to M, not 1000k", () => {
+    expect(formatStars(999_499)).toBe("999k");
+    expect(formatStars(999_999)).toBe("1M");
+  });
 });

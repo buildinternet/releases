@@ -207,12 +207,19 @@ export async function runLookup(
     // fresh probe result. emptyResult flips false here when the repo now
     // has content, which is what unsticks the stub on the next read.
     sourceId = existingStub.id;
+    // Write the fresh stargazer count from this probe (mirrors the new-source
+    // insert path) so a re-lookup of a previously-empty stub shows stars
+    // immediately rather than waiting for the next poll-fetch cron.
+    const starsFields = {
+      stargazersCount: probe.stargazersCount,
+      starsFetchedAt: probe.stargazersCount != null ? new Date().toISOString() : null,
+    };
     const [updated] = await db
       .update(sources)
-      .set({ metadata: newMeta })
+      .set({ metadata: newMeta, ...starsFields })
       .where(eq(sources.id, sourceId))
       .returning();
-    insertedSource = updated ?? { ...existingStub, metadata: newMeta };
+    insertedSource = updated ?? { ...existingStub, metadata: newMeta, ...starsFields };
   } else {
     // Org reuse: attach to an existing curated/agent org if relatedOrg matched.
     // Otherwise insert a hidden on-demand org, falling back on slug collision.
