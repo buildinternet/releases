@@ -301,7 +301,7 @@ export const EXTRACTION_TEMPERATURE = 0;
 
 export function buildBodyGuardrail(approxTokens: number): string {
   const rounded = Math.round(approxTokens / 1000) * 1000;
-  return `Response body is approximately ${rounded.toLocaleString()} tokens — large enough that you cannot emit a full detail body for every historical entry within the output budget. Focus ONLY on the most recent entries (the top of the changelog or items with the latest dates). Older entries are likely already stored. Be aggressively concise: short content bodies, no quoted descriptions, summarize bullet lists into 1-2 sentences. If the source uses weekly/monthly rollups, prefer ONE entry per recent rollup over many per-item entries.`;
+  return `Response body is approximately ${rounded.toLocaleString()} tokens — large enough that you cannot emit a full detail body for every historical entry within the output budget. Focus ONLY on the most recent entries (the top of the changelog or items with the latest dates). Older entries are likely already stored. Be aggressively concise: short content bodies, no quoted descriptions, summarize bullet lists into 1-2 sentences. If the source uses weekly/monthly rollups, prefer ONE entry per recent rollup over many per-item entries. Conciseness applies to prose only — for every entry you DO emit, still populate its media array with that entry's image/video URLs. Media is one or two URLs per entry, costs almost no output budget, and must never be dropped to save space.`;
 }
 
 // ── Extracted entry → RawRelease-shaped mapper ──────────────────────

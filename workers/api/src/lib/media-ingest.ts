@@ -171,10 +171,12 @@ const URL_LOOKUP_CHUNK = 90;
  *
  * The media pre-pass gates `processMediaForR2` on this: a release whose URL
  * already exists is skipped by the poll-fetch `onConflictDoNothing` insert, and
- * the `/releases/batch` upsert (`RELEASE_URL_UPSERT`) never touches the `media`
- * column on conflict — so mirroring its images to R2 would fetch + upload bytes
- * whose result is immediately discarded. Null/empty URLs aren't queried (a null
- * URL is always a fresh insert under the `UNIQUE(source_id, url)` index).
+ * the `/releases/batch` upsert (`RELEASE_URL_UPSERT`) only ever backfills the
+ * `media` column for a stored-empty row and never overwrites populated media —
+ * so mirroring an existing row's images to R2 here would fetch + upload bytes
+ * whose result is immediately discarded (a row freshly backfilled from empty is
+ * R2-mirrored later by the `backfill-media` route). Null/empty URLs aren't
+ * queried (a null URL is always a fresh insert under `UNIQUE(source_id, url)`).
  */
 export async function selectExistingReleaseUrls(
   db: Db,
