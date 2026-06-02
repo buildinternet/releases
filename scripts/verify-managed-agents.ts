@@ -171,8 +171,11 @@ function compareTool(r: Record<string, unknown>, l: Record<string, unknown>): Li
 
   // Custom tool: compare input_schema property sets.
   // Set membership only — order irrelevant, so no sort needed.
-  const rProps = Object.keys((r.input_schema as { properties?: object }).properties ?? {});
-  const lProps = Object.keys((l.input_schema as { properties?: object }).properties ?? {});
+  // `l.input_schema` may be absent even when `r`'s is present (a live toolset
+  // paired at this index, or the `{}` fallback for a missing live tool) — guard
+  // it so a missing schema reads as an empty property set instead of throwing.
+  const rProps = Object.keys((r.input_schema as { properties?: object })?.properties ?? {});
+  const lProps = Object.keys((l.input_schema as { properties?: object })?.properties ?? {});
   const renderedOnly = rProps.filter((k) => !lProps.includes(k));
   const liveOnly = lProps.filter((k) => !rProps.includes(k));
   if (liveOnly.length > 0) {
