@@ -1930,9 +1930,9 @@ workflowsRoutes.get("/workflows/batch-enrich/status/:instanceId", async (c) => {
 // Operator-triggered R2 backfill for releases stored before (or while)
 // ingest-time R2 mirroring (`MEDIA_R2_UPLOAD_ENABLED`) was off, so their `media`
 // still points at third-party URLs with no `r2Key`. The standard ingest upsert
-// never touches `media` on conflict (RELEASE_URL_UPSERT) and the ingest media
-// pre-pass skips already-stored URLs, so re-fetching a source can NOT backfill
-// existing rows — this route is the only path that does.
+// backfills `media` only for stored-empty rows and never overwrites populated
+// media (RELEASE_URL_UPSERT), so re-fetching a source can NOT re-mirror media
+// that already has URLs — this route is the only path that R2-stamps them.
 //
 // It re-runs the exact ingest mirror (`processMediaForR2`: junk filter →
 // content-type/size gate → R2 put → registry insert → stamp `r2Key`) and writes
