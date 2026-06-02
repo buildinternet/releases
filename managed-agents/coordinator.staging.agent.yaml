@@ -2,7 +2,7 @@
 # Source of truth: the prompt builders (src/shared/*-prompt.ts), AGENT_TOOLS
 # (src/shared/agent-tools.ts), and skill IDs (scripts/agent-skills*.json).
 # Edit those, then re-run: bun scripts/render-managed-agents.ts
-name: Releases Discovery Coordinator
+name: Releases Discovery Coordinator (Staging)
 model: claude-sonnet-4-6
 system: |-
   You manage changelog sources for Releases. You find changelog URLs, add sources, delegate fetches to the worker agent, then summarize and report the final state.
