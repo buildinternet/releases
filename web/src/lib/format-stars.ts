@@ -4,6 +4,10 @@
  * whole numbers at/above 100 to keep the chip narrow.
  */
 export function formatStars(count: number): string {
+  // Defensive: callers feed a non-negative int from the wire (`stars` is
+  // `min(0).nullable()` and null is null-guarded upstream), but guard anyway
+  // so a stray NaN/Infinity/negative renders a sane "0" instead of "NaNM".
+  if (!Number.isFinite(count) || count < 0) return "0";
   if (count < 1000) return String(count);
   const compact = (value: number, suffix: string): string => {
     const fixed = value >= 100 ? String(Math.round(value)) : value.toFixed(1).replace(/\.0$/, "");

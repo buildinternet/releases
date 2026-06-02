@@ -28,7 +28,8 @@ describe("GET /v1/orgs/:orgSlug/sources/:sourceSlug — stars", () => {
     const app = createTestApp(db, [sourceRoutes], { env: { STATUS_HUB: statusHubStub } });
     const res = await app(new Request("https://x.test/v1/orgs/acme/sources/widget"));
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { stars?: number };
+    const body = (await res.json()) as { stars?: number; starsFetchedAt?: string };
     expect(body.stars).toBe(4321);
+    expect(body.starsFetchedAt).toBe("2026-06-02T00:00:00.000Z");
   });
 });

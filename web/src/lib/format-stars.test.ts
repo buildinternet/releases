@@ -17,6 +17,15 @@ describe("formatStars", () => {
   });
   test("rolls the high-thousands boundary up to M, not 1000k", () => {
     expect(formatStars(999_499)).toBe("999k");
+    expect(formatStars(999_500)).toBe("1M"); // exact cutover point
     expect(formatStars(999_999)).toBe("1M");
+  });
+  test("renders very large counts in M (no billions unit)", () => {
+    expect(formatStars(1_500_000_000)).toBe("1500M");
+  });
+  test("falls back to '0' for non-finite or negative input", () => {
+    expect(formatStars(-100)).toBe("0");
+    expect(formatStars(Number.NaN)).toBe("0");
+    expect(formatStars(Number.POSITIVE_INFINITY)).toBe("0");
   });
 });
