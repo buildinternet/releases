@@ -273,7 +273,7 @@ function renderOgImageText(props: OgTemplateProps): ImageResponse {
             letterSpacing: "0.02em",
           }}
         >
-          An agent-friendly API for product changelogs
+          The latest product releases, indexed for agents
         </div>
       )}
     </div>,
@@ -508,6 +508,6 @@ export async function resolveAvatarUrl(org: OrgAvatarShape): Promise<string | nu
 export function renderOgFallback(): ImageResponse {
   return renderOgImage({
     title: "releases.sh",
-    subtitle: "An agent-friendly API for product changelogs",
+    subtitle: "The latest product releases, indexed for agents",
   });
 }

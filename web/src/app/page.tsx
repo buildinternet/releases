@@ -289,7 +289,7 @@ export default async function HomePage() {
         name: "releases.sh",
         url: "https://releases.sh",
         description:
-          "An agent-friendly API for product changelogs. A unified registry of product releases, available via CLI, API, or MCP.",
+          "The latest product releases, indexed for agents. Releases is a registry of release notes from across the web, queryable from your terminal, code, or MCP client.",
         publisher: { "@id": "https://releases.sh#org" },
         potentialAction: {
           "@type": "SearchAction",
@@ -305,7 +305,8 @@ export default async function HomePage() {
         "@id": "https://releases.sh#org",
         name: "releases.sh",
         url: "https://releases.sh",
-        description: "An agent-friendly registry of product changelogs and release notes.",
+        description:
+          "A registry of release notes from across the web, indexed for agents and queryable from your terminal, code, or MCP client.",
       },
     ],
   };
@@ -316,10 +317,11 @@ export default async function HomePage() {
       <Header />
       <div className="pt-12 pb-8 text-center px-6">
         <h1 className="text-[28px] font-bold tracking-tight text-stone-900 dark:text-stone-100 mb-2">
-          An agent-friendly API for product changelogs.
+          The latest product releases, indexed for agents
         </h1>
         <p className="text-[15px] text-stone-500 dark:text-stone-400 mb-6">
-          A unified registry of product releases, available via CLI, API, or MCP.
+          Releases is a registry of release notes from across the web, queryable from your terminal,
+          code, or MCP client.
         </p>
         <div className="flex justify-center gap-8 text-[13px] text-stone-400 dark:text-stone-500">
           <span>

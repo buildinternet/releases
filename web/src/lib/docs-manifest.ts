@@ -1,7 +1,7 @@
 import { loadDoc, type Doc } from "@/lib/docs";
 
 export const SITE_NAME = "releases.sh";
-export const SITE_TAGLINE = "An agent-friendly API for product changelogs.";
+export const SITE_TAGLINE = "The latest product releases, indexed for agents.";
 
 export type DocEntry = {
   /** Path under `src/content/docs/`, e.g. `cli/browsing`. `index` is the `/docs` root. */
