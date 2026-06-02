@@ -289,7 +289,7 @@ export default async function HomePage() {
         name: "releases.sh",
         url: "https://releases.sh",
         description:
-          "An agent-friendly API for product changelogs. A unified registry of product releases, available via CLI, API, or MCP.",
+          "The latest product releases, indexed for agents. Releases is a registry of release notes from across the web, queryable from your terminal, code, or MCP client.",
         publisher: { "@id": "https://releases.sh#org" },
         potentialAction: {
           "@type": "SearchAction",
@@ -305,7 +305,8 @@ export default async function HomePage() {
         "@id": "https://releases.sh#org",
         name: "releases.sh",
         url: "https://releases.sh",
-        description: "An agent-friendly registry of product changelogs and release notes.",
+        description:
+          "A registry of release notes from across the web, indexed for agents and queryable from your terminal, code, or MCP client.",
       },
     ],
   };

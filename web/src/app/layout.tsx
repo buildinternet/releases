@@ -25,7 +25,7 @@ export const metadata: Metadata = {
     template: "%s — releases.sh",
   },
   description:
-    "An agent-friendly API for product changelogs. A unified registry of product releases, available via CLI, API, or MCP.",
+    "The latest product releases, indexed for agents. Releases is a registry of release notes from across the web, queryable from your terminal, code, or MCP client.",
   metadataBase: new URL("https://releases.sh"),
   openGraph: {
     type: "website",
