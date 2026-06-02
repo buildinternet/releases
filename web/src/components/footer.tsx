@@ -56,6 +56,14 @@ export function Footer() {
             Security
           </Link>
           <a
+            href="https://status.releases.sh"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hover:text-stone-700 dark:hover:text-stone-300"
+          >
+            Status
+          </a>
+          <a
             href={GITHUB_REPO_URL}
             target="_blank"
             rel="noopener noreferrer"

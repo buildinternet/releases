@@ -8,10 +8,12 @@
 // id, so re-running converges the account to the config below instead of
 // creating duplicates. Edit MONITORS / COMMON and re-run to update in place.
 //
-// What it manages:
-//   - Web   GET https://releases.sh/                                 (status check)
-//   - API   GET https://api.releases.sh/v1/releases/latest?limit=1   (keyword "releases" — exercises D1)
-//   - MCP   GET https://mcp.releases.sh/                              (keyword "Releases MCP Server")
+// What it manages (monitors are matched by name, so a URL can be repointed in
+// place without orphaning the old monitor):
+//   - Web       GET https://releases.sh/                  (status check)
+//   - API       GET https://api.releases.sh/health        (status check; /health 503s when D1 is down)
+//   - MCP       GET https://mcp.releases.sh/               (keyword "Releases MCP Server")
+//   - Webhooks  GET https://webhooks.releases.sh/health   (status check; liveness)
 //
 // It does NOT manage log shipping (Better Stack Telemetry is a separate product
 // with its own source token); worker logs already go to Axiom.
@@ -70,12 +72,12 @@ const MONITORS: MonitorSpec[] = [
     publicName: "Web",
   },
   {
-    // /v1/releases/latest hits D1, so the monitor goes red if the worker is up
-    // but the database is failing — unlike the static root index.
-    url: "https://api.releases.sh/v1/releases/latest?limit=1",
+    // Dedicated /health runs a cheap `SELECT 1` and returns 503 when D1 is
+    // unreachable, so a plain status check goes red on database failure — both
+    // cheaper and more correct than monitoring a full read endpoint.
+    url: "https://api.releases.sh/health",
     pronounceable_name: "API (api.releases.sh)",
-    monitor_type: "keyword",
-    required_keyword: "releases",
+    monitor_type: "status",
     publicName: "API",
   },
   {
@@ -84,6 +86,13 @@ const MONITORS: MonitorSpec[] = [
     monitor_type: "keyword",
     required_keyword: "Releases MCP Server",
     publicName: "MCP Server",
+  },
+  {
+    // Queue-consumer worker; /health is a simple liveness 200.
+    url: "https://webhooks.releases.sh/health",
+    pronounceable_name: "Webhooks (webhooks.releases.sh)",
+    monitor_type: "status",
+    publicName: "Webhooks",
   },
 ];
 
@@ -131,8 +140,6 @@ function monitorBody(m: MonitorSpec) {
   return body;
 }
 
-const norm = (u: string) => u.replace(/\/+$/, "");
-
 async function main() {
   console.log(`Better Stack monitor setup${DRY_RUN ? " (dry-run)" : ""}\n`);
 
@@ -166,14 +173,17 @@ async function main() {
       : "Section: none found — resources will be attached ungrouped\n",
   );
 
-  // 2. Upsert monitors (match by URL).
+  // 2. Upsert monitors. Matched by pronounceable_name (not URL) so a monitor's
+  //    URL can be repointed in place — e.g. the API monitor moving from
+  //    /v1/releases/latest to /health — without orphaning the old monitor or
+  //    creating a duplicate.
   const existingMonitors = await listAll("/monitors");
-  const byUrl = new Map<string, any>();
-  for (const m of existingMonitors) byUrl.set(norm(m.attributes.url ?? ""), m);
+  const byName = new Map<string, any>();
+  for (const m of existingMonitors) byName.set(m.attributes.pronounceable_name ?? "", m);
 
   const resolved: { spec: MonitorSpec; id: string }[] = [];
   for (const spec of MONITORS) {
-    const existing = byUrl.get(norm(spec.url));
+    const existing = byName.get(spec.pronounceable_name);
     if (existing) {
       if (DRY_RUN) {
         console.log(`= would update  ${spec.publicName.padEnd(11)} #${existing.id}  ${spec.url}`);
