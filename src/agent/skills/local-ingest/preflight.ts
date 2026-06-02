@@ -96,6 +96,9 @@ function parseRobots(body: string): {
       if (eq === -1) continue;
       const sig = token.slice(0, eq).trim().toLowerCase();
       if (!sig) continue;
+      // Strictest reading: a "no" wins. Once a signal is "no", a later "yes"
+      // (another line / UA group) must not override the opt-out.
+      if (merged[sig] === "no") continue;
       merged[sig] = token
         .slice(eq + 1)
         .trim()
@@ -150,13 +153,14 @@ async function preflight(input: string): Promise<PreflightResult> {
   }
 
   const body = await res.text();
-  // A challenge/login HTML page (not a real robots.txt) carries no parseable directive — treat it
-  // as absent (proceed), same as a 404. An opt-out can only refuse when it's actually present.
+  // robots.txt served as HTML (not a real policy file) usually means a challenge/login wall — we
+  // can't read the opt-out, so fail closed: surface to the operator rather than assume permissive.
   if (looksLikeHtml(body)) {
     return {
       ...base,
-      verdict: "proceed",
-      reason: "robots.txt served HTML (likely absent) — no opt-out declared.",
+      verdict: "unknown",
+      reason:
+        "robots.txt served HTML (likely a challenge/login wall) — could not read the opt-out policy. Operator review required before fetching.",
     };
   }
 
