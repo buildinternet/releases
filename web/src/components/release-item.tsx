@@ -1,17 +1,16 @@
 "use client";
 
-import { useState, useRef, useEffect, useMemo, ViewTransition } from "react";
+import { useState, useRef, useEffect, useMemo, useId, ViewTransition } from "react";
 import ReactMarkdown from "react-markdown";
 import { remarkPlugins } from "@/lib/markdown-plugins";
 import { rehypeShikiPlugin } from "@/lib/shiki";
 import Link from "next/link";
 import type { ReleaseItem } from "@/lib/api";
-import Image from "next/image";
 import { FallbackImage } from "./fallback-image";
 import { releaseThumbUrl, IMG_TRANSFORM_ON } from "@/lib/media";
 import { appStoreIconUrl, type AppRowInfo } from "@/lib/app-source";
 import type { VideoRowInfo } from "@/lib/video-source";
-import { EXTERNAL_UGC_REL, isOptimizableImage } from "@/lib/sanitize";
+import { EXTERNAL_UGC_REL } from "@/lib/sanitize";
 import { deriveFeedTitle } from "@/lib/release-title";
 import { markdownComponents, collapsedMarkdownComponents } from "./markdown-components";
 import { formatDate } from "@/lib/formatters";
@@ -19,6 +18,13 @@ import { RollupBadge } from "./rollup-badge";
 import { ClusterChip } from "./cluster-chip";
 import { CompactComposition } from "./compact-composition";
 import { PlayBadge } from "./play-badge";
+import { useLightboxImage, type LightboxEntry } from "./lightbox";
+
+/** Release context shared by every previewable image in one feed row. */
+type RowMeta = Pick<
+  LightboxEntry,
+  "title" | "dateLabel" | "byline" | "avatarUrl" | "detailHref" | "sourceUrl"
+>;
 
 /** Strip a leading markdown heading that duplicates the release title,
  *  and empty artifacts left by HTML-to-markdown conversion. */
@@ -38,14 +44,53 @@ function stripLeadingTitle(content: string, title: string | null): string {
   return content;
 }
 
+/** One gallery thumbnail, registered with the page lightbox so it joins the
+ *  left/right paging set alongside the row's primary thumbnail. */
+function GalleryThumb({
+  id,
+  src,
+  alt,
+  meta,
+}: {
+  id: string;
+  src: string;
+  alt: string;
+  meta: RowMeta;
+}) {
+  const { ref, open } = useLightboxImage<HTMLButtonElement>({ id, src, alt, ...meta });
+  return (
+    <button
+      ref={ref}
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        open();
+      }}
+      className="cursor-zoom-in"
+      aria-label="Preview image"
+    >
+      <FallbackImage
+        src={releaseThumbUrl(src, 800)}
+        alt={alt}
+        width={400}
+        height={192}
+        className="rounded-md object-contain max-h-48 w-auto"
+        unoptimized={IMG_TRANSFORM_ON || undefined}
+      />
+    </button>
+  );
+}
+
 function MediaGallery({
   media,
   content,
-  onPreview,
+  meta,
+  keyPrefix,
 }: {
   media: ReleaseItem["media"];
   content: string;
-  onPreview: (src: string, alt: string) => void;
+  meta: RowMeta;
+  keyPrefix: string;
 }) {
   if (!media || media.length === 0) return null;
 
@@ -58,81 +103,17 @@ function MediaGallery({
 
   return (
     <div className="flex flex-wrap gap-2 mt-2">
-      {extra.map((item, i) => {
-        if (item.type === "image" || item.type === "gif") {
-          const src = item.r2Url ?? item.url;
-          return (
-            <button
-              key={i}
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onPreview(src, item.alt || "");
-              }}
-              className="cursor-zoom-in"
-              aria-label="Preview image"
-            >
-              <FallbackImage
-                src={releaseThumbUrl(src, 800)}
-                alt={item.alt || ""}
-                width={400}
-                height={192}
-                className="rounded-md object-contain max-h-48 w-auto"
-                unoptimized={IMG_TRANSFORM_ON || undefined}
-              />
-            </button>
-          );
-        }
-        return null;
-      })}
-    </div>
-  );
-}
-
-function Lightbox({ src, alt, onClose }: { src: string; alt: string; onClose: () => void }) {
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", onKey);
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.removeEventListener("keydown", onKey);
-      document.body.style.overflow = prev;
-    };
-  }, [onClose]);
-
-  return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label={alt || "Image preview"}
-      onClick={onClose}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 cursor-zoom-out"
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        className="relative w-full h-full flex items-center justify-center cursor-default"
-      >
-        <Image
-          src={src}
-          alt={alt}
-          fill
-          sizes="100vw"
-          quality={90}
-          unoptimized={!isOptimizableImage(src)}
-          className="object-contain rounded-md shadow-2xl"
-        />
-      </div>
-      <button
-        type="button"
-        aria-label="Close"
-        onClick={onClose}
-        className="absolute top-4 right-4 text-white/70 hover:text-white text-2xl leading-none w-8 h-8 flex items-center justify-center rounded-full bg-black/30 hover:bg-black/50"
-      >
-        ×
-      </button>
+      {extra.map((item, i) =>
+        item.type === "image" || item.type === "gif" ? (
+          <GalleryThumb
+            key={i}
+            id={`${keyPrefix}:g${i}`}
+            src={item.r2Url ?? item.url}
+            alt={item.alt || ""}
+            meta={meta}
+          />
+        ) : null,
+      )}
     </div>
   );
 }
@@ -148,16 +129,23 @@ export function ReleaseListItem({
   sourceByline,
   appStore,
   video,
+  byline,
+  avatarUrl,
 }: {
   release: ReleaseItem;
   hideDate?: boolean;
   sourceByline?: { name: string; slug: string; orgSlug?: string };
   appStore?: AppRowInfo | null;
   video?: VideoRowInfo | null;
+  /** Product/org/source label for the lightbox byline — the originating
+   *  product or source name, supplied by the feed container. */
+  byline?: string;
+  /** Resolved org avatar URL (incl. GitHub fallback) for the lightbox byline. */
+  avatarUrl?: string | null;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [isOverflowing, setIsOverflowing] = useState(false);
-  const [preview, setPreview] = useState<{ src: string; alt: string } | null>(null);
+  const rowId = useId();
   const contentRef = useRef<HTMLDivElement>(null);
   const markdownContent = useMemo(
     () => stripLeadingTitle(release.content || release.summary, release.title),
@@ -195,6 +183,30 @@ export function ReleaseListItem({
   // left-rail byline into an inline meta line. App Store rows keep their own
   // layout below. See `.context/2026-05-29-feed-version-title-hierarchy.md`.
   const { descriptive, versionLabel } = deriveFeedTitle(release);
+
+  // Context shown alongside the image in the lightbox so a zoomed-in screenshot
+  // still says which release it belongs to: title, org avatar + name byline, and
+  // links to the on-site detail page (primary) and the original source (secondary).
+  const lightboxMeta: RowMeta = {
+    title: descriptive || versionLabel || release.title || "Release",
+    dateLabel: release.publishedAt ? formatDate(release.publishedAt) : null,
+    byline: byline ?? sourceByline?.name ?? appStore?.appName ?? video?.label ?? null,
+    avatarUrl: avatarUrl ?? null,
+    detailHref: release.id ? `/release/${release.id}` : null,
+    sourceUrl: release.url ?? null,
+  };
+
+  // The row's primary thumbnail (default rows only — app-store/video rows use
+  // their thumbnail as a play/link affordance, not a lightbox image). Register
+  // it with the page lightbox so left/right paging walks between releases.
+  const lightboxThumbSrc =
+    !appStore && !video && thumbnail ? (thumbnail.r2Url ?? thumbnail.url) : "";
+  const { ref: thumbRef, open: openThumb } = useLightboxImage<HTMLButtonElement>({
+    id: `${rowId}:thumb`,
+    src: lightboxThumbSrc,
+    alt: thumbnail?.alt || "",
+    ...lightboxMeta,
+  });
 
   // Bold heading: the descriptive title when we have one; otherwise the version,
   // led by the product name (with the version dimmed after it, matching the App
@@ -566,7 +578,8 @@ export function ReleaseListItem({
                   <MediaGallery
                     media={release.media}
                     content={markdownContent}
-                    onPreview={(src, alt) => setPreview({ src, alt })}
+                    meta={lightboxMeta}
+                    keyPrefix={rowId}
                   />
                 </div>
               ) : (
@@ -593,13 +606,11 @@ export function ReleaseListItem({
                     </div>
                     {thumbnail && (
                       <button
+                        ref={thumbRef}
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
-                          setPreview({
-                            src: thumbnail.r2Url ?? thumbnail.url,
-                            alt: thumbnail.alt || "",
-                          });
+                          openThumb();
                         }}
                         className="shrink-0 cursor-zoom-in"
                         aria-label="Preview image"
@@ -626,7 +637,6 @@ export function ReleaseListItem({
           </>
         )}
       </div>
-      {preview && <Lightbox src={preview.src} alt={preview.alt} onClose={() => setPreview(null)} />}
     </article>
   );
 }

@@ -19,6 +19,9 @@ interface SourceReleaseListProps {
   appStore?: AppRowInfo | null;
   /** Video display info when this source is a video source; null otherwise. */
   video?: VideoRowInfo | null;
+  /** Source display name — used for the lightbox byline (the page header that
+   *  names the source isn't visible once an image is zoomed in). */
+  sourceName?: string;
 }
 
 /**
@@ -34,6 +37,7 @@ export function SourceReleaseList({
   initialCursor,
   appStore,
   video,
+  sourceName,
 }: SourceReleaseListProps) {
   const [includePrereleases, setIncludePrereleases] = useState(false);
   const [searchInput, setSearchInput] = useState("");
@@ -164,6 +168,7 @@ export function SourceReleaseList({
               release={release}
               appStore={appStore ?? null}
               video={video ?? null}
+              byline={appStore?.appName ?? video?.label ?? sourceName}
               hideDate={
                 i > 0 &&
                 release.publishedAt?.slice(0, 10) === releases[i - 1].publishedAt?.slice(0, 10)

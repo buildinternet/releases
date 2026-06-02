@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { api, ApiSetupError, ApiNotFoundError, type OrgReleasesFeedResponse } from "@/lib/api";
 import { OrgReleaseList } from "@/components/org-release-list";
+import { orgAvatarSrc } from "@/components/org-avatar";
 import { JsonLd } from "@/components/json-ld";
 import { buildReleaseItemListJsonLd, currentPeriod, lastModifiedAt } from "@/lib/schema-org";
 import { domainHref } from "@/lib/source-display";
@@ -57,6 +58,10 @@ export default async function OrgReleasesPage({
   const orgUrl = `https://releases.sh/${orgSlug}`;
   const pageUrl = `${orgUrl}/releases`;
   const orgNodeId = `${orgUrl}#org`;
+
+  // Resolved org avatar (incl. GitHub fallback) for the image-lightbox byline.
+  const orgGithubHandle = org.accounts?.find((a) => a.platform === "github")?.handle ?? null;
+  const orgAvatarUrl = orgAvatarSrc(org.avatarUrl, orgGithubHandle, 24);
   const releaseListId = `${pageUrl}#releases`;
   const dateModified = lastModifiedAt(org);
   const jsonLd = {
@@ -101,6 +106,7 @@ export default async function OrgReleasesPage({
         initialCursor={initialReleases.pagination.nextCursor}
         multipleSourcesExist={org.sources.length > 1}
         availableSourceTypes={Array.from(new Set(org.sources.map((s) => s.type)))}
+        orgAvatarUrl={orgAvatarUrl}
       />
     </>
   );

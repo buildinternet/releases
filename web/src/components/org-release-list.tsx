@@ -24,6 +24,8 @@ interface OrgReleaseListProps {
   availableSourceTypes: SourceType[];
   /** When set, pins the feed to one product (slug or prod_ id). Not a user-flippable filter. */
   product?: string;
+  /** Resolved org avatar URL (incl. GitHub fallback) for the image lightbox byline. */
+  orgAvatarUrl?: string | null;
 }
 
 // Source types collapse into two filter groups for the user-facing tabs.
@@ -45,6 +47,7 @@ export function OrgReleaseList({
   multipleSourcesExist,
   availableSourceTypes,
   product,
+  orgAvatarUrl,
 }: OrgReleaseListProps) {
   const [filterGroup, setFilterGroup] = useState<FilterGroup>("all");
   const [includePrereleases, setIncludePrereleases] = useState(false);
@@ -269,6 +272,7 @@ export function OrgReleaseList({
                   hideDate={!showDate}
                   orgSlug={orgSlug}
                   multipleSourcesExist={multipleSourcesExist}
+                  orgAvatarUrl={orgAvatarUrl}
                 />
               );
             }
@@ -280,6 +284,8 @@ export function OrgReleaseList({
                 hideDate={!showDate}
                 appStore={appRowInfoFromWire(release.source.appStore, release.source.name)}
                 video={videoRowInfoFromWire(release.source.video)}
+                byline={release.groupName ?? release.product?.name ?? release.source.name}
+                avatarUrl={orgAvatarUrl ?? null}
                 sourceByline={
                   multipleSourcesExist
                     ? {
@@ -317,11 +323,13 @@ function ReleaseRollupRow({
   hideDate,
   orgSlug,
   multipleSourcesExist,
+  orgAvatarUrl,
 }: {
   item: RollupItem;
   hideDate?: boolean;
   orgSlug: string;
   multipleSourcesExist: boolean;
+  orgAvatarUrl?: string | null;
 }) {
   const [open, setOpen] = useState(false);
   const newest = item.releases[0];
@@ -395,6 +403,8 @@ function ReleaseRollupRow({
             hideDate
             appStore={appRowInfoFromWire(r.source.appStore, r.source.name)}
             video={videoRowInfoFromWire(r.source.video)}
+            byline={r.groupName ?? r.product?.name ?? r.source.name}
+            avatarUrl={orgAvatarUrl ?? null}
             sourceByline={
               multipleSourcesExist
                 ? { name: r.source.name, slug: r.source.slug, orgSlug }
