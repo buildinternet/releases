@@ -280,8 +280,16 @@ sourceRoutes.get(
       const rows: (typeof sources.$inferSelect)[] = [];
       for (let i = 0; i < urls.length; i += IN_ARRAY_CHUNK_SIZE) {
         const chunk = urls.slice(i, i + IN_ARRAY_CHUNK_SIZE);
+        // Skip soft-deleted (tombstoned) sources. This is the dedup pre-check
+        // the CLI's `source create` / `import` run before inserting; surfacing
+        // a deleted row here makes create "revive" the tombstone (returns the
+        // mangled `<slug>--<id>` row as `existed: true`) instead of starting
+        // fresh, which is the create-revives half of #1184.
         // oxlint-disable-next-line no-await-in-loop -- sequential chunks under the D1 bind-param cap
-        const chunkRows = await db.select().from(sources).where(inArray(sources.url, chunk));
+        const chunkRows = await db
+          .select()
+          .from(sources)
+          .where(and(inArray(sources.url, chunk), isNull(sources.deletedAt)));
         rows.push(...chunkRows);
       }
       return c.json(rows);
