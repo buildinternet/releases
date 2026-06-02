@@ -60,6 +60,7 @@ export const SearchSourceHitSchema = z.object({
   orgSlug: z.string().nullable(),
   orgName: z.string().nullable(),
   productSlug: z.string().nullable(),
+  stars: z.number().int().min(0).nullable().optional(),
 });
 
 export const SearchReleaseHitSchema = z.object({
