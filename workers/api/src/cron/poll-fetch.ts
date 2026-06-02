@@ -1589,15 +1589,6 @@ export async function fetchOne(
       }
     }
 
-    // GitHub stargazer refresh — captured in parallel with the releases fetch
-    // above; folded into the atomic success update so it runs on both the
-    // inline-cron and Workflow ingest paths.
-    const starsUpdate: Partial<{ stargazersCount: number; starsFetchedAt: string }> = {};
-    if (repoStars != null) {
-      starsUpdate.stargazersCount = repoStars;
-      starsUpdate.starsFetchedAt = new Date().toISOString();
-    }
-
     // Single D1 round-trip: insert fetch_log + update sources atomically.
     // Promise.all would issue two separate RPCs and leave either half committed
     // on a mid-flight failure. db.batch() is strictly better here — a wedged
@@ -1620,7 +1611,14 @@ export async function fetchOne(
           consecutiveErrors: 0,
           nextFetchAfter: null,
           changeDetectedAt: null,
-          ...starsUpdate,
+          // GitHub stargazer refresh — captured in parallel with the releases
+          // fetch above; folded into this atomic update so it runs on both the
+          // inline-cron and Workflow ingest paths. Spreads nothing when the
+          // best-effort star fetch returned null.
+          ...(repoStars != null && {
+            stargazersCount: repoStars,
+            starsFetchedAt: new Date().toISOString(),
+          }),
         })
         .where(eq(sources.id, source.id)),
     ];
@@ -2090,17 +2088,13 @@ async function fetchGitHub(
  * Returns null on ANY failure — a star count must never fail a release fetch.
  */
 async function fetchRepoStars(repoUrl: string, token?: string): Promise<number | null> {
-  const match = repoUrl.match(/github\.com\/([^/]+)\/([^/]+)/);
-  if (!match) return null;
-  const [, owner, rawRepo] = match;
-  const repo = rawRepo.replace(/\.git$/, "");
-  const headers: Record<string, string> = {
-    Accept: "application/vnd.github+json",
-    "User-Agent": RELEASES_BOT_UA,
-  };
-  if (token) headers.Authorization = `Bearer ${token}`;
+  const parsed = parseOwnerRepo(repoUrl);
+  if (!parsed) return null;
+  const { apiHeaders } = buildGitHubHeaders(token, RELEASES_BOT_UA);
   try {
-    const res = await fetch(`https://api.github.com/repos/${owner}/${repo}`, { headers });
+    const res = await fetch(`https://api.github.com/repos/${parsed.owner}/${parsed.repo}`, {
+      headers: apiHeaders,
+    });
     if (!res.ok) return null;
     const data = (await res.json()) as { stargazers_count?: number };
     return typeof data.stargazers_count === "number" ? data.stargazers_count : null;

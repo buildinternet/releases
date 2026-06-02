@@ -202,18 +202,19 @@ export async function runLookup(
   let insertedSource: typeof sources.$inferSelect | undefined;
   let sourceId: string;
 
+  // Fresh stargazer count from this probe, written on whichever path creates or
+  // refreshes the source row so a re-lookup shows stars immediately rather than
+  // waiting for the next poll-fetch cron.
+  const starsFields = {
+    stargazersCount: probe.stargazersCount,
+    starsFetchedAt: probe.stargazersCount != null ? new Date().toISOString() : null,
+  };
+
   if (existingStub) {
     // Refresh in place: keep id/orgId/slug, update metadata to reflect the
     // fresh probe result. emptyResult flips false here when the repo now
     // has content, which is what unsticks the stub on the next read.
     sourceId = existingStub.id;
-    // Write the fresh stargazer count from this probe (mirrors the new-source
-    // insert path) so a re-lookup of a previously-empty stub shows stars
-    // immediately rather than waiting for the next poll-fetch cron.
-    const starsFields = {
-      stargazersCount: probe.stargazersCount,
-      starsFetchedAt: probe.stargazersCount != null ? new Date().toISOString() : null,
-    };
     const [updated] = await db
       .update(sources)
       .set({ metadata: newMeta, ...starsFields })
@@ -278,8 +279,7 @@ export async function runLookup(
           discovery: "on_demand",
           isHidden: true,
           metadata: newMeta,
-          stargazersCount: probe.stargazersCount,
-          starsFetchedAt: probe.stargazersCount != null ? new Date().toISOString() : null,
+          ...starsFields,
         })
         .returning();
       insertedSource = row;
@@ -431,13 +431,9 @@ lookupRoutes.post(
     // Map stargazersCount → stars on the wire shape so it matches LookupSourceSchema.
     // Destructure the internal column out so the camelCase `stargazersCount` never
     // leaks through the looseObject schema onto this public response.
-    const wireResult = result.source
-      ? (() => {
-          const { stargazersCount, ...sourceForWire } = result.source;
-          return { ...result, source: { ...sourceForWire, stars: stargazersCount ?? null } };
-        })()
-      : result;
-    return c.json(wireResult);
+    if (!result.source) return c.json(result);
+    const { stargazersCount, ...sourceForWire } = result.source;
+    return c.json({ ...result, source: { ...sourceForWire, stars: stargazersCount ?? null } });
   },
 );
 
