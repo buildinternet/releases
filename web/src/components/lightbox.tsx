@@ -208,23 +208,48 @@ function LightboxOverlay({
   const { list, index } = view;
   const hasPrev = index > 0;
   const hasNext = index < list.length - 1;
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const closeBtnRef = useRef<HTMLButtonElement>(null);
+  const [erroredSrc, setErroredSrc] = useState<string | null>(null);
 
   useEffect(() => {
+    // Move focus into the dialog and restore it to the opener on close, so
+    // keyboard users aren't dropped back at the top of the page (a11y).
+    const opener = document.activeElement as HTMLElement | null;
+    closeBtnRef.current?.focus();
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
       else if (e.key === "ArrowLeft") go(-1);
       else if (e.key === "ArrowRight") go(1);
+      else if (e.key === "Tab") {
+        // Trap focus within the dialog.
+        const focusable = Array.from(
+          dialogRef.current?.querySelectorAll<HTMLElement>("a[href], button:not([disabled])") ?? [],
+        ).filter((el) => el.offsetParent !== null);
+        if (focusable.length === 0) return;
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
     };
     document.addEventListener("keydown", onKey);
-    const prev = document.body.style.overflow;
+    const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
       document.removeEventListener("keydown", onKey);
-      document.body.style.overflow = prev;
+      document.body.style.overflow = prevOverflow;
+      opener?.focus?.();
     };
   }, [onClose, go]);
 
   const { src, alt, title, dateLabel, byline, avatarUrl, detailHref, sourceUrl } = list[index];
+  const imageFailed = erroredSrc === src;
   const primaryIsExternal = !detailHref && !!sourceUrl;
   const primaryHref = detailHref ?? sourceUrl;
   const primaryLabel = detailHref ? "View full release" : "View source";
@@ -237,6 +262,7 @@ function LightboxOverlay({
 
   return (
     <div
+      ref={dialogRef}
       role="dialog"
       aria-modal="true"
       aria-label={title || alt || "Image preview"}
@@ -292,6 +318,7 @@ function LightboxOverlay({
                 </Link>
               ))}
             <button
+              ref={closeBtnRef}
               type="button"
               aria-label="Close"
               onClick={onClose}
@@ -303,15 +330,26 @@ function LightboxOverlay({
         </div>
       </div>
       {/* Image — floats on the scrim, centered in the same column and capped so
-          a high-res original doesn't upscale to fill the viewport. */}
+          a high-res original doesn't upscale to fill the viewport. A broken src
+          falls back to a placeholder instead of the browser's broken-image icon. */}
       <div className="flex min-h-0 flex-1 items-center justify-center px-4 pb-6 sm:px-6">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={src}
-          alt={alt}
-          onClick={(e) => e.stopPropagation()}
-          className="lightbox-card h-auto max-h-full w-auto max-w-4xl cursor-default rounded-md object-contain shadow-2xl ring-1 ring-white/10"
-        />
+        {imageFailed ? (
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="lightbox-card flex cursor-default items-center justify-center rounded-md px-10 py-16 text-[13px] text-white/50 ring-1 ring-white/10"
+          >
+            Image unavailable
+          </div>
+        ) : (
+          /* eslint-disable-next-line @next/next/no-img-element */
+          <img
+            src={src}
+            alt={alt}
+            onClick={(e) => e.stopPropagation()}
+            onError={() => setErroredSrc(src)}
+            className="lightbox-card h-auto max-h-full w-auto max-w-4xl cursor-default rounded-md object-contain shadow-2xl ring-1 ring-white/10"
+          />
+        )}
       </div>
       {hasPrev && <NavButton side="left" onClick={() => go(-1)} />}
       {hasNext && <NavButton side="right" onClick={() => go(1)} />}
