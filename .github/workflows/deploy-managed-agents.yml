@@ -39,9 +39,9 @@ on:
         options: [all, discovery, worker, coordinator]
         default: all
       apply_via_ant:
-        description: Apply agents from the committed managed-agents/*.yaml via the ant CLI (default uses the fetch path)
+        description: Apply agents from the committed managed-agents/*.yaml via the ant CLI (default; uncheck to fall back to the legacy fetch path)
         type: boolean
-        default: false
+        default: true
 
 # Queue concurrent runs per env instead of cancelling — an interrupted deploy
 # can leave prod with a partially-applied agent config.
@@ -58,9 +58,10 @@ env:
   DEPLOY_TARGET: ${{ github.event.inputs.deploy || 'both' }}
   AGENT_TARGET: ${{ github.event.inputs.agent || 'all' }}
   # Render-then-apply: when '1', the agent steps feed the committed
-  # managed-agents/*.yaml to `ant beta:agents update`. Default '0' (push
-  # deploys, and dispatches that leave the box unchecked) keeps the fetch path.
-  AGENT_APPLY_VIA_ANT: ${{ github.event.inputs.apply_via_ant == 'true' && '1' || '0' }}
+  # managed-agents/*.yaml to `ant beta:agents update` — now the default. Push
+  # deploys and dispatches use it; only a dispatch that explicitly unchecks
+  # apply_via_ant ('false') falls back to the legacy fetch path (the rollback).
+  AGENT_APPLY_VIA_ANT: ${{ github.event.inputs.apply_via_ant == 'false' && '0' || '1' }}
   ANT_VERSION: "1.10.0"
 
 jobs:
