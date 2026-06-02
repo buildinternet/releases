@@ -504,44 +504,12 @@ function feedItemUrl(item: { url?: string | null; id?: string | null }): string 
   return undefined;
 }
 
-const MEDIA_RSS_NAMESPACE_URI = "http://search.yahoo.com/mrss/";
-
-/** Minimal slice of @rowanmanning/feed-parser's xml `Element` we reach into. */
-interface MediaRssElement {
-  readonly namespaceUri: string | null;
-  readonly innerHtml: string;
-  findElementsWithName(name: string): MediaRssElement[];
-}
-
-/**
- * Recover a body from Media RSS `<media:group><media:description>`. YouTube
- * channel/playlist feeds (and some podcast feeds) put the human-readable body
- * there rather than in Atom `<content>`/`<summary>` or RSS `<description>`.
- * The parser surfaces media:* only as enclosures, so `item.content` /
- * `item.description` come back null and the release body would be empty.
- * Scoped to the Media RSS namespace so a coincidentally-named `<group>` /
- * `<description>` from another vocabulary can't leak in. Returns inner HTML
- * (entities intact) so it flows through `htmlToMarkdown` like any other body.
- */
-function mediaRssDescriptionHtml(item: unknown): string | undefined {
-  const entry = (item as { element?: MediaRssElement | null }).element;
-  if (!entry) return undefined;
-  const isMediaRss = (el: MediaRssElement) => el.namespaceUri === MEDIA_RSS_NAMESPACE_URI;
-  for (const group of entry.findElementsWithName("group").filter(isMediaRss)) {
-    const html = group.findElementsWithName("description").find(isMediaRss)?.innerHtml.trim();
-    if (html) return html;
-  }
-  return undefined;
-}
-
 export function parseRss(xml: string): RawRelease[] {
   const releases: RawRelease[] = [];
   for (const item of libParseFeed(xml).items) {
     if (!item.title) continue;
     const hasDistinctBody = Boolean(item.content && item.content.trim().length > 0);
-    // Fall back to <media:group><media:description> (YouTube et al.) when the
-    // standard Atom/RSS body fields are empty; a real <content> still wins.
-    const body = (item.content ?? item.description ?? "") || mediaRssDescriptionHtml(item) || "";
+    const body = item.content ?? item.description ?? "";
     const dateRaw = item.updated ?? item.published;
     const categories = item.categories
       .map((c) => c.label ?? c.term)
