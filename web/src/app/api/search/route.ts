@@ -21,13 +21,17 @@ export async function GET(req: NextRequest) {
   const limit =
     Number.isFinite(limitParam) && limitParam > 0 ? Math.min(limitParam, MAX_LIMIT) : 20;
   const offset = Number.isFinite(offsetParam) && offsetParam >= 0 ? offsetParam : 0;
+  // Forwarded verbatim to /v1/search; the API validates the format (ISO or
+  // relative shorthand) and 400s on bad input. The client only ever sends a
+  // known-good preset shorthand.
+  const since = req.nextUrl.searchParams.get("since") ?? undefined;
 
   if (!q.trim()) {
     return NextResponse.json(emptyResults(q));
   }
 
   try {
-    const results = await api.search(q, limit, offset);
+    const results = await api.search(q, limit, offset, since);
     return NextResponse.json(results);
   } catch {
     // Mirror the search page's server fallback: an empty result set rather

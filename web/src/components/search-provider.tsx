@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { useDebounced } from "@/hooks/use-debounced";
 import type { UnifiedSearchResponse } from "@/lib/api";
+import { DEFAULT_RANGE, rangeSince, type SearchRangeKey } from "@/lib/search-range";
 
 type SearchContextValue = {
   /** Live input text — the single source of truth for every search input. */
@@ -17,6 +18,10 @@ type SearchContextValue = {
   committedQuery: string;
   /** Latest results, or `null` for the empty state. */
   results: UnifiedSearchResponse | null;
+  /** Active timeframe filter key. */
+  range: SearchRangeKey;
+  /** Change the timeframe filter; re-runs the search immediately. */
+  setRange: (value: SearchRangeKey) => void;
 };
 
 const SearchContext = createContext<SearchContextValue | null>(null);
@@ -59,34 +64,44 @@ function clearPendingQuery(): void {
   pendingQuery = null;
 }
 
-function syncUrl(value: string): void {
+function syncUrl(value: string, range: SearchRangeKey): void {
   const trimmed = value.trim();
-  const url = trimmed ? `/search?q=${encodeURIComponent(trimmed)}` : "/search";
-  // Shallow URL update: keeps `/search?q=` shareable and the back/forward URL
-  // honest WITHOUT a Next navigation or RSC fetch. Preserving the existing
-  // history state object keeps the App Router's own router state intact.
+  const params = new URLSearchParams();
+  if (trimmed) params.set("q", trimmed);
+  // Omit the default so the common past-year case keeps a clean URL; any other
+  // window (incl. "any") is written explicitly so deep links restore it.
+  if (range !== DEFAULT_RANGE) params.set("range", range);
+  const qs = params.toString();
+  const url = qs ? `/search?${qs}` : "/search";
+  // Shallow URL update: keeps `/search?q=&range=` shareable and the
+  // back/forward URL honest WITHOUT a Next navigation or RSC fetch. Preserving
+  // the existing history state object keeps the App Router's own router state
+  // intact.
   window.history.replaceState(window.history.state, "", url);
 }
 
 export function SearchProvider({
   initialQuery,
   initialResults,
+  initialRange,
   children,
 }: {
   initialQuery: string;
   initialResults: UnifiedSearchResponse | null;
+  initialRange: SearchRangeKey;
   children: React.ReactNode;
 }) {
   // Seed from the cross-page handoff when present (header launcher → /search),
   // otherwise from the server-provided query (deep link / hard load).
   const [query, setQueryState] = useState(() => peekPendingQuery() ?? initialQuery);
   const [results, setResults] = useState<UnifiedSearchResponse | null>(initialResults);
+  const [range, setRangeState] = useState<SearchRangeKey>(initialRange);
   const debouncedQuery = useDebounced(query, DEBOUNCE_MS);
 
   const abortRef = useRef<AbortController | null>(null);
   const seededRef = useRef(false);
 
-  const runSearch = useCallback((value: string) => {
+  const runSearch = useCallback((value: string, since?: string) => {
     // Abort any in-flight request so a slow earlier query can never overwrite
     // the results for a newer one — this is what makes fast typing converge on
     // the latest query instead of freezing on a stale one.
@@ -102,7 +117,8 @@ export function SearchProvider({
     const controller = new AbortController();
     abortRef.current = controller;
 
-    fetch(`/api/search?q=${encodeURIComponent(trimmed)}&limit=20`, {
+    const sinceParam = since ? `&since=${encodeURIComponent(since)}` : "";
+    fetch(`/api/search?q=${encodeURIComponent(trimmed)}&limit=20${sinceParam}`, {
       signal: controller.signal,
     })
       .then((res) => (res.ok ? (res.json() as Promise<UnifiedSearchResponse>) : null))
@@ -115,6 +131,7 @@ export function SearchProvider({
   }, []);
 
   const setQuery = useCallback((value: string) => setQueryState(value), []);
+  const setRange = useCallback((value: SearchRangeKey) => setRangeState(value), []);
 
   // React to the (debounced) query: refresh results and sync the URL. The first
   // run is the mount seed — when the server already rendered results for the
@@ -127,14 +144,16 @@ export function SearchProvider({
       clearPendingQuery();
       if (initialResults !== null && !wasHandoff) return;
     }
-    runSearch(debouncedQuery);
-    syncUrl(debouncedQuery);
-  }, [debouncedQuery, initialResults, runSearch]);
+    runSearch(debouncedQuery, rangeSince(range));
+    syncUrl(debouncedQuery, range);
+  }, [debouncedQuery, range, initialResults, runSearch]);
 
   useEffect(() => () => abortRef.current?.abort(), []);
 
   return (
-    <SearchContext.Provider value={{ query, setQuery, committedQuery: debouncedQuery, results }}>
+    <SearchContext.Provider
+      value={{ query, setQuery, committedQuery: debouncedQuery, results, range, setRange }}
+    >
       {children}
     </SearchContext.Provider>
   );
