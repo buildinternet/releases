@@ -227,6 +227,55 @@ describe("parseAtom", () => {
     expect(releases[0].content).toContain("Body of the first essay");
     expect(releases[1].title).toBe("Second Essay");
   });
+
+  // YouTube playlist/channel feeds carry the human-readable body in
+  // `<media:group><media:description>` rather than Atom <content>/<summary>.
+  // @rowanmanning/feed-parser only surfaces media:* as enclosures, so
+  // item.content/item.description come back null and the body ends up empty.
+  const YT_MEDIA_DESC = `<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns:yt="http://www.youtube.com/xml/schemas/2015" xmlns:media="http://search.yahoo.com/mrss/" xmlns="http://www.w3.org/2005/Atom">
+  <entry>
+    <id>yt:video:abc123</id>
+    <yt:videoId>abc123</yt:videoId>
+    <title>Fin Product Updates | March 2026</title>
+    <link rel="alternate" href="https://www.youtube.com/watch?v=abc123"/>
+    <published>2026-05-21T15:28:11+00:00</published>
+    <updated>2026-05-22T00:00:00+00:00</updated>
+    <media:group>
+      <media:title>Fin Product Updates | March 2026</media:title>
+      <media:content url="https://www.youtube.com/v/abc123?version=3" type="application/x-shockwave-flash" width="640" height="390"/>
+      <media:thumbnail url="https://i4.ytimg.com/vi/abc123/hqdefault.jpg" width="480" height="360"/>
+      <media:description>Over the past month we've delivered complete control over your conversation quality in Monitors and launched Fin Apex 1.0.</media:description>
+    </media:group>
+  </entry>
+</feed>`;
+
+  it("recovers the body from <media:group><media:description> when content/summary are absent (YouTube)", () => {
+    const releases = parseAtom(YT_MEDIA_DESC);
+    expect(releases).toHaveLength(1);
+    expect(releases[0].content).toContain("complete control over your conversation quality");
+    expect(releases[0].content).toContain("Fin Apex 1.0");
+    // No distinct <content> body — this is a summary-grade field.
+    expect(releases[0].contentFromSummary).toBe(true);
+  });
+
+  it("prefers a real <content> body over media:description when both are present", () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns:media="http://search.yahoo.com/mrss/" xmlns="http://www.w3.org/2005/Atom">
+  <entry>
+    <title>Has real content</title>
+    <link rel="alternate" href="https://example.com/x"/>
+    <content type="html">&lt;p&gt;The canonical body wins&lt;/p&gt;</content>
+    <media:group>
+      <media:description>media description should be ignored here</media:description>
+    </media:group>
+  </entry>
+</feed>`;
+    const releases = parseAtom(xml);
+    expect(releases[0].content).toContain("The canonical body wins");
+    expect(releases[0].content).not.toContain("should be ignored");
+    expect(releases[0].contentFromSummary).toBe(false);
+  });
 });
 
 // ── JSON Feed parsing ──────────────────────────────────────────────
