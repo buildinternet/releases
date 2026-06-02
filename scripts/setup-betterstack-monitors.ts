@@ -4,9 +4,10 @@
 // Provisions the v1 uptime monitors for the Releases status page in Better Stack
 // (Uptime API v2) and attaches them to the existing public status page.
 //
-// Idempotent: monitors are matched by URL and status-page resources by monitor
-// id, so re-running converges the account to the config below instead of
-// creating duplicates. Edit MONITORS / COMMON and re-run to update in place.
+// Idempotent: monitors are matched by name (pronounceable_name) and status-page
+// resources by monitor id, so re-running converges the account to the config
+// below instead of creating duplicates. Edit MONITORS / COMMON and re-run to
+// update in place — a monitor's URL can be repointed without orphaning it.
 //
 // What it manages (monitors are matched by name, so a URL can be repointed in
 // place without orphaning the old monitor):

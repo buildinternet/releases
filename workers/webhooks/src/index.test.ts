@@ -95,6 +95,7 @@ describe("fetch handler (health + robots)", () => {
   it("serves a deny-all robots.txt", async () => {
     const res = await worker.fetch(new Request("https://webhooks.releases.sh/robots.txt"));
     expect(res.status).toBe(200);
+    expect(res.headers.get("X-Robots-Tag")).toBe("noindex, nofollow");
     expect(await res.text()).toContain("Disallow: /");
   });
 

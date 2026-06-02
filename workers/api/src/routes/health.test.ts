@@ -36,6 +36,8 @@ describe("GET /health", () => {
   it("returns 503 when D1 is unreachable", async () => {
     const res = await appWith(failDb)("/health");
     expect(res.status).toBe(503);
+    expect(res.headers.get("X-Robots-Tag")).toBe("noindex, nofollow");
+    expect(res.headers.get("Cache-Control")).toBe("no-store");
     const body = (await res.json()) as { ok?: boolean };
     expect(body.ok).toBe(false);
   });
