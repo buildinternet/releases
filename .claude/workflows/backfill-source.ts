@@ -170,7 +170,6 @@ const WRITE_SCHEMA = {
   additionalProperties: false,
   properties: {
     written: { type: "number" },
-    chunks: { type: "number" },
     errors: { type: "array", items: { type: "string" } },
   },
   required: ["written"],
@@ -227,7 +226,9 @@ const slugForDir = String(SOURCE)
 // ── Phase: Preflight ─────────────────────────────────────────────────────────
 phase("Preflight");
 const resolved = await agent(
-  `Resolve the Releases source "${SOURCE}". Run \`releases admin source get ${SOURCE} --json\` (it may be a slug, src_ id, or http(s) URL — if already a URL, use it directly and still resolve the slug). Return the canonical human URL, the source slug, and org slug.`,
+  `Resolve the Releases source "${SOURCE}" and return its identifiers.
+Run \`releases admin source get ${SOURCE} --json\`. SOURCE may be a human slug, a typed \`src_…\` id, or an http(s) URL — if it is a URL and the command can't resolve it directly, look it up via \`releases lookup domain <domain> --json\` or \`releases admin source list --json\` and match the URL.
+Return: the typed \`src_…\` id (REQUIRED — the batch write needs it; the human slug 400s on the bare path), the canonical human URL, the source slug, and the org slug.`,
   {
     label: "resolve-source",
     phase: "Preflight",
@@ -236,23 +237,24 @@ const resolved = await agent(
       type: "object",
       additionalProperties: false,
       properties: {
+        id: { type: "string" },
         url: { type: "string" },
         slug: { type: "string" },
         org: { type: ["string", "null"] },
       },
-      required: ["url", "slug"],
+      required: ["id", "url", "slug"],
     },
   },
 );
-if (!resolved || !resolved.url || !resolved.slug) {
-  log("preflight: could not resolve source");
+if (!resolved || !resolved.id || !resolved.url || !resolved.slug) {
+  log("preflight: could not resolve source (need typed src_ id + url + slug)");
   return { status: "error", error: "unresolved source" };
 }
 
 let verdict = "unknown",
   sitemaps = [],
   attempt = 0,
-  decision;
+  decision = { action: "retry" };
 do {
   attempt++;
   const pf = await agent(
@@ -294,7 +296,7 @@ const WE_STARTED_RUN = !!(runInfo && runInfo.started);
 // ── Phase: Map ───────────────────────────────────────────────────────────────
 phase("Map");
 const known = await agent(
-  `List the release URLs already ingested for source "${resolved.slug}" so we skip them. Run \`releases tail ${resolved.slug} --json\` and return the array of release \`url\` values (\`[]\` if none).`,
+  `List the release URLs ALREADY ingested for source "${resolved.slug}" so we don't re-extract them. Get as complete a list as the tooling allows — \`releases tail ${resolved.slug}\` only shows the most recent rows, so prefer a high limit / the list API (e.g. \`releases tail ${resolved.slug} --json --limit 500\`, falling back to whatever the command accepts). Return the array of release \`url\` values, omitting any null/empty urls (\`[]\` if none).`,
   {
     label: "known-urls",
     phase: "Map",
@@ -313,8 +315,8 @@ const mapped = await agent(
   `Map the changelog at ${resolved.url} into per-release detail-page URLs.
 1. Classify shape: \`releases admin discovery evaluate ${resolved.url} --json\` → read pageStructure (single-page | index | unknown).
 2. single-page → return structure "single-page", pages=[${JSON.stringify(resolved.url)}] (it is entry-split during extraction).
-3. index/unknown → enumerate per-release detail URLs. Prefer these sitemaps filtered to the changelog path: ${JSON.stringify(sitemaps)}. If none usable, fetch ${resolved.url} and parse the index HTML for per-release links. Order newest-first if discernible.
-Return the structure and the FULL discovered list (do not cap — the workflow caps).`,
+3. index/unknown → enumerate per-release detail URLs. Prefer these sitemaps filtered to the changelog path: ${JSON.stringify(sitemaps)}. If none usable, fetch ${resolved.url} and parse the index HTML for per-release links.
+Order the list STRICTLY newest-first — the workflow's window cap keeps the FIRST \`maxReleases\` entries and skips the rest, so wrong ordering silently drops the newest releases. Return the structure and the FULL discovered list (do not cap — the workflow caps).`,
   { label: "map-pages", phase: "Map", model: "sonnet", schema: MAP_SCHEMA },
 );
 const structure = (mapped && mapped.structure) || "unknown";
@@ -347,14 +349,20 @@ const allRecords = [];
 let done = 0,
   deferredForBudget = 0;
 if (structure === "single-page") {
-  const r = await agent(extractPrompt(targets[0] || resolved.url, true), {
-    label: "extract:single",
-    phase: "Extract",
-    model: EXTRACT_MODEL,
-    schema: RECORDS_SCHEMA,
-  });
-  if (r && Array.isArray(r.records)) allRecords.push(...r.records);
-  done = 1;
+  const gate = budgetGate(budget.total, budget.remaining(), PER_WAVE_RESERVE, 0, 1);
+  if (gate.stop) {
+    log(gate.logLine);
+    deferredForBudget = 1;
+  } else {
+    const r = await agent(extractPrompt(targets[0] || resolved.url, true), {
+      label: "extract:single",
+      phase: "Extract",
+      model: EXTRACT_MODEL,
+      schema: RECORDS_SCHEMA,
+    });
+    if (r && Array.isArray(r.records)) allRecords.push(...r.records);
+    done = 1;
+  }
 } else {
   for (let i = 0; i < targets.length; i += WAVE) {
     const gate = budgetGate(
@@ -396,7 +404,7 @@ if (kept.length) {
   const writeRes = await agent(
     `POST these ${kept.length} already-deduped+cleaned release records to the Releases batch upsert for source "${resolved.slug}". They are pre-split into ${batches.length} chunk(s) (≤${CHUNK_SIZE} each — the D1 100-bind limit). POST each chunk as its own request, writing it to a temp file first:
 \`\`\`
-curl -sS -X POST "$RELEASES_API_URL/v1/sources/${resolved.slug}/releases/batch" -H "Authorization: Bearer $RELEASES_API_KEY" -H "Content-Type: application/json" -d @chunk.json
+curl -sS -X POST "$RELEASES_API_URL/v1/sources/${resolved.id}/releases/batch" -H "Authorization: Bearer $RELEASES_API_KEY" -H "Content-Type: application/json" -d @chunk.json
 \`\`\`
 Each request body is { "releases": [ ...one chunk... ] }. Report how many were written and any non-2xx responses.
 CHUNKS_JSON (an array of chunks; POST each element verbatim, do not alter or re-chunk): ${JSON.stringify(batches)}`,
@@ -435,7 +443,7 @@ const rep = await agent(
   `Write the maintenance run summary for this backfill.
 Target file: ${RUN_DIR ? RUN_DIR + "/summary.md" : "<run dir from `releases admin work status --json`>/summary.md"}
 Follow docs/architecture/maintenance-workspace.md's summary.md template (status, per-target counts table, cost, what changed, findings). Use these numbers VERBATIM (do not invent): ${JSON.stringify(summaryInputs)}.
-Cost line, exactly: "${spentTokens} output tokens this turn (budget.spent()); session sub-agent tokens, no managed-agent bill." Stamp the date via \`date -u +%FT%TZ\`. Surface data-quality findings (empty content, thin pages, deferred-for-budget pages, write errors).
+Cost line, exactly: "${spentTokens} output tokens this turn (budget.spent(), excludes this summary write); session sub-agent tokens, no managed-agent bill." Stamp the date via \`date -u +%FT%TZ\`. Surface data-quality findings (empty content, thin pages, deferred-for-budget pages, write errors).
 ${WE_STARTED_RUN ? "Then run `releases admin work end` (this run started it)." : "Do NOT run `releases admin work end` — a parent sweep owns this run."}
 Return the absolute report path.`,
   {

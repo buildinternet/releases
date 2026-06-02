@@ -61,6 +61,7 @@ for (const source of SOURCES) {
 // ── Phase: Report ────────────────────────────────────────────────────────────
 phase("Report");
 const ok = results.filter((r) => r && (r.status === "completed" || r.status === "dry-run")).length;
+const sweepStatus = ok === 0 ? "failed" : ok < SOURCES.length ? "partial" : "completed";
 const rep = await agent(
   `Write a cross-run sweep report to ~/.releases/work/reports/<date>-backfill-sweep.md using docs/architecture/maintenance-workspace.md's report template (pass-rate + cost table + findings). Stamp <date> via \`date -u +%F\`.
 Per-source results (use verbatim): ${JSON.stringify(results)}.
@@ -78,7 +79,7 @@ Then run \`releases admin work end\` to close the sweep's run. Return the absolu
   },
 );
 return {
-  status: "completed",
+  status: sweepStatus,
   sources: SOURCES.length,
   succeeded: ok,
   reportPath: (rep && rep.reportPath) || null,
