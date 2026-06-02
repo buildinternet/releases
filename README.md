@@ -34,7 +34,7 @@ This monorepo publishes a single Claude Code plugin named `releases-dev` (market
 The plugin bundles:
 
 - **MCP tools** — search releases, inspect orgs/products/sources, read stored CHANGELOGs (via `mcp.releases.sh`)
-- **Skills** — every skill in `src/agent/skills/`, including the 4 monorepo-only operator skills
+- **Skills** — every skill in `src/agent/skills/`, including the 5 monorepo-only operator skills
 - **Agents** — `discovery`, `worker`, and the monorepo-only `grader` subagent
 - **Commands** — `/releases <product> [query]` for quick lookups
 

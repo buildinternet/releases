@@ -9,7 +9,7 @@
       "name": "releases-dev",
       "source": "./",
       "description": "Monorepo developer plugin for buildinternet/releases. Bundles every skill in src/agent/skills/, the discovery/worker/grader subagents, the /releases command, and the hosted MCP connection. Use this when working in the monorepo; end users should install `releases` and `releases-admin` from the buildinternet/releases-cli marketplace instead.",
-      "version": "0.3.0",
+      "version": "0.4.0",
       "author": {
         "name": "Build Internet"
       },
@@ -20,6 +20,7 @@
         "./src/agent/skills/finding-changelogs",
         "./src/agent/skills/generating-release-content",
         "./src/agent/skills/grouping-releases",
+        "./src/agent/skills/local-ingest",
         "./src/agent/skills/maintaining-orgs",
         "./src/agent/skills/managing-sources",
         "./src/agent/skills/parsing-changelogs",
