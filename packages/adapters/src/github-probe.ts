@@ -27,6 +27,9 @@ export interface ProbeResult {
   // user typed in the coordinate. Null when the repo was not found.
   ownerLogin: string | null;
   repoName: string | null;
+  // GitHub stargazer count from the /repos response. Null when the repo was
+  // not found or the field was absent.
+  stargazersCount: number | null;
 }
 
 export class ProbeRateLimitError extends Error {
@@ -92,6 +95,7 @@ export async function probeRepo(env: ProbeEnv, owner: string, repo: string): Pro
       defaultBranch: null,
       ownerLogin: null,
       repoName: null,
+      stargazersCount: null,
     };
   }
   const repoBody = (await repoRes.json()) as {
@@ -99,6 +103,7 @@ export async function probeRepo(env: ProbeEnv, owner: string, repo: string): Pro
     default_branch?: string;
     name?: string;
     owner?: { login?: string };
+    stargazers_count?: number;
   };
   const ownerLogin = repoBody.owner?.login ?? null;
   const repoName = repoBody.name ?? null;
@@ -116,6 +121,7 @@ export async function probeRepo(env: ProbeEnv, owner: string, repo: string): Pro
       defaultBranch: repoBody.default_branch ?? null,
       ownerLogin,
       repoName,
+      stargazersCount: repoBody.stargazers_count ?? null,
     };
   }
 
@@ -134,5 +140,6 @@ export async function probeRepo(env: ProbeEnv, owner: string, repo: string): Pro
     defaultBranch: repoBody.default_branch ?? null,
     ownerLogin,
     repoName,
+    stargazersCount: repoBody.stargazers_count ?? null,
   };
 }
