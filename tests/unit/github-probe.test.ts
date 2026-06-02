@@ -42,6 +42,7 @@ describe("probeRepo", () => {
       defaultBranch: "main",
       ownerLogin: null,
       repoName: null,
+      stargazersCount: null,
     });
   });
 
