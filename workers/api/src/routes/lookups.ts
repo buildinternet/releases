@@ -271,6 +271,8 @@ export async function runLookup(
           discovery: "on_demand",
           isHidden: true,
           metadata: newMeta,
+          stargazersCount: probe.stargazersCount,
+          starsFetchedAt: probe.stargazersCount != null ? new Date().toISOString() : null,
         })
         .returning();
       insertedSource = row;
@@ -419,7 +421,16 @@ lookupRoutes.post(
         // No ExecutionContext in test environments — embedding is best-effort.
       }
     }
-    return c.json(result);
+    // Map stargazersCount → stars on the wire shape so it matches LookupSourceSchema.
+    // Destructure the internal column out so the camelCase `stargazersCount` never
+    // leaks through the looseObject schema onto this public response.
+    const wireResult = result.source
+      ? (() => {
+          const { stargazersCount, ...sourceForWire } = result.source;
+          return { ...result, source: { ...sourceForWire, stars: stargazersCount ?? null } };
+        })()
+      : result;
+    return c.json(wireResult);
   },
 );
 

@@ -455,6 +455,8 @@ sourceRoutes.get(
       nextFetchAfter: src.next_fetch_after ?? null,
       medianGapDays: src.median_gap_days ?? null,
       lastRetieredAt: src.last_retiered_at ?? null,
+      stars: src.stargazers_count ?? null,
+      starsFetchedAt: src.stars_fetched_at ?? null,
     }));
 
     if (wantsEnvelope && totalItems != null) {
@@ -2155,6 +2157,8 @@ export async function buildSourceDetailPayload(
     discovery: src.discovery ?? "curated",
     metadata: src.metadata ?? "{}",
     kind: src.kind ?? null,
+    stars: src.stargazersCount ?? null,
+    starsFetchedAt: src.starsFetchedAt ?? null,
     releaseCount: totalItems,
     releasesLast30Days,
     avgReleasesPerWeek,

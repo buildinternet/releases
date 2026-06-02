@@ -34,6 +34,8 @@ export type SourceListRow = {
   next_fetch_after: string | null;
   median_gap_days: number | null;
   last_retiered_at: string | null;
+  stargazers_count: number | null;
+  stars_fetched_at: string | null;
   org_slug: string | null;
   org_name: string | null;
   product_slug: string | null;
