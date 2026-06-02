@@ -60,10 +60,14 @@ for (const source of SOURCES) {
 
 // ── Phase: Report ────────────────────────────────────────────────────────────
 phase("Report");
-const ok = results.filter((r) => r && (r.status === "completed" || r.status === "dry-run")).length;
-const sweepStatus = ok === 0 ? "failed" : ok < SOURCES.length ? "partial" : "completed";
+// partial-budget is a resumable cost-gate stop, not a failure — count it as a success.
+const SUCCESS = new Set(["completed", "dry-run", "partial-budget"]);
+const ok = results.filter((r) => r && SUCCESS.has(r.status)).length;
+const budgetStopped = results.filter((r) => r && r.status === "partial-budget").length;
+const sweepStatus = ok === 0 ? "failed" : ok >= SOURCES.length ? "completed" : "partial";
 const rep = await agent(
   `Write a cross-run sweep report to ~/.releases/work/reports/<date>-backfill-sweep.md using docs/architecture/maintenance-workspace.md's report template (pass-rate + cost table + findings). Stamp <date> via \`date -u +%F\`.
+${budgetStopped} source(s) stopped on the budget gate (status "partial-budget") — call these out as resumable, not failed.
 Per-source results (use verbatim): ${JSON.stringify(results)}.
 Then run \`releases admin work end\` to close the sweep's run. Return the absolute report path.`,
   {
@@ -82,6 +86,7 @@ return {
   status: sweepStatus,
   sources: SOURCES.length,
   succeeded: ok,
+  budgetStopped,
   reportPath: (rep && rep.reportPath) || null,
   results,
 };

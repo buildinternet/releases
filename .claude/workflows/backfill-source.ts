@@ -345,53 +345,35 @@ if (DRY) {
 
 // ── Phase: Extract ───────────────────────────────────────────────────────────
 phase("Extract");
+// One loop for both shapes: a single-page changelog is just one entry-split page
+// (step 1), an index is waves of WAVE. `parallel()` over a 1-element array is a
+// no-op, so the budget gate + accumulate logic lives in exactly one place.
 const allRecords = [];
+const singlePage = structure === "single-page";
+const step = singlePage ? 1 : WAVE;
 let done = 0,
   deferredForBudget = 0;
-if (structure === "single-page") {
-  const gate = budgetGate(budget.total, budget.remaining(), PER_WAVE_RESERVE, 0, 1);
+for (let i = 0; i < targets.length; i += step) {
+  const gate = budgetGate(budget.total, budget.remaining(), PER_WAVE_RESERVE, done, targets.length);
   if (gate.stop) {
     log(gate.logLine);
-    deferredForBudget = 1;
-  } else {
-    const r = await agent(extractPrompt(targets[0] || resolved.url, true), {
-      label: "extract:single",
-      phase: "Extract",
-      model: EXTRACT_MODEL,
-      schema: RECORDS_SCHEMA,
-    });
-    if (r && Array.isArray(r.records)) allRecords.push(...r.records);
-    done = 1;
+    deferredForBudget = targets.length - done;
+    break;
   }
-} else {
-  for (let i = 0; i < targets.length; i += WAVE) {
-    const gate = budgetGate(
-      budget.total,
-      budget.remaining(),
-      PER_WAVE_RESERVE,
-      done,
-      targets.length,
-    );
-    if (gate.stop) {
-      log(gate.logLine);
-      deferredForBudget = targets.length - done;
-      break;
-    }
-    const wave = targets.slice(i, i + WAVE);
-    const results = await parallel(
-      wave.map(
-        (u) => () =>
-          agent(extractPrompt(u, false), {
-            label: `extract:${short(u)}`,
-            phase: "Extract",
-            model: EXTRACT_MODEL,
-            schema: RECORDS_SCHEMA,
-          }),
-      ),
-    );
-    for (const r of results) if (r && Array.isArray(r.records)) allRecords.push(...r.records);
-    done += wave.length;
-  }
+  const wave = targets.slice(i, i + step);
+  const results = await parallel(
+    wave.map(
+      (u) => () =>
+        agent(extractPrompt(u, singlePage), {
+          label: `extract:${short(u)}`,
+          phase: "Extract",
+          model: EXTRACT_MODEL,
+          schema: RECORDS_SCHEMA,
+        }),
+    ),
+  );
+  for (const r of results) if (r && Array.isArray(r.records)) allRecords.push(...r.records);
+  done += wave.length;
 }
 
 // ── Phase: Write ─────────────────────────────────────────────────────────────
