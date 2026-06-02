@@ -15,6 +15,12 @@ on:
       - src/shared/coordinator-prompt.ts
       - src/agent/skills/**
       - scripts/sync-agent-skills.ts
+      # CATEGORIES is embedded verbatim in every agent's system prompt, so a
+      # taxonomy change shifts the deployed prompt even when no prompt builder
+      # moved. Without this, a category-only change re-renders the committed
+      # managed-agents/*.yaml (the CI drift gate catches it) but leaves the live
+      # agents' embedded list stale until the next prompt/tool deploy.
+      - packages/core/src/categories.ts
   workflow_dispatch:
     inputs:
       environment:
