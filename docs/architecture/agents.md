@@ -34,6 +34,22 @@ The `deploy-managed-agents.yml` workflow exposes the same selector as a `workflo
 
 **Follow-up (not yet done):** there's no CLI/API surface to trigger a staging discovery session against `releases-discovery-staging` — the worker is service-bound from `releases-api-staging` but we haven't threaded an `--env staging` flag through the CLI's onboard/update commands. Track via issue #447.
 
+### Version-controlled definitions (render + verify)
+
+The agent definitions aren't hand-authored YAML — the source of truth is TypeScript (the prompt builders, `AGENT_TOOLS`, and the per-env skill IDs), which the deploy assembles. To make that assembled state reviewable and diffable, a committed mirror lives under `managed-agents/` (`<kind>.<env>.agent.yaml`, six files = discovery/worker/coordinator × production/staging):
+
+```bash
+bun scripts/render-managed-agents.ts          # regenerate the six YAML files from source
+bun scripts/render-managed-agents.ts --check  # CI drift gate — fails if any file is stale
+bun scripts/verify-managed-agents.ts --env staging   # diff committed YAML against the LIVE agents
+```
+
+- **`render … --check`** runs in CI (`.github/workflows/ci.yml`, the `test` job). It re-renders from source and fails if the committed YAML drifted — so changing a prompt builder, a tool schema, or the category list without re-rendering is caught at PR time. Pure codegen; no network.
+- **`verify`** retrieves each live agent via `ant beta:agents retrieve` and classifies every field diff: `match`, `api-default` (server-injected toolset defaults like `configs: []` / `permission_policy` — benign), `source-ahead` (the live agent predates a merged change; a redeploy reconciles it), or `MISMATCH` (a renderer bug or unexplained live drift — the only thing that fails the run). It's an on-demand check, not a CI gate.
+- **Workspace caveat:** `ant`'s default OAuth login resolves to the Rally "Default" workspace, which holds the **staging** agents and both coordinators but not the **prod** discovery/worker agents (they live in a sibling Rally workspace, the one the CI `ANTHROPIC_API_KEY` is scoped to). Bind to that workspace — or export its API key — before running `verify --env production`, or those two agents report `UNREACHABLE`.
+
+This is a source mirror plus drift detector; applying the YAML to Anthropic still goes through `scripts/sync-agent-skills.ts`. Switching the apply path to `ant beta:agents update --version` is a separate, later step.
+
 ### Per-session cost observability
 
 After each managed-agent session ends — both successful completions and terminal failures (provider `session.error`, retries-exhausted idle) — the discovery DO retrieves the final usage envelope via `client.beta.sessions.retrieve(session.id)` (the shared `captureFinalUsage` helper) and computes a list-price USD estimate using `@releases/lib/anthropic-pricing`. The full block — `inputTokens`, `outputTokens`, `cacheWriteTokens`, `cacheReadTokens`, `model`, and `estimatedUsd` — is forwarded to StatusHub via the `session:complete` / `session:error` events and stored on `SessionState.usage`. The web `/status` page renders it under each session card with an `≈ $` qualifier. The dollar figure is from list prices (not the actual billed amount) — for ground truth use the Anthropic console or AI Gateway dashboards. Pricing constants for new models go in `packages/lib/src/anthropic-pricing.ts`. See #657.

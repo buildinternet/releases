@@ -206,6 +206,13 @@ jobs:
         # ALLOWLIST. Sub-second pure-JS check; no network, D1, or Wrangler.
         run: bun scripts/check-openapi-coverage.ts
 
+      - name: Verify managed-agent YAML is up to date
+        # Re-renders the committed managed-agents/*.agent.yaml from the prompt
+        # builders, AGENT_TOOLS, and skill IDs, and fails if any file drifted.
+        # Pure codegen — no network or API calls. Regenerate locally with:
+        #   bun scripts/render-managed-agents.ts
+        run: bun scripts/render-managed-agents.ts --check
+
       - name: Validate Claude Code plugin marketplace manifest
         # Catches schema bugs in .claude-plugin/marketplace.json before they
         # reach a user's /plugin install. --strict treats unrecognized fields
