@@ -106,11 +106,12 @@ async function api(method: string, path: string, body?: unknown): Promise<any> {
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   const text = await res.text();
-  const json = text ? JSON.parse(text) : null;
   if (!res.ok) {
+    // Parse only after confirming success — error bodies may be non-JSON
+    // (proxy HTML / plain-text 5xx), and JSON.parse would mask the status.
     throw new Error(`${method} ${path} → ${res.status}\n${text}`);
   }
-  return json;
+  return text ? JSON.parse(text) : null;
 }
 
 // Follow pagination.next, accumulating .data across pages.
@@ -195,6 +196,9 @@ async function main() {
       }
     } else if (DRY_RUN) {
       console.log(`+ would create  ${spec.publicName.padEnd(11)} (new)       ${spec.url}`);
+      // Sentinel id so the attach-phase preview below also lists this monitor.
+      // Never reaches the live attach (DRY_RUN short-circuits before Number(id)).
+      resolved.push({ spec, id: "(new)" });
     } else {
       const created = await api("POST", "/monitors", monitorBody(spec));
       const id = created.data.id;
