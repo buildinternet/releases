@@ -577,6 +577,44 @@ export function filterByKeywordAllow(
   return { kept, dropped };
 }
 
+/**
+ * Drop items whose `url` matches any deny pattern (case-insensitive regex).
+ * Built for feeds that publish localized translations of a post under a
+ * locale-suffixed URL — ClickHouse's RSS carries both `/blog/gala` and its
+ * Japanese twin `/blog/gala-jp`. A translation duplicate shares no other
+ * dedup key with its source post (`UNIQUE(source_id, url)` sees two distinct
+ * URLs), so the URL slug is the only reliable discriminator. The complement
+ * of `filterByKeywordAllow`: an allowlist keeps matches, this denylist drops
+ * them. Items with no `url` are kept — a deny rule can only fire on a positive
+ * match. Patterns are compiled defensively (try/catch) so one malformed rule
+ * can't silently wipe a feed; uncompilable and blank entries are skipped.
+ * Empty `deny` (or all-invalid) short-circuits to passthrough.
+ */
+export function filterByUrlDeny(
+  items: RawRelease[],
+  deny: readonly string[],
+): { kept: RawRelease[]; dropped: number } {
+  const patterns: RegExp[] = [];
+  for (const raw of deny) {
+    const trimmed = raw.trim();
+    if (!trimmed) continue;
+    try {
+      patterns.push(new RegExp(trimmed, "i"));
+    } catch {
+      // Skip an uncompilable pattern: a malformed rule must not drop everything.
+    }
+  }
+  if (patterns.length === 0) return { kept: items, dropped: 0 };
+  const kept: RawRelease[] = [];
+  let dropped = 0;
+  for (const item of items) {
+    const url = item.url ?? "";
+    if (url && patterns.some((re) => re.test(url))) dropped++;
+    else kept.push(item);
+  }
+  return { kept, dropped };
+}
+
 export function parseJsonFeed(json: string): RawRelease[] {
   const feed = JSON.parse(json);
   const items: Array<{

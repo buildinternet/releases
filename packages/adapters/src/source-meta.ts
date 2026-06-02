@@ -135,6 +135,20 @@ export interface SourceMetadata {
   feedKeywordAllow?: string[];
 
   /**
+   * Optional denylist of regex patterns matched case-insensitively against
+   * each feed item's `url`. Items whose URL matches any pattern are dropped
+   * before insert. Built to suppress localized translation duplicates that
+   * reuse a source post's content under a locale-suffixed URL — ClickHouse's
+   * RSS publishes every post twice, `…/blog/gala` and `…/blog/gala-jp`, and
+   * the `-jp` variant shares no other dedup key with the English original
+   * (`UNIQUE(source_id, url)` sees two distinct URLs). Set `["-jp$"]` to drop
+   * Japanese translations; add `-de$`, `-fr$`, etc. for other locales. The
+   * deny complement of `feedKeywordAllow`; applied after the allow filters.
+   * Patterns that fail to compile are ignored (a bad rule can't wipe a feed).
+   */
+  feedUrlDeny?: string[];
+
+  /**
    * When true, run each newly-parsed item through a Haiku classifier before
    * insert; items classified as marketing are inserted with `suppressed=true`
    * and `suppressedReason="marketing_classifier:<slug>"` so they stay out of

@@ -17,6 +17,7 @@ import {
   getSourceMeta,
   filterByCategoryAllow,
   filterByKeywordAllow,
+  filterByUrlDeny,
 } from "@releases/adapters/feed";
 import type { RawRelease } from "@releases/adapters/types";
 
@@ -999,6 +1000,96 @@ describe("filterByKeywordAllow", () => {
     // Models a hand-typed "changelog, " → ["changelog", " "] or a stray space.
     const { kept } = filterByKeywordAllow(items, [" ", "  changelog  "]);
     expect(kept.map((i) => i.title)).toEqual(["Discord Update - March 24, 2026 (Changelog)"]);
+  });
+});
+
+describe("filterByUrlDeny", () => {
+  // Models the ClickHouse RSS feed, which publishes every post twice: the
+  // English original (/blog/gala) and a Japanese translation at a locale-
+  // suffixed URL (/blog/gala-jp). The translation shares no other dedup key
+  // with the original, so the URL suffix is the only reliable discriminator.
+  const items: RawRelease[] = [
+    { title: "Gala on AWS", content: "", url: "https://clickhouse.com/blog/gala" },
+    { title: "Gala (JP)", content: "", url: "https://clickhouse.com/blog/gala-jp" },
+    {
+      title: "ClickHouse Release 26.5",
+      content: "",
+      url: "https://clickhouse.com/blog/clickhouse-release-26-05",
+    },
+    // A legit English slug that contains "jp"/"japan" but does NOT end in -jp.
+    {
+      title: "ClickHouse Cloud now in Google Cloud Tokyo",
+      content: "",
+      url: "https://clickhouse.com/blog/clickhouse-gcp-japan-availability",
+    },
+  ];
+
+  it("drops items whose URL matches a deny pattern, keeps the rest", () => {
+    const { kept, dropped } = filterByUrlDeny(items, ["-jp$"]);
+    expect(kept.map((i) => i.title)).toEqual([
+      "Gala on AWS",
+      "ClickHouse Release 26.5",
+      "ClickHouse Cloud now in Google Cloud Tokyo",
+    ]);
+    expect(dropped).toBe(1);
+  });
+
+  it("anchors with $ so a mid-slug 'jp'/'japan' is not dropped", () => {
+    // `-jp$` matches only the trailing locale suffix, not `-japan-availability`.
+    const { kept } = filterByUrlDeny([items[3]!], ["-jp$"]);
+    expect(kept).toHaveLength(1);
+  });
+
+  it("supports multiple locale patterns", () => {
+    const multi: RawRelease[] = [
+      { title: "en", content: "", url: "https://x.test/blog/a" },
+      { title: "jp", content: "", url: "https://x.test/blog/a-jp" },
+      { title: "de", content: "", url: "https://x.test/blog/a-de" },
+    ];
+    const { kept, dropped } = filterByUrlDeny(multi, ["-jp$", "-de$"]);
+    expect(kept.map((i) => i.title)).toEqual(["en"]);
+    expect(dropped).toBe(2);
+  });
+
+  it("matches case-insensitively", () => {
+    const { kept } = filterByUrlDeny(
+      [{ title: "JP", content: "", url: "https://x.test/blog/a-JP" }],
+      ["-jp$"],
+    );
+    expect(kept).toHaveLength(0);
+  });
+
+  it("keeps items with no URL (a deny rule only fires on a positive match)", () => {
+    const { kept } = filterByUrlDeny([{ title: "No URL", content: "" }], ["-jp$"]);
+    expect(kept).toHaveLength(1);
+  });
+
+  it("treats an empty denylist as passthrough", () => {
+    const { kept, dropped } = filterByUrlDeny(items, []);
+    expect(kept).toEqual(items);
+    expect(dropped).toBe(0);
+  });
+
+  it("ignores whitespace-only / empty patterns instead of dropping everything", () => {
+    expect(filterByUrlDeny(items, [""]).kept).toEqual(items);
+    expect(filterByUrlDeny(items, ["   "]).kept).toEqual(items);
+  });
+
+  it("skips an uncompilable pattern instead of wiping the feed, still applying valid ones", () => {
+    // "[" is an unterminated character class — a bad rule must not drop everything.
+    const { kept, dropped } = filterByUrlDeny(items, ["[", "-jp$"]);
+    expect(kept.map((i) => i.title)).toEqual([
+      "Gala on AWS",
+      "ClickHouse Release 26.5",
+      "ClickHouse Cloud now in Google Cloud Tokyo",
+    ]);
+    expect(dropped).toBe(1);
+  });
+
+  it("treats an all-invalid denylist as passthrough", () => {
+    const { kept, dropped } = filterByUrlDeny(items, ["["]);
+    expect(kept).toEqual(items);
+    expect(dropped).toBe(0);
   });
 });
 
