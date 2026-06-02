@@ -92,10 +92,12 @@ Each record must match the batch schema (see Step 5) and the parity rules.
 POST records to the batch endpoint in chunks (~50/request keeps requests bounded; the handler does the D1 bind-limit chunking server-side):
 
 ```bash
-# Org-scoped (preferred) or bare-slug form, both hit the same handler:
-#   POST $RELEASES_API_URL/v1/orgs/:orgSlug/sources/:sourceSlug/releases/batch
-#   POST $RELEASES_API_URL/v1/sources/:slug/releases/batch
-curl -sS -X POST "$RELEASES_API_URL/v1/sources/<slug>/releases/batch" \
+# Use the org-scoped path. The bare /v1/sources/:slug form accepts ONLY a typed
+# `src_…` id — a human slug there returns 400 bare_slug_rejected (slugs are
+# org-scoped, #690). With a typed id the bare form also works:
+#   POST $RELEASES_API_URL/v1/orgs/<orgSlug>/sources/<sourceSlug>/releases/batch
+#   POST $RELEASES_API_URL/v1/sources/<src_…>/releases/batch
+curl -sS -X POST "$RELEASES_API_URL/v1/orgs/<orgSlug>/sources/<sourceSlug>/releases/batch" \
   -H "Authorization: Bearer $RELEASES_API_KEY" \
   -H "Content-Type: application/json" \
   -d @chunk.json   # { "releases": [ … ] }
@@ -125,19 +127,19 @@ Chunking helper (reads a `records.json` array, posts in batches of 50):
 
 ```bash
 bun -e '
-const slug = process.argv[1], file = process.argv[2];
+const orgSlug = process.argv[1], sourceSlug = process.argv[2], file = process.argv[3];
 const all = JSON.parse(await Bun.file(file).text());
 const base = process.env.RELEASES_API_URL, key = process.env.RELEASES_API_KEY;
 for (let i = 0; i < all.length; i += 50) {
   const releases = all.slice(i, i + 50);
-  const res = await fetch(`${base}/v1/sources/${slug}/releases/batch`, {
+  const res = await fetch(`${base}/v1/orgs/${orgSlug}/sources/${sourceSlug}/releases/batch`, {
     method: "POST",
     headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
     body: JSON.stringify({ releases }),
   });
   console.log(`chunk ${i / 50}: ${res.status} ${(await res.text()).slice(0, 200)}`);
 }
-' <slug> records.json
+' <orgSlug> <sourceSlug> records.json
 ```
 
 ### Step 6 — Validate
