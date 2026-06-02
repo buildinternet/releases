@@ -372,13 +372,16 @@ export const api = {
       `/v1/orgs/${ref.orgSlug}/sources/${ref.sourceSlug}${qs ? `?${qs}` : ""}`,
     );
   },
-  search: (q: string, limit = 20, offset = 0) => {
+  search: (q: string, limit = 20, offset = 0, since?: string) => {
     // Coordinate-shaped queries skip the hybrid semantic rail so the API's
     // on-demand lookup fallback can fire — otherwise weakly-matched chunks
     // suppress it.
     const mode = parseCoordinate(q.trim()) ? "&mode=lexical" : "";
+    // `since` narrows release hits to a published-at window (relative
+    // shorthand resolved by the API). Omitted for "any time".
+    const sinceParam = since ? `&since=${encodeURIComponent(since)}` : "";
     return fetchApi<UnifiedSearchResponse>(
-      `/v1/search?q=${encodeURIComponent(q)}&limit=${limit}&offset=${offset}${mode}`,
+      `/v1/search?q=${encodeURIComponent(q)}&limit=${limit}&offset=${offset}${mode}${sinceParam}`,
     );
   },
   sourceActivity: (ref: { orgSlug: string; sourceSlug: string }, from?: string, to?: string) => {
