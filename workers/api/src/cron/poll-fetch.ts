@@ -1303,11 +1303,16 @@ export async function fetchOne(
 
   try {
     let rawReleases: RawRelease[];
+    let repoStars: number | null = null;
 
     if (isGitHubFetched(source, meta)) {
-      rawReleases = await fetchGitHub(source, env.GITHUB_TOKEN, {
-        repoUrl: effectiveGitHubUrl(source, meta),
-      });
+      const repoUrl = effectiveGitHubUrl(source, meta);
+      const [releases, stars] = await Promise.all([
+        fetchGitHub(source, env.GITHUB_TOKEN, { repoUrl }),
+        fetchRepoStars(repoUrl, env.GITHUB_TOKEN),
+      ]);
+      rawReleases = releases;
+      repoStars = stars;
     } else if (isAppStoreFetched(source)) {
       const coord = appStoreCoordFromSource(source);
       const listing = coord ? await resolveAppStore(coord) : null;
@@ -1584,6 +1589,15 @@ export async function fetchOne(
       }
     }
 
+    // GitHub stargazer refresh — captured in parallel with the releases fetch
+    // above; folded into the atomic success update so it runs on both the
+    // inline-cron and Workflow ingest paths.
+    const starsUpdate: Partial<{ stargazersCount: number; starsFetchedAt: string }> = {};
+    if (repoStars != null) {
+      starsUpdate.stargazersCount = repoStars;
+      starsUpdate.starsFetchedAt = new Date().toISOString();
+    }
+
     // Single D1 round-trip: insert fetch_log + update sources atomically.
     // Promise.all would issue two separate RPCs and leave either half committed
     // on a mid-flight failure. db.batch() is strictly better here — a wedged
@@ -1606,6 +1620,7 @@ export async function fetchOne(
           consecutiveErrors: 0,
           nextFetchAfter: null,
           changeDetectedAt: null,
+          ...starsUpdate,
         })
         .where(eq(sources.id, source.id)),
     ];
@@ -2067,6 +2082,31 @@ async function fetchGitHub(
       media: rel.body ? extractMediaFromMarkdown(rel.body) : undefined,
     };
   });
+}
+
+/**
+ * Best-effort GitHub stargazer count for a repo URL. One extra `/repos`
+ * call per github poll (the releases fetch hits a different endpoint).
+ * Returns null on ANY failure — a star count must never fail a release fetch.
+ */
+async function fetchRepoStars(repoUrl: string, token?: string): Promise<number | null> {
+  const match = repoUrl.match(/github\.com\/([^/]+)\/([^/]+)/);
+  if (!match) return null;
+  const [, owner, rawRepo] = match;
+  const repo = rawRepo.replace(/\.git$/, "");
+  const headers: Record<string, string> = {
+    Accept: "application/vnd.github+json",
+    "User-Agent": RELEASES_BOT_UA,
+  };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  try {
+    const res = await fetch(`https://api.github.com/repos/${owner}/${repo}`, { headers });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { stargazers_count?: number };
+    return typeof data.stargazers_count === "number" ? data.stargazers_count : null;
+  } catch {
+    return null;
+  }
 }
 
 // ── Embedding side effects ──
