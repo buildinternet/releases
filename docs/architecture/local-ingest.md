@@ -74,3 +74,7 @@ The out-of-scope AI fields stay settable, case by case:
 - MA model choice (what local-ingest avoids): `workers/discovery/src/managed-agents-session.ts`.
 - Extract libs + smoke: `packages/adapters/src/extract/`, `scripts/smoke-toolloop.ts`.
 - CLI `--local` handoff (separate repo): `buildinternet/releases-cli`, `src/cli/commands/fetch.ts`.
+
+## Backfill workflow
+
+For full-history backfills, the `backfill-source` / `backfill-sweep` dynamic Workflows (`.claude/workflows/`) wrap these same primitives in a deterministic harness: the fail-closed preflight gate, the window cap with skip-logging, the budget gate between extract waves, the known-URL dedup, and the chunked `/batch` write (by typed `src_` id) all live in JS rather than prose, so a long backfill can't silently truncate, blow its budget, or lose its place. Model-tiered — Sonnet for the two judgment phases (map, extract), Haiku for the mechanical ones (preflight, run-setup, write, validate, report). Launch them via the `backfilling-sources` skill (dry-run is the default); runs are recorded under `~/.releases/work/` via `releases admin work start`. The decision logic is unit-tested in `tests/workflows/backfill-helpers.js` and inlined into the workflow (scripts can't import); `tests/workflows/workflow-scripts.test.ts` guards the copies against drift.
