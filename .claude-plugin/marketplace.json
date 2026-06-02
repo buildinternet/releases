@@ -16,6 +16,7 @@
       "strict": false,
       "skills": [
         "./src/agent/skills/analyzing-releases",
+        "./src/agent/skills/backfilling-sources",
         "./src/agent/skills/classify-media-relevance",
         "./src/agent/skills/finding-changelogs",
         "./src/agent/skills/generating-release-content",
