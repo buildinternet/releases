@@ -320,6 +320,11 @@ export interface LatestReleaseItem {
   coverageCount?: number;
 }
 
+/** An empty unified-search payload — the shared "no results" / error fallback. */
+export function emptyResults(query: string): UnifiedSearchResponse {
+  return { query, orgs: [], catalog: [], sources: [], releases: [] };
+}
+
 export const api = {
   stats: () => fetchApi<Stats>("/v1/stats"),
   latestReleases: async (

@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
-import { Suspense } from "react";
-import { api } from "@/lib/api";
+import { api, emptyResults } from "@/lib/api";
 import { Header } from "@/components/header";
 import { SearchBar } from "@/components/search-bar";
-import { SearchResults } from "@/components/search-results";
-import { InlineCopyCode } from "@/components/inline-copy-code";
+import { SearchProvider } from "@/components/search-provider";
+import { SearchResultsLive } from "@/components/search-results-live";
+import { SearchCliHint } from "@/components/search-cli-hint";
 import type { UnifiedSearchResponse } from "@/lib/api";
 
 export const metadata: Metadata = {
@@ -13,17 +13,13 @@ export const metadata: Metadata = {
   robots: { index: false, follow: true },
 };
 
-async function SearchContent({ q }: { q?: string }) {
-  let results: UnifiedSearchResponse | null = null;
-  if (q && q.trim()) {
-    try {
-      results = await api.search(q);
-    } catch {
-      results = { query: q, orgs: [], catalog: [], sources: [], releases: [] };
-    }
+async function initialResults(q?: string): Promise<UnifiedSearchResponse | null> {
+  if (!q || !q.trim()) return null;
+  try {
+    return await api.search(q);
+  } catch {
+    return emptyResults(q);
   }
-
-  return <SearchResults query={q} results={results} />;
 }
 
 export default async function SearchPage({
@@ -32,23 +28,22 @@ export default async function SearchPage({
   searchParams: Promise<{ q?: string }>;
 }) {
   const { q } = await searchParams;
+  // Server-fetch the first page of results for deep links / no-JS / first paint.
+  // After hydration the SearchProvider takes over with client-side live search,
+  // so typing never triggers another server route navigation.
+  const results = await initialResults(q);
 
   return (
-    <div className="min-h-screen">
-      <Header />
-      <div className="max-w-2xl mx-auto px-6 pt-12 pb-12">
-        <h1 className="text-2xl font-semibold mb-4">Search</h1>
-        <SearchBar defaultValue={q} />
-        <p className="mt-2 text-[12px] text-stone-400 dark:text-stone-500">
-          From the CLI:{" "}
-          <InlineCopyCode
-            code={`npx @buildinternet/releases search "${(q?.trim() || "vercel").replace(/"/g, '\\"')}"`}
-          />
-        </p>
-        <Suspense>
-          <SearchContent q={q} />
-        </Suspense>
+    <SearchProvider initialQuery={q ?? ""} initialResults={results}>
+      <div className="min-h-screen">
+        <Header />
+        <div className="max-w-2xl mx-auto px-6 pt-12 pb-12">
+          <h1 className="text-2xl font-semibold mb-4">Search</h1>
+          <SearchBar />
+          <SearchCliHint />
+          <SearchResultsLive />
+        </div>
       </div>
-    </div>
+    </SearchProvider>
   );
 }
