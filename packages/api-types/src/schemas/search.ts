@@ -165,6 +165,7 @@ export const LookupResultPayloadSchema = z.object({
       name: z.string(),
       url: z.string(),
       discovery: z.enum(["curated", "agent", "on_demand"]),
+      stars: z.number().int().min(0).nullable().optional(),
     })
     .optional(),
   releases: z

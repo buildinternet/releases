@@ -3,6 +3,7 @@ import type { LookupResultPayload } from "@/lib/api";
 import { formatDate } from "@/lib/formatters";
 import { EXTERNAL_UGC_REL } from "@/lib/sanitize";
 import { SourceTypeIcon } from "./source-type-icon";
+import { RepoStars } from "@/components/repo-stars";
 
 /**
  * Renders the on-demand lookup rail attached to coordinate-shaped search
@@ -53,6 +54,7 @@ function LookupHeading({ query, payload }: { query: string; payload: LookupResul
             {payload.source?.name ?? query}
           </span>
           <SourceTypeIcon type="github" size={12} />
+          <RepoStars stars={payload.source?.stars} className="ml-1" />
         </div>
         {payload.source && (
           <p className="text-[12px] text-stone-500 dark:text-stone-400 mt-1">

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { RepoStars } from "@/components/repo-stars";
 import type { SourceListItem, OrgDetail } from "@/lib/api";
 import { productPath, sourceOrProductPath } from "@/lib/links";
 import { formatRelativeDate } from "@/lib/formatters";
@@ -152,6 +153,9 @@ export function SourceTable({
             >
               {source.url.replace(/^https?:\/\//, "")}
             </div>
+          )}
+          {source.type === "github" && (
+            <RepoStars stars={source.stars} className="text-[12px] mt-0.5" />
           )}
         </td>
         <td className="px-3 py-3 whitespace-nowrap">

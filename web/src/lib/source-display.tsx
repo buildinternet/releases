@@ -1,4 +1,5 @@
 import { SourceTypeIcon } from "@/components/source-type-icon";
+import { RepoStars } from "@/components/repo-stars";
 
 export function formatSourceDate(iso: string | null) {
   if (!iso) return "—";
@@ -44,7 +45,11 @@ interface SourceSidebarItem {
 }
 
 /** Sidebar row for the source URL — GitHub sources get the @org/repo handle + icon. */
-export function sourceUrlSidebarItem(source: { type: string; url: string }): SourceSidebarItem {
+export function sourceUrlSidebarItem(source: {
+  type: string;
+  url: string;
+  stars?: number | null;
+}): SourceSidebarItem {
   const ghHandle = source.type === "github" ? githubRepoHandle(source.url) : null;
   if (ghHandle) {
     return {
@@ -53,6 +58,7 @@ export function sourceUrlSidebarItem(source: { type: string; url: string }): Sou
         <span className="inline-flex items-center gap-1.5">
           <SourceTypeIcon type="github" size={13} />
           <span>{ghHandle}</span>
+          <RepoStars stars={source.stars} className="ml-1" />
         </span>
       ),
       externalLink: source.url,
