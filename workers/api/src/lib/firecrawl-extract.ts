@@ -8,6 +8,7 @@ import {
   extractFromBody,
   mapEntries,
   CLOUDFLARE_SYSTEM_PROMPT,
+  CRAWL_PAGE_SYSTEM_PROMPT,
   type ExtractDeps,
 } from "@releases/adapters/extract";
 
@@ -121,11 +122,21 @@ export async function extractFirecrawlMarkdown(
     },
   };
 
+  // Prompt selection by monitor target — the crawl-vs-scrape signal is already
+  // in hand as opts.pageUrl (set only for CRAWL monitors, where each webhook
+  // page is exactly one per-post body). For those, use the body-preserving
+  // CRAWL_PAGE_SYSTEM_PROMPT ("Do NOT summarize") so the canonical post body is
+  // stored verbatim rather than condensed. SCRAPE monitors watch a single
+  // multi-entry index page, where extracting + condensing many entries off one
+  // page is correct — keep CLOUDFLARE_SYSTEM_PROMPT. See issue #1343.
+  const isCrawlPage = !!opts.pageUrl;
   const result = await extractFromBody(
     {
       body,
-      systemPrompt: CLOUDFLARE_SYSTEM_PROMPT,
-      userMessage: `Extract all changelog/release entries from this page (source URL: ${source.url}):`,
+      systemPrompt: isCrawlPage ? CRAWL_PAGE_SYSTEM_PROMPT : CLOUDFLARE_SYSTEM_PROMPT,
+      userMessage: isCrawlPage
+        ? `Extract the release/changelog post on this page, preserving its full body verbatim (page URL: ${opts.pageUrl}):`
+        : `Extract all changelog/release entries from this page (source URL: ${source.url}):`,
       sourceUrl: source.url,
       fetchUrl: source.url,
     },

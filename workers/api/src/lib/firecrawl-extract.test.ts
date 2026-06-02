@@ -1,5 +1,6 @@
 import { describe, it, expect } from "bun:test";
 import type { Source } from "@buildinternet/releases-core/schema";
+import { CLOUDFLARE_SYSTEM_PROMPT, CRAWL_PAGE_SYSTEM_PROMPT } from "@releases/adapters/extract";
 import {
   extractFirecrawlMarkdown,
   extractChangelogAllWindows,
@@ -7,14 +8,18 @@ import {
 } from "./firecrawl-extract.js";
 
 // Minimal fake Anthropic client whose messages.stream() returns the expected
-// shape. `calls` records the user-message content actually sent to the model so
-// tests can assert what body (full vs. windowed) reached extraction.
+// shape. `calls` records the user-message content AND the system prompt actually
+// sent to the model so tests can assert what body (full vs. windowed) reached
+// extraction and which prompt (summarizing vs. body-preserving) was selected.
 function makeFakeAnthropicClient() {
-  const calls: Array<{ body: string }> = [];
+  const calls: Array<{ body: string; system: string }> = [];
   const client = {
     messages: {
-      stream: (args: { messages: Array<{ role: string; content: string }> }) => {
-        calls.push({ body: args.messages[0].content });
+      stream: (args: {
+        messages: Array<{ role: string; content: string }>;
+        system: Array<{ text: string }>;
+      }) => {
+        calls.push({ body: args.messages[0].content, system: args.system[0].text });
         return {
           finalMessage: async () => ({
             content: [
@@ -156,6 +161,40 @@ describe("extractFirecrawlMarkdown", () => {
     expect(releases).toHaveLength(1);
     // Unchanged behavior: a synthesized #anchor hanging off source.url.
     expect(releases[0].url).toMatch(/^https:\/\/acme\.com\/changelog#/);
+  });
+
+  it("selects the body-preserving prompt for a crawl-target page (pageUrl set)", async () => {
+    // A crawl monitor's webhook page is exactly one post, so extraction must
+    // preserve its full body, not condense it. The crawl-vs-scrape signal is
+    // already in hand as pageUrl — when present, swap to CRAWL_PAGE_SYSTEM_PROMPT
+    // ("Do NOT summarize") instead of the summarizing CLOUDFLARE_SYSTEM_PROMPT.
+    const { client, calls } = makeFakeAnthropicClient();
+    await extractFirecrawlMarkdown(
+      "# beehiiv MCP v2\nFuller prose body that must survive verbatim.",
+      fakeSource,
+      {
+        anthropicClient: client as never,
+        agentModel: "claude-haiku-4-5-20251001",
+        logger: fakeLogger,
+      },
+      { pageUrl: "https://product.beehiiv.com/p/beehiiv-mcp-v2" },
+    );
+
+    expect(calls[0].system).toBe(CRAWL_PAGE_SYSTEM_PROMPT);
+    expect(calls[0].system).not.toBe(CLOUDFLARE_SYSTEM_PROMPT);
+  });
+
+  it("keeps the summarizing CLOUDFLARE prompt for a scrape monitor (pageUrl absent)", async () => {
+    // A scrape monitor watches a single multi-entry index page; condensing many
+    // entries off one page is correct there, so the prompt must NOT change.
+    const { client, calls } = makeFakeAnthropicClient();
+    await extractFirecrawlMarkdown("# v1.2.0\nAdded X.", fakeSource, {
+      anthropicClient: client as never,
+      agentModel: "claude-haiku-4-5-20251001",
+      logger: fakeLogger,
+    });
+
+    expect(calls[0].system).toBe(CLOUDFLARE_SYSTEM_PROMPT);
   });
 });
 

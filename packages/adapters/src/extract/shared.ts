@@ -389,6 +389,28 @@ If a "# <url>" section is the index page (e.g. ends in /changelog and contains m
 
 ${CRAWL_EXTRACTION_RULES}`;
 
+export const CRAWL_PAGE_EXTRACTION_RULES = `Rules:
+- CONTENT: preserve the full post body markdown verbatim. Do NOT summarize, condense, or paraphrase. Strip only site chrome (header/footer nav, login/signup CTAs, share widgets, cookie banners, related-post lists).
+- Media: include screenshots, product images, diagrams, and videos that appear in the body as markdown image links. Exclude author avatars, navigation logos, footer icons, social badges, tracking pixels.
+- Dates: ISO 8601. For month-only dates (e.g. "April 2026"), use the first of the month: 2026-04-01. For quarter or season headings (e.g. "Q3 2025", "Fall 2025"), use the first day of the period (Q3 → 2025-07-01, Fall → 2025-09-01). For year-only dates, use January 1. If no date is recoverable, omit publishedAt.
+- Mark isBreaking only if the entry mentions breaking or backwards-incompatible changes.
+- Always call the extract_releases tool with your results.`;
+
+/**
+ * Single-post counterpart to {@link CRAWL_SYSTEM_PROMPT}. The Firecrawl
+ * crawl-target path extracts ONE discovered post at a time (one webhook page =
+ * one `/p/` URL, no `"# <url>"` heading wrapper), so it can't reuse the
+ * multi-page crawl prompt verbatim. Same body-preserving intent ("Do NOT
+ * summarize"), authored for a single page's markdown. Scrape-target monitors
+ * keep CLOUDFLARE_SYSTEM_PROMPT — condensing many entries off one index page is
+ * correct there. See issue #1343.
+ */
+export const CRAWL_PAGE_SYSTEM_PROMPT = `You are a changelog parser. The user message contains the full rendered markdown of a SINGLE release/changelog post — one entry's own page. Extract it using the extract_releases tool.
+
+This page is already one release's worth of content, so you normally return exactly one entry whose content is the full post body. Preserve that body verbatim — light cleanup of navigation chrome (header/footer nav, login links, share buttons, social embed widgets, cookie banners) only. Do NOT summarize, condense, or paraphrase: the post body is the canonical release body. If the page genuinely contains several distinct dated entries, extract each — but never condense any of them.
+
+${CRAWL_PAGE_EXTRACTION_RULES}`;
+
 export const TOOLLOOP_SYSTEM_PROMPT = `You are a changelog parser operating in tool-use mode. The body of a URL is NOT included in this conversation — it is available through tools.
 
 Use \`query_json\` for JSONPath queries into structured content, or \`get_slice\` for byte-range reads (both JSON and HTML). Both return at most 20K chars per call; if a match set is larger, a remainder marker is included.
