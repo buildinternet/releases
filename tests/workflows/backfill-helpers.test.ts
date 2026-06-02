@@ -50,19 +50,23 @@ test("cleanVersion: strips placeholders, trims, keeps real versions", () => {
   expect(cleanVersion(" 1.4.0 ")).toBe("1.4.0");
 });
 
-test("dedupeRecords: dedups by url, drops missing fields, cleans version", () => {
+test("dedupeRecords: dedups by url, drops missing/blank fields, trims + cleans", () => {
   const { kept, dropped, reasons } = dedupeRecords([
     { url: "u1", title: "T", content: "C", version: "<UNKNOWN>" },
     { url: "u1", title: "T2", content: "C2" }, // dup url
     { url: "u2", title: "", content: "C" }, // missing title
     { title: "T3", content: "C3" }, // missing url
     { url: "u3", title: "T3", content: "C3", version: "2.0" },
+    { url: "u4", title: "   ", content: "C4" }, // whitespace-only title -> dropped
+    { url: "u5", title: " Spaced ", content: " body " }, // trimmed on store
   ]);
-  expect(kept.map((r) => r.url)).toEqual(["u1", "u3"]);
+  expect(kept.map((r) => r.url)).toEqual(["u1", "u3", "u5"]);
   expect(kept[0].version).toBeUndefined();
   expect(kept[1].version).toBe("2.0");
-  expect(dropped).toBe(3);
-  expect(reasons).toEqual({ missingUrl: 1, missingTitleOrContent: 1, duplicate: 1 });
+  expect(kept[2].title).toBe("Spaced");
+  expect(kept[2].content).toBe("body");
+  expect(dropped).toBe(4);
+  expect(reasons).toEqual({ missingUrl: 1, missingTitleOrContent: 2, duplicate: 1 });
 });
 
 test("chunk: splits into bounded groups", () => {

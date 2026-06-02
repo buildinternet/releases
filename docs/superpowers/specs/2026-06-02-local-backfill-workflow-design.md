@@ -68,7 +68,7 @@ world is an `agent()` dispatch returning a forced schema.
 
 ## Deliverables
 
-```
+```text
 .claude/workflows/backfill-source.ts           ← per-source engine (the core)
 .claude/workflows/backfill-sweep.ts            ← sibling: loops the engine over a list
 src/agent/skills/backfilling-sources/SKILL.md  ← front-door: when/why/cost contract, launch recipe

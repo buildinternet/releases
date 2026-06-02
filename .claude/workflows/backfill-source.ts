@@ -88,7 +88,9 @@ function dedupeRecords(records) {
       reasons.missingUrl++;
       continue;
     }
-    if (!r.title || !r.content) {
+    const title = typeof r.title === "string" ? r.title.trim() : "";
+    const content = typeof r.content === "string" ? r.content.trim() : "";
+    if (!title || !content) {
       dropped++;
       reasons.missingTitleOrContent++;
       continue;
@@ -100,7 +102,7 @@ function dedupeRecords(records) {
     }
     seen.add(r.url);
     const v = cleanVersion(r.version);
-    const out = { ...r };
+    const out = { ...r, title, content };
     if (v === undefined) delete out.version;
     else out.version = v;
     kept.push(out);
@@ -211,7 +213,11 @@ if (typeof input === "string") {
 }
 input = input || {};
 const SOURCE = input.source;
-const MAX = Number.isFinite(input.maxReleases) ? input.maxReleases : 50;
+if (input.maxReleases != null && !(Number.isInteger(input.maxReleases) && input.maxReleases > 0)) {
+  log(`backfill-source: maxReleases must be a positive integer, got ${input.maxReleases}`);
+  return { status: "error", error: "invalid maxReleases" };
+}
+const MAX = input.maxReleases == null ? 50 : input.maxReleases;
 const DRY = input.dryRun !== false; // default true
 const EXTRACT_MODEL = input.model === "haiku" ? "haiku" : "sonnet";
 if (!SOURCE) {

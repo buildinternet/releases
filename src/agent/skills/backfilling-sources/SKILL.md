@@ -34,15 +34,21 @@ The Workflow runs `local-ingest`'s `preflight.ts` first and **fails closed**: `r
 
 Dry-run one source, review the plan + counts, then commit:
 
-```
-Workflow({ name: "backfill-source", args: { source: "acme/changelog" } })            // dry-run (default)
-Workflow({ name: "backfill-source", args: { source: "acme/changelog", dryRun: false, maxReleases: 50 } })
+```js
+Workflow({ name: "backfill-source", args: { source: "acme/changelog" } }); // dry-run (default)
+Workflow({
+  name: "backfill-source",
+  args: { source: "acme/changelog", dryRun: false, maxReleases: 50 },
+});
 ```
 
 Set a turn budget to cap spend (e.g. prefix the request with `+300k`). Several sources at once:
 
-```
-Workflow({ name: "backfill-sweep", args: { sources: ["acme/changelog", "globex/releases"], dryRun: false } })
+```js
+Workflow({
+  name: "backfill-sweep",
+  args: { sources: ["acme/changelog", "globex/releases"], dryRun: false },
+});
 ```
 
 `args`: `source` (slug | src\_ id | URL), `maxReleases` (default 50), `dryRun` (default true), `model` (`sonnet` default; `haiku` for bulk/simple). Sweep takes `sources: string[]`.

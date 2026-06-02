@@ -99,7 +99,9 @@ export function dedupeRecords(records) {
       reasons.missingUrl++;
       continue;
     }
-    if (!r.title || !r.content) {
+    const title = typeof r.title === "string" ? r.title.trim() : "";
+    const content = typeof r.content === "string" ? r.content.trim() : "";
+    if (!title || !content) {
       dropped++;
       reasons.missingTitleOrContent++;
       continue;
@@ -111,7 +113,7 @@ export function dedupeRecords(records) {
     }
     seen.add(r.url);
     const v = cleanVersion(r.version);
-    const out = { ...r };
+    const out = { ...r, title, content };
     if (v === undefined) delete out.version;
     else out.version = v;
     kept.push(out);

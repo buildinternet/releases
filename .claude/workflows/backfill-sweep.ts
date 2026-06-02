@@ -20,7 +20,11 @@ if (typeof input === "string") {
 }
 input = input || {};
 const SOURCES = Array.isArray(input.sources) ? input.sources : [];
-const MAX = Number.isFinite(input.maxReleases) ? input.maxReleases : 50;
+if (input.maxReleases != null && !(Number.isInteger(input.maxReleases) && input.maxReleases > 0)) {
+  log(`backfill-sweep: maxReleases must be a positive integer, got ${input.maxReleases}`);
+  return { status: "error", error: "invalid maxReleases" };
+}
+const MAX = input.maxReleases == null ? 50 : input.maxReleases;
 const DRY = input.dryRun !== false; // default true
 const MODEL = input.model === "haiku" ? "haiku" : "sonnet";
 if (!SOURCES.length) {
