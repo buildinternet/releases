@@ -7,6 +7,7 @@
 
 import type Anthropic from "@anthropic-ai/sdk";
 import { RELEASE_TYPES, type ReleaseType } from "@buildinternet/releases-core/schema";
+import { isGifUrl } from "../media-classify.js";
 import type { ExtractedEntry, KnownRelease } from "./types.js";
 
 // ── Version sanitization ─────────────────────────────────────────────
@@ -452,7 +453,12 @@ export function mapEntries(entries: ExtractedEntry[], opts: MapEntriesOptions): 
         publishedAt: e.publishedAt ? new Date(e.publishedAt) : undefined,
         isBreaking: e.isBreaking,
         type: e.type,
-        media: e.media,
+        // Force `type: "gif"` on any `.gif` URL. The extraction prompt only
+        // names "image"/"video", so the model under-classifies animated GIFs as
+        // "image" — which would skip the ingest GIF→MP4 path and the heavier
+        // serve-time handling (#1368). Deterministic, URL-keyed; leaves
+        // model-classified videos (YouTube/Vimeo/Loom, no extension) untouched.
+        media: e.media?.map((mm) => (isGifUrl(mm.url) ? { ...mm, type: "gif" as const } : mm)),
       };
     });
 }

@@ -62,6 +62,70 @@ describe("mapEntries URL resolution", () => {
   });
 });
 
+describe("mapEntries GIF reclassification (#1368)", () => {
+  test("a .gif URL the model labeled 'image' is forced to 'gif'", () => {
+    const [r] = mapEntries(
+      [
+        entry({
+          title: "Animated demo",
+          media: [{ type: "image", url: "https://x.test/demo.gif" }],
+        }),
+      ],
+      { sourceUrl: SRC },
+    );
+    expect(r.media).toEqual([{ type: "gif", url: "https://x.test/demo.gif" }]);
+  });
+
+  test("a resize-wrapper URL whose path ends in .gif is reclassified (beehiiv/Firecrawl case)", () => {
+    const wrapped =
+      "https://media.beehiiv.com/cdn-cgi/image/fit=scale-down,quality=80,format=auto/uploads/asset/file/abc/subscribe_forms-2.gif";
+    const [r] = mapEntries(
+      [entry({ title: "Subscribe forms", media: [{ type: "image", url: wrapped, alt: "forms" }] })],
+      { sourceUrl: SRC },
+    );
+    expect(r.media).toEqual([{ type: "gif", url: wrapped, alt: "forms" }]);
+  });
+
+  test("preserves alt text while overriding type", () => {
+    const [r] = mapEntries(
+      [
+        entry({
+          title: "x",
+          media: [{ type: "image", url: "https://x.test/a.GIF?v=2", alt: "wave" }],
+        }),
+      ],
+      { sourceUrl: SRC },
+    );
+    expect(r.media).toEqual([{ type: "gif", url: "https://x.test/a.GIF?v=2", alt: "wave" }]);
+  });
+
+  test("model-classified videos (no extension) are left untouched", () => {
+    const [r] = mapEntries(
+      [
+        entry({
+          title: "Walkthrough",
+          media: [{ type: "video", url: "https://www.youtube.com/watch?v=abc123" }],
+        }),
+      ],
+      { sourceUrl: SRC },
+    );
+    expect(r.media).toEqual([{ type: "video", url: "https://www.youtube.com/watch?v=abc123" }]);
+  });
+
+  test("non-gif images are left as 'image'", () => {
+    const [r] = mapEntries(
+      [entry({ title: "x", media: [{ type: "image", url: "https://x.test/shot.png" }] })],
+      { sourceUrl: SRC },
+    );
+    expect(r.media).toEqual([{ type: "image", url: "https://x.test/shot.png" }]);
+  });
+
+  test("an entry with no media survives without a media array", () => {
+    const [r] = mapEntries([entry({ title: "No media" })], { sourceUrl: SRC });
+    expect(r.media).toBeUndefined();
+  });
+});
+
 describe("buildBodyGuardrail", () => {
   // Regression: the large-body guardrail told the model to "be aggressively
   // concise", and at temperature 0 the Haiku extractor obeyed by dropping each

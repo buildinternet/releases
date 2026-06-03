@@ -2,6 +2,7 @@ import type { RawRelease, FetchOptions } from "@releases/adapters/types";
 import { logger } from "@buildinternet/releases-lib/logger";
 import { FeedHttpError } from "@releases/lib/errors";
 import { RELEASES_BOT_UA } from "@releases/adapters/user-agent";
+import { classifyMediaType, isGifUrl } from "./media-classify.js";
 import { parseFeed as libParseFeed } from "@rowanmanning/feed-parser";
 import { parseHTML } from "linkedom";
 import TurndownService from "turndown";
@@ -709,8 +710,7 @@ export function extractMedia(
     const url = m[1];
     if (!isSafeMediaUrl(url)) continue;
     const alt = m[2] || undefined;
-    const isGif = url.toLowerCase().endsWith(".gif");
-    media.push({ type: isGif ? "gif" : "image", url, alt });
+    media.push({ type: isGifUrl(url) ? "gif" : "image", url, alt });
   }
 
   const iframeRe = /<iframe[^>]*src=["']([^"']+)["'][^>]*>/gi;
@@ -729,17 +729,6 @@ export function extractMedia(
   }
 
   return media;
-}
-
-/**
- * Classify a URL by file extension into the MediaRef type union.
- * `.gif` -> "gif"; `.mp4`/`.webm`/`.mov` -> "video"; everything else -> "image".
- */
-function classifyMediaType(url: string): "image" | "video" | "gif" {
-  const lower = url.split("?")[0].toLowerCase();
-  if (lower.endsWith(".gif")) return "gif";
-  if (lower.endsWith(".mp4") || lower.endsWith(".webm") || lower.endsWith(".mov")) return "video";
-  return "image";
 }
 
 /**
