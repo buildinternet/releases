@@ -486,7 +486,14 @@ export const usageLog = sqliteTable("usage_log", {
     .$defaultFn(() => new Date().toISOString()),
 });
 
-export const FETCH_LOG_STATUSES = ["success", "error", "no_change", "dry_run", "blocked"] as const;
+export const FETCH_LOG_STATUSES = [
+  "success",
+  "error",
+  "no_change",
+  "dry_run",
+  "blocked",
+  "crawl_timeout",
+] as const;
 export type FetchLogStatus = (typeof FETCH_LOG_STATUSES)[number];
 
 export const fetchLog = sqliteTable(

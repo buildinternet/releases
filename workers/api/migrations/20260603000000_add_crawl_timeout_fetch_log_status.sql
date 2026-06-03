@@ -1,0 +1,12 @@
+-- Marker migration (no DDL): adds the "crawl_timeout" value to
+-- FETCH_LOG_STATUSES in packages/core/src/schema.ts. fetch_log.status is a
+-- free-form TEXT column with no CHECK constraint (see
+-- 20260520010000_squashed_baseline.sql), so storing a new status value requires
+-- no schema change — this file exists only to pair the schema.ts edit with a
+-- migration per the CI "schema-change" gate.
+--
+-- "crawl_timeout" is written when the scrape path's Cloudflare `/crawl` job
+-- throws (e.g. CrawlTimeoutError after 300s) instead of returning pages (issue
+-- #1341). Previously the crawl error fell through to the index render and
+-- recorded a misleading `no_change`; this distinct status keeps a timed-out
+-- crawl source from looking healthy, mirroring the `blocked` path from #1171.

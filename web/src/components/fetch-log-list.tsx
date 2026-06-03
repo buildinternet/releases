@@ -50,7 +50,7 @@ export function FetchLogList({
 }: Props) {
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
 
-  const activeTotal = filter === "all" ? totalCount : statusCounts[filter];
+  const activeTotal = filter === "all" ? totalCount : (statusCounts[filter] ?? 0);
   const totalLabel = filter === "all" ? "entries" : filter.replace("_", " ");
 
   return (

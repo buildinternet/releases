@@ -13,6 +13,7 @@ type Envelope = {
     no_change: number;
     dry_run: number;
     blocked: number;
+    crawl_timeout: number;
   };
 };
 
@@ -57,6 +58,7 @@ describe("GET /v1/status/fetch-log", () => {
       no_change: 0,
       dry_run: 0,
       blocked: 0,
+      crawl_timeout: 0,
     });
     expect(body.nextCursor).not.toBeNull();
   });
@@ -144,6 +146,7 @@ describe("GET /v1/status/fetch-log", () => {
       no_change: 0,
       dry_run: 0,
       blocked: 0,
+      crawl_timeout: 0,
     });
   });
 

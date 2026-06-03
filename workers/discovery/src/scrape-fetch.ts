@@ -252,11 +252,29 @@ export function resolveCrawlIncludePatterns(
 }
 
 /**
+ * Outcome of a crawl-acquisition attempt.
+ *
+ *   - `{ markdown: string }`      — crawl succeeded; concatenated body.
+ *   - `{ markdown: null }`        — crawl ran but produced zero usable pages
+ *                                   (empty result or every page filtered out).
+ *                                   The caller falls back to the index render.
+ *   - `{ markdown: null, error }` — the crawl threw (timeout / job failure /
+ *                                   startCrawl error). The caller must NOT fall
+ *                                   back to the index render — doing so masks
+ *                                   the failure as a healthy `no_change` (see
+ *                                   #1341); it surfaces a distinct
+ *                                   `crawl_timeout` fetch-log status instead.
+ */
+export interface CrawlOutcome {
+  markdown: string | null;
+  error?: { message: string; category: ErrorCategory };
+}
+
+/**
  * Dependency-injected crawl helper. Runs `startCrawl` + `pollCrawlResults`,
  * concatenates pages into a single markdown body (with per-page URL headers
  * for attribution), persists `lastCrawlJobId` + `lastCrawlAt`, and logs the
- * outcome. Returns `null` when the crawl returns zero pages or throws — the
- * caller falls back to `fetchCloudflareMarkdown` in that case.
+ * outcome. See `CrawlOutcome` for the return contract.
  *
  * Crawl primitives are passed in so unit tests can exercise the dispatch
  * logic without registering a process-global `mock.module` (which leaks
@@ -315,7 +333,7 @@ export async function acquireCrawlMarkdown(
     crawlMaxAge?: number;
   },
   crawl: CrawlDeps,
-): Promise<string | null> {
+): Promise<CrawlOutcome> {
   const excludePatterns = meta.crawlExcludePatterns;
   const includeExternalLinks = meta.crawlIncludeExternal;
   const includePathPrefix = meta.crawlIncludePathPrefix;
@@ -368,7 +386,7 @@ export async function acquireCrawlMarkdown(
             ? "crawl returned zero pages"
             : "crawlIncludePathPrefix filtered out every page",
       });
-      return null;
+      return { markdown: null };
     }
 
     logEvent("info", {
@@ -391,8 +409,17 @@ export async function acquireCrawlMarkdown(
       })
       .catch(() => {});
 
-    return markdown;
+    return { markdown };
   } catch (err) {
+    // The crawl threw (timeout / job failure / startCrawl error). Surface the
+    // error to the caller rather than returning a bare null: a bare null reads
+    // as a clean "fall back to the index render" and masks the failure as a
+    // healthy `no_change` (#1341). `CrawlTimeoutError`/`CrawlJobError` carry an
+    // `infra` category; anything else defaults to `infra` (crawl-backend
+    // transport failure).
+    const message = err instanceof Error ? err.message : String(err);
+    const category: ErrorCategory =
+      (err as { category?: ErrorCategory } | null)?.category ?? "infra";
     logEvent("warn", {
       component: "scrape-fetch",
       event: "crawl-fallback",
@@ -401,7 +428,7 @@ export async function acquireCrawlMarkdown(
       reason: "crawl threw an error",
       err,
     });
-    return null;
+    return { markdown: null, error: { message, category } };
   }
 }
 
@@ -648,13 +675,40 @@ async function runScrapePath(
 
   if (!markdown && meta.crawlEnabled === true) {
     const crawlAuth = { accountId: env.cloudflareAccountId, apiToken: env.cloudflareApiToken };
-    markdown = await acquireCrawlMarkdown(source, meta, {
+    const crawl = await acquireCrawlMarkdown(source, meta, {
       startCrawl: (url, options) => startCrawl(url, options, crawlAuth),
       pollCrawlResults: (jobId) => pollCrawlResults(jobId, crawlAuth),
       updateSourceMeta: (s, patch) => deps.repo.updateSourceMeta(s, patch),
     });
-    // markdown === null after a zero-page or thrown-error crawl — fall
-    // through to fetchCloudflareMarkdown below.
+
+    // The crawl threw (timeout / job failure). Don't fall through to the index
+    // render: for a per-post crawl source the index holds no per-release bodies,
+    // so incremental extraction yields 0 → a misleading `no_change`. Short-circuit
+    // to a distinct `crawl_timeout` status instead, mirroring the #1171 `blocked`
+    // path so the source is visibly flagged rather than looking healthy (#1341).
+    if (crawl.error) {
+      const durationMs = Date.now() - start;
+      await writeFetchLog(env, source.id, {
+        releasesFound: 0,
+        releasesInserted: 0,
+        durationMs,
+        status: "crawl_timeout",
+        error: crawl.error.message,
+        errorCategory: crawl.error.category,
+      });
+      logEvent("warn", {
+        component: "scrape-fetch",
+        event: "crawl-timeout",
+        sourceSlug: source.slug,
+        sourceUrl: source.url,
+        err: crawl.error.message,
+      });
+      return `Degraded [crawl_timeout]: ${crawl.error.message}`;
+    }
+
+    // markdown === null after a zero-page crawl — fall through to
+    // fetchCloudflareMarkdown below (a legitimate, non-error fall-through).
+    markdown = crawl.markdown;
     if (markdown !== null) {
       cameFromCrawl = true;
     }
