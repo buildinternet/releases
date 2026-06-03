@@ -52,6 +52,7 @@ interface SkillConfig {
   agentId?: string;
   workerAgentId?: string;
   coordinatorAgentId?: string;
+  environmentId?: string;
 }
 
 function loadConfig(env: AgentEnv): SkillConfig {

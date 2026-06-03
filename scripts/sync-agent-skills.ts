@@ -145,6 +145,7 @@ interface SkillConfig {
     errata?: string;
     toolNotes?: string;
   };
+  environmentId?: string;
 }
 
 interface ApiSkill {

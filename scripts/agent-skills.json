@@ -27,5 +27,6 @@
     "errata": "memstore_012MKStcUM7QxW9qPCLQtwwt",
     "toolNotes": "memstore_01Jc5WAiqp4fwSJUmjR2excj"
   },
-  "coordinatorAgentId": "agent_011Can9iMPcPuLy3oEgjGCs6"
+  "coordinatorAgentId": "agent_011Can9iMPcPuLy3oEgjGCs6",
+  "environmentId": "env_01Tq7S8F2FK1KBz68NMje2RU"
 }
