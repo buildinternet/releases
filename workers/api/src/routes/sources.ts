@@ -35,6 +35,7 @@ import { buildListResponse, parseListPagination } from "../lib/pagination.js";
 import { RELEASE_URL_UPSERT } from "@releases/core-internal/release-upsert";
 import { daysAgoIso, inferMonthOnlyDate } from "@buildinternet/releases-core/dates";
 import { parseCompositionFromMetadata } from "@buildinternet/releases-core/composition";
+import { parseNotice, setNoticeInMetadata } from "@buildinternet/releases-core/notice";
 import { buildCompositionMetadataSet } from "@releases/core-internal/composition-metadata";
 import { likeContains } from "@buildinternet/releases-core/sql-like";
 import { toSlug } from "@buildinternet/releases-core/slug";
@@ -2218,6 +2219,7 @@ export async function buildSourceDetailPayload(
     isHidden: Boolean(src.isHidden),
     discovery: src.discovery ?? "curated",
     metadata: src.metadata ?? "{}",
+    notice: parseNotice(src.metadata),
     kind: src.kind ?? null,
     stars: src.stargazersCount ?? null,
     starsFetchedAt: src.starsFetchedAt ?? null,
@@ -2748,6 +2750,7 @@ const patchSourceHandler = async (c: import("hono").Context<Env>) => {
     "lastPolledAt",
     "kind",
     "discovery",
+    "notice",
   ] as const;
 
   const updates: Record<string, unknown> = {};
@@ -2810,6 +2813,12 @@ const patchSourceHandler = async (c: import("hono").Context<Env>) => {
   if (body.lastPolledAt !== undefined) updates.lastPolledAt = body.lastPolledAt;
   if ("kind" in body) updates.kind = body.kind ?? null;
   if (body.discovery !== undefined) updates.discovery = body.discovery;
+  if (body.notice !== undefined) {
+    updates.metadata = setNoticeInMetadata(
+      (updates.metadata as string | undefined) ?? src.metadata,
+      body.notice,
+    );
+  }
 
   if (Object.keys(updates).length === 0) {
     const bodyKeys = Object.keys(body);
