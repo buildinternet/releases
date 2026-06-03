@@ -445,6 +445,35 @@ function antUpdateAgent(
   return { version: parsed.version as number };
 }
 
+/**
+ * Apply an environment by feeding its committed YAML to `ant beta:environments
+ * update` (ant-path-only; gated by APPLY_VIA_ANT). Environments take no version
+ * (no optimistic-locking token), so the call is simpler than antUpdateAgent.
+ * Parses stdout only — ant prints an auth-source note to stderr. A no-op while
+ * the committed name/config match live (names are preserved verbatim).
+ */
+function antUpdateEnvironment(env: DeployEnv, environmentId: string): { id: string } {
+  const yamlPath = resolve(PROJECT_ROOT, "managed-agents", `${env}.environment.yaml`);
+  const body = readFileSync(yamlPath, "utf8");
+  const res = Bun.spawnSync(
+    ["ant", "beta:environments", "update", "--environment-id", environmentId, "--format", "json"],
+    { stdin: Buffer.from(body) },
+  );
+  const stdout = res.stdout.toString().trim();
+  let parsed: { id?: string; error?: unknown; type?: string };
+  try {
+    parsed = JSON.parse(stdout);
+  } catch {
+    throw new Error(
+      `ant env update ${environmentId}: unparseable response (exit ${res.exitCode}): ${stdout || res.stderr.toString()}`,
+    );
+  }
+  if (res.exitCode !== 0 || parsed.error || parsed.type === "error" || !parsed.id) {
+    throw new Error(`ant env update ${environmentId} failed: ${stdout}`);
+  }
+  return { id: parsed.id };
+}
+
 // ── Memory stores ───────────────────────────────────────────────
 
 interface ApiMemoryStore {
@@ -895,6 +924,25 @@ async function main() {
       } else {
         console.log("(would create coordinator agent)");
       }
+    }
+    console.log();
+  }
+
+  // ── Apply environment ────────────────────────────────────────
+  // Environments are applied ant-path-only (no fetch/REST equivalent). With
+  // APPLY_VIA_ANT off, environments are left untouched — the historical default.
+  // A no-op while the committed name/config match live (names preserved verbatim).
+  if (syncAgent && APPLY_VIA_ANT) {
+    console.log("── Environment ──────────────────────────────────");
+    const environmentId = config.environmentId;
+    if (!environmentId) {
+      console.log("⚠ Skipping environment apply: no environmentId in config.");
+    } else if (dryRun) {
+      console.log(`(would apply environment ${environmentId} via ant)`);
+    } else {
+      console.log(`Applying environment (via ant): ${environmentId}...`);
+      const updated = antUpdateEnvironment(deployEnv, environmentId);
+      console.log(`✓ Environment applied: ${updated.id}`);
     }
     console.log();
   }
