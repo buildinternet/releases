@@ -35,6 +35,7 @@ import {
   ProductTagsMutationResponseSchema,
   ProductActivityResponseSchema,
   ProductHeatmapResponseSchema,
+  CollectionListResponseSchema,
   ErrorResponseSchema,
   ResolveResponseSchema,
 } from "@buildinternet/releases-api-types";
@@ -58,6 +59,7 @@ import { dbErrorLogFields } from "@releases/lib/db-errors";
 import { buildListResponse, parseListPagination } from "../lib/pagination.js";
 import { IN_ARRAY_CHUNK_SIZE } from "../lib/d1-limits.js";
 import { getProductActivityData, getProductHeatmapData } from "../queries/orgs.js";
+import { listCollectionsWhere } from "../queries/collections.js";
 
 export const productRoutes = new Hono<Env>();
 
@@ -1342,4 +1344,46 @@ productRoutes.get(
   "/orgs/:orgSlug/products/:productSlug/heatmap",
   getProductHeatmapRoute,
   getProductHeatmapHandler,
+);
+
+// ── Product collections (/products/:slug/collections, /orgs/:orgSlug/products/:productSlug/collections) ──
+
+const getProductCollectionsHandler = async (c: import("hono").Context<Env>) => {
+  const db = createDb(c.env.DB);
+  const product = await resolveProductFromContext(c, db);
+  if (!product) return c.json({ error: "not_found", message: "Product not found" }, 404);
+
+  const body = await listCollectionsWhere(
+    db,
+    sql`c.id IN (SELECT cm.collection_id FROM collection_members cm WHERE cm.product_id = ${product.id})`,
+  );
+  return c.json(body);
+};
+
+const getProductCollectionsRoute = describeRoute({
+  tags: ["Products"],
+  summary: "Collections this product belongs to",
+  description:
+    "Returns the curated collections that pin this product, ordered alphabetically by collection name. Mirrors `GET /v1/orgs/:slug/collections` so the web 'Featured in' sidebar renders identically at the org and product levels — a `coding-agents` collection that pins Claude Code surfaces on the Claude Code product page. Each item includes `memberCount` (visible public orgs + products).",
+  responses: {
+    200: {
+      description: "Collection membership list",
+      content: { "application/json": { schema: resolver(CollectionListResponseSchema) } },
+    },
+    404: {
+      description: "Product not found",
+      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+    },
+  },
+});
+
+productRoutes.get(
+  "/products/:slug/collections",
+  getProductCollectionsRoute,
+  getProductCollectionsHandler,
+);
+productRoutes.get(
+  "/orgs/:orgSlug/products/:productSlug/collections",
+  getProductCollectionsRoute,
+  getProductCollectionsHandler,
 );

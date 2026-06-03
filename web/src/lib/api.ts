@@ -472,6 +472,10 @@ export const api = {
   },
   productHeatmap: (ref: { orgSlug: string; productSlug: string }) =>
     fetchApi<ProductHeatmapResponse>(`/v1/orgs/${ref.orgSlug}/products/${ref.productSlug}/heatmap`),
+  productCollections: (ref: { orgSlug: string; productSlug: string }) =>
+    fetchApi<CollectionListItem[]>(
+      `/v1/orgs/${ref.orgSlug}/products/${ref.productSlug}/collections`,
+    ),
   categories: () => fetchApi<CategoryListItem[]>("/v1/categories"),
   categoryDetail: (slug: string) => fetchApi<CategoryDetail>(`/v1/categories/${slug}`),
   categoryReleases: (

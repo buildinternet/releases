@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { categoryDisplayName } from "@buildinternet/releases-core/categories";
 import { toSlug } from "@buildinternet/releases-core/slug";
+import type { CollectionListItem } from "@buildinternet/releases-api-types";
 import type { SidebarSection } from "./sidebar";
 
 interface TaxonomyChip {
@@ -54,4 +55,29 @@ export function taxonomySidebarSections({
     });
   }
   return items.length > 0 ? [{ items }] : [];
+}
+
+/**
+ * "Featured in" sidebar section listing the collections an entity belongs to.
+ * Shared by the org layout and the product view so both render the chips the
+ * same way. Returns an empty array (no section) when the entity is in none.
+ */
+export function collectionsSidebarSection(
+  collections: CollectionListItem[] | null | undefined,
+): SidebarSection[] {
+  if (!collections || collections.length === 0) return [];
+  return [
+    {
+      items: [
+        {
+          label: "Featured in",
+          value: (
+            <TaxonomyChips
+              items={collections.map((c) => ({ label: c.name, href: `/collections/${c.slug}` }))}
+            />
+          ),
+        },
+      ],
+    },
+  ];
 }
