@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type MouseEventHandler } from "react";
 import { releaseVideoUrl } from "@/lib/media";
 
 interface GifVideoProps {
@@ -8,6 +8,13 @@ interface GifVideoProps {
   src: string;
   alt: string;
   className?: string;
+  /**
+   * Click handler on the rendered element (video, or the `<img>` fallback).
+   * The gallery/collapsed thumbnails deliberately omit this so the click
+   * bubbles to their wrapping `<button>` to open the lightbox; the lightbox
+   * passes `stopPropagation` so clicking the video doesn't dismiss the overlay.
+   */
+  onClick?: MouseEventHandler<HTMLElement>;
 }
 
 /**
@@ -17,7 +24,7 @@ interface GifVideoProps {
  * `prefers-reduced-motion`: when set, autoplay is paused and native controls are
  * shown so the user opts in to motion.
  */
-export function GifVideo({ src, alt, className }: GifVideoProps) {
+export function GifVideo({ src, alt, className, onClick }: GifVideoProps) {
   const [failed, setFailed] = useState(false);
   const [reduceMotion, setReduceMotion] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -40,6 +47,7 @@ export function GifVideo({ src, alt, className }: GifVideoProps) {
         decoding="async"
         referrerPolicy="no-referrer"
         className={className}
+        onClick={onClick}
       />
     );
   }
@@ -56,6 +64,7 @@ export function GifVideo({ src, alt, className }: GifVideoProps) {
       controls={reduceMotion}
       preload="metadata"
       className={className}
+      onClick={onClick}
       onError={() => setFailed(true)}
     />
   );
