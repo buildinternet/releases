@@ -2,12 +2,15 @@
 
 import { useEffect, useId, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import type { Notice } from "@buildinternet/releases-core/notice";
 import {
   setOrgHiddenAction,
   setOrgAutoGenerateContentAction,
   setOrgFeaturedAction,
+  setOrgNoticeAction,
   renameOrgAction,
 } from "@/app/actions/org-admin";
+import { NoticeForm } from "@/components/notice-form";
 
 export function OrgAdminMenu({
   orgSlug,
@@ -17,6 +20,7 @@ export function OrgAdminMenu({
   featured,
   discovery,
   fetchPaused,
+  notice,
 }: {
   orgSlug: string;
   name: string;
@@ -25,6 +29,7 @@ export function OrgAdminMenu({
   featured: boolean;
   discovery?: string;
   fetchPaused?: boolean;
+  notice?: Notice | null;
 }) {
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -196,6 +201,13 @@ export function OrgAdminMenu({
                     : "Enable AI content"}
               </button>
             </div>
+
+            <NoticeForm
+              notice={notice}
+              pending={pending}
+              onSave={(n) => run(() => setOrgNoticeAction({ slug: orgSlug, notice: n }))}
+              onClear={() => run(() => setOrgNoticeAction({ slug: orgSlug, notice: null }))}
+            />
 
             <div className="space-y-1 border-t border-stone-200 dark:border-stone-800 pt-3">
               <div className="font-medium text-stone-700 dark:text-stone-200">State</div>

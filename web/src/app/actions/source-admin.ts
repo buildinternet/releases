@@ -1,10 +1,51 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import type { Notice } from "@buildinternet/releases-core/notice";
 import { webApiHeaders } from "@/lib/api";
 import { adminActionEnv } from "@/lib/admin-action";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
+
+/**
+ * Set or clear the curator notice on a source via
+ * `PATCH /v1/orgs/:orgSlug/sources/:sourceSlug`. Pass a `Notice` to set it or
+ * `null` to clear it. This hits the source PATCH route (not the `/metadata`
+ * shallow-merge) so the server validates the shape with `NoticeSchema` while
+ * still preserving the source's other metadata keys.
+ */
+export async function setSourceNoticeAction(input: {
+  orgSlug: string;
+  sourceSlug: string;
+  notice: Notice | null;
+}): Promise<ActionResult> {
+  const env = adminActionEnv();
+  if ("error" in env) return { ok: false, error: env.error };
+
+  const path = `/v1/orgs/${encodeURIComponent(input.orgSlug)}/sources/${encodeURIComponent(input.sourceSlug)}`;
+  let res: Response;
+  try {
+    res = await fetch(`${env.apiUrl}${path}`, {
+      method: "PATCH",
+      headers: webApiHeaders({
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${env.apiSecret}`,
+      }),
+      body: JSON.stringify({ notice: input.notice }),
+      cache: "no-store",
+    });
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Network error" };
+  }
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    return { ok: false, error: `API ${res.status}: ${text || res.statusText}` };
+  }
+
+  revalidatePath(`/${input.orgSlug}/${input.sourceSlug}`);
+  return { ok: true };
+}
 
 /**
  * Shallow-merge a patch into the source's `metadata` blob via

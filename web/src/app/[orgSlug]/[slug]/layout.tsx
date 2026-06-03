@@ -138,6 +138,7 @@ export default async function OrgSlugLayout({
               feedContentDepth={sourceMeta.feedContentDepth ?? null}
               discovery={source.discovery}
               isHidden={source.isHidden ?? false}
+              notice={source.notice}
             />
           )}
         </div>
