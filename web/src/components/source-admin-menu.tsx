@@ -2,11 +2,14 @@
 
 import { useEffect, useId, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import type { Notice } from "@buildinternet/releases-core/notice";
 import {
   setSourceMetadataAction,
   promoteSourceAction,
   renameSourceAction,
+  setSourceNoticeAction,
 } from "@/app/actions/source-admin";
+import { NoticeForm } from "@/components/notice-form";
 
 type Depth = "full" | "summary-only" | null;
 
@@ -19,6 +22,7 @@ export function SourceAdminMenu({
   feedContentDepth,
   discovery,
   isHidden,
+  notice,
 }: {
   orgSlug: string;
   sourceSlug: string;
@@ -28,6 +32,7 @@ export function SourceAdminMenu({
   feedContentDepth: Depth;
   discovery?: string;
   isHidden: boolean;
+  notice?: Notice | null;
 }) {
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -241,6 +246,15 @@ export function SourceAdminMenu({
                 </button>
               </div>
             )}
+
+            <NoticeForm
+              notice={notice}
+              pending={pending}
+              onSave={(n) => run(() => setSourceNoticeAction({ orgSlug, sourceSlug, notice: n }))}
+              onClear={() =>
+                run(() => setSourceNoticeAction({ orgSlug, sourceSlug, notice: null }))
+              }
+            />
 
             <div className="space-y-1 border-t border-stone-200 dark:border-stone-800 pt-3">
               <div className="font-medium text-stone-700 dark:text-stone-200">State</div>

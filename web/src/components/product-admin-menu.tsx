@@ -2,16 +2,20 @@
 
 import { useEffect, useId, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { renameProductAction } from "@/app/actions/product-admin";
+import type { Notice } from "@buildinternet/releases-core/notice";
+import { renameProductAction, setProductNoticeAction } from "@/app/actions/product-admin";
+import { NoticeForm } from "@/components/notice-form";
 
 export function ProductAdminMenu({
   orgSlug,
   productSlug,
   name,
+  notice,
 }: {
   orgSlug: string;
   productSlug: string;
   name: string;
+  notice?: Notice | null;
 }) {
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -113,6 +117,15 @@ export function ProductAdminMenu({
                 Renames the display name only — slug and URL stay the same.
               </p>
             </div>
+
+            <NoticeForm
+              notice={notice}
+              pending={pending}
+              onSave={(n) => run(() => setProductNoticeAction({ orgSlug, productSlug, notice: n }))}
+              onClear={() =>
+                run(() => setProductNoticeAction({ orgSlug, productSlug, notice: null }))
+              }
+            />
 
             {error && <div className="text-[12px] text-red-600 dark:text-red-400">{error}</div>}
           </div>

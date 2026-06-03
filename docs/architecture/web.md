@@ -144,6 +144,9 @@ registry path (`org` / `org/slug`) and `href` is an external URL — at most one
 - **Read:** the org/product/source detail responses return a typed `notice`
   field (raw `metadata` is not surfaced on products).
 - **Web:** `EntityNotice` renders a compact banner under the entity header.
+  Curators set / edit / clear it from each entity's local-dev admin menu via the
+  shared `NoticeForm` (message + an Internal-coordinate vs External-URL toggle),
+  which calls the `set{Org,Product,Source}NoticeAction` server actions.
 - **MCP:** `get_organization` emits `Notice: <message> → <coordinate>` so an
   agent can follow the pointer.
 - **No cascade:** a notice shows only on the entity it is set on. The

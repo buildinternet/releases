@@ -193,7 +193,12 @@ export async function ProductView({
         <CliCommand identifier={product.slug} />
         {adminEnabled && (
           <div className="mt-2">
-            <ProductAdminMenu orgSlug={orgSlug} productSlug={productSlug} name={product.name} />
+            <ProductAdminMenu
+              orgSlug={orgSlug}
+              productSlug={productSlug}
+              name={product.name}
+              notice={product.notice}
+            />
           </div>
         )}
         <EntityNotice notice={product.notice} />

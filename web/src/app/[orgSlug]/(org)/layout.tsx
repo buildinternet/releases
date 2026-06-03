@@ -93,6 +93,7 @@ export default async function OrgLayout({
               featured={org.featured ?? false}
               discovery={org.discovery}
               fetchPaused={org.fetchPaused}
+              notice={org.notice}
             />
           </div>
         )}
