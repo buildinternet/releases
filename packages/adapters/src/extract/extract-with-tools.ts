@@ -5,10 +5,12 @@ import {
   extractReleasesToolFull,
   getSliceTool,
   queryJsonTool,
+  withGuidance,
   TOOLLOOP_SYSTEM_PROMPT,
   MAX_ROUNDS,
   MAX_TOTAL_TOOL_CHARS,
   EXTRACTION_TEMPERATURE,
+  type ExtractionGuidance,
 } from "./shared.js";
 import { handleGetSlice, handleQueryJson } from "./tool-handlers.js";
 import type { ExtractDeps, ExtractedEntry } from "./types.js";
@@ -45,7 +47,14 @@ export class LoopFallbackError extends Error {
 
 export interface ExtractWithToolsOpts {
   body: string;
+  /** Base system prompt only — do NOT pre-fold guidance in (pass it via `guidance`). */
   systemPrompt: string;
+  /**
+   * Per-source / per-org guidance. Emitted as a trailing system block AFTER the
+   * cache breakpoint so the static base+TOOLLOOP prefix stays shareable across
+   * sources; still delivered to the model. Omit when there's no guidance.
+   */
+  guidance?: ExtractionGuidance;
   userMessage: string;
   sourceUrl: string;
   fetchUrl: string;
@@ -83,6 +92,11 @@ export async function extractWithTools(
     { role: "user", content: `${opts.userMessage}\n\n${preview.message}` },
   ];
 
+  // Static prompt first, breakpoint on it; volatile per-source/org guidance goes
+  // in a trailing block AFTER the breakpoint — so the base+TOOLLOOP text (and the
+  // tool schemas that render before it) stay byte-identical and cacheable across
+  // sources, instead of guidance being wedged mid-prefix. Guidance still reaches
+  // the model; it's just downstream of the cache read point.
   const systemBlocks: Anthropic.TextBlockParam[] = [
     {
       type: "text",
@@ -90,6 +104,10 @@ export async function extractWithTools(
       cache_control: { type: "ephemeral" },
     },
   ];
+  const guidanceText = opts.guidance ? withGuidance("", opts.guidance) : "";
+  if (guidanceText) {
+    systemBlocks.push({ type: "text", text: guidanceText });
+  }
 
   let totalInput = 0;
   let totalOutput = 0;

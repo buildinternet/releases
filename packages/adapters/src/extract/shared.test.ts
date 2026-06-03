@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { buildBodyGuardrail, mapEntries } from "./shared.js";
+import type Anthropic from "@anthropic-ai/sdk";
+import { applySlidingCacheBreakpoint, buildBodyGuardrail, mapEntries } from "./shared.js";
 import type { ExtractedEntry } from "./types.js";
 
 const SRC = "https://docs.x.ai/developers/release-notes";
@@ -75,5 +76,72 @@ describe("buildBodyGuardrail", () => {
 
   test("still rounds the token count into the prose", () => {
     expect(buildBodyGuardrail(148_156)).toContain("148,000 tokens");
+  });
+});
+
+describe("applySlidingCacheBreakpoint", () => {
+  test("strips a stale breakpoint and re-anchors the last block of the last message", () => {
+    const messages: Anthropic.MessageParam[] = [
+      { role: "user", content: "kickoff" },
+      {
+        role: "assistant",
+        content: [{ type: "text", text: "round 1", cache_control: { type: "ephemeral" } }],
+      },
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: "round 2 a" },
+          { type: "text", text: "round 2 b" },
+        ],
+      },
+    ];
+
+    applySlidingCacheBreakpoint(messages);
+
+    // Old breakpoint removed — never accumulate past the 4-breakpoint cap.
+    const prior = messages[1]!.content as Anthropic.TextBlockParam[];
+    expect(prior[0]!.cache_control).toBeUndefined();
+    // New breakpoint on the final block of the final turn.
+    const tail = messages[2]!.content as Anthropic.TextBlockParam[];
+    expect(tail[0]!.cache_control).toBeUndefined();
+    expect(tail[1]!.cache_control).toEqual({ type: "ephemeral" });
+  });
+
+  test("skips a server-tool tail block and anchors the nearest eligible block", () => {
+    // web_fetch pause_turn turns often end in a server_tool_use block; the API
+    // doesn't document cache_control there, so we must anchor the text block
+    // before it rather than risk a 400 that kills the extraction.
+    const messages = [
+      { role: "user", content: "kickoff" },
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: "fetching" },
+          { type: "server_tool_use", id: "s1", name: "web_fetch", input: {} },
+        ],
+      },
+    ] as unknown as Anthropic.MessageParam[];
+
+    applySlidingCacheBreakpoint(messages);
+
+    const tail = messages[1]!.content as Array<{ type: string; cache_control?: unknown }>;
+    expect(tail[0]!.cache_control).toEqual({ type: "ephemeral" });
+    expect(tail[1]!.cache_control).toBeUndefined();
+  });
+
+  test("is a no-op when the last message is a plain string (loop kickoff turn)", () => {
+    const messages: Anthropic.MessageParam[] = [
+      {
+        role: "assistant",
+        content: [{ type: "text", text: "earlier", cache_control: { type: "ephemeral" } }],
+      },
+      { role: "user", content: "string kickoff" },
+    ];
+
+    applySlidingCacheBreakpoint(messages);
+
+    // Prior breakpoint still stripped; none re-added (a string turn can't carry one).
+    const prior = messages[0]!.content as Anthropic.TextBlockParam[];
+    expect(prior[0]!.cache_control).toBeUndefined();
   });
 });

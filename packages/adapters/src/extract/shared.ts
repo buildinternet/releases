@@ -193,6 +193,55 @@ export function withParseInstructions(basePrompt: string, parseInstructions?: st
   return withGuidance(basePrompt, { parseInstructions });
 }
 
+// ── Prompt-cache breakpoint helpers ──────────────────────────────────
+
+/**
+ * Block types the Anthropic API documents as accepting `cache_control`
+ * (text / tool_use / tool_result / image / document). Server-tool blocks
+ * (`server_tool_use`, `web_fetch_tool_result`, …) are intentionally excluded:
+ * marking one is unspecified and risks a 400 that would kill a live extraction.
+ */
+const CACHEABLE_BLOCK_TYPES = new Set(["text", "tool_use", "tool_result", "image", "document"]);
+
+/**
+ * Slide the message-level cache breakpoint to the tail of the most recent turn.
+ *
+ * In an agentic loop the conversation grows every round, so the prior round's
+ * breakpoint must move forward or each request re-bills the whole accumulated
+ * prefix at full price. This strips every prior message-level `cache_control`
+ * (keeping us under the 4-breakpoint cap and leaving a single moving read
+ * point), then re-anchors on the last cache-eligible block of the last message.
+ * System-prompt and tool-definition breakpoints live in separate arrays and are
+ * left untouched.
+ *
+ * Anchors on the last *eligible* block (see {@link CACHEABLE_BLOCK_TYPES}): if
+ * the tail turn ends in a server-tool block (common on a `web_fetch` pause_turn)
+ * it scans back to the nearest text/tool block; if the turn has no eligible
+ * block it skips this round rather than risk an unsupported `cache_control`
+ * placement. No-op when the last message carries plain string content (e.g. the
+ * loop's kickoff turn) — the static tool + system breakpoints cover that case.
+ */
+export function applySlidingCacheBreakpoint(messages: Anthropic.MessageParam[]): void {
+  for (const msg of messages) {
+    if (typeof msg.content === "string") continue;
+    for (const block of msg.content) {
+      if ("cache_control" in block) {
+        delete (block as { cache_control?: unknown }).cache_control;
+      }
+    }
+  }
+
+  const last = messages[messages.length - 1];
+  if (!last || typeof last.content === "string") return;
+  for (let i = last.content.length - 1; i >= 0; i--) {
+    const block = last.content[i]!;
+    if (CACHEABLE_BLOCK_TYPES.has(block.type)) {
+      (block as { cache_control?: { type: "ephemeral" } }).cache_control = { type: "ephemeral" };
+      return;
+    }
+  }
+}
+
 // ── Prompt library ───────────────────────────────────────────────────
 
 export const EXTRACTION_RULES = `Rules:

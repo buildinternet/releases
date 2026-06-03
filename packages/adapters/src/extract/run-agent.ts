@@ -17,6 +17,7 @@ import {
   CLOUDFLARE_SYSTEM_PROMPT,
   mapEntries,
   withGuidance,
+  applySlidingCacheBreakpoint,
   DEFAULT_MAX_OUTPUT_TOKENS,
   type ExtractionGuidance,
   type MappedEntry,
@@ -398,6 +399,12 @@ async function runWebFetchLoop(
   let containerId: string | undefined;
 
   while (continuations <= maxContinuations) {
+    // Slide the cache breakpoint onto the freshly-appended turn so each
+    // continuation reads the accumulated web_fetch transcript (fetched page
+    // bodies — large and re-sent every round) from cache instead of re-billing
+    // it at full price. No-op on the first iteration: the kickoff message is a
+    // plain string, and the tool + system breakpoints already cover that round.
+    applySlidingCacheBreakpoint(messages);
     const stream = anthropicClient.messages.stream({
       model: agentModel,
       max_tokens: DEFAULT_MAX_OUTPUT_TOKENS,
