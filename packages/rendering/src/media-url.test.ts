@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { normalizeMediaUrl, cfImageUrl } from "./media-url.js";
+import { normalizeMediaUrl, cfImageUrl, cfMediaUrl } from "./media-url.js";
 
 describe("cfImageUrl", () => {
   const origin = "https://media.releases.sh";
@@ -66,6 +66,53 @@ describe("cfImageUrl", () => {
   test("returns the source unchanged when origin is empty", () => {
     expect(cfImageUrl("https://cdn.example.com/a.png", { origin: "", width: 240 })).toBe(
       "https://cdn.example.com/a.png",
+    );
+  });
+});
+
+describe("cfMediaUrl", () => {
+  const origin = "https://media.releases.sh";
+
+  test("wraps an absolute GIF URL in a Media Transformations video transform", () => {
+    expect(cfMediaUrl("https://cdn.example.com/demo.gif", { origin })).toBe(
+      "https://media.releases.sh/cdn-cgi/media/mode=video/https://cdn.example.com/demo.gif",
+    );
+  });
+
+  test("appends the source raw, preserving its path and query", () => {
+    const src =
+      "https://media.beehiiv.com/cdn-cgi/image/format=auto,onerror=redirect/uploads/x/subscribe_forms-2.gif";
+    expect(cfMediaUrl(src, { origin })).toBe(`${origin}/cdn-cgi/media/mode=video/${src}`);
+  });
+
+  test("strips a trailing slash on origin so the path is not doubled", () => {
+    expect(cfMediaUrl("https://cdn.example.com/a.gif", { origin: `${origin}/` })).toBe(
+      "https://media.releases.sh/cdn-cgi/media/mode=video/https://cdn.example.com/a.gif",
+    );
+  });
+
+  test("does not double-wrap an already-transformed media URL", () => {
+    const already =
+      "https://media.releases.sh/cdn-cgi/media/mode=video/https://cdn.example.com/a.gif";
+    expect(cfMediaUrl(already, { origin })).toBe(already);
+  });
+
+  test("leaves a relative URL unchanged (no absolute source to fetch)", () => {
+    expect(cfMediaUrl("/local/a.gif", { origin })).toBe("/local/a.gif");
+  });
+
+  test("leaves a data: URL unchanged", () => {
+    const data = "data:image/gif;base64,R0lGODlh";
+    expect(cfMediaUrl(data, { origin })).toBe(data);
+  });
+
+  test("leaves a non-parseable string unchanged", () => {
+    expect(cfMediaUrl("not a url", { origin })).toBe("not a url");
+  });
+
+  test("returns the source unchanged when origin is empty", () => {
+    expect(cfMediaUrl("https://cdn.example.com/a.gif", { origin: "" })).toBe(
+      "https://cdn.example.com/a.gif",
     );
   });
 });

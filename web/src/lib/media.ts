@@ -1,4 +1,4 @@
-import { cfImageUrl } from "@releases/rendering/media-url";
+import { cfImageUrl, cfMediaUrl } from "@releases/rendering/media-url";
 
 /** R2 / Cloudflare media origin (carries the `/cdn-cgi/image/` transform endpoint). */
 const MEDIA_ORIGIN = "https://media.releases.sh";
@@ -60,4 +60,49 @@ export function thumbUrl(
  */
 export function releaseThumbUrl(src: string, width: number): string {
   return thumbUrl(src, width, { enabled: IMG_TRANSFORM_ON, origin: MEDIA_ORIGIN });
+}
+
+/**
+ * Rollout flag for serving heavy animated GIFs as Cloudflare Media
+ * Transformations MP4 (`<video>`) instead of full-size GIF `<img>`. Default OFF:
+ * flag-off renders GIFs exactly as today. `NEXT_PUBLIC_*` is inlined at build
+ * time, so this is a static literal in the client bundle.
+ */
+export const MEDIA_VIDEO_ON = process.env.NEXT_PUBLIC_RELEASES_MEDIA_VIDEO === "true";
+
+/**
+ * True when `src` points at a GIF (by `.gif` pathname). Used to route heavy
+ * animated GIFs through an MP4 transform. Robust to stored items that are
+ * mistyped `image` (e.g. Firecrawl-ingested GIFs whose URL is a `cdn-cgi/image`
+ * wrapper ending in `.gif`). Unparseable inputs are not GIFs.
+ */
+export function isGifSrc(src: string): boolean {
+  try {
+    return /\.gif$/i.test(new URL(src).pathname);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Pure decision (parameterized on the flag for testability): render a media item
+ * as an MP4 `<video>` rather than an `<img>`. True for a `gif`-typed item or any
+ * `.gif` source, when the rollout flag is enabled.
+ */
+export function shouldRenderAsVideo(opts: {
+  type?: string;
+  src: string;
+  enabled: boolean;
+}): boolean {
+  if (!opts.enabled) return false;
+  return opts.type === "gif" || isGifSrc(opts.src);
+}
+
+/**
+ * The Cloudflare Media Transformations MP4 URL for a GIF source. Third-party and
+ * R2-hosted sources both work (cross-origin transforms are permitted on the
+ * media zone). See {@link cfMediaUrl}.
+ */
+export function releaseVideoUrl(src: string): string {
+  return cfMediaUrl(src, { origin: MEDIA_ORIGIN });
 }

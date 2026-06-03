@@ -14,6 +14,8 @@ import {
 import Link from "next/link";
 import { EXTERNAL_UGC_REL } from "@/lib/sanitize";
 import { OrgAvatar } from "./org-avatar";
+import { GifVideo } from "./gif-video";
+import { MEDIA_VIDEO_ON, shouldRenderAsVideo } from "@/lib/media";
 
 /**
  * One previewable image in the feed. Built by whoever renders the thumbnail
@@ -250,6 +252,7 @@ function LightboxOverlay({
 
   const { src, alt, title, dateLabel, byline, avatarUrl, detailHref, sourceUrl } = list[index];
   const imageFailed = erroredSrc === src;
+  const asVideo = shouldRenderAsVideo({ src, enabled: MEDIA_VIDEO_ON });
   const primaryIsExternal = !detailHref && !!sourceUrl;
   const primaryHref = detailHref ?? sourceUrl;
   const primaryLabel = detailHref ? "View full release" : "View source";
@@ -333,7 +336,15 @@ function LightboxOverlay({
           a high-res original doesn't upscale to fill the viewport. A broken src
           falls back to a placeholder instead of the browser's broken-image icon. */}
       <div className="flex min-h-0 flex-1 items-center justify-center px-4 pb-6 sm:px-6">
-        {imageFailed ? (
+        {asVideo ? (
+          // GifVideo carries its own <img> fallback on transform error, so it
+          // sits outside the imageFailed placeholder branch.
+          <GifVideo
+            src={src}
+            alt={alt}
+            className="lightbox-card h-auto max-h-full w-auto max-w-4xl cursor-default rounded-md object-contain shadow-2xl ring-1 ring-white/10"
+          />
+        ) : imageFailed ? (
           <div
             onClick={(e) => e.stopPropagation()}
             className="lightbox-card flex cursor-default items-center justify-center rounded-md px-10 py-16 text-[13px] text-white/50 ring-1 ring-white/10"
