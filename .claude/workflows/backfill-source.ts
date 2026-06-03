@@ -428,12 +428,17 @@ const summaryInputs = {
   spentTokens,
 };
 const rep = await agent(
-  `Write the maintenance run summary for this backfill.
-Target file: ${RUN_DIR ? RUN_DIR + "/summary.md" : "<run dir from `releases admin work status --json`>/summary.md"}
-Follow docs/architecture/maintenance-workspace.md's summary.md template (status, per-target counts table, cost, what changed, findings). Use these numbers VERBATIM (do not invent): ${JSON.stringify(summaryInputs)}.
-Cost line, exactly: "${spentTokens} output tokens this turn (budget.spent(), excludes this summary write); session sub-agent tokens, no managed-agent bill." Stamp the date via \`date -u +%FT%TZ\`. Surface data-quality findings (empty content, thin pages, deferred-for-budget pages, write errors).
-${WE_STARTED_RUN ? "Then run `releases admin work end` (this run started it)." : "Do NOT run `releases admin work end` — a parent sweep owns this run."}
-Return the absolute report path.`,
+  `Write the maintenance run summary for this backfill. Do these steps IN ORDER:
+
+1. Write the summary file to: ${RUN_DIR ? RUN_DIR + "/summary.md" : "<run dir from `releases admin work status --json`>/summary.md"}
+   Follow docs/architecture/maintenance-workspace.md's summary.md template (status, per-target counts table, cost, what changed, findings). Use these numbers VERBATIM (do not invent): ${JSON.stringify(summaryInputs)}.
+   Cost line, exactly: "${spentTokens} output tokens this turn (budget.spent(), excludes this summary write); session sub-agent tokens, no managed-agent bill." Stamp the date via \`date -u +%FT%TZ\`. Surface data-quality findings (empty content, thin pages, deferred-for-budget pages, write errors).
+
+2. Self-verify the file was written: run \`test -f "<absolute path>" && echo EXISTS || echo MISSING\`. If the output is MISSING, try writing the file again before continuing.
+
+3. ${WE_STARTED_RUN ? "Run `releases admin work end` (this run started it)." : "Do NOT run `releases admin work end` — a parent sweep owns this run."}
+
+4. Return the absolute report path and set \`wrote\` to true if the file exists, false if it does not.`,
   {
     label: "run-report",
     phase: "Report",
@@ -441,11 +446,19 @@ Return the absolute report path.`,
     schema: {
       type: "object",
       additionalProperties: false,
-      properties: { reportPath: { type: "string" } },
-      required: ["reportPath"],
+      properties: {
+        reportPath: { type: "string" },
+        wrote: { type: "boolean" },
+      },
+      required: ["reportPath", "wrote"],
     },
   },
 );
+if (!rep || !rep.wrote || !rep.reportPath) {
+  log(
+    `WARNING: run-report agent did not confirm summary.md was written (wrote=${rep?.wrote}, reportPath=${rep?.reportPath || "(empty)"}). Check ${RUN_DIR || "the run dir"} manually.`,
+  );
+}
 
 return {
   status,
