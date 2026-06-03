@@ -3,6 +3,7 @@ import { describeRoute, resolver } from "hono-openapi";
 import { hideInProduction } from "../openapi.js";
 import { and, count, eq, inArray, max, min, sql, type SQL } from "drizzle-orm";
 import { parseKindParam, KIND_VALUES } from "@buildinternet/releases-core/kinds";
+import { parseNotice, setNoticeInMetadata, type Notice } from "@buildinternet/releases-core/notice";
 import { createDb } from "../db.js";
 import {
   products,
@@ -62,6 +63,20 @@ import { getProductActivityData, getProductHeatmapData } from "../queries/orgs.j
 import { listCollectionsWhere } from "../queries/collections.js";
 
 export const productRoutes = new Hono<Env>();
+
+/**
+ * `ProductRowSchema` (the product-row wire contract) omits `metadata`. Products
+ * gained a `metadata` column for entity notices; strip the raw blob from any
+ * raw product row before returning it so the notice JSON (and any future
+ * metadata) doesn't leak out of the mutation responses. The GET detail surfaces
+ * a typed `notice` field instead (see `buildProductDetailPayload`).
+ */
+const stripProductMetadata = <T extends { metadata?: string | null }>(
+  row: T,
+): Omit<T, "metadata"> => {
+  const { metadata: _metadata, ...rest } = row;
+  return rest;
+};
 
 async function detectSourceSlugShadow(
   db: ReturnType<typeof createDb>,
@@ -408,7 +423,7 @@ productRoutes.post(
 
     const moved = await migrateOrgToProduct(db, sourceOrg.id, targetOrg.id, product.id);
     return c.json({
-      product,
+      product: stripProductMetadata(product),
       sourcesMoved: moved.sourcesMoved,
       accountsMoved: moved.accountsMoved,
       sourceOrgDeleted: sourceOrg.slug,
@@ -493,11 +508,13 @@ export async function buildProductDetailPayload(
       .orderBy(domainAliases.domain),
   ]);
 
+  const { metadata, ...productRow } = product;
   return {
-    ...product,
+    ...productRow,
     sources: productSources,
     tags: tagRows.map((t) => t.name),
     aliases: aliasRows.map((a) => a.domain),
+    notice: parseNotice(metadata),
   };
 }
 
@@ -655,10 +672,10 @@ productRoutes.post(
       return c.json(
         shadowed
           ? {
-              ...created,
+              ...stripProductMetadata(created),
               warning: `Product slug "${slug}" shadows an existing source in this org; the product will win the bare URL.`,
             }
-          : created,
+          : stripProductMetadata(created),
         201,
       );
     } catch (err) {
@@ -688,6 +705,7 @@ const patchProductHandler = async (c: import("hono").Context<Env>) => {
     aliases?: string[];
     kind?: string | null;
     avatarUrl?: string | null;
+    notice?: Notice | null;
   } = {
     ...(c.req as unknown as { valid: (target: "json") => Record<string, unknown> }).valid("json"),
   };
@@ -710,9 +728,11 @@ const patchProductHandler = async (c: import("hono").Context<Env>) => {
   if (body.category !== undefined) updates.category = body.category;
   if ("kind" in body) updates.kind = body.kind ?? null;
   if (body.avatarUrl !== undefined) updates.avatarUrl = body.avatarUrl;
+  if (body.notice !== undefined)
+    updates.metadata = setNoticeInMetadata(product.metadata, body.notice);
 
   if (Object.keys(updates).length === 0 && body.tags === undefined && body.aliases === undefined) {
-    return c.json(product);
+    return c.json(stripProductMetadata(product));
   }
 
   let updated = product;
@@ -760,7 +780,7 @@ const patchProductHandler = async (c: import("hono").Context<Env>) => {
     c.executionCtx.waitUntil(embedProductSideEffect(c.env, db, product.id));
   }
 
-  return c.json(updated);
+  return c.json(stripProductMetadata(updated));
 };
 const patchProductRoute = describeRoute({
   hide: hideInProduction,

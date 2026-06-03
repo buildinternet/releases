@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { KIND_VALUES } from "@buildinternet/releases-core/kinds";
-import { CategorySchema, ListResponseSchema, ReleaseItemSchema } from "./shared.js";
+import { CategorySchema, ListResponseSchema, NoticeSchema, ReleaseItemSchema } from "./shared.js";
 import { SourceTypeSchema, SourceFeedPaginationSchema } from "./sources.js";
 
 /**
@@ -89,6 +89,7 @@ export const ProductDetailSchema = ProductRowSchema.extend({
   releases: z.array(ReleaseItemSchema).optional(),
   /** Cursor pagination for the embedded release feed — set by the web format adapter (PR #1207), absent on bare product detail. */
   pagination: SourceFeedPaginationSchema.optional(),
+  notice: NoticeSchema.nullable().optional(),
 });
 
 /**
@@ -125,6 +126,7 @@ export const UpdateProductBodySchema = z.object({
   aliases: z.array(z.string()).optional(),
   kind: z.enum(KIND_VALUES).nullable().optional(),
   avatarUrl: z.string().nullable().optional(),
+  notice: NoticeSchema.nullable().optional(),
 });
 
 /**

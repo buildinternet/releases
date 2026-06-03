@@ -4,6 +4,7 @@ import {
   AppStoreSourceInfoSchema,
   CategorySchema,
   ListResponseSchema,
+  NoticeSchema,
   OverviewPageItemSchema,
   PaginationSchema,
   ReleaseItemSchema,
@@ -114,6 +115,7 @@ export const UpdateOrgBodySchema = z.object({
   featured: z.boolean().optional(),
   /** Admin-only: promote or demote the org's discovery status (curated/agent/on_demand). */
   discovery: z.enum(["curated", "agent", "on_demand"]).optional(),
+  notice: NoticeSchema.nullable().optional(),
 });
 
 // Org detail's products query selects a strict subset of `ProductListItem` —
@@ -455,4 +457,5 @@ export const OrgDetailSchema = z.object({
   sources: z.array(SourceListItemSchema),
   overview: OverviewPageItemSchema.nullable().optional(),
   playbook: OrgDetailPlaybookSchema.nullable().optional(),
+  notice: NoticeSchema.nullable().optional(),
 });

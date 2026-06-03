@@ -18,6 +18,7 @@ import { SourceAdminMenu } from "@/components/source-admin-menu";
 import { isLocalAdminEnabled } from "@/lib/local-admin-flag";
 import { SourceTimeline } from "@/components/source-timeline";
 import { CliCommand } from "@/components/cli-command";
+import { EntityNotice } from "@/components/entity-notice";
 import { api } from "@/lib/api";
 import { formatSourceDate, sourceUrlSidebarItem } from "@/lib/source-display";
 import { getResolved } from "./_lib/resolve";
@@ -141,6 +142,7 @@ export default async function OrgSlugLayout({
           )}
         </div>
         <CliCommand identifier={source.slug} />
+        <EntityNotice notice={source.notice} />
         <div className="flex flex-col md:flex-row gap-10 mt-6 pb-12">
           <div className="flex-1 min-w-0">
             {activity && (

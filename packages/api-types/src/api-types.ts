@@ -250,6 +250,7 @@ export {
   OverviewPageItemSchema,
   OverviewCitationSchema,
   CategorySchema,
+  NoticeSchema,
 } from "./schemas/shared.js";
 export {
   OrgListItemSchema,

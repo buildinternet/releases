@@ -24,6 +24,7 @@ import { AppIcon } from "@/components/app-icon";
 import { getAppInfo, type AppInfo } from "@/lib/app-source";
 import { sourceIdPath } from "@/lib/links";
 import { ProductAdminMenu } from "@/components/product-admin-menu";
+import { EntityNotice } from "@/components/entity-notice";
 import { isLocalAdminEnabled } from "@/lib/local-admin-flag";
 import { formatSourceDate, shortUrl } from "@/lib/source-display";
 
@@ -195,7 +196,7 @@ export async function ProductView({
             <ProductAdminMenu orgSlug={orgSlug} productSlug={productSlug} name={product.name} />
           </div>
         )}
-
+        <EntityNotice notice={product.notice} />
         <div className="flex flex-col md:flex-row gap-10 mt-6 pb-6">
           <div className="flex-1 min-w-0">
             {activity && (

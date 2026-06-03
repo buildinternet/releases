@@ -127,6 +127,28 @@ The `released-media` R2 bucket also holds org avatars (`orgs/{slug}.{ext}`, writ
 
 `FallbackImage` / `FallbackPlainImage` in `web/src/components/fallback-image.tsx` show an "Image unavailable" placeholder when a third-party URL fails to load.
 
+## Entity notices
+
+A **notice** is one small curator-set note attached to an org, product, or
+source — e.g. "Windsurf is now Cognition's Devin → cognition/devin". It is a
+JSON sub-object stored under the `notice` key of the entity's `metadata` column
+(`organizations`/`sources`/`releases` already have `metadata`; `products` gained
+it for this feature). Shape (`@buildinternet/releases-core/notice` `Notice`,
+validated on write by `NoticeSchema` in `@buildinternet/releases-api-types`):
+`{ message, linkText?, coordinate?, href? }`, where `coordinate` is an internal
+registry path (`org` / `org/slug`) and `href` is an external URL — at most one.
+
+- **Write:** `PATCH /v1/orgs/:slug` · `/v1/products/:id` · `/v1/sources/:slug`
+  with `{ notice: {...} }` to set or `{ notice: null }` to clear; the merge
+  preserves all other metadata keys.
+- **Read:** the org/product/source detail responses return a typed `notice`
+  field (raw `metadata` is not surfaced on products).
+- **Web:** `EntityNotice` renders a compact banner under the entity header.
+- **MCP:** `get_organization` emits `Notice: <message> → <coordinate>` so an
+  agent can follow the pointer.
+- **No cascade:** a notice shows only on the entity it is set on. The
+  "formerly X" case is two independent notices pointing at each other.
+
 ## Fetch Log workflow drawer (dev-only)
 
 On the dev-gated Fetch Log tab, clicking a Fetch Plan row opens a per-source ingestion-pipeline drawer: an adaptive vertical stage list (topology from `describeWorkflowStages` in `@releases/adapters/workflow-stages`) annotated with current state and last-run outcome derived from `fetch_log` + `usage_log` + `sources` via `GET /v1/status/source-workflow`. Phase 1 is derived-data only; per-stage timing instrumentation is a documented Phase 2. Spec: `docs/superpowers/specs/2026-05-31-per-source-workflow-viz-design.md`.
