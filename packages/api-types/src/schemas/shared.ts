@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { RELEASE_TYPES } from "@buildinternet/releases-core/schema";
 import { CATEGORIES } from "@buildinternet/releases-core/categories";
+import { isValidNoticeCoordinate } from "@buildinternet/releases-core/notice";
 
 export const CategorySchema = z.enum(CATEGORIES);
 
@@ -149,6 +150,26 @@ export const OverviewCitationSchema = z.object({
   citedText: z.string(),
   releaseId: z.string().nullable().optional(),
 });
+
+/**
+ * Entity notice — a small curator-set note on an org / product / source. Stored
+ * under the `notice` key of the entity's metadata JSON; mirrors the `Notice`
+ * type in @buildinternet/releases-core/notice. `coordinate` is an internal
+ * registry path ("org" / "org/slug"); `href` is an external URL; at most one.
+ */
+export const NoticeSchema = z
+  .object({
+    message: z.string().min(1).max(280),
+    linkText: z.string().max(60).optional(),
+    coordinate: z.string().max(200).optional(),
+    href: z.url().max(500).optional(),
+  })
+  .refine((n) => !(n.coordinate && n.href), {
+    message: "notice may set coordinate or href, not both",
+  })
+  .refine((n) => !n.coordinate || isValidNoticeCoordinate(n.coordinate), {
+    message: "notice.coordinate must be 'org' or 'org/slug'",
+  });
 
 export const OverviewPageItemSchema = z.object({
   scope: z.enum(["org", "product"]),
