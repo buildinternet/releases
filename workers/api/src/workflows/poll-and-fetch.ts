@@ -17,7 +17,7 @@ import type { ReleaseComposition } from "@buildinternet/releases-core/compositio
 import { buildCompositionMetadataSet } from "@releases/core-internal/composition-metadata";
 import { summarizeNotOptedOut } from "@releases/core-internal/eligibility";
 import { releaseCoverage } from "@releases/db/schema-coverage.js";
-import { SOURCE_DELETED_SENTINEL, recordWorkflowFailure } from "./_shared.js";
+import { SOURCE_DELETED_SENTINEL, isDurableObjectReset, recordWorkflowFailure } from "./_shared.js";
 import { buildFetchOneEnv } from "./_fetch-env.js";
 import { logEvent } from "@releases/lib/log-event";
 import { dbErrorLogFields } from "@releases/lib/db-errors";
@@ -675,6 +675,24 @@ export class PollAndFetchWorkflow extends WorkflowEntrypoint<
         return;
       }
       const errorMsg = err instanceof Error ? err.message : String(err);
+
+      // Durable Object reset (a deploy landed mid-fire): transient infra churn,
+      // not a source failure. The Workflows engine resumes the instance on the
+      // new code and the source completes within the same fire (verified: reset
+      // → `done` ~5 min later, nothing missed). Log it for visibility but skip
+      // the error-level `step-failed` + the `workflow_failures` row that would
+      // otherwise drive a false-alarm alert email. Re-throw is preserved so the
+      // engine's resume/retry path is untouched.
+      if (isDurableObjectReset(errorMsg)) {
+        logEvent("warn", {
+          component: "poll-fetch-workflow",
+          event: "do-reset-transient",
+          sourceId,
+          step: currentStep,
+        });
+        throw err;
+      }
+
       logEvent("error", {
         component: "poll-fetch-workflow",
         event: "step-failed",
