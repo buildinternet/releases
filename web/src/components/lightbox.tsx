@@ -342,6 +342,7 @@ function LightboxOverlay({
           <GifVideo
             src={src}
             alt={alt}
+            onClick={(e) => e.stopPropagation()}
             className="lightbox-card h-auto max-h-full w-auto max-w-4xl cursor-default rounded-md object-contain shadow-2xl ring-1 ring-white/10"
           />
         ) : imageFailed ? (

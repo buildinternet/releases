@@ -628,14 +628,26 @@ export function ReleaseListItem({
                         className="shrink-0 cursor-zoom-in"
                         aria-label="Preview image"
                       >
-                        <FallbackImage
-                          src={releaseThumbUrl(thumbnail.r2Url ?? thumbnail.url, 240)}
-                          alt={thumbnail.alt || ""}
-                          width={120}
-                          height={72}
-                          className="rounded-md object-cover w-[120px] h-[72px] border border-stone-200 dark:border-stone-800"
-                          unoptimized={IMG_TRANSFORM_ON || undefined}
-                        />
+                        {shouldRenderAsVideo({
+                          type: thumbnail.type,
+                          src: thumbnail.r2Url ?? thumbnail.url,
+                          enabled: MEDIA_VIDEO_ON,
+                        }) ? (
+                          <GifVideo
+                            src={thumbnail.r2Url ?? thumbnail.url}
+                            alt={thumbnail.alt || ""}
+                            className="rounded-md object-cover w-[120px] h-[72px] border border-stone-200 dark:border-stone-800"
+                          />
+                        ) : (
+                          <FallbackImage
+                            src={releaseThumbUrl(thumbnail.r2Url ?? thumbnail.url, 240)}
+                            alt={thumbnail.alt || ""}
+                            width={120}
+                            height={72}
+                            className="rounded-md object-cover w-[120px] h-[72px] border border-stone-200 dark:border-stone-800"
+                            unoptimized={IMG_TRANSFORM_ON || undefined}
+                          />
+                        )}
                       </button>
                     )}
                   </div>

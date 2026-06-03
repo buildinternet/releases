@@ -1,7 +1,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { EXTERNAL_UGC_REL, isSafeHref, isSafeImgSrc } from "@/lib/sanitize";
 import { youtubeEmbedUrl, youtubeVideoId } from "@/lib/video-source";
+import { MEDIA_VIDEO_ON, shouldRenderAsVideo } from "@/lib/media";
 import { FallbackPlainImage } from "./fallback-image";
+import { GifVideo } from "./gif-video";
 
 interface MarkdownComponentOptions {
   imgClass?: string;
@@ -50,13 +52,17 @@ export function createMarkdownComponents(opts: MarkdownComponentOptions = {}): R
     img: (props: any) => {
       const src = props.src as string | undefined;
       if (!isSafeImgSrc(src)) return null;
-      return (
-        <FallbackPlainImage
-          src={src!}
-          alt={props.alt || ""}
-          className={`rounded-md max-w-full h-auto ${imgClass}`}
-        />
-      );
+      const className = `rounded-md max-w-full h-auto ${imgClass}`;
+      // Heavy animated GIFs render as a Media Transformations MP4 <video> (same
+      // decision the gallery/lightbox use), keyed off the `.gif` pathname so
+      // both `/_media/`-hydrated R2 URLs and third-party sources are covered.
+      // The shared className keeps the <video> at the inline <img>'s width and
+      // rounding inside the prose container. GifVideo carries its own <img>
+      // fallback on transform error.
+      if (shouldRenderAsVideo({ src: src!, enabled: MEDIA_VIDEO_ON })) {
+        return <GifVideo src={src!} alt={props.alt || ""} className={className} />;
+      }
+      return <FallbackPlainImage src={src!} alt={props.alt || ""} className={className} />;
     },
     a: (props: any) => {
       const href = props.href as string | undefined;
