@@ -557,3 +557,81 @@ describe("extractWithTools — fallback triggers", () => {
     ).rejects.toMatchObject({ name: "LoopFallbackError", reason: "max_tokens" });
   });
 });
+
+describe("extractWithTools — guidance placement", () => {
+  function capturingClient(captured: Anthropic.MessageCreateParams[]): Pick<Anthropic, "messages"> {
+    return {
+      messages: {
+        stream: ((params: Anthropic.MessageCreateParams) => {
+          captured.push(params);
+          return {
+            finalMessage: async () =>
+              ({
+                id: "m1",
+                type: "message",
+                role: "assistant",
+                model: "x",
+                content: [
+                  { type: "tool_use", id: "t1", name: "extract_releases", input: { releases: [] } },
+                ],
+                stop_reason: "tool_use",
+                stop_sequence: null,
+                usage: {
+                  input_tokens: 100,
+                  output_tokens: 10,
+                  cache_read_input_tokens: 0,
+                  cache_creation_input_tokens: 0,
+                },
+              }) as Anthropic.Message,
+          } as never;
+        }) as never,
+      } as never,
+    };
+  }
+
+  test("emits guidance in a trailing system block after the cached static block", async () => {
+    const captured: Anthropic.MessageCreateParams[] = [];
+    await extractWithTools(
+      {
+        body: JSON.stringify({ a: 1 }),
+        systemPrompt: "BASE_PROMPT",
+        guidance: { parseInstructions: "PER_SOURCE_NOTE", playbookContext: "ORG_PLAYBOOK" },
+        userMessage: "Extract from:",
+        sourceUrl: "https://x.test",
+        fetchUrl: "https://x.test/feed.json",
+      },
+      makeDeps(capturingClient(captured)),
+    );
+
+    const sys = captured[0]!.system as Anthropic.TextBlockParam[];
+    expect(sys).toHaveLength(2);
+    // Static block carries the breakpoint and is free of volatile guidance —
+    // so the prefix stays byte-identical (and cacheable) across sources.
+    expect(sys[0]!.cache_control).toEqual({ type: "ephemeral" });
+    expect(sys[0]!.text).toContain("BASE_PROMPT");
+    expect(sys[0]!.text).not.toContain("PER_SOURCE_NOTE");
+    expect(sys[0]!.text).not.toContain("ORG_PLAYBOOK");
+    // Guidance trails the breakpoint, uncached, but still delivered to the model.
+    expect(sys[1]!.cache_control).toBeUndefined();
+    expect(sys[1]!.text).toContain("PER_SOURCE_NOTE");
+    expect(sys[1]!.text).toContain("ORG_PLAYBOOK");
+  });
+
+  test("omits the trailing block when no guidance is supplied", async () => {
+    const captured: Anthropic.MessageCreateParams[] = [];
+    await extractWithTools(
+      {
+        body: JSON.stringify({ a: 1 }),
+        systemPrompt: "BASE_PROMPT",
+        userMessage: "Extract from:",
+        sourceUrl: "https://x.test",
+        fetchUrl: "https://x.test/feed.json",
+      },
+      makeDeps(capturingClient(captured)),
+    );
+
+    const sys = captured[0]!.system as Anthropic.TextBlockParam[];
+    expect(sys).toHaveLength(1);
+    expect(sys[0]!.cache_control).toEqual({ type: "ephemeral" });
+  });
+});
