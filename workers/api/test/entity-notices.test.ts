@@ -1,4 +1,5 @@
 import { describe, it, expect } from "bun:test";
+import { eq } from "drizzle-orm";
 import { organizations, products, sources } from "@buildinternet/releases-core/schema";
 import { orgRoutes } from "../src/routes/orgs.js";
 import { productRoutes } from "../src/routes/products.js";
@@ -40,6 +41,11 @@ describe("org notice", () => {
     );
     expect(set.status).toBe(200);
 
+    // the notice merge preserves other metadata keys (org detail hides raw
+    // metadata, so assert against the stored row directly)
+    const [storedOrg] = await db.select().from(organizations).where(eq(organizations.id, "org_ws"));
+    expect(JSON.parse(storedOrg.metadata ?? "{}").feedUrl).toBe("https://x");
+
     // detail exposes typed notice
     const detail = await app(new Request("https://x.test/v1/orgs/windsurf"));
     const body = (await detail.json()) as {
@@ -80,6 +86,8 @@ describe("product notice", () => {
       ),
     );
     expect(set.status).toBe(200);
+    // the PATCH response is a raw product row — it must not leak the metadata blob
+    expect("metadata" in ((await set.json()) as Record<string, unknown>)).toBe(false);
 
     const detail = await app(new Request("https://x.test/v1/orgs/cognition/products/devin"));
     const body = (await detail.json()) as {
