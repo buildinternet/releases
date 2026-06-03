@@ -8,7 +8,7 @@ import { Sidebar } from "@/components/sidebar";
 import { OrgAvatar } from "@/components/org-avatar";
 import { OrgTabs } from "@/components/org-tabs";
 import { CliCommand } from "@/components/cli-command";
-import { taxonomySidebarSections, TaxonomyChips } from "@/components/taxonomy-chips";
+import { taxonomySidebarSections, collectionsSidebarSection } from "@/components/taxonomy-chips";
 import { OrgAdminMenu } from "@/components/org-admin-menu";
 import { isLocalAdminEnabled } from "@/lib/local-admin-flag";
 import { domainHref } from "@/lib/source-display";
@@ -50,25 +50,7 @@ export default async function OrgLayout({
         : [],
     },
     ...taxonomySidebarSections({ category: org.category, tags: org.tags }),
-    ...(collections.length > 0
-      ? [
-          {
-            items: [
-              {
-                label: "Featured in",
-                value: (
-                  <TaxonomyChips
-                    items={collections.map((c) => ({
-                      label: c.name,
-                      href: `/collections/${c.slug}`,
-                    }))}
-                  />
-                ),
-              },
-            ],
-          },
-        ]
-      : []),
+    ...collectionsSidebarSection(collections),
   ];
 
   return (

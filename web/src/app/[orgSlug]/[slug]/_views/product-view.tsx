@@ -7,6 +7,7 @@ import {
   type OverviewPageItem,
   type OrgActivity,
   type OrgHeatmap,
+  type CollectionListItem,
 } from "@/lib/api";
 import { tryFetch } from "@/lib/ssr-fetch";
 import type { SourceType } from "@buildinternet/releases-core/source-enums";
@@ -17,7 +18,7 @@ import { JsonLd } from "@/components/json-ld";
 import { OrgReleaseList } from "@/components/org-release-list";
 import { OverviewView } from "@/components/overview-view";
 import { ReleaseTimeline } from "@/components/release-timeline";
-import { taxonomySidebarSections } from "@/components/taxonomy-chips";
+import { taxonomySidebarSections, collectionsSidebarSection } from "@/components/taxonomy-chips";
 import { buildReleaseItemListJsonLd } from "@/lib/schema-org";
 import { AppIcon } from "@/components/app-icon";
 import { getAppInfo, type AppInfo } from "@/lib/app-source";
@@ -40,19 +41,21 @@ export async function ProductView({
   const productRef = { orgSlug, productSlug };
   const activityFrom = daysAgoIso(365 * 2).slice(0, 10);
 
-  // Initial feed rows (product-scoped), overview, activity, heatmap — all best-effort.
-  const [releasesResult, overviewResult, activityResult, heatmapResult] = await Promise.allSettled([
-    api.orgReleases(orgSlug, { product: productSlug }),
-    api.productOverview(product.id),
-    tryFetch(api.productActivity(productRef, activityFrom), {
-      route: `/${orgSlug}/${productSlug}`,
-      event: "product-activity-fetch-failed",
-    }),
-    tryFetch(api.productHeatmap(productRef), {
-      route: `/${orgSlug}/${productSlug}`,
-      event: "product-heatmap-fetch-failed",
-    }),
-  ]);
+  // Initial feed rows (product-scoped), overview, activity, heatmap, collections — all best-effort.
+  const [releasesResult, overviewResult, activityResult, heatmapResult, collectionsResult] =
+    await Promise.allSettled([
+      api.orgReleases(orgSlug, { product: productSlug }),
+      api.productOverview(product.id),
+      tryFetch(api.productActivity(productRef, activityFrom), {
+        route: `/${orgSlug}/${productSlug}`,
+        event: "product-activity-fetch-failed",
+      }),
+      tryFetch(api.productHeatmap(productRef), {
+        route: `/${orgSlug}/${productSlug}`,
+        event: "product-heatmap-fetch-failed",
+      }),
+      api.productCollections(productRef),
+    ]);
   const initialReleases: OrgReleasesFeedResponse =
     releasesResult.status === "fulfilled"
       ? releasesResult.value
@@ -96,6 +99,11 @@ export async function ProductView({
     new Set(product.sources.map((s) => s.type)),
   ) as SourceType[];
 
+  // Collections this product is pinned in (e.g. "coding agents" → Claude Code).
+  // Also surfaced on the parent org page, which merges org + product membership.
+  const collections: CollectionListItem[] =
+    collectionsResult.status === "fulfilled" ? collectionsResult.value : [];
+
   const latestPublishedAt = initialReleases.releases[0]?.publishedAt ?? null;
   const primaryItems = [
     ...(latestPublishedAt ? [{ label: "Latest", value: formatSourceDate(latestPublishedAt) }] : []),
@@ -106,6 +114,7 @@ export async function ProductView({
   const sidebarSections = [
     ...(primaryItems.length > 0 ? [{ items: primaryItems }] : []),
     ...taxonomySidebarSections({ category: product.category, tags: product.tags }),
+    ...collectionsSidebarSection(collections),
   ];
 
   const productUrl = `https://releases.sh/${orgSlug}/${productSlug}`;

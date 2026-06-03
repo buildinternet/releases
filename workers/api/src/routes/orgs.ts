@@ -23,7 +23,6 @@ import {
   CreateTagBodySchema,
   TagRowSchema,
   DeleteOrgAccountResponseSchema,
-  type CollectionListItem,
 } from "@buildinternet/releases-api-types";
 import { validateJson } from "../lib/validate.js";
 import { eq, count, max, min, and, sql, inArray, gte, desc } from "drizzle-orm";
@@ -42,8 +41,6 @@ import {
   domainAliases,
   knowledgePages,
   knowledgePageCitations,
-  collections,
-  collectionMembers,
 } from "@buildinternet/releases-core/schema";
 import { daysAgoIso } from "@buildinternet/releases-core/dates";
 import { parseCompositionFromMetadata } from "@buildinternet/releases-core/composition";
@@ -87,6 +84,7 @@ import {
   getOrgSourceSparklines,
   getOrgReleasesFeed,
 } from "../queries/orgs.js";
+import { listCollectionsWhere } from "../queries/collections.js";
 import { embedAndUpsertEntities, type EntityKind } from "@releases/search/embed-entities.js";
 import { buildEmbedConfig } from "@releases/search/embed-config.js";
 import { logEvent } from "@releases/lib/log-event";
@@ -966,14 +964,15 @@ orgRoutes.get(
   },
 );
 
-// Collections this org is a member of, ordered by collection name.
+// Collections this org appears in — either as a direct org member or via one
+// of its products — ordered by collection name.
 orgRoutes.get(
   "/orgs/:slug/collections",
   describeRoute({
     tags: ["Orgs"],
     summary: "Collections this org belongs to",
     description:
-      "Returns the curated collections that include this organization, ordered alphabetically by collection name. Each item includes `memberCount` (visible public orgs only). Use `GET /v1/collections/:slug` for the full collection detail.",
+      "Returns the curated collections that include this organization — either because the org itself is a member, or because one of its products is a member (e.g. a `coding-agents` collection that pins Claude Code surfaces on the Anthropic org page). Deduplicated and ordered alphabetically by collection name. Each item includes `memberCount` (visible public orgs + products, matching `GET /v1/collections`). Use `GET /v1/collections/:slug` for the full collection detail.",
     responses: {
       200: {
         description: "Collection membership list",
@@ -995,32 +994,17 @@ orgRoutes.get(
       .where(orgWhere(slug));
     if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
 
-    const rows = await db
-      .select({
-        slug: collections.slug,
-        name: collections.name,
-        description: collections.description,
-        isFeatured: collections.isFeatured,
-        // Count visible members only — joining through organizations_public
-        // matches /v1/collections so the count and the rendered list agree.
-        memberCount: sql<number>`(
-        SELECT COUNT(*) FROM ${collectionMembers} cm
-        INNER JOIN organizations_public op ON op.id = cm.org_id
-        WHERE cm.collection_id = ${collections.id}
+    // Surface a collection when the org itself is pinned OR any of the org's
+    // visible products is pinned; the IN-subquery dedupes a collection that
+    // pins both down to a single row.
+    const body = await listCollectionsWhere(
+      db,
+      sql`c.id IN (
+        SELECT cm.collection_id FROM collection_members cm
+        WHERE cm.org_id = ${org.id}
+           OR cm.product_id IN (SELECT id FROM products_active WHERE org_id = ${org.id})
       )`,
-      })
-      .from(collections)
-      .innerJoin(collectionMembers, eq(collectionMembers.collectionId, collections.id))
-      .where(eq(collectionMembers.orgId, org.id))
-      .orderBy(collections.name);
-
-    const body: CollectionListItem[] = rows.map((r) => ({
-      slug: r.slug,
-      name: r.name,
-      description: r.description,
-      isFeatured: r.isFeatured,
-      memberCount: Number(r.memberCount),
-    }));
+    );
     return c.json(body);
   },
 );
