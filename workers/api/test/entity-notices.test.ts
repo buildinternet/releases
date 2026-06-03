@@ -138,3 +138,22 @@ describe("source notice", () => {
     expect(((await afterDetail.json()) as { notice?: unknown }).notice ?? null).toBeNull();
   });
 });
+
+describe("notice validation", () => {
+  it("rejects a notice with both coordinate and href (400)", async () => {
+    const db = mkDb();
+    await db
+      .insert(organizations)
+      .values([{ id: "org_v", slug: "vorg", name: "V", discovery: "curated" }]);
+    const app = createTestApp(db, orgRoutes);
+    const res = await app(
+      new Request(
+        "https://x.test/v1/orgs/vorg",
+        patch({
+          notice: { message: "x", coordinate: "a/b", href: "https://y.com" },
+        }),
+      ),
+    );
+    expect(res.status).toBe(400);
+  });
+});

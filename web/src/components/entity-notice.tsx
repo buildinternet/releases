@@ -42,6 +42,7 @@ export function EntityNotice({ notice }: { notice?: Notice | null }) {
             {" "}
             <a
               href={notice.href}
+              target="_blank"
               rel="noopener noreferrer"
               className="font-medium underline underline-offset-2 hover:no-underline"
             >

@@ -31,5 +31,6 @@ describe("NoticeSchema", () => {
   it("rejects a malformed coordinate", () => {
     expect(NoticeSchema.safeParse({ message: "x", coordinate: "/leading" }).success).toBe(false);
     expect(NoticeSchema.safeParse({ message: "x", coordinate: "a/b/c" }).success).toBe(false);
+    expect(NoticeSchema.safeParse({ message: "x", coordinate: "" }).success).toBe(false);
   });
 });

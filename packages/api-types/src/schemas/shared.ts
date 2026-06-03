@@ -160,8 +160,8 @@ export const OverviewCitationSchema = z.object({
 export const NoticeSchema = z
   .object({
     message: z.string().min(1).max(280),
-    linkText: z.string().max(60).optional(),
-    coordinate: z.string().max(200).optional(),
+    linkText: z.string().min(1).max(60).optional(),
+    coordinate: z.string().min(1).max(200).optional(),
     href: z.url().max(500).optional(),
   })
   .refine((n) => !(n.coordinate && n.href), {
