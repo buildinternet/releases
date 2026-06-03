@@ -1,0 +1,21 @@
+# Hand-maintained mirror of the live managed-agent environment (prod).
+# Captured via: ant beta:environments retrieve --environment-id env_01Tq7S8F2FK1KBz68NMje2RU
+# Edit this file and deploy (apply via ant) to change the live env, or re-capture
+# after an out-of-band change. Verify: bun scripts/verify-managed-agents.ts --env production
+name: released-discovery-1775753412076
+description: ""
+scope: organization
+config:
+  type: cloud
+  packages:
+    type: packages
+    pip: []
+    npm: []
+    apt: []
+    cargo: []
+    gem: []
+    go: []
+  networking:
+    type: unrestricted
+  init_script: ""
+  environment: {}
