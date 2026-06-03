@@ -21,6 +21,10 @@ on:
       # managed-agents/*.yaml (the CI drift gate catches it) but leaves the live
       # agents' embedded list stale until the next prompt/tool deploy.
       - packages/core/src/categories.ts
+      # The environment YAML is hand-authored (the env config isn't generated
+      # from TS), so it is its own source of truth — editing it must trigger a
+      # deploy to apply it via `ant beta:environments update`.
+      - managed-agents/*.environment.yaml
   workflow_dispatch:
     inputs:
       environment:
