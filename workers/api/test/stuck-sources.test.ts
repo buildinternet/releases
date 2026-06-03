@@ -53,7 +53,7 @@ async function addLog(
   sourceId: string,
   status: FetchLogStatus,
   createdAt: string,
-  opts: Partial<{ error: string; errorCategory: string }> = {},
+  opts: Partial<{ error: string | null; errorCategory: string }> = {},
 ): Promise<void> {
   await db.insert(fetchLog).values({
     id: `fl_${++logCounter}`,
@@ -278,5 +278,103 @@ describe("GET /v1/admin/sources/stuck", () => {
     const body = (await res.json()) as StuckSourcesResponse;
     expect(body.items).toHaveLength(1);
     expect(body.meta).toEqual({ window: 3, minAttempts: 2, includePaused: false });
+  });
+});
+
+/**
+ * Seed N consecutive rows of a single status for a source, most recent last.
+ * `opts` (when given) is applied to every row — pass `{ error: null }` to seed a
+ * degraded row that carries no error message; otherwise each row gets a distinct
+ * `"<status> <i>"` error so lastError assertions stay stable.
+ */
+async function addStatusStreak(
+  db: TestDb,
+  sourceId: string,
+  status: FetchLogStatus,
+  n: number,
+  startDay = 1,
+  opts?: Partial<{ error: string | null; errorCategory: string }>,
+): Promise<void> {
+  for (let i = 0; i < n; i++) {
+    // oxlint-disable-next-line no-await-in-loop -- sequential seed inserts
+    await addLog(db, sourceId, status, ts(startDay + i), opts ?? { error: `${status} ${i}` });
+  }
+}
+
+// The bonus from #1360: crawl_timeout / blocked are "middle" states the stuck
+// query previously ignored — a chronically degraded crawl source surfaced (it
+// passes the recent_ok=0 gate) but reported recentErrors=0, reading as healthy.
+// They now count as failed/degraded attempts so the count is truthful and the
+// recent_errors-DESC ranking is correct.
+describe("getStuckSources — crawl_timeout / blocked degraded states", () => {
+  it("counts an all-crawl_timeout window toward recentErrors", async () => {
+    const { db } = createTestDb();
+    await addOrg(db, "org_c", "crawler");
+    await addSource(db, "src_ct", "org_c", "crawl-index", { type: "scrape" });
+    await addStatusStreak(db, "src_ct", "crawl_timeout", 4);
+
+    const { items } = await getStuckSources(db as unknown as D1Db);
+
+    expect(items).toHaveLength(1);
+    expect(items[0].sourceSlug).toBe("crawl-index");
+    expect(items[0].recentAttempts).toBe(4);
+    expect(items[0].recentErrors).toBe(4); // was 0 before the fix
+    expect(items[0].lastError).toBe("crawl_timeout 3");
+  });
+
+  it("counts an all-blocked window toward recentErrors", async () => {
+    const { db } = createTestDb();
+    await addOrg(db, "org_b", "blocked-org");
+    await addSource(db, "src_bl", "org_b", "blocked-src", { type: "scrape" });
+    await addStatusStreak(db, "src_bl", "blocked", 3);
+
+    const { items } = await getStuckSources(db as unknown as D1Db);
+
+    expect(items).toHaveLength(1);
+    expect(items[0].recentAttempts).toBe(3);
+    expect(items[0].recentErrors).toBe(3);
+  });
+
+  it("counts a mixed error + crawl_timeout window fully toward recentErrors", async () => {
+    const { db } = createTestDb();
+    await addOrg(db, "org_m", "mixed");
+    await addSource(db, "src_mx", "org_m", "mixed-src", { type: "scrape" });
+    await addLog(db, "src_mx", "error", ts(1), { error: "boom" });
+    await addLog(db, "src_mx", "crawl_timeout", ts(2), { error: "timed out" });
+    await addLog(db, "src_mx", "blocked", ts(3), { error: "challenge" });
+
+    const { items } = await getStuckSources(db as unknown as D1Db, { minAttempts: 3 });
+
+    expect(items).toHaveLength(1);
+    expect(items[0].recentAttempts).toBe(3);
+    expect(items[0].recentErrors).toBe(3);
+  });
+
+  it("does NOT flag a source that mixes success with crawl_timeout (membership unchanged)", async () => {
+    const { db } = createTestDb();
+    await addOrg(db, "org_p", "partial");
+    await addSource(db, "src_pt", "org_p", "partial-src", { type: "scrape" });
+    await addStatusStreak(db, "src_pt", "crawl_timeout", 3, 1);
+    await addLog(db, "src_pt", "success", ts(10)); // reachable within the window
+
+    const { items } = await getStuckSources(db as unknown as D1Db);
+
+    expect(items).toHaveLength(0);
+  });
+
+  it("counts crawl_timeout rows even when their error column is null", async () => {
+    // The count keys off `status`, not the error message — a degraded row with
+    // no error text must still count, and lastError stays null.
+    const { db } = createTestDb();
+    await addOrg(db, "org_n", "null-err");
+    await addSource(db, "src_ce", "org_n", "null-err-src", { type: "scrape" });
+    await addStatusStreak(db, "src_ce", "crawl_timeout", 4, 1, { error: null });
+
+    const { items } = await getStuckSources(db as unknown as D1Db);
+
+    expect(items).toHaveLength(1);
+    expect(items[0].recentAttempts).toBe(4);
+    expect(items[0].recentErrors).toBe(4);
+    expect(items[0].lastError).toBeNull();
   });
 });

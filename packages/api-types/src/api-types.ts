@@ -636,7 +636,10 @@ export interface StuckSource {
   isHidden: boolean;
   /** Non-`dry_run` attempts examined in the window (all errors when stuck). */
   recentAttempts: number;
-  /** Errors among the examined attempts (equals `recentAttempts` when stuck). */
+  /**
+   * Failed or degraded attempts (`error`, `crawl_timeout`, `blocked`) among the
+   * examined attempts (equals `recentAttempts` when stuck).
+   */
   recentErrors: number;
   /** Most-recent fetch attempt timestamp (ISO), or null. */
   lastAttemptAt: string | null;
@@ -1167,6 +1170,33 @@ export interface FetchLogEntry {
   durationMs: number | null;
   error: string | null;
   createdAt: string;
+}
+
+/**
+ * The managed-agent session currently fetching a source, surfaced read-side on
+ * the fetch-log view so an operator/agent can tell "a fetch is in flight" from
+ * "stuck/dead" without waiting for a terminal `fetch_log` row (#1360). Only
+ * running, non-stale sessions are reported (the StatusHub DO drops sessions idle
+ * past its staleness cutoff), so the presence of this object means a fetch is
+ * live; `startedAt` says how long it has been running.
+ */
+export interface ActiveFetchSession {
+  sessionId: string;
+  /** Always `running` today — only running sessions are surfaced. */
+  status: string;
+  /** Session start, epoch ms. */
+  startedAt: number;
+  /** Last session activity, epoch ms. */
+  lastUpdatedAt: number;
+}
+
+/**
+ * Enveloped response for `GET /v1/admin/logs/fetch?source=…&envelope=true`.
+ * `activeSession` is the live in-flight fetch (or `null`); the bare-array form
+ * (no `envelope`) omits it for back-compat.
+ */
+export interface FetchLogListResponse extends ListResponse<FetchLogEntry> {
+  activeSession?: ActiveFetchSession | null;
 }
 
 // ── Usage ──

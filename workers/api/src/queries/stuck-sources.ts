@@ -54,10 +54,13 @@ function clampInt(v: number | undefined, def: number, min: number, max: number):
 }
 
 /**
- * Find sources whose recent fetch history is all errors with no reachability —
- * pause candidates. A source is "stuck" when, within its last `window`
- * non-`dry_run` fetch_log rows, every one is an `error` (zero `success` /
- * `no_change`) and there are at least `minAttempts` of them.
+ * Find sources whose recent fetch history shows no reachability — pause
+ * candidates. A source is "stuck" when, within its last `window` non-`dry_run`
+ * fetch_log rows, none is a `success` / `no_change` and there are at least
+ * `minAttempts` of them. The failure count (`recentErrors`) folds in the
+ * degraded `crawl_timeout` (#1361) and `blocked` (#1171) states alongside
+ * `error`, so a chronically timing-out / challenge-blocked crawl source is
+ * ranked and labeled as failing rather than showing 0 errors (#1360).
  *
  * Keys off the fetch_log error streak rather than `sources.consecutive_errors`:
  * the scrape/agent fetch path never bumps that column, so a source can fail for
@@ -104,7 +107,12 @@ export async function getStuckSources(
       SELECT
         source_id,
         COUNT(*) AS recent_attempts,
-        SUM(CASE WHEN status = 'error' THEN 1 ELSE 0 END) AS recent_errors,
+        -- crawl_timeout (#1361) and blocked (#1171) are degraded outcomes, not
+        -- reachability — count them as failures alongside error (#1360) so a
+        -- chronically timing-out / challenge-blocked crawl source reports a
+        -- truthful failure count and ranks correctly via recent_errors DESC,
+        -- instead of showing 0 errors and reading as healthy.
+        SUM(CASE WHEN status IN ('error', 'crawl_timeout', 'blocked') THEN 1 ELSE 0 END) AS recent_errors,
         SUM(CASE WHEN status IN ('success', 'no_change') THEN 1 ELSE 0 END) AS recent_ok,
         MAX(CASE WHEN rn = 1 THEN created_at END) AS last_attempt_at,
         MAX(CASE WHEN rn = 1 THEN error END) AS last_error,
