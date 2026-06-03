@@ -51,6 +51,11 @@ export const FLAGS = {
     env: "MEDIA_R2_UPLOAD_ENABLED",
     default: false,
   },
+  mediaGifTranscodeEnabled: {
+    key: "media-gif-transcode-enabled",
+    env: "MEDIA_GIF_TRANSCODE_ENABLED",
+    default: false,
+  },
   feedEnrichEnabled: { key: "feed-enrich-enabled", env: "FEED_ENRICH_ENABLED", default: false },
   scrapeChangeDetectEnabled: {
     key: "scrape-change-detect-enabled",

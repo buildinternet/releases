@@ -52,7 +52,11 @@ import { isPrereleaseVersion } from "@buildinternet/releases-core/prerelease";
 import { computeVersionSort } from "@buildinternet/releases-core/version-sort";
 import { normalizeMediaUrl } from "@releases/rendering/media-url.js";
 import { filterJunkMedia } from "@releases/rendering/media-filter.js";
-import { processMediaForR2, selectExistingReleaseUrls } from "../lib/media-ingest.js";
+import {
+  processMediaForR2,
+  selectExistingReleaseUrls,
+  type MediaTransformBinding,
+} from "../lib/media-ingest.js";
 import {
   embedAndUpsertChangelogFile,
   type EmbeddedChunk,
@@ -678,6 +682,10 @@ export interface FetchOneEnv extends IndexNowEnv, AnthropicEnv {
   // binding — absent or flag-off => media is stored verbatim as today.
   MEDIA_R2_UPLOAD_ENABLED?: string;
   MEDIA?: R2Bucket;
+  // GIF→MP4 ingest transcode (#1368). When the binding is present and the flag is
+  // on, an ingested `image/gif` is stored as a small MP4 instead of the raw GIF.
+  MEDIA_TRANSFORM?: MediaTransformBinding;
+  MEDIA_GIF_TRANSCODE_ENABLED?: string;
 }
 
 /**
@@ -1144,6 +1152,11 @@ export async function ingestRawReleases(
   const r2UploadEnabled =
     (await flag(env.FLAGS, env.MEDIA_R2_UPLOAD_ENABLED, FLAGS.mediaR2UploadEnabled)) &&
     env.MEDIA != null;
+  // GIF→MP4 transcode (#1368): store ingested GIFs as small MP4s. Gated on its own
+  // flag AND the transform binding being bound; off → GIFs mirror verbatim.
+  const transcodeGif =
+    env.MEDIA_TRANSFORM != null &&
+    (await flag(env.FLAGS, env.MEDIA_GIF_TRANSCODE_ENABLED, FLAGS.mediaGifTranscodeEnabled));
   // Mirror media only for releases the insert below will actually create —
   // existing URLs are skipped by onConflictDoNothing, so their media JSON is
   // discarded and re-fetching their images every fire would be pure waste.
@@ -1173,6 +1186,8 @@ export async function ingestRawReleases(
         db,
         bucket: env.MEDIA!,
         sourceId: source.id,
+        mediaTransform: env.MEDIA_TRANSFORM,
+        transcodeGif,
       });
     }
     mediaJsonByIndex[index] = JSON.stringify(finalMedia);

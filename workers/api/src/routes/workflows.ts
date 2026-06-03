@@ -8,6 +8,9 @@ import {
   runMediaBackfill,
   MEDIA_BACKFILL_DEFAULT_LIMIT,
   MEDIA_BACKFILL_MAX_LIMIT,
+  runGifTranscodeBackfill,
+  GIF_BACKFILL_DEFAULT_LIMIT,
+  GIF_BACKFILL_MAX_LIMIT,
 } from "../lib/media-backfill.js";
 import {
   enrichFeedItem,
@@ -1993,6 +1996,82 @@ workflowsRoutes.post("/workflows/backfill-media", async (c) => {
 
   logEvent("info", {
     component: "backfill-media",
+    event: "done",
+    sourceId: ident ?? null,
+    all: body.all === true,
+    ...report,
+  });
+  return c.json({ scope: ident ?? "all", ...report });
+});
+
+// ── POST /workflows/backfill-gif-mp4 ─────────────────────────────────────────
+//
+// Operator-triggered GIF→MP4 transcode backfill (#1368). Streams already-ingested
+// animated GIFs through the Media Transformations binding and re-stamps their
+// media `r2Key` to the stored `releases/<hash>.mp4`, so historical rows match new
+// ingests. Requires both the R2 bucket (`MEDIA`) and the transform binding
+// (`MEDIA_TRANSFORM`). Bounded per call; `remaining` lets the operator loop.
+// `dryRun` (default) reports the pending count without transcoding or writing.
+//
+// Body: { sourceId?, all?, limit?, dryRun? }
+
+interface BackfillGifBody {
+  sourceId?: string;
+  all?: boolean;
+  limit?: number;
+  dryRun?: boolean;
+}
+
+workflowsRoutes.post("/workflows/backfill-gif-mp4", async (c) => {
+  const db = createDb(c.env.DB);
+  const body = await c.req.json<BackfillGifBody>().catch(() => ({}) as BackfillGifBody);
+
+  const bucket = c.env.MEDIA;
+  const mediaTransform = c.env.MEDIA_TRANSFORM;
+  if (!bucket || !mediaTransform) {
+    return c.json(
+      {
+        error: "service_unavailable",
+        message: !bucket ? "MEDIA bucket not bound" : "MEDIA_TRANSFORM binding not bound",
+      },
+      503,
+    );
+  }
+
+  // Scope to a typed source ID, or require an explicit `all: true` to sweep every
+  // source — so a dropped/typo'd `sourceId` can't silently transcode everything.
+  const ident = body.sourceId?.trim();
+  if (!ident && body.all !== true) {
+    return c.json(
+      { error: "bad_request", message: "Provide a typed `sourceId` (src_…) or `all: true`" },
+      400,
+    );
+  }
+  if (ident && !isSourceId(ident)) {
+    return c.json(
+      {
+        error: "bare_slug_rejected",
+        message:
+          "Pass a typed source ID (src_…). Resolve a slug via /v1/orgs/{orgSlug}/sources/{sourceSlug} first.",
+      },
+      400,
+    );
+  }
+
+  const rawLimit = Number(body.limit ?? GIF_BACKFILL_DEFAULT_LIMIT);
+  const limit = Number.isFinite(rawLimit)
+    ? Math.min(Math.max(Math.floor(rawLimit), 1), GIF_BACKFILL_MAX_LIMIT)
+    : GIF_BACKFILL_DEFAULT_LIMIT;
+  const dryRun = body.dryRun !== false; // default to a dry run for safety
+
+  const report = await runGifTranscodeBackfill(db, bucket, mediaTransform, {
+    sourceId: ident || undefined,
+    limit,
+    dryRun,
+  });
+
+  logEvent("info", {
+    component: "backfill-gif-mp4",
     event: "done",
     sourceId: ident ?? null,
     all: body.all === true,
