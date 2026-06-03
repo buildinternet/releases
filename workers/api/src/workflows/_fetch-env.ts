@@ -11,6 +11,7 @@
  * the drift surface: a new forwarded binding is added in one place.
  */
 import { getSecret } from "@releases/lib/secrets";
+import type { MediaTransformBinding } from "../lib/media-ingest.js";
 import type { FetchOneEnv, DiscoveryWorkerRpc } from "../cron/poll-fetch.js";
 import type { AnthropicEnv } from "../lib/anthropic.js";
 import type { InvalidationEnv } from "../lib/latest-cache.js";
@@ -36,6 +37,8 @@ export interface WorkflowFetchEnv extends InvalidationEnv, AnthropicEnv {
   WEB_BOT_AUTH_PRIVATE_KEY?: { get(): Promise<string> };
   MEDIA_R2_UPLOAD_ENABLED?: string;
   MEDIA?: R2Bucket;
+  MEDIA_TRANSFORM?: MediaTransformBinding;
+  MEDIA_GIF_TRANSCODE_ENABLED?: string;
   FEED_ENRICH_ENABLED?: string;
   FEED_ENRICH_MAX_PER_FIRE?: string;
   FEED_THIN_CHARS?: string;
@@ -97,6 +100,8 @@ export async function buildFetchOneEnv(env: WorkflowFetchEnv): Promise<GuardedFe
     WEB_BOT_AUTH_PRIVATE_KEY: env.WEB_BOT_AUTH_PRIVATE_KEY,
     MEDIA_R2_UPLOAD_ENABLED: env.MEDIA_R2_UPLOAD_ENABLED,
     MEDIA: env.MEDIA,
+    MEDIA_TRANSFORM: env.MEDIA_TRANSFORM,
+    MEDIA_GIF_TRANSCODE_ENABLED: env.MEDIA_GIF_TRANSCODE_ENABLED,
     FLAGS: env.FLAGS,
     // Anthropic key + gateway opts (ingest-time enrichment / marketing classifier
     // build their client from these) and the feed-enrich tuning + render creds.

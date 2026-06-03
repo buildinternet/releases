@@ -18,6 +18,7 @@
     "./appstore": "./src/appstore.ts",
     "./feed": "./src/feed.ts",
     "./feed-depth": "./src/feed-depth.ts",
+    "./media-classify": "./src/media-classify.ts",
     "./firecrawl": "./src/firecrawl.ts",
     "./firecrawl-diff": "./src/firecrawl-diff.ts",
     "./extract": "./src/extract/index.ts",

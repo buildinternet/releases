@@ -45,6 +45,35 @@ const CONTENT_TYPE_EXT: Record<string, string> = {
   "image/avif": "avif",
 };
 
+/**
+ * Ceiling on the MP4 we buffer from a GIF→MP4 transcode (#1368). A GIF→MP4 is
+ * ~95% smaller, so even a 100 MB GIF (the Media Transformations input cap) lands
+ * far under this; a transcode that somehow exceeds it is skipped (fail-open to
+ * the third-party GIF URL). Intentionally larger than `MEDIA_MAX_BYTES` because
+ * the GIF input is deliberately not bounded by that cap.
+ */
+export const MP4_MAX_BYTES = 16 * 1024 * 1024;
+
+/**
+ * Minimal shape of the Cloudflare Media Transformations Workers binding (wrangler
+ * `"media": { "binding": "MEDIA_TRANSFORM" }`). Hand-typed — the product type
+ * isn't in our `@cloudflare/workers-types` yet — modeling only the
+ * `input → output → media/contentType` chain we use. `.transform()` is optional
+ * and unused here: a pure GIF→MP4 transcode needs only `input → output`
+ * (confirmed via a live spike). See docs/architecture/web.md (Media handling).
+ */
+export interface MediaTransformResult {
+  media(): Promise<ReadableStream<Uint8Array>>;
+  contentType(): Promise<string>;
+}
+export interface MediaTransformInput {
+  transform(opts: Record<string, unknown>): MediaTransformInput;
+  output(opts: { mode: "video" | "frame" }): MediaTransformResult;
+}
+export interface MediaTransformBinding {
+  input(stream: ReadableStream<Uint8Array>): MediaTransformInput;
+}
+
 export interface ProcessMediaOptions {
   db: Db;
   /** The `released-media` R2 bucket binding (`env.MEDIA`). */
@@ -59,6 +88,15 @@ export interface ProcessMediaOptions {
   fetchImpl?: typeof fetch;
   /** Injectable clock for the registry `createdAt`. */
   now?: () => string;
+  /**
+   * Cloudflare Media Transformations binding (`env.MEDIA_TRANSFORM`). When present
+   * AND `transcodeGif` is set, an `image/gif` is streamed through it to an MP4 and
+   * only the small MP4 is stored at `releases/<hash>.mp4` — the heavy raw GIF is
+   * never buffered or stored (#1368). Absent → GIFs are stored verbatim as before.
+   */
+  mediaTransform?: MediaTransformBinding;
+  /** Gate for the GIF→MP4 transcode branch (flag `media-gif-transcode-enabled`). */
+  transcodeGif?: boolean;
 }
 
 /**
@@ -98,6 +136,39 @@ export async function processMediaForR2<T extends { url: string; r2Key?: string 
         logSkip("not-image", item.url, opts.sourceId, { contentType });
         return;
       }
+
+      // GIF → MP4 transcode branch (#1368). Stream the (possibly large) GIF
+      // straight into the Media Transformations binding and store ONLY the small
+      // MP4 — the raw GIF is never buffered or stored, sidestepping MEDIA_MAX_BYTES
+      // for GIFs. Fail-open: a missing body or any transcode error leaves the
+      // third-party URL in place (no r2Key), exactly like a GIF that fails to
+      // mirror today. The stored MP4 lets the serve layer skip the per-view
+      // cross-origin transform (web/src/lib/media.ts releaseVideoUrl).
+      if (opts.transcodeGif && opts.mediaTransform && contentType === "image/gif") {
+        if (!res.body) {
+          logSkip("gif-no-body", item.url, opts.sourceId, {});
+          return;
+        }
+        const mp4 = await transcodeGifToMp4(res.body, opts.mediaTransform);
+        if (mp4 === null) {
+          logSkip("gif-transcode-failed", item.url, opts.sourceId, {});
+          return;
+        }
+        const mp4Hash = await sha256Hex(mp4);
+        const mp4Key = `releases/${mp4Hash}.mp4`;
+        await opts.bucket.put(mp4Key, mp4, { httpMetadata: { contentType: "video/mp4" } });
+        item.r2Key = mp4Key;
+        await registerMediaAsset(opts, {
+          r2Key: mp4Key,
+          sourceUrl: item.url,
+          contentType: "video/mp4",
+          contentHash: mp4Hash,
+          byteSize: mp4.byteLength,
+          now,
+        });
+        return;
+      }
+
       // Read with a hard ceiling so a huge (or unbounded / chunked) body can't
       // buffer past the cap into the worker's memory — `arrayBuffer()` would
       // pull the whole response first, then check the size too late.
@@ -124,30 +195,14 @@ export async function processMediaForR2<T extends { url: string; r2Key?: string 
       // must not strip the user-facing same-origin URL.
       item.r2Key = r2Key;
 
-      try {
-        await opts.db
-          .insert(mediaAssets)
-          .values({
-            r2Key,
-            sourceUrl: item.url,
-            sourceFilename: filenameFromUrl(item.url),
-            contentType,
-            contentHash,
-            byteSize,
-            sourceId: opts.sourceId ?? null,
-            releaseId: opts.releaseId ?? null,
-            createdAt: now(),
-          })
-          .onConflictDoNothing();
-      } catch (err) {
-        logEvent("warn", {
-          component: "media-r2-upload",
-          event: "registry-insert-failed",
-          sourceId: opts.sourceId ?? null,
-          url: item.url,
-          err,
-        });
-      }
+      await registerMediaAsset(opts, {
+        r2Key,
+        sourceUrl: item.url,
+        contentType,
+        contentHash,
+        byteSize,
+        now,
+      });
     } catch (err) {
       logEvent("warn", {
         component: "media-r2-upload",
@@ -241,6 +296,18 @@ async function readBodyBounded(res: Response, maxBytes: number): Promise<ArrayBu
     return buf.byteLength > maxBytes ? null : buf;
   }
 
+  return readStreamBounded(body, maxBytes);
+}
+
+/**
+ * Accumulate a byte stream into an `ArrayBuffer`, bailing out (→ `null`) the
+ * moment it would exceed `maxBytes`. Shared by `readBodyBounded` (response body)
+ * and the GIF→MP4 transcode (the binding's MP4 output stream).
+ */
+async function readStreamBounded(
+  body: ReadableStream<Uint8Array>,
+  maxBytes: number,
+): Promise<ArrayBuffer | null> {
   const reader = body.getReader();
   const chunks: Uint8Array[] = [];
   let total = 0;
@@ -263,6 +330,66 @@ async function readBodyBounded(res: Response, maxBytes: number): Promise<ArrayBu
     offset += chunk.byteLength;
   }
   return out.buffer;
+}
+
+/**
+ * Transcode an animated GIF stream to MP4 via the Media Transformations binding,
+ * returning the MP4 bytes (capped at {@link MP4_MAX_BYTES}) or `null` on any
+ * failure. Pure transcode — `input → output({mode:"video"})` — no `.transform()`.
+ */
+async function transcodeGifToMp4(
+  gif: ReadableStream<Uint8Array>,
+  binding: MediaTransformBinding,
+): Promise<ArrayBuffer | null> {
+  try {
+    const out = await binding.input(gif).output({ mode: "video" }).media();
+    return await readStreamBounded(out, MP4_MAX_BYTES);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Insert a `media_assets` registry row for a stored object. Bookkeeping for
+ * observability / dedup / backfill — `onConflictDoNothing` makes it idempotent,
+ * and a failure here must never strip the already-stamped user-facing `r2Key`,
+ * so it swallows + logs rather than throwing.
+ */
+async function registerMediaAsset(
+  opts: ProcessMediaOptions,
+  fields: {
+    r2Key: string;
+    sourceUrl: string;
+    contentType: string;
+    contentHash: string;
+    byteSize: number;
+    now: () => string;
+  },
+): Promise<void> {
+  try {
+    await opts.db
+      .insert(mediaAssets)
+      .values({
+        r2Key: fields.r2Key,
+        sourceUrl: fields.sourceUrl,
+        sourceFilename: filenameFromUrl(fields.sourceUrl),
+        contentType: fields.contentType,
+        contentHash: fields.contentHash,
+        byteSize: fields.byteSize,
+        sourceId: opts.sourceId ?? null,
+        releaseId: opts.releaseId ?? null,
+        createdAt: fields.now(),
+      })
+      .onConflictDoNothing();
+  } catch (err) {
+    logEvent("warn", {
+      component: "media-r2-upload",
+      event: "registry-insert-failed",
+      sourceId: opts.sourceId ?? null,
+      url: fields.sourceUrl,
+      err,
+    });
+  }
 }
 
 async function sha256Hex(buf: ArrayBuffer): Promise<string> {

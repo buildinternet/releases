@@ -65,6 +65,15 @@ export type Env = {
     MEDIA_ORIGIN?: string;
     /** Ingest-time R2 media upload kill switch (#1177); default off. */
     MEDIA_R2_UPLOAD_ENABLED?: string;
+    /**
+     * Cloudflare Media Transformations binding (wrangler `"media"`). Streams an
+     * ingested animated GIF to a small MP4 stored in R2 (#1368). Absent → GIFs
+     * stored verbatim. NOTE: deliberately a different binding NAME from the R2
+     * bucket `MEDIA` above (`env.MEDIA` is the bucket; this is the transformer).
+     */
+    MEDIA_TRANSFORM?: import("./lib/media-ingest.js").MediaTransformBinding;
+    /** GIF→MP4 ingest-transcode kill switch (#1368); default off. */
+    MEDIA_GIF_TRANSCODE_ENABLED?: string;
     /** Raw page snapshots for durable backfill (#1281); pointer in source_raw_snapshots. */
     RAW_SNAPSHOTS?: R2Bucket;
     /** Routes deep Firecrawl backfills to BackfillSourceWorkflow (#1281); default off. */

@@ -787,6 +787,11 @@ const postReleasesBatchHandler = async (c: import("hono").Context<Env>) => {
     const r2UploadEnabled =
       (await flag(c.env.FLAGS, c.env.MEDIA_R2_UPLOAD_ENABLED, FLAGS.mediaR2UploadEnabled)) &&
       c.env.MEDIA != null;
+    // GIF→MP4 ingest transcode (#1368): store ingested GIFs as small MP4s when the
+    // transform binding is bound + the flag is on; off => GIFs mirror verbatim.
+    const transcodeGif =
+      c.env.MEDIA_TRANSFORM != null &&
+      (await flag(c.env.FLAGS, c.env.MEDIA_GIF_TRANSCODE_ENABLED, FLAGS.mediaGifTranscodeEnabled));
     // Coerce array/object media to a JSON string so a non-primitive bind can't
     // 500 the chunked, non-transactional insert mid-batch. See media-bind.ts.
     const mediaJsonByIndex = body.releases.map((r) => normalizeMediaBind(r.media));
@@ -819,7 +824,13 @@ const postReleasesBatchHandler = async (c: import("hono").Context<Env>) => {
         // oxlint-disable-next-line no-await-in-loop -- sequential per release; helper bounds image concurrency internally
         const processed = await processMediaForR2(
           filterJunkMedia(parsed.filter((m) => m && typeof m.url === "string")),
-          { db, bucket: c.env.MEDIA!, sourceId: src.id },
+          {
+            db,
+            bucket: c.env.MEDIA!,
+            sourceId: src.id,
+            mediaTransform: c.env.MEDIA_TRANSFORM,
+            transcodeGif,
+          },
         );
         mediaJsonByIndex[i] = JSON.stringify(processed);
       }

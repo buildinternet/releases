@@ -3,7 +3,12 @@ import { eq } from "drizzle-orm";
 import { mediaAssets, organizations, releases, sources } from "@buildinternet/releases-core/schema";
 import { createTestDb } from "../../../../tests/db-helper.js";
 import { createDb } from "../db.js";
-import { MEDIA_MAX_BYTES, processMediaForR2, selectExistingReleaseUrls } from "./media-ingest.js";
+import {
+  MEDIA_MAX_BYTES,
+  processMediaForR2,
+  selectExistingReleaseUrls,
+  type MediaTransformBinding,
+} from "./media-ingest.js";
 
 /** Minimal in-memory R2 stand-in recording put() calls. */
 function makeFakeBucket() {
@@ -242,5 +247,151 @@ describe("selectExistingReleaseUrls", () => {
     const db = createDb(testDb as unknown as D1Database);
     const existing = await selectExistingReleaseUrls(db, "src_missing", [null, undefined, ""]);
     expect(existing.size).toBe(0);
+  });
+});
+
+/** A fetch impl returning a `body`-bearing response of `bytes` at `contentType`. */
+function streamFetch(bytes: number, contentType: string): typeof fetch {
+  return (async () =>
+    new Response(new Uint8Array(bytes).fill(9), {
+      headers: { "content-type": contentType },
+    })) as unknown as typeof fetch;
+}
+
+/**
+ * Fake Media Transformations binding: drains the input stream (so the caller's
+ * `res.body` is consumed) and emits `mp4Bytes` of dummy `video/mp4`. `getInputs`
+ * counts how many times `.input()` was invoked. `failMode` exercises fail-open.
+ */
+function makeFakeMediaTransform(mp4Bytes: number, failMode?: "throw-on-output" | "throw-on-media") {
+  let inputs = 0;
+  const binding = {
+    input(stream: ReadableStream<Uint8Array>) {
+      inputs++;
+      // Drain the input so the upstream response body is consumed like prod.
+      void stream.getReader().read();
+      const result = {
+        media: async () => {
+          if (failMode === "throw-on-media") throw new Error("transcode failed");
+          return new Response(new Uint8Array(mp4Bytes).fill(1)).body!;
+        },
+        contentType: async () => "video/mp4",
+      };
+      const chain = {
+        transform: () => chain,
+        output: (_opts: { mode: "video" | "frame" }) => {
+          if (failMode === "throw-on-output") throw new Error("output failed");
+          return result;
+        },
+      };
+      return chain;
+    },
+  };
+  return { binding: binding as unknown as MediaTransformBinding, getInputs: () => inputs };
+}
+
+describe("processMediaForR2 GIF→MP4 transcode (#1368)", () => {
+  test("stores a small MP4 (not the raw GIF) and registers it as video/mp4", async () => {
+    const { db: testDb } = createTestDb();
+    const db = createDb(testDb as unknown as D1Database);
+    const { bucket, puts } = makeFakeBucket();
+    const { binding, getInputs } = makeFakeMediaTransform(4096);
+
+    // A GIF larger than MEDIA_MAX_BYTES proves the transcode sidesteps the cap:
+    // the raw bytes are never buffered/size-checked.
+    const result = await processMediaForR2([{ type: "gif", url: "https://x/demo.gif" }], {
+      db,
+      bucket,
+      mediaTransform: binding,
+      transcodeGif: true,
+      fetchImpl: streamFetch(MEDIA_MAX_BYTES + 1, "image/gif"),
+    });
+
+    expect(getInputs()).toBe(1);
+    expect(result[0]!.r2Key).toMatch(/^releases\/[0-9a-f]{64}\.mp4$/);
+    expect(puts).toHaveLength(1);
+    expect(puts[0]!.key).toBe(result[0]!.r2Key!);
+    expect(puts[0]!.contentType).toBe("video/mp4");
+    expect(puts[0]!.size).toBe(4096);
+
+    const rows = await db
+      .select()
+      .from(mediaAssets)
+      .where(eq(mediaAssets.r2Key, result[0]!.r2Key!));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.contentType).toBe("video/mp4");
+    expect(rows[0]!.sourceUrl).toBe("https://x/demo.gif");
+  });
+
+  test("flag off (transcodeGif unset): a GIF takes the verbatim mirror path", async () => {
+    const { db: testDb } = createTestDb();
+    const db = createDb(testDb as unknown as D1Database);
+    const { bucket, puts } = makeFakeBucket();
+    const { binding, getInputs } = makeFakeMediaTransform(4096);
+
+    const result = await processMediaForR2([{ type: "gif", url: "https://x/small.gif" }], {
+      db,
+      bucket,
+      mediaTransform: binding, // present, but transcodeGif not set
+      fetchImpl: streamFetch(2048, "image/gif"),
+    });
+
+    expect(getInputs()).toBe(0); // binding never invoked
+    expect(result[0]!.r2Key).toMatch(/^releases\/[0-9a-f]{64}\.gif$/);
+    expect(puts[0]!.contentType).toBe("image/gif");
+  });
+
+  test("no binding bound: a GIF takes the verbatim mirror path", async () => {
+    const { db: testDb } = createTestDb();
+    const db = createDb(testDb as unknown as D1Database);
+    const { bucket, puts } = makeFakeBucket();
+
+    const result = await processMediaForR2([{ type: "gif", url: "https://x/small.gif" }], {
+      db,
+      bucket,
+      transcodeGif: true, // on, but no mediaTransform binding
+      fetchImpl: streamFetch(2048, "image/gif"),
+    });
+
+    expect(result[0]!.r2Key).toMatch(/^releases\/[0-9a-f]{64}\.gif$/);
+    expect(puts[0]!.contentType).toBe("image/gif");
+  });
+
+  test("non-GIF content is unaffected by transcodeGif (normal image mirror)", async () => {
+    const { db: testDb } = createTestDb();
+    const db = createDb(testDb as unknown as D1Database);
+    const { bucket, puts } = makeFakeBucket();
+    const { binding, getInputs } = makeFakeMediaTransform(4096);
+
+    const result = await processMediaForR2([{ type: "image", url: "https://x/shot.png" }], {
+      db,
+      bucket,
+      mediaTransform: binding,
+      transcodeGif: true,
+      fetchImpl: streamFetch(2048, "image/png"),
+    });
+
+    expect(getInputs()).toBe(0);
+    expect(result[0]!.r2Key).toMatch(/^releases\/[0-9a-f]{64}\.png$/);
+    expect(puts[0]!.contentType).toBe("image/png");
+  });
+
+  test("fail-open: a transcode error leaves the GIF untouched (no put, no r2Key)", async () => {
+    const { db: testDb } = createTestDb();
+    const db = createDb(testDb as unknown as D1Database);
+    const { bucket, puts } = makeFakeBucket();
+    const { binding } = makeFakeMediaTransform(4096, "throw-on-media");
+
+    const result = await processMediaForR2([{ type: "gif", url: "https://x/demo.gif" }], {
+      db,
+      bucket,
+      mediaTransform: binding,
+      transcodeGif: true,
+      fetchImpl: streamFetch(2048, "image/gif"),
+    });
+
+    expect(result[0]!.r2Key).toBeUndefined();
+    expect(result[0]!.url).toBe("https://x/demo.gif");
+    expect(puts).toHaveLength(0);
   });
 });
