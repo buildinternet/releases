@@ -24,7 +24,13 @@ type FeedCall = {
 };
 const feedCalls: FeedCall[] = [];
 
+// Spread the real adapter so exports the fetch path imports transitively
+// (e.g. extractMediaFromMarkdown) resolve to their real implementations; only
+// the entry points this test controls are overridden below (#1391).
+const actualFeed = await import("@releases/adapters/feed.js");
+
 mock.module("@releases/adapters/feed.js", () => ({
+  ...actualFeed,
   // poll-fetch.ts reads these two constants. Values match production.
   FEED_4XX_INVALIDATE_THRESHOLD: 3,
   CLEARED_FEED_FIELDS: {
