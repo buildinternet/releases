@@ -1103,6 +1103,29 @@ export async function ingestRawReleases(
   // Firecrawl ingest workflow) omit it and get a fresh parse.
   meta: ReturnType<typeof getSourceMeta> = getSourceMeta(source),
 ): Promise<IngestResult> {
+  // Defense-in-depth `feedUrlDeny` (#1335). The cron `fetchOne` already filters
+  // denied URLs in-memory before calling here, but the Firecrawl ingest and
+  // backfill workflows call `ingestRawReleases` directly with an unfiltered
+  // list — applying the denylist at this shared in-process write boundary means
+  // every non-HTTP ingest path drops locale-suffixed translation dupes (the
+  // HTTP `/releases/batch` path carries its own guard). Run it before the
+  // marketing/enrich passes so denied items never incur inference cost; on the
+  // cron path the upstream filter makes this a cheap no-op.
+  if (meta.feedUrlDeny && meta.feedUrlDeny.length > 0) {
+    const filtered = filterByUrlDeny(rawReleases, meta.feedUrlDeny);
+    if (filtered.dropped > 0) {
+      logEvent("info", {
+        component: "cron-poll-fetch",
+        event: "url-deny-filter-applied",
+        sourceSlug: source.slug,
+        kept: filtered.kept.length,
+        dropped: filtered.dropped,
+        feedUrlDeny: meta.feedUrlDeny,
+      });
+    }
+    rawReleases = filtered.kept;
+  }
+
   const marketingMap =
     meta.marketingFilter === true
       ? await classifyMarketingForReleases(db, source, meta, rawReleases, env)

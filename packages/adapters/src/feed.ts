@@ -589,11 +589,17 @@ export function filterByKeywordAllow(
  * match. Patterns are compiled defensively (try/catch) so one malformed rule
  * can't silently wipe a feed; uncompilable and blank entries are skipped.
  * Empty `deny` (or all-invalid) short-circuits to passthrough.
+ *
+ * Generic over any item carrying a `url` so the same denylist can run on both
+ * the parsed-feed path (`RawRelease`) and the release-insert write boundary
+ * (the `/releases/batch` payload shape) — see #1335, where the filter is
+ * applied server-side at insert time so it can't be bypassed by the
+ * managed-agent fetch path.
  */
-export function filterByUrlDeny(
-  items: RawRelease[],
+export function filterByUrlDeny<T extends { url?: string | null }>(
+  items: T[],
   deny: readonly string[],
-): { kept: RawRelease[]; dropped: number } {
+): { kept: T[]; dropped: number } {
   const patterns: RegExp[] = [];
   for (const raw of deny) {
     const trimmed = raw.trim();
@@ -605,7 +611,7 @@ export function filterByUrlDeny(
     }
   }
   if (patterns.length === 0) return { kept: items, dropped: 0 };
-  const kept: RawRelease[] = [];
+  const kept: T[] = [];
   let dropped = 0;
   for (const item of items) {
     const url = item.url ?? "";

@@ -145,6 +145,12 @@ export interface SourceMetadata {
    * Japanese translations; add `-de$`, `-fr$`, etc. for other locales. The
    * deny complement of `feedKeywordAllow`; applied after the allow filters.
    * Patterns that fail to compile are ignored (a bad rule can't wipe a feed).
+   *
+   * Enforced at every ingest write boundary, not just the cron feed path
+   * (#1335): the HTTP `/releases/batch` + single-insert handlers and the shared
+   * in-process `ingestRawReleases` helper all run `filterByUrlDeny`, so the
+   * managed-agent fetch, scrape-delegation, Firecrawl, and backfill paths drop
+   * matching URLs too.
    */
   feedUrlDeny?: string[];
 

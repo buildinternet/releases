@@ -80,6 +80,52 @@ describe("ingestRawReleases", () => {
     expect(rows).toHaveLength(2);
   });
 
+  it("drops releases whose URL matches the source's feedUrlDeny (#1335)", async () => {
+    // Backstop for the in-process callers that bypass the cron in-memory filter
+    // (Firecrawl ingest, backfill). A `-jp` locale twin must not be ingested.
+    const db = mkDb();
+    const { eq } = await import("drizzle-orm");
+
+    await db
+      .insert(organizations)
+      .values({ id: "org_deny", slug: "deny-org", name: "Deny Org", category: "cloud" });
+    await db.insert(sources).values({
+      id: "src_deny",
+      orgId: "org_deny",
+      slug: "deny-source",
+      name: "Deny Source",
+      type: "feed",
+      url: "https://deny.example.com",
+      metadata: JSON.stringify({ feedUrlDeny: ["-jp$"] }),
+    });
+
+    const [source] = await db.select().from(sources).where(eq(sources.id, "src_deny"));
+
+    const en: RawRelease = {
+      title: "Gala",
+      content: "x",
+      url: "https://deny.example.com/blog/gala",
+      isBreaking: false,
+      media: [],
+    };
+    const jp: RawRelease = {
+      title: "Gala (JP)",
+      content: "x",
+      url: "https://deny.example.com/blog/gala-jp",
+      isBreaking: false,
+      media: [],
+    };
+
+    const env = { RELEASE_HUB: undefined, DB: undefined } as never;
+    const result = await ingestRawReleases(db as never, source!, [en, jp], env);
+
+    expect(result.found).toBe(1);
+    expect(result.inserted).toBe(1);
+
+    const rows = await db.select().from(releases).where(eq(releases.sourceId, "src_deny"));
+    expect(rows.map((r) => r.url)).toEqual(["https://deny.example.com/blog/gala"]);
+  });
+
   it("is idempotent — re-inserting the same releases produces inserted=0", async () => {
     const db = mkDb();
     const { eq } = await import("drizzle-orm");

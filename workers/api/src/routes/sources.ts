@@ -105,7 +105,7 @@ import { filterJunkMedia } from "@releases/rendering/media-filter.js";
 import { processMediaForR2, selectExistingReleaseUrls } from "../lib/media-ingest.js";
 import { saveRawSnapshot, type RawFormat } from "../lib/raw-snapshot.js";
 import { fetchOne, embedReleasesForSource } from "../cron/poll-fetch.js";
-import { getSourceMeta, isGitHubFetched } from "@releases/adapters/feed.js";
+import { getSourceMeta, isGitHubFetched, filterByUrlDeny } from "@releases/adapters/feed.js";
 import { isAppStoreFetched, isVideoFetched, videoSourceInfo } from "@releases/adapters/source-meta";
 import { appStoreSourceInfo } from "@releases/adapters/appstore";
 import { sanitizeVersion } from "@releases/adapters/extract/shared.js";
@@ -725,6 +725,30 @@ const postReleasesBatchHandler = async (c: import("hono").Context<Env>) => {
       prerelease?: boolean;
     }>;
   }>();
+
+  // Defense-in-depth `feedUrlDeny` (#1335). The cron poll-fetch path drops
+  // locale-suffixed translation dupes in-memory, but every managed-agent fetch
+  // path — operator `admin source fetch`, scrape summary-only crawl delegation,
+  // and the in-worker scrape pipeline — writes through this endpoint and would
+  // otherwise bypass that filter (the MA worker re-derives URLs independently of
+  // the in-memory filtered list). Applying it here at the write boundary means a
+  // denied URL can't be ingested as an active release regardless of fetch path.
+  const denyMeta = getSourceMeta(src);
+  if (denyMeta.feedUrlDeny && denyMeta.feedUrlDeny.length > 0) {
+    const filtered = filterByUrlDeny(body.releases, denyMeta.feedUrlDeny);
+    if (filtered.dropped > 0) {
+      logEvent("info", {
+        component: "sources-batch",
+        event: "url-deny-filter-applied",
+        sourceId: src.id,
+        slug: src.slug,
+        kept: filtered.kept.length,
+        dropped: filtered.dropped,
+        feedUrlDeny: denyMeta.feedUrlDeny,
+      });
+    }
+    body.releases = filtered.kept;
+  }
 
   try {
     // D1 caps prepared statements at 100 bound parameters — see
@@ -2890,7 +2914,7 @@ const postReleaseRoute = describeRoute({
   tags: ["Sources"],
   summary: "Insert a single release",
   description:
-    "Inserts a single release for the source. Unlike the `/batch` endpoint this path is used for data seeding or manual inserts where the caller controls the `id`. On `UNIQUE(source_id, url)` conflict the insert is skipped (`onConflictDoNothing`) and the response is `{ skipped: true }` (200). A successful insert returns 201 with the inserted row. LLM-generated version placeholders (`<UNKNOWN>`, `n/a`) are stripped. Body fields: `title`, `content` (required); `id?`, `version?`, `summary?`, `titleGenerated?`, `titleShort?`, `url?`, `contentHash?`, `publishedAt?`, `fetchedAt?`, `type?`. Body documented in prose — formal `requestBody` modelling is deferred to the validator-middleware phase of #894. Auth inherited from `publicReadAuthMiddleware`'s non-SAFE_METHODS branch — Bearer token required. Bare-path slugs return 400 `bare_slug_rejected` per #698 — pass a `src_…` ID on the bare path.",
+    "Inserts a single release for the source. Unlike the `/batch` endpoint this path is used for data seeding or manual inserts where the caller controls the `id`. On `UNIQUE(source_id, url)` conflict the insert is skipped (`onConflictDoNothing`) and the response is `{ skipped: true }` (200). A `url` matching the source's `feedUrlDeny` is likewise skipped, as `{ skipped: true, reason: \"url_denied\" }` (200) — see #1335. A successful insert returns 201 with the inserted row. LLM-generated version placeholders (`<UNKNOWN>`, `n/a`) are stripped. Body fields: `title`, `content` (required); `id?`, `version?`, `summary?`, `titleGenerated?`, `titleShort?`, `url?`, `contentHash?`, `publishedAt?`, `fetchedAt?`, `type?`. Body documented in prose — formal `requestBody` modelling is deferred to the validator-middleware phase of #894. Auth inherited from `publicReadAuthMiddleware`'s non-SAFE_METHODS branch — Bearer token required. Bare-path slugs return 400 `bare_slug_rejected` per #698 — pass a `src_…` ID on the bare path.",
   security: [{ bearerAuth: [] }],
   responses: {
     201: {
@@ -2953,6 +2977,31 @@ sourceRoutes.post("/sources/:slug/releases", postReleaseRoute, async (c) => {
   }
   if (typeof body.content !== "string") {
     return c.json({ error: "bad_request", message: "content must be a string" }, 400);
+  }
+
+  // Defense-in-depth `feedUrlDeny` (#1335): mirror the batch guard so the
+  // single-release insert (local-ingest's per-release alternative to `/batch`)
+  // can't reintroduce a denied locale-suffixed URL either. A match is treated
+  // as a skip — same shape as the onConflictDoNothing dedup-skip below — with a
+  // `reason` so callers can distinguish it from a URL-conflict skip.
+  if (typeof body.url === "string") {
+    const denyMeta = getSourceMeta(src);
+    if (
+      denyMeta.feedUrlDeny &&
+      denyMeta.feedUrlDeny.length > 0 &&
+      filterByUrlDeny([{ url: body.url }], denyMeta.feedUrlDeny).dropped > 0
+    ) {
+      logEvent("info", {
+        component: "sources-release-insert",
+        event: "url-deny-filter-applied",
+        sourceId: src.id,
+        slug: src.slug,
+        kept: 0,
+        dropped: 1,
+        feedUrlDeny: denyMeta.feedUrlDeny,
+      });
+      return c.json({ skipped: true, reason: "url_denied" }, 200);
+    }
   }
 
   // See batch handler: strip LLM placeholders ("<UNKNOWN>", "n/a") so
