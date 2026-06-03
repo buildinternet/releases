@@ -53,6 +53,22 @@ Workflow({
 
 `args`: `source` (slug | src\_ id | URL), `maxReleases` (default 50), `dryRun` (default true), `model` (`sonnet` default; `haiku` for bulk/simple). Sweep takes `sources: string[]`.
 
+## Re-seed vs. top-up (scrape sources)
+
+A dry-run showing `skippedKnown=0` while the source already has rows is a signal, not a success: **scrape-ingested releases are stored with `url = null`**, so the workflow's known-URL dedup finds nothing to skip. A `dryRun:false` run would then write the overlap as new url'd rows alongside the old url-null rows — duplicates, not a gap-fill.
+
+Correct path for the **first** backfill of an already-ingested `scrape` source:
+
+1. Hard-delete the existing rows to free the `UNIQUE(source_id, url)` dedup slot:
+   ```
+   releases admin release delete --source <slug> --hard
+   ```
+2. Then run the backfill with `dryRun: false`.
+
+Truly incremental re-runs (`skippedKnown > 0`) only happen after the source already carries per-release URLs from a prior backfill.
+
+**Caveat:** `releases tail --json` does not expose `url` or `content` — only `id/title/summary/publishedAt/source/contentChars/contentTokens`. To confirm whether existing rows are url-null, use `releases admin release get <id> --json`.
+
 ## After a run
 
 The Workflow records the run under `~/.releases/work/` via `releases admin work start` (summary per source, cost line grounded in `budget.spent()`, cross-run sweep report). Review the report for data-quality findings (empty content, thin pages, deferred-for-budget pages).
