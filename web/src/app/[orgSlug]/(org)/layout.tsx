@@ -10,6 +10,7 @@ import { OrgTabs } from "@/components/org-tabs";
 import { CliCommand } from "@/components/cli-command";
 import { taxonomySidebarSections, collectionsSidebarSection } from "@/components/taxonomy-chips";
 import { OrgAdminMenu } from "@/components/org-admin-menu";
+import { EntityNotice } from "@/components/entity-notice";
 import { isLocalAdminEnabled } from "@/lib/local-admin-flag";
 import { domainHref } from "@/lib/source-display";
 import { getOrg, getOrgCollections } from "../_lib/org-data";
@@ -95,6 +96,7 @@ export default async function OrgLayout({
             />
           </div>
         )}
+        <EntityNotice notice={org.notice} />
         <div className="flex flex-col md:flex-row gap-10 mt-6 pb-6">
           <div className="flex-1 min-w-0">
             <OrgTabs orgSlug={orgSlug} hasPlaybook={hasPlaybook} hasFetchLog={hasFetchLog} />
