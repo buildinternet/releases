@@ -5,7 +5,12 @@ import {
   SOURCE_FETCH_PRIORITIES,
 } from "@buildinternet/releases-core/source-enums";
 import { KIND_VALUES } from "@buildinternet/releases-core/kinds";
-import { ListResponseSchema, ReleaseItemSchema, ReleaseSummaryItemSchema } from "./shared.js";
+import {
+  ListResponseSchema,
+  NoticeSchema,
+  ReleaseItemSchema,
+  ReleaseSummaryItemSchema,
+} from "./shared.js";
 
 export const SourceTypeSchema = z.enum(SOURCE_TYPES);
 export const SourceDiscoverySchema = z.enum(SOURCE_DISCOVERY);
@@ -176,6 +181,7 @@ export const SourceDetailSchema = z.object({
   // carry `null`. Consumers treat null/undefined as "unknown".
   stars: z.number().int().min(0).nullable().optional(),
   starsFetchedAt: z.string().nullable().optional(),
+  notice: NoticeSchema.nullable().optional(),
 });
 
 /**
@@ -263,6 +269,7 @@ export const SourcePatchInputSchema = z.object({
   kind: z.enum(KIND_VALUES).nullable().optional(),
   /** Admin-only: promote or demote the source's discovery status (curated/agent/on_demand). */
   discovery: SourceDiscoverySchema.optional(),
+  notice: NoticeSchema.nullable().optional(),
 });
 
 /** Body accepted by `POST /v1/sources`. */
