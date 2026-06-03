@@ -3,7 +3,8 @@ import { eq, desc } from "drizzle-orm";
 import { createDb } from "../db.js";
 import { fetchLog, sources } from "@buildinternet/releases-core/schema";
 import { buildBareLimitEnvelope } from "../lib/pagination.js";
-import { sourceMatchByIdOrSlug } from "../utils.js";
+import { getStatusHub, sourceMatchByIdOrSlug } from "../utils.js";
+import { getActiveFetchSession } from "../lib/active-fetch-session.js";
 import { classifyDbError } from "@releases/lib/db-errors";
 import type { Env } from "../index.js";
 
@@ -31,7 +32,13 @@ fetchLogRoutes.get("/admin/logs/fetch", async (c) => {
       .where(eq(fetchLog.sourceId, src.id))
       .orderBy(desc(fetchLog.createdAt))
       .limit(limit);
-    return wantsEnvelope ? c.json(buildBareLimitEnvelope(logs, limit)) : c.json(logs);
+    if (!wantsEnvelope) return c.json(logs);
+    // Overlay the live in-flight fetch (#1360). fetch_log only records terminal
+    // states, so during a multi-minute crawl the history above shows nothing
+    // newer; `activeSession` lets a single enveloped poll tell "still running"
+    // from "stuck/dead". Bare-array form (above) stays unchanged for back-compat.
+    const activeSession = await getActiveFetchSession(getStatusHub(c.env), src.slug);
+    return c.json({ ...buildBareLimitEnvelope(logs, limit), activeSession });
   }
 
   const logs = await db.select().from(fetchLog).orderBy(desc(fetchLog.createdAt)).limit(limit);

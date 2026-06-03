@@ -154,6 +154,7 @@ import { classifyDbError } from "@releases/lib/db-errors";
 import { getSecret } from "@releases/lib/secrets";
 import { classifyRepoStatus } from "../lib/github-repo-status.js";
 import { materializeAppStoreSource } from "../lib/appstore-materialize.js";
+import { getActiveSessionRaw } from "../lib/active-fetch-session.js";
 import { materializeVideoSource } from "../lib/video-materialize.js";
 import { normalizeMediaBind } from "../lib/media-bind.js";
 import { FLAGS, flag } from "@releases/lib/flags";
@@ -1560,16 +1561,10 @@ sourceRoutes.get("/sources/:slug/sessions", getSourceSessionsRoute, async (c) =>
   const src = await resolveSourceFromContext(c, db);
   if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
 
-  const hub = getStatusHub(c.env);
-  const res = await hub.fetch(new Request("https://do/active-sources"));
-  const data = (await res.json()) as { slugs: string[]; sessionMap: Record<string, string> };
-  const sessionId = data.sessionMap[src.slug];
-  if (!sessionId) return c.json({ sessions: [] });
-
-  const sessionRes = await hub.fetch(new Request(`https://do/sessions/${sessionId}`));
-  if (sessionRes.status === 404) return c.json({ sessions: [] });
-  const session = await sessionRes.json();
-  return c.json({ sessions: [session] });
+  // Shared with the fetch-log activeSession overlay (#1360): the same
+  // /active-sources → /sessions/:id join, fail-open to no active session.
+  const session = await getActiveSessionRaw(getStatusHub(c.env), src.slug);
+  return c.json({ sessions: session ? [session] : [] });
 });
 
 // Weekly release activity for source timeline visualization
