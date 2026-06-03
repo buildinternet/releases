@@ -152,6 +152,39 @@ export function cfImageUrl(src: string, opts: { origin: string; width: number })
   return `${base}/cdn-cgi/image/width=${width},quality=80,format=auto/${src}`;
 }
 
+/** Cloudflare Media Transformation: GIF/video source → optimized MP4. */
+const MEDIA_VIDEO_TRANSFORM = "cdn-cgi/media/mode=video";
+
+/**
+ * Wrap an absolute media URL in a Cloudflare Media Transformation that serves an
+ * optimized MP4 (`mode=video`) from `origin`'s `/cdn-cgi/media/` endpoint. Used
+ * to serve heavy animated GIFs as video — Cloudflare Image Resizing refuses
+ * animated GIFs above ~50 MP of frame-area (`err=9413`), so `/cdn-cgi/media/` is
+ * the supported transcode path. The MP4 is ~95% smaller than the source GIF.
+ *
+ * The source is appended raw (Cloudflare parses everything after the options
+ * segment as the source), so paths + query strings survive. Returns `src`
+ * unchanged when there's nothing to transform: empty `src`/`origin`, a
+ * non-absolute / non-http(s) / unparseable URL, or a URL already pointing at a
+ * `/cdn-cgi/media/` transform (no double-wrap).
+ */
+export function cfMediaUrl(src: string, opts: { origin: string }): string {
+  const { origin } = opts;
+  if (!src || !origin) return src;
+  if (src.includes("/cdn-cgi/media/")) return src;
+
+  let parsed: URL;
+  try {
+    parsed = new URL(src);
+  } catch {
+    return src; // relative or malformed — no absolute source to fetch
+  }
+  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return src;
+
+  const base = origin.endsWith("/") ? origin.slice(0, -1) : origin;
+  return `${base}/${MEDIA_VIDEO_TRANSFORM}/${src}`;
+}
+
 /**
  * Build an absolute media URL from an R2 key, or undefined if no key.
  * Returns a plain URL without Image Transforms — gallery images go through
