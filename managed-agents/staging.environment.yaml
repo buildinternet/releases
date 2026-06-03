@@ -1,0 +1,21 @@
+# Hand-maintained mirror of the live managed-agent environment (staging).
+# Captured via: ant beta:environments retrieve --environment-id env_015c9WRKAWFfSqAV6tsAj6Qf
+# Edit this file and deploy (apply via ant) to change the live env, or re-capture
+# after an out-of-band change. Verify: bun scripts/verify-managed-agents.ts --env staging
+name: releases-agents-staging
+description: Staging agents env for releases.sh
+scope: organization
+config:
+  type: cloud
+  packages:
+    type: packages
+    pip: []
+    npm: []
+    apt: []
+    cargo: []
+    gem: []
+    go: []
+  networking:
+    type: unrestricted
+  init_script: ""
+  environment: {}
