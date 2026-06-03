@@ -51,6 +51,7 @@ import {
   type SearchCollectionHit,
   type RawSourceHit,
 } from "@buildinternet/releases-api-types";
+import { parseNotice, formatNoticePointer } from "@buildinternet/releases-core/notice";
 import type { SourceType } from "@buildinternet/releases-core/source-enums";
 import {
   buildFeedCursor,
@@ -300,17 +301,18 @@ async function findOrg(db: D1Db, identifier: string) {
     domain: string | null;
     description: string | null;
     category: string | null;
+    metadata: string | null;
   }>(sql`
-    SELECT o.id, o.name, o.slug, o.domain, o.description, o.category
+    SELECT o.id, o.name, o.slug, o.domain, o.description, o.category, o.metadata
     FROM organizations o
     WHERE o.id = ${id} OR o.slug = ${id} OR o.domain = ${id} OR LOWER(o.name) = LOWER(${id})
     UNION
-    SELECT o.id, o.name, o.slug, o.domain, o.description, o.category
+    SELECT o.id, o.name, o.slug, o.domain, o.description, o.category, o.metadata
     FROM organizations o
     JOIN domain_aliases da ON da.org_id = o.id
     WHERE da.domain = ${id}
     UNION
-    SELECT o.id, o.name, o.slug, o.domain, o.description, o.category
+    SELECT o.id, o.name, o.slug, o.domain, o.description, o.category, o.metadata
     FROM organizations o
     JOIN org_accounts oa ON oa.org_id = o.id
     WHERE oa.handle = ${id}
@@ -1080,6 +1082,8 @@ export async function getOrganization(
     `Slug: ${org.slug} | Domain: ${org.domain ?? "N/A"} | Category: ${org.category ?? "N/A"}`,
   );
   if (org.description) lines.push(`Description: ${org.description}`);
+  const notice = parseNotice(org.metadata);
+  if (notice) lines.push(`Notice: ${formatNoticePointer(notice)}`);
 
   const overview = overviewRow[0];
   if (overview?.content) {
