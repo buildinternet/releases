@@ -3,6 +3,7 @@ import { describeRoute, resolver } from "hono-openapi";
 import { hideInProduction } from "../openapi.js";
 import { and, count, eq, inArray, max, min, sql, type SQL } from "drizzle-orm";
 import { parseKindParam, KIND_VALUES } from "@buildinternet/releases-core/kinds";
+import { parseNotice, setNoticeInMetadata, type Notice } from "@buildinternet/releases-core/notice";
 import { createDb } from "../db.js";
 import {
   products,
@@ -493,11 +494,13 @@ export async function buildProductDetailPayload(
       .orderBy(domainAliases.domain),
   ]);
 
+  const { metadata, ...productRow } = product;
   return {
-    ...product,
+    ...productRow,
     sources: productSources,
     tags: tagRows.map((t) => t.name),
     aliases: aliasRows.map((a) => a.domain),
+    notice: parseNotice(metadata),
   };
 }
 
@@ -688,6 +691,7 @@ const patchProductHandler = async (c: import("hono").Context<Env>) => {
     aliases?: string[];
     kind?: string | null;
     avatarUrl?: string | null;
+    notice?: Notice | null;
   } = {
     ...(c.req as unknown as { valid: (target: "json") => Record<string, unknown> }).valid("json"),
   };
@@ -710,6 +714,8 @@ const patchProductHandler = async (c: import("hono").Context<Env>) => {
   if (body.category !== undefined) updates.category = body.category;
   if ("kind" in body) updates.kind = body.kind ?? null;
   if (body.avatarUrl !== undefined) updates.avatarUrl = body.avatarUrl;
+  if (body.notice !== undefined)
+    updates.metadata = setNoticeInMetadata(product.metadata, body.notice);
 
   if (Object.keys(updates).length === 0 && body.tags === undefined && body.aliases === undefined) {
     return c.json(product);
