@@ -46,6 +46,7 @@ import {
   buildMcpToolset,
 } from "../src/shared/agent-tools.js";
 import { CATEGORIES } from "@buildinternet/releases-core/categories";
+import { fetchWithRetry } from "./fetch-retry.js";
 
 // Display name of the worker agent the coordinator delegates to. Must match
 // the `name` used when creating the worker agent below.
@@ -266,9 +267,11 @@ function readSkillFile(dirName: string): { path: string; content: Buffer } {
 // ── API calls ────────────────────────────────────────────────────
 
 async function listCustomSkills(apiKey: string): Promise<ApiSkill[]> {
-  const res = await fetch(`${ANTHROPIC_API}/v1/skills?source=custom`, {
-    headers: { ...HEADERS, "x-api-key": apiKey },
-  });
+  const res = await fetchWithRetry(
+    `${ANTHROPIC_API}/v1/skills?source=custom`,
+    { headers: { ...HEADERS, "x-api-key": apiKey } },
+    { label: "list skills" },
+  );
   if (!res.ok) {
     throw new Error(`Failed to list skills: ${res.status} ${await res.text()}`);
   }
@@ -286,11 +289,11 @@ async function createSkill(
   form.append("display_title", displayTitle);
   form.append("files[]", new Blob([skillFile]), `${dirName}/SKILL.md`);
 
-  const res = await fetch(`${ANTHROPIC_API}/v1/skills`, {
-    method: "POST",
-    headers: { ...HEADERS, "x-api-key": apiKey },
-    body: form,
-  });
+  const res = await fetchWithRetry(
+    `${ANTHROPIC_API}/v1/skills`,
+    { method: "POST", headers: { ...HEADERS, "x-api-key": apiKey }, body: form },
+    { label: `create skill "${displayTitle}"` },
+  );
   if (!res.ok) {
     throw new Error(`Failed to create skill "${displayTitle}": ${res.status} ${await res.text()}`);
   }
@@ -306,11 +309,11 @@ async function createSkillVersion(
   const form = new FormData();
   form.append("files[]", new Blob([skillFile]), `${dirName}/SKILL.md`);
 
-  const res = await fetch(`${ANTHROPIC_API}/v1/skills/${skillId}/versions`, {
-    method: "POST",
-    headers: { ...HEADERS, "x-api-key": apiKey },
-    body: form,
-  });
+  const res = await fetchWithRetry(
+    `${ANTHROPIC_API}/v1/skills/${skillId}/versions`,
+    { method: "POST", headers: { ...HEADERS, "x-api-key": apiKey }, body: form },
+    { label: `create version for ${skillId}` },
+  );
   if (!res.ok) {
     throw new Error(`Failed to create version for ${skillId}: ${res.status} ${await res.text()}`);
   }
