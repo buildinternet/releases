@@ -7,7 +7,13 @@ import { rehypeShikiPlugin } from "@/lib/shiki";
 import Link from "next/link";
 import type { ReleaseItem } from "@/lib/api";
 import { FallbackImage } from "./fallback-image";
-import { releaseThumbUrl, IMG_TRANSFORM_ON } from "@/lib/media";
+import { GifVideo } from "./gif-video";
+import {
+  releaseThumbUrl,
+  IMG_TRANSFORM_ON,
+  MEDIA_VIDEO_ON,
+  shouldRenderAsVideo,
+} from "@/lib/media";
 import { appStoreIconUrl, type AppRowInfo } from "@/lib/app-source";
 import type { VideoRowInfo } from "@/lib/video-source";
 import { EXTERNAL_UGC_REL } from "@/lib/sanitize";
@@ -50,11 +56,13 @@ function GalleryThumb({
   id,
   src,
   alt,
+  type,
   meta,
 }: {
   id: string;
   src: string;
   alt: string;
+  type?: string;
   meta: RowMeta;
 }) {
   const { ref, open } = useLightboxImage<HTMLButtonElement>({ id, src, alt, ...meta });
@@ -69,14 +77,18 @@ function GalleryThumb({
       className="cursor-zoom-in"
       aria-label="Preview image"
     >
-      <FallbackImage
-        src={releaseThumbUrl(src, 800)}
-        alt={alt}
-        width={400}
-        height={192}
-        className="rounded-md object-contain max-h-48 w-auto"
-        unoptimized={IMG_TRANSFORM_ON || undefined}
-      />
+      {shouldRenderAsVideo({ type, src, enabled: MEDIA_VIDEO_ON }) ? (
+        <GifVideo src={src} alt={alt} className="rounded-md object-contain max-h-48 w-auto" />
+      ) : (
+        <FallbackImage
+          src={releaseThumbUrl(src, 800)}
+          alt={alt}
+          width={400}
+          height={192}
+          className="rounded-md object-contain max-h-48 w-auto"
+          unoptimized={IMG_TRANSFORM_ON || undefined}
+        />
+      )}
     </button>
   );
 }
@@ -110,6 +122,7 @@ function MediaGallery({
             id={`${keyPrefix}:g${i}`}
             src={item.r2Url ?? item.url}
             alt={item.alt || ""}
+            type={item.type}
             meta={meta}
           />
         ) : null,
