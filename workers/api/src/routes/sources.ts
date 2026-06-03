@@ -2814,6 +2814,9 @@ const patchSourceHandler = async (c: import("hono").Context<Env>) => {
   if ("kind" in body) updates.kind = body.kind ?? null;
   if (body.discovery !== undefined) updates.discovery = body.discovery;
   if (body.notice !== undefined) {
+    // Sources accept a raw `metadata` string in the same PATCH (see above), so
+    // merge the notice on top of any freshly-set metadata, else the stored row.
+    // Org/product handlers have no raw-metadata passthrough and merge into the row directly.
     updates.metadata = setNoticeInMetadata(
       (updates.metadata as string | undefined) ?? src.metadata,
       body.notice,

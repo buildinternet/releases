@@ -26,9 +26,11 @@ const COORDINATE_SEGMENT = /^[A-Za-z0-9._-]+$/;
  * may point at an entity before it exists.
  */
 export function isValidNoticeCoordinate(input: string): boolean {
-  if (!input || input.startsWith("/") || input.endsWith("/")) return false;
+  if (!input) return false;
   const parts = input.split("/");
   if (parts.length > 2) return false;
+  // An empty segment (from a leading, trailing, or doubled slash) fails the
+  // segment regex, so no separate slash guard is needed.
   return parts.every((p) => COORDINATE_SEGMENT.test(p));
 }
 

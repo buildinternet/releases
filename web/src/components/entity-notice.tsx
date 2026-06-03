@@ -11,6 +11,16 @@ export function EntityNotice({ notice }: { notice?: Notice | null }) {
   if (!notice) return null;
   const internalHref = notice.coordinate ? `/${notice.coordinate}` : null;
   const label = notice.linkText ?? notice.coordinate ?? notice.href ?? null;
+  const linkClassName = "font-medium underline underline-offset-2 hover:no-underline";
+  const link = internalHref ? (
+    <Link href={internalHref} className={linkClassName}>
+      {label}
+    </Link>
+  ) : notice.href ? (
+    <a href={notice.href} target="_blank" rel="noopener noreferrer" className={linkClassName}>
+      {label}
+    </a>
+  ) : null;
   return (
     <div className="mt-4 flex items-start gap-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-[13px] text-blue-800 dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-300">
       <svg
@@ -27,29 +37,7 @@ export function EntityNotice({ notice }: { notice?: Notice | null }) {
       </svg>
       <span>
         {notice.message}
-        {internalHref && label ? (
-          <>
-            {" "}
-            <Link
-              href={internalHref}
-              className="font-medium underline underline-offset-2 hover:no-underline"
-            >
-              {label}
-            </Link>
-          </>
-        ) : notice.href && label ? (
-          <>
-            {" "}
-            <a
-              href={notice.href}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="font-medium underline underline-offset-2 hover:no-underline"
-            >
-              {label}
-            </a>
-          </>
-        ) : null}
+        {link && <> {link}</>}
       </span>
     </div>
   );
