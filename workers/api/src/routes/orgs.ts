@@ -44,6 +44,7 @@ import {
 } from "@buildinternet/releases-core/schema";
 import { daysAgoIso } from "@buildinternet/releases-core/dates";
 import { parseCompositionFromMetadata } from "@buildinternet/releases-core/composition";
+import { parseNotice, setNoticeInMetadata, type Notice } from "@buildinternet/releases-core/notice";
 import { parseKindParam, KIND_VALUES, isValidKind } from "@buildinternet/releases-core/kinds";
 import { resolveCategoryInput } from "@releases/core-internal/category-alias";
 import { parseSourceTypesLenient } from "../lib/source-types.js";
@@ -463,6 +464,7 @@ orgRoutes.get(
             updatedAt: playbookRow.updatedAt,
           }
         : null,
+      notice: parseNotice(org.metadata),
     };
 
     if (wantsMarkdown(c)) {
@@ -619,6 +621,7 @@ orgRoutes.patch(
       autoGenerateContent?: boolean;
       featured?: boolean;
       discovery?: "curated" | "agent" | "on_demand";
+      notice?: Notice | null;
     } = { ...c.req.valid("json") };
 
     if (body.category !== undefined && body.category !== null) {
@@ -676,6 +679,8 @@ orgRoutes.patch(
       updates.autoGenerateContent = body.autoGenerateContent;
     if (body.featured !== undefined) updates.featured = body.featured;
     if (body.discovery !== undefined) updates.discovery = body.discovery;
+    if (body.notice !== undefined)
+      updates.metadata = setNoticeInMetadata(org.metadata, body.notice);
 
     const [updated] = await db
       .update(organizations)
