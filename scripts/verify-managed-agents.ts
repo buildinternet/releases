@@ -136,6 +136,35 @@ function retrieveLive(id: string): Record<string, unknown> | null {
   return obj;
 }
 
+/** Retrieve a live environment via the `ant` CLI. Returns null when unreachable. */
+function retrieveEnvironmentLive(id: string): Record<string, unknown> | null {
+  let res;
+  try {
+    res = Bun.spawnSync([
+      "ant",
+      "beta:environments",
+      "retrieve",
+      "--environment-id",
+      id,
+      "--format",
+      "json",
+    ]);
+  } catch {
+    return null; // ant not installed / not on PATH
+  }
+  const out = res.stdout.toString().trim();
+  if (!out) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(out);
+  } catch {
+    return null;
+  }
+  const obj = parsed as Record<string, unknown>;
+  if (!obj || obj.error || obj.type === "error" || !obj.id) return null;
+  return obj;
+}
+
 function compareTool(r: Record<string, unknown>, l: Record<string, unknown>): Line | null {
   const name = (r.name ?? r.type) as string;
   if (j(r) === j(l)) return null;
@@ -259,6 +288,31 @@ function compareAgent(
   return lines;
 }
 
+/**
+ * Diff a committed environment YAML against the live environment. Strict on the
+ * meaningful writable fields (name, description, scope, config.type,
+ * config.networking) and silent on server-managed config sub-objects
+ * (packages / init_script / environment), so server-default churn never reads as
+ * a failing mismatch.
+ */
+function compareEnvironment(
+  rendered: Record<string, unknown>,
+  live: Record<string, unknown>,
+): Line[] {
+  const lines: Line[] = [];
+  const eq = (field: string, a: unknown, b: unknown, note?: string): void => {
+    lines.push({ field, verdict: j(a) === j(b) ? "match" : "MISMATCH", note });
+  };
+  const rConfig = (rendered.config ?? {}) as Record<string, unknown>;
+  const lConfig = (live.config ?? {}) as Record<string, unknown>;
+  eq("name", rendered.name, live.name, `${rendered.name}`);
+  eq("description", rendered.description ?? "", live.description ?? "");
+  eq("scope", rendered.scope ?? "organization", live.scope ?? "organization");
+  eq("config.type", rConfig.type, lConfig.type, `${rConfig.type}`);
+  eq("config.networking", rConfig.networking, lConfig.networking);
+  return lines;
+}
+
 function main(): void {
   const argv = process.argv.slice(2);
   const envArg = argv[argv.indexOf("--env") + 1];
@@ -294,6 +348,32 @@ function main(): void {
       for (const ln of lines) {
         if (ln.verdict === "MISMATCH") mismatches++;
         console.log(`  ${ICON[ln.verdict]} ${ln.field}${ln.note ? `  ${ln.note}` : ""}`);
+      }
+    }
+
+    // Environment (one per env, no kind axis). Checked on a no-`--kind` run or an
+    // explicit `--kind environment`.
+    if (!argv.includes("--kind") || kindArg === "environment") {
+      const envId = cfg.environmentId;
+      const renderedEnv = parse(
+        readFileSync(resolve(PROJECT_ROOT, "managed-agents", `${env}.environment.yaml`), "utf8"),
+      ) as Record<string, unknown>;
+      console.log(`\n=== environment.${env} (${envId ?? "no id in config"}) ===`);
+      if (!envId) {
+        console.log("  (skipped — no environmentId in config)");
+      } else {
+        const liveEnv = retrieveEnvironmentLive(envId);
+        if (!liveEnv) {
+          console.log(
+            "  UNREACHABLE — not found in the active workspace (wrong workspace, or `ant` not authed/installed).",
+          );
+          unreachable++;
+        } else {
+          for (const ln of compareEnvironment(renderedEnv, liveEnv)) {
+            if (ln.verdict === "MISMATCH") mismatches++;
+            console.log(`  ${ICON[ln.verdict]} ${ln.field}${ln.note ? `  ${ln.note}` : ""}`);
+          }
+        }
       }
     }
   }
