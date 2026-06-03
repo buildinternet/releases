@@ -41,7 +41,15 @@ type StubMeta = {
 const parseMeta = (src: StubSource): StubMeta =>
   src.metadata ? (JSON.parse(src.metadata) as StubMeta) : {};
 
+// Spread the real adapter as the base so exports the fetch path imports
+// transitively — e.g. `htmlToMarkdown` via cron/feed-enrich.ts — resolve to
+// their real (pure) implementations. Only the entry points this test needs to
+// control are overridden below. Without the spread, every newly-imported feed
+// export silently breaks this mock's ESM bindings at module-eval time (#1391).
+const actualFeed = await import("@releases/adapters/feed.js");
+
 mock.module("@releases/adapters/feed.js", () => ({
+  ...actualFeed,
   FEED_4XX_INVALIDATE_THRESHOLD: 5,
   CLEARED_FEED_FIELDS: {
     feedUrl: undefined,
