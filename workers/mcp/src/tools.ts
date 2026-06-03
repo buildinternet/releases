@@ -1565,6 +1565,8 @@ async function renderSourceDetail(
   lines.push(`Product: ${product ? `${product.name} (${product.slug})` : "none"}`);
   lines.push(`Release count: ${releaseCount}`);
   lines.push(`Last fetched: ${src.lastFetchedAt ?? "Never"}`);
+  const notice = parseNotice(src.metadata);
+  if (notice) lines.push(`Notice: ${formatNoticePointer(notice)}`);
 
   if (changelogMeta.length === 0) {
     lines.push("Changelog files tracked: none");
@@ -1671,6 +1673,8 @@ async function renderProductDetail(
   );
   if (product.url) lines.push(`URL: ${product.url}`);
   if (product.description) lines.push(`Description: ${product.description}`);
+  const notice = parseNotice(product.metadata);
+  if (notice) lines.push(`Notice: ${formatNoticePointer(notice)}`);
 
   lines.push("");
   lines.push(tagRows.length > 0 ? `Tags: ${tagRows.map((t) => t.name).join(", ")}` : "Tags: none");
