@@ -1190,15 +1190,6 @@ export interface ActiveFetchSession {
   lastUpdatedAt: number;
 }
 
-/**
- * Enveloped response for `GET /v1/admin/logs/fetch?source=…&envelope=true`.
- * `activeSession` is the live in-flight fetch (or `null`); the bare-array form
- * (no `envelope`) omits it for back-compat.
- */
-export interface FetchLogListResponse extends ListResponse<FetchLogEntry> {
-  activeSession?: ActiveFetchSession | null;
-}
-
 // ── Usage ──
 
 export interface UsageBreakdownRow {
