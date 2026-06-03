@@ -16,6 +16,7 @@
 
 import { describe, it, expect, beforeAll, afterAll } from "bun:test";
 import type { Source } from "@buildinternet/releases-core/schema";
+import { CrawlTimeoutError } from "@releases/lib/errors";
 import {
   acquireCrawlMarkdown,
   deriveCrawlPattern,
@@ -196,8 +197,13 @@ describe("acquireCrawlMarkdown", () => {
       ],
     });
 
-    const markdown = await acquireCrawlMarkdown(source, { crawlExcludePatterns: [] }, deps);
+    const { markdown, error } = await acquireCrawlMarkdown(
+      source,
+      { crawlExcludePatterns: [] },
+      deps,
+    );
 
+    expect(error).toBeUndefined();
     expect(markdown).not.toBeNull();
     expect(markdown).toContain("# https://resend.com/changelog/welcome");
     expect(markdown).toContain("# https://resend.com/changelog/v2");
@@ -215,35 +221,54 @@ describe("acquireCrawlMarkdown", () => {
     expect(typeof metaPatches[0].patch.lastCrawlAt).toBe("string");
   });
 
-  it("returns null and skips metadata persistence when crawl returns zero pages", async () => {
+  it("returns markdown:null with no error (legitimate fall-through) when crawl returns zero pages", async () => {
     const source = makeSource();
     const { deps, startCrawlCalls, metaPatches } = makeDeps({ jobId: "job_empty", pages: [] });
 
-    const markdown = await acquireCrawlMarkdown(source, {}, deps);
+    const { markdown, error } = await acquireCrawlMarkdown(source, {}, deps);
 
+    // Zero pages is NOT an error — the caller falls back to the index render.
     expect(markdown).toBeNull();
+    expect(error).toBeUndefined();
     expect(startCrawlCalls).toHaveLength(1);
     expect(metaPatches).toHaveLength(0);
   });
 
-  it("returns null when startCrawl throws (degrades to caller's fallback)", async () => {
+  it("surfaces an error (not a bare null) when startCrawl throws", async () => {
     const source = makeSource();
     const { deps, metaPatches } = makeDeps({ startThrows: new Error("crawl API down") });
 
-    const markdown = await acquireCrawlMarkdown(source, {}, deps);
+    const { markdown, error } = await acquireCrawlMarkdown(source, {}, deps);
 
+    // A thrown crawl error must NOT look like a clean fall-through (#1341) —
+    // the caller short-circuits to a distinct crawl_timeout status.
     expect(markdown).toBeNull();
+    expect(error).toBeDefined();
+    expect(error?.message).toContain("crawl API down");
     expect(metaPatches).toHaveLength(0);
   });
 
-  it("returns null when pollCrawlResults throws", async () => {
+  it("surfaces an error when pollCrawlResults throws", async () => {
     const source = makeSource();
     const { deps, metaPatches } = makeDeps({ pollThrows: new Error("poll 500") });
 
-    const markdown = await acquireCrawlMarkdown(source, {}, deps);
+    const { markdown, error } = await acquireCrawlMarkdown(source, {}, deps);
 
     expect(markdown).toBeNull();
+    expect(error).toBeDefined();
+    expect(error?.message).toContain("poll 500");
     expect(metaPatches).toHaveLength(0);
+  });
+
+  it("carries the infra category and timeout message when the crawl times out (#1341)", async () => {
+    const source = makeSource();
+    const { deps } = makeDeps({ pollThrows: new CrawlTimeoutError("job_slow", 300_000) });
+
+    const { markdown, error } = await acquireCrawlMarkdown(source, {}, deps);
+
+    expect(markdown).toBeNull();
+    expect(error?.category).toBe("infra");
+    expect(error?.message).toMatch(/timed out after 300s/);
   });
 
   it("default behavior (no overrides) — startCrawl receives includeExternalLinks: false and no excludePatterns", async () => {
@@ -340,7 +365,7 @@ describe("acquireCrawlMarkdown", () => {
       ],
     });
 
-    const markdown = await acquireCrawlMarkdown(
+    const { markdown } = await acquireCrawlMarkdown(
       source,
       { crawlIncludePathPrefix: "/changelog/" },
       deps,
@@ -369,13 +394,15 @@ describe("acquireCrawlMarkdown", () => {
       ],
     });
 
-    const markdown = await acquireCrawlMarkdown(
+    const { markdown, error } = await acquireCrawlMarkdown(
       source,
       { crawlIncludePathPrefix: "/changelog/" },
       deps,
     );
 
+    // Every page filtered out is a legitimate fall-through, not a crawl error.
     expect(markdown).toBeNull();
+    expect(error).toBeUndefined();
     // No metadata persistence when the post-filter wipes out the page set —
     // there's no successful crawl to anchor the lastCrawlJobId to.
     expect(metaPatches).toHaveLength(0);
@@ -391,7 +418,7 @@ describe("acquireCrawlMarkdown", () => {
       ],
     });
 
-    const markdown = await acquireCrawlMarkdown(source, {}, deps);
+    const { markdown } = await acquireCrawlMarkdown(source, {}, deps);
 
     expect(markdown).toContain("body");
     expect(markdown).toContain("kept too");
@@ -407,7 +434,7 @@ describe("acquireCrawlMarkdown", () => {
 
     // Should still return concatenated markdown — the .catch(() => {}) in
     // acquireCrawlMarkdown swallows the rejection.
-    const markdown = await acquireCrawlMarkdown(source, {}, deps);
+    const { markdown } = await acquireCrawlMarkdown(source, {}, deps);
     expect(markdown).toContain("body");
 
     // Give the swallowed rejection a tick to settle so an unhandled-rejection

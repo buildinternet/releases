@@ -1,3 +1,5 @@
+import type { FetchLogStatus } from "@buildinternet/releases-core/schema";
+
 export interface FetchLogEntry {
   id: string;
   sourceId: string;
@@ -9,7 +11,11 @@ export interface FetchLogEntry {
   releasesFound: number;
   releasesInserted: number;
   durationMs?: number;
-  status: "success" | "error" | "no_change" | "dry_run";
+  // Canonical status set (single source of truth in core's schema) so the
+  // label/style maps below fail compilation if a new status is ever added
+  // without them. `blocked` = Cloudflare challenge (#1171); `crawl_timeout` =
+  // the /crawl job threw/timed out instead of returning pages (#1341).
+  status: FetchLogStatus;
   error?: string;
   rawContent?: string;
   createdAt: string;
@@ -17,12 +23,10 @@ export interface FetchLogEntry {
 
 export type FetchLogStatusFilter = FetchLogEntry["status"] | "all";
 
-export interface FetchLogStatusCounts {
-  success: number;
-  error: number;
-  no_change: number;
-  dry_run: number;
-}
+// Per-status tallies are populated by the API only for the statuses it counts;
+// keep it partial so streamed-in statuses (blocked / crawl_timeout) can be
+// accumulated client-side without a missing-key type error.
+export type FetchLogStatusCounts = Partial<Record<FetchLogEntry["status"], number>>;
 
 export interface FetchLogResponse {
   entries: FetchLogEntry[];
@@ -46,6 +50,9 @@ const STATUS_STYLES: Record<FetchLogEntry["status"], string> = {
   error: "text-red-500",
   no_change: "text-stone-400",
   dry_run: "text-blue-500",
+  // Degraded-but-not-broken states: amber, distinct from healthy gray and hard-error red.
+  blocked: "text-amber-500",
+  crawl_timeout: "text-amber-500",
 };
 
 const STATUS_LABELS: Record<FetchLogEntry["status"], string> = {
@@ -53,6 +60,8 @@ const STATUS_LABELS: Record<FetchLogEntry["status"], string> = {
   error: "Error",
   no_change: "No change",
   dry_run: "Dry run",
+  blocked: "Blocked",
+  crawl_timeout: "Crawl timeout",
 };
 
 export function FetchStatusBadge({ status }: { status: FetchLogEntry["status"] }) {
@@ -67,6 +76,12 @@ export function FetchLogResultCell({ log }: { log: FetchLogEntry }) {
   if (log.status === "no_change") return <span className="text-stone-400">no changes</span>;
   if (log.status === "error")
     return <span className="text-red-500">{log.error?.slice(0, 40) ?? "failed"}</span>;
+  // Degraded states carry an error message and 0 releases — show the reason
+  // rather than the misleading "—" that empty rows otherwise render.
+  if (log.status === "blocked" || log.status === "crawl_timeout")
+    return (
+      <span className="text-amber-500">{log.error?.slice(0, 40) ?? STATUS_LABELS[log.status]}</span>
+    );
   if (log.releasesInserted > 0)
     return <span className="text-green-600">+{log.releasesInserted}</span>;
   if (log.releasesFound > 0) return <span>{log.releasesFound} found</span>;
