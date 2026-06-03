@@ -97,6 +97,17 @@ describe("getActiveFetchSession", () => {
 
     expect(result).toBeNull();
   });
+
+  it("fails open to null on a shape-drifted session (missing/mistyped fields), not coerced garbage", async () => {
+    // A payload missing startedAt/lastUpdatedAt must NOT become
+    // { startedAt: NaN, lastUpdatedAt: NaN } — the helper's contract is fail-open.
+    const malformed = { sessionId: "ma-abc", status: "running" };
+    const hub = mkHub({ sessionMap: { "acme-one": "ma-abc" }, sessions: { "ma-abc": malformed } });
+
+    const result = await getActiveFetchSession(hub, "acme-one");
+
+    expect(result).toBeNull();
+  });
 });
 
 describe("getActiveSessionRaw", () => {

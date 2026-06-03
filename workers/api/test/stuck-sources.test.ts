@@ -53,7 +53,7 @@ async function addLog(
   sourceId: string,
   status: FetchLogStatus,
   createdAt: string,
-  opts: Partial<{ error: string; errorCategory: string }> = {},
+  opts: Partial<{ error: string | null; errorCategory: string }> = {},
 ): Promise<void> {
   await db.insert(fetchLog).values({
     id: `fl_${++logCounter}`,
@@ -281,17 +281,23 @@ describe("GET /v1/admin/sources/stuck", () => {
   });
 });
 
-/** Seed N consecutive rows of a single status for a source, most recent last. */
+/**
+ * Seed N consecutive rows of a single status for a source, most recent last.
+ * `opts` (when given) is applied to every row — pass `{ error: null }` to seed a
+ * degraded row that carries no error message; otherwise each row gets a distinct
+ * `"<status> <i>"` error so lastError assertions stay stable.
+ */
 async function addStatusStreak(
   db: TestDb,
   sourceId: string,
   status: FetchLogStatus,
   n: number,
   startDay = 1,
+  opts?: Partial<{ error: string | null; errorCategory: string }>,
 ): Promise<void> {
   for (let i = 0; i < n; i++) {
     // oxlint-disable-next-line no-await-in-loop -- sequential seed inserts
-    await addLog(db, sourceId, status, ts(startDay + i), { error: `${status} ${i}` });
+    await addLog(db, sourceId, status, ts(startDay + i), opts ?? { error: `${status} ${i}` });
   }
 }
 
@@ -354,5 +360,21 @@ describe("getStuckSources — crawl_timeout / blocked degraded states", () => {
     const { items } = await getStuckSources(db as unknown as D1Db);
 
     expect(items).toHaveLength(0);
+  });
+
+  it("counts crawl_timeout rows even when their error column is null", async () => {
+    // The count keys off `status`, not the error message — a degraded row with
+    // no error text must still count, and lastError stays null.
+    const { db } = createTestDb();
+    await addOrg(db, "org_n", "null-err");
+    await addSource(db, "src_ce", "org_n", "null-err-src", { type: "scrape" });
+    await addStatusStreak(db, "src_ce", "crawl_timeout", 4, 1, { error: null });
+
+    const { items } = await getStuckSources(db as unknown as D1Db);
+
+    expect(items).toHaveLength(1);
+    expect(items[0].recentAttempts).toBe(4);
+    expect(items[0].recentErrors).toBe(4);
+    expect(items[0].lastError).toBeNull();
   });
 });

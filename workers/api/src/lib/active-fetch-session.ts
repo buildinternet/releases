@@ -68,10 +68,16 @@ export async function getActiveFetchSession(
 ): Promise<ActiveFetchSession | null> {
   const session = await getActiveSessionRaw(hub, sourceSlug);
   if (!session) return null;
-  return {
-    sessionId: String(session.sessionId),
-    status: String(session.status),
-    startedAt: Number(session.startedAt),
-    lastUpdatedAt: Number(session.lastUpdatedAt),
-  };
+  const { sessionId, status, startedAt, lastUpdatedAt } = session;
+  // Fail open on shape drift rather than coerce missing fields into
+  // "undefined" / NaN — the contract is null-or-valid, never garbage.
+  if (
+    typeof sessionId !== "string" ||
+    typeof status !== "string" ||
+    typeof startedAt !== "number" ||
+    typeof lastUpdatedAt !== "number"
+  ) {
+    return null;
+  }
+  return { sessionId, status, startedAt, lastUpdatedAt };
 }
