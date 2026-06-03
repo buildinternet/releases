@@ -99,6 +99,15 @@ describe("POST /sources/:id/releases/batch — feedUrlDeny insert guard (#1335)"
     const rows = await db.select().from(releases).where(eq(releases.sourceId, "src_ch_blog"));
     expect(rows).toHaveLength(0);
   });
+
+  it("returns 400 on a malformed body instead of throwing (releases not an array)", async () => {
+    const db = mkDb();
+    await seed(db, { feedUrlDeny: ["-jp$"] });
+
+    const res = await batch(db, { releases: "nope" });
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: string }).error).toBe("bad_request");
+  });
 });
 
 describe("POST /sources/:id/releases — feedUrlDeny insert guard (#1335)", () => {
@@ -108,7 +117,10 @@ describe("POST /sources/:id/releases — feedUrlDeny insert guard (#1335)", () =
 
     const res = await single(db, JP);
     expect(res.status).toBe(200);
-    expect((await res.json()) as Record<string, unknown>).toMatchObject({ skipped: true });
+    expect((await res.json()) as Record<string, unknown>).toMatchObject({
+      skipped: true,
+      reason: "url_denied",
+    });
 
     const rows = await db.select().from(releases).where(eq(releases.sourceId, "src_ch_blog"));
     expect(rows).toHaveLength(0);

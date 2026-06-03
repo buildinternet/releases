@@ -18,6 +18,7 @@ import {
   filterByCategoryAllow,
   filterByKeywordAllow,
   filterByUrlDeny,
+  isUrlDenied,
 } from "@releases/adapters/feed";
 import type { RawRelease } from "@releases/adapters/types";
 
@@ -1060,7 +1061,8 @@ describe("filterByUrlDeny", () => {
   });
 
   it("keeps items with no URL (a deny rule only fires on a positive match)", () => {
-    const { kept } = filterByUrlDeny([{ title: "No URL", content: "" }], ["-jp$"]);
+    const noUrl: RawRelease[] = [{ title: "No URL", content: "" }];
+    const { kept } = filterByUrlDeny(noUrl, ["-jp$"]);
     expect(kept).toHaveLength(1);
   });
 
@@ -1090,6 +1092,31 @@ describe("filterByUrlDeny", () => {
     const { kept, dropped } = filterByUrlDeny(items, ["["]);
     expect(kept).toEqual(items);
     expect(dropped).toBe(0);
+  });
+});
+
+describe("isUrlDenied", () => {
+  const deny = ["-jp$", "-de$"];
+
+  it("returns true when the URL matches a deny pattern", () => {
+    expect(isUrlDenied("https://clickhouse.com/blog/gala-jp", deny)).toBe(true);
+    expect(isUrlDenied("https://clickhouse.com/blog/gala-de", deny)).toBe(true);
+  });
+
+  it("returns false when the URL matches no pattern", () => {
+    expect(isUrlDenied("https://clickhouse.com/blog/gala", deny)).toBe(false);
+    // Anchored: a mid-slug 'jp' is not a match.
+    expect(isUrlDenied("https://clickhouse.com/blog/gcp-japan", deny)).toBe(false);
+  });
+
+  it("matches case-insensitively", () => {
+    expect(isUrlDenied("https://x.test/blog/a-JP", ["-jp$"])).toBe(true);
+  });
+
+  it("returns false for an empty URL or an empty/all-invalid denylist", () => {
+    expect(isUrlDenied("", deny)).toBe(false);
+    expect(isUrlDenied("https://x.test/blog/a-jp", [])).toBe(false);
+    expect(isUrlDenied("https://x.test/blog/a-jp", ["["])).toBe(false);
   });
 });
 

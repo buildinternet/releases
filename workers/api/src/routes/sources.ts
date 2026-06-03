@@ -105,7 +105,12 @@ import { filterJunkMedia } from "@releases/rendering/media-filter.js";
 import { processMediaForR2, selectExistingReleaseUrls } from "../lib/media-ingest.js";
 import { saveRawSnapshot, type RawFormat } from "../lib/raw-snapshot.js";
 import { fetchOne, embedReleasesForSource } from "../cron/poll-fetch.js";
-import { getSourceMeta, isGitHubFetched, filterByUrlDeny } from "@releases/adapters/feed.js";
+import {
+  getSourceMeta,
+  isGitHubFetched,
+  filterByUrlDeny,
+  isUrlDenied,
+} from "@releases/adapters/feed.js";
 import { isAppStoreFetched, isVideoFetched, videoSourceInfo } from "@releases/adapters/source-meta";
 import { appStoreSourceInfo } from "@releases/adapters/appstore";
 import { sanitizeVersion } from "@releases/adapters/extract/shared.js";
@@ -725,6 +730,20 @@ const postReleasesBatchHandler = async (c: import("hono").Context<Env>) => {
       prerelease?: boolean;
     }>;
   }>();
+
+  // Validate the payload shape before touching `body.releases`. The deny filter
+  // and the insert loop below both iterate it, so a malformed body (missing or
+  // non-array `releases`) must fail fast with a controlled 400 rather than throw
+  // an uncaught TypeError mid-handler.
+  if (!body || !Array.isArray(body.releases)) {
+    logEvent("warn", {
+      component: "sources-batch",
+      event: "invalid-batch-body",
+      sourceId: src.id,
+      slug: src.slug,
+    });
+    return c.json({ error: "bad_request", message: "`releases` must be an array" }, 400);
+  }
 
   // Defense-in-depth `feedUrlDeny` (#1335). The cron poll-fetch path drops
   // locale-suffixed translation dupes in-memory, but every managed-agent fetch
@@ -2989,7 +3008,7 @@ sourceRoutes.post("/sources/:slug/releases", postReleaseRoute, async (c) => {
     if (
       denyMeta.feedUrlDeny &&
       denyMeta.feedUrlDeny.length > 0 &&
-      filterByUrlDeny([{ url: body.url }], denyMeta.feedUrlDeny).dropped > 0
+      isUrlDenied(body.url, denyMeta.feedUrlDeny)
     ) {
       logEvent("info", {
         component: "sources-release-insert",
