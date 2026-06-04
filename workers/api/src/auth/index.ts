@@ -61,26 +61,32 @@ export function buildSocialProviders(creds: {
   return providers;
 }
 
+/** Operator-configured extra trusted origins (`BETTER_AUTH_TRUSTED_ORIGINS`, comma-separated). */
+function extraTrustedOrigins(env: Bindings): string[] {
+  return (env.BETTER_AUTH_TRUSTED_ORIGINS ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
 /**
  * Web origins permitted to call the auth API with credentials. The releases.sh /
  * releases.localhost family (incl. subdomains + local worktree hosts) is always
- * trusted; `BETTER_AUTH_TRUSTED_ORIGINS` (comma-separated) adds any extras (e.g.
- * a Vercel preview origin).
+ * trusted; `BETTER_AUTH_TRUSTED_ORIGINS` (comma-separated) adds any extras — a
+ * Vercel preview origin, or a portless custom-TLD dev host (e.g.
+ * `https://releases.local.buildinternet.dev`, which Google OAuth accepts where the
+ * `*.releases.localhost` portless hosts are rejected).
  *
- * Outside production we also trust bare-loopback web origins (`http://localhost:3000`,
- * `http://127.0.0.1:3000`): Google OAuth rejects the portless `*.releases.localhost`
- * hosts as redirect/origin values, so local OAuth dev runs both web and worker on
- * plain `localhost` ports. Prod stays locked to the releases.sh family.
+ * Outside production we additionally trust bare-loopback web origins
+ * (`http://localhost:3000`, `http://127.0.0.1:3000`) so local OAuth can also run on
+ * plain `localhost` ports without any config. Prod stays locked to the releases.sh
+ * family plus whatever is explicitly configured.
  */
 export function authTrustedOrigins(env: Bindings): string[] {
   const defaults = ["https://releases.sh", "https://releases.localhost"];
   const localDev =
     env.ENVIRONMENT === "production" ? [] : ["http://localhost:3000", "http://127.0.0.1:3000"];
-  const extra = (env.BETTER_AUTH_TRUSTED_ORIGINS ?? "")
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
-  return [...new Set([...defaults, ...localDev, ...extra])];
+  return [...new Set([...defaults, ...localDev, ...extraTrustedOrigins(env)])];
 }
 
 /** True for an origin in the releases.sh / releases.localhost family (any subdomain). */
@@ -137,18 +143,20 @@ export function deriveCookieDomain(env: Bindings): string | undefined {
  * Credentials`; auth needs a reflected origin + credentials so the browser will
  * send and store the session cookie. MUST be registered BEFORE the global
  * `cors()` so it owns the auth preflight (the first matching CORS middleware
- * answers OPTIONS and returns). Origin allow-list is the releases.sh/.localhost
- * family — our own first-party web surfaces — plus bare-loopback origins outside
- * production (local OAuth dev; see {@link authTrustedOrigins}).
+ * answers OPTIONS and returns). Allow-list mirrors {@link authTrustedOrigins}: the
+ * releases.sh/.localhost family (our first-party web surfaces), every operator-
+ * configured `BETTER_AUTH_TRUSTED_ORIGINS` entry (Vercel preview / portless dev
+ * host), and bare-loopback origins outside production. Keeping the two in lockstep
+ * means CORS never silently blocks an origin Better Auth already trusts.
  */
 export function authCorsMiddleware(): MiddlewareHandler<Env> {
   return cors({
     origin: (origin, c) => {
       if (!origin) return null;
       if (isReleasesFamilyOrigin(origin)) return origin;
-      if ((c.env as Bindings).ENVIRONMENT !== "production" && isLoopbackOrigin(origin)) {
-        return origin;
-      }
+      const env = c.env as Bindings;
+      if (extraTrustedOrigins(env).includes(origin)) return origin;
+      if (env.ENVIRONMENT !== "production" && isLoopbackOrigin(origin)) return origin;
       return null;
     },
     allowHeaders: ["Content-Type", "Authorization"],
