@@ -269,16 +269,18 @@ export async function createAuth(
     // gate it explicitly. Sensitive endpoints (sign-in/up) get the built-in
     // 3-requests-per-10s rule, keyed by `cf-connecting-ip` (advanced.ipAddress).
     //
-    // The `&& !!secret` is what keeps this OUT of local dev: local `wrangler dev`
-    // can't resolve the Secrets Store binding (the `secret-unresolved` warning
-    // above), so an unresolved secret reliably means "not a deployed env." Without
-    // it, rate limiting would run locally (ENVIRONMENT is "production" in the
-    // top-level wrangler vars) and every `/api/auth/*` call would query a
-    // `rate_limit` table a fresh local D1 doesn't have → 500s — plus repeated
-    // sign-in testing would 429 after 3 tries. Deployed prod resolves the secret →
-    // rate limiting on.
+    // FAIL-CLOSED: on in any deployed prod env, full stop. We deliberately do NOT
+    // couple this to the signing secret resolving — local dev and a broken prod
+    // deploy are indistinguishable by (ENVIRONMENT, secret), and a transiently
+    // unresolved secret in prod must never silently drop brute-force protection on
+    // the most sensitive endpoints. `AUTH_RATE_LIMIT_DISABLED` is the explicit,
+    // auditable opt-out (a plain var, never a transient Secrets-Store failure):
+    // default OFF so prod stays protected; set it to "true" in local `.dev.vars` to
+    // skip rate limiting (and its `rate_limit` table dependency) during sign-in
+    // testing. Local dev otherwise mirrors prod once the table exists
+    // (`bun run db:reset:local`).
     rateLimit: {
-      enabled: env.ENVIRONMENT === "production" && !!secret,
+      enabled: env.ENVIRONMENT === "production" && env.AUTH_RATE_LIMIT_DISABLED !== "true",
       storage: "database",
     },
     advanced: {

@@ -289,6 +289,11 @@ export type Env = {
     // Optional comma-separated extra trusted web origins (allowed to call the
     // auth API with credentials), on top of the releases.sh/.localhost family.
     BETTER_AUTH_TRUSTED_ORIGINS?: string;
+    // Explicit kill switch for Better Auth's brute-force rate limiting (default
+    // OFF → rate limiting stays ON in prod). Set to "true" in local `.dev.vars`
+    // to skip rate limiting during sign-in testing. A plain var (never a transient
+    // Secrets-Store failure), so it can't silently drop protection in prod.
+    AUTH_RATE_LIMIT_DISABLED?: string;
     // Social-login credentials — GATED: a provider activates only when BOTH its
     // id + secret resolve; absent → silently omitted (no crash). To enable, add
     // the matching Secrets Store binding here AND the value in the store.

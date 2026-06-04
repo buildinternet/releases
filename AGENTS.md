@@ -36,6 +36,8 @@ The miniflare-backed local D1 (`workers/api/.wrangler/state/v3/d1`) does **not**
 
 Don't `wrangler d1 execute --local --file <migration>` to patch a single table — it lands the schema but not the `d1_migrations` log row, compounding the drift (same trap as the staging note below). Use `db:reset:local`.
 
+Auth brute-force **rate limiting** is D1-backed and **fail-closed in deployed prod** (on whenever `ENVIRONMENT === "production"`, never coupled to the signing secret — a broken secret must not silently drop protection). To skip it during local sign-in testing, set `AUTH_RATE_LIMIT_DISABLED=true` in `workers/api/.dev.vars` (explicit opt-out; defaults OFF so prod stays protected). Otherwise local mirrors prod once the `rate_limit` table exists (`db:reset:local`).
+
 ## Workspaces and carved-out packages
 
 Root `package.json` declares `workers/api`, `web`, and `packages/*` as workspaces. `workers/discovery/`, `workers/mcp/`, and `workers/webhooks/` are intentionally excluded — wrangler manages their dependencies independently.
