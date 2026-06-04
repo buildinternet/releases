@@ -21,7 +21,7 @@ describe("Fern provider detection", () => {
   });
 
   it("detects Fern from a `fern-docs` class marker", () => {
-    const head = `<head><body class="fern-docs-bg"></head>`;
+    const head = `<head><div class="fern-docs-bg"></div></head>`;
     expect(detectProviderFromHtml(head)?.id).toBe("fern");
   });
 
