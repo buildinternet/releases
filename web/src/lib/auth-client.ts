@@ -1,4 +1,5 @@
 import { createAuthClient } from "better-auth/react";
+import { dashClient } from "@better-auth/infra/client";
 
 /**
  * Better Auth browser client. Points at the API worker (where the auth instance
@@ -17,6 +18,11 @@ import { createAuthClient } from "better-auth/react";
 export const authClient = createAuthClient({
   baseURL: process.env.NEXT_PUBLIC_BETTER_AUTH_URL,
   fetchOptions: { credentials: "include" },
+  // Client half of Better Auth Infrastructure ("dash"). Pairs with the server-side
+  // dash() plugin (workers/api/src/auth/index.ts) so the hosted dashboard's
+  // admin/audit endpoints are reachable from this client. No API key here — the
+  // client plugin only exposes the endpoints; the key lives server-side.
+  plugins: [dashClient()],
 });
 
 export const { signIn, signUp, signOut, useSession, getSession } = authClient;

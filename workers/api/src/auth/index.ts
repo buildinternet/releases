@@ -1,5 +1,6 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import { dash } from "@better-auth/infra";
 import { cors } from "hono/cors";
 import type { MiddlewareHandler } from "hono";
 import { getSecret } from "@releases/lib/secrets";
@@ -219,6 +220,18 @@ export async function createAuth(env: Bindings) {
   });
   const cookieDomain = deriveCookieDomain(env);
 
+  // Better Auth Infrastructure ("dash") — the hosted admin/analytics dashboard at
+  // dash.better-auth.com reads from THIS self-hosted backend through the dash()
+  // plugin (user management, session monitoring, sign-up/sign-in analytics, audit
+  // logs). Gated on the API key resolving, same graceful-degradation seam as the
+  // social providers above: present (prod Secrets Store binding, or local
+  // .dev.vars) → the plugin mounts and the dashboard connects; absent (e.g. local
+  // dev without the key) → it stays off rather than making keyless outbound calls.
+  // Activity tracking is intentionally NOT enabled — it adds a `lastActiveAt`
+  // column to the user schema, which would need a paired Drizzle migration.
+  const dashApiKey = await resolveSecret(env.BETTER_AUTH_API_KEY);
+  const plugins = dashApiKey ? [dash({ apiKey: dashApiKey })] : [];
+
   return betterAuth({
     secret,
     baseURL: env.BETTER_AUTH_URL,
@@ -229,6 +242,7 @@ export async function createAuth(env: Bindings) {
     }),
     emailAndPassword: { enabled: true },
     socialProviders,
+    plugins,
     advanced: {
       // Engage cross-subdomain cookies only when a real cookie domain is
       // derivable (prod `.releases.sh`, local portless `.releases.localhost`).

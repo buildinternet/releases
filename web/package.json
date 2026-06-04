@@ -9,6 +9,7 @@
     "codegen": "graphql-codegen --config codegen.ts"
   },
   "dependencies": {
+    "@better-auth/infra": "^0.2.11",
     "@buildinternet/releases-api-types": "workspace:*",
     "@buildinternet/releases-core": "workspace:*",
     "@releases/rendering": "workspace:*",
