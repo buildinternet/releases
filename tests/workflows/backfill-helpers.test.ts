@@ -10,6 +10,7 @@ import {
   finalStatus,
   summaryPath,
   sweepReportPath,
+  altitudeSanity,
 } from "./backfill-helpers.js";
 
 test("preflightDecision: proceed/refuse/unknown-with-retry", () => {
@@ -98,4 +99,29 @@ test("sweepReportPath: runs/<ts>-batch → sibling reports/<date>-backfill-sweep
     "/data/work/reports/2026-01-09-backfill-sweep.md",
   );
   expect(sweepReportPath(null)).toBeNull();
+});
+
+test("altitudeSanity: flags high record-per-month, suppressed by feature hint / low ratio / no dates", () => {
+  // 10 records across 2 months = 5/mo (> 4) → flagged when the altitude is unguided.
+  const many = [
+    ...Array.from({ length: 5 }, () => ({ publishedAt: "2026-01-15" })),
+    ...Array.from({ length: 5 }, () => ({ publishedAt: "2026-02-20" })),
+  ];
+  const note = altitudeSanity(many, null);
+  expect(note).toContain("10 records across 2 month(s)");
+  expect(note).toContain("no granularity hint set");
+  // A non-feature hint still flags — high per-month contradicts the pinned altitude.
+  expect(altitudeSanity(many, "period")).toContain('granularity="period"');
+  // feature pins many-per-month as expected → suppressed.
+  expect(altitudeSanity(many, "feature")).toBeNull();
+  // <= 4/mo is fine (4 records across 1 month sits on the boundary).
+  expect(
+    altitudeSanity(
+      Array.from({ length: 4 }, () => ({ publishedAt: "2026-01-01" })),
+      null,
+    ),
+  ).toBeNull();
+  // No parseable YYYY-MM dates → nothing to measure → null.
+  expect(altitudeSanity([{ publishedAt: null }, { title: "x" }], null)).toBeNull();
+  expect(altitudeSanity([], null)).toBeNull();
 });

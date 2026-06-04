@@ -23,6 +23,7 @@ const INLINE_CHECKS = [
       "chunk",
       "finalStatus",
       "summaryPath",
+      "altitudeSanity",
     ],
   },
   {

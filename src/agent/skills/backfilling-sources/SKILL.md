@@ -25,6 +25,7 @@ Backfill a source's changelog history **without the managed-agent (MA) inference
 - **Spends:** your Claude Code session tokens for the `agent()` sub-agents, hard-capped by the turn's `budget.total` (set with a `+Nk` directive). Extraction runs at Sonnet; the mechanical phases (preflight, run-setup, write, validate, report) run at Haiku.
 - **Does NOT spend:** no MA coordinator-Sonnet, no Haiku worker loop, no metered Anthropic API bill. `POST /v1/workflows/update` is never called. `/batch` runs no AI on insert.
 - Always **dry-run first** (the default) — it maps + estimates and writes nothing.
+- **When a dry-run is worth it:** on **index → detail** sources, where it enumerates the per-release pages it would pull and shows how many are new vs already-ingested. For a known **single-page** source it adds little — it can only confirm shape/reachability, not preview record counts (those need extraction), and the workflow already routes single-page through a lighter recon path (no run-setup or known-URL agent on the way to the estimate). Going straight to `dryRun: false` with a turn budget is reasonable there.
 
 ## Preflight gate (non-negotiable)
 
@@ -68,6 +69,10 @@ Correct path for the **first** backfill of an already-ingested `scrape` source:
 Truly incremental re-runs (`skippedKnown > 0`) only happen after the source already carries per-release URLs from a prior backfill.
 
 **Caveat:** `releases tail --json` does not expose `url` or `content` — only `id/title/summary/publishedAt/source/contentChars/contentTokens`. To confirm whether existing rows are url-null, use `releases admin release get <id> --json`.
+
+## Extraction altitude (granularity)
+
+The same page can be split at very different altitudes — per **feature**, per **period** (month/quarter heading), per **version**, or one coarse **rollup** — and left unguided the extractor chooses per-run, so an unchanged page can yield different record counts on different runs. Pin it by setting the source's `metadata.granularity` once at onboard to one of `feature | period | version | rollup`. The workflow reads it (via `resolve-source`) into the extract prompt so the altitude is deterministic across runs, and the Report phase logs an **altitude check** when the record count runs high relative to the date span (≫4 records per covered month) and the altitude wasn't pinned to `feature` — surfacing over-splitting instead of letting it pass silently.
 
 ## After a run
 

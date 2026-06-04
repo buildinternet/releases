@@ -167,3 +167,29 @@ export function sweepReportPath(runDir) {
   const date = (runDir.split("/").pop() || "").slice(0, 10);
   return `${reportsDir}/${date}-backfill-sweep.md`;
 }
+
+/**
+ * Altitude sanity check (#1409): flag when the extracted record count is high
+ * relative to the date span it covers, which suggests feature-level (or over-)
+ * splitting that a different run could choose differently. Suppressed when the
+ * source pinned granularity="feature" (many-per-month is expected then) or when
+ * <= ~4 records land per covered month. Records without a parseable YYYY-MM
+ * publishedAt don't count toward the span. Null = nothing to flag.
+ * @param {Array<{publishedAt?:string|null}>} records kept (deduped) records
+ * @param {string|null|undefined} granularity source metadata.granularity hint
+ * @returns {string|null}
+ */
+export function altitudeSanity(records, granularity) {
+  const months = new Set();
+  for (const r of records || []) {
+    const p = r && typeof r.publishedAt === "string" ? r.publishedAt.slice(0, 7) : "";
+    if (/^\d{4}-\d{2}$/.test(p)) months.add(p);
+  }
+  const recordCount = (records || []).length;
+  const monthCount = months.size;
+  if (recordCount === 0 || monthCount === 0) return null;
+  const perMonth = recordCount / monthCount;
+  if (granularity === "feature" || perMonth <= 4) return null;
+  const hint = granularity ? `granularity="${granularity}"` : "no granularity hint set";
+  return `altitude check: ${recordCount} records across ${monthCount} month(s) (~${perMonth.toFixed(1)}/mo), ${hint} — confirm the intended altitude (feature | period | version | rollup); pin it via source metadata.granularity.`;
+}
