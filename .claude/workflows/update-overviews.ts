@@ -1,0 +1,572 @@
+// @ts-nocheck -- Workflow scripts run inside the runtime's injected-hook scope (agent, parallel,
+// log, phase, budget, args are globals) and live outside any tsconfig, so an editor would report
+// false implicit-any / undeclared-global errors. The runtime executes this; the pure helpers are
+// type-clean in tests/workflows/overview-helpers.js and parse-guarded by workflow-scripts.test.ts.
+export const meta = {
+  name: "update-overviews",
+  description:
+    "Local batch overview regeneration: select orgs (outdated / overview-age window / activity window / explicit list), fetch only the lagging ones, generate via budget-gated agent() waves, lint + re-derive citation offsets in-parent, and upsert through `overview update` — no metered Anthropic bill.",
+  whenToUse:
+    "Refresh org overviews across a set of orgs locally without the server-side batch-overview Anthropic bill. Dry-run first (the default). Launch via the maintaining-orgs skill → Sweep via Workflow.",
+  phases: [
+    { title: "Select", detail: "overview plan manifest → mode filter → cap" },
+    { title: "Fetch", detail: "serial source fetch for needsFetch orgs (skipped on dry-run)" },
+    { title: "Generate", detail: "agent-per-org body + citations (budget-gated waves)" },
+    { title: "Write", detail: "de-escape + lint + re-derive offsets + overview update" },
+    { title: "Report", detail: "run summary to ~/.releases/work" },
+  ],
+};
+
+// ── Tunables ──────────────────────────────────────────────────────────────
+// Overview generation is heavy per org (~40–80K tokens), so waves are small and
+// the reserve is sized so a budget stop overshoots by at most one wave.
+const GEN_WAVE = 3; // orgs generated concurrently per budget-checked wave
+const PER_WAVE_RESERVE = 250000; // stop scheduling a new wave when budget.remaining() drops below this
+const MAX_CONTENT_CHARS = 1000; // clip each release body client-side (silent-truncation guard)
+
+// ── Inlined deterministic helpers ──────────────────────────────────────────
+// MIRRORED VERBATIM from tests/workflows/overview-helpers.js (Workflow scripts
+// can't import). Unit-tested there; workflow-scripts.test.ts guards drift.
+// Do not edit here without editing the module — the drift guard will fail.
+
+function inferSelectionMode(input) {
+  const a = input || {};
+  if (Array.isArray(a.orgs) && a.orgs.length > 0) return "orgs";
+  if (a.activeSince != null || a.activeUntil != null) return "activity";
+  if (a.overviewUpdatedFrom != null || a.overviewUpdatedTo != null) return "overviewAge";
+  return "outdated";
+}
+
+function filterByDateWindow(rows, field, from, to) {
+  const lo = from ? String(from).slice(0, 10) : null;
+  const hi = to ? String(to).slice(0, 10) : null;
+  return (rows || []).filter((r) => {
+    if (!r || r[field] == null) return false;
+    const d = String(r[field]).slice(0, 10);
+    if (lo && d < lo) return false;
+    if (hi && d > hi) return false;
+    return true;
+  });
+}
+
+function unescapeHtmlEntities(s) {
+  if (typeof s !== "string") return s;
+  const map = { "&amp;": "&", "&lt;": "<", "&gt;": ">", "&quot;": '"', "&#39;": "'" };
+  return s.replace(/&amp;|&lt;|&gt;|&quot;|&#39;/g, (m) => map[m]);
+}
+
+function lintOverviewBody(body, orgName) {
+  const text = typeof body === "string" ? body : "";
+  const violations = [];
+  if (/^#{1,6}\s/m.test(text)) violations.push("markdown-heading");
+  const trimmed = text.trim();
+  const sm = trimmed.match(/^[\s\S]*?[.!?](?=\s|$)/);
+  const opener = (sm ? sm[0] : trimmed.split("\n")[0] || "").trim();
+  const openerWords = opener.replace(/[*`_]/g, "").split(/\s+/).filter(Boolean);
+  if (openerWords.length > 25) violations.push("opener-too-long");
+  const name = typeof orgName === "string" ? orgName.trim() : "";
+  if (name) {
+    const rest = opener.replace(/^\**\s*/, "");
+    if (rest.toLowerCase().startsWith(name.toLowerCase())) {
+      const remainder = rest.slice(name.length);
+      if (/^['’]s\b/.test(remainder) || /^\s+[a-z]/.test(remainder)) {
+        violations.push("org-as-subject-opener");
+      }
+    }
+  }
+  for (const m of text.matchAll(/\*\*\s*([^*]+?)\s*\*\*/g)) {
+    if (/^(v?\d+(\.\d+)+|CVE-\d)/i.test(m[1].trim())) {
+      violations.push("version-lead-tease");
+      break;
+    }
+  }
+  const banned = [
+    "biggest",
+    "doubling down",
+    "leap forward",
+    "in the best sense",
+    "powerful",
+    "seamless",
+    "comprehensive",
+    "world-class",
+    "best-in-class",
+    "transformative",
+    "next-generation",
+    "cutting-edge",
+  ];
+  for (const p of banned) {
+    const re = new RegExp("\\b" + p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b", "i");
+    if (re.test(text)) violations.push("banned-phrase:" + p);
+  }
+  return violations;
+}
+
+function deriveCitationOffsets(body, citations) {
+  const text = typeof body === "string" ? body : "";
+  const accepted = [];
+  const spans = [];
+  let dropped = 0;
+  for (const c of citations || []) {
+    const citedText = c && typeof c.citedText === "string" ? c.citedText : "";
+    if (!citedText) {
+      dropped++;
+      continue;
+    }
+    const idx = text.indexOf(citedText);
+    if (idx < 0) {
+      dropped++;
+      continue;
+    }
+    const start = idx;
+    const end = idx + citedText.length;
+    if (spans.some((s) => start < s.end && end > s.start)) {
+      dropped++;
+      continue;
+    }
+    spans.push({ start, end });
+    accepted.push({
+      startIndex: start,
+      endIndex: end,
+      sourceUrl: c.sourceUrl,
+      title: c.title,
+      citedText,
+    });
+  }
+  return { citations: accepted, dropped };
+}
+
+function budgetGate(total, remaining, reserve, done, totalTargets) {
+  if (!total) return { stop: false };
+  if (remaining >= reserve) return { stop: false };
+  const deferred = totalTargets - done;
+  return {
+    stop: true,
+    logLine: `budget gate: ${remaining} tokens left (< ${reserve} reserve); stopping at ${done}/${totalTargets}, ${deferred} orgs deferred — re-run to continue (idempotent)`,
+  };
+}
+
+// ── Schemas (forced structured output) ──────────────────────────────────────
+const SELECT_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    rows: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          orgSlug: { type: "string" },
+          overviewUpdatedAt: { type: ["string", "null"] },
+          orgLastActivity: { type: ["string", "null"] },
+          releasesSinceOverview: { type: ["number", "null"] },
+          staleness: { type: ["string", "null"] },
+          needsFetch: { type: ["boolean", "null"] },
+        },
+        required: ["orgSlug"],
+      },
+    },
+  },
+  required: ["rows"],
+};
+const FETCH_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  properties: { ok: { type: "boolean" }, error: { type: ["string", "null"] } },
+  required: ["ok"],
+};
+const GEN_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    status: { type: "string", enum: ["generated", "empty-window", "error"] },
+    body: { type: ["string", "null"] },
+    orgName: { type: ["string", "null"] },
+    citations: {
+      type: ["array", "null"],
+      items: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          sourceUrl: { type: "string" },
+          title: { type: ["string", "null"] },
+          citedText: { type: "string" },
+        },
+        required: ["sourceUrl", "citedText"],
+      },
+    },
+    releaseCount: { type: ["number", "null"] },
+    lastContributingAt: { type: ["string", "null"] },
+    note: { type: ["string", "null"] },
+  },
+  required: ["status"],
+};
+const WRITE_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    written: { type: "boolean" },
+    citationCount: { type: ["number", "null"] },
+    error: { type: ["string", "null"] },
+  },
+  required: ["written"],
+};
+
+// ── Local prompt helpers (not shared; fine to keep here) ─────────────────────
+function genPrompt(slug, corrective) {
+  const fix =
+    corrective && corrective.length
+      ? `\nYOUR PREVIOUS DRAFT FAILED THESE LINT RULES — fix them and regenerate: ${corrective.join(", ")}.\n`
+      : "";
+  return `Regenerate the AI overview for the "${slug}" org in the Releases registry. The \`releases\` CLI is installed and authenticated against production. Do NOT fetch and do NOT upload — generate only and return the result inline. Read the regenerating-overviews skill for the full prompt; the rules below are the load-bearing subset.
+${fix}
+1. Read inputs with each release body clipped (the raw payload truncates silently otherwise):
+     releases admin overview inputs ${slug} --json --max-content-chars ${MAX_CONTENT_CHARS}
+   If \`selected\` is empty, return { status: "empty-window" }. If the read looks truncated (ends mid-JSON, or \`selected\` count is far below \`totalAvailable\`), return { status: "error", note: "truncated read" }.
+2. Generate the markdown body from \`selected\` (HARD rules — linted in-parent):
+   - Do NOT open with the org's own name as the sentence subject. Bad: "${slug} shipped…", "${slug}'s SDK…". Good: "Recently shipped X" or a product name ("Nuxt Agent launched…"). Product names containing the org name are fine.
+   - Opening sentence ≤25 words.
+   - Bold-tease section headers describe the user-facing claim, NOT a version or CVE id. Bad: "**3.2.0 added X**", "**CVE-2024-… patched**". Good: "**Persistent state landed**".
+   - No editorializing: ban biggest, doubling down, leap forward, powerful, seamless, comprehensive, world-class, best-in-class, transformative, next-generation, cutting-edge.
+   - No markdown headings (#, ##, …). No admissions of ingestion gaps.
+   - 250 words target, 300 HARD ceiling, 80 floor. Past tense, active voice. When \`existingContent\` is present, amend and evolve it — don't rewrite from scratch.
+3. Citations (model-asserted): for each major claim pick the backing release URL from \`selected[*].url\`. Return an array of { sourceUrl, title, citedText } where citedText is an EXACT, contiguous substring of your body from a SINGLE formatting run (never spanning ** markers). Do NOT compute offsets — the parent re-derives them.
+Return { status: "generated", body, orgName: <org.name from inputs>, citations, releaseCount: <totalAvailable from inputs>, lastContributingAt: <selected[0].publishedAt> }.`;
+}
+
+function writePrompt(slug, body, citations, releaseCount, lastContributingAt) {
+  const extra = [
+    Number.isFinite(releaseCount) ? `--release-count ${releaseCount}` : "",
+    lastContributingAt ? `--last-contributing-at ${lastContributingAt}` : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+  return `Upload a regenerated overview for the "${slug}" org. Steps, in order:
+1. Write the decoded value of BODY_JSON (it is a JSON-encoded string — write its contents, not the surrounding quotes) to a temp file, e.g. /tmp/${slug}-overview.md.
+2. Write CITATIONS_JSON verbatim (a JSON array) to /tmp/${slug}-overview-citations.json.
+3. Run: releases admin overview update ${slug} --content-file /tmp/${slug}-overview.md --citations-file /tmp/${slug}-overview-citations.json ${extra}
+   Do NOT pass --unescape-html (the body is already decoded and offsets are computed against it).
+4. Report written=true if it exited 0, the accepted citation count from the response ("citations": N) as citationCount, and any non-2xx error.
+BODY_JSON: ${JSON.stringify(body)}
+CITATIONS_JSON: ${JSON.stringify(citations)}`;
+}
+
+// Decode the five over-escaped HTML entities and strip a trailing newline so the
+// stored body and the offsets computed against it line up. Applied identically to
+// the initial draft and the corrective pass.
+function decodeBody(raw) {
+  return unescapeHtmlEntities(typeof raw === "string" ? raw : "").replace(/\s+$/, "");
+}
+
+// Decode each model-asserted citation's citedText so it matches the decoded body
+// before deriveCitationOffsets locates it.
+function decodeCitations(gen) {
+  return Array.isArray(gen.citations)
+    ? gen.citations.map((c) => ({ ...c, citedText: unescapeHtmlEntities(c.citedText) }))
+    : [];
+}
+
+async function regenOneOrg(t) {
+  const slug = t.slug;
+  let gen = await agent(genPrompt(slug, null), {
+    label: `gen:${slug}`,
+    phase: "Generate",
+    model: GEN_MODEL,
+    schema: GEN_SCHEMA,
+  });
+  if (!gen || gen.status === "error")
+    return { slug, status: "gen-error", note: (gen && gen.note) || "no result" };
+  if (gen.status === "empty-window") return { slug, status: "empty-window" };
+  let body = decodeBody(gen.body);
+  if (!body) return { slug, status: "gen-error", note: "empty body" };
+  const orgName = gen.orgName || slug;
+  let rawCitations = decodeCitations(gen);
+  let violations = lintOverviewBody(body, orgName);
+
+  if (violations.length) {
+    const gen2 = await agent(genPrompt(slug, violations), {
+      label: `gen-fix:${slug}`,
+      phase: "Generate",
+      model: GEN_MODEL,
+      schema: GEN_SCHEMA,
+    });
+    if (gen2 && gen2.status === "generated" && typeof gen2.body === "string" && gen2.body.trim()) {
+      const body2 = decodeBody(gen2.body);
+      const v2 = lintOverviewBody(body2, gen2.orgName || orgName);
+      if (v2.length <= violations.length) {
+        body = body2;
+        rawCitations = decodeCitations(gen2);
+        violations = v2;
+        gen = gen2;
+      }
+    }
+  }
+
+  const { citations, dropped } = deriveCitationOffsets(body, rawCitations);
+  const wr = await agent(
+    writePrompt(slug, body, citations, gen.releaseCount, gen.lastContributingAt),
+    { label: `write:${slug}`, phase: "Write", model: "haiku", schema: WRITE_SCHEMA },
+  );
+  const written = !!(wr && wr.written);
+  return {
+    slug,
+    status: written ? "written" : "write-error",
+    chars: body.length,
+    citationsAccepted: citations.length,
+    citationsDropped: dropped,
+    citationCountConfirmed: (wr && wr.citationCount) ?? null,
+    violations,
+    hadOverview: !!t.hasOverview,
+    writeError: (wr && wr.error) || null,
+  };
+}
+
+// ── args ─────────────────────────────────────────────────────────────────────
+let input = args;
+if (typeof input === "string") {
+  try {
+    input = JSON.parse(input);
+  } catch {
+    /* validated below */
+  }
+}
+input = input || {};
+const ORGS = Array.isArray(input.orgs)
+  ? input.orgs.filter((s) => typeof s === "string" && s.trim())
+  : [];
+if (input.maxOrgs != null && !(Number.isInteger(input.maxOrgs) && input.maxOrgs > 0)) {
+  log(`update-overviews: maxOrgs must be a positive integer, got ${input.maxOrgs}`);
+  return { status: "error", error: "invalid maxOrgs" };
+}
+const MAX_ORGS = input.maxOrgs == null ? 25 : input.maxOrgs;
+const STALE_DAYS =
+  input.staleDays != null ? Math.max(0, Math.floor(Number(input.staleDays) || 0)) : 14;
+const MISSING = input.missing !== false; // default true
+const HAS_ACTIVITY = input.hasActivity !== false; // default true
+const OVERVIEW_FROM = input.overviewUpdatedFrom ?? null;
+const OVERVIEW_TO = input.overviewUpdatedTo ?? null;
+const ACTIVE_SINCE = input.activeSince ?? null;
+const ACTIVE_UNTIL = input.activeUntil ?? null;
+const FETCH = input.fetch === "none" || input.fetch === "all" ? input.fetch : "needsFetch";
+const DRY = input.dryRun !== false; // default true
+const GEN_MODEL = input.model === "haiku" ? "haiku" : "sonnet";
+const mode = inferSelectionMode(input);
+
+// ── Phase: Select ──────────────────────────────────────────────────────────
+phase("Select");
+// `orgs` mode deliberately fetches the bare manifest (no --has-activity) — the
+// caller named exact slugs and is the gate, so an inactive org they listed is
+// still attempted (it will skip later as empty-window if there's nothing to say).
+let planCmd = "releases admin overview plan --json";
+if (mode === "outdated") {
+  planCmd += ` --stale-days ${STALE_DAYS}`;
+  if (MISSING) planCmd += " --missing";
+  if (HAS_ACTIVITY) planCmd += " --has-activity";
+} else if (mode === "overviewAge" || mode === "activity") {
+  if (HAS_ACTIVITY) planCmd += " --has-activity";
+}
+const selectRes = await agent(
+  `Fetch the overview-regen manifest for this sweep. Run exactly:
+\`${planCmd}\`
+The response is a JSON envelope \`{ items, pagination }\` listing curated orgs (on-demand orgs are already excluded) with freshness signals. Return EVERY item — if \`pagination.hasMore\` is true, page through with \`--page N\` until it isn't. Pass each item's fields through verbatim under these exact names: orgSlug, overviewUpdatedAt, orgLastActivity, releasesSinceOverview, staleness, needsFetch. Use null for any field an item omits.`,
+  { label: "select-manifest", phase: "Select", model: "haiku", schema: SELECT_SCHEMA },
+);
+const rows = (selectRes && Array.isArray(selectRes.rows) ? selectRes.rows : []).filter(
+  (r) => r && typeof r.orgSlug === "string" && r.orgSlug.trim(),
+);
+
+function toTarget(r) {
+  return {
+    slug: r.orgSlug,
+    needsFetch: !!r.needsFetch,
+    hasOverview: r.staleness ? r.staleness !== "missing" : r.overviewUpdatedAt != null,
+    releasesSinceOverview: r.releasesSinceOverview ?? 0,
+  };
+}
+
+let targets;
+if (mode === "orgs") {
+  const bySlug = new Map(rows.map((r) => [r.orgSlug.toLowerCase(), r]));
+  targets = ORGS.map((slug) => {
+    const r = bySlug.get(slug.toLowerCase());
+    if (!r) return { slug, needsFetch: false, hasOverview: false, releasesSinceOverview: 0 };
+    const t = toTarget(r);
+    t.slug = slug; // preserve the caller's requested casing
+    return t;
+  });
+} else if (mode === "overviewAge") {
+  targets = filterByDateWindow(rows, "overviewUpdatedAt", OVERVIEW_FROM, OVERVIEW_TO).map(toTarget);
+} else if (mode === "activity") {
+  targets = filterByDateWindow(rows, "orgLastActivity", ACTIVE_SINCE, ACTIVE_UNTIL).map(toTarget);
+} else {
+  targets = rows.map(toTarget);
+}
+
+// Most-stale-first so a truncated run hits the highest-value orgs. Explicit-list
+// order is preserved (callers chose it deliberately).
+if (mode !== "orgs")
+  targets.sort((a, b) => (b.releasesSinceOverview || 0) - (a.releasesSinceOverview || 0));
+const candidates = targets.length;
+const capped = targets.slice(0, MAX_ORGS);
+const cappedOut = candidates - capped.length;
+const needsFetchCount = capped.filter((t) => t.needsFetch).length;
+log(
+  `select: mode=${mode}, candidates=${candidates}, targets=${capped.length}, cappedOut=${cappedOut}, needsFetch=${needsFetchCount}`,
+);
+
+if (DRY) {
+  return {
+    status: "dry-run",
+    mode,
+    candidates,
+    targets: capped.length,
+    cappedOut,
+    needsFetch: needsFetchCount,
+    fetchPlan: FETCH,
+    sampleSlugs: capped.slice(0, 10).map((t) => t.slug),
+    note: "Re-invoke with dryRun:false to fetch + generate + write. Set a turn budget (+Nk) to cap generation spend.",
+  };
+}
+if (!capped.length) {
+  log("no target orgs after selection — nothing to regenerate");
+  return { status: "completed", mode, candidates, targets: 0, written: 0 };
+}
+
+// Own a maintenance run (live runs only) so each `overview update` auto-logs.
+const runInfo = await agent(
+  `Set up the maintenance run for this overview sweep.
+1. Run \`releases admin work status --json\`.
+2. If a run is active, capture its run dir, started=false.
+3. If none, run \`releases admin work start update-overviews --json\`, capture the new run dir, started=true, and \`mkdir -p ~/.releases/work/tasks ~/.releases/work/reports\`.
+Return the absolute run dir and whether you started it.`,
+  {
+    label: "run-setup",
+    phase: "Select",
+    model: "haiku",
+    schema: {
+      type: "object",
+      additionalProperties: false,
+      properties: { runDir: { type: "string" }, started: { type: "boolean" } },
+      required: ["runDir", "started"],
+    },
+  },
+);
+const RUN_DIR = (runInfo && runInfo.runDir) || null;
+const WE_STARTED_RUN = !!(runInfo && runInfo.started);
+
+// ── Phase: Fetch ───────────────────────────────────────────────────────────
+const fetchFailed = new Set();
+if (FETCH !== "none") {
+  phase("Fetch");
+  // Serial — concurrent managed-agent fetches 409.
+  const toFetch = FETCH === "all" ? capped : capped.filter((t) => t.needsFetch);
+  for (const t of toFetch) {
+    // eslint-disable-next-line no-await-in-loop -- serial by design: concurrent managed-agent fetches return 409
+    const fr = await agent(
+      `Fetch all active sources for org "${t.slug}" so its overview reflects the latest releases. Run \`releases admin source fetch --org ${t.slug} --wait\`. Report ok=true only if it exited 0; otherwise ok=false with a one-line error. Do NOT regenerate anything.`,
+      { label: `fetch:${t.slug}`, phase: "Fetch", model: "haiku", schema: FETCH_SCHEMA },
+    );
+    if (!fr || fr.ok === false) {
+      fetchFailed.add(t.slug);
+      log(`fetch: ${t.slug} failed — skipping its regen (won't regen on stale data)`);
+    }
+  }
+}
+
+// ── Phase: Generate (+ in-script Write) ──────────────────────────────────────
+phase("Generate");
+const toGen = capped.filter((t) => !fetchFailed.has(t.slug));
+const results = [];
+let done = 0;
+let deferredForBudget = 0;
+for (let i = 0; i < toGen.length; i += GEN_WAVE) {
+  const gate = budgetGate(budget.total, budget.remaining(), PER_WAVE_RESERVE, done, toGen.length);
+  if (gate.stop) {
+    log(gate.logLine);
+    deferredForBudget = toGen.length - done;
+    break;
+  }
+  const wave = toGen.slice(i, i + GEN_WAVE);
+  // eslint-disable-next-line no-await-in-loop -- sequential by design: the budget gate must settle between waves
+  const waveResults = await parallel(wave.map((t) => () => regenOneOrg(t)));
+  for (const r of waveResults) if (r) results.push(r);
+  done += wave.length;
+}
+
+// ── Phase: Report ────────────────────────────────────────────────────────────
+phase("Report");
+const written = results.filter((r) => r.status === "written").length;
+const emptyWindow = results.filter((r) => r.status === "empty-window").length;
+const genErrors = results.filter((r) => r.status === "gen-error" || r.status === "write-error");
+const fetchErrorSlugs = [...fetchFailed];
+const lintFlagged = results.filter((r) => r.violations && r.violations.length);
+const citationsStripped = results.filter(
+  (r) => r.status === "written" && r.hadOverview && r.citationsAccepted === 0,
+);
+const status = deferredForBudget > 0 ? "partial-budget" : "completed";
+const spentTokens = Math.round(budget.spent());
+const summaryInputs = {
+  mode,
+  candidates,
+  targets: capped.length,
+  cappedOut,
+  fetchPlan: FETCH,
+  fetchErrors: fetchErrorSlugs,
+  generated: written,
+  emptyWindow,
+  deferredForBudget,
+  lintFlagged: lintFlagged.map((r) => ({ slug: r.slug, violations: r.violations })),
+  citationsStripped: citationsStripped.map((r) => r.slug),
+  spentTokens,
+  results,
+};
+const rep = await agent(
+  `Write the maintenance run summary for this overview sweep. Do these steps IN ORDER:
+
+1. Write the summary file to: ${RUN_DIR ? RUN_DIR + "/summary.md" : "<run dir from `releases admin work status --json`>/summary.md"}
+   Follow docs/architecture/maintenance-workspace.md's summary.md template (status, per-org result table, cost, what changed, findings). Use these numbers VERBATIM (do not invent): ${JSON.stringify(summaryInputs)}.
+   Cost line, exactly: "${spentTokens} output tokens this turn (budget.spent(), excludes this summary write); session sub-agent tokens, no managed-agent bill — except any needsFetch source fetches." Stamp the date via \`date -u +%FT%TZ\`. Call out as findings: lint-flagged bodies (uploaded anyway — operator should review), empty-window skips (no-ops), fetch errors (regen correctly skipped), and any org where a prior overview's citations were stripped to zero.
+
+2. Self-verify the file was written: run \`test -f "<absolute path>" && echo EXISTS || echo MISSING\`. If MISSING, write it again before continuing.
+
+3. ${WE_STARTED_RUN ? "Run `releases admin work end` (this run started it)." : "Do NOT run `releases admin work end` — a parent sweep owns this run."}
+
+4. Return the absolute report path and set \`wrote\` to true if the file exists, false if not.`,
+  {
+    label: "run-report",
+    phase: "Report",
+    model: "haiku",
+    schema: {
+      type: "object",
+      additionalProperties: false,
+      properties: { reportPath: { type: "string" }, wrote: { type: "boolean" } },
+      required: ["reportPath", "wrote"],
+    },
+  },
+);
+if (!rep || !rep.wrote || !rep.reportPath) {
+  log(
+    `WARNING: run-report agent did not confirm summary.md was written (wrote=${rep?.wrote}, reportPath=${rep?.reportPath || "(empty)"}). Check ${RUN_DIR || "the run dir"} manually.`,
+  );
+}
+
+return {
+  status,
+  mode,
+  candidates,
+  targets: capped.length,
+  cappedOut,
+  fetchErrors: fetchErrorSlugs,
+  generated: written,
+  emptyWindow,
+  genErrors: genErrors.map((r) => ({
+    slug: r.slug,
+    status: r.status,
+    note: r.note || r.writeError,
+  })),
+  lintFlagged: lintFlagged.length,
+  citationsStripped: citationsStripped.map((r) => r.slug),
+  deferredForBudget,
+  actualCostTokens: spentTokens,
+  reportPath: (rep && rep.reportPath) || null,
+};

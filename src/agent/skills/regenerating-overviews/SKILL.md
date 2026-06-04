@@ -223,6 +223,6 @@ Real incidents have come from sub-agents quietly working around upstream errors:
 
 ## Composing With Other Skills
 
-- **`maintaining-orgs`** dispatches sub-agents that each run this skill for one org. See that skill for batch patterns.
+- **`maintaining-orgs`** dispatches sub-agents that each run this skill for one org, and fronts the **`update-overviews` dynamic Workflow** that wraps the whole batch sweep deterministically (select → fetch → generate → lint + cite → upsert) with no metered bill. See that skill → _Sweep via Workflow_ for batch patterns.
 - **`parsing-changelogs`** is the upstream pipeline — if releases are missing from `selected`, fetching may not have run. Suggest the operator run `releases admin source fetch …` first, then re-invoke this skill.
 - **`managing-sources`** is the right place to look if `sources` is empty or every source is hidden/paused.
