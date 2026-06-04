@@ -227,12 +227,22 @@ export async function createAuth(env: Bindings) {
   // social providers above: present (prod Secrets Store binding, or local
   // .dev.vars) → the plugin mounts and the dashboard connects; absent (e.g. local
   // dev without the key) → it stays off rather than making keyless outbound calls.
-  // Activity tracking is intentionally NOT enabled — it adds a `lastActiveAt`
-  // column to the user schema, which would need a paired Drizzle migration.
+  // Activity tracking is ON: dash() stamps `user.lastActiveAt` on non-GET authed
+  // requests (throttled to updateInterval, default 5 min) so the dashboard can show
+  // "last active". Best-effort on Workers — the plugin fires the write without
+  // awaiting it — so it's approximate, not a per-request heartbeat; the dashboard
+  // also lazily backfills it from session timestamps. The `last_active_at` column is
+  // paired in schema-auth.ts + migration 20260604010000_add_user_last_active_at.sql.
   const dashApiKey = await resolveSecret(env.BETTER_AUTH_API_KEY);
-  const plugins = dashApiKey ? [dash({ apiKey: dashApiKey })] : [];
+  const plugins = dashApiKey
+    ? [dash({ apiKey: dashApiKey, activityTracking: { enabled: true } })]
+    : [];
 
   return betterAuth({
+    // Display name Better Auth surfaces in OTP/passkey labels, the hosted
+    // dashboard, and future transactional emails. Resolves the dashboard's
+    // "Missing Application Name" insight.
+    appName: "Releases",
     secret,
     baseURL: env.BETTER_AUTH_URL,
     trustedOrigins: authTrustedOrigins(env),
@@ -244,6 +254,14 @@ export async function createAuth(env: Bindings) {
     socialProviders,
     plugins,
     advanced: {
+      // True client IP behind Cloudflare. `cf-connecting-ip` is the single
+      // authoritative client IP CF sets on every request; `x-forwarded-for` is the
+      // fallback (and what local `wrangler dev` / non-CF paths populate). Drives
+      // Better Auth's rate-limit keying and the dash plugin's IP-based analytics —
+      // without it the worker would see one upstream IP for everyone behind the CDN.
+      ipAddress: {
+        ipAddressHeaders: ["cf-connecting-ip", "x-forwarded-for"],
+      },
       // Engage cross-subdomain cookies only when a real cookie domain is
       // derivable (prod `.releases.sh`, local portless `.releases.localhost`).
       // On bare loopback (`http://localhost:8787`) the host is single-label and

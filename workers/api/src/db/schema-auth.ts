@@ -16,8 +16,9 @@ import { sqliteTable, text, integer, index } from "drizzle-orm/sqlite-core";
  * round-trips `Date`/`boolean` through the adapter cleanly (the repo's app tables
  * use ISO-text timestamps, but auth tables follow Better Auth's expectations).
  *
- * Paired migration: workers/api/migrations/20260604000000_add_better_auth_tables.sql
- * (the schema↔migration pairing gate in ci.yml watches this file).
+ * Paired migrations: workers/api/migrations/20260604000000_add_better_auth_tables.sql
+ * (initial tables) and 20260604010000_add_user_last_active_at.sql (the dash activity-
+ * tracking column). The schema↔migration pairing gate in ci.yml watches this file.
  */
 
 /** A non-null integer `timestamp` column with a JS-side default (Better Auth sets these too). */
@@ -36,6 +37,12 @@ export const user = sqliteTable("user", {
   image: text("image"),
   createdAt: timestampCol("created_at"),
   updatedAt: timestampCol("updated_at"),
+  // Better Auth Infrastructure ("dash") activity tracking stamps this on user
+  // activity (throttled to the plugin's updateInterval, default 5 min) so the
+  // hosted dashboard can show "last active". Nullable on purpose: existing rows
+  // and users inactive since the column was added have no value until dash()
+  // next records them. Paired migration: 20260604010000_add_user_last_active_at.sql.
+  lastActiveAt: integer("last_active_at", { mode: "timestamp" }),
 });
 
 export const session = sqliteTable(
