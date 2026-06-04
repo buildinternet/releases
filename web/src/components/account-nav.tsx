@@ -4,18 +4,21 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { signOut, useSession } from "@/lib/auth-client";
+import { AUTH_UI_ENABLED } from "@/lib/auth-ui";
 
 /**
  * Session-aware header control. Renders a "Sign in" link when signed out and a
  * compact account menu (name/email + sign out) when signed in.
  *
- * Hard-gated on `NEXT_PUBLIC_BETTER_AUTH_URL`: when it's unset the Better Auth
- * client would resolve `/api/auth/*` against the *web* origin (which has no auth
- * handler) and `useSession` would 404 on every page. So we render nothing — and,
- * critically, the guard sits in a component that calls NO hooks, so we never
- * invoke `useSession` in an environment that can't serve it.
+ * Gated on two things: the `NEXT_PUBLIC_AUTH_UI_ENABLED` master switch (so the
+ * surface stays dark until opted in — see {@link AUTH_UI_ENABLED}) AND
+ * `NEXT_PUBLIC_BETTER_AUTH_URL` (without it the Better Auth client resolves
+ * `/api/auth/*` against the *web* origin and `useSession` 404s every page). When
+ * either is absent we render nothing — and, critically, the guard sits in a
+ * component that calls NO hooks, so we never invoke `useSession` where it can't
+ * be served.
  */
-const AUTH_ENABLED = Boolean(process.env.NEXT_PUBLIC_BETTER_AUTH_URL);
+const AUTH_ENABLED = AUTH_UI_ENABLED && Boolean(process.env.NEXT_PUBLIC_BETTER_AUTH_URL);
 
 type Variant = "desktop" | "mobile";
 
