@@ -29,13 +29,21 @@ describe("buildSocialProviders gating", () => {
 
   it("includes google only when id + secret both resolve", () => {
     const p = buildSocialProviders({ googleClientId: "id", googleClientSecret: "sec" });
-    expect(p.google).toEqual({ clientId: "id", clientSecret: "sec" });
+    // Google carries overrideUserInfoOnSignIn so the imported avatar/name re-sync
+    // from Google on every sign-in (there's no profile-edit surface to clobber).
+    expect(p.google).toEqual({
+      clientId: "id",
+      clientSecret: "sec",
+      overrideUserInfoOnSignIn: true,
+    });
     expect(p.github).toBeUndefined();
   });
 
-  it("includes github independently of google", () => {
+  it("includes github independently of google (no re-sync flag)", () => {
     const p = buildSocialProviders({ githubClientId: "gid", githubClientSecret: "gsec" });
     expect(Object.keys(p)).toEqual(["github"]);
+    // GitHub keeps Better Auth's default import-on-signup; only Google opted into re-sync.
+    expect(p.github).toEqual({ clientId: "gid", clientSecret: "gsec" });
   });
 
   it("treats empty strings as absent", () => {
@@ -349,5 +357,42 @@ describe("email verification gate", () => {
     ).rejects.toThrow();
     // sendOnSignIn: a fresh verification email is sent on the unverified sign-in.
     expect(captured.length).toBeGreaterThanOrEqual(2);
+  });
+});
+
+// ── One Tap plugin gating ──
+// The Google One Tap endpoint verifies a Google ID token, so it's meaningless
+// without a configured Google client id. createAuth registers oneTap() ONLY when
+// Google's credential pair resolves — same fail-safe seam as buildSocialProviders.
+
+// The built Better Auth instance exposes its resolved plugin list on `.options`.
+const pluginIds = (auth: { options: { plugins?: Array<{ id: string }> } }) =>
+  (auth.options.plugins ?? []).map((p) => p.id);
+
+describe("one-tap plugin gating", () => {
+  const baseEnv = {
+    BETTER_AUTH_URL: "https://api.releases.localhost",
+    BETTER_AUTH_SECRET: "test-secret-do-not-use-in-prod-0123456789",
+  };
+
+  it("registers one-tap when Google is configured", async () => {
+    const auth = await createAuth(
+      {
+        ...baseEnv,
+        GOOGLE_CLIENT_ID: "gid",
+        GOOGLE_CLIENT_SECRET: "gsec",
+      } as never,
+      undefined,
+      { db: createTestDb(), sendEmail: () => {} },
+    );
+    expect(pluginIds(auth)).toContain("one-tap");
+  });
+
+  it("omits one-tap when Google is absent", async () => {
+    const auth = await createAuth(baseEnv as never, undefined, {
+      db: createTestDb(),
+      sendEmail: () => {},
+    });
+    expect(pluginIds(auth)).not.toContain("one-tap");
   });
 });

@@ -1,5 +1,6 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import { oneTap } from "better-auth/plugins";
 import { dash } from "@better-auth/infra";
 import { cors } from "hono/cors";
 import type { MiddlewareHandler } from "hono";
@@ -43,7 +44,17 @@ async function resolveSecret(value: SecretLike): Promise<string | null> {
   }
 }
 
-type SocialProvider = { clientId: string; clientSecret: string };
+type SocialProvider = {
+  clientId: string;
+  clientSecret: string;
+  /**
+   * Re-import the provider's profile (`name`, `image`) onto the user on EVERY
+   * sign-in, not just the first. Better Auth defaults this off; we opt Google in
+   * so the avatar we surface stays current. Safe today — there's no profile-edit
+   * UI whose values this could clobber. See `buildSocialProviders`.
+   */
+  overrideUserInfoOnSignIn?: boolean;
+};
 
 /**
  * Build the `socialProviders` map, **gating each provider on both halves of its
@@ -52,6 +63,11 @@ type SocialProvider = { clientId: string; clientSecret: string };
  * This is the "social-ready" seam — dropping the Google/GitHub secrets into the
  * environment activates them with zero code change. Pure + synchronous so it can
  * be unit-tested without touching the database or the network.
+ *
+ * Google additionally carries `overrideUserInfoOnSignIn` so the Google profile
+ * photo (mapped to `user.image` by Better Auth's default profile mapping) and
+ * name re-sync on every Google sign-in. GitHub keeps the plain import-on-signup
+ * default — only Google was asked to stay fresh.
  */
 export function buildSocialProviders(creds: {
   googleClientId?: string | null;
@@ -61,7 +77,11 @@ export function buildSocialProviders(creds: {
 }): Record<string, SocialProvider> {
   const providers: Record<string, SocialProvider> = {};
   if (creds.googleClientId && creds.googleClientSecret) {
-    providers.google = { clientId: creds.googleClientId, clientSecret: creds.googleClientSecret };
+    providers.google = {
+      clientId: creds.googleClientId,
+      clientSecret: creds.googleClientSecret,
+      overrideUserInfoOnSignIn: true,
+    };
   }
   if (creds.githubClientId && creds.githubClientSecret) {
     providers.github = { clientId: creds.githubClientId, clientSecret: creds.githubClientSecret };
@@ -288,9 +308,18 @@ export async function createAuth(
   // also lazily backfills it from session timestamps. The `last_active_at` column is
   // paired in schema-auth.ts + migration 20260604010000_add_user_last_active_at.sql.
   const dashApiKey = await resolveSecret(env.BETTER_AUTH_API_KEY);
-  const plugins = dashApiKey
-    ? [dash({ apiKey: dashApiKey, activityTracking: { enabled: true } })]
-    : [];
+
+  // Google One Tap (`/api/auth/one-tap/*`): the popup renders on the web origin
+  // with the PUBLIC client id and posts the Google ID token here for verification.
+  // Gated on Google being configured — the endpoint only verifies a Google ID
+  // token, so it's meaningless (a dangling route) without the client id. Same
+  // fail-safe seam as `buildSocialProviders`: present → mounts; absent → omitted.
+  // The client id is the one Google already uses for the social provider; pass it
+  // explicitly rather than leaning on the plugin's socialProviders fallback.
+  const plugins = [
+    ...(dashApiKey ? [dash({ apiKey: dashApiKey, activityTracking: { enabled: true } })] : []),
+    ...(socialProviders.google ? [oneTap({ clientId: socialProviders.google.clientId })] : []),
+  ];
 
   return betterAuth({
     // Display name Better Auth surfaces in OTP/passkey labels, the hosted

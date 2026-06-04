@@ -32,6 +32,37 @@ function initialOf(name: string | undefined, email: string): string {
   return source.slice(0, 1).toUpperCase();
 }
 
+/**
+ * Fills its (circular, sized by the parent) container with the user's avatar
+ * `image` — imported from Google/GitHub on sign-in — falling back to the name/email
+ * initial when there's no image (email-password users) or it fails to load. Each
+ * instance tracks its own load error, so multiple avatars on screen degrade
+ * independently. Plain <img> (not next/image) to cover both `lh3.googleusercontent.com`
+ * and `*.githubusercontent.com` without an optimizer remote-pattern, and
+ * `referrerPolicy="no-referrer"` — the convention for third-party profile photos.
+ */
+function UserAvatar({
+  user,
+}: {
+  user: { name?: string | null; email: string; image?: string | null };
+}) {
+  const [broken, setBroken] = useState(false);
+  if (user.image && !broken) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={user.image}
+        alt=""
+        referrerPolicy="no-referrer"
+        decoding="async"
+        onError={() => setBroken(true)}
+        className="h-full w-full object-cover"
+      />
+    );
+  }
+  return <span aria-hidden="true">{initialOf(user.name ?? undefined, user.email)}</span>;
+}
+
 function AccountNavInner({ variant }: { variant: Variant }) {
   const router = useRouter();
   const { data, isPending } = useSession();
@@ -77,8 +108,15 @@ function AccountNavInner({ variant }: { variant: Variant }) {
     }
     return (
       <div className="border-t border-stone-200 pt-3 mt-2 dark:border-stone-800">
-        <p className="text-xs text-stone-400 dark:text-stone-500">Signed in as</p>
-        <p className="truncate text-stone-700 dark:text-stone-200">{user.email}</p>
+        <div className="flex items-center gap-3">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full border border-stone-300 bg-stone-100 text-sm font-semibold text-stone-700 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-200">
+            <UserAvatar user={user} />
+          </span>
+          <div className="min-w-0">
+            <p className="text-xs text-stone-400 dark:text-stone-500">Signed in as</p>
+            <p className="truncate text-stone-700 dark:text-stone-200">{user.email}</p>
+          </div>
+        </div>
         <button
           type="button"
           onClick={handleSignOut}
@@ -107,9 +145,9 @@ function AccountNavInner({ variant }: { variant: Variant }) {
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label="Account menu"
-        className="flex h-7 w-7 items-center justify-center rounded-full border border-stone-300 bg-stone-100 text-xs font-semibold text-stone-700 transition hover:border-stone-400 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-200 dark:hover:border-stone-600"
+        className="flex h-7 w-7 items-center justify-center overflow-hidden rounded-full border border-stone-300 bg-stone-100 text-xs font-semibold text-stone-700 transition hover:border-stone-400 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-200 dark:hover:border-stone-600"
       >
-        {initialOf(user.name, user.email)}
+        <UserAvatar user={user} />
       </button>
 
       {open && (
@@ -119,15 +157,22 @@ function AccountNavInner({ variant }: { variant: Variant }) {
             role="menu"
             className="absolute right-0 top-full z-40 mt-2 w-56 border border-stone-200 bg-white p-3 shadow-lg dark:border-stone-800 dark:bg-stone-950"
           >
-            <p className="text-[11px] uppercase tracking-[0.18em] text-stone-400 dark:text-stone-500">
-              Signed in as
-            </p>
-            {user.name && (
-              <p className="mt-1 truncate text-sm font-medium text-stone-900 dark:text-stone-100">
-                {user.name}
-              </p>
-            )}
-            <p className="truncate text-sm text-stone-600 dark:text-stone-300">{user.email}</p>
+            <div className="flex items-center gap-3">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full border border-stone-300 bg-stone-100 text-sm font-semibold text-stone-700 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-200">
+                <UserAvatar user={user} />
+              </span>
+              <div className="min-w-0">
+                <p className="text-[11px] uppercase tracking-[0.18em] text-stone-400 dark:text-stone-500">
+                  Signed in as
+                </p>
+                {user.name && (
+                  <p className="truncate text-sm font-medium text-stone-900 dark:text-stone-100">
+                    {user.name}
+                  </p>
+                )}
+                <p className="truncate text-sm text-stone-600 dark:text-stone-300">{user.email}</p>
+              </div>
+            </div>
             <button
               type="button"
               onClick={handleSignOut}
