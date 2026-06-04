@@ -1,5 +1,6 @@
 import { describe, it, expect } from "bun:test";
 import { Hono } from "hono";
+import { cors } from "hono/cors";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { createTestDb } from "./setup";
@@ -181,6 +182,46 @@ describe("authCorsMiddleware origin allow-list", () => {
     expect(
       await preflightOrigin("https://evil.example.com", { ENVIRONMENT: "production" }),
     ).toBeNull();
+  });
+});
+
+describe("public CORS skips /api/auth/* (no wildcard clobbering of credentialed auth CORS)", () => {
+  // Mirrors the middleware wiring in src/index.ts: authCorsMiddleware owns the
+  // credentialed CORS on /api/auth/*, and the wildcard public cors() runs on every
+  // OTHER path (guarded by a path check). Without that guard the wildcard cors
+  // overwrites Access-Control-Allow-Origin with "*" on the ACTUAL (non-preflight)
+  // auth response — which a browser rejects for `credentials: "include"` requests.
+  // The preflight stays fine (authCorsMiddleware short-circuits OPTIONS), so only
+  // a real browser catches it; this locks the behavior in.
+  function makeApp() {
+    const app = new Hono();
+    app.use("/api/auth/*", authCorsMiddleware());
+    const publicReadCors = cors();
+    app.use("*", (c, next) =>
+      c.req.path.startsWith("/api/auth/") ? next() : publicReadCors(c, next),
+    );
+    app.get("/api/auth/ok", (c) => c.text("ok"));
+    app.get("/v1/ping", (c) => c.text("pong"));
+    return app;
+  }
+
+  it("reflects the origin (not '*') with credentials on an actual GET to /api/auth/*", async () => {
+    const res = await makeApp().request(
+      "/api/auth/ok",
+      { headers: { Origin: "https://releases.sh" } },
+      { ENVIRONMENT: "production" } as never,
+    );
+    expect(res.headers.get("access-control-allow-origin")).toBe("https://releases.sh");
+    expect(res.headers.get("access-control-allow-credentials")).toBe("true");
+  });
+
+  it("keeps wildcard CORS on non-auth public routes", async () => {
+    const res = await makeApp().request(
+      "/v1/ping",
+      { headers: { Origin: "https://anything.example" } },
+      { ENVIRONMENT: "production" } as never,
+    );
+    expect(res.headers.get("access-control-allow-origin")).toBe("*");
   });
 });
 

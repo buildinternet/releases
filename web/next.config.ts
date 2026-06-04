@@ -10,8 +10,26 @@ try {
   apiHostname = "localhost";
 }
 
+// Next 16 blocks cross-origin dev-runtime requests (the HMR WebSocket and
+// `/_next/*` dev assets) from any host outside the localhost family. Local OAuth
+// dev runs the app on a real portless custom-TLD domain (Google/Apple reject
+// `*.localhost`), so those hosts must be allow-listed or the page 403s its own
+// chunks and never hydrates — leaving every button inert. The localhost family
+// stays allowed by default; the `*.` wildcard also covers worktree-prefixed
+// hosts (`feat-x.releases.local.buildinternet.dev`). Extend with
+// NEXT_DEV_ALLOWED_ORIGINS (comma-separated hostnames) for any other dev domain.
+const devAllowedOrigins = [
+  "releases.local.buildinternet.dev",
+  "*.releases.local.buildinternet.dev",
+  ...(process.env.NEXT_DEV_ALLOWED_ORIGINS ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean),
+];
+
 const nextConfig: NextConfig = {
   outputFileTracingRoot: path.resolve(__dirname, ".."),
+  allowedDevOrigins: devAllowedOrigins,
   experimental: {
     viewTransition: true,
   },
