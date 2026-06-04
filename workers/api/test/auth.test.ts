@@ -10,7 +10,9 @@ import {
   authTrustedOrigins,
   authCorsMiddleware,
   deriveCookieDomain,
+  createAuth,
 } from "../src/auth/index.js";
+import type { AuthEmailMessage } from "../src/auth/email.js";
 
 // ── Pure helpers ──
 
@@ -285,5 +287,67 @@ describe("email/password over the D1 schema", () => {
     await expect(
       auth.api.signInEmail({ body: { email: "carol@example.com", password: "wrong-password" } }),
     ).rejects.toThrow();
+  });
+});
+
+// ── Integration: the email-verification gate ──
+// Builds the REAL createAuth() over the migrated test DB with an injected
+// capturing email sender (no network). Proves requireEmailVerification blocks
+// the session at sign-up and fires the verification email, and that an
+// unverified sign-in is rejected.
+
+describe("email verification gate", () => {
+  const env = {
+    BETTER_AUTH_URL: "https://api.releases.localhost",
+    BETTER_AUTH_SECRET: "test-secret-do-not-use-in-prod-0123456789",
+  } as never;
+
+  it("sign-up creates NO session and fires a verification email", async () => {
+    const db = createTestDb();
+    const captured: AuthEmailMessage[] = [];
+    const auth = await createAuth(env, undefined, {
+      db,
+      sendEmail: (m) => {
+        captured.push(m);
+      },
+    });
+
+    await auth.api.signUpEmail({
+      body: { email: "dora@example.com", password: "correct-horse-battery", name: "Dora" },
+    });
+
+    // requireEmailVerification → no session row at sign-up.
+    const sessions = await db.select().from(session);
+    expect(sessions).toHaveLength(0);
+    // user row exists but unverified.
+    const users = await db.select().from(user);
+    expect(users).toHaveLength(1);
+    expect(users[0]?.emailVerified).toBeFalsy();
+    // a verification email was scheduled to the new address with a token link.
+    expect(captured).toHaveLength(1);
+    expect(captured[0]?.to).toBe("dora@example.com");
+    expect(captured[0]?.text).toMatch(/\/verify-email\?token=[\w-]+/);
+  });
+
+  it("rejects sign-in while unverified and re-sends the verification email", async () => {
+    const db = createTestDb();
+    const captured: AuthEmailMessage[] = [];
+    const auth = await createAuth(env, undefined, {
+      db,
+      sendEmail: (m) => {
+        captured.push(m);
+      },
+    });
+    await auth.api.signUpEmail({
+      body: { email: "evan@example.com", password: "correct-horse-battery", name: "Evan" },
+    });
+    expect(captured).toHaveLength(1); // verification sent on sign-up
+    await expect(
+      auth.api.signInEmail({
+        body: { email: "evan@example.com", password: "correct-horse-battery" },
+      }),
+    ).rejects.toThrow();
+    // sendOnSignIn: a fresh verification email is sent on the unverified sign-in.
+    expect(captured.length).toBeGreaterThanOrEqual(2);
   });
 });

@@ -3,7 +3,7 @@
 import { useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { signIn, signUp } from "@/lib/auth-client";
+import { signIn, signUp, sendVerificationEmail } from "@/lib/auth-client";
 import { safeRedirect } from "@/lib/auth-redirect";
 
 type Mode = "login" | "signup";
@@ -78,7 +78,44 @@ export function AuthForm({ mode, redirectTo = "/" }: { mode: Mode; redirectTo?: 
   const [error, setError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
 
+  // After a sign-up, the user has NO session (verification is required) — show a
+  // "check your email" panel instead of redirecting. On an unverified sign-in the
+  // worker returns 403 and re-sends the link; show the same panel with a resend.
+  const [pendingEmail, setPendingEmail] = useState<string | null>(null);
+  const [phase, setPhase] = useState<"form" | "check-email">("form");
+  const [resent, setResent] = useState(false);
+
   const busy = pending || social !== null;
+
+  // Absolute callback URL on THIS web origin — the verify link redirects here
+  // after the worker verifies + auto-signs-in (a relative URL would resolve
+  // against the worker's baseURL and strand the user on api.releases.sh).
+  function callbackURL(): string {
+    return new URL(target, window.location.origin).toString();
+  }
+
+  async function resend() {
+    if (!pendingEmail || busy) return;
+    setError(null);
+    setPending(true);
+    try {
+      const result = await sendVerificationEmail({
+        email: pendingEmail,
+        callbackURL: callbackURL(),
+      });
+      // Better Auth surfaces request-level failures (rate-limit, bad request) in
+      // `result.error` rather than throwing — only confirm resent on success.
+      if (result.error) {
+        setError(result.error.message ?? "Could not resend the email. Please try again.");
+        return;
+      }
+      setResent(true);
+    } catch {
+      setError("Could not resend the email. Please try again.");
+    } finally {
+      setPending(false);
+    }
+  }
 
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -89,11 +126,33 @@ export function AuthForm({ mode, redirectTo = "/" }: { mode: Mode; redirectTo?: 
     setError(null);
     setPending(true);
     try {
-      const result =
-        mode === "signup"
-          ? await signUp.email({ name: String(data.get("name") ?? "").trim(), email, password })
-          : await signIn.email({ email, password });
+      if (mode === "signup") {
+        const result = await signUp.email({
+          name: String(data.get("name") ?? "").trim(),
+          email,
+          password,
+          callbackURL: callbackURL(),
+        });
+        if (result.error) {
+          setError(prettyError(result.error, mode));
+          return;
+        }
+        // No session yet — email verification is required. Show the panel.
+        setPendingEmail(email);
+        setPhase("check-email");
+        return;
+      }
+
+      const result = await signIn.email({ email, password });
       if (result.error) {
+        // 403 = email not verified. The worker has re-sent the link; surface the
+        // check-email panel rather than a raw error.
+        if (result.error.status === 403) {
+          setPendingEmail(email);
+          setResent(true);
+          setPhase("check-email");
+          return;
+        }
         setError(prettyError(result.error, mode));
         return;
       }
@@ -112,15 +171,11 @@ export function AuthForm({ mode, redirectTo = "/" }: { mode: Mode; redirectTo?: 
     setSocial(provider);
     try {
       // On success this triggers a full-page redirect to the provider; an error
-      // means the provider isn't configured server-side (or the call failed).
-      // `callbackURL` must be ABSOLUTE on the web origin: the auth server is the
-      // API worker on a different subdomain, and it resolves a relative callback
-      // against its OWN baseURL — which would dump the user on the worker domain
-      // after the OAuth round-trip instead of back here. `target` is a safe
-      // same-origin path; anchor it to this origin (prod releases.sh / local dev
-      // host alike — both are trusted origins on the worker).
-      const callbackURL = new URL(target, window.location.origin).toString();
-      const result = await signIn.social({ provider, callbackURL });
+      // means the provider isn't configured server-side (or the call failed). The
+      // callback must be ABSOLUTE on the web origin (see `callbackURL` above) — a
+      // relative one resolves against the worker's baseURL and would strand the
+      // user on api.releases.sh after the OAuth round-trip.
+      const result = await signIn.social({ provider, callbackURL: callbackURL() });
       if (result.error) {
         setError(prettyError(result.error, mode));
         setSocial(null);
@@ -133,6 +188,47 @@ export function AuthForm({ mode, redirectTo = "/" }: { mode: Mode; redirectTo?: 
 
   const submitLabel = mode === "signup" ? "Create account" : "Sign in";
   const pendingLabel = mode === "signup" ? "Creating account..." : "Signing in...";
+
+  if (phase === "check-email") {
+    return (
+      <div className="space-y-5">
+        <div>
+          <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-stone-400 dark:text-stone-500">
+            Check your email
+          </p>
+          <h2 className="mt-3 text-lg font-semibold tracking-tight text-stone-900 dark:text-stone-100">
+            Verify your email address
+          </h2>
+          <p className="mt-3 text-sm leading-6 text-stone-500 dark:text-stone-400">
+            {pendingEmail ? (
+              <>
+                We sent a verification link to{" "}
+                <span className="font-medium text-stone-700 dark:text-stone-200">
+                  {pendingEmail}
+                </span>
+                . Click it to finish signing in. {resent && "We just sent a fresh link."}
+              </>
+            ) : (
+              "We sent you a verification link. Click it to finish signing in."
+            )}
+          </p>
+        </div>
+        {error && (
+          <p className="text-sm text-red-600 dark:text-red-400" role="alert">
+            {error}
+          </p>
+        )}
+        <button
+          type="button"
+          onClick={resend}
+          disabled={busy}
+          className="inline-flex h-10 items-center justify-center border border-stone-300 bg-white px-4 text-sm font-medium text-stone-800 transition hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-stone-700 dark:bg-stone-950 dark:text-stone-100 dark:hover:bg-stone-900"
+        >
+          {pending ? "Sending..." : "Resend verification email"}
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -223,6 +319,18 @@ export function AuthForm({ mode, redirectTo = "/" }: { mode: Mode; redirectTo?: 
             </button>
           </div>
         </div>
+
+        {/* -mt-2 tucks this under the password field, offsetting the form's space-y-5 gap */}
+        {mode === "login" && (
+          <p className="-mt-2 text-right text-sm">
+            <Link
+              href="/forgot-password"
+              className="font-medium text-blue-600 hover:text-blue-500 dark:text-blue-400"
+            >
+              Forgot password?
+            </Link>
+          </p>
+        )}
 
         {error && (
           <p className="text-sm text-red-600 dark:text-red-400" role="alert">

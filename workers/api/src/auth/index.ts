@@ -3,11 +3,18 @@ import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { dash } from "@better-auth/infra";
 import { cors } from "hono/cors";
 import type { MiddlewareHandler } from "hono";
+import type { BaseSQLiteDatabase } from "drizzle-orm/sqlite-core";
 import { getSecret } from "@releases/lib/secrets";
 import { logEvent } from "@releases/lib/log-event";
 import { createDb } from "../db.js";
 import { user, session, account, verification, rateLimit } from "../db/schema-auth.js";
 import type { Env } from "../index.js";
+import {
+  sendAuthEmail,
+  verifyEmailTemplate,
+  resetPasswordTemplate,
+  type AuthEmailMessage,
+} from "./email.js";
 
 type Bindings = Env["Bindings"];
 
@@ -191,6 +198,26 @@ export function authCorsMiddleware(): MiddlewareHandler<Env> {
 }
 
 /**
+ * Send a fully-rendered auth email. Injectable so tests can capture without I/O.
+ * The default RETURNS the send promise (not `void`) so `scheduleSend` can hand the
+ * real async work to `waitUntil` — a discarded promise would let the isolate tear
+ * down mid-send. A capturing test sender may return `void` (it records synchronously).
+ */
+export type AuthEmailSender = (msg: AuthEmailMessage) => void | Promise<unknown>;
+
+export interface CreateAuthDeps {
+  /**
+   * DB handle — tests pass `createTestDb()` (BunSQLite); production uses
+   * `createDb(env.DB)` (D1). Both extend `BaseSQLiteDatabase`, which is what
+   * `drizzleAdapter` actually requires at runtime.
+   */
+  // oxlint-disable-next-line no-explicit-any
+  db?: BaseSQLiteDatabase<any, any, any, any>;
+  /** Email sender — tests capture; defaults to the real `sendAuthEmail`. */
+  sendEmail?: AuthEmailSender;
+}
+
+/**
  * Build a per-request Better Auth instance bound to this worker's environment —
  * mirrors `createDb(env.DB)`. Cheap to construct; the Workers model gives us env
  * bindings per request, so the instance is created per request rather than once.
@@ -202,11 +229,15 @@ export async function createAuth(
   env: Bindings,
   /**
    * `waitUntil` from the request's execution context. When provided, Better Auth's
-   * background work (account-enumeration dummy ops, etc.) is registered with it so it
-   * completes after the response instead of being dropped when the Worker isolate is
-   * torn down. Omitted in non-request contexts (e.g. tests) → Better Auth's default.
+   * background work (account-enumeration dummy ops, etc.) AND our fire-and-forget
+   * verification/reset email sends are registered with it so they complete after the
+   * response instead of being dropped when the Worker isolate is torn down. Omitted
+   * in non-request contexts (e.g. tests) → background tasks fall back to Better Auth's
+   * default and `scheduleSend` runs the send inline.
    */
   waitUntil?: (promise: Promise<unknown>) => void,
+  /** Test-only injection — a capturing email sender and/or an in-memory DB. Production passes neither. */
+  deps: CreateAuthDeps = {},
 ) {
   const secret = (await resolveSecret(env.BETTER_AUTH_SECRET)) ?? undefined;
   if (!secret) {
@@ -228,6 +259,20 @@ export async function createAuth(
     githubClientSecret: await resolveSecret(env.GITHUB_CLIENT_SECRET),
   });
   const cookieDomain = deriveCookieDomain(env);
+  const db = deps.db ?? createDb(env.DB);
+  const sendEmail: AuthEmailSender = deps.sendEmail ?? ((msg) => sendAuthEmail(env, msg));
+
+  // Fire-and-forget an email send: hand the REAL send promise to the request's
+  // `waitUntil` so it outlives the response (the Better Auth docs flag AWAITING the
+  // send as a timing-attack oracle, and on Workers a bare floating promise is
+  // cancelled when the response returns). With no exec-ctx (tests / non-request
+  // callers) it runs inline, where the injected capturing sender records
+  // synchronously. `Promise.resolve` only normalizes a `void`-returning test sender;
+  // a real send promise passes through unwrapped so `waitUntil` tracks it.
+  const scheduleSend = (run: () => void | Promise<unknown>): void => {
+    const result = run();
+    if (waitUntil) waitUntil(Promise.resolve(result));
+  };
 
   // Better Auth Infrastructure ("dash") — the hosted admin/analytics dashboard at
   // dash.better-auth.com reads from THIS self-hosted backend through the dash()
@@ -249,18 +294,41 @@ export async function createAuth(
 
   return betterAuth({
     // Display name Better Auth surfaces in OTP/passkey labels, the hosted
-    // dashboard, and future transactional emails. Resolves the dashboard's
-    // "Missing Application Name" insight.
+    // dashboard, and the verification/reset transactional emails. Resolves the
+    // dashboard's "Missing Application Name" insight.
     appName: "Releases",
     secret,
     baseURL: env.BETTER_AUTH_URL,
     trustedOrigins: authTrustedOrigins(env),
-    database: drizzleAdapter(createDb(env.DB), {
+    database: drizzleAdapter(db, {
       provider: "sqlite",
       // Schema key `rateLimit` must match Better Auth's default rate-limit model name.
       schema: { user, session, account, verification, rateLimit },
     }),
-    emailAndPassword: { enabled: true },
+    emailAndPassword: {
+      enabled: true,
+      // Block sign-in until the email is verified. Sign-up returns a success
+      // response with NO session (also enables Better Auth's enumeration
+      // protection), and each unverified sign-in attempt re-sends the link.
+      requireEmailVerification: true,
+      // Resetting a password kills the user's other sessions.
+      revokeSessionsOnPasswordReset: true,
+      sendResetPassword: async ({ user: u, url }) => {
+        const msg: AuthEmailMessage = { to: u.email, ...resetPasswordTemplate({ url }) };
+        scheduleSend(() => sendEmail(msg));
+      },
+    },
+    emailVerification: {
+      sendOnSignUp: true,
+      // Re-send a fresh verification link on each unverified sign-in attempt
+      // (the web form surfaces "we just sent a fresh link" on the 403).
+      sendOnSignIn: true,
+      autoSignInAfterVerification: true,
+      sendVerificationEmail: async ({ user: u, url }) => {
+        const msg: AuthEmailMessage = { to: u.email, ...verifyEmailTemplate({ url }) };
+        scheduleSend(() => sendEmail(msg));
+      },
+    },
     socialProviders,
     plugins,
     // Rate limiting backed by D1 so counters survive across Worker isolates — the
@@ -290,10 +358,9 @@ export async function createAuth(
       },
       // Engage cross-subdomain cookies only when a real cookie domain is
       // derivable (prod `.releases.sh`, local portless `.releases.localhost`).
-      // On bare loopback (`http://localhost:8787`) the host is single-label and
-      // no domain resolves — leave it OFF so Better Auth sets a clean host-only
-      // cookie shared across `localhost` ports rather than a `Domain=localhost`
-      // cookie. See `authTrustedOrigins` for the local OAuth rationale.
+      // On bare loopback the host is single-label and no domain resolves —
+      // leave it OFF so Better Auth sets a clean host-only cookie shared across
+      // `localhost` ports. See `authTrustedOrigins` for the local OAuth rationale.
       crossSubDomainCookies: cookieDomain
         ? { enabled: true, domain: cookieDomain }
         : { enabled: false },

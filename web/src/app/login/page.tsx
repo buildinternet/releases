@@ -15,11 +15,12 @@ export const metadata: Metadata = {
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ redirect?: string | string[] }>;
+  searchParams: Promise<{ redirect?: string | string[]; reset?: string | string[] }>;
 }) {
   if (!AUTH_UI_ENABLED) notFound();
-  const { redirect } = await searchParams;
+  const { redirect, reset } = await searchParams;
   const redirectTo = safeRedirect(redirect);
+  const passwordReset = reset === "1";
 
   return (
     <div className="min-h-screen">
@@ -42,6 +43,14 @@ export default async function LoginPage({
         </aside>
 
         <section className="border border-stone-200 bg-stone-50 p-5 dark:border-stone-800 dark:bg-stone-950 sm:p-6">
+          {passwordReset && (
+            <p
+              role="status"
+              className="mb-5 border border-green-600/30 bg-green-50 px-4 py-3 text-sm leading-6 text-green-800 dark:border-green-500/30 dark:bg-green-950/40 dark:text-green-300"
+            >
+              Your password has been updated. Sign in with your new password.
+            </p>
+          )}
           <AuthForm mode="login" redirectTo={redirectTo} />
         </section>
       </div>

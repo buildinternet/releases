@@ -78,6 +78,9 @@
     "EMAIL_NOTIFY_ENABLED": "true",
     "EMAIL_NOTIFY_TO": "zach@releases.sh",
     "EMAIL_FROM": "notifications@releases.sh",
+    // Sender for user-facing auth email (AUTH_EMAIL binding; see src/auth/email.ts).
+    "AUTH_EMAIL_FROM": "noreply@releases.sh",
+    "AUTH_EMAIL_FROM_NAME": "Releases",
     // Kill switch for the open POST /v1/feedback endpoint (releases feedback).
     "FEEDBACK_DISABLED": "false",
     // Per-IP rate limiter for /v1/feedback (binding FEEDBACK_RATE_LIMITER). On
@@ -227,11 +230,15 @@
   "queues": {
     "producers": [{ "binding": "WEBHOOK_DELIVERY_QUEUE", "queue": "webhook-delivery" }],
   },
-  // Email send binding. Omitting `destination_address` keeps the binding open
-  // to any destination verified on the account, so EMAIL_NOTIFY_TO can be
-  // changed via vars without a binding rename. Pin it if we ever want to
-  // narrow the blast radius at the platform level.
-  "send_email": [{ "name": "SEND_EMAIL" }],
+  // Two Email bindings. SEND_EMAIL = Email Routing (internal ops notifications,
+  // reaches only account-verified destinations). AUTH_EMAIL = Email Sending
+  // (user-facing verification + password-reset mail to arbitrary recipients),
+  // sender-locked to noreply@releases.sh. Requires Email Sending enabled on the
+  // account + releases.sh verified for Email Sending (DKIM) — see the spec.
+  "send_email": [
+    { "name": "SEND_EMAIL" },
+    { "name": "AUTH_EMAIL", "allowed_sender_addresses": ["noreply@releases.sh"] },
+  ],
   "durable_objects": {
     "bindings": [
       { "class_name": "StatusHub", "name": "STATUS_HUB" },
@@ -503,6 +510,8 @@
         "EMAIL_NOTIFY_ENABLED": "false",
         "EMAIL_NOTIFY_TO": "zach@releases.sh",
         "EMAIL_FROM": "notifications@releases.sh",
+        "AUTH_EMAIL_FROM": "noreply@releases.sh",
+        "AUTH_EMAIL_FROM_NAME": "Releases",
         "FEEDBACK_DISABLED": "false",
         // Staging has no FEEDBACK_RATE_LIMITER binding (no `unsafe` block); the
         // handler no-ops the limiter there. Vars kept for parity.
@@ -578,7 +587,10 @@
       "queues": {
         "producers": [{ "binding": "WEBHOOK_DELIVERY_QUEUE", "queue": "webhook-delivery" }],
       },
-      "send_email": [{ "name": "SEND_EMAIL" }],
+      "send_email": [
+        { "name": "SEND_EMAIL" },
+        { "name": "AUTH_EMAIL", "allowed_sender_addresses": ["noreply@releases.sh"] },
+      ],
       "durable_objects": {
         "bindings": [
           { "class_name": "StatusHub", "name": "STATUS_HUB" },
