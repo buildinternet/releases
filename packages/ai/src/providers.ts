@@ -222,7 +222,18 @@ const PROVIDERS: ProviderDef[] = [
     headers: { "x-zendesk-request-id": "" },
     htmlPatterns: ["zendesk", "zd-", "hc-", "zendesk-host"],
     hints: {
-      // Zendesk Guide (help center) uses /hc/en-us/sections/<id> and /hc/en-us/articles/<id>
+      // Zendesk Guide (help center) uses /hc/<locale>/sections/<id> and
+      // /hc/<locale>/articles/<id>. The canonical structured source is the public
+      // Help Center Content API: each section's articles (full HTML body + dates +
+      // canonical html_url) are served as paginated JSON at
+      //   /api/v2/help_center/<locale>/sections/<id>/articles.json
+      // Ingest a section as a `type: "feed"` source whose metadata.feedUrl points
+      // at that articles.json endpoint plus metadata.helpCenter =
+      // { provider: "zendesk", releaseType? }; the feed dispatcher routes it to
+      // packages/adapters/src/helpcenter.ts instead of RSS/Atom parsing. The
+      // section index itself is JS-rendered, so scrape+crawl can't read it, and
+      // the legacy /hc/<locale>/articles.rss feed is gone (404s on modern Zendesk,
+      // incl. Zendesk's own help center). No feedPaths probe here.
       changelogPaths: [
         "/hc/en-us/sections/release-notes",
         "/hc/en-us/sections/changelog",
@@ -230,7 +241,6 @@ const PROVIDERS: ProviderDef[] = [
         "/hc/en-us/categories/release-notes",
         "/hc/en-us/categories/changelog",
       ],
-      feedPaths: ["/hc/en-us/articles.rss"],
       preferredType: "scrape",
       crawlPattern: "/hc/en-us/articles/**",
     },
