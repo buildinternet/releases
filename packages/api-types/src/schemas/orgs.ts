@@ -118,6 +118,19 @@ export const UpdateOrgBodySchema = z.object({
   notice: NoticeSchema.nullable().optional(),
 });
 
+/** Body for `POST /v1/orgs/:slug/avatar` — the remote image to mirror to R2 (#1406). */
+export const SetOrgAvatarBodySchema = z.object({
+  sourceUrl: z.url(),
+});
+
+/** Response for `POST /v1/orgs/:slug/avatar` — the mirrored avatar's public URL + dims. */
+export const SetOrgAvatarResponseSchema = z.object({
+  avatarUrl: z.string(),
+  key: z.string(),
+  width: z.number(),
+  height: z.number(),
+});
+
 // Org detail's products query selects a strict subset of `ProductListItem` —
 // no category/orgId because the parent already names the org; createdAt is
 // included for age-based filtering by consumers.
