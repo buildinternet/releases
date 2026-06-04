@@ -32,6 +32,8 @@ import type {
   OrgTagsResponseSchema,
   CreateOrgBodySchema,
   UpdateOrgBodySchema,
+  SetOrgAvatarBodySchema,
+  SetOrgAvatarResponseSchema,
   OrgDetailSchema,
   OrgCatalogItemSchema,
   OrgCatalogResponseSchema,
@@ -260,6 +262,8 @@ export {
   OrgTagsResponseSchema,
   CreateOrgBodySchema,
   UpdateOrgBodySchema,
+  SetOrgAvatarBodySchema,
+  SetOrgAvatarResponseSchema,
   OrgDetailSchema,
   OrgCatalogItemSchema,
   OrgCatalogResponseSchema,
@@ -515,6 +519,8 @@ export type OrgAccountsResponse = z.infer<typeof OrgAccountsResponseSchema>;
 export type OrgTagsResponse = z.infer<typeof OrgTagsResponseSchema>;
 export type CreateOrgBody = z.infer<typeof CreateOrgBodySchema>;
 export type UpdateOrgBody = z.infer<typeof UpdateOrgBodySchema>;
+export type SetOrgAvatarBody = z.infer<typeof SetOrgAvatarBodySchema>;
+export type SetOrgAvatarResponse = z.infer<typeof SetOrgAvatarResponseSchema>;
 export type OrgDetail = z.infer<typeof OrgDetailSchema>;
 
 export type OrgCatalogItem = z.infer<typeof OrgCatalogItemSchema>;

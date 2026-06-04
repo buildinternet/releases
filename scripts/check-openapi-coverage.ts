@@ -69,6 +69,7 @@ const ALLOWLIST = new Set<string>([
   // registered routes even though they require Bearer auth at runtime.
   "POST /orgs",
   "PATCH /orgs/:slug",
+  "POST /orgs/:slug/avatar", // one-step avatar ingest (#1406); Bearer required, hide: hideInProduction
   "DELETE /orgs/:slug",
   "DELETE /orgs/:slug/accounts/:platform/:handle",
   "POST /orgs/:slug/accounts",

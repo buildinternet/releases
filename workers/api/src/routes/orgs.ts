@@ -6,6 +6,8 @@ import {
   OrgDetailSchema,
   CreateOrgBodySchema,
   UpdateOrgBodySchema,
+  SetOrgAvatarBodySchema,
+  SetOrgAvatarResponseSchema,
   ErrorResponseSchema,
   OrgAccountsResponseSchema,
   OrgAccountItemSchema,
@@ -25,6 +27,7 @@ import {
   DeleteOrgAccountResponseSchema,
 } from "@buildinternet/releases-api-types";
 import { validateJson } from "../lib/validate.js";
+import { ingestOrgAvatar } from "../lib/avatar-ingest.js";
 import { eq, count, max, min, and, sql, inArray, gte, desc } from "drizzle-orm";
 import { createDb } from "../db.js";
 import {
@@ -575,6 +578,65 @@ orgRoutes.post(
       }
       throw err;
     }
+  },
+);
+
+orgRoutes.post(
+  "/orgs/:slug/avatar",
+  describeRoute({
+    hide: hideInProduction,
+    tags: ["Orgs"],
+    summary: "Set organization avatar from a remote image",
+    description:
+      "Fetches `sourceUrl`, validates it is a reasonable square raster (png/jpeg/gif/webp, ≥128px per side, roughly square), mirrors it to R2 at `orgs/{slug}.{ext}` (served from media.releases.sh), and sets the org's `avatarUrl`. Idempotent — a re-run overwrites the same key. Keeps CF credentials server-side; the CLI passes only a resolved image URL.",
+    security: [{ bearerAuth: [] }],
+    responses: {
+      200: {
+        description: "Avatar stored and avatarUrl set",
+        content: { "application/json": { schema: resolver(SetOrgAvatarResponseSchema) } },
+      },
+      400: {
+        description: "Invalid sourceUrl",
+        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      },
+      404: {
+        description: "Organization not found",
+        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      },
+      422: {
+        description: "Image is not a usable square raster",
+        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      },
+    },
+  }),
+  validateJson(SetOrgAvatarBodySchema),
+  async (c) => {
+    const db = createDb(c.env.DB);
+    const slug = c.req.param("slug");
+    const { sourceUrl } = c.req.valid("json") as { sourceUrl: string };
+
+    const [org] = await db.select().from(organizations).where(orgWhere(slug));
+    if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
+
+    const result = await ingestOrgAvatar({
+      sourceUrl,
+      slug: org.slug,
+      bucket: c.env.MEDIA,
+      mediaOrigin: c.env.MEDIA_ORIGIN ?? "https://media.releases.sh",
+    });
+    if (!result.ok) return c.json({ error: result.error, message: result.message }, result.status);
+
+    await db
+      .update(organizations)
+      .set({ avatarUrl: result.avatarUrl, updatedAt: new Date().toISOString() })
+      .where(eq(organizations.id, org.id));
+
+    return c.json({
+      avatarUrl: result.avatarUrl,
+      key: result.key,
+      width: result.width,
+      height: result.height,
+    });
   },
 );
 
