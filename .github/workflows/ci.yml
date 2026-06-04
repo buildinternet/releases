@@ -155,7 +155,8 @@ jobs:
           schema_changed=$(git diff --name-only "origin/$BASE_REF"...HEAD -- \
             'packages/core/src/schema.ts' \
             'src/db/schema-coverage.ts' \
-            'workers/api/src/db/schema-cron.ts' || true)
+            'workers/api/src/db/schema-cron.ts' \
+            'workers/api/src/db/schema-auth.ts' || true)
           if [ -z "$schema_changed" ]; then
             echo "No schema files changed — pairing check skipped."
             exit 0

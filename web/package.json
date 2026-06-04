@@ -16,6 +16,7 @@
     "@shikijs/rehype": "^4.2.0",
     "@shikijs/themes": "^4.2.0",
     "@tailwindcss/typography": "^0.5.19",
+    "better-auth": "^1.6.14",
     "gray-matter": "^4.0.3",
     "next": "^16.2.7",
     "react": "^19.2.7",
