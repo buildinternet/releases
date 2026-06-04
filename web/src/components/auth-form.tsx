@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { signIn, signUp, sendVerificationEmail } from "@/lib/auth-client";
+import { signIn, signUp, sendVerificationEmail, oneTap } from "@/lib/auth-client";
 import { safeRedirect } from "@/lib/auth-redirect";
 
 type Mode = "login" | "signup";
@@ -21,6 +21,16 @@ const SOCIAL_PROVIDERS = (process.env.NEXT_PUBLIC_AUTH_SOCIAL_PROVIDERS ?? "")
   .split(",")
   .map((s) => s.trim().toLowerCase())
   .filter((s): s is "google" | "github" => s === "google" || s === "github");
+
+/**
+ * Whether to auto-prompt Google One Tap on mount. Requires BOTH the public One Tap
+ * client id (`NEXT_PUBLIC_GOOGLE_CLIENT_ID`, which is what registers the `oneTap`
+ * action on the client — see `auth-client.ts`) AND Google being a surfaced social
+ * provider, so One Tap and the "Continue with Google" fallback button stay in
+ * lockstep. When off, the redirect-based button remains the only Google path.
+ */
+const GOOGLE_ONE_TAP_ENABLED =
+  SOCIAL_PROVIDERS.includes("google") && Boolean(process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID);
 
 const PROVIDER_META: Record<"google" | "github", { label: string; icon: ReactNode }> = {
   google: {
@@ -86,6 +96,25 @@ export function AuthForm({ mode, redirectTo = "/" }: { mode: Mode; redirectTo?: 
   const [resent, setResent] = useState(false);
 
   const busy = pending || social !== null;
+
+  // Auto-prompt Google One Tap on mount (login + signup surfaces). On success,
+  // soft-navigate to the post-auth target like the email/social flows do, rather
+  // than One Tap's default hard redirect to "/". If the user dismisses the prompt
+  // or Google can't render it, the "Continue with Google" button below is the
+  // manual fallback — `onPromptNotification` intentionally adds no extra UI. Any
+  // GSI error (blocked third-party context, no Google session) is non-fatal.
+  useEffect(() => {
+    if (!GOOGLE_ONE_TAP_ENABLED || typeof oneTap !== "function") return;
+    void oneTap({
+      fetchOptions: {
+        onSuccess: () => {
+          router.push(target);
+          router.refresh();
+        },
+      },
+      onPromptNotification: () => {},
+    }).catch(() => {});
+  }, [router, target]);
 
   // Absolute callback URL on THIS web origin — the verify link redirects here
   // after the worker verifies + auto-signs-in (a relative URL would resolve
