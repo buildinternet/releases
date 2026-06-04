@@ -8,6 +8,7 @@ import {
 } from "./middleware/auth.js";
 import type { AuthContext } from "./middleware/auth.js";
 import { createAuth, authCorsMiddleware } from "./auth/index.js";
+import type { AuthEmailBinding } from "./auth/email.js";
 import { publicRateLimitMiddleware } from "./middleware/rate-limit.js";
 import { dbHealthCheck } from "./middleware/db-health.js";
 import { cacheControl } from "./middleware/cache.js";
@@ -296,6 +297,14 @@ export type Env = {
     GOOGLE_CLIENT_SECRET?: SecretBinding | string;
     GITHUB_CLIENT_ID?: SecretBinding | string;
     GITHUB_CLIENT_SECRET?: SecretBinding | string;
+    // Cloudflare Email Sending binding for USER-FACING auth mail (verification +
+    // password reset). Object-form send → arbitrary recipients. Distinct from
+    // SEND_EMAIL (Email Routing, internal-only, verified-destinations). Absent →
+    // sendAuthEmail logs the link and no-ops (local `wrangler dev` simulates sends).
+    AUTH_EMAIL?: AuthEmailBinding;
+    // Sender address + display name for AUTH_EMAIL. Default noreply@releases.sh / "Releases".
+    AUTH_EMAIL_FROM?: string;
+    AUTH_EMAIL_FROM_NAME?: string;
   };
   Variables: {
     auth?: AuthContext;
@@ -381,9 +390,10 @@ app.use("*", async (c, next) => {
 // instance is built per-request from env bindings — see src/auth/index.ts.
 // Runs after the "*" middleware above, so the staging gate + noindex apply.
 app.on(["POST", "GET"], "/api/auth/*", async (c) => {
-  // Pass the execution context's waitUntil so Better Auth's background work survives
-  // past the response on Workers. `c.executionCtx` throws when absent (e.g. tests),
-  // so guard it — createAuth treats an undefined waitUntil as "use the default".
+  // Pass the execution context's waitUntil so Better Auth's background work — and
+  // our fire-and-forget verification/reset email sends — survive past the response
+  // on Workers. `c.executionCtx` throws when absent (e.g. tests), so guard it;
+  // createAuth treats an undefined waitUntil as "run inline / use the default".
   let waitUntil: ((promise: Promise<unknown>) => void) | undefined;
   try {
     waitUntil = c.executionCtx.waitUntil.bind(c.executionCtx);

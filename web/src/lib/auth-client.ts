@@ -25,4 +25,13 @@ export const authClient = createAuthClient({
   plugins: [dashClient()],
 });
 
-export const { signIn, signUp, signOut, useSession, getSession } = authClient;
+export const {
+  signIn,
+  signUp,
+  signOut,
+  useSession,
+  getSession,
+  requestPasswordReset,
+  resetPassword,
+  sendVerificationEmail,
+} = authClient;
