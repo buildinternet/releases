@@ -125,6 +125,21 @@ function summaryPath(runDir, slug, nested) {
   return runDir + "/" + (nested ? `summary-${slug}.md` : "summary.md");
 }
 
+function altitudeSanity(records, granularity) {
+  const months = new Set();
+  for (const r of records || []) {
+    const p = r && typeof r.publishedAt === "string" ? r.publishedAt.slice(0, 7) : "";
+    if (/^\d{4}-\d{2}$/.test(p)) months.add(p);
+  }
+  const recordCount = (records || []).length;
+  const monthCount = months.size;
+  if (recordCount === 0 || monthCount === 0) return null;
+  const perMonth = recordCount / monthCount;
+  if (granularity === "feature" || perMonth <= 4) return null;
+  const hint = granularity ? `granularity="${granularity}"` : "no granularity hint set";
+  return `altitude check: ${recordCount} records across ${monthCount} month(s) (~${perMonth.toFixed(1)}/mo), ${hint} — confirm the intended altitude (feature | period | version | rollup); pin it via source metadata.granularity.`;
+}
+
 // ── Schemas (forced structured output) ──────────────────────────────────────
 const PREFLIGHT_SCHEMA = {
   type: "object",
@@ -201,8 +216,29 @@ function short(u) {
     return String(u).slice(0, 40);
   }
 }
-function extractPrompt(url, singlePage) {
-  return `Fetch ${url} and extract ${singlePage ? "EVERY changelog entry on the page" : "the release(s) on this page"} as records for the Releases /batch upsert.
+// Per-altitude split instruction injected when the source pins metadata.granularity
+// (#1409), so the record altitude is deterministic across runs instead of a per-run
+// judgment call by the extractor. Empty string when no hint is set (today's behavior).
+function granularityGuide(g) {
+  switch (g) {
+    case "feature":
+      return "one record per distinct feature/change (split multi-item sections into individual entries)";
+    case "period":
+      return "one record per time-period heading (month/quarter), collecting that period's changes into a single entry";
+    case "version":
+      return "one record per version / released build";
+    case "rollup":
+      return "one coarse record per logical release grouping (do not split into individual features)";
+    default:
+      return "";
+  }
+}
+function extractPrompt(url, singlePage, granularity) {
+  const guide = granularityGuide(granularity);
+  const altitude = guide
+    ? `\nGRANULARITY = "${granularity}" — extract at this altitude: ${guide}. Keep the record count consistent with this altitude on every run.`
+    : "";
+  return `Fetch ${url} and extract ${singlePage ? "EVERY changelog entry on the page" : "the release(s) on this page"} as records for the Releases /batch upsert.${altitude}
 Per record: { version?, title (required), content (required, markdown), url (REQUIRED — stable per-release URL; for a single-page changelog use ${url}#<slug-anchor>), publishedAt? (ISO-8601; approximate a month/quarter/year heading to a date rather than omit), media? (UNWRAP _next/image and Vercel optimizer wrappers to the underlying CDN URL), type? ("feature"|"rollup"), prerelease? }.
 Rules: ALWAYS populate url (the dedup key). Never invent a version — omit if absent. Return { pageUrl: "${url}", records: [...] }.`;
 }
@@ -244,7 +280,7 @@ phase("Preflight");
 const resolved = await agent(
   `Resolve the Releases source "${SOURCE}" and return its identifiers.
 Run \`releases admin source get ${SOURCE} --json\`. SOURCE may be a human slug, a typed \`src_…\` id, or an http(s) URL — if it is a URL and the command can't resolve it directly, look it up via \`releases lookup domain <domain> --json\` or \`releases admin source list --json\` and match the URL.
-Return: the typed \`src_…\` id (REQUIRED — the batch write needs it; the human slug 400s on the bare path), the canonical human URL, the source slug, and the org slug.`,
+Return: the typed \`src_…\` id (REQUIRED — the batch write needs it; the human slug 400s on the bare path), the canonical human URL, the source slug, the org slug, and \`granularity\` = the source's \`metadata.granularity\` if set (one of feature|period|version|rollup), else null.`,
   {
     label: "resolve-source",
     phase: "Preflight",
@@ -257,6 +293,10 @@ Return: the typed \`src_…\` id (REQUIRED — the batch write needs it; the hum
         url: { type: "string" },
         slug: { type: "string" },
         org: { type: ["string", "null"] },
+        granularity: {
+          type: ["string", "null"],
+          enum: ["feature", "period", "version", "rollup", null],
+        },
       },
       required: ["id", "url", "slug"],
     },
@@ -266,6 +306,13 @@ if (!resolved || !resolved.id || !resolved.url || !resolved.slug) {
   log("preflight: could not resolve source (need typed src_ id + url + slug)");
   return { status: "error", error: "unresolved source" };
 }
+// Altitude hint (#1409): pins how finely the extractor splits records so the count
+// is deterministic across runs. Only the known values are honored; anything else
+// (or absent) leaves the extract prompt at its default, unguided behavior.
+const GRANULARITY =
+  resolved.granularity && ["feature", "period", "version", "rollup"].includes(resolved.granularity)
+    ? resolved.granularity
+    : null;
 
 let verdict = "unknown",
   sitemaps = [],
@@ -294,9 +341,10 @@ if (decision.action === "stop") {
 // parent sweep passes its already-created run dir (PARENT_RUN_DIR) so siblings
 // share one run; standalone, we mint a fresh timestamped dir directly (same
 // layout/naming as the CLI's startRun → run-dir.ts, honoring RELEASES_DATA_DIR)
-// without ever touching the pointer.
+// without ever touching the pointer. Skipped on a dry-run (#1408): it returns
+// before the Report phase, so no run dir / summary is ever written.
 let RUN_DIR = PARENT_RUN_DIR;
-if (!RUN_DIR) {
+if (!RUN_DIR && !DRY) {
   const runInfo = await agent(
     `Create an ISOLATED maintenance run dir for this backfill. Do NOT run \`releases admin work start\` (it sets a shared pointer that leaks across sessions). Run exactly this, then return the absolute dir it prints:
 \`\`\`
@@ -323,29 +371,14 @@ Return runDir = the absolute path printed (it must start with / and end in -back
       ? runInfo.runDir
       : null;
 }
-if (!RUN_DIR) log("run-setup: could not resolve an isolated run dir — summary won't be written");
+if (!RUN_DIR && !DRY)
+  log("run-setup: could not resolve an isolated run dir — summary won't be written");
 // Under a sweep, sibling sources share one run dir, so namespace each summary by
 // slug to avoid clobbering. Standalone runs keep the canonical `summary.md`.
 const SUMMARY_PATH = summaryPath(RUN_DIR, slugForDir, !!PARENT_RUN_DIR);
 
 // ── Phase: Map ───────────────────────────────────────────────────────────────
 phase("Map");
-const known = await agent(
-  `List the release URLs ALREADY ingested for source "${resolved.slug}" so we don't re-extract them. Get as complete a list as the tooling allows — \`releases tail ${resolved.slug}\` only shows the most recent rows, so prefer a high count / the list API (e.g. \`releases tail ${resolved.slug} --json -c 500\`, falling back to whatever the command accepts). Return the array of release \`url\` values, omitting any null/empty urls (\`[]\` if none).`,
-  {
-    label: "known-urls",
-    phase: "Map",
-    model: "haiku",
-    schema: {
-      type: "object",
-      additionalProperties: false,
-      properties: { urls: { type: "array", items: { type: "string" } } },
-      required: ["urls"],
-    },
-  },
-);
-const knownUrls = (known && known.urls) || [];
-
 const mapped = await agent(
   `Map the changelog at ${resolved.url} into per-release detail-page URLs.
 1. Classify shape: \`releases admin discovery evaluate ${resolved.url} --json\` → read pageStructure (single-page | index | unknown).
@@ -356,6 +389,29 @@ Order the list STRICTLY newest-first — the workflow's window cap keeps the FIR
 );
 const structure = (mapped && mapped.structure) || "unknown";
 const discovered = mapped && Array.isArray(mapped.pages) ? mapped.pages : [];
+
+// Single-page sources skip the known-URL lookup (#1408): their releases are stored
+// as `pageUrl#anchor`, so the bare page URL never matches a known release URL
+// (skippedKnown is always 0) and the /batch upsert is idempotent anyway — the agent
+// call is pure waste. Index/unknown shapes still dedup against already-ingested URLs.
+let knownUrls = [];
+if (structure !== "single-page") {
+  const known = await agent(
+    `List the release URLs ALREADY ingested for source "${resolved.slug}" so we don't re-extract them. Get as complete a list as the tooling allows — \`releases tail ${resolved.slug}\` only shows the most recent rows, so prefer a high count / the list API (e.g. \`releases tail ${resolved.slug} --json -c 500\`, falling back to whatever the command accepts). Return the array of release \`url\` values, omitting any null/empty urls (\`[]\` if none).`,
+    {
+      label: "known-urls",
+      phase: "Map",
+      model: "haiku",
+      schema: {
+        type: "object",
+        additionalProperties: false,
+        properties: { urls: { type: "array", items: { type: "string" } } },
+        required: ["urls"],
+      },
+    },
+  );
+  knownUrls = (known && known.urls) || [];
+}
 const { fresh, skippedKnown } = selectNewUrls(discovered, knownUrls);
 const { targets, capped, deferred: cappedOut, logLine: capLog } = applyCap(fresh, MAX);
 log(capLog);
@@ -399,7 +455,7 @@ for (let i = 0; i < targets.length; i += step) {
   const results = await parallel(
     wave.map(
       (u) => () =>
-        agent(extractPrompt(u, singlePage), {
+        agent(extractPrompt(u, singlePage, GRANULARITY), {
           label: `extract:${short(u)}`,
           phase: "Extract",
           model: EXTRACT_MODEL,
@@ -437,6 +493,11 @@ const validation = await agent(
   `Validate the backfill for source "${resolved.slug}": run \`releases tail ${resolved.slug} --json\` and report the total count, how many have empty content, and up to 5 sample titles.`,
   { label: "validate", phase: "Report", model: "haiku", schema: VALIDATE_SCHEMA },
 );
+// Altitude sanity (#1409): surface when the record count is high relative to the
+// date span it covers, so over-/under-splitting is visible in the log + summary
+// rather than a silent per-run judgment. Null when nothing looks anomalous.
+const altitudeNote = altitudeSanity(kept, GRANULARITY);
+if (altitudeNote) log(altitudeNote);
 const status = finalStatus(deferredForBudget);
 const spentTokens = Math.round(budget.spent());
 const summaryInputs = {
@@ -454,6 +515,7 @@ const summaryInputs = {
   deferredForBudget,
   writeErrors,
   validation,
+  altitudeNote,
   spentTokens,
 };
 // Deterministic report path: computed in-script (SUMMARY_PATH), not re-resolved by
