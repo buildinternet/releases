@@ -348,7 +348,14 @@ app.onError((err, c) => {
 app.use("/api/auth/*", authCorsMiddleware());
 
 // Public read CORS — wildcard is fine; these endpoints don't accept credentials.
-app.use("*", cors());
+// SKIP `/api/auth/*`: those routes are owned by `authCorsMiddleware` above, which
+// sets a credentialed, origin-reflecting CORS header. If this wildcard `cors()`
+// also ran there it would overwrite `Access-Control-Allow-Origin` with `*` on the
+// actual (non-preflight) response — which browsers reject for `credentials:
+// "include"` requests. The preflight passes (authCorsMiddleware short-circuits
+// OPTIONS), but the real GET/POST would be blocked. Keep the two in lockstep.
+const publicReadCors = cors();
+app.use("*", (c, next) => (c.req.path.startsWith("/api/auth/") ? next() : publicReadCors(c, next)));
 app.use("*", stagingAccessGate());
 app.use("*", blockIndexing());
 

@@ -113,7 +113,14 @@ export function AuthForm({ mode, redirectTo = "/" }: { mode: Mode; redirectTo?: 
     try {
       // On success this triggers a full-page redirect to the provider; an error
       // means the provider isn't configured server-side (or the call failed).
-      const result = await signIn.social({ provider, callbackURL: target });
+      // `callbackURL` must be ABSOLUTE on the web origin: the auth server is the
+      // API worker on a different subdomain, and it resolves a relative callback
+      // against its OWN baseURL — which would dump the user on the worker domain
+      // after the OAuth round-trip instead of back here. `target` is a safe
+      // same-origin path; anchor it to this origin (prod releases.sh / local dev
+      // host alike — both are trusted origins on the worker).
+      const callbackURL = new URL(target, window.location.origin).toString();
+      const result = await signIn.social({ provider, callbackURL });
       if (result.error) {
         setError(prettyError(result.error, mode));
         setSocial(null);
