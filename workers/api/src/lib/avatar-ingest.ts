@@ -54,37 +54,125 @@ function reject(status: AvatarRejectStatus, error: string, message: string): Ava
   return { ok: false, status, error, message };
 }
 
+/** Max redirect hops to follow (each re-validated). github.com/{h}.png 302s once. */
+const MAX_REDIRECTS = 4;
+
+/**
+ * SSRF guard: is this hostname a private / loopback / link-local address or an
+ * obviously-internal name? Workers can't pre-resolve DNS, so this is best-effort —
+ * it blocks literal private IPs (incl. the cloud-metadata 169.254/16), localhost
+ * and single-label / internal hostnames, and is re-applied to every redirect hop.
+ * A public name that resolves to a private IP (DNS rebinding) can't be caught here
+ * without resolver access; the manual-redirect re-validation narrows even that.
+ */
+export function isPrivateOrLocalHost(hostname: string): boolean {
+  const h = hostname.toLowerCase().replace(/^\[/, "").replace(/\]$/, "");
+  if (!h) return true;
+  if (h === "localhost" || h.endsWith(".localhost") || h.endsWith(".local")) return true;
+  if (h.endsWith(".internal") || h === "metadata.google.internal") return true;
+
+  const v4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(h);
+  if (v4) {
+    const a = Number(v4[1]);
+    const b = Number(v4[2]);
+    if ([a, b, Number(v4[3]), Number(v4[4])].some((n) => n > 255)) return true; // malformed
+    if (a === 0 || a === 127 || a === 10) return true;
+    if (a === 172 && b >= 16 && b <= 31) return true;
+    if (a === 192 && b === 168) return true;
+    if (a === 169 && b === 254) return true; // link-local incl. 169.254.169.254
+    if (a >= 224) return true; // multicast / reserved
+    return false;
+  }
+
+  if (h.includes(":")) {
+    // IPv6 literal.
+    if (h === "::1" || h === "::") return true;
+    if (h.startsWith("fc") || h.startsWith("fd")) return true; // unique-local fc00::/7
+    if (h.startsWith("fe80") || h.startsWith("fe9") || h.startsWith("fea") || h.startsWith("feb"))
+      return true; // link-local fe80::/10
+    const mapped = /^::ffff:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/.exec(h);
+    if (mapped) return isPrivateOrLocalHost(mapped[1]!);
+    return false;
+  }
+
+  // No dot, not an IP → single-label / internal hostname.
+  if (!h.includes(".")) return true;
+  return false;
+}
+
+/** Parse + SSRF-screen a URL. Returns the URL or null if it must not be fetched. */
+function safeUrl(raw: string): URL | null {
+  let parsed: URL;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    return null;
+  }
+  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return null;
+  if (isPrivateOrLocalHost(parsed.hostname)) return null;
+  return parsed;
+}
+
+/**
+ * Fetch following redirects MANUALLY so every hop is SSRF-screened before it's
+ * requested (auto-follow would chase a 302 → internal target unchecked). Returns
+ * `{ blocked: true }` for an unfetchable/unsafe URL (→ 400) vs `{ res: null }` for
+ * a transport failure or redirect loop (→ 502, generic message — never echo the
+ * upstream status, so the endpoint can't be used as an internal port scanner).
+ */
+async function fetchImageSafely(
+  startUrl: string,
+  fetchImpl: (input: string, init?: RequestInit) => Promise<Response>,
+): Promise<{ blocked: true } | { blocked: false; res: Response | null }> {
+  let current = safeUrl(startUrl);
+  if (!current) return { blocked: true };
+
+  for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+    let res: Response;
+    try {
+      // oxlint-disable-next-line no-await-in-loop -- redirect chain is inherently sequential
+      res = await fetchImpl(current.toString(), { signal: controller.signal, redirect: "manual" });
+    } catch {
+      return { blocked: false, res: null };
+    } finally {
+      clearTimeout(timer);
+    }
+    if (res.status < 300 || res.status >= 400) return { blocked: false, res };
+    const location = res.headers.get("location");
+    if (!location) return { blocked: false, res: null };
+    const next = safeUrl(new URL(location, current).toString());
+    if (!next) return { blocked: true };
+    current = next;
+  }
+  return { blocked: false, res: null }; // too many redirects
+}
+
 export async function ingestOrgAvatar(opts: AvatarIngestOptions): Promise<AvatarIngestResult> {
   const fetchImpl = opts.fetchImpl ?? fetch;
 
-  let parsed: URL;
-  try {
-    parsed = new URL(opts.sourceUrl);
-  } catch {
-    return reject(400, "invalid_source_url", "sourceUrl is not a valid URL");
+  const fetched = await fetchImageSafely(opts.sourceUrl, fetchImpl);
+  if (fetched.blocked) {
+    logEvent("warn", {
+      component: "org-avatar",
+      event: "url-blocked",
+      slug: opts.slug,
+      url: opts.sourceUrl,
+    });
+    return reject(400, "invalid_source_url", "sourceUrl must be a public http(s) image URL");
   }
-  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
-    return reject(400, "invalid_source_url", "sourceUrl must be an http(s) URL");
-  }
-
-  let res: Response;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-  try {
-    res = await fetchImpl(opts.sourceUrl, { signal: controller.signal });
-  } catch (err) {
+  const res = fetched.res;
+  if (!res || !res.ok) {
     logEvent("warn", {
       component: "org-avatar",
       event: "fetch-failed",
       slug: opts.slug,
       url: opts.sourceUrl,
-      err,
+      status: res?.status ?? null,
     });
     return reject(502, "fetch_failed", "Could not fetch the source image");
-  } finally {
-    clearTimeout(timer);
   }
-  if (!res.ok) return reject(502, "fetch_failed", `Source image returned HTTP ${res.status}`);
 
   const contentType = (res.headers.get("content-type") ?? "").split(";")[0]!.trim().toLowerCase();
   const ext = CONTENT_TYPE_EXT[contentType];

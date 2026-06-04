@@ -1,5 +1,5 @@
 import { test, expect } from "bun:test";
-import { ingestOrgAvatar } from "../src/lib/avatar-ingest";
+import { ingestOrgAvatar, isPrivateOrLocalHost } from "../src/lib/avatar-ingest";
 
 // Minimal PNG: the IHDR header is all the sniffer reads; pad to `bytes` total so
 // the byte-size gate sees a realistic size.
@@ -251,4 +251,121 @@ test("idempotent: a re-run overwrites the same key", async () => {
   await ingestOrgAvatar({ ...opts, fetchImpl: async () => imageResponse(pngBytes(512, 512)) });
   expect(R2.store.size).toBe(1);
   expect(R2.store.has("orgs/acme.png")).toBe(true);
+});
+
+// ── SSRF guard (#1406 follow-up) ──────────────────────────────────────────────
+
+test("isPrivateOrLocalHost: flags private/loopback/link-local + internal names", () => {
+  for (const h of [
+    "127.0.0.1",
+    "10.1.2.3",
+    "172.16.0.1",
+    "172.31.255.255",
+    "192.168.1.1",
+    "169.254.169.254", // cloud metadata
+    "0.0.0.0",
+    "224.0.0.1",
+    "::1",
+    "::",
+    "fc00::1",
+    "fd12:3456::1",
+    "fe80::1",
+    "::ffff:127.0.0.1",
+    "localhost",
+    "db.localhost",
+    "service.internal",
+    "metadata.google.internal",
+    "printer", // single-label
+  ]) {
+    expect(isPrivateOrLocalHost(h), `${h} should be blocked`).toBe(true);
+  }
+  for (const h of [
+    "cdn.example.com",
+    "avatars.githubusercontent.com",
+    "is1-ssl.mzstatic.com",
+    "8.8.8.8",
+    "172.32.0.1", // just outside 172.16/12
+    "192.169.0.1",
+  ]) {
+    expect(isPrivateOrLocalHost(h), `${h} should be allowed`).toBe(false);
+  }
+});
+
+test("blocks an SSRF target before fetching, returning 400", async () => {
+  let called = 0;
+  const opts = {
+    slug: "acme",
+    bucket: bucketOf(fakeR2()),
+    mediaOrigin: "https://media.test",
+    fetchImpl: async () => {
+      called++;
+      return imageResponse(pngBytes(256, 256));
+    },
+  };
+  for (const url of [
+    "http://169.254.169.254/latest/meta-data/",
+    "http://127.0.0.1/icon.png",
+    "http://10.0.0.5/icon.png",
+    "http://localhost:8787/icon.png",
+    "http://[::1]/icon.png",
+  ]) {
+    // oxlint-disable-next-line no-await-in-loop -- assert each URL sequentially
+    const res = await ingestOrgAvatar({ ...opts, sourceUrl: url });
+    expect(res.ok, `${url} should be blocked`).toBe(false);
+    if (!res.ok) expect(res.status).toBe(400);
+  }
+  expect(called).toBe(0); // never fetched any of them
+});
+
+test("follows a redirect to a public host", async () => {
+  const R2 = fakeR2();
+  let hop = 0;
+  const res = await ingestOrgAvatar({
+    sourceUrl: "https://github.com/acme.png",
+    slug: "acme",
+    bucket: bucketOf(R2),
+    mediaOrigin: "https://media.test",
+    fetchImpl: async () => {
+      hop++;
+      return hop === 1
+        ? new Response(null, {
+            status: 302,
+            headers: { location: "https://avatars.githubusercontent.com/u/1?v=4" },
+          })
+        : imageResponse(pngBytes(256, 256));
+    },
+  });
+  expect(res.ok).toBe(true);
+  expect(hop).toBe(2);
+  expect(R2.store.has("orgs/acme.png")).toBe(true);
+});
+
+test("blocks a redirect that points at an internal address", async () => {
+  const R2 = fakeR2();
+  const res = await ingestOrgAvatar({
+    sourceUrl: "https://cdn.test/icon.png",
+    slug: "acme",
+    bucket: bucketOf(R2),
+    mediaOrigin: "https://media.test",
+    fetchImpl: async () =>
+      new Response(null, { status: 302, headers: { location: "http://169.254.169.254/" } }),
+  });
+  expect(res.ok).toBe(false);
+  if (!res.ok) expect(res.status).toBe(400);
+  expect(R2.store.size).toBe(0);
+});
+
+test("does not echo the upstream status in the error message", async () => {
+  const res = await ingestOrgAvatar({
+    sourceUrl: "https://cdn.test/missing.png",
+    slug: "acme",
+    bucket: bucketOf(fakeR2()),
+    mediaOrigin: "https://media.test",
+    fetchImpl: async () => new Response("nope", { status: 403 }),
+  });
+  expect(res.ok).toBe(false);
+  if (!res.ok) {
+    expect(res.status).toBe(502);
+    expect(res.message).not.toContain("403");
+  }
 });
