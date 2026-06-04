@@ -334,10 +334,21 @@ export async function createAuth(
     // Rate limiting backed by D1 so counters survive across Worker isolates — the
     // in-memory default resets per isolate and is useless on serverless. Better
     // Auth's own prod auto-enable keys off NODE_ENV, which Workers don't set, so we
-    // gate it explicitly on ENVIRONMENT. Sensitive endpoints (sign-in/up) get the
-    // built-in 3-requests-per-10s rule, keyed by `cf-connecting-ip` (advanced.ipAddress).
+    // gate it explicitly. Sensitive endpoints (sign-in/up) get the built-in
+    // 3-requests-per-10s rule, keyed by `cf-connecting-ip` (advanced.ipAddress).
+    //
+    // FAIL-CLOSED: on in any deployed prod env, full stop. We deliberately do NOT
+    // couple this to the signing secret resolving — local dev and a broken prod
+    // deploy are indistinguishable by (ENVIRONMENT, secret), and a transiently
+    // unresolved secret in prod must never silently drop brute-force protection on
+    // the most sensitive endpoints. `AUTH_RATE_LIMIT_DISABLED` is the explicit,
+    // auditable opt-out (a plain var, never a transient Secrets-Store failure):
+    // default OFF so prod stays protected; set it to "true" in local `.dev.vars` to
+    // skip rate limiting (and its `rate_limit` table dependency) during sign-in
+    // testing. Local dev otherwise mirrors prod once the table exists
+    // (`bun run db:reset:local`).
     rateLimit: {
-      enabled: env.ENVIRONMENT === "production",
+      enabled: env.ENVIRONMENT === "production" && env.AUTH_RATE_LIMIT_DISABLED !== "true",
       storage: "database",
     },
     advanced: {
