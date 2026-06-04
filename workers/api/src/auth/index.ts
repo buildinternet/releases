@@ -70,22 +70,33 @@ function extraTrustedOrigins(env: Bindings): string[] {
 }
 
 /**
- * Web origins permitted to call the auth API with credentials. The releases.sh /
- * releases.localhost family (incl. subdomains + local worktree hosts) is always
- * trusted; `BETTER_AUTH_TRUSTED_ORIGINS` (comma-separated) adds any extras — a
- * Vercel preview origin, or a portless custom-TLD dev host (e.g.
+ * Web origins permitted to call the auth API with credentials. Mirrors the CORS
+ * allow-list ({@link isReleasesFamilyOrigin} + {@link isLoopbackOrigin}) so an
+ * origin the CORS layer reflects is also accepted by Better Auth's own origin
+ * check — never trusted by one and rejected by the other.
+ *
+ * The releases.sh / releases.localhost family is the apex (exact origin) plus every
+ * subdomain (host wildcard `*.releases.sh` — Better Auth matches a no-scheme
+ * wildcard against the request host, exactly like `isReleasesFamilyOrigin`).
+ * `BETTER_AUTH_TRUSTED_ORIGINS` (comma-separated) adds explicit extras — a Vercel
+ * preview origin, or a portless custom-TLD dev host (e.g.
  * `https://releases.local.buildinternet.dev`, which Google OAuth accepts where the
  * `*.releases.localhost` portless hosts are rejected).
  *
- * Outside production we additionally trust bare-loopback web origins
- * (`http://localhost:3000`, `http://127.0.0.1:3000`) so local OAuth can also run on
- * plain `localhost` ports without any config. Prod stays locked to the releases.sh
+ * Outside production we additionally trust any bare-loopback web origin
+ * (`http://localhost:*` / `http://127.0.0.1:*`, any port) so local OAuth can run on
+ * plain `localhost` ports without config. Prod stays locked to the releases.sh
  * family plus whatever is explicitly configured.
  */
 export function authTrustedOrigins(env: Bindings): string[] {
-  const defaults = ["https://releases.sh", "https://releases.localhost"];
+  const defaults = [
+    "https://releases.sh",
+    "*.releases.sh",
+    "https://releases.localhost",
+    "*.releases.localhost",
+  ];
   const localDev =
-    env.ENVIRONMENT === "production" ? [] : ["http://localhost:3000", "http://127.0.0.1:3000"];
+    env.ENVIRONMENT === "production" ? [] : ["http://localhost:*", "http://127.0.0.1:*"];
   return [...new Set([...defaults, ...localDev, ...extraTrustedOrigins(env)])];
 }
 
@@ -118,17 +129,28 @@ function isLoopbackOrigin(origin: string): boolean {
   }
 }
 
+/** True for an IP-literal host: an IPv4 dotted-quad or a bracketed/colon IPv6 literal. */
+function isIpHost(host: string): boolean {
+  return /^\d{1,3}(\.\d{1,3}){3}$/.test(host) || host.includes(":") || host.startsWith("[");
+}
+
 /**
  * Cross-subdomain cookie domain. Explicit `BETTER_AUTH_COOKIE_DOMAIN` wins;
  * otherwise derive it from `BETTER_AUTH_URL` by dropping the leftmost host label
  * (`api.releases.sh` → `.releases.sh`). Undefined when neither is available — in
  * which case Better Auth scopes the cookie to the request host.
+ *
+ * A single-label host (`localhost`) or an IP literal (`127.0.0.1`) has no
+ * registrable parent: label-dropping would yield a bogus cookie domain
+ * (`127.0.0.1` → `.0.0.1`) and wrongly switch on cross-subdomain cookies. Both
+ * return undefined so the cookie stays host-only.
  */
 export function deriveCookieDomain(env: Bindings): string | undefined {
   if (env.BETTER_AUTH_COOKIE_DOMAIN) return env.BETTER_AUTH_COOKIE_DOMAIN;
   if (!env.BETTER_AUTH_URL) return undefined;
   try {
     const host = new URL(env.BETTER_AUTH_URL).hostname;
+    if (isIpHost(host)) return undefined;
     const parts = host.split(".");
     if (parts.length < 2) return undefined;
     return "." + parts.slice(1).join(".");

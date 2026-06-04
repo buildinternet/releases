@@ -15,7 +15,7 @@ export const metadata: Metadata = {
 export default async function SignupPage({
   searchParams,
 }: {
-  searchParams: Promise<{ redirect?: string }>;
+  searchParams: Promise<{ redirect?: string | string[] }>;
 }) {
   if (!AUTH_UI_ENABLED) notFound();
   const { redirect } = await searchParams;

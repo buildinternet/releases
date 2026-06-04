@@ -62,6 +62,18 @@ describe("deriveCookieDomain", () => {
   it("returns undefined when nothing is configured", () => {
     expect(deriveCookieDomain({} as never)).toBeUndefined();
   });
+
+  it("returns undefined for a loopback IP host (no bogus `.0.0.1` domain)", () => {
+    // 127.0.0.1 has no registrable parent — must not enable cross-subdomain cookies.
+    expect(
+      deriveCookieDomain({ BETTER_AUTH_URL: "http://127.0.0.1:8787" } as never),
+    ).toBeUndefined();
+    expect(deriveCookieDomain({ BETTER_AUTH_URL: "http://[::1]:8787" } as never)).toBeUndefined();
+    // `localhost` (single label) stays host-only too.
+    expect(
+      deriveCookieDomain({ BETTER_AUTH_URL: "http://localhost:8787" } as never),
+    ).toBeUndefined();
+  });
 });
 
 describe("authTrustedOrigins", () => {
@@ -79,16 +91,27 @@ describe("authTrustedOrigins", () => {
     expect(origins.filter((o) => o === "https://releases.sh")).toHaveLength(1);
   });
 
-  it("adds bare-loopback dev origins outside production", () => {
+  it("mirrors the CORS family with subdomain wildcards", () => {
     const origins = authTrustedOrigins({} as never);
-    expect(origins).toContain("http://localhost:3000");
-    expect(origins).toContain("http://127.0.0.1:3000");
+    expect(origins).toContain("*.releases.sh");
+    expect(origins).toContain("*.releases.localhost");
   });
 
-  it("excludes loopback origins in production", () => {
+  it("adds any-port bare-loopback wildcards outside production", () => {
+    const origins = authTrustedOrigins({} as never);
+    expect(origins).toContain("http://localhost:*");
+    expect(origins).toContain("http://127.0.0.1:*");
+  });
+
+  it("excludes loopback origins in production (family only)", () => {
     const origins = authTrustedOrigins({ ENVIRONMENT: "production" } as never);
-    expect(origins).not.toContain("http://localhost:3000");
-    expect(origins).toEqual(["https://releases.sh", "https://releases.localhost"]);
+    expect(origins).not.toContain("http://localhost:*");
+    expect(origins).toEqual([
+      "https://releases.sh",
+      "*.releases.sh",
+      "https://releases.localhost",
+      "*.releases.localhost",
+    ]);
   });
 });
 
