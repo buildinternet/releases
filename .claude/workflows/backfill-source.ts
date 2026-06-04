@@ -120,6 +120,11 @@ function finalStatus(deferredForBudget) {
   return deferredForBudget > 0 ? "partial-budget" : "completed";
 }
 
+function summaryPath(runDir, slug, nested) {
+  if (!runDir) return null;
+  return runDir + "/" + (nested ? `summary-${slug}.md` : "summary.md");
+}
+
 // ── Schemas (forced structured output) ──────────────────────────────────────
 const PREFLIGHT_SCHEMA = {
   type: "object",
@@ -220,6 +225,11 @@ if (input.maxReleases != null && !(Number.isInteger(input.maxReleases) && input.
 const MAX = input.maxReleases == null ? 50 : input.maxReleases;
 const DRY = input.dryRun !== false; // default true
 const EXTRACT_MODEL = input.model === "haiku" ? "haiku" : "sonnet";
+// A parent sweep passes its own already-created run dir so all sources share one
+// run without going through the shared `.current-run` pointer (#1396). Absolute
+// paths only; anything else is ignored and we mint our own isolated run.
+const PARENT_RUN_DIR =
+  typeof input.runDir === "string" && input.runDir.startsWith("/") ? input.runDir : null;
 if (!SOURCE) {
   log("backfill-source: missing required `source` arg");
   return { status: "error", error: "missing source" };
@@ -278,26 +288,45 @@ if (decision.action === "stop") {
   return { status: decision.status, source: SOURCE, url: resolved.url };
 }
 
-const runInfo = await agent(
-  `Set up the maintenance run for this backfill.
-1. Run \`releases admin work status --json\`.
-2. If a run is active, capture its run dir, started=false.
-3. If none, run \`releases admin work start backfill-${slugForDir} --json\`, capture the new run dir, started=true, and \`mkdir -p ~/.releases/work/tasks ~/.releases/work/reports\`.
-Return the absolute run dir and whether you started it.`,
-  {
-    label: "run-setup",
-    phase: "Preflight",
-    model: "haiku",
-    schema: {
-      type: "object",
-      additionalProperties: false,
-      properties: { runDir: { type: "string" }, started: { type: "boolean" } },
-      required: ["runDir", "started"],
+// Own an ISOLATED maintenance run. We deliberately do NOT `work start` — that
+// writes the shared global `.current-run` pointer, and any concurrent `releases
+// admin` write in another session resolves it and leaks into our run (#1396). A
+// parent sweep passes its already-created run dir (PARENT_RUN_DIR) so siblings
+// share one run; standalone, we mint a fresh timestamped dir directly (same
+// layout/naming as the CLI's startRun → run-dir.ts, honoring RELEASES_DATA_DIR)
+// without ever touching the pointer.
+let RUN_DIR = PARENT_RUN_DIR;
+if (!RUN_DIR) {
+  const runInfo = await agent(
+    `Create an ISOLATED maintenance run dir for this backfill. Do NOT run \`releases admin work start\` (it sets a shared pointer that leaks across sessions). Run exactly this, then return the absolute dir it prints:
+\`\`\`
+base="\${RELEASES_DATA_DIR:-\${RELEASED_DATA_DIR:-$HOME/.releases}}/work"
+dir="$base/runs/$(date +%Y-%m-%d-%H%M)-backfill-${slugForDir}"
+mkdir -p "$dir" "$base/tasks" "$base/reports"
+echo "$dir"
+\`\`\`
+Return runDir = the absolute path printed (it must start with / and end in -backfill-${slugForDir}).`,
+    {
+      label: "run-setup",
+      phase: "Preflight",
+      model: "haiku",
+      schema: {
+        type: "object",
+        additionalProperties: false,
+        properties: { runDir: { type: "string" } },
+        required: ["runDir"],
+      },
     },
-  },
-);
-const RUN_DIR = (runInfo && runInfo.runDir) || null;
-const WE_STARTED_RUN = !!(runInfo && runInfo.started);
+  );
+  RUN_DIR =
+    runInfo && typeof runInfo.runDir === "string" && runInfo.runDir.startsWith("/")
+      ? runInfo.runDir
+      : null;
+}
+if (!RUN_DIR) log("run-setup: could not resolve an isolated run dir — summary won't be written");
+// Under a sweep, sibling sources share one run dir, so namespace each summary by
+// slug to avoid clobbering. Standalone runs keep the canonical `summary.md`.
+const SUMMARY_PATH = summaryPath(RUN_DIR, slugForDir, !!PARENT_RUN_DIR);
 
 // ── Phase: Map ───────────────────────────────────────────────────────────────
 phase("Map");
@@ -427,37 +456,41 @@ const summaryInputs = {
   validation,
   spentTokens,
 };
-const rep = await agent(
-  `Write the maintenance run summary for this backfill. Do these steps IN ORDER:
+// Deterministic report path: computed in-script (SUMMARY_PATH), not re-resolved by
+// the agent from the racy active-run pointer. No run dir → skip the report.
+let rep = null;
+if (!SUMMARY_PATH) {
+  log("report: no isolated run dir — skipping summary.md (results are in the return value)");
+} else {
+  rep = await agent(
+    `Write the maintenance run summary for this backfill to this EXACT absolute path (do not derive it from \`work status\` — it is already resolved): ${SUMMARY_PATH}
 
-1. Write the summary file to: ${RUN_DIR ? RUN_DIR + "/summary.md" : "<run dir from `releases admin work status --json`>/summary.md"}
-   Follow docs/architecture/maintenance-workspace.md's summary.md template (status, per-target counts table, cost, what changed, findings). Use these numbers VERBATIM (do not invent): ${JSON.stringify(summaryInputs)}.
+Steps IN ORDER:
+1. Write the file at ${SUMMARY_PATH} following docs/architecture/maintenance-workspace.md's summary.md template (status, per-target counts table, cost, what changed, findings). Use these numbers VERBATIM (do not invent): ${JSON.stringify(summaryInputs)}.
    Cost line, exactly: "${spentTokens} output tokens this turn (budget.spent(), excludes this summary write); session sub-agent tokens, no managed-agent bill." Stamp the date via \`date -u +%FT%TZ\`. Surface data-quality findings (empty content, thin pages, deferred-for-budget pages, write errors).
-
-2. Self-verify the file was written: run \`test -f "<absolute path>" && echo EXISTS || echo MISSING\`. If the output is MISSING, try writing the file again before continuing.
-
-3. ${WE_STARTED_RUN ? "Run `releases admin work end` (this run started it)." : "Do NOT run `releases admin work end` — a parent sweep owns this run."}
-
-4. Return the absolute report path and set \`wrote\` to true if the file exists, false if it does not.`,
-  {
-    label: "run-report",
-    phase: "Report",
-    model: "haiku",
-    schema: {
-      type: "object",
-      additionalProperties: false,
-      properties: {
-        reportPath: { type: "string" },
-        wrote: { type: "boolean" },
+2. Self-verify it landed at that exact path: run \`test -f "${SUMMARY_PATH}" && echo EXISTS || echo MISSING\`. If MISSING, write it again and re-check. Only set wrote=true once the check prints EXISTS.
+3. Do NOT run \`releases admin work end\` — this workflow does not use the shared run pointer.
+4. Return reportPath=${SUMMARY_PATH} and wrote = whether the test -f check printed EXISTS.`,
+    {
+      label: "run-report",
+      phase: "Report",
+      model: "haiku",
+      schema: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          reportPath: { type: "string" },
+          wrote: { type: "boolean" },
+        },
+        required: ["reportPath", "wrote"],
       },
-      required: ["reportPath", "wrote"],
     },
-  },
-);
-if (!rep || !rep.wrote || !rep.reportPath) {
-  log(
-    `WARNING: run-report agent did not confirm summary.md was written (wrote=${rep?.wrote}, reportPath=${rep?.reportPath || "(empty)"}). Check ${RUN_DIR || "the run dir"} manually.`,
   );
+  if (!rep || !rep.wrote) {
+    log(
+      `WARNING: run-report agent did not confirm summary landed at ${SUMMARY_PATH} (wrote=${rep?.wrote}). Write it by hand from the return value.`,
+    );
+  }
 }
 
 return {
@@ -473,5 +506,7 @@ return {
   dropped,
   deferredForBudget,
   actualCostTokens: spentTokens,
-  reportPath: (rep && rep.reportPath) || null,
+  runDir: RUN_DIR,
+  reportPath: SUMMARY_PATH,
+  reportWritten: !!(rep && rep.wrote),
 };
