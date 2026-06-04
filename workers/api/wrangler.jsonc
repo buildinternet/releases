@@ -394,10 +394,7 @@
       "secret_name": "GITHUB_TOKEN",
     },
     // Better Auth signing secret (human user sessions). Already provisioned in
-    // the Secrets Store. The social-login secrets (GOOGLE_/GITHUB_CLIENT_ID +
-    // _SECRET) are intentionally NOT bound yet — bind them here once the OAuth
-    // apps exist and their values are in the store, otherwise deploy fails on a
-    // missing secret. Until then the providers stay gated off in code.
+    // the Secrets Store.
     {
       "binding": "BETTER_AUTH_SECRET",
       "store_id": "a887a71cab084105b79706df23380723",
@@ -410,6 +407,24 @@
       "binding": "BETTER_AUTH_API_KEY",
       "store_id": "a887a71cab084105b79706df23380723",
       "secret_name": "BETTER_AUTH_API_KEY",
+    },
+    // Google social login. Binding both halves of the credential pair activates
+    // the provider via `buildSocialProviders` (src/auth/index.ts) AND mounts the
+    // Google One Tap plugin — no code change, that's the "social-ready" seam. The
+    // OAuth app's redirect URI must be https://api.releases.sh/api/auth/callback/google
+    // and its JS origin https://releases.sh (One Tap) before this goes live; the web
+    // side reveals the button via NEXT_PUBLIC_AUTH_SOCIAL_PROVIDERS=google. GitHub is
+    // NOT bound — its client id/secret aren't in the Secrets Store yet, so binding it
+    // here would fail the deploy; it stays gated off in code until those values exist.
+    {
+      "binding": "GOOGLE_CLIENT_ID",
+      "store_id": "a887a71cab084105b79706df23380723",
+      "secret_name": "GOOGLE_CLIENT_ID",
+    },
+    {
+      "binding": "GOOGLE_CLIENT_SECRET",
+      "store_id": "a887a71cab084105b79706df23380723",
+      "secret_name": "GOOGLE_CLIENT_SECRET",
     },
     {
       "binding": "VOYAGE_API_KEY",
