@@ -63,12 +63,28 @@ const PROVIDERS: ProviderDef[] = [
   {
     id: "fern",
     name: "Fern",
+    // CNAME only matches Fern's own marketing/docs site; customer docs (e.g.
+    // elevenlabs.io/docs, docs.cohere.com) live on the customer domain via
+    // Vercel, so detection there relies on the HTML markers below.
     cnames: ["buildwithfern.com"],
-    htmlPatterns: ["fve-data-id", "fve-mdx-b64", "buildwithfern"],
+    // `buildwithfern` (asset/config references) is the reliable <head> marker —
+    // present 70+ times in the head of real customer sites. The `fve-*` Fern
+    // Visual Editor attributes are body-only content markers (consumed by
+    // htmlToMarkdown's attribute stripping) and never appear in <head>, so they
+    // don't contribute to detection (detectFromHttpSignals only scans headHtml).
+    htmlPatterns: ["buildwithfern", "fern-docs", "fve-data-id", "fve-mdx-b64"],
     hints: {
+      // Fern appends `.rss` to the changelog path: /docs/changelog.rss or
+      // /changelog.rss depending on where the changelog is mounted.
       feedPaths: ["/changelog.rss", "/docs/changelog.rss"],
       changelogPaths: ["/docs/changelog", "/changelog"],
       preferredType: "feed",
+      // Fern serves fully pre-rendered HTML (content present without JS).
+      staticContent: true,
+      // markdownSuffix intentionally omitted: appending `.md` to the changelog
+      // *index* returns a 200 text/plain "Page Not Found" (a false positive for
+      // tryMarkdownSuffix). Only individual dated entries (/docs/changelog/YYYY/M/D.md)
+      // serve real markdown, and those are already covered by the RSS feed.
     },
   },
   {
