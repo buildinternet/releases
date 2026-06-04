@@ -6,7 +6,7 @@ import type { MiddlewareHandler } from "hono";
 import { getSecret } from "@releases/lib/secrets";
 import { logEvent } from "@releases/lib/log-event";
 import { createDb } from "../db.js";
-import { user, session, account, verification } from "../db/schema-auth.js";
+import { user, session, account, verification, rateLimit } from "../db/schema-auth.js";
 import type { Env } from "../index.js";
 
 type Bindings = Env["Bindings"];
@@ -198,7 +198,16 @@ export function authCorsMiddleware(): MiddlewareHandler<Env> {
  * Email/password is always on (the dependency-free path). Google + GitHub are
  * registered only when their secrets resolve (see `buildSocialProviders`).
  */
-export async function createAuth(env: Bindings) {
+export async function createAuth(
+  env: Bindings,
+  /**
+   * `waitUntil` from the request's execution context. When provided, Better Auth's
+   * background work (account-enumeration dummy ops, etc.) is registered with it so it
+   * completes after the response instead of being dropped when the Worker isolate is
+   * torn down. Omitted in non-request contexts (e.g. tests) → Better Auth's default.
+   */
+  waitUntil?: (promise: Promise<unknown>) => void,
+) {
   const secret = (await resolveSecret(env.BETTER_AUTH_SECRET)) ?? undefined;
   if (!secret) {
     // Deployed envs supply this via the Secrets Store binding (validated at
@@ -248,12 +257,29 @@ export async function createAuth(env: Bindings) {
     trustedOrigins: authTrustedOrigins(env),
     database: drizzleAdapter(createDb(env.DB), {
       provider: "sqlite",
-      schema: { user, session, account, verification },
+      // Schema key `rateLimit` must match Better Auth's default rate-limit model name.
+      schema: { user, session, account, verification, rateLimit },
     }),
     emailAndPassword: { enabled: true },
     socialProviders,
     plugins,
+    // Rate limiting backed by D1 so counters survive across Worker isolates — the
+    // in-memory default resets per isolate and is useless on serverless. Better
+    // Auth's own prod auto-enable keys off NODE_ENV, which Workers don't set, so we
+    // gate it explicitly on ENVIRONMENT. Sensitive endpoints (sign-in/up) get the
+    // built-in 3-requests-per-10s rule, keyed by `cf-connecting-ip` (advanced.ipAddress).
+    rateLimit: {
+      enabled: env.ENVIRONMENT === "production",
+      storage: "database",
+    },
     advanced: {
+      // Hand Better Auth's background work (account-enumeration dummy ops, etc.) to
+      // the request's waitUntil so it completes after the response on Workers instead
+      // of being dropped when the isolate is torn down. Omitted when there's no
+      // execution context (tests) → Better Auth's default floating behavior.
+      ...(waitUntil
+        ? { backgroundTasks: { handler: (promise: Promise<unknown>) => waitUntil(promise) } }
+        : {}),
       // True client IP behind Cloudflare. `cf-connecting-ip` is the single
       // authoritative client IP CF sets on every request; `x-forwarded-for` is the
       // fallback (and what local `wrangler dev` / non-CF paths populate). Drives

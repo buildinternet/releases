@@ -381,7 +381,16 @@ app.use("*", async (c, next) => {
 // instance is built per-request from env bindings — see src/auth/index.ts.
 // Runs after the "*" middleware above, so the staging gate + noindex apply.
 app.on(["POST", "GET"], "/api/auth/*", async (c) => {
-  const auth = await createAuth(c.env);
+  // Pass the execution context's waitUntil so Better Auth's background work survives
+  // past the response on Workers. `c.executionCtx` throws when absent (e.g. tests),
+  // so guard it — createAuth treats an undefined waitUntil as "use the default".
+  let waitUntil: ((promise: Promise<unknown>) => void) | undefined;
+  try {
+    waitUntil = c.executionCtx.waitUntil.bind(c.executionCtx);
+  } catch {
+    waitUntil = undefined;
+  }
+  const auth = await createAuth(c.env, waitUntil);
   return auth.handler(c.req.raw);
 });
 

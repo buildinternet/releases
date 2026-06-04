@@ -16,9 +16,9 @@ import { sqliteTable, text, integer, index } from "drizzle-orm/sqlite-core";
  * round-trips `Date`/`boolean` through the adapter cleanly (the repo's app tables
  * use ISO-text timestamps, but auth tables follow Better Auth's expectations).
  *
- * Paired migrations: workers/api/migrations/20260604000000_add_better_auth_tables.sql
- * (initial tables) and 20260604010000_add_user_last_active_at.sql (the dash activity-
- * tracking column). The schema↔migration pairing gate in ci.yml watches this file.
+ * Paired migrations live in workers/api/migrations/ (20260604000000 initial tables,
+ * 20260604010000 the dash lastActiveAt column, 20260604020000 the rate-limit store).
+ * The schema↔migration pairing gate in ci.yml watches this file.
  */
 
 /** A non-null integer `timestamp` column with a JS-side default (Better Auth sets these too). */
@@ -98,7 +98,23 @@ export const verification = sqliteTable(
   (t) => [index("idx_verification_identifier").on(t.identifier)],
 );
 
+/**
+ * Better Auth rate-limit store — used when `rateLimit.storage: "database"` (see
+ * createAuth). Keeps rate-limit counters in D1 so they hold across Worker isolates;
+ * Better Auth's in-memory default resets per isolate and is useless on serverless.
+ * The column set is mandated by Better Auth (id / key / count / lastRequest, epoch
+ * ms). Model name is the default "rateLimit", so the drizzle-adapter schema key must
+ * stay `rateLimit`. Paired migration: 20260604020000_add_rate_limit.sql.
+ */
+export const rateLimit = sqliteTable("rate_limit", {
+  id: text("id").primaryKey(),
+  key: text("key").notNull().unique(),
+  count: integer("count").notNull(),
+  lastRequest: integer("last_request").notNull(),
+});
+
 export type AuthUser = typeof user.$inferSelect;
 export type AuthSession = typeof session.$inferSelect;
 export type AuthAccount = typeof account.$inferSelect;
 export type AuthVerification = typeof verification.$inferSelect;
+export type AuthRateLimit = typeof rateLimit.$inferSelect;
