@@ -7,6 +7,7 @@ import {
   tokensAuthMiddleware,
 } from "./middleware/auth.js";
 import type { AuthContext } from "./middleware/auth.js";
+import { createAuth, authCorsMiddleware } from "./auth/index.js";
 import { publicRateLimitMiddleware } from "./middleware/rate-limit.js";
 import { dbHealthCheck } from "./middleware/db-health.js";
 import { cacheControl } from "./middleware/cache.js";
@@ -263,6 +264,30 @@ export type Env = {
     // Cloudflare Flagship binding (prod + staging apps; absent in local dev /
     // tests → flag() falls back to the wrangler var). See @releases/lib/flags.
     FLAGS?: FlagshipBinding;
+    // ── Better Auth (human user sessions; a separate layer from the relk_
+    // machine tokens). The auth instance is served at /api/auth/* — see
+    // src/auth/index.ts. ──
+    // Signing secret. Cloudflare Secrets Store binding in prod; a plain string
+    // is accepted too (local .dev.vars / wrangler var). Required in prod.
+    BETTER_AUTH_SECRET?: SecretBinding | string;
+    // Public base URL of THIS worker (where the auth handler lives), e.g.
+    // https://api.releases.sh. Drives OAuth callback + cookie-domain derivation.
+    // Local: set via .dev.vars to https://api.releases.localhost, or omit to let
+    // Better Auth infer from the request.
+    BETTER_AUTH_URL?: string;
+    // Optional explicit cross-subdomain cookie domain (e.g. ".releases.sh").
+    // Absent → derived from BETTER_AUTH_URL's host (strip the leftmost label).
+    BETTER_AUTH_COOKIE_DOMAIN?: string;
+    // Optional comma-separated extra trusted web origins (allowed to call the
+    // auth API with credentials), on top of the releases.sh/.localhost family.
+    BETTER_AUTH_TRUSTED_ORIGINS?: string;
+    // Social-login credentials — GATED: a provider activates only when BOTH its
+    // id + secret resolve; absent → silently omitted (no crash). To enable, add
+    // the matching Secrets Store binding here AND the value in the store.
+    GOOGLE_CLIENT_ID?: SecretBinding | string;
+    GOOGLE_CLIENT_SECRET?: SecretBinding | string;
+    GITHUB_CLIENT_ID?: SecretBinding | string;
+    GITHUB_CLIENT_SECRET?: SecretBinding | string;
   };
   Variables: {
     auth?: AuthContext;
@@ -317,6 +342,11 @@ app.onError((err, c) => {
   return c.json({ error: "internal_error", message }, 500);
 });
 
+// Better Auth CORS — credentialed, first-party origins only. MUST come before
+// the global wildcard `cors()` so it owns the `/api/auth/*` preflight (the first
+// matching CORS middleware answers OPTIONS and returns). See src/auth/index.ts.
+app.use("/api/auth/*", authCorsMiddleware());
+
 // Public read CORS — wildcard is fine; these endpoints don't accept credentials.
 app.use("*", cors());
 app.use("*", stagingAccessGate());
@@ -328,6 +358,16 @@ app.use("*", async (c, next) => {
   c.res.headers.set("X-Content-Type-Options", "nosniff");
   c.res.headers.set("X-Frame-Options", "DENY");
   c.res.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+});
+
+// ── Better Auth ──
+// Human user sessions (email/password now; Google/GitHub when their secrets are
+// supplied). Served at /api/auth/* on this worker (api.releases.sh). The auth
+// instance is built per-request from env bindings — see src/auth/index.ts.
+// Runs after the "*" middleware above, so the staging gate + noindex apply.
+app.on(["POST", "GET"], "/api/auth/*", async (c) => {
+  const auth = await createAuth(c.env);
+  return auth.handler(c.req.raw);
 });
 
 // ── v1 REST API ──
