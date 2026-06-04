@@ -1,15 +1,41 @@
 import { test, expect } from "bun:test";
 
-const SCRIPTS = [".claude/workflows/backfill-source.ts", ".claude/workflows/backfill-sweep.ts"];
-const HELPER_NAMES = [
-  "preflightDecision",
-  "selectNewUrls",
-  "applyCap",
-  "budgetGate",
-  "cleanVersion",
-  "dedupeRecords",
-  "chunk",
-  "finalStatus",
+const SCRIPTS = [
+  ".claude/workflows/backfill-source.ts",
+  ".claude/workflows/backfill-sweep.ts",
+  ".claude/workflows/update-overviews.ts",
+];
+
+// Each entry maps a workflow script to the helper module it inlines verbatim, and
+// the exact set of helper names guarded against drift. A script not listed here
+// (e.g. backfill-sweep.ts) inlines no helpers and is only parse/meta/phase-checked.
+const INLINE_CHECKS = [
+  {
+    script: ".claude/workflows/backfill-source.ts",
+    module: "tests/workflows/backfill-helpers.js",
+    names: [
+      "preflightDecision",
+      "selectNewUrls",
+      "applyCap",
+      "budgetGate",
+      "cleanVersion",
+      "dedupeRecords",
+      "chunk",
+      "finalStatus",
+    ],
+  },
+  {
+    script: ".claude/workflows/update-overviews.ts",
+    module: "tests/workflows/overview-helpers.js",
+    names: [
+      "inferSelectionMode",
+      "filterByDateWindow",
+      "unescapeHtmlEntities",
+      "lintOverviewBody",
+      "deriveCitationOffsets",
+      "budgetGate",
+    ],
+  },
 ];
 
 async function read(path: string): Promise<string> {
@@ -83,14 +109,14 @@ test.each(SCRIPTS)("%s only calls phase() titles declared in meta.phases", async
   for (const c of called) expect(declared.has(c)).toBe(true);
 });
 
-test("backfill-source.ts inlines the helper module verbatim", async () => {
-  const mod = await read("tests/workflows/backfill-helpers.js");
-  const wf = await read(".claude/workflows/backfill-source.ts");
-  for (const name of HELPER_NAMES) {
+test.each(INLINE_CHECKS)("$script inlines $module verbatim", async ({ script, module, names }) => {
+  const mod = await read(module);
+  const wf = await read(script);
+  for (const name of names) {
     const a = extractFn(mod, name);
     const b = extractFn(wf, name);
-    expect(a, `module missing ${name}`).not.toBeNull();
-    expect(b, `backfill-source.ts missing inlined ${name}`).not.toBeNull();
-    expect(b, `inlined ${name} drifted from module`).toBe(a);
+    expect(a, `${module} missing ${name}`).not.toBeNull();
+    expect(b, `${script} missing inlined ${name}`).not.toBeNull();
+    expect(b, `inlined ${name} drifted from ${module}`).toBe(a);
   }
 });

@@ -65,6 +65,45 @@ After regen, `releases admin overview get <slug>` prints the new content with me
 
 When updating multiple orgs, use parallel Claude Code sub-agents (one per org). Each agent runs the two-step flow above for its target.
 
+### Sweep via Workflow (recommended)
+
+The **`update-overviews` dynamic Workflow** (`.claude/workflows/update-overviews.ts`) wraps this whole batch flow in a deterministic harness — selection, the `needsFetch` pre-fetch, budget-gated generation waves, in-parent HTML de-escape + lint + citation-offset re-derivation, and run-recording — so the disciplines documented below are enforced in code rather than re-derived each sweep. **Local Claude Code only**; it fans out `agent()` sub-agents and writes through the same `releases admin overview update` CLI.
+
+**Cost contract.** Spends only your Claude Code session tokens for the `agent()` sub-agents, hard-capped by the turn's `budget.total` (set a `+Nk` directive on the request). No metered Anthropic bill — generation is local sub-agents, _not_ the server-side `batch-overview` Anthropic Batch API. The one exception is `needsFetch` source fetches: re-fetching a `scrape`/`agent` source runs a managed-agent fetch session (feed/github fetches are free). Always **dry-run first** (the default) — it reports the target set and writes/fetches nothing.
+
+**Launch recipe.**
+
+```js
+// dry-run the outdated set (default): stale ≥14d, missing, must have activity
+Workflow({ name: "update-overviews", args: { staleDays: 14 } });
+// commit the run
+Workflow({ name: "update-overviews", args: { staleDays: 14, dryRun: false } });
+// a date window of overviews (last refreshed on/before Apr 1), live
+Workflow({ name: "update-overviews", args: { overviewUpdatedTo: "2026-04-01", dryRun: false } });
+// everyone who shipped since May, capped at 15
+Workflow({
+  name: "update-overviews",
+  args: { activeSince: "2026-05-01", dryRun: false, maxOrgs: 15 },
+});
+// explicit orgs
+Workflow({ name: "update-overviews", args: { orgs: ["vercel", "stripe"], dryRun: false } });
+```
+
+**Selection modes** — the mode is inferred from which args are set; precedence `orgs > activity window > overview-age window > outdated`:
+
+| Args                                        | Mode                    | Selects                                                              |
+| ------------------------------------------- | ----------------------- | -------------------------------------------------------------------- |
+| `orgs: [...]`                               | explicit list           | exactly those slugs (operator is the gate)                           |
+| `activeSince` / `activeUntil`               | release-activity window | orgs whose most-recent release falls in the date range               |
+| `overviewUpdatedFrom` / `overviewUpdatedTo` | overview-age window     | orgs whose overview was last refreshed in the date range             |
+| `staleDays` / `missing` (or none)           | outdated                | the `overview plan --stale-days N --missing --has-activity` manifest |
+
+Other args: `fetch` (`needsFetch` default \| `none` \| `all`), `dryRun` (default `true`), `model` (`sonnet` default \| `haiku` for bulk), `maxOrgs` (default 25, most-stale-first). Dates are ISO (`YYYY-MM-DD`); the upper bound is inclusive of the whole day. The activity window uses each org's most-recent-release timestamp as the activity proxy — not a count-in-window.
+
+After a run, review the `summary.md` it writes under `~/.releases/work/` for the per-org table and findings: lint-flagged bodies (uploaded anyway — review them), empty-window skips, fetch errors (regen correctly skipped), and any org whose prior citations were stripped to zero.
+
+The manual parallel-sub-agent flow below is the lower-level path — reach for it when you need per-org control the Workflow doesn't expose, or to generate richer Anthropic-emitted (`search_result`) citations in-session for a single org.
+
 ### Selecting targets
 
 Pick orgs by activity level or overview freshness.
