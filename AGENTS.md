@@ -27,6 +27,15 @@ The four `dev:*` scripts (`dev:web`, `dev:api`, `dev:mcp`, `dev:discovery`) run 
 - **Override:** set `PORTLESS_NAME=foo` to swap the base name across all four services in one go (`foo.localhost`, `api.foo.localhost`, …). Useful when sharing a machine, demoing on a custom domain, or sidestepping a stuck route. Worktree prefixing still applies on top.
 - **Ports:** wrangler is invoked with `--port $PORT --ip 127.0.0.1` so it binds to the ephemeral port portless assigns; Next.js gets `--port $PORT` via `bun run dev`. Don't hard-code dev ports in wrangler.jsonc — portless's auto-assignment is what avoids conflicts when multiple services run simultaneously.
 
+### Local D1 schema parity
+
+The miniflare-backed local D1 (`workers/api/.wrangler/state/v3/d1`) does **not** auto-apply migrations — prod/staging get them on deploy, local never does. When `/api/auth/*` (or any query) 500s locally with a missing table/column (`no such table: rate_limit`, `no such column: last_active_at`, …), your local DB is behind the migration files. Recover it:
+
+- **`bun run db:reset:local`** — wipes the local D1 and re-applies every migration from the squash baseline. This is the reliable path: a _fresh_ DB applies the baseline cleanly, whereas `bun run db:migrate:local` against a pre-squash local DB dies on `no such column: product_id` (the baseline indexes a column old-timeline local tables lack). Schema only, no data — restart `dev:api` afterward.
+- **`bun run db:pull`** — same rebuild, then imports a prod **content** subset (orgs/sources/releases/…) for realistic local data. **Auth tables (`user`/`session`/`account`/`verification`/`rate_limit`) are deliberately never synced** — real user data / OAuth tokens / password hashes stay off laptops; sign up locally instead.
+
+Don't `wrangler d1 execute --local --file <migration>` to patch a single table — it lands the schema but not the `d1_migrations` log row, compounding the drift (same trap as the staging note below). Use `db:reset:local`.
+
 ## Workspaces and carved-out packages
 
 Root `package.json` declares `workers/api`, `web`, and `packages/*` as workspaces. `workers/discovery/`, `workers/mcp/`, and `workers/webhooks/` are intentionally excluded — wrangler manages their dependencies independently.

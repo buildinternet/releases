@@ -35,6 +35,7 @@
     "db:check-filenames": "./scripts/check-migration-filenames.sh",
     "db:migrate": "drizzle-kit migrate",
     "db:migrate:local": "wrangler d1 migrations apply released-db --local --config workers/api/wrangler.jsonc",
+    "db:reset:local": "rm -rf workers/api/.wrangler/state/v3/d1 && bun run db:migrate:local",
     "db:migrate:remote": "wrangler d1 migrations apply released-db --remote --config workers/api/wrangler.jsonc",
     "db:studio": "bun drizzle-kit studio",
     "db:studio:d1": "bun drizzle-kit studio --config drizzle-d1.config.ts",

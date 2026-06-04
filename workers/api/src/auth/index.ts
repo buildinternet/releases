@@ -266,10 +266,19 @@ export async function createAuth(
     // Rate limiting backed by D1 so counters survive across Worker isolates — the
     // in-memory default resets per isolate and is useless on serverless. Better
     // Auth's own prod auto-enable keys off NODE_ENV, which Workers don't set, so we
-    // gate it explicitly on ENVIRONMENT. Sensitive endpoints (sign-in/up) get the
-    // built-in 3-requests-per-10s rule, keyed by `cf-connecting-ip` (advanced.ipAddress).
+    // gate it explicitly. Sensitive endpoints (sign-in/up) get the built-in
+    // 3-requests-per-10s rule, keyed by `cf-connecting-ip` (advanced.ipAddress).
+    //
+    // The `&& !!secret` is what keeps this OUT of local dev: local `wrangler dev`
+    // can't resolve the Secrets Store binding (the `secret-unresolved` warning
+    // above), so an unresolved secret reliably means "not a deployed env." Without
+    // it, rate limiting would run locally (ENVIRONMENT is "production" in the
+    // top-level wrangler vars) and every `/api/auth/*` call would query a
+    // `rate_limit` table a fresh local D1 doesn't have → 500s — plus repeated
+    // sign-in testing would 429 after 3 tries. Deployed prod resolves the secret →
+    // rate limiting on.
     rateLimit: {
-      enabled: env.ENVIRONMENT === "production",
+      enabled: env.ENVIRONMENT === "production" && !!secret,
       storage: "database",
     },
     advanced: {
