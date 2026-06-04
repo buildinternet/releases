@@ -1,0 +1,12 @@
+-- Add user.last_active_at for Better Auth Infrastructure ("dash") activity tracking.
+-- Paired with workers/api/src/db/schema-auth.ts (the schema↔migration pairing gate in
+-- ci.yml watches that file). Nullable integer epoch-seconds (Drizzle `timestamp` mode),
+-- matching the other auth timestamps; existing rows and users inactive since this column
+-- was added stay NULL until dash() next records activity.
+--
+-- Behaviour note (verified against @better-auth/infra dist): the dash plugin updates this
+-- on non-GET authed requests (throttled to its updateInterval, default 5 min) as a
+-- best-effort write, and lazily backfills from the most-recent session's timestamp when
+-- the hosted dashboard reads a user. So it is an approximate "last active", not a precise
+-- per-request heartbeat.
+ALTER TABLE user ADD COLUMN last_active_at integer;
