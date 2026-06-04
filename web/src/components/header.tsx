@@ -3,6 +3,7 @@ import { ThemeToggle } from "./theme-toggle";
 import { MobileNav } from "./mobile-nav";
 import { SearchBar } from "./search-bar";
 import { SearchTrigger } from "./search-trigger";
+import { AccountNav } from "./account-nav";
 import { GITHUB_REPO_URL, visibleNavItems } from "./nav-items";
 
 export function Header() {
@@ -73,6 +74,7 @@ export function Header() {
           </svg>
         </a>
         <ThemeToggle />
+        <AccountNav />
       </nav>
     </header>
   );

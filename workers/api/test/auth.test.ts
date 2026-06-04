@@ -1,9 +1,15 @@
 import { describe, it, expect } from "bun:test";
+import { Hono } from "hono";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { createTestDb } from "./setup";
 import { user, session, account, verification } from "../src/db/schema-auth.js";
-import { buildSocialProviders, authTrustedOrigins, deriveCookieDomain } from "../src/auth/index.js";
+import {
+  buildSocialProviders,
+  authTrustedOrigins,
+  authCorsMiddleware,
+  deriveCookieDomain,
+} from "../src/auth/index.js";
 
 // ── Pure helpers ──
 
@@ -71,6 +77,87 @@ describe("authTrustedOrigins", () => {
     } as never);
     expect(origins).toContain("https://x.vercel.app");
     expect(origins.filter((o) => o === "https://releases.sh")).toHaveLength(1);
+  });
+
+  it("adds bare-loopback dev origins outside production", () => {
+    const origins = authTrustedOrigins({} as never);
+    expect(origins).toContain("http://localhost:3000");
+    expect(origins).toContain("http://127.0.0.1:3000");
+  });
+
+  it("excludes loopback origins in production", () => {
+    const origins = authTrustedOrigins({ ENVIRONMENT: "production" } as never);
+    expect(origins).not.toContain("http://localhost:3000");
+    expect(origins).toEqual(["https://releases.sh", "https://releases.localhost"]);
+  });
+});
+
+describe("authCorsMiddleware origin allow-list", () => {
+  // Drive a real CORS preflight through the middleware and read back the
+  // reflected Access-Control-Allow-Origin (null when the origin is rejected).
+  async function preflightOrigin(
+    origin: string,
+    env: { ENVIRONMENT?: string; BETTER_AUTH_TRUSTED_ORIGINS?: string } = {},
+  ): Promise<string | null> {
+    const app = new Hono();
+    app.use("/api/auth/*", authCorsMiddleware());
+    app.get("/api/auth/ok", (c) => c.text("ok"));
+    const res = await app.request(
+      "/api/auth/ok",
+      { method: "OPTIONS", headers: { Origin: origin, "Access-Control-Request-Method": "POST" } },
+      env as never,
+    );
+    return res.headers.get("access-control-allow-origin");
+  }
+
+  it("reflects the releases.sh family in production", async () => {
+    expect(await preflightOrigin("https://releases.sh", { ENVIRONMENT: "production" })).toBe(
+      "https://releases.sh",
+    );
+    expect(await preflightOrigin("https://app.releases.sh", { ENVIRONMENT: "production" })).toBe(
+      "https://app.releases.sh",
+    );
+  });
+
+  it("rejects bare-loopback origins in production", async () => {
+    expect(
+      await preflightOrigin("http://localhost:3000", { ENVIRONMENT: "production" }),
+    ).toBeNull();
+    expect(
+      await preflightOrigin("http://127.0.0.1:3000", { ENVIRONMENT: "production" }),
+    ).toBeNull();
+  });
+
+  it("allows bare-loopback origins outside production", async () => {
+    expect(await preflightOrigin("http://localhost:3000", { ENVIRONMENT: "development" })).toBe(
+      "http://localhost:3000",
+    );
+    expect(await preflightOrigin("http://127.0.0.1:3000")).toBe("http://127.0.0.1:3000");
+  });
+
+  it("reflects a configured BETTER_AUTH_TRUSTED_ORIGINS host in any environment", async () => {
+    const dev = "https://releases.local.buildinternet.dev";
+    expect(
+      await preflightOrigin(dev, { ENVIRONMENT: "development", BETTER_AUTH_TRUSTED_ORIGINS: dev }),
+    ).toBe(dev);
+    // A portless/preview host explicitly trusted in prod is honored by CORS too —
+    // the allow-list stays in lockstep with authTrustedOrigins.
+    const preview = "https://feat-x.vercel.app";
+    expect(
+      await preflightOrigin(preview, {
+        ENVIRONMENT: "production",
+        BETTER_AUTH_TRUSTED_ORIGINS: preview,
+      }),
+    ).toBe(preview);
+  });
+
+  it("rejects unknown origins regardless of environment", async () => {
+    expect(
+      await preflightOrigin("https://evil.example.com", { ENVIRONMENT: "development" }),
+    ).toBeNull();
+    expect(
+      await preflightOrigin("https://evil.example.com", { ENVIRONMENT: "production" }),
+    ).toBeNull();
   });
 });
 
