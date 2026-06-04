@@ -143,6 +143,21 @@ test("deriveCitationOffsets: finds offsets, drops not-found / overlapping / empt
   expect(dropped).toBe(3);
 });
 
+test("deriveCitationOffsets: uses a later non-overlapping occurrence of a repeated phrase", () => {
+  // "alpha" occurs at 0 and 17; the first hit overlaps citation #1's span, so
+  // citation #2 must fall back to the second occurrence rather than being dropped.
+  const body = "alpha beta gamma alpha";
+  const { citations, dropped } = deriveCitationOffsets(body, [
+    { sourceUrl: "https://x/1", title: "T1", citedText: "alpha beta" },
+    { sourceUrl: "https://x/2", title: "T2", citedText: "alpha" },
+  ]);
+  expect(citations).toEqual([
+    { startIndex: 0, endIndex: 10, sourceUrl: "https://x/1", title: "T1", citedText: "alpha beta" },
+    { startIndex: 17, endIndex: 22, sourceUrl: "https://x/2", title: "T2", citedText: "alpha" },
+  ]);
+  expect(dropped).toBe(0);
+});
+
 test("budgetGate: no ceiling never stops; stops under reserve with org wording", () => {
   expect(budgetGate(null, 0, 1000, 0, 10)).toEqual({ stop: false });
   expect(budgetGate(500000, 999999, 120000, 3, 20).stop).toBe(false);

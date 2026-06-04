@@ -112,17 +112,24 @@ function deriveCitationOffsets(body, citations) {
       dropped++;
       continue;
     }
-    const idx = text.indexOf(citedText);
-    if (idx < 0) {
+    // Use the first occurrence that doesn't overlap an accepted span, so a
+    // repeated phrase can still cite a later copy when its first hit is taken.
+    let start = -1;
+    let from = 0;
+    while (from <= text.length) {
+      const idx = text.indexOf(citedText, from);
+      if (idx < 0) break;
+      if (!spans.some((s) => idx < s.end && idx + citedText.length > s.start)) {
+        start = idx;
+        break;
+      }
+      from = idx + 1;
+    }
+    if (start < 0) {
       dropped++;
       continue;
     }
-    const start = idx;
-    const end = idx + citedText.length;
-    if (spans.some((s) => start < s.end && end > s.start)) {
-      dropped++;
-      continue;
-    }
+    const end = start + citedText.length;
     spans.push({ start, end });
     accepted.push({
       startIndex: start,
@@ -332,13 +339,26 @@ if (typeof input === "string") {
 }
 input = input || {};
 const ORGS = Array.isArray(input.orgs)
-  ? input.orgs.filter((s) => typeof s === "string" && s.trim())
+  ? input.orgs
+      .map((s) => (typeof s === "string" ? s.trim() : ""))
+      .filter(Boolean)
+      .filter((s) => {
+        // Keep only plausible slugs so whitespace / shell-unsafe characters can't
+        // reach the fetch/update command strings or the /tmp paths built from them.
+        if (/^[A-Za-z0-9._-]+$/.test(s)) return true;
+        log(
+          `update-overviews: dropping org "${s}" — slugs allow letters, digits, dot, underscore, hyphen only`,
+        );
+        return false;
+      })
   : [];
 if (input.maxOrgs != null && !(Number.isInteger(input.maxOrgs) && input.maxOrgs > 0)) {
   log(`update-overviews: maxOrgs must be a positive integer, got ${input.maxOrgs}`);
   return { status: "error", error: "invalid maxOrgs" };
 }
 const MAX_ORGS = input.maxOrgs == null ? 25 : input.maxOrgs;
+// Default 14 = the server's "behind" eligibility threshold (DEFAULT_MIN_OVERVIEW_AGE_DAYS)
+// that `--stale-days` controls — not OVERVIEW_STALE_DAYS (30), the display-only staleness mark.
 const STALE_DAYS =
   input.staleDays != null ? Math.max(0, Math.floor(Number(input.staleDays) || 0)) : 14;
 const MISSING = input.missing !== false; // default true

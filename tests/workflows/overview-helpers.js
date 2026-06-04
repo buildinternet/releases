@@ -128,17 +128,24 @@ export function deriveCitationOffsets(body, citations) {
       dropped++;
       continue;
     }
-    const idx = text.indexOf(citedText);
-    if (idx < 0) {
+    // Use the first occurrence that doesn't overlap an accepted span, so a
+    // repeated phrase can still cite a later copy when its first hit is taken.
+    let start = -1;
+    let from = 0;
+    while (from <= text.length) {
+      const idx = text.indexOf(citedText, from);
+      if (idx < 0) break;
+      if (!spans.some((s) => idx < s.end && idx + citedText.length > s.start)) {
+        start = idx;
+        break;
+      }
+      from = idx + 1;
+    }
+    if (start < 0) {
       dropped++;
       continue;
     }
-    const start = idx;
-    const end = idx + citedText.length;
-    if (spans.some((s) => start < s.end && end > s.start)) {
-      dropped++;
-      continue;
-    }
+    const end = start + citedText.length;
     spans.push({ start, end });
     accepted.push({
       startIndex: start,
