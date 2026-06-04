@@ -69,3 +69,39 @@ describe("Fern provider hints", () => {
     expect(hints?.markdownSuffix).toBeUndefined();
   });
 });
+
+// Markers verified against help.gong.io (a Document360 help center) in June 2026:
+// its <head> carries `cdn.us.document360.io` asset URLs 27+ times, and the bundle
+// emits a `ghost-serverApp` token ~789 times. That token false-matches Ghost's loose
+// `ghost-` htmlPattern, so before Document360 was added these sites mis-detected as
+// Ghost. Detection is first-match-wins, so Document360 is ordered ahead of Ghost.
+describe("Document360 provider detection", () => {
+  it("detects Document360 from the `document360` <head> marker", () => {
+    const head = `<head><link rel="preconnect" href="https://cdn.us.document360.io"></head>`;
+    expect(detectProviderFromHtml(head)?.id).toBe("document360");
+  });
+
+  it("resolves to Document360, not Ghost, despite the `ghost-serverApp` token", () => {
+    // Regression: the Document360 bundle's `ghost-serverApp` matches Ghost's `ghost-`
+    // pattern. Ordering Document360 first must keep these sites off the Ghost branch.
+    const head = `<head><script>window["ghost-serverApp"]=1</script><link href="https://cdn.us.document360.io/x.js"></head>`;
+    expect(detectProviderFromHtml(head)?.id).toBe("document360");
+  });
+
+  it("does not misdetect a real Ghost page as Document360", () => {
+    const head = `<head><meta name="generator" content="Ghost 5.0"><link href="/content/themes/casper/x.css"></head>`;
+    expect(detectProviderFromHtml(head)?.id).toBe("ghost");
+  });
+});
+
+describe("Document360 provider hints", () => {
+  const hints = getProviderHints("document360");
+
+  it("prefers the scrape adapter (no public feed)", () => {
+    expect(hints?.preferredType).toBe("scrape");
+  });
+
+  it("marks content as statically rendered (no headless render needed)", () => {
+    expect(hints?.staticContent).toBe(true);
+  });
+});

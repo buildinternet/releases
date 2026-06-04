@@ -331,7 +331,7 @@ const SUMMARY_PATH = summaryPath(RUN_DIR, slugForDir, !!PARENT_RUN_DIR);
 // ── Phase: Map ───────────────────────────────────────────────────────────────
 phase("Map");
 const known = await agent(
-  `List the release URLs ALREADY ingested for source "${resolved.slug}" so we don't re-extract them. Get as complete a list as the tooling allows — \`releases tail ${resolved.slug}\` only shows the most recent rows, so prefer a high limit / the list API (e.g. \`releases tail ${resolved.slug} --json --limit 500\`, falling back to whatever the command accepts). Return the array of release \`url\` values, omitting any null/empty urls (\`[]\` if none).`,
+  `List the release URLs ALREADY ingested for source "${resolved.slug}" so we don't re-extract them. Get as complete a list as the tooling allows — \`releases tail ${resolved.slug}\` only shows the most recent rows, so prefer a high count / the list API (e.g. \`releases tail ${resolved.slug} --json -c 500\`, falling back to whatever the command accepts). Return the array of release \`url\` values, omitting any null/empty urls (\`[]\` if none).`,
   {
     label: "known-urls",
     phase: "Map",
