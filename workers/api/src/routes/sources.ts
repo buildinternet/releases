@@ -159,6 +159,8 @@ import { getActiveSessionRaw } from "../lib/active-fetch-session.js";
 import { materializeVideoSource } from "../lib/video-materialize.js";
 import { normalizeMediaBind } from "../lib/media-bind.js";
 import { FLAGS, flag } from "@releases/lib/flags";
+import { dedupeByExistingTitle } from "@buildinternet/releases-core/title-dedup";
+import { selectExistingReleaseKeys } from "../lib/title-dedup.js";
 
 export const sourceRoutes = new Hono<Env>();
 
@@ -769,6 +771,35 @@ const postReleasesBatchHandler = async (c: import("hono").Context<Env>) => {
       });
     }
     body.releases = filtered.kept;
+  }
+
+  // Title-dedup for scrape sources (#1410): the discovery-worker scrape sweep and
+  // the local backfill both write through this endpoint with synthesized anchor
+  // URLs (`<page>#<slug>`); a backfill's heading-slug anchor (`#may-2026`) and a
+  // re-fetch's slug(title) anchor for the SAME release don't collide under
+  // UNIQUE(source_id, url), so the entry lands twice. Collapse by normalized title
+  // (scrape-scoped; feed/github/appstore carry stable real URLs). Kill-switchable.
+  if (src.type === "scrape" && body.releases.length > 0) {
+    const dedupDisabled = await flag(
+      c.env.FLAGS,
+      c.env.SCRAPE_TITLE_DEDUP_DISABLED,
+      FLAGS.scrapeTitleDedupDisabled,
+    );
+    if (!dedupDisabled) {
+      const existing = await selectExistingReleaseKeys(db, src.id);
+      const deduped = dedupeByExistingTitle(body.releases, existing.titleKeys, existing.urls);
+      if (deduped.dropped > 0) {
+        logEvent("info", {
+          component: "sources-batch",
+          event: "title-dedup-applied",
+          sourceId: src.id,
+          slug: src.slug,
+          kept: deduped.kept.length,
+          dropped: deduped.dropped,
+        });
+      }
+      body.releases = deduped.kept;
+    }
   }
 
   try {
@@ -3038,6 +3069,37 @@ sourceRoutes.post("/sources/:slug/releases", postReleaseRoute, async (c) => {
         feedUrlDeny: denyMeta.feedUrlDeny,
       });
       return c.json({ skipped: true, reason: "url_denied" }, 200);
+    }
+  }
+
+  // Title-dedup for scrape sources (#1410): mirror the batch guard for the
+  // single-release insert. A normalized-title match against an existing row is a
+  // skip (the same entry under a different anchor URL — same shape as the
+  // onConflictDoNothing dedup-skip). Scrape-scoped; kill-switchable.
+  if (src.type === "scrape") {
+    const dedupDisabled = await flag(
+      c.env.FLAGS,
+      c.env.SCRAPE_TITLE_DEDUP_DISABLED,
+      FLAGS.scrapeTitleDedupDisabled,
+    );
+    if (!dedupDisabled) {
+      const existing = await selectExistingReleaseKeys(db, src.id);
+      const { dropped } = dedupeByExistingTitle(
+        [{ title: body.title, url: body.url ?? null }],
+        existing.titleKeys,
+        existing.urls,
+      );
+      if (dropped > 0) {
+        logEvent("info", {
+          component: "sources-release-insert",
+          event: "title-dedup-applied",
+          sourceId: src.id,
+          slug: src.slug,
+          kept: 0,
+          dropped: 1,
+        });
+        return c.json({ skipped: true, reason: "title_duplicate" }, 200);
+      }
     }
   }
 

@@ -51,6 +51,8 @@ import {
 import { CHANGELOG_MAX_FILES, truncateToByteCap } from "@releases/adapters/github";
 import { isPrereleaseVersion } from "@buildinternet/releases-core/prerelease";
 import { computeVersionSort } from "@buildinternet/releases-core/version-sort";
+import { dedupeByExistingTitle } from "@buildinternet/releases-core/title-dedup";
+import { selectExistingReleaseKeys } from "../lib/title-dedup.js";
 import { normalizeMediaUrl } from "@releases/rendering/media-url.js";
 import { filterJunkMedia } from "@releases/rendering/media-filter.js";
 import {
@@ -682,6 +684,8 @@ export interface FetchOneEnv extends IndexNowEnv, AnthropicEnv {
   // vars are strings); default off. `MEDIA` is the `released-media` R2 bucket
   // binding — absent or flag-off => media is stored verbatim as today.
   MEDIA_R2_UPLOAD_ENABLED?: string;
+  /** Scrape title-dedup kill switch (#1410); default off (i.e. dedup ON). */
+  SCRAPE_TITLE_DEDUP_DISABLED?: string;
   MEDIA?: R2Bucket;
   // GIF→MP4 ingest transcode (#1368). When the binding is present and the flag is
   // on, an ingested `image/gif` is stored as a small MP4 instead of the raw GIF.
@@ -1133,6 +1137,34 @@ export async function ingestRawReleases(
       });
     }
     rawReleases = filtered.kept;
+  }
+
+  // Title-dedup for scrape sources (#1410): collapse same-source same-normalized-
+  // title entries that synthesized anchor URLs (`<page>#<slug>`) fail to dedup —
+  // notably a local backfill's heading-slug anchor (`#may-2026`) vs the cron's
+  // slug(title) anchor for the SAME release. Scrape-scoped (feed/github/appstore
+  // carry stable real URLs); kill-switchable; run before the marketing/enrich
+  // passes so dropped dupes never incur inference cost.
+  if (source.type === "scrape" && rawReleases.length > 0) {
+    const dedupDisabled = await flag(
+      env.FLAGS,
+      env.SCRAPE_TITLE_DEDUP_DISABLED,
+      FLAGS.scrapeTitleDedupDisabled,
+    );
+    if (!dedupDisabled) {
+      const existing = await selectExistingReleaseKeys(db, source.id);
+      const deduped = dedupeByExistingTitle(rawReleases, existing.titleKeys, existing.urls);
+      if (deduped.dropped > 0) {
+        logEvent("info", {
+          component: "cron-poll-fetch",
+          event: "title-dedup-applied",
+          sourceSlug: source.slug,
+          kept: deduped.kept.length,
+          dropped: deduped.dropped,
+        });
+      }
+      rawReleases = deduped.kept;
+    }
   }
 
   const marketingMap =

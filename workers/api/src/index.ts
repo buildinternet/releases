@@ -66,6 +66,8 @@ export type Env = {
     MEDIA_ORIGIN?: string;
     /** Ingest-time R2 media upload kill switch (#1177); default off. */
     MEDIA_R2_UPLOAD_ENABLED?: string;
+    /** Scrape title-dedup kill switch (#1410); default off (i.e. dedup ON). */
+    SCRAPE_TITLE_DEDUP_DISABLED?: string;
     /**
      * Cloudflare Media Transformations binding (wrangler `"media"`). Streams an
      * ingested animated GIF to a small MP4 stored in R2 (#1368). Absent → GIFs

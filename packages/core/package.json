@@ -35,7 +35,8 @@
     "./version-sort": "./src/version-sort.ts",
     "./composition": "./src/composition.ts",
     "./web-bot-auth": "./src/web-bot-auth.ts",
-    "./notice": "./src/notice.ts"
+    "./notice": "./src/notice.ts",
+    "./title-dedup": "./src/title-dedup.ts"
   },
   "files": [
     "src",

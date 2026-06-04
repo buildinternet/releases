@@ -62,6 +62,14 @@ export const FLAGS = {
     env: "SCRAPE_CHANGE_DETECT_ENABLED",
     default: false,
   },
+  // Kill switch (#1410): scrape-source title-dedup is ON by default (default:false
+  // → not disabled); flip to true in Flagship to roll back. Collapses same-source
+  // same-normalized-title rows that anchor URLs (`<page>#<slug>`) fail to dedup.
+  scrapeTitleDedupDisabled: {
+    key: "scrape-title-dedup-disabled",
+    env: "SCRAPE_TITLE_DEDUP_DISABLED",
+    default: false,
+  },
   webBotAuthEnabled: { key: "web-bot-auth-enabled", env: "WEB_BOT_AUTH_ENABLED", default: false },
   invalidationEnabled: { key: "invalidation-enabled", env: "INVALIDATION_ENABLED", default: false },
   indexnowEnabled: { key: "indexnow-enabled", env: "INDEXNOW_ENABLED", default: false },
