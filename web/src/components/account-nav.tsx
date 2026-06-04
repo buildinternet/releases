@@ -47,6 +47,12 @@ function UserAvatar({
   user: { name?: string | null; email: string; image?: string | null };
 }) {
   const [broken, setBroken] = useState(false);
+  // Clear a prior load error whenever the URL changes (avatar re-sync on a fresh
+  // Google sign-in, a different user, or a session refetch) — otherwise `broken`
+  // would permanently mask a NEW, valid `src` behind the initial fallback.
+  useEffect(() => {
+    setBroken(false);
+  }, [user.image]);
   if (user.image && !broken) {
     return (
       // eslint-disable-next-line @next/next/no-img-element
