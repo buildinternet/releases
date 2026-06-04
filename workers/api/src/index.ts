@@ -272,6 +272,12 @@ export type Env = {
     // Signing secret. Cloudflare Secrets Store binding in prod; a plain string
     // is accepted too (local .dev.vars / wrangler var). Required in prod.
     BETTER_AUTH_SECRET?: SecretBinding | string;
+    // Better Auth Infrastructure ("dash") API key — connects this backend to the
+    // hosted admin/analytics dashboard at dash.better-auth.com via the dash()
+    // plugin. Secrets Store binding in prod; plain string locally (.dev.vars).
+    // Absent → the dash plugin stays off (no keyless outbound calls). See
+    // src/auth/index.ts.
+    BETTER_AUTH_API_KEY?: SecretBinding | string;
     // Public base URL of THIS worker (where the auth handler lives), e.g.
     // https://api.releases.sh. Drives OAuth callback + cookie-domain derivation.
     // Local: set via .dev.vars to https://api.releases.localhost, or omit to let
