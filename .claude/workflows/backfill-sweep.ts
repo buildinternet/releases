@@ -39,6 +39,16 @@ if (input.maxReleases != null && !(Number.isInteger(input.maxReleases) && input.
 const MAX = input.maxReleases == null ? 50 : input.maxReleases;
 const DRY = input.dryRun !== false; // default true
 const MODEL = input.model === "haiku" ? "haiku" : "sonnet";
+// The child is resolved by PATH, not by registry name: project `.claude/workflows/`
+// scripts are NOT name-registered in the Workflow registry (only plugin-shipped
+// workflows like deep-research/code-review are), so `workflow("backfill-source")`
+// throws "not found" (#1407). Default to the sibling script, repo-relative to cwd
+// (same form the operator uses to launch this sweep); an operator can override with
+// an absolute path via `backfillScriptPath`.
+const BACKFILL_SCRIPT_PATH =
+  typeof input.backfillScriptPath === "string" && input.backfillScriptPath.trim()
+    ? input.backfillScriptPath.trim()
+    : ".claude/workflows/backfill-source.ts";
 if (!SOURCES.length) {
   log("backfill-sweep: missing required `sources` array");
   return { status: "error", error: "no sources" };
@@ -86,13 +96,21 @@ for (const source of SOURCES) {
   try {
     // Pass the sweep's run dir so each source logs/reports into it (RUN_DIR null →
     // child mints its own isolated run; still pointer-free, just not co-located).
-    r = await workflow("backfill-source", {
+    const childArgs = {
       source,
       maxReleases: MAX,
       dryRun: DRY,
       model: MODEL,
       runDir: RUN_DIR || undefined,
-    });
+    };
+    // Resolve by path (the working mechanism, #1407); fall back to the registry
+    // name only if a future harness registers project workflows. A launch failure
+    // throws; a child that simply errored returns a result and is NOT retried.
+    try {
+      r = await workflow({ scriptPath: BACKFILL_SCRIPT_PATH }, childArgs);
+    } catch {
+      r = await workflow("backfill-source", childArgs);
+    }
   } catch (e) {
     r = { status: "error", source, error: String((e && e.message) || e) };
   }

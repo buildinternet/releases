@@ -32,12 +32,17 @@ The Workflow runs `local-ingest`'s `preflight.ts` first and **fails closed**: `r
 
 ## Launch recipe
 
+Launch **by `scriptPath`, not by `name`** — project `.claude/workflows/` scripts are not registered in the Workflow name registry (only plugin-shipped workflows like `deep-research` resolve by name), so `Workflow({ name: "backfill-source" })` errors `not found` (#1407). The path is repo-relative to the session cwd.
+
 Dry-run one source, review the plan + counts, then commit:
 
 ```js
-Workflow({ name: "backfill-source", args: { source: "acme/changelog" } }); // dry-run (default)
 Workflow({
-  name: "backfill-source",
+  scriptPath: ".claude/workflows/backfill-source.ts",
+  args: { source: "acme/changelog" },
+}); // dry-run (default)
+Workflow({
+  scriptPath: ".claude/workflows/backfill-source.ts",
   args: { source: "acme/changelog", dryRun: false, maxReleases: 50 },
 });
 ```
@@ -46,12 +51,12 @@ Set a turn budget to cap spend (e.g. prefix the request with `+300k`). Several s
 
 ```js
 Workflow({
-  name: "backfill-sweep",
+  scriptPath: ".claude/workflows/backfill-sweep.ts",
   args: { sources: ["acme/changelog", "globex/releases"], dryRun: false },
 });
 ```
 
-`args`: `source` (slug | src\_ id | URL), `maxReleases` (default 50), `dryRun` (default true), `model` (`sonnet` default; `haiku` for bulk/simple). Sweep takes `sources: string[]`.
+`args`: `source` (slug | src\_ id | URL), `maxReleases` (default 50), `dryRun` (default true), `model` (`sonnet` default; `haiku` for bulk/simple). Sweep takes `sources: string[]` and resolves each child `backfill-source` by the same sibling path (override with `backfillScriptPath` for a non-standard checkout layout).
 
 ## Re-seed vs. top-up (scrape sources)
 

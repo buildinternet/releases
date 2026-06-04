@@ -71,22 +71,31 @@ The **`update-overviews` dynamic Workflow** (`.claude/workflows/update-overviews
 
 **Cost contract.** Spends only your Claude Code session tokens for the `agent()` sub-agents, hard-capped by the turn's `budget.total` (set a `+Nk` directive on the request). No metered Anthropic bill — generation is local sub-agents, _not_ the server-side `batch-overview` Anthropic Batch API. The one exception is `needsFetch` source fetches: re-fetching a `scrape`/`agent` source runs a managed-agent fetch session (feed/github fetches are free). Always **dry-run first** (the default) — it reports the target set and writes/fetches nothing.
 
-**Launch recipe.**
+**Launch recipe.** Launch **by `scriptPath`, not by `name`** — project `.claude/workflows/` scripts are not registered in the Workflow name registry (only plugin-shipped workflows like `deep-research` resolve by name), so `Workflow({ name: "update-overviews" })` errors `not found` (#1407). The path is repo-relative to the session cwd.
 
 ```js
 // dry-run the outdated set (default): stale ≥14d, missing, must have activity
-Workflow({ name: "update-overviews", args: { staleDays: 14 } });
+Workflow({ scriptPath: ".claude/workflows/update-overviews.ts", args: { staleDays: 14 } });
 // commit the run
-Workflow({ name: "update-overviews", args: { staleDays: 14, dryRun: false } });
+Workflow({
+  scriptPath: ".claude/workflows/update-overviews.ts",
+  args: { staleDays: 14, dryRun: false },
+});
 // a date window of overviews (last refreshed on/before Apr 1), live
-Workflow({ name: "update-overviews", args: { overviewUpdatedTo: "2026-04-01", dryRun: false } });
+Workflow({
+  scriptPath: ".claude/workflows/update-overviews.ts",
+  args: { overviewUpdatedTo: "2026-04-01", dryRun: false },
+});
 // everyone who shipped since May, capped at 15
 Workflow({
-  name: "update-overviews",
+  scriptPath: ".claude/workflows/update-overviews.ts",
   args: { activeSince: "2026-05-01", dryRun: false, maxOrgs: 15 },
 });
 // explicit orgs
-Workflow({ name: "update-overviews", args: { orgs: ["vercel", "stripe"], dryRun: false } });
+Workflow({
+  scriptPath: ".claude/workflows/update-overviews.ts",
+  args: { orgs: ["vercel", "stripe"], dryRun: false },
+});
 ```
 
 **Selection modes** — the mode is inferred from which args are set; precedence `orgs > activity window > overview-age window > outdated`:
