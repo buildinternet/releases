@@ -7,8 +7,8 @@ const SCRIPTS = [
 ];
 
 // Each entry maps a workflow script to the helper module it inlines verbatim, and
-// the exact set of helper names guarded against drift. A script not listed here
-// (e.g. backfill-sweep.ts) inlines no helpers and is only parse/meta/phase-checked.
+// the exact set of helper names guarded against drift. A script may appear once
+// per module it draws from; only the listed names are checked.
 const INLINE_CHECKS = [
   {
     script: ".claude/workflows/backfill-source.ts",
@@ -22,7 +22,13 @@ const INLINE_CHECKS = [
       "dedupeRecords",
       "chunk",
       "finalStatus",
+      "summaryPath",
     ],
+  },
+  {
+    script: ".claude/workflows/backfill-sweep.ts",
+    module: "tests/workflows/backfill-helpers.js",
+    names: ["sweepReportPath"],
   },
   {
     script: ".claude/workflows/update-overviews.ts",

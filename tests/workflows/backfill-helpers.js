@@ -139,3 +139,31 @@ export function chunk(arr, size) {
 export function finalStatus(deferredForBudget) {
   return deferredForBudget > 0 ? "partial-budget" : "completed";
 }
+
+/**
+ * Per-source summary path inside a run dir. Standalone runs use the canonical
+ * `summary.md`; under a sweep (nested), siblings share one run dir so each
+ * summary is namespaced by slug to avoid clobbering. Null run dir → null.
+ * @param {string|null} runDir
+ * @param {string} slug
+ * @param {boolean} nested true when a parent sweep owns the run dir
+ * @returns {string|null}
+ */
+export function summaryPath(runDir, slug, nested) {
+  if (!runDir) return null;
+  return runDir + "/" + (nested ? `summary-${slug}.md` : "summary.md");
+}
+
+/**
+ * Deterministic cross-run sweep report path derived from the in-script run dir:
+ * `<base>/runs/<YYYY-MM-DD-HHMM>-backfill-sweep` → `<base>/reports/<YYYY-MM-DD>-backfill-sweep.md`.
+ * Null run dir → null (caller falls back to an agent-stamped date).
+ * @param {string|null} runDir
+ * @returns {string|null}
+ */
+export function sweepReportPath(runDir) {
+  if (!runDir) return null;
+  const reportsDir = runDir.replace(/\/runs\/[^/]+$/, "/reports");
+  const date = (runDir.split("/").pop() || "").slice(0, 10);
+  return `${reportsDir}/${date}-backfill-sweep.md`;
+}

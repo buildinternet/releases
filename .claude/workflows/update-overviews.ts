@@ -241,7 +241,7 @@ ${fix}
 Return { status: "generated", body, orgName: <org.name from inputs>, citations, releaseCount: <totalAvailable from inputs>, lastContributingAt: <selected[0].publishedAt> }.`;
 }
 
-function writePrompt(slug, body, citations, releaseCount, lastContributingAt) {
+function writePrompt(slug, body, citations, releaseCount, lastContributingAt, runEnv) {
   const extra = [
     Number.isFinite(releaseCount) ? `--release-count ${releaseCount}` : "",
     lastContributingAt ? `--last-contributing-at ${lastContributingAt}` : "",
@@ -251,7 +251,7 @@ function writePrompt(slug, body, citations, releaseCount, lastContributingAt) {
   return `Upload a regenerated overview for the "${slug}" org. Steps, in order:
 1. Write the decoded value of BODY_JSON (it is a JSON-encoded string — write its contents, not the surrounding quotes) to a temp file, e.g. /tmp/${slug}-overview.md.
 2. Write CITATIONS_JSON verbatim (a JSON array) to /tmp/${slug}-overview-citations.json.
-3. Run: releases admin overview update ${slug} --content-file /tmp/${slug}-overview.md --citations-file /tmp/${slug}-overview-citations.json ${extra}
+3. Run this command EXACTLY${runEnv ? ", including the leading `RELEASES_RUN_DIR=…` env prefix (it pins this mutation to the workflow's own isolated run — without it the write logs to whatever `.current-run` happens to point at, which is the cross-session leak this guards against)" : ""}: ${runEnv}releases admin overview update ${slug} --content-file /tmp/${slug}-overview.md --citations-file /tmp/${slug}-overview-citations.json ${extra}
    Do NOT pass --unescape-html (the body is already decoded and offsets are computed against it).
 4. Report written=true if it exited 0, the accepted citation count from the response ("citations": N) as citationCount, and any non-2xx error.
 BODY_JSON: ${JSON.stringify(body)}
@@ -311,7 +311,7 @@ async function regenOneOrg(t) {
 
   const { citations, dropped } = deriveCitationOffsets(body, rawCitations);
   const wr = await agent(
-    writePrompt(slug, body, citations, gen.releaseCount, gen.lastContributingAt),
+    writePrompt(slug, body, citations, gen.releaseCount, gen.lastContributingAt, runEnv),
     { label: `write:${slug}`, phase: "Write", model: "haiku", schema: WRITE_SCHEMA },
   );
   const written = !!(wr && wr.written);
@@ -452,13 +452,24 @@ if (!capped.length) {
   return { status: "completed", mode, candidates, targets: 0, written: 0 };
 }
 
-// Own a maintenance run (live runs only) so each `overview update` auto-logs.
+// Own an ISOLATED maintenance run so each `overview update` auto-logs into THIS
+// sweep's dir and nowhere else. We deliberately do NOT `work start` — that writes
+// the shared global `.current-run` pointer, and any concurrent `releases admin`
+// write in another session resolves that pointer and leaks into our run (#1396).
+// Instead we mint a fresh timestamped run dir directly (same layout/naming as the
+// CLI's startRun → run-dir.ts: `<dataDir>/work/runs/<YYYY-MM-DD-HHMM>-<batch>`,
+// honoring RELEASES_DATA_DIR) without touching the pointer, then pin every write
+// to it with an inline `RELEASES_RUN_DIR=…` prefix (resolveRunDir: env wins over
+// the pointer, and inline survives the fresh-shell-per-Bash-call harness).
 const runInfo = await agent(
-  `Set up the maintenance run for this overview sweep.
-1. Run \`releases admin work status --json\`.
-2. If a run is active, capture its run dir, started=false.
-3. If none, run \`releases admin work start update-overviews --json\`, capture the new run dir, started=true, and \`mkdir -p ~/.releases/work/tasks ~/.releases/work/reports\`.
-Return the absolute run dir and whether you started it.`,
+  `Create an ISOLATED maintenance run dir for this overview sweep. Do NOT run \`releases admin work start\` (it sets a shared pointer that leaks across sessions). Run exactly this, then return the absolute dir it prints:
+\`\`\`
+base="\${RELEASES_DATA_DIR:-\${RELEASED_DATA_DIR:-$HOME/.releases}}/work"
+dir="$base/runs/$(date +%Y-%m-%d-%H%M)-update-overviews"
+mkdir -p "$dir" "$base/tasks" "$base/reports"
+echo "$dir"
+\`\`\`
+Return runDir = the absolute path printed (it must start with / and end in -update-overviews).`,
   {
     label: "run-setup",
     phase: "Select",
@@ -466,13 +477,20 @@ Return the absolute run dir and whether you started it.`,
     schema: {
       type: "object",
       additionalProperties: false,
-      properties: { runDir: { type: "string" }, started: { type: "boolean" } },
-      required: ["runDir", "started"],
+      properties: { runDir: { type: "string" } },
+      required: ["runDir"],
     },
   },
 );
-const RUN_DIR = (runInfo && runInfo.runDir) || null;
-const WE_STARTED_RUN = !!(runInfo && runInfo.started);
+const RUN_DIR =
+  runInfo && typeof runInfo.runDir === "string" && runInfo.runDir.startsWith("/")
+    ? runInfo.runDir
+    : null;
+// Inline env prefix that pins a CLI mutation to RUN_DIR regardless of `.current-run`.
+// Empty when run-setup failed — the mutation still runs, just unlogged (degraded, not fatal).
+const runEnv = RUN_DIR ? `RELEASES_RUN_DIR="${RUN_DIR}" ` : "";
+if (!RUN_DIR)
+  log("run-setup: could not create an isolated run dir — mutations this sweep go unlogged");
 
 // ── Phase: Fetch ───────────────────────────────────────────────────────────
 const fetchFailed = new Set();
@@ -483,7 +501,7 @@ if (FETCH !== "none") {
   for (const t of toFetch) {
     // eslint-disable-next-line no-await-in-loop -- serial by design: concurrent managed-agent fetches return 409
     const fr = await agent(
-      `Fetch all active sources for org "${t.slug}" so its overview reflects the latest releases. Run \`releases admin source fetch --org ${t.slug} --wait\`. Report ok=true only if it exited 0; otherwise ok=false with a one-line error. Do NOT regenerate anything.`,
+      `Fetch all active sources for org "${t.slug}" so its overview reflects the latest releases. Run this command EXACTLY${runEnv ? ", keeping the leading `RELEASES_RUN_DIR=…` prefix that pins the fetch to this sweep's isolated run" : ""}: \`${runEnv}releases admin source fetch --org ${t.slug} --wait\`. Report ok=true only if it exited 0; otherwise ok=false with a one-line error. Do NOT regenerate anything.`,
       { label: `fetch:${t.slug}`, phase: "Fetch", model: "haiku", schema: FETCH_SCHEMA },
     );
     if (!fr || fr.ok === false) {
@@ -540,34 +558,40 @@ const summaryInputs = {
   spentTokens,
   results,
 };
-const rep = await agent(
-  `Write the maintenance run summary for this overview sweep. Do these steps IN ORDER:
+// Deterministic report path: computed in-script, not re-resolved by the agent from
+// the (racy) active-run pointer. When run-setup failed there's nowhere to write —
+// skip the report rather than have the agent guess a dir.
+const SUMMARY_PATH = RUN_DIR ? RUN_DIR + "/summary.md" : null;
+let rep = null;
+if (!SUMMARY_PATH) {
+  log("report: no isolated run dir — skipping summary.md (sweep results are in the return value)");
+} else {
+  rep = await agent(
+    `Write the maintenance run summary for this overview sweep to this EXACT absolute path (do not derive it from \`work status\` — it is already resolved): ${SUMMARY_PATH}
 
-1. Write the summary file to: ${RUN_DIR ? RUN_DIR + "/summary.md" : "<run dir from `releases admin work status --json`>/summary.md"}
-   Follow docs/architecture/maintenance-workspace.md's summary.md template (status, per-org result table, cost, what changed, findings). Use these numbers VERBATIM (do not invent): ${JSON.stringify(summaryInputs)}.
+Steps IN ORDER:
+1. Write the file at ${SUMMARY_PATH} following docs/architecture/maintenance-workspace.md's summary.md template (status, per-org result table, cost, what changed, findings). Use these numbers VERBATIM (do not invent): ${JSON.stringify(summaryInputs)}.
    Cost line, exactly: "${spentTokens} output tokens this turn (budget.spent(), excludes this summary write); session sub-agent tokens, no managed-agent bill — except any needsFetch source fetches." Stamp the date via \`date -u +%FT%TZ\`. Call out as findings: lint-flagged bodies (uploaded anyway — operator should review), empty-window skips (no-ops), fetch errors (regen correctly skipped), and any org where a prior overview's citations were stripped to zero.
-
-2. Self-verify the file was written: run \`test -f "<absolute path>" && echo EXISTS || echo MISSING\`. If MISSING, write it again before continuing.
-
-3. ${WE_STARTED_RUN ? "Run `releases admin work end` (this run started it)." : "Do NOT run `releases admin work end` — a parent sweep owns this run."}
-
-4. Return the absolute report path and set \`wrote\` to true if the file exists, false if not.`,
-  {
-    label: "run-report",
-    phase: "Report",
-    model: "haiku",
-    schema: {
-      type: "object",
-      additionalProperties: false,
-      properties: { reportPath: { type: "string" }, wrote: { type: "boolean" } },
-      required: ["reportPath", "wrote"],
+2. Self-verify it landed at that exact path: run \`test -f "${SUMMARY_PATH}" && echo EXISTS || echo MISSING\`. If MISSING, write it again and re-check. Only set wrote=true once the check prints EXISTS.
+3. Do NOT run \`releases admin work end\` — this workflow does not use the shared run pointer.
+4. Return reportPath=${SUMMARY_PATH} and wrote = whether the test -f check printed EXISTS.`,
+    {
+      label: "run-report",
+      phase: "Report",
+      model: "haiku",
+      schema: {
+        type: "object",
+        additionalProperties: false,
+        properties: { reportPath: { type: "string" }, wrote: { type: "boolean" } },
+        required: ["reportPath", "wrote"],
+      },
     },
-  },
-);
-if (!rep || !rep.wrote || !rep.reportPath) {
-  log(
-    `WARNING: run-report agent did not confirm summary.md was written (wrote=${rep?.wrote}, reportPath=${rep?.reportPath || "(empty)"}). Check ${RUN_DIR || "the run dir"} manually.`,
   );
+  if (!rep || !rep.wrote) {
+    log(
+      `WARNING: run-report agent did not confirm summary.md landed at ${SUMMARY_PATH} (wrote=${rep?.wrote}). Write it by hand from the return value.`,
+    );
+  }
 }
 
 return {
@@ -588,5 +612,7 @@ return {
   citationsStripped: citationsStripped.map((r) => r.slug),
   deferredForBudget,
   actualCostTokens: spentTokens,
-  reportPath: (rep && rep.reportPath) || null,
+  runDir: RUN_DIR,
+  reportPath: SUMMARY_PATH,
+  reportWritten: !!(rep && rep.wrote),
 };

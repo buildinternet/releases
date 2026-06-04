@@ -71,7 +71,7 @@ Truly incremental re-runs (`skippedKnown > 0`) only happen after the source alre
 
 ## After a run
 
-The Workflow records the run under `~/.releases/work/` via `releases admin work start` (summary per source, cost line grounded in `budget.spent()`, cross-run sweep report). Review the report for data-quality findings (empty content, thin pages, deferred-for-budget pages).
+The Workflow records the run under `~/.releases/work/` in an **isolated** run dir it mints itself (summary per source, cost line grounded in `budget.spent()`, cross-run sweep report). It deliberately does **not** use `releases admin work start` / the shared `.current-run` pointer — that pointer is global and leaks across concurrent sessions (#1396), so an automated sweep that held it would absorb an unrelated session's mutations. A sweep threads its run dir to each nested source; per-source summaries are namespaced `summary-<slug>.md` to avoid clobbering. Because no pointer is set, these runs don't appear in `releases admin work status`. Review the cross-run report (`reports/<date>-backfill-sweep.md`) for data-quality findings (empty content, thin pages, deferred-for-budget pages). See [maintenance-workspace.md → Concurrency](../../../../docs/architecture/maintenance-workspace.md).
 
 ## Related
 

@@ -8,6 +8,8 @@ import {
   dedupeRecords,
   chunk,
   finalStatus,
+  summaryPath,
+  sweepReportPath,
 } from "./backfill-helpers.js";
 
 test("preflightDecision: proceed/refuse/unknown-with-retry", () => {
@@ -77,4 +79,23 @@ test("chunk: splits into bounded groups", () => {
 test("finalStatus: partial-budget when anything deferred", () => {
   expect(finalStatus(0)).toBe("completed");
   expect(finalStatus(3)).toBe("partial-budget");
+});
+
+test("summaryPath: canonical standalone, slug-namespaced under a sweep, null run dir → null", () => {
+  const dir = "/home/u/.releases/work/runs/2026-06-04-0944-backfill-inngest";
+  expect(summaryPath(dir, "inngest", false)).toBe(dir + "/summary.md");
+  // Under a sweep, siblings share one dir → each summary is namespaced (no clobber).
+  expect(summaryPath(dir, "inngest", true)).toBe(dir + "/summary-inngest.md");
+  expect(summaryPath(null, "inngest", true)).toBeNull();
+});
+
+test("sweepReportPath: runs/<ts>-batch → sibling reports/<date>-backfill-sweep.md", () => {
+  expect(sweepReportPath("/home/u/.releases/work/runs/2026-06-04-0944-backfill-sweep")).toBe(
+    "/home/u/.releases/work/reports/2026-06-04-backfill-sweep.md",
+  );
+  // Honors a custom RELEASES_DATA_DIR root (only the trailing /runs/<name> is rewritten).
+  expect(sweepReportPath("/data/work/runs/2026-01-09-2312-backfill-sweep")).toBe(
+    "/data/work/reports/2026-01-09-backfill-sweep.md",
+  );
+  expect(sweepReportPath(null)).toBeNull();
 });

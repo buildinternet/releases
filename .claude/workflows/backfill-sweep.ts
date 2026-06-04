@@ -10,6 +10,18 @@ export const meta = {
   ],
 };
 
+// ── Inlined deterministic helper ────────────────────────────────────────────
+// MIRRORED VERBATIM from tests/workflows/backfill-helpers.js (Workflow scripts
+// can't import). Unit-tested there; workflow-scripts.test.ts guards drift.
+// Do not edit here without editing the module — the drift guard will fail.
+
+function sweepReportPath(runDir) {
+  if (!runDir) return null;
+  const reportsDir = runDir.replace(/\/runs\/[^/]+$/, "/reports");
+  const date = (runDir.split("/").pop() || "").slice(0, 10);
+  return `${reportsDir}/${date}-backfill-sweep.md`;
+}
+
 let input = args;
 if (typeof input === "string") {
   try {
@@ -34,28 +46,53 @@ if (!SOURCES.length) {
 
 // ── Phase: Sweep ─────────────────────────────────────────────────────────────
 phase("Sweep");
-// Own one maintenance run so each nested per-source run reuses it (no .current-run collisions).
-await agent(
-  `Start a maintenance run for this sweep: \`releases admin work start backfill-sweep --json\` and \`mkdir -p ~/.releases/work/tasks ~/.releases/work/reports\`. Return { ok: true }.`,
+// Own ONE isolated maintenance run and thread its dir to every nested backfill so
+// siblings share it WITHOUT the shared global `.current-run` pointer (#1396). We
+// do not `work start` — that pointer leaks across concurrent sessions; we mint a
+// fresh timestamped dir directly (same layout as run-dir.ts, honoring
+// RELEASES_DATA_DIR) and pass its absolute path down via `runDir`.
+const runInfo = await agent(
+  `Create an ISOLATED maintenance run dir for this backfill sweep. Do NOT run \`releases admin work start\` (it sets a shared pointer that leaks across sessions). Run exactly this, then return the absolute dir it prints:
+\`\`\`
+base="\${RELEASES_DATA_DIR:-\${RELEASED_DATA_DIR:-$HOME/.releases}}/work"
+dir="$base/runs/$(date +%Y-%m-%d-%H%M)-backfill-sweep"
+mkdir -p "$dir" "$base/tasks" "$base/reports"
+echo "$dir"
+\`\`\`
+Return runDir = the absolute path printed (it must start with / and end in -backfill-sweep).`,
   {
-    label: "sweep-run-start",
+    label: "sweep-run-setup",
     phase: "Sweep",
     model: "haiku",
     schema: {
       type: "object",
       additionalProperties: false,
-      properties: { ok: { type: "boolean" } },
-      required: ["ok"],
+      properties: { runDir: { type: "string" } },
+      required: ["runDir"],
     },
   },
 );
+const RUN_DIR =
+  runInfo && typeof runInfo.runDir === "string" && runInfo.runDir.startsWith("/")
+    ? runInfo.runDir
+    : null;
+if (!RUN_DIR)
+  log("sweep-run-setup: could not create an isolated run dir — per-source runs self-isolate");
 
 const results = [];
 for (const source of SOURCES) {
   log(`sweep: backfilling ${source}${DRY ? " (dry-run)" : ""}`);
   let r;
   try {
-    r = await workflow("backfill-source", { source, maxReleases: MAX, dryRun: DRY, model: MODEL });
+    // Pass the sweep's run dir so each source logs/reports into it (RUN_DIR null →
+    // child mints its own isolated run; still pointer-free, just not co-located).
+    r = await workflow("backfill-source", {
+      source,
+      maxReleases: MAX,
+      dryRun: DRY,
+      model: MODEL,
+      runDir: RUN_DIR || undefined,
+    });
   } catch (e) {
     r = { status: "error", source, error: String((e && e.message) || e) };
   }
@@ -69,11 +106,17 @@ const SUCCESS = new Set(["completed", "dry-run", "partial-budget"]);
 const ok = results.filter((r) => r && SUCCESS.has(r.status)).length;
 const budgetStopped = results.filter((r) => r && r.status === "partial-budget").length;
 const sweepStatus = ok === 0 ? "failed" : ok >= SOURCES.length ? "completed" : "partial";
+// Deterministic cross-run report path, derived from the in-script run dir.
+// No run dir → fall back to letting the agent stamp the date (best-effort).
+const REPORT_PATH = sweepReportPath(RUN_DIR);
+const reportDest = REPORT_PATH
+  ? `this EXACT absolute path (already resolved — do not re-derive it): ${REPORT_PATH}`
+  : "~/.releases/work/reports/<date>-backfill-sweep.md (stamp <date> via `date -u +%F`)";
 const rep = await agent(
-  `Write a cross-run sweep report to ~/.releases/work/reports/<date>-backfill-sweep.md using docs/architecture/maintenance-workspace.md's report template (pass-rate + cost table + findings). Stamp <date> via \`date -u +%F\`.
+  `Write a cross-run sweep report to ${reportDest} using docs/architecture/maintenance-workspace.md's report template (pass-rate + cost table + findings).
 ${budgetStopped} source(s) stopped on the budget gate (status "partial-budget") — call these out as resumable, not failed.
 Per-source results (use verbatim): ${JSON.stringify(results)}.
-Then run \`releases admin work end\` to close the sweep's run. Return the absolute report path.`,
+${REPORT_PATH ? `Self-verify it landed: \`test -f "${REPORT_PATH}" && echo EXISTS || echo MISSING\`; if MISSING, write it again. ` : ""}Do NOT run \`releases admin work end\` — this sweep does not use the shared run pointer. Return the absolute report path.`,
   {
     label: "sweep-report",
     phase: "Report",
@@ -91,6 +134,7 @@ return {
   sources: SOURCES.length,
   succeeded: ok,
   budgetStopped,
-  reportPath: (rep && rep.reportPath) || null,
+  runDir: RUN_DIR,
+  reportPath: REPORT_PATH || (rep && rep.reportPath) || null,
   results,
 };
