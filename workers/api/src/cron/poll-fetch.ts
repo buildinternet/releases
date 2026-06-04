@@ -35,6 +35,7 @@ import {
   appStoreCoordFromSource,
   mapListingToRawReleases,
 } from "@releases/adapters/appstore";
+import { fetchHelpCenter } from "@releases/adapters/helpcenter";
 import { refreshAppStoreListing } from "../lib/appstore-materialize.js";
 import { fetchAndParseVideoFeed, resolveVideoProvider } from "@releases/adapters/video";
 import { loadFetchQuirks, type FetchQuirk } from "@releases/ai-internal/playbook";
@@ -1205,6 +1206,10 @@ export async function ingestRawReleases(
       title: raw.title,
       content,
       url: raw.url ?? null,
+      // Honor an adapter-provided release type (e.g. the Zendesk adapter classes
+      // periodic digests as `rollup`); existing feed/github/appstore adapters
+      // leave it unset, so this is a no-op for them (column default `feature`).
+      type: raw.type ?? "feature",
       contentHash: contentHash({ ...raw, content }),
       contentChars: size.contentChars,
       contentTokens: size.contentTokens,
@@ -1408,6 +1413,13 @@ export async function fetchOne(
             .where(eq(sources.id, source.id));
         }
       }
+    } else if (meta.helpCenter?.provider) {
+      // Help-center API source (type:feed whose feedUrl is a vendor JSON API,
+      // not RSS/Atom — e.g. Zendesk). Route to the deterministic parser instead
+      // of fetchAndParseFeed. Newest-first single page is enough for steady state:
+      // new articles land on page 1 and the UNIQUE(source_id, url) upsert dedups
+      // the overlap; deeper history is a one-time local backfill.
+      rawReleases = await fetchHelpCenter(source, { maxEntries });
     } else {
       if (!meta.feedUrl || !meta.feedType) {
         logEvent("warn", {

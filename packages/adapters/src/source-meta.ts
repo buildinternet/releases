@@ -312,6 +312,22 @@ export interface SourceMetadata {
     lastCheckId?: string; // observability
     lastChangeAt?: string; // observability (ISO)
   };
+
+  /**
+   * Help-center API routing. A `type: "feed"` source whose `feedUrl` points at a
+   * vendor Help Center API (not RSS/Atom) carries this block so the feed
+   * dispatcher routes the fetch to the matching deterministic parser instead of
+   * `fetchAndParseFeed`. `provider` selects the parser (`zendesk` →
+   * `/api/v2/help_center/.../sections/<id>/articles.json`, one article → one
+   * release). `releaseType` classifies every article from the source — set
+   * `"rollup"` for periodic-digest sections (weekly release notes, monthly
+   * "what's new"); omit for per-feature sections. See
+   * `packages/adapters/src/helpcenter.ts`.
+   */
+  helpCenter?: {
+    provider: "zendesk";
+    releaseType?: "feature" | "rollup";
+  };
 }
 
 /** Parse the JSON metadata blob from a source row. */
