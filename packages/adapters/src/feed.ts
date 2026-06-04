@@ -315,7 +315,13 @@ export async function fetchAndParseFeed(
     releases = releases.filter((r) => !r.publishedAt || r.publishedAt >= options.since!);
   }
   if (options?.maxEntries) {
-    releases = releases.slice(0, options.maxEntries);
+    // A positional cap drops the newest entries on oldest-first feeds (e.g.
+    // Hugo's default index.xml, which releases.1password.com serves). Sort
+    // newest-first before truncating so the cap keeps the most recent
+    // releases regardless of feed document order. Undated items sink last.
+    releases = [...releases]
+      .sort((a, b) => (b.publishedAt?.getTime() ?? 0) - (a.publishedAt?.getTime() ?? 0))
+      .slice(0, options.maxEntries);
   }
 
   return { releases, etag, lastModified, contentLength };
