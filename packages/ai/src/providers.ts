@@ -121,6 +121,23 @@ const PROVIDERS: ProviderDef[] = [
     },
   },
   {
+    id: "document360",
+    name: "Document360",
+    // Document360 help centers (e.g. help.gong.io) server-render their content and
+    // carry `document360` markers (cdn.us.document360.io asset URLs, etc.) dozens of
+    // times in <head>. Listed BEFORE Ghost on purpose: the Document360 bundle emits a
+    // `ghost-serverApp` token that false-matches Ghost's loose `ghost-` pattern, and
+    // detectFromHttpSignals is first-match-wins — so Document360 must be evaluated first.
+    htmlPatterns: ["document360"],
+    hints: {
+      // No public RSS/Atom feed. The "what's new" pages are single-page scrape targets
+      // and content is present in the initial HTML, so no headless render is needed.
+      changelogPaths: ["/docs/whats-new", "/docs/release-notes", "/docs/changelog"],
+      preferredType: "scrape",
+      staticContent: true,
+    },
+  },
+  {
     id: "ghost",
     name: "Ghost",
     headers: { "x-ghost-cache-status": "" },
