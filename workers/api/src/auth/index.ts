@@ -200,16 +200,20 @@ export function deriveCookieDomain(env: Bindings): string | undefined {
 }
 
 /**
- * Scoped, credentialed CORS for `/api/auth/*`. The worker's global `cors()` is
+ * Scoped, credentialed CORS for `/api/auth/*` AND the session-authed self-serve
+ * surface `/v1/api-keys` (see index.ts). The worker's global `cors()` is
  * wildcard-origin / no-credentials, which cannot carry `Access-Control-Allow-
- * Credentials`; auth needs a reflected origin + credentials so the browser will
- * send and store the session cookie. MUST be registered BEFORE the global
- * `cors()` so it owns the auth preflight (the first matching CORS middleware
+ * Credentials`; both surfaces need a reflected origin + credentials so the browser
+ * will send and store the session cookie. MUST be registered BEFORE the global
+ * `cors()` so it owns the preflight (the first matching CORS middleware
  * answers OPTIONS and returns). Allow-list mirrors {@link authTrustedOrigins}: the
  * releases.sh/.localhost family (our first-party web surfaces), every operator-
  * configured `BETTER_AUTH_TRUSTED_ORIGINS` entry (Vercel preview / portless dev
  * host), and bare-loopback origins outside production. Keeping the two in lockstep
  * means CORS never silently blocks an origin Better Auth already trusts.
+ *
+ * `DELETE` is allowed for the `/v1/api-keys/:id` revoke endpoint — Better Auth's
+ * own `/api/auth/*` routes are POST/GET only, so it's a no-op there.
  */
 export function authCorsMiddleware(): MiddlewareHandler<Env> {
   return cors({
@@ -222,7 +226,7 @@ export function authCorsMiddleware(): MiddlewareHandler<Env> {
       return null;
     },
     allowHeaders: ["Content-Type", "Authorization"],
-    allowMethods: ["POST", "GET", "OPTIONS"],
+    allowMethods: ["POST", "GET", "DELETE", "OPTIONS"],
     exposeHeaders: ["Content-Length"],
     maxAge: 600,
     credentials: true,

@@ -36,6 +36,22 @@ describe("/v1/api-keys credentialed CORS", () => {
     expect(res.headers.get("access-control-allow-credentials")).toBe("true");
   });
 
+  it("allows the DELETE method on a /v1/api-keys/:id revoke preflight", async () => {
+    const res = await makeApp().request(
+      "/v1/api-keys/ak_1",
+      {
+        method: "OPTIONS",
+        headers: {
+          Origin: "https://releases.sh",
+          "Access-Control-Request-Method": "DELETE",
+        },
+      },
+      { ENVIRONMENT: "production" } as never,
+    );
+    expect(res.headers.get("access-control-allow-origin")).toBe("https://releases.sh");
+    expect(res.headers.get("access-control-allow-methods")).toContain("DELETE");
+  });
+
   it("keeps wildcard CORS on other public routes", async () => {
     const res = await makeApp().request(
       "/v1/orgs",
