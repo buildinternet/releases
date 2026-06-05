@@ -14,7 +14,7 @@ import { createDb } from "../db.js";
 import { touchLastUsed, verifyApiToken } from "./token-store.js";
 import type { Env } from "../index.js";
 import { createAuth } from "../auth/index.js";
-import { apiScopesFromPermissions } from "../auth/api-key-scope.js";
+import { apiScopesFromPermissions, clampUserKeyScopes } from "../auth/api-key-scope.js";
 
 export const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
@@ -149,7 +149,15 @@ async function resolveAuthUncached(
     if (!(await flag(c.env.FLAGS, c.env.USER_API_KEYS_ENABLED, FLAGS.userApiKeysEnabled)))
       return { kind: "none", skip: false };
     const v = await verifyUserKey(c, presented);
-    if (v.ok) return { kind: "token", tokenId: USER_API_KEY_PREFIX + v.keyId, scopes: v.scopes };
+    if (v.ok) {
+      // User keys are read-only. Clamp to the user-key ceiling regardless of the
+      // permissions stored on the key, so write/admin is unreachable for the
+      // user lane even if a write-permissioned relu_ key was minted or granted
+      // out-of-band. An empty result (no read) denies.
+      const scopes = clampUserKeyScopes(v.scopes);
+      if (scopes.length === 0) return { kind: "none", skip: false };
+      return { kind: "token", tokenId: USER_API_KEY_PREFIX + v.keyId, scopes };
+    }
     return v.rateLimited ? { kind: "rate_limited" } : { kind: "none", skip: false };
   }
 

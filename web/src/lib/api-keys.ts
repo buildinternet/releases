@@ -47,9 +47,12 @@ export async function listApiKeys(): Promise<UserApiKey[]> {
   return data.apiKeys;
 }
 
+// Self-serve user keys are read-only; the server caps the scope and an omitted
+// scope defaults to read. The display type (`UserApiKeyScope`) still admits
+// write/admin so an out-of-band key renders correctly in the list.
 export async function createApiKey(input: {
   name: string;
-  scope: "read" | "write";
+  scope?: "read";
   expiresInDays?: number;
 }): Promise<CreatedUserApiKey> {
   const res = await fetch(`${apiBase()}/v1/api-keys`, {

@@ -3,15 +3,16 @@ import { and, eq } from "drizzle-orm";
 import { createDb } from "../db.js";
 import { apikey } from "../db/schema-auth.js";
 import { createAuth } from "../auth/index.js";
-import { scopeToPermissions, apiScopesFromPermissions } from "../auth/api-key-scope.js";
+import {
+  scopeToPermissions,
+  apiScopesFromPermissions,
+  isWithinUserKeyCeiling,
+  USER_API_KEY_MAX_SCOPE,
+} from "../auth/api-key-scope.js";
 import { type ApiScope } from "@buildinternet/releases-core/api-token";
 import { requireSession, execWaitUntil } from "../middleware/auth.js";
 import { logEvent } from "@releases/lib/log-event";
 import type { Env } from "../index.js";
-
-function isSelfServeScope(s: unknown): s is "read" | "write" {
-  return s === "read" || s === "write";
-}
 
 /** Parse a JSON body, or null if it isn't valid JSON. */
 export async function parseJsonBody(c: Context<Env>): Promise<Record<string, unknown> | null> {
@@ -58,9 +59,17 @@ userApiKeyHandlers.post("/api-keys", async (c) => {
   const name = typeof body.name === "string" ? body.name.trim() : "";
   if (!name) return c.json({ error: "bad_request", message: "name is required" }, 400);
 
-  // The server-side scope ceiling: self-serve mints read/write only, never admin.
-  if (!isSelfServeScope(body.scope)) {
-    return c.json({ error: "bad_request", message: "scope must be 'read' or 'write'" }, 400);
+  // The server-side scope ceiling: self-serve keys are capped at
+  // USER_API_KEY_MAX_SCOPE (read today). A missing scope defaults to the
+  // ceiling; anything above it is refused rather than silently downgraded so a
+  // caller asking for write gets an explicit error. Ceiling-aware, matching the
+  // auth-time clamp, so this stays correct if the ceiling is ever raised.
+  const requestedScope = body.scope === undefined ? USER_API_KEY_MAX_SCOPE : body.scope;
+  if (!isWithinUserKeyCeiling(requestedScope)) {
+    return c.json(
+      { error: "bad_request", message: `scope must be '${USER_API_KEY_MAX_SCOPE}'` },
+      400,
+    );
   }
 
   let expiresIn: number | undefined;
@@ -104,19 +113,19 @@ userApiKeyHandlers.post("/api-keys", async (c) => {
     body: {
       name,
       userId: session.user.id,
-      permissions: scopeToPermissions(body.scope),
+      permissions: scopeToPermissions(requestedScope),
       metadata: { plan: "default" },
       ...(expiresIn ? { expiresIn } : {}),
     },
   });
-  // `body.scope` is already validated to "read" | "write", which is exactly the
-  // ladder label scopeLabel(scopeToPermissions(scope)) would round-trip back to.
+  // `requestedScope` is validated to be within the user-key ceiling, which is
+  // exactly the ladder label scopeLabel(scopeToPermissions(scope)) round-trips.
 
   logEvent("info", {
     component: "user-api-keys",
     event: "created",
     keyId: created.id,
-    scope: body.scope,
+    scope: requestedScope,
   });
 
   // The full key is returned exactly once and is never retrievable again.
@@ -126,7 +135,7 @@ userApiKeyHandlers.post("/api-keys", async (c) => {
       id: created.id,
       name: created.name,
       start: created.start,
-      scope: body.scope,
+      scope: requestedScope,
       remaining: created.remaining,
       expiresAt: created.expiresAt ? new Date(created.expiresAt).toISOString() : null,
       createdAt: new Date(created.createdAt).toISOString(),
