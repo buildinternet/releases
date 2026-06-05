@@ -30,6 +30,7 @@ import { buildSearchMeta } from "./lib/pagination.js";
 import type { SearchMode } from "@buildinternet/releases-core/schema";
 import { KIND_VALUES, type Kind } from "@buildinternet/releases-core/kinds";
 import { scopeSatisfies, type ApiScope } from "@buildinternet/releases-core/api-token";
+import { scopeErrorText } from "./scope-error.js";
 import { parseCoordinate } from "@buildinternet/releases-core/lookup-coordinate";
 import type { LookupResultPayload } from "@buildinternet/releases-api-types";
 import { getSecret, getSecretWithFallback } from "@releases/lib/secrets";
@@ -200,12 +201,7 @@ function withPagination<T extends Record<string, z.ZodTypeAny>>(schema: T) {
 /** Tool-level scope failure surfaced to the model (not a protocol error). */
 function scopeError(required: ApiScope): ToolResult {
   return {
-    content: [
-      {
-        type: "text",
-        text: `insufficient_scope: this MCP tool requires a '${required}'-scoped API token. Present one via Authorization: Bearer relk_…`,
-      },
-    ],
+    content: [{ type: "text", text: scopeErrorText(required) }],
     isError: true,
   };
 }
