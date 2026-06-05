@@ -1,6 +1,6 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { oneTap } from "better-auth/plugins";
+import { oneTap, magicLink } from "better-auth/plugins";
 import { dash } from "@better-auth/infra";
 import { cors } from "hono/cors";
 import type { MiddlewareHandler } from "hono";
@@ -14,6 +14,7 @@ import {
   sendAuthEmail,
   verifyEmailTemplate,
   resetPasswordTemplate,
+  magicLinkTemplate,
   type AuthEmailMessage,
 } from "./email.js";
 
@@ -316,9 +317,29 @@ export async function createAuth(
   // fail-safe seam as `buildSocialProviders`: present → mounts; absent → omitted.
   // The client id is the one Google already uses for the social provider; pass it
   // explicitly rather than leaning on the plugin's socialProviders fallback.
+  //
+  // Magic link (`/api/auth/sign-in/magic-link`, `/api/auth/magic-link/verify`):
+  // passwordless email sign-in. Always registered — unlike the social providers it
+  // needs no credential pair, only the AUTH_EMAIL binding already used by the
+  // verify/reset emails (a missing binding degrades to a logged no-send, never a
+  // crash). The verification token rides Better Auth's existing `verification`
+  // table; `storeToken: "hashed"` keeps only a hash at rest so a D1 read can't
+  // replay a live link, and the token is single-use + 15-min TTL. disableSignUp is
+  // left default-false: an unknown email auto-creates a verified account on click
+  // (Better Auth writes `name: ""` when none is supplied — satisfies the NOT NULL
+  // `user.name` column). The send routes through the same `scheduleSend` →
+  // `waitUntil` seam as verify/reset so it outlives the response on Workers.
   const plugins = [
     ...(dashApiKey ? [dash({ apiKey: dashApiKey, activityTracking: { enabled: true } })] : []),
     ...(socialProviders.google ? [oneTap({ clientId: socialProviders.google.clientId })] : []),
+    magicLink({
+      expiresIn: 60 * 15,
+      storeToken: "hashed",
+      sendMagicLink: async ({ email, url }) => {
+        const msg: AuthEmailMessage = { to: email, ...magicLinkTemplate({ url }) };
+        scheduleSend(() => sendEmail(msg));
+      },
+    }),
   ];
 
   return betterAuth({
