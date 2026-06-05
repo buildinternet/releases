@@ -1,20 +1,23 @@
 /**
- * Persist a local eval run to the gitignored tests/evals/results/ dir — the
- * location the eval framework reserved in .gitignore back in #81. Writes one
- * timestamped JSON per run plus a `<eval>-latest.json` pointer for quick access.
+ * Persist a local eval run to the global data dir at `~/.releases/evals/results/`
+ * (via getEvalsDir) — out of the repo tree, alongside logs and runs, the same
+ * way the CLI persists logs. Writes one timestamped JSON per run plus a
+ * `<eval>-latest.json` pointer for quick access.
  *
  * Each record carries the git SHA (which prompt version was under test), the
  * model, the pass/fail gate, and per-case detail, so two runs are directly
  * diffable across a prompt or model change.
  *
- * Honors RELEASES_EVAL_DIR to relocate the results dir (e.g. point it at
- * ~/.releases/evals to keep results out of the repo tree entirely).
+ * Honors RELEASES_EVAL_DIR to point the results dir somewhere else entirely
+ * (e.g. back into the repo tree); RELEASES_DATA_DIR relocates the whole
+ * `~/.releases` root.
  *
  * Local/ad-hoc only — these scripts never run in CI.
  */
 import { mkdirSync, writeFileSync } from "fs";
 import { join } from "path";
 import { spawnSync } from "child_process";
+import { getEvalsDir } from "@releases/lib/config";
 
 export interface EvalRunInput {
   /** Short eval name, used as the filename prefix (e.g. "marketing", "summary"). */
@@ -31,7 +34,7 @@ export interface EvalRunInput {
 
 function resultsDir(): string {
   const override = process.env.RELEASES_EVAL_DIR;
-  return override && override.length > 0 ? override : join(import.meta.dir, "results");
+  return override && override.length > 0 ? override : join(getEvalsDir(), "results");
 }
 
 function gitSha(): string | null {

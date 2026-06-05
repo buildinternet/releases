@@ -23,6 +23,19 @@ export function getLogsDir(): string {
   return dir;
 }
 
+/**
+ * Home for local eval artifacts (`~/.releases/evals` by default). Mirrors
+ * getLogsDir: eval results and review workspaces live under the global data dir
+ * — out of the repo tree, alongside logs — rather than inside tests/evals. The
+ * eval harness writes `evals/results/` (saveRun JSON) and `evals/runs/` (viewer
+ * workspaces) under here.
+ */
+export function getEvalsDir(): string {
+  const dir = join(getDataDir(), "evals");
+  mkdirSync(dir, { recursive: true });
+  return dir;
+}
+
 export const config = {
   anthropicApiKey: () => process.env.ANTHROPIC_API_KEY || "",
   cloudflareAccountId: () => process.env.CLOUDFLARE_ACCOUNT_ID || "",

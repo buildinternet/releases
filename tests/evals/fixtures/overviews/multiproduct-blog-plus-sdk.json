@@ -1,0 +1,66 @@
+{
+  "input": {
+    "org": {
+      "name": "Northwind",
+      "description": "Issue tracking and project planning for software teams"
+    },
+    "sources": [
+      { "name": "Northwind Blog" },
+      { "name": "Northwind Changelog" },
+      { "name": "northwind-sdk (GitHub)" }
+    ],
+    "selected": [
+      {
+        "id": "rel_agent_ga",
+        "title": "Northwind Agent is now generally available",
+        "version": null,
+        "content": "Northwind Agent moves out of beta. It reads an issue, proposes a plan, and opens a draft pull request linked back to the issue. Teams can scope which repositories the agent may touch and require human approval before any branch is pushed. Agent runs now show a step-by-step trace so reviewers can see what it read and why it acted. Available on all paid plans today.",
+        "publishedAt": "2026-05-28",
+        "url": "https://northwind.example/blog/agent-ga",
+        "media": [
+          {
+            "type": "image",
+            "url": "https://northwind.example/img/agent-trace.png",
+            "alt": "Agent run trace view"
+          }
+        ]
+      },
+      {
+        "id": "rel_triage_views",
+        "title": "Saved triage views",
+        "version": null,
+        "content": "You can now save a filtered triage view and share it with your team. Views combine assignee, label, priority, and a time window, and they update live as issues change. A shared view shows the same ordering for everyone, so standups stop drifting. Views are pinned to the left sidebar and can be set as a team default.",
+        "publishedAt": "2026-05-21",
+        "url": "https://northwind.example/changelog/saved-triage-views"
+      },
+      {
+        "id": "rel_webhooks_retry",
+        "title": "Webhook delivery retries and a dead-letter log",
+        "version": null,
+        "content": "Outbound webhooks now retry with exponential backoff for up to 24 hours, and any delivery that exhausts its retries lands in a per-workspace dead-letter log you can inspect and replay. Each attempt records the response status and latency. This replaces the previous fire-and-forget delivery that silently dropped failures.",
+        "publishedAt": "2026-05-19",
+        "url": "https://northwind.example/changelog/webhook-retries"
+      },
+      {
+        "id": "rel_sdk_240",
+        "title": "northwind-sdk v2.4.0",
+        "version": "2.4.0",
+        "content": "Adds typed helpers for the saved-views API and a small client for replaying dead-letter webhook events. No breaking changes. Drops Node 18 from the support matrix; Node 20+ is required.",
+        "publishedAt": "2026-05-22",
+        "url": "https://github.com/northwind/northwind-sdk/releases/tag/v2.4.0"
+      },
+      {
+        "id": "rel_sdk_241",
+        "title": "northwind-sdk v2.4.1",
+        "version": "2.4.1",
+        "content": "Patch release. Fixes a pagination cursor bug in listIssues() that could skip the last page when the page size evenly divided the result count.",
+        "publishedAt": "2026-05-30",
+        "url": "https://github.com/northwind/northwind-sdk/releases/tag/v2.4.1"
+      }
+    ],
+    "existingContent": null,
+    "totalAvailable": 18
+  },
+  "structural": { "maxMedia": 2 },
+  "citations": { "minCitations": 2 }
+}
