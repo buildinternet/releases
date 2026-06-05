@@ -142,6 +142,26 @@ userApiKeyHandlers.post("/api-keys", async (c) => {
   );
 });
 
+userApiKeyHandlers.get("/api-keys", async (c) => {
+  const session = c.get("session");
+  if (!session) return c.json({ error: "unauthorized", message: "Sign in required" }, 401);
+  const db = createDb(c.env.DB);
+  const rows = await db.select().from(apikey).where(eq(apikey.referenceId, session.user.id)).all();
+  return c.json({
+    apiKeys: rows.map((r) => ({
+      id: r.id,
+      name: r.name,
+      start: r.start,
+      scope: scopeLabel(parsePermissions(r.permissions)),
+      enabled: r.enabled,
+      remaining: r.remaining,
+      lastRequest: r.lastRequest ? r.lastRequest.toISOString() : null,
+      createdAt: r.createdAt.toISOString(),
+      expiresAt: r.expiresAt ? r.expiresAt.toISOString() : null,
+    })),
+  });
+});
+
 /** Production composition: requireSession then the handlers. */
 export const userApiKeyRoutes = new Hono<Env>();
 userApiKeyRoutes.use("/api-keys", requireSession);

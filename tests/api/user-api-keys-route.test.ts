@@ -107,3 +107,38 @@ describe("POST /v1/api-keys (create)", () => {
     );
   });
 });
+
+async function list(userId: string) {
+  const res = await appAs(userId).request("/api-keys", {}, env());
+  return {
+    status: res.status,
+    body: (await res.json()) as { apiKeys: Array<Record<string, unknown>> },
+  };
+}
+
+describe("GET /v1/api-keys (list)", () => {
+  it("returns only the caller's keys, never the secret", async () => {
+    h = createTestDb();
+    seedUser("user_1", "u1@e.com");
+    seedUser("user_2", "u2@e.com");
+    await post("user_1", { name: "mine", scope: "read" });
+    await post("user_2", { name: "theirs", scope: "write" });
+
+    const { status, body } = await list("user_1");
+    expect(status).toBe(200);
+    expect(body.apiKeys).toHaveLength(1);
+    const k = body.apiKeys[0]!;
+    expect(k.name).toBe("mine");
+    expect(k.scope).toBe("read");
+    expect("key" in k).toBe(false); // the hashed/secret key is never projected
+    expect(typeof k.id).toBe("string");
+  });
+
+  it("returns an empty list for a user with no keys", async () => {
+    h = createTestDb();
+    seedUser("user_1", "u1@e.com");
+    const { status, body } = await list("user_1");
+    expect(status).toBe(200);
+    expect(body.apiKeys).toEqual([]);
+  });
+});
