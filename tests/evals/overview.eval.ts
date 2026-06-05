@@ -29,6 +29,22 @@ import { saveRun } from "./results";
 
 const JUDGE_MODEL = "claude-sonnet-4-6";
 
+/**
+ * Pull the JSON verdict out of the judge's raw text. The grader prompt asks for
+ * a bare object, but the API model still tends to wrap it in ```json fences or a
+ * one-line preamble ("Here is my evaluation:"), which makes a direct JSON.parse
+ * throw — every fixture then scores "unparseable". Strip a fenced block if
+ * present, else take the outermost {...} span, before parsing.
+ */
+export function extractJudgeJson(raw: string): string | null {
+  const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const candidate = fenced ? fenced[1] : raw;
+  const start = candidate.indexOf("{");
+  const end = candidate.lastIndexOf("}");
+  if (start === -1 || end === -1 || end <= start) return null;
+  return candidate.slice(start, end + 1);
+}
+
 /** The citation source set the API can legitimately resolve to (matches buildReleaseBlock). */
 function validSources(input: OverviewRequestInput): string[] {
   return input.selected.map((r) => r.url ?? `release://${r.id}`);
@@ -41,8 +57,8 @@ async function judge(
 ): Promise<{ ok: boolean; result: string }> {
   const prompt = buildGraderPrompt({ rubric, artifact: body, rubricLabel: "overview.md" });
   // The rubric has ~24 criteria, each with an evidence quote, so the JSON
-  // verdict runs well past 2K tokens; a low cap truncates it to invalid JSON
-  // and every fixture scores "unparseable". 8K leaves comfortable headroom.
+  // verdict runs well past 2K tokens; a low cap truncates it to invalid JSON.
+  // 8K leaves comfortable headroom.
   const res = await client.messages.create({
     model: JUDGE_MODEL,
     max_tokens: 8192,
@@ -53,7 +69,9 @@ async function judge(
     .map((b) => b.text)
     .join("");
   try {
-    const result = String(JSON.parse(raw).result ?? "failed");
+    const json = extractJudgeJson(raw);
+    if (json === null) return { ok: false, result: "unparseable" };
+    const result = String(JSON.parse(json).result ?? "failed");
     return { ok: result === "satisfied", result };
   } catch {
     return { ok: false, result: "unparseable" };
@@ -153,4 +171,6 @@ async function main() {
   process.exit(allPassed ? 0 : 1);
 }
 
-main();
+// Only run when invoked as a script (`bun run eval:overview`), not on import —
+// keeps the module importable for unit-testing helpers like extractJudgeJson.
+if (import.meta.main) main();

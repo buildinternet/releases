@@ -39,6 +39,47 @@ call. Honest caveats:
 Treat them as **free smoke tests**, complementary to the metered
 `bun run eval:{marketing,summary}` gates — not a replacement for them.
 
+### Why the local sub-agent path and the metered (direct-API) path diverge
+
+Both paths run the **same model family** (Haiku for generation, Sonnet for
+grading) — the weights are not the variable. What differs is _how the prompt
+reaches the model_, and for format-heavy tasks (like the overview rubric) that
+difference dominates the result. Three things change at once on the local path:
+
+1. **Instruction placement.** On the metered path the production prompt **is the
+   system prompt** (`messages.create({ system, messages })`) — the highest-priority
+   instruction channel, evaluated in one completion. On the local path the prompt
+   arrives as **tool-result data**: the `overview-writer` sub-agent runs under the
+   Claude Code _agent_ system prompt (tool list, loop instructions), then Reads the
+   composed prompt as the _contents of a file_. So "≤5 sections", "every section
+   opens with a bold tease" land as suggestions inside a document the model is
+   reading, not as system-level law. Models follow system instructions far more
+   reliably than instructions embedded in retrieved content — which is exactly why
+   the same rules produce clean structure on the API and random collapse/blowup
+   locally.
+2. **Agent-loop framing.** The sub-agent is primed to _be an agent_ (read,
+   deliberate, optionally ask). That is literally why thin-content fixtures can make
+   it return a clarifying question instead of an overview — a raw `messages.create`
+   has no notion of asking; it just completes.
+3. **Sampling params.** The Agent tool runs at whatever temperature/top-p the
+   harness chooses for sub-agents; it can't be pinned. Production sets its own.
+   Uncontrolled/higher temperature is why the _same_ fixture can come out a bald
+   paragraph one run and a 15-section wall the next.
+
+(There's also a smaller input-shape gap: production feeds releases as native
+`search_result` blocks — which also enables citations — whereas the local path
+flattens them to plain `<release>` text.)
+
+**Consequence for measurement:** the local path's harness-induced variance can be
+**larger than the prompt effect you're trying to detect**, so it is a reliable
+_smoke test_ ("is the prompt followable? does it ever refuse?") but a poor
+_instrument_ for a satisfied-rate delta. There is no "subscription raw-completion"
+primitive exposed locally: the only way to exercise the exact production code path
+(prompt-as-system, `search_result` blocks, pinned `claude-haiku-4-5`, production
+params) is the billable `client.messages.create` call. Detecting a small
+satisfied-rate change therefore needs **multiple metered samples per fixture**
+(single samples are inside the noise band), not the free path.
+
 ## How to run
 
 Three steps (the Workflow sandbox can't read files or import repo code, so the
