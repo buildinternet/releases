@@ -163,6 +163,7 @@
     "ENVIRONMENT": "production",
     "WEB_BOT_AUTH_ENABLED": "true",
     "USER_API_KEYS_ENABLED": "false",
+    "DEVICE_AUTHORIZATION_ENABLED": "false",
   },
   "d1_databases": [
     {
@@ -574,6 +575,7 @@
         "ENVIRONMENT": "staging",
         "WEB_BOT_AUTH_ENABLED": "false",
         "USER_API_KEYS_ENABLED": "false",
+        "DEVICE_AUTHORIZATION_ENABLED": "false",
       },
       "d1_databases": [
         {

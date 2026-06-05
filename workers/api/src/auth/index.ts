@@ -1,6 +1,6 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { oneTap, magicLink } from "better-auth/plugins";
+import { oneTap, magicLink, deviceAuthorization, bearer } from "better-auth/plugins";
 import { dash } from "@better-auth/infra";
 import { apiKey } from "@better-auth/api-key";
 import { cors } from "hono/cors";
@@ -12,7 +12,15 @@ import { FLAGS, flag } from "@releases/lib/flags";
 import { USER_API_KEY_PREFIX } from "@buildinternet/releases-core/api-token";
 import { scopeToPermissions } from "./api-key-scope.js";
 import { createDb } from "../db.js";
-import { user, session, account, verification, rateLimit, apikey } from "../db/schema-auth.js";
+import {
+  user,
+  session,
+  account,
+  verification,
+  rateLimit,
+  apikey,
+  deviceCode,
+} from "../db/schema-auth.js";
 import type { Env } from "../index.js";
 import {
   sendAuthEmail,
@@ -30,6 +38,15 @@ import {
 } from "./audit.js";
 
 type Bindings = Env["Bindings"];
+
+/**
+ * The single OAuth client id permitted to run the device-authorization flow.
+ * The CLI (`releases login`) sends this verbatim as `client_id`; the server's
+ * `validateClient` allow-list rejects anything else (fail closed). This is a
+ * public, non-secret identifier — it must stay in lockstep with the CLI's own
+ * `CLIENT_ID` constant in releases-cli `src/lib/device-auth.ts`.
+ */
+export const DEVICE_AUTH_CLIENT_ID = "releases-cli";
 
 /** A value bound as a Secrets Store binding (prod) or a plain string (local .dev.vars / wrangler var). */
 type SecretLike = string | Parameters<typeof getSecret>[0];
@@ -342,6 +359,17 @@ export async function createAuth(
   // default(false). Mirrors the middleware gate in middleware/auth.ts.
   const userApiKeysOn = await flag(env.FLAGS, env.USER_API_KEYS_ENABLED, FLAGS.userApiKeysEnabled);
 
+  // Device-authorization (RFC 8628) path that backs `releases login` — same flagged
+  // rollout discipline as the user-key path above. When off, neither the device
+  // plugin nor bearer() is registered, so the device endpoints simply don't exist.
+  // Device login mints relu_ keys via the /v1/api-keys route, which is itself gated
+  // on userApiKeysEnabled — so this flag is only USEFUL with that one also on.
+  const deviceAuthOn = await flag(
+    env.FLAGS,
+    env.DEVICE_AUTHORIZATION_ENABLED,
+    FLAGS.deviceAuthorizationEnabled,
+  );
+
   // Google One Tap (`/api/auth/one-tap/*`): the popup renders on the web origin
   // with the PUBLIC client id and posts the Google ID token here for verification.
   // Gated on Google being configured — the endpoint only verifies a Google ID
@@ -394,6 +422,32 @@ export async function createAuth(
           }),
         ]
       : []),
+    // Device-authorization (RFC 8628) for `releases login`. bearer() MUST ride
+    // alongside it: the device token endpoint returns a session access token that
+    // the CLI then presents as `Authorization: Bearer <token>` to the /v1/api-keys
+    // create route — bearer() is what makes `auth.api.getSession` (and thus
+    // `requireSession`) honor that header instead of only the cookie. verificationUri
+    // matches the web /device page route. validateClient is a fail-closed allow-list:
+    // only our known CLI client id may start a device flow (an unknown id can never
+    // obtain a token even though approval is interactive — defense in depth).
+    ...(deviceAuthOn
+      ? [
+          bearer(),
+          deviceAuthorization({
+            verificationUri: "/device",
+            validateClient: (clientId) => clientId === DEVICE_AUTH_CLIENT_ID,
+            // `schema: {}` is load-bearing, not a no-op. The plugin's own options
+            // schema declares `schema: z.custom(() => true)` WITHOUT `.optional()`;
+            // zod ^4.3.x tolerated a missing value but the root-resolved zod@4.4.3
+            // rejects `undefined` here ("expected nonoptional"). An empty object
+            // satisfies the required field and `mergeSchema(builtin, {})` is an
+            // additive no-op (no extra deviceCode columns). Drop this only once
+            // better-auth ships the upstream `.optional()` fix or the tree no longer
+            // resolves zod ≥4.4. See [[reference_mcp_worker_zod_pinned_to_sdk_nested]].
+            schema: {},
+          }),
+        ]
+      : []),
   ];
 
   return betterAuth({
@@ -407,7 +461,7 @@ export async function createAuth(
     database: drizzleAdapter(db, {
       provider: "sqlite",
       // Schema key `rateLimit` must match Better Auth's default rate-limit model name.
-      schema: { user, session, account, verification, rateLimit, apikey },
+      schema: { user, session, account, verification, rateLimit, apikey, deviceCode },
     }),
     emailAndPassword: {
       enabled: true,

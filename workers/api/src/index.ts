@@ -221,6 +221,10 @@ export type Env = {
     // When "true", all relk_… tokens are rejected without a DB lookup.
     API_TOKENS_DISABLED?: string;
     USER_API_KEYS_ENABLED?: string;
+    // Rollout gate for the device-authorization (RFC 8628) CLI login path —
+    // registers the deviceAuthorization() + bearer() plugins. See @releases/lib/flags
+    // (deviceAuthorizationEnabled). Default off.
+    DEVICE_AUTHORIZATION_ENABLED?: string;
     // When "true", `/v1/search` and the MCP search tools skip writing rows to
     // `search_queries`. Default off → logging on. See workers/api/src/lib/log-search.ts.
     SEARCH_QUERY_LOG_DISABLED?: string;
