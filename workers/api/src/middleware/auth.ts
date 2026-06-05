@@ -26,6 +26,9 @@ export type AuthContext =
   | { kind: "root"; scopes: string[] }
   | { kind: "token"; tokenId: string; scopes: string[] };
 
+/** Minimal session shape attached to the Hono context by `requireSession`. */
+export type AuthSessionContext = { user: { id: string; email: string; name: string } };
+
 type ResolvedAuth =
   | { kind: "root"; scopes: string[] }
   | { kind: "token"; tokenId: string; scopes: string[] }
@@ -277,6 +280,35 @@ function recordAuth(
     touchLastUsed(createDb(c.env.DB), tokenId).catch(() => undefined);
   }
 }
+
+/**
+ * Gate the session-authed self-serve surface (`/v1/api-keys`). When the
+ * `user-api-keys-enabled` flag is off, the feature is dark → 404. Otherwise
+ * resolve the Better Auth session from the request cookie; no session → 401.
+ * On success, attach a minimal `{ user }` to the context for the handlers.
+ */
+export const requireSession: MiddlewareHandler<Env> = async (c, next) => {
+  if (!(await flag(c.env.FLAGS, c.env.USER_API_KEYS_ENABLED, FLAGS.userApiKeysEnabled))) {
+    return c.json({ error: "not_found", message: "Not found" }, 404);
+  }
+  let waitUntil: ((p: Promise<unknown>) => void) | undefined;
+  try {
+    waitUntil = c.executionCtx.waitUntil.bind(c.executionCtx);
+  } catch {
+    waitUntil = undefined;
+  }
+  const auth = await createAuth(c.env, waitUntil);
+  const session = await auth.api.getSession({ headers: c.req.raw.headers });
+  if (!session?.user?.id) {
+    // No WWW-Authenticate challenge: this is a cookie-session gate, not a Bearer
+    // scheme, and "Cookie" is not a registered RFC 7235 auth scheme.
+    return c.json({ error: "unauthorized", message: "Sign in required" }, 401);
+  }
+  c.set("session", {
+    user: { id: session.user.id, email: session.user.email, name: session.user.name },
+  });
+  await next();
+};
 
 function createAuthMiddleware(opts: {
   allowPublicReads: boolean;

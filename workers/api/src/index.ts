@@ -6,7 +6,7 @@ import {
   publicReadAuthMiddleware,
   tokensAuthMiddleware,
 } from "./middleware/auth.js";
-import type { AuthContext } from "./middleware/auth.js";
+import type { AuthContext, AuthSessionContext } from "./middleware/auth.js";
 import { createAuth, authCorsMiddleware } from "./auth/index.js";
 import type { AuthEmailBinding } from "./auth/email.js";
 import { classifySignInFailure, redactIp, makeAuthAudit } from "./auth/audit.js";
@@ -315,6 +315,7 @@ export type Env = {
   };
   Variables: {
     auth?: AuthContext;
+    session?: AuthSessionContext;
   };
 };
 
