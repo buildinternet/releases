@@ -70,6 +70,7 @@ const ALLOWLIST = new Set<string>([
   "POST /orgs",
   "PATCH /orgs/:slug",
   "POST /orgs/:slug/avatar", // one-step avatar ingest (#1406); Bearer required, hide: hideInProduction
+  "POST /orgs/:slug/sync-well-known", // .well-known reconcile; Bearer required, hide: hideInProduction
   "DELETE /orgs/:slug",
   "DELETE /orgs/:slug/accounts/:platform/:handle",
   "POST /orgs/:slug/accounts",

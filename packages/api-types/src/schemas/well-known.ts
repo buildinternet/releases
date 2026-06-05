@@ -44,3 +44,11 @@ export const ReleasesJsonConfigSchema = z
 
 export type ReleasesJsonConfig = z.infer<typeof ReleasesJsonConfigSchema>;
 export type ReleasesJsonProduct = z.infer<typeof ReleasesJsonProductSchema>;
+
+/** Response shape of POST /v1/orgs/:slug/sync-well-known. */
+export const SyncWellKnownResponseSchema = z.object({
+  fetched: z.boolean(),
+  applied: z.boolean(),
+  skippedReason: z.string().optional(),
+  plan: z.unknown().optional(),
+});

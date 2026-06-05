@@ -288,7 +288,11 @@ export {
   OrgRecentReleasesResponseSchema,
   DeleteOrgAccountResponseSchema,
 } from "./schemas/orgs.js";
-export { ReleasesJsonConfigSchema, ReleasesJsonProductSchema } from "./schemas/well-known.js";
+export {
+  ReleasesJsonConfigSchema,
+  ReleasesJsonProductSchema,
+  SyncWellKnownResponseSchema,
+} from "./schemas/well-known.js";
 export type { ReleasesJsonConfig, ReleasesJsonProduct } from "./schemas/well-known.js";
 export {
   SourceListItemSchema,
