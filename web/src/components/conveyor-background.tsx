@@ -225,36 +225,51 @@ export default function ConveyorBackground({
       }
     }
 
-    const start = () => {
-      if (reduced) return;
-      if (running) return;
-      running = true;
-      last = performance.now();
-      raf = requestAnimationFrame(frame);
-    };
     const stop = () => {
       running = false;
       cancelAnimationFrame(raf);
+    };
+
+    // The pause contract requires BOTH conditions: resume only when the masthead
+    // is in view AND the tab is visible (and motion isn't reduced). Gating on a
+    // single signal lets one observer restart the loop while the other still says
+    // "paused" — e.g. refocusing the tab while scrolled past the band.
+    let isInView = true;
+    let isPageVisible = !document.hidden;
+    const syncRunState = () => {
+      const shouldRun = !reduced && isInView && isPageVisible;
+      if (shouldRun && !running) {
+        running = true;
+        last = performance.now();
+        raf = requestAnimationFrame(frame);
+      } else if (!shouldRun && running) {
+        stop();
+      }
     };
 
     const ro = new ResizeObserver(resize);
     ro.observe(canvas);
 
     // pause when scrolled out of view
-    const io = new IntersectionObserver(([entry]) => (entry.isIntersecting ? start() : stop()), {
-      threshold: 0,
-    });
+    const io = new IntersectionObserver(
+      ([entry]) => {
+        isInView = entry.isIntersecting;
+        syncRunState();
+      },
+      { threshold: 0 },
+    );
     io.observe(canvas);
 
     // pause when tab hidden
-    const onVis = () => (document.hidden ? stop() : start());
+    const onVis = () => {
+      isPageVisible = !document.hidden;
+      syncRunState();
+    };
     document.addEventListener("visibilitychange", onVis);
 
     resize();
-    if (!reduced) {
-      running = false;
-      start();
-    }
+    running = false;
+    syncRunState();
 
     return () => {
       stop();
