@@ -14,28 +14,28 @@
 
 ## File structure
 
-| File | Responsibility |
-|---|---|
-| `packages/api-types/src/schemas/well-known.ts` (create) | `ReleasesJsonConfigSchema` zod + `ReleasesJsonConfig` type |
-| `packages/api-types/src/api-types.ts` (modify) | Re-export the new schema + type |
-| `packages/api-types/src/schemas/well-known.test.ts` (create) | zod accept/reject tests |
-| `scripts/gen-releases-json-schema.ts` (create) | Generate JSON Schema → `web/public/schemas/releases.json` |
-| `web/public/schemas/releases.json` (create, generated) | Public `$schema` document |
-| `package.json` (modify) | `gen:releases-schema` script |
-| `workers/api/src/lib/well-known/self-declared.ts` (create) | Pure parse/set of `metadata.selfDeclared` |
-| `workers/api/src/lib/well-known/fetch.ts` (create) | `fetchReleasesJson` fail-closed fetch |
-| `workers/api/src/lib/well-known/reconcile-org.ts` (create) | Pure `computeOrgIdentityUpdates` + `applyOrgReconciliation` + `syncOrgWellKnown` |
+| File                                                          | Responsibility                                                                                 |
+| ------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `packages/api-types/src/schemas/well-known.ts` (create)       | `ReleasesJsonConfigSchema` zod + `ReleasesJsonConfig` type                                     |
+| `packages/api-types/src/api-types.ts` (modify)                | Re-export the new schema + type                                                                |
+| `packages/api-types/src/schemas/well-known.test.ts` (create)  | zod accept/reject tests                                                                        |
+| `scripts/gen-releases-json-schema.ts` (create)                | Generate JSON Schema → `web/public/schemas/releases.json`                                      |
+| `web/public/schemas/releases.json` (create, generated)        | Public `$schema` document                                                                      |
+| `package.json` (modify)                                       | `gen:releases-schema` script                                                                   |
+| `workers/api/src/lib/well-known/self-declared.ts` (create)    | Pure parse/set of `metadata.selfDeclared`                                                      |
+| `workers/api/src/lib/well-known/fetch.ts` (create)            | `fetchReleasesJson` fail-closed fetch                                                          |
+| `workers/api/src/lib/well-known/reconcile-org.ts` (create)    | Pure `computeOrgIdentityUpdates` + `applyOrgReconciliation` + `syncOrgWellKnown`               |
 | `workers/api/src/lib/well-known/reconcile-source.ts` (create) | `parseGitHubRepo` + pure `computeProductPlan` + `applySourceReconciliation` + `syncSourceRepo` |
-| `workers/api/src/lib/well-known/*.test.ts` (create) | Unit + integration tests for each module |
-| `workers/api/src/routes/orgs.ts` (modify) | `POST /orgs/:slug/sync-well-known` route |
-| `workers/api/test/orgs-sync-well-known.test.ts` (create) | Route test |
-| `packages/lib/src/flags.ts` (modify) | `wellKnownSyncEnabled` flag (default **true**) |
-| `workers/api/src/cron/well-known-sync.ts` (create) | Two-pass sweep entrypoint |
-| `workers/api/src/cron/well-known-sync.test.ts` (create) | Cron test |
-| `workers/api/src/index.ts` (modify) | Dispatch the new cron + `WELL_KNOWN_SYNC_ENABLED` env field |
-| `workers/api/wrangler.jsonc` (modify) | New `0 6 * * *` cron trigger |
-| `docs/architecture/well-known-config.md` (create) | Architecture doc + examples |
-| `AGENTS.md` (modify) | One-line conventions entry |
+| `workers/api/src/lib/well-known/*.test.ts` (create)           | Unit + integration tests for each module                                                       |
+| `workers/api/src/routes/orgs.ts` (modify)                     | `POST /orgs/:slug/sync-well-known` route                                                       |
+| `workers/api/test/orgs-sync-well-known.test.ts` (create)      | Route test                                                                                     |
+| `packages/lib/src/flags.ts` (modify)                          | `wellKnownSyncEnabled` flag (default **true**)                                                 |
+| `workers/api/src/cron/well-known-sync.ts` (create)            | Two-pass sweep entrypoint                                                                      |
+| `workers/api/src/cron/well-known-sync.test.ts` (create)       | Cron test                                                                                      |
+| `workers/api/src/index.ts` (modify)                           | Dispatch the new cron + `WELL_KNOWN_SYNC_ENABLED` env field                                    |
+| `workers/api/wrangler.jsonc` (modify)                         | New `0 6 * * *` cron trigger                                                                   |
+| `docs/architecture/well-known-config.md` (create)             | Architecture doc + examples                                                                    |
+| `AGENTS.md` (modify)                                          | One-line conventions entry                                                                     |
 
 Conventions for any new worker code: log via `logEvent` from `@releases/lib/log-event`; D1 handle via `createDb(env.DB)`; gates fail closed.
 
@@ -44,6 +44,7 @@ Conventions for any new worker code: log via `logEvent` from `@releases/lib/log-
 ### Task 1: api-types `ReleasesJsonConfigSchema`
 
 **Files:**
+
 - Create: `packages/api-types/src/schemas/well-known.ts`
 - Modify: `packages/api-types/src/api-types.ts`
 - Test: `packages/api-types/src/schemas/well-known.test.ts`
@@ -83,9 +84,9 @@ describe("ReleasesJsonConfigSchema", () => {
   });
 
   it("rejects a non-https avatar", () => {
-    expect(
-      ReleasesJsonConfigSchema.safeParse({ avatar: "http://acme.com/x.png" }).success,
-    ).toBe(false);
+    expect(ReleasesJsonConfigSchema.safeParse({ avatar: "http://acme.com/x.png" }).success).toBe(
+      false,
+    );
   });
 
   it("rejects a product with no name", () => {
@@ -146,7 +147,10 @@ export const ReleasesJsonConfigSchema = z
     name: z.string().min(1).max(120).optional(),
     description: z.string().max(2000).optional(),
     category: z.string().min(1).max(120).optional(),
-    avatar: z.url().refine((u) => u.startsWith("https://"), "avatar must be an https URL").optional(),
+    avatar: z
+      .url()
+      .refine((u) => u.startsWith("https://"), "avatar must be an https URL")
+      .optional(),
     tags: z.array(z.string().min(1).max(60)).max(50).optional(),
     social: z.record(z.string().min(1).max(40), SocialValueSchema).optional(),
     notice: NoticeSchema.optional(),
@@ -188,6 +192,7 @@ git commit -m "feat(api-types): ReleasesJsonConfig schema for releases.json"
 ### Task 2: Generate + commit the public JSON Schema
 
 **Files:**
+
 - Create: `scripts/gen-releases-json-schema.ts`
 - Create (generated): `web/public/schemas/releases.json`
 - Modify: `package.json` (root)
@@ -254,6 +259,7 @@ git commit -m "feat(web): publish releases.json JSON Schema at /schemas/releases
 ### Task 3: `selfDeclared` metadata helpers (pure)
 
 **Files:**
+
 - Create: `workers/api/src/lib/well-known/self-declared.ts`
 - Test: `workers/api/src/lib/well-known/self-declared.test.ts`
 
@@ -384,6 +390,7 @@ git commit -m "feat(api): selfDeclared provenance metadata helpers"
 ### Task 4: Fail-closed fetch helper
 
 **Files:**
+
 - Create: `workers/api/src/lib/well-known/fetch.ts`
 - Test: `workers/api/src/lib/well-known/fetch.test.ts`
 
@@ -396,7 +403,11 @@ import { describe, it, expect } from "bun:test";
 import { fetchReleasesJson } from "./fetch.js";
 
 function resp(body: string, init: ResponseInit = {}): Response {
-  return new Response(body, { status: 200, headers: { "content-type": "application/json" }, ...init });
+  return new Response(body, {
+    status: 200,
+    headers: { "content-type": "application/json" },
+    ...init,
+  });
 }
 
 describe("fetchReleasesJson", () => {
@@ -497,7 +508,8 @@ export async function fetchReleasesJson(
     return { ok: false, reason: "blocked", detail: "unparseable url" };
   }
   if (parsed.protocol !== "https:") return { ok: false, reason: "blocked", detail: "not https" };
-  if (isPrivateOrLocalHost(parsed.hostname)) return { ok: false, reason: "blocked", detail: "private host" };
+  if (isPrivateOrLocalHost(parsed.hostname))
+    return { ok: false, reason: "blocked", detail: "private host" };
 
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
@@ -580,6 +592,7 @@ git commit -m "feat(api): fail-closed fetch helper for releases.json"
 ### Task 5: Org-identity diff (pure)
 
 **Files:**
+
 - Create: `workers/api/src/lib/well-known/reconcile-org.ts` (pure part only this task)
 - Test: `workers/api/src/lib/well-known/reconcile-org.test.ts`
 
@@ -628,7 +641,12 @@ describe("computeOrgIdentityUpdates", () => {
 
   it("updates a field that was previously self-declared", () => {
     const meta = JSON.stringify({
-      selfDeclared: { fields: ["description"], source: "well-known", configHash: "x", syncedAt: "x" },
+      selfDeclared: {
+        fields: ["description"],
+        source: "well-known",
+        configHash: "x",
+        syncedAt: "x",
+      },
     });
     const plan = computeOrgIdentityUpdates(
       org({ description: "old owner value", metadata: meta }),
@@ -824,6 +842,7 @@ git commit -m "feat(api): pure org-identity diff for releases.json"
 ### Task 6: Apply org reconciliation + `syncOrgWellKnown`
 
 **Files:**
+
 - Modify: `workers/api/src/lib/well-known/reconcile-org.ts` (add apply + orchestration)
 - Test: `workers/api/src/lib/well-known/reconcile-org.apply.test.ts`
 
@@ -858,10 +877,17 @@ describe("syncOrgWellKnown", () => {
       bucket: fakeR2(),
       mediaOrigin: "https://media.test",
       fetchImpl: async () =>
-        new Response(JSON.stringify({ description: "CI for teams.", tags: ["ci"], social: { twitter: "acmehq" } }), {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        }),
+        new Response(
+          JSON.stringify({
+            description: "CI for teams.",
+            tags: ["ci"],
+            social: { twitter: "acmehq" },
+          }),
+          {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          },
+        ),
       domain: "acme.com",
     });
 
@@ -961,13 +987,25 @@ export async function syncOrgWellKnown(
   const url = `https://${opts.domain}/.well-known/releases.json`;
   const fetched = await fetchReleasesJson(url, { fetchImpl: opts.fetchImpl });
   if (!fetched.ok) {
-    logEvent("info", { component: "well-known", event: "fetch-skip", orgId, url, reason: fetched.reason });
+    logEvent("info", {
+      component: "well-known",
+      event: "fetch-skip",
+      orgId,
+      url,
+      reason: fetched.reason,
+    });
     return { fetched: false, applied: false, skippedReason: fetched.reason };
   }
 
   const validated = ReleasesJsonConfigSchema.safeParse(fetched.json);
   if (!validated.success) {
-    logEvent("warn", { component: "well-known", event: "validate-skip", orgId, url, err: validated.error.message });
+    logEvent("warn", {
+      component: "well-known",
+      event: "validate-skip",
+      orgId,
+      url,
+      err: validated.error.message,
+    });
     return { fetched: true, applied: false, skippedReason: "invalid_schema" };
   }
   const config = validated.data;
@@ -978,12 +1016,14 @@ export async function syncOrgWellKnown(
     return { fetched: true, applied: false, skippedReason: "unchanged" };
   }
 
-  const aliasResolved = async (input: string) => (await resolveCategoryInput(db, input));
+  const aliasResolved = async (input: string) => await resolveCategoryInput(db, input);
   // Pre-resolve the single category input so the pure diff stays synchronous.
   const resolvedCategory = config.category ? await aliasResolved(config.category) : null;
   const plan = computeOrgIdentityUpdates(org, config, {
     resolveCategory: (input) =>
-      input === config.category && resolvedCategory && resolvedCategory.ok ? resolvedCategory.slug : null,
+      input === config.category && resolvedCategory && resolvedCategory.ok
+        ? resolvedCategory.slug
+        : null,
   });
 
   if (opts.dryRun) return { fetched: true, applied: false, plan };
@@ -998,7 +1038,11 @@ export async function syncOrgWellKnown(
     syncedAt: new Date().toISOString(),
   });
 
-  const columnUpdates: Record<string, unknown> = { ...plan.columnUpdates, metadata, updatedAt: new Date().toISOString() };
+  const columnUpdates: Record<string, unknown> = {
+    ...plan.columnUpdates,
+    metadata,
+    updatedAt: new Date().toISOString(),
+  };
 
   // Avatar mirror (best-effort; failure does not fail the sync).
   if (plan.avatarSourceUrl) {
@@ -1010,7 +1054,13 @@ export async function syncOrgWellKnown(
       fetchImpl: opts.fetchImpl,
     });
     if (result.ok) columnUpdates.avatarUrl = result.avatarUrl;
-    else logEvent("info", { component: "well-known", event: "avatar-skip", orgId, reason: result.error });
+    else
+      logEvent("info", {
+        component: "well-known",
+        event: "avatar-skip",
+        orgId,
+        reason: result.error,
+      });
   }
 
   await db.update(organizations).set(columnUpdates).where(eq(organizations.id, org.id));
@@ -1028,11 +1078,21 @@ export async function syncOrgWellKnown(
   for (const s of plan.socialsToAdd) {
     await db
       .insert(orgAccounts)
-      .values({ orgId: org.id, platform: s.platform, handle: s.handle, createdAt: new Date().toISOString() })
+      .values({
+        orgId: org.id,
+        platform: s.platform,
+        handle: s.handle,
+        createdAt: new Date().toISOString(),
+      })
       .onConflictDoNothing();
   }
 
-  logEvent("info", { component: "well-known", event: "org-applied", orgId, fields: plan.selfDeclaredFields });
+  logEvent("info", {
+    component: "well-known",
+    event: "org-applied",
+    orgId,
+    fields: plan.selfDeclaredFields,
+  });
   return { fetched: true, applied: true, plan };
 }
 ```
@@ -1061,6 +1121,7 @@ git commit -m "feat(api): apply org reconciliation + syncOrgWellKnown"
 ### Task 7: Product diff (pure) + GitHub repo parsing
 
 **Files:**
+
 - Create: `workers/api/src/lib/well-known/reconcile-source.ts` (pure parts this task)
 - Test: `workers/api/src/lib/well-known/reconcile-source.test.ts`
 
@@ -1076,10 +1137,16 @@ const resolveCategory = (input: string) => (["cloud", "ai"].includes(input) ? in
 
 describe("parseGitHubRepo", () => {
   it("parses owner/repo from a github url", () => {
-    expect(parseGitHubRepo("https://github.com/acme/cloud")).toEqual({ owner: "acme", repo: "cloud" });
+    expect(parseGitHubRepo("https://github.com/acme/cloud")).toEqual({
+      owner: "acme",
+      repo: "cloud",
+    });
   });
   it("strips trailing path and .git", () => {
-    expect(parseGitHubRepo("https://github.com/acme/cloud.git/releases")).toEqual({ owner: "acme", repo: "cloud" });
+    expect(parseGitHubRepo("https://github.com/acme/cloud.git/releases")).toEqual({
+      owner: "acme",
+      repo: "cloud",
+    });
   });
   it("returns null for non-github urls", () => {
     expect(parseGitHubRepo("https://gitlab.com/acme/cloud")).toBeNull();
@@ -1090,21 +1157,43 @@ describe("computeProductPlan", () => {
   const cfg = { product: { name: "Acme Cloud", category: "cloud", kind: "saas" } };
 
   it("creates a product when none matches the slug", () => {
-    const plan = computeProductPlan(null, { productId: null, metadata: "{}" } as any, cfg, { resolveCategory });
-    expect(plan.create).toEqual({ name: "Acme Cloud", slug: "acme-cloud", description: null, category: "cloud", kind: "saas" });
+    const plan = computeProductPlan(null, { productId: null, metadata: "{}" } as any, cfg, {
+      resolveCategory,
+    });
+    expect(plan.create).toEqual({
+      name: "Acme Cloud",
+      slug: "acme-cloud",
+      description: null,
+      category: "cloud",
+      kind: "saas",
+    });
     expect(plan.attach).toBe(true);
   });
 
   it("attaches to an existing product and fills only empty fields", () => {
-    const existing = { id: "prod_1", slug: "acme-cloud", description: "Existing", category: null, kind: null } as any;
-    const plan = computeProductPlan(existing, { productId: null, metadata: "{}" } as any, cfg, { resolveCategory });
+    const existing = {
+      id: "prod_1",
+      slug: "acme-cloud",
+      description: "Existing",
+      category: null,
+      kind: null,
+    } as any;
+    const plan = computeProductPlan(existing, { productId: null, metadata: "{}" } as any, cfg, {
+      resolveCategory,
+    });
     expect(plan.create).toBeUndefined();
     expect(plan.attach).toBe(true);
     expect(plan.fills).toEqual({ category: "cloud", kind: "saas" }); // description NOT overwritten
   });
 
   it("does not reattach a curator-set productId", () => {
-    const existing = { id: "prod_1", slug: "acme-cloud", description: null, category: null, kind: null } as any;
+    const existing = {
+      id: "prod_1",
+      slug: "acme-cloud",
+      description: null,
+      category: null,
+      kind: null,
+    } as any;
     const plan = computeProductPlan(
       existing,
       { productId: "prod_other", metadata: "{}" } as any,
@@ -1115,14 +1204,32 @@ describe("computeProductPlan", () => {
   });
 
   it("reattaches when productId was self-declared", () => {
-    const meta = JSON.stringify({ selfDeclared: { fields: ["product"], source: "github", configHash: "x", syncedAt: "x" } });
-    const existing = { id: "prod_1", slug: "acme-cloud", description: null, category: null, kind: null } as any;
-    const plan = computeProductPlan(existing, { productId: "prod_old", metadata: meta } as any, cfg, { resolveCategory });
+    const meta = JSON.stringify({
+      selfDeclared: { fields: ["product"], source: "github", configHash: "x", syncedAt: "x" },
+    });
+    const existing = {
+      id: "prod_1",
+      slug: "acme-cloud",
+      description: null,
+      category: null,
+      kind: null,
+    } as any;
+    const plan = computeProductPlan(
+      existing,
+      { productId: "prod_old", metadata: meta } as any,
+      cfg,
+      { resolveCategory },
+    );
     expect(plan.attach).toBe(true);
   });
 
   it("returns empty plan when there is no product block", () => {
-    const plan = computeProductPlan(null, { productId: null, metadata: "{}" } as any, {}, { resolveCategory });
+    const plan = computeProductPlan(
+      null,
+      { productId: null, metadata: "{}" } as any,
+      {},
+      { resolveCategory },
+    );
     expect(plan.create).toBeUndefined();
     expect(plan.attach).toBe(false);
   });
@@ -1180,7 +1287,13 @@ export interface SourceRowLike {
 
 export interface ProductPlan {
   /** Create a new product with these values (omitted when one already matches). */
-  create?: { name: string; slug: string; description: string | null; category: string | null; kind: string | null };
+  create?: {
+    name: string;
+    slug: string;
+    description: string | null;
+    category: string | null;
+    kind: string | null;
+  };
   /** Set source.productId to the matched/created product. */
   attach: boolean;
   /** Fill-if-empty updates to an existing product. */
@@ -1254,6 +1367,7 @@ git commit -m "feat(api): pure product diff + github repo parsing for releases.j
 ### Task 8: Apply source reconciliation + grouping
 
 **Files:**
+
 - Modify: `workers/api/src/lib/well-known/reconcile-source.ts` (add apply + `syncSourceRepo`)
 - Test: `workers/api/src/lib/well-known/reconcile-source.apply.test.ts`
 
@@ -1270,14 +1384,31 @@ import { syncSourceRepo } from "./reconcile-source.js";
 
 function fileResp(body: unknown) {
   return async () =>
-    new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
+    new Response(JSON.stringify(body), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
 }
 
 async function seed(db: any) {
   await db.insert(organizations).values({ id: "org_a", slug: "acme", name: "Acme" });
   await db.insert(sources).values([
-    { id: "src_1", orgId: "org_a", name: "Cloud repo", slug: "cloud", type: "github", url: "https://github.com/acme/cloud" },
-    { id: "src_2", orgId: "org_a", name: "Cloud CLI", slug: "cloud-cli", type: "github", url: "https://github.com/acme/cloud-cli" },
+    {
+      id: "src_1",
+      orgId: "org_a",
+      name: "Cloud repo",
+      slug: "cloud",
+      type: "github",
+      url: "https://github.com/acme/cloud",
+    },
+    {
+      id: "src_2",
+      orgId: "org_a",
+      name: "Cloud CLI",
+      slug: "cloud-cli",
+      type: "github",
+      url: "https://github.com/acme/cloud-cli",
+    },
   ]);
 }
 
@@ -1311,8 +1442,12 @@ describe("syncSourceRepo", () => {
   it("does not overwrite an existing product's description across repos", async () => {
     const db = createTestDb();
     await seed(db);
-    await syncSourceRepo(db, "src_1", { fetchImpl: fileResp({ product: { name: "Acme Cloud", description: "First" } }) });
-    await syncSourceRepo(db, "src_2", { fetchImpl: fileResp({ product: { name: "Acme Cloud", description: "Second" } }) });
+    await syncSourceRepo(db, "src_1", {
+      fetchImpl: fileResp({ product: { name: "Acme Cloud", description: "First" } }),
+    });
+    await syncSourceRepo(db, "src_2", {
+      fetchImpl: fileResp({ product: { name: "Acme Cloud", description: "Second" } }),
+    });
     const [p] = await db.select().from(products).where(eq(products.slug, "acme-cloud"));
     expect(p!.description).toBe("First");
   });
@@ -1320,8 +1455,17 @@ describe("syncSourceRepo", () => {
   it("no-ops for a non-github source", async () => {
     const db = createTestDb();
     await db.insert(organizations).values({ id: "org_b", slug: "beta", name: "Beta" });
-    await db.insert(sources).values({ id: "src_x", orgId: "org_b", name: "Feed", slug: "feed", type: "feed", url: "https://beta.com/changelog" });
-    const res = await syncSourceRepo(db, "src_x", { fetchImpl: fileResp({ product: { name: "X" } }) });
+    await db.insert(sources).values({
+      id: "src_x",
+      orgId: "org_b",
+      name: "Feed",
+      slug: "feed",
+      type: "feed",
+      url: "https://beta.com/changelog",
+    });
+    const res = await syncSourceRepo(db, "src_x", {
+      fetchImpl: fileResp({ product: { name: "X" } }),
+    });
     expect(res.applied).toBe(false);
     expect(res.skippedReason).toBe("not_github");
   });
@@ -1368,7 +1512,8 @@ export async function syncSourceRepo(
 ): Promise<SyncSourceResult> {
   const [source] = await db.select().from(sources).where(eq(sources.id, sourceId));
   if (!source) return { fetched: false, applied: false, skippedReason: "source_not_found" };
-  if (source.type !== "github") return { fetched: false, applied: false, skippedReason: "not_github" };
+  if (source.type !== "github")
+    return { fetched: false, applied: false, skippedReason: "not_github" };
 
   const gh = parseGitHubRepo(source.url);
   if (!gh) return { fetched: false, applied: false, skippedReason: "not_github" };
@@ -1376,7 +1521,13 @@ export async function syncSourceRepo(
   const url = `https://raw.githubusercontent.com/${gh.owner}/${gh.repo}/HEAD/releases.json`;
   const fetched = await fetchReleasesJson(url, { fetchImpl: opts.fetchImpl });
   if (!fetched.ok) {
-    logEvent("info", { component: "well-known", event: "repo-fetch-skip", sourceId, url, reason: fetched.reason });
+    logEvent("info", {
+      component: "well-known",
+      event: "repo-fetch-skip",
+      sourceId,
+      url,
+      reason: fetched.reason,
+    });
     return { fetched: false, applied: false, skippedReason: fetched.reason };
   }
 
@@ -1394,7 +1545,9 @@ export async function syncSourceRepo(
     .from(products)
     .where(and(eq(products.orgId, source.orgId), eq(products.slug, slug)));
 
-  const resolved = config.product.category ? await resolveCategoryInput(db, config.product.category) : null;
+  const resolved = config.product.category
+    ? await resolveCategoryInput(db, config.product.category)
+    : null;
   const plan = computeProductPlan(existing ?? null, source, config, {
     resolveCategory: (input) =>
       input === config.product?.category && resolved && resolved.ok ? resolved.slug : null,
@@ -1433,7 +1586,11 @@ export async function syncSourceRepo(
   }
 
   logEvent("info", { component: "well-known", event: "repo-applied", sourceId, productSlug: slug });
-  return { fetched: true, applied: plan.attach || !!plan.create || Object.keys(plan.fills).length > 0, plan };
+  return {
+    fetched: true,
+    applied: plan.attach || !!plan.create || Object.keys(plan.fills).length > 0,
+    plan,
+  };
 }
 
 // silence unused import in builds where parseSelfDeclared is only used by the pure fn above
@@ -1459,6 +1616,7 @@ git commit -m "feat(api): apply source/product reconciliation + cross-repo group
 ### Task 9: `POST /v1/orgs/:slug/sync-well-known` route
 
 **Files:**
+
 - Modify: `workers/api/src/routes/orgs.ts`
 - Test: `workers/api/test/orgs-sync-well-known.test.ts`
 
@@ -1475,21 +1633,31 @@ import { orgRoutes } from "../src/routes/orgs.js";
 
 function fakeR2() {
   const store = new Map<string, unknown>();
-  return { store, put: async (k: string, v: unknown) => void store.set(k, v), get: async () => null } as any;
+  return {
+    store,
+    put: async (k: string, v: unknown) => void store.set(k, v),
+    get: async () => null,
+  } as any;
 }
 
 describe("POST /v1/orgs/:slug/sync-well-known", () => {
   let db: TestDb;
   const realFetch = globalThis.fetch;
-  afterEach(() => { globalThis.fetch = realFetch; });
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+  });
 
   beforeEach(async () => {
     db = createTestDb();
-    await db.insert(organizations).values({ id: "org_a", slug: "acme", name: "Acme", domain: "acme.com" });
+    await db
+      .insert(organizations)
+      .values({ id: "org_a", slug: "acme", name: "Acme", domain: "acme.com" });
   });
 
   function app() {
-    return createTestApp(db, orgRoutes, { env: { MEDIA: fakeR2(), MEDIA_ORIGIN: "https://media.test" } });
+    return createTestApp(db, orgRoutes, {
+      env: { MEDIA: fakeR2(), MEDIA_ORIGIN: "https://media.test" },
+    });
   }
 
   it("applies the owner file and returns the plan", async () => {
@@ -1604,6 +1772,7 @@ git commit -m "feat(api): POST /v1/orgs/:slug/sync-well-known (with dryRun)"
 ### Task 10: Feature flag + daily two-pass cron
 
 **Files:**
+
 - Modify: `packages/lib/src/flags.ts`
 - Create: `workers/api/src/cron/well-known-sync.ts`
 - Test: `workers/api/src/cron/well-known-sync.test.ts`
@@ -1635,7 +1804,10 @@ function fileFor(map: Record<string, unknown>) {
   return async (url: string) => {
     for (const [needle, body] of Object.entries(map)) {
       if (url.includes(needle)) {
-        return new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
+        return new Response(JSON.stringify(body), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
       }
     }
     return new Response("nope", { status: 404 });
@@ -1645,8 +1817,17 @@ function fileFor(map: Record<string, unknown>) {
 describe("wellKnownSync cron", () => {
   it("runs both passes: org identity + repo grouping", async () => {
     const db = createTestDb();
-    await db.insert(organizations).values({ id: "org_a", slug: "acme", name: "Acme", domain: "acme.com" });
-    await db.insert(sources).values({ id: "src_1", orgId: "org_a", name: "Cloud", slug: "cloud", type: "github", url: "https://github.com/acme/cloud" });
+    await db
+      .insert(organizations)
+      .values({ id: "org_a", slug: "acme", name: "Acme", domain: "acme.com" });
+    await db.insert(sources).values({
+      id: "src_1",
+      orgId: "org_a",
+      name: "Cloud",
+      slug: "cloud",
+      type: "github",
+      url: "https://github.com/acme/cloud",
+    });
 
     await wellKnownSync({
       DB: {} as any,
@@ -1655,7 +1836,9 @@ describe("wellKnownSync cron", () => {
       _drizzleOverride: db,
       fetchImpl: fileFor({
         "acme.com/.well-known/releases.json": { description: "CI for teams." },
-        "raw.githubusercontent.com/acme/cloud/HEAD/releases.json": { product: { name: "Acme Cloud" } },
+        "raw.githubusercontent.com/acme/cloud/HEAD/releases.json": {
+          product: { name: "Acme Cloud" },
+        },
       }),
     });
 
@@ -1677,7 +1860,10 @@ describe("wellKnownSync cron", () => {
       MEDIA_ORIGIN: "x",
       CRON_ENABLED: "false",
       _drizzleOverride: db,
-      fetchImpl: async () => { called = true; return new Response("{}"); },
+      fetchImpl: async () => {
+        called = true;
+        return new Response("{}");
+      },
     });
     expect(called).toBe(false);
   });
@@ -1760,7 +1946,12 @@ export async function wellKnownSync(env: WellKnownSyncEnv): Promise<void> {
       const r = await syncSourceRepo(db, s.id, { fetchImpl: env.fetchImpl });
       if (r.applied) sourceApplied++;
     } catch (err) {
-      logEvent("error", { component: "well-known", event: "source-sync-failed", sourceId: s.id, err });
+      logEvent("error", {
+        component: "well-known",
+        event: "source-sync-failed",
+        sourceId: s.id,
+        err,
+      });
     }
   }
 
@@ -1805,23 +1996,23 @@ import { wellKnownSync } from "./cron/well-known-sync.js";
 (c) In the `scheduled` handler, add a branch before the hourly fallthrough:
 
 ```ts
-  if (event.cron === "0 6 * * *") {
-    ctx.waitUntil(
-      loggedDispatch(
-        "well-known-sync-cron",
-        wellKnownSync({
-          DB: env.DB,
-          MEDIA: env.MEDIA,
-          MEDIA_ORIGIN: env.MEDIA_ORIGIN,
-          FLAGS: env.FLAGS,
-          WELL_KNOWN_SYNC_ENABLED: env.WELL_KNOWN_SYNC_ENABLED,
-          CRON_ENABLED: env.CRON_ENABLED,
-        }),
-        alertEnv,
-      ),
-    );
-    return;
-  }
+if (event.cron === "0 6 * * *") {
+  ctx.waitUntil(
+    loggedDispatch(
+      "well-known-sync-cron",
+      wellKnownSync({
+        DB: env.DB,
+        MEDIA: env.MEDIA,
+        MEDIA_ORIGIN: env.MEDIA_ORIGIN,
+        FLAGS: env.FLAGS,
+        WELL_KNOWN_SYNC_ENABLED: env.WELL_KNOWN_SYNC_ENABLED,
+        CRON_ENABLED: env.CRON_ENABLED,
+      }),
+      alertEnv,
+    ),
+  );
+  return;
+}
 ```
 
 - [ ] **Step 8: Run the cron + flag tests + typecheck the worker**
@@ -1841,6 +2032,7 @@ git commit -m "feat(api): daily well-known sweep (two-pass) behind well-known-sy
 ### Task 11: Docs + conventions entry
 
 **Files:**
+
 - Create: `docs/architecture/well-known-config.md`
 - Modify: `AGENTS.md`
 
@@ -1848,17 +2040,17 @@ git commit -m "feat(api): daily well-known sweep (two-pass) behind well-known-sy
 
 Create `docs/architecture/well-known-config.md`:
 
-```markdown
+````markdown
 # Owner-declared listing metadata (`releases.json`)
 
 Owners self-declare how they appear in the registry with a small,
 `$schema`-validated `releases.json`. Authority is scoped by **where the file is
 hosted**, not by what it claims.
 
-| Location | Scope | Honored fields |
-|---|---|---|
-| `https://{domain}/.well-known/releases.json` | Org identity | `name`, `description`, `category`, `avatar`, `tags`, `social`, `notice` |
-| `{owner}/{repo}/releases.json` (repo root) | That source → product | `product` (name/slug + optional description/category/kind) |
+| Location                                     | Scope                 | Honored fields                                                          |
+| -------------------------------------------- | --------------------- | ----------------------------------------------------------------------- |
+| `https://{domain}/.well-known/releases.json` | Org identity          | `name`, `description`, `category`, `avatar`, `tags`, `social`, `notice` |
+| `{owner}/{repo}/releases.json` (repo root)   | That source → product | `product` (name/slug + optional description/category/kind)              |
 
 The reconciler honors org-identity keys only from the domain file and `product`
 only from a repo file — a repo cannot define the org. Same product slug across
@@ -1878,6 +2070,7 @@ repos groups those sources under one product.
   "notice": { "message": "Docs moved", "href": "https://acme.com/docs" }
 }
 ```
+````
 
 ## Repo-scope example (`releases.json` at repo root)
 
@@ -1915,7 +2108,8 @@ repos groups those sources under one product.
 
 Self-serve source declaration (`changelogs[]`), org-identity from a repo file,
 social/tag removal sync, a CLI verb, and a public web docs page.
-```
+
+````
 
 - [ ] **Step 2: Add the AGENTS.md conventions line**
 
@@ -1923,7 +2117,7 @@ In `AGENTS.md`, in the `## Conventions` list, add one bullet:
 
 ```markdown
 - **Owner-declared listing metadata**: a `$schema`-validated `releases.json` — domain `.well-known/releases.json` sets org identity, repo-root `releases.json` maps that source to a product (grouping by shared product slug); display-only, fail-closed, never clobbers curator/editorial fields, flag `well-known-sync-enabled` (default on). See [well-known-config.md](docs/architecture/well-known-config.md).
-```
+````
 
 Add the matching entry to the `## Further reading` list:
 
@@ -1983,4 +2177,7 @@ git commit -m "chore: lint/format fixups for releases.json" || echo "nothing to 
 - **Spec coverage:** schema+`$schema` (T1–T2), fail-closed fetch (T4), org reconciler + precedence/`selfDeclared` (T3,T5,T6), source/product reconciler + grouping (T7,T8), route + dryRun (T9), flag default-on + two-pass sweep (T10), no migration (confirmed — only `metadata` JSON + existing columns), docs (T11), tests throughout, verification (T12). Tier 2 / removals / CLI / web docs page explicitly deferred.
 - **Type consistency:** `syncOrgWellKnown`/`syncSourceRepo` signatures, `OrgIdentityPlan`/`ProductPlan` shapes, `SelfDeclared` marker, and `FLAGS.wellKnownSyncEnabled` key are used identically across producing and consuming tasks.
 - **Known soft spots flagged inline:** the test-db handle vs `Db` type may need an `as any` at test call sites (noted in T6/T12); the `void parseSelfDeclared;` guard in T8 is removable if the linter says so; the flag entry shape must match neighbors (noted in T10).
+
+```
+
 ```
