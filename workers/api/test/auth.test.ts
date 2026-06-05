@@ -500,8 +500,12 @@ describe("magic link", () => {
 // migration), so a schema mismatch would throw on insert and fail here.
 
 describe("device-authorization plugin gating", () => {
+  // WEB_BASE_URL is deliberately a DIFFERENT host than BETTER_AUTH_URL so the
+  // verification_uri assertion below proves the approval URL lands on the web
+  // origin (where /device is served), not the API origin (where it 404s).
   const baseEnv = {
     BETTER_AUTH_URL: "https://api.releases.localhost",
+    WEB_BASE_URL: "https://app.releases.localhost",
     BETTER_AUTH_SECRET: "test-secret-do-not-use-in-prod-0123456789",
   };
 
@@ -537,8 +541,10 @@ describe("device-authorization plugin gating", () => {
     const res = await auth.api.deviceCode({ body: { client_id: DEVICE_AUTH_CLIENT_ID } });
     expect(res.user_code).toBeTruthy();
     expect(res.device_code).toBeTruthy();
-    // verificationUri: "/device" is echoed back (absolute or relative).
-    expect(res.verification_uri).toContain("/device");
+    // The approval URL must resolve to the WEB origin (where /device lives), NOT the
+    // API origin — a relative "/device" would resolve against BETTER_AUTH_URL and 404.
+    expect(res.verification_uri).toBe("https://app.releases.localhost/device");
+    expect(res.verification_uri).not.toContain("api.releases.localhost");
 
     // A pending row landed through the real device_code column shape.
     const rows = await db.select().from(deviceCode);
