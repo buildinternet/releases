@@ -313,6 +313,18 @@ describe("resolveMcpAuth — relu_ user keys", () => {
     expect(calls.length).toBe(0);
   });
 
+  it("API_TOKENS_DISABLED ⇒ relu_ path disabled (anonymous, no /me call)", async () => {
+    const calls: MeCall[] = [];
+    const api = stubMeApi(calls, { status: 200, scopes: ["read"] });
+    const r = await resolveMcpAuth(
+      rpcReq("tools/call", { Authorization: `Bearer ${RELU}` }),
+      enabled(api, { API_TOKENS_DISABLED: "true" }),
+    );
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.identity.kind).toBe("anonymous");
+    expect(calls.length).toBe(0);
+  });
+
   it("no API binding ⇒ relu_ resolves anonymous (cannot verify)", async () => {
     const r = await resolveMcpAuth(
       rpcReq("tools/call", { Authorization: `Bearer ${RELU}` }),
@@ -322,18 +334,20 @@ describe("resolveMcpAuth — relu_ user keys", () => {
     if (r.ok) expect(r.identity.kind).toBe("anonymous");
   });
 
-  it("forwards the staging key to /me when bound", async () => {
+  it("forwards the BOUND staging key to /me, not the inbound header value", async () => {
     const calls: MeCall[] = [];
     const api = stubMeApi(calls, { status: 200, scopes: ["read"] });
     const r = await resolveMcpAuth(
       rpcReq("tools/call", {
         Authorization: `Bearer ${RELU}`,
-        "X-Releases-Staging-Key": "stg-key",
+        "X-Releases-Staging-Key": "inbound-key",
       }),
-      enabled(api, { STAGING_ACCESS_KEY: mockSecret("stg-key") }),
+      enabled(api, { STAGING_ACCESS_KEY: mockSecret("bound-key") }),
     );
     expect(r.ok).toBe(true);
-    expect(calls[0].stagingKey).toBe("stg-key");
+    // resolveUserKey must read env.STAGING_ACCESS_KEY (the binding), never the
+    // inbound header — distinct values catch a header-passthrough bug.
+    expect(calls[0].stagingKey).toBe("bound-key");
   });
 
   it("method peek leaves the original request body readable for createMcpHandler", async () => {
