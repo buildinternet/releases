@@ -8,7 +8,7 @@ import { describe, it, expect, beforeAll, afterAll } from "bun:test";
 import { createTestDb, type TestDatabase } from "../db-helper.js";
 import { apiTokens } from "@buildinternet/releases-core/schema";
 import { generateApiToken, hashSecret } from "@buildinternet/releases-core/api-token";
-import { resolveMcpAuth } from "../../workers/mcp/src/auth.js";
+import { resolveMcpAuth, isMeteredMcpMethod } from "../../workers/mcp/src/auth.js";
 import type { Env } from "../../workers/mcp/src/mcp-agent.js";
 
 const mockSecret = (v: string) => ({ get: () => Promise.resolve(v) });
@@ -131,5 +131,68 @@ describe("resolveMcpAuth — staging gate", () => {
       staging(),
     );
     expect(r.ok).toBe(true);
+  });
+});
+
+describe("isMeteredMcpMethod", () => {
+  const post = (body: unknown) =>
+    new Request("https://mcp.releases.sh/mcp", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+  it("tools/call ⇒ billable", async () => {
+    expect(await isMeteredMcpMethod(post({ jsonrpc: "2.0", id: 1, method: "tools/call" }))).toBe(
+      true,
+    );
+  });
+
+  it("protocol-overhead methods ⇒ not billable", async () => {
+    for (const m of [
+      "initialize",
+      "tools/list",
+      "resources/list",
+      "resources/templates/list",
+      "prompts/list",
+      "ping",
+      "logging/setLevel",
+      "completion/complete",
+    ]) {
+      expect(await isMeteredMcpMethod(post({ method: m }))).toBe(false);
+    }
+  });
+
+  it("notifications/* ⇒ not billable", async () => {
+    expect(await isMeteredMcpMethod(post({ method: "notifications/initialized" }))).toBe(false);
+  });
+
+  it("unknown method ⇒ billable (fail-toward-metering)", async () => {
+    expect(await isMeteredMcpMethod(post({ method: "tools/weird" }))).toBe(true);
+  });
+
+  it("missing/non-string method ⇒ billable", async () => {
+    expect(await isMeteredMcpMethod(post({ id: 1 }))).toBe(true);
+  });
+
+  it("unparseable body ⇒ billable", async () => {
+    const r = new Request("https://mcp.releases.sh/mcp", { method: "POST", body: "{not json" });
+    expect(await isMeteredMcpMethod(r)).toBe(true);
+  });
+
+  it("non-POST ⇒ not billable", async () => {
+    expect(
+      await isMeteredMcpMethod(new Request("https://mcp.releases.sh/mcp", { method: "GET" })),
+    ).toBe(false);
+  });
+
+  it("batch with any billable entry ⇒ billable", async () => {
+    expect(
+      await isMeteredMcpMethod(post([{ method: "tools/list" }, { method: "tools/call" }])),
+    ).toBe(true);
+  });
+
+  it("batch of only overhead ⇒ not billable", async () => {
+    expect(await isMeteredMcpMethod(post([{ method: "tools/list" }]))).toBe(false);
   });
 });

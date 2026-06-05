@@ -9,6 +9,47 @@ import type { Env } from "./mcp-agent.js";
 const STAGING_KEY_HEADER = "X-Releases-Staging-Key";
 
 /**
+ * JSON-RPC methods that are MCP protocol overhead, not billable operations.
+ * A presented relu_ key is NOT metered on these.
+ */
+const NON_BILLABLE_MCP_METHODS = new Set([
+  "initialize",
+  "tools/list",
+  "resources/list",
+  "resources/templates/list",
+  "prompts/list",
+  "ping",
+  "logging/setLevel",
+  "completion/complete",
+]);
+
+function isBillableMethod(method: unknown): boolean {
+  if (typeof method !== "string") return true; // unknown/absent → meter (safe)
+  if (method.startsWith("notifications/")) return false; // fire-and-forget
+  return !NON_BILLABLE_MCP_METHODS.has(method);
+}
+
+/**
+ * Decide whether an inbound MCP request should meter a presented relu_ user key.
+ * Clones + parses the JSON-RPC body and bills everything except an allowlist of
+ * protocol-overhead methods; defaults to billable on parse failure or unknown
+ * method (fail-toward-metering). Cloning leaves the ORIGINAL request stream
+ * intact for `createMcpHandler` downstream.
+ */
+export async function isMeteredMcpMethod(request: Request): Promise<boolean> {
+  if (request.method !== "POST") return false; // GET = SSE stream, never billable
+  try {
+    const body = (await request.clone().json()) as unknown;
+    if (Array.isArray(body)) {
+      return body.some((m) => isBillableMethod((m as { method?: unknown })?.method));
+    }
+    return isBillableMethod((body as { method?: unknown })?.method);
+  } catch {
+    return true; // parse failure → meter (safe)
+  }
+}
+
+/**
  * Resolved caller identity, attached to the MCP server per request. Mirrors the
  * API worker's AuthContext, plus the raw `token` so the lookup fallback can
  * forward the caller's own credential instead of borrowing the root key.
