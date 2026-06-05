@@ -1,0 +1,46 @@
+{
+  "input": {
+    "org": {
+      "name": "Quill",
+      "description": "A type-safe query builder and migration toolkit"
+    },
+    "sources": [{ "name": "quill (GitHub)" }],
+    "selected": [
+      {
+        "id": "rel_quill_60",
+        "title": "quill v6.0.0",
+        "version": "6.0.0",
+        "content": "Major release. The connection pool is rewritten to release handles eagerly under load, which cuts steady-state memory on busy services. BREAKING: the implicit `any` row type is gone — queries now infer row shapes from the schema, and untyped raw queries must opt in with `raw<T>()`. The deprecated `Model.find()` helper is removed in favor of `query().where()`.",
+        "publishedAt": "2026-05-26",
+        "url": "https://github.com/quill/quill/releases/tag/v6.0.0"
+      },
+      {
+        "id": "rel_quill_migrate",
+        "title": "quill-migrate v2.0.0",
+        "version": "2.0.0",
+        "content": "Migrations can now run inside a single transaction with automatic rollback on failure, so a half-applied migration no longer leaves the schema wedged. Adds a `--dry-run` flag that prints the SQL without executing it. Generated migration files now include a checksum so drift between the file and the applied state is detected on the next run.",
+        "publishedAt": "2026-05-24",
+        "url": "https://github.com/quill/quill-migrate/releases/tag/v2.0.0"
+      },
+      {
+        "id": "rel_quill_601",
+        "title": "quill v6.0.1",
+        "version": "6.0.1",
+        "content": "Patch. Fixes a regression where `raw<T>()` lost the inferred type when chained after `.limit()`. Restores the prior behavior and adds a type-level test to guard it.",
+        "publishedAt": "2026-05-31",
+        "url": "https://github.com/quill/quill/releases/tag/v6.0.1"
+      },
+      {
+        "id": "rel_quill_pg18",
+        "title": "Postgres 18 support",
+        "version": null,
+        "content": "Adds first-class support for Postgres 18, including the new `MERGE ... RETURNING` syntax and virtual generated columns. The driver negotiates protocol features at connect time, so older servers keep working unchanged.",
+        "publishedAt": "2026-05-20",
+        "url": "https://github.com/quill/quill/releases/tag/pg18-support"
+      }
+    ],
+    "existingContent": null,
+    "totalAvailable": 22
+  },
+  "citations": { "minCitations": 2 }
+}

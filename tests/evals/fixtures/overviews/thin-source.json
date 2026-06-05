@@ -1,0 +1,31 @@
+{
+  "input": {
+    "org": {
+      "name": "Mapleboard",
+      "description": "A shared whiteboard for remote design reviews"
+    },
+    "sources": [{ "name": "Mapleboard Changelog" }],
+    "selected": [
+      {
+        "id": "rel_maple_comments",
+        "title": "Threaded comments on frames",
+        "version": null,
+        "content": "Comments now thread under the frame they were left on instead of floating on the canvas. Each thread tracks resolved state, and resolving one collapses it out of the way. Mentions notify the named collaborator by email and in the activity feed.",
+        "publishedAt": "2026-05-27",
+        "url": "https://mapleboard.example/changelog/threaded-comments"
+      },
+      {
+        "id": "rel_maple_export",
+        "title": "PDF export with presenter notes",
+        "version": null,
+        "content": "You can export a board to PDF with one frame per page. Presenter notes attached to a frame render on the page so a review can be shared with people who were not in the session. Export respects the current zoom and frame ordering.",
+        "publishedAt": "2026-05-23",
+        "url": "https://mapleboard.example/changelog/pdf-export"
+      }
+    ],
+    "existingContent": null,
+    "totalAvailable": 2
+  },
+  "structural": { "maxWords": 200 },
+  "citations": { "minCitations": 1 }
+}
