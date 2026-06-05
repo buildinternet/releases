@@ -38,8 +38,8 @@ describe("api-keys client", () => {
   });
 
   it("creates via POST with a JSON body and credentials", async () => {
-    mockFetch({ id: "ak_2", key: "relu_secret", name: "ci", scope: "write" }, true, 201);
-    const created = await createApiKey({ name: "ci", scope: "write" });
+    mockFetch({ id: "ak_2", key: "relu_secret", name: "ci", scope: "read" }, true, 201);
+    const created = await createApiKey({ name: "ci", scope: "read" });
     expect(created.key).toBe("relu_secret");
     expect(calls[0]!.url).toBe("https://api.test/v1/api-keys");
     expect(calls[0]!.init?.method).toBe("POST");
@@ -47,8 +47,8 @@ describe("api-keys client", () => {
   });
 
   it("surfaces the server message on a failed create", async () => {
-    mockFetch({ error: "bad_request", message: "scope must be 'read' or 'write'" }, false, 400);
-    await expect(createApiKey({ name: "x", scope: "write" })).rejects.toThrow(/scope must be/);
+    mockFetch({ error: "bad_request", message: "scope must be 'read'" }, false, 400);
+    await expect(createApiKey({ name: "x" })).rejects.toThrow(/scope must be/);
   });
 
   it("revokes via DELETE with credentials", async () => {

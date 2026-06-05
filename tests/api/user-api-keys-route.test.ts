@@ -60,10 +60,12 @@ describe("POST /v1/api-keys (create)", () => {
     expect(res.status).toBe(400);
   });
 
-  it("rejects a missing/garbage scope with 400", async () => {
+  it("defaults a missing scope to read; rejects a garbage scope with 400", async () => {
     h = createTestDb();
     seedUser("user_1", "u1@e.com");
-    expect((await post("user_1", { name: "k" })).status).toBe(400);
+    const missing = await post("user_1", { name: "k" });
+    expect(missing.status).toBe(201);
+    expect(((await missing.json()) as { scope: string }).scope).toBe("read");
     expect((await post("user_1", { name: "k", scope: "owner" })).status).toBe(400);
   });
 
@@ -89,13 +91,11 @@ describe("POST /v1/api-keys (create)", () => {
     expect(body.id).toBeTruthy();
   });
 
-  it("creates a write key whose stored scope is write", async () => {
+  it("rejects scope 'write' with 400 (read-only ceiling)", async () => {
     h = createTestDb();
     seedUser("user_1", "u1@e.com");
     const res = await post("user_1", { name: "ci", scope: "write" });
-    expect(res.status).toBe(201);
-    const body = (await res.json()) as { scope: string };
-    expect(body.scope).toBe("write");
+    expect(res.status).toBe(400);
   });
 
   it("rejects an out-of-range expiry with 400", async () => {
@@ -122,7 +122,7 @@ describe("GET /v1/api-keys (list)", () => {
     seedUser("user_1", "u1@e.com");
     seedUser("user_2", "u2@e.com");
     await post("user_1", { name: "mine", scope: "read" });
-    await post("user_2", { name: "theirs", scope: "write" });
+    await post("user_2", { name: "theirs", scope: "read" });
 
     const { status, body } = await list("user_1");
     expect(status).toBe(200);

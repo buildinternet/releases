@@ -32,7 +32,6 @@ export function ApiKeysPanel() {
   const [error, setError] = useState<string | null>(null);
 
   const [name, setName] = useState("");
-  const [scope, setScope] = useState<"read" | "write">("read");
   const [creating, setCreating] = useState(false);
   const [revealed, setRevealed] = useState<CreatedUserApiKey | null>(null);
   const [copied, setCopied] = useState(false);
@@ -60,11 +59,10 @@ export function ApiKeysPanel() {
     setCreating(true);
     setError(null);
     try {
-      const created = await createApiKey({ name: name.trim(), scope });
+      const created = await createApiKey({ name: name.trim() });
       setRevealed(created);
       setCopied(false);
       setName("");
-      setScope("read");
       await refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to create API key");
@@ -173,31 +171,9 @@ export function ApiKeysPanel() {
             required
           />
         </div>
-        <fieldset>
-          <legend className={labelClass}>Scope</legend>
-          <div className="mt-2 flex gap-4 text-sm text-stone-700 dark:text-stone-200">
-            <label className="flex items-center gap-2">
-              <input
-                type="radio"
-                name="scope"
-                value="read"
-                checked={scope === "read"}
-                onChange={() => setScope("read")}
-              />
-              Read
-            </label>
-            <label className="flex items-center gap-2">
-              <input
-                type="radio"
-                name="scope"
-                value="write"
-                checked={scope === "write"}
-                onChange={() => setScope("write")}
-              />
-              Write
-            </label>
-          </div>
-        </fieldset>
+        <p className="text-sm text-stone-500 dark:text-stone-400">
+          Keys are read-only — they can search and read the catalog, but cannot modify it.
+        </p>
         <button type="submit" disabled={creating || !name.trim()} className={buttonClass}>
           {creating ? "Creating…" : "Create key"}
         </button>
