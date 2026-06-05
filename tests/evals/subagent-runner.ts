@@ -178,7 +178,7 @@ function prepSummary(useJudge: boolean) {
 // the parent dispatches the `overview-writer` agent per fixture, writes each
 // returned body to <bodiesDir>/<name>.md, then `grade overview` runs the REAL
 // gradeOverviewStructural here — no inline mirror, no drift. The optional
-// `overview-grader` (Sonnet) verdicts fold in via --verdicts.
+// `rubric-grader` (Sonnet) verdicts fold in via --verdicts.
 //
 // Citation integrity is NOT graded on this path: a free-text sub-agent cannot
 // emit Anthropic's native search_result citation objects. That check stays on
@@ -297,7 +297,7 @@ function materializeViewerCase(
  * Grade sub-agent-produced overview bodies. Reads <bodiesDir>/<name>.md per
  * fixture, runs the real structural grader. With --judge but no --verdicts,
  * writes <bodiesDir>/<name>.grader.txt (the buildGraderPrompt artifact) for the
- * overview-grader agent to consume, and skips saving (run is incomplete). With
+ * rubric-grader agent to consume, and skips saving (run is incomplete). With
  * --verdicts <file> (a JSON map name -> { result }), folds the Sonnet verdict in
  * and saves the run. With --viewer <dir>, also materializes a skill-creator
  * eval-viewer workspace so the bodies can be reviewed in the browser.
@@ -382,7 +382,7 @@ function gradeOverview(
 
   if (useJudge && awaitingVerdict.length > 0) {
     console.error(
-      `\nAwaiting judge verdicts. Dispatch the overview-grader agent on each grader prompt, then re-run with --verdicts:`,
+      `\nAwaiting judge verdicts. Dispatch the rubric-grader agent on each grader prompt, then re-run with --verdicts:`,
     );
     for (const g of awaitingVerdict) console.error(`  ${g}`);
     console.error(

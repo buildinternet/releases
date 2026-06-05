@@ -14,9 +14,12 @@ only the execution substrate changes.
 Two driver shapes are in play. Marketing + summary fan out inside a **Workflow**
 (`.claude/workflows/eval-*-subagents.ts`) whose sandbox can't import repo code,
 so each mirrors `graders.ts` inline. Overview is instead driven by the parent
-session's **Agent tool** against the `.claude/agents/overview-{writer,grader}.md`
-definitions — so its `grade` step calls the _real_ `gradeOverviewStructural`
-from `graders.ts` (no inline mirror, no drift).
+session's **Agent tool** against `.claude/agents/overview-writer.md` (the
+generator) and the domain-neutral `.claude/agents/rubric-grader.md` (the judge)
+— so its `grade` step calls the _real_ `gradeOverviewStructural` from
+`graders.ts` (no inline mirror, no drift). The grader is intentionally generic:
+the rubric supplies the per-eval criteria, so the same `rubric-grader` serves
+any eval's Tier-2 judge step.
 
 ## What it is (and isn't)
 
@@ -124,7 +127,7 @@ voice, length, faithfulness) on the subscription.
    With `--judge` and no verdicts yet, it writes one `<name>.grader.txt`
    (`buildGraderPrompt` output) per fixture and stops without saving.
 
-4. **Judge** — dispatch the `overview-grader` agent (Sonnet) on each
+4. **Judge** — dispatch the `rubric-grader` agent (Sonnet) on each
    `<name>.grader.txt`, collect each `{ "result": ... }`, assemble a
    `verdicts.json` map (`name -> { result }`), then finalize + save:
 
@@ -180,10 +183,12 @@ Marketing classifier, release summary, and overview are all wired. The
 marketing and summary Workflows mirror `gradeBinary` / `gradeStructural` inline
 (Tier-1) and map the `--judge` faithfulness tier to a Sonnet sub-agent (Tier-2).
 Overview runs via the Agent tool, pairing the real `gradeOverviewStructural`
-(Tier-1) with the `overview-grader` Sonnet judge against
+(Tier-1) with the generic `rubric-grader` Sonnet judge against
 `src/shared/rubrics/overview.md` (Tier-2); its citation-integrity check is
-metered-only. An A/B prompt/model comparison harness is the natural next
-addition.
+metered-only. Because the grader is rubric-driven (not overview-specific), the
+summary/marketing Tier-2 legs can adopt the same `rubric-grader` rather than
+each spawning a bespoke judge. An A/B prompt/model comparison harness is the
+natural next addition.
 
 ## Files
 
@@ -194,7 +199,7 @@ addition.
 - `.claude/workflows/eval-summary-subagents.ts` — summary fan-out + inline
   `gradeStructural` mirror + optional Sonnet judge.
 - `.claude/agents/overview-writer.md` — Haiku generator agent (overview body).
-- `.claude/agents/overview-grader.md` — Sonnet rubric-judge agent.
+- `.claude/agents/rubric-grader.md` — Sonnet rubric-judge agent (domain-neutral; reusable across evals).
 
 > The inline grade mirrors (`graders.ts`) live in each Workflow because the
 > sandbox can't import repo modules — keep them in sync if `graders.ts` changes.
