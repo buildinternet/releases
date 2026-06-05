@@ -9,6 +9,7 @@ import type { BaseSQLiteDatabase } from "drizzle-orm/sqlite-core";
 import { getSecret } from "@releases/lib/secrets";
 import { logEvent } from "@releases/lib/log-event";
 import { FLAGS, flag } from "@releases/lib/flags";
+import { USER_API_KEY_PREFIX } from "@buildinternet/releases-core/api-token";
 import { scopeToPermissions } from "./api-key-scope.js";
 import { createDb } from "../db.js";
 import { user, session, account, verification, rateLimit, apikey } from "../db/schema-auth.js";
@@ -371,7 +372,7 @@ export async function createAuth(
       ? [
           apiKey({
             // Public-facing user keys. Distinct prefix from the relk_ machine lane.
-            defaultPrefix: "relu_",
+            defaultPrefix: USER_API_KEY_PREFIX,
             requireName: true,
             enableMetadata: true,
             // Default tier (single config). Per-key overrides land at creation time.
