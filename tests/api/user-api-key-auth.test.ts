@@ -29,9 +29,8 @@ function app() {
   return a;
 }
 
-// betterAuth's inferred api type omits the flag-gated apiKey endpoints; assert the
-// shape under test with a precise (non-any) structural cast.
-async function mintKey(scope: "read" | "write") {
+// Seed the single owning user the keys are minted for.
+function insertUser() {
   h!.db
     .insert(user)
     .values({
@@ -43,6 +42,12 @@ async function mintKey(scope: "read" | "write") {
       updatedAt: new Date(),
     })
     .run();
+}
+
+// betterAuth's inferred api type omits the flag-gated apiKey endpoints; assert the
+// shape under test with a precise (non-any) structural cast.
+async function mintKey(scope: "read" | "write") {
+  insertUser();
   const auth = await createAuth(env(), undefined, { db: h!.db });
   const api = auth.api as typeof auth.api & {
     createApiKey: (a: {
@@ -107,17 +112,7 @@ function prodEnv() {
 describe("relu_ key rate limiting", () => {
   it("returns 429 once the per-key request budget is exhausted", async () => {
     h = createTestDb();
-    h.db
-      .insert(user)
-      .values({
-        id: "user_1",
-        name: "T",
-        email: "t@example.com",
-        emailVerified: true,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      })
-      .run();
+    insertUser();
     const auth = await createAuth(prodEnv(), undefined, { db: h.db });
     // betterAuth's inferred api type omits the flag-gated apiKey endpoints; assert
     // the create shape (incl. the server-only per-key rate-limit fields) precisely.
