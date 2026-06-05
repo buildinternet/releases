@@ -22,6 +22,7 @@
   },
   "vars": {
     "ENABLE_AI_TOOLS": "false",
+    "USER_API_KEYS_ENABLED": "false",
     "MEDIA_ORIGIN": "https://media.releases.sh",
     // Embedding provider for semantic search. Default: voyage (voyage-4-lite,
     // requested at 512 dims via output_dimension to match the Vectorize indexes).
@@ -101,6 +102,7 @@
       "routes": [{ "pattern": "mcp-staging.releases.sh", "custom_domain": true }],
       "vars": {
         "ENABLE_AI_TOOLS": "false",
+        "USER_API_KEYS_ENABLED": "false",
         "MEDIA_ORIGIN": "https://media.releases.sh",
         "EMBEDDING_PROVIDER": "voyage",
         // Staging-only: emit X-Robots-Tag: noindex and serve a deny-all
