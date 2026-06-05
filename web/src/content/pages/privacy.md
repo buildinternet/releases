@@ -30,7 +30,7 @@ We send account-related email (verification, password reset, and sign-in links) 
 
 ### API request logs
 
-Requests to the API are logged with basic metadata — IP address, user agent, request path, response status, and timing — for operational and abuse-prevention purposes. We use these logs to diagnose errors, detect abuse, and enforce rate limits. Request logs are retained for up to 30 days and are not shared with third parties.
+Requests to the API are logged with basic metadata — IP address, user agent, request path, response status, and timing — for operational and abuse-prevention purposes. We use these logs to diagnose errors, detect abuse, and enforce rate limits. Request logs are retained for up to 30 days. We do not sell them or share them for any independent third-party use; they are processed only by the infrastructure providers that host and route the service (chiefly Cloudflare) for those operational purposes — see [Service providers](#service-providers) below.
 
 ### CLI and MCP telemetry
 
