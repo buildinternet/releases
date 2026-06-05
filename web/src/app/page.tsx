@@ -5,7 +5,7 @@ import { tryFetch } from "@/lib/ssr-fetch";
 import { graphqlRequest } from "@/lib/graphql/client";
 import { HomepageTickerDocument } from "@/lib/graphql/__generated__/graphql";
 import type { HomepageTickerQuery } from "@/lib/graphql/__generated__/graphql";
-import ConveyorBackground from "@/components/conveyor-background";
+import { ConveyorBackdrop } from "@/components/conveyor-backdrop";
 import { Header } from "@/components/header";
 import { JsonLd } from "@/components/json-ld";
 import { SetupMessage } from "@/components/setup-message";
@@ -330,7 +330,7 @@ export default async function HomePage() {
           No `overflow-hidden`: the canvas self-clips to its own box, and clipping
           here would cut off the header's search / mobile-nav dropdowns. */}
       <div className="relative">
-        <ConveyorBackground intensity={0.7} density={1} style={{ position: "absolute" }} />
+        <ConveyorBackdrop style={{ position: "absolute" }} />
         <div className="relative z-10">
           <Header />
           <div className="pt-12 pb-8 text-center px-6">
