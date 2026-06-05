@@ -65,15 +65,18 @@ async function mintKey(scope: "read" | "write") {
 }
 
 describe("relu_ user key auth on the public-read middleware", () => {
-  it("a write key passes a POST (unsafe method requires write)", async () => {
+  it("a write-permissioned key is clamped to read → POST 403 (user keys are read-only)", async () => {
     h = createTestDb();
+    // Minted directly with write permissions (bypassing the read-only mint cap)
+    // to prove the auth resolver clamps every relu_ key to read regardless of
+    // its stored permissions — write is unreachable for the user lane.
     const { key } = await mintKey("write");
     const res = await app().request(
       "/thing",
       { method: "POST", headers: { Authorization: `Bearer ${key}` } },
       env(),
     );
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(403);
   });
 
   it("a read key is rejected on a POST with 403 insufficient_scope", async () => {
@@ -114,7 +117,11 @@ function prodEnv() {
 }
 
 describe("relu_ key rate limiting", () => {
-  it("returns 429 once the per-key request budget is exhausted", async () => {
+  // User keys are read-only, so an unsafe POST is metered (verifyApiKey runs and
+  // ticks the per-key budget) and THEN scope-denied with 403 — the metering
+  // happens before the scope check. So the first request is 403, and once the
+  // per-key budget is spent the second request short-circuits to 429.
+  it("meters every unsafe request and returns 429 once the per-key budget is exhausted", async () => {
     h = createTestDb();
     insertUser();
     const auth = await createAuth(prodEnv(), undefined, { db: h.db });
@@ -132,12 +139,13 @@ describe("relu_ key rate limiting", () => {
         };
       }) => Promise<{ key: string }>;
     };
-    // Per-key override: 1 request per hour, write scope.
+    // Per-key override: 1 request per hour. Read scope (the only thing a user key
+    // can hold); the clamp still meters the request before denying the write.
     const created = await api.createApiKey({
       body: {
         name: "tight",
         userId: "user_1",
-        permissions: scopeToPermissions("write"),
+        permissions: scopeToPermissions("read"),
         rateLimitEnabled: true,
         rateLimitMax: 1,
         rateLimitTimeWindow: 1000 * 60 * 60,
@@ -145,17 +153,19 @@ describe("relu_ key rate limiting", () => {
     });
     const key = created.key;
 
+    // Metered, then scope-denied (read key on a write-required route).
     const once = await app().request(
       "/thing",
       { method: "POST", headers: { Authorization: `Bearer ${key}` } },
       prodEnv(),
     );
-    expect(once.status).toBe(200);
+    expect(once.status).toBe(403);
 
     // deferUpdates floats the requestCount write; flush so it lands before the
     // second verify reads the key.
     await new Promise((r) => setTimeout(r, 0));
 
+    // Budget spent → verify short-circuits to rate-limited before the scope check.
     const twice = await app().request(
       "/thing",
       { method: "POST", headers: { Authorization: `Bearer ${key}` } },
