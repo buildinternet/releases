@@ -426,6 +426,54 @@ describe("GraphQL spike", () => {
     expect(feed.items.every((r) => r.source.type === "feed")).toBe(true);
   });
 
+  it("latestReleases drops sources marked metadata.contentQuality = 'low'", async () => {
+    // Content-quality tier: a `low` source is de-prioritized off the homepage
+    // ticker (which this resolver backs) without the heavier `isHidden` blast
+    // radius. Mark the feed source low; its releases drop from the feed while
+    // the github sources remain.
+    await h.db
+      .update(sources)
+      .set({ metadata: JSON.stringify({ contentQuality: "low" }) })
+      .where(eq(sources.id, "src_b1_1"));
+
+    const result = await graphql({
+      schema,
+      source: `query { latestReleases(limit: 100) { items { id } } }`,
+      contextValue: ctx(h.db),
+    });
+    expect(result.errors).toBeUndefined();
+    const ids = (
+      result.data as { latestReleases: { items: Array<{ id: string }> } }
+    ).latestReleases.items.map((r) => r.id);
+    expect(ids.some((id) => id.startsWith("rel_src_a1_1"))).toBe(true);
+    expect(ids.some((id) => id.startsWith("rel_src_b1_1"))).toBe(false);
+  });
+
+  it("latestReleases keeps sources marked contentQuality 'normal' or 'high'", async () => {
+    // Only `low` has an effect today; `high` is reserved for a future ranking
+    // boost and must be a no-op here, and an explicit `normal` matches default.
+    await h.db
+      .update(sources)
+      .set({ metadata: JSON.stringify({ contentQuality: "high" }) })
+      .where(eq(sources.id, "src_b1_1"));
+    await h.db
+      .update(sources)
+      .set({ metadata: JSON.stringify({ contentQuality: "normal" }) })
+      .where(eq(sources.id, "src_a1_1"));
+
+    const result = await graphql({
+      schema,
+      source: `query { latestReleases(limit: 100) { items { id } } }`,
+      contextValue: ctx(h.db),
+    });
+    expect(result.errors).toBeUndefined();
+    const ids = (
+      result.data as { latestReleases: { items: Array<{ id: string }> } }
+    ).latestReleases.items.map((r) => r.id);
+    expect(ids.some((id) => id.startsWith("rel_src_b1_1"))).toBe(true);
+    expect(ids.some((id) => id.startsWith("rel_src_a1_1"))).toBe(true);
+  });
+
   it("latestReleases excludes releases whose org is hidden", async () => {
     // Hidden orgs ("don't feature") must not surface on the homepage ticker,
     // which this resolver backs. Mark org_b hidden; its releases drop while
