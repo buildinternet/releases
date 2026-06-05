@@ -43,6 +43,10 @@ repos groups those sources under one product.
   self-declared (tracked at `metadata.selfDeclared`). Curator-set and editorial
   fields (`featured`, `isHidden`, `discovery`, `fetchPaused`, collections,
   blocked/ignored URLs; source `isPrimary`/`fetchPriority`) are never touched.
+- **`name` in practice:** an org's `name` is required at creation and never
+  empty, so the domain file's `name` is honored only for the (rare) nameless org
+  — an existing name is never overwritten. It stays in the honored set so a
+  future nameless-org path keeps working, but expect it to no-op in practice.
 - **Category** is validated against `CATEGORIES`; an unresolvable value is
   ignored without failing the sync.
 - **Tags/social** are additive (v1 does not remove entries absent from the file).
