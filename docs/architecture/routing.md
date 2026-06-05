@@ -12,6 +12,15 @@ Three buckets, by intent:
 
 Do **not** add new `/v1/admin/*` endpoints for CRUD or for async triggers — those belong on the canonical path or under `/v1/workflows/*` respectively. Existing `/v1/admin/*` CRUD is tech debt (#494).
 
+A fourth, narrower bucket exists for **self-serve, session-authed** resources:
+`/v1/api-keys` (user-owned `relu_` API key management) is gated by `requireSession`
+(Better Auth session cookie), not by the Bearer-token middleware. It is intentionally
+absent from both `publicReadRoutes` and `adminRoutes` in
+`workers/api/src/route-namespaces.ts` (so neither the public-read nor admin auth loop
+touches it) and from the public-read OpenAPI coverage gate. Its credentialed CORS is
+carved out alongside `/api/auth/*` in `index.ts`. This bucket is for first-party,
+current-user browser operations; it is not a general extension point.
+
 ## Entity resolution: IDs over slugs
 
 Entity resolution prefers IDs over slugs; IDs are immutable, so prefer them in new clients.
