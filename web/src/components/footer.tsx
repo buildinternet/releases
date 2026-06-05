@@ -11,11 +11,13 @@ const COLUMNS: FooterColumn[] = [
     title: "Product",
     links: [
       { label: "Why", href: "/docs/why" },
-      { label: "Live", href: "/live" },
+      { label: "Live Updates", href: "/live" },
+      { label: "Collections", href: "/collections" },
+      { label: "Catalog", href: "/catalog" },
     ],
   },
   {
-    title: "Developers",
+    title: "Agents",
     links: [
       { label: "Docs", href: "/docs" },
       { label: "CLI", href: "/docs/installation" },
