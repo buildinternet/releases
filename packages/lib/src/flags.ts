@@ -98,6 +98,15 @@ export const FLAGS = {
     default: false,
   },
   apiTokensDisabled: { key: "api-tokens-disabled", env: "API_TOKENS_DISABLED", default: false },
+  // Rollout gate: the Better Auth user-API-key path. default:false → OFF until the
+  // web self-serve panel ships; flip on in BOTH Flagship apps to enable relu_ key
+  // verification + (later) self-serve creation. Separate from apiTokensDisabled,
+  // which kills the whole token path (both lanes).
+  userApiKeysEnabled: {
+    key: "user-api-keys-enabled",
+    env: "USER_API_KEYS_ENABLED",
+    default: false,
+  },
   cacheDisabled: { key: "cache-disabled", env: "CACHE_DISABLED", default: false },
   indexingDisabled: { key: "indexing-disabled", env: "INDEXING_DISABLED", default: false },
   extractToolLoopEnabled: {

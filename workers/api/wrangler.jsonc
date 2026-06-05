@@ -162,6 +162,7 @@
     // to "staging".
     "ENVIRONMENT": "production",
     "WEB_BOT_AUTH_ENABLED": "true",
+    "USER_API_KEYS_ENABLED": "false",
   },
   "d1_databases": [
     {
@@ -571,6 +572,7 @@
         // Discriminator read by /v1/graphql to gate GraphiQL + introspection.
         "ENVIRONMENT": "staging",
         "WEB_BOT_AUTH_ENABLED": "false",
+        "USER_API_KEYS_ENABLED": "false",
       },
       "d1_databases": [
         {
