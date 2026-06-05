@@ -1,7 +1,7 @@
 import { createMcpHandler } from "agents/mcp";
 import { isHtmlRequest, renderLandingPage } from "./landing.js";
 import { createServer, type Env } from "./mcp-agent.js";
-import { resolveMcpAuth } from "./auth.js";
+import { resolveMcpAuth, machineTokenIdForUsage } from "./auth.js";
 import { touchLastUsed } from "@releases/core-internal/api-token-store";
 import { FLAGS, flag } from "@releases/lib/flags";
 import { createDb } from "./db.js";
@@ -31,9 +31,11 @@ async function handle(
   if (!auth.ok) return auth.response;
   const { identity } = auth;
   // Record token usage (throttled, fire-and-forget) so the admin surface can
-  // audit last-used across both the API and MCP workers.
-  if (identity.kind === "token") {
-    ctx.waitUntil(touchLastUsed(createDb(env.DB), identity.tokenId).catch(() => undefined));
+  // audit last-used across both the API and MCP workers. relu_ user keys are
+  // metered by Better Auth's apikey table, not api_tokens — skip them here.
+  const usageTokenId = machineTokenIdForUsage(identity);
+  if (usageTokenId) {
+    ctx.waitUntil(touchLastUsed(createDb(env.DB), usageTokenId).catch(() => undefined));
   }
 
   if (url.pathname === "/" && request.method === "GET") {

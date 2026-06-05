@@ -8,7 +8,11 @@ import { describe, it, expect, beforeAll, afterAll } from "bun:test";
 import { createTestDb, type TestDatabase } from "../db-helper.js";
 import { apiTokens } from "@buildinternet/releases-core/schema";
 import { generateApiToken, hashSecret } from "@buildinternet/releases-core/api-token";
-import { resolveMcpAuth, isMeteredMcpMethod } from "../../workers/mcp/src/auth.js";
+import {
+  resolveMcpAuth,
+  isMeteredMcpMethod,
+  machineTokenIdForUsage,
+} from "../../workers/mcp/src/auth.js";
 import type { Env } from "../../workers/mcp/src/mcp-agent.js";
 
 const mockSecret = (v: string) => ({ get: () => Promise.resolve(v) });
@@ -194,5 +198,36 @@ describe("isMeteredMcpMethod", () => {
 
   it("batch of only overhead ⇒ not billable", async () => {
     expect(await isMeteredMcpMethod(post([{ method: "tools/list" }]))).toBe(false);
+  });
+});
+
+describe("machineTokenIdForUsage", () => {
+  it("relk_ token ⇒ returns the tokenId (record last_used)", () => {
+    expect(
+      machineTokenIdForUsage({
+        kind: "token",
+        scopes: ["read"],
+        tokenId: "tok_x",
+        token: "relk_x",
+      }),
+    ).toBe("tok_x");
+  });
+
+  it("relu_ user key ⇒ null (metered by Better Auth, no api_tokens row)", () => {
+    expect(
+      machineTokenIdForUsage({ kind: "token", scopes: ["read"], tokenId: "relu_", token: null }),
+    ).toBeNull();
+  });
+
+  it("root ⇒ null", () => {
+    expect(
+      machineTokenIdForUsage({ kind: "root", scopes: ["*"], tokenId: null, token: null }),
+    ).toBeNull();
+  });
+
+  it("anonymous ⇒ null", () => {
+    expect(
+      machineTokenIdForUsage({ kind: "anonymous", scopes: ["read"], tokenId: null, token: null }),
+    ).toBeNull();
   });
 });

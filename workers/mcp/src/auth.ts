@@ -1,5 +1,10 @@
 import { getSecret, getSecretWithFallback } from "@releases/lib/secrets";
-import { isApiTokenShaped, ROOT_SCOPE } from "@buildinternet/releases-core/api-token";
+import {
+  isApiTokenShaped,
+  isUserApiKeyShaped,
+  ROOT_SCOPE,
+  USER_API_KEY_PREFIX,
+} from "@buildinternet/releases-core/api-token";
 import { verifyApiToken } from "@releases/core-internal/api-token-store";
 import { FLAGS, flag } from "@releases/lib/flags";
 import { createDb } from "./db.js";
@@ -56,8 +61,21 @@ export async function isMeteredMcpMethod(request: Request): Promise<boolean> {
  */
 export type McpIdentity =
   | { kind: "root"; scopes: string[]; tokenId: null; token: null }
-  | { kind: "token"; scopes: string[]; tokenId: string; token: string }
+  | { kind: "token"; scopes: string[]; tokenId: string; token: string | null }
   | { kind: "anonymous"; scopes: string[]; tokenId: null; token: null };
+
+/**
+ * The `api_tokens` tokenId whose `last_used_at` should be recorded for this
+ * identity, or null when there is nothing to record: root / anonymous have no
+ * row, and relu_ user keys are metered by Better Auth's `apikey` table (a
+ * machine-lane UPDATE would touch zero rows). Returns the id (not a boolean) so
+ * the caller gets a non-null `string` without re-narrowing.
+ */
+export function machineTokenIdForUsage(identity: McpIdentity): string | null {
+  return identity.kind === "token" && !isUserApiKeyShaped(identity.tokenId)
+    ? identity.tokenId
+    : null;
+}
 
 export type McpAuthResult = { ok: false; response: Response } | { ok: true; identity: McpIdentity };
 
