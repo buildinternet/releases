@@ -102,12 +102,19 @@ const nextConfig: NextConfig = {
             // `/docs/api/rest`. The same origin is used by the API worker at
             // `workers/api/src/openapi.ts`. style-src adds it too because
             // Scalar injects its stylesheet from the same CDN.
-            // `frame-src` allows the YouTube video embeds (the release-detail
+            // `accounts.google.com/gsi/*` is Google Identity Services for the
+            // Google One Tap sign-in prompt (better-auth `oneTapClient`, auto-
+            // prompted from `auth-form.tsx`): it injects the GSI client script,
+            // renders the prompt in an iframe, and loads its own stylesheet — so
+            // script-src/frame-src/style-src must each allow it or the browser
+            // blocks the script with "Failed to load Google Identity Services
+            // script". connect-src already permits it via the broad `https:`.
+            // `frame-src` also allows the YouTube video embeds (the release-detail
             // click-to-play facade and YouTube links in changelog body copy);
             // without it they fall back to default-src 'self' and are blocked.
             key: "Content-Security-Policy",
             value:
-              "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' https: data:; media-src 'self' https:; font-src 'self' https: data:; connect-src 'self' https: wss:; frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com; frame-ancestors 'none'",
+              "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://accounts.google.com/gsi/client; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://accounts.google.com/gsi/style; img-src 'self' https: data:; media-src 'self' https:; font-src 'self' https: data:; connect-src 'self' https: wss:; frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com https://accounts.google.com/gsi/; frame-ancestors 'none'",
           },
         ],
       },
