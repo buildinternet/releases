@@ -12,7 +12,7 @@ import {
   deriveCookieDomain,
   createAuth,
 } from "../src/auth/index.js";
-import type { AuthEmailMessage } from "../src/auth/email.js";
+import { magicLinkTemplate, type AuthEmailMessage } from "../src/auth/email.js";
 
 // ── Pure helpers ──
 
@@ -394,5 +394,110 @@ describe("one-tap plugin gating", () => {
       sendEmail: () => {},
     });
     expect(pluginIds(auth)).not.toContain("one-tap");
+  });
+});
+
+// ── Magic link ──
+// Passwordless sign-in. Unlike social/one-tap the plugin needs no credential pair,
+// so it's ALWAYS registered (it leans only on the AUTH_EMAIL binding, same as
+// verify/reset). The token rides Better Auth's existing `verification` table, so
+// these exercise the real createAuth() over the migrated test DB with a capturing
+// sender (no network).
+
+describe("magic link", () => {
+  const env = {
+    BETTER_AUTH_URL: "https://api.releases.localhost",
+    BETTER_AUTH_SECRET: "test-secret-do-not-use-in-prod-0123456789",
+  } as never;
+
+  /** Pull the verify-link token out of a captured email's plain-text body. */
+  function tokenFromEmail(msg: AuthEmailMessage): string {
+    const link = msg.text.match(/https?:\/\/\S*\/magic-link\/verify\S*/)?.[0];
+    if (!link) throw new Error("no magic-link verify URL in email body");
+    const token = new URL(link).searchParams.get("token");
+    if (!token) throw new Error("no token in magic-link verify URL");
+    return token;
+  }
+
+  it("always registers the magic-link plugin (no credential gating)", async () => {
+    const auth = await createAuth(env, undefined, { db: createTestDb(), sendEmail: () => {} });
+    expect(pluginIds(auth)).toContain("magic-link");
+  });
+
+  it("emails a single sign-in link to the address, carrying the verify token", async () => {
+    const db = createTestDb();
+    const captured: AuthEmailMessage[] = [];
+    const auth = await createAuth(env, undefined, {
+      db,
+      sendEmail: (m) => {
+        captured.push(m);
+      },
+    });
+
+    await auth.api.signInMagicLink({ body: { email: "mira@example.com" }, headers: {} });
+
+    expect(captured).toHaveLength(1);
+    expect(captured[0]?.to).toBe("mira@example.com");
+    expect(captured[0]?.text).toMatch(/\/magic-link\/verify\?token=[\w-]+/);
+    // No account is created at request time — only a pending verification token.
+    expect(await db.select().from(user)).toHaveLength(0);
+  });
+
+  it("verifying the link auto-creates a verified user (blank name) + a session", async () => {
+    const db = createTestDb();
+    const captured: AuthEmailMessage[] = [];
+    const auth = await createAuth(env, undefined, {
+      db,
+      sendEmail: (m) => {
+        captured.push(m);
+      },
+    });
+
+    await auth.api.signInMagicLink({ body: { email: "nadia@example.com" }, headers: {} });
+    const res = await auth.api.magicLinkVerify({
+      query: { token: tokenFromEmail(captured[0]!) },
+      headers: {},
+    });
+    expect(res.user.email).toBe("nadia@example.com");
+
+    // disableSignUp is off → an unknown email lands a verified user. No name was
+    // supplied, so Better Auth writes "" (satisfies the NOT NULL user.name column).
+    const users = await db.select().from(user);
+    expect(users).toHaveLength(1);
+    expect(users[0]?.email).toBe("nadia@example.com");
+    expect(users[0]?.name).toBe("");
+    expect(users[0]?.emailVerified).toBeTruthy();
+    // A session row now exists.
+    expect((await db.select().from(session)).length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("consumes the token on first verify — a replay is rejected (single-use)", async () => {
+    const db = createTestDb();
+    const captured: AuthEmailMessage[] = [];
+    const auth = await createAuth(env, undefined, {
+      db,
+      sendEmail: (m) => {
+        captured.push(m);
+      },
+    });
+
+    await auth.api.signInMagicLink({ body: { email: "omar@example.com" }, headers: {} });
+    const token = tokenFromEmail(captured[0]!);
+    await auth.api.magicLinkVerify({ query: { token }, headers: {} });
+    // Second use of the same token must fail (atomic single-use consume).
+    await expect(auth.api.magicLinkVerify({ query: { token }, headers: {} })).rejects.toThrow();
+  });
+});
+
+describe("magicLinkTemplate", () => {
+  it("renders the URL into both bodies and escapes the attribute-breakout quote", () => {
+    const url = 'https://api.releases.localhost/api/auth/magic-link/verify?token=abc"x';
+    const t = magicLinkTemplate({ url });
+    expect(t.subject).toMatch(/sign-in/i);
+    // Plain-text body keeps the raw URL (no escaping).
+    expect(t.text).toContain('token=abc"x');
+    // HTML href escapes only the breakout char so the attribute can't be broken out of.
+    expect(t.html).toContain("token=abc%22x");
+    expect(t.html).not.toContain('token=abc"x');
   });
 });

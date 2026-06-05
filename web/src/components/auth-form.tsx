@@ -32,6 +32,16 @@ const SOCIAL_PROVIDERS = (process.env.NEXT_PUBLIC_AUTH_SOCIAL_PROVIDERS ?? "")
 const GOOGLE_ONE_TAP_ENABLED =
   SOCIAL_PROVIDERS.includes("google") && Boolean(process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID);
 
+/**
+ * Whether to surface the passwordless "Email me a sign-in link" button, gated by
+ * `NEXT_PUBLIC_AUTH_MAGIC_LINK`. The CLIENT half of the magic-link seam: the worker
+ * registers the magicLink plugin unconditionally (it needs only the AUTH_EMAIL
+ * binding), and the `magicLinkClient` is always in the bundle, but the button stays
+ * hidden until this flag is `"true"`. Lets the endpoints ship dark and the UI flip
+ * on later (set in Vercel) without a code change. Unset → password/social only.
+ */
+const MAGIC_LINK_ENABLED = process.env.NEXT_PUBLIC_AUTH_MAGIC_LINK === "true";
+
 const PROVIDER_META: Record<"google" | "github", { label: string; icon: ReactNode }> = {
   google: {
     label: "Google",
@@ -91,11 +101,17 @@ export function AuthForm({ mode, redirectTo = "/" }: { mode: Mode; redirectTo?: 
   // After a sign-up, the user has NO session (verification is required) — show a
   // "check your email" panel instead of redirecting. On an unverified sign-in the
   // worker returns 403 and re-sends the link; show the same panel with a resend.
+  // The same panel serves the magic-link flow; `checkEmailKind` keys the copy and
+  // which email the resend re-sends (verification vs. a fresh sign-in link).
   const [pendingEmail, setPendingEmail] = useState<string | null>(null);
   const [phase, setPhase] = useState<"form" | "check-email">("form");
   const [resent, setResent] = useState(false);
+  const [checkEmailKind, setCheckEmailKind] = useState<"verify" | "magic-link">("verify");
+  // Dedicated pending flag for the magic-link send so its button shows "Sending..."
+  // without coupling to the password submit's `pending`.
+  const [magicSending, setMagicSending] = useState(false);
 
-  const busy = pending || social !== null;
+  const busy = pending || social !== null || magicSending;
 
   // Auto-prompt Google One Tap on mount (login + signup surfaces). On success,
   // soft-navigate to the post-auth target like the email/social flows do, rather
@@ -126,23 +142,72 @@ export function AuthForm({ mode, redirectTo = "/" }: { mode: Mode; redirectTo?: 
   async function resend() {
     if (!pendingEmail || busy) return;
     setError(null);
-    setPending(true);
+    // Same shape for both panels — only the API call, the loading flag, and the copy
+    // differ. Magic-link re-issues a fresh sign-in link (a new token; the email-only
+    // resend means a brand-new account would land `name: ""`, same as the server's
+    // default — name only matters on first creation and isn't re-collected here);
+    // verify re-sends the verification link. Better Auth surfaces request-level
+    // failures (rate-limit, bad request) in `result.error` rather than throwing, so
+    // we only confirm `resent` on success.
+    const isMagic = checkEmailKind === "magic-link";
+    const setSending = isMagic ? setMagicSending : setPending;
+    const failMsg = isMagic
+      ? "Could not resend the link. Please try again."
+      : "Could not resend the email. Please try again.";
+    setSending(true);
     try {
-      const result = await sendVerificationEmail({
-        email: pendingEmail,
-        callbackURL: callbackURL(),
-      });
-      // Better Auth surfaces request-level failures (rate-limit, bad request) in
-      // `result.error` rather than throwing — only confirm resent on success.
+      const result = isMagic
+        ? await signIn.magicLink({ email: pendingEmail, callbackURL: callbackURL() })
+        : await sendVerificationEmail({ email: pendingEmail, callbackURL: callbackURL() });
       if (result.error) {
-        setError(result.error.message ?? "Could not resend the email. Please try again.");
+        setError(result.error.message ?? failMsg);
         return;
       }
       setResent(true);
     } catch {
-      setError("Could not resend the email. Please try again.");
+      setError(failMsg);
     } finally {
-      setPending(false);
+      setSending(false);
+    }
+  }
+
+  // Passwordless sign-in: email the user a one-time link. Reads the email (and, in
+  // signup mode, the optional name) straight from the form — the button is
+  // `type="button"`, so HTML5 required/minLength on the password field don't block
+  // it. On success, reuse the "check your email" panel (kind = magic-link). A
+  // brand-new email auto-creates a verified account on click (server `disableSignUp`
+  // is off); `name` is forwarded only when present so first-time signups carry it.
+  async function onMagicLink(event: React.MouseEvent<HTMLButtonElement>) {
+    if (busy) return;
+    const form = event.currentTarget.form;
+    if (!form) return;
+    const data = new FormData(form);
+    const email = String(data.get("email") ?? "").trim();
+    const name = String(data.get("name") ?? "").trim();
+    if (!email) {
+      setError("Enter your email to get a sign-in link.");
+      return;
+    }
+    setError(null);
+    setMagicSending(true);
+    try {
+      const result = await signIn.magicLink({
+        email,
+        ...(mode === "signup" && name ? { name } : {}),
+        callbackURL: callbackURL(),
+      });
+      if (result.error) {
+        setError(result.error.message ?? "Could not send a sign-in link. Please try again.");
+        return;
+      }
+      setPendingEmail(email);
+      setCheckEmailKind("magic-link");
+      setResent(false);
+      setPhase("check-email");
+    } catch {
+      setError("Network error. Please try again.");
+    } finally {
+      setMagicSending(false);
     }
   }
 
@@ -219,6 +284,12 @@ export function AuthForm({ mode, redirectTo = "/" }: { mode: Mode; redirectTo?: 
   const pendingLabel = mode === "signup" ? "Creating account..." : "Signing in...";
 
   if (phase === "check-email") {
+    const isMagic = checkEmailKind === "magic-link";
+    const linkNoun = isMagic ? "sign-in link" : "verification link";
+    const heading = isMagic ? "Your sign-in link is on its way" : "Verify your email address";
+    const action = isMagic ? "Click it to sign in." : "Click it to finish signing in.";
+    const resendLabel = isMagic ? "Resend sign-in link" : "Resend verification email";
+    const resendBusy = isMagic ? magicSending : pending;
     return (
       <div className="space-y-5">
         <div>
@@ -226,19 +297,19 @@ export function AuthForm({ mode, redirectTo = "/" }: { mode: Mode; redirectTo?: 
             Check your email
           </p>
           <h2 className="mt-3 text-lg font-semibold tracking-tight text-stone-900 dark:text-stone-100">
-            Verify your email address
+            {heading}
           </h2>
           <p className="mt-3 text-sm leading-6 text-stone-500 dark:text-stone-400">
             {pendingEmail ? (
               <>
-                We sent a verification link to{" "}
+                We sent a {linkNoun} to{" "}
                 <span className="font-medium text-stone-700 dark:text-stone-200">
                   {pendingEmail}
                 </span>
-                . Click it to finish signing in. {resent && "We just sent a fresh link."}
+                . {action} {resent && "We just sent a fresh link."}
               </>
             ) : (
-              "We sent you a verification link. Click it to finish signing in."
+              `We sent you a ${linkNoun}. ${action}`
             )}
           </p>
         </div>
@@ -253,7 +324,7 @@ export function AuthForm({ mode, redirectTo = "/" }: { mode: Mode; redirectTo?: 
           disabled={busy}
           className="inline-flex h-10 items-center justify-center border border-stone-300 bg-white px-4 text-sm font-medium text-stone-800 transition hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-stone-700 dark:bg-stone-950 dark:text-stone-100 dark:hover:bg-stone-900"
         >
-          {pending ? "Sending..." : "Resend verification email"}
+          {resendBusy ? "Sending..." : resendLabel}
         </button>
       </div>
     );
@@ -374,6 +445,19 @@ export function AuthForm({ mode, redirectTo = "/" }: { mode: Mode; redirectTo?: 
         >
           {pending ? pendingLabel : submitLabel}
         </button>
+
+        {/* Passwordless alternative. `type="button"` so it reads the email from the
+            form without tripping the password field's required/minLength validation. */}
+        {MAGIC_LINK_ENABLED && (
+          <button
+            type="button"
+            onClick={onMagicLink}
+            disabled={busy}
+            className="inline-flex h-10 w-full items-center justify-center border border-stone-300 bg-white px-4 text-sm font-medium text-stone-800 transition hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-stone-700 dark:bg-stone-950 dark:text-stone-100 dark:hover:bg-stone-900"
+          >
+            {magicSending ? "Sending link..." : "Email me a sign-in link"}
+          </button>
+        )}
       </form>
 
       <p className="text-sm text-stone-500 dark:text-stone-400">

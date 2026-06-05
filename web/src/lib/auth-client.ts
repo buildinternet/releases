@@ -1,5 +1,5 @@
 import { createAuthClient } from "better-auth/react";
-import { oneTapClient } from "better-auth/client/plugins";
+import { oneTapClient, magicLinkClient } from "better-auth/client/plugins";
 import { dashClient } from "@better-auth/infra/client";
 
 /**
@@ -36,6 +36,12 @@ export const authClient = createAuthClient({
     // admin/audit endpoints are reachable from this client. No API key here — the
     // client plugin only exposes the endpoints; the key lives server-side.
     dashClient(),
+    // Magic link — registers the `signIn.magicLink` method. No secret and nothing to
+    // gate at construction (mirrors the always-on server plugin); whether the UI
+    // surfaces a button is controlled separately by NEXT_PUBLIC_AUTH_MAGIC_LINK in
+    // auth-form.tsx. Registering it here unconditionally just makes the method
+    // available — it's inert until a caller invokes it.
+    magicLinkClient(),
     // Google One Tap — only when its public client id is configured. Mirrors the
     // server seam: the worker registers oneTap() only when Google's secrets resolve,
     // and this bundle reveals it only when the public id is present. Omitted → no

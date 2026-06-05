@@ -102,15 +102,23 @@ export async function sendAuthEmail(
   }
 }
 
+/**
+ * Escape the attribute-breakout char (`"`) so the URL can sit inside an `href="…"`
+ * without breaking out of the attribute. Only that char is touched — `&`/etc. must
+ * stay raw or a valid query string would corrupt; the plain-text body keeps the
+ * un-escaped URL.
+ */
+function escapeHrefUrl(url: string): string {
+  return url.replace(/"/g, "%22");
+}
+
 /** Verification email shown on sign-up / re-sent on an unverified sign-in. */
 export function verifyEmailTemplate(opts: { url: string }): {
   subject: string;
   text: string;
   html: string;
 } {
-  // Escape the attribute-breakout char only — `&`/etc. must stay raw or valid
-  // query strings would corrupt; the plain-text body keeps the un-escaped URL.
-  const safeUrl = opts.url.replace(/"/g, "%22");
+  const safeUrl = escapeHrefUrl(opts.url);
   const subject = "Verify your email for Releases";
   const text = [
     "Welcome to Releases.",
@@ -135,9 +143,7 @@ export function resetPasswordTemplate(opts: { url: string }): {
   text: string;
   html: string;
 } {
-  // Escape the attribute-breakout char only — `&`/etc. must stay raw or valid
-  // query strings would corrupt; the plain-text body keeps the un-escaped URL.
-  const safeUrl = opts.url.replace(/"/g, "%22");
+  const safeUrl = escapeHrefUrl(opts.url);
   const subject = "Reset your Releases password";
   const text = [
     "We received a request to reset your Releases password.",
@@ -151,6 +157,36 @@ export function resetPasswordTemplate(opts: { url: string }): {
     "<p>We received a request to reset your Releases password.</p>",
     `<p><a href="${safeUrl}">Reset password</a></p>`,
     "<p>This link expires in 1 hour. If you didn't request this, you can ignore this email — your password won't change.</p>",
+  ].join("");
+  return { subject, text, html };
+}
+
+/**
+ * Passwordless magic-link sign-in email. Clicking the link authenticates the user
+ * (and auto-creates a verified account for an unknown email — see the magicLink
+ * plugin in index.ts). Shorter expiry copy than verify/reset: a login link lives 15
+ * minutes (`expiresIn: 60 * 15`).
+ */
+export function magicLinkTemplate(opts: { url: string }): {
+  subject: string;
+  text: string;
+  html: string;
+} {
+  const safeUrl = escapeHrefUrl(opts.url);
+  const subject = "Your Releases sign-in link";
+  const text = [
+    "Sign in to Releases.",
+    "",
+    "Click the link below to sign in — no password needed:",
+    opts.url,
+    "",
+    "This link expires in 15 minutes and can be used once. If you didn't request it, you can ignore this email.",
+  ].join("\n");
+  const html = [
+    "<p>Sign in to Releases.</p>",
+    "<p>Click the link below to sign in — no password needed:</p>",
+    `<p><a href="${safeUrl}">Sign in to Releases</a></p>`,
+    "<p>This link expires in 15 minutes and can be used once. If you didn't request it, you can ignore this email.</p>",
   ].join("");
   return { subject, text, html };
 }
