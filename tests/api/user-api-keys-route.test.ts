@@ -142,3 +142,39 @@ describe("GET /v1/api-keys (list)", () => {
     expect(body.apiKeys).toEqual([]);
   });
 });
+
+async function del(userId: string, id: string) {
+  return appAs(userId).request(`/api-keys/${id}`, { method: "DELETE" }, env());
+}
+
+describe("DELETE /v1/api-keys/:id (revoke)", () => {
+  it("deletes the caller's own key", async () => {
+    h = createTestDb();
+    seedUser("user_1", "u1@e.com");
+    const created = (await (await post("user_1", { name: "k", scope: "read" })).json()) as {
+      id: string;
+    };
+    const res = await del("user_1", created.id);
+    expect(res.status).toBe(200);
+    expect((await list("user_1")).body.apiKeys).toHaveLength(0);
+  });
+
+  it("cannot delete another user's key (404, indistinct from absent)", async () => {
+    h = createTestDb();
+    seedUser("user_1", "u1@e.com");
+    seedUser("user_2", "u2@e.com");
+    const created = (await (await post("user_2", { name: "k", scope: "read" })).json()) as {
+      id: string;
+    };
+    const res = await del("user_1", created.id);
+    expect(res.status).toBe(404);
+    // and user_2's key still exists
+    expect((await list("user_2")).body.apiKeys).toHaveLength(1);
+  });
+
+  it("404 for an absent id", async () => {
+    h = createTestDb();
+    seedUser("user_1", "u1@e.com");
+    expect((await del("user_1", "ak_nope")).status).toBe(404);
+  });
+});

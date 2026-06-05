@@ -162,6 +162,23 @@ userApiKeyHandlers.get("/api-keys", async (c) => {
   });
 });
 
+userApiKeyHandlers.delete("/api-keys/:id", async (c) => {
+  const session = c.get("session");
+  if (!session) return c.json({ error: "unauthorized", message: "Sign in required" }, 401);
+  const id = c.req.param("id");
+  const db = createDb(c.env.DB);
+  // The referenceId clause IS the ownership check — a non-owned/absent id deletes
+  // zero rows and returns one indistinct 404 (no cross-user existence oracle).
+  const deleted = await db
+    .delete(apikey)
+    .where(and(eq(apikey.id, id), eq(apikey.referenceId, session.user.id)))
+    .returning();
+  if (deleted.length === 0)
+    return c.json({ error: "not_found", message: "API key not found" }, 404);
+  logEvent("info", { component: "user-api-keys", event: "revoked", keyId: id });
+  return c.json({ success: true });
+});
+
 /** Production composition: requireSession then the handlers. */
 export const userApiKeyRoutes = new Hono<Env>();
 userApiKeyRoutes.use("/api-keys", requireSession);
