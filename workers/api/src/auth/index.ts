@@ -417,14 +417,20 @@ export async function createAuth(
     // the CLI then presents as `Authorization: Bearer <token>` to the /v1/api-keys
     // create route — bearer() is what makes `auth.api.getSession` (and thus
     // `requireSession`) honor that header instead of only the cookie. verificationUri
-    // matches the web /device page route. validateClient is a fail-closed allow-list:
-    // only our known CLI client id may start a device flow (an unknown id can never
-    // obtain a token even though approval is interactive — defense in depth).
+    // MUST be an ABSOLUTE URL on the WEB origin: the /device approval page is served
+    // by the Next.js frontend (releases.sh), not this API worker (api.releases.sh).
+    // The plugin only prefixes baseURL when the value is relative — a bare "/device"
+    // resolves against baseURL and yields https://api.releases.sh/device, which 404s.
+    // WEB_BASE_URL is releases.sh in prod/staging and the portless web origin locally;
+    // the session cookie is .releases.sh-scoped so it rides across the two subdomains.
+    // validateClient is a fail-closed allow-list: only our known CLI client id may
+    // start a device flow (an unknown id can never obtain a token even though approval
+    // is interactive — defense in depth).
     ...(deviceAuthOn
       ? [
           bearer(),
           deviceAuthorization({
-            verificationUri: "/device",
+            verificationUri: `${env.WEB_BASE_URL ?? "https://releases.sh"}/device`,
             validateClient: (clientId) => clientId === DEVICE_AUTH_CLIENT_ID,
             // `schema: {}` is load-bearing, not a no-op. The plugin's own options
             // schema declares `schema: z.custom(() => true)` WITHOUT `.optional()`;
