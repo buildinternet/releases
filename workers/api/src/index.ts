@@ -6,7 +6,7 @@ import {
   publicReadAuthMiddleware,
   tokensAuthMiddleware,
 } from "./middleware/auth.js";
-import type { AuthContext } from "./middleware/auth.js";
+import type { AuthContext, AuthSessionContext } from "./middleware/auth.js";
 import { createAuth, authCorsMiddleware } from "./auth/index.js";
 import type { AuthEmailBinding } from "./auth/email.js";
 import { classifySignInFailure, redactIp, makeAuthAudit } from "./auth/audit.js";
@@ -319,6 +319,7 @@ export type Env = {
   };
   Variables: {
     auth?: AuthContext;
+    session?: AuthSessionContext;
   };
 };
 
@@ -374,6 +375,10 @@ app.onError((err, c) => {
 // the global wildcard `cors()` so it owns the `/api/auth/*` preflight (the first
 // matching CORS middleware answers OPTIONS and returns). See src/auth/index.ts.
 app.use("/api/auth/*", authCorsMiddleware());
+// Session-authed self-serve surface needs the same credentialed, origin-reflecting
+// CORS as /api/auth/* so the browser sends the cross-subdomain session cookie.
+app.use("/v1/api-keys", authCorsMiddleware());
+app.use("/v1/api-keys/*", authCorsMiddleware());
 
 // Public read CORS — wildcard is fine; these endpoints don't accept credentials.
 // SKIP `/api/auth/*`: those routes are owned by `authCorsMiddleware` above, which
@@ -382,8 +387,15 @@ app.use("/api/auth/*", authCorsMiddleware());
 // actual (non-preflight) response — which browsers reject for `credentials:
 // "include"` requests. The preflight passes (authCorsMiddleware short-circuits
 // OPTIONS), but the real GET/POST would be blocked. Keep the two in lockstep.
+// SKIP `/v1/api-keys` for the same reason — it is carved out above.
 const publicReadCors = cors();
-app.use("*", (c, next) => (c.req.path.startsWith("/api/auth/") ? next() : publicReadCors(c, next)));
+app.use("*", (c, next) =>
+  c.req.path.startsWith("/api/auth/") ||
+  c.req.path === "/v1/api-keys" ||
+  c.req.path.startsWith("/v1/api-keys/")
+    ? next()
+    : publicReadCors(c, next),
+);
 app.use("*", stagingAccessGate());
 app.use("*", blockIndexing());
 
@@ -477,6 +489,12 @@ for (const r of adminRoutes) {
   v1.use(`/${r}`, adminCors);
   v1.use(`/${r}/*`, adminCors);
 }
+
+// Self-serve API keys: per-IP limiter on the read (GET list) path for parity
+// with public reads. It no-ops on POST/DELETE (non-safe methods); those are
+// session-gated. (See routing.md — the session-authed self-serve bucket.)
+v1.use("/api-keys", publicRateLimitMiddleware);
+v1.use("/api-keys/*", publicRateLimitMiddleware);
 
 // Cache-Control for read-heavy GET endpoints
 v1.use("/stats", cacheControl(300, { staleWhileRevalidate: 60, isPublic: true }));

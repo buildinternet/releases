@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { signOut, useSession } from "@/lib/auth-client";
-import { AUTH_UI_ENABLED } from "@/lib/auth-ui";
+import { AUTH_UI_ENABLED, USER_API_KEYS_ENABLED } from "@/lib/auth-ui";
 
 /**
  * Session-aware header control. Renders a "Sign in" link when signed out and a
@@ -123,6 +123,14 @@ function AccountNavInner({ variant }: { variant: Variant }) {
             <p className="truncate text-stone-700 dark:text-stone-200">{user.email}</p>
           </div>
         </div>
+        {USER_API_KEYS_ENABLED && (
+          <Link
+            href="/account"
+            className="mt-2 block py-1 text-left text-stone-500 hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100"
+          >
+            API keys
+          </Link>
+        )}
         <button
           type="button"
           onClick={handleSignOut}
@@ -179,6 +187,16 @@ function AccountNavInner({ variant }: { variant: Variant }) {
                 <p className="truncate text-sm text-stone-600 dark:text-stone-300">{user.email}</p>
               </div>
             </div>
+            {USER_API_KEYS_ENABLED && (
+              <Link
+                href="/account"
+                role="menuitem"
+                onClick={() => setOpen(false)}
+                className="mt-3 block w-full border border-stone-300 px-3 py-1.5 text-center text-sm text-stone-700 transition hover:bg-stone-50 dark:border-stone-700 dark:text-stone-200 dark:hover:bg-stone-900"
+              >
+                API keys
+              </Link>
+            )}
             <button
               type="button"
               onClick={handleSignOut}

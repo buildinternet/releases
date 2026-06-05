@@ -1,0 +1,259 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
+import { useSession } from "@/lib/auth-client";
+import {
+  listApiKeys,
+  createApiKey,
+  revokeApiKey,
+  type UserApiKey,
+  type CreatedUserApiKey,
+} from "@/lib/api-keys";
+
+const labelClass = "block text-sm font-medium text-stone-700 dark:text-stone-200";
+const inputClass =
+  "mt-1 w-full border border-stone-300 bg-white px-3 py-2 text-sm text-stone-900 outline-none focus:border-stone-500 dark:border-stone-700 dark:bg-stone-950 dark:text-stone-100";
+const buttonClass =
+  "inline-flex h-10 items-center justify-center border border-stone-300 bg-white px-4 text-sm font-medium text-stone-800 transition hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-stone-700 dark:bg-stone-950 dark:text-stone-100 dark:hover:bg-stone-900";
+
+function formatDate(iso: string | null): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? "—" : d.toLocaleDateString();
+}
+
+export function ApiKeysPanel() {
+  const { data: sessionData, isPending } = useSession();
+  const user = sessionData?.user;
+
+  const [keys, setKeys] = useState<UserApiKey[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const [name, setName] = useState("");
+  const [scope, setScope] = useState<"read" | "write">("read");
+  const [creating, setCreating] = useState(false);
+  const [revealed, setRevealed] = useState<CreatedUserApiKey | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [confirmId, setConfirmId] = useState<string | null>(null);
+
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      setKeys(await listApiKeys());
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load API keys");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (user) void refresh();
+  }, [user, refresh]);
+
+  async function onCreate(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (creating || !name.trim()) return;
+    setCreating(true);
+    setError(null);
+    try {
+      const created = await createApiKey({ name: name.trim(), scope });
+      setRevealed(created);
+      setCopied(false);
+      setName("");
+      setScope("read");
+      await refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to create API key");
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  async function onRevoke(id: string) {
+    setError(null);
+    try {
+      await revokeApiKey(id);
+      setConfirmId(null);
+      await refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to revoke API key");
+    }
+  }
+
+  async function onCopy() {
+    if (!revealed) return;
+    try {
+      await navigator.clipboard.writeText(revealed.key);
+      setCopied(true);
+    } catch {
+      // Clipboard API unavailable (non-HTTPS origin, denied permission, or
+      // missing) — the key shows only once, so tell the user to copy it manually
+      // rather than failing silently.
+      setCopied(false);
+      setError("Could not copy automatically — select and copy the key above before dismissing.");
+    }
+  }
+
+  if (isPending) {
+    return <p className="text-sm text-stone-500 dark:text-stone-400">Loading…</p>;
+  }
+
+  if (!user) {
+    return (
+      <p className="text-sm leading-6 text-stone-600 dark:text-stone-300">
+        Please{" "}
+        <Link href="/login?redirect=/account" className="underline">
+          sign in
+        </Link>{" "}
+        to manage your API keys.
+      </p>
+    );
+  }
+
+  return (
+    <div className="space-y-8">
+      <header>
+        <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-stone-400 dark:text-stone-500">
+          Account
+        </p>
+        <h1 className="mt-2 text-2xl font-semibold tracking-tight text-stone-900 dark:text-stone-100">
+          API keys
+        </h1>
+        <p className="mt-3 max-w-prose text-sm leading-6 text-stone-500 dark:text-stone-400">
+          Personal{" "}
+          <code className="font-mono text-[0.85em] text-stone-600 dark:text-stone-300">relu_</code>{" "}
+          keys for the Releases API and MCP server. A key is shown once at creation — store it
+          somewhere safe.
+        </p>
+      </header>
+
+      {error && (
+        <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+          {error}
+        </p>
+      )}
+
+      {revealed && (
+        <div className="border border-green-600/30 bg-green-50 p-4 dark:border-green-500/30 dark:bg-green-950/40">
+          <p className="text-sm font-medium text-green-800 dark:text-green-300">
+            Key created. Copy it now — it won't be shown again.
+          </p>
+          <code className="mt-3 block overflow-x-auto whitespace-nowrap border border-green-600/30 bg-white px-3 py-2 font-mono text-xs text-stone-900 dark:bg-stone-950 dark:text-stone-100">
+            {revealed.key}
+          </code>
+          <div className="mt-3 flex gap-2">
+            <button type="button" onClick={onCopy} className={buttonClass}>
+              {copied ? "Copied" : "Copy"}
+            </button>
+            <button type="button" onClick={() => setRevealed(null)} className={buttonClass}>
+              I've saved it
+            </button>
+          </div>
+        </div>
+      )}
+
+      <form
+        onSubmit={onCreate}
+        className="space-y-4 border border-stone-200 p-5 dark:border-stone-800"
+      >
+        <div>
+          <label htmlFor="key-name" className={labelClass}>
+            Name
+          </label>
+          <input
+            id="key-name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="e.g. CI pipeline"
+            className={inputClass}
+            required
+          />
+        </div>
+        <fieldset>
+          <legend className={labelClass}>Scope</legend>
+          <div className="mt-2 flex gap-4 text-sm text-stone-700 dark:text-stone-200">
+            <label className="flex items-center gap-2">
+              <input
+                type="radio"
+                name="scope"
+                value="read"
+                checked={scope === "read"}
+                onChange={() => setScope("read")}
+              />
+              Read
+            </label>
+            <label className="flex items-center gap-2">
+              <input
+                type="radio"
+                name="scope"
+                value="write"
+                checked={scope === "write"}
+                onChange={() => setScope("write")}
+              />
+              Write
+            </label>
+          </div>
+        </fieldset>
+        <button type="submit" disabled={creating || !name.trim()} className={buttonClass}>
+          {creating ? "Creating…" : "Create key"}
+        </button>
+      </form>
+
+      <section>
+        <h2 className="text-sm font-semibold text-stone-900 dark:text-stone-100">Your keys</h2>
+        {loading ? (
+          <p className="mt-3 text-sm text-stone-500 dark:text-stone-400">Loading…</p>
+        ) : keys.length === 0 ? (
+          <p className="mt-3 text-sm text-stone-500 dark:text-stone-400">No keys yet.</p>
+        ) : (
+          <ul className="mt-3 divide-y divide-stone-200 border border-stone-200 dark:divide-stone-800 dark:border-stone-800">
+            {keys.map((k) => (
+              <li key={k.id} className="flex items-center justify-between gap-4 px-4 py-3">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-stone-900 dark:text-stone-100">
+                    {k.name || "(unnamed)"}
+                  </p>
+                  <p className="mt-0.5 font-mono text-xs text-stone-500 dark:text-stone-400">
+                    {k.start ? `${k.start}…` : "relu_…"} · {k.scope ?? "read"} · created{" "}
+                    {formatDate(k.createdAt)}
+                    {k.expiresAt ? ` · expires ${formatDate(k.expiresAt)}` : ""}
+                  </p>
+                </div>
+                {confirmId === k.id ? (
+                  <div className="flex shrink-0 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => onRevoke(k.id)}
+                      className="inline-flex h-9 items-center justify-center border border-red-300 bg-white px-3 text-sm font-medium text-red-700 transition hover:bg-red-50 dark:border-red-500/40 dark:bg-stone-950 dark:text-red-400 dark:hover:bg-red-950/30"
+                    >
+                      Confirm revoke
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setConfirmId(null)}
+                      className={buttonClass}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setConfirmId(k.id)}
+                    className="shrink-0 text-sm text-stone-500 underline hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100"
+                  >
+                    Revoke
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+    </div>
+  );
+}

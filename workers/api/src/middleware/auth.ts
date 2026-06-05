@@ -26,6 +26,22 @@ export type AuthContext =
   | { kind: "root"; scopes: string[] }
   | { kind: "token"; tokenId: string; scopes: string[] };
 
+/** Minimal session shape attached to the Hono context by `requireSession`. */
+export type AuthSessionContext = { user: { id: string; email: string; name: string } };
+
+/**
+ * The request's `waitUntil` (for handing background work — metering writes, email
+ * sends — to the runtime so it outlives the response), or undefined when there's
+ * no execution context (tests / non-request callers, where it runs inline).
+ */
+export function execWaitUntil(c: Context<Env>): ((p: Promise<unknown>) => void) | undefined {
+  try {
+    return c.executionCtx.waitUntil.bind(c.executionCtx);
+  } catch {
+    return undefined;
+  }
+}
+
 type ResolvedAuth =
   | { kind: "root"; scopes: string[] }
   | { kind: "token"; tokenId: string; scopes: string[] }
@@ -48,12 +64,7 @@ async function verifyUserKey(
   c: Context<Env>,
   presented: string,
 ): Promise<{ ok: true; scopes: string[]; keyId: string } | { ok: false; rateLimited: boolean }> {
-  let waitUntil: ((p: Promise<unknown>) => void) | undefined;
-  try {
-    waitUntil = c.executionCtx.waitUntil.bind(c.executionCtx);
-  } catch {
-    waitUntil = undefined;
-  }
+  const waitUntil = execWaitUntil(c);
   try {
     const auth = await createAuth(c.env, waitUntil);
     // apiKey() is registered conditionally (flag-gated), so betterAuth's inferred
@@ -92,32 +103,47 @@ async function verifyUserKey(
   }
 }
 
-const RESOLVE_MEMO = new WeakMap<Request, Promise<ResolvedAuth>>();
+const RESOLVE_MEMO_METERED = new WeakMap<Request, Promise<ResolvedAuth>>();
+const RESOLVE_MEMO_UNMETERED = new WeakMap<Request, Promise<ResolvedAuth>>();
 
 /**
- * Memoize resolution per request. `resolveAuth` runs 2–3× per request (rate
- * limiter, auth middleware, isValidBearerAuth); Better Auth's verifyApiKey meters
- * on every call, so without this a single request would meter a relu_ key multiple
- * times. Keyed on the underlying Request (stable per request, WeakMap auto-GCs).
- * `presented` is derived from the same request, so it's constant across callers.
+ * Memoize resolution per request AND per metering mode. `resolveAuth` runs
+ * several times per request (rate limiter, auth middleware, isValidBearerAuth);
+ * Better Auth's verifyApiKey meters on every call, so memoization keeps a relu_
+ * key metered at most once. The mode split lets the limiter / public-read attach
+ * resolve a relu_ key WITHOUT metering (they pass `meterUserKeys=false`) while
+ * the authenticated authorization point meters once (`true`). Keyed on the
+ * underlying Request (stable per request, WeakMap auto-GCs).
  */
-function resolveAuth(c: Context<Env>, presented: string): Promise<ResolvedAuth> {
+function resolveAuth(
+  c: Context<Env>,
+  presented: string,
+  meterUserKeys: boolean,
+): Promise<ResolvedAuth> {
+  const memo = meterUserKeys ? RESOLVE_MEMO_METERED : RESOLVE_MEMO_UNMETERED;
   const key = c.req.raw;
-  const cached = RESOLVE_MEMO.get(key);
+  const cached = memo.get(key);
   if (cached) return cached;
-  const p = resolveAuthUncached(c, presented);
-  RESOLVE_MEMO.set(key, p);
+  const p = resolveAuthUncached(c, presented, meterUserKeys);
+  memo.set(key, p);
   return p;
 }
 
 /**
- * Resolve a presented credential to an identity. `relu_…` user keys go to Better
- * Auth's verifyApiKey (metered); `relk_…` tokens go to the DB path only;
- * everything else compares to the static RELEASES_API_KEY (root). No credential
- * is eligible for more than one path.
+ * Resolve a presented credential to an identity. `relu_…` user keys are verified
+ * + metered by Better Auth's verifyApiKey ONLY when `meterUserKeys` is true (the
+ * authenticated authorization point); otherwise they resolve to anonymous so a
+ * public read never burns the key's budget. `relk_…` tokens go to the DB path;
+ * everything else compares to the static RELEASES_API_KEY (root).
  */
-async function resolveAuthUncached(c: Context<Env>, presented: string): Promise<ResolvedAuth> {
+async function resolveAuthUncached(
+  c: Context<Env>,
+  presented: string,
+  meterUserKeys: boolean,
+): Promise<ResolvedAuth> {
   if (isUserApiKeyShaped(presented)) {
+    // Exempt path (limiter, public reads): do not verify/meter — read as anonymous.
+    if (!meterUserKeys) return { kind: "none", skip: false };
     if (await flag(c.env.FLAGS, c.env.API_TOKENS_DISABLED, FLAGS.apiTokensDisabled))
       return { kind: "none", skip: false };
     if (!(await flag(c.env.FLAGS, c.env.USER_API_KEYS_ENABLED, FLAGS.userApiKeysEnabled)))
@@ -151,7 +177,7 @@ async function resolveAuthUncached(c: Context<Env>, presented: string): Promise<
 export async function resolveAuthIdentity(c: Context<Env>): Promise<AuthContext | null> {
   const presented = bearer(c);
   if (!presented) return null;
-  const auth = await resolveAuth(c, presented);
+  const auth = await resolveAuth(c, presented, false);
   return auth.kind === "root" || auth.kind === "token" ? auth : null;
 }
 
@@ -173,7 +199,7 @@ export async function hasValidAuth(c: Context<Env>): Promise<boolean> {
 export async function isValidBearerAuth(c: Context<Env>): Promise<boolean> {
   const presented = bearer(c);
   if (!presented) return false;
-  const auth = await resolveAuth(c, presented);
+  const auth = await resolveAuth(c, presented, false);
   if (auth.kind === "root") return true;
   if (auth.kind === "token") return scopeSatisfies(auth.scopes, "admin");
   return false;
@@ -263,6 +289,30 @@ function recordAuth(
   }
 }
 
+/**
+ * Gate the session-authed self-serve surface (`/v1/api-keys`). When the
+ * `user-api-keys-enabled` flag is off, the feature is dark → 404. Otherwise
+ * resolve the Better Auth session from the request cookie; no session → 401.
+ * On success, attach a minimal `{ user }` to the context for the handlers.
+ */
+export const requireSession: MiddlewareHandler<Env> = async (c, next) => {
+  if (!(await flag(c.env.FLAGS, c.env.USER_API_KEYS_ENABLED, FLAGS.userApiKeysEnabled))) {
+    return c.json({ error: "not_found", message: "Not found" }, 404);
+  }
+  const waitUntil = execWaitUntil(c);
+  const auth = await createAuth(c.env, waitUntil);
+  const session = await auth.api.getSession({ headers: c.req.raw.headers });
+  if (!session?.user?.id) {
+    // No WWW-Authenticate challenge: this is a cookie-session gate, not a Bearer
+    // scheme, and "Cookie" is not a registered RFC 7235 auth scheme.
+    return c.json({ error: "unauthorized", message: "Sign in required" }, 401);
+  }
+  c.set("session", {
+    user: { id: session.user.id, email: session.user.email, name: session.user.name },
+  });
+  await next();
+};
+
 function createAuthMiddleware(opts: {
   allowPublicReads: boolean;
   requiredScope: ApiScope;
@@ -275,7 +325,7 @@ function createAuthMiddleware(opts: {
       // is ignored — never rejected — so the read stays public.
       const presented = bearer(c);
       if (presented) {
-        const auth = await resolveAuth(c, presented);
+        const auth = await resolveAuth(c, presented, false);
         // Don't record a rate_limited result; leave the read public — an
         // over-limit key on a public GET still reads.
         if (auth.kind === "root" || auth.kind === "token") recordAuth(c, auth);
@@ -285,7 +335,7 @@ function createAuthMiddleware(opts: {
     }
 
     const presented = bearer(c);
-    const auth = await resolveAuth(c, presented);
+    const auth = await resolveAuth(c, presented, true);
 
     if (auth.kind === "rate_limited") {
       return c.json({ error: "rate_limited", message: "API key rate limit exceeded" }, 429);

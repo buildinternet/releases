@@ -13,3 +13,11 @@
  * control and the server-rendered route guards from a single value.
  */
 export const AUTH_UI_ENABLED = process.env.NEXT_PUBLIC_AUTH_UI_ENABLED === "true";
+
+/**
+ * Reveal the self-serve API Keys panel (`/account`). **Off unless
+ * `NEXT_PUBLIC_USER_API_KEYS` is exactly `"true"`.** Mirrors the server-side
+ * `user-api-keys-enabled` Flagship flag so the panel stays dark until the backend
+ * accepts `relu_` keys. `NEXT_PUBLIC_*` is inlined at build time.
+ */
+export const USER_API_KEYS_ENABLED = process.env.NEXT_PUBLIC_USER_API_KEYS === "true";
