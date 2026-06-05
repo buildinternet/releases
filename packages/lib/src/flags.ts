@@ -124,6 +124,11 @@ export const FLAGS = {
     env: "RAW_SNAPSHOT_CAPTURE_ENABLED",
     default: false,
   },
+  wellKnownSyncEnabled: {
+    key: "well-known-sync-enabled",
+    env: "WELL_KNOWN_SYNC_ENABLED",
+    default: true,
+  },
 } as const satisfies Record<string, FlagDef>;
 
 /** Layered fallback: var value if set, else the hardcoded default. */
