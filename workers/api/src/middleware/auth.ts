@@ -1,15 +1,20 @@
 import type { Context, MiddlewareHandler } from "hono";
 import { FLAGS, flag } from "@releases/lib/flags";
 import { getSecret, getSecretWithFallback } from "@releases/lib/secrets";
+import { logEvent } from "@releases/lib/log-event";
 import {
   type ApiScope,
   isApiTokenShaped,
+  isUserApiKeyShaped,
   ROOT_SCOPE,
   scopeSatisfies,
+  USER_API_KEY_PREFIX,
 } from "@buildinternet/releases-core/api-token";
 import { createDb } from "../db.js";
 import { touchLastUsed, verifyApiToken } from "./token-store.js";
 import type { Env } from "../index.js";
+import { createAuth } from "../auth/index.js";
+import { apiScopesFromPermissions } from "../auth/api-key-scope.js";
 
 export const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
@@ -24,6 +29,7 @@ export type AuthContext =
 type ResolvedAuth =
   | { kind: "root"; scopes: string[] }
   | { kind: "token"; tokenId: string; scopes: string[] }
+  | { kind: "rate_limited" }
   // skip=true means "local dev, no secret configured" — preserve open access.
   | { kind: "none"; skip: boolean };
 
@@ -33,11 +39,94 @@ function bearer(c: Context<Env>): string {
 }
 
 /**
- * Resolve a presented credential to an identity. `relk_…` tokens go to the DB
- * path only; everything else compares to the static RELEASES_API_KEY (root).
- * No credential is eligible for both paths.
+ * Verify a `relu_` user key via Better Auth. Returns the resolved scopes (the
+ * cumulative `api` permission actions) on success. `rateLimited` lets the caller
+ * answer 429 instead of a generic 401. Builds a per-request auth instance; the
+ * surrounding `resolveAuth` memo ensures this runs (and meters) at most once.
  */
-async function resolveAuth(c: Context<Env>, presented: string): Promise<ResolvedAuth> {
+async function verifyUserKey(
+  c: Context<Env>,
+  presented: string,
+): Promise<{ ok: true; scopes: string[]; keyId: string } | { ok: false; rateLimited: boolean }> {
+  let waitUntil: ((p: Promise<unknown>) => void) | undefined;
+  try {
+    waitUntil = c.executionCtx.waitUntil.bind(c.executionCtx);
+  } catch {
+    waitUntil = undefined;
+  }
+  try {
+    const auth = await createAuth(c.env, waitUntil);
+    // apiKey() is registered conditionally (flag-gated), so betterAuth's inferred
+    // `api` type doesn't statically expose verifyApiKey. We only reach here when the
+    // flag is on (checked in resolveAuthUncached), so the endpoint is mounted; assert
+    // its shape with a precise (non-any) structural cast.
+    const verifyApiKey = (
+      auth.api as {
+        verifyApiKey?: (a: { body: { key: string } }) => Promise<{
+          valid: boolean;
+          error?: { code?: string | null } | null;
+          key?: { id?: string; permissions?: Record<string, string[]> | null } | null;
+        }>;
+      }
+    ).verifyApiKey;
+    if (!verifyApiKey) return { ok: false, rateLimited: false };
+    const result = await verifyApiKey({ body: { key: presented } });
+    if (result.valid && result.key) {
+      const scopes = apiScopesFromPermissions(result.key.permissions);
+      if (scopes.length > 0)
+        return { ok: true, scopes, keyId: result.key.id ?? presented.slice(0, 12) };
+      return { ok: false, rateLimited: false };
+    }
+    const code = result.error?.code ?? "";
+    return { ok: false, rateLimited: /rate.?limit/i.test(code) };
+  } catch (err) {
+    // An UNEXPECTED verify error (transient DB/plugin failure) must not 500 a
+    // public read — deny the credential and let the public-read path stay public.
+    logEvent("warn", {
+      component: "auth",
+      event: "user-key-verify-error",
+      message: "relu_ key verification threw; denying credential",
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return { ok: false, rateLimited: false };
+  }
+}
+
+const RESOLVE_MEMO = new WeakMap<Request, Promise<ResolvedAuth>>();
+
+/**
+ * Memoize resolution per request. `resolveAuth` runs 2–3× per request (rate
+ * limiter, auth middleware, isValidBearerAuth); Better Auth's verifyApiKey meters
+ * on every call, so without this a single request would meter a relu_ key multiple
+ * times. Keyed on the underlying Request (stable per request, WeakMap auto-GCs).
+ * `presented` is derived from the same request, so it's constant across callers.
+ */
+function resolveAuth(c: Context<Env>, presented: string): Promise<ResolvedAuth> {
+  const key = c.req.raw;
+  const cached = RESOLVE_MEMO.get(key);
+  if (cached) return cached;
+  const p = resolveAuthUncached(c, presented);
+  RESOLVE_MEMO.set(key, p);
+  return p;
+}
+
+/**
+ * Resolve a presented credential to an identity. `relu_…` user keys go to Better
+ * Auth's verifyApiKey (metered); `relk_…` tokens go to the DB path only;
+ * everything else compares to the static RELEASES_API_KEY (root). No credential
+ * is eligible for more than one path.
+ */
+async function resolveAuthUncached(c: Context<Env>, presented: string): Promise<ResolvedAuth> {
+  if (isUserApiKeyShaped(presented)) {
+    if (await flag(c.env.FLAGS, c.env.API_TOKENS_DISABLED, FLAGS.apiTokensDisabled))
+      return { kind: "none", skip: false };
+    if (!(await flag(c.env.FLAGS, c.env.USER_API_KEYS_ENABLED, FLAGS.userApiKeysEnabled)))
+      return { kind: "none", skip: false };
+    const v = await verifyUserKey(c, presented);
+    if (v.ok) return { kind: "token", tokenId: USER_API_KEY_PREFIX + v.keyId, scopes: v.scopes };
+    return v.rateLimited ? { kind: "rate_limited" } : { kind: "none", skip: false };
+  }
+
   if (isApiTokenShaped(presented)) {
     if (await flag(c.env.FLAGS, c.env.API_TOKENS_DISABLED, FLAGS.apiTokensDisabled))
       return { kind: "none", skip: false };
@@ -63,7 +152,7 @@ export async function resolveAuthIdentity(c: Context<Env>): Promise<AuthContext 
   const presented = bearer(c);
   if (!presented) return null;
   const auth = await resolveAuth(c, presented);
-  return auth.kind === "none" ? null : auth;
+  return auth.kind === "root" || auth.kind === "token" ? auth : null;
 }
 
 /**
@@ -163,6 +252,9 @@ function recordAuth(
   c.set("auth", auth);
   if (auth.kind !== "token") return;
   const tokenId = auth.tokenId;
+  // User API keys (relu_) are metered by Better Auth's apikey table, not the
+  // api_tokens last_used path; skip the (zero-row) machine-lane UPDATE for them.
+  if (isUserApiKeyShaped(tokenId)) return;
   try {
     c.executionCtx.waitUntil(touchLastUsed(createDb(c.env.DB), tokenId).catch(() => undefined));
   } catch {
@@ -184,7 +276,9 @@ function createAuthMiddleware(opts: {
       const presented = bearer(c);
       if (presented) {
         const auth = await resolveAuth(c, presented);
-        if (auth.kind !== "none") recordAuth(c, auth);
+        // Don't record a rate_limited result; leave the read public — an
+        // over-limit key on a public GET still reads.
+        if (auth.kind === "root" || auth.kind === "token") recordAuth(c, auth);
       }
       await next();
       return;
@@ -192,6 +286,10 @@ function createAuthMiddleware(opts: {
 
     const presented = bearer(c);
     const auth = await resolveAuth(c, presented);
+
+    if (auth.kind === "rate_limited") {
+      return c.json({ error: "rate_limited", message: "API key rate limit exceeded" }, 429);
+    }
 
     if (auth.kind === "none") {
       if (auth.skip) {

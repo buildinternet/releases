@@ -216,6 +216,7 @@ export type Env = {
     // Kill switch for DB-backed token validation (see middleware/auth.ts).
     // When "true", all relk_… tokens are rejected without a DB lookup.
     API_TOKENS_DISABLED?: string;
+    USER_API_KEYS_ENABLED?: string;
     // When "true", `/v1/search` and the MCP search tools skip writing rows to
     // `search_queries`. Default off → logging on. See workers/api/src/lib/log-search.ts.
     SEARCH_QUERY_LOG_DISABLED?: string;

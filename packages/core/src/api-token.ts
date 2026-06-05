@@ -95,6 +95,19 @@ export function isApiTokenShaped(raw: string): boolean {
   return raw.startsWith(API_TOKEN_PREFIX);
 }
 
+/**
+ * Wire prefix for Better Auth-issued, user-owned API keys. Distinct from the
+ * machine-lane `API_TOKEN_PREFIX` (`relk_`) so the auth middleware routes a
+ * presented credential to exactly one verifier. Set as the plugin's
+ * `defaultPrefix` in workers/api/src/auth/index.ts.
+ */
+export const USER_API_KEY_PREFIX = "relu_";
+
+/** Cheap prefix check routing a credential to the Better Auth verify path. */
+export function isUserApiKeyShaped(raw: string): boolean {
+  return raw.startsWith(USER_API_KEY_PREFIX);
+}
+
 /** SHA-256 of the secret as lowercase hex. Web Crypto — runtime-neutral. */
 export async function hashSecret(secret: string): Promise<string> {
   const data = new TextEncoder().encode(secret);

@@ -2,13 +2,17 @@ import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { oneTap, magicLink } from "better-auth/plugins";
 import { dash } from "@better-auth/infra";
+import { apiKey } from "@better-auth/api-key";
 import { cors } from "hono/cors";
 import type { MiddlewareHandler } from "hono";
 import type { BaseSQLiteDatabase } from "drizzle-orm/sqlite-core";
 import { getSecret } from "@releases/lib/secrets";
 import { logEvent } from "@releases/lib/log-event";
+import { FLAGS, flag } from "@releases/lib/flags";
+import { USER_API_KEY_PREFIX } from "@buildinternet/releases-core/api-token";
+import { scopeToPermissions } from "./api-key-scope.js";
 import { createDb } from "../db.js";
-import { user, session, account, verification, rateLimit } from "../db/schema-auth.js";
+import { user, session, account, verification, rateLimit, apikey } from "../db/schema-auth.js";
 import type { Env } from "../index.js";
 import {
   sendAuthEmail,
@@ -329,6 +333,11 @@ export async function createAuth(
   // paired in schema-auth.ts + migration 20260604010000_add_user_last_active_at.sql.
   const dashApiKey = await resolveSecret(env.BETTER_AUTH_API_KEY);
 
+  // User-API-key path (relu_) is a flagged rollout. When off, the plugin (and its
+  // self-serve endpoints) are simply not registered. Flag order: Flagship → var →
+  // default(false). Mirrors the middleware gate in middleware/auth.ts.
+  const userApiKeysOn = await flag(env.FLAGS, env.USER_API_KEYS_ENABLED, FLAGS.userApiKeysEnabled);
+
   // Google One Tap (`/api/auth/one-tap/*`): the popup renders on the web origin
   // with the PUBLIC client id and posts the Google ID token here for verification.
   // Gated on Google being configured — the endpoint only verifies a Google ID
@@ -359,6 +368,28 @@ export async function createAuth(
         scheduleSend(() => sendEmail(msg));
       },
     }),
+    ...(userApiKeysOn
+      ? [
+          apiKey({
+            // Public-facing user keys. Distinct prefix from the relk_ machine lane.
+            defaultPrefix: USER_API_KEY_PREFIX,
+            requireName: true,
+            enableMetadata: true,
+            // Default tier (single config). Per-key overrides land at creation time.
+            rateLimit: {
+              enabled: env.ENVIRONMENT === "production",
+              timeWindow: 1000 * 60 * 60, // 1 hour
+              maxRequests: 1000,
+            },
+            // New keys default to read-only unless the caller passes explicit
+            // cumulative permissions (web create passes scopeToPermissions(scope)).
+            permissions: { defaultPermissions: scopeToPermissions("read") },
+            // Hand metering/rate-limit writes to waitUntil (already wired in
+            // `advanced.backgroundTasks` below) so they run after the response.
+            deferUpdates: true,
+          }),
+        ]
+      : []),
   ];
 
   return betterAuth({
@@ -372,7 +403,7 @@ export async function createAuth(
     database: drizzleAdapter(db, {
       provider: "sqlite",
       // Schema key `rateLimit` must match Better Auth's default rate-limit model name.
-      schema: { user, session, account, verification, rateLimit },
+      schema: { user, session, account, verification, rateLimit, apikey },
     }),
     emailAndPassword: {
       enabled: true,
