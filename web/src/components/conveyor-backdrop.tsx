@@ -7,30 +7,30 @@ import { useTheme } from "@/components/theme-provider";
 /**
  * Theme-aware wrapper around the generic <ConveyorBackground>.
  *
- * The canvas paints blocks in `baseColor` with very low alpha, so the color has
- * to contrast with the page background or the blocks vanish. The homepage runs
- * light (#fafaf9) and dark (#0c0a09), so white blocks only read in dark mode —
- * in light mode they disappear and all you see is the emerald ship-flash. We
- * pick the block color from the resolved theme: near-black (stone-900) on light,
- * white on dark. The emerald accent reads on both.
+ * The canvas paints with very low alpha, so the look has to be tuned per theme
+ * or the blocks vanish against the page background (light #fafaf9 / dark #0c0a09).
+ *
+ *   dark  — solid white extruded blocks (the original look; reads on the dark bg).
+ *   light — faint near-black wireframe boxes with an occasional solid-green
+ *           "shipped" crate. White-filled blocks were invisible on the light bg
+ *           (you only saw the green flash); the outline style stays subtle while
+ *           the green pop carries the product nod. The green is flash-driven, so
+ *           it stays bold even though the outlines are deliberately ghost-faint.
  */
-export function ConveyorBackdrop({
-  intensity = 0.7,
-  density = 1,
-  style,
-}: {
-  intensity?: number;
-  density?: number;
-  style?: CSSProperties;
-}) {
+export function ConveyorBackdrop({ style }: { style?: CSSProperties }) {
   const { resolved } = useTheme();
-  const baseColor = resolved === "dark" ? "255,255,255" : "28,25,23";
+
+  if (resolved === "dark") {
+    return <ConveyorBackground baseColor="255,255,255" intensity={0.7} density={1} style={style} />;
+  }
 
   return (
     <ConveyorBackground
-      baseColor={baseColor}
-      intensity={intensity}
-      density={density}
+      baseColor="28,25,23"
+      variant="outline"
+      intensity={0.25}
+      density={1}
+      shipFrequency={0.5}
       style={style}
     />
   );

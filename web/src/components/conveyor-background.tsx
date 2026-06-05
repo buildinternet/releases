@@ -41,6 +41,8 @@ export interface ConveyorBackgroundProps {
   density?: number;
   /** Relative rate of green "shipped" flashes. 0 disables them, 1 default. */
   shipFrequency?: number;
+  /** "fill" = solid extruded blocks (default), "outline" = wireframe boxes. */
+  variant?: "fill" | "outline";
   className?: string;
   style?: CSSProperties;
 }
@@ -52,6 +54,7 @@ export default function ConveyorBackground({
   speed = 1,
   density = 1,
   shipFrequency = 1,
+  variant = "fill",
   className,
   style,
 }: ConveyorBackgroundProps) {
@@ -135,6 +138,62 @@ export default function ConveyorBackground({
       flash: number,
     ) {
       const d = 3 + depth * 5; // extrude distance (light from upper-right)
+
+      if (variant === "outline") {
+        // Wireframe extruded box: front rectangle + the visible depth edges
+        // (top + right faces). Normally stroke-only; a "shipped" box fills solid
+        // with the accent (green) and fades back to a bare outline as the flash
+        // decays. The fill alpha is driven by `flash` rather than the base
+        // intensity, so the green highlight pops even when the outlines are faint.
+        const shipping = flash > 0.01;
+        if (shipping) {
+          const fa = flash * 0.85;
+          // right side face
+          ctx!.fillStyle = `rgba(${accentColor}, ${fa * 0.6})`;
+          ctx!.beginPath();
+          ctx!.moveTo(x + w, y);
+          ctx!.lineTo(x + w + d, y - d);
+          ctx!.lineTo(x + w + d, y - d + h);
+          ctx!.lineTo(x + w, y + h);
+          ctx!.closePath();
+          ctx!.fill();
+          // top face
+          ctx!.fillStyle = `rgba(${accentColor}, ${Math.min(1, fa * 1.1)})`;
+          ctx!.beginPath();
+          ctx!.moveTo(x, y);
+          ctx!.lineTo(x + d, y - d);
+          ctx!.lineTo(x + w + d, y - d);
+          ctx!.lineTo(x + w, y);
+          ctx!.closePath();
+          ctx!.fill();
+          // front face
+          ctx!.fillStyle = `rgba(${accentColor}, ${fa})`;
+          ctx!.fillRect(x, y, w, h);
+        }
+        // Strokes ride brighter than the fill alpha so thin 1px lines still read;
+        // accent-colored while shipping so the crate's edges stay crisp.
+        const strokeA = shipping ? Math.min(0.95, flash) : Math.min(0.85, a * 2.4);
+        ctx!.lineWidth = 1;
+        ctx!.lineJoin = "round";
+        ctx!.strokeStyle = shipping ? `rgba(${accentColor}, ${strokeA})` : ink(strokeA);
+        ctx!.beginPath();
+        // front face
+        ctx!.rect(x, y, w, h);
+        // depth edges from the front corners back to the top face
+        ctx!.moveTo(x, y);
+        ctx!.lineTo(x + d, y - d);
+        ctx!.moveTo(x + w, y);
+        ctx!.lineTo(x + w + d, y - d);
+        ctx!.moveTo(x + w, y + h);
+        ctx!.lineTo(x + w + d, y - d + h);
+        // back top edge + back right vertical
+        ctx!.moveTo(x + d, y - d);
+        ctx!.lineTo(x + w + d, y - d);
+        ctx!.lineTo(x + w + d, y - d + h);
+        ctx!.stroke();
+        return;
+      }
+
       const side = a * 0.55;
       const top = Math.min(1, a * 1.9 + 0.02);
       // right side face
@@ -277,7 +336,7 @@ export default function ConveyorBackground({
       io.disconnect();
       document.removeEventListener("visibilitychange", onVis);
     };
-  }, [baseColor, accentColor, intensity, speed, density, shipFrequency]);
+  }, [baseColor, accentColor, intensity, speed, density, shipFrequency, variant]);
 
   return (
     <canvas
