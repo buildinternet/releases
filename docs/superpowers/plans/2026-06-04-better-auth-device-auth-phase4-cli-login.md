@@ -25,6 +25,23 @@ Phase 4 builds on code the other agent is still landing. Treat each item below a
 
 ---
 
+## As-built reconciliation (implemented 2026-06-05, after P1–3 merged)
+
+The seams above resolved as follows once the api-key lane (PRs #1434/#1435/#1444) was on `main`. Deltas from the plan-as-written:
+
+1. **Flag name.** Shipped as **`device-authorization-enabled`** (env `DEVICE_AUTHORIZATION_ENABLED`), not the placeholder `cli-device-auth-enabled`. Web reveal flag: `NEXT_PUBLIC_DEVICE_AUTH_ENABLED`.
+2. **Key-exchange endpoint (the big one).** The CLI does **not** call Better Auth's raw `POST /api/auth/api-key/create`. The web panel and CLI both use the worker's own **`POST /v1/api-keys`** route (`workers/api/src/routes/user-api-keys.ts`), which runs under `requireSession`, injects the owner from the session, and caps the scope. Body is **`{ name, scope }`** (scope = `"read" | "write"`), not a client-built `permissions` map. The device-flow access token rides as `Authorization: Bearer …`, honored because we register **`bearer()`**.
+3. **Server-side scope cap.** Enforced in the `/v1/api-keys` POST handler (`isSelfServeScope` → 400 on anything but read/write). The device path inherits it for free by reusing that route.
+4. **Permission encoding.** Owned entirely server-side (`scopeToPermissions` in `workers/api/src/auth/api-key-scope.ts`). The CLI's local `scopeToApiPermissions` copy was **deleted** — it sends `scope` and the server encodes.
+5. **`user-api-keys-enabled` dependency.** Unchanged: device login mints `relu_` keys via `/v1/api-keys`, which is gated on `user-api-keys-enabled`. Both flags must be on for end-to-end login. The two flag reads are batched with `Promise.all`.
+6. **Endpoint paths.** Confirmed verbatim against the installed `better-auth@1.6.14` device-authorization bundle.
+
+**New finding not in the plan — zod skew.** `better-auth@1.6.14`'s `deviceAuthorization()` options schema marks its `schema` field nonoptional-by-omission; the root-resolved **zod@4.4.3** rejects a missing value (`"expected nonoptional"`). Fix: pass `schema: {}` at the call site (an additive `mergeSchema` no-op). Necessary for prod, not just tests. See `[[reference_mcp_worker_zod_pinned_to_sdk_nested]]`.
+
+**Shared client-id contract.** `DEVICE_AUTH_CLIENT_ID = "releases-cli"` lives in `@buildinternet/releases-core/api-token` (next to `USER_API_KEY_PREFIX`); the worker's `validateClient` allow-list rejects anything else (fail closed). The CLI hard-codes the same literal until it adopts the published core version exposing it.
+
+---
+
 ## File Structure
 
 **[MONOREPO] Create:**
