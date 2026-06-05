@@ -1,0 +1,110 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://releases.sh/schemas/releases.json",
+  "title": "releases.json configuration",
+  "description": "Owner-declared listing metadata for the Releases registry. Host at https://{domain}/.well-known/releases.json (org identity) or in a repo root as releases.json (that source's product mapping).",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "format": "uri"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120
+    },
+    "description": {
+      "type": "string",
+      "maxLength": 2000
+    },
+    "category": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120
+    },
+    "avatar": {
+      "type": "string",
+      "format": "uri"
+    },
+    "tags": {
+      "maxItems": 50,
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 60
+      }
+    },
+    "social": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 40
+      },
+      "additionalProperties": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200
+      }
+    },
+    "notice": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 280
+        },
+        "linkText": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "coordinate": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "href": {
+          "type": "string",
+          "maxLength": 500,
+          "format": "uri"
+        }
+      },
+      "required": ["message"],
+      "additionalProperties": false
+    },
+    "product": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "slug": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "category": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "kind": {
+          "type": "string",
+          "enum": ["platform", "sdk", "mobile", "desktop", "docs", "integration", "tool"]
+        }
+      },
+      "required": ["name"],
+      "additionalProperties": false
+    }
+  }
+}

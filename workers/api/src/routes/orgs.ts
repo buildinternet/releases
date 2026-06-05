@@ -25,9 +25,11 @@ import {
   CreateTagBodySchema,
   TagRowSchema,
   DeleteOrgAccountResponseSchema,
+  SyncWellKnownResponseSchema,
 } from "@buildinternet/releases-api-types";
 import { validateJson } from "../lib/validate.js";
 import { ingestOrgAvatar } from "../lib/avatar-ingest.js";
+import { syncOrgWellKnown } from "../lib/well-known/reconcile-org.js";
 import { eq, count, max, min, and, sql, inArray, gte, desc } from "drizzle-orm";
 import { createDb } from "../db.js";
 import {
@@ -637,6 +639,44 @@ orgRoutes.post(
       width: result.width,
       height: result.height,
     });
+  },
+);
+
+orgRoutes.post(
+  "/orgs/:slug/sync-well-known",
+  describeRoute({
+    hide: hideInProduction,
+    tags: ["Orgs"],
+    summary: "Reconcile org metadata from the owner's .well-known/releases.json",
+    description:
+      "Fetches https://{org.domain}/.well-known/releases.json, validates it, and reconciles owner-declared identity fields onto the org (never clobbering curator/editorial fields). Pass ?dryRun=1 (or ?dryRun=true) to preview the computed diff without applying. Requires write scope.",
+    security: [{ bearerAuth: [] }],
+    responses: {
+      200: {
+        description: "Sync result (applied, or the dry-run plan)",
+        content: { "application/json": { schema: resolver(SyncWellKnownResponseSchema) } },
+      },
+      404: {
+        description: "Organization not found",
+        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      },
+    },
+  }),
+  async (c) => {
+    const db = createDb(c.env.DB);
+    const slug = c.req.param("slug");
+    const dryRun = c.req.query("dryRun") === "1" || c.req.query("dryRun") === "true";
+
+    const [org] = await db.select().from(organizations).where(orgWhere(slug));
+    if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
+
+    const result = await syncOrgWellKnown(db, org.id, {
+      bucket: c.env.MEDIA,
+      mediaOrigin: c.env.MEDIA_ORIGIN ?? "https://media.releases.sh",
+      domain: org.domain,
+      dryRun,
+    });
+    return c.json(result);
   },
 );
 

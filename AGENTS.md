@@ -89,6 +89,7 @@ Shared code is split between published npm packages (`@buildinternet/releases-*`
 - Org avatars: stored at `orgs/{slug}.{ext}` in `released-media`, served from `https://media.releases.sh/orgs/{slug}.{ext}`; pointer on `organizations.avatar_url`, writable via `PATCH /v1/orgs/:slug { avatarUrl }`. New orgs land `null` with the OG/web fallback to `github.com/{handle}.png` (#982 open). Reuse the `orgs/{slug}.{ext}` key for any new avatar-write path. See [web.md](docs/architecture/web.md).
 - Scoped API tokens: opaque `relk_<lookupId>_<secret>` Bearer tokens (`api_tokens` table), scope ladder `read ⊂ write ⊂ admin`; static `RELEASES_API_KEY` is implicit root; kill switch `API_TOKENS_DISABLED`. MCP gates the AI tools + the on-demand `/v1/lookups` fallback on `write` and forwards the caller's own token. See [remote-mode.md → Auth model](docs/architecture/remote-mode.md) and [mcp.md → scope enforcement](docs/architecture/mcp.md). User-owned **API keys** use the Better Auth `@better-auth/api-key` plugin (prefix `relu_`, `apikey` table, per-key rate-limit + metering), gated by `user-api-keys-enabled`; the `relk_` lane stays for machine principals.
 - **Entity notices**: a small curator-set note on an org/product/source, stored under `metadata.notice` (`{ message, linkText?, coordinate?, href? }`); set via the entity PATCH route, surfaced as a typed `notice` field + a web banner + an MCP pointer. See [web.md → Entity notices](docs/architecture/web.md#entity-notices).
+- **Owner-declared listing metadata**: a `$schema`-validated `releases.json` — domain `.well-known/releases.json` sets org identity, repo-root `releases.json` maps that source to a product (grouping by shared product slug); display-only, fail-closed, never clobbers curator/editorial fields, flag `well-known-sync-enabled` (default on). See [well-known-config.md](docs/architecture/well-known-config.md).
 
 ## Further reading
 
@@ -112,6 +113,7 @@ Deep dives live in `docs/architecture/`:
 - [feature-flags.md](docs/architecture/feature-flags.md) — Cloudflare Flagship Tier-1 boolean flags: registry, evaluation order, per-flag reference, dashboard setup.
 - [firecrawl-monitoring.md](docs/architecture/firecrawl-monitoring.md) — external Firecrawl fetch backend for challenge-blocked `scrape` sources: monitor lifecycle, the hunkless `monitor.page` diff wire format, the diff-delta vs. full re-scrape ingest paths, cost gate, poll-fetch exclusion, and staleness resilience.
 - [maintenance-workspace.md](docs/architecture/maintenance-workspace.md) — per-user `~/.releases/work/` (tasks / runs / reports) convention for agent-driven admin maintenance; durable, cost-aware trail for the seeding/maintaining/managing/overview skills, reachable across the monorepo and CLI checkouts.
+- [well-known-config.md](docs/architecture/well-known-config.md) — owner-declared `releases.json`: host-scoped authority (domain = org identity, repo = source→product), reconciliation precedence, the sync route + daily sweep.
 
 ## Environment
 

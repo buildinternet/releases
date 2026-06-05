@@ -50,6 +50,7 @@
     "eval:marketing": "bun tests/evals/marketing-classifier.eval.ts",
     "eval:summary": "bun tests/evals/release-summary.eval.ts",
     "eval:tool-ux-report": "bun tests/evals/tool-ux-report.ts",
+    "gen:releases-schema": "bun scripts/gen-releases-json-schema.ts",
     "prepare": "husky"
   },
   "lint-staged": {

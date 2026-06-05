@@ -338,6 +338,7 @@
       "30 4 * * *",
       "0 5 * * *",
       "30 5 * * *",
+      "0 6 * * *",
     ],
   },
   // State is per-colo, not global. `period` must be 10 or 60 (CF constraint).

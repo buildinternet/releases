@@ -30,6 +30,7 @@ import { forceDrainSweep } from "./cron/force-drain-sweep.js";
 import { sweepSearchQueries } from "./cron/sweep-search-queries.js";
 import { sweepTombstones } from "./cron/sweep-tombstones.js";
 import { scanStaleFirecrawlSources } from "./cron/firecrawl-staleness.js";
+import { wellKnownSync } from "./cron/well-known-sync.js";
 import { sendAlert, type AlertEnv } from "./lib/send-alert.js";
 import { logEvent } from "@releases/lib/log-event";
 import { dbErrorLogFields } from "@releases/lib/db-errors";
@@ -107,6 +108,9 @@ export type Env = {
     // tail instead of riding `c.executionCtx.waitUntil(...)`. See issue #493.
     ONBOARD_USE_WORKFLOW?: string;
     ONBOARD_SOURCE_WORKFLOW?: Workflow;
+    // Daily well-known sync (two-pass: org identity + github source→product
+    // mapping). Self-gates via well-known-sync-enabled (default on).
+    WELL_KNOWN_SYNC_ENABLED?: string;
     // Batch summarization workflow (issue #971). Cron at 04:30 UTC; self-gates
     // via BATCH_SUMMARIZE_ENABLED. Admin POST trigger runs unconditionally.
     BATCH_SUMMARIZE_ENABLED?: string;
@@ -687,6 +691,23 @@ export default {
             CRON_ENABLED: env.CRON_ENABLED,
             TOMBSTONE_RETENTION_DAYS: env.TOMBSTONE_RETENTION_DAYS,
             RELEASES_INDEX: env.RELEASES_INDEX,
+          }),
+          alertEnv,
+        ),
+      );
+      return;
+    }
+    if (event.cron === "0 6 * * *") {
+      ctx.waitUntil(
+        loggedDispatch(
+          "well-known-sync-cron",
+          wellKnownSync({
+            DB: env.DB,
+            MEDIA: env.MEDIA,
+            MEDIA_ORIGIN: env.MEDIA_ORIGIN,
+            FLAGS: env.FLAGS,
+            WELL_KNOWN_SYNC_ENABLED: env.WELL_KNOWN_SYNC_ENABLED,
+            CRON_ENABLED: env.CRON_ENABLED,
           }),
           alertEnv,
         ),
