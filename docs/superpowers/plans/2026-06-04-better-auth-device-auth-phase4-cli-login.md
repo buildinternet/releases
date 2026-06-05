@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **⚠️ Implemented — read the "As-built reconciliation" section first.** This feature shipped in [releases#1447](https://github.com/buildinternet/releases/pull/1447) (server + web) and [releases-cli#282](https://github.com/buildinternet/releases-cli/pull/282) (CLI). The numbered task steps below are the **original plan**, preserved as a historical record. Several details changed during implementation — the flag name (`device-authorization-enabled`, not `cli-device-auth-enabled`), the key-exchange endpoint (`POST /v1/api-keys` with `{ name, scope }`, not the raw `/api/auth/api-key/create` with a client-built permissions map), server-side scope encoding (the CLI's `scopeToApiPermissions` was dropped), and a zod `schema: {}` workaround. **Where a task step and the "As-built reconciliation" section disagree, that section and the merged code are authoritative** — compare against it before treating any step as current.
+
 **Goal:** Give the Releases CLI a no-paste, browser-based `releases login` using the OAuth 2.0 Device Authorization Grant (RFC 8628), which mints a durable user-owned `relu_` API key on the lane that Phases 1–3 build — without replacing the web self-serve panel (the web app remains a first-class way to generate keys).
 
 **Architecture:** Register Better Auth's `deviceAuthorization()` plugin (+ `bearer()`) on the per-request auth instance in `workers/api`, flag-gated behind `cli-device-auth-enabled`. The web app hosts the `/device` verification + `/device/approve` pages (a logged-in human approves the code). The CLI (`releases-cli`, a separate repo) runs the device flow over plain `fetch` — request code → open browser → poll for an access token (a Better Auth session) → exchange that session for a `relu_` key via the Phase-1 `@better-auth/api-key` create endpoint → store the `relu_` key in `~/.releases/credentials` exactly as `auth login` does today, then discard the session. The REST hot path is unchanged: it verifies the stored `relu_` key through the Phase-1 middleware branch.
@@ -173,7 +175,7 @@ CREATE INDEX idx_device_code_user_code ON deviceCode (user_code);
 In `packages/lib/src/flags.ts`, in the `FLAGS` object after the `userApiKeysEnabled` entry (added in Phase 1; if Phase 1 hasn't merged, add it after `apiTokensDisabled`), add:
 
 ```ts
-  // Rollout gate (#TBD-issue): the CLI device-authorization login flow. default:
+  // Rollout gate: the CLI device-authorization login flow. default:
   // false → OFF until the /device pages ship + P1's relu_ lane is live. When on,
   // the API worker registers deviceAuthorization() + bearer(). Functionally
   // depends on userApiKeysEnabled (a minted relu_ key only verifies when that is
@@ -360,6 +362,11 @@ const cliDeviceAuthOn = await flag(
             // Only our CLI may run the flow. Constant for now; widen to an env-driven
             // allowlist if other first-party clients adopt it.
             validateClient: async (clientId: string) => clientId === "releases-cli",
+            // REQUIRED under the root-resolved zod@4.4.3: the plugin's options schema
+            // marks `schema` nonoptional-by-omission, so a missing value throws
+            // ("expected nonoptional"). `{}` satisfies it and merges to nothing. See
+            // the "As-built reconciliation" section (zod skew).
+            schema: {},
           }),
         ]
       : []),
@@ -1371,7 +1378,7 @@ git commit -m "chore(auth): lint/format pass for device-auth phase 4"
 - Flag/schema/migration/env → Tasks 1–2. ✓
 - `relk_` machine lane + static root + paste `auth login` untouched → explicit "untouched" note + no edits to those files. ✓
 
-**2. Placeholder scan:** Two `#TBD-issue` markers (Task 1 flag comment) are issue-number references to fill at PR time, not logic gaps. The "Seam"/"Confirm" notes (Prerequisites §1–6, Task 5/7 seams) are concrete reconcile-against-merged-P1–3 instructions with the exact action to take, not deferred work.
+**2. Placeholder scan:** No issue-number placeholders remain (the rollout-gate flag comment is tracked via releases#1447 / releases-cli#282, not a dedicated issue). The "Seam"/"Confirm" notes (Prerequisites §1–6, Task 5/7 seams) are concrete reconcile-against-merged-P1–3 instructions with the exact action to take, not deferred work.
 
 **3. Type consistency:** `UserScope` (`"read" | "write"`) is defined in `device-auth.ts` (Task 5) and consumed in `login.ts` (Task 7). `scopeToApiPermissions` returns `{ api: string[] }` and is used by `createUserApiKey` (Task 5) and the runDeviceLogin fallback (Task 7). `DeviceLoginResult` (`token`/`name`/`scopes`/`apiUrl`) maps 1:1 onto `StoredCredential` (`token`/`name`/`scopes`/`apiUrl`/`savedAt`) in Task 7's command. `deviceCode` table export (Task 1) is imported by the auth schema map (Task 2) and the table-exists test. The server `verificationUri` (Task 2) yields `https://releases.sh/device`, which the web `/device` page (Task 3) serves and the CLI surfaces verbatim.
 
