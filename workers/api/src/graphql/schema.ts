@@ -146,6 +146,20 @@ builder.queryType({
             ? not(inArray(sources.type, args.excludeSourceTypes))
             : undefined;
 
+        // Content-quality tier (`metadata.contentQuality`): a per-source signal
+        // — `low | normal | high`, default `normal` (absent) — that lets us
+        // de-prioritize noisy sources and, later, boost high-signal ones rather
+        // than a binary hide. Today only `low` has an effect: it drops the
+        // source from this feed, which backs only the homepage "Shipping now"
+        // ticker. So a `low` source stays fully present in search, the catalog,
+        // its source page, related rails, and the REST `/v1/releases` feed
+        // (unlike the heavier `sources.isHidden`) — it just stops occupying its
+        // org's homepage ticker slot, letting the org's higher-signal sources
+        // own it. `high` is reserved for a future ranking boost and is a no-op
+        // here. SQLite `json_extract` returns the JSON string; `IS NOT 'low'`
+        // keeps rows where the key is absent (NULL), `normal`, or `high`.
+        const qualityFilter = sql`(json_extract(${sources.metadata}, '$.contentQuality') IS NOT 'low')`;
+
         // Drop releases whose upstream-supplied date is in the future. Sources
         // occasionally publish a misdated entry (typo, scheduled-post slip);
         // without this, the row sticks at the top of the feed until the date
@@ -216,6 +230,7 @@ builder.queryType({
               isNull(organizations.deletedAt),
               orgFilter,
               excludeFilter,
+              qualityFilter,
               futureFilter,
               cursorFilter,
             ),
