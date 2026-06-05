@@ -33,129 +33,25 @@ export const metadata: Metadata = {
  * fields for demo clarity, the way the CLI's own `--json` drops storage
  * internals).
  *
- *  - "Check product updates" — `releases get <product>` (Next.js): one product's
- *    latest releases. Captured from releases-cli; release rows are space-aligned
- *    and dates shortened to YYYY-MM-DD (the CLI uses tabs that expand past the
- *    83-char demo width).
- *  - "Track a company" — `releases get <org>` (Vercel): an org's activity across
- *    its six sources and two products, showing the company-vs-product contrast.
+ * Search leads (the default open tab): it shows the richest story — cross-vendor
+ * results with AI-summary snippets, then a `get rel_…` drill-in — and the tabs
+ * narrow from many vendors, to one company, to one product:
+ *
  *  - "Search across vendors" — cross-vendor `search "webhooks"` then a `get
  *    rel_…` drill-in into one hit (record + AI summary). The relative ages
  *    ("1y", "3w") are a capture-time snapshot.
+ *  - "Track a company" — `releases get <org>` (Vercel): an org's activity across
+ *    its six sources and two products, showing the company-vs-product contrast.
+ *  - "Check product updates" — `releases get <product>` (Cursor): one product's
+ *    latest releases as descriptive feature titles, not version tags; the full
+ *    AI summary + token counts surface in the Agents view. Release rows are
+ *    space-aligned and dates shortened to YYYY-MM-DD (the CLI uses tabs that
+ *    expand past the 83-char demo width).
  *
- * Re-capture tabs 1 & 2 with the `releases` CLI when refreshing so the format
- * never drifts from real stdout.
+ * Re-capture the get-based tabs (company + product) with the `releases` CLI when
+ * refreshing so the format never drifts from real stdout.
  */
 const DEMO_TABS: TerminalTab[] = [
-  {
-    id: "product",
-    label: "Check product updates",
-    blocks: [
-      {
-        command: "releases get nextjs",
-        output: `Next.js by Vercel (vercel/nextjs)
-  URL:      https://nextjs.org
-  Category: framework
-  About:    React framework for production
-  Tags:     react, ssr
-  Sources:  next-js
-
-Latest 3 releases (most recent first):
-rel_UTc0qrP0xbCO3xCI7rkBS  v15.5.18  2026-05-07
-rel_Vwfyzuh36yWITvNxJ8cZ9  v16.2.6   2026-05-07
-rel_1QpKqJ0E7JCIgHxkl2DGS  v16.2.5   2026-05-06`,
-        json: `{
-  "id": "prod_JoRuQm6EnVccYeDh_NTEz",
-  "name": "Next.js",
-  "slug": "nextjs",
-  "orgSlug": "vercel",
-  "url": "https://nextjs.org",
-  "category": "framework",
-  "kind": "sdk",
-  "sourceCount": 1,
-  "releases": [
-    {
-      "id": "rel_UTc0qrP0xbCO3xCI7rkBS",
-      "title": "v15.5.18",
-      "version": "v15.5.18",
-      "publishedAt": "2026-05-07T20:18:27.000Z",
-      "sourceName": "Next.js"
-    },
-    {
-      "id": "rel_Vwfyzuh36yWITvNxJ8cZ9",
-      "title": "v16.2.6",
-      "version": "v16.2.6",
-      "publishedAt": "2026-05-07T20:16:51.000Z",
-      "sourceName": "Next.js"
-    },
-    {
-      "id": "rel_1QpKqJ0E7JCIgHxkl2DGS",
-      "title": "v16.2.5",
-      "version": "v16.2.5",
-      "publishedAt": "2026-05-06T18:54:20.000Z",
-      "sourceName": "Next.js"
-    }
-  ]
-}`,
-      },
-    ],
-  },
-  {
-    id: "company",
-    label: "Track a company",
-    blocks: [
-      {
-        command: "releases get vercel",
-        output: `Vercel (vercel)
-  Domain:      vercel.com
-  Category:    cloud
-  Sources:     6 active
-  Products:    Next.js (nextjs), Turborepo (turborepo)
-
-Latest 3 releases (most recent first):
-rel_f-_EUoCYDOCIvAdk4u7KR  ai@6.0.193              2026-05-28
-rel_34oH4s7v1BkhjJG4Nmb7X  @vercel/python@6.44.0   2026-05-28
-rel_sWKjqqfAsQYbLkeAKgDno  @vercel/express@0.1.94  2026-05-28`,
-        json: `{
-  "id": "org_qsyZSlC_PRGFDYIGsMfzp",
-  "slug": "vercel",
-  "name": "Vercel",
-  "domain": "vercel.com",
-  "category": "cloud",
-  "sourceCount": 6,
-  "releaseCount": 4690,
-  "releasesLast30Days": 1898,
-  "products": [
-    { "slug": "nextjs", "name": "Next.js" },
-    { "slug": "turborepo", "name": "Turborepo" }
-  ],
-  "releases": [
-    {
-      "id": "rel_f-_EUoCYDOCIvAdk4u7KR",
-      "title": "ai@6.0.193",
-      "version": "ai@6.0.193",
-      "publishedAt": "2026-05-28T23:37:36.000Z",
-      "sourceName": "AI SDK"
-    },
-    {
-      "id": "rel_34oH4s7v1BkhjJG4Nmb7X",
-      "title": "@vercel/python@6.44.0",
-      "version": "@vercel/python@6.44.0",
-      "publishedAt": "2026-05-28T23:01:15.000Z",
-      "sourceName": "Vercel CLI"
-    },
-    {
-      "id": "rel_sWKjqqfAsQYbLkeAKgDno",
-      "title": "@vercel/express@0.1.94",
-      "version": "@vercel/express@0.1.94",
-      "publishedAt": "2026-05-28T23:00:48.000Z",
-      "sourceName": "Vercel CLI"
-    }
-  ]
-}`,
-      },
-    ],
-  },
   {
     id: "search",
     label: "Search across vendors",
@@ -232,6 +128,118 @@ Event-driven webhooks support is now available in the Gemini API, replacing poll
   "org": { "slug": "google", "name": "Google" },
   "contentChars": 132,
   "contentTokens": 24
+}`,
+      },
+    ],
+  },
+  {
+    id: "company",
+    label: "Track a company",
+    blocks: [
+      {
+        command: "releases get vercel",
+        output: `Vercel (vercel)
+  Domain:      vercel.com
+  Category:    cloud
+  Sources:     6 active
+  Products:    Next.js (nextjs), Turborepo (turborepo)
+
+Latest 3 releases (most recent first):
+rel_f-_EUoCYDOCIvAdk4u7KR  ai@6.0.193              2026-05-28
+rel_34oH4s7v1BkhjJG4Nmb7X  @vercel/python@6.44.0   2026-05-28
+rel_sWKjqqfAsQYbLkeAKgDno  @vercel/express@0.1.94  2026-05-28`,
+        json: `{
+  "id": "org_qsyZSlC_PRGFDYIGsMfzp",
+  "slug": "vercel",
+  "name": "Vercel",
+  "domain": "vercel.com",
+  "category": "cloud",
+  "sourceCount": 6,
+  "releaseCount": 4690,
+  "releasesLast30Days": 1898,
+  "products": [
+    { "slug": "nextjs", "name": "Next.js" },
+    { "slug": "turborepo", "name": "Turborepo" }
+  ],
+  "releases": [
+    {
+      "id": "rel_f-_EUoCYDOCIvAdk4u7KR",
+      "title": "ai@6.0.193",
+      "version": "ai@6.0.193",
+      "publishedAt": "2026-05-28T23:37:36.000Z",
+      "sourceName": "AI SDK"
+    },
+    {
+      "id": "rel_34oH4s7v1BkhjJG4Nmb7X",
+      "title": "@vercel/python@6.44.0",
+      "version": "@vercel/python@6.44.0",
+      "publishedAt": "2026-05-28T23:01:15.000Z",
+      "sourceName": "Vercel CLI"
+    },
+    {
+      "id": "rel_sWKjqqfAsQYbLkeAKgDno",
+      "title": "@vercel/express@0.1.94",
+      "version": "@vercel/express@0.1.94",
+      "publishedAt": "2026-05-28T23:00:48.000Z",
+      "sourceName": "Vercel CLI"
+    }
+  ]
+}`,
+      },
+    ],
+  },
+  {
+    id: "product",
+    label: "Check product updates",
+    blocks: [
+      {
+        command: "releases get cursor",
+        output: `Cursor (cursor)
+  Domain:      cursor.com
+  Category:    developer-tools
+  About:       AI-powered code editor built on VS Code
+  Sources:     1 active
+  Collections: Coding Agents (coding-agents)
+
+Latest 3 releases (most recent first):
+rel_mKKH2T7nzFN0UuOLVYB86  Canvas Design Mode and Context Usage Report  2026-06-04
+rel_vBsY33fzVojgOdvcTDPui  Organizations for Cursor Enterprise          2026-06-03
+rel_CKUKVIG-gOOnIpjk0uC_x  Auto-review Run Mode                         2026-05-29`,
+        json: `{
+  "id": "org_keFBTgO7XcFJzGNl-g0W5",
+  "slug": "cursor",
+  "name": "Cursor",
+  "domain": "cursor.com",
+  "category": "developer-tools",
+  "sourceCount": 1,
+  "releaseCount": 56,
+  "releasesLast30Days": 12,
+  "releases": [
+    {
+      "id": "rel_mKKH2T7nzFN0UuOLVYB86",
+      "title": "Canvas Design Mode and Context Usage Report",
+      "summary": "Design Mode is now available in canvases, allowing you to select and annotate UI elements directly to guide Cursor's edits. Cursor can now show your agent's context usage as an interactive report in a canvas, breaking down where tokens go across the system prompt, tool definitions, rules, and skills.",
+      "publishedAt": "2026-06-04T00:00:00.000Z",
+      "sourceName": "Cursor Changelog",
+      "contentTokens": 330
+    },
+    {
+      "id": "rel_vBsY33fzVojgOdvcTDPui",
+      "title": "Organizations for Cursor Enterprise",
+      "summary": "Enterprise customers can now manage multiple Cursor teams under a single organization, with separate security, governance, budget, and feature controls per team. Organizations provide unified spend and token usage rollup, IDP management at the organization level, and per-team or per-group model access and spend limits. Users can belong to multiple teams with different roles in each, and admins can move users between teams via dashboard, API, or CSV.",
+      "publishedAt": "2026-06-03T00:00:00.000Z",
+      "sourceName": "Cursor Changelog",
+      "contentTokens": 410
+    },
+    {
+      "id": "rel_CKUKVIG-gOOnIpjk0uC_x",
+      "title": "Auto-review Run Mode",
+      "summary": "Auto-review is a new run mode that applies to Shell, MCP, and Fetch tool calls. Allowlisted calls run immediately, sandboxed calls execute in isolation, and remaining actions go to a classifier subagent that decides whether to allow, retry, or ask for approval. Configure it in Settings > Cursor Settings > Agents > Run Mode.",
+      "publishedAt": "2026-05-29T00:00:00.000Z",
+      "sourceName": "Cursor Changelog",
+      "contentTokens": 136
+    }
+  ]
 }`,
       },
     ],
