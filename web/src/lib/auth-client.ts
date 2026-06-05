@@ -1,5 +1,9 @@
 import { createAuthClient } from "better-auth/react";
-import { oneTapClient, magicLinkClient } from "better-auth/client/plugins";
+import {
+  oneTapClient,
+  magicLinkClient,
+  deviceAuthorizationClient,
+} from "better-auth/client/plugins";
 import { dashClient } from "@better-auth/infra/client";
 
 /**
@@ -47,6 +51,12 @@ export const authClient = createAuthClient({
     // and this bundle reveals it only when the public id is present. Omitted → no
     // Google GSI script loads and `authClient.oneTap` stays undefined.
     ...(GOOGLE_ONE_TAP_CLIENT_ID ? [oneTapClient({ clientId: GOOGLE_ONE_TAP_CLIENT_ID })] : []),
+    // Device authorization (RFC 8628) — the browser half of `releases login`.
+    // Registers `authClient.device()` (verify a user code) plus `device.approve` /
+    // `device.deny`, used by the /device and /device/approve pages. Takes no options
+    // (so nothing to gate at construction); the pages themselves are flag-gated.
+    // The CLI does NOT use this client — it speaks the raw HTTP endpoints directly.
+    deviceAuthorizationClient(),
   ],
 });
 

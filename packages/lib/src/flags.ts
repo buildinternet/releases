@@ -107,6 +107,17 @@ export const FLAGS = {
     env: "USER_API_KEYS_ENABLED",
     default: false,
   },
+  // Rollout gate: the OAuth 2.0 Device Authorization Grant (RFC 8628) path that
+  // backs `releases login` from the CLI — registers the `deviceAuthorization()` +
+  // `bearer()` plugins and their endpoints. default:false → OFF until the web
+  // /device verification pages ship; flip on in BOTH Flagship apps. Device login
+  // mints relu_ user keys, so it is only useful with `user-api-keys-enabled` ALSO
+  // on (the /v1/api-keys create route the CLI calls is gated on that flag).
+  deviceAuthorizationEnabled: {
+    key: "device-authorization-enabled",
+    env: "DEVICE_AUTHORIZATION_ENABLED",
+    default: false,
+  },
   cacheDisabled: { key: "cache-disabled", env: "CACHE_DISABLED", default: false },
   indexingDisabled: { key: "indexing-disabled", env: "INDEXING_DISABLED", default: false },
   extractToolLoopEnabled: {

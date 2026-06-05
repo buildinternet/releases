@@ -17,7 +17,8 @@ import { sqliteTable, text, integer, index } from "drizzle-orm/sqlite-core";
  * use ISO-text timestamps, but auth tables follow Better Auth's expectations).
  *
  * Paired migrations live in workers/api/migrations/ (20260604000000 initial tables,
- * 20260604010000 the dash lastActiveAt column, 20260604020000 the rate-limit store).
+ * 20260604010000 the dash lastActiveAt column, 20260604020000 the rate-limit store,
+ * 20260604030000 the api-key store, 20260605000000 the device-code store).
  * The schema↔migration pairing gate in ci.yml watches this file.
  */
 
@@ -154,9 +155,43 @@ export const apikey = sqliteTable(
   (t) => [index("idx_apikey_key").on(t.key), index("idx_apikey_reference_id").on(t.referenceId)],
 );
 
+/**
+ * Better Auth device-authorization plugin (`deviceAuthorization`) store — the
+ * OAuth 2.0 Device Authorization Grant (RFC 8628) pending-request table that
+ * backs `releases login` from the CLI. One row per device-code request, moving
+ * `pending` → `approved`/`denied` as the user acts in the browser; the plugin
+ * reaps expired rows. `userId` is null until a session claims and approves the
+ * code. The field set is mandated by the plugin (see its `schema.mjs`): it has
+ * NO created/updated timestamps. Like `rate_limit`, the SQL name is snake_case
+ * but the drizzle-adapter schema KEY must stay the camelCase model name
+ * `deviceCode`. Paired migration: 20260605000000_add_device_code.sql.
+ */
+export const deviceCode = sqliteTable(
+  "device_code",
+  {
+    id: text("id").primaryKey(),
+    deviceCode: text("device_code").notNull(),
+    userCode: text("user_code").notNull(),
+    // null until a signed-in session approves the request.
+    userId: text("user_id"),
+    expiresAt: integer("expires_at", { mode: "timestamp" }).notNull(),
+    // pending | approved | denied
+    status: text("status").notNull(),
+    lastPolledAt: integer("last_polled_at", { mode: "timestamp" }),
+    pollingInterval: integer("polling_interval"),
+    clientId: text("client_id"),
+    scope: text("scope"),
+  },
+  (t) => [
+    index("idx_device_code_device_code").on(t.deviceCode),
+    index("idx_device_code_user_code").on(t.userCode),
+  ],
+);
+
 export type AuthUser = typeof user.$inferSelect;
 export type AuthSession = typeof session.$inferSelect;
 export type AuthAccount = typeof account.$inferSelect;
 export type AuthVerification = typeof verification.$inferSelect;
 export type AuthRateLimit = typeof rateLimit.$inferSelect;
 export type AuthApiKey = typeof apikey.$inferSelect;
+export type AuthDeviceCode = typeof deviceCode.$inferSelect;
