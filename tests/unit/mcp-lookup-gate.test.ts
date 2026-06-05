@@ -117,5 +117,23 @@ describe("MCP lookup gate", () => {
       delete (env as Partial<Env>).API;
       await expect(callSearchTool(env, "search", "acme/some-sdk", WRITE)).resolves.toBeDefined();
     });
+
+    it("relu_ caller (authToken=null) forwards the ROOT key, never the user key (no second meter)", async () => {
+      const calls: ApiCall[] = [];
+      const env = {
+        ...makeEnv(calls),
+        RELEASES_API_KEY: { get: async () => "root-secret" },
+      } as Env;
+      // A relu_-metered caller reaches createServer with write scope but token=null
+      // (set in workers/mcp/src/auth.ts → resolveUserKey). maybeLookup must fall
+      // back to the root key, NOT forward a relu_ key (which the API would meter).
+      await callSearchTool(env, "search", "acme/some-sdk", {
+        authScopes: ["write"],
+        authToken: null,
+      });
+      expect(calls.length).toBe(1);
+      expect(calls[0].url).toContain("/v1/lookups");
+      expect(calls[0].auth).toBe("Bearer root-secret");
+    });
   });
 });

@@ -7,6 +7,7 @@ import {
   generateApiToken,
   hashSecret,
   isApiScope,
+  isUserApiKeyShaped,
   parseStoredScopes,
   PRINCIPAL_TYPES,
   ROOT_SCOPE,
@@ -138,6 +139,21 @@ apiTokenRoutes.get("/tokens/me", async (c) => {
       name: "root",
       scopes: auth.scopes,
       principalType: "internal",
+      principalId: null,
+      expiresAt: null,
+      lastUsedAt: null,
+    } satisfies TokenIdentity);
+  }
+  // User API keys (relu_) live in Better Auth's `apikey` table, not `api_tokens`.
+  // The middleware already verified + metered the key and resolved its scopes;
+  // return them directly (no `api_tokens` row exists, so the query below would
+  // 401). Richer fields (name, remaining, userId) are a Phase 3 enrichment.
+  if (auth.kind === "token" && isUserApiKeyShaped(auth.tokenId)) {
+    return c.json({
+      kind: "token",
+      name: "user-api-key",
+      scopes: auth.scopes,
+      principalType: "user",
       principalId: null,
       expiresAt: null,
       lastUsedAt: null,

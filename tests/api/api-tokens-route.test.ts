@@ -253,4 +253,23 @@ describe("GET /v1/tokens/me", () => {
     );
     expect(res.status).toBe(401);
   });
+
+  it("returns scopes for a relu_ user-key identity without a DB lookup (no 401)", async () => {
+    h = createTestDb();
+    // A relu_ identity has no api_tokens row; the handler must NOT 401 on it.
+    const res = await callAs(h.db, {
+      kind: "token",
+      tokenId: "relu_someUserKeyId",
+      scopes: ["read", "write"],
+    })("/tokens/me");
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      kind: string;
+      scopes: string[];
+      principalType: string;
+    };
+    expect(body.kind).toBe("token");
+    expect(body.scopes).toEqual(["read", "write"]);
+    expect(body.principalType).toBe("user");
+  });
 });
