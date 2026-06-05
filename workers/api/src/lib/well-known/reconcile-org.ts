@@ -262,16 +262,19 @@ export async function syncOrgWellKnown(
       .values(tagRows.map((t) => ({ orgId: org.id, tagId: t.id, createdAt: now })))
       .onConflictDoNothing();
   }
-  // Additive socials.
-  for (const s of plan.socialsToAdd) {
+  // Additive socials — single batched insert (mirrors the tag insert above).
+  if (plan.socialsToAdd.length > 0) {
+    const socialNow = new Date().toISOString();
     await db
       .insert(orgAccounts)
-      .values({
-        orgId: org.id,
-        platform: s.platform,
-        handle: s.handle,
-        createdAt: new Date().toISOString(),
-      })
+      .values(
+        plan.socialsToAdd.map((s) => ({
+          orgId: org.id,
+          platform: s.platform,
+          handle: s.handle,
+          createdAt: socialNow,
+        })),
+      )
       .onConflictDoNothing();
   }
 

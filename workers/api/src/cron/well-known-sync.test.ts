@@ -79,7 +79,6 @@ describe("wellKnownSync cron", () => {
       slug: "dead",
       name: "Dead",
       domain: "dead.com",
-      fetchPaused: false,
       deletedAt: "2020-01-01T00:00:00.000Z",
     });
     let hitDead = false;
@@ -96,5 +95,46 @@ describe("wellKnownSync cron", () => {
       },
     });
     expect(hitDead).toBe(false);
+  });
+
+  it("skips Pass 2 sources whose org is paused or deleted", async () => {
+    const db = createTestDb();
+    await db.insert(organizations).values([
+      { id: "org_paused", slug: "paused", name: "Paused", fetchPaused: true },
+      { id: "org_gone", slug: "gone", name: "Gone", deletedAt: "2020-01-01T00:00:00.000Z" },
+    ]);
+    // Sources left with deletedAt = null so the exclusion can only come from the
+    // org-level join, not the source's own deletedAt.
+    await db.insert(sources).values([
+      {
+        id: "src_p",
+        orgId: "org_paused",
+        name: "P",
+        slug: "p",
+        type: "github",
+        url: "https://github.com/paused/repo",
+      },
+      {
+        id: "src_g",
+        orgId: "org_gone",
+        name: "G",
+        slug: "g",
+        type: "github",
+        url: "https://github.com/gone/repo",
+      },
+    ]);
+    const hits: string[] = [];
+    await wellKnownSync({
+      DB: {} as any,
+      MEDIA: {} as any,
+      MEDIA_ORIGIN: "x",
+      _drizzleOverride: db as any,
+      fetchImpl: async (url: string) => {
+        hits.push(url);
+        return new Response("nope", { status: 404 });
+      },
+    });
+    expect(hits.some((u) => u.includes("paused/repo"))).toBe(false);
+    expect(hits.some((u) => u.includes("gone/repo"))).toBe(false);
   });
 });

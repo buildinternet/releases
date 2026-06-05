@@ -13,6 +13,13 @@ function fakeR2() {
   } as any;
 }
 
+type SyncResult = {
+  fetched: boolean;
+  applied: boolean;
+  skippedReason?: string;
+  plan?: unknown;
+};
+
 describe("POST /v1/orgs/:slug/sync-well-known", () => {
   let db: TestDb;
   const realFetch = globalThis.fetch;
@@ -44,7 +51,7 @@ describe("POST /v1/orgs/:slug/sync-well-known", () => {
       new Request("http://x/v1/orgs/acme/sync-well-known", { method: "POST" }),
     );
     expect(res.status).toBe(200);
-    const json = (await res.json()) as any;
+    const json = (await res.json()) as SyncResult;
     expect(json.applied).toBe(true);
     const [o] = await db.select().from(organizations).where(eq(organizations.id, "org_a"));
     expect(o!.description).toBe("CI for teams.");
@@ -61,7 +68,7 @@ describe("POST /v1/orgs/:slug/sync-well-known", () => {
       new Request("http://x/v1/orgs/acme/sync-well-known?dryRun=1", { method: "POST" }),
     );
     expect(res.status).toBe(200);
-    const json = (await res.json()) as any;
+    const json = (await res.json()) as SyncResult;
     expect(json.applied).toBe(false);
     const [o] = await db.select().from(organizations).where(eq(organizations.id, "org_a"));
     expect(o!.description ?? null).toBeNull();
@@ -73,7 +80,7 @@ describe("POST /v1/orgs/:slug/sync-well-known", () => {
       new Request("http://x/v1/orgs/nodom/sync-well-known", { method: "POST" }),
     );
     expect(res.status).toBe(200);
-    const json = (await res.json()) as any;
+    const json = (await res.json()) as SyncResult;
     expect(json.applied).toBe(false);
     expect(json.skippedReason).toBe("no_domain");
   });

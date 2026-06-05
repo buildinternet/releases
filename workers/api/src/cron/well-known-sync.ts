@@ -63,11 +63,23 @@ export async function wellKnownSync(env: WellKnownSyncEnv): Promise<void> {
   // Both passes iterate the full corpus sequentially — no cap. Fine at current
   // scale; fair-rotation/batching (a last-swept-at column + due-filtering, like
   // poll-and-fetch) is deferred to Tier 2 if the org/source count grows large.
-  // Pass 2: source→product mapping from repo-root releases.json files.
+  // Pass 2: source→product mapping from repo-root releases.json files. Join the
+  // org so a github source under a paused/deleted org is skipped too — mirrors
+  // Pass 1's org predicates. (Org soft-delete already cascades deletedAt to its
+  // sources, so the org deletedAt check is belt-and-suspenders against a cascade
+  // gap; the fetchPaused check is the one Pass 2 would otherwise miss.)
   const ghSources = await db
     .select({ id: sources.id })
     .from(sources)
-    .where(and(eq(sources.type, "github"), isNull(sources.deletedAt)));
+    .innerJoin(organizations, eq(sources.orgId, organizations.id))
+    .where(
+      and(
+        eq(sources.type, "github"),
+        isNull(sources.deletedAt),
+        eq(organizations.fetchPaused, false),
+        isNull(organizations.deletedAt),
+      ),
+    );
   for (const s of ghSources) {
     try {
       // oxlint-disable-next-line no-await-in-loop -- sequential per-source to avoid concurrent GitHub raw-content fetch pressure
