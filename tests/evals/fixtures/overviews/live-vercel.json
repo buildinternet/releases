@@ -1,0 +1,481 @@
+{
+  "input": {
+    "org": {
+      "name": "Vercel",
+      "description": null
+    },
+    "sources": [
+      {
+        "name": "Next.js"
+      },
+      {
+        "name": "SWR"
+      },
+      {
+        "name": "Turborepo"
+      },
+      {
+        "name": "Vercel"
+      },
+      {
+        "name": "AI SDK"
+      },
+      {
+        "name": "Vercel CLI"
+      }
+    ],
+    "selected": [
+      {
+        "id": "rel_p2aCPONWGPkNKSCoY0lV4",
+        "title": "@ai-sdk/xai@4.0.0-canary.71",
+        "version": "@ai-sdk/xai@4.0.0-canary.71",
+        "content": "### Patch Changes\n\n-   ce769dd: feat(provider): add experimental Realtime API support for voice conversations\n\n    Adds first-class support for realtime (speech-to-speech) APIs:\n\n    -   `Experimental_RealtimeModelV4` spec in `@ai-sdk/provider` with normalized event types and factory\n    -   OpenAI, Google, and xAI realtime provider implementations\n    -   `openai.experimental_realtime()` / `google.experimental_realtime()` / `xai.experimental_realtime()` work in both server and browser\n    -   `.getToken()` static method on each provider for server-side ephemeral token creation\n    -   `experimental_getRealtimeToolDefinitions` helper for provider session tool definitions\n    -   `experimental_useRealtime` hook in `@ai-sdk/react` returning `UIMessage[]` (aligned with `useChat`), with `onToolCall` and `addToolOutput` for client-driven tool execution\n    -   `inputAudioTranscription` session config for showing transcribed user audio messages when supported by the provider\n\n-   Updated dep",
+        "publishedAt": "2026-06-05T04:43:55.000Z",
+        "url": "https://github.com/vercel/ai/releases/tag/%40ai-sdk/xai%404.0.0-canary.71"
+      },
+      {
+        "id": "rel_y6kXAwXH6P70RqqXvgjUL",
+        "title": "@ai-sdk/workflow@1.0.0-canary.82",
+        "version": "@ai-sdk/workflow@1.0.0-canary.82",
+        "content": "### Patch Changes\n\n-   Updated dependencies [ce769dd]\n    -   @ai-sdk/provider@4.0.0-canary.18\n    -   ai@7.0.0-canary.165\n    -   @ai-sdk/provider-utils@5.0.0-canary.46\n",
+        "publishedAt": "2026-06-05T04:43:52.000Z",
+        "url": "https://github.com/vercel/ai/releases/tag/%40ai-sdk/workflow%401.0.0-canary.82"
+      },
+      {
+        "id": "rel_KL1OiZJPnUmqJNt_WxXiz",
+        "title": "@ai-sdk/vue@4.0.0-canary.165",
+        "version": "@ai-sdk/vue@4.0.0-canary.165",
+        "content": "### Patch Changes\n\n-   Updated dependencies [ce769dd]\n    -   ai@7.0.0-canary.165\n    -   @ai-sdk/provider-utils@5.0.0-canary.46\n",
+        "publishedAt": "2026-06-05T04:43:49.000Z",
+        "url": "https://github.com/vercel/ai/releases/tag/%40ai-sdk/vue%404.0.0-canary.165"
+      },
+      {
+        "id": "rel_MYjT1Nbed-T8Os-ccaqg-",
+        "title": "@ai-sdk/voyage@2.0.0-canary.21",
+        "version": "@ai-sdk/voyage@2.0.0-canary.21",
+        "content": "### Patch Changes\n\n-   Updated dependencies [ce769dd]\n    -   @ai-sdk/provider@4.0.0-canary.18\n    -   @ai-sdk/provider-utils@5.0.0-canary.46\n",
+        "publishedAt": "2026-06-05T04:43:46.000Z",
+        "url": "https://github.com/vercel/ai/releases/tag/%40ai-sdk/voyage%402.0.0-canary.21"
+      },
+      {
+        "id": "rel_t2308rq1if08Prn09vsTh",
+        "title": "@ai-sdk/vercel@3.0.0-canary.54",
+        "version": "@ai-sdk/vercel@3.0.0-canary.54",
+        "content": "### Patch Changes\n\n-   Updated dependencies [ce769dd]\n    -   @ai-sdk/provider@4.0.0-canary.18\n    -   @ai-sdk/openai-compatible@3.0.0-canary.54\n    -   @ai-sdk/provider-utils@5.0.0-canary.46\n",
+        "publishedAt": "2026-06-05T04:43:43.000Z",
+        "url": "https://github.com/vercel/ai/releases/tag/%40ai-sdk/vercel%403.0.0-canary.54"
+      },
+      {
+        "id": "rel_ux5qS2k0HEmjFB2V9vKO1",
+        "title": "@ai-sdk/valibot@3.0.0-canary.46",
+        "version": "@ai-sdk/valibot@3.0.0-canary.46",
+        "content": "### Patch Changes\n\n-   @ai-sdk/provider-utils@5.0.0-canary.46\n",
+        "publishedAt": "2026-06-05T04:43:40.000Z",
+        "url": "https://github.com/vercel/ai/releases/tag/%40ai-sdk/valibot%403.0.0-canary.46"
+      },
+      {
+        "id": "rel_YIte-ysTjnXMLYa3xhGFN",
+        "title": "@ai-sdk/togetherai@3.0.0-canary.54",
+        "version": "@ai-sdk/togetherai@3.0.0-canary.54",
+        "content": "### Patch Changes\n\n-   Updated dependencies [ce769dd]\n    -   @ai-sdk/provider@4.0.0-canary.18\n    -   @ai-sdk/openai-compatible@3.0.0-canary.54\n    -   @ai-sdk/provider-utils@5.0.0-canary.46\n",
+        "publishedAt": "2026-06-05T04:43:37.000Z",
+        "url": "https://github.com/vercel/ai/releases/tag/%40ai-sdk/togetherai%403.0.0-canary.54"
+      },
+      {
+        "id": "rel_gA4xe9FHo5b806zPjrGr-",
+        "title": "@ai-sdk/svelte@5.0.0-canary.165",
+        "version": "@ai-sdk/svelte@5.0.0-canary.165",
+        "content": "### Patch Changes\n\n-   Updated dependencies [ce769dd]\n    -   ai@7.0.0-canary.165\n    -   @ai-sdk/provider-utils@5.0.0-canary.46\n",
+        "publishedAt": "2026-06-05T04:43:34.000Z",
+        "url": "https://github.com/vercel/ai/releases/tag/%40ai-sdk/svelte%405.0.0-canary.165"
+      },
+      {
+        "id": "rel_hIdnUrxr45eXsRU-FaorY",
+        "title": "@ai-sdk/rsc@3.0.0-canary.166",
+        "version": "@ai-sdk/rsc@3.0.0-canary.166",
+        "content": "### Patch Changes\n\n-   Updated dependencies [ce769dd]\n    -   @ai-sdk/provider@4.0.0-canary.18\n    -   ai@7.0.0-canary.165\n    -   @ai-sdk/provider-utils@5.0.0-canary.46\n",
+        "publishedAt": "2026-06-05T04:43:31.000Z",
+        "url": "https://github.com/vercel/ai/releases/tag/%40ai-sdk/rsc%403.0.0-canary.166"
+      },
+      {
+        "id": "rel_xPI4I5egh2KqvJWII14K3",
+        "title": "@ai-sdk/revai@3.0.0-canary.48",
+        "version": "@ai-sdk/revai@3.0.0-canary.48",
+        "content": "### Patch Changes\n\n-   Updated dependencies [ce769dd]\n    -   @ai-sdk/provider@4.0.0-canary.18\n    -   @ai-sdk/provider-utils@5.0.0-canary.46\n",
+        "publishedAt": "2026-06-05T04:43:28.000Z",
+        "url": "https://github.com/vercel/ai/releases/tag/%40ai-sdk/revai%403.0.0-canary.48"
+      },
+      {
+        "id": "rel_4mgzetPz-U6vt12sbMM8i",
+        "title": "@vercel/static-build@2.9.37",
+        "version": "@vercel/static-build@2.9.37",
+        "content": "### Patch Changes\n\n-   @vercel/gatsby-plugin-vercel-builder@2.2.14\n",
+        "publishedAt": "2026-06-04T13:59:11.000Z",
+        "url": "https://github.com/vercel/vercel/releases/tag/%40vercel/static-build%402.9.37"
+      },
+      {
+        "id": "rel_lBUtkTjZ-w9NFjCrL8iuT",
+        "title": "@vercel/node@5.8.12",
+        "version": "@vercel/node@5.8.12",
+        "content": "### Patch Changes\n\n-   Updated dependencies [0a170fd]\n    -   @vercel/build-utils@13.27.1\n",
+        "publishedAt": "2026-06-04T13:59:08.000Z",
+        "url": "https://github.com/vercel/vercel/releases/tag/%40vercel/node%405.8.12"
+      },
+      {
+        "id": "rel_v04XCr79n9LekKZ-L4ubC",
+        "title": "@vercel/nestjs@0.2.92",
+        "version": "@vercel/nestjs@0.2.92",
+        "content": "### Patch Changes\n\n-   @vercel/node@5.8.12\n",
+        "publishedAt": "2026-06-04T13:59:05.000Z",
+        "url": "https://github.com/vercel/vercel/releases/tag/%40vercel/nestjs%400.2.92"
+      },
+      {
+        "id": "rel_VoEwl4Q7T6RoBm1HlVzLh",
+        "title": "@vercel/koa@0.1.71",
+        "version": "@vercel/koa@0.1.71",
+        "content": "### Patch Changes\n\n-   @vercel/node@5.8.12\n",
+        "publishedAt": "2026-06-04T13:59:02.000Z",
+        "url": "https://github.com/vercel/vercel/releases/tag/%40vercel/koa%400.1.71"
+      },
+      {
+        "id": "rel_eeep4zdUgKU_LQj09ClSs",
+        "title": "@vercel/hono@0.2.91",
+        "version": "@vercel/hono@0.2.91",
+        "content": "### Patch Changes\n\n-   @vercel/node@5.8.12\n",
+        "publishedAt": "2026-06-04T13:58:59.000Z",
+        "url": "https://github.com/vercel/vercel/releases/tag/%40vercel/hono%400.2.91"
+      },
+      {
+        "id": "rel_a9djg_b28ENB6KcnMUC0r",
+        "title": "@vercel/h3@0.1.97",
+        "version": "@vercel/h3@0.1.97",
+        "content": "### Patch Changes\n\n-   @vercel/node@5.8.12\n",
+        "publishedAt": "2026-06-04T13:58:56.000Z",
+        "url": "https://github.com/vercel/vercel/releases/tag/%40vercel/h3%400.1.97"
+      },
+      {
+        "id": "rel_Pdk8TXFO1tXQ2NtKIOxF_",
+        "title": "@vercel/gatsby-plugin-vercel-builder@2.2.14",
+        "version": "@vercel/gatsby-plugin-vercel-builder@2.2.14",
+        "content": "### Patch Changes\n\n-   Updated dependencies [0a170fd]\n    -   @vercel/build-utils@13.27.1\n",
+        "publishedAt": "2026-06-04T13:58:53.000Z",
+        "url": "https://github.com/vercel/vercel/releases/tag/%40vercel/gatsby-plugin-vercel-builder%402.2.14"
+      },
+      {
+        "id": "rel_CBvkK2evwmjy1KYqb_NAm",
+        "title": "@vercel/fs-detectors@6.7.8",
+        "version": "@vercel/fs-detectors@6.7.8",
+        "content": "### Patch Changes\n\n-   0a170fd: [services] wire `experimentalServicesV2` into `fs-detectors`.\n-   Updated dependencies [0a170fd]\n    -   @vercel/build-utils@13.27.1\n",
+        "publishedAt": "2026-06-04T13:58:50.000Z",
+        "url": "https://github.com/vercel/vercel/releases/tag/%40vercel/fs-detectors%406.7.8"
+      },
+      {
+        "id": "rel_aT2R_jaQSwwAJ0jcdC8DW",
+        "title": "@vercel/fastify@0.1.91",
+        "version": "@vercel/fastify@0.1.91",
+        "content": "### Patch Changes\n\n-   @vercel/node@5.8.12\n",
+        "publishedAt": "2026-06-04T13:58:47.000Z",
+        "url": "https://github.com/vercel/vercel/releases/tag/%40vercel/fastify%400.1.91"
+      },
+      {
+        "id": "rel_gORPDhTQT1QN0onjP7Ppa",
+        "title": "@vercel/express@0.1.98",
+        "version": "@vercel/express@0.1.98",
+        "content": "### Patch Changes\n\n-   @vercel/cervel@0.1.15\n-   @vercel/node@5.8.12\n",
+        "publishedAt": "2026-06-04T13:58:44.000Z",
+        "url": "https://github.com/vercel/vercel/releases/tag/%40vercel/express%400.1.98"
+      },
+      {
+        "id": "rel_zoFBwb78PWBizK7QVxCYl",
+        "title": "Nemotron 3 Ultra now available on AI Gateway",
+        "version": null,
+        "content": "Nemotron 3 Ultra from Nvidia is now available on Vercel AI Gateway. This is an open Mixture-of-Experts reasoning model built for orchestrating long-running agent workflows, with a 1M token context window.\n\nKey features:\n- Targets multi-turn agent workflows: planning, tool use, sub-agent delegation, and error recovery\n- Throughput up to 350 tokens per second\n- Up to 30% lower cost on agentic tasks\n- Use model `nvidia/nemotron-3-ultra-550b-a55b` in AI SDK\n\nAI Gateway provides unified API for calling models, tracking usage and cost, configuring retries, failover, and performance optimizations. Includes custom reporting, Zero Data Retention support, and dynamic provider sorting.",
+        "publishedAt": "2026-06-04T00:00:00.000Z",
+        "url": "https://vercel.com/changelog#nemotron-3-ultra-now-available-on-ai-gateway"
+      },
+      {
+        "id": "rel_Ce61Ls4bnbAlTssNsH3mI",
+        "title": "Updates to Legal Terms",
+        "version": null,
+        "content": "Vercel has updated its Terms of Service and Marketplace terms to clarify shared responsibility when actions on your account may be taken by AI, whether Vercel's own or third-party tools. Key updates include:\n\n**AI Functionality and Third-Party Tools**: New concepts introduced to clarify responsibilities around AI-powered services (v0, Vercel Agent, WAF, AI Gateway) and non-Vercel tools granted account access. You control how AI Functionality behaves, are responsible for reviewing its outputs, and responsible for any Third-Party Tool actions on your behalf.\n\n**Billing Flexibility**: Fees are no longer exclusively tied to subscription plans. Services like AI Gateway credits can be purchased independently. Charges may occur at purchase or top-up. High or suspicious usage may trigger early charges ahead of regular billing cycles.\n\n**Enterprise Managed Accounts**: Enterprise customers can now claim email addresses on verified domains associated with existing Vercel accounts.\n\n**Representati",
+        "publishedAt": "2026-06-04T00:00:00.000Z",
+        "url": "https://vercel.com/changelog#updates-to-legal-terms"
+      },
+      {
+        "id": "rel_sVYx7wQ-pP3sVnw7TMtit",
+        "title": "Turborepo v2.9.17-canary.3",
+        "version": "v2.9.17-canary.3",
+        "content": "<!-- Release notes generated using configuration in .github/release.yml at v2.9.17-canary.3 -->\n\n## What's Changed\n### Changelog\n* release(turborepo): 2.9.17-canary.2 by @github-actions[bot] in https://github.com/vercel/turborepo/pull/12980\n* test: Skip installs for JSON output fixtures by @anthonyshew in https://github.com/vercel/turborepo/pull/12981\n* feat: Add Rsbuild examples by @Nsttt in https://github.com/vercel/turborepo/pull/12942\n* test: Skip installs for single package dry runs by @anthonyshew in https://github.com/vercel/turborepo/pull/12982\n* test: Skip Corepack setup without installs by @anthonyshew in https://github.com/vercel/turborepo/pull/12983\n* test: Skip installs for metadata-only Rust tests by @anthonyshew in https://github.com/vercel/turborepo/pull/12985\n* test: Skip remaining unnecessary fixture installs by @anthonyshew in https://github.com/vercel/turborepo/pull/12986\n* test: Add final hash contract snapshots by @anthonyshew in https://github.com/vercel/turborep",
+        "publishedAt": "2026-06-03T13:54:52.000Z",
+        "url": "https://github.com/vercel/turborepo/releases/tag/v2.9.17-canary.3"
+      },
+      {
+        "id": "rel_-j-q24tyE6aHgRelOmHhu",
+        "title": "Grok Imagine Video 1.5 on AI Gateway",
+        "version": null,
+        "content": "Grok Imagine Video 1.5 from xAI is now available on AI Gateway. The model generates video from an input image with synchronized audio in a single pass.\n\nThis release improves audio quality, prompt following, and photorealism. Face accuracy and character consistency are stronger across longer sequences, with better lighting and physical realism. Reference image support has been expanded to give more control over visual style and subject.\n\nUse the model by setting it to `xai/grok-imagine-video-1.5-preview` in the AI SDK. You can chain an image model with Grok Imagine Video 1.5 to generate a still and animate it in one flow. Try this model directly in the [AI Gateway Playground](https://vercel.com/ai-gateway/models/grok-imagine-video-1.5-preview).\n\nAI Gateway provides a unified API for calling models, tracking usage and cost, and configuring retries, failover, and performance optimizations. It includes built-in custom reporting, Zero Data Retention support, dynamic provider sorting by lat",
+        "publishedAt": "2026-06-03T00:00:00.000Z",
+        "url": "https://vercel.com/changelog#grok-imagine-video-1-5-on-ai-gateway"
+      },
+      {
+        "id": "rel_Fo-GHAdyotSpkUme8dUUN",
+        "title": "Signed URLs are now available for Vercel Blob",
+        "version": null,
+        "content": "Vercel Blob now supports time-bound signed URLs for scoped, secure access without exposing your entire Blob store. Each signed URL is scoped to a single operation (put, get, head, or delete), a single pathname, and an expiry up to 7 days. Features include:\n\n- **Direct uploads from the browser**: Upload URLs (put) support multipart for streaming large files straight to Blob storage\n- **Conditional deletes**: Delete URLs accept an `ifMatch` option so deletion only applies if the object hasn't been overwritten since the URL was signed\n- **OIDC integration**: Your server authenticates via OIDC, generates signed tokens, and produces narrowly scoped URLs for the browser, keeping your `BLOB_READ_WRITE_TOKEN` server-side\n\nUpdate `@vercel/blob` to `2.4.0` or later.",
+        "publishedAt": "2026-06-02T00:00:00.000Z",
+        "url": "https://vercel.com/changelog#signed-urls-are-now-available-for-vercel-blob"
+      },
+      {
+        "id": "rel_BkZc-x1Q33GM_UFaG8-CY",
+        "title": "Edit Git settings for all projects in a repo",
+        "version": null,
+        "content": "Monorepos that deploy many projects can now configure all of their project's Git settings more conveniently. Previously, you had to click through to every project's settings and apply the same setting consistently. Now you can configure commit status, repository_dispatch events, and other settings for all projects in one place via project settings.",
+        "publishedAt": "2026-06-02T00:00:00.000Z",
+        "url": "https://vercel.com/changelog#edit-git-settings-for-all-projects-in-a-repo",
+        "media": [
+          {
+            "type": "image",
+            "url": "https://assets.vercel.com/image/upload/contentful/image/e5382hct74si/3AIDblVrq2hbyGmJ1MuYyg/e504200fc62930ff063b67c63650cc6c/git-settings-light.png",
+            "alt": "git settings (light)"
+          },
+          {
+            "type": "image",
+            "url": "https://assets.vercel.com/image/upload/contentful/image/e5382hct74si/5PtQT5tlxU93dSHdOp6VJd/7157870cfabb0677ead41cf23c47a59d/git-settings-dark.png",
+            "alt": "git settings (dark)"
+          }
+        ]
+      },
+      {
+        "id": "rel_v4y49dmZs1JTAvO__VYXa",
+        "title": "Qwen 3.7 Plus now available on AI Gateway",
+        "version": null,
+        "content": "Qwen 3.7 Plus from Alibaba is now available on Vercel AI Gateway. Both Qwen 3.7 Plus and 3.7 Max are free for paid AI Gateway users through 6/4/26 12:00pm PT.\n\nThe model unifies vision and language into a single agent foundation with capabilities spanning GUI and CLI operation, coding and productivity workflows with full-modality input, and visual agent tasks including perception and reasoning. Use `alibaba/qwen-3.7-plus` as the model in the AI SDK.",
+        "publishedAt": "2026-06-01T00:00:00.000Z",
+        "url": "https://vercel.com/changelog#qwen-3-7-plus-now-available-on-ai-gateway"
+      },
+      {
+        "id": "rel_q3tjMkpEBNBc5OGbkh1Qu",
+        "title": "Elastic Build Machines now protect against out of memory builds",
+        "version": null,
+        "content": "Elastic build machines now monitor your build's memory usage and automatically adjust to prevent out-of-memory (OOM) failures:\n\n- If your build is fast but memory-intensive, Vercel will no longer downgrade you to a smaller machine\n- If your build is close to running out of memory, it will automatically upgrade to a higher tier\n- If your build fails due to an OOM error, the next deployment will automatically run on a higher tier\n\nThresholds are set conservatively to balance deployment reliability and cost. Enable elastic builds in your team or project settings.",
+        "publishedAt": "2026-06-01T00:00:00.000Z",
+        "url": "https://vercel.com/changelog#elastic-build-machines-now-protect-against-out-of-memory-bui"
+      },
+      {
+        "id": "rel_dLdGhE9DlzttJle9-d5JF",
+        "title": "MiniMax M3 on AI Gateway",
+        "version": null,
+        "content": "MiniMax M3 is now available on Vercel AI Gateway. M3 is MiniMax's first model with a 1M-token context window and native multimodality, built around MiniMax Sparse Attention (MSA). M3 improves on software engineering, terminal-based tool use, and agentic web browsing, and is tuned for multi-turn collaboration.\n\nUse in the AI SDK by setting model to `minimax/minimax-m3`. Supports multimodal input with text and images.\n\nAI Gateway provides a unified API for calling models, tracking usage and cost, and configuring retries, failover, and performance optimizations. Includes custom reporting, Zero Data Retention support, dynamic provider sorting by latency & cost, and more.",
+        "publishedAt": "2026-05-31T00:00:00.000Z",
+        "url": "https://vercel.com/changelog#minimax-m3-on-ai-gateway"
+      },
+      {
+        "id": "rel_TP1gbvqZU7fMddOmZK8iL",
+        "title": "Turborepo v2.9.17-canary.2",
+        "version": "v2.9.17-canary.2",
+        "content": "<!-- Release notes generated using configuration in .github/release.yml at v2.9.17-canary.2 -->\n\n## What's Changed\n### Changelog\n* release(turborepo): 2.9.17-canary.1 by @github-actions[bot] in https://github.com/vercel/turborepo/pull/12973\n* fix: Add auth HTTP timeouts by @anthonyshew in https://github.com/vercel/turborepo/pull/12976\n* fix: Detect affected root tasks in query by @anthonyshew in https://github.com/vercel/turborepo/pull/12977\n* fix: Wait for Windows graceful shutdown by @anthonyshew in https://github.com/vercel/turborepo/pull/12979\n\n\n**Full Changelog**: https://github.com/vercel/turborepo/compare/v2.9.17-canary.1...v2.9.17-canary.2",
+        "publishedAt": "2026-05-30T18:09:56.000Z",
+        "url": "https://github.com/vercel/turborepo/releases/tag/v2.9.17-canary.2"
+      },
+      {
+        "id": "rel_aTynI2rWxbpbBx0p-F5uc",
+        "title": "Run Docker containers inside Vercel Sandbox",
+        "version": null,
+        "content": "Vercel Sandbox now supports installing and running Docker inside a sandbox. An agent can build containers, install system packages, and modify files without touching your host system. Install Docker, start the daemon, and serve containerized applications directly within the sandbox environment.",
+        "publishedAt": "2026-05-29T00:00:00.000Z",
+        "url": "https://vercel.com/changelog#run-docker-containers-inside-vercel-sandbox"
+      },
+      {
+        "id": "rel_MNWdTdHbc9_q3bzH2w9cQ",
+        "title": "Function invocations now billed per unit",
+        "version": null,
+        "content": "Function invocations are moving from package-based to per-unit pricing for Pro and new Enterprise customers. Starting with your next billing cycle, you'll be billed per unit at $0.0000006 per invocation (previously $0.60 per 1M invocations) for Pro customers. Per-unit billing scales more smoothly across team sizes and usage patterns and helps teams on Pro use function invocations without immediately consuming a large portion of the included monthly usage credit.",
+        "publishedAt": "2026-05-29T00:00:00.000Z",
+        "url": "https://vercel.com/changelog#function-invocations-now-billed-per-unit"
+      },
+      {
+        "id": "rel_EK8Z3Ol7Vh3RgYGY5SKfs",
+        "title": "Turborepo v2.9.17-canary.1",
+        "version": "v2.9.17-canary.1",
+        "content": "<!-- Release notes generated using configuration in .github/release.yml at v2.9.17-canary.1 -->\n\n## What's Changed\n### Changelog\n* fix: Preserve nested Bun dependency versions by @anthonyshew in https://github.com/vercel/turborepo/pull/12963\n* Revert \"fix: Preserve nested Bun dependency versions\" by @anthonyshew in https://github.com/vercel/turborepo/pull/12964\n* release(turborepo): 2.9.16-canary.2 by @github-actions[bot] in https://github.com/vercel/turborepo/pull/12961\n* fix: Preserve nested Bun dependency versions by @anthonyshew in https://github.com/vercel/turborepo/pull/12965\n* fix: Don't delete existing `.git` when using `--no-git` flag by @anthonyshew in https://github.com/vercel/turborepo/pull/12968\n* fix: Keep non-PTY stdin alive for persistent tasks by @anthonyshew in https://github.com/vercel/turborepo/pull/12972\n* release(turborepo): 2.9.16 by @github-actions[bot] in https://github.com/vercel/turborepo/pull/12970\n\n\n**Full Changelog**: https://github.com/vercel/turborepo/co",
+        "publishedAt": "2026-05-28T16:18:35.000Z",
+        "url": "https://github.com/vercel/turborepo/releases/tag/v2.9.17-canary.1"
+      },
+      {
+        "id": "rel_lq-fVeJj_k7isKSiWjiST",
+        "title": "Turborepo v2.9.16",
+        "version": "v2.9.16",
+        "content": "<!-- Release notes generated using configuration in .github/release.yml at v2.9.16 -->\n\n## What's Changed\n### Changelog\n* release(turborepo): 2.9.15 by @github-actions[bot] in https://github.com/vercel/turborepo/pull/12955\n* fix: Avoid hanging PTY shutdown by @anthonyshew in https://github.com/vercel/turborepo/pull/12958\n* fix: Retry npm tlog publish failures by @anthonyshew in https://github.com/vercel/turborepo/pull/12959\n* release(turborepo): 2.9.16-canary.1 by @anthonyshew in https://github.com/vercel/turborepo/pull/12960\n* fix: Preserve nested Bun dependency versions by @anthonyshew in https://github.com/vercel/turborepo/pull/12963\n* Revert \"fix: Preserve nested Bun dependency versions\" by @anthonyshew in https://github.com/vercel/turborepo/pull/12964\n* release(turborepo): 2.9.16-canary.2 by @github-actions[bot] in https://github.com/vercel/turborepo/pull/12961\n* fix: Preserve nested Bun dependency versions by @anthonyshew in https://github.com/vercel/turborepo/pull/12965\n* fix: D",
+        "publishedAt": "2026-05-28T14:32:37.000Z",
+        "url": "https://github.com/vercel/turborepo/releases/tag/v2.9.16"
+      },
+      {
+        "id": "rel__ZNccE8RM04bvrCBEJ6hN",
+        "title": "Turborepo v2.9.16-canary.2",
+        "version": "v2.9.16-canary.2",
+        "content": "<!-- Release notes generated using configuration in .github/release.yml at v2.9.16-canary.2 -->\n\n## What's Changed\n### Changelog\n* release(turborepo): 2.9.15-canary.7 by @github-actions[bot] in https://github.com/vercel/turborepo/pull/12935\n* fix: Restore a few internal invariant checks by @anthonyshew in https://github.com/vercel/turborepo/pull/12933\n* fix: Improve profile tracing coverage by @anthonyshew in https://github.com/vercel/turborepo/pull/12936\n* fix: Use build-scale OTel duration buckets by @anthonyshew in https://github.com/vercel/turborepo/pull/12939\n* fix: Preserve pnpm injected peer package entries by @anthonyshew in https://github.com/vercel/turborepo/pull/12940\n* feat: Add heap allocation profiling by @anthonyshew in https://github.com/vercel/turborepo/pull/12943\n* release(turborepo): 2.9.15-canary.8 by @anthonyshew in https://github.com/vercel/turborepo/pull/12945\n* docs: Correct attribute presence claims in turborepo-otel by @adityasingh2400 in https://github.com/ve",
+        "publishedAt": "2026-05-27T17:16:35.000Z",
+        "url": "https://github.com/vercel/turborepo/releases/tag/v2.9.16-canary.2"
+      },
+      {
+        "id": "rel_rHW4iRNOw5F-B0ENZs6aH",
+        "title": "Turborepo v2.9.15",
+        "version": "v2.9.15",
+        "content": "<!-- Release notes generated using configuration in .github/release.yml at v2.9.15 -->\n\n## What's Changed\n### Changelog\n* release(turborepo): 2.9.14 by @github-actions[bot] in https://github.com/vercel/turborepo/pull/12805\n* fix: Prune package.json workspaces by @anthonyshew in https://github.com/vercel/turborepo/pull/12808\n* fix: Wait for process trees before task completion by @anthonyshew in https://github.com/vercel/turborepo/pull/12809\n* release(turborepo): 2.9.15-canary.1 by @github-actions[bot] in https://github.com/vercel/turborepo/pull/12810\n* ci: Sign macOS release binaries by @anthonyshew in https://github.com/vercel/turborepo/pull/12811\n* release(turborepo): 2.9.15-canary.2 by @github-actions[bot] in https://github.com/vercel/turborepo/pull/12812\n* fix: Prevent cache archive symlink reads by @anthonyshew in https://github.com/vercel/turborepo/pull/12813\n* release(turborepo): 2.9.15-canary.3 by @github-actions[bot] in https://github.com/vercel/turborepo/pull/12814\n* fix: Avo",
+        "publishedAt": "2026-05-26T22:38:08.000Z",
+        "url": "https://github.com/vercel/turborepo/releases/tag/v2.9.15"
+      },
+      {
+        "id": "rel_BgY7nILWhxj11NxWWxPip",
+        "title": "Turborepo v2.9.15-canary.7",
+        "version": "v2.9.15-canary.7",
+        "content": "<!-- Release notes generated using configuration in .github/release.yml at v2.9.15-canary.7 -->\n\n## What's Changed\n### Changelog\n* release(turborepo): 2.9.15-canary.6 by @github-actions[bot] in https://github.com/vercel/turborepo/pull/12925\n* fix: Restore release PR auto-merge by @anthonyshew in https://github.com/vercel/turborepo/pull/12927\n* perf: Index repo gitignore matchers by @anthonyshew in https://github.com/vercel/turborepo/pull/12928\n* ci: Disable incremental Rust test builds by @anthonyshew in https://github.com/vercel/turborepo/pull/12929\n* perf: Trim OpenTelemetry crate features by @anthonyshew in https://github.com/vercel/turborepo/pull/12930\n* perf: Trim microfrontends proxy HTTP features by @anthonyshew in https://github.com/vercel/turborepo/pull/12931\n* fix: Accept `experimentalCI` object config by @anthonyshew in https://github.com/vercel/turborepo/pull/12934\n\n\n**Full Changelog**: https://github.com/vercel/turborepo/compare/v2.9.15-canary.6...v2.9.15-canary.7",
+        "publishedAt": "2026-05-22T17:21:42.000Z",
+        "url": "https://github.com/vercel/turborepo/releases/tag/v2.9.15-canary.7"
+      },
+      {
+        "id": "rel_kKFVMZT_VCkPiuEh9tsLP",
+        "title": "Turborepo v2.9.15-canary.6",
+        "version": "v2.9.15-canary.6",
+        "content": "<!-- Release notes generated using configuration in .github/release.yml at v2.9.15-canary.6 -->\n\n## What's Changed\n### Changelog\n* release(turborepo): 2.9.15-canary.5 by @github-actions[bot] in https://github.com/vercel/turborepo/pull/12919\n* fix: Restore task completion semantics by @anthonyshew in https://github.com/vercel/turborepo/pull/12923\n* fix: Preserve nested Bun workspace dependency versions by @anthonyshew in https://github.com/vercel/turborepo/pull/12924\n\n\n**Full Changelog**: https://github.com/vercel/turborepo/compare/v2.9.15-canary.5...v2.9.15-canary.6",
+        "publishedAt": "2026-05-21T21:52:24.000Z",
+        "url": "https://github.com/vercel/turborepo/releases/tag/v2.9.15-canary.6"
+      },
+      {
+        "id": "rel_bngBp944Os22CaYkRqPtW",
+        "title": "Turborepo v2.9.15-canary.5",
+        "version": "v2.9.15-canary.5",
+        "content": "<!-- Release notes generated using configuration in .github/release.yml at v2.9.15-canary.5 -->\n\n## What's Changed\n### Changelog\n* fix: Remove `turborepo-wax`'s `expect()` usage by @anthonyshew in https://github.com/vercel/turborepo/pull/12901\n* fix: Remove `turborepo-filewatch`'s `expect()` usage by @anthonyshew in https://github.com/vercel/turborepo/pull/12903\n* fix: Remove `turborepo-cache`'s `expect()` usage by @anthonyshew in https://github.com/vercel/turborepo/pull/12902\n* fix: Remove `turborepo-daemon`'s `expect()` usage by @anthonyshew in https://github.com/vercel/turborepo/pull/12904\n* fix: Remove `turborepo-engine`'s `unwrap()` usage by @anthonyshew in https://github.com/vercel/turborepo/pull/12906\n* fix: Remove filewatch unwrap usage by @anthonyshew in https://github.com/vercel/turborepo/pull/12907\n* fix: Remove engine expect usage by @anthonyshew in https://github.com/vercel/turborepo/pull/12908\n* fix: Remove cache unwrap usage by @anthonyshew in https://github.com/vercel/t",
+        "publishedAt": "2026-05-20T22:06:28.000Z",
+        "url": "https://github.com/vercel/turborepo/releases/tag/v2.9.15-canary.5"
+      },
+      {
+        "id": "rel_M1LbqiOVDjI6s9V-wBmxs",
+        "title": "Turborepo v2.9.15-canary.4",
+        "version": "v2.9.15-canary.4",
+        "content": "<!-- Release notes generated using configuration in .github/release.yml at v2.9.15-canary.4 -->\n\n## What's Changed\n### Changelog\n* release(turborepo): 2.9.15-canary.3 by @github-actions[bot] in https://github.com/vercel/turborepo/pull/12814\n* fix: Avoid path-racy chmod during directory restore by @anthonyshew in https://github.com/vercel/turborepo/pull/12815\n* fix: Prevent cache restore symlink race writes by @anthonyshew in https://github.com/vercel/turborepo/pull/12817\n* chore: Deny Rust panic extraction by default by @anthonyshew in https://github.com/vercel/turborepo/pull/12818\n* fix: Make structured log symlink defense race-safe by @anthonyshew in https://github.com/vercel/turborepo/pull/12821\n* fix: Preserve Bun alias child packages by @anthonyshew in https://github.com/vercel/turborepo/pull/12822\n* fix: Avoid UTF-8 panics at boundaries by @anthonyshew in https://github.com/vercel/turborepo/pull/12823\n* fix: Preserve non-UTF-8 Git path boundaries by @anthonyshew in https://github",
+        "publishedAt": "2026-05-20T17:34:48.000Z",
+        "url": "https://github.com/vercel/turborepo/releases/tag/v2.9.15-canary.4"
+      },
+      {
+        "id": "rel_0ZvyEwssPFNTTEbESPfZ1",
+        "title": "Hobby projects now default to 30-day deployment retention",
+        "version": null,
+        "content": "Starting April 29th, the maximum retention policy for Hobby plans will be capped at 30 days. Deployments outside your retention window will be automatically removed. This excludes your 10 most recent production deployments and any aliased deployments, which continue to be preserved regardless of retention settings.\n\nPro and Enterprise plans are not affected.\n\nLearn more about [Deployment Retention](https://vercel.com/docs/deployment-retention).",
+        "publishedAt": "2026-04-27T00:00:00.000Z",
+        "url": "https://vercel.com/changelog#hobby-projects-now-default-to-30-day-deployment-retention"
+      },
+      {
+        "id": "rel_HWiCQI9gKopSZT5T5GveI",
+        "title": "GPT 5.5 on AI Gateway",
+        "version": null,
+        "content": "GPT-5.5 is now available on Vercel AI Gateway. Two variants: GPT-5.5 and GPT-5.5 Pro, both tuned for long-running agentic work across coding, computer use, knowledge work, and scientific research.\n\nGPT-5.5 excels at agentic coding and long-horizon work with strong context retention. GPT-5.5 Pro targets demanding, multi-step work prioritizing response quality over latency, with gains in business, legal, education, data science, and technical research workflows.\n\nUse model `openai/gpt-5.5` or `openai/gpt-5.5-pro` in the AI SDK. AI Gateway provides unified API access with custom reporting, observability, Bring Your Own Key support, and intelligent provider routing with automatic retries.",
+        "publishedAt": "2026-04-24T00:00:00.000Z",
+        "url": "https://vercel.com/changelog#gpt-5-5-on-ai-gateway"
+      },
+      {
+        "id": "rel_IMpMRP8Kj7j8VhzUWCaXz",
+        "title": "Deepseek V4 on AI Gateway",
+        "version": null,
+        "content": "DeepSeek V4 is now available on Vercel AI Gateway with 1M token context window default across both variants: DeepSeek V4 Pro and DeepSeek V4 Flash.\n\nDeepSeek V4 Pro focuses on agentic coding, formal mathematical reasoning, and long-horizon workflows, handling feature development, bug fixing, and refactoring across stacks with tool use for MCP workflows and agent frameworks. DeepSeek V4 Flash performs close to V4 Pro on reasoning with smaller parameters for faster responses and lower API cost, ideal for high-volume and latency-sensitive workloads.\n\nUse model `deepseek/deepseek-v4-pro` or `deepseek/deepseek-v4-flash` in the AI SDK.",
+        "publishedAt": "2026-04-23T00:00:00.000Z",
+        "url": "https://vercel.com/changelog#deepseek-v4-on-ai-gateway"
+      },
+      {
+        "id": "rel_xZmpCRX9bc0kfVw6Y3Z4E",
+        "title": "GPT Image 2 on AI Gateway",
+        "version": null,
+        "content": "GPT Image 2 is now available on Vercel AI Gateway. OpenAI's newest image model supports detailed instruction following, accurate object placement and relationships, and dense text rendering across multiple aspect ratios up to 2K resolution.\n\nThe model renders fine-grained elements including small text, iconography, UI elements, dense compositions, and subtle stylistic constraints. Non-English text is supported and reads coherently. GPT Image 2 produces photos, cinematic stills, pixel art, manga, and other visual styles with consistency in texture, lighting, composition, and detail—suited for game prototyping, storyboarding, marketing creative, and asset generation.\n\nUse model `openai/gpt-image-2` in the AI SDK or try the model playground.",
+        "publishedAt": "2026-04-21T00:00:00.000Z",
+        "url": "https://vercel.com/changelog#gpt-image-2-on-ai-gateway",
+        "media": [
+          {
+            "type": "image",
+            "url": "https://assets.vercel.com/image/upload/contentful/image/e5382hct74si/68Q2JSnbSFhIAJNUdzGv50/a10fc1069c11d393fbe51fbd3abda035/image__27_.png",
+            "alt": "GPT Image 2 example - Poster of Vercel AI products, Bauhaus style"
+          },
+          {
+            "type": "image",
+            "url": "https://assets.vercel.com/image/upload/contentful/image/e5382hct74si/4TKc4nyf4YBGEvmoSiPT1m/b834a9357ad717153d5300e89eab2326/image__27_.png",
+            "alt": "GPT Image 2 example - Bauhaus style composition"
+          }
+        ]
+      },
+      {
+        "id": "rel_alRxS9-4yXbdlspVO4qS1",
+        "title": "Kimi K2.6 on AI Gateway",
+        "version": null,
+        "content": "Kimi K2.6 from Moonshot AI is now available on Vercel AI Gateway. The model focuses on long-horizon coding tasks with generalization across languages such as Rust, Go, and Python, and across front-end, devops, and performance optimization work. K2.6 can turn simple prompts into complete front-end interfaces with structured layouts.\n\nFor autonomous, proactive agents running continuously across multiple applications, K2.6 improves on API interpretation, long-running stability, and safety awareness during extended research tasks.\n\nUse model `moonshotai/kimi-k2.6` in the AI SDK.",
+        "publishedAt": "2026-04-20T00:00:00.000Z",
+        "url": "https://vercel.com/changelog#kimi-k2-6-on-ai-gateway"
+      },
+      {
+        "id": "rel_zlKzE2VsxqzAUbGz-mEZE",
+        "title": "Deployment retention policies now preserve active branch deployments",
+        "version": null,
+        "content": "Retention policies no longer delete the latest preview deployment for branches with open or unmerged pull requests. Previously, deployments for active branches could be removed if they exceeded the configured retention window.",
+        "publishedAt": "2026-04-17T00:00:00.000Z",
+        "url": "https://vercel.com/changelog#deployment-retention-policies-now-preserve-active-branch-dep"
+      },
+      {
+        "id": "rel_-sx7dkkPvODZ2VC9YjH8Q",
+        "title": "Claude Opus 4.7 on AI Gateway",
+        "version": null,
+        "content": "Claude Opus 4.7 from Anthropic is now available on Vercel AI Gateway. Opus 4.7 is optimized for long-running, asynchronous agents and handles complex, multi-step tasks with reliable agentic execution.\n\nKey features include:\n- Gains on knowledge-worker tasks, particularly where visual verification of outputs is needed\n- Stronger programmatic tool-calling with image-processing libraries for analyzing charts and figures\n- High-resolution image support for computer use, screenshot understanding, and document analysis\n- Improved memory for structured memory stores across turns with more reliable recall\n\nNew features:\n- Task budgets: Set a total token budget for agentic turns via `taskBudget`\n- New effort level: `'xhigh'`\n- Thinking content now omitted by default; set `display` to `'summarized'` to receive it\n\nUse the model by setting `model` to `anthropic/claude-opus-4.7` in the AI SDK.",
+        "publishedAt": "2026-04-16T00:00:00.000Z",
+        "url": "https://vercel.com/changelog#claude-opus-4-7-on-ai-gateway"
+      },
+      {
+        "id": "rel_FUGAwv8wU9hCt1o5P8TyL",
+        "title": "Vercel Flags is now generally available",
+        "version": null,
+        "content": "Vercel Flags is now generally available. Vercel Flags is a feature flag provider built into the Vercel platform. Create and manage feature flags with targeting rules, user segments, and environment controls directly in the Vercel Dashboard.\n\nThe Flags SDK provides a framework-native way to define and use flags within Next.js and SvelteKit applications, integrating directly with your codebase. Once defined, flags can be used in a few lines of code to control feature rendering.\n\nFor teams using other frameworks or custom backends, the Vercel Flags adapter supports the OpenFeature standard, allowing you to plug Vercel Flags into their provider agnostic SDK.",
+        "publishedAt": "2026-04-16T00:00:00.000Z",
+        "url": "https://vercel.com/changelog#vercel-flags-is-now-generally-available",
+        "media": [
+          {
+            "type": "image",
+            "url": "https://assets.vercel.com/image/upload/contentful/image/e5382hct74si/43jMcVHPkPF3Az5YAIWYe9/f252d72f8b35cf9368cd8c2e86737e43/flags-ga-light.png",
+            "alt": "flags-ga-dark"
+          },
+          {
+            "type": "image",
+            "url": "https://assets.vercel.com/image/upload/contentful/image/e5382hct74si/tCLWbTWQqrUTQLuauPA7G/fb10709ed51561c3d670af0e9c0da50c/flags-ga-dark.png",
+            "alt": "flags-ga-dark"
+          }
+        ]
+      },
+      {
+        "id": "rel_eqnw3qhov3H5uq5RT3Q6O",
+        "title": "Seedance 2.0 Video Generation on AI Gateway",
+        "version": null,
+        "content": "Bytedance's Seedance 2.0, a state-of-the-art video generation model, is now available on AI Gateway with no other provider accounts required.\n\nAvailable in two variants: Standard (highest quality) and Fast (prioritizes speed and lower cost).\n\nKey capabilities:\n- Text-to-video and image-to-video generation\n- Multimodal reference-to-video combining image, video, and audio inputs\n- Video editing and video extension\n- Professional camera movements, multi-shot composition, and in-video text rendering\n- Strong motion stability and fine detail across frames\n- Native synchronized audio generation with support for multiple languages and dialects\n\nUse the model by setting `model` to `bytedance/seedance-2.0` or `bytedance/seedance-2.0-fast` in the AI SDK or try it in the AI Gateway Playground.",
+        "publishedAt": "2026-04-15T00:00:00.000Z",
+        "url": "https://vercel.com/changelog#seedance-2-0-video-generation-on-ai-gateway"
+      },
+      {
+        "id": "rel_x14G8z6INIgfAwo_OWlpR",
+        "title": "Axios package compromise and remediation steps",
+        "version": null,
+        "content": "The `axios` npm package was compromised in an active supply chain attack discovered on March 31, 2026. Vercel investigated and implemented remediation actions. No Vercel systems were affected.\n\n**Affected versions:** `axios@1.14.1`, `axios@0.30.4`, `plain-crypto-js@4.2.1`\n\n**Remediation actions:**\n- Blocked outgoing access from build infrastructure to Command & Control hostname\n- Malicious package versions blocked and unpublished from npm\n- Latest tag now points to safe `axios@1.14.0` release\n\n**Recommended actions:** Check dependencies and lockfiles, redeploy projects, rotate API keys and credentials, review dependency tree for affected versions.",
+        "publishedAt": "2026-03-31T00:00:00.000Z",
+        "url": "https://vercel.com/changelog#axios-package-compromise-and-remediation-steps",
+        "media": [
+          {
+            "type": "image",
+            "url": "https://assets.vercel.com/image/upload/f_auto,c_fill,w_44,h_44,q_75/contentful/image/e5382hct74si/29zNaEjjfjLsgEkquv75Sn/39785c823a1787f9fe7f439e923918ed/images_1.png",
+            "alt": null
+          }
+        ]
+      }
+    ],
+    "existingContent": null,
+    "totalAvailable": 4588
+  },
+  "structural": {
+    "maxMedia": 2
+  },
+  "citations": {
+    "minCitations": 2
+  }
+}

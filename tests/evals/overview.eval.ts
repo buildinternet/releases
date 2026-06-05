@@ -40,9 +40,12 @@ async function judge(
   body: string,
 ): Promise<{ ok: boolean; result: string }> {
   const prompt = buildGraderPrompt({ rubric, artifact: body, rubricLabel: "overview.md" });
+  // The rubric has ~24 criteria, each with an evidence quote, so the JSON
+  // verdict runs well past 2K tokens; a low cap truncates it to invalid JSON
+  // and every fixture scores "unparseable". 8K leaves comfortable headroom.
   const res = await client.messages.create({
     model: JUDGE_MODEL,
-    max_tokens: 2048,
+    max_tokens: 8192,
     messages: [{ role: "user", content: prompt }],
   });
   const raw = res.content
