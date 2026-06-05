@@ -201,6 +201,153 @@ describe("isMeteredMcpMethod", () => {
   });
 });
 
+type MeCall = { url: string; auth: string | null; stagingKey: string | null };
+
+/** Stub the API service binding's /v1/tokens/me response. */
+function stubMeApi(calls: MeCall[], response: { status: number; scopes?: string[] }): Env["API"] {
+  return {
+    fetch: async (input: RequestInfo | URL) => {
+      const r = input instanceof Request ? input : new Request(input as RequestInfo | URL);
+      calls.push({
+        url: r.url,
+        auth: r.headers.get("Authorization"),
+        stagingKey: r.headers.get("X-Releases-Staging-Key"),
+      });
+      if (response.status === 429) {
+        return new Response(JSON.stringify({ error: "rate_limited" }), { status: 429 });
+      }
+      if (response.status !== 200) {
+        return new Response(JSON.stringify({ error: "unauthorized" }), { status: response.status });
+      }
+      return new Response(
+        JSON.stringify({
+          kind: "token",
+          name: "user-api-key",
+          scopes: response.scopes ?? [],
+          principalType: "user",
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    },
+  } as unknown as Env["API"];
+}
+
+/** POST request carrying a single JSON-RPC method (default: a billable tools/call). */
+function rpcReq(method: string, headers: Record<string, string> = {}): Request {
+  return new Request("https://mcp.releases.sh/mcp", {
+    method: "POST",
+    headers: { "content-type": "application/json", ...headers },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params: {} }),
+  });
+}
+
+describe("resolveMcpAuth — relu_ user keys", () => {
+  const RELU = "relu_testkey000000000000000000000000";
+  const enabled = (api: Env["API"], o: Partial<Env> = {}) =>
+    baseEnv({ USER_API_KEYS_ENABLED: "true", API: api, ...o });
+
+  it("billable tool call ⇒ verifies via /v1/tokens/me, meters once, token identity (token=null)", async () => {
+    const calls: MeCall[] = [];
+    const api = stubMeApi(calls, { status: 200, scopes: ["read", "write"] });
+    const r = await resolveMcpAuth(
+      rpcReq("tools/call", { Authorization: `Bearer ${RELU}` }),
+      enabled(api),
+    );
+    expect(r.ok).toBe(true);
+    if (r.ok)
+      expect(r.identity).toEqual({
+        kind: "token",
+        scopes: ["read", "write"],
+        tokenId: "relu_",
+        token: null,
+      });
+    expect(calls.length).toBe(1);
+    expect(calls[0].url).toContain("/v1/tokens/me");
+    expect(calls[0].auth).toBe(`Bearer ${RELU}`);
+  });
+
+  it("non-billable method (tools/list) ⇒ anonymous, NOT metered (no /me call)", async () => {
+    const calls: MeCall[] = [];
+    const api = stubMeApi(calls, { status: 200, scopes: ["read"] });
+    const r = await resolveMcpAuth(
+      rpcReq("tools/list", { Authorization: `Bearer ${RELU}` }),
+      enabled(api),
+    );
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.identity.kind).toBe("anonymous");
+    expect(calls.length).toBe(0);
+  });
+
+  it("invalid relu_ (401 from /me) ⇒ anonymous read", async () => {
+    const calls: MeCall[] = [];
+    const api = stubMeApi(calls, { status: 401 });
+    const r = await resolveMcpAuth(
+      rpcReq("tools/call", { Authorization: `Bearer ${RELU}` }),
+      enabled(api),
+    );
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.identity.kind).toBe("anonymous");
+    expect(calls.length).toBe(1);
+  });
+
+  it("rate-limited relu_ (429 from /me) ⇒ 429 response", async () => {
+    const calls: MeCall[] = [];
+    const api = stubMeApi(calls, { status: 429 });
+    const r = await resolveMcpAuth(
+      rpcReq("tools/call", { Authorization: `Bearer ${RELU}` }),
+      enabled(api),
+    );
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.response.status).toBe(429);
+  });
+
+  it("flag off ⇒ relu_ inert (anonymous), no /me call", async () => {
+    const calls: MeCall[] = [];
+    const api = stubMeApi(calls, { status: 200, scopes: ["read"] });
+    const r = await resolveMcpAuth(
+      rpcReq("tools/call", { Authorization: `Bearer ${RELU}` }),
+      baseEnv({ API: api }), // USER_API_KEYS_ENABLED unset → flag() default false
+    );
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.identity.kind).toBe("anonymous");
+    expect(calls.length).toBe(0);
+  });
+
+  it("no API binding ⇒ relu_ resolves anonymous (cannot verify)", async () => {
+    const r = await resolveMcpAuth(
+      rpcReq("tools/call", { Authorization: `Bearer ${RELU}` }),
+      baseEnv({ USER_API_KEYS_ENABLED: "true" }),
+    );
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.identity.kind).toBe("anonymous");
+  });
+
+  it("forwards the staging key to /me when bound", async () => {
+    const calls: MeCall[] = [];
+    const api = stubMeApi(calls, { status: 200, scopes: ["read"] });
+    const r = await resolveMcpAuth(
+      rpcReq("tools/call", {
+        Authorization: `Bearer ${RELU}`,
+        "X-Releases-Staging-Key": "stg-key",
+      }),
+      enabled(api, { STAGING_ACCESS_KEY: mockSecret("stg-key") }),
+    );
+    expect(r.ok).toBe(true);
+    expect(calls[0].stagingKey).toBe("stg-key");
+  });
+
+  it("method peek leaves the original request body readable for createMcpHandler", async () => {
+    const body = JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: {} });
+    const request = new Request("https://mcp.releases.sh/mcp", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body,
+    });
+    await resolveMcpAuth(request, baseEnv());
+    expect(await request.text()).toBe(body);
+  });
+});
+
 describe("machineTokenIdForUsage", () => {
   it("relk_ token ⇒ returns the tokenId (record last_used)", () => {
     expect(

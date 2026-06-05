@@ -7,6 +7,7 @@ import {
 } from "@buildinternet/releases-core/api-token";
 import { verifyApiToken } from "@releases/core-internal/api-token-store";
 import { FLAGS, flag } from "@releases/lib/flags";
+import { logEvent } from "@releases/lib/log-event";
 import { createDb } from "./db.js";
 import type { Env } from "./mcp-agent.js";
 
@@ -86,14 +87,80 @@ function bearer(request: Request): string {
   return header.startsWith("Bearer ") ? header.slice(7) : "";
 }
 
+function unauthorized(): Response {
+  return new Response(
+    JSON.stringify({ error: "unauthorized", message: "Missing or invalid staging access key" }),
+    { status: 401, headers: { "Content-Type": "application/json" } },
+  );
+}
+
+function rateLimited(): Response {
+  return new Response(
+    JSON.stringify({ error: "rate_limited", message: "API key rate limit exceeded" }),
+    { status: 429, headers: { "Content-Type": "application/json" } },
+  );
+}
+
 /**
- * Resolve the presented Bearer credential to an identity. A `relk_…` token goes
- * to the DB-token path (verified against D1); the static RELEASES_API_KEY maps
- * to root; anything else — no credential, or an invalid/unknown `relk_` token —
- * resolves to anonymous read. No credential is eligible for both paths.
+ * Verify + meter a relu_ user key by authenticating it against the API worker's
+ * `GET /v1/tokens/me` over the service binding. The API worker's existing auth
+ * middleware verifies and meters the key exactly once; we read back the resolved
+ * scopes. `token` is null on success — there is no forwardable credential, and
+ * the null routes maybeLookup's `authToken ?? rootKey` fallback through the root
+ * key (no second meter). 429 → rate-limited; any other non-2xx (401) or error →
+ * anonymous read (fail-open, matching the relk_ path).
  */
-async function resolveIdentity(presented: string, env: Env): Promise<McpIdentity> {
+async function resolveUserKey(
+  presented: string,
+  env: Env,
+): Promise<McpIdentity | { rateLimited: true }> {
+  if (!env.API) return ANONYMOUS; // no binding (local dev) — cannot verify
+  try {
+    const headers: Record<string, string> = { Authorization: `Bearer ${presented}` };
+    const stagingKey = (await getSecret(env.STAGING_ACCESS_KEY).catch(() => null)) ?? "";
+    if (stagingKey) headers[STAGING_KEY_HEADER] = stagingKey;
+    const res = await env.API.fetch(
+      new Request("https://internal/v1/tokens/me", { method: "GET", headers }),
+    );
+    if (res.status === 429) return { rateLimited: true };
+    if (!res.ok) return ANONYMOUS; // 401 invalid/unknown/revoked → public read
+    const body = (await res.json()) as { scopes?: unknown };
+    const scopes = Array.isArray(body.scopes)
+      ? body.scopes.filter((s): s is string => typeof s === "string")
+      : [];
+    if (scopes.length === 0) return ANONYMOUS; // defensive: empty scope never authenticates
+    return { kind: "token", scopes, tokenId: USER_API_KEY_PREFIX, token: null };
+  } catch (err) {
+    logEvent("warn", {
+      component: "mcp-auth",
+      event: "user-key-introspect-error",
+      message: "relu_ introspection failed; treating as anonymous",
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return ANONYMOUS;
+  }
+}
+
+/**
+ * Resolve the presented Bearer credential to an identity. A `relu_…` user key
+ * is authenticated via the API service binding (verify + meter once); a `relk_…`
+ * token goes to the DB-token path (verified against D1); the static
+ * RELEASES_API_KEY maps to root; anything else — no credential, or an
+ * invalid/unknown token — resolves to anonymous read.
+ */
+async function resolveIdentity(
+  presented: string,
+  env: Env,
+  metered: boolean,
+): Promise<McpIdentity | { rateLimited: true }> {
   if (!presented) return ANONYMOUS;
+  if (isUserApiKeyShaped(presented)) {
+    if (await flag(env.FLAGS, env.API_TOKENS_DISABLED, FLAGS.apiTokensDisabled)) return ANONYMOUS;
+    if (!(await flag(env.FLAGS, env.USER_API_KEYS_ENABLED, FLAGS.userApiKeysEnabled)))
+      return ANONYMOUS;
+    if (!metered) return ANONYMOUS; // non-billable method (initialize/list) — don't meter
+    return resolveUserKey(presented, env);
+  }
   if (isApiTokenShaped(presented)) {
     if (await flag(env.FLAGS, env.API_TOKENS_DISABLED, FLAGS.apiTokensDisabled)) return ANONYMOUS;
     const res = await verifyApiToken(createDb(env.DB), presented);
@@ -112,13 +179,6 @@ async function resolveIdentity(presented: string, env: Env): Promise<McpIdentity
   return ANONYMOUS;
 }
 
-function unauthorized(): Response {
-  return new Response(
-    JSON.stringify({ error: "unauthorized", message: "Missing or invalid staging access key" }),
-    { status: 401, headers: { "Content-Type": "application/json" } },
-  );
-}
-
 /**
  * Resolve identity and enforce the staging access gate in one pass. In prod (no
  * STAGING_ACCESS_KEY bound) the gate is skipped and identity flows through. In
@@ -130,7 +190,10 @@ function unauthorized(): Response {
  */
 export async function resolveMcpAuth(request: Request, env: Env): Promise<McpAuthResult> {
   const presented = bearer(request);
-  const identity = await resolveIdentity(presented, env);
+  const metered = await isMeteredMcpMethod(request);
+  const resolved = await resolveIdentity(presented, env, metered);
+  if ("rateLimited" in resolved) return { ok: false, response: rateLimited() };
+  const identity = resolved;
 
   if (env.STAGING_ACCESS_KEY && request.method !== "OPTIONS") {
     const stagingSecret = await getSecret(env.STAGING_ACCESS_KEY).catch(() => null);
