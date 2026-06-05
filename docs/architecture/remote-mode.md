@@ -31,6 +31,16 @@ permission resource, so route guards are unchanged. Gated by the
 `user-api-keys-enabled` flag; rate-limit exhaustion → HTTP 429. Verification is
 memoized per request so a single request meters exactly once.
 
+User keys are capped at a **read-only ceiling** (`USER_API_KEY_MAX_SCOPE = "read"`
+in `workers/api/src/auth/api-key-scope.ts`), enforced at both layers: the mint
+route refuses any scope above the ceiling (a missing scope defaults to read;
+write/admin → 400, via `isWithinUserKeyCeiling`), and the auth resolver clamps
+every verified `relu_` key's scopes to the ceiling before route guards see them
+(`clampUserKeyScopes`) — so write is unreachable for the user lane even if a
+write-permissioned `relu_` key were granted out-of-band. The `relk_` machine lane
+and static root key are unaffected and still use the full `read ⊂ write ⊂ admin`
+ladder.
+
 ## On-demand AI admin endpoints
 
 `POST /v1/workflows/summarize` and `POST /v1/workflows/compare` generate summaries and comparisons via Anthropic on demand. Both are gated by `authMiddleware` and fail with 503 when `ANTHROPIC_API_KEY` is unset. They are distinct from `POST /v1/sources/:slug/summaries`, which upserts a pre-generated row into `release_summaries`. Payload: `summarize` takes exactly one of `source` / `org` (slug or id) plus optional `days` and `instructions`; `compare` takes `sourceA` / `sourceB` plus optional `days`. Each success writes a `usage_log` row tagged with operation `summarize` / `compare`. Prompts live in `workers/api/src/routes/workflows.ts`.
