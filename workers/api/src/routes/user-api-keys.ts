@@ -5,13 +5,12 @@ import { apikey } from "../db/schema-auth.js";
 import { createAuth } from "../auth/index.js";
 import { scopeToPermissions, apiScopesFromPermissions } from "../auth/api-key-scope.js";
 import { type ApiScope } from "@buildinternet/releases-core/api-token";
-import { requireSession } from "../middleware/auth.js";
+import { requireSession, execWaitUntil } from "../middleware/auth.js";
 import { logEvent } from "@releases/lib/log-event";
 import type { Env } from "../index.js";
 
-const SELF_SERVE_SCOPES = ["read", "write"] as const;
 function isSelfServeScope(s: unknown): s is "read" | "write" {
-  return typeof s === "string" && (SELF_SERVE_SCOPES as readonly string[]).includes(s);
+  return s === "read" || s === "write";
 }
 
 /** Parse a JSON body, or null if it isn't valid JSON. */
@@ -40,14 +39,6 @@ export function scopeLabel(permissions: Record<string, string[]> | null): ApiSco
   if (scopes.includes("write")) return "write";
   if (scopes.includes("read")) return "read";
   return null;
-}
-
-export function execWaitUntil(c: Context<Env>): ((p: Promise<unknown>) => void) | undefined {
-  try {
-    return c.executionCtx.waitUntil.bind(c.executionCtx);
-  } catch {
-    return undefined;
-  }
 }
 
 /**
@@ -118,6 +109,8 @@ userApiKeyHandlers.post("/api-keys", async (c) => {
       ...(expiresIn ? { expiresIn } : {}),
     },
   });
+  // `body.scope` is already validated to "read" | "write", which is exactly the
+  // ladder label scopeLabel(scopeToPermissions(scope)) would round-trip back to.
 
   logEvent("info", {
     component: "user-api-keys",
@@ -133,7 +126,7 @@ userApiKeyHandlers.post("/api-keys", async (c) => {
       id: created.id,
       name: created.name,
       start: created.start,
-      scope: scopeLabel(scopeToPermissions(body.scope)),
+      scope: body.scope,
       remaining: created.remaining,
       expiresAt: created.expiresAt ? new Date(created.expiresAt).toISOString() : null,
       createdAt: new Date(created.createdAt).toISOString(),

@@ -153,7 +153,16 @@ apiTokenRoutes.get("/tokens/me", async (c) => {
   if (auth.kind === "token" && isUserApiKeyShaped(auth.tokenId)) {
     const keyId = auth.tokenId.slice(USER_API_KEY_PREFIX.length);
     const db = createDb(c.env.DB);
-    const row = await db.select().from(apikey).where(eq(apikey.id, keyId)).get();
+    const row = await db
+      .select({
+        name: apikey.name,
+        referenceId: apikey.referenceId,
+        expiresAt: apikey.expiresAt,
+        lastRequest: apikey.lastRequest,
+      })
+      .from(apikey)
+      .where(eq(apikey.id, keyId))
+      .get();
     return c.json({
       kind: "token",
       name: row?.name ?? "user-api-key",

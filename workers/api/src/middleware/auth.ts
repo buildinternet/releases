@@ -29,6 +29,19 @@ export type AuthContext =
 /** Minimal session shape attached to the Hono context by `requireSession`. */
 export type AuthSessionContext = { user: { id: string; email: string; name: string } };
 
+/**
+ * The request's `waitUntil` (for handing background work — metering writes, email
+ * sends — to the runtime so it outlives the response), or undefined when there's
+ * no execution context (tests / non-request callers, where it runs inline).
+ */
+export function execWaitUntil(c: Context<Env>): ((p: Promise<unknown>) => void) | undefined {
+  try {
+    return c.executionCtx.waitUntil.bind(c.executionCtx);
+  } catch {
+    return undefined;
+  }
+}
+
 type ResolvedAuth =
   | { kind: "root"; scopes: string[] }
   | { kind: "token"; tokenId: string; scopes: string[] }
@@ -51,12 +64,7 @@ async function verifyUserKey(
   c: Context<Env>,
   presented: string,
 ): Promise<{ ok: true; scopes: string[]; keyId: string } | { ok: false; rateLimited: boolean }> {
-  let waitUntil: ((p: Promise<unknown>) => void) | undefined;
-  try {
-    waitUntil = c.executionCtx.waitUntil.bind(c.executionCtx);
-  } catch {
-    waitUntil = undefined;
-  }
+  const waitUntil = execWaitUntil(c);
   try {
     const auth = await createAuth(c.env, waitUntil);
     // apiKey() is registered conditionally (flag-gated), so betterAuth's inferred
@@ -291,12 +299,7 @@ export const requireSession: MiddlewareHandler<Env> = async (c, next) => {
   if (!(await flag(c.env.FLAGS, c.env.USER_API_KEYS_ENABLED, FLAGS.userApiKeysEnabled))) {
     return c.json({ error: "not_found", message: "Not found" }, 404);
   }
-  let waitUntil: ((p: Promise<unknown>) => void) | undefined;
-  try {
-    waitUntil = c.executionCtx.waitUntil.bind(c.executionCtx);
-  } catch {
-    waitUntil = undefined;
-  }
+  const waitUntil = execWaitUntil(c);
   const auth = await createAuth(c.env, waitUntil);
   const session = await auth.api.getSession({ headers: c.req.raw.headers });
   if (!session?.user?.id) {
