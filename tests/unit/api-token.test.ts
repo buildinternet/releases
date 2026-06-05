@@ -151,3 +151,18 @@ describe("constantTimeEqual", () => {
     expect(DUMMY_TOKEN_HASH).toMatch(/^[0-9a-f]{64}$/);
   });
 });
+
+import { USER_API_KEY_PREFIX, isUserApiKeyShaped } from "@buildinternet/releases-core/api-token";
+
+describe("user API key prefix (relu_)", () => {
+  it("recognizes relu_ as a user key, not a machine token", () => {
+    expect(USER_API_KEY_PREFIX).toBe("relu_");
+    expect(isUserApiKeyShaped("relu_abc123")).toBe(true);
+    expect(isApiTokenShaped("relu_abc123")).toBe(false); // machine check is relk_
+  });
+
+  it("keeps relk_ as the machine lane, distinct from user keys", () => {
+    expect(isUserApiKeyShaped("relk_abc_def")).toBe(false);
+    expect(isApiTokenShaped("relk_abc_def")).toBe(true);
+  });
+});
