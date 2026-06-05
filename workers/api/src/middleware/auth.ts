@@ -1,6 +1,7 @@
 import type { Context, MiddlewareHandler } from "hono";
 import { FLAGS, flag } from "@releases/lib/flags";
 import { getSecret, getSecretWithFallback } from "@releases/lib/secrets";
+import { logEvent } from "@releases/lib/log-event";
 import {
   type ApiScope,
   isApiTokenShaped,
@@ -53,30 +54,42 @@ async function verifyUserKey(
   } catch {
     waitUntil = undefined;
   }
-  const auth = await createAuth(c.env, waitUntil);
-  // apiKey() is registered conditionally (flag-gated), so betterAuth's inferred
-  // `api` type doesn't statically expose verifyApiKey. We only reach here when the
-  // flag is on (checked in resolveAuthUncached), so the endpoint is mounted; assert
-  // its shape with a precise (non-any) structural cast.
-  const verifyApiKey = (
-    auth.api as {
-      verifyApiKey?: (a: { body: { key: string } }) => Promise<{
-        valid: boolean;
-        error?: { code?: string | null } | null;
-        key?: { id?: string; permissions?: Record<string, string[]> | null } | null;
-      }>;
+  try {
+    const auth = await createAuth(c.env, waitUntil);
+    // apiKey() is registered conditionally (flag-gated), so betterAuth's inferred
+    // `api` type doesn't statically expose verifyApiKey. We only reach here when the
+    // flag is on (checked in resolveAuthUncached), so the endpoint is mounted; assert
+    // its shape with a precise (non-any) structural cast.
+    const verifyApiKey = (
+      auth.api as {
+        verifyApiKey?: (a: { body: { key: string } }) => Promise<{
+          valid: boolean;
+          error?: { code?: string | null } | null;
+          key?: { id?: string; permissions?: Record<string, string[]> | null } | null;
+        }>;
+      }
+    ).verifyApiKey;
+    if (!verifyApiKey) return { ok: false, rateLimited: false };
+    const result = await verifyApiKey({ body: { key: presented } });
+    if (result.valid && result.key) {
+      const scopes = apiScopesFromPermissions(result.key.permissions);
+      if (scopes.length > 0)
+        return { ok: true, scopes, keyId: result.key.id ?? presented.slice(0, 12) };
+      return { ok: false, rateLimited: false };
     }
-  ).verifyApiKey;
-  if (!verifyApiKey) return { ok: false, rateLimited: false };
-  const result = await verifyApiKey({ body: { key: presented } });
-  if (result.valid && result.key) {
-    const scopes = apiScopesFromPermissions(result.key.permissions);
-    if (scopes.length > 0)
-      return { ok: true, scopes, keyId: result.key.id ?? presented.slice(0, 12) };
+    const code = result.error?.code ?? "";
+    return { ok: false, rateLimited: /rate.?limit/i.test(code) };
+  } catch (err) {
+    // An UNEXPECTED verify error (transient DB/plugin failure) must not 500 a
+    // public read — deny the credential and let the public-read path stay public.
+    logEvent("warn", {
+      component: "auth",
+      event: "user-key-verify-error",
+      message: "relu_ key verification threw; denying credential",
+      error: err instanceof Error ? err.message : String(err),
+    });
     return { ok: false, rateLimited: false };
   }
-  const code = result.error?.code ?? "";
-  return { ok: false, rateLimited: /rate.?limit/i.test(code) };
 }
 
 const RESOLVE_MEMO = new WeakMap<Request, Promise<ResolvedAuth>>();
