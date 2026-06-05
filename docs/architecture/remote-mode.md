@@ -22,6 +22,15 @@ to a principal (`principal_type`: `internal | agent | user`, plus optional
 `scripts/mint-token.ts`. Kill switch: `API_TOKENS_DISABLED=true` falls back to the
 static key only. See `docs/superpowers/specs/2026-05-20-scoped-api-tokens-design.md`.
 
+**User API keys (`relu_`).** Logged-in users own metered, rate-limited API keys
+issued by the Better Auth `@better-auth/api-key` plugin (the `apikey` table),
+distinct from the `relk_` machine lane. The auth middleware routes `relu_` →
+`auth.api.verifyApiKey` (per-key rate-limit + `remaining`, deferred via
+`waitUntil`); the scope ladder is encoded as cumulative actions on one `api`
+permission resource, so route guards are unchanged. Gated by the
+`user-api-keys-enabled` flag; rate-limit exhaustion → HTTP 429. Verification is
+memoized per request so a single request meters exactly once.
+
 ## On-demand AI admin endpoints
 
 `POST /v1/workflows/summarize` and `POST /v1/workflows/compare` generate summaries and comparisons via Anthropic on demand. Both are gated by `authMiddleware` and fail with 503 when `ANTHROPIC_API_KEY` is unset. They are distinct from `POST /v1/sources/:slug/summaries`, which upserts a pre-generated row into `release_summaries`. Payload: `summarize` takes exactly one of `source` / `org` (slug or id) plus optional `days` and `instructions`; `compare` takes `sourceA` / `sourceB` plus optional `days`. Each success writes a `usage_log` row tagged with operation `summarize` / `compare`. Prompts live in `workers/api/src/routes/workflows.ts`.
