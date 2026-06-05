@@ -3,6 +3,8 @@ import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { oneTap, magicLink, deviceAuthorization, bearer } from "better-auth/plugins";
 import { dash } from "@better-auth/infra";
 import { apiKey } from "@better-auth/api-key";
+import type { BetterAuthPlugin } from "better-auth";
+import { APIError, createAuthMiddleware, getSessionFromCtx } from "better-auth/api";
 import { cors } from "hono/cors";
 import type { MiddlewareHandler } from "hono";
 import type { BaseSQLiteDatabase } from "drizzle-orm/sqlite-core";
@@ -11,6 +13,12 @@ import { logEvent } from "@releases/lib/log-event";
 import { FLAGS, flag } from "@releases/lib/flags";
 import { USER_API_KEY_PREFIX, DEVICE_AUTH_CLIENT_ID } from "@buildinternet/releases-core/api-token";
 import { scopeToPermissions } from "./api-key-scope.js";
+import {
+  USER_API_KEY_MAX_ACTIVE,
+  API_KEY_LIMIT_CODE,
+  API_KEY_LIMIT_MESSAGE,
+  countActiveUserKeys,
+} from "./api-key-limit.js";
 import { createDb } from "../db.js";
 import {
   user,
@@ -319,6 +327,109 @@ export interface CreateAuthDeps {
 }
 
 /**
+ * The endpoint-hook context Better Auth hands a `createAuthMiddleware` handler —
+ * inferred from the wrapper so we get the real shape (`.path`, `.body`,
+ * `.context`, and the fields `getSessionFromCtx` needs) instead of the looser
+ * top-level-hook type.
+ */
+type ApiKeyHookCtx = Parameters<Parameters<typeof createAuthMiddleware>[0]>[0];
+
+/**
+ * Resolve the owning userId for an api-key create/delete hook. A real session
+ * wins (the native HTTP endpoint rejects a body.userId and authenticates by
+ * session); our trusted server call carries the verified owner as `body.userId`
+ * with no session. So "session ?? body.userId" is the effective owner on every
+ * path — and a forged body.userId can't game it, because a present session
+ * always takes precedence. Session resolution failures degrade to body.userId.
+ */
+async function resolveApiKeyHookOwner(ctx: ApiKeyHookCtx): Promise<string | undefined> {
+  const session = await getSessionFromCtx(ctx).catch(() => null);
+  if (session?.user?.id) return session.user.id;
+  const body = ctx.body as { userId?: unknown } | undefined;
+  return typeof body?.userId === "string" ? body.userId : undefined;
+}
+
+/**
+ * Better Auth plugin governing the user-key (`relu_`) lane: a per-user active-key
+ * cap (before `/api-key/create`) and an audit trail (after create/delete). The
+ * idiomatic matcher-scoped plugin form — handlers run ONLY for those two
+ * endpoints (not on every auth request) and receive the properly-typed endpoint
+ * context from `createAuthMiddleware`. Covers BOTH our `/v1/api-keys` route (a
+ * server `auth.api.createApiKey` call) AND Better Auth's native
+ * `/api/auth/api-key/*` HTTP endpoints, so neither the cap nor the audit can be
+ * sidestepped by hitting the native endpoint directly.
+ *
+ * NOTE: our `/v1/api-keys/:id` DELETE hard-deletes via Drizzle (not
+ * `auth.api.deleteApiKey`), so its revoke audit is emitted in the route; this
+ * after-hook covers create on every path plus the native delete endpoint.
+ */
+function apiKeyGovernancePlugin(deps: {
+  // oxlint-disable-next-line no-explicit-any -- matches CreateAuthDeps.db (D1 in prod, BunSQLite in tests)
+  db: BaseSQLiteDatabase<any, any, any, any>;
+  audit: AuthAuditEmitter;
+}): BetterAuthPlugin {
+  const { db, audit } = deps;
+  return {
+    id: "api-key-governance",
+    hooks: {
+      // BEFORE create: enforce the per-user active-key cap. Fail OPEN on an
+      // unexpected count error — the cap is anti-sprawl, not a security control,
+      // and must never break key creation on a transient DB hiccup.
+      before: [
+        {
+          matcher: (ctx) => ctx.path === "/api-key/create",
+          handler: createAuthMiddleware(async (ctx) => {
+            const userId = await resolveApiKeyHookOwner(ctx);
+            if (!userId) return; // no resolvable owner — the endpoint itself will 401
+            let active: number;
+            try {
+              active = await countActiveUserKeys(db, userId);
+            } catch (err) {
+              logEvent("warn", {
+                component: "user-api-keys",
+                event: "cap-check-error",
+                message: "active-key count failed; allowing create (fail-open)",
+                error: err instanceof Error ? err.message : String(err),
+              });
+              return;
+            }
+            if (active >= USER_API_KEY_MAX_ACTIVE) {
+              throw new APIError("FORBIDDEN", {
+                code: API_KEY_LIMIT_CODE,
+                message: API_KEY_LIMIT_MESSAGE,
+              });
+            }
+          }),
+        },
+      ],
+      // AFTER create/delete: emit the audit trail on the same `component: "auth"`
+      // stream as sign-up / sign-in (with the owning userId), so issuance and
+      // revocation are queryable alongside the other auth events. After-hooks run
+      // even when the endpoint threw (the APIError lands in `returned`), so guard
+      // on a successful result.
+      after: [
+        {
+          matcher: (ctx) => ctx.path === "/api-key/create" || ctx.path === "/api-key/delete",
+          handler: createAuthMiddleware(async (ctx) => {
+            const returned = (ctx.context as { returned?: unknown }).returned;
+            if (!returned || returned instanceof APIError) return; // endpoint failed
+            const userId = await resolveApiKeyHookOwner(ctx);
+            if (ctx.path === "/api-key/create") {
+              const keyId = (returned as { id?: string }).id;
+              audit("info", { event: "api-key-created", userId, keyId });
+            } else {
+              const body = ctx.body as { keyId?: unknown } | undefined;
+              const keyId = typeof body?.keyId === "string" ? body.keyId : undefined;
+              audit("info", { event: "api-key-revoked", userId, keyId });
+            }
+          }),
+        },
+      ],
+    },
+  };
+}
+
+/**
  * Build a per-request Better Auth instance bound to this worker's environment —
  * mirrors `createDb(env.DB)`. Cheap to construct; the Workers model gives us env
  * bindings per request, so the instance is created per request rather than once.
@@ -461,6 +572,9 @@ export async function createAuth(
             // `advanced.backgroundTasks` below) so they run after the response.
             deferUpdates: true,
           }),
+          // Cap + audit for the user-key lane — registered only with apiKey(), since
+          // its hooks govern that plugin's `/api-key/*` endpoints.
+          apiKeyGovernancePlugin({ db, audit }),
         ]
       : []),
     // Device-authorization (RFC 8628) for `releases login`. bearer() MUST ride
@@ -542,7 +656,9 @@ export async function createAuth(
     socialProviders,
     plugins,
     // Audit hooks for sign-up / sign-in-success / sign-out / session-revoked. See
-    // audit.ts; the failure stream is logged at the HTTP layer in index.ts.
+    // audit.ts; the failure stream is logged at the HTTP layer in index.ts. The
+    // api-key cap + create/delete audit ride the `apiKeyGovernancePlugin` in
+    // `plugins` above (matcher-scoped to the `/api-key/*` endpoints).
     databaseHooks: auditDatabaseHooks(audit),
     // Rate limiting backed by D1 so counters survive across Worker isolates — the
     // in-memory default resets per isolate and is useless on serverless. Better

@@ -2,6 +2,7 @@ import { Hono, type Context } from "hono";
 import { and, eq } from "drizzle-orm";
 import { createDb } from "../db.js";
 import { apikey } from "../db/schema-auth.js";
+import { APIError } from "better-auth/api";
 import { createAuth } from "../auth/index.js";
 import {
   scopeToPermissions,
@@ -9,9 +10,15 @@ import {
   isWithinUserKeyCeiling,
   USER_API_KEY_MAX_SCOPE,
 } from "../auth/api-key-scope.js";
+import {
+  USER_API_KEY_MAX_ACTIVE,
+  API_KEY_LIMIT_CODE,
+  API_KEY_LIMIT_MESSAGE,
+  countActiveUserKeys,
+} from "../auth/api-key-limit.js";
+import { makeAuthAudit } from "../auth/audit.js";
 import { type ApiScope } from "@buildinternet/releases-core/api-token";
 import { requireSession, execWaitUntil } from "../middleware/auth.js";
-import { logEvent } from "@releases/lib/log-event";
 import type { Env } from "../index.js";
 
 /** Parse a JSON body, or null if it isn't valid JSON. */
@@ -84,6 +91,16 @@ userApiKeyHandlers.post("/api-keys", async (c) => {
     expiresIn = d * 24 * 60 * 60;
   }
 
+  // Enforce the per-user active-key cap up front so the happy path returns a
+  // clean 409 instead of catching the create-hook's throw. The Better Auth
+  // `/api-key/create` before-hook re-checks this as the authoritative backstop
+  // (it also covers the native endpoint and a concurrent create-create race), so
+  // this is the friendly pre-check, not the only gate.
+  const activeCount = await countActiveUserKeys(createDb(c.env.DB), session.user.id);
+  if (activeCount >= USER_API_KEY_MAX_ACTIVE) {
+    return c.json({ error: "api_key_limit", message: API_KEY_LIMIT_MESSAGE }, 409);
+  }
+
   const auth = await createAuth(c.env, execWaitUntil(c));
   // apiKey() is flag-gated, so betterAuth's inferred api type omits createApiKey;
   // assert its shape with a precise (non-any) structural cast.
@@ -109,24 +126,30 @@ userApiKeyHandlers.post("/api-keys", async (c) => {
     }>;
   };
 
-  const created = await api.createApiKey({
-    body: {
-      name,
-      userId: session.user.id,
-      permissions: scopeToPermissions(requestedScope),
-      metadata: { plan: "default" },
-      ...(expiresIn ? { expiresIn } : {}),
-    },
-  });
   // `requestedScope` is validated to be within the user-key ceiling, which is
   // exactly the ladder label scopeLabel(scopeToPermissions(scope)) round-trips.
-
-  logEvent("info", {
-    component: "user-api-keys",
-    event: "created",
-    keyId: created.id,
-    scope: requestedScope,
-  });
+  // The create's audit (`api-key-created`, with the owning userId) is emitted by
+  // the `/api-key/create` after-hook in auth/index.ts — one chokepoint for both
+  // this route and the native endpoint — so it isn't logged again here.
+  let created;
+  try {
+    created = await api.createApiKey({
+      body: {
+        name,
+        userId: session.user.id,
+        permissions: scopeToPermissions(requestedScope),
+        metadata: { plan: "default" },
+        ...(expiresIn ? { expiresIn } : {}),
+      },
+    });
+  } catch (err) {
+    // The before-hook cap backstop throws this when a concurrent create slipped
+    // past the pre-check above — surface the same clean 409, not a 500.
+    if (err instanceof APIError && err.body?.code === API_KEY_LIMIT_CODE) {
+      return c.json({ error: "api_key_limit", message: API_KEY_LIMIT_MESSAGE }, 409);
+    }
+    throw err;
+  }
 
   // The full key is returned exactly once and is never retrievable again.
   return c.json(
@@ -177,7 +200,14 @@ userApiKeyHandlers.delete("/api-keys/:id", async (c) => {
     .returning();
   if (deleted.length === 0)
     return c.json({ error: "not_found", message: "API key not found" }, 404);
-  logEvent("info", { component: "user-api-keys", event: "revoked", keyId: id });
+  // Revoke audit on the shared `component: "auth"` stream, with the owning
+  // userId — same event the native-delete after-hook emits (this route deletes
+  // via Drizzle, not auth.api.deleteApiKey, so it audits its own path).
+  makeAuthAudit(c.env)("info", {
+    event: "api-key-revoked",
+    userId: session.user.id,
+    keyId: id,
+  });
   return c.json({ success: true });
 });
 
