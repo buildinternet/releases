@@ -230,7 +230,12 @@ const results = await parallel(
       const ok = !!(j && j.result === "satisfied");
       allFields = [
         ...fields,
-        { field: "judge: satisfied", passed: ok, actual: j ? j.result : "no verdict" },
+        {
+          field: "judge: satisfied",
+          passed: ok,
+          expected: "satisfied",
+          actual: j ? j.result : "no verdict",
+        },
       ];
       passed = passed && ok;
     }
