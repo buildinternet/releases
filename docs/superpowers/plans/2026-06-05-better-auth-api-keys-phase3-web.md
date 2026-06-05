@@ -11,6 +11,7 @@
 **Spec:** `docs/superpowers/specs/2026-06-05-better-auth-api-keys-phase3-web-design.md`
 
 **Conventions to respect (from the tree):**
+
 - Test harness: `tests/db-helper.ts` `createTestDb()` applies every migration (so `apikey` exists); `createDb(c.env.DB)` short-circuits when handed a drizzle handle, so route handlers run unchanged under tests that pass `DB: h.db`.
 - `createAuth(env, waitUntil?, deps?)` builds a per-request Better Auth instance; the flag-gated `apiKey()` plugin means `auth.api.createApiKey` / `verifyApiKey` are not on the inferred type — use a precise structural cast (see existing `middleware/auth.ts` and `tests/api/user-api-key-auth.test.ts`).
 - Timestamps on the `apikey` table are Drizzle `mode:"timestamp"` → JS `Date`; `TokenIdentity` and our wire shapes use ISO strings → convert with `.toISOString()`.
@@ -21,6 +22,7 @@
 ## File Structure
 
 **API worker (`workers/api/`)**
+
 - Modify `src/middleware/auth.ts` — thread `meterUserKeys` through resolution; add `requireSession`; add the `AuthSessionContext` type.
 - Modify `src/index.ts` — extend `Env["Variables"]` with `session`; register credentialed CORS + carve-out for `/v1/api-keys`.
 - Create `src/routes/user-api-keys.ts` — `userApiKeyHandlers` (no auth) + `userApiKeyRoutes` (requireSession + handlers).
@@ -28,10 +30,12 @@
 - Modify `src/routes/api-tokens.ts` — enrich the `relu_` branch of `GET /tokens/me`.
 
 **MCP worker (`workers/mcp/`)**
+
 - Create `src/scope-error.ts` — `scopeErrorText(required)` naming both lanes.
 - Modify `src/mcp-agent.ts` — use `scopeErrorText`.
 
 **Web (`web/`)**
+
 - Modify `src/lib/auth-ui.ts` — add `USER_API_KEYS_ENABLED`.
 - Create `src/lib/api-keys.ts` — `listApiKeys` / `createApiKey` / `revokeApiKey` client + types.
 - Create `src/components/api-keys-panel.tsx` — the panel.
@@ -39,10 +43,12 @@
 - Modify `src/components/account-nav.tsx` — add the "API keys" link.
 
 **Docs / config**
+
 - Modify `docs/architecture/routing.md` — document the session-authed bucket.
 - Modify `.env.example` — document `NEXT_PUBLIC_USER_API_KEYS`.
 
 **Tests**
+
 - Create `tests/api/user-api-keys-route.test.ts` — create/list/delete behavior + scope cap + ownership.
 - Create `tests/api/require-session.test.ts` — gate (401/404/happy).
 - Modify `tests/api/user-api-key-auth.test.ts` — metering-exemption + `resolveAuthIdentity` returns null for `relu_`.
@@ -55,6 +61,7 @@
 ## Task 1: Metering refactor — exempt public reads (`meterUserKeys`)
 
 **Files:**
+
 - Modify: `workers/api/src/middleware/auth.ts`
 - Test: `tests/api/user-api-key-auth.test.ts`
 
@@ -210,6 +217,7 @@ async function resolveAuthUncached(
 In the same file:
 
 `resolveAuthIdentity` — the limiter never meters:
+
 ```ts
 export async function resolveAuthIdentity(c: Context<Env>): Promise<AuthContext | null> {
   const presented = bearer(c);
@@ -219,7 +227,8 @@ export async function resolveAuthIdentity(c: Context<Env>): Promise<AuthContext 
 }
 ```
 
-`isValidBearerAuth` — a relu_ key can never be admin, so don't meter to learn that:
+`isValidBearerAuth` — a relu\_ key can never be admin, so don't meter to learn that:
+
 ```ts
 export async function isValidBearerAuth(c: Context<Env>): Promise<boolean> {
   const presented = bearer(c);
@@ -232,24 +241,26 @@ export async function isValidBearerAuth(c: Context<Env>): Promise<boolean> {
 ```
 
 In `createAuthMiddleware`, the public-read attach branch (inside `if (opts.allowPublicReads && SAFE_METHODS.has(c.req.method))`) passes `false`:
+
 ```ts
-      const presented = bearer(c);
-      if (presented) {
-        const auth = await resolveAuth(c, presented, false);
-        if (auth.kind === "root" || auth.kind === "token") recordAuth(c, auth);
-      }
+const presented = bearer(c);
+if (presented) {
+  const auth = await resolveAuth(c, presented, false);
+  if (auth.kind === "root" || auth.kind === "token") recordAuth(c, auth);
+}
 ```
 
 In `createAuthMiddleware`, the auth-required block (after the early return) passes `true`:
+
 ```ts
-    const presented = bearer(c);
-    const auth = await resolveAuth(c, presented, true);
+const presented = bearer(c);
+const auth = await resolveAuth(c, presented, true);
 ```
 
 - [ ] **Step 5: Run the tests to verify they pass**
 
 Run: `bun test tests/api/user-api-key-auth.test.ts tests/api/resolve-auth-identity.test.ts tests/api/tokens-me-middleware.test.ts`
-Expected: PASS (new metering tests green; existing relk_/root/`/tokens/me` tests unaffected).
+Expected: PASS (new metering tests green; existing relk\_/root/`/tokens/me` tests unaffected).
 
 - [ ] **Step 6: Commit**
 
@@ -263,6 +274,7 @@ git commit -m "feat(auth): exempt public reads from relu_ metering (meterUserKey
 ## Task 2: `requireSession` middleware + `session` context var
 
 **Files:**
+
 - Modify: `workers/api/src/middleware/auth.ts`
 - Modify: `workers/api/src/index.ts` (extend `Env["Variables"]`)
 - Test: `tests/api/require-session.test.ts`
@@ -422,6 +434,7 @@ git commit -m "feat(auth): requireSession middleware for the session-authed self
 ## Task 3: `POST /v1/api-keys` — create with server-side scope cap
 
 **Files:**
+
 - Create: `workers/api/src/routes/user-api-keys.ts`
 - Test: `tests/api/user-api-keys-route.test.ts`
 
@@ -454,7 +467,14 @@ function env() {
 function seedUser(id: string, email: string) {
   h!.db
     .insert(user)
-    .values({ id, name: "U", email, emailVerified: true, createdAt: new Date(), updatedAt: new Date() })
+    .values({
+      id,
+      name: "U",
+      email,
+      emailVerified: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    })
     .run();
 }
 
@@ -503,7 +523,12 @@ describe("POST /v1/api-keys (create)", () => {
     seedUser("user_1", "u1@e.com");
     const res = await post("user_1", { name: "ci", scope: "read" });
     expect(res.status).toBe(201);
-    const body = (await res.json()) as { key: string; id: string; scope: string; start: string | null };
+    const body = (await res.json()) as {
+      key: string;
+      id: string;
+      scope: string;
+      start: string | null;
+    };
     expect(body.key.startsWith("relu_")).toBe(true);
     expect(body.scope).toBe("read");
     expect(body.id).toBeTruthy();
@@ -522,7 +547,9 @@ describe("POST /v1/api-keys (create)", () => {
     h = createTestDb();
     seedUser("user_1", "u1@e.com");
     expect((await post("user_1", { name: "k", scope: "read", expiresInDays: 0 })).status).toBe(400);
-    expect((await post("user_1", { name: "k", scope: "read", expiresInDays: 999 })).status).toBe(400);
+    expect((await post("user_1", { name: "k", scope: "read", expiresInDays: 999 })).status).toBe(
+      400,
+    );
   });
 });
 ```
@@ -708,6 +735,7 @@ git commit -m "feat(api): POST /v1/api-keys self-serve create with server-side s
 ## Task 4: `GET /v1/api-keys` — list (own keys only)
 
 **Files:**
+
 - Modify: `workers/api/src/routes/user-api-keys.ts`
 - Test: `tests/api/user-api-keys-route.test.ts`
 
@@ -718,7 +746,10 @@ Append to `tests/api/user-api-keys-route.test.ts`:
 ```ts
 async function list(userId: string) {
   const res = await appAs(userId).request("/api-keys", {}, env());
-  return { status: res.status, body: (await res.json()) as { apiKeys: Array<Record<string, unknown>> } };
+  return {
+    status: res.status,
+    body: (await res.json()) as { apiKeys: Array<Record<string, unknown>> },
+  };
 }
 
 describe("GET /v1/api-keys (list)", () => {
@@ -797,6 +828,7 @@ git commit -m "feat(api): GET /v1/api-keys lists the caller's own keys"
 ## Task 5: `DELETE /v1/api-keys/:id` — revoke (ownership-checked)
 
 **Files:**
+
 - Modify: `workers/api/src/routes/user-api-keys.ts`
 - Test: `tests/api/user-api-keys-route.test.ts`
 
@@ -813,7 +845,9 @@ describe("DELETE /v1/api-keys/:id (revoke)", () => {
   it("deletes the caller's own key", async () => {
     h = createTestDb();
     seedUser("user_1", "u1@e.com");
-    const created = (await (await post("user_1", { name: "k", scope: "read" })).json()) as { id: string };
+    const created = (await (await post("user_1", { name: "k", scope: "read" })).json()) as {
+      id: string;
+    };
     const res = await del("user_1", created.id);
     expect(res.status).toBe(200);
     expect((await list("user_1")).body.apiKeys).toHaveLength(0);
@@ -823,7 +857,9 @@ describe("DELETE /v1/api-keys/:id (revoke)", () => {
     h = createTestDb();
     seedUser("user_1", "u1@e.com");
     seedUser("user_2", "u2@e.com");
-    const created = (await (await post("user_2", { name: "k", scope: "read" })).json()) as { id: string };
+    const created = (await (await post("user_2", { name: "k", scope: "read" })).json()) as {
+      id: string;
+    };
     const res = await del("user_1", created.id);
     expect(res.status).toBe(404);
     // and user_2's key still exists
@@ -859,7 +895,8 @@ userApiKeyHandlers.delete("/api-keys/:id", async (c) => {
     .delete(apikey)
     .where(and(eq(apikey.id, id), eq(apikey.referenceId, session.user.id)))
     .returning();
-  if (deleted.length === 0) return c.json({ error: "not_found", message: "API key not found" }, 404);
+  if (deleted.length === 0)
+    return c.json({ error: "not_found", message: "API key not found" }, 404);
   logEvent("info", { component: "user-api-keys", event: "revoked", keyId: id });
   return c.json({ success: true });
 });
@@ -882,6 +919,7 @@ git commit -m "feat(api): DELETE /v1/api-keys/:id revokes an owned key"
 ## Task 6: Mount `/v1/api-keys` + credentialed CORS carve-out
 
 **Files:**
+
 - Modify: `workers/api/src/v1-routes.ts`
 - Modify: `workers/api/src/index.ts`
 - Test: `tests/api/user-api-keys-cors.test.ts`
@@ -954,7 +992,7 @@ import { userApiKeyRoutes } from "./routes/user-api-keys.js";
 And add the mount inside `mountV1Routes`, next to `apiTokenRoutes`:
 
 ```ts
-  v1.route("/", userApiKeyRoutes);
+v1.route("/", userApiKeyRoutes);
 ```
 
 - [ ] **Step 4: Wire the credentialed CORS carve-out in `index.ts`**
@@ -1013,6 +1051,7 @@ git commit -m "feat(api): mount /v1/api-keys with credentialed CORS carve-out"
 ## Task 7: `/tokens/me` enrichment for `relu_` keys
 
 **Files:**
+
 - Modify: `workers/api/src/routes/api-tokens.ts`
 - Test: `tests/api/tokens-me-relu-enrichment.test.ts`
 
@@ -1059,7 +1098,11 @@ describe("GET /tokens/me enrichment for relu_ keys", () => {
       })
       .run();
 
-    const res = await appWithReluAuth("relu_ak_1", ["read"]).request("/tokens/me", {}, { DB: h.db });
+    const res = await appWithReluAuth("relu_ak_1", ["read"]).request(
+      "/tokens/me",
+      {},
+      { DB: h.db },
+    );
     expect(res.status).toBe(200);
     const body = (await res.json()) as Record<string, unknown>;
     expect(body.name).toBe("My CI Key");
@@ -1103,24 +1146,24 @@ import { apikey } from "../db/schema-auth.js";
 Replace the current `relu_` branch inside `apiTokenRoutes.get("/tokens/me", ...)`:
 
 ```ts
-  // User API keys (relu_) live in Better Auth's `apikey` table. The middleware
-  // already verified + metered the key; enrich with the row's name + owning
-  // userId. Timestamps are Date columns → ISO. A missing row (revoked between
-  // verify and this read) falls back to the minimal identity rather than 500ing.
-  if (auth.kind === "token" && isUserApiKeyShaped(auth.tokenId)) {
-    const keyId = auth.tokenId.slice(USER_API_KEY_PREFIX.length);
-    const db = createDb(c.env.DB);
-    const row = await db.select().from(apikey).where(eq(apikey.id, keyId)).get();
-    return c.json({
-      kind: "token",
-      name: row?.name ?? "user-api-key",
-      scopes: auth.scopes,
-      principalType: "user",
-      principalId: row?.referenceId ?? null,
-      expiresAt: row?.expiresAt ? row.expiresAt.toISOString() : null,
-      lastUsedAt: row?.lastRequest ? row.lastRequest.toISOString() : null,
-    } satisfies TokenIdentity);
-  }
+// User API keys (relu_) live in Better Auth's `apikey` table. The middleware
+// already verified + metered the key; enrich with the row's name + owning
+// userId. Timestamps are Date columns → ISO. A missing row (revoked between
+// verify and this read) falls back to the minimal identity rather than 500ing.
+if (auth.kind === "token" && isUserApiKeyShaped(auth.tokenId)) {
+  const keyId = auth.tokenId.slice(USER_API_KEY_PREFIX.length);
+  const db = createDb(c.env.DB);
+  const row = await db.select().from(apikey).where(eq(apikey.id, keyId)).get();
+  return c.json({
+    kind: "token",
+    name: row?.name ?? "user-api-key",
+    scopes: auth.scopes,
+    principalType: "user",
+    principalId: row?.referenceId ?? null,
+    expiresAt: row?.expiresAt ? row.expiresAt.toISOString() : null,
+    lastUsedAt: row?.lastRequest ? row.lastRequest.toISOString() : null,
+  } satisfies TokenIdentity);
+}
 ```
 
 - [ ] **Step 4: Run the test to verify it passes**
@@ -1140,6 +1183,7 @@ git commit -m "feat(api): enrich /tokens/me with relu_ key name + Better Auth us
 ## Task 8: MCP `scopeError` names both lanes
 
 **Files:**
+
 - Create: `workers/mcp/src/scope-error.ts`
 - Modify: `workers/mcp/src/mcp-agent.ts`
 - Test: `tests/unit/mcp-scope-error.test.ts`
@@ -1228,6 +1272,7 @@ git commit -m "feat(mcp): scopeError names both the relk_ and relu_ lanes"
 ## Task 9: Docs + `.env.example`
 
 **Files:**
+
 - Modify: `docs/architecture/routing.md`
 - Modify: `.env.example`
 
@@ -1268,6 +1313,7 @@ git commit -m "docs(auth): document the /v1/api-keys session bucket + NEXT_PUBLI
 ## Task 10: Web reveal flag
 
 **Files:**
+
 - Modify: `web/src/lib/auth-ui.ts`
 
 - [ ] **Step 1: Add the flag**
@@ -1301,6 +1347,7 @@ git commit -m "feat(web): NEXT_PUBLIC_USER_API_KEYS reveal flag"
 ## Task 11: Web API-keys client (`web/src/lib/api-keys.ts`)
 
 **Files:**
+
 - Create: `web/src/lib/api-keys.ts`
 - Test: `web/src/lib/api-keys.test.ts`
 
@@ -1468,6 +1515,7 @@ git commit -m "feat(web): api-keys client (list/create/revoke) over the session 
 ## Task 12: Web `ApiKeysPanel` component
 
 **Files:**
+
 - Create: `web/src/components/api-keys-panel.tsx`
 
 - [ ] **Step 1: Create the component**
@@ -1629,7 +1677,10 @@ export function ApiKeysPanel() {
         </div>
       )}
 
-      <form onSubmit={onCreate} className="space-y-4 border border-stone-200 p-5 dark:border-stone-800">
+      <form
+        onSubmit={onCreate}
+        className="space-y-4 border border-stone-200 p-5 dark:border-stone-800"
+      >
         <div>
           <label htmlFor="key-name" className={labelClass}>
             Name
@@ -1746,6 +1797,7 @@ git commit -m "feat(web): ApiKeysPanel — list/create (reveal-once)/revoke UI"
 ## Task 13: Web `/account` page
 
 **Files:**
+
 - Create: `web/src/app/account/page.tsx`
 
 - [ ] **Step 1: Create the page**
@@ -1800,6 +1852,7 @@ git commit -m "feat(web): /account page hosting the API Keys panel (gated)"
 ## Task 14: AccountNav "API keys" link
 
 **Files:**
+
 - Modify: `web/src/components/account-nav.tsx`
 
 - [ ] **Step 1: Add the link to both menu variants**
@@ -1815,29 +1868,33 @@ import { AUTH_UI_ENABLED, USER_API_KEYS_ENABLED } from "@/lib/auth-ui";
 In the **mobile** signed-in branch, add an "API keys" link before the "Sign out" button (only when the flag is on):
 
 ```tsx
-        {USER_API_KEYS_ENABLED && (
-          <Link
-            href="/account"
-            className="mt-2 block py-1 text-left text-stone-500 hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100"
-          >
-            API keys
-          </Link>
-        )}
+{
+  USER_API_KEYS_ENABLED && (
+    <Link
+      href="/account"
+      className="mt-2 block py-1 text-left text-stone-500 hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100"
+    >
+      API keys
+    </Link>
+  );
+}
 ```
 
 In the **desktop** dropdown menu, add an "API keys" link inside the `role="menu"` container, before the "Sign out" button:
 
 ```tsx
-            {USER_API_KEYS_ENABLED && (
-              <Link
-                href="/account"
-                role="menuitem"
-                onClick={() => setOpen(false)}
-                className="mt-3 block w-full border border-stone-300 px-3 py-1.5 text-center text-sm text-stone-700 transition hover:bg-stone-50 dark:border-stone-700 dark:text-stone-200 dark:hover:bg-stone-900"
-              >
-                API keys
-              </Link>
-            )}
+{
+  USER_API_KEYS_ENABLED && (
+    <Link
+      href="/account"
+      role="menuitem"
+      onClick={() => setOpen(false)}
+      className="mt-3 block w-full border border-stone-300 px-3 py-1.5 text-center text-sm text-stone-700 transition hover:bg-stone-50 dark:border-stone-700 dark:text-stone-200 dark:hover:bg-stone-900"
+    >
+      API keys
+    </Link>
+  );
+}
 ```
 
 (`Link` is already imported in this file.)
@@ -1863,12 +1920,14 @@ git commit -m "feat(web): link to /account from the account menu (flag-gated)"
 - [ ] **Step 1: Typecheck root + all workers + web**
 
 Run:
+
 ```bash
 npx tsc --noEmit
 cd workers/api && npx tsc --noEmit && cd ../..
 cd workers/mcp && npx tsc --noEmit && cd ../..
 cd web && npx tsc --noEmit && cd ..
 ```
+
 Expected: no errors anywhere.
 
 - [ ] **Step 2: Run the full test suite**
@@ -1893,12 +1952,13 @@ Expected: build succeeds; `/account` compiles as a route.
 - [ ] **Step 5: Manual smoke (local), documented for the reviewer**
 
 With local dev running (`bun run dev:web`, `bun run dev:api`), `NEXT_PUBLIC_AUTH_UI_ENABLED=true`, `NEXT_PUBLIC_USER_API_KEYS=true`, `USER_API_KEYS_ENABLED=true` (api `.dev.vars`), and a signed-in verified user:
-  1. Visit `/account` → panel renders.
-  2. Create a `write` key → full `relu_…` key revealed once; copy works; "I've saved it" dismisses.
-  3. List shows the new key (start, scope, created).
-  4. Revoke → inline confirm → key disappears.
-  5. `curl -s https://api.releases.localhost/v1/tokens/me -H "Authorization: Bearer <key>"` → returns the real key name + your userId as `principalId`.
-  6. A public GET with the key (e.g. `/v1/orgs`) succeeds and does NOT decrement the key (read exemption).
+
+1. Visit `/account` → panel renders.
+2. Create a `write` key → full `relu_…` key revealed once; copy works; "I've saved it" dismisses.
+3. List shows the new key (start, scope, created).
+4. Revoke → inline confirm → key disappears.
+5. `curl -s https://api.releases.localhost/v1/tokens/me -H "Authorization: Bearer <key>"` → returns the real key name + your userId as `principalId`.
+6. A public GET with the key (e.g. `/v1/orgs`) succeeds and does NOT decrement the key (read exemption).
 
 - [ ] **Step 6: Final commit (if lint/format changed anything)**
 
@@ -1918,4 +1978,7 @@ git commit -m "chore(auth): Phase 3 lint/format pass" || echo "nothing to commit
 - Spec §5 web panel (flag, client, component, page, nav) → Tasks 10–14.
 - Spec §6 flags/config + §9 rollout docs → Task 9 (`routing.md` + `.env.example`); the Flagship key + prod flip remain ops (out of code scope).
 - Spec §8 testing → tests embedded per task + Task 15 full run.
+
+```
+
 ```
