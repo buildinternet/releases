@@ -54,6 +54,9 @@ const verdicts = await parallel(
         expected: c.expected,
         predicted: !!v.isMarketing,
         reason: v.reason || null,
+        // Echoed back (from prep's inline `item`) so `save --viewer` can render
+        // the classified item next to its verdict. Optional; null if not prepped.
+        item: c.item || null,
       })),
   ),
 );

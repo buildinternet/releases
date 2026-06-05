@@ -21,6 +21,22 @@ generator) and the domain-neutral `.claude/agents/rubric-grader.md` (the judge)
 the rubric supplies the per-eval criteria, so the same `rubric-grader` serves
 any eval's Tier-2 judge step.
 
+**One judge across the suite.** The summary Workflow's Tier-2 leg dispatches that
+_same_ `rubric-grader` agent (`agentType: "rubric-grader"`), fed the _same_
+`buildGraderPrompt` `<rubric>`+`<artifact>` envelope the overview and metered
+paths build — there is no longer a per-eval bespoke judge. Because the sandbox
+can't import `buildGraderPrompt`, the summary Workflow inlines a faithful mirror
+of it (see the mirror note at the bottom). Marketing has no LLM-judge tier — it
+is a binary classifier graded by `gradeBinary` (false-positive-weighted), so the
+rubric-grader does not apply there (see Scope).
+
+**Reviewable runs.** Every driver can emit a `--viewer` workspace in the
+skill-creator eval-viewer convention (`outputs/` + `grading.json` +
+`eval_metadata.json` per case) via the shared `materializeViewerCase` /
+`materializeViewerWorkspace` helpers in `viewer.ts` — overview from its bun
+`grade` step, summary and marketing from `save … --viewer`. Results always land
+in the global `~/.releases/evals/results/` dir via `saveRun` (`getEvalsDir`).
+
 ## What it is (and isn't)
 
 A sub-agent is **not** equivalent to the production `client.messages.create`
@@ -79,11 +95,14 @@ prompt files by path.
 
    Empty/boilerplate fixtures that production short-circuits before the model
    (`isEmptyContent`) are flagged in the manifest so the Workflow skips the
-   sub-agent and asserts the all-null discard directly. With `--judge`, prep also
-   emits a per-fixture body file + the rubric path for the judge sub-agent.
+   sub-agent and asserts the all-null discard directly. The release body is
+   carried inline per fixture (tiny, ≤250B); with `--judge`, prep also includes
+   the rubric **text** (not a path) inline, which the Workflow folds into the
+   `buildGraderPrompt` artifact for the shared `rubric-grader`.
 
 2. **Run the Workflow** (one Haiku sub-agent per non-discarded fixture →
-   inline Tier-1 structural grade → optional Sonnet judge per fixture):
+   inline Tier-1 structural grade → optional `rubric-grader` (Sonnet) judge per
+   fixture, fed the `BODY`+`SUMMARY` `buildGraderPrompt` artifact):
 
    ```text
    Workflow({
@@ -92,7 +111,9 @@ prompt files by path.
    })
    ```
 
-   Returns `{ pass, total, passed, judge, failures, perCase }`.
+   Returns `{ pass, total, passed, judge, failures, perCase }`. Each `perCase`
+   entry carries the produced `summary` / `titleShort` / source `body` so a later
+   `save … --viewer` can render it.
 
 ### Overview
 
@@ -160,47 +181,98 @@ voice, length, faithfulness) on the subscription.
    Pass `--previous-workspace <prior>` for iteration-over-iteration diffs — the
    hook for the prompt/model A/B harness noted above.
 
-### Persist (optional, either eval)
+### Persist + review (optional, either eval)
 
 Write the Workflow's returned JSON to a file and save it into the shared results
-dir alongside the bun evals:
+dir alongside the bun evals. Add `--viewer [dir]` to also materialize an
+eval-viewer workspace (same shape as overview's) so each case — every marketing
+**misclassification** with the model's reason, every summary with its grades —
+can be reviewed in the browser:
 
 ```bash
 bun tests/evals/subagent-runner.ts save marketing <workflow-result.json>
 bun tests/evals/subagent-runner.ts save summary   <workflow-result.json>
 # -> ~/.releases/evals/results/<eval>-subagent-<timestamp>.json (+ -latest.json)
+
+bun tests/evals/subagent-runner.ts save summary <workflow-result.json> --viewer
+# bare --viewer -> ~/.releases/evals/runs/summary-subagent-<ts>/ ; pass a dir to override
+python ~/.claude/skills/skill-creator/eval-viewer/generate_review.py \
+  <runDir> --skill-name summary-eval --static <runDir>/review.html
 ```
+
+The viewer reads only the directory shape, so it does not matter that summary /
+marketing produce it from `save` (post-Workflow) while overview produces it from
+`grade` — the `materializeViewerWorkspace` helper in `viewer.ts` is shared.
 
 All eval results land in the global data dir at **`~/.releases/evals/results/`**
 (via `getEvalsDir()`), out of the repo tree alongside the CLI's logs — the same
-convention as runs/workflow logging. `RELEASES_EVAL_DIR` overrides the results
-dir; `RELEASES_DATA_DIR` relocates the whole `~/.releases` root. See
+convention as runs/workflow logging. Viewer workspaces land under
+`~/.releases/evals/runs/`. `RELEASES_EVAL_DIR` overrides the results dir;
+`RELEASES_DATA_DIR` relocates the whole `~/.releases` root. See
 `tests/evals/results.ts` and `getEvalsDir` in `@releases/lib/config`.
 
 ## Scope
 
-Marketing classifier, release summary, and overview are all wired. The
-marketing and summary Workflows mirror `gradeBinary` / `gradeStructural` inline
-(Tier-1) and map the `--judge` faithfulness tier to a Sonnet sub-agent (Tier-2).
+Marketing classifier, release summary, and overview are all wired. The marketing
+and summary Workflows mirror `gradeBinary` / `gradeStructural` inline (Tier-1).
 Overview runs via the Agent tool, pairing the real `gradeOverviewStructural`
 (Tier-1) with the generic `rubric-grader` Sonnet judge against
 `src/shared/rubrics/overview.md` (Tier-2); its citation-integrity check is
-metered-only. Because the grader is rubric-driven (not overview-specific), the
-summary/marketing Tier-2 legs can adopt the same `rubric-grader` rather than
-each spawning a bespoke judge. An A/B prompt/model comparison harness is the
-natural next addition.
+metered-only. The summary `--judge` tier now dispatches that _same_
+`rubric-grader` against `src/shared/rubrics/release-summary.md`, fed the same
+`buildGraderPrompt` artifact (Tier-2) — one judge, not a per-eval one.
+
+**Marketing has no Tier-2.** It is a binary classifier graded by `gradeBinary`
+(accuracy floor + a hard zero-false-positive gate), so there is no rubric / no
+LLM judge — the rubric-grader does not apply. A Tier-2 _"rationale quality"_
+rubric (grading the model's stated reason, not just the label) was considered and
+**not added**: the false-positive-weighted gate is the signal that matters, the
+reason string is already surfaced verbatim in the `--viewer` workspace for human
+review, and an LLM-judged rationale tier would add metered-equivalent cost and
+noise for little gate value. Revisit only if reason quality becomes a tracked
+metric.
+
+**URL `evaluation` eval stays as-is.** `tests/evals/evaluation.eval.ts` is a
+`bun:test` integration check (`bun run eval:evaluation`) that asserts
+`evaluateChangelog()`'s deterministic, code-only URL recommendations against live
+HEAD requests — no AI, no generated artifact, no per-run pass/fail record. The
+global-dir `saveRun` + eval-viewer pattern targets _AI-produced artifacts you
+read and grade_; neither fits a `describe`/`it` assertion suite with nothing to
+render. Converting it would mean abandoning `bun:test` for no reviewer benefit,
+so it is intentionally left on the `bun test` path. An A/B prompt/model
+comparison harness is the natural next addition for the AI evals.
 
 ## Files
 
 - `tests/evals/subagent-runner.ts` — bun prep + save (marketing/summary) and
-  prep + grade (overview).
+  prep + grade (overview); `save … --viewer` materializes the viewer workspace.
+- `tests/evals/viewer.ts` — shared eval-viewer materializer (`ViewerCase`,
+  `materializeViewerCase` / `materializeViewerWorkspace`, `fieldEvidence`,
+  `defaultViewerDir`); consumed by all three drivers. Unit-tested in
+  `viewer.test.ts`.
 - `.claude/workflows/eval-marketing-subagents.ts` — marketing fan-out + inline
-  `gradeBinary` mirror.
+  `gradeBinary` mirror; echoes each item back in `perCase` for `--viewer`.
 - `.claude/workflows/eval-summary-subagents.ts` — summary fan-out + inline
-  `gradeStructural` mirror + optional Sonnet judge.
+  `gradeStructural` mirror + inline `buildGraderPrompt` mirror + the shared
+  `rubric-grader` judge (`agentType: "rubric-grader"`).
 - `.claude/agents/overview-writer.md` — Haiku generator agent (overview body).
-- `.claude/agents/rubric-grader.md` — Sonnet rubric-judge agent (domain-neutral; reusable across evals).
+- `.claude/agents/rubric-grader.md` — Sonnet rubric-judge agent (domain-neutral;
+  the single Tier-2 judge for both overview and summary).
 
-> The inline grade mirrors (`graders.ts`) live in each Workflow because the
-> sandbox can't import repo modules — keep them in sync if `graders.ts` changes.
-> The overview driver sidesteps this: it calls `graders.ts` directly from bun.
+> **Inline sandbox mirrors — keep in sync.** The Workflow sandbox can't import
+> repo modules, so three pieces are mirrored inline and must be reconciled when
+> their source changes:
+>
+> - `gradeBinary` (marketing Workflow) ⟷ `tests/evals/graders.ts` — unchanged;
+>   still matches.
+> - `gradeStructural` (summary Workflow) ⟷ `tests/evals/graders.ts` — unchanged;
+>   still matches (the inline copy omits the cosmetic `expected` field, as it
+>   always has — logic is identical).
+> - `buildGraderPrompt` (summary Workflow) ⟷ `packages/ai/src/grader-prompt.ts`
+>   — added in this retrofit. The summary judge always calls it without an
+>   `artifactLabel`, so the inline copy hardcodes a bare `<artifact>` header;
+>   the instruction text, `OUTPUT_SCHEMA`, `escapeLabel`, and
+>   `neutralizeClosingTag` are verbatim copies.
+>
+> The overview driver sidesteps all of this: it calls `graders.ts` and
+> `buildGraderPrompt` directly from bun (no Workflow, no mirror).

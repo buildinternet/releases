@@ -11,16 +11,20 @@
  *
  *   bun tests/evals/subagent-runner.ts prep marketing
  *   bun tests/evals/subagent-runner.ts prep summary [--judge]
- *     -> writes <tmp>/releases-subagent-eval/<kind>/<id>.txt (+ .body.txt for judge)
- *     -> prints the manifest JSON to stdout
+ *     -> writes <tmp>/releases-subagent-eval/<kind>/<id>.txt (the composed prompt)
+ *     -> prints the manifest JSON to stdout (rubric text + bodies inline, for --judge)
  *
- *   bun tests/evals/subagent-runner.ts save <marketing|summary> <result.json>
+ *   bun tests/evals/subagent-runner.ts save <marketing|summary> <result.json> [--viewer [dir]]
  *     -> persists the Workflow's returned JSON into ~/.releases/evals/results/
+ *     -> with --viewer, also writes an eval-viewer workspace under
+ *        ~/.releases/evals/runs/ so each case can be reviewed inline (see viewer.ts)
  *
  * Grading mirrors tests/evals/graders.ts (gradeBinary / gradeStructural) and
  * lives inline in each Workflow (the sandbox can't import graders.ts); the
  * thresholds + forbidden-token lists below are the single source those two
- * places agree on.
+ * places agree on. The summary Workflow's Tier-2 judge additionally mirrors
+ * buildGraderPrompt (packages/ai) so it can hand the shared rubric-grader agent
+ * the same <rubric>+<artifact> envelope the overview/metered paths use.
  */
 import { mkdirSync, readFileSync, readdirSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
@@ -58,7 +62,7 @@ import {
 } from "./overview-fixtures";
 import type { FieldResult } from "./helpers";
 import { saveRun } from "./results";
-import { getEvalsDir } from "@releases/lib/config";
+import { defaultViewerDir, materializeViewerWorkspace, type ViewerCase } from "./viewer";
 
 export const ACCURACY_FLOOR = 0.85;
 export const MAX_FALSE_POSITIVES = 0;
@@ -86,10 +90,13 @@ function prepMarketing() {
   mkdirSync(outDir, { recursive: true });
 
   const cases = fixtures.map((f) => {
-    const composed = `${MARKETING_SYSTEM_PROMPT}\n\n---\nClassify this item:\n\n${buildClassifierInput(f.input)}`;
+    const item = buildClassifierInput(f.input);
+    const composed = `${MARKETING_SYSTEM_PROMPT}\n\n---\nClassify this item:\n\n${item}`;
     const file = join(outDir, `${f.id}.txt`);
     writeFileSync(file, composed);
-    return { id: f.id, expected: f.expected.isMarketing, file };
+    // `item` is echoed inline (not just written to `file`) so the Workflow can
+    // pass it back in perCase for the --viewer review of misclassifications.
+    return { id: f.id, expected: f.expected.isMarketing, file, item };
   });
 
   process.stdout.write(
@@ -119,21 +126,20 @@ function prepSummary(useJudge: boolean) {
   const outDir = join(tmpdir(), "releases-subagent-eval", "summary");
   mkdirSync(outDir, { recursive: true });
 
-  // Absolute path to the Tier-2 rubric; the judge sub-agent reads it directly.
-  const rubricFile = useJudge
-    ? join(import.meta.dir, "..", "..", "src", "shared", "rubrics", "release-summary.md")
+  // The Tier-2 rubric text is passed inline (not as a path): the Workflow folds
+  // it into a buildGraderPrompt artifact and hands that to the shared
+  // rubric-grader agent — the same judge + artifact shape as overview/metered.
+  const rubricText = useJudge
+    ? readFileSync(
+        join(import.meta.dir, "..", "..", "src", "shared", "rubrics", "release-summary.md"),
+        "utf8",
+      )
     : null;
 
   const cases = fixtures.map((f) => {
     const composed = `${SUMMARY_SYSTEM_PROMPT}\n\n---\nSummarize this release:\n\n${buildReleaseBlock(f.input)}`;
     const promptFile = join(outDir, `${f.name}.txt`);
     writeFileSync(promptFile, composed);
-
-    let bodyFile: string | null = null;
-    if (useJudge && !f.spec.expectDiscarded) {
-      bodyFile = join(outDir, `${f.name}.body.txt`);
-      writeFileSync(bodyFile, f.input.content);
-    }
 
     // Same forbidden-token set the metered eval feeds gradeStructural:
     // structural defaults + the empty-body sentinel + any per-fixture tokens.
@@ -146,7 +152,10 @@ function prepSummary(useJudge: boolean) {
     return {
       id: f.name,
       promptFile,
-      bodyFile,
+      // The release body, inline: the Workflow needs it to build the judge's
+      // BODY+SUMMARY artifact, and `save --viewer` renders it for context.
+      // Fixtures are tiny (≤250B), so inlining keeps args small enough.
+      body: f.input.content,
       // isEmptyContent short-circuits the model in production (all-null fields);
       // mirror that here so the Workflow skips the sub-agent for these.
       shortCircuit: isEmptyContent(f.input.content),
@@ -164,7 +173,8 @@ function prepSummary(useJudge: boolean) {
       judge: useJudge,
       titleShortMaxChars: TITLE_SHORT_MAX_CHARS,
       emptyBodyFallback: EMPTY_BODY_FALLBACK,
-      rubricFile,
+      rubricText,
+      rubricLabel: "release-summary.md",
       cases,
     }),
   );
@@ -231,66 +241,11 @@ function prepOverview(useJudge: boolean) {
   );
 }
 
-/** One-line evidence string for a graded field, for the viewer's grading.json. */
-function fieldEvidence(f: FieldResult): string {
-  const exp = typeof f.expected === "string" ? f.expected : JSON.stringify(f.expected);
-  const act = typeof f.actual === "string" ? f.actual : JSON.stringify(f.actual);
-  return f.passed ? `ok — ${act}` : `expected ${exp}, got ${act}`;
-}
-
 /** Short human-readable description of what a fixture asks for (viewer prompt pane). */
 function viewerPrompt(input: OverviewRequestInput): string {
   const desc = input.org.description ? ` (${input.org.description})` : "";
   const sources = input.sources.map((s) => s.name).join(", ");
   return `Generate the overview knowledge page for ${input.org.name}${desc} from ${input.selected.length} releases across ${input.sources.length} source(s): ${sources}.`;
-}
-
-/**
- * Materialize one graded fixture into the skill-creator eval-viewer's workspace
- * convention (a dir containing outputs/ + grading.json + eval_metadata.json),
- * so `generate_review.py` can render the produced overview body inline next to
- * its grades with a feedback box. The viewer just reads this directory shape —
- * it is fully decoupled from how the run was produced.
- */
-function materializeViewerCase(
-  viewerDir: string,
-  index: number,
-  fixture: OverviewFixture,
-  body: string,
-  fields: FieldResult[],
-) {
-  const runDir = join(viewerDir, `eval-${fixture.name}`);
-  mkdirSync(join(runDir, "outputs"), { recursive: true });
-  writeFileSync(join(runDir, "outputs", "overview.md"), body);
-  writeFileSync(
-    join(runDir, "eval_metadata.json"),
-    JSON.stringify(
-      { eval_id: index, eval_name: fixture.name, prompt: viewerPrompt(fixture.input) },
-      null,
-      2,
-    ),
-  );
-  const passedCount = fields.filter((f) => f.passed).length;
-  writeFileSync(
-    join(runDir, "grading.json"),
-    JSON.stringify(
-      {
-        expectations: fields.map((f) => ({
-          text: f.field,
-          passed: f.passed,
-          evidence: fieldEvidence(f),
-        })),
-        summary: {
-          passed: passedCount,
-          failed: fields.length - passedCount,
-          total: fields.length,
-          pass_rate: fields.length > 0 ? passedCount / fields.length : 0,
-        },
-      },
-      null,
-      2,
-    ),
-  );
 }
 
 /**
@@ -392,10 +347,14 @@ function gradeOverview(
   }
 
   if (viewerDir) {
-    mkdirSync(viewerDir, { recursive: true });
-    for (const c of cases) {
-      materializeViewerCase(viewerDir, c.index, c.fixture, c.body, c.fields);
-    }
+    const viewerCases: ViewerCase[] = cases.map((c) => ({
+      name: c.name,
+      prompt: viewerPrompt(c.fixture.input),
+      outputName: "overview.md",
+      body: c.body,
+      fields: c.fields,
+    }));
+    materializeViewerWorkspace(viewerDir, viewerCases);
     console.error(`\nviewer workspace: ${viewerDir}`);
     console.error(
       `  python <skill-creator>/eval-viewer/generate_review.py ${viewerDir} --skill-name overview-eval --static ${join(viewerDir, "review.html")}\n`,
@@ -417,30 +376,106 @@ function gradeOverview(
   console.error(`results: ${file}\n`);
 }
 
+const marketingLabel = (b: boolean) => (b ? "marketing" : "real release");
+
+/** Build the viewer cases for a marketing Workflow result. The "artifact" is the
+ * model's verdict on each item; misclassifications surface as a failed field
+ * with the model's reason as evidence. */
+function marketingViewerCases(perCase: unknown[]): ViewerCase[] {
+  return (perCase as Array<Record<string, unknown>>).map((c) => {
+    const expected = !!c.expected;
+    const predicted = !!c.predicted;
+    const reason = typeof c.reason === "string" ? c.reason : null;
+    const item = typeof c.item === "string" ? c.item : "(item text unavailable)";
+    const label = marketingLabel;
+    return {
+      name: String(c.id),
+      prompt: `Classify whether this changelog item is marketing vs. a real release. Ground truth: ${label(expected)}.`,
+      outputName: "classification.md",
+      body: `**Predicted:** ${label(predicted)}\n**Expected:** ${label(expected)}\n**Model reason:** ${reason ?? "(none)"}\n\n---\n\n${item}`,
+      fields: [
+        {
+          field: "classified correctly",
+          passed: predicted === expected,
+          expected: label(expected),
+          actual: label(predicted),
+        },
+      ],
+    };
+  });
+}
+
+/** Build the viewer cases for a summary Workflow result. The artifact is the
+ * generated summary + title_short, rendered with the source body for context. */
+function summaryViewerCases(perCase: unknown[]): ViewerCase[] {
+  return (perCase as Array<Record<string, unknown>>).map((c) => {
+    const summary = typeof c.summary === "string" ? c.summary : null;
+    const titleShort = typeof c.titleShort === "string" ? c.titleShort : null;
+    const body = typeof c.body === "string" ? c.body : "(body unavailable)";
+    const fields = (c.fields as FieldResult[]) ?? [];
+    const artifact = summary
+      ? `**title_short:** ${titleShort ?? "(none)"}\n\n**summary:**\n${summary}\n\n---\n\n**source body:**\n${body}`
+      : `_(discarded — no summary produced)_\n\n---\n\n**source body:**\n${body}`;
+    return {
+      name: String(c.name),
+      prompt: `Summarize the "${String(c.name)}" release; grade the summary for faithfulness + structure.`,
+      outputName: "summary.md",
+      body: artifact,
+      fields,
+    };
+  });
+}
+
 /**
  * Persist a Workflow result (the JSON a sub-agent eval Workflow returns) into
  * the shared results dir, alongside the metered bun evals. Marketing and
  * summary return different aggregate shapes, so the `summary` field is passed
- * through verbatim minus the per-case list.
+ * through verbatim minus the per-case list. With a viewerDir, also materializes
+ * a skill-creator eval-viewer workspace so each case can be reviewed inline.
  */
-function saveSubagentResult(kind: "marketing" | "summary", resultPath: string) {
+function saveSubagentResult(
+  kind: "marketing" | "summary",
+  resultPath: string,
+  viewerDir: string | null,
+) {
   const r = JSON.parse(readFileSync(resultPath, "utf8")) as Record<string, unknown> & {
     pass: boolean;
     perCase?: unknown[];
   };
   const { perCase, ...aggregate } = r;
+  const cases = (perCase as unknown[]) ?? [];
+
+  if (viewerDir) {
+    const viewerCases =
+      kind === "marketing" ? marketingViewerCases(cases) : summaryViewerCases(cases);
+    materializeViewerWorkspace(viewerDir, viewerCases);
+    console.error(`\nviewer workspace: ${viewerDir}`);
+    console.error(
+      `  python <skill-creator>/eval-viewer/generate_review.py ${viewerDir} --skill-name ${kind}-eval --static ${join(viewerDir, "review.html")}\n`,
+    );
+  }
+
   const file = saveRun({
     eval: `${kind}-subagent`,
     model: kind === "marketing" ? MARKETING_MODEL : SUMMARY_MODEL,
     pass: r.pass,
     summary: aggregate,
-    cases: (perCase as unknown[]) ?? [],
+    cases,
   });
   console.error(`results: ${file}`);
 }
 
 const [cmd, kind, arg] = process.argv.slice(2);
 const useJudge = process.argv.includes("--judge");
+
+/** Resolve `--viewer [dir]`: explicit dir, or a default `<eval>-<ts>/` under the
+ * global runs dir. Returns null when --viewer is absent. */
+function resolveViewerDir(evalName: string): string | null {
+  const wi = process.argv.indexOf("--viewer");
+  if (wi < 0) return null;
+  const next = process.argv[wi + 1];
+  return next && !next.startsWith("--") ? next : defaultViewerDir(evalName);
+}
 
 if (cmd === "prep" && kind === "marketing") {
   prepMarketing();
@@ -457,27 +492,13 @@ if (cmd === "prep" && kind === "marketing") {
   }
   const vi = process.argv.indexOf("--verdicts");
   const verdictsFile = vi >= 0 ? (process.argv[vi + 1] ?? null) : null;
-  // --viewer [dir]: explicit dir, or default to ~/.releases/evals/runs/<eval>-<ts>/
-  const wi = process.argv.indexOf("--viewer");
-  let viewerDir: string | null = null;
-  if (wi >= 0) {
-    const next = process.argv[wi + 1];
-    viewerDir =
-      next && !next.startsWith("--")
-        ? next
-        : join(
-            getEvalsDir(),
-            "runs",
-            `overview-subagent-${new Date().toISOString().replace(/[:.]/g, "-")}`,
-          );
-  }
-  gradeOverview(arg, useJudge, verdictsFile, viewerDir);
+  gradeOverview(arg, useJudge, verdictsFile, resolveViewerDir("overview-subagent"));
 } else if (cmd === "save" && (kind === "marketing" || kind === "summary")) {
   if (!arg || arg.startsWith("--")) {
-    console.error(`usage: subagent-runner.ts save ${kind} <workflow-result.json>`);
+    console.error(`usage: subagent-runner.ts save ${kind} <workflow-result.json> [--viewer <dir>]`);
     process.exit(2);
   }
-  saveSubagentResult(kind, arg);
+  saveSubagentResult(kind, arg, resolveViewerDir(`${kind}-subagent`));
 } else {
   console.error(
     "usage: subagent-runner.ts <prep|grade|save> <marketing|summary|overview> [arg] [--judge] [--verdicts <f>]",
