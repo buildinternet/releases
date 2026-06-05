@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { authClient, useSession } from "@/lib/auth-client";
 
@@ -105,11 +104,7 @@ export function DeviceVerifyForm() {
 
       {!user && (
         <p className="text-sm leading-6 text-stone-500 dark:text-stone-400">
-          You'll{" "}
-          <Link href="/login?redirect=/device" className="underline">
-            sign in
-          </Link>{" "}
-          first, then return here to approve the device.
+          You'll be asked to sign in first, then returned here to approve the device.
         </p>
       )}
 

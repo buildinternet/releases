@@ -9,7 +9,7 @@ import type { BaseSQLiteDatabase } from "drizzle-orm/sqlite-core";
 import { getSecret } from "@releases/lib/secrets";
 import { logEvent } from "@releases/lib/log-event";
 import { FLAGS, flag } from "@releases/lib/flags";
-import { USER_API_KEY_PREFIX } from "@buildinternet/releases-core/api-token";
+import { USER_API_KEY_PREFIX, DEVICE_AUTH_CLIENT_ID } from "@buildinternet/releases-core/api-token";
 import { scopeToPermissions } from "./api-key-scope.js";
 import { createDb } from "../db.js";
 import {
@@ -38,15 +38,6 @@ import {
 } from "./audit.js";
 
 type Bindings = Env["Bindings"];
-
-/**
- * The single OAuth client id permitted to run the device-authorization flow.
- * The CLI (`releases login`) sends this verbatim as `client_id`; the server's
- * `validateClient` allow-list rejects anything else (fail closed). This is a
- * public, non-secret identifier — it must stay in lockstep with the CLI's own
- * `CLIENT_ID` constant in releases-cli `src/lib/device-auth.ts`.
- */
-export const DEVICE_AUTH_CLIENT_ID = "releases-cli";
 
 /** A value bound as a Secrets Store binding (prod) or a plain string (local .dev.vars / wrangler var). */
 type SecretLike = string | Parameters<typeof getSecret>[0];
@@ -354,21 +345,20 @@ export async function createAuth(
   // paired in schema-auth.ts + migration 20260604010000_add_user_last_active_at.sql.
   const dashApiKey = await resolveSecret(env.BETTER_AUTH_API_KEY);
 
-  // User-API-key path (relu_) is a flagged rollout. When off, the plugin (and its
-  // self-serve endpoints) are simply not registered. Flag order: Flagship → var →
-  // default(false). Mirrors the middleware gate in middleware/auth.ts.
-  const userApiKeysOn = await flag(env.FLAGS, env.USER_API_KEYS_ENABLED, FLAGS.userApiKeysEnabled);
-
-  // Device-authorization (RFC 8628) path that backs `releases login` — same flagged
-  // rollout discipline as the user-key path above. When off, neither the device
-  // plugin nor bearer() is registered, so the device endpoints simply don't exist.
-  // Device login mints relu_ keys via the /v1/api-keys route, which is itself gated
-  // on userApiKeysEnabled — so this flag is only USEFUL with that one also on.
-  const deviceAuthOn = await flag(
-    env.FLAGS,
-    env.DEVICE_AUTHORIZATION_ENABLED,
-    FLAGS.deviceAuthorizationEnabled,
-  );
+  // Two flagged rollouts of the same flavor (Flagship → var → default false):
+  //  • userApiKeysOn — the relu_ user-key path; when off, apiKey() and its
+  //    self-serve endpoints aren't registered. Mirrors the middleware/auth.ts gate.
+  //  • deviceAuthOn — the device-authorization (RFC 8628) path backing
+  //    `releases login`; when off, neither deviceAuthorization() nor bearer() is
+  //    registered, so the device endpoints simply don't exist. Device login mints
+  //    relu_ keys via the /v1/api-keys route (gated on userApiKeysEnabled), so it is
+  //    only USEFUL with that one also on.
+  // Read concurrently — independent flags, and createAuth runs per request, so with a
+  // real Flagship binding each read is its own round-trip.
+  const [userApiKeysOn, deviceAuthOn] = await Promise.all([
+    flag(env.FLAGS, env.USER_API_KEYS_ENABLED, FLAGS.userApiKeysEnabled),
+    flag(env.FLAGS, env.DEVICE_AUTHORIZATION_ENABLED, FLAGS.deviceAuthorizationEnabled),
+  ]);
 
   // Google One Tap (`/api/auth/one-tap/*`): the popup renders on the web origin
   // with the PUBLIC client id and posts the Google ID token here for verification.

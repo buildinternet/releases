@@ -11,8 +11,8 @@ import {
   authCorsMiddleware,
   deriveCookieDomain,
   createAuth,
-  DEVICE_AUTH_CLIENT_ID,
 } from "../src/auth/index.js";
+import { DEVICE_AUTH_CLIENT_ID } from "@buildinternet/releases-core/api-token";
 import { magicLinkTemplate, type AuthEmailMessage } from "../src/auth/email.js";
 
 // ── Pure helpers ──

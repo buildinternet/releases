@@ -24,9 +24,9 @@ export const USER_API_KEYS_ENABLED = process.env.NEXT_PUBLIC_USER_API_KEYS === "
 
 /**
  * Reveal the device-authorization verification pages (`/device`, `/device/approve`)
- * that back `releases login` from the CLI. **Off unless `NEXT_PUBLIC_DEVICE_AUTH`
- * is exactly `"true"`.** Mirrors the server-side `device-authorization-enabled`
- * Flagship flag so the pages stay dark until the backend registers the device
- * plugin. `NEXT_PUBLIC_*` is inlined at build time.
+ * that back `releases login` from the CLI. **Off unless
+ * `NEXT_PUBLIC_DEVICE_AUTH_ENABLED` is exactly `"true"`.** Named to match the
+ * server-side `DEVICE_AUTHORIZATION_ENABLED` flag so the pages stay dark until the
+ * backend registers the device plugin. `NEXT_PUBLIC_*` is inlined at build time.
  */
-export const DEVICE_AUTH_ENABLED = process.env.NEXT_PUBLIC_DEVICE_AUTH === "true";
+export const DEVICE_AUTH_ENABLED = process.env.NEXT_PUBLIC_DEVICE_AUTH_ENABLED === "true";

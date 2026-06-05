@@ -108,6 +108,16 @@ export function isUserApiKeyShaped(raw: string): boolean {
   return raw.startsWith(USER_API_KEY_PREFIX);
 }
 
+/**
+ * The single OAuth client id permitted to run the device-authorization flow
+ * (RFC 8628) that backs `releases login`. The CLI sends this as `client_id`; the
+ * API worker's `validateClient` allow-list (workers/api/src/auth/index.ts) rejects
+ * anything else (fail closed). A public, non-secret identifier — it lives here so
+ * the OSS CLI and the worker share ONE source of truth instead of hard-coding it
+ * on each side and silently drifting.
+ */
+export const DEVICE_AUTH_CLIENT_ID = "releases-cli";
+
 /** SHA-256 of the secret as lowercase hex. Web Crypto — runtime-neutral. */
 export async function hashSecret(secret: string): Promise<string> {
   const data = new TextEncoder().encode(secret);
