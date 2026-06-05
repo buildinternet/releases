@@ -1122,7 +1122,7 @@ orgRoutes.get(
     tags: ["Orgs"],
     summary: "List org social/platform accounts",
     description:
-      "Returns the org's registered accounts (GitHub, Twitter, LinkedIn, etc.) as a paginated list. Pass `?platform=<name>` to fetch a single account by platform — returns the account object or `null` when not set. The 200 schema is a union of the paginated list (default) or a single `OrgAccountItem`/`null` (single-mode) — the OSS CLI depends on the single-row return shape.",
+      "Returns the org's registered accounts (GitHub, Twitter, LinkedIn, etc.) as a paginated list. Pass `?platform=<name>` to fetch a single account by platform — returns the account object or `null` when not set. When the org holds multiple accounts for the platform, single-mode returns the oldest-linked one deterministically; use the full list (omit `?platform`) to retrieve them all. The 200 schema is a union of the paginated list (default) or a single `OrgAccountItem`/`null` (single-mode) — the OSS CLI depends on the single-row return shape.",
     parameters: [
       {
         name: "platform",
@@ -1154,10 +1154,20 @@ orgRoutes.get(
     if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
 
     if (platform) {
+      // An org can hold multiple accounts for one platform (`org_accounts` is
+      // one-to-many; the unique index is on `(platform, handle)`, not
+      // `(org_id, platform)`). Order by `created_at` so single-account mode
+      // deterministically returns the oldest-linked (canonical) handle instead
+      // of whichever row the index scan surfaces first. `handle` is a stable
+      // tiebreaker. Single-row shape is preserved — the OSS CLI consumes this
+      // as `OrgAccount | null` and an array shape would break it (`[]` is
+      // truthy). See #1449.
       const [account] = await db
         .select({ platform: orgAccounts.platform, handle: orgAccounts.handle })
         .from(orgAccounts)
-        .where(and(eq(orgAccounts.orgId, org.id), eq(orgAccounts.platform, platform)));
+        .where(and(eq(orgAccounts.orgId, org.id), eq(orgAccounts.platform, platform)))
+        .orderBy(orgAccounts.createdAt, orgAccounts.handle)
+        .limit(1);
       return c.json(account ?? null);
     }
 
