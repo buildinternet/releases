@@ -11,8 +11,10 @@ import {
   parseStoredScopes,
   PRINCIPAL_TYPES,
   ROOT_SCOPE,
+  USER_API_KEY_PREFIX,
   type PrincipalType,
 } from "@buildinternet/releases-core/api-token";
+import { apikey } from "../db/schema-auth.js";
 import type { TokenIdentity } from "@buildinternet/releases-api-types";
 import { newApiTokenId } from "@buildinternet/releases-core/id";
 import { logEvent } from "@releases/lib/log-event";
@@ -144,19 +146,22 @@ apiTokenRoutes.get("/tokens/me", async (c) => {
       lastUsedAt: null,
     } satisfies TokenIdentity);
   }
-  // User API keys (relu_) live in Better Auth's `apikey` table, not `api_tokens`.
-  // The middleware already verified + metered the key and resolved its scopes;
-  // return them directly (no `api_tokens` row exists, so the query below would
-  // 401). Richer fields (name, remaining, userId) are a Phase 3 enrichment.
+  // User API keys (relu_) live in Better Auth's `apikey` table. The middleware
+  // already verified + metered the key; enrich with the row's name + owning
+  // userId. Timestamps are Date columns → ISO. A missing row (revoked between
+  // verify and this read) falls back to the minimal identity rather than 500ing.
   if (auth.kind === "token" && isUserApiKeyShaped(auth.tokenId)) {
+    const keyId = auth.tokenId.slice(USER_API_KEY_PREFIX.length);
+    const db = createDb(c.env.DB);
+    const row = await db.select().from(apikey).where(eq(apikey.id, keyId)).get();
     return c.json({
       kind: "token",
-      name: "user-api-key",
+      name: row?.name ?? "user-api-key",
       scopes: auth.scopes,
       principalType: "user",
-      principalId: null,
-      expiresAt: null,
-      lastUsedAt: null,
+      principalId: row?.referenceId ?? null,
+      expiresAt: row?.expiresAt ? row.expiresAt.toISOString() : null,
+      lastUsedAt: row?.lastRequest ? row.lastRequest.toISOString() : null,
     } satisfies TokenIdentity);
   }
   const db = createDb(c.env.DB);
