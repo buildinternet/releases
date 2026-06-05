@@ -334,20 +334,46 @@ describe("resolveMcpAuth — relu_ user keys", () => {
     if (r.ok) expect(r.identity.kind).toBe("anonymous");
   });
 
-  it("forwards the BOUND staging key to /me, not the inbound header value", async () => {
+  it("forwards the BOUND staging key to /me (the binding, not the inbound header)", async () => {
     const calls: MeCall[] = [];
     const api = stubMeApi(calls, { status: 200, scopes: ["read"] });
-    const r = await resolveMcpAuth(
+    // Distinct inbound vs bound values prove resolveUserKey reads
+    // env.STAGING_ACCESS_KEY, never the inbound header (a header-passthrough
+    // guard). The mismatched inbound header means the staging gate then refuses
+    // this request (see the gate test below) — but the /me call fires during
+    // resolution first, so the forwarded value is observable here.
+    await resolveMcpAuth(
       rpcReq("tools/call", {
         Authorization: `Bearer ${RELU}`,
         "X-Releases-Staging-Key": "inbound-key",
       }),
       enabled(api, { STAGING_ACCESS_KEY: mockSecret("bound-key") }),
     );
-    expect(r.ok).toBe(true);
-    // resolveUserKey must read env.STAGING_ACCESS_KEY (the binding), never the
-    // inbound header — distinct values catch a header-passthrough bug.
     expect(calls[0].stagingKey).toBe("bound-key");
+  });
+
+  it("does NOT bypass the staging gate — a relu_ identity (token=null) must present the staging key", async () => {
+    const calls: MeCall[] = [];
+    const api = stubMeApi(calls, { status: 200, scopes: ["read", "write"] });
+    // A valid relu_ resolves to a token identity, but token=null, so it does NOT
+    // open the staging gate via the relk_ token bridge. Without the staging key
+    // the gate refuses (401), even though the key itself is valid.
+    const blocked = await resolveMcpAuth(
+      rpcReq("tools/call", { Authorization: `Bearer ${RELU}` }),
+      enabled(api, { STAGING_ACCESS_KEY: mockSecret("stg-key") }),
+    );
+    expect(blocked.ok).toBe(false);
+    if (!blocked.ok) expect(blocked.response.status).toBe(401);
+    // With the staging key supplied inbound, the same call passes and keeps its scopes.
+    const allowed = await resolveMcpAuth(
+      rpcReq("tools/call", {
+        Authorization: `Bearer ${RELU}`,
+        "X-Releases-Staging-Key": "stg-key",
+      }),
+      enabled(api, { STAGING_ACCESS_KEY: mockSecret("stg-key") }),
+    );
+    expect(allowed.ok).toBe(true);
+    if (allowed.ok) expect(allowed.identity).toMatchObject({ kind: "token", token: null });
   });
 
   it("method peek leaves the original request body readable for createMcpHandler", async () => {

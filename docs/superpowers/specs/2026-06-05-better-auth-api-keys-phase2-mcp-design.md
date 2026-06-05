@@ -76,7 +76,7 @@ Metering happens in exactly one place per billable request: the `GET /v1/tokens/
 
 No new route. The MCP worker authenticates the caller's `relu_` key against the existing endpoint:
 
-```
+```http
 GET https://internal/v1/tokens/me
 Authorization: Bearer relu_<...>
 X-Releases-Staging-Key: <staging secret>   # only when bound (staging); no-op in prod/local
@@ -89,7 +89,7 @@ X-Releases-Staging-Key: <staging secret>   # only when bound (staging); no-op in
   if (isUserApiKeyShaped(auth.tokenId)) {
     return c.json({
       kind: "token",
-      name: null, // Phase 3 enrichment: real key name
+      name: "user-api-key", // TokenIdentity.name is `string`; Phase 3 surfaces the real key name
       scopes: auth.scopes, // already resolved by the middleware
       principalType: "user",
       principalId: null, // Phase 3 enrichment: BA userId
@@ -190,7 +190,7 @@ MCP interprets the `GET /v1/tokens/me` response:
 | **non-OK / unreachable / throws**                                | Fail-open to **anonymous** + `logEvent("warn", { component: "mcp-auth", event: "user-key-introspect-error" })`. Never 500 a read.                              |
 
 - **Flag off** → MCP short-circuits before the `/me` call (no round-trip); the API worker also fail-closes `relu_` to 401 (defense-in-depth).
-- The existing staging access gate is unaffected: in staging, clients present the staging key (header or Bearer) as today; `relu_` resolution is orthogonal and only metered on billable tool calls.
+- The existing staging access gate still requires the staging key: a `relu_` identity carries `token: null`, so it does **not** open the gate via the `relk_` token bridge (`identity.kind === "token" && identity.token !== null`). In staging, a `relu_` caller must present the staging key (header or Bearer) as today; `relu_` resolution is otherwise orthogonal and only metered on billable tool calls.
 
 ## 5. Usage tracking (`workers/mcp/src/index.ts`)
 

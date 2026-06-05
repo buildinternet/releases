@@ -201,7 +201,10 @@ export async function resolveMcpAuth(request: Request, env: Env): Promise<McpAut
       !stagingSecret ||
       request.headers.get(STAGING_KEY_HEADER) === stagingSecret ||
       presented === stagingSecret ||
-      identity.kind === "token" ||
+      // Only the `relk_` token bridge (raw token present) opens the gate, not a
+      // `relu_` user identity — those carry `token: null`, so a user key must
+      // still supply the staging key to reach mcp-staging.
+      (identity.kind === "token" && identity.token !== null) ||
       identity.kind === "root";
     if (!passes) return { ok: false, response: unauthorized() };
   }
