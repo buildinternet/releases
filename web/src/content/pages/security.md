@@ -23,6 +23,7 @@ For issues in the open-source CLI, you're also welcome to open a pull request or
 In scope:
 
 - `releases.sh` and its subdomains (`api.releases.sh`, `*.releases.sh`).
+- Account and authentication features — sign-in, sessions, password reset, and API keys.
 - The open-source CLI at [buildinternet/releases-cli](https://github.com/buildinternet/releases-cli).
 - The remote MCP server.
 
@@ -41,3 +42,8 @@ We won't pursue legal action against researchers who make a good-faith effort to
 ## Also see
 
 Our [security.txt](/.well-known/security.txt) ([RFC 9116](https://www.rfc-editor.org/rfc/rfc9116)) lists the same contact in machine-readable form.
+
+## Revision history
+
+- **April 20, 2026** — Initial version published.
+- **June 5, 2026** — Added account and authentication features to the in-scope list.

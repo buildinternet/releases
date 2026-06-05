@@ -1,18 +1,27 @@
 ---
 title: "Terms of Service"
-description: "Acceptable use, rate limits, and takedown policy for the releases.sh web app, API, and MCP server."
-effectiveDate: "April 20, 2026"
+description: "Accounts, acceptable use, rate limits, and takedown policy for the releases.sh web app, API, and MCP server."
+effectiveDate: "June 5, 2026"
 ---
 
 # Terms of Service
 
-_Effective April 20, 2026_
+_Effective June 5, 2026_
 
 These terms cover use of the releases.sh website, the public API, the remote MCP server, and the open-source CLI. By using any of these, you agree to the terms below. If you don't agree, please don't use the service.
 
 ## The service
 
 releases.sh is a public index of release notes, changelogs, and version updates pulled from third-party sources. It is provided free of charge on a best-effort basis. We may change, rate-limit, suspend, or discontinue any part of the service at any time.
+
+## Accounts
+
+You don't need an account to use the public catalog, API, CLI, or MCP server. You may create one to manage API keys and other authenticated features. If you do:
+
+- You must provide an accurate email address and keep it current, and you must be able to receive email at it (we use it for verification, password reset, and sign-in links).
+- You are responsible for keeping your password, sign-in links, and API keys confidential, and for all activity that occurs under your account or your keys. Treat an API key like a password — anyone holding it can act with the access you granted it. If you believe a key or your account has been compromised, revoke the key and email [security@releases.sh](mailto:security@releases.sh).
+- One person or entity per account; don't share credentials or impersonate someone else.
+- We may suspend or terminate an account, and revoke its keys, for violating these terms or to protect the service or its users. You may delete your account at any time (see the [Privacy Policy](/privacy#your-rights)).
 
 ## Acceptable use
 
@@ -58,3 +67,8 @@ We may update these terms as the service changes. Material changes will be annou
 - Takedowns and abuse — [abuse@releases.sh](mailto:abuse@releases.sh)
 - Security reports — [security@releases.sh](mailto:security@releases.sh)
 - Privacy — [privacy@releases.sh](mailto:privacy@releases.sh)
+
+## Revision history
+
+- **April 20, 2026** — Initial version published.
+- **June 5, 2026** — Added account terms (account responsibilities, credential and API-key security, suspension and termination).
