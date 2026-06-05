@@ -5,6 +5,7 @@ import { tryFetch } from "@/lib/ssr-fetch";
 import { graphqlRequest } from "@/lib/graphql/client";
 import { HomepageTickerDocument } from "@/lib/graphql/__generated__/graphql";
 import type { HomepageTickerQuery } from "@/lib/graphql/__generated__/graphql";
+import ConveyorBackground from "@/components/conveyor-background";
 import { Header } from "@/components/header";
 import { JsonLd } from "@/components/json-ld";
 import { SetupMessage } from "@/components/setup-message";
@@ -314,33 +315,50 @@ export default async function HomePage() {
   return (
     <div className="min-h-screen">
       <JsonLd data={jsonLd} />
-      <Header />
-      <div className="pt-12 pb-8 text-center px-6">
-        <h1 className="text-[28px] font-bold tracking-tight text-stone-900 dark:text-stone-100 mb-2">
-          The latest product releases, indexed for agents
-        </h1>
-        <p className="text-[15px] text-stone-500 dark:text-stone-400 mb-6">
-          Releases is a registry of release notes from across the web, queryable from your terminal,
-          code, or MCP client.
-        </p>
-        <div className="flex justify-center gap-8 text-[13px] text-stone-400 dark:text-stone-500">
-          <span>
-            <strong className="text-stone-600 dark:text-stone-300">{stats?.orgs ?? 0}</strong> orgs
-          </span>
-          <span>
-            <strong className="text-stone-600 dark:text-stone-300">{stats?.sources ?? 0}</strong>{" "}
-            sources
-          </span>
-          <span>
-            <strong className="text-stone-600 dark:text-stone-300">
-              {(stats?.releases ?? 0).toLocaleString()}
-            </strong>{" "}
-            releases
-          </span>
+      {/* Masthead band: the animated "advancing blocks" backdrop is confined to
+          this top region — `position: absolute` inside a `relative` wrapper, so
+          it fills only the nav + hero rather than the whole viewport. The nav and
+          hero text sit in a `relative z-10` layer above the (transparent) canvas.
+          No `overflow-hidden`: the canvas self-clips to its own box, and clipping
+          here would cut off the header's search / mobile-nav dropdowns. */}
+      <div className="relative">
+        <ConveyorBackground intensity={0.7} density={1} style={{ position: "absolute" }} />
+        <div className="relative z-10">
+          <Header />
+          <div className="pt-12 pb-8 text-center px-6">
+            <h1 className="text-[28px] font-bold tracking-tight text-stone-900 dark:text-stone-100 mb-2">
+              The latest product releases, indexed for agents
+            </h1>
+            <p className="text-[15px] text-stone-500 dark:text-stone-400 mb-6">
+              Releases is a registry of release notes from across the web, queryable from your
+              terminal, code, or MCP client.
+            </p>
+            <div className="flex justify-center gap-8 text-[13px] text-stone-400 dark:text-stone-500">
+              <span>
+                <strong className="text-stone-600 dark:text-stone-300">{stats?.orgs ?? 0}</strong>{" "}
+                orgs
+              </span>
+              <span>
+                <strong className="text-stone-600 dark:text-stone-300">
+                  {stats?.sources ?? 0}
+                </strong>{" "}
+                sources
+              </span>
+              <span>
+                <strong className="text-stone-600 dark:text-stone-300">
+                  {(stats?.releases ?? 0).toLocaleString()}
+                </strong>{" "}
+                releases
+              </span>
+            </div>
+          </div>
         </div>
-        <div className="mt-8 xl:hidden">
-          <InstallStepsInline />
-        </div>
+      </div>
+      {/* "Get Started" install widget — kept below the animated masthead band so
+          its faint label and tab text retain full contrast (no blocks behind it).
+          On xl the same content renders in the sidebar instead. */}
+      <div className="px-6 pb-8 xl:hidden">
+        <InstallStepsInline />
       </div>
       {/* Illustrative CLI transcript. `data-nosnippet` keeps its example text and
           JSON out of search-result snippets so it doesn't skew the page's topic;
