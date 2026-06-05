@@ -16,6 +16,13 @@ import {
   resetPasswordTemplate,
   type AuthEmailMessage,
 } from "./email.js";
+import {
+  makeAuthAudit,
+  auditDatabaseHooks,
+  auditAfterEmailVerification,
+  auditOnPasswordReset,
+  type AuthAuditEmitter,
+} from "./audit.js";
 
 type Bindings = Env["Bindings"];
 
@@ -235,6 +242,12 @@ export interface CreateAuthDeps {
   db?: BaseSQLiteDatabase<any, any, any, any>;
   /** Email sender — tests capture; defaults to the real `sendAuthEmail`. */
   sendEmail?: AuthEmailSender;
+  /**
+   * Audit-event sink — tests capture the emitted security/audit events without
+   * spying on `console`; defaults to the real `logEvent`-backed emitter
+   * ({@link makeAuthAudit}). See `audit.ts`.
+   */
+  audit?: AuthAuditEmitter;
 }
 
 /**
@@ -281,6 +294,12 @@ export async function createAuth(
   const cookieDomain = deriveCookieDomain(env);
   const db = deps.db ?? createDb(env.DB);
   const sendEmail: AuthEmailSender = deps.sendEmail ?? ((msg) => sendAuthEmail(env, msg));
+  // Audit-event sink for human-auth business actions (sign-up, sign-in-success,
+  // sign-out / session-revoked, email-verified, password-reset-completed). Tests
+  // inject a capturing sink; production routes through logEvent. Sign-in FAILURES
+  // are logged separately at the HTTP layer (see index.ts) — a 429 rate-limit
+  // never reaches these hooks. See audit.ts and #1427.
+  const audit: AuthAuditEmitter = deps.audit ?? makeAuthAudit(env);
 
   // Fire-and-forget an email send: hand the REAL send promise to the request's
   // `waitUntil` so it outlives the response (the Better Auth docs flag AWAITING the
@@ -346,6 +365,8 @@ export async function createAuth(
         const msg: AuthEmailMessage = { to: u.email, ...resetPasswordTemplate({ url }) };
         scheduleSend(() => sendEmail(msg));
       },
+      // Audit: a completed password reset (the user id only; no token material).
+      onPasswordReset: auditOnPasswordReset(audit),
     },
     emailVerification: {
       sendOnSignUp: true,
@@ -357,9 +378,15 @@ export async function createAuth(
         const msg: AuthEmailMessage = { to: u.email, ...verifyEmailTemplate({ url }) };
         scheduleSend(() => sendEmail(msg));
       },
+      // Audit: a successful email verification (the auto-sign-in that follows logs
+      // its own `sign-in-success` via the session.create hook below).
+      afterEmailVerification: auditAfterEmailVerification(audit),
     },
     socialProviders,
     plugins,
+    // Audit hooks for sign-up / sign-in-success / sign-out / session-revoked. See
+    // audit.ts; the failure stream is logged at the HTTP layer in index.ts.
+    databaseHooks: auditDatabaseHooks(audit),
     // Rate limiting backed by D1 so counters survive across Worker isolates — the
     // in-memory default resets per isolate and is useless on serverless. Better
     // Auth's own prod auto-enable keys off NODE_ENV, which Workers don't set, so we

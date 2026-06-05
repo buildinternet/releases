@@ -9,6 +9,7 @@ import {
 import type { AuthContext } from "./middleware/auth.js";
 import { createAuth, authCorsMiddleware } from "./auth/index.js";
 import type { AuthEmailBinding } from "./auth/email.js";
+import { classifySignInFailure, redactIp, makeAuthAudit } from "./auth/audit.js";
 import { publicRateLimitMiddleware } from "./middleware/rate-limit.js";
 import { dbHealthCheck } from "./middleware/db-health.js";
 import { cacheControl } from "./middleware/cache.js";
@@ -406,7 +407,31 @@ app.on(["POST", "GET"], "/api/auth/*", async (c) => {
     waitUntil = undefined;
   }
   const auth = await createAuth(c.env, waitUntil);
-  return auth.handler(c.req.raw);
+  const res = await auth.handler(c.req.raw);
+
+  // Audit failed credential sign-ins. This is the ONLY place a rate-limit (429)
+  // rejection is observable — it short-circuits in Better Auth's router before any
+  // internal hook runs — so all sign-in failure modes are classified here from the
+  // response (path + status, no body read). Successes/state-changes ride the
+  // internal hooks in createAuth. Never let an audit failure break the response.
+  try {
+    const failure = classifySignInFailure({
+      path: new URL(c.req.url).pathname,
+      method: c.req.method,
+      status: res.status,
+    });
+    if (failure) {
+      makeAuthAudit(c.env)("warn", {
+        event: failure.event,
+        reason: failure.reason,
+        ip: redactIp(c.req.header("cf-connecting-ip") ?? c.req.header("x-forwarded-for")),
+      });
+    }
+  } catch {
+    // Audit logging is best-effort; a classification/log error must not 500 the auth flow.
+  }
+
+  return res;
 });
 
 // ── v1 REST API ──
