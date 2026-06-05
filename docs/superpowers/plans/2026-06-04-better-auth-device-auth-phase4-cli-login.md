@@ -42,6 +42,12 @@ The seams above resolved as follows once the api-key lane (PRs #1434/#1435/#1444
 
 **Shared client-id contract.** `DEVICE_AUTH_CLIENT_ID = "releases-cli"` lives in `@buildinternet/releases-core/api-token` (next to `USER_API_KEY_PREFIX`); the worker's `validateClient` allow-list rejects anything else (fail closed). The CLI hard-codes the same literal until it adopts the published core version exposing it.
 
+**Post-merge fixes & verification (2026-06-05).**
+
+- **Read-only ceiling (#1448).** Landed right after #1447: `relu_` keys are capped read-only (`USER_API_KEY_MAX_SCOPE = "read"`). CLI #282 reconciled to match — dropped the `--scope` option, removed `UserScope`/`scopeToApiPermissions`, and now always mints `{ name, scope: "read" }`. There is no self-serve write user key.
+- **`verificationUri` host bug (#1450).** Found during the live smoke: the device flow returned `verification_uri = https://api.releases.sh/device`, which 404s — the `/device` approval page is served by the web app (releases.sh), not the API worker. Cause: `verificationUri: "/device"` is relative, and Better Auth's `buildVerificationUris` resolves relatives against the API `baseURL`. Fix: absolute `${env.WEB_BASE_URL ?? "https://releases.sh"}/device`. The `.releases.sh`-scoped cookie rides across the api↔apex subdomains. Lesson: any Better Auth verification/redirect target that points at a web page must be an absolute web-origin URL.
+- **Shipped & verified.** All flags on in prod; end-to-end smoke passed — `releases login` → browser approve → minted read-only `relu_` key stored to `~/.releases/credentials`; live `GET /v1/search` → 200, `POST /v1/releases/batch` with the key → 403 `insufficient_scope`. PRs: server #1447, read-only #1448, verificationUri fix #1450, CLI #282; doc note #1451.
+
 ---
 
 ## File Structure

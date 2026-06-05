@@ -41,6 +41,30 @@ write-permissioned `relu_` key were granted out-of-band. The `relk_` machine lan
 and static root key are unaffected and still use the full `read ⊂ write ⊂ admin`
 ladder.
 
+**Browser login (`releases login`, device authorization).** Users mint a `relu_`
+key without copy-pasting a token via the OAuth 2.0 Device Authorization Grant
+(RFC 8628). Better Auth's `deviceAuthorization()` + `bearer()` plugins are
+registered in `workers/api/src/auth/index.ts`, gated by the
+`device-authorization-enabled` flag (and, since it issues through the user-key
+route, `user-api-keys-enabled` must also be on). Flow: the CLI POSTs
+`/api/auth/device/code` (client id `releases-cli`; a fail-closed `validateClient`
+allow-list rejects any other id), the user approves at the web `/device` page,
+and the CLI polls `/api/auth/device/token` until it gets a **session access
+token**. That token rides as `Authorization: Bearer` — `bearer()` is what makes
+`requireSession` honor it — to the _same_ `POST /v1/api-keys` route the web panel
+uses, which injects the owner and mints a read-only `relu_` key (the ceiling
+above applies). The session is then discarded; the durable `relu_` key is what's
+stored.
+
+> **`verificationUri` must be an absolute URL on the WEB origin**
+> (`${WEB_BASE_URL}/device`), never a relative `/device`. The approval page is
+> served by the Next.js frontend (releases.sh), not the API worker — Better Auth's
+> `buildVerificationUris` resolves a _relative_ value against the API `baseURL`,
+> yielding `https://api.releases.sh/device`, which 404s (#1450). The
+> `.releases.sh`-scoped session cookie rides across the `api.` ↔ apex subdomains,
+> so only the page needed to live on the web origin. The same rule applies to any
+> Better Auth redirect/verification target that points at a web page.
+
 ## On-demand AI admin endpoints
 
 `POST /v1/workflows/summarize` and `POST /v1/workflows/compare` generate summaries and comparisons via Anthropic on demand. Both are gated by `authMiddleware` and fail with 503 when `ANTHROPIC_API_KEY` is unset. They are distinct from `POST /v1/sources/:slug/summaries`, which upserts a pre-generated row into `release_summaries`. Payload: `summarize` takes exactly one of `source` / `org` (slug or id) plus optional `days` and `instructions`; `compare` takes `sourceA` / `sourceB` plus optional `days`. Each success writes a `usage_log` row tagged with operation `summarize` / `compare`. Prompts live in `workers/api/src/routes/workflows.ts`.
