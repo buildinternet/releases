@@ -1,9 +1,13 @@
 import { describe, it, expect, afterEach } from "bun:test";
 import { Hono } from "hono";
+import { eq } from "drizzle-orm";
 import { createTestDb, type TestDatabase } from "../db-helper.js";
 import { createAuth } from "../../workers/api/src/auth/index.js";
-import { publicReadAuthMiddleware } from "../../workers/api/src/middleware/auth.js";
-import { user } from "../../workers/api/src/db/schema-auth.js";
+import {
+  publicReadAuthMiddleware,
+  resolveAuthIdentity,
+} from "../../workers/api/src/middleware/auth.js";
+import { user, apikey } from "../../workers/api/src/db/schema-auth.js";
 import { scopeToPermissions } from "../../workers/api/src/auth/api-key-scope.js";
 import type { Env } from "../../workers/api/src/index.js";
 
@@ -52,18 +56,18 @@ async function mintKey(scope: "read" | "write") {
   const api = auth.api as typeof auth.api & {
     createApiKey: (a: {
       body: { name: string; userId: string; permissions: Record<string, string[]> };
-    }) => Promise<{ key: string }>;
+    }) => Promise<{ key: string; id: string }>;
   };
   const created = await api.createApiKey({
     body: { name: "k", userId: "user_1", permissions: scopeToPermissions(scope) },
   });
-  return created.key;
+  return { key: created.key, id: created.id };
 }
 
 describe("relu_ user key auth on the public-read middleware", () => {
   it("a write key passes a POST (unsafe method requires write)", async () => {
     h = createTestDb();
-    const key = await mintKey("write");
+    const { key } = await mintKey("write");
     const res = await app().request(
       "/thing",
       { method: "POST", headers: { Authorization: `Bearer ${key}` } },
@@ -74,7 +78,7 @@ describe("relu_ user key auth on the public-read middleware", () => {
 
   it("a read key is rejected on a POST with 403 insufficient_scope", async () => {
     h = createTestDb();
-    const key = await mintKey("read");
+    const { key } = await mintKey("read");
     const res = await app().request(
       "/thing",
       { method: "POST", headers: { Authorization: `Bearer ${key}` } },
@@ -158,5 +162,43 @@ describe("relu_ key rate limiting", () => {
       prodEnv(),
     );
     expect(twice.status).toBe(429);
+  });
+});
+
+// A GET route guarded by the public-read middleware (safe method → public).
+function readApp() {
+  const a = new Hono<Env>();
+  a.use("/thing", publicReadAuthMiddleware);
+  a.get("/thing", (c) => c.json({ ok: true }));
+  return a;
+}
+
+describe("relu_ public-read metering exemption", () => {
+  // The write path's metering is already proven by the existing "relu_ key rate
+  // limiting" describe above (a 2nd POST → 429 once the per-key budget is spent).
+  // This test proves the NEW behavior: a public GET never invokes verifyApiKey, so
+  // the key row is never touched (lastRequest stays exactly null from minting).
+  it("a public GET does NOT meter the key (lastRequest stays null)", async () => {
+    h = createTestDb();
+    const { key, id } = await mintKey("write");
+    const res = await readApp().request(
+      "/thing",
+      { headers: { Authorization: `Bearer ${key}` } },
+      env(),
+    );
+    expect(res.status).toBe(200); // public read succeeds regardless of the key
+    await new Promise((r) => setTimeout(r, 0)); // flush any deferred writes (there are none)
+    const row = h.db.select().from(apikey).where(eq(apikey.id, id)).get();
+    expect(row?.lastRequest ?? null).toBeNull(); // never verified → never metered
+  });
+
+  it("resolveAuthIdentity returns null for a relu_ key (limiter never meters user keys)", async () => {
+    h = createTestDb();
+    const { key } = await mintKey("write");
+    const a = new Hono<Env>();
+    a.get("/p", async (c) => c.json({ id: await resolveAuthIdentity(c) }));
+    const res = await a.request("/p", { headers: { Authorization: `Bearer ${key}` } }, env());
+    const body = (await res.json()) as { id: unknown };
+    expect(body.id).toBeNull();
   });
 });

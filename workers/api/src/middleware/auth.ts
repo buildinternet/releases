@@ -92,32 +92,47 @@ async function verifyUserKey(
   }
 }
 
-const RESOLVE_MEMO = new WeakMap<Request, Promise<ResolvedAuth>>();
+const RESOLVE_MEMO_METERED = new WeakMap<Request, Promise<ResolvedAuth>>();
+const RESOLVE_MEMO_UNMETERED = new WeakMap<Request, Promise<ResolvedAuth>>();
 
 /**
- * Memoize resolution per request. `resolveAuth` runs 2–3× per request (rate
- * limiter, auth middleware, isValidBearerAuth); Better Auth's verifyApiKey meters
- * on every call, so without this a single request would meter a relu_ key multiple
- * times. Keyed on the underlying Request (stable per request, WeakMap auto-GCs).
- * `presented` is derived from the same request, so it's constant across callers.
+ * Memoize resolution per request AND per metering mode. `resolveAuth` runs
+ * several times per request (rate limiter, auth middleware, isValidBearerAuth);
+ * Better Auth's verifyApiKey meters on every call, so memoization keeps a relu_
+ * key metered at most once. The mode split lets the limiter / public-read attach
+ * resolve a relu_ key WITHOUT metering (they pass `meterUserKeys=false`) while
+ * the authenticated authorization point meters once (`true`). Keyed on the
+ * underlying Request (stable per request, WeakMap auto-GCs).
  */
-function resolveAuth(c: Context<Env>, presented: string): Promise<ResolvedAuth> {
+function resolveAuth(
+  c: Context<Env>,
+  presented: string,
+  meterUserKeys: boolean,
+): Promise<ResolvedAuth> {
+  const memo = meterUserKeys ? RESOLVE_MEMO_METERED : RESOLVE_MEMO_UNMETERED;
   const key = c.req.raw;
-  const cached = RESOLVE_MEMO.get(key);
+  const cached = memo.get(key);
   if (cached) return cached;
-  const p = resolveAuthUncached(c, presented);
-  RESOLVE_MEMO.set(key, p);
+  const p = resolveAuthUncached(c, presented, meterUserKeys);
+  memo.set(key, p);
   return p;
 }
 
 /**
- * Resolve a presented credential to an identity. `relu_…` user keys go to Better
- * Auth's verifyApiKey (metered); `relk_…` tokens go to the DB path only;
- * everything else compares to the static RELEASES_API_KEY (root). No credential
- * is eligible for more than one path.
+ * Resolve a presented credential to an identity. `relu_…` user keys are verified
+ * + metered by Better Auth's verifyApiKey ONLY when `meterUserKeys` is true (the
+ * authenticated authorization point); otherwise they resolve to anonymous so a
+ * public read never burns the key's budget. `relk_…` tokens go to the DB path;
+ * everything else compares to the static RELEASES_API_KEY (root).
  */
-async function resolveAuthUncached(c: Context<Env>, presented: string): Promise<ResolvedAuth> {
+async function resolveAuthUncached(
+  c: Context<Env>,
+  presented: string,
+  meterUserKeys: boolean,
+): Promise<ResolvedAuth> {
   if (isUserApiKeyShaped(presented)) {
+    // Exempt path (limiter, public reads): do not verify/meter — read as anonymous.
+    if (!meterUserKeys) return { kind: "none", skip: false };
     if (await flag(c.env.FLAGS, c.env.API_TOKENS_DISABLED, FLAGS.apiTokensDisabled))
       return { kind: "none", skip: false };
     if (!(await flag(c.env.FLAGS, c.env.USER_API_KEYS_ENABLED, FLAGS.userApiKeysEnabled)))
@@ -151,7 +166,7 @@ async function resolveAuthUncached(c: Context<Env>, presented: string): Promise<
 export async function resolveAuthIdentity(c: Context<Env>): Promise<AuthContext | null> {
   const presented = bearer(c);
   if (!presented) return null;
-  const auth = await resolveAuth(c, presented);
+  const auth = await resolveAuth(c, presented, false);
   return auth.kind === "root" || auth.kind === "token" ? auth : null;
 }
 
@@ -173,7 +188,7 @@ export async function hasValidAuth(c: Context<Env>): Promise<boolean> {
 export async function isValidBearerAuth(c: Context<Env>): Promise<boolean> {
   const presented = bearer(c);
   if (!presented) return false;
-  const auth = await resolveAuth(c, presented);
+  const auth = await resolveAuth(c, presented, false);
   if (auth.kind === "root") return true;
   if (auth.kind === "token") return scopeSatisfies(auth.scopes, "admin");
   return false;
@@ -275,7 +290,7 @@ function createAuthMiddleware(opts: {
       // is ignored — never rejected — so the read stays public.
       const presented = bearer(c);
       if (presented) {
-        const auth = await resolveAuth(c, presented);
+        const auth = await resolveAuth(c, presented, false);
         // Don't record a rate_limited result; leave the read public — an
         // over-limit key on a public GET still reads.
         if (auth.kind === "root" || auth.kind === "token") recordAuth(c, auth);
@@ -285,7 +300,7 @@ function createAuthMiddleware(opts: {
     }
 
     const presented = bearer(c);
-    const auth = await resolveAuth(c, presented);
+    const auth = await resolveAuth(c, presented, true);
 
     if (auth.kind === "rate_limited") {
       return c.json({ error: "rate_limited", message: "API key rate limit exceeded" }, 429);
