@@ -113,8 +113,50 @@ export const rateLimit = sqliteTable("rate_limit", {
   lastRequest: integer("last_request").notNull(),
 });
 
+/**
+ * Better Auth API key plugin (`@better-auth/api-key`) store — user-owned, metered
+ * API keys. `referenceId` is the owning user id (config `references: "user"`).
+ * `permissions` is a JSON string encoding the scope ladder as cumulative actions
+ * on one `api` resource (see workers/api/src/auth/api-key-scope.ts). The hashed
+ * key lives in `key`; `start`/`prefix` are non-secret display aids. `configId`
+ * scopes the key to a named plugin configuration (default "default"); only
+ * relevant with multiple `apiKey()` configs. Column set is mandated by the plugin
+ * — reconcile with `@better-auth/cli generate`. Paired migration:
+ * 20260604030000_add_api_key.sql.
+ */
+export const apikey = sqliteTable(
+  "apikey",
+  {
+    id: text("id").primaryKey(),
+    name: text("name"),
+    start: text("start"),
+    prefix: text("prefix"),
+    key: text("key").notNull(),
+    referenceId: text("reference_id").notNull(),
+    configId: text("config_id"),
+    refillInterval: integer("refill_interval"),
+    refillAmount: integer("refill_amount"),
+    lastRefillAt: integer("last_refill_at", { mode: "timestamp" }),
+    // null = plugin treats as enabled; set false to disable the key
+    enabled: integer("enabled", { mode: "boolean" }),
+    rateLimitEnabled: integer("rate_limit_enabled", { mode: "boolean" }),
+    rateLimitTimeWindow: integer("rate_limit_time_window"),
+    rateLimitMax: integer("rate_limit_max"),
+    requestCount: integer("request_count"),
+    remaining: integer("remaining"),
+    lastRequest: integer("last_request", { mode: "timestamp" }),
+    expiresAt: integer("expires_at", { mode: "timestamp" }),
+    createdAt: timestampCol("created_at"),
+    updatedAt: timestampCol("updated_at"),
+    permissions: text("permissions"),
+    metadata: text("metadata"),
+  },
+  (t) => [index("idx_apikey_key").on(t.key), index("idx_apikey_reference_id").on(t.referenceId)],
+);
+
 export type AuthUser = typeof user.$inferSelect;
 export type AuthSession = typeof session.$inferSelect;
 export type AuthAccount = typeof account.$inferSelect;
 export type AuthVerification = typeof verification.$inferSelect;
 export type AuthRateLimit = typeof rateLimit.$inferSelect;
+export type AuthApiKey = typeof apikey.$inferSelect;
