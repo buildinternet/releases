@@ -118,6 +118,52 @@ function extraTrustedOrigins(env: Bindings): string[] {
 }
 
 /**
+ * Does `origin` match any operator-configured `BETTER_AUTH_TRUSTED_ORIGINS` entry?
+ * Supports the two forms Better Auth's own origin check accepts, so the CORS layer
+ * stays in lockstep — an entry Better Auth trusts is never silently blocked by CORS:
+ *
+ *  • an exact origin (`https://foo.example.com`) — matched verbatim against the
+ *    request origin (the pre-wildcard behavior);
+ *  • a host wildcard (`*.example.com`, optionally scheme-prefixed) — matched against
+ *    the request HOST as a glob (`*` = any run of chars, `?` = one char). A single
+ *    `*.example.com` entry therefore covers every subdomain, including the
+ *    worktree-prefixed dev hosts (`feat-x.example.com`) that an exact-match list
+ *    can't enumerate. The apex is NOT matched by `*.example.com` (mirrors Better
+ *    Auth / standard glob — there's no leading-dot segment), so list it separately.
+ *
+ * This is what lets the local-dev origin live entirely in `.dev.vars` instead of
+ * being hard-coded here: set `BETTER_AUTH_TRUSTED_ORIGINS` to the apex + `*.` wildcard.
+ */
+function matchesTrustedOrigin(origin: string, entries: string[]): boolean {
+  let host: string;
+  try {
+    host = new URL(origin).hostname;
+  } catch {
+    return false;
+  }
+  return entries.some((entry) => {
+    if (entry.includes("*") || entry.includes("?")) {
+      // Host wildcard. Drop an optional `scheme://` so `https://*.example.com` and
+      // the bare `*.example.com` form both reduce to a host glob.
+      const pattern = entry.replace(/^[a-z][a-z\d+.-]*:\/\//i, "");
+      return globToHostRegExp(pattern).test(host);
+    }
+    return entry === origin;
+  });
+}
+
+/**
+ * Compile a host glob (`*.example.com`) to an anchored RegExp: escape every regex
+ * metachar, then translate the glob wildcards — `*` → any run of characters, `?` →
+ * a single character. Hostnames contain no `/`, so `.*` faithfully reproduces Better
+ * Auth's `[^/]*?` for this input.
+ */
+function globToHostRegExp(pattern: string): RegExp {
+  const escaped = pattern.replace(/[.+^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`^${escaped.replace(/\*/g, ".*").replace(/\?/g, ".")}$`);
+}
+
+/**
  * Web origins permitted to call the auth API with credentials. Mirrors the CORS
  * allow-list ({@link isReleasesFamilyOrigin} + {@link isLoopbackOrigin}) so an
  * origin the CORS layer reflects is also accepted by Better Auth's own origin
@@ -127,9 +173,12 @@ function extraTrustedOrigins(env: Bindings): string[] {
  * subdomain (host wildcard `*.releases.sh` — Better Auth matches a no-scheme
  * wildcard against the request host, exactly like `isReleasesFamilyOrigin`).
  * `BETTER_AUTH_TRUSTED_ORIGINS` (comma-separated) adds explicit extras — a Vercel
- * preview origin, or a portless custom-TLD dev host (e.g.
- * `https://releases.local.buildinternet.dev`, which Google OAuth accepts where the
- * `*.releases.localhost` portless hosts are rejected).
+ * preview origin, or the portless custom-TLD dev host (Google/Apple OAuth accept a
+ * real TLD where the `*.releases.localhost` portless hosts are rejected). Entries
+ * may be exact origins OR host wildcards (`*.releases.local.buildinternet.dev`),
+ * which Better Auth's origin check and {@link matchesTrustedOrigin} both honor — a
+ * single wildcard entry covers worktree-prefixed dev hosts. The dev origin lives in
+ * config (`.dev.vars`), not hard-coded here, so nothing org-specific ships in code.
  *
  * Outside production we additionally trust any bare-loopback web origin
  * (`http://localhost:*` / `http://127.0.0.1:*`, any port) so local OAuth can run on
@@ -216,9 +265,11 @@ export function deriveCookieDomain(env: Bindings): string | undefined {
  * `cors()` so it owns the preflight (the first matching CORS middleware
  * answers OPTIONS and returns). Allow-list mirrors {@link authTrustedOrigins}: the
  * releases.sh/.localhost family (our first-party web surfaces), every operator-
- * configured `BETTER_AUTH_TRUSTED_ORIGINS` entry (Vercel preview / portless dev
- * host), and bare-loopback origins outside production. Keeping the two in lockstep
- * means CORS never silently blocks an origin Better Auth already trusts.
+ * configured `BETTER_AUTH_TRUSTED_ORIGINS` entry — exact origins OR host wildcards
+ * (Vercel preview / the portless dev host + its worktree subdomains via a `*.`
+ * entry; see {@link matchesTrustedOrigin}) — and bare-loopback origins outside
+ * production. Keeping the two in lockstep means CORS never silently blocks an origin
+ * Better Auth already trusts.
  *
  * `DELETE` is allowed for the `/v1/api-keys/:id` revoke endpoint — Better Auth's
  * own `/api/auth/*` routes are POST/GET only, so it's a no-op there.
@@ -229,7 +280,7 @@ export function authCorsMiddleware(): MiddlewareHandler<Env> {
       if (!origin) return null;
       if (isReleasesFamilyOrigin(origin)) return origin;
       const env = c.env as Bindings;
-      if (extraTrustedOrigins(env).includes(origin)) return origin;
+      if (matchesTrustedOrigin(origin, extraTrustedOrigins(env))) return origin;
       if (env.ENVIRONMENT !== "production" && isLoopbackOrigin(origin)) return origin;
       return null;
     },

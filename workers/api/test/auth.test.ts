@@ -115,6 +115,17 @@ describe("authTrustedOrigins", () => {
     expect(origins).toContain("http://127.0.0.1:*");
   });
 
+  it("passes wildcard BETTER_AUTH_TRUSTED_ORIGINS entries through verbatim", () => {
+    // The dev origin lives in config, not in code. A `*.` entry reaches Better Auth's
+    // trustedOrigins (which wildcard-matches it) AND the CORS layer (matchesTrustedOrigin).
+    const origins = authTrustedOrigins({
+      BETTER_AUTH_TRUSTED_ORIGINS:
+        "https://releases.local.buildinternet.dev, *.releases.local.buildinternet.dev",
+    } as never);
+    expect(origins).toContain("https://releases.local.buildinternet.dev");
+    expect(origins).toContain("*.releases.local.buildinternet.dev");
+  });
+
   it("excludes loopback origins in production (family only)", () => {
     const origins = authTrustedOrigins({ ENVIRONMENT: "production" } as never);
     expect(origins).not.toContain("http://localhost:*");
@@ -170,11 +181,15 @@ describe("authCorsMiddleware origin allow-list", () => {
     expect(await preflightOrigin("http://127.0.0.1:3000")).toBe("http://127.0.0.1:3000");
   });
 
-  it("reflects a configured BETTER_AUTH_TRUSTED_ORIGINS host in any environment", async () => {
-    const dev = "https://releases.local.buildinternet.dev";
+  it("reflects an exact configured BETTER_AUTH_TRUSTED_ORIGINS host in any environment", async () => {
+    // A one-off dev/preview host trusted by exact match.
+    const custom = "https://custom-dev.example.com";
     expect(
-      await preflightOrigin(dev, { ENVIRONMENT: "development", BETTER_AUTH_TRUSTED_ORIGINS: dev }),
-    ).toBe(dev);
+      await preflightOrigin(custom, {
+        ENVIRONMENT: "development",
+        BETTER_AUTH_TRUSTED_ORIGINS: custom,
+      }),
+    ).toBe(custom);
     // A portless/preview host explicitly trusted in prod is honored by CORS too —
     // the allow-list stays in lockstep with authTrustedOrigins.
     const preview = "https://feat-x.vercel.app";
@@ -184,6 +199,41 @@ describe("authCorsMiddleware origin allow-list", () => {
         BETTER_AUTH_TRUSTED_ORIGINS: preview,
       }),
     ).toBe(preview);
+  });
+
+  it("matches a wildcard BETTER_AUTH_TRUSTED_ORIGINS entry against subdomains (incl. worktree hosts)", async () => {
+    // This is the case an exact-match list can't cover: a single `*.` entry trusts
+    // every subdomain, so worktree-prefixed dev hosts clear CORS with no per-host config.
+    const wild = "*.releases.local.buildinternet.dev";
+    expect(
+      await preflightOrigin("https://feat-x.releases.local.buildinternet.dev", {
+        ENVIRONMENT: "development",
+        BETTER_AUTH_TRUSTED_ORIGINS: wild,
+      }),
+    ).toBe("https://feat-x.releases.local.buildinternet.dev");
+    // Honored in any environment — extras are operator-configured, so prod-safety is
+    // "don't list dev domains in prod's env", consistent with the exact-match path above.
+    expect(
+      await preflightOrigin("https://deep.nested.releases.local.buildinternet.dev", {
+        ENVIRONMENT: "production",
+        BETTER_AUTH_TRUSTED_ORIGINS: wild,
+      }),
+    ).toBe("https://deep.nested.releases.local.buildinternet.dev");
+    // The wildcard does NOT match the apex (no leading-dot segment) — list it
+    // separately, exactly as Better Auth requires.
+    expect(
+      await preflightOrigin("https://releases.local.buildinternet.dev", {
+        ENVIRONMENT: "development",
+        BETTER_AUTH_TRUSTED_ORIGINS: wild,
+      }),
+    ).toBeNull();
+    // A wildcard must not leak across the dot boundary it anchors on.
+    expect(
+      await preflightOrigin("https://evil-buildinternet.dev", {
+        ENVIRONMENT: "development",
+        BETTER_AUTH_TRUSTED_ORIGINS: wild,
+      }),
+    ).toBeNull();
   });
 
   it("rejects unknown origins regardless of environment", async () => {
