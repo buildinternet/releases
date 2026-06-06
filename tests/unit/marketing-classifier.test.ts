@@ -1,12 +1,14 @@
 import { describe, expect, it } from "bun:test";
-import type Anthropic from "@anthropic-ai/sdk";
 import {
   buildClassifierInput,
   classifyMarketing,
   MAX_CONTENT_CHARS,
+  MAX_OUTPUT_TOKENS,
   parseMarketingVerdict,
+  SYSTEM_PROMPT,
   type MarketingClassifierInput,
 } from "@releases/ai-internal/marketing-classifier";
+import type { TextModel, TextModelRequest } from "@releases/ai-internal/text-model";
 
 function baseInput(overrides?: Partial<MarketingClassifierInput>): MarketingClassifierInput {
   return {
@@ -18,24 +20,21 @@ function baseInput(overrides?: Partial<MarketingClassifierInput>): MarketingClas
   };
 }
 
-// Build a stub Anthropic client that returns a canned `<marketing>…</marketing>`
+// Build a stub TextModel that returns a canned `<marketing>…</marketing>`
 // envelope. Pins the exact contract `classifyMarketing` parses without standing
-// up the real SDK or making a network call.
-function stubClient(text: string): Anthropic {
+// up a real provider or making a network call. Optionally captures the request
+// so tests can assert what the classifier asked the model for.
+function stubModel(text: string, capture?: (req: TextModelRequest) => void): TextModel {
   return {
-    messages: {
-      create: async () => ({
-        content: [{ type: "text", text }],
-        stop_reason: "end_turn",
-        usage: {
-          input_tokens: 50,
-          output_tokens: 8,
-          cache_creation_input_tokens: 0,
-          cache_read_input_tokens: 0,
-        },
-      }),
+    id: "test:stub",
+    async complete(req) {
+      capture?.(req);
+      return {
+        text,
+        usage: { input: 50, output: 8, cacheCreate: 0, cacheRead: 0 },
+      };
     },
-  } as unknown as Anthropic;
+  };
 }
 
 describe("parseMarketingVerdict", () => {
@@ -129,8 +128,8 @@ describe("buildClassifierInput", () => {
 
 describe("classifyMarketing", () => {
   it("returns isMarketing=true + reason slug for a marketing verdict", async () => {
-    const client = stubClient(`<marketing>true</marketing><reason>case_study</reason>`);
-    const result = await classifyMarketing(client, baseInput());
+    const model = stubModel(`<marketing>true</marketing><reason>case_study</reason>`);
+    const result = await classifyMarketing(model, baseInput());
     expect(result.isMarketing).toBe(true);
     expect(result.reason).toBe("case_study");
     expect(result.usage.input).toBe(50);
@@ -138,15 +137,25 @@ describe("classifyMarketing", () => {
   });
 
   it("returns isMarketing=false for a product-news verdict", async () => {
-    const client = stubClient(`<marketing>false</marketing><reason>not_marketing</reason>`);
-    const result = await classifyMarketing(client, baseInput({ title: "ClickHouse Release 26.4" }));
+    const model = stubModel(`<marketing>false</marketing><reason>not_marketing</reason>`);
+    const result = await classifyMarketing(model, baseInput({ title: "ClickHouse Release 26.4" }));
     expect(result.isMarketing).toBe(false);
   });
 
   it("propagates parse failures so the caller can fail-open", async () => {
-    const client = stubClient("malformed response with no tags");
-    expect(classifyMarketing(client, baseInput())).rejects.toThrow(
+    const model = stubModel("malformed response with no tags");
+    expect(classifyMarketing(model, baseInput())).rejects.toThrow(
       /missing or malformed <marketing>/,
     );
+  });
+
+  it("sends the system prompt, rendered user input, token cap, and cacheSystem", async () => {
+    let seen: TextModelRequest | undefined;
+    const model = stubModel(`<marketing>false</marketing>`, (r) => (seen = r));
+    await classifyMarketing(model, baseInput());
+    expect(seen?.system).toBe(SYSTEM_PROMPT);
+    expect(seen?.maxTokens).toBe(MAX_OUTPUT_TOKENS);
+    expect(seen?.cacheSystem).toBe(true);
+    expect(seen?.user).toContain("Source: ClickHouse Blog");
   });
 });
