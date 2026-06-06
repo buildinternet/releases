@@ -108,7 +108,7 @@
     // when the `marketing-classifier-openrouter` flag is on; otherwise the
     // classifier stays on Anthropic Haiku. Direct OpenRouter (no AI-Gateway
     // sub-path) until the gateway's OpenRouter provider is confirmed.
-    "MARKETING_CLASSIFIER_MODEL": "google/gemini-3.1-flash-lite",
+    "MARKETING_CLASSIFIER_MODEL": "google/gemini-2.5-flash-lite",
     // OpenRouter cheap-call model for the *live* poll-fetch summarizer. Only
     // consulted when the `summarize-openrouter` flag is on; empty → the
     // summarizer stays on Anthropic Haiku (fail-open). Intentionally UNSET until
@@ -569,7 +569,7 @@
         "ANTHROPIC_BASE_URL": "https://gateway.ai.cloudflare.com/v1/b082600d280d44fd5da3501bc1bffe2f/releases-staging/anthropic",
         // OpenRouter cheap-call model (marketing classifier); gated by the
         // `marketing-classifier-openrouter` flag. Mirrors prod.
-        "MARKETING_CLASSIFIER_MODEL": "google/gemini-3.1-flash-lite",
+        "MARKETING_CLASSIFIER_MODEL": "google/gemini-2.5-flash-lite",
         // OpenRouter cheap-call model for the live summarizer; gated by the
         // `summarize-openrouter` flag. UNSET until the eval picks a candidate;
         // empty → stays on Anthropic Haiku (fail-open). Mirrors prod.
