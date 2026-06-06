@@ -7,6 +7,9 @@ const X_PATH =
 const YOUTUBE_PATH =
   "M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z";
 
+const BLUESKY_PATH =
+  "M5.202 2.857C7.954 4.922 10.913 9.11 12 11.358c1.087-2.247 4.046-6.436 6.798-8.501C20.783 1.366 24 .213 24 3.883c0 .732-.42 6.156-.667 7.037-.856 3.061-3.978 3.842-6.755 3.37 4.854.826 6.089 3.562 3.422 6.299-5.065 5.196-7.28-1.304-7.847-2.97-.104-.305-.152-.448-.153-.327 0-.121-.05.022-.153.327-.568 1.666-2.782 8.166-7.847 2.97-2.667-2.737-1.432-5.473 3.422-6.3-2.777.473-5.899-.308-6.755-3.369C.42 10.04 0 4.615 0 3.883c0-3.67 3.217-2.517 5.202-1.026";
+
 interface AccountIconProps {
   platform: string;
   size?: number;
@@ -39,6 +42,8 @@ function iconPath(platform: string): string | null {
       return X_PATH;
     case "youtube":
       return YOUTUBE_PATH;
+    case "bluesky":
+      return BLUESKY_PATH;
     default:
       return null;
   }
@@ -57,6 +62,9 @@ export function accountUrl(platform: string, handle: string): string | null {
       if (h.startsWith("/")) return `https://www.youtube.com${h}`;
       if (h.startsWith("@")) return `https://www.youtube.com/${h}`;
       return `https://www.youtube.com/@${h}`;
+    case "bluesky":
+      // Handles are domains (`vitest.dev`) or `name.bsky.social`; stored bare, no `@`.
+      return `https://bsky.app/profile/${h.replace(/^@/, "")}`;
     default:
       return null;
   }
