@@ -6,24 +6,12 @@
  * to our own endpoints for one consistent surface.
  */
 
-export type UserApiKeyScope = "read" | "write" | "admin";
-
-export interface UserApiKey {
-  id: string;
-  name: string | null;
-  start: string | null;
-  scope: UserApiKeyScope | null;
-  enabled: boolean | null;
-  remaining: number | null;
-  lastRequest: string | null;
-  createdAt: string;
-  expiresAt: string | null;
-}
-
-/** Create response — includes the full key exactly once. */
-export interface CreatedUserApiKey extends Omit<UserApiKey, "enabled" | "lastRequest"> {
-  key: string;
-}
+import type {
+  UserApiKey,
+  CreatedUserApiKey,
+  ListUserApiKeysResponse,
+} from "@buildinternet/releases-api-types";
+export type { UserApiKey, CreatedUserApiKey, ListUserApiKeysResponse };
 
 function apiBase(): string {
   const url = process.env.NEXT_PUBLIC_BETTER_AUTH_URL;
@@ -43,13 +31,13 @@ async function errorMessage(res: Response, fallback: string): Promise<string> {
 export async function listApiKeys(): Promise<UserApiKey[]> {
   const res = await fetch(`${apiBase()}/v1/api-keys`, { credentials: "include" });
   if (!res.ok) throw new Error(await errorMessage(res, `Failed to load API keys (${res.status})`));
-  const data = (await res.json()) as { apiKeys: UserApiKey[] };
+  const data = (await res.json()) as ListUserApiKeysResponse;
   return data.apiKeys;
 }
 
 // Self-serve user keys are read-only; the server caps the scope and an omitted
-// scope defaults to read. The display type (`UserApiKeyScope`) still admits
-// write/admin so an out-of-band key renders correctly in the list.
+// scope defaults to read. The ApiScope type admits write/admin so an out-of-band
+// key renders correctly in the list.
 export async function createApiKey(input: {
   name: string;
   scope?: "read";
