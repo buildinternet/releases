@@ -11,14 +11,14 @@
  * `unsuppress`.
  *
  * Worker-safe: no `fs`, no `node:*`, no logger. The caller constructs the
- * Anthropic client (so the worker can route through AI Gateway and the script
- * path can hit the API directly), the caller decides whether the source has
- * opted in via `SourceMetadata.marketingFilter`, and the caller is responsible
- * for fail-open behavior on any thrown error.
+ * `TextModel` (so the worker can route through AI Gateway / a cheap OpenRouter
+ * model and the script path can hit the API directly), the caller decides
+ * whether the source has opted in via `SourceMetadata.marketingFilter`, and the
+ * caller is responsible for fail-open behavior on any thrown error.
  */
 
-import type Anthropic from "@anthropic-ai/sdk";
 import { extractTagged } from "./release-content";
+import type { TextModel, TextModelUsage } from "./text-model";
 
 export const MODEL = "claude-haiku-4-5";
 
@@ -63,12 +63,7 @@ export interface MarketingClassifierInput {
   hint?: string | null;
 }
 
-export interface MarketingClassifierUsage {
-  input: number;
-  output: number;
-  cacheCreate: number;
-  cacheRead: number;
-}
+export type MarketingClassifierUsage = TextModelUsage;
 
 export interface MarketingClassifierResult {
   isMarketing: boolean;
@@ -170,35 +165,25 @@ export function parseMarketingVerdict(raw: string): {
 }
 
 /**
- * Classify a single feed item. The Anthropic client is constructed by the
- * caller so we can route through AI Gateway (worker) or hit the API directly
- * (script / eval). Throws on transport errors and on unparseable output;
- * production callers should catch and fail open (insert visibly).
+ * Classify a single feed item. The caller constructs the `TextModel` so the
+ * provider (Anthropic Haiku via AI Gateway, or a cheap OpenRouter model) and
+ * routing are decided outside this pure helper. `MODEL` is the Anthropic
+ * default the caller should use when building an Anthropic-backed model; an
+ * OpenRouter-backed model carries its own id. Throws on transport errors and on
+ * unparseable output; production callers should catch and fail open (insert
+ * visibly).
  */
 export async function classifyMarketing(
-  client: Anthropic,
+  model: TextModel,
   input: MarketingClassifierInput,
 ): Promise<MarketingClassifierResult> {
-  const res = await client.messages.create({
-    model: MODEL,
-    max_tokens: MAX_OUTPUT_TOKENS,
-    system: [{ type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } }],
-    messages: [{ role: "user", content: buildClassifierInput(input) }],
+  const { text: raw, usage } = await model.complete({
+    system: SYSTEM_PROMPT,
+    user: buildClassifierInput(input),
+    maxTokens: MAX_OUTPUT_TOKENS,
+    cacheSystem: true,
   });
 
-  const raw = res.content
-    .filter((block): block is Extract<typeof block, { type: "text" }> => block.type === "text")
-    .map((block) => block.text)
-    .join("");
-
   const verdict = parseMarketingVerdict(raw);
-  return {
-    ...verdict,
-    usage: {
-      input: res.usage.input_tokens,
-      output: res.usage.output_tokens,
-      cacheCreate: res.usage.cache_creation_input_tokens ?? 0,
-      cacheRead: res.usage.cache_read_input_tokens ?? 0,
-    },
-  };
+  return { ...verdict, usage };
 }

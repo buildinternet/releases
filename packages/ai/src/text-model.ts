@@ -1,0 +1,92 @@
+/**
+ * Provider-agnostic text-completion seam. A `TextModel` takes a system prompt,
+ * a single user message, and a token cap, and returns text + token/cost usage.
+ * Two adapters: Anthropic (wraps the SDK `messages.create`, keeps prompt
+ * caching) and OpenRouter (wraps the OpenAI-compatible transport). Env-agnostic:
+ * the caller constructs the concrete model so workers can route through a
+ * gateway and pick a provider per flag.
+ *
+ * This is the seam that lets cheap, high-volume calls (the marketing classifier
+ * today) run on a sub-Haiku model without rewriting prompts or parse logic.
+ */
+
+import type Anthropic from "@anthropic-ai/sdk";
+import { openRouterChat, type OpenRouterOptions } from "./openrouter-client";
+
+export interface TextModelUsage {
+  input: number;
+  output: number;
+  cacheCreate: number;
+  cacheRead: number;
+  /** Provider-reported cost (OpenRouter). Undefined for Anthropic — derive via anthropic-pricing. */
+  costUsd?: number;
+}
+
+export interface TextModelRequest {
+  system: string;
+  user: string;
+  maxTokens: number;
+  /**
+   * Advisory: cache the static system prompt when the provider supports it
+   * (Anthropic ephemeral block). Silently ignored by the OpenRouter adapter.
+   */
+  cacheSystem?: boolean;
+}
+
+export interface TextModelResult {
+  text: string;
+  usage: TextModelUsage;
+}
+
+export interface TextModel {
+  /** `<provider>:<model>` — used for telemetry / log attribution. */
+  readonly id: string;
+  complete(req: TextModelRequest): Promise<TextModelResult>;
+}
+
+/** Wrap an Anthropic SDK client as a `TextModel`. Honors `cacheSystem` via an ephemeral cache block. */
+export function anthropicTextModel(client: Anthropic, model: string): TextModel {
+  return {
+    id: `anthropic:${model}`,
+    async complete({ system, user, maxTokens, cacheSystem }) {
+      const res = await client.messages.create({
+        model,
+        max_tokens: maxTokens,
+        system: cacheSystem
+          ? [{ type: "text", text: system, cache_control: { type: "ephemeral" } }]
+          : system,
+        messages: [{ role: "user", content: user }],
+      });
+      const text = res.content
+        .filter((b): b is Extract<typeof b, { type: "text" }> => b.type === "text")
+        .map((b) => b.text)
+        .join("");
+      return {
+        text,
+        usage: {
+          input: res.usage.input_tokens,
+          output: res.usage.output_tokens,
+          cacheCreate: res.usage.cache_creation_input_tokens ?? 0,
+          cacheRead: res.usage.cache_read_input_tokens ?? 0,
+        },
+      };
+    },
+  };
+}
+
+/**
+ * Wrap OpenRouter as a `TextModel`. `transport` is injectable for tests; it
+ * defaults to the real `openRouterChat`. `cacheSystem` is ignored — OpenRouter
+ * prompt caching is model-specific and not requested by this lane.
+ */
+export function openRouterTextModel(
+  opts: OpenRouterOptions,
+  transport: typeof openRouterChat = openRouterChat,
+): TextModel {
+  return {
+    id: `openrouter:${opts.model}`,
+    // `OpenRouterResult` is structurally `TextModelResult`, so the transport
+    // result is returned directly.
+    complete: ({ system, user, maxTokens }) => transport(opts, { system, user, maxTokens }),
+  };
+}

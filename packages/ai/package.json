@@ -9,11 +9,13 @@
     "./grader-prompt": "./src/grader-prompt.ts",
     "./article-extract": "./src/article-extract.ts",
     "./marketing-classifier": "./src/marketing-classifier.ts",
+    "./openrouter-client": "./src/openrouter-client.ts",
     "./playbook": "./src/playbook.ts",
     "./providers": "./src/providers.ts",
     "./release-content": "./src/release-content.ts",
     "./overview-content": "./src/overview-content.ts",
-    "./overview-citations": "./src/overview-citations.ts"
+    "./overview-citations": "./src/overview-citations.ts",
+    "./text-model": "./src/text-model.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "catalog:",

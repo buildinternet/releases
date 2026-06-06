@@ -140,6 +140,16 @@ export const FLAGS = {
     env: "WELL_KNOWN_SYNC_ENABLED",
     default: true,
   },
+  // OpenRouter cheap-call lane for the per-source marketing classifier. OFF by
+  // default → the classifier stays on Anthropic Haiku. Flip ON (per env) once an
+  // OPENROUTER_API_KEY is bound and the eval confirms agreement with the Haiku
+  // baseline. Fail-open: a missing key/model or any OpenRouter throw falls back
+  // to Anthropic at the call site (see workers/api/src/lib/text-model.ts).
+  marketingClassifierOpenrouter: {
+    key: "marketing-classifier-openrouter",
+    env: "MARKETING_CLASSIFIER_OPENROUTER",
+    default: false,
+  },
 } as const satisfies Record<string, FlagDef>;
 
 /** Layered fallback: var value if set, else the hardcoded default. */

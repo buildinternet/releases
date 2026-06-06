@@ -1,4 +1,4 @@
-type SecretBinding = { get(): Promise<string | null> } | { get(): Promise<string> };
+export type SecretBinding = { get(): Promise<string | null> } | { get(): Promise<string> };
 type CachedSecret = { value: string | null; loadedAt: number };
 
 const cache = new WeakMap<SecretBinding, CachedSecret>();

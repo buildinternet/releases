@@ -89,8 +89,8 @@ import {
   classifyMarketing,
   type MarketingClassifierResult,
 } from "@releases/ai-internal/marketing-classifier";
-import { getAnthropicKey, resolveGatewayOpts, type AnthropicEnv } from "../lib/anthropic.js";
-import { buildAnthropicClient } from "@releases/lib/anthropic-client.js";
+import type { AnthropicEnv } from "../lib/anthropic.js";
+import { resolveMarketingModel } from "../lib/text-model.js";
 import { assessFeedDepth, DEFAULT_FEED_THIN_CHARS } from "@releases/adapters/feed-depth";
 import {
   enrichNewThinItems,
@@ -1023,26 +1023,28 @@ async function classifyMarketingForReleases(
   let cacheCreateTokens = 0;
   let cacheReadTokens = 0;
   let outputTokens = 0;
+  let costUsd = 0;
   const startedAt = Date.now();
 
+  // Provider/model decided here (Anthropic Haiku via gateway, or a cheap
+  // OpenRouter model when `marketing-classifier-openrouter` is on + configured).
+  // Fail-open: null means no usable provider — skip rather than block insert.
+  const model = await resolveMarketingModel(env);
+  if (!model) {
+    logEvent("warn", {
+      component: "cron-poll-fetch",
+      event: "marketing-filter-no-api-key",
+      sourceSlug: source.slug,
+    });
+    return result;
+  }
+
   try {
-    const apiKey = await getAnthropicKey(env);
-    if (!apiKey) {
-      logEvent("warn", {
-        component: "cron-poll-fetch",
-        event: "marketing-filter-no-api-key",
-        sourceSlug: source.slug,
-      });
-      return result;
-    }
-
-    const client = buildAnthropicClient({ apiKey, ...(await resolveGatewayOpts(env)) });
-
     for (const index of newIndices) {
       const raw = rawReleases[index];
       try {
-        // oxlint-disable-next-line no-await-in-loop -- sequential per-item bounds concurrent Anthropic load per cron fire; the prompt cache hit doesn't depend on ordering
-        const verdict = await classifyMarketing(client, {
+        // oxlint-disable-next-line no-await-in-loop -- sequential per-item bounds concurrent inference load per cron fire; the prompt cache hit doesn't depend on ordering
+        const verdict = await classifyMarketing(model, {
           sourceName: source.name,
           title: raw.title,
           content: raw.content,
@@ -1053,6 +1055,7 @@ async function classifyMarketingForReleases(
         cacheCreateTokens += verdict.usage.cacheCreate;
         cacheReadTokens += verdict.usage.cacheRead;
         outputTokens += verdict.usage.output;
+        costUsd += verdict.usage.costUsd ?? 0;
         if (verdict.isMarketing) {
           result.set(index, verdict);
           suppressedCount++;
@@ -1069,8 +1072,8 @@ async function classifyMarketingForReleases(
       }
     }
   } catch (err) {
-    // Catches API-key resolution + client construction throws. Per-item errors
-    // are caught above; reaching here means the classifier never ran at all.
+    // Per-item errors are caught above; reaching here means the classify loop
+    // threw outside an item (unexpected) — log and return what we have.
     logEvent("warn", {
       component: "cron-poll-fetch",
       event: "marketing-filter-bootstrap-failed",
@@ -1084,6 +1087,7 @@ async function classifyMarketingForReleases(
     component: "cron-poll-fetch",
     event: "marketing-filter-applied",
     sourceSlug: source.slug,
+    modelId: model.id,
     classified: newIndices.length,
     suppressed: suppressedCount,
     failed: failedCount,
@@ -1091,6 +1095,7 @@ async function classifyMarketingForReleases(
     cacheCreateTokens,
     cacheReadTokens,
     outputTokens,
+    costUsd,
     durationMs: Date.now() - startedAt,
   });
 
