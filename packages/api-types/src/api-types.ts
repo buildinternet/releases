@@ -12,6 +12,7 @@ export type {
 } from "@buildinternet/releases-core/source-enums";
 // Re-export above doesn't create local bindings; import for use in interfaces below.
 import type { SourceType, SourceFetchPriority } from "@buildinternet/releases-core/source-enums";
+import type { ApiScope } from "@buildinternet/releases-core/api-token";
 import type {
   MediaItemSchema,
   PaginationSchema,
@@ -493,6 +494,38 @@ export type Pagination = z.infer<typeof PaginationSchema>;
 export interface ListResponse<T> {
   items: T[];
   pagination: Pagination;
+}
+
+// === User-owned API keys (relu_) — self-serve surface served by /v1/api-keys ===
+
+/** A user-owned API key (relu_) as returned by GET /v1/api-keys. */
+export interface UserApiKey {
+  id: string;
+  name: string | null;
+  start: string | null;
+  scope: ApiScope | null;
+  enabled: boolean | null;
+  remaining: number | null;
+  lastRequest: string | null; // ISO 8601
+  createdAt: string; // ISO 8601
+  expiresAt: string | null; // ISO 8601
+}
+
+/** POST /v1/api-keys create response — includes the full key string exactly once. */
+export interface CreatedUserApiKey extends Omit<UserApiKey, "enabled" | "lastRequest"> {
+  key: string;
+}
+
+/** GET /v1/api-keys response envelope. */
+export interface ListUserApiKeysResponse {
+  apiKeys: UserApiKey[];
+}
+
+/** POST /v1/api-keys request body. Self-serve mints are capped at read server-side. */
+export interface CreateUserApiKeyBody {
+  name: string;
+  scope?: ApiScope;
+  expiresInDays?: number;
 }
 
 export type ErrorResponse = z.infer<typeof ErrorResponseSchema>;
