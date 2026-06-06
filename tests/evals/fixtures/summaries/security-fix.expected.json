@@ -1,0 +1,11 @@
+{
+  "input": {
+    "orgSlug": "acme",
+    "sourceName": "Acme Server",
+    "productName": null,
+    "title": "9.1.0",
+    "version": "9.1.0",
+    "url": "https://acme.com/changelog/9-1-0"
+  },
+  "spec": { "expectDiscarded": false }
+}

@@ -1,0 +1,11 @@
+{
+  "input": {
+    "orgSlug": "superhuman",
+    "sourceName": "Release Notes",
+    "productName": "Superhuman Mail",
+    "title": "Mac 3.4.0",
+    "version": "3.4.0",
+    "url": "https://superhuman.com/release-notes/mac-3-4-0"
+  },
+  "spec": { "expectDiscarded": false }
+}

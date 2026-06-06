@@ -1,0 +1,11 @@
+{
+  "input": {
+    "orgSlug": "acme",
+    "sourceName": "Acme Stream",
+    "productName": null,
+    "title": "7.2.1",
+    "version": "7.2.1",
+    "url": "https://acme.com/changelog/7-2-1"
+  },
+  "spec": { "expectDiscarded": false }
+}

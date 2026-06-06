@@ -1,0 +1,11 @@
+{
+  "input": {
+    "orgSlug": "acme",
+    "sourceName": "Acme Blog",
+    "productName": null,
+    "title": "Introducing Acme for Teams",
+    "version": null,
+    "url": "https://acme.com/blog/introducing-acme-for-teams"
+  },
+  "spec": { "expectDiscarded": false }
+}

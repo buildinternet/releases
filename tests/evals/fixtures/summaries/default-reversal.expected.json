@@ -1,0 +1,11 @@
+{
+  "input": {
+    "orgSlug": "acme",
+    "sourceName": "Acme CLI",
+    "productName": null,
+    "title": "v4.3.0",
+    "version": "4.3.0",
+    "url": "https://acme.com/changelog/4-3-0"
+  },
+  "spec": { "expectDiscarded": false, "forbidInSummary": ["#2291"] }
+}

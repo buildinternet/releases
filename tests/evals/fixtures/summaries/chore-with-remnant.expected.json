@@ -1,0 +1,11 @@
+{
+  "input": {
+    "orgSlug": "acme",
+    "sourceName": "Acme Parser",
+    "productName": null,
+    "title": "v0.44.2",
+    "version": "0.44.2",
+    "url": "https://acme.com/changelog/0-44-2"
+  },
+  "spec": { "expectDiscarded": false }
+}
