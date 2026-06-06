@@ -56,8 +56,8 @@ What the code sends today: a static `trace` block with `generation_name` (`"mark
 
 **The tags are inert until Broadcast is enabled in the OpenRouter dashboard.** To activate (all dashboard, no code):
 
-1. **Axiom** (our existing stack — worker logs already ship there): create a dataset, e.g. `releases-openrouter-traces`, and an ingest API token.
-2. **OpenRouter → Settings → Observability → Broadcast**: add an **OpenTelemetry** destination pointed at Axiom's OTLP endpoint `https://api.axiom.co/v1/traces`, with headers `Authorization: Bearer <token>` and `x-axiom-dataset: releases-openrouter-traces`. (Axiom ingests OTLP natively — no collector to host. If the OTel destination can't set custom headers, the generic **Webhook** destination to the same endpoint is the fallback.)
+1. **Cloudflare R2** (stays inside our existing ecosystem — Broadcast's **S3 / S3-compatible** destination speaks the S3 API, which R2 serves): create a bucket, e.g. `released-openrouter-traces`, and an R2 access key/secret with write scope on it.
+2. **OpenRouter → Settings → Observability → Broadcast**: add the **S3-compatible** destination pointed at the R2 S3 endpoint (`https://<account-id>.r2.cloudflarestorage.com`) with the bucket name + access key/secret. Trace objects land in R2 as JSON; query them with R2 SQL or any S3 tooling.
 3. Toggle **Privacy Mode on** for that destination so the raw release text in prompts/completions is stripped before forwarding — only tokens/cost/timing/our tags are kept.
 
-Langfuse (LLM-eval-specialized) is an alternative native destination; Broadcast supports multiple destinations at once, so it can be added alongside Axiom later without disturbing it.
+This keeps observability entirely within Cloudflare (no new third-party account, no Axiom dataset consumed). It's archival object storage, not a live dashboard — for an at-a-glance per-lane cost/latency UI, **Langfuse** (LLM-eval-specialized, free tier) is a native destination that maps our `generation_name`/`environment` tags directly onto its generation model. Broadcast supports multiple destinations at once, so Langfuse (or Axiom via OTLP) can be added alongside R2 later without disturbing it.
