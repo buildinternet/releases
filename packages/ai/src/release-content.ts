@@ -6,13 +6,14 @@
  *   - `scripts/generate-release-content.ts` — operational backfill / rerun
  *   - the API worker's poll-fetch / scrape-agent workflows (per-org opt-in)
  *
- * Worker-safe: no `fs`, no `node:*` imports, no logger. Caller constructs
- * the Anthropic client so the script can route directly and the worker
- * can route through AI Gateway via `@buildinternet/releases-lib/anthropic-client`.
+ * Worker-safe: no `fs`, no `node:*` imports, no logger. Caller constructs the
+ * `TextModel` (so the worker can route through AI Gateway / a cheap OpenRouter
+ * model behind the `summarize-openrouter` flag, and the script path can hit the
+ * Anthropic API directly).
  */
 
-import type Anthropic from "@anthropic-ai/sdk";
 import type { ReleaseComposition } from "@buildinternet/releases-core/composition";
+import type { TextModel } from "./text-model";
 
 export type { ReleaseComposition };
 
@@ -520,16 +521,19 @@ function readEmptyTag(raw: string): "true" | "false" | null {
 }
 
 /**
- * Run a release body through Haiku 4.5 to produce title / short title /
- * summary. Returns all-null + `skipped: true` when the body has no real
- * content (read paths fall back to the raw release.title).
+ * Run a release body through the supplied `TextModel` to produce title / short
+ * title / summary. The caller constructs the model (Anthropic Haiku via AI
+ * Gateway, or a cheap OpenRouter model behind the `summarize-openrouter` flag),
+ * so this helper stays provider-neutral. Returns all-null + `skipped: true`
+ * when the body has no real content (read paths fall back to the raw
+ * release.title).
  *
  * Throws when the model returns no `<summary>` tag (output_too_short or
  * upstream API error). Title fields are independent — missing `<title>`
  * or `<title_short>` yields null rather than a fabricated placeholder.
  */
 export async function summarizeRelease(
-  client: Anthropic,
+  model: TextModel,
   input: SummarizeReleaseInput,
 ): Promise<SummarizeReleaseResult> {
   if (isEmptyContent(input.content)) {
@@ -544,27 +548,25 @@ export async function summarizeRelease(
   }
 
   const releaseBlock = buildReleaseBlock(input);
-  const res = await client.messages.create({
-    model: MODEL,
-    max_tokens: MAX_OUTPUT_TOKENS,
-    system: [{ type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } }],
-    messages: [{ role: "user", content: releaseBlock }],
+  // `cacheSystem` honors Anthropic prompt caching on the large system prompt;
+  // the OpenRouter adapter ignores it (no cross-call caching on that lane).
+  // The seam returns joined text + usage, so the SDK content-block walk and
+  // stop_reason plumbing live inside the adapter, not here. parseReleaseContent
+  // only uses stop_reason for an error message, so passing null is harmless.
+  const { text: raw, usage } = await model.complete({
+    system: SYSTEM_PROMPT,
+    user: releaseBlock,
+    maxTokens: MAX_OUTPUT_TOKENS,
+    cacheSystem: true,
   });
 
-  // The Messages API returns an array of typed content blocks. We don't
-  // pass tools so the model only ever returns text, but it's not contractual
-  // that text sits at index 0 — concatenate every text block defensively.
-  const raw = res.content
-    .filter((block): block is Extract<typeof block, { type: "text" }> => block.type === "text")
-    .map((block) => block.text)
-    .join("");
   return {
-    ...parseReleaseContent(raw, res.stop_reason),
+    ...parseReleaseContent(raw, null),
     usage: {
-      input: res.usage.input_tokens,
-      output: res.usage.output_tokens,
-      cacheCreate: res.usage.cache_creation_input_tokens ?? 0,
-      cacheRead: res.usage.cache_read_input_tokens ?? 0,
+      input: usage.input,
+      output: usage.output,
+      cacheCreate: usage.cacheCreate,
+      cacheRead: usage.cacheRead,
     },
     skipped: false,
   };

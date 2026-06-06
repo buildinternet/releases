@@ -150,6 +150,20 @@ export const FLAGS = {
     env: "MARKETING_CLASSIFIER_OPENROUTER",
     default: false,
   },
+  // OpenRouter cheap-call lane for the *live* poll-fetch release summarizer
+  // (title / short title / summary). OFF by default → summarization stays on
+  // Anthropic Haiku. Separate from the marketing flag because summaries are
+  // user-facing: flip ON (per env) only after the release-content eval confirms
+  // no quality regression vs. Haiku AND a SUMMARIZE_MODEL + OPENROUTER_API_KEY
+  // are configured. The daily batch path (Message Batches API) is NOT affected —
+  // it always stays on Anthropic (no OpenRouter batch equivalent). Fail-open: a
+  // missing key/model or any OpenRouter throw falls back to Anthropic at the call
+  // site (see workers/api/src/lib/text-model.ts).
+  summarizeOpenrouter: {
+    key: "summarize-openrouter",
+    env: "SUMMARIZE_OPENROUTER",
+    default: false,
+  },
 } as const satisfies Record<string, FlagDef>;
 
 /** Layered fallback: var value if set, else the hardcoded default. */

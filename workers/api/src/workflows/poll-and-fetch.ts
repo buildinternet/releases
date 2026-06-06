@@ -21,7 +21,7 @@ import { SOURCE_DELETED_SENTINEL, isDurableObjectReset, recordWorkflowFailure } 
 import { buildFetchOneEnv } from "./_fetch-env.js";
 import { logEvent } from "@releases/lib/log-event";
 import { dbErrorLogFields } from "@releases/lib/db-errors";
-import { summarizeRelease, MODEL as SUMMARIZE_MODEL } from "@releases/ai-internal/release-content";
+import { summarizeRelease } from "@releases/ai-internal/release-content";
 import {
   fetchOne,
   pollOne,
@@ -33,8 +33,8 @@ import {
 } from "../cron/poll-fetch.js";
 import { getSourceMeta, isGitHubFetched } from "@releases/adapters/feed.js";
 import { invalidateLatestCache, type InvalidationEnv } from "../lib/latest-cache.js";
-import { getAnthropicKey, resolveGatewayOpts, type AnthropicEnv } from "../lib/anthropic.js";
-import { buildAnthropicClient } from "@releases/lib/anthropic-client.js";
+import { type AnthropicEnv } from "../lib/anthropic.js";
+import { resolveSummarizeModel } from "../lib/text-model.js";
 import { IN_ARRAY_CHUNK_SIZE } from "../lib/d1-limits.js";
 import { logUsage } from "../lib/usage-log.js";
 import { makeBotFetch } from "../lib/web-bot-auth-fetch.js";
@@ -267,11 +267,13 @@ export async function generateContentForReleases(
     return;
   }
 
-  const apiKey = await getAnthropicKey(env);
-  if (!apiKey) return;
+  // Provider/model decided here: Anthropic Haiku via gateway by default, or a
+  // cheap OpenRouter model when `summarize-openrouter` is on + configured.
+  // Fail-open: null means no usable provider (no Anthropic key) — skip.
+  const model = await resolveSummarizeModel(env);
+  if (!model) return;
 
   const startedAt = Date.now();
-  const client = buildAnthropicClient({ apiKey, ...(await resolveGatewayOpts(env)) });
 
   let skippedEmpty = 0;
   let skippedTooLarge = 0;
@@ -311,7 +313,7 @@ export async function generateContentForReleases(
     }
     try {
       // eslint-disable-next-line no-await-in-loop -- sequential per-row keeps cost bounded; typical fire is 0–3 rows
-      const result = await summarizeRelease(client, {
+      const result = await summarizeRelease(model, {
         orgSlug: row.orgSlug,
         sourceName: row.sourceName,
         productName: row.productName,
@@ -334,7 +336,13 @@ export async function generateContentForReleases(
           db,
           {
             operation: "summarize",
-            model: SUMMARIZE_MODEL,
+            // usage_log.model historically stores the bare model id (e.g.
+            // "claude-haiku-4-5") so Anthropic rollups stay continuous with the
+            // batch path. The TextModel id is "<provider>:<model>"; strip the
+            // provider tag — OpenRouter ids ("google/…") carry no further colon,
+            // so this is unambiguous and, while the flag is off, reproduces
+            // today's value byte-for-byte.
+            model: model.id.replace(/^[^:]+:/, ""),
             inputTokens: result.usage.input,
             outputTokens: result.usage.output,
             cacheReadTokens: result.usage.cacheRead,
