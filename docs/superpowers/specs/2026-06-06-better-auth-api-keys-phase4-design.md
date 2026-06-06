@@ -111,7 +111,7 @@ This guarantees the auto-reauth path (below) never creates a stray `relu_` key â
 
 ### Session helper â€” `src/lib/credentials.ts` or a small `src/lib/session.ts`
 
-```
+```ts
 getSessionToken(apiUrl, { interactive }): Promise<string>
 ```
 
