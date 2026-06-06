@@ -109,6 +109,13 @@
     // classifier stays on Anthropic Haiku. Direct OpenRouter (no AI-Gateway
     // sub-path) until the gateway's OpenRouter provider is confirmed.
     "MARKETING_CLASSIFIER_MODEL": "google/gemini-3.1-flash-lite",
+    // OpenRouter cheap-call model for the *live* poll-fetch summarizer. Only
+    // consulted when the `summarize-openrouter` flag is on; empty → the
+    // summarizer stays on Anthropic Haiku (fail-open). Intentionally UNSET until
+    // the release-content eval (`bun run eval:summary`) picks a candidate that
+    // shows no quality regression vs. Haiku — summaries are user-facing. The
+    // daily batch path is unaffected (always Anthropic).
+    "SUMMARIZE_MODEL": "",
     // Smear window for the per-source jitter at the head of PollAndFetchWorkflow.
     // Set to "0" to disable; see FANOUT_JITTER_WINDOW_MAX_MS for the upper clamp.
     // See workers/api/src/workflows/poll-and-fetch.ts.
@@ -563,6 +570,10 @@
         // OpenRouter cheap-call model (marketing classifier); gated by the
         // `marketing-classifier-openrouter` flag. Mirrors prod.
         "MARKETING_CLASSIFIER_MODEL": "google/gemini-3.1-flash-lite",
+        // OpenRouter cheap-call model for the live summarizer; gated by the
+        // `summarize-openrouter` flag. UNSET until the eval picks a candidate;
+        // empty → stays on Anthropic Haiku (fail-open). Mirrors prod.
+        "SUMMARIZE_MODEL": "",
         // Mirrors prod flag; not read in staging (CRON_ENABLED=false). See #971.
         "BATCH_SUMMARIZE_ENABLED": "false",
         "BATCH_SUMMARIZE_MAX_COST_USD": "10",

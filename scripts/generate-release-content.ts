@@ -49,6 +49,7 @@ import {
   type SummarizeReleaseInput,
   type SummarizeReleaseResult,
 } from "@releases/ai-internal/release-content";
+import { anthropicTextModel } from "@releases/ai-internal/text-model";
 import { collectResults, pollBatch, submitBatch } from "@releases/ai-internal/batch";
 import { adminPatch, adminPost } from "./lib/admin-client.js";
 
@@ -257,7 +258,7 @@ function errorMessage(err: unknown): string {
 async function runRealtime(rows: ReleaseRow[]): Promise<PerRow[]> {
   return pool(rows, CONCURRENCY, async (row): Promise<PerRow> => {
     try {
-      const result = await summarizeRelease(client, rowToSummarizeInput(row));
+      const result = await summarizeRelease(realtimeModel, rowToSummarizeInput(row));
       return { row, kind: "ok", result };
     } catch (err) {
       return { row, kind: "err", error: errorMessage(err) };
@@ -424,6 +425,9 @@ async function runBatch(
 }
 
 const client = new Anthropic({ apiKey });
+// The real-time path runs `summarizeRelease` through the TextModel seam; this
+// script always uses Anthropic directly (the batch path stays on the Batches API).
+const realtimeModel = anthropicTextModel(client, MODEL);
 
 const mode = `${apply ? "APPLY (writes to D1 prod)" : "DRY RUN"} (${noBatch ? "real-time" : "batched"})`;
 

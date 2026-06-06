@@ -12,6 +12,11 @@ import {
   MODEL as SUMMARY_MODEL,
   type SummarizeReleaseInput,
 } from "@releases/ai-internal/release-content";
+import {
+  anthropicTextModel,
+  openRouterTextModel,
+  type TextModel,
+} from "@releases/ai-internal/text-model";
 import { buildGraderPrompt } from "@releases/ai-internal/grader-prompt";
 import { gradeStructural, type StructuralSpec } from "./graders";
 import type { FieldResult } from "./helpers";
@@ -78,6 +83,23 @@ async function main() {
   const dir = join(import.meta.dir, "fixtures", "summaries");
   const fixtures = loadFixtures(dir);
   const client = new Anthropic({ apiKey });
+
+  // The model under test. Defaults to Anthropic Haiku (the production baseline).
+  // To eval an OpenRouter candidate for the `summarize-openrouter` lane, set
+  // EVAL_OPENROUTER_MODEL (e.g. "google/gemini-3.1-flash-lite") + OPENROUTER_API_KEY.
+  // The judge (when --judge) always runs on Anthropic regardless.
+  const orModel = process.env.EVAL_OPENROUTER_MODEL?.trim();
+  const orKey = process.env.OPENROUTER_API_KEY?.trim();
+  const summaryModel: TextModel =
+    orModel && orKey
+      ? openRouterTextModel({
+          apiKey: orKey,
+          model: orModel,
+          referer: "https://releases.sh",
+          title: "Releases summary eval",
+        })
+      : anthropicTextModel(client, SUMMARY_MODEL);
+  console.error(`model under test: ${summaryModel.id}`);
   const rubric = useJudge
     ? readFileSync(
         join(import.meta.dir, "..", "..", "src", "shared", "rubrics", "release-summary.md"),
@@ -96,7 +118,7 @@ async function main() {
     let fields: FieldResult[];
     let passed: boolean;
     try {
-      const result = await summarizeRelease(client, f.input);
+      const result = await summarizeRelease(summaryModel, f.input);
       ({ fields, passed } = gradeStructural(f.spec, result, {
         titleShortMaxChars: TITLE_SHORT_MAX_CHARS,
         extraForbidden: [EMPTY_BODY_FALLBACK],
@@ -141,7 +163,7 @@ async function main() {
 
   const file = saveRun({
     eval: "summary",
-    model: SUMMARY_MODEL,
+    model: summaryModel.id,
     pass: allPassed,
     summary: {
       total: runCases.length,
