@@ -1,0 +1,11 @@
+{
+  "input": {
+    "orgSlug": "acme",
+    "sourceName": "Acme API",
+    "productName": null,
+    "title": "2026.09",
+    "version": "2026.09",
+    "url": "https://acme.com/changelog/2026-09"
+  },
+  "spec": { "expectDiscarded": false }
+}
