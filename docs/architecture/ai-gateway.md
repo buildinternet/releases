@@ -47,3 +47,17 @@ Two routing modes:
 ## What this PR does not configure
 
 Gateway-level features (fallback chains, caching TTLs, rate limits, reranking) are configured in the Cloudflare dashboard, not in this repo. This PR is passthrough only: flip the env var and telemetry starts flowing. Per-route cache config and provider fallbacks land in follow-up changes once there's a week of baseline metrics.
+
+## OpenRouter Broadcast observability
+
+The cheap-call OpenRouter lanes (marketing classifier, live summarizer — see [`packages/ai/src/text-model.ts`](../../packages/ai/src/text-model.ts)) attach optional **Broadcast** trace tags to every request via `OpenRouterTrace` on `openRouterChat`. Broadcast is OpenRouter's account-level observability side-channel: it forwards a copy of each traced request (tokens, cost, latency, model, and our tags) to a configured destination. It is **not** provider fan-out, and it adds no per-call latency (forwarding is server-side, after the response returns).
+
+What the code sends today: a static `trace` block with `generation_name` (`"marketing-classifier"` / `"summarize-release"`, or `"summarize-eval"` from the local eval) and `environment` (the worker's `ENVIRONMENT` var). No prompt/completion content is in the trace block — only labels — so it is never a PII surface on its own.
+
+**The tags are inert until Broadcast is enabled in the OpenRouter dashboard.** To activate (all dashboard, no code):
+
+1. **Cloudflare R2** (stays inside our existing ecosystem — Broadcast's **S3 / S3-compatible** destination speaks the S3 API, which R2 serves): create a bucket, e.g. `released-openrouter-traces`, and an R2 access key/secret with write scope on it.
+2. **OpenRouter → Settings → Observability → Broadcast**: add the **S3-compatible** destination pointed at the R2 S3 endpoint (`https://<account-id>.r2.cloudflarestorage.com`) with the bucket name + access key/secret. Trace objects land in R2 as JSON; query them with R2 SQL or any S3 tooling.
+3. **Privacy Mode: leave off** for the R2 destination. The prompt content in these lanes is public changelog/release text — the same content we already persist in `release.content` and serve through the API — so a trace copy in our own bucket is no more exposing than what we already publish, and the prompt→completion pair is the most useful part of the trace when debugging a bad summary. Privacy Mode is per-destination, so if a **third-party** sink (Langfuse, Datadog) is added later, strip content there while keeping it full in R2.
+
+This keeps observability entirely within Cloudflare (no new third-party account, no Axiom dataset consumed). It's archival object storage, not a live dashboard — for an at-a-glance per-lane cost/latency UI, **Langfuse** (LLM-eval-specialized, free tier) is a native destination that maps our `generation_name`/`environment` tags directly onto its generation model. Broadcast supports multiple destinations at once, so Langfuse (or Axiom via OTLP) can be added alongside R2 later without disturbing it.
