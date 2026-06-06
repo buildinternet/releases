@@ -8,9 +8,9 @@
 import { eq, and, sql } from "drizzle-orm";
 import { createDb } from "./db.js";
 import {
-  sources,
+  sourcesActive,
   organizations,
-  products,
+  productsActive,
   knowledgePages,
 } from "@buildinternet/releases-core/schema";
 import {
@@ -40,18 +40,23 @@ export async function regeneratePlaybook(
       return;
     }
 
-    const orgSources = await db.select().from(sources).where(eq(sources.orgId, orgId));
+    // Use the *_active views so soft-deleted sources/products never leak into
+    // the regenerated header. The admin notes-write path (routes/playbook.ts)
+    // already reads from these views; the raw tables here meant a soft-deleted
+    // source kept appearing in the header and got handed to the fetch agent,
+    // which then errored with "source not found" on the tombstoned id.
+    const orgSources = await db.select().from(sourcesActive).where(eq(sourcesActive.orgId, orgId));
     if (orgSources.length === 0) return;
 
     const orgProducts = await db
       .select({
-        id: products.id,
-        name: products.name,
-        slug: products.slug,
-        description: products.description,
+        id: productsActive.id,
+        name: productsActive.name,
+        slug: productsActive.slug,
+        description: productsActive.description,
       })
-      .from(products)
-      .where(eq(products.orgId, orgId));
+      .from(productsActive)
+      .where(eq(productsActive.orgId, orgId));
 
     const header = generatePlaybookHeader({
       orgName: org.name,
