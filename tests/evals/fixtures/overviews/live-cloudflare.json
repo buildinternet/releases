@@ -1,0 +1,417 @@
+{
+  "input": {
+    "org": {
+      "name": "Cloudflare",
+      "description": null
+    },
+    "sources": [
+      {
+        "name": "Cloudflare Changelog"
+      },
+      {
+        "name": "Cloudflare workerd"
+      },
+      {
+        "name": "Workers SDK"
+      },
+      {
+        "name": "cloudflared"
+      }
+    ],
+    "selected": [
+      {
+        "id": "rel_GM2Fpi8XFNrY0fHA6830S",
+        "title": "Workflows - Rollback support now available in Workflows",
+        "version": null,
+        "content": "[Workflows](https://developers.cloudflare.com/workflows/) now supports saga-style rollbacks, allowing you to add compensating logic to each `step.do()` in case of downstream failures. If the instance fails, the rollback handlers will execute in reverse `step-start` order.\n\nThis is useful for multi-step operations that touch external systems, such as inventory reservations, payment authorization, ticket creation, or infrastructure provisioning. Instead of writing all cleanup logic in a top-level `catch`, you can keep each compensating action next to the step it undoes.\n\nRollback handlers support their own retry and timeout configuration, and Workflows now exposes rollback outcomes in instance status responses. Workflows analytics also emits rollback lifecycle events, making it easier to distinguish a forward execution failure from a rollback failure when debugging production workflows.\n\n- JavaScript\n    \n    ```js\n    <div><div><span>await</span><span> </span><span>step</span><span>.</s",
+        "publishedAt": "2026-06-05T15:00:00.000Z",
+        "url": "https://developers.cloudflare.com/changelog/post/2026-06-05-saga-rollbacks/"
+      },
+      {
+        "id": "rel_B4riGi9fWW7sNUNJMRUHh",
+        "title": "@cloudflare/wrangler-bundler@0.1.2",
+        "version": "@cloudflare/wrangler-bundler@0.1.2",
+        "content": "### Patch Changes\n\n- Updated dependencies [[`c6c61b5`](https://github.com/cloudflare/workers-sdk/commit/c6c61b59431443b2bcda25f3af7624dd2ce19b9b), [`c6c61b5`](https://github.com/cloudflare/workers-sdk/commit/c6c61b59431443b2bcda25f3af7624dd2ce19b9b), [`a3eea27`](https://github.com/cloudflare/workers-sdk/commit/a3eea277aae46450aec1f0c811e3fe256022c46e), [`7a6b1a4`](https://github.com/cloudflare/workers-sdk/commit/7a6b1a4f4e9d8d5bd88732c8e11368c3ad7f867b), [`7539a9b`](https://github.com/cloudflare/workers-sdk/commit/7539a9bfcf03a14b2c16f281d541b6bc45523a80), [`3b8b80a`](https://github.com/cloudflare/workers-sdk/commit/3b8b80ab32e3ac33b5df9f6944dca9cdf72c5495), [`0bb2d55`](https://github.com/cloudflare/workers-sdk/commit/0bb2d55116ce90a147582a7b4d96e3090cddf7ee), [`8400fb9`](https://github.com/cloudflare/workers-sdk/commit/8400fb945a781e7a7a78a3614a702ace2d1fbc87), [`b502d54`](https://github.com/cloudflare/workers-sdk/commit/b502d5445b9e9e030020a3d65c0334507393aa64), [`7949f81`](https://g",
+        "publishedAt": "2026-06-05T10:47:46.000Z",
+        "url": "https://github.com/cloudflare/workers-sdk/releases/tag/%40cloudflare/wrangler-bundler%400.1.2"
+      },
+      {
+        "id": "rel_9FSlKQZbOhcWiEGfFTwUv",
+        "title": "wrangler@4.98.0",
+        "version": "wrangler@4.98.0",
+        "content": "### Minor Changes\n\n- [#14089](https://github.com/cloudflare/workers-sdk/pull/14089) [`c6c61b5`](https://github.com/cloudflare/workers-sdk/commit/c6c61b59431443b2bcda25f3af7624dd2ce19b9b) Thanks [@alsuren](https://github.com/alsuren)! - Add `migrations_pattern` to D1 database bindings\n\n  The D1 binding now accepts an optional `migrations_pattern` field, allowing you to point `wrangler d1 migrations apply` and `wrangler d1 migrations list` at migration files in nested layouts (e.g. ORM-generated folders like `migrations/0000_init/migration.sql`).\n\n  `migrations_pattern` is a glob (relative to the wrangler config file) and defaults to `${migrations_dir}/*.sql`, which preserves today's behaviour. Files that do not match the pattern are not executed.\n\n  ```jsonc\n  {\n    \"d1_databases\": [\n      {\n        \"binding\": \"DB\",\n        \"database_name\": \"my-db\",\n        \"database_id\": \"...\",\n        \"migrations_dir\": \"migrations\",\n        \"migrations_pattern\": \"migrations/*/migration.sql\"\n      }\n  ",
+        "publishedAt": "2026-06-05T10:47:44.000Z",
+        "url": "https://github.com/cloudflare/workers-sdk/releases/tag/wrangler%404.98.0"
+      },
+      {
+        "id": "rel_Enajg2AedHOBia7BvslE7",
+        "title": "@cloudflare/workers-utils@0.23.0",
+        "version": "@cloudflare/workers-utils@0.23.0",
+        "content": "### Minor Changes\n\n- [#14089](https://github.com/cloudflare/workers-sdk/pull/14089) [`c6c61b5`](https://github.com/cloudflare/workers-sdk/commit/c6c61b59431443b2bcda25f3af7624dd2ce19b9b) Thanks [@alsuren](https://github.com/alsuren)! - Add `migrations_pattern` to D1 database bindings\n\n  The D1 binding now accepts an optional `migrations_pattern` field, allowing you to point `wrangler d1 migrations apply` and `wrangler d1 migrations list` at migration files in nested layouts (e.g. ORM-generated folders like `migrations/0000_init/migration.sql`).\n\n  `migrations_pattern` is a glob (relative to the wrangler config file) and defaults to `${migrations_dir}/*.sql`, which preserves today's behaviour. Files that do not match the pattern are not executed.\n\n  ```jsonc\n  {\n    \"d1_databases\": [\n      {\n        \"binding\": \"DB\",\n        \"database_name\": \"my-db\",\n        \"database_id\": \"...\",\n        \"migrations_dir\": \"migrations\",\n        \"migrations_pattern\": \"migrations/*/migration.sql\"\n      }\n  ",
+        "publishedAt": "2026-06-05T10:47:42.000Z",
+        "url": "https://github.com/cloudflare/workers-sdk/releases/tag/%40cloudflare/workers-utils%400.23.0"
+      },
+      {
+        "id": "rel_J0boFVAgVqnFL0JhPrupO",
+        "title": "@cloudflare/vitest-pool-workers@0.16.13",
+        "version": "@cloudflare/vitest-pool-workers@0.16.13",
+        "content": "### Patch Changes\n\n- Updated dependencies [[`c6c61b5`](https://github.com/cloudflare/workers-sdk/commit/c6c61b59431443b2bcda25f3af7624dd2ce19b9b), [`c6c61b5`](https://github.com/cloudflare/workers-sdk/commit/c6c61b59431443b2bcda25f3af7624dd2ce19b9b), [`a3eea27`](https://github.com/cloudflare/workers-sdk/commit/a3eea277aae46450aec1f0c811e3fe256022c46e), [`7a6b1a4`](https://github.com/cloudflare/workers-sdk/commit/7a6b1a4f4e9d8d5bd88732c8e11368c3ad7f867b), [`7539a9b`](https://github.com/cloudflare/workers-sdk/commit/7539a9bfcf03a14b2c16f281d541b6bc45523a80), [`1fdd8de`](https://github.com/cloudflare/workers-sdk/commit/1fdd8def456011c29c5879fe49be6fa90ad9858d), [`3b8b80a`](https://github.com/cloudflare/workers-sdk/commit/3b8b80ab32e3ac33b5df9f6944dca9cdf72c5495), [`0bb2d55`](https://github.com/cloudflare/workers-sdk/commit/0bb2d55116ce90a147582a7b4d96e3090cddf7ee), [`8400fb9`](https://github.com/cloudflare/workers-sdk/commit/8400fb945a781e7a7a78a3614a702ace2d1fbc87), [`b502d54`](https://g",
+        "publishedAt": "2026-06-05T10:47:41.000Z",
+        "url": "https://github.com/cloudflare/workers-sdk/releases/tag/%40cloudflare/vitest-pool-workers%400.16.13"
+      },
+      {
+        "id": "rel_iG8Tc0x67LtBHaTd_diu5",
+        "title": "@cloudflare/vite-plugin@1.40.0",
+        "version": "@cloudflare/vite-plugin@1.40.0",
+        "content": "### Minor Changes\n\n- [#14013](https://github.com/cloudflare/workers-sdk/pull/14013) [`3cf9d0e`](https://github.com/cloudflare/workers-sdk/commit/3cf9d0e9daa043265f2d5cd5add1b448f6378474) Thanks [@jamesopstad](https://github.com/jamesopstad)! - Add experimental `experimental.newConfig` option to load the entry Worker's configuration from `cloudflare.config.ts`\n\n  This is an experimental, opt-in feature. When enabled, the plugin loads the entry Worker's configuration from a `cloudflare.config.ts` file instead of the usual `wrangler.json` / `wrangler.jsonc` / `wrangler.toml`.\n\n  Pass `true` to enable with defaults, or an object to customise behaviour. Currently the only sub-option is `types.generate` (defaults to `true`), which writes a `worker-configuration.d.ts` file next to the config. This enables typed `env` and `exports` for your Worker and currently assumes that you have `@cloudflare/workers-types` installed.\n\n  ```ts\n  // vite.config.ts\n  import { defineConfig } from \"vite\";\n  imp",
+        "publishedAt": "2026-06-05T10:47:38.000Z",
+        "url": "https://github.com/cloudflare/workers-sdk/releases/tag/%40cloudflare/vite-plugin%401.40.0"
+      },
+      {
+        "id": "rel_TWlV5TMM6J9g7R1NQCV0g",
+        "title": "@cloudflare/pages-shared@0.13.143",
+        "version": "@cloudflare/pages-shared@0.13.143",
+        "content": "### Patch Changes\n\n- Updated dependencies [[`a3eea27`](https://github.com/cloudflare/workers-sdk/commit/a3eea277aae46450aec1f0c811e3fe256022c46e), [`1fdd8de`](https://github.com/cloudflare/workers-sdk/commit/1fdd8def456011c29c5879fe49be6fa90ad9858d), [`b502d54`](https://github.com/cloudflare/workers-sdk/commit/b502d5445b9e9e030020a3d65c0334507393aa64), [`3b8b80a`](https://github.com/cloudflare/workers-sdk/commit/3b8b80ab32e3ac33b5df9f6944dca9cdf72c5495)]:\n  - miniflare@4.20260603.0\n",
+        "publishedAt": "2026-06-05T10:47:36.000Z",
+        "url": "https://github.com/cloudflare/workers-sdk/releases/tag/%40cloudflare/pages-shared%400.13.143"
+      },
+      {
+        "id": "rel_D9VYSge2w51Brj007nYRp",
+        "title": "miniflare@4.20260603.0",
+        "version": "miniflare@4.20260603.0",
+        "content": "### Minor Changes\n\n- [#14164](https://github.com/cloudflare/workers-sdk/pull/14164) [`b502d54`](https://github.com/cloudflare/workers-sdk/commit/b502d5445b9e9e030020a3d65c0334507393aa64) Thanks [@G4brym](https://github.com/G4brym)! - Rename the `web_search` binding kind to `websearch`\n\n  Pre-launch rename of the public binding type from `web_search` to `websearch` so the on-the-wire shape matches the product name (Web Search). The wrangler config key, the binding-type string sent to the Cloudflare API, and the miniflare option key all move from `web_search` / `webSearch` to `websearch`.\n\n  Update your wrangler config:\n\n  ```diff\n  - \"web_search\": { \"binding\": \"WEBSEARCH\" }\n  + \"websearch\": { \"binding\": \"WEBSEARCH\" }\n  ```\n\n  The runtime `WebSearch` type exposed on `env.WEBSEARCH` is unchanged.\n\n- [#13863](https://github.com/cloudflare/workers-sdk/pull/13863) [`3b8b80a`](https://github.com/cloudflare/workers-sdk/commit/3b8b80ab32e3ac33b5df9f6944dca9cdf72c5495) Thanks [@aslakhellesoy](ht",
+        "publishedAt": "2026-06-05T10:47:34.000Z",
+        "url": "https://github.com/cloudflare/workers-sdk/releases/tag/miniflare%404.20260603.0"
+      },
+      {
+        "id": "rel_igkyElBhZVsCQHyfZjfwO",
+        "title": "@cloudflare/deploy-helpers@0.1.2",
+        "version": "@cloudflare/deploy-helpers@0.1.2",
+        "content": "### Patch Changes\n\n- Updated dependencies [[`c6c61b5`](https://github.com/cloudflare/workers-sdk/commit/c6c61b59431443b2bcda25f3af7624dd2ce19b9b), [`b502d54`](https://github.com/cloudflare/workers-sdk/commit/b502d5445b9e9e030020a3d65c0334507393aa64), [`c4f45e8`](https://github.com/cloudflare/workers-sdk/commit/c4f45e8b8694c60fb1808f7fbb130e4b4893d20c)]:\n  - @cloudflare/workers-utils@0.23.0\n",
+        "publishedAt": "2026-06-05T10:47:32.000Z",
+        "url": "https://github.com/cloudflare/workers-sdk/releases/tag/%40cloudflare/deploy-helpers%400.1.2"
+      },
+      {
+        "id": "rel_shRH3bsvXvSRhQv_gYUzt",
+        "title": "@cloudflare/cli-shared-helpers@0.1.7",
+        "version": "@cloudflare/cli-shared-helpers@0.1.7",
+        "content": "### Patch Changes\n\n- Updated dependencies [[`c6c61b5`](https://github.com/cloudflare/workers-sdk/commit/c6c61b59431443b2bcda25f3af7624dd2ce19b9b), [`b502d54`](https://github.com/cloudflare/workers-sdk/commit/b502d5445b9e9e030020a3d65c0334507393aa64), [`c4f45e8`](https://github.com/cloudflare/workers-sdk/commit/c4f45e8b8694c60fb1808f7fbb130e4b4893d20c)]:\n  - @cloudflare/workers-utils@0.23.0\n",
+        "publishedAt": "2026-06-05T10:47:30.000Z",
+        "url": "https://github.com/cloudflare/workers-sdk/releases/tag/%40cloudflare/cli-shared-helpers%400.1.7"
+      },
+      {
+        "id": "rel_yZqqt0JzCjUTUMT34Q5-R",
+        "title": "v1.20260605.1",
+        "version": "v1.20260605.1",
+        "content": "**Full Changelog**: https://github.com/cloudflare/workerd/compare/v1.20260604.1...v1.20260605.1",
+        "publishedAt": "2026-06-05T01:28:00.000Z",
+        "url": "https://github.com/cloudflare/workerd/releases/tag/v1.20260605.1"
+      },
+      {
+        "id": "rel_YGVmyNRDLwcDvH8iUEi7J",
+        "title": "Gateway, Cloudflare Mesh, Workers VPC - Filter Workers' public Internet traffic using Gateway policies",
+        "version": null,
+        "content": "Workers using a [VPC Network](https://developers.cloudflare.com/workers-vpc/configuration/vpc-networks/) binding with `network_id: \"cf1:network\"` now egress to public Internet destinations through [Cloudflare Gateway](https://developers.cloudflare.com/cloudflare-one/traffic-policies/). This means your existing Zero Trust traffic policies — DNS, HTTP, Network, and egress — extend to traffic that originates from your Workers, the same way they do for WARP users today.\n\n1. [Worker](https://developers.cloudflare.com/workers/)\n    \n    Calls `env.EGRESS.fetch()`\n    \n2. [VPC binding](https://developers.cloudflare.com/workers-vpc/) ↓\n3. [Cloudflare Mesh](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-mesh/)\n    \n    Bind via [`cf1:network`](https://developers.cloudflare.com/workers-vpc/configuration/vpc-networks/)\n    \n4. ↓\n5. [Cloudflare Gateway](https://developers.cloudflare.com/cloudflare-one/traffic-policies/)\n    \n    Policies applied:\n    \n    [DNS](htt",
+        "publishedAt": "2026-06-05T00:00:00.000Z",
+        "url": "https://developers.cloudflare.com/changelog/post/2026-06-05-gateway-egress/"
+      },
+      {
+        "id": "rel_6dTSqg-al5Yu7_OTkDPak",
+        "title": "Radar - Finer-grained chart granularity on Cloudflare Radar for longer time ranges",
+        "version": null,
+        "content": "[**Radar**](https://developers.cloudflare.com/radar/) now provides finer-grained traffic charts for longer time ranges. Previously, selecting a 1-3 month view on HTTP and NetFlows charts defaulted to weekly aggregation, which was too coarse to surface meaningful trends. Views longer than 3 months defaulted to monthly aggregation, returning as few as 7 data points for a 6-month range.\n\nThe new defaults are:\n\n- **1-3 months**: daily granularity (7x more data points)\n- **Longer than 3 months** (HTTP and NetFlows): weekly granularity (4x more data points)\n\nFor example, a 12-week traffic view previously showed weekly data:\n\n![Traffic trends chart with weekly granularity for a 12-week view](https://developers.cloudflare.com/_astro/traffic-granularity-12w-before.OlJmS6Ts_1UjtFK.webp)\n\nThe same view now shows daily data:\n\n![Traffic trends chart with daily granularity for a 12-week view](https://developers.cloudflare.com/_astro/traffic-granularity-12w-after.DL8mxwQ3_ZMfTlA.webp)\n\nSimilarly, a 1",
+        "publishedAt": "2026-06-05T00:00:00.000Z",
+        "url": "https://developers.cloudflare.com/changelog/post/2026-06-05-radar-traffic-chart-granularity/",
+        "media": [
+          {
+            "type": "image",
+            "url": "https://developers.cloudflare.com/_astro/traffic-granularity-12w-before.OlJmS6Ts_1UjtFK.webp",
+            "alt": "Traffic trends chart with weekly granularity for a 12-week view"
+          },
+          {
+            "type": "image",
+            "url": "https://developers.cloudflare.com/_astro/traffic-granularity-12w-after.DL8mxwQ3_ZMfTlA.webp",
+            "alt": "Traffic trends chart with daily granularity for a 12-week view"
+          }
+        ]
+      },
+      {
+        "id": "rel_YgJhaf3MUWNbX5qzkdyIi",
+        "title": "AI Gateway - Control AI costs with spend limits",
+        "version": null,
+        "content": "AI Gateway now supports spend limits — cost-based budgets that track cumulative dollar spend and block requests when the budget is exceeded. Unlike rate limiting, which caps the number of requests, spend limits track actual cost based on token usage and model pricing.\n\nYou can scope limits by model, provider, or custom metadata dimensions. For example, give each user a $200/day budget, cap total gateway spend at $10,000/day, or limit a specific model to $50/day per user. Each rule uses a configurable time window with fixed or sliding enforcement.\n\nSpend limits work with both [Unified Billing](https://developers.cloudflare.com/ai-gateway/features/unified-billing/) and [BYOK](https://developers.cloudflare.com/ai-gateway/configuration/bring-your-own-keys/) requests for models with known pricing.\n\nFor more details, refer to the [Spend limits documentation](https://developers.cloudflare.com/ai-gateway/features/spend-limits/).",
+        "publishedAt": "2026-06-05T00:00:00.000Z",
+        "url": "https://developers.cloudflare.com/changelog/post/2026-06-05-spend-limits/"
+      },
+      {
+        "id": "rel_ZZVhcze25A-d_wQqMw6-y",
+        "title": "@cloudflare/workers-auth@0.1.1",
+        "version": "@cloudflare/workers-auth@0.1.1",
+        "content": "### Patch Changes\n\n-   [#14121](https://github.com/cloudflare/workers-sdk/pull/14121) [`7539a9b`](https://github.com/cloudflare/workers-sdk/commit/7539a9bfcf03a14b2c16f281d541b6bc45523a80) Thanks [@petebacondarwin](https://github.com/petebacondarwin)! - Extract the OAuth 2.0 + PKCE flow into a new `@cloudflare/workers-auth` package.\n\n    The OAuth login / logout / refresh logic, the auth-config TOML file IO, the OAuth token exchange + local callback server, and the Cloudflare Access detection helpers that previously lived in `packages/wrangler/src/user/` have moved to the new internal-only `@cloudflare/workers-auth` package. Wrangler now wires the OAuth flow up via a small glue module that injects its logger, browser opener, interactivity detector, and config cache via a dependency- injection context.\n\n    What stays in wrangler:\n\n    -   The yargs `login` / `logout` / `whoami` / `auth token` commands\n    -   Environment-based credential resolution (`CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_",
+        "publishedAt": "2026-06-04T12:13:22.000Z",
+        "url": "https://github.com/cloudflare/workers-sdk/releases/tag/%40cloudflare/workers-auth%400.1.1"
+      },
+      {
+        "id": "rel_G-M4-f-vc9iOuWPNMMq_c",
+        "title": "v1.20260604.1",
+        "version": "v1.20260604.1",
+        "content": "**Full Changelog**: https://github.com/cloudflare/workerd/compare/v1.20260603.1...v1.20260604.1",
+        "publishedAt": "2026-06-04T01:38:14.000Z",
+        "url": "https://github.com/cloudflare/workerd/releases/tag/v1.20260604.1"
+      },
+      {
+        "id": "rel_EX3KFAKBMbZ7CBu1uHKA8",
+        "title": "Access - Share identity providers across accounts with IdP federation",
+        "version": null,
+        "content": "Cloudflare Access now supports [IdP federation](https://developers.cloudflare.com/cloudflare-one/integrations/identity-providers/idp-federation/), which allows organizations to share a single identity provider across multiple Cloudflare accounts.\n\nInstead of configuring the same IdP (for example, Okta or Entra ID) separately in every account, you configure it once in a source account and share it with the other accounts in your organization. Each recipient account gets a read-only IdP connection that routes authentication back to the source account through a bridge — a hidden application in the source account that brokers the cross-account login. End users sign in with their existing IdP credentials, and each account's Access policies evaluate the resulting identity just like any other IdP login.\n\nKey capabilities:\n\n- **One IdP, many accounts** — Configure your IdP once and share it with all accounts in your organization.\n- **Lifecycle management** — As accounts join or leave your Clou",
+        "publishedAt": "2026-06-04T00:00:00.000Z",
+        "url": "https://developers.cloudflare.com/changelog/post/2026-06-04-idp-federation/"
+      },
+      {
+        "id": "rel_2vE_6wK743xbtC9cJqqGZ",
+        "title": "Pipelines, Workers - Pipeline binding configuration field renamed to stream",
+        "version": null,
+        "content": "The `pipeline` field inside the `pipelines` binding configuration in your [Wrangler configuration file](https://developers.cloudflare.com/workers/wrangler/configuration/) has been renamed to `stream`. The old field is deprecated but still accepted.\n\nUpdate your configuration to use `stream` to avoid the deprecation warning.\n\n**Before (deprecated):**\n\n- wrangler.jsonc\n    \n    ```jsonc\n    <div><div><span>{</span></div></div><div><div><span>  </span><span>\"</span><span>$schema</span><span>\"</span><span>:</span><span> </span><span>\"./node_modules/wrangler/config-schema.json\"</span><span>,</span></div></div><div><div><span>  </span><span>\"</span><span>pipelines</span><span>\"</span><span>:</span><span> </span><span>[</span></div></div><div><div><span>    </span><span>{</span></div></div><div><div><span>      </span><span>\"</span><span>binding</span><span>\"</span><span>:</span><span> </span><span>\"MY_PIPELINE\"</span><span>,</span></div></div><div><div><span>      </span><span>\"</span><span>",
+        "publishedAt": "2026-06-04T00:00:00.000Z",
+        "url": "https://developers.cloudflare.com/changelog/post/2026-05-27-pipeline-binding-stream-field/"
+      },
+      {
+        "id": "rel_q1Re3yeGLdRFe_8VYqhWw",
+        "title": "Cloudflare Fundamentals, Workers, D1, R2, KV, Queues, Vectorize, Durable Objects, Containers - Billable usage and budget alerts now in product sidebars",
+        "version": null,
+        "content": "Pay-as-you-go customers can now view billable usage and create [budget alerts](https://developers.cloudflare.com/changelog/post/2026-04-13-billable-usage-dashboard-and-budget-alerts/) directly from the product overview pages for [Workers & Pages](https://developers.cloudflare.com/workers/), [D1](https://developers.cloudflare.com/d1/), [R2](https://developers.cloudflare.com/r2/), [Workers KV](https://developers.cloudflare.com/kv/), [Queues](https://developers.cloudflare.com/queues/), [Vectorize](https://developers.cloudflare.com/vectorize/), [Durable Objects](https://developers.cloudflare.com/durable-objects/), and [Containers](https://developers.cloudflare.com/containers/). A new sidebar widget shows current-period spend and the billing cycle date range, alongside a button to create a budget alert.\n\nThe widget pulls from the same data as the [Billable Usage dashboard](https://developers.cloudflare.com/changelog/post/2026-04-13-billable-usage-dashboard-and-budget-alerts/) and aligns to ",
+        "publishedAt": "2026-06-04T00:00:00.000Z",
+        "url": "https://developers.cloudflare.com/changelog/post/2026-06-04-billable-usage-product-sidebar/",
+        "media": [
+          {
+            "type": "image",
+            "url": "https://developers.cloudflare.com/_astro/2026-06-04-billable-usage-product-sidebar.BUuIokn__ZAx1o6.webp",
+            "alt": "Billable usage widget in the Durable Objects product sidebar showing current-period spend and a breakdown by service"
+          }
+        ]
+      },
+      {
+        "id": "rel_t99vpFXU011zS56jcW_NW",
+        "title": "v1.20260603.1",
+        "version": "v1.20260603.1",
+        "content": "**Full Changelog**: https://github.com/cloudflare/workerd/compare/v1.20260602.1...v1.20260603.1",
+        "publishedAt": "2026-06-03T01:37:13.000Z",
+        "url": "https://github.com/cloudflare/workerd/releases/tag/v1.20260603.1"
+      },
+      {
+        "id": "rel_uVQ49zyiUmq1NCsbgj5V_",
+        "title": "Access - SAML assertion encryption for identity providers",
+        "version": null,
+        "content": "Cloudflare Access now supports SAML assertion encryption for identity provider integrations. When turned on, your identity provider encrypts SAML assertions using a Cloudflare-managed certificate before sending them through the user's browser. Only Access can decrypt these assertions, protecting sensitive identity data even after TLS termination.\n\nWithout encryption, SAML assertions are transmitted in plaintext and could be visible to browser extensions or client-side malware.\n\n![SAML encryption toggle in the identity provider configuration](https://developers.cloudflare.com/_astro/saml-encryption.J5jmiYv8_ZkhXFT.webp)\n\nSAML encryption includes built-in certificate lifecycle management:\n\n- **Automatic certificate generation**: Access generates an encryption certificate when you turn on SAML encryption for an identity provider.\n- **Certificate rotation**: Rotate certificates without downtime. The previous certificate remains valid until expiration, giving you time to update your IdP.\n- ",
+        "publishedAt": "2026-06-03T00:00:00.000Z",
+        "url": "https://developers.cloudflare.com/changelog/post/2026-06-03-saml-assertion-encryption/",
+        "media": [
+          {
+            "type": "image",
+            "url": "https://developers.cloudflare.com/_astro/saml-encryption.J5jmiYv8_ZkhXFT.webp",
+            "alt": "SAML encryption toggle in the identity provider configuration"
+          }
+        ]
+      },
+      {
+        "id": "rel_4RxRpjuh0dU452km2u46p",
+        "title": "Cloudflare Fundamentals - Introducing self-managed OAuth clients",
+        "version": null,
+        "content": "Today we are launching self-managed OAuth, enabling developers to build third-party applications that integrate with Cloudflare via OAuth. This provides a more secure, user-friendly, and manageable alternative to API tokens.\n\nOAuth lets third-party applications act on behalf of a user to access their Cloudflare account. For example, after a user grants consent, Wrangler can deploy Workers into that account.\n\n#### What is new\n\nCloudflare Developers can now create and manage their own OAuth applications to integrate with Cloudflare.\n\n#### Create an application\n\nTo create an application, go to **Manage account** > **OAuth clients** in your account on the Cloudflare dashboard.\n\n[Go to **OAuth clients**](https://dash.cloudflare.com/?to=/:account/oauth-clients)\n\n#### Select limited scopes\n\nIf you have used an API token to call Cloudflare APIs, OAuth client scopes will look familiar. Select only the scopes your application needs during application creation, and include that scope list when se",
+        "publishedAt": "2026-06-03T00:00:00.000Z",
+        "url": "https://developers.cloudflare.com/changelog/post/2026-06-03-public-oauth-clients/"
+      },
+      {
+        "id": "rel_0Icfmy7lBTVeNWnVpn1St",
+        "title": "Workers - New Workers bulk secrets API endpoint",
+        "version": null,
+        "content": "You can now create, update, or delete multiple secrets for your Worker in a single request using the [bulk secrets endpoint](https://developers.cloudflare.com/api/resources/workers/subresources/scripts/subresources/secrets/methods/bulk_update/).\n\n- Include a secret with a value to create or update.\n- Set a secret to `null` to delete.\n- Secrets not included in the request are left unchanged.\n\nThe following example creates `API_KEY`, updates the already existing `DB_PASSWORD`, and deletes `OLD_SECRET`:\n\n```json\n<div><div><span>{</span></div></div><div><div><span>  </span><span>\"</span><span>secrets</span><span>\"</span><span>:</span><span> </span><span>{</span></div></div><div><div><span>    </span><span>\"</span><span>API_KEY</span><span>\"</span><span>:</span><span> </span><span>{</span><span> </span><span>\"</span><span>type</span><span>\"</span><span>:</span><span> </span><span>\"secret_text\"</span><span>,</span><span> </span><span>\"</span><span>name</span><span>\"</span><span>:</span><span",
+        "publishedAt": "2026-06-03T00:00:00.000Z",
+        "url": "https://developers.cloudflare.com/changelog/post/2026-06-03-bulk-secrets-api/"
+      },
+      {
+        "id": "rel_xC1atIbr6vGI-AJsOIcLG",
+        "title": "Workflows, Workers - Schedule Workflow instances directly from your Workflow binding",
+        "version": null,
+        "content": "You can now attach cron schedules directly to a Workflow binding in `wrangler.jsonc`. Each scheduled run creates a new Workflow instance automatically, so you do not need to define a separate Worker with a `scheduled` handler just to trigger your Workflow on an interval.\n\nFor example, you can configure hourly, every-15-minute, or weekday schedules on the same Workflow:\n\n```jsonc\n<div><div><span>{</span></div></div><div><div><span>  </span><span>\"</span><span>workflows</span><span>\"</span><span>:</span><span> </span><span>[</span></div></div><div><div><span>    </span><span>{</span></div></div><div><div><span>      </span><span>\"</span><span>name</span><span>\"</span><span>:</span><span> </span><span>\"my-scheduled-workflow\"</span><span>,</span></div></div><div><div><span>      </span><span>\"</span><span>binding</span><span>\"</span><span>:</span><span> </span><span>\"MY_WORKFLOW\"</span><span>,</span></div></div><div><div><span>      </span><span>\"</span><span>class_name</span><span>\"</span",
+        "publishedAt": "2026-06-02T15:00:00.000Z",
+        "url": "https://developers.cloudflare.com/changelog/post/2026-06-02-cron-workflows/"
+      },
+      {
+        "id": "rel_oKlPeWG1y6j4JjgN2h8nY",
+        "title": "v1.20260602.1",
+        "version": "v1.20260602.1",
+        "content": "## What's Changed\n* 2026 05 27 update by @mikea in https://github.com/cloudflare/workerd/pull/6785\n\n\n**Full Changelog**: https://github.com/cloudflare/workerd/compare/v1.20260601.1...v1.20260602.1",
+        "publishedAt": "2026-06-02T01:32:15.000Z",
+        "url": "https://github.com/cloudflare/workerd/releases/tag/v1.20260602.1"
+      },
+      {
+        "id": "rel_GWhqWuPmCAaZO8R5YFWKO",
+        "title": "Cloudflare WAN, Cloudflare One - Cisco IOS XE",
+        "version": null,
+        "content": "The Cisco IOS XE third-party integration guide for Cloudflare WAN has been updated to include:\n\n- Post Quantum Cryptography (PQC)\n- Policy-Based Routing (PBR)\n- IP Service Level Agreement (IP SLA)\n\nThis link will take you directly to the updated [Cisco IOS XE](https://developers.cloudflare.com/cloudflare-wan/configuration/third-party/cisco-ios-xe/) guide.",
+        "publishedAt": "2026-06-02T00:00:00.000Z",
+        "url": "https://developers.cloudflare.com/changelog/post/2026-06-02-cisco-ios-xe/"
+      },
+      {
+        "id": "rel_wsC0DYSQAU0-c5vdLnClD",
+        "title": "Agents, Workers - Agents SDK v0.14.0: Agent Skills, messengers, scheduled tasks, Workflows, and hardened chat recovery",
+        "version": "0.14.0",
+        "content": "The latest release of the [Agents SDK](https://github.com/cloudflare/agents) adds four new ways to build with `@cloudflare/think`: on-demand Agent Skills, chat messengers (starting with Telegram), declarative scheduled tasks, and durable reasoning steps inside Workflows. This release also significantly hardens durable chat recovery, so turns reliably ride through deploys, evictions, and stalled model streams in production.\n\n#### Agent Skills (experimental)\n\nGive an agent a catalog of on-demand instructions, resources, and scripts. A skill source adds a catalog to the system prompt, and the model activates a skill only when a task matches — so a large library of capabilities does not bloat every prompt.\n\n- JavaScript\n    \n    ```js\n    <div><div><span>import </span><span>{</span><span><span> </span><span>Think</span></span><span>,</span><span><span> </span><span>skills</span><span> </span></span><span>}</span><span> from </span><span>\"@cloudflare/think\"</span><span>;</span></div></div><",
+        "publishedAt": "2026-06-02T00:00:00.000Z",
+        "url": "https://developers.cloudflare.com/changelog/post/2026-06-02-agents-sdk-v0140/"
+      },
+      {
+        "id": "rel_U7CUJfAUbnvV0S4U7cnWW",
+        "title": "v1.20260601.1",
+        "version": "v1.20260601.1",
+        "content": "**Full Changelog**: https://github.com/cloudflare/workerd/compare/v1.20260531.1...v1.20260601.1",
+        "publishedAt": "2026-06-01T01:33:17.000Z",
+        "url": "https://github.com/cloudflare/workerd/releases/tag/v1.20260601.1"
+      },
+      {
+        "id": "rel_74ENV4Feao3E_Wy4y1MMq",
+        "title": "Logs - New Turnstile Events Logpush dataset in Cloudflare Logs",
+        "version": null,
+        "content": "Cloudflare has updated [Logpush datasets](https://developers.cloudflare.com/logs/logpush/logpush-job/datasets/):\n\n#### New datasets\n\n- **Turnstile Events**: A new dataset with fields including `ASN`, `Action`, `BrowserMajor`, `BrowserName`, `ClientIP`, `CountryCode`, `EventType`, `Hostname`, `OSMajor`, `OSName`, `Sitekey`, `Timestamp`, and `UserAgent`.\n\nFor the complete field definitions for each dataset, refer to [Logpush datasets](https://developers.cloudflare.com/logs/logpush/logpush-job/datasets/).",
+        "publishedAt": "2026-06-01T00:00:00.000Z",
+        "url": "https://developers.cloudflare.com/changelog/post/2026-06-01-log-fields-updated/"
+      },
+      {
+        "id": "rel_Dg6Gw3WTvJPrxyUttk89q",
+        "title": "v1.20260531.1",
+        "version": "v1.20260531.1",
+        "content": "**Full Changelog**: https://github.com/cloudflare/workerd/compare/v1.20260530.1...v1.20260531.1",
+        "publishedAt": "2026-05-31T01:29:54.000Z",
+        "url": "https://github.com/cloudflare/workerd/releases/tag/v1.20260531.1"
+      },
+      {
+        "id": "rel_jrmMkB-jpG4mNPf6su6Tr",
+        "title": "v1.20260530.1",
+        "version": "v1.20260530.1",
+        "content": "## What's Changed\n* IMAGES-2299: Add types for composite feature by @ns476 in https://github.com/cloudflare/workerd/pull/6786\n\n\n**Full Changelog**: https://github.com/cloudflare/workerd/compare/v1.20260529.1...v1.20260530.1",
+        "publishedAt": "2026-05-30T01:21:24.000Z",
+        "url": "https://github.com/cloudflare/workerd/releases/tag/v1.20260530.1"
+      },
+      {
+        "id": "rel_9EtVe7j7BJ3WIuG_l8eD-",
+        "title": "v1.20260529.1",
+        "version": "v1.20260529.1",
+        "content": "## What's Changed\n* Add AgentMemoryNamespace types scaffold by @petebacondarwin in https://github.com/cloudflare/workerd/pull/6628\n\n\n**Full Changelog**: https://github.com/cloudflare/workerd/compare/v1.20260528.1...v1.20260529.1",
+        "publishedAt": "2026-05-29T01:26:22.000Z",
+        "url": "https://github.com/cloudflare/workerd/releases/tag/v1.20260529.1"
+      },
+      {
+        "id": "rel_pN1S3WvN2GzhpPn1TislW",
+        "title": "Cloudflare One Client - Cloudflare One Client for macOS (version 2026.5.1155.1)",
+        "version": "2026.5.1155",
+        "content": "A new Beta release for the macOS Cloudflare One Client is now available on the [beta releases downloads page](https://developers.cloudflare.com/cloudflare-one/team-and-resources/devices/cloudflare-one-client/download/beta-releases/).\n\nThis release introduces the new Cloudflare One Client UI for macOS! You can expect a cleaner and more intuitive design as well as easier access to common actions and information. Here are some of the many things we have found our users appreciate:\n\n- Right click context menu to access the most common client actions quickly\n- Built-in captive portal login experience\n\n**Additional Changes and improvements**\n\n- The client now applies DNS search suffixes configured in your [device profile](https://developers.cloudflare.com/cloudflare-one/team-and-resources/devices/cloudflare-one-client/configure/device-profiles) / [network policy](https://developers.cloudflare.com/cloudflare-one/traffic-policies/network-policies). Administrators can push a list of DNS search ",
+        "publishedAt": "2026-05-29T00:55:38.000Z",
+        "url": "https://developers.cloudflare.com/changelog/post/2026-05-29-warp-macos-beta/"
+      },
+      {
+        "id": "rel_9RNL2PBet_aEg8NBk4XA2",
+        "title": "Cloudflare One Client - Cloudflare One Client for Windows (version 2026.5.1155.1)",
+        "version": "2026.5.1155",
+        "content": "A new Beta release for the Windows Cloudflare One Client is now available on the [beta releases downloads page](https://developers.cloudflare.com/cloudflare-one/team-and-resources/devices/cloudflare-one-client/download/beta-releases/).\n\nThis release introduces the new Cloudflare One Client UI for Windows! You can expect a cleaner and more intuitive design as well as easier access to common actions and information. Here are some of the many things we have found our users appreciate:\n\n- Right click context menu to access the most common client actions quickly\n- Built-in captive portal login experience\n\n**Additional Changes and improvements**\n\n- The client now applies DNS search suffixes configured in your [device profile](https://developers.cloudflare.com/cloudflare-one/team-and-resources/devices/cloudflare-one-client/configure/device-profiles) / [network policy](https://developers.cloudflare.com/cloudflare-one/traffic-policies/network-policies). Administrators can push a list of DNS sea",
+        "publishedAt": "2026-05-29T00:55:37.000Z",
+        "url": "https://developers.cloudflare.com/changelog/post/2026-05-29-warp-windows-beta/"
+      },
+      {
+        "id": "rel_6fdhqqiriErGY07Ez835M",
+        "title": "Security Center - Security scans more frequent",
+        "version": null,
+        "content": "Security Insights scans now run more often. Cloudflare scans Free accounts **every 7 days**, Pro and Business accounts **every 3 days**, and Enterprise accounts **daily**.\n\nIn addition, all accounts and zones now receive scans by default. You no longer need to enable scans before Cloudflare checks your account for misconfigurations, vulnerabilities, and other security risks.\n\nGranular on-demand scans are now available on any plan. You can trigger an on-demand scan for any zone, insight, insight type from the Cloudflare dashboard in order to quickly re-check your security posture after remediating an issue.\n\nTo learn more, refer to the [Security Insights documentation](https://developers.cloudflare.com/security/security-insights/).",
+        "publishedAt": "2026-05-29T00:00:00.000Z",
+        "url": "https://developers.cloudflare.com/changelog/post/2026-05-29-security-insights-default-scans/"
+      },
+      {
+        "id": "rel_T7tlGUufzt5ZMJhfNl-Nr",
+        "title": "Agents - Share sandbox previews through Cloudflare Tunnel",
+        "version": null,
+        "content": "[Sandboxes](https://developers.cloudflare.com/sandbox/) can expose a service running inside the container on a public preview URL through the `sandbox.tunnels` namespace. The SDK uses `cloudflared` inside the sandbox so you can share a running service without configuring `exposePort()` or a custom domain.\n\nBy default, `sandbox.tunnels.get(port)` creates a [quick tunnel](https://try.cloudflare.com/) on a zero-config `*.trycloudflare.com` URL — no Cloudflare account, DNS record, or custom domain required. This is perfect for quick development and for `.workers.dev` deployments.\n\n- JavaScript\n    \n    ```js\n    <div><div><span>import </span><span>{</span><span><span> </span><span>getSandbox</span><span> </span></span><span>}</span><span> from </span><span>\"@cloudflare/sandbox\"</span><span>;</span></div></div><div><div>\n    </div></div><div><div><span>const</span><span> </span><span>sandbox</span><span> </span><span>=</span><span> </span><span>getSandbox</span><span>(</span><span>env</span",
+        "publishedAt": "2026-05-29T00:00:00.000Z",
+        "url": "https://developers.cloudflare.com/changelog/post/2026-05-29-sandbox-named-tunnels/"
+      },
+      {
+        "id": "rel_G9NUE7VlkCliwL1YouVBa",
+        "title": "Radar - TLS bug detection in the Cloudflare Radar post-quantum checker",
+        "version": null,
+        "content": "The [**Radar**](https://developers.cloudflare.com/radar/) [post-quantum TLS support checker](https://radar.cloudflare.com/post-quantum#website-support) now also reports TLS bugs detected during the handshake test. When a scanned host exhibits compatibility issues, the results include details on the specific bugs detected, along with guidance on how to investigate and remediate each issue. The bugs section only appears for hosts where issues are found.\n\nThe following TLS bugs are detected:\n\n- **Split ClientHello** — The connection fails with a fragmented post-quantum `ClientHello` but succeeds with classical handshakes. Typically caused by middleboxes or firewalls that cannot reassemble split TLS messages.\n- **HRR Failure** — The server sends a `HelloRetryRequest` but fails to complete the handshake afterward.\n- **Unknown Keyshare** — The server cannot handle unknown key exchange algorithms and fails instead of responding with a `HelloRetryRequest` as required by the TLS 1.3 specificati",
+        "publishedAt": "2026-05-29T00:00:00.000Z",
+        "url": "https://developers.cloudflare.com/changelog/post/2026-05-29-radar-pq-tls-bug-detection/",
+        "media": [
+          {
+            "type": "image",
+            "url": "https://developers.cloudflare.com/_astro/pq-tls-bug-detection.BrmsVMno_ZIsLXh.webp",
+            "alt": "TLS bug detection results in the Radar post-quantum checker"
+          }
+        ]
+      },
+      {
+        "id": "rel_lfrA1xVAs31Y2885JOSzC",
+        "title": "Logs - Updated fields across multiple Logpush datasets in Cloudflare Logs",
+        "version": null,
+        "content": "Cloudflare has updated [Logpush datasets](https://developers.cloudflare.com/logs/logpush/logpush-job/datasets/):\n\n#### Updated fields in existing datasets\n\n- **DEX Device State Events** (added): `DeviceRegistrationProfileID`.\n- **Gateway HTTP** (added): `AddedHeaders`, `DeletedHeaders`, and `SetHeaders`.\n- **HTTP requests** (added): `MatchedRules`.\n\nFor the complete field definitions for each dataset, refer to [Logpush datasets](https://developers.cloudflare.com/logs/logpush/logpush-job/datasets/).",
+        "publishedAt": "2026-05-29T00:00:00.000Z",
+        "url": "https://developers.cloudflare.com/changelog/post/2026-05-29-log-fields-updated/"
+      },
+      {
+        "id": "rel_sfkcGu3jCXj4iVvWsWN6P",
+        "title": "v1.20260528.1",
+        "version": "v1.20260528.1",
+        "content": "## What's Changed\n* add BrowserRun types by @Refaerds in https://github.com/cloudflare/workerd/pull/6771\n\n## New Contributors\n* @Refaerds made their first contribution in https://github.com/cloudflare/workerd/pull/6771\n\n**Full Changelog**: https://github.com/cloudflare/workerd/compare/v1.20260527.1...v1.20260528.1",
+        "publishedAt": "2026-05-28T01:18:18.000Z",
+        "url": "https://github.com/cloudflare/workerd/releases/tag/v1.20260528.1"
+      },
+      {
+        "id": "rel_fLDeqY09WSxozXbM-cJ7K",
+        "title": "2026.5.2",
+        "version": "2026.5.2",
+        "content": " \n### SHA256 Checksums:\n```\ncloudflared-amd64.pkg: bb7ede305d62fe98cc77edccfecbef8c1aa392b8516aa40b3764f82bee146e84\ncloudflared-arm64.pkg: 7bf8bebc175b60d58a553f8f56ccc9caca204c6b196ffd992bea57452693d05d\ncloudflared-darwin-amd64.tgz: c4fdc6021cd63003e32e70b577e17d47d493c6df4e24c7c97169ed74b67a715d\ncloudflared-darwin-arm64.tgz: cd9f764abfd06757b4def10ee5ba3d862381ed9fc02d6c1f06086c23d88695c6\ncloudflared-fips-linux-amd64: 1056673c76a821225b5af20c82d56f1214ba6398982798dfb4c15993a8985b36\ncloudflared-fips-linux-amd64.deb: 380a1761659d11aea1d6447611bb0a1721687e247ac133f41daea1a98277100d\ncloudflared-fips-linux-x86_64.rpm: 69e8b6b57c722c53cab8cd89dce9cac42ea8f4920519224d2fac32692fae3b3f\ncloudflared-linux-386: ad82d1dbed8bbb9d702807cbd97df932cc774d29e9da5c109b7a3c7f7aee2065\ncloudflared-linux-386.deb: e1c6288f9337eb632da626d4c7e3b9c347e87750afc8c5d06da4dec821e96412\ncloudflared-linux-386.rpm: 93f2ae0ccf98a5dd70ebdb8fd09881719bbd744cf9745dec47b3a8e99f861c73\ncloudflared-linux-aarch64.rpm: 120746435",
+        "publishedAt": "2026-05-27T10:45:14.000Z",
+        "url": "https://github.com/cloudflare/cloudflared/releases/tag/2026.5.2"
+      },
+      {
+        "id": "rel_xadMQVZq-h0Wfk3KXMaMW",
+        "title": "v1.20260527.1",
+        "version": "v1.20260527.1",
+        "content": "## What's Changed\n* [Workflows] Add sensitive step output option by @pombosilva in https://github.com/cloudflare/workerd/pull/6758\n* [Workflows] Add workflowName and schedule to WorkflowEvent by @pombosilva in https://github.com/cloudflare/workerd/pull/6781\n\n\n**Full Changelog**: https://github.com/cloudflare/workerd/compare/v1.20260526.1...v1.20260527.1",
+        "publishedAt": "2026-05-27T01:26:19.000Z",
+        "url": "https://github.com/cloudflare/workerd/releases/tag/v1.20260527.1"
+      },
+      {
+        "id": "rel_2HZeC7s--7qbNpsLiT7vA",
+        "title": "2026.5.1",
+        "version": "2026.5.1",
+        "content": " \n### SHA256 Checksums:\n```\ncloudflared-amd64.pkg: f1b8ff401fce3863dac400129f27fce90fe5b682582c70c60c8e4d5ab2258c3d\ncloudflared-arm64.pkg: 8e35c67d5488baa6656aff2d777258c27c7dd08a4a8f022afbf536a52c0c3496\ncloudflared-darwin-amd64.tgz: c232c2be1fda76ffb5dff55874c4d4e3d3137bd426e3e73d539c3ecbe20526a2\ncloudflared-darwin-arm64.tgz: 086dd6628a3608eba7327af1092abcc52b10994524112ae49bf356ec49bef8c4\ncloudflared-fips-linux-amd64: 8df480451aaf0829fea35b208e137cf692002eed4ae000093aa8669545f47873\ncloudflared-fips-linux-amd64.deb: bc4e5f62220b3997c0919e5eff399627c2d862f990e42837f0530cef576da5b5\ncloudflared-fips-linux-x86_64.rpm: d0faf1bf239b8e616d360b515ffc8006b35f7acc6258fe646483f68b825beda4\ncloudflared-linux-386: 3b2dce38a91e0806ac581cfdd80fd3b382a5c85cad2bb351e95a0820bbc4e8b1\ncloudflared-linux-386.deb: de68946f1a7a4290088a8f9ec5cc10e864604a23c63bf9636c6bd4e1d6820488\ncloudflared-linux-386.rpm: 6525ed3edb564bf7196869236379db8412e8577d6c5725b159a3c1abec6de412\ncloudflared-linux-aarch64.rpm: 30d02e78f",
+        "publishedAt": "2026-05-25T10:31:33.000Z",
+        "url": "https://github.com/cloudflare/cloudflared/releases/tag/2026.5.1"
+      },
+      {
+        "id": "rel_jZdyTUad01lmMhzLBVj2g",
+        "title": "2026.5.0",
+        "version": "2026.5.0",
+        "content": " \n### SHA256 Checksums:\n```\ncloudflared-amd64.pkg: 3bba5d1ae1fc7f4e224da244b15c281588f774f649bd15ef148ab7577df9a87d\ncloudflared-arm64.pkg: e0aeda65c34359dcd71f228137fe5bcb4e2b36cde41acbeaed018141f18a17a1\ncloudflared-darwin-amd64.tgz: 2b9ad49aee5d390ba9b9bf949a0576cc1e5f1e7444a59f4db0f0ceff05560542\ncloudflared-darwin-arm64.tgz: 2c1664a06fb7bc4d3af24e208ee34a1b5ed4610006dab98aa3e65cccf2c6b444\ncloudflared-fips-linux-amd64: e340475b8ea87469ffeb2d244fa33502a690ccd414be5d31be0a622f5a19f2ef\ncloudflared-fips-linux-amd64.deb: 6741ed3e67a3ead2b6f54514de532e8956234f7b4c87b546c98d45fe07626eb1\ncloudflared-fips-linux-x86_64.rpm: 365ac1ee3520f8979077840842e3b45f114c482812b2390c5e8694c9e4aa4c55\ncloudflared-linux-386: af63c00d89e92538b40b1e3b8a264558f17c23d706b3b07c1c5a0f21e5f27942\ncloudflared-linux-386.deb: fd5dda4a50377baed4cdcfa0b112e1d82a7f6db13fbc653a80cd99748ee573e8\ncloudflared-linux-386.rpm: 63685d4209bb0313b75dd852b9e0f3760101cbed20a88e242f412bb20314d49a\ncloudflared-linux-aarch64.rpm: ae3f0dcfb",
+        "publishedAt": "2026-05-13T11:56:40.000Z",
+        "url": "https://github.com/cloudflare/cloudflared/releases/tag/2026.5.0"
+      },
+      {
+        "id": "rel_dLtxrGK_h3bDWskCKmyBH",
+        "title": "2026.3.0",
+        "version": "2026.3.0",
+        "content": " \n### SHA256 Checksums:\n```\ncloudflared-amd64.pkg: 6e7f474441ad76c4f6da029302065e410bf36f27e4e757cc3c690d752dde76a1\ncloudflared-arm64.pkg: 4f47e69d744ff3f357d82be0c18859b0f346b09e5aa5dc6bba9549fc63780d98\ncloudflared-darwin-amd64.tgz: b91dbec79a3e3809d5508b96d8b0bdfbf3ad7d51f858200228fa3e57100580d9\ncloudflared-darwin-arm64.tgz: 633cee0fd41fd2020e17498beecc54811bf4fc99f891c080dc9343eb0f449c60\ncloudflared-fips-linux-amd64: 3729780d913feb4f3e97a424f59fc6d2d80b6178b8a9584e858b186cc20a268a\ncloudflared-fips-linux-amd64.deb: 45253dfcaf990049f017b2859654b2d0d3c71f97c55bdaaf09b451a879dfd0f8\ncloudflared-fips-linux-x86_64.rpm: 6d5af9923e62837d0bac97af57039105ff54a593b55c0d1e16a1e2ba525ab502\ncloudflared-linux-386: 7d59f6ef7b4c255edd88187c74d2b4ecd895b6f5c4aca2cae0c4411eacebcbbd\ncloudflared-linux-386.deb: cadaaf29794d24172f8a16db4fe072ee3d3552dfe17167de99762bb36edf27b8\ncloudflared-linux-386.rpm: 2d8645894da4d4a8f2949cae2b8f1bb0b378114ae99f897edc2afba39b5493b4\ncloudflared-linux-aarch64.rpm: 78e839450",
+        "publishedAt": "2026-03-09T14:17:29.000Z",
+        "url": "https://github.com/cloudflare/cloudflared/releases/tag/2026.3.0"
+      }
+    ],
+    "existingContent": null,
+    "totalAvailable": 627
+  },
+  "structural": {
+    "maxMedia": 2
+  },
+  "citations": {
+    "minCitations": 2
+  }
+}
