@@ -97,6 +97,8 @@ async function main() {
           model: orModel,
           referer: "https://releases.sh",
           title: "Releases summary eval",
+          // Tag eval runs so Broadcast traces stay separate from prod traffic.
+          trace: { generationName: "summarize-eval", environment: "eval" },
         })
       : anthropicTextModel(client, SUMMARY_MODEL);
   console.error(`model under test: ${summaryModel.id}`);

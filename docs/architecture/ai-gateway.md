@@ -47,3 +47,17 @@ Two routing modes:
 ## What this PR does not configure
 
 Gateway-level features (fallback chains, caching TTLs, rate limits, reranking) are configured in the Cloudflare dashboard, not in this repo. This PR is passthrough only: flip the env var and telemetry starts flowing. Per-route cache config and provider fallbacks land in follow-up changes once there's a week of baseline metrics.
+
+## OpenRouter Broadcast observability
+
+The cheap-call OpenRouter lanes (marketing classifier, live summarizer — see [`packages/ai/src/text-model.ts`](../../packages/ai/src/text-model.ts)) attach optional **Broadcast** trace tags to every request via `OpenRouterTrace` on `openRouterChat`. Broadcast is OpenRouter's account-level observability side-channel: it forwards a copy of each traced request (tokens, cost, latency, model, and our tags) to a configured destination. It is **not** provider fan-out, and it adds no per-call latency (forwarding is server-side, after the response returns).
+
+What the code sends today: a static `trace` block with `generation_name` (`"marketing-classifier"` / `"summarize-release"`, or `"summarize-eval"` from the local eval) and `environment` (the worker's `ENVIRONMENT` var). No prompt/completion content is in the trace block — only labels — so it is never a PII surface on its own.
+
+**The tags are inert until Broadcast is enabled in the OpenRouter dashboard.** To activate (all dashboard, no code):
+
+1. **Axiom** (our existing stack — worker logs already ship there): create a dataset, e.g. `releases-openrouter-traces`, and an ingest API token.
+2. **OpenRouter → Settings → Observability → Broadcast**: add an **OpenTelemetry** destination pointed at Axiom's OTLP endpoint `https://api.axiom.co/v1/traces`, with headers `Authorization: Bearer <token>` and `x-axiom-dataset: releases-openrouter-traces`. (Axiom ingests OTLP natively — no collector to host. If the OTel destination can't set custom headers, the generic **Webhook** destination to the same endpoint is the fallback.)
+3. Toggle **Privacy Mode on** for that destination so the raw release text in prompts/completions is stripped before forwarding — only tokens/cost/timing/our tags are kept.
+
+Langfuse (LLM-eval-specialized) is an alternative native destination; Broadcast supports multiple destinations at once, so it can be added alongside Axiom later without disturbing it.

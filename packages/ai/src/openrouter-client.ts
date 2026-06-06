@@ -10,6 +10,24 @@
  * OpenRouter needs its own transport rather than a `baseURL` swap on the SDK.
  */
 
+/**
+ * Static Broadcast trace tags attached to every request from one model
+ * instance. OpenRouter forwards these to a configured Broadcast destination
+ * (Axiom via OTLP, Langfuse, …) for grouping; they are *silently ignored* until
+ * Broadcast is enabled in the OpenRouter dashboard, so populating them is inert
+ * and safe. Only labels live here — no prompt/completion content — so these
+ * fields are never a PII concern (the model messages are; gate those with the
+ * destination's Privacy Mode).
+ */
+export interface OpenRouterTrace {
+  /** Stable name for this lane — e.g. "summarize-release", "marketing-classifier". */
+  generationName?: string;
+  /** "production" | "staging" | "eval" — separates prod traffic from eval runs. */
+  environment?: string;
+  feature?: string;
+  version?: string;
+}
+
 export interface OpenRouterOptions {
   apiKey: string;
   model: string;
@@ -19,6 +37,23 @@ export interface OpenRouterOptions {
   referer?: string;
   title?: string;
   timeoutMs?: number;
+  /** Optional Broadcast observability tags (see `OpenRouterTrace`). */
+  trace?: OpenRouterTrace;
+}
+
+/**
+ * Map the camelCase trace tags to OpenRouter's snake_case `trace` body shape,
+ * dropping unset keys. Returns `undefined` when nothing is set so the body merge
+ * omits the field entirely (no empty `trace: {}` on the wire).
+ */
+function serializeTrace(trace: OpenRouterTrace | undefined): Record<string, string> | undefined {
+  if (!trace) return undefined;
+  const out: Record<string, string> = {};
+  if (trace.generationName) out.generation_name = trace.generationName;
+  if (trace.environment) out.environment = trace.environment;
+  if (trace.feature) out.feature = trace.feature;
+  if (trace.version) out.version = trace.version;
+  return Object.keys(out).length > 0 ? out : undefined;
 }
 
 export interface OpenRouterRequest {
@@ -50,6 +85,7 @@ export async function openRouterChat(
   fetchImpl: typeof fetch = fetch,
 ): Promise<OpenRouterResult> {
   const base = (opts.baseURL ?? DEFAULT_BASE).replace(/\/$/, "");
+  const trace = serializeTrace(opts.trace);
   const res = await fetchImpl(`${base}/chat/completions`, {
     method: "POST",
     headers: {
@@ -67,6 +103,8 @@ export async function openRouterChat(
       ],
       // Ask OpenRouter to include token + cost accounting in the response.
       usage: { include: true },
+      // Broadcast observability tags — inert until Broadcast is configured.
+      ...(trace ? { trace } : {}),
     }),
     signal: AbortSignal.timeout(opts.timeoutMs ?? DEFAULT_TIMEOUT_MS),
   });

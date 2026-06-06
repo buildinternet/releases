@@ -26,6 +26,8 @@ import { getSecret, type SecretBinding } from "@releases/lib/secrets";
 import { getAnthropicKey, resolveGatewayOpts, type AnthropicEnv } from "./anthropic.js";
 
 export interface TextModelEnv extends AnthropicEnv {
+  /** "production" | "staging" — tags OpenRouter Broadcast traces by environment. */
+  ENVIRONMENT?: string;
   FLAGS?: FlagshipBinding;
   OPENROUTER_API_KEY?: SecretBinding;
   OPENROUTER_BASE_URL?: string;
@@ -39,7 +41,8 @@ export interface TextModelEnv extends AnthropicEnv {
  * Shared resolver for both cheap-call lanes. `flagDef` + `varValue` pick the
  * OpenRouter toggle; `orModel` is the lane's OpenRouter model id (empty → stay
  * on Anthropic); `anthropicModel` is the Haiku fallback. `title` tags the
- * OpenRouter request for cost attribution.
+ * OpenRouter request for cost attribution; `generationName` tags it for
+ * Broadcast trace grouping (inert until Broadcast is configured).
  */
 async function resolveTextModel(
   env: TextModelEnv,
@@ -49,6 +52,7 @@ async function resolveTextModel(
     orModel: string | undefined;
     anthropicModel: string;
     title: string;
+    generationName: string;
   },
 ): Promise<TextModel | null> {
   const useOpenRouter = await flag(env.FLAGS, opts.varValue, opts.flagDef);
@@ -63,6 +67,10 @@ async function resolveTextModel(
         ...(baseURL ? { baseURL } : {}),
         referer: "https://releases.sh",
         title: opts.title,
+        trace: {
+          generationName: opts.generationName,
+          ...(env.ENVIRONMENT ? { environment: env.ENVIRONMENT } : {}),
+        },
       });
     }
     // key/model not configured → fall through to Anthropic (fail open)
@@ -83,6 +91,7 @@ export function resolveMarketingModel(env: TextModelEnv): Promise<TextModel | nu
     orModel: env.MARKETING_CLASSIFIER_MODEL,
     anthropicModel: ANTHROPIC_MARKETING_MODEL,
     title: "Releases marketing-classifier",
+    generationName: "marketing-classifier",
   });
 }
 
@@ -93,5 +102,6 @@ export function resolveSummarizeModel(env: TextModelEnv): Promise<TextModel | nu
     orModel: env.SUMMARIZE_MODEL,
     anthropicModel: ANTHROPIC_SUMMARIZE_MODEL,
     title: "Releases summarize",
+    generationName: "summarize-release",
   });
 }

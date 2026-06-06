@@ -72,6 +72,37 @@ describe("openRouterChat", () => {
     expect(res.usage).toEqual({ input: 10, output: 2, cacheCreate: 0, cacheRead: 0 });
   });
 
+  it("serializes Broadcast trace tags to the snake_case `trace` body field", async () => {
+    const f = fakeFetch(200, { choices: [{ message: { content: "x" } }], usage: {} });
+    await openRouterChat(
+      {
+        apiKey: "k",
+        model: "m",
+        trace: { generationName: "summarize-release", environment: "production" },
+      },
+      { system: "s", user: "u", maxTokens: 1 },
+      f as unknown as typeof fetch,
+    );
+    const init = (f.mock.calls[0] as unknown as [string, RequestInit])[1];
+    const sent = JSON.parse(init.body as string);
+    expect(sent.trace).toEqual({
+      generation_name: "summarize-release",
+      environment: "production",
+    });
+  });
+
+  it("omits the `trace` field entirely when no trace tags are set", async () => {
+    const f = fakeFetch(200, { choices: [{ message: { content: "x" } }], usage: {} });
+    await openRouterChat(
+      { apiKey: "k", model: "m", trace: {} },
+      { system: "s", user: "u", maxTokens: 1 },
+      f as unknown as typeof fetch,
+    );
+    const init = (f.mock.calls[0] as unknown as [string, RequestInit])[1];
+    const sent = JSON.parse(init.body as string);
+    expect(sent.trace).toBeUndefined();
+  });
+
   it("throws with status + truncated body on non-2xx", async () => {
     const f = fakeFetch(429, "rate limited");
     expect(
