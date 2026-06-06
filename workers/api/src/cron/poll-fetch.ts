@@ -89,8 +89,7 @@ import {
   classifyMarketing,
   type MarketingClassifierResult,
 } from "@releases/ai-internal/marketing-classifier";
-import type { AnthropicEnv } from "../lib/anthropic.js";
-import { resolveMarketingModel } from "../lib/text-model.js";
+import { resolveMarketingModel, type TextModelEnv } from "../lib/text-model.js";
 import { assessFeedDepth, DEFAULT_FEED_THIN_CHARS } from "@releases/adapters/feed-depth";
 import {
   enrichNewThinItems,
@@ -639,7 +638,7 @@ export type FetchOneResult =
 
 export const DEFAULT_FETCH_MAX_ENTRIES = 200;
 
-export interface FetchOneEnv extends IndexNowEnv, AnthropicEnv {
+export interface FetchOneEnv extends IndexNowEnv, TextModelEnv {
   GITHUB_TOKEN?: string;
   /**
    * Optional Vectorize bindings for semantic-search side effects. Typed as
