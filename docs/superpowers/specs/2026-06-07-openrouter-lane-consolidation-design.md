@@ -56,13 +56,16 @@ with the global switch plus the per-lane model var.
 2. Route the two operational standalone scripts through the gateway when configured;
    leave the eval script direct (with a reason).
 3. Confirm + document that cost accounting already rolls up `costUsd` per provider.
-4. Document (not implement) the OpenRouter-gateway-fronting follow-up.
+4. Resolve the OpenRouter-gateway-fronting item as already-decided by #1476, and fix the
+   stale "until the gateway's OpenRouter provider is confirmed" comments.
 
 ## Non-goals
 
-- Setting `OPENROUTER_BASE_URL` to front OpenRouter with the gateway — **deferred** to a
-  follow-up gated on verifying the gateway exposes an OpenRouter provider (#1468.1 /
-  #1474b). The seam already supports it via the existing optional var.
+- Setting `OPENROUTER_BASE_URL` to front OpenRouter with the CF AI Gateway. This was
+  **decided against** in #1476 (the Layer-1 routing policy in `ai-gateway.md`): the
+  protocol picks the proxy, OpenRouter is itself an aggregating gateway, and routing it
+  _through_ the CF gateway would double-hop for no gain. We update the stale "until
+  confirmed" comments to reflect this rather than leave them implying pending work.
 - Any change to the batch summarize/overview paths, which stay Anthropic by design.
 - Adding any _net-new_ feature flag or env var. This change set deletes two flags and
   renames the third; it adds no new toggle.
@@ -140,13 +143,22 @@ lane). If one is, decide intentionally before removing.
   the eval intentionally measures raw provider latency without a proxy hop, so it does
   not route through the gateway.
 
-### Part 3 — Front OpenRouter with the gateway (deferred, documented)
+### Part 3 — Resolve the OpenRouter-gateway-fronting item (it's already decided)
 
-No code change. In `docs/architecture/ai-gateway.md`, record that fronting OpenRouter
-with the gateway (`OPENROUTER_BASE_URL` → the gateway's `/openrouter` sub-path) is a
-pending follow-up gated on verifying the `releases`/`releases-staging` gateways expose an
-OpenRouter provider, and that the seam already threads the existing optional var when set.
-Keep #1468 / #1474 open for that item, or open a focused follow-up.
+#1476's Layer-1 routing policy (`ai-gateway.md`) already settled this: OpenRouter is
+called **directly**, never fronted by the CF AI Gateway (no double-hop). #1468.1 /
+#1474b's underlying concern — OpenRouter spend in a separate dashboard — is already met
+by the unified `ai_usage` Axiom event (per-provider `costUsd` rollup) and OpenRouter
+Broadcast (traces → R2/Langfuse). So this is a close-out + comment-cleanup, not a feature:
+
+- `workers/api/wrangler.jsonc`: the `MARKETING_CLASSIFIER_MODEL` block comment says
+  _"Direct OpenRouter … until the gateway's OpenRouter provider is confirmed."_ Reword to
+  state direct OpenRouter is the settled policy (per #1476 Layer 1, no double-hop), not a
+  pending step. Same for any sibling comment in the staging block.
+- `packages/lib/src/flags.ts` and any other comment implying the gateway-fronting is
+  "until confirmed": reword to the settled policy.
+- The PR write-up resolves the #1468.1 / #1474b acceptance items as answered-by-#1476;
+  no `OPENROUTER_BASE_URL` change.
 
 ### Part 4 — Cost-accounting audit + doc (#1468.2)
 
