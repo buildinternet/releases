@@ -1,4 +1,5 @@
 import { describe, it, expect } from "bun:test";
+import { forwardWellKnown } from "../src/oauth-discovery.js";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { jwt } from "better-auth/plugins";
@@ -167,5 +168,49 @@ describe("oauth provider wiring", () => {
     const rawUris = clients[0]?.redirectUris;
     const uris = typeof rawUris === "string" ? JSON.parse(rawUris) : rawUris;
     expect(uris).toEqual(["https://app.example.com/callback"]);
+  });
+});
+
+describe("forwardWellKnown discovery alias", () => {
+  it("rewrites apex → /api/auth/.well-known path and stamps wildcard CORS", async () => {
+    let seenPath: string | undefined;
+    const fakeAuth = {
+      handler: async (req: Request) => {
+        seenPath = new URL(req.url).pathname;
+        return new Response(JSON.stringify({ token_endpoint: "https://x/oauth2/token" }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      },
+    };
+    const res = await forwardWellKnown(
+      fakeAuth,
+      "oauth-authorization-server",
+      "https://api.releases.localhost/.well-known/oauth-authorization-server",
+      new Headers(),
+    );
+    expect(seenPath).toBe("/api/auth/.well-known/oauth-authorization-server");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("access-control-allow-origin")).toBe("*");
+    const meta = (await res.json()) as { token_endpoint?: string };
+    expect(meta.token_endpoint).toContain("/oauth2/token");
+  });
+
+  it("rewrites the openid-configuration variant to its Better Auth path", async () => {
+    let seenPath: string | undefined;
+    const fakeAuth = {
+      handler: async (req: Request) => {
+        seenPath = new URL(req.url).pathname;
+        return new Response("{}", { status: 200, headers: { "content-type": "application/json" } });
+      },
+    };
+    const res = await forwardWellKnown(
+      fakeAuth,
+      "openid-configuration",
+      "https://api.releases.localhost/.well-known/openid-configuration",
+      new Headers(),
+    );
+    expect(seenPath).toBe("/api/auth/.well-known/openid-configuration");
+    expect(res.headers.get("access-control-allow-origin")).toBe("*");
   });
 });
