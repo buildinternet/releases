@@ -615,7 +615,7 @@ gh pr create --title "feat(admin): user role provisioning verbs" --body "Wraps P
 
 ## Phase C — Bootstrap the first admin (after Phase A merges + deploys)
 
-### Task 7: Seed `dunn.zach@gmail.com` → admin
+### Task 7: Seed `<bootstrap-admin-email>` → admin
 
 - [ ] **Step 1: Confirm the deploy landed**
 
@@ -626,14 +626,14 @@ The monorepo PR merge auto-deploys the API worker. Confirm `PATCH /v1/admin/user
 ```bash
 set -a; . ./.env; set +a   # loads CLOUDFLARE_ACCOUNT_ID (Build Internet); required for non-interactive prod D1
 bunx wrangler d1 execute released-db --remote --config workers/api/wrangler.jsonc \
-  --command "UPDATE user SET role='admin' WHERE email='dunn.zach@gmail.com';"
+  --command "UPDATE user SET role='admin' WHERE email='<bootstrap-admin-email>';"
 ```
 
 - [ ] **Step 3: Verify**
 
 ```bash
 bunx wrangler d1 execute released-db --remote --config workers/api/wrangler.jsonc \
-  --command "SELECT id, email, role FROM user WHERE email='dunn.zach@gmail.com';"
+  --command "SELECT id, email, role FROM user WHERE email='<bootstrap-admin-email>';"
 ```
 
 Expected: one row, `role = admin`. (Reversible: re-run with `role='user'`.)

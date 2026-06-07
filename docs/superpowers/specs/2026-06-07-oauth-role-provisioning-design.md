@@ -29,7 +29,7 @@ admin}` (user→read, curator→read+write, admin→read+write+admin). There is 
    environment today, so removal is a runtime no-op. The static root key is the
    break-glass channel; once the first admin's `role` column is `admin`, the
    admin plugin authorizes them for native `setRole` too.
-4. **Bootstrap only `dunn.zach@gmail.com` → admin.** Other grants happen later
+4. **Bootstrap only `<bootstrap-admin-email>` → admin.** Other grants happen later
    through the new mechanism.
 
 ### Approach rejected
@@ -101,11 +101,11 @@ Direct prod D1 write, runnable now, independent of deploy timing:
 set -a; . ./.env; set +a   # loads CLOUDFLARE_ACCOUNT_ID (Build Internet) — required for non-interactive prod D1
 bunx wrangler d1 execute released-db \
   --remote --config workers/api/wrangler.jsonc \
-  --command "UPDATE user SET role='admin' WHERE email='dunn.zach@gmail.com';"
+  --command "UPDATE user SET role='admin' WHERE email='<bootstrap-admin-email>';"
 ```
 
 Verify with a follow-up `SELECT id, email, role FROM user WHERE
-email='dunn.zach@gmail.com';`. Reversible (`role='user'`).
+email='<bootstrap-admin-email>';`. Reversible (`role='user'`).
 
 ### 5. CLI verbs (separate PR, `~/Code/releases-cli`)
 
@@ -123,7 +123,7 @@ tools (matches the prior `admin`-namespace convention).
 
 1. **Monorepo PR** — route + registration + env-var removal + tests + docs.
    Auto-deploys on merge.
-2. **Seed** `dunn.zach@gmail.com` → admin (direct D1; user has pre-approved
+2. **Seed** `<bootstrap-admin-email>` → admin (direct D1; user has pre-approved
    direct ID edits in scope).
 3. **CLI PR** — the `admin user` verbs.
 
