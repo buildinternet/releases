@@ -96,8 +96,8 @@ resource-server role verifies JWTs minimally via `jose`/JWKS, sub-project 5).
 
 ```ts
 oauthProvider({
-  loginPage: "/sign-in", // reuse the existing web sign-in page
-  consentPage: "/oauth/consent", // declared now; page is sub-project 3
+  loginPage: "/login", // existing web sign-in route (web/src/app/login)
+  consentPage: "/oauth/consent", // declared now; built in sub-project 3 (path provisional)
   scopes: [
     "openid",
     "profile",
