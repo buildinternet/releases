@@ -90,3 +90,69 @@ export function openRouterTextModel(
     complete: ({ system, user, maxTokens }) => transport(opts, { system, user, maxTokens }),
   };
 }
+
+/** One usage record emitted per seam call. Provider-agnostic; the sink decides where it goes. */
+export interface UsageRecord {
+  provider: string;
+  model: string;
+  lane: string;
+  environment?: string;
+  input: number;
+  output: number;
+  cacheCreate: number;
+  cacheRead: number;
+  /** USD cost: provider-reported for OpenRouter, derived for Anthropic, undefined if unknown. */
+  costUsd?: number;
+}
+
+export type UsageSink = (record: UsageRecord) => void;
+
+/** Split a `<provider>:<model>` TextModel id on the first ":". */
+function splitModelId(id: string): { provider: string; model: string } {
+  const i = id.indexOf(":");
+  return i === -1
+    ? { provider: "unknown", model: id }
+    : { provider: id.slice(0, i), model: id.slice(i + 1) };
+}
+
+/**
+ * Wrap a TextModel so every `complete()` emits one usage record. Cost comes from
+ * the provider (`usage.costUsd`) when present, else from `deriveCost` (used for
+ * Anthropic, which reports no cost). Best-effort: a throwing sink or deriveCost
+ * never breaks the underlying AI call. Dependencies are injected so this package
+ * stays free of `@releases/lib`.
+ */
+export function withUsageLogging(
+  inner: TextModel,
+  opts: {
+    lane: string;
+    environment?: string;
+    sink: UsageSink;
+    deriveCost?: (provider: string, model: string, usage: TextModelUsage) => number | undefined;
+  },
+): TextModel {
+  const { provider, model } = splitModelId(inner.id);
+  return {
+    id: inner.id,
+    async complete(req) {
+      const result = await inner.complete(req);
+      try {
+        const costUsd = result.usage.costUsd ?? opts.deriveCost?.(provider, model, result.usage);
+        opts.sink({
+          provider,
+          model,
+          lane: opts.lane,
+          environment: opts.environment,
+          input: result.usage.input,
+          output: result.usage.output,
+          cacheCreate: result.usage.cacheCreate,
+          cacheRead: result.usage.cacheRead,
+          costUsd,
+        });
+      } catch {
+        // best-effort observability — never break the AI call path
+      }
+      return result;
+    },
+  };
+}
