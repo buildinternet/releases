@@ -47,7 +47,7 @@ export const DEFAULT_JUDGE_MODEL = "google/gemini-2.5-flash";
  */
 export function resolveJudgeModel(client: Anthropic): TextModel {
   const id = process.env.JUDGE_MODEL?.trim() || DEFAULT_JUDGE_MODEL;
-  if (id.startsWith("claude")) {
+  if (id.startsWith("claude-")) {
     return anthropicTextModel(client, id);
   }
   const orKey = process.env.OPENROUTER_API_KEY?.trim();
