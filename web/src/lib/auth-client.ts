@@ -5,6 +5,7 @@ import {
   deviceAuthorizationClient,
 } from "better-auth/client/plugins";
 import { dashClient } from "@better-auth/infra/client";
+import { oauthProviderClient } from "@better-auth/oauth-provider/client";
 
 /**
  * Google One Tap client id. Unlike the worker's `GOOGLE_CLIENT_ID` (a server
@@ -57,6 +58,11 @@ export const authClient = createAuthClient({
     // (so nothing to gate at construction); the pages themselves are flag-gated.
     // The CLI does NOT use this client — it speaks the raw HTTP endpoints directly.
     deviceAuthorizationClient(),
+    // OAuth provider client — infers typed methods from the server oauthProvider
+    // plugin (authClient.oauth2Consent, authClient.oauth2PublicClient, …) and a
+    // fetch hook that injects the signed `oauth_query` into consent POSTs. Drives
+    // the /oauth/consent page. Inert until that page calls it.
+    oauthProviderClient(),
   ],
 });
 

@@ -1,6 +1,7 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { oneTap, magicLink, deviceAuthorization, bearer, jwt } from "better-auth/plugins";
+import { oneTap, magicLink, deviceAuthorization, bearer, jwt, admin } from "better-auth/plugins";
+import { adminAc, userAc } from "better-auth/plugins/admin/access";
 import { oauthProvider } from "@better-auth/oauth-provider";
 import { dash } from "@better-auth/infra";
 import { apiKey } from "@better-auth/api-key";
@@ -13,6 +14,7 @@ import { getSecret } from "@releases/lib/secrets";
 import { logEvent } from "@releases/lib/log-event";
 import { FLAGS, flag } from "@releases/lib/flags";
 import { USER_API_KEY_PREFIX, DEVICE_AUTH_CLIENT_ID } from "@buildinternet/releases-core/api-token";
+import { oauthAccessTokenClaims, consentScopeViolation } from "./entitlement.js";
 import { scopeToPermissions } from "./api-key-scope.js";
 import {
   USER_API_KEY_MAX_ACTIVE,
@@ -242,6 +244,19 @@ export function oauthValidAudiences(env: Bindings): string[] {
   }
   if (auds.size === 0) auds.add(DEFAULT_AUTH_ORIGIN);
   return [...auds];
+}
+
+/**
+ * Better Auth `admin`-plugin `adminUserIds`: user IDs treated as admin regardless
+ * of their DB `role`. Bootstrap seam for the first admin (who then `setRole`s
+ * others) — OAuth scope entitlement reads the persisted `role` column, not this
+ * list. Parses the comma-separated OAUTH_ADMIN_USER_IDS var. Pure + exported for testing.
+ */
+export function oauthAdminUserIds(env: Bindings): string[] {
+  return (env.OAUTH_ADMIN_USER_IDS ?? "")
+    .split(",")
+    .map((id) => id.trim())
+    .filter(Boolean);
 }
 
 /** True for an origin in the releases.sh / releases.localhost family (any subdomain). */
@@ -601,14 +616,53 @@ export async function createAuth(
     // spec (a kill switch guards nothing a not-yet-provisioned client wouldn't).
     jwt(),
     oauthProvider({
-      loginPage: "/login", // existing web sign-in route (web/src/app/login)
-      consentPage: "/oauth/consent", // page built in sub-project 3; path provisional
+      // ABSOLUTE web-origin URLs (not relative): the plugin redirects the browser
+      // to these verbatim, and a relative path resolves against the request origin
+      // (api.releases.sh) — the wrong worker. The /login + /oauth/consent pages are
+      // served by the Next.js frontend (releases.sh). Same rule as the device-auth
+      // verificationUri. WEB_BASE_URL is releases.sh in prod/staging, the portless
+      // web origin locally; the session cookie is .releases.sh-scoped so it rides
+      // across the two subdomains.
+      loginPage: `${env.WEB_BASE_URL ?? "https://releases.sh"}/login`,
+      consentPage: `${env.WEB_BASE_URL ?? "https://releases.sh"}/oauth/consent`, // page built in sub-project 3; path provisional
       scopes: ["openid", "profile", "email", "offline_access", "read", "write", "admin"],
       validAudiences: oauthValidAudiences(env),
       allowDynamicClientRegistration: false, // sub-project 4 enables this
       // Set-once before first deploy (changing later orphans live tokens). Extends
       // the existing relk_/relu_ credential family. Access tokens are JWTs (no prefix).
       prefix: { refreshToken: "relo_", clientSecret: "reloc_" },
+      // Per-user entitlement backstop + role claim. Runs at every user-token
+      // issuance (authorization_code, refresh re-issue) and introspection, so no
+      // token can carry scopes beyond the user's live role — even via a
+      // skip_consent client or refresh replay. M2M tokens (no user) are skipped.
+      // Wrapped because the plugin's `info.user` is typed as
+      // `(User & Record<string, unknown>) | null | undefined` — the base `User`
+      // type doesn't carry `role` statically (that field is added by the admin
+      // plugin at runtime). Extracting `role` via the index signature satisfies
+      // both the plugin's expected callback type and `oauthAccessTokenClaims`.
+      customAccessTokenClaims: (info) => {
+        const u = info.user;
+        return oauthAccessTokenClaims({
+          user:
+            u === undefined
+              ? undefined
+              : u === null
+                ? null
+                : { role: u.role as string | null | undefined },
+          scopes: info.scopes as string[] | undefined, // optional on the introspection path; oauthAccessTokenClaims guards with ?? []
+        });
+      },
+    }),
+    // Better Auth admin plugin — adds the `role` column that drives OAuth scope
+    // entitlement (auth/entitlement.ts). Reuses the built-in admin/user roles;
+    // `curator` mirrors `user` for admin-plugin permissions (NO user-management
+    // powers) — its only meaning is the OAuth scope ceiling. `adminUserIds`
+    // bootstraps the first admin (then they setRole others). Always-on, no flag.
+    admin({
+      roles: { admin: adminAc, user: userAc, curator: userAc },
+      adminRoles: ["admin"],
+      defaultRole: "user",
+      adminUserIds: oauthAdminUserIds(env),
     }),
     ...(userApiKeysOn
       ? [
@@ -733,6 +787,24 @@ export async function createAuth(
     // api-key cap + create/delete audit ride the `apiKeyGovernancePlugin` in
     // `plugins` above (matcher-scoped to the `/api-key/*` endpoints).
     databaseHooks: auditDatabaseHooks(audit),
+    // Per-user scope-entitlement gate on the OAuth consent submission. Rejects a
+    // consent that grants scopes beyond the signed-in user's role BEFORE it is
+    // persisted (the friendly, early half of the fail-closed pair; the token
+    // backstop above is authoritative). Only matches /oauth2/consent; everything
+    // else passes through. getSessionFromCtx reads the cookie/bearer session.
+    hooks: {
+      before: createAuthMiddleware(async (ctx) => {
+        if (ctx.path !== "/oauth2/consent") return;
+        const session = await getSessionFromCtx(ctx);
+        const role = (session?.user as { role?: string } | undefined)?.role;
+        if (consentScopeViolation(role, ctx.body as { accept?: unknown; scope?: unknown })) {
+          throw new APIError("BAD_REQUEST", {
+            error: "invalid_scope",
+            error_description: "requested scopes exceed your entitlement",
+          });
+        }
+      }),
+    },
     // Rate limiting backed by D1 so counters survive across Worker isolates — the
     // in-memory default resets per isolate and is useless on serverless. Better
     // Auth's own prod auto-enable keys off NODE_ENV, which Workers don't set, so we
