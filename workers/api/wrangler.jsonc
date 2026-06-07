@@ -176,6 +176,11 @@
     "WEB_BOT_AUTH_ENABLED": "true",
     "USER_API_KEYS_ENABLED": "false",
     "DEVICE_AUTHORIZATION_ENABLED": "false",
+    // Comma-separated audience URIs accepted in JWT access tokens issued by the
+    // OAuth provider. The API worker origin (BETTER_AUTH_URL) is always included;
+    // this var adds remote resource servers (first consumer: the MCP worker).
+    // See src/auth/index.ts `oauthValidAudiences()`.
+    "OAUTH_RESOURCE_AUDIENCES": "https://mcp.releases.sh",
   },
   "d1_databases": [
     {
@@ -603,6 +608,9 @@
         "WEB_BOT_AUTH_ENABLED": "false",
         "USER_API_KEYS_ENABLED": "false",
         "DEVICE_AUTHORIZATION_ENABLED": "false",
+        // Staging MCP host as the accepted JWT audience. Mirrors the prod entry;
+        // resource-server verification wired in sub-project 5.
+        "OAUTH_RESOURCE_AUDIENCES": "https://mcp-staging.releases.sh",
       },
       "d1_databases": [
         {

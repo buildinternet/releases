@@ -1,7 +1,7 @@
 # OAuth Provider — AS Foundation (sub-project 1)
 
 - **Date:** 2026-06-07
-- **Status:** Design approved; spec under review
+- **Status:** Implemented (AS foundation); pending staging smoke
 - **Worktree/branch:** `worktree-oauth-provider-foundation`
 
 ## Summary
