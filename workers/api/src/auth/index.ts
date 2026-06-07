@@ -616,8 +616,15 @@ export async function createAuth(
     // spec (a kill switch guards nothing a not-yet-provisioned client wouldn't).
     jwt(),
     oauthProvider({
-      loginPage: "/login", // existing web sign-in route (web/src/app/login)
-      consentPage: "/oauth/consent", // page built in sub-project 3; path provisional
+      // ABSOLUTE web-origin URLs (not relative): the plugin redirects the browser
+      // to these verbatim, and a relative path resolves against the request origin
+      // (api.releases.sh) — the wrong worker. The /login + /oauth/consent pages are
+      // served by the Next.js frontend (releases.sh). Same rule as the device-auth
+      // verificationUri. WEB_BASE_URL is releases.sh in prod/staging, the portless
+      // web origin locally; the session cookie is .releases.sh-scoped so it rides
+      // across the two subdomains.
+      loginPage: `${env.WEB_BASE_URL ?? "https://releases.sh"}/login`,
+      consentPage: `${env.WEB_BASE_URL ?? "https://releases.sh"}/oauth/consent`, // page built in sub-project 3; path provisional
       scopes: ["openid", "profile", "email", "offline_access", "read", "write", "admin"],
       validAudiences: oauthValidAudiences(env),
       allowDynamicClientRegistration: false, // sub-project 4 enables this

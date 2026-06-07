@@ -1,5 +1,9 @@
 import { describe, it, expect } from "bun:test";
 import { eq } from "drizzle-orm";
+import { betterAuth } from "better-auth";
+import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import { jwt } from "better-auth/plugins";
+import { oauthProvider } from "@better-auth/oauth-provider";
 import {
   IDENTITY_SCOPES,
   ROLE_LADDER,
@@ -10,7 +14,17 @@ import {
 } from "../src/auth/entitlement.js";
 import { oauthAdminUserIds, createAuth } from "../src/auth/index.js";
 import { createTestDb } from "./setup";
-import { user as userTable, session as sessionTable } from "../src/db/schema-auth.js";
+import {
+  user as userTable,
+  session as sessionTable,
+  account as accountTbl,
+  verification as verificationTbl,
+  jwks,
+  oauthClient,
+  oauthAccessToken,
+  oauthRefreshToken,
+  oauthConsent,
+} from "../src/db/schema-auth.js";
 
 describe("entitledScopes", () => {
   it("gives identity + read to a plain user", () => {
@@ -191,5 +205,74 @@ describe("consent gate + claims wiring", () => {
       sendEmail: () => {},
     });
     expect(typeof auth.options.hooks?.before).toBe("function");
+  });
+});
+
+describe("absolute consent/login redirect origin", () => {
+  it("redirects an unauthenticated authorize to the WEB origin, not the api origin", async () => {
+    const db = createTestDb();
+    const auth = betterAuth({
+      baseURL: "https://api.releases.localhost",
+      secret: "test-secret-do-not-use-in-prod-0123456789",
+      database: drizzleAdapter(db, {
+        provider: "sqlite",
+        schema: {
+          user: userTable,
+          session: sessionTable,
+          account: accountTbl,
+          verification: verificationTbl,
+          jwks,
+          oauthClient,
+          oauthAccessToken,
+          oauthRefreshToken,
+          oauthConsent,
+        },
+      }),
+      plugins: [
+        jwt(),
+        oauthProvider({
+          loginPage: "https://releases.localhost/login",
+          consentPage: "https://releases.localhost/oauth/consent",
+          scopes: ["openid", "read"],
+          allowDynamicClientRegistration: true,
+          allowUnauthenticatedClientRegistration: true,
+        }),
+      ],
+    });
+    const reg = await auth.handler(
+      new Request("https://api.releases.localhost/api/auth/oauth2/register", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          client_name: "Test",
+          redirect_uris: ["https://app.example.com/cb"],
+          token_endpoint_auth_method: "none",
+        }),
+      }),
+    );
+    const { client_id } = (await reg.json()) as { client_id: string };
+    const authorizeUrl = new URL("https://api.releases.localhost/api/auth/oauth2/authorize");
+    authorizeUrl.searchParams.set("client_id", client_id);
+    authorizeUrl.searchParams.set("redirect_uri", "https://app.example.com/cb");
+    authorizeUrl.searchParams.set("response_type", "code");
+    authorizeUrl.searchParams.set("scope", "openid read");
+    authorizeUrl.searchParams.set("code_challenge", "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM");
+    authorizeUrl.searchParams.set("code_challenge_method", "S256");
+    const res = await auth.handler(new Request(authorizeUrl, { redirect: "manual" }));
+    const location = res.headers.get("location") ?? "";
+    expect(location.startsWith("https://releases.localhost/login")).toBe(true);
+    expect(location.startsWith("https://api.releases.localhost")).toBe(false);
+  });
+
+  it("createAuth configures oauthProvider with absolute loginPage/consentPage", async () => {
+    const auth = await createAuth(wiringEnv, undefined, {
+      db: createTestDb(),
+      sendEmail: () => {},
+    });
+    const provider = (auth.options.plugins ?? []).find((p: { id: string }) =>
+      /oauth/i.test(p.id),
+    ) as { options?: { loginPage?: string; consentPage?: string } } | undefined;
+    expect(provider?.options?.loginPage).toBe("https://releases.localhost/login");
+    expect(provider?.options?.consentPage).toBe("https://releases.localhost/oauth/consent");
   });
 });
