@@ -54,17 +54,15 @@ const APP_TITLE = "Releases";
 /** Anthropic reports no cost; derive a list-price estimate. OpenRouter reports its own via usage.costUsd. */
 function laneCost(provider: string, model: string, usage: TextModelUsage): number | undefined {
   if (provider !== "anthropic") return undefined;
-  return (
-    estimateCost(
-      {
-        inputTokens: usage.input,
-        outputTokens: usage.output,
-        cacheWriteTokens: usage.cacheCreate,
-        cacheReadTokens: usage.cacheRead,
-      },
-      model,
-    )?.totalUsd ?? undefined
-  );
+  return estimateCost(
+    {
+      inputTokens: usage.input,
+      outputTokens: usage.output,
+      cacheWriteTokens: usage.cacheCreate,
+      cacheReadTokens: usage.cacheRead,
+    },
+    model,
+  )?.totalUsd;
 }
 
 /** Wrap a resolved model so each call emits an `ai_usage` event into the worker log stream. */
@@ -94,15 +92,15 @@ async function resolveTextModel(
     generationName: string;
   },
 ): Promise<TextModel | null> {
-  const laneState = await flagState(env.FLAGS, opts.varValue, opts.flagDef);
-  const useOpenRouter =
-    laneState === "unset"
-      ? await flag(
-          env.FLAGS,
-          env.ELASTIC_LANE_DEFAULT_OPENROUTER,
-          FLAGS.elasticLaneDefaultOpenrouter,
-        )
-      : laneState === "on";
+  // Resolve the lane's own toggle and the global default concurrently — the
+  // global is only consulted when the lane is unset, but reading it eagerly
+  // collapses what would otherwise be a sequential third Flagship probe on the
+  // unset path. Both reads are cheap and this resolves once per source/batch.
+  const [laneState, globalDefault] = await Promise.all([
+    flagState(env.FLAGS, opts.varValue, opts.flagDef),
+    flag(env.FLAGS, env.ELASTIC_LANE_DEFAULT_OPENROUTER, FLAGS.elasticLaneDefaultOpenrouter),
+  ]);
+  const useOpenRouter = laneState === "unset" ? globalDefault : laneState === "on";
 
   if (useOpenRouter) {
     const orKey = await getSecret(env.OPENROUTER_API_KEY).catch(() => null);
