@@ -128,25 +128,24 @@ statements so the `admin` role retains its user-management powers:
 
 ```ts
 import { admin } from "better-auth/plugins";
-import { createAccessControl } from "better-auth/plugins/access";
-import { defaultStatements, adminAc } from "better-auth/plugins/admin/access";
+import { adminAc, userAc } from "better-auth/plugins/admin/access";
 
-// entitlement.ts owns the statement + roles (see §3); imported here. Role
-// exports are suffixed `Role` to avoid colliding with the `user` table import
-// already in index.ts.
 admin({
-  ac,                         // createAccessControl(statement)
-  roles: { user: userRole, curator: curatorRole, admin: adminRole },
+  // Reuse Better Auth's built-in admin/user roles. `curator` mirrors `user` for
+  // admin-plugin permissions (it grants NO user-management powers); its only
+  // meaning is the OAuth scope ceiling in entitlement.ts (ROLE_LADDER). No custom
+  // createAccessControl is needed — entitlement is a plain map, not the AC system.
+  roles: { admin: adminAc, user: userAc, curator: userAc },
   adminRoles: ["admin"],      // only the `admin` role hits admin-plugin endpoints
   defaultRole: "user",        // new sign-ups are read-only
   adminUserIds: oauthAdminUserIds(env), // bootstrap; see §5
 }),
 ```
 
-The `admin`-role definition merges `adminAc.statements` (so `setRole`, ban, etc.
-keep working) with our `oauthScope` statement; `user`/`curator` get only their
-`oauthScope` slice. Placement: alongside the other always-on plugins, near
-`jwt()`/`oauthProvider()`.
+`adminAc`/`userAc` are the built-in roles exported by
+`better-auth/plugins/admin/access`. Registering `curator: userAc` makes `setRole`
+accept `"curator"` while granting it no admin powers. Placement: alongside the
+other always-on plugins, near `jwt()`/`oauthProvider()`.
 
 ### 2. Schema + migration
 
@@ -161,20 +160,20 @@ modes):
 Paired migration `workers/api/migrations/20260607010000_add_admin_plugin.sql`
 (`ALTER TABLE user ADD COLUMN ...` ×4, `ALTER TABLE session ADD COLUMN
 impersonated_by text`). The schema↔migration pairing CI gate watches
-`schema-auth.ts`, so the migration lands in the same change. `role` defaults to
-`'user'`, so existing prod rows become read-only by default (fail-closed).
-Reconcile exact column/field names with `@better-auth/cli generate` / the
-installed admin-plugin schema at implementation time (same discipline as #1).
+`schema-auth.ts`, so the migration lands in the same change. The admin plugin
+declares `role` with **no schema-level default** (it stamps `"user"` at runtime in
+its user-create hook), so `role` is a nullable column; existing prod rows stay
+`NULL` → `entitledScopes(null)` returns read-only (fail-closed). Reconcile exact
+column/field names with the installed admin-plugin schema at implementation time
+(same discipline as #1).
 
 ### 3. Entitlement module (`workers/api/src/auth/entitlement.ts`)
 
-The single source of truth, pure + unit-testable, imported by both the plugin
-config (§1) and the enforcement seams (§4):
+The single source of truth, pure + unit-testable, imported by the enforcement
+seams (§4). It is a plain scope map — **not** the Better Auth access-control
+system (the AC governs admin-plugin endpoints, not OAuth scopes):
 
 ```ts
-import { createAccessControl } from "better-auth/plugins/access";
-import { defaultStatements, adminAc } from "better-auth/plugins/admin/access";
-
 // Identity scopes everyone who signs in may grant.
 export const IDENTITY_SCOPES = ["openid", "profile", "email", "offline_access"] as const;
 
@@ -184,16 +183,6 @@ export const ROLE_LADDER: Record<string, readonly string[]> = {
   curator: ["read", "write"],
   admin: ["read", "write", "admin"],
 };
-
-const statement = { ...defaultStatements, oauthScope: ["read", "write", "admin"] } as const;
-export const ac = createAccessControl(statement);
-// `…Role` suffix avoids colliding with the `user` table import in index.ts.
-export const userRole = ac.newRole({ oauthScope: ["read"] });
-export const curatorRole = ac.newRole({ oauthScope: ["read", "write"] });
-export const adminRole = ac.newRole({
-  ...adminAc.statements,
-  oauthScope: ["read", "write", "admin"],
-});
 
 /** Scopes a user with `role` may consent to. Unknown/null role → read-only (fail-closed). */
 export function entitledScopes(role: string | null | undefined): string[] {
