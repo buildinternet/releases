@@ -246,19 +246,6 @@ export function oauthValidAudiences(env: Bindings): string[] {
   return [...auds];
 }
 
-/**
- * Better Auth `admin`-plugin `adminUserIds`: user IDs treated as admin regardless
- * of their DB `role`. Bootstrap seam for the first admin (who then `setRole`s
- * others) — OAuth scope entitlement reads the persisted `role` column, not this
- * list. Parses the comma-separated OAUTH_ADMIN_USER_IDS var. Pure + exported for testing.
- */
-export function oauthAdminUserIds(env: Bindings): string[] {
-  return (env.OAUTH_ADMIN_USER_IDS ?? "")
-    .split(",")
-    .map((id) => id.trim())
-    .filter(Boolean);
-}
-
 /** True for an origin in the releases.sh / releases.localhost family (any subdomain). */
 function isReleasesFamilyOrigin(origin: string): boolean {
   try {
@@ -656,13 +643,14 @@ export async function createAuth(
     // Better Auth admin plugin — adds the `role` column that drives OAuth scope
     // entitlement (auth/entitlement.ts). Reuses the built-in admin/user roles;
     // `curator` mirrors `user` for admin-plugin permissions (NO user-management
-    // powers) — its only meaning is the OAuth scope ceiling. `adminUserIds`
-    // bootstraps the first admin (then they setRole others). Always-on, no flag.
+    // powers) — its only meaning is the OAuth scope ceiling. The first admin is
+    // provisioned via `PATCH /v1/admin/users/role` (root-key gated; see
+    // docs/architecture/remote-mode.md) — once a user's `role` column is `admin`,
+    // `adminRoles` authorizes them for native `setRole` too. Always-on, no flag.
     admin({
       roles: { admin: adminAc, user: userAc, curator: userAc },
       adminRoles: ["admin"],
       defaultRole: "user",
-      adminUserIds: oauthAdminUserIds(env),
     }),
     ...(userApiKeysOn
       ? [

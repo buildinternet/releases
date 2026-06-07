@@ -12,6 +12,8 @@ Three buckets, by intent:
 
 Do **not** add new `/v1/admin/*` endpoints for CRUD or for async triggers — those belong on the canonical path or under `/v1/workflows/*` respectively. Existing `/v1/admin/*` CRUD is tech debt (#494).
 
+> **Sanctioned exception: `/v1/admin/users/role` (#1484).** User-role provisioning (the OAuth scope-entitlement source of truth) lives under `/v1/admin/*` on purpose, not as tech debt. Users are Better Auth principals, not catalog resources, so there is no canonical `/v1/<resource>` path for them; the only built-in alternative is Better Auth's native `admin/set-role`, which requires a browser admin session the CLI/scripts don't have. The route is root-key-gated, fail-closed (role validated against `ROLE_LADDER`), and audited (`role-changed` logEvent). See [remote-mode.md → Role provisioning](remote-mode.md).
+
 A fourth, narrower bucket exists for **self-serve, session-authed** resources:
 `/v1/api-keys` (user-owned `relu_` API key management — minted read-only, the
 write/admin scope is refused; see remote-mode.md) is gated by `requireSession`

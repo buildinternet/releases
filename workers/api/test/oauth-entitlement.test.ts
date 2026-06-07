@@ -11,7 +11,7 @@ import {
   oauthAccessTokenClaims,
   consentScopeViolation,
 } from "../src/auth/entitlement.js";
-import { oauthAdminUserIds, createAuth } from "../src/auth/index.js";
+import { createAuth } from "../src/auth/index.js";
 import { createTestDb } from "./setup";
 import {
   user as userTable,
@@ -161,22 +161,6 @@ describe("admin-plugin schema", () => {
     expect(nullRow[0]?.impersonatedBy ?? null).toBeNull();
     const adminRow = await db.select().from(sessionTable).where(eq(sessionTable.id, "s_2"));
     expect(adminRow[0]?.impersonatedBy).toBe("u_admin");
-  });
-});
-
-describe("oauthAdminUserIds", () => {
-  it("parses a comma-separated list, trimming blanks", () => {
-    expect(oauthAdminUserIds({ OAUTH_ADMIN_USER_IDS: "u_1, u_2 ,, u_3" } as never)).toEqual([
-      "u_1",
-      "u_2",
-      "u_3",
-    ]);
-  });
-  it("returns [] when unset", () => {
-    expect(oauthAdminUserIds({} as never)).toEqual([]);
-  });
-  it("returns [] for an empty string", () => {
-    expect(oauthAdminUserIds({ OAUTH_ADMIN_USER_IDS: "" } as never)).toEqual([]);
   });
 });
 

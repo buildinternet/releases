@@ -65,6 +65,29 @@ stored.
 > so only the page needed to live on the web origin. The same rule applies to any
 > Better Auth redirect/verification target that points at a web page.
 
+### Role provisioning (admin / curator)
+
+A signed-in user's OAuth scope ceiling comes from the Better Auth admin-plugin
+`user.role` column — the durable source of truth the entitlement boundary reads
+(`workers/api/src/auth/entitlement.ts`: `user`→read, `curator`→read+write,
+`admin`→read+write+admin; NULL/unknown → read-only, fail-closed). Roles are
+managed through a **root-key-gated** admin route — no redeploy, audited via a
+`role-changed` `logEvent` (component `auth`, queryable in Axiom):
+
+- `PATCH /v1/admin/users/role` `{ email | userId, role }` — set a role
+  (`workers/api/src/routes/admin-users.ts`). The accepted role set is derived
+  from `ROLE_LADDER`, so the route can never drift from the scope boundary;
+  unknown role → 400, missing user → 404. "Revoke" = set role back to `user`.
+- `GET /v1/admin/users/role?email=|userId=` — read one user's role.
+- `GET /v1/admin/users/roles` — list curator/admin users.
+
+The OSS CLI wraps these as `releases admin user set-role | get-role |
+list-roles`. **Bootstrap:** the first admin is seeded once by a direct D1 write
+(`UPDATE user SET role='admin' WHERE email=…`); thereafter that admin grants
+others via the route (or Better Auth's native `setRole` in the browser, which a
+role=admin user is authorized for under `adminRoles: ["admin"]`). The former
+`OAUTH_ADMIN_USER_IDS` env bootstrap has been removed (#1484).
+
 ## On-demand AI admin endpoints
 
 `POST /v1/workflows/summarize` and `POST /v1/workflows/compare` generate summaries and comparisons via Anthropic on demand. Both are gated by `authMiddleware` and fail with 503 when `ANTHROPIC_API_KEY` is unset. They are distinct from `POST /v1/sources/:slug/summaries`, which upserts a pre-generated row into `release_summaries`. Payload: `summarize` takes exactly one of `source` / `org` (slug or id) plus optional `days` and `instructions`; `compare` takes `sourceA` / `sourceB` plus optional `days`. Each success writes a `usage_log` row tagged with operation `summarize` / `compare`. Prompts live in `workers/api/src/routes/workflows.ts`.
