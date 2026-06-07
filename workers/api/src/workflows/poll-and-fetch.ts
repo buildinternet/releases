@@ -269,7 +269,7 @@ export async function generateContentForReleases(
   }
 
   // Provider/model decided here: Anthropic Haiku via gateway by default, or a
-  // cheap OpenRouter model when `summarize-openrouter` is on + configured.
+  // cheap OpenRouter model when `openrouter-enabled` is on + a model is configured.
   // Fail-open: null means no usable provider (no Anthropic key) — skip.
   const model = await resolveSummarizeModel(env);
   if (!model) return;

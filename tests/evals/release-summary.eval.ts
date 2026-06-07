@@ -76,7 +76,7 @@ async function main() {
   const client = new Anthropic({ apiKey });
 
   // The model under test. Defaults to Anthropic Haiku (the production baseline).
-  // To eval an OpenRouter candidate for the `summarize-openrouter` lane, set
+  // To eval an OpenRouter candidate for the summarizer lane, set
   // EVAL_OPENROUTER_MODEL (e.g. "google/gemini-3.1-flash-lite") + OPENROUTER_API_KEY.
   // The judge (when --judge) is selected independently via JUDGE_MODEL.
   const orModel = process.env.EVAL_OPENROUTER_MODEL?.trim();

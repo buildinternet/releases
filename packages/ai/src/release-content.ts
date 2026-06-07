@@ -8,7 +8,7 @@
  *
  * Worker-safe: no `fs`, no `node:*` imports, no logger. Caller constructs the
  * `TextModel` (so the worker can route through AI Gateway / a cheap OpenRouter
- * model behind the `summarize-openrouter` flag, and the script path can hit the
+ * model when `openrouter-enabled` is on, and the script path can hit the
  * Anthropic API directly).
  */
 
@@ -523,8 +523,8 @@ function readEmptyTag(raw: string): "true" | "false" | null {
 /**
  * Run a release body through the supplied `TextModel` to produce title / short
  * title / summary. The caller constructs the model (Anthropic Haiku via AI
- * Gateway, or a cheap OpenRouter model behind the `summarize-openrouter` flag),
- * so this helper stays provider-neutral. Returns all-null + `skipped: true`
+ * Gateway, or a cheap OpenRouter model when `openrouter-enabled` is on), so this
+ * helper stays provider-neutral. Returns all-null + `skipped: true`
  * when the body has no real content (read paths fall back to the raw
  * release.title).
  *
