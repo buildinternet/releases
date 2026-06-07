@@ -228,9 +228,11 @@ actually changes exposure.
 - A bun:sqlite unit test mirroring `workers/api/test/auth.test.ts`: `createAuth`
   constructs with the OAuth + JWT plugins, and the five new tables round-trip
   through the adapter.
-- **Staging smoke:** `curl https://api-staging.releases.sh/.well-known/oauth-authorization-server`
-  returns valid metadata (`authorization_endpoint`, `token_endpoint`, `jwks_uri`,
-  `scopes_supported`, …); then an admin-created `skip_consent` client completes an
+- **Staging smoke:** `curl -s -H "X-Releases-Staging-Key: $STAGING_ACCESS_KEY" https://api-staging.releases.sh/.well-known/oauth-authorization-server`
+  (the staging access gate runs on `*` and shadows the apex alias, so the header
+  is required there; `STAGING_ACCESS_KEY` must be set — in prod the endpoint is
+  public) returns valid metadata (`authorization_endpoint`, `token_endpoint`,
+  `jwks_uri`, `scopes_supported`, …); then an admin-created `skip_consent` client completes an
   `authorization_code` + PKCE exchange and the issued JWT verifies against
   `/api/auth/jwks` with the expected `iss`/`aud`/scopes.
 

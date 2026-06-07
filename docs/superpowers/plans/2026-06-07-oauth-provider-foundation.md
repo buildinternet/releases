@@ -827,10 +827,10 @@ git commit -m "chore(api): OAUTH_RESOURCE_AUDIENCES var + mark AS foundation imp
 > Deploys are automatic on merge to main; for a pre-merge check, deploy the branch to staging per AGENTS.md:
 > `bunx wrangler deploy --env staging --config workers/api/wrangler.jsonc`
 
-Then verify (staging requires the `X-Releases-Staging-Key` header on `api-staging`, but the apex `.well-known` aliases are registered before the gate — confirm they answer without the key; if the staging access gate shadows them, note it as a follow-up):
+Then verify. The staging access gate (`stagingAccessGate()`) runs on `*`, so it shadows the apex `.well-known` aliases on `api-staging` — discovery requires the `X-Releases-Staging-Key` header there (in prod the gate no-ops and discovery is public). Set `STAGING_ACCESS_KEY` to the staging access key first:
 
 ```bash
-curl -s https://api-staging.releases.sh/.well-known/oauth-authorization-server | jq '{token_endpoint, authorization_endpoint, jwks_uri, scopes_supported}'
+curl -s -H "X-Releases-Staging-Key: $STAGING_ACCESS_KEY" https://api-staging.releases.sh/.well-known/oauth-authorization-server | jq '{token_endpoint, authorization_endpoint, jwks_uri, scopes_supported}'
 ```
 
 Expected: JSON with `/oauth2/token`, `/oauth2/authorize`, a `/jwks` URI, and `scopes_supported` including `read`/`write`/`admin`.

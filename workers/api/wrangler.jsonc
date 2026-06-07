@@ -608,6 +608,10 @@
         "WEB_BOT_AUTH_ENABLED": "false",
         "USER_API_KEYS_ENABLED": "false",
         "DEVICE_AUTHORIZATION_ENABLED": "false",
+        // Staging issuer/baseURL — overrides the inherited top-level prod value so
+        // createAuth's baseURL and oauthValidAudiences() resolve to the staging
+        // origin (OAuth issuer, JWT `aud`, discovery metadata), not api.releases.sh.
+        "BETTER_AUTH_URL": "https://api-staging.releases.sh",
         // Staging MCP host as the accepted JWT audience. Mirrors the prod entry;
         // resource-server verification wired in sub-project 5.
         "OAUTH_RESOURCE_AUDIENCES": "https://mcp-staging.releases.sh",
