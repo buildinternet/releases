@@ -2,13 +2,17 @@
  * Shared rubric-judge plumbing for the LLM-as-judge eval suites
  * (`release-summary.eval.ts`, `overview.eval.ts`).
  *
- * The judge defaults to Anthropic Sonnet (the baseline), but can be routed
- * through OpenRouter via the provider-agnostic `TextModel` seam by setting
- * `JUDGE_OPENROUTER_MODEL` + `OPENROUTER_API_KEY`. A spike (see PR) found Gemini
- * 2.5 Flash is a ~15x-cheaper, ~4x-faster judge that catches every objective
- * faithfulness violation and emits clean JSON; its only divergence from Sonnet
- * is a stricter reading of subjective "lead-with-the-user-outcome" criteria, so
- * re-baseline pass-rates against it rather than comparing to Sonnet history.
+ * The judge runs on a cheap OpenRouter model by default (Gemini 2.5 Flash via
+ * the provider-agnostic `TextModel` seam) — a spike found it ~15x cheaper and
+ * ~4x faster than Sonnet while catching every objective faithfulness violation
+ * and emitting clean JSON. Its only divergence from Sonnet is a stricter reading
+ * of the subjective "lead-with-the-user-outcome" criteria, so eval pass-rates
+ * are baselined against it, not against Sonnet history.
+ *
+ * Override via `JUDGE_MODEL`: an Anthropic id (`claude-…`) judges with the SDK
+ * (needs `ANTHROPIC_API_KEY`); anything else is treated as an OpenRouter model
+ * slug (needs `OPENROUTER_API_KEY`). e.g. `JUDGE_MODEL=claude-sonnet-4-6` to go
+ * back to Sonnet, or `JUDGE_MODEL=google/gemini-2.5-flash-lite` for cheaper.
  */
 import type Anthropic from "@anthropic-ai/sdk";
 import {
@@ -33,25 +37,34 @@ export function extractJudgeJson(raw: string): string | null {
   return candidate.slice(start, end + 1);
 }
 
+/** Default judge: a cheap OpenRouter model. Override with the `JUDGE_MODEL` env var. */
+export const DEFAULT_JUDGE_MODEL = "google/gemini-2.5-flash";
+
 /**
- * The judge model under test. Defaults to Anthropic `defaultModel`. Set
- * `JUDGE_OPENROUTER_MODEL` (e.g. "google/gemini-2.5-flash") + `OPENROUTER_API_KEY`
- * to route the judge through OpenRouter instead.
+ * Resolve the judge model. Defaults to {@link DEFAULT_JUDGE_MODEL} on OpenRouter;
+ * `JUDGE_MODEL` overrides it. An `claude-…` id routes through the Anthropic SDK;
+ * any other id is an OpenRouter slug (requires `OPENROUTER_API_KEY`).
  */
-export function resolveJudgeModel(client: Anthropic, defaultModel: string): TextModel {
-  const orModel = process.env.JUDGE_OPENROUTER_MODEL?.trim();
-  const orKey = process.env.OPENROUTER_API_KEY?.trim();
-  if (orModel && orKey) {
-    return openRouterTextModel({
-      apiKey: orKey,
-      model: orModel,
-      referer: "https://releases.sh",
-      title: "Releases",
-      // Tag eval runs so Broadcast traces stay separate from prod traffic.
-      trace: { generationName: "rubric-judge-eval", environment: "eval" },
-    });
+export function resolveJudgeModel(client: Anthropic): TextModel {
+  const id = process.env.JUDGE_MODEL?.trim() || DEFAULT_JUDGE_MODEL;
+  if (id.startsWith("claude")) {
+    return anthropicTextModel(client, id);
   }
-  return anthropicTextModel(client, defaultModel);
+  const orKey = process.env.OPENROUTER_API_KEY?.trim();
+  if (!orKey) {
+    throw new Error(
+      `Judge model "${id}" needs OPENROUTER_API_KEY. Set it, or set ` +
+        `JUDGE_MODEL=claude-sonnet-4-6 to judge with Anthropic instead.`,
+    );
+  }
+  return openRouterTextModel({
+    apiKey: orKey,
+    model: id,
+    referer: "https://releases.sh",
+    title: "Releases",
+    // Tag eval runs so Broadcast traces stay separate from prod traffic.
+    trace: { generationName: "rubric-judge-eval", environment: "eval" },
+  });
 }
 
 /**

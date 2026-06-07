@@ -1,8 +1,9 @@
 /**
  * Org-overview regression eval. LOCAL, AD-HOC ONLY — calls the real Anthropic
  * API. Run: `bun run eval:overview` (Tier-1 structural + citation integrity) or
- * `bun run eval:overview -- --judge` (adds the Sonnet rubric faithfulness check
- * against src/shared/rubrics/overview.md). Never part of `bun test`.
+ * `bun run eval:overview -- --judge` (adds the rubric faithfulness check against
+ * src/shared/rubrics/overview.md — judged by Gemini 2.5 Flash via OpenRouter by
+ * default; see ./judge-model.ts). Never part of `bun test`.
  *
  * Each fixture is a single JSON file under fixtures/overviews/ carrying the
  * OverviewRequestInput the production batch-overview workflow would build, plus
@@ -28,8 +29,6 @@ import { loadOverviewFixtures, overviewRubricPath } from "./overview-fixtures";
 import type { FieldResult } from "./helpers";
 import { extractJudgeJson, resolveJudgeModel, runJudge } from "./judge-model";
 import { saveRun } from "./results";
-
-const JUDGE_MODEL = "claude-sonnet-4-6";
 
 // Re-exported for any unit test that imports it from this module.
 export { extractJudgeJson };
@@ -62,9 +61,9 @@ async function main() {
   const fixtures = loadOverviewFixtures();
   const client = new Anthropic({ apiKey });
   const rubric = useJudge ? readFileSync(overviewRubricPath(), "utf8") : "";
-  // Judge defaults to Anthropic Sonnet; JUDGE_OPENROUTER_MODEL routes it through
-  // OpenRouter (e.g. Gemini Flash) for a far cheaper run. See ./judge-model.ts.
-  const judgeModel = useJudge ? resolveJudgeModel(client, JUDGE_MODEL) : null;
+  // Judge defaults to a cheap OpenRouter model (Gemini Flash); JUDGE_MODEL
+  // overrides it (e.g. claude-sonnet-4-6 for Anthropic). See ./judge-model.ts.
+  const judgeModel = useJudge ? resolveJudgeModel(client) : null;
 
   let allPassed = true;
   console.error(`\n${"=".repeat(60)}`);

@@ -1,7 +1,8 @@
 /**
  * Release-summary regression eval. LOCAL, AD-HOC ONLY — calls the real Anthropic
  * API. Run: `bun run eval:summary` (Tier-1 structural) or `bun run eval:summary -- --judge`
- * (adds the Sonnet faithfulness check). Never part of `bun test`.
+ * (adds the rubric faithfulness check — judged by Gemini 2.5 Flash via OpenRouter
+ * by default; see ./judge-model.ts). Never part of `bun test`.
  */
 import { readFileSync, readdirSync } from "fs";
 import { basename, join } from "path";
@@ -24,7 +25,6 @@ import { resolveJudgeModel, runJudge } from "./judge-model";
 import { saveRun } from "./results";
 
 const TITLE_SHORT_MAX_CHARS = 120;
-const JUDGE_MODEL = "claude-sonnet-4-6";
 
 interface SummaryFixture {
   name: string;
@@ -78,7 +78,7 @@ async function main() {
   // The model under test. Defaults to Anthropic Haiku (the production baseline).
   // To eval an OpenRouter candidate for the `summarize-openrouter` lane, set
   // EVAL_OPENROUTER_MODEL (e.g. "google/gemini-3.1-flash-lite") + OPENROUTER_API_KEY.
-  // The judge (when --judge) is swapped independently via JUDGE_OPENROUTER_MODEL.
+  // The judge (when --judge) is selected independently via JUDGE_MODEL.
   const orModel = process.env.EVAL_OPENROUTER_MODEL?.trim();
   const orKey = process.env.OPENROUTER_API_KEY?.trim();
   const summaryModel: TextModel =
@@ -99,9 +99,9 @@ async function main() {
         "utf8",
       )
     : "";
-  // Judge defaults to Anthropic Sonnet; JUDGE_OPENROUTER_MODEL routes it through
-  // OpenRouter (e.g. Gemini Flash) for a far cheaper run. See ./judge-model.ts.
-  const judgeModel = useJudge ? resolveJudgeModel(client, JUDGE_MODEL) : null;
+  // Judge defaults to a cheap OpenRouter model (Gemini Flash); JUDGE_MODEL
+  // overrides it (e.g. claude-sonnet-4-6 for Anthropic). See ./judge-model.ts.
+  const judgeModel = useJudge ? resolveJudgeModel(client) : null;
   if (judgeModel) console.error(`judge model: ${judgeModel.id}`);
 
   let allPassed = true;
