@@ -164,6 +164,16 @@ export const FLAGS = {
     env: "SUMMARIZE_OPENROUTER",
     default: false,
   },
+  // Global default for the elastic cheap-call lanes (marketing classifier, live
+  // summarizer, …). OFF → a lane that doesn't set its own flag stays on Anthropic.
+  // Flip ON in Flagship to move EVERY elastic lane that has an OpenRouter model
+  // configured onto OpenRouter at runtime; a per-lane flag still overrides this.
+  // Inheritance lives in workers/api/src/lib/text-model.ts (resolveTextModel).
+  elasticLaneDefaultOpenrouter: {
+    key: "elastic-lane-default-openrouter",
+    env: "ELASTIC_LANE_DEFAULT_OPENROUTER",
+    default: false,
+  },
 } as const satisfies Record<string, FlagDef>;
 
 /** Layered fallback: var value if set, else the hardcoded default. */
@@ -188,4 +198,38 @@ export async function flag(
   } catch {
     return fb;
   }
+}
+
+export type FlagState = "on" | "off" | "unset";
+
+/**
+ * Three-state flag evaluation for inheritance. Distinguishes an explicit on/off
+ * from "unset" (neither Flagship nor the var supplies a value), so a caller can
+ * fall back to a different base (e.g. a global default flag) instead of the
+ * FlagDef's hardcoded `default`. Precedence matches `flag()`: Flagship → var →
+ * unset. Never throws.
+ *
+ * Flagship's getBooleanValue returns the passed default when a key is absent and
+ * gives no separate "missing" signal, so we probe it twice with opposite
+ * defaults: equal results ⇒ the key is present (explicit value); differing
+ * results ⇒ the key is absent (the calls only echoed our two defaults).
+ */
+export async function flagState(
+  binding: FlagshipBinding | undefined,
+  varValue: string | undefined,
+  def: FlagDef,
+): Promise<FlagState> {
+  if (binding) {
+    try {
+      const [asFalse, asTrue] = await Promise.all([
+        binding.getBooleanValue(def.key, false),
+        binding.getBooleanValue(def.key, true),
+      ]);
+      if (asFalse === asTrue) return asFalse ? "on" : "off";
+    } catch {
+      // fall through to the var / unset path
+    }
+  }
+  if (varValue !== undefined) return varValue === "true" ? "on" : "off";
+  return "unset";
 }

@@ -16,12 +16,16 @@
 import {
   anthropicTextModel,
   openRouterTextModel,
+  withUsageLogging,
   type TextModel,
+  type TextModelUsage,
 } from "@releases/ai-internal/text-model";
 import { MODEL as ANTHROPIC_MARKETING_MODEL } from "@releases/ai-internal/marketing-classifier";
 import { MODEL as ANTHROPIC_SUMMARIZE_MODEL } from "@releases/ai-internal/release-content";
 import { buildAnthropicClient } from "@releases/lib/anthropic-client.js";
-import { flag, FLAGS, type FlagDef, type FlagshipBinding } from "@releases/lib/flags";
+import { flag, flagState, FLAGS, type FlagDef, type FlagshipBinding } from "@releases/lib/flags";
+import { logEvent } from "@releases/lib/log-event";
+import { estimateCost } from "@releases/lib/anthropic-pricing";
 import { getSecret, type SecretBinding } from "@releases/lib/secrets";
 import { getAnthropicKey, resolveGatewayOpts, type AnthropicEnv } from "./anthropic.js";
 
@@ -35,6 +39,8 @@ export interface TextModelEnv extends AnthropicEnv {
   MARKETING_CLASSIFIER_MODEL?: string;
   SUMMARIZE_OPENROUTER?: string;
   SUMMARIZE_MODEL?: string;
+  /** Global default for the elastic lanes; per-lane flags override it. Flagship-driven; var optional. */
+  ELASTIC_LANE_DEFAULT_OPENROUTER?: string;
 }
 
 /**
@@ -44,6 +50,30 @@ export interface TextModelEnv extends AnthropicEnv {
  * anything. Per-lane breakdown lives in the Broadcast `generation_name` tag.
  */
 const APP_TITLE = "Releases";
+
+/** Anthropic reports no cost; derive a list-price estimate. OpenRouter reports its own via usage.costUsd. */
+function laneCost(provider: string, model: string, usage: TextModelUsage): number | undefined {
+  if (provider !== "anthropic") return undefined;
+  return estimateCost(
+    {
+      inputTokens: usage.input,
+      outputTokens: usage.output,
+      cacheWriteTokens: usage.cacheCreate,
+      cacheReadTokens: usage.cacheRead,
+    },
+    model,
+  )?.totalUsd;
+}
+
+/** Wrap a resolved model so each call emits an `ai_usage` event into the worker log stream. */
+function withLaneUsageLogging(model: TextModel, lane: string, env: TextModelEnv): TextModel {
+  return withUsageLogging(model, {
+    lane,
+    environment: env.ENVIRONMENT,
+    deriveCost: laneCost,
+    sink: (r) => logEvent("info", { component: "ai", event: "ai_usage", ...r }),
+  });
+}
 
 /**
  * Shared resolver for both cheap-call lanes. `flagDef` + `varValue` pick the
@@ -62,33 +92,49 @@ async function resolveTextModel(
     generationName: string;
   },
 ): Promise<TextModel | null> {
-  const useOpenRouter = await flag(env.FLAGS, opts.varValue, opts.flagDef);
+  // Resolve the lane's own toggle and the global default concurrently — the
+  // global is only consulted when the lane is unset, but reading it eagerly
+  // collapses what would otherwise be a sequential third Flagship probe on the
+  // unset path. Both reads are cheap and this resolves once per source/batch.
+  const [laneState, globalDefault] = await Promise.all([
+    flagState(env.FLAGS, opts.varValue, opts.flagDef),
+    flag(env.FLAGS, env.ELASTIC_LANE_DEFAULT_OPENROUTER, FLAGS.elasticLaneDefaultOpenrouter),
+  ]);
+  const useOpenRouter = laneState === "unset" ? globalDefault : laneState === "on";
+
   if (useOpenRouter) {
     const orKey = await getSecret(env.OPENROUTER_API_KEY).catch(() => null);
     const model = opts.orModel?.trim();
     if (orKey && model) {
       const baseURL = env.OPENROUTER_BASE_URL?.trim();
-      return openRouterTextModel({
-        apiKey: orKey,
-        model,
-        ...(baseURL ? { baseURL } : {}),
-        referer: "https://releases.sh",
-        title: APP_TITLE,
-        trace: {
-          generationName: opts.generationName,
-          ...(env.ENVIRONMENT ? { environment: env.ENVIRONMENT } : {}),
-        },
-      });
+      return withLaneUsageLogging(
+        openRouterTextModel({
+          apiKey: orKey,
+          model,
+          ...(baseURL ? { baseURL } : {}),
+          referer: "https://releases.sh",
+          title: APP_TITLE,
+          trace: {
+            generationName: opts.generationName,
+            ...(env.ENVIRONMENT ? { environment: env.ENVIRONMENT } : {}),
+          },
+        }),
+        opts.generationName,
+        env,
+      );
     }
     // key/model not configured → fall through to Anthropic (fail open)
   }
 
-  // Key + gateway opts are independent secret/var reads — resolve concurrently
-  // (halves cold-isolate latency; both are WeakMap-cached on warm hits).
+  // Key + gateway opts are independent secret/var reads — resolve concurrently.
   const [apiKey, gatewayOpts] = await Promise.all([getAnthropicKey(env), resolveGatewayOpts(env)]);
   if (!apiKey) return null;
   const client = buildAnthropicClient({ apiKey, ...gatewayOpts });
-  return anthropicTextModel(client, opts.anthropicModel);
+  return withLaneUsageLogging(
+    anthropicTextModel(client, opts.anthropicModel),
+    opts.generationName,
+    env,
+  );
 }
 
 export function resolveMarketingModel(env: TextModelEnv): Promise<TextModel | null> {

@@ -61,3 +61,19 @@ What the code sends today: a static `trace` block with `generation_name` (`"mark
 3. **Privacy Mode: leave off** for the R2 destination. The prompt content in these lanes is public changelog/release text — the same content we already persist in `release.content` and serve through the API — so a trace copy in our own bucket is no more exposing than what we already publish, and the prompt→completion pair is the most useful part of the trace when debugging a bad summary. Privacy Mode is per-destination, so if a **third-party** sink (Langfuse, Datadog) is added later, strip content there while keeping it full in R2.
 
 This keeps observability entirely within Cloudflare (no new third-party account, no Axiom dataset consumed). It's archival object storage, not a live dashboard — for an at-a-glance per-lane cost/latency UI, **Langfuse** (LLM-eval-specialized, free tier) is a native destination that maps our `generation_name`/`environment` tags directly onto its generation model. Broadcast supports multiple destinations at once, so Langfuse (or Axiom via OTLP) can be added alongside R2 later without disturbing it.
+
+## Routing policy + the elastic-lane provider switch
+
+**Layer 1 — Transport (fixed rule, not a flag).** Every non-managed-agent call traverses exactly one proxy, chosen by protocol — never two in series:
+
+- Anthropic-protocol calls → CF AI Gateway (base-URL passthrough; preserves prompt caching).
+- OpenRouter calls → OpenRouter directly.
+- Managed-agents session/memory surface → direct to Anthropic (see "Not covered" above).
+
+There is deliberately **no transport-selector flag**: the protocol decides the proxy, so a call is never double-hopped, and CF-AI-Gateway-fronting-OpenRouter is not adopted.
+
+**Layer 2 — Provider selection (the switch).** For the elastic lanes on the `TextModel` seam, the `elastic-lane-default-openrouter` Flagship flag is the global default; each per-lane flag (`marketing-classifier-openrouter`, `summarize-openrouter`, …) inherits it when unset and overrides it when set. Flip the global ON to move every elastic lane that has an OpenRouter model configured onto OpenRouter at runtime; OFF returns them to Anthropic. A lane with the toggle on but no OpenRouter model stays on Anthropic (fail-open). Model ids stay per-lane. Inheritance is implemented in `workers/api/src/lib/text-model.ts` via `flagState()`.
+
+**Unified usage view.** `resolveTextModel` wraps every resolved model in `withUsageLogging`, emitting one `ai_usage` `logEvent` per call: `provider`, `model`, `lane`, `environment`, token counts, and `costUsd` (provider-reported for OpenRouter; derived via `@releases/lib/anthropic-pricing` for Anthropic). These ride in the existing `releases-cloudflare-logs` Axiom dataset as the `ai_usage` event — **no new dataset**. Query example: `["releases-cloudflare-logs"] | where ["event"] == "ai_usage" | summarize sum(toreal(costUsd)) by ["lane"], ["provider"]`.
+
+**Enabling the switch (Flagship, no deploy).** Create the `elastic-lane-default-openrouter` key in BOTH Flagship apps (`releases-platform` and `releases-platform-staging`) per the feature-flag convention; default OFF. There is no wrangler var for this flag — Flagship drives it, with the registry default (`false`) as the floor. Rollback is a Flagship toggle.

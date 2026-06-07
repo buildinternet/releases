@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { FLAGS, flag, type FlagshipBinding } from "./flags.js";
+import { FLAGS, flag, flagState, type FlagshipBinding } from "./flags.js";
 
 interface RecordingBinding extends FlagshipBinding {
   lastCall?: { key: string; defaultValue: boolean };
@@ -74,5 +74,58 @@ describe("FLAGS registry", () => {
     const envs = defs.map((d) => d.env);
     expect(new Set(envs).size).toBe(envs.length);
     for (const e of envs) expect(e).toMatch(/^[A-Z0-9]+(_[A-Z0-9]+)*$/);
+  });
+});
+
+/** Stub binding that echoes the passed default — simulates an ABSENT Flagship key. */
+const echoingBinding: FlagshipBinding = {
+  getBooleanValue: async (_key, defaultValue) => defaultValue,
+};
+
+describe("flagState()", () => {
+  it("reads on/off from the var when the binding is absent", async () => {
+    expect(await flagState(undefined, "true", FLAGS.pollFetchUseWorkflow)).toBe("on");
+    expect(await flagState(undefined, "false", FLAGS.pollFetchUseWorkflow)).toBe("off");
+  });
+
+  it("returns unset when neither binding nor var supplies a value", async () => {
+    expect(await flagState(undefined, undefined, FLAGS.pollFetchUseWorkflow)).toBe("unset");
+  });
+
+  it("reads an explicit Flagship value (present key wins over the probe defaults)", async () => {
+    expect(await flagState(bindingReturning(true), undefined, FLAGS.pollFetchUseWorkflow)).toBe(
+      "on",
+    );
+    expect(await flagState(bindingReturning(false), undefined, FLAGS.pollFetchUseWorkflow)).toBe(
+      "off",
+    );
+  });
+
+  it("returns unset when the Flagship key is absent (probe defaults differ)", async () => {
+    expect(await flagState(echoingBinding, undefined, FLAGS.pollFetchUseWorkflow)).toBe("unset");
+  });
+
+  it("falls back to the var when the Flagship key is absent", async () => {
+    expect(await flagState(echoingBinding, "true", FLAGS.pollFetchUseWorkflow)).toBe("on");
+    expect(await flagState(echoingBinding, "false", FLAGS.pollFetchUseWorkflow)).toBe("off");
+  });
+
+  it("lets Flagship win over the var when the key is present", async () => {
+    expect(await flagState(bindingReturning(true), "false", FLAGS.pollFetchUseWorkflow)).toBe("on");
+  });
+
+  it("collapses an eval error to the var, else unset", async () => {
+    expect(await flagState(throwingBinding, "true", FLAGS.pollFetchUseWorkflow)).toBe("on");
+    expect(await flagState(throwingBinding, undefined, FLAGS.pollFetchUseWorkflow)).toBe("unset");
+  });
+});
+
+describe("elasticLaneDefaultOpenrouter flag", () => {
+  it("is registered with the expected key/env and defaults off", () => {
+    expect(FLAGS.elasticLaneDefaultOpenrouter).toEqual({
+      key: "elastic-lane-default-openrouter",
+      env: "ELASTIC_LANE_DEFAULT_OPENROUTER",
+      default: false,
+    });
   });
 });

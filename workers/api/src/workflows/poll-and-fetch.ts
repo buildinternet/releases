@@ -22,6 +22,7 @@ import { buildFetchOneEnv } from "./_fetch-env.js";
 import { logEvent } from "@releases/lib/log-event";
 import { dbErrorLogFields } from "@releases/lib/db-errors";
 import { summarizeRelease } from "@releases/ai-internal/release-content";
+import { splitModelId } from "@releases/ai-internal/text-model";
 import {
   fetchOne,
   pollOne,
@@ -339,10 +340,10 @@ export async function generateContentForReleases(
             // usage_log.model historically stores the bare model id (e.g.
             // "claude-haiku-4-5") so Anthropic rollups stay continuous with the
             // batch path. The TextModel id is "<provider>:<model>"; strip the
-            // provider tag — OpenRouter ids ("google/…") carry no further colon,
-            // so this is unambiguous and, while the flag is off, reproduces
-            // today's value byte-for-byte.
-            model: model.id.replace(/^[^:]+:/, ""),
+            // provider tag via the shared parser (OpenRouter ids like "google/…"
+            // carry no further colon, so the bare model is unambiguous and, while
+            // the flag is off, reproduces today's value byte-for-byte).
+            model: splitModelId(model.id).model,
             inputTokens: result.usage.input,
             outputTokens: result.usage.output,
             cacheReadTokens: result.usage.cacheRead,
