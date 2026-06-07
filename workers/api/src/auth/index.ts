@@ -14,6 +14,7 @@ import { getSecret } from "@releases/lib/secrets";
 import { logEvent } from "@releases/lib/log-event";
 import { FLAGS, flag } from "@releases/lib/flags";
 import { USER_API_KEY_PREFIX, DEVICE_AUTH_CLIENT_ID } from "@buildinternet/releases-core/api-token";
+import { oauthAccessTokenClaims, consentScopeViolation } from "./entitlement.js";
 import { scopeToPermissions } from "./api-key-scope.js";
 import {
   USER_API_KEY_MAX_ACTIVE,
@@ -623,6 +624,27 @@ export async function createAuth(
       // Set-once before first deploy (changing later orphans live tokens). Extends
       // the existing relk_/relu_ credential family. Access tokens are JWTs (no prefix).
       prefix: { refreshToken: "relo_", clientSecret: "reloc_" },
+      // Per-user entitlement backstop + role claim. Runs at every user-token
+      // issuance (authorization_code, refresh re-issue) and introspection, so no
+      // token can carry scopes beyond the user's live role — even via a
+      // skip_consent client or refresh replay. M2M tokens (no user) are skipped.
+      // Wrapped because the plugin's `info.user` is typed as
+      // `(User & Record<string, unknown>) | null | undefined` — the base `User`
+      // type doesn't carry `role` statically (that field is added by the admin
+      // plugin at runtime). Extracting `role` via the index signature satisfies
+      // both the plugin's expected callback type and `oauthAccessTokenClaims`.
+      customAccessTokenClaims: (info) => {
+        const u = info.user;
+        return oauthAccessTokenClaims({
+          user:
+            u === undefined
+              ? undefined
+              : u === null
+                ? null
+                : { role: u.role as string | null | undefined },
+          scopes: info.scopes as string[] | undefined, // optional on the introspection path; oauthAccessTokenClaims guards with ?? []
+        });
+      },
     }),
     // Better Auth admin plugin — adds the `role` column that drives OAuth scope
     // entitlement (auth/entitlement.ts). Reuses the built-in admin/user roles;
@@ -758,6 +780,24 @@ export async function createAuth(
     // api-key cap + create/delete audit ride the `apiKeyGovernancePlugin` in
     // `plugins` above (matcher-scoped to the `/api-key/*` endpoints).
     databaseHooks: auditDatabaseHooks(audit),
+    // Per-user scope-entitlement gate on the OAuth consent submission. Rejects a
+    // consent that grants scopes beyond the signed-in user's role BEFORE it is
+    // persisted (the friendly, early half of the fail-closed pair; the token
+    // backstop above is authoritative). Only matches /oauth2/consent; everything
+    // else passes through. getSessionFromCtx reads the cookie/bearer session.
+    hooks: {
+      before: createAuthMiddleware(async (ctx) => {
+        if (ctx.path !== "/oauth2/consent") return;
+        const session = await getSessionFromCtx(ctx);
+        const role = (session?.user as { role?: string } | undefined)?.role;
+        if (consentScopeViolation(role, ctx.body as { accept?: unknown; scope?: unknown })) {
+          throw new APIError("BAD_REQUEST", {
+            error: "invalid_scope",
+            error_description: "requested scopes exceed your entitlement",
+          });
+        }
+      }),
+    },
     // Rate limiting backed by D1 so counters survive across Worker isolates — the
     // in-memory default resets per isolate and is useless on serverless. Better
     // Auth's own prod auto-enable keys off NODE_ENV, which Workers don't set, so we

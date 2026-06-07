@@ -183,3 +183,13 @@ describe("admin plugin wiring", () => {
     expect(ids.includes("admin")).toBe(true);
   });
 });
+
+describe("consent gate + claims wiring", () => {
+  it("registers a before-hook on the auth instance", async () => {
+    const auth = await createAuth(wiringEnv, undefined, {
+      db: createTestDb(),
+      sendEmail: () => {},
+    });
+    expect(typeof auth.options.hooks?.before).toBe("function");
+  });
+});
