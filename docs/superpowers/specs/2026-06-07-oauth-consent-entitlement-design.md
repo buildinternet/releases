@@ -307,7 +307,7 @@ with the existing auth pages. No new component library.
 
 ## Data flow
 
-```
+```text
 client → GET api.releases.sh/api/auth/oauth2/authorize?client_id&scope&PKCE…
   AS: no session?  → 302 ${WEB_BASE_URL}/login            (absolute, §5)
   AS: session, consent needed → 302 ${WEB_BASE_URL}/oauth/consent?…signed…

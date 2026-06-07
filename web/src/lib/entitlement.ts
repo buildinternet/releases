@@ -37,7 +37,9 @@ export function entitledScopes(role: string | null | undefined): string[] {
     .filter(Boolean);
   const ladder = new Set<string>();
   for (const r of roles) for (const s of ROLE_LADDER[r] ?? ROLE_LADDER.user) ladder.add(s);
-  if (ladder.size === 0) for (const s of ROLE_LADDER.user) ladder.add(s); // unreachable belt-and-suspenders (role || "user" guarantees ≥1 known role)
+  // Fail closed to user/read when `role` is truthy but empties after filter
+  // (whitespace- or comma-only, e.g. " " or ","), which `role || "user"` doesn't catch.
+  if (ladder.size === 0) for (const s of ROLE_LADDER.user) ladder.add(s);
   return [...IDENTITY_SCOPES, ...ladder];
 }
 

@@ -50,7 +50,7 @@ export function OauthConsentForm() {
 
   const { data: sessionData, isPending: sessionPending } = useSession();
   const user = sessionData?.user;
-  const role = ((user as { role?: string } | undefined)?.role ?? null) as string | null;
+  const role = (user as { role?: string } | undefined)?.role ?? null;
 
   const [client, setClient] = useState<OAuthClient | null>(null);
   const [clientLoading, setClientLoading] = useState(true);

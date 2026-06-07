@@ -1195,7 +1195,3 @@ Capture the result in the PR description.
 - **Do not** add a Flagship feature flag (spec decision). Do not adopt the `organization` plugin. Do not touch `workers/mcp` (resource-server verification is sub-project 5; keep `better-auth` out of that worker — zod-split landmine).
 - **Reconcile inferred client method names** (`oauth2Consent`/`oauth2PublicClient`) against the installed `@better-auth/oauth-provider/client` if `web` tsc disagrees (Task 8 Step 2).
 - **`hooks.before` shape:** the top-level `betterAuth({ hooks })` config takes a single `createAuthMiddleware` function for `before`/`after` (branch on `ctx.path`), not the plugin-level `{matcher,handler}[]` array. If tsc demands the array form, that's the only place to adapt (Task 4 Step 6).
-
-```
-
-```
