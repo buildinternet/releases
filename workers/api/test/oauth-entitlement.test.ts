@@ -1,4 +1,5 @@
 import { describe, it, expect } from "bun:test";
+import { eq } from "drizzle-orm";
 import {
   IDENTITY_SCOPES,
   ROLE_LADDER,
@@ -7,6 +8,8 @@ import {
   oauthAccessTokenClaims,
   consentScopeViolation,
 } from "../src/auth/entitlement.js";
+import { createTestDb } from "./setup";
+import { user as userTable, session as sessionTable } from "../src/db/schema-auth.js";
 
 describe("entitledScopes", () => {
   it("gives identity + read to a plain user", () => {
@@ -86,5 +89,63 @@ describe("consentScopeViolation", () => {
   });
   it("passes when scope is omitted (token backstop catches over-broad)", () => {
     expect(consentScopeViolation("user", { accept: true })).toBe(false);
+  });
+});
+
+describe("admin-plugin schema", () => {
+  it("user.role + ban fields round-trip through drizzle", async () => {
+    const db = createTestDb();
+    await db.insert(userTable).values({
+      id: "u_1",
+      name: "Curator",
+      email: "curator@example.com",
+      emailVerified: true,
+      role: "curator",
+      banned: false,
+      banReason: "spam",
+      banExpires: new Date(Date.now() + 86_400_000),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    const rows = await db.select().from(userTable);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.role).toBe("curator");
+    expect(rows[0]?.banned).toBe(false);
+    expect(rows[0]?.banReason).toBe("spam");
+    expect(rows[0]?.banExpires).toBeInstanceOf(Date);
+  });
+
+  it("session.impersonatedBy column exists and round-trips", async () => {
+    const db = createTestDb();
+    await db.insert(userTable).values({
+      id: "u_2",
+      name: "U",
+      email: "u2@example.com",
+      emailVerified: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    await db.insert(sessionTable).values({
+      id: "s_1",
+      userId: "u_2",
+      token: "tok_1",
+      expiresAt: new Date(Date.now() + 3_600_000),
+      impersonatedBy: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    await db.insert(sessionTable).values({
+      id: "s_2",
+      userId: "u_2",
+      token: "tok_2",
+      expiresAt: new Date(Date.now() + 3_600_000),
+      impersonatedBy: "u_admin",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    const nullRow = await db.select().from(sessionTable).where(eq(sessionTable.id, "s_1"));
+    expect(nullRow[0]?.impersonatedBy ?? null).toBeNull();
+    const adminRow = await db.select().from(sessionTable).where(eq(sessionTable.id, "s_2"));
+    expect(adminRow[0]?.impersonatedBy).toBe("u_admin");
   });
 });

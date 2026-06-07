@@ -18,7 +18,8 @@ import { sqliteTable, text, integer, index } from "drizzle-orm/sqlite-core";
  *
  * Paired migrations live in workers/api/migrations/ (20260604000000 initial tables,
  * 20260604010000 the dash lastActiveAt column, 20260604020000 the rate-limit store,
- * 20260604030000 the api-key store, 20260605000000 the device-code store).
+ * 20260604030000 the api-key store, 20260605000000 the device-code store,
+ * 20260607010000 the admin-plugin role/ban columns).
  * The schema↔migration pairing gate in ci.yml watches this file.
  */
 
@@ -44,6 +45,15 @@ export const user = sqliteTable("user", {
   // and users inactive since the column was added have no value until dash()
   // next records them. Paired migration: 20260604010000_add_user_last_active_at.sql.
   lastActiveAt: integer("last_active_at", { mode: "timestamp" }),
+  // Better Auth `admin` plugin (better-auth/plugins). `role` drives the OAuth
+  // scope-entitlement ceiling (see auth/entitlement.ts). No schema default — the
+  // plugin stamps "user" on new sign-ups at runtime; existing rows stay NULL,
+  // which entitledScopes() treats as read-only (fail-closed). Multi-role is a
+  // comma-separated string. Paired migration: 20260607010000_add_admin_plugin.sql.
+  role: text("role"),
+  banned: integer("banned", { mode: "boolean" }),
+  banReason: text("ban_reason"),
+  banExpires: integer("ban_expires", { mode: "timestamp" }),
 });
 
 export const session = sqliteTable(
@@ -59,6 +69,8 @@ export const session = sqliteTable(
     userAgent: text("user_agent"),
     createdAt: timestampCol("created_at"),
     updatedAt: timestampCol("updated_at"),
+    // Better Auth `admin` plugin — set when this session is an admin impersonating a user.
+    impersonatedBy: text("impersonated_by"),
   },
   (t) => [index("idx_session_user_id").on(t.userId)],
 );
