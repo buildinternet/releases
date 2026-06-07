@@ -1,0 +1,78 @@
+import { describe, expect, it } from "bun:test";
+import { resolveMarketingModel, type TextModelEnv } from "./text-model.js";
+import type { FlagshipBinding } from "@releases/lib/flags";
+
+/** Flagship stub: `true`/`false` = present key with that value; absent key echoes the default. */
+function flagsBinding(values: Record<string, boolean>): FlagshipBinding {
+  return {
+    getBooleanValue: async (key, defaultValue) => (key in values ? values[key]! : defaultValue),
+  };
+}
+
+const secret = (v: string | null) => ({ get: async () => v });
+
+/** Base env with a usable Anthropic key + an OpenRouter key & model configured. */
+function baseEnv(overrides: Partial<TextModelEnv> = {}): TextModelEnv {
+  return {
+    ANTHROPIC_API_KEY: secret("anthropic-key"),
+    OPENROUTER_API_KEY: secret("or-key"),
+    MARKETING_CLASSIFIER_MODEL: "google/gemini-2.5-flash-lite",
+    ENVIRONMENT: "test",
+    ...overrides,
+  } as TextModelEnv;
+}
+
+describe("resolveMarketingModel inheritance", () => {
+  it("lane unset + global ON → OpenRouter", async () => {
+    const env = baseEnv({ FLAGS: flagsBinding({ "elastic-lane-default-openrouter": true }) });
+    const model = await resolveMarketingModel(env);
+    expect(model?.id.startsWith("openrouter:")).toBe(true);
+  });
+
+  it("lane unset + global OFF → Anthropic", async () => {
+    const env = baseEnv({ FLAGS: flagsBinding({}) });
+    const model = await resolveMarketingModel(env);
+    expect(model?.id.startsWith("anthropic:")).toBe(true);
+  });
+
+  it("lane explicitly ON overrides global OFF → OpenRouter", async () => {
+    const env = baseEnv({ FLAGS: flagsBinding({ "marketing-classifier-openrouter": true }) });
+    const model = await resolveMarketingModel(env);
+    expect(model?.id.startsWith("openrouter:")).toBe(true);
+  });
+
+  it("lane explicitly OFF overrides global ON → Anthropic", async () => {
+    const env = baseEnv({
+      FLAGS: flagsBinding({
+        "marketing-classifier-openrouter": false,
+        "elastic-lane-default-openrouter": true,
+      }),
+    });
+    const model = await resolveMarketingModel(env);
+    expect(model?.id.startsWith("anthropic:")).toBe(true);
+  });
+
+  it("OpenRouter selected but no model configured → falls back to Anthropic", async () => {
+    const env = baseEnv({
+      FLAGS: flagsBinding({ "elastic-lane-default-openrouter": true }),
+      MARKETING_CLASSIFIER_MODEL: "",
+    });
+    const model = await resolveMarketingModel(env);
+    expect(model?.id.startsWith("anthropic:")).toBe(true);
+  });
+
+  it("OpenRouter selected but no OpenRouter key → falls back to Anthropic", async () => {
+    const env = baseEnv({
+      FLAGS: flagsBinding({ "elastic-lane-default-openrouter": true }),
+      OPENROUTER_API_KEY: undefined,
+    });
+    const model = await resolveMarketingModel(env);
+    expect(model?.id.startsWith("anthropic:")).toBe(true);
+  });
+
+  it("returns null when no Anthropic key is available for the fallback", async () => {
+    const env = baseEnv({ FLAGS: flagsBinding({}), ANTHROPIC_API_KEY: undefined });
+    const model = await resolveMarketingModel(env);
+    expect(model).toBeNull();
+  });
+});
