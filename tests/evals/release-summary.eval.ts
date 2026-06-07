@@ -20,6 +20,7 @@ import {
 import { buildGraderPrompt } from "@releases/ai-internal/grader-prompt";
 import { gradeStructural, type StructuralSpec } from "./graders";
 import type { FieldResult } from "./helpers";
+import { resolveJudgeModel, runJudge } from "./judge-model";
 import { saveRun } from "./results";
 
 const TITLE_SHORT_MAX_CHARS = 120;
@@ -46,30 +47,20 @@ function loadFixtures(dir: string): SummaryFixture[] {
 }
 
 async function judge(
-  client: Anthropic,
+  model: TextModel,
   rubric: string,
   body: string,
   summary: string,
-): Promise<boolean> {
+): Promise<{ ok: boolean; result: string }> {
   const prompt = buildGraderPrompt({
     rubric,
     artifact: `BODY:\n${body}\n\nSUMMARY:\n${summary}`,
     rubricLabel: "release-summary.md",
   });
-  const res = await client.messages.create({
-    model: JUDGE_MODEL,
-    max_tokens: 1024,
-    messages: [{ role: "user", content: prompt }],
-  });
-  const raw = res.content
-    .filter((b): b is Extract<typeof b, { type: "text" }> => b.type === "text")
-    .map((b) => b.text)
-    .join("");
-  try {
-    return JSON.parse(raw).result === "satisfied";
-  } catch {
-    return false;
-  }
+  // 2K cap (up from 1K): the faithfulness rubric verdict is short, but an
+  // OpenRouter judge that emits reasoning tokens needs headroom or it returns
+  // empty text → "unparseable".
+  return runJudge(model, prompt, 2048);
 }
 
 async function main() {
@@ -87,7 +78,7 @@ async function main() {
   // The model under test. Defaults to Anthropic Haiku (the production baseline).
   // To eval an OpenRouter candidate for the `summarize-openrouter` lane, set
   // EVAL_OPENROUTER_MODEL (e.g. "google/gemini-3.1-flash-lite") + OPENROUTER_API_KEY.
-  // The judge (when --judge) always runs on Anthropic regardless.
+  // The judge (when --judge) is swapped independently via JUDGE_OPENROUTER_MODEL.
   const orModel = process.env.EVAL_OPENROUTER_MODEL?.trim();
   const orKey = process.env.OPENROUTER_API_KEY?.trim();
   const summaryModel: TextModel =
@@ -108,6 +99,10 @@ async function main() {
         "utf8",
       )
     : "";
+  // Judge defaults to Anthropic Sonnet; JUDGE_OPENROUTER_MODEL routes it through
+  // OpenRouter (e.g. Gemini Flash) for a far cheaper run. See ./judge-model.ts.
+  const judgeModel = useJudge ? resolveJudgeModel(client, JUDGE_MODEL) : null;
+  if (judgeModel) console.error(`judge model: ${judgeModel.id}`);
 
   let allPassed = true;
   console.error(`\n${"=".repeat(60)}`);
@@ -126,18 +121,18 @@ async function main() {
         extraForbidden: [EMPTY_BODY_FALLBACK],
       }));
 
-      if (useJudge && !f.spec.expectDiscarded && result.summary) {
-        const ok = await judge(client, rubric, f.input.content, result.summary);
+      if (judgeModel && !f.spec.expectDiscarded && result.summary) {
+        const verdict = await judge(judgeModel, rubric, f.input.content, result.summary);
         fields = [
           ...fields,
           {
             field: "judge: satisfied",
-            passed: ok,
+            passed: verdict.ok,
             expected: "satisfied",
-            actual: ok ? "satisfied" : "not satisfied",
+            actual: verdict.result,
           },
         ];
-        passed = passed && ok;
+        passed = passed && verdict.ok;
       }
     } catch (err) {
       fields = [
@@ -171,7 +166,7 @@ async function main() {
       total: runCases.length,
       passed: runCases.filter((c) => c.passed).length,
       judge: useJudge,
-      judgeModel: useJudge ? JUDGE_MODEL : null,
+      judgeModel: judgeModel?.id ?? null,
     },
     cases: runCases,
   });
