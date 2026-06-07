@@ -6,7 +6,7 @@
 
 ## Background
 
-#1466 introduced the OpenRouter cheap-call lane on the `TextModel` seam; #1476 added
+Issue #1466 introduced the OpenRouter cheap-call lane on the `TextModel` seam; #1476 added
 the global `elastic-lane-default-openrouter` switch that unset lanes inherit. Two
 follow-up issues remain:
 
@@ -145,9 +145,9 @@ lane). If one is, decide intentionally before removing.
 
 ### Part 3 — Resolve the OpenRouter-gateway-fronting item (it's already decided)
 
-#1476's Layer-1 routing policy (`ai-gateway.md`) already settled this: OpenRouter is
+Issue #1476's Layer-1 routing policy (`ai-gateway.md`) already settled this: OpenRouter is
 called **directly**, never fronted by the CF AI Gateway (no double-hop). #1468.1 /
-#1474b's underlying concern — OpenRouter spend in a separate dashboard — is already met
+Issue #1474b's underlying concern — OpenRouter spend in a separate dashboard — is already met
 by the unified `ai_usage` Axiom event (per-provider `costUsd` rollup) and OpenRouter
 Broadcast (traces → R2/Langfuse). So this is a close-out + comment-cleanup, not a feature:
 
