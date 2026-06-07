@@ -120,11 +120,11 @@ describe("flagState()", () => {
   });
 });
 
-describe("elasticLaneDefaultOpenrouter flag", () => {
+describe("openrouterEnabled flag", () => {
   it("is registered with the expected key/env and defaults off", () => {
-    expect(FLAGS.elasticLaneDefaultOpenrouter).toEqual({
-      key: "elastic-lane-default-openrouter",
-      env: "ELASTIC_LANE_DEFAULT_OPENROUTER",
+    expect(FLAGS.openrouterEnabled).toEqual({
+      key: "openrouter-enabled",
+      env: "OPENROUTER_ENABLED",
       default: false,
     });
   });

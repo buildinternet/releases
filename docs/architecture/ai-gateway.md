@@ -10,6 +10,8 @@ Covered when `ANTHROPIC_BASE_URL` is set:
 - `workers/mcp` — AI-backed tools (`summarizeChanges`, `compareProducts`)
 - `workers/discovery` — extract-deps agent/incremental paths only (managed-agents sessions are routed direct, see below)
 - `scripts/run-eval-task.ts` — local eval runner
+- `scripts/generate-release-content.ts` — operational backfill / regenerate tool (#1474)
+- `scripts/smoke-toolloop.ts` — one-off tool-loop smoke test (#1474)
 
 Not covered (by design):
 
@@ -62,7 +64,7 @@ What the code sends today: a static `trace` block with `generation_name` (`"mark
 
 This keeps observability entirely within Cloudflare (no new third-party account, no Axiom dataset consumed). It's archival object storage, not a live dashboard — for an at-a-glance per-lane cost/latency UI, **Langfuse** (LLM-eval-specialized, free tier) is a native destination that maps our `generation_name`/`environment` tags directly onto its generation model. Broadcast supports multiple destinations at once, so Langfuse (or Axiom via OTLP) can be added alongside R2 later without disturbing it.
 
-## Routing policy + the elastic-lane provider switch
+## Routing policy + the OpenRouter provider switch
 
 **Layer 1 — Transport (fixed rule, not a flag).** Every non-managed-agent call traverses exactly one proxy, chosen by protocol — never two in series:
 
@@ -72,8 +74,8 @@ This keeps observability entirely within Cloudflare (no new third-party account,
 
 There is deliberately **no transport-selector flag**: the protocol decides the proxy, so a call is never double-hopped, and CF-AI-Gateway-fronting-OpenRouter is not adopted.
 
-**Layer 2 — Provider selection (the switch).** For the elastic lanes on the `TextModel` seam, the `elastic-lane-default-openrouter` Flagship flag is the global default; each per-lane flag (`marketing-classifier-openrouter`, `summarize-openrouter`, …) inherits it when unset and overrides it when set. Flip the global ON to move every elastic lane that has an OpenRouter model configured onto OpenRouter at runtime; OFF returns them to Anthropic. A lane with the toggle on but no OpenRouter model stays on Anthropic (fail-open). Model ids stay per-lane. Inheritance is implemented in `workers/api/src/lib/text-model.ts` via `flagState()`.
+**Layer 2 — Provider selection (the switch).** A single Flagship flag, `openrouter-enabled`, governs every secondary lane on the `TextModel` seam (marketing classifier, live summarizer, …). ON moves each lane that ALSO has an OpenRouter model var configured (e.g. `MARKETING_CLASSIFIER_MODEL`) onto OpenRouter at runtime; OFF returns them all to Anthropic. A lane with an empty model var stays on Anthropic regardless (fail-open), so per-lane control is just "set the model var or leave it empty" — there are no per-lane flags. Implemented in `workers/api/src/lib/text-model.ts` (`resolveTextModel`).
 
-**Unified usage view.** `resolveTextModel` wraps every resolved model in `withUsageLogging`, emitting one `ai_usage` `logEvent` per call: `provider`, `model`, `lane`, `environment`, token counts, and `costUsd` (provider-reported for OpenRouter; derived via `@releases/lib/anthropic-pricing` for Anthropic). These ride in the existing `releases-cloudflare-logs` Axiom dataset as the `ai_usage` event — **no new dataset**. Query example: `["releases-cloudflare-logs"] | where ["event"] == "ai_usage" | summarize sum(toreal(costUsd)) by ["lane"], ["provider"]`.
+**Unified usage view.** `resolveTextModel` wraps every resolved model in `withUsageLogging`, emitting one `ai_usage` `logEvent` per call: `provider`, `model`, `lane`, `environment`, token counts, and `costUsd` (provider-reported for OpenRouter; derived via `@releases/lib/anthropic-pricing` for Anthropic). These ride in the existing `releases-cloudflare-logs` Axiom dataset as the `ai_usage` event — **no new dataset**. Query example: `["releases-cloudflare-logs"] | where ["event"] == "ai_usage" | summarize sum(toreal(costUsd)) by ["lane"], ["provider"]`. The daily batch summarize/overview workflows are **not** on this seam — they call the Anthropic Message Batches API directly and price via `estimateCost()`. That is correct because there is no OpenRouter Batches equivalent, so batch spend is always Anthropic; a future OpenRouter batch path is the one place this assumption would need revisiting.
 
-**Enabling the switch (Flagship, no deploy).** Create the `elastic-lane-default-openrouter` key in BOTH Flagship apps (`releases-platform` and `releases-platform-staging`) per the feature-flag convention; default OFF. There is no wrangler var for this flag — Flagship drives it, with the registry default (`false`) as the floor. Rollback is a Flagship toggle.
+**Enabling the switch (Flagship, no deploy).** Create the `openrouter-enabled` key in BOTH Flagship apps (`releases-platform` and `releases-platform-staging`) per the feature-flag convention; default OFF. There is no wrangler var for this flag — Flagship drives it, with the registry default (`false`) as the floor. Rollback is a Flagship toggle.

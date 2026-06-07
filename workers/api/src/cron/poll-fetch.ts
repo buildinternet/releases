@@ -1026,7 +1026,7 @@ async function classifyMarketingForReleases(
   const startedAt = Date.now();
 
   // Provider/model decided here (Anthropic Haiku via gateway, or a cheap
-  // OpenRouter model when `marketing-classifier-openrouter` is on + configured).
+  // OpenRouter model when `openrouter-enabled` is on + a model is configured).
   // Fail-open: null means no usable provider — skip rather than block insert.
   const model = await resolveMarketingModel(env);
   if (!model) {

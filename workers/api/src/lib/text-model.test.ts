@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { resolveMarketingModel, type TextModelEnv } from "./text-model.js";
+import { resolveMarketingModel, resolveSummarizeModel, type TextModelEnv } from "./text-model.js";
 import type { FlagshipBinding } from "@releases/lib/flags";
 
 /** Flagship stub: `true`/`false` = present key with that value; absent key echoes the default. */
@@ -22,48 +22,39 @@ function baseEnv(overrides: Partial<TextModelEnv> = {}): TextModelEnv {
   } as TextModelEnv;
 }
 
-describe("resolveMarketingModel inheritance", () => {
-  it("lane unset + global ON → OpenRouter", async () => {
-    const env = baseEnv({ FLAGS: flagsBinding({ "elastic-lane-default-openrouter": true }) });
+describe("resolveMarketingModel — single openrouter-enabled switch", () => {
+  it("switch ON + model set → OpenRouter", async () => {
+    const env = baseEnv({ FLAGS: flagsBinding({ "openrouter-enabled": true }) });
     const model = await resolveMarketingModel(env);
     expect(model?.id.startsWith("openrouter:")).toBe(true);
   });
 
-  it("lane unset + global OFF → Anthropic", async () => {
+  it("switch OFF → Anthropic", async () => {
     const env = baseEnv({ FLAGS: flagsBinding({}) });
     const model = await resolveMarketingModel(env);
     expect(model?.id.startsWith("anthropic:")).toBe(true);
   });
 
-  it("lane explicitly ON overrides global OFF → OpenRouter", async () => {
+  it("ignores a stray legacy per-lane flag (consolidated away)", async () => {
+    // `marketing-classifier-openrouter` no longer exists. With the global switch
+    // off, a leftover Flagship key of that name must have no effect → Anthropic.
     const env = baseEnv({ FLAGS: flagsBinding({ "marketing-classifier-openrouter": true }) });
-    const model = await resolveMarketingModel(env);
-    expect(model?.id.startsWith("openrouter:")).toBe(true);
-  });
-
-  it("lane explicitly OFF overrides global ON → Anthropic", async () => {
-    const env = baseEnv({
-      FLAGS: flagsBinding({
-        "marketing-classifier-openrouter": false,
-        "elastic-lane-default-openrouter": true,
-      }),
-    });
     const model = await resolveMarketingModel(env);
     expect(model?.id.startsWith("anthropic:")).toBe(true);
   });
 
-  it("OpenRouter selected but no model configured → falls back to Anthropic", async () => {
+  it("switch ON but no model configured → falls back to Anthropic", async () => {
     const env = baseEnv({
-      FLAGS: flagsBinding({ "elastic-lane-default-openrouter": true }),
+      FLAGS: flagsBinding({ "openrouter-enabled": true }),
       MARKETING_CLASSIFIER_MODEL: "",
     });
     const model = await resolveMarketingModel(env);
     expect(model?.id.startsWith("anthropic:")).toBe(true);
   });
 
-  it("OpenRouter selected but no OpenRouter key → falls back to Anthropic", async () => {
+  it("switch ON but no OpenRouter key → falls back to Anthropic", async () => {
     const env = baseEnv({
-      FLAGS: flagsBinding({ "elastic-lane-default-openrouter": true }),
+      FLAGS: flagsBinding({ "openrouter-enabled": true }),
       OPENROUTER_API_KEY: undefined,
     });
     const model = await resolveMarketingModel(env);
@@ -74,5 +65,27 @@ describe("resolveMarketingModel inheritance", () => {
     const env = baseEnv({ FLAGS: flagsBinding({}), ANTHROPIC_API_KEY: undefined });
     const model = await resolveMarketingModel(env);
     expect(model).toBeNull();
+  });
+});
+
+describe("resolveSummarizeModel — model var is the per-lane gate", () => {
+  it("switch ON + SUMMARIZE_MODEL empty (the prod config) → stays on Anthropic", async () => {
+    // The summarizer ships with SUMMARIZE_MODEL="" so it stays on Anthropic even
+    // when the global switch is on — the empty model var is the definitional gate.
+    const env = baseEnv({
+      FLAGS: flagsBinding({ "openrouter-enabled": true }),
+      SUMMARIZE_MODEL: "",
+    });
+    const model = await resolveSummarizeModel(env);
+    expect(model?.id.startsWith("anthropic:")).toBe(true);
+  });
+
+  it("switch ON + SUMMARIZE_MODEL set → OpenRouter", async () => {
+    const env = baseEnv({
+      FLAGS: flagsBinding({ "openrouter-enabled": true }),
+      SUMMARIZE_MODEL: "google/gemini-2.5-flash-lite",
+    });
+    const model = await resolveSummarizeModel(env);
+    expect(model?.id.startsWith("openrouter:")).toBe(true);
   });
 });

@@ -9,7 +9,7 @@
  *   bun scripts/smoke-toolloop.ts <url>
  */
 
-import Anthropic from "@anthropic-ai/sdk";
+import { buildAnthropicClient } from "@releases/lib/anthropic-client.js";
 import { extractFromBody } from "@releases/adapters/extract";
 import { DIRECT_FETCH_SYSTEM_PROMPT } from "../packages/adapters/src/extract/shared.js";
 import type { ExtractDeps, ExtractRepo } from "../packages/adapters/src/extract/types.js";
@@ -45,7 +45,12 @@ const noopRepo: ExtractRepo = {
 };
 
 const deps: ExtractDeps = {
-  anthropicClient: new Anthropic({ apiKey }),
+  // Route through the CF AI Gateway when ANTHROPIC_BASE_URL is set; direct when unset.
+  anthropicClient: buildAnthropicClient({
+    apiKey,
+    baseURL: process.env.ANTHROPIC_BASE_URL,
+    gatewayToken: process.env.AI_GATEWAY_TOKEN,
+  }),
   agentModel: "claude-sonnet-4-6",
   logger: {
     info: (m) => console.error(`[info] ${m}`),
