@@ -10,6 +10,8 @@ Covered when `ANTHROPIC_BASE_URL` is set:
 - `workers/mcp` — AI-backed tools (`summarizeChanges`, `compareProducts`)
 - `workers/discovery` — extract-deps agent/incremental paths only (managed-agents sessions are routed direct, see below)
 - `scripts/run-eval-task.ts` — local eval runner
+- `scripts/generate-release-content.ts` — operational backfill / regenerate tool (#1474)
+- `scripts/smoke-toolloop.ts` — one-off tool-loop smoke test (#1474)
 
 Not covered (by design):
 
@@ -62,7 +64,7 @@ What the code sends today: a static `trace` block with `generation_name` (`"mark
 
 This keeps observability entirely within Cloudflare (no new third-party account, no Axiom dataset consumed). It's archival object storage, not a live dashboard — for an at-a-glance per-lane cost/latency UI, **Langfuse** (LLM-eval-specialized, free tier) is a native destination that maps our `generation_name`/`environment` tags directly onto its generation model. Broadcast supports multiple destinations at once, so Langfuse (or Axiom via OTLP) can be added alongside R2 later without disturbing it.
 
-## Routing policy + the elastic-lane provider switch
+## Routing policy + the OpenRouter provider switch
 
 **Layer 1 — Transport (fixed rule, not a flag).** Every non-managed-agent call traverses exactly one proxy, chosen by protocol — never two in series:
 

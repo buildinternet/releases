@@ -73,6 +73,8 @@ async function main() {
 
   const dir = join(import.meta.dir, "fixtures", "summaries");
   const fixtures = loadFixtures(dir);
+  // Eval harness talks to Anthropic directly (no CF AI Gateway): it measures raw
+  // model output/latency for the baseline, not production routing.
   const client = new Anthropic({ apiKey });
 
   // The model under test. Defaults to Anthropic Haiku (the production baseline).
