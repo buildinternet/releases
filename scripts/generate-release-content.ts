@@ -32,7 +32,7 @@
  * `--max-cost` (default $10). Override per-run for deliberate larger backfills.
  */
 
-import Anthropic from "@anthropic-ai/sdk";
+import { buildAnthropicClient } from "@releases/lib/anthropic-client.js";
 import { spawn } from "node:child_process";
 import { daysAgoIso } from "@buildinternet/releases-core/dates";
 import { logger } from "@buildinternet/releases-lib/logger";
@@ -424,9 +424,16 @@ async function runBatch(
   };
 }
 
-const client = new Anthropic({ apiKey });
-// The real-time path runs `summarizeRelease` through the TextModel seam; this
-// script always uses Anthropic directly (the batch path stays on the Batches API).
+// Route through the CF AI Gateway when ANTHROPIC_BASE_URL is set (so this tool's
+// spend is attributed alongside the worker paths); falls back to direct Anthropic
+// when unset, so local runs are unchanged. Same pattern as scripts/run-eval-task.ts.
+const client = buildAnthropicClient({
+  apiKey,
+  baseURL: process.env.ANTHROPIC_BASE_URL,
+  gatewayToken: process.env.AI_GATEWAY_TOKEN,
+});
+// The real-time path runs `summarizeRelease` through the TextModel seam; the batch
+// path stays on the Anthropic Batches API (no OpenRouter batch equivalent).
 const realtimeModel = anthropicTextModel(client, MODEL);
 
 const mode = `${apply ? "APPLY (writes to D1 prod)" : "DRY RUN"} (${noBatch ? "real-time" : "batched"})`;

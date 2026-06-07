@@ -296,6 +296,9 @@ interface ProviderResult {
 
 async function callAnthropic(cfg: ProviderConfig, userBlock: string): Promise<ProviderResult> {
   const start = Date.now();
+  // Intentionally direct (no AI Gateway): this eval measures raw per-provider
+  // latency, so a proxy hop would skew the Anthropic baseline against the
+  // OpenAI-compat providers it is being compared with. See #1474.
   const client = new Anthropic({ apiKey: cfg.apiKey! });
   try {
     const res = await client.messages.create({
