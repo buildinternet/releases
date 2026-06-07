@@ -6,7 +6,6 @@ import { jwt } from "better-auth/plugins";
 import { oauthProvider } from "@better-auth/oauth-provider";
 import {
   IDENTITY_SCOPES,
-  ROLE_LADDER,
   entitledScopes,
   assertScopesEntitled,
   oauthAccessTokenClaims,

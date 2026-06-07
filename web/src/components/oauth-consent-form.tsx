@@ -202,7 +202,7 @@ export function OauthConsentForm() {
       <div className="flex gap-3">
         <button
           type="button"
-          disabled={busy !== null}
+          disabled={busy !== null || grantable.length === 0}
           onClick={() => act("approve")}
           className={approveClass}
         >
