@@ -8,6 +8,7 @@ import {
   oauthAccessTokenClaims,
   consentScopeViolation,
 } from "../src/auth/entitlement.js";
+import { oauthAdminUserIds, createAuth } from "../src/auth/index.js";
 import { createTestDb } from "./setup";
 import { user as userTable, session as sessionTable } from "../src/db/schema-auth.js";
 
@@ -147,5 +148,38 @@ describe("admin-plugin schema", () => {
     expect(nullRow[0]?.impersonatedBy ?? null).toBeNull();
     const adminRow = await db.select().from(sessionTable).where(eq(sessionTable.id, "s_2"));
     expect(adminRow[0]?.impersonatedBy).toBe("u_admin");
+  });
+});
+
+describe("oauthAdminUserIds", () => {
+  it("parses a comma-separated list, trimming blanks", () => {
+    expect(oauthAdminUserIds({ OAUTH_ADMIN_USER_IDS: "u_1, u_2 ,, u_3" } as never)).toEqual([
+      "u_1",
+      "u_2",
+      "u_3",
+    ]);
+  });
+  it("returns [] when unset", () => {
+    expect(oauthAdminUserIds({} as never)).toEqual([]);
+  });
+  it("returns [] for an empty string", () => {
+    expect(oauthAdminUserIds({ OAUTH_ADMIN_USER_IDS: "" } as never)).toEqual([]);
+  });
+});
+
+const wiringEnv = {
+  BETTER_AUTH_URL: "https://api.releases.localhost",
+  BETTER_AUTH_SECRET: "test-secret-do-not-use-in-prod-0123456789",
+  WEB_BASE_URL: "https://releases.localhost",
+} as never;
+
+describe("admin plugin wiring", () => {
+  it("registers the admin plugin", async () => {
+    const auth = await createAuth(wiringEnv, undefined, {
+      db: createTestDb(),
+      sendEmail: () => {},
+    });
+    const ids = (auth.options.plugins ?? []).map((p: { id: string }) => p.id);
+    expect(ids.includes("admin")).toBe(true);
   });
 });

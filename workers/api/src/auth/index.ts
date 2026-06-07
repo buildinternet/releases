@@ -1,6 +1,7 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { oneTap, magicLink, deviceAuthorization, bearer, jwt } from "better-auth/plugins";
+import { oneTap, magicLink, deviceAuthorization, bearer, jwt, admin } from "better-auth/plugins";
+import { adminAc, userAc } from "better-auth/plugins/admin/access";
 import { oauthProvider } from "@better-auth/oauth-provider";
 import { dash } from "@better-auth/infra";
 import { apiKey } from "@better-auth/api-key";
@@ -242,6 +243,19 @@ export function oauthValidAudiences(env: Bindings): string[] {
   }
   if (auds.size === 0) auds.add(DEFAULT_AUTH_ORIGIN);
   return [...auds];
+}
+
+/**
+ * Better Auth `admin`-plugin `adminUserIds`: user IDs treated as admin regardless
+ * of their DB `role`. Bootstrap seam for the first admin (who then `setRole`s
+ * others) — OAuth scope entitlement reads the persisted `role` column, not this
+ * list. Parses the comma-separated OAUTH_ADMIN_USER_IDS var. Pure + exported for testing.
+ */
+export function oauthAdminUserIds(env: Bindings): string[] {
+  return (env.OAUTH_ADMIN_USER_IDS ?? "")
+    .split(",")
+    .map((id) => id.trim())
+    .filter(Boolean);
 }
 
 /** True for an origin in the releases.sh / releases.localhost family (any subdomain). */
@@ -609,6 +623,17 @@ export async function createAuth(
       // Set-once before first deploy (changing later orphans live tokens). Extends
       // the existing relk_/relu_ credential family. Access tokens are JWTs (no prefix).
       prefix: { refreshToken: "relo_", clientSecret: "reloc_" },
+    }),
+    // Better Auth admin plugin — adds the `role` column that drives OAuth scope
+    // entitlement (auth/entitlement.ts). Reuses the built-in admin/user roles;
+    // `curator` mirrors `user` for admin-plugin permissions (NO user-management
+    // powers) — its only meaning is the OAuth scope ceiling. `adminUserIds`
+    // bootstraps the first admin (then they setRole others). Always-on, no flag.
+    admin({
+      roles: { admin: adminAc, user: userAc, curator: userAc },
+      adminRoles: ["admin"],
+      defaultRole: "user",
+      adminUserIds: oauthAdminUserIds(env),
     }),
     ...(userApiKeysOn
       ? [
