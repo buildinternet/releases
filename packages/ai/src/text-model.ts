@@ -108,7 +108,7 @@ export interface UsageRecord {
 export type UsageSink = (record: UsageRecord) => void;
 
 /** Split a `<provider>:<model>` TextModel id on the first ":". */
-function splitModelId(id: string): { provider: string; model: string } {
+export function splitModelId(id: string): { provider: string; model: string } {
   const i = id.indexOf(":");
   return i === -1
     ? { provider: "unknown", model: id }

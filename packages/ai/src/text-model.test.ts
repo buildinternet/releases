@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import {
   anthropicTextModel,
   openRouterTextModel,
+  splitModelId,
   withUsageLogging,
   type UsageRecord,
 } from "./text-model";
@@ -183,5 +184,28 @@ describe("withUsageLogging", () => {
     });
     const res = await wrapped.complete({ system: "s", user: "u", maxTokens: 1 });
     expect(res.text).toBe("OUT");
+  });
+});
+
+describe("splitModelId", () => {
+  it("splits a provider:model id on the first colon", () => {
+    expect(splitModelId("anthropic:claude-haiku-4-5")).toEqual({
+      provider: "anthropic",
+      model: "claude-haiku-4-5",
+    });
+  });
+
+  it("preserves a model segment that contains slashes and no further colon", () => {
+    expect(splitModelId("openrouter:google/gemini-2.5-flash-lite")).toEqual({
+      provider: "openrouter",
+      model: "google/gemini-2.5-flash-lite",
+    });
+  });
+
+  it("returns provider 'unknown' when there is no colon", () => {
+    expect(splitModelId("claude-haiku-4-5")).toEqual({
+      provider: "unknown",
+      model: "claude-haiku-4-5",
+    });
   });
 });
