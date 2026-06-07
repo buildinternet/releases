@@ -49,7 +49,9 @@ with the global switch plus the per-lane model var.
 
 ## Goals
 
-1. Collapse the three OpenRouter flags to one (`elastic-lane-default-openrouter`),
+1. Collapse the three OpenRouter flags to one, renamed from the jargon
+   `elastic-lane-default-openrouter` to the plain `openrouter-enabled`
+   (env `OPENROUTER_ENABLED`, registry field `openrouterEnabled`),
    behavior-preserving against the current config.
 2. Route the two operational standalone scripts through the gateway when configured;
    leave the eval script direct (with a reason).
@@ -58,13 +60,12 @@ with the global switch plus the per-lane model var.
 
 ## Non-goals
 
-- Renaming the `elastic-lane-default-openrouter` Flagship key (cosmetic; not worth the
-  two-app + redeploy migration).
 - Setting `OPENROUTER_BASE_URL` to front OpenRouter with the gateway — **deferred** to a
   follow-up gated on verifying the gateway exposes an OpenRouter provider (#1468.1 /
   #1474b). The seam already supports it via the existing optional var.
 - Any change to the batch summarize/overview paths, which stay Anthropic by design.
-- Adding any new feature flag or env var. This change set only removes surface.
+- Adding any _net-new_ feature flag or env var. This change set deletes two flags and
+  renames the third; it adds no new toggle.
 
 ## Design
 
@@ -72,9 +73,8 @@ with the global switch plus the per-lane model var.
 
 New rule, replacing the per-lane inheritance:
 
-> A lane uses OpenRouter **iff** `elastic-lane-default-openrouter` is on **and** that
-> lane has a non-empty model var **and** `OPENROUTER_API_KEY` is bound. Otherwise
-> Anthropic.
+> A lane uses OpenRouter **iff** `openrouter-enabled` is on **and** that lane has a
+> non-empty model var **and** `OPENROUTER_API_KEY` is bound. Otherwise Anthropic.
 
 Per-lane control is preserved through the model var: an empty `SUMMARIZE_MODEL` pins the
 summarizer to Anthropic even with the global switch on. This is now the _definitional_
@@ -84,19 +84,22 @@ guarantee rather than a flag that must be remembered (resolves the
 Changes:
 
 - `packages/lib/src/flags.ts`: delete the `marketingClassifierOpenrouter` and
-  `summarizeOpenrouter` entries. Refresh the `elasticLaneDefaultOpenrouter` comment to
-  describe it as the single switch (no per-lane override) and to state that the per-lane
-  model var gates eligibility.
+  `summarizeOpenrouter` entries. Rename `elasticLaneDefaultOpenrouter` →
+  `openrouterEnabled` (key `openrouter-enabled`, env `OPENROUTER_ENABLED`), and refresh
+  its comment to describe it as the single switch (no per-lane override) gated by the
+  per-lane model var.
 - `workers/api/src/lib/text-model.ts`:
   - Drop `flagDef` and `varValue` from `resolveTextModel`'s `opts`.
   - Replace the `flagState` + inheritance block with a single
-    `useOpenRouter = await flag(env.FLAGS, env.ELASTIC_LANE_DEFAULT_OPENROUTER, FLAGS.elasticLaneDefaultOpenrouter)`.
-  - Remove `MARKETING_CLASSIFIER_OPENROUTER` and `SUMMARIZE_OPENROUTER` from
-    `TextModelEnv`.
+    `useOpenRouter = await flag(env.FLAGS, env.OPENROUTER_ENABLED, FLAGS.openrouterEnabled)`.
+  - Rename `ELASTIC_LANE_DEFAULT_OPENROUTER` → `OPENROUTER_ENABLED` on `TextModelEnv`, and
+    remove `MARKETING_CLASSIFIER_OPENROUTER` and `SUMMARIZE_OPENROUTER`.
   - `resolveMarketingModel` / `resolveSummarizeModel` lose their flag wiring; they keep
     `orModel`, `anthropicModel`, `generationName`.
   - `flagState` and `FlagDef` imports become unused here — drop them if no longer
     referenced (keep `flag`, `FLAGS`).
+- Grep for any other reader of the old key/var/field (`elasticLaneDefaultOpenrouter`,
+  `ELASTIC_LANE_DEFAULT_OPENROUTER`, `elastic-lane-default-openrouter`) and update each.
 - `workers/api/src/lib/text-model.test.ts`: replace the per-lane-flag cases with
   global-switch + model-var cases (global on + model set → OpenRouter; global on + empty
   model → Anthropic; global off → Anthropic).
@@ -104,14 +107,27 @@ Changes:
   `packages/ai/src/release-content.ts` (lines ~11, ~526),
   `workers/api/src/cron/poll-fetch.ts:1029`,
   `workers/api/src/workflows/poll-and-fetch.ts:272`,
-  `tests/evals/release-summary.eval.ts:79` — reword from "behind the
-  `summarize-openrouter` flag" to "when `elastic-lane-default-openrouter` is on and a
-  model is configured".
+  `tests/evals/release-summary.eval.ts:79`, and the `Layer 2` section of
+  `docs/architecture/ai-gateway.md` — reword from "behind the `summarize-openrouter`
+  flag" / "elastic-lane-default-openrouter global default + per-lane override" to "when
+  `openrouter-enabled` is on and a model is configured".
 
-**Pre-flight before merge:** confirm neither per-lane key is currently set to an explicit
-`false` in either Flagship app that would be overriding an `on` global — the only case
-where removal changes live behavior (would flip the marketing lane). Leaving the orphaned
-Flagship keys is harmless; note them for optional dashboard cleanup.
+**Flagship migration (ordering matters).** `openrouter-enabled` is a renamed key, so it
+must exist in **both** Flagship apps (`releases-platform`, `releases-platform-staging`)
+**before** the code that reads it deploys; otherwise `flag()` falls back to the var
+(unset) → hardcoded `false` and every lane silently reverts to Anthropic. Sequence:
+
+1. Create `openrouter-enabled` in both apps, set to match the current
+   `elastic-lane-default-openrouter` value.
+2. Merge/deploy the code (now reading `openrouter-enabled`).
+3. Delete the three orphaned keys (`elastic-lane-default-openrouter`,
+   `marketing-classifier-openrouter`, `summarize-openrouter`) from both apps. Orphaned
+   keys are harmless to leave, but delete them to finish the cleanup.
+
+**Pre-flight before deleting the per-lane keys:** confirm neither per-lane key is
+currently set to an explicit `false` in either Flagship app that would be overriding an
+`on` global — the only case where removal changes live behavior (would flip the marketing
+lane). If one is, decide intentionally before removing.
 
 ### Part 2 — Route standalone scripts through the gateway (#1474a)
 
@@ -156,7 +172,7 @@ No code change. Confirm and document in `docs/architecture/ai-gateway.md`:
 - Behavior-preserving against current config (marketing on OpenRouter via the set model;
   summarizer on Anthropic via the empty model). Risk is confined to a per-lane Flagship
   key explicitly overriding the global — caught by the pre-flight check.
-- The global `elastic-lane-default-openrouter` remains the single runtime kill-switch:
-  flip off → every elastic lane reverts to Anthropic instantly.
+- The renamed `openrouter-enabled` remains the single runtime kill-switch: flip off →
+  every secondary AI lane reverts to Anthropic instantly.
 - Net flag surface: 3 → 1. Net env-var surface: unchanged (the per-lane flags had no var;
   the per-lane _model_ vars stay as the eligibility gate).
