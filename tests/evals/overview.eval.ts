@@ -1,8 +1,9 @@
 /**
  * Org-overview regression eval. LOCAL, AD-HOC ONLY — calls the real Anthropic
  * API. Run: `bun run eval:overview` (Tier-1 structural + citation integrity) or
- * `bun run eval:overview -- --judge` (adds the Sonnet rubric faithfulness check
- * against src/shared/rubrics/overview.md). Never part of `bun test`.
+ * `bun run eval:overview -- --judge` (adds the rubric faithfulness check against
+ * src/shared/rubrics/overview.md — judged by Gemini 2.5 Flash via OpenRouter by
+ * default; see ./judge-model.ts). Never part of `bun test`.
  *
  * Each fixture is a single JSON file under fixtures/overviews/ carrying the
  * OverviewRequestInput the production batch-overview workflow would build, plus
@@ -22,28 +23,15 @@ import {
   clampCitationsToBody,
 } from "@releases/ai-internal/overview-citations";
 import { buildGraderPrompt } from "@releases/ai-internal/grader-prompt";
+import type { TextModel } from "@releases/ai-internal/text-model";
 import { gradeOverviewStructural, gradeCitations } from "./graders";
 import { loadOverviewFixtures, overviewRubricPath } from "./overview-fixtures";
 import type { FieldResult } from "./helpers";
+import { extractJudgeJson, resolveJudgeModel, runJudge } from "./judge-model";
 import { saveRun } from "./results";
 
-const JUDGE_MODEL = "claude-sonnet-4-6";
-
-/**
- * Pull the JSON verdict out of the judge's raw text. The grader prompt asks for
- * a bare object, but the API model still tends to wrap it in ```json fences or a
- * one-line preamble ("Here is my evaluation:"), which makes a direct JSON.parse
- * throw — every fixture then scores "unparseable". Strip a fenced block if
- * present, else take the outermost {...} span, before parsing.
- */
-export function extractJudgeJson(raw: string): string | null {
-  const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  const candidate = fenced ? fenced[1] : raw;
-  const start = candidate.indexOf("{");
-  const end = candidate.lastIndexOf("}");
-  if (start === -1 || end === -1 || end <= start) return null;
-  return candidate.slice(start, end + 1);
-}
+// Re-exported for any unit test that imports it from this module.
+export { extractJudgeJson };
 
 /** The citation source set the API can legitimately resolve to (matches buildReleaseBlock). */
 function validSources(input: OverviewRequestInput): string[] {
@@ -51,31 +39,15 @@ function validSources(input: OverviewRequestInput): string[] {
 }
 
 async function judge(
-  client: Anthropic,
+  model: TextModel,
   rubric: string,
   body: string,
 ): Promise<{ ok: boolean; result: string }> {
   const prompt = buildGraderPrompt({ rubric, artifact: body, rubricLabel: "overview.md" });
   // The rubric has ~24 criteria, each with an evidence quote, so the JSON
   // verdict runs well past 2K tokens; a low cap truncates it to invalid JSON.
-  // 8K leaves comfortable headroom.
-  const res = await client.messages.create({
-    model: JUDGE_MODEL,
-    max_tokens: 8192,
-    messages: [{ role: "user", content: prompt }],
-  });
-  const raw = res.content
-    .filter((b): b is Extract<typeof b, { type: "text" }> => b.type === "text")
-    .map((b) => b.text)
-    .join("");
-  try {
-    const json = extractJudgeJson(raw);
-    if (json === null) return { ok: false, result: "unparseable" };
-    const result = String(JSON.parse(json).result ?? "failed");
-    return { ok: result === "satisfied", result };
-  } catch {
-    return { ok: false, result: "unparseable" };
-  }
+  // 8K leaves comfortable headroom (and room for OpenRouter reasoning tokens).
+  return runJudge(model, prompt, 8192);
 }
 
 async function main() {
@@ -89,10 +61,14 @@ async function main() {
   const fixtures = loadOverviewFixtures();
   const client = new Anthropic({ apiKey });
   const rubric = useJudge ? readFileSync(overviewRubricPath(), "utf8") : "";
+  // Judge defaults to a cheap OpenRouter model (Gemini Flash); JUDGE_MODEL
+  // overrides it (e.g. claude-sonnet-4-6 for Anthropic). See ./judge-model.ts.
+  const judgeModel = useJudge ? resolveJudgeModel(client) : null;
 
   let allPassed = true;
   console.error(`\n${"=".repeat(60)}`);
   console.error(`Org overview eval${useJudge ? " (+ judge)" : ""}: ${fixtures.length} fixtures`);
+  if (judgeModel) console.error(`judge model: ${judgeModel.id}`);
   console.error("=".repeat(60));
 
   const runCases: Array<{ name: string; passed: boolean; fields: FieldResult[]; body?: string }> =
@@ -117,8 +93,8 @@ async function main() {
       fields = [...structural.fields, ...citationGrade.fields];
       passed = structural.passed && citationGrade.passed;
 
-      if (useJudge && body.trim().length > 0) {
-        const verdict = await judge(client, rubric, body);
+      if (judgeModel && body.trim().length > 0) {
+        const verdict = await judge(judgeModel, rubric, body);
         fields = [
           ...fields,
           {
@@ -162,7 +138,7 @@ async function main() {
       total: runCases.length,
       passed: runCases.filter((c) => c.passed).length,
       judge: useJudge,
-      judgeModel: useJudge ? JUDGE_MODEL : null,
+      judgeModel: judgeModel?.id ?? null,
     },
     cases: runCases,
   });
