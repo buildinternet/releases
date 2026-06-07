@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { resolveMarketingModel, type TextModelEnv } from "./text-model.js";
+import { resolveMarketingModel, resolveSummarizeModel, type TextModelEnv } from "./text-model.js";
 import type { FlagshipBinding } from "@releases/lib/flags";
 
 /** Flagship stub: `true`/`false` = present key with that value; absent key echoes the default. */
@@ -65,5 +65,27 @@ describe("resolveMarketingModel — single openrouter-enabled switch", () => {
     const env = baseEnv({ FLAGS: flagsBinding({}), ANTHROPIC_API_KEY: undefined });
     const model = await resolveMarketingModel(env);
     expect(model).toBeNull();
+  });
+});
+
+describe("resolveSummarizeModel — model var is the per-lane gate", () => {
+  it("switch ON + SUMMARIZE_MODEL empty (the prod config) → stays on Anthropic", async () => {
+    // The summarizer ships with SUMMARIZE_MODEL="" so it stays on Anthropic even
+    // when the global switch is on — the empty model var is the definitional gate.
+    const env = baseEnv({
+      FLAGS: flagsBinding({ "openrouter-enabled": true }),
+      SUMMARIZE_MODEL: "",
+    });
+    const model = await resolveSummarizeModel(env);
+    expect(model?.id.startsWith("anthropic:")).toBe(true);
+  });
+
+  it("switch ON + SUMMARIZE_MODEL set → OpenRouter", async () => {
+    const env = baseEnv({
+      FLAGS: flagsBinding({ "openrouter-enabled": true }),
+      SUMMARIZE_MODEL: "google/gemini-2.5-flash-lite",
+    });
+    const model = await resolveSummarizeModel(env);
+    expect(model?.id.startsWith("openrouter:")).toBe(true);
   });
 });
