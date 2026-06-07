@@ -96,7 +96,7 @@ async function main() {
           apiKey: orKey,
           model: orModel,
           referer: "https://releases.sh",
-          title: "Releases summary eval",
+          title: "Releases",
           // Tag eval runs so Broadcast traces stay separate from prod traffic.
           trace: { generationName: "summarize-eval", environment: "eval" },
         })

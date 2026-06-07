@@ -38,11 +38,19 @@ export interface TextModelEnv extends AnthropicEnv {
 }
 
 /**
+ * Single, stable OpenRouter app name across every lane. App *identity* (rankings,
+ * the app page) is keyed on `HTTP-Referer`, and the title is display-only — so a
+ * lane-varying title would just flap the app's shown name without segmenting
+ * anything. Per-lane breakdown lives in the Broadcast `generation_name` tag.
+ */
+const APP_TITLE = "Releases";
+
+/**
  * Shared resolver for both cheap-call lanes. `flagDef` + `varValue` pick the
  * OpenRouter toggle; `orModel` is the lane's OpenRouter model id (empty → stay
- * on Anthropic); `anthropicModel` is the Haiku fallback. `title` tags the
- * OpenRouter request for cost attribution; `generationName` tags it for
- * Broadcast trace grouping (inert until Broadcast is configured).
+ * on Anthropic); `anthropicModel` is the Haiku fallback. `generationName` tags
+ * the request for Broadcast trace grouping (inert until Broadcast is configured)
+ * and is the axis that breaks usage/cost out per lane.
  */
 async function resolveTextModel(
   env: TextModelEnv,
@@ -51,7 +59,6 @@ async function resolveTextModel(
     varValue: string | undefined;
     orModel: string | undefined;
     anthropicModel: string;
-    title: string;
     generationName: string;
   },
 ): Promise<TextModel | null> {
@@ -66,7 +73,7 @@ async function resolveTextModel(
         model,
         ...(baseURL ? { baseURL } : {}),
         referer: "https://releases.sh",
-        title: opts.title,
+        title: APP_TITLE,
         trace: {
           generationName: opts.generationName,
           ...(env.ENVIRONMENT ? { environment: env.ENVIRONMENT } : {}),
@@ -90,7 +97,6 @@ export function resolveMarketingModel(env: TextModelEnv): Promise<TextModel | nu
     varValue: env.MARKETING_CLASSIFIER_OPENROUTER,
     orModel: env.MARKETING_CLASSIFIER_MODEL,
     anthropicModel: ANTHROPIC_MARKETING_MODEL,
-    title: "Releases marketing-classifier",
     generationName: "marketing-classifier",
   });
 }
@@ -101,7 +107,6 @@ export function resolveSummarizeModel(env: TextModelEnv): Promise<TextModel | nu
     varValue: env.SUMMARIZE_OPENROUTER,
     orModel: env.SUMMARIZE_MODEL,
     anthropicModel: ANTHROPIC_SUMMARIZE_MODEL,
-    title: "Releases summarize",
     generationName: "summarize-release",
   });
 }

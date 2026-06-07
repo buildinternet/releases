@@ -55,7 +55,9 @@ function buildEvalModel(): { model: TextModel; label: string } | null {
           ? { baseURL: process.env.OPENROUTER_BASE_URL.trim() }
           : {}),
         referer: "https://releases.sh",
-        title: "Releases marketing-classifier eval",
+        title: "Releases",
+        // Tag eval runs so Broadcast traces stay separate from prod traffic.
+        trace: { generationName: "marketing-classifier-eval", environment: "eval" },
       }),
       label: `openrouter:${orModel}`,
     };
