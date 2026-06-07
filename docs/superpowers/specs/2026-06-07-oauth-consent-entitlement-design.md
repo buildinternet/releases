@@ -1,7 +1,7 @@
 # OAuth Provider — Consent UI + Per-User Scope Entitlement (sub-projects 2 + 3)
 
 - **Date:** 2026-06-07
-- **Status:** Designed; pending implementation
+- **Status:** Implemented; pending staging smoke
 - **Builds on:** `2026-06-07-oauth-provider-foundation-design.md` (sub-project 1, merged `6d290051` / #1479)
 
 ## Summary
