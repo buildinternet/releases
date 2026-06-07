@@ -305,11 +305,6 @@ export type Env = {
     // resource servers, e.g. the MCP worker). Unioned with the BETTER_AUTH_URL
     // origin by oauthValidAudiences(). Plain config, not a feature flag.
     OAUTH_RESOURCE_AUDIENCES?: string;
-    // Comma-separated Better Auth user IDs treated as admin regardless of their DB
-    // `role` (admin-plugin `adminUserIds`). Bootstrap only: it unlocks the first
-    // admin so they can `setRole` others; OAuth entitlement reads the persisted
-    // `role` column, not this list. Operator-set; unset → no bootstrap admin.
-    OAUTH_ADMIN_USER_IDS?: string;
     // Explicit kill switch for Better Auth's brute-force rate limiting (default
     // OFF → rate limiting stays ON in prod). Set to "true" in local `.dev.vars`
     // to skip rate limiting during sign-in testing. A plain var (never a transient
