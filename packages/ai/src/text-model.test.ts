@@ -146,6 +146,20 @@ describe("withUsageLogging", () => {
     expect(rec?.costUsd).toBe(0.005);
   });
 
+  it("preserves costUsd: 0 rather than falling through to deriveCost", async () => {
+    let rec: UsageRecord | undefined;
+    const inner = fakeModel("openrouter:m", { ...ZERO, costUsd: 0 });
+    const wrapped = withUsageLogging(inner, {
+      lane: "x",
+      sink: (r) => {
+        rec = r;
+      },
+      deriveCost: () => 99,
+    });
+    await wrapped.complete({ system: "s", user: "u", maxTokens: 1 });
+    expect(rec?.costUsd).toBe(0);
+  });
+
   it("does not break the call when the sink throws", async () => {
     const inner = fakeModel("anthropic:m", { ...ZERO });
     const wrapped = withUsageLogging(inner, {
