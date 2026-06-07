@@ -212,6 +212,15 @@ export function authTrustedOrigins(env: Bindings): string[] {
 }
 
 /**
+ * Fallback issuer/audience origin when `BETTER_AUTH_URL` is unset (e.g. in tests
+ * that build `createAuth` from a bare env). The oauth-provider plugin's `init`
+ * does `new URL(issuer)` on the baseURL and throws on an empty string, so a
+ * parseable default keeps the AS from crashing auth context creation. Prod +
+ * staging always set `BETTER_AUTH_URL`, so this only bites the test path.
+ */
+const DEFAULT_AUTH_ORIGIN = "https://api.releases.sh";
+
+/**
  * Valid `aud` values for issued OAuth access tokens: the origin of this AS
  * (`BETTER_AUTH_URL`) unioned with every comma-separated entry of
  * `OAUTH_RESOURCE_AUDIENCES` (the resource servers — e.g. the MCP worker). Pure
@@ -231,7 +240,7 @@ export function oauthValidAudiences(env: Bindings): string[] {
     const trimmed = entry.trim();
     if (trimmed) auds.add(trimmed);
   }
-  if (auds.size === 0) auds.add("https://api.releases.sh");
+  if (auds.size === 0) auds.add(DEFAULT_AUTH_ORIGIN);
   return [...auds];
 }
 
@@ -666,7 +675,9 @@ export async function createAuth(
     // dashboard's "Missing Application Name" insight.
     appName: "Releases",
     secret,
-    baseURL: env.BETTER_AUTH_URL,
+    // Fallback keeps the oauth-provider plugin's issuer (`new URL(baseURL)`)
+    // parseable when BETTER_AUTH_URL is unset; prod/staging always set it.
+    baseURL: env.BETTER_AUTH_URL ?? DEFAULT_AUTH_ORIGIN,
     trustedOrigins: authTrustedOrigins(env),
     database: drizzleAdapter(db, {
       provider: "sqlite",
