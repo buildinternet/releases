@@ -33,7 +33,12 @@ export interface OpenRouterOptions {
   model: string;
   /** Defaults to `https://openrouter.ai/api/v1`. Pass an AI Gateway sub-path to proxy. */
   baseURL?: string;
-  /** Optional OpenRouter ranking headers (https://openrouter.ai/docs/api-reference). */
+  /**
+   * Optional OpenRouter ranking headers. `referer` (sent as `HTTP-Referer`) is
+   * the app *identity* — it keys the app page + rankings. `title` is display-only
+   * (the app's shown name); it does NOT segment usage. Keep `title` stable across
+   * all lanes and use `trace.generationName` to break traffic out per lane.
+   */
   referer?: string;
   title?: string;
   timeoutMs?: number;
@@ -92,7 +97,10 @@ export async function openRouterChat(
       Authorization: `Bearer ${opts.apiKey}`,
       "Content-Type": "application/json",
       ...(opts.referer ? { "HTTP-Referer": opts.referer } : {}),
-      ...(opts.title ? { "X-Title": opts.title } : {}),
+      // Send both the legacy (`X-Title`) and current (`X-OpenRouter-Title`)
+      // display-name headers so the app name shows regardless of which OpenRouter
+      // honors; attribution itself rides on `HTTP-Referer` either way.
+      ...(opts.title ? { "X-Title": opts.title, "X-OpenRouter-Title": opts.title } : {}),
     },
     body: JSON.stringify({
       model: opts.model,

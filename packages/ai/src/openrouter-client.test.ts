@@ -48,6 +48,7 @@ describe("openRouterChat", () => {
     expect(headers.Authorization).toBe("Bearer k");
     expect(headers["HTTP-Referer"]).toBe("https://releases.sh");
     expect(headers["X-Title"]).toBe("Releases");
+    expect(headers["X-OpenRouter-Title"]).toBe("Releases");
     const sent = JSON.parse(init.body as string);
     expect(sent.model).toBe("google/gemini-2.5-flash-lite");
     expect(sent.max_tokens).toBe(40);
