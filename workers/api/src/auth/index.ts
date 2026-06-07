@@ -1,6 +1,7 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { oneTap, magicLink, deviceAuthorization, bearer } from "better-auth/plugins";
+import { oneTap, magicLink, deviceAuthorization, bearer, jwt } from "better-auth/plugins";
+import { oauthProvider } from "@better-auth/oauth-provider";
 import { dash } from "@better-auth/infra";
 import { apiKey } from "@better-auth/api-key";
 import type { BetterAuthPlugin } from "better-auth";
@@ -28,6 +29,11 @@ import {
   rateLimit,
   apikey,
   deviceCode,
+  oauthClient,
+  oauthAccessToken,
+  oauthRefreshToken,
+  oauthConsent,
+  jwks,
 } from "../db/schema-auth.js";
 import type { Env } from "../index.js";
 import {
@@ -203,6 +209,30 @@ export function authTrustedOrigins(env: Bindings): string[] {
   const localDev =
     env.ENVIRONMENT === "production" ? [] : ["http://localhost:*", "http://127.0.0.1:*"];
   return [...new Set([...defaults, ...localDev, ...extraTrustedOrigins(env)])];
+}
+
+/**
+ * Valid `aud` values for issued OAuth access tokens: the origin of this AS
+ * (`BETTER_AUTH_URL`) unioned with every comma-separated entry of
+ * `OAUTH_RESOURCE_AUDIENCES` (the resource servers — e.g. the MCP worker). Pure
+ * + exported so it's unit-testable. Falls back to the prod API origin when
+ * nothing resolves, so a token always has a defined audience.
+ */
+export function oauthValidAudiences(env: Bindings): string[] {
+  const auds = new Set<string>();
+  if (env.BETTER_AUTH_URL) {
+    try {
+      auds.add(new URL(env.BETTER_AUTH_URL).origin);
+    } catch {
+      /* ignore malformed */
+    }
+  }
+  for (const entry of (env.OAUTH_RESOURCE_AUDIENCES ?? "").split(",")) {
+    const trimmed = entry.trim();
+    if (trimmed) auds.add(trimmed);
+  }
+  if (auds.size === 0) auds.add("https://api.releases.sh");
+  return [...auds];
 }
 
 /** True for an origin in the releases.sh / releases.localhost family (any subdomain). */
@@ -552,6 +582,25 @@ export async function createAuth(
         scheduleSend(() => sendEmail(msg));
       },
     }),
+    // OAuth 2.0 / OIDC authorization server ("Sign in with Releases"). Issues
+    // JWT access tokens (the adjacent jwt() plugin signs them + exposes JWKS)
+    // and serves discovery metadata. INERT until an admin provisions a client:
+    // dynamic client registration is OFF and there is no consent page yet, so
+    // only an admin-created skip_consent client can complete a flow. Consent UI,
+    // public registration, per-user scope entitlement, and resource-server
+    // verification are later sub-projects. No feature flag — see the AS-foundation
+    // spec (a kill switch guards nothing a not-yet-provisioned client wouldn't).
+    jwt(),
+    oauthProvider({
+      loginPage: "/login", // existing web sign-in route (web/src/app/login)
+      consentPage: "/oauth/consent", // page built in sub-project 3; path provisional
+      scopes: ["openid", "profile", "email", "offline_access", "read", "write", "admin"],
+      validAudiences: oauthValidAudiences(env),
+      allowDynamicClientRegistration: false, // sub-project 4 enables this
+      // Set-once before first deploy (changing later orphans live tokens). Extends
+      // the existing relk_/relu_ credential family. Access tokens are JWTs (no prefix).
+      prefix: { refreshToken: "relo_", clientSecret: "reloc_" },
+    }),
     ...(userApiKeysOn
       ? [
           apiKey({
@@ -622,7 +671,20 @@ export async function createAuth(
     database: drizzleAdapter(db, {
       provider: "sqlite",
       // Schema key `rateLimit` must match Better Auth's default rate-limit model name.
-      schema: { user, session, account, verification, rateLimit, apikey, deviceCode },
+      schema: {
+        user,
+        session,
+        account,
+        verification,
+        rateLimit,
+        apikey,
+        deviceCode,
+        oauthClient,
+        oauthAccessToken,
+        oauthRefreshToken,
+        oauthConsent,
+        jwks,
+      },
     }),
     emailAndPassword: {
       enabled: true,

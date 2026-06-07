@@ -300,6 +300,10 @@ export type Env = {
     // Optional comma-separated extra trusted web origins (allowed to call the
     // auth API with credentials), on top of the releases.sh/.localhost family.
     BETTER_AUTH_TRUSTED_ORIGINS?: string;
+    // Comma-separated extra `aud` values for issued OAuth access tokens (the
+    // resource servers, e.g. the MCP worker). Unioned with the BETTER_AUTH_URL
+    // origin by oauthValidAudiences(). Plain config, not a feature flag.
+    OAUTH_RESOURCE_AUDIENCES?: string;
     // Explicit kill switch for Better Auth's brute-force rate limiting (default
     // OFF → rate limiting stays ON in prod). Set to "true" in local `.dev.vars`
     // to skip rate limiting during sign-in testing. A plain var (never a transient
