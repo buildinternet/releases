@@ -1,13 +1,15 @@
 /**
- * Pick the `TextModel` for the cheap-call AI lanes (marketing classifier and
- * live release summarizer) at call time.
+ * Pick the `TextModel` for the secondary cheap-call AI lanes (marketing
+ * classifier and live release summarizer) at call time.
  *
- * Each lane has its own flag + model var so they roll out independently. When a
- * lane's flag is ON *and* an `OPENROUTER_API_KEY` + that lane's model id are
- * configured, route to OpenRouter (fronted by AI Gateway when
- * `OPENROUTER_BASE_URL` is set); otherwise fall back to the lane's Anthropic
- * Haiku model through the existing gateway path. Returns `null` only when no
- * provider is usable (no Anthropic key) so the caller can fail open by skipping.
+ * A single `openrouter-enabled` Flagship switch governs all these lanes. When it
+ * is ON *and* an `OPENROUTER_API_KEY` + that lane's model id are configured, route
+ * to OpenRouter (called directly — not fronted by the CF AI Gateway; see
+ * docs/architecture/ai-gateway.md); otherwise fall back to the lane's Anthropic
+ * Haiku model through the existing gateway path. Per-lane control is the model
+ * var: an empty model id keeps that lane on Anthropic regardless. Returns `null`
+ * only when no provider is usable (no Anthropic key) so the caller can fail open
+ * by skipping.
  *
  * Fail-open is layered: a missing/empty OpenRouter secret or model var quietly
  * falls through to Anthropic here; a runtime OpenRouter throw is caught by the
