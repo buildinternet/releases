@@ -140,38 +140,19 @@ export const FLAGS = {
     env: "WELL_KNOWN_SYNC_ENABLED",
     default: true,
   },
-  // OpenRouter cheap-call lane for the per-source marketing classifier. OFF by
-  // default → the classifier stays on Anthropic Haiku. Flip ON (per env) once an
-  // OPENROUTER_API_KEY is bound and the eval confirms agreement with the Haiku
-  // baseline. Fail-open: a missing key/model or any OpenRouter throw falls back
-  // to Anthropic at the call site (see workers/api/src/lib/text-model.ts).
-  marketingClassifierOpenrouter: {
-    key: "marketing-classifier-openrouter",
-    env: "MARKETING_CLASSIFIER_OPENROUTER",
-    default: false,
-  },
-  // OpenRouter cheap-call lane for the *live* poll-fetch release summarizer
-  // (title / short title / summary). OFF by default → summarization stays on
-  // Anthropic Haiku. Separate from the marketing flag because summaries are
-  // user-facing: flip ON (per env) only after the release-content eval confirms
-  // no quality regression vs. Haiku AND a SUMMARIZE_MODEL + OPENROUTER_API_KEY
-  // are configured. The daily batch path (Message Batches API) is NOT affected —
-  // it always stays on Anthropic (no OpenRouter batch equivalent). Fail-open: a
-  // missing key/model or any OpenRouter throw falls back to Anthropic at the call
-  // site (see workers/api/src/lib/text-model.ts).
-  summarizeOpenrouter: {
-    key: "summarize-openrouter",
-    env: "SUMMARIZE_OPENROUTER",
-    default: false,
-  },
-  // Global default for the elastic cheap-call lanes (marketing classifier, live
-  // summarizer, …). OFF → a lane that doesn't set its own flag stays on Anthropic.
-  // Flip ON in Flagship to move EVERY elastic lane that has an OpenRouter model
-  // configured onto OpenRouter at runtime; a per-lane flag still overrides this.
-  // Inheritance lives in workers/api/src/lib/text-model.ts (resolveTextModel).
-  elasticLaneDefaultOpenrouter: {
-    key: "elastic-lane-default-openrouter",
-    env: "ELASTIC_LANE_DEFAULT_OPENROUTER",
+  // Single switch for the secondary AI lanes (marketing classifier, live release
+  // summarizer, …) on the TextModel seam. OFF → those lanes use Anthropic Haiku.
+  // Flip ON in Flagship to route every such lane that ALSO has an OpenRouter model
+  // var configured (e.g. MARKETING_CLASSIFIER_MODEL) onto OpenRouter at runtime; a
+  // lane with an empty model var stays on Anthropic regardless (fail-open). This is
+  // the ONLY OpenRouter toggle — there are no per-lane flags; per-lane control is
+  // "set the model var or leave it empty". Resolved in
+  // workers/api/src/lib/text-model.ts (resolveTextModel). OpenRouter is called
+  // directly, never fronted by the CF AI Gateway (no double-hop) — see
+  // docs/architecture/ai-gateway.md.
+  openrouterEnabled: {
+    key: "openrouter-enabled",
+    env: "OPENROUTER_ENABLED",
     default: false,
   },
 } as const satisfies Record<string, FlagDef>;
