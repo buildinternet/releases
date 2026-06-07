@@ -56,12 +56,18 @@ adminUsersRoutes.get("/admin/users/roles", async (c) => {
 
 adminUsersRoutes.patch("/admin/users/role", async (c) => {
   const db = getDb(c);
-  let body: { email?: unknown; userId?: unknown; role?: unknown };
+  let raw: unknown;
   try {
-    body = await c.req.json();
+    raw = await c.req.json();
   } catch {
     return c.json({ error: "invalid_json" }, 400);
   }
+  // Fail closed on a non-object payload (e.g. a literal JSON `null`, which would
+  // otherwise throw on property access below and 500 instead of a clean 400).
+  if (typeof raw !== "object" || raw === null) {
+    return c.json({ error: "invalid_json" }, 400);
+  }
+  const body = raw as { email?: unknown; userId?: unknown; role?: unknown };
   const email = typeof body.email === "string" ? body.email : undefined;
   const userId = typeof body.userId === "string" ? body.userId : undefined;
   const role = typeof body.role === "string" ? body.role : undefined;

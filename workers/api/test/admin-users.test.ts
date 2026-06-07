@@ -83,6 +83,30 @@ describe("PATCH /v1/admin/users/role", () => {
     ).toBe(400);
   });
 
+  it("rejects 'operator' as an unknown role (it is informal language for admin, not an input value)", async () => {
+    const db = mkDb();
+    await seed(db);
+    const fetch = await makeApp(db);
+    const res = await fetch(patch({ email: "pat@example.com", role: "operator" }));
+    expect(res.status).toBe(400);
+    const [row] = await db.select({ role: user.role }).from(user).where(eq(user.id, "u_plain"));
+    expect(row.role).toBeNull(); // unchanged
+  });
+
+  it("fails closed with 400 on a non-object JSON body (null)", async () => {
+    const db = mkDb();
+    await seed(db);
+    const fetch = await makeApp(db);
+    const res = await fetch(
+      new Request("http://x/v1/admin/users/role", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: "null",
+      }),
+    );
+    expect(res.status).toBe(400);
+  });
+
   it("returns 404 for a missing user", async () => {
     const db = mkDb();
     await seed(db);
