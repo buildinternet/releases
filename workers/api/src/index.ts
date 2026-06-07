@@ -419,11 +419,17 @@ app.use("*", async (c, next) => {
 // Apex OAuth/OIDC discovery aliases — registered before any auth gate so
 // discovery stays public. Protected-resource metadata is NOT here; that belongs
 // to the resource servers (later sub-project). See oauth-discovery.ts.
-for (const wellKnown of ["oauth-authorization-server", "openid-configuration"] as const) {
-  app.get(`/.well-known/${wellKnown}`, async (c) =>
-    forwardWellKnown(await createAuth(c.env), wellKnown, c.req.url, c.req.raw.headers),
-  );
-}
+app.get("/.well-known/oauth-authorization-server", async (c) =>
+  forwardWellKnown(
+    await createAuth(c.env),
+    "oauth-authorization-server",
+    c.req.url,
+    c.req.raw.headers,
+  ),
+);
+app.get("/.well-known/openid-configuration", async (c) =>
+  forwardWellKnown(await createAuth(c.env), "openid-configuration", c.req.url, c.req.raw.headers),
+);
 
 // ── Better Auth ──
 // Human user sessions (email/password now; Google/GitHub when their secrets are
