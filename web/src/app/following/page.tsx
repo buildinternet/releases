@@ -18,7 +18,7 @@ export default function FollowingPage() {
   return (
     <div className="min-h-screen">
       <Header />
-      <div className="mx-auto w-full max-w-4xl px-6 py-12">
+      <div className="mx-auto w-full max-w-4xl px-6">
         <FollowingClient />
       </div>
     </div>

@@ -1,26 +1,65 @@
 "use client";
 
 import { useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import type { FollowTarget } from "@buildinternet/releases-api-types";
 import { useFollows } from "./follows-provider";
 
 /**
- * Follow/unfollow toggle for an org or product. Renders nothing when follows is
- * disabled or the user is signed out (`useFollows()` is null), so detail pages
- * stay unchanged for anonymous visitors.
+ * Follow/unfollow toggle for an org or product. Renders nothing only when the
+ * follows feature is disabled (`useFollows()` is null). For signed-out visitors
+ * the button still shows as a "Follow" call-to-action, but a click routes to
+ * `/login?redirect=<current path>` instead of silently failing the unauthorized
+ * write — once signed back in, the user lands where they left off.
+ *
+ * On a product page, pass `parentOrgId`/`parentOrgName`: when the user already
+ * follows the owning org, the product is covered transitively (an org follow =
+ * all its products), so the control becomes a non-interactive "Following <org>"
+ * indicator. Unfollowing then happens on the org page, not here — preventing a
+ * confusing redundant product follow.
  */
 export function FollowButton({
   targetType,
   targetId,
   label,
+  parentOrgId,
+  parentOrgName,
 }: {
   targetType: FollowTarget;
   targetId: string;
   label?: string;
+  parentOrgId?: string;
+  parentOrgName?: string;
 }) {
   const follows = useFollows();
+  const router = useRouter();
+  const pathname = usePathname();
   const [busy, setBusy] = useState(false);
   if (!follows || !follows.ready) return null;
+
+  // A product already covered by an org follow can't be followed/unfollowed
+  // here — surface a locked, informational state instead of a dead toggle.
+  const coveredByOrg =
+    targetType === "product" &&
+    follows.signedIn &&
+    parentOrgId !== undefined &&
+    follows.isFollowing("org", parentOrgId);
+
+  if (coveredByOrg) {
+    const text = parentOrgName ? `Following ${parentOrgName}` : "Following organization";
+    return (
+      <span
+        className="inline-flex cursor-default items-center rounded-md border border-stone-200 px-3 py-1 text-sm text-stone-400 dark:border-stone-700 dark:text-stone-500"
+        title={
+          parentOrgName
+            ? `You follow ${parentOrgName}, which already includes all its products.`
+            : "You follow this organization, which already includes all its products."
+        }
+      >
+        {text}
+      </span>
+    );
+  }
 
   const following = follows.isFollowing(targetType, targetId);
   return (
@@ -28,6 +67,10 @@ export function FollowButton({
       type="button"
       disabled={busy}
       onClick={async () => {
+        if (!follows.signedIn) {
+          router.push(`/login?redirect=${encodeURIComponent(pathname)}`);
+          return;
+        }
         setBusy(true);
         try {
           await follows.toggle(targetType, targetId);

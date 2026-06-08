@@ -32,10 +32,12 @@ import { formatSourceDate, shortUrl } from "@/lib/source-display";
 export async function ProductView({
   orgSlug,
   orgName,
+  orgId,
   product,
 }: {
   orgSlug: string;
   orgName: string;
+  orgId?: string;
   product: ProductDetail;
 }) {
   const productSlug = product.slug;
@@ -175,7 +177,13 @@ export async function ProductView({
           <p className="text-sm text-stone-500 dark:text-stone-400 mt-1">{product.description}</p>
         )}
         <div className="mt-3">
-          <FollowButton targetType="product" targetId={product.id} label={product.name} />
+          <FollowButton
+            targetType="product"
+            targetId={product.id}
+            label={product.name}
+            parentOrgId={orgId}
+            parentOrgName={orgName}
+          />
         </div>
         {appEntries.length > 0 && (
           <div className="flex items-center gap-2 mt-3">
