@@ -11,6 +11,7 @@ import { CliCommand } from "@/components/cli-command";
 import { taxonomySidebarSections, collectionsSidebarSection } from "@/components/taxonomy-chips";
 import { OrgAdminMenu } from "@/components/org-admin-menu";
 import { EntityNotice } from "@/components/entity-notice";
+import { FollowButton } from "@/components/follow-button";
 import { isLocalAdminEnabled } from "@/lib/local-admin-flag";
 import { domainHref } from "@/lib/source-display";
 import { getOrg, getOrgCollections } from "../_lib/org-data";
@@ -81,6 +82,11 @@ export default async function OrgLayout({
           <h1 className="text-[28px] font-bold tracking-tight text-stone-900 dark:text-stone-100 mt-4">
             {org.name}
           </h1>
+        )}
+        {org.id && (
+          <div className="mt-3">
+            <FollowButton targetType="org" targetId={org.id} />
+          </div>
         )}
         <CliCommand identifier={org.slug} />
         {adminEnabled && (
