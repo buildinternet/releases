@@ -26,6 +26,7 @@ import {
   organizationsActive,
   releaseSummaries,
   products,
+  productsActive,
   sourceChangelogFiles,
   type ReleaseType,
 } from "@buildinternet/releases-core/schema";
@@ -3182,17 +3183,33 @@ sourceRoutes.get(
         sourceMetadata: sourcesActive.metadata,
         orgSlug: organizationsActive.slug,
         orgName: organizationsActive.name,
+        orgAvatarUrl: organizationsActive.avatarUrl,
+        productSlug: productsActive.slug,
+        productName: productsActive.name,
       })
       .from(releases)
       .innerJoin(sourcesActive, eq(releases.sourceId, sourcesActive.id))
       .leftJoin(organizationsActive, eq(sourcesActive.orgId, organizationsActive.id))
+      .leftJoin(productsActive, eq(sourcesActive.productId, productsActive.id))
       .where(and(eq(releases.id, id), sql`${releases.id} IN (SELECT id FROM releases_visible)`));
 
     if (rows.length === 0) return c.json({ error: "not_found", message: "Release not found" }, 404);
 
-    const { release, sourceName, sourceSlug, sourceType, sourceMetadata, orgSlug, orgName } =
-      rows[0];
-    const org = orgSlug && orgName ? { slug: orgSlug, name: orgName } : null;
+    const {
+      release,
+      sourceName,
+      sourceSlug,
+      sourceType,
+      sourceMetadata,
+      orgSlug,
+      orgName,
+      orgAvatarUrl,
+      productSlug,
+      productName,
+    } = rows[0];
+    const org =
+      orgSlug && orgName ? { slug: orgSlug, name: orgName, avatarUrl: orgAvatarUrl } : null;
+    const product = productSlug && productName ? { slug: productSlug, name: productName } : null;
     const appStore = appStoreSourceInfo(sourceType ?? "", sourceMetadata);
     const video = videoSourceInfo(sourceType ?? "", sourceMetadata);
     const mediaOrigin = c.env.MEDIA_ORIGIN ?? "";
@@ -3214,6 +3231,7 @@ sourceRoutes.get(
       sourceSlug,
       sourceType,
       org,
+      product,
       composition,
       appStore,
       video,

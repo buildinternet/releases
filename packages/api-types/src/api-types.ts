@@ -748,7 +748,16 @@ export interface ReleaseDetail {
   sourceName: string;
   sourceSlug: string;
   sourceType: string;
-  org: { slug: string; name: string } | null;
+  /**
+   * Owning org. `avatarUrl` is the resolved `organizations.avatar_url`
+   * (nullable; `.optional()` for mid-deploy / pinned-worker tolerance).
+   */
+  org: { slug: string; name: string; avatarUrl?: string | null } | null;
+  /**
+   * Owning product, when the source is grouped under one (`sources.product_id`).
+   * `null` when ungrouped; `.optional()` so older servers that omit it still type.
+   */
+  product?: { slug: string; name: string } | null;
   /** Release type. See {@link ReleaseType}. */
   type?: ReleaseType;
   /** Per-category item counts from the AI release-content pass. See {@link ReleaseComposition}. */
