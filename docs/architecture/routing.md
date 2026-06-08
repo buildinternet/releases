@@ -33,7 +33,7 @@ use the same credentialed CORS carve-out in `index.ts`. They are gated behind th
 - `GET /v1/me/follows` — list the signed-in user's follows, enriched with each target's display fields (name, slug, avatarUrl, orgSlug for products), newest first.
 - `POST /v1/me/follows { targetType, targetId }` — add a follow (idempotent; `targetType` is `"org"` or `"product"`).
 - `DELETE /v1/me/follows/:targetType/:targetId` — remove a follow (idempotent).
-- `GET /v1/me/feed` — paginated release feed across all followed entities; an org follow implicitly includes all of that org's products (org follow = its products too). Cursor-based, newest-first.
+- `GET /v1/me/feed` — paginated release feed across all followed entities; an org follow implicitly includes all of that org's products (org follow = its products too). Page/offset-paginated (`?page=&limit=`, the standard `ListResponse` envelope), newest-first.
 
 ## Entity resolution: IDs over slugs
 

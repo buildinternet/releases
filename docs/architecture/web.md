@@ -160,8 +160,8 @@ On the dev-gated Fetch Log tab, clicking a Fetch Plan row opens a per-source ing
 
 Signed-in users can follow orgs and products; an org follow implicitly covers all of that org's products on the feed (org follow = everything under it).
 
-**Follow state** is loaded client-side once per page visit via `FollowsProvider` (`web/src/components/follows/follows-provider.tsx`) — a single `GET /v1/me/follows` call whose result is held in React context and updated optimistically on follow/unfollow. The whole surface is gated behind `NEXT_PUBLIC_USER_FOLLOWS`; when the flag is off, `FollowButton` renders nothing and the `/following` page is unreachable.
+**Follow state** is loaded client-side once per page visit via `FollowsProvider` (`web/src/components/follows-provider.tsx`) — a single `GET /v1/me/follows` call whose result is held in React context and updated optimistically on follow/unfollow. The whole surface is gated behind `NEXT_PUBLIC_USER_FOLLOWS`; when the flag is off, `FollowButton` renders nothing and the `/following` page is unreachable.
 
-**`FollowButton`** (`web/src/components/follows/follow-button.tsx`) reads from `FollowsProvider` context, calls `POST /v1/me/follows` or `DELETE /v1/me/follows/:targetType/:targetId` on click, and applies an optimistic local toggle with a rollback on error. It appears on org and product detail pages for signed-in users.
+**`FollowButton`** (`web/src/components/follow-button.tsx`) reads from `FollowsProvider` context, calls `POST /v1/me/follows` or `DELETE /v1/me/follows/:targetType/:targetId` on click, and applies an optimistic local toggle with a rollback on error. It appears on org and product detail pages for signed-in users.
 
 **`/following` page** (`web/src/app/following/page.tsx`) is the personalized feed: a newest-first release list (reusing the `ReleaseLatestItem` component) drawn from `GET /v1/me/feed`, with a same-page sidebar listing all current follows and offering unfollow actions. The feed is cursor-paginated and empty-stated with a prompt to follow orgs or products when the user has no follows yet.
