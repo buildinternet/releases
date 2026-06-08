@@ -150,7 +150,7 @@ For deep architectural context, see `docs/architecture/` — separate documents 
 
 ## Search-query observability
 
-Every call to `/v1/search` and the MCP `search` / `search_releases` / `search_registry` tools writes a row to the `search_queries` table — query text (truncated to 200 chars), surface (`web` | `mcp` | `api`), retrieval mode, per-section result counts, and duration. Inspect via:
+Every call to `/v1/search` and the MCP `search` tool writes a row to the `search_queries` table — query text (truncated to 200 chars), surface (`web` | `mcp` | `api`), retrieval mode, per-section result counts, and duration. Inspect via:
 
 - `GET /v1/admin/search-queries?since=7d&surface=mcp` — paginated raw rows, newest first. Bearer-auth.
 - `GET /v1/admin/search-queries/top?since=30d` — grouped by query, count desc.

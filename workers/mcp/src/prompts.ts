@@ -26,7 +26,7 @@ function parseDays(raw: string | undefined, fallback: number): number {
 /** Quote user-controlled strings so the interpolated snippet stays parseable. */
 const q = (value: string): string => JSON.stringify(value);
 
-export function registerPrompts(server: McpServer, db: D1Db, opts: { aiTools: boolean }) {
+export function registerPrompts(server: McpServer, db: D1Db) {
   server.registerPrompt(
     "whats_new",
     {
@@ -47,9 +47,7 @@ export function registerPrompts(server: McpServer, db: D1Db, opts: { aiTools: bo
     },
     async ({ product, days }) => {
       const window = parseDays(days, 30);
-      const tool = opts.aiTools
-        ? `Use the \`summarize_changes\` tool with product=${q(product)} and days=${window} to generate an AI summary.`
-        : `Call \`get_latest_releases\` with product=${q(product)} (request enough entries to cover the last ${window} days) and summarize the highlights yourself.`;
+      const tool = `Call \`get_latest_releases\` with product=${q(product)} (request enough entries to cover the last ${window} days) and summarize the highlights yourself.`;
       return {
         messages: [
           {
@@ -92,9 +90,7 @@ export function registerPrompts(server: McpServer, db: D1Db, opts: { aiTools: bo
     },
     async ({ productA, productB, days }) => {
       const window = parseDays(days, 30);
-      const tool = opts.aiTools
-        ? `Use the \`compare_products\` tool with products=[${q(productA)}, ${q(productB)}] and days=${window}.`
-        : `Call \`get_latest_releases\` twice — once per product — over the last ${window} days, then do the comparison yourself.`;
+      const tool = `Call \`get_latest_releases\` twice — once per product — over the last ${window} days, then do the comparison yourself.`;
       return {
         messages: [
           {

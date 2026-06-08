@@ -87,7 +87,7 @@ Pick the shape from the data, not the surface:
 
 - **Page-based** — catalog-shaped surfaces (stable, sortable, mostly non-mutating between calls): the four MCP `list_*` tools, `/v1/sources`, `/v1/orgs`, `/v1/products`. Inputs `page` + `limit`; output `Pagination { page, pageSize, returned, totalItems, totalPages, hasMore }`. This is the **default** when a surface is bounded and stable.
 - **Cursor-based** — feed-shaped surfaces (append-only, mutates between calls): `/v1/orgs/:slug/releases`, `/v1/status/fetch-log`, MCP `get_latest_releases`. Opaque `cursor` input, `nextCursor` output. Pick cursor **only** when the data shape forces it.
-- **Ranking-bounded** — `search`, `search_releases`, `search_registry` attach `_meta.search` instead of pagination. `hitCap: true` means "we returned `limit` matches; refine the query to see different ones" — distinct from "fetch the next slice".
+- **Ranking-bounded** — `search` attaches `_meta.search` instead of pagination. `hitCap: true` means "we returned `limit` matches; refine the query to see different ones" — distinct from "fetch the next slice".
 
 MCP `list_*` results expose pagination via `_meta.pagination` (page variant matches the REST `Pagination` shape; cursor variant adds a `kind: "cursor"` discriminator) plus an LLM-readable markdown footer.
 

@@ -14,7 +14,7 @@ For the full privacy policy covering the web app, API worker logs, third-party p
 
 Every CLI command and every local MCP tool call records a single event with:
 
-- **Command or tool name** — e.g. `search`, `list`, or `tool search_releases`
+- **Command or tool name** — e.g. `search`, `list`, or `tool get_latest_releases`
 - **CLI version** — e.g. `0.10.0`
 - **Device info** — operating system, architecture, and how the CLI is running (e.g. `darwin arm64`, compiled binary or Bun)
 - **Outcome** — exit code and duration in milliseconds

@@ -106,12 +106,8 @@ VS Code, Windsurf, Zed, and other stdio-only clients:
 | `get_catalog_entry`   | Detail for a catalog entry — dispatches on slug / `prod_` / `src_` id and returns product or source fields. Source entries list tracked CHANGELOG files; pass `include_changelog: true` (or `changelog_path` / `changelog_offset` / `changelog_limit` / `changelog_tokens`) to embed a heading-aligned slice with cl100k_base token budgeting |
 | `get_latest_releases` | Most recent releases (filter by product, org, or `type`)                                                                                                                                                                                                                                                                                      |
 | `get_release`         | Full content of a single release by id (accepts `rel_` prefix or bare nanoid)                                                                                                                                                                                                                                                                 |
-| `summarize_changes`   | AI summary of a product's recent changes (gated)                                                                                                                                                                                                                                                                                              |
-| `compare_products`    | AI comparison between two products (gated)                                                                                                                                                                                                                                                                                                    |
 | `list_organizations`  | List all organizations with their linked sources                                                                                                                                                                                                                                                                                              |
 | `get_organization`    | Detailed view of a single org (accounts, tags, sources, products, aliases). Shows a preview of the AI-generated overview by default; pass `include_overview: true` to inline the full briefing (stale warning if older than 30 days)                                                                                                          |
-
-**Deprecated shims** (one release cycle): `search_releases`, `search_registry`, `list_sources`, `list_products`, `get_product` — each titled `(deprecated)` and pointing callers at the replacement above.
 
 Every tool carries MCP annotations (`readOnlyHint`, `idempotentHint`, `openWorldHint`, and a display `title`) so clients can surface them correctly in low-trust modes.
 
@@ -127,13 +123,13 @@ All three templates are completion-only — `resources/list` returns empty so th
 
 **MCP Prompts** (priming conversation starters):
 
-| Prompt             | Arguments                                     | Purpose                                                                        |
-| ------------------ | --------------------------------------------- | ------------------------------------------------------------------------------ |
-| `whats_new`        | `product` (completable), `days?`              | Summarize recent changes for a product. Uses `summarize_changes` when enabled. |
-| `compare_products` | `productA`, `productB` (completable), `days?` | Compare recent releases between two products.                                  |
-| `catch_me_up`      | `organization` (completable), `days?`         | Read the org's AI overview, then list recent releases grouped by product.      |
+| Prompt             | Arguments                                     | Purpose                                                                   |
+| ------------------ | --------------------------------------------- | ------------------------------------------------------------------------- |
+| `whats_new`        | `product` (completable), `days?`              | Summarize recent changes for a product (via `get_latest_releases`).       |
+| `compare_products` | `productA`, `productB` (completable), `days?` | Compare recent releases between two products.                             |
+| `catch_me_up`      | `organization` (completable), `days?`         | Read the org's AI overview, then list recent releases grouped by product. |
 
-**Gated** = requires `ENABLE_AI_TOOLS=true`. These tools make Anthropic API calls and are disabled by default. Set the env var in the worker config. Admin/write flows (adding sources, fetching, suppressing releases, etc.) live behind the API worker's bearer-auth endpoints, not MCP.
+Admin/write flows (adding sources, fetching, suppressing releases, etc.) live behind the API worker's bearer-auth endpoints, not MCP.
 
 #### In-browser (WebMCP)
 

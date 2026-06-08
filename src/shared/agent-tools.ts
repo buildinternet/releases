@@ -14,8 +14,8 @@ import { assemblePlaybook } from "@releases/ai-internal/playbook";
 
 // ── Tool input types ─────────────────────────────────────────────────
 // Read tools (list_catalog, get_catalog_entry, list_organizations,
-// get_latest_releases, search, summarize_changes, compare_products) are
-// provided by the MCP server at mcp.releases.sh via vault credentials.
+// get_latest_releases, search) are provided by the MCP server at
+// mcp.releases.sh via vault credentials.
 // Only write, utility, and session tools remain as custom tools here.
 
 export interface ManageOrgInput {
@@ -139,10 +139,9 @@ export const AGENT_TOOLS = [
   { type: "agent_toolset_20260401", default_config: { enabled: true } },
 
   // Read tools (list_catalog, get_catalog_entry, list_organizations,
-  // get_latest_releases, search, summarize_changes, compare_products) are
-  // served by the MCP server registered via `mcp_servers` + the `mcp_toolset`
-  // entry returned by `buildMcpToolset`. The custom surface below is writes,
-  // utilities, and session tools.
+  // get_latest_releases, search) are served by the MCP server registered via
+  // `mcp_servers` + the `mcp_toolset` entry returned by `buildMcpToolset`. The
+  // custom surface below is writes, utilities, and session tools.
 
   // ── Consolidated write tools (prefer these) ──
   {
@@ -829,8 +828,6 @@ const KNOWN_MCP_TOOL_NAMES: ReadonlySet<string> = new Set([
   "list_organizations",
   "get_latest_releases",
   "search",
-  "summarize_changes",
-  "compare_products",
 ]);
 
 export interface ToolDispatchContext {
