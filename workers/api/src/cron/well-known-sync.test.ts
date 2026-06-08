@@ -97,6 +97,134 @@ describe("wellKnownSync cron", () => {
     expect(hitDead).toBe(false);
   });
 
+  it("stamps metadata.wellKnownSweptAt on every swept entity (even on a 404)", async () => {
+    const db = createTestDb();
+    await db
+      .insert(organizations)
+      .values({ id: "org_a", slug: "acme", name: "Acme", domain: "acme.com" });
+    await db.insert(sources).values({
+      id: "src_1",
+      orgId: "org_a",
+      name: "Cloud",
+      slug: "cloud",
+      type: "github",
+      url: "https://github.com/acme/cloud",
+    });
+
+    // Everything 404s → nothing applied, but the swept clock must still advance.
+    await wellKnownSync({
+      DB: {} as any,
+      MEDIA: {} as any,
+      MEDIA_ORIGIN: "x",
+      _drizzleOverride: db as any,
+      fetchImpl: async () => new Response("nope", { status: 404 }),
+    });
+
+    const [o] = await db.select().from(organizations).where(eq(organizations.id, "org_a"));
+    const [s] = await db.select().from(sources).where(eq(sources.id, "src_1"));
+    expect(JSON.parse(o!.metadata ?? "{}").wellKnownSweptAt).toBeTruthy();
+    expect(JSON.parse(s!.metadata ?? "{}").wellKnownSweptAt).toBeTruthy();
+  });
+
+  it("due-filters: an org swept within the interval is skipped", async () => {
+    const db = createTestDb();
+    const fresh = new Date().toISOString();
+    await db.insert(organizations).values({
+      id: "org_fresh",
+      slug: "fresh",
+      name: "Fresh",
+      domain: "fresh.com",
+      metadata: JSON.stringify({ wellKnownSweptAt: fresh }),
+    });
+    let hit = false;
+    await wellKnownSync({
+      DB: {} as any,
+      MEDIA: {} as any,
+      MEDIA_ORIGIN: "x",
+      _drizzleOverride: db as any,
+      fetchImpl: async (url: string) => {
+        if (url.includes("fresh.com")) hit = true;
+        return new Response("nope", { status: 404 });
+      },
+    });
+    expect(hit).toBe(false);
+  });
+
+  it("due-filters: an org swept before the interval is re-checked", async () => {
+    const db = createTestDb();
+    const stale = new Date(Date.now() - 100 * 24 * 3600_000).toISOString();
+    await db.insert(organizations).values({
+      id: "org_stale",
+      slug: "stale",
+      name: "Stale",
+      domain: "stale.com",
+      metadata: JSON.stringify({ wellKnownSweptAt: stale }),
+    });
+    let hit = false;
+    await wellKnownSync({
+      DB: {} as any,
+      MEDIA: {} as any,
+      MEDIA_ORIGIN: "x",
+      _drizzleOverride: db as any,
+      fetchImpl: async (url: string) => {
+        if (url.includes("stale.com")) hit = true;
+        return new Response("nope", { status: 404 });
+      },
+    });
+    expect(hit).toBe(true);
+  });
+
+  it("caps each pass at WELL_KNOWN_MAX_PER_RUN, oldest-first", async () => {
+    const db = createTestDb();
+    // 3 orgs: two never swept (NULL → oldest), one swept long ago. Cap=2 should
+    // process exactly the two NULL ones (NULL sorts first in ASC).
+    const old = new Date(Date.now() - 100 * 24 * 3600_000).toISOString();
+    await db.insert(organizations).values([
+      { id: "org_n1", slug: "n1", name: "N1", domain: "n1.com" },
+      { id: "org_n2", slug: "n2", name: "N2", domain: "n2.com" },
+      {
+        id: "org_old",
+        slug: "old",
+        name: "Old",
+        domain: "old.com",
+        metadata: JSON.stringify({ wellKnownSweptAt: old }),
+      },
+    ]);
+    const hits: string[] = [];
+    await wellKnownSync({
+      DB: {} as any,
+      MEDIA: {} as any,
+      MEDIA_ORIGIN: "x",
+      WELL_KNOWN_MAX_PER_RUN: "2",
+      _drizzleOverride: db as any,
+      fetchImpl: async (url: string) => {
+        hits.push(url);
+        return new Response("nope", { status: 404 });
+      },
+    });
+    const orgHits = hits.filter((u) => u.includes(".well-known"));
+    expect(orgHits.length).toBe(2);
+    expect(orgHits.some((u) => u.includes("n1.com"))).toBe(true);
+    expect(orgHits.some((u) => u.includes("n2.com"))).toBe(true);
+    expect(orgHits.some((u) => u.includes("old.com"))).toBe(false);
+
+    // A second run (the two are now fresh) picks up the previously-deferred old one.
+    hits.length = 0;
+    await wellKnownSync({
+      DB: {} as any,
+      MEDIA: {} as any,
+      MEDIA_ORIGIN: "x",
+      WELL_KNOWN_MAX_PER_RUN: "2",
+      _drizzleOverride: db as any,
+      fetchImpl: async (url: string) => {
+        hits.push(url);
+        return new Response("nope", { status: 404 });
+      },
+    });
+    const orgHits2 = hits.filter((u) => u.includes(".well-known"));
+    expect(orgHits2.some((u) => u.includes("old.com"))).toBe(true);
+  });
+
   it("skips Pass 2 sources whose org is paused or deleted", async () => {
     const db = createTestDb();
     await db.insert(organizations).values([
