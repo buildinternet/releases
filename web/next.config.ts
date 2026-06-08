@@ -74,6 +74,28 @@ const nextConfig: NextConfig = {
       { source: "/mcp", destination: "/docs/api/mcp", statusCode: 302 },
       { source: "/status", destination: "/admin/status", permanent: true },
       { source: "/status/:path*", destination: "/admin/status/:path*", permanent: true },
+      // OAuth/OIDC discovery lives on the authorization server (api.releases.sh),
+      // where the issuer is `https://api.releases.sh/api/auth`. Agents and scanners
+      // that probe the brand root (`releases.sh`) for the standard well-known paths
+      // would otherwise 404. Redirect them to the AS so discovery resolves from the
+      // root domain too; the served document's `issuer` still matches the api host
+      // after the redirect, so strict OIDC/RFC 8414 validation stays happy. Config
+      // redirects run before the routing middleware, so these win cleanly.
+      {
+        source: "/.well-known/openid-configuration",
+        destination: "https://api.releases.sh/.well-known/openid-configuration",
+        permanent: true,
+      },
+      {
+        source: "/.well-known/oauth-authorization-server",
+        destination: "https://api.releases.sh/.well-known/oauth-authorization-server",
+        permanent: true,
+      },
+      {
+        source: "/.well-known/oauth-protected-resource",
+        destination: "https://api.releases.sh/.well-known/oauth-protected-resource",
+        permanent: true,
+      },
     ];
   },
   async rewrites() {
