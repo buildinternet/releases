@@ -9,6 +9,7 @@
  */
 import { Hono } from "hono";
 import type { Context } from "hono";
+import { SafeUrlSchema } from "@better-auth/core/utils/redirect-uri";
 import { logEvent } from "@releases/lib/log-event";
 import { createAuth } from "../auth/index.js";
 import { execWaitUntil } from "../middleware/auth.js";
@@ -16,8 +17,7 @@ import {
   createOAuthClient,
   listOAuthClients,
   getOAuthClient,
-  setClientDisabled,
-  setClientTrusted,
+  updateClientFlags,
   rotateClientSecret,
   deleteOAuthClient,
   type CreateClientInput,
@@ -52,6 +52,12 @@ adminOauthRoutes.post("/admin/oauth/clients", async (c) => {
   if (!redirectUris) return c.json({ error: "redirectUris must be a non-empty string array" }, 400);
   const scopes = asStringArray(b.scopes);
   if (!scopes) return c.json({ error: "scopes must be a non-empty string array" }, 400);
+
+  for (const uri of redirectUris) {
+    if (!SafeUrlSchema.safeParse(uri).success) {
+      return c.json({ error: "invalid_redirect_uri", uri }, 400);
+    }
+  }
 
   const tokenEndpointAuthMethod =
     b.tokenEndpointAuthMethod === "none" ||
@@ -117,11 +123,10 @@ adminOauthRoutes.patch("/admin/oauth/clients/:clientId", async (c) => {
   }
 
   const adapter = await getAdapter(c);
-  let found = true;
-  if (typeof b.disabled === "boolean")
-    found = await setClientDisabled(adapter, clientId, b.disabled);
-  if (found && typeof b.trusted === "boolean")
-    found = await setClientTrusted(adapter, clientId, b.trusted);
+  const found = await updateClientFlags(adapter, clientId, {
+    disabled: typeof b.disabled === "boolean" ? b.disabled : undefined,
+    trusted: typeof b.trusted === "boolean" ? b.trusted : undefined,
+  });
   if (!found) return c.json({ error: "client_not_found" }, 404);
 
   logEvent("info", {

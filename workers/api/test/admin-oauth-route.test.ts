@@ -107,4 +107,36 @@ describe("admin oauth client routes", () => {
     const res = await app.request("/admin/oauth/clients/missing/rotate-secret", { method: "POST" });
     expect(res.status).toBe(404);
   });
+
+  it("rejects a javascript: redirect_uri with 400", async () => {
+    const app = await makeApp();
+    const res = await app.request(
+      "/admin/oauth/clients",
+      json({ redirectUris: ["javascript:alert(1)"], scopes: ["read"] }),
+    );
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: string }).error).toBe("invalid_redirect_uri");
+  });
+
+  it("rejects a non-loopback http: redirect_uri with 400", async () => {
+    const app = await makeApp();
+    const res = await app.request(
+      "/admin/oauth/clients",
+      json({ redirectUris: ["http://evil.example.com/cb"], scopes: ["read"] }),
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it("allows a loopback http: redirect_uri (native/public client)", async () => {
+    const app = await makeApp();
+    const res = await app.request(
+      "/admin/oauth/clients",
+      json({
+        redirectUris: ["http://127.0.0.1:8976/cb"],
+        scopes: ["read"],
+        tokenEndpointAuthMethod: "none",
+      }),
+    );
+    expect(res.status).toBe(201);
+  });
 });
