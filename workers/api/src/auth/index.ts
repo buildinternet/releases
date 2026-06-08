@@ -13,6 +13,7 @@ import type { BaseSQLiteDatabase } from "drizzle-orm/sqlite-core";
 import { getSecret } from "@releases/lib/secrets";
 import { logEvent } from "@releases/lib/log-event";
 import { FLAGS, flag } from "@releases/lib/flags";
+import { audienceVariants } from "@releases/lib/oauth-jwt";
 import { USER_API_KEY_PREFIX, DEVICE_AUTH_CLIENT_ID } from "@buildinternet/releases-core/api-token";
 import { oauthAccessTokenClaims, consentScopeViolation } from "./entitlement.js";
 import { scopeToPermissions } from "./api-key-scope.js";
@@ -272,7 +273,14 @@ export function oauthValidAudiences(env: Bindings): string[] {
     if (trimmed) auds.add(trimmed);
   }
   if (auds.size === 0) auds.add(DEFAULT_AUTH_ORIGIN);
-  return [...auds];
+  // Accept both the bare-origin and trailing-slash form of every audience. The
+  // oauth-provider plugin validates the client's RFC 8707 `resource` parameter
+  // against this set by exact string, and MCP clients derive that resource via
+  // WHATWG URL normalization (`new URL("https://mcp.releases.sh").href` →
+  // `"https://mcp.releases.sh/"`), so a root-hosted resource server is requested
+  // with a trailing slash our config omits. The RS verifier accepts the matching
+  // pair (`audienceVariants` in @releases/lib/oauth-jwt) — keep them in lockstep.
+  return [...new Set([...auds].flatMap(audienceVariants))];
 }
 
 /** True for an origin in the releases.sh / releases.localhost family (any subdomain). */

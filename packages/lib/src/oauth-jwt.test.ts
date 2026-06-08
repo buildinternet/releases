@@ -12,6 +12,7 @@ import {
   extractApiScopes,
   verifyOAuthJwt,
   defaultJwksUrl,
+  audienceVariants,
   type OAuthJwtConfig,
 } from "./oauth-jwt.js";
 
@@ -168,5 +169,52 @@ describe("verifyOAuthJwt", () => {
     const token = await sign({ scope: "openid profile read" });
     const res = await verifyOAuthJwt(token, config());
     expect(res!.scopes).toEqual(["read"]);
+  });
+
+  // Trailing-slash tolerance: MCP clients derive their RFC 8707 `resource` via
+  // WHATWG URL normalization, so a root-hosted resource server gets tokens whose
+  // `aud` carries a trailing slash even when our configured audience omits it.
+  // The verifier must accept the token in either direction.
+  it("verifies a token whose aud has a trailing slash against a bare-origin config", async () => {
+    const token = await sign({ scope: "read", audience: `${AUDIENCE}/` });
+    const res = await verifyOAuthJwt(token, { issuer: ISSUER, audience: AUDIENCE, keyResolver });
+    expect(res).not.toBeNull();
+    expect(res!.scopes).toEqual(["read"]);
+  });
+
+  it("verifies a bare-origin aud against a trailing-slash config", async () => {
+    const token = await sign({ scope: "read", audience: AUDIENCE });
+    const res = await verifyOAuthJwt(token, {
+      issuer: ISSUER,
+      audience: `${AUDIENCE}/`,
+      keyResolver,
+    });
+    expect(res).not.toBeNull();
+  });
+
+  it("still rejects an unrelated audience (slash tolerance is not a wildcard)", async () => {
+    const token = await sign({ scope: "read", audience: "https://evil.example.com/" });
+    expect(await verifyOAuthJwt(token, config())).toBeNull();
+  });
+});
+
+describe("audienceVariants", () => {
+  it("adds the trailing-slash form to a bare-origin audience", () => {
+    expect(audienceVariants("https://mcp.releases.sh")).toEqual([
+      "https://mcp.releases.sh",
+      "https://mcp.releases.sh/",
+    ]);
+  });
+
+  it("adds the bare form to a trailing-slash audience", () => {
+    expect(audienceVariants("https://mcp.releases.sh/")).toEqual([
+      "https://mcp.releases.sh/",
+      "https://mcp.releases.sh",
+    ]);
+  });
+
+  it("keeps the input first (stable order)", () => {
+    expect(audienceVariants("https://a/")[0]).toBe("https://a/");
+    expect(audienceVariants("https://a")[0]).toBe("https://a");
   });
 });
