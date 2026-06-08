@@ -20,7 +20,7 @@ async function makeAdapter(): Promise<OAuthClientAdapter> {
 }
 
 describe("oauth-clients secret helpers", () => {
-  it("generateClientSecret yields a 32-char alnum string", () => {
+  it("generateClientSecret yields a 32-char alpha string (a-zA-Z)", () => {
     const s = generateClientSecret();
     expect(s).toMatch(/^[a-zA-Z]{32}$/);
   });
@@ -123,6 +123,13 @@ describe("oauth-clients read + mutate", () => {
       where: [{ field: "clientId", value: client.clientId }],
     });
     expect(Boolean(row?.disabled)).toBe(true);
+    // Re-enable: the production use case is temporarily disabling then restoring a client.
+    expect(await setClientDisabled(adapter, client.clientId, false)).toBe(true);
+    const reenabled = await adapter.findOne({
+      model: "oauthClient",
+      where: [{ field: "clientId", value: client.clientId }],
+    });
+    expect(Boolean(reenabled?.disabled)).toBe(false);
     expect(await setClientDisabled(adapter, "missing", true)).toBe(false);
   });
 
@@ -132,6 +139,7 @@ describe("oauth-clients read + mutate", () => {
     expect(await setClientTrusted(adapter, client.clientId, true)).toBe(true);
     const got = await getOAuthClient(adapter, client.clientId);
     expect(got?.trusted).toBe(true);
+    expect(await setClientTrusted(adapter, "missing", true)).toBe(false);
   });
 
   it("rotateClientSecret changes the stored hash; new secret verifies", async () => {
