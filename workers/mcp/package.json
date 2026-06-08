@@ -10,7 +10,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.100.1",
     "@modelcontextprotocol/sdk": "^1.29.0",
-    "agents": "^0.10.2",
+    "agents": "^0.15.0",
     "zod": "^4.1.8"
   },
   "devDependencies": {
