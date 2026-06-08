@@ -88,6 +88,33 @@ others via the route (or Better Auth's native `setRole` in the browser, which a
 role=admin user is authorized for under `adminRoles: ["admin"]`). The former
 `OAUTH_ADMIN_USER_IDS` env bootstrap has been removed (#1484).
 
+### OAuth client provisioning (admin/oauth)
+
+OAuth clients for "Sign in with Releases" are provisioned via a root-key-gated
+admin surface — RFC 7591 dynamic registration stays OFF (#1482). This is the
+second sanctioned exception to the "no new `/v1/admin/*` CRUD" rule (alongside
+role provisioning).
+
+- `POST /v1/admin/oauth/clients` — create a client. Body: `redirectUris`
+  (required, non-empty), `scopes` (required, non-empty), optional `name`,
+  `trusted` (→ `skip_consent`, first-party only), `tokenEndpointAuthMethod`
+  (`none` ⇒ a secretless **public/PKCE** client, e.g. the MCP client), `type`,
+  `grantTypes`, `requirePKCE`, `clientUri`, `logoUri`. Returns the
+  `reloc_`-prefixed `clientSecret` **once** (null for a public client).
+- `GET /v1/admin/oauth/clients` · `GET /v1/admin/oauth/clients/:clientId` —
+  list/get public, secret-free client fields.
+- `PATCH /v1/admin/oauth/clients/:clientId { disabled?, trusted? }` — disable is
+  a true kill switch (the AS rejects disabled clients at authorize/token/
+  introspect); `trusted` toggles `skip_consent`.
+- `POST /v1/admin/oauth/clients/:clientId/rotate-secret` — new `reloc_` secret,
+  returned once; 400 for a public client.
+- `DELETE /v1/admin/oauth/clients/:clientId`.
+
+All mutations emit an audited `logEvent` (`actor: "root-key"`). The plugin's
+session-gated self-service write endpoints (`/api/auth/oauth2/{create,update,
+delete}-client`, `/api/auth/oauth2/client/rotate-secret`) are restricted to `role=admin`.
+The #1480 entitlement ceiling still applies regardless of client trust.
+
 ## On-demand AI admin endpoints
 
 `POST /v1/workflows/summarize` and `POST /v1/workflows/compare` generate summaries and comparisons via Anthropic on demand. Both are gated by `authMiddleware` and fail with 503 when `ANTHROPIC_API_KEY` is unset. They are distinct from `POST /v1/sources/:slug/summaries`, which upserts a pre-generated row into `release_summaries`. Payload: `summarize` takes exactly one of `source` / `org` (slug or id) plus optional `days` and `instructions`; `compare` takes `sourceA` / `sourceB` plus optional `days`. Each success writes a `usage_log` row tagged with operation `summarize` / `compare`. Prompts live in `workers/api/src/routes/workflows.ts`.

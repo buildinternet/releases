@@ -7,7 +7,11 @@ import {
   tokensAuthMiddleware,
 } from "./middleware/auth.js";
 import type { AuthContext, AuthSessionContext } from "./middleware/auth.js";
-import { createAuth, authCorsMiddleware } from "./auth/index.js";
+import { createAuth, authCorsMiddleware, type BetterAuthInstance } from "./auth/index.js";
+import {
+  oauthSelfServiceGuard,
+  OAUTH_SELF_SERVICE_WRITE_PATHS,
+} from "./auth/oauth-self-service-guard.js";
 import { forwardWellKnown } from "./oauth-discovery.js";
 import type { AuthEmailBinding } from "./auth/email.js";
 import { classifySignInFailure, redactIp, makeAuthAudit } from "./auth/audit.js";
@@ -329,6 +333,8 @@ export type Env = {
   Variables: {
     auth?: AuthContext;
     session?: AuthSessionContext;
+    /** Test seam: an injected Better Auth instance; real requests build one per call. */
+    betterAuth?: BetterAuthInstance;
   };
 };
 
@@ -430,6 +436,14 @@ app.get("/.well-known/oauth-authorization-server", async (c) =>
 app.get("/.well-known/openid-configuration", async (c) =>
   forwardWellKnown(await createAuth(c.env), "openid-configuration", c.req.url, c.req.raw.headers),
 );
+
+// Lock the oauth-provider plugin's self-service *write* client endpoints to
+// admins. The provisioning path is the root-key /v1/admin/oauth route; this
+// removes the "any logged-in user can register a client" surface while leaving
+// the consent-flow read endpoints (public-client*) untouched. See #1482.
+for (const p of OAUTH_SELF_SERVICE_WRITE_PATHS) {
+  app.use(p, oauthSelfServiceGuard());
+}
 
 // ── Better Auth ──
 // Human user sessions (email/password now; Google/GitHub when their secrets are
