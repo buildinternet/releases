@@ -1,11 +1,8 @@
 import { sql } from "drizzle-orm";
-import type { BaseSQLiteDatabase } from "drizzle-orm/sqlite-core";
 import type { ReleaseLatestItem } from "@buildinternet/releases-api-types";
 import { COVERAGE_COUNT_EXPR } from "@releases/core-internal/release-coverage-sql";
+import type { AnyDb } from "../db.js";
 import { parseReleaseMedia } from "../utils.js";
-
-// oxlint-disable-next-line no-explicit-any -- matches D1Db in prod, BunSQLite in tests
-type AnyDb = BaseSQLiteDatabase<any, any, any, any>;
 
 export type LatestReleaseRow = {
   id: string;

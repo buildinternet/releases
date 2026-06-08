@@ -1,10 +1,7 @@
-import { and, eq } from "drizzle-orm";
-import type { BaseSQLiteDatabase } from "drizzle-orm/sqlite-core";
+import { and, desc, eq } from "drizzle-orm";
 import { organizations, products } from "@buildinternet/releases-core/schema";
+import type { AnyDb } from "../db.js";
 import { userFollows, type FollowTargetType } from "../db/schema-follows.js";
-
-// oxlint-disable-next-line no-explicit-any -- matches D1Db in prod, BunSQLite in tests
-type AnyDb = BaseSQLiteDatabase<any, any, any, any>;
 
 /** A user's follow, enriched with the target entity's display fields. */
 export interface EnrichedFollow {
@@ -20,7 +17,6 @@ export interface EnrichedFollow {
 
 /** The minimal entity shape returned by target validation. */
 export interface FollowTargetEntity {
-  id: string;
   name: string;
   slug: string;
   avatarUrl: string | null;
@@ -45,7 +41,6 @@ export async function resolveFollowTarget(
   if (targetType === "org") {
     const row = await db
       .select({
-        id: organizations.id,
         name: organizations.name,
         slug: organizations.slug,
         avatarUrl: organizations.avatarUrl,
@@ -55,11 +50,10 @@ export async function resolveFollowTarget(
       .where(eq(organizations.id, targetId))
       .get();
     if (!row || row.deletedAt) return null;
-    return { id: row.id, name: row.name, slug: row.slug, avatarUrl: row.avatarUrl, orgSlug: null };
+    return { name: row.name, slug: row.slug, avatarUrl: row.avatarUrl, orgSlug: null };
   }
   const row = await db
     .select({
-      id: products.id,
       name: products.name,
       slug: products.slug,
       avatarUrl: products.avatarUrl,
@@ -72,12 +66,36 @@ export async function resolveFollowTarget(
     .get();
   if (!row || row.deletedAt) return null;
   return {
-    id: row.id,
     name: row.name,
     slug: row.slug,
     avatarUrl: row.avatarUrl,
     orgSlug: row.orgSlug ?? null,
   };
+}
+
+/**
+ * Cheap point-existence check on the unique index `(user_id, target_type,
+ * target_id)` — used by the follow route to answer 200 (already following) vs
+ * 201 (fresh) without loading + enriching the caller's whole follow set.
+ */
+export async function hasFollow(
+  db: AnyDb,
+  userId: string,
+  targetType: FollowTargetType,
+  targetId: string,
+): Promise<boolean> {
+  const row = await db
+    .select({ id: userFollows.id })
+    .from(userFollows)
+    .where(
+      and(
+        eq(userFollows.userId, userId),
+        eq(userFollows.targetType, targetType),
+        eq(userFollows.targetId, targetId),
+      ),
+    )
+    .get();
+  return row !== undefined;
 }
 
 /** Idempotently add a follow (re-follow is a no-op via the unique index). */
@@ -126,8 +144,11 @@ export async function listFollows(db: AnyDb, userId: string): Promise<EnrichedFo
     })
     .from(userFollows)
     .where(eq(userFollows.userId, userId))
+    .orderBy(desc(userFollows.createdAt))
     .all();
 
+  // Promise.all preserves input order, so the newest-first ordering established
+  // by the SQL ORDER BY above carries through the resolve + filter.
   const resolved = await Promise.all(
     rows.map(async (r: (typeof rows)[number]) => {
       const entity = await resolveFollowTarget(db, r.targetType, r.targetId);
@@ -138,12 +159,11 @@ export async function listFollows(db: AnyDb, userId: string): Promise<EnrichedFo
         name: entity.name,
         slug: entity.slug,
         avatarUrl: entity.avatarUrl,
-        orgSlug: r.targetType === "product" ? entity.orgSlug : null,
+        // resolveFollowTarget already returns null orgSlug for org targets.
+        orgSlug: entity.orgSlug,
         createdAt: r.createdAt.toISOString(),
       } satisfies EnrichedFollow;
     }),
   );
-  const out = resolved.filter((x): x is EnrichedFollow => x !== null);
-  out.sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0));
-  return out;
+  return resolved.filter((x): x is EnrichedFollow => x !== null);
 }
