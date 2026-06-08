@@ -1,6 +1,14 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { oneTap, magicLink, deviceAuthorization, bearer, jwt, admin } from "better-auth/plugins";
+import {
+  oneTap,
+  magicLink,
+  deviceAuthorization,
+  bearer,
+  jwt,
+  admin,
+  lastLoginMethod,
+} from "better-auth/plugins";
 import { adminAc, userAc } from "better-auth/plugins/admin/access";
 import { oauthProvider } from "@better-auth/oauth-provider";
 import { dash } from "@better-auth/infra";
@@ -152,6 +160,21 @@ export function buildSocialProviders(creds: {
     providers.github = { clientId: creds.githubClientId, clientSecret: creds.githubClientSecret };
   }
   return providers;
+}
+
+/**
+ * Override resolution for the `last-login-method` plugin. Better Auth's default
+ * resolver already maps the Google redirect callback (`/callback/google`),
+ * password sign-in (`/sign-in/email` → `"email"`), and `/magic-link/verify`, but
+ * NOT Google One Tap — that flow completes at `/one-tap/callback`, which the
+ * default misses. Mapping it to `"google"` keeps One Tap and the redirect
+ * "Continue with Google" button on a single badge. Returning `null` falls through
+ * to the plugin's default resolution for every other path. Pure + synchronous so
+ * it's unit-testable in isolation (mirrors `buildSocialProviders`).
+ */
+export function resolveLastLoginMethodOverride(path: string | null | undefined): string | null {
+  if (path === "/one-tap/callback") return "google";
+  return null;
 }
 
 /** Operator-configured extra trusted origins (`BETTER_AUTH_TRUSTED_ORIGINS`, comma-separated). */
@@ -763,6 +786,18 @@ export async function createAuth(
           }),
         ]
       : []),
+    // Tracks the auth method each user last signed in with and writes it to a
+    // non-httpOnly cookie (`better-auth.last_used_login_method`). The cookie
+    // inherits the session cookie's attributes — including the `.releases.sh`
+    // cross-subdomain domain set above — so the web sign-in form (releases.sh) can
+    // read a cookie set by this worker (api.releases.sh) and badge the method the
+    // returning user used last. Cookie-only: no `storeInDatabase`, so no schema
+    // column and no migration. The plugin's default resolver already covers the
+    // Google redirect callback, password sign-in, and magic-link verify; the
+    // override adds Google One Tap (`/one-tap/callback`), which the default misses.
+    lastLoginMethod({
+      customResolveMethod: (ctx) => resolveLastLoginMethodOverride(ctx.path),
+    }),
   ];
 
   return betterAuth({

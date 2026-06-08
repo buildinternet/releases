@@ -3,7 +3,13 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { signIn, signUp, sendVerificationEmail, oneTap } from "@/lib/auth-client";
+import {
+  signIn,
+  signUp,
+  sendVerificationEmail,
+  oneTap,
+  getLastUsedLoginMethod,
+} from "@/lib/auth-client";
 import { safeRedirect } from "@/lib/auth-redirect";
 
 type Mode = "login" | "signup";
@@ -90,6 +96,22 @@ const inputClass =
 const labelClass =
   "block text-[11px] font-medium uppercase tracking-[0.18em] text-stone-500 dark:text-stone-400";
 
+/**
+ * Small pill marking the method the returning user last signed in with. Uses
+ * `currentColor` for both border and text (via the button's inherited text color)
+ * plus a flat opacity so it reads on every button variant — the dark-bg outline
+ * buttons (Google, magic-link) AND the inverted light-bg primary "Sign in" button
+ * — without per-button color overrides. Absolutely positioned so it doesn't push
+ * the button's centered label.
+ */
+function LastUsedBadge() {
+  return (
+    <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 rounded-full border border-current px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider opacity-55">
+      Last used
+    </span>
+  );
+}
+
 export function AuthForm({ mode, redirectTo = "/" }: { mode: Mode; redirectTo?: string }) {
   const router = useRouter();
   const target = safeRedirect(redirectTo);
@@ -97,6 +119,17 @@ export function AuthForm({ mode, redirectTo = "/" }: { mode: Mode; redirectTo?: 
   const [social, setSocial] = useState<"google" | "github" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
+
+  // The method the user last signed in with ("google" | "email" | "magic-link"),
+  // read client-side from the non-httpOnly cookie the last-login-method plugin
+  // sets. Read in an effect rather than during render because it touches
+  // document.cookie — reading inline would diverge between SSR (null) and the
+  // client and trip hydration. Login surface only: a "last used" hint is
+  // meaningless on the signup form (no prior method for a new account).
+  const [lastMethod, setLastMethod] = useState<string | null>(null);
+  useEffect(() => {
+    if (mode === "login") setLastMethod(getLastUsedLoginMethod());
+  }, [mode]);
 
   // After a sign-up, the user has NO session (verification is required) — show a
   // "check your email" panel instead of redirecting. On an unverified sign-in the
@@ -343,10 +376,11 @@ export function AuthForm({ mode, redirectTo = "/" }: { mode: Mode; redirectTo?: 
                   type="button"
                   onClick={() => onSocial(provider)}
                   disabled={busy}
-                  className="inline-flex h-10 items-center justify-center gap-2.5 border border-stone-300 bg-white px-4 text-sm font-medium text-stone-800 transition hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-stone-700 dark:bg-stone-950 dark:text-stone-100 dark:hover:bg-stone-900"
+                  className="relative inline-flex h-10 items-center justify-center gap-2.5 border border-stone-300 bg-white px-4 text-sm font-medium text-stone-800 transition hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-stone-700 dark:bg-stone-950 dark:text-stone-100 dark:hover:bg-stone-900"
                 >
                   {meta.icon}
                   {social === provider ? "Redirecting..." : `Continue with ${meta.label}`}
+                  {lastMethod === provider && <LastUsedBadge />}
                 </button>
               );
             })}
@@ -441,9 +475,10 @@ export function AuthForm({ mode, redirectTo = "/" }: { mode: Mode; redirectTo?: 
         <button
           type="submit"
           disabled={busy}
-          className="inline-flex h-10 w-full items-center justify-center bg-stone-950 px-4 text-sm font-semibold text-white transition hover:bg-stone-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-stone-100 dark:text-stone-950 dark:hover:bg-white"
+          className="relative inline-flex h-10 w-full items-center justify-center bg-stone-950 px-4 text-sm font-semibold text-white transition hover:bg-stone-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-stone-100 dark:text-stone-950 dark:hover:bg-white"
         >
           {pending ? pendingLabel : submitLabel}
+          {lastMethod === "email" && <LastUsedBadge />}
         </button>
 
         {/* Passwordless alternative. `type="button"` so it reads the email from the
@@ -453,9 +488,10 @@ export function AuthForm({ mode, redirectTo = "/" }: { mode: Mode; redirectTo?: 
             type="button"
             onClick={onMagicLink}
             disabled={busy}
-            className="inline-flex h-10 w-full items-center justify-center border border-stone-300 bg-white px-4 text-sm font-medium text-stone-800 transition hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-stone-700 dark:bg-stone-950 dark:text-stone-100 dark:hover:bg-stone-900"
+            className="relative inline-flex h-10 w-full items-center justify-center border border-stone-300 bg-white px-4 text-sm font-medium text-stone-800 transition hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-stone-700 dark:bg-stone-950 dark:text-stone-100 dark:hover:bg-stone-900"
           >
             {magicSending ? "Sending link..." : "Email me a sign-in link"}
+            {lastMethod === "magic-link" && <LastUsedBadge />}
           </button>
         )}
       </form>
