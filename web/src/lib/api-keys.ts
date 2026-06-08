@@ -11,22 +11,8 @@ import type {
   CreatedUserApiKey,
   ListUserApiKeysResponse,
 } from "@buildinternet/releases-api-types";
+import { apiBase, errorMessage } from "./user-api";
 export type { UserApiKey, CreatedUserApiKey, ListUserApiKeysResponse };
-
-function apiBase(): string {
-  const url = process.env.NEXT_PUBLIC_BETTER_AUTH_URL;
-  if (!url) throw new Error("NEXT_PUBLIC_BETTER_AUTH_URL is not set");
-  return url.replace(/\/$/, "");
-}
-
-async function errorMessage(res: Response, fallback: string): Promise<string> {
-  try {
-    const body = (await res.json()) as { message?: string };
-    return body.message || fallback;
-  } catch {
-    return fallback;
-  }
-}
 
 export async function listApiKeys(): Promise<UserApiKey[]> {
   const res = await fetch(`${apiBase()}/v1/api-keys`, { credentials: "include" });

@@ -1,7 +1,7 @@
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
+import { alias } from "drizzle-orm/sqlite-core";
 import { organizations, products } from "@buildinternet/releases-core/schema";
 import type { AnyDb } from "../db.js";
-import { IN_ARRAY_CHUNK_SIZE } from "../lib/d1-limits.js";
 import { userFollows, type FollowTargetType } from "../db/schema-follows.js";
 
 /** A user's follow, enriched with the target entity's display fields. */
@@ -130,136 +130,86 @@ export async function removeFollow(
     );
 }
 
-/** D1 caps a prepared statement at 100 bound params; `inArray` binds one per
- * id, so chunk lookups at `IN_ARRAY_CHUNK_SIZE` (90, repo convention) and
- * concat the results. */
-async function fetchInChunks<T>(
-  ids: string[],
-  run: (chunk: string[]) => Promise<T[]>,
-): Promise<T[]> {
-  const out: T[] = [];
-  for (let i = 0; i < ids.length; i += IN_ARRAY_CHUNK_SIZE) {
-    out.push(...(await run(ids.slice(i, i + IN_ARRAY_CHUNK_SIZE))));
-  }
-  return out;
-}
-
 /**
  * List a user's follows, enriched with each target's display fields, newest
  * first. Orphaned follows (target soft-deleted/removed) are dropped — a follow
  * whose org/product no longer resolves is omitted.
  *
- * Set-based, constant query count (not N+1): read the ordered follow rows, then
- * partition their ids by type and hydrate orgs and products in two concurrent
- * batched `IN (...)` queries (chunked at 90 ids for D1's 100-bind cap, so a
- * >90-follow power user can't 500). Finally re-walk the original ordered rows
- * against the resulting id→entity maps, dropping misses, to preserve
- * newest-first order.
+ * Single ordered query: LEFT JOIN the polymorphic `(target_type, target_id)`
+ * against both `organizations` and `products` (the join predicate carries the
+ * type discriminator, so at most one side matches per row), plus a second
+ * aliased `organizations` join for a product's owning-org slug. SQL does the
+ * `ORDER BY created_at DESC`, so there's no id-partition / batched-`IN` /
+ * re-walk machinery and no D1 100-bind chunking to worry about — the only bound
+ * param is `user_id`. A row whose matched side is NULL (target removed) or
+ * soft-deleted is an orphan and is skipped.
  */
 export async function listFollows(db: AnyDb, userId: string): Promise<EnrichedFollow[]> {
+  // Owning-org of a followed product. A second reference to `organizations`
+  // needs an alias so it doesn't collide with the org-target join above.
+  const productOrg = alias(organizations, "product_org");
+
   const rows = (await db
     .select({
       targetType: userFollows.targetType,
       targetId: userFollows.targetId,
       createdAt: userFollows.createdAt,
+      // org-target side (orgSlug is always null — matches resolveFollowTarget;
+      // hidden orgs stay followable, only soft-deleted ones are dropped).
+      orgName: organizations.name,
+      orgSlug: organizations.slug,
+      orgAvatarUrl: organizations.avatarUrl,
+      orgDeletedAt: organizations.deletedAt,
+      // product-target side, with its owning-org slug from the aliased join.
+      productName: products.name,
+      productSlug: products.slug,
+      productAvatarUrl: products.avatarUrl,
+      productDeletedAt: products.deletedAt,
+      productOrgSlug: productOrg.slug,
     })
     .from(userFollows)
+    .leftJoin(
+      organizations,
+      and(eq(userFollows.targetType, "org"), eq(organizations.id, userFollows.targetId)),
+    )
+    .leftJoin(
+      products,
+      and(eq(userFollows.targetType, "product"), eq(products.id, userFollows.targetId)),
+    )
+    .leftJoin(productOrg, eq(productOrg.id, products.orgId))
     .where(eq(userFollows.userId, userId))
     .orderBy(desc(userFollows.createdAt))
     .all()) as Array<{
     targetType: FollowTargetType;
     targetId: string;
     createdAt: Date;
+    orgName: string | null;
+    orgSlug: string | null;
+    orgAvatarUrl: string | null;
+    orgDeletedAt: string | null;
+    productName: string | null;
+    productSlug: string | null;
+    productAvatarUrl: string | null;
+    productDeletedAt: string | null;
+    productOrgSlug: string | null;
   }>;
 
-  const orgIds = [...new Set(rows.filter((r) => r.targetType === "org").map((r) => r.targetId))];
-  const productIds = [
-    ...new Set(rows.filter((r) => r.targetType === "product").map((r) => r.targetId)),
-  ];
-
-  // Hydrate orgs and products. They hit different tables and neither block
-  // reads the other's rows, so run the two batched queries concurrently —
-  // their latencies overlap instead of stacking.
-  type OrgRow = {
-    id: string;
-    name: string;
-    slug: string;
-    avatarUrl: string | null;
-    deletedAt: string | null;
-  };
-  type ProductRow = {
-    id: string;
-    name: string;
-    slug: string;
-    avatarUrl: string | null;
-    deletedAt: string | null;
-    orgSlug: string | null;
-  };
-  const [orgRows, productRows] = await Promise.all([
-    // Soft-deleted rows are dropped (orphans); hidden orgs are still followable,
-    // matching resolveFollowTarget — orgSlug is always null.
-    orgIds.length
-      ? fetchInChunks(
-          orgIds,
-          (chunk) =>
-            db
-              .select({
-                id: organizations.id,
-                name: organizations.name,
-                slug: organizations.slug,
-                avatarUrl: organizations.avatarUrl,
-                deletedAt: organizations.deletedAt,
-              })
-              .from(organizations)
-              .where(inArray(organizations.id, chunk))
-              .all() as Promise<OrgRow[]>,
-        )
-      : Promise.resolve<OrgRow[]>([]),
-    // orgSlug comes from the LEFT JOIN to the owning org (null if absent);
-    // soft-deleted products are dropped as orphans.
-    productIds.length
-      ? fetchInChunks(
-          productIds,
-          (chunk) =>
-            db
-              .select({
-                id: products.id,
-                name: products.name,
-                slug: products.slug,
-                avatarUrl: products.avatarUrl,
-                deletedAt: products.deletedAt,
-                orgSlug: organizations.slug,
-              })
-              .from(products)
-              .leftJoin(organizations, eq(organizations.id, products.orgId))
-              .where(inArray(products.id, chunk))
-              .all() as Promise<ProductRow[]>,
-        )
-      : Promise.resolve<ProductRow[]>([]),
-  ]);
-
-  const orgById = new Map<string, FollowTargetEntity>();
-  for (const r of orgRows) {
-    if (r.deletedAt) continue;
-    orgById.set(r.id, { name: r.name, slug: r.slug, avatarUrl: r.avatarUrl, orgSlug: null });
-  }
-
-  const productById = new Map<string, FollowTargetEntity>();
-  for (const r of productRows) {
-    if (r.deletedAt) continue;
-    productById.set(r.id, {
-      name: r.name,
-      slug: r.slug,
-      avatarUrl: r.avatarUrl,
-      orgSlug: r.orgSlug ?? null,
-    });
-  }
-
-  // Re-walk the original newest-first rows; drop orphans (map misses).
   const out: EnrichedFollow[] = [];
   for (const r of rows) {
-    const entity = r.targetType === "org" ? orgById.get(r.targetId) : productById.get(r.targetId);
-    if (!entity) continue;
+    const entity: FollowTargetEntity | null =
+      r.targetType === "org"
+        ? r.orgName !== null && !r.orgDeletedAt
+          ? { name: r.orgName, slug: r.orgSlug!, avatarUrl: r.orgAvatarUrl, orgSlug: null }
+          : null
+        : r.productName !== null && !r.productDeletedAt
+          ? {
+              name: r.productName,
+              slug: r.productSlug!,
+              avatarUrl: r.productAvatarUrl,
+              orgSlug: r.productOrgSlug ?? null,
+            }
+          : null;
+    if (!entity) continue; // orphan: target removed or soft-deleted
     out.push({
       targetType: r.targetType,
       targetId: r.targetId,
