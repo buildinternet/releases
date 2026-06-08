@@ -96,6 +96,34 @@ describe("/v1/me follows routes", () => {
     expect(res.status).toBe(400);
   });
 
+  it("POST with invalid JSON body → 400", async () => {
+    const { a, env } = app();
+    const res = await a.request(
+      "/me/follows",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{not json",
+      },
+      env,
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it("POST with missing targetId → 400", async () => {
+    const { a, env } = app();
+    const res = await a.request(
+      "/me/follows",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ targetType: "org" }),
+      },
+      env,
+    );
+    expect(res.status).toBe(400);
+  });
+
   it("DELETE unfollows (idempotent)", async () => {
     const { a, env } = app();
     const body = JSON.stringify({ targetType: "org", targetId: "org_a" });
