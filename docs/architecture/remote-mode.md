@@ -90,10 +90,16 @@ role=admin user is authorized for under `adminRoles: ["admin"]`). The former
 
 ### OAuth client provisioning (admin/oauth)
 
-OAuth clients for "Sign in with Releases" are provisioned via a root-key-gated
-admin surface — RFC 7591 dynamic registration stays OFF (#1482). This is the
-second sanctioned exception to the "no new `/v1/admin/*` CRUD" rule (alongside
-role provisioning).
+OAuth clients for "Sign in with Releases" are provisioned two ways: via a
+root-key-gated admin surface (for first-party / `trusted` `skip_consent` clients),
+and — now that agent-run MCP clients need to self-register — via **RFC 7591
+dynamic client registration** at the public `/oauth2/register` endpoint
+(`allowDynamicClientRegistration: true`). DCR clients are always untrusted (they
+hit the consent page), PKCE-required, and their tokens are role-clamped at
+issuance, so DCR grants no scope a user's role doesn't already allow. The endpoint
+is rate-limited to 5 registrations/min/IP (explicit in `auth/index.ts`, enforced
+in deployed prod). The admin route remains the second sanctioned exception to the
+"no new `/v1/admin/*` CRUD" rule (alongside role provisioning).
 
 - `POST /v1/admin/oauth/clients` — create a client. Body: `redirectUris`
   (required, non-empty), `scopes` (required, non-empty), optional `name`,
