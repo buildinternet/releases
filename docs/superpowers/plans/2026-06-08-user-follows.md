@@ -621,27 +621,23 @@ beforeEach(async () => {
   await h.db
     .insert(products)
     .values({ id: "prd_p", name: "Widget", slug: "widget", orgId: "org_a" });
-  await h.db
-    .insert(sources)
-    .values({
-      id: "src_org",
-      name: "Blog",
-      slug: "blog",
-      type: "feed",
-      url: "https://a/blog",
-      orgId: "org_a",
-    });
-  await h.db
-    .insert(sources)
-    .values({
-      id: "src_prd",
-      name: "Notes",
-      slug: "notes",
-      type: "feed",
-      url: "https://a/notes",
-      orgId: "org_a",
-      productId: "prd_p",
-    });
+  await h.db.insert(sources).values({
+    id: "src_org",
+    name: "Blog",
+    slug: "blog",
+    type: "feed",
+    url: "https://a/blog",
+    orgId: "org_a",
+  });
+  await h.db.insert(sources).values({
+    id: "src_prd",
+    name: "Notes",
+    slug: "notes",
+    type: "feed",
+    url: "https://a/notes",
+    orgId: "org_a",
+    productId: "prd_p",
+  });
   // Org B (not followed).
   await h.db.insert(organizations).values({ id: "org_b", name: "Other", slug: "other" });
   await h.db
