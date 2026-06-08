@@ -407,6 +407,7 @@ app.use("/api/auth/*", authCorsMiddleware());
 // CORS as /api/auth/* so the browser sends the cross-subdomain session cookie.
 app.use("/v1/api-keys", authCorsMiddleware());
 app.use("/v1/api-keys/*", authCorsMiddleware());
+app.use("/v1/me/*", authCorsMiddleware());
 
 // Public read CORS — wildcard is fine; these endpoints don't accept credentials.
 // SKIP `/api/auth/*`: those routes are owned by `authCorsMiddleware` above, which
@@ -420,7 +421,8 @@ const publicReadCors = cors();
 app.use("*", (c, next) =>
   c.req.path.startsWith("/api/auth/") ||
   c.req.path === "/v1/api-keys" ||
-  c.req.path.startsWith("/v1/api-keys/")
+  c.req.path.startsWith("/v1/api-keys/") ||
+  c.req.path.startsWith("/v1/me/")
     ? next()
     : publicReadCors(c, next),
 );
@@ -572,6 +574,11 @@ for (const r of adminRoutes) {
 // session-gated. (See routing.md — the session-authed self-serve bucket.)
 v1.use("/api-keys", publicRateLimitMiddleware);
 v1.use("/api-keys/*", publicRateLimitMiddleware);
+
+// /me follows reads: same per-IP limiter posture as api-keys. No-ops on
+// POST/DELETE (non-safe methods); those are session-gated.
+v1.use("/me/follows", publicRateLimitMiddleware);
+v1.use("/me/*", publicRateLimitMiddleware);
 
 // Cache-Control for read-heavy GET endpoints
 v1.use("/stats", cacheControl(300, { staleWhileRevalidate: 60, isPublic: true }));
