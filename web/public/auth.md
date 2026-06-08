@@ -1,4 +1,4 @@
-# Releases — Agent Authentication
+# auth.md — Releases Agent Authentication
 
 Releases is a changelog registry for AI agents and developers. **Most read
 access is public and needs no authentication** — you can query the REST API or
