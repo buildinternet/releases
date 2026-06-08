@@ -17,7 +17,13 @@ import type { ReleaseComposition } from "@buildinternet/releases-core/compositio
 import { buildCompositionMetadataSet } from "@releases/core-internal/composition-metadata";
 import { summarizeNotOptedOut } from "@releases/core-internal/eligibility";
 import { releaseCoverage } from "@releases/db/schema-coverage.js";
-import { SOURCE_DELETED_SENTINEL, isDurableObjectReset, recordWorkflowFailure } from "./_shared.js";
+import {
+  SOURCE_DELETED_SENTINEL,
+  RATE_LIMITED_SENTINEL,
+  isRateLimited,
+  isDurableObjectReset,
+  recordWorkflowFailure,
+} from "./_shared.js";
 import { buildFetchOneEnv } from "./_fetch-env.js";
 import { logEvent } from "@releases/lib/log-event";
 import { dbErrorLogFields } from "@releases/lib/db-errors";
@@ -573,8 +579,15 @@ export class PollAndFetchWorkflow extends WorkflowEntrypoint<
       const fetchEnv = await resolveFetchEnv(env);
       const fetchResult = await step.do("fetch-and-persist", RETRY_FETCH, async () => {
         const result = await fetchOne(db, source, fetchEnv, { skipSideEffects: true });
-        // Surface fetch errors so the step retries. The inline path already
-        // recorded fetch_log + source counter updates, so retry is safe.
+        // A transient feed rate-limit/timeout (429/408) is expected churn:
+        // fetchOne already stamped the backoff, so throw NON-retryable (retrying
+        // only deepens the rate-limit) with the sentinel the catch swallows
+        // without recording a failure — no alert email.
+        if (result.status === "error" && result.rateLimited) {
+          throw new NonRetryableError(`${RATE_LIMITED_SENTINEL}: ${source.slug}: ${result.error}`);
+        }
+        // Surface other fetch errors so the step retries. The inline path
+        // already recorded fetch_log + source counter updates, so retry is safe.
         if (result.status === "error") {
           throw new Error(`fetch ${source.slug}: ${result.error}`);
         }
@@ -684,6 +697,20 @@ export class PollAndFetchWorkflow extends WorkflowEntrypoint<
         return;
       }
       const errorMsg = err instanceof Error ? err.message : String(err);
+
+      // Transient feed rate-limit/timeout (429/408): fetchOne already stamped
+      // the backoff. Return cleanly (instance ends `Completed`, not `Errored`)
+      // so it skips the `workflow_failures` row and its alert email — a
+      // rate-limited feed is expected churn, not an actionable failure.
+      if (err instanceof NonRetryableError && isRateLimited(errorMsg)) {
+        logEvent("warn", {
+          component: "poll-fetch-workflow",
+          event: "feed-rate-limited",
+          sourceId,
+          step: currentStep,
+        });
+        return;
+      }
 
       // Durable Object reset (a deploy landed mid-fire): transient infra churn,
       // not a source failure. The Workflows engine resumes the instance on the

@@ -256,6 +256,22 @@ export function detectFeedTypeFromContent(body: string): FeedType | null {
  */
 const FEED_ACCEPT = "application/rss+xml, application/atom+xml, application/feed+json";
 
+/**
+ * Parse an HTTP `Retry-After` header to milliseconds. The header is either
+ * delta-seconds (`"120"`) or an HTTP-date (`"Wed, 21 Oct 2026 07:28:00 GMT"`).
+ * Returns `undefined` when absent or unparseable; never negative.
+ */
+export function parseRetryAfterMs(headerVal: string | null): number | undefined {
+  if (!headerVal) return undefined;
+  const trimmed = headerVal.trim();
+  if (trimmed === "") return undefined;
+  const secs = Number(trimmed);
+  if (Number.isFinite(secs)) return Math.max(0, secs * 1000);
+  const dateMs = Date.parse(trimmed);
+  if (!Number.isNaN(dateMs)) return Math.max(0, dateMs - Date.now());
+  return undefined;
+}
+
 export async function fetchAndParseFeed(
   feedUrl: string,
   feedType: FeedType,
@@ -288,7 +304,10 @@ export async function fetchAndParseFeed(
 
   if (!res.ok) {
     if (res.status >= 400 && res.status < 500) {
-      throw new FeedHttpError(res.status, feedUrl, res.statusText);
+      // Carry the server's Retry-After hint (429/408) so the caller can back
+      // off for at least that long instead of guessing.
+      const retryAfterMs = parseRetryAfterMs(res.headers.get("retry-after"));
+      throw new FeedHttpError(res.status, feedUrl, res.statusText, retryAfterMs);
     }
     throw new Error(`Feed fetch failed: ${res.status} ${res.statusText}`);
   }

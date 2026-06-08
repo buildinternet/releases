@@ -61,19 +61,33 @@ export class CrawlJobError extends Error {
 
 /**
  * Thrown when a feed URL returns a 4xx response. Distinct from generic
- * `Error` so callers can react: 4xx is evidence the URL is gone (renamed,
+ * `Error` so callers can react: most 4xx is evidence the URL is gone (renamed,
  * removed) and warrants invalidating the stored feedUrl after a streak;
- * 5xx is transient and should not.
+ * 5xx is transient and should not. The exceptions are 429 (Too Many Requests)
+ * and 408 (Request Timeout): those are transient rate-limit/timeout signals,
+ * NOT a gone URL — see {@link isTransientFeedHttpStatus}. `retryAfterMs` carries
+ * the server's `Retry-After` hint (parsed to milliseconds) when present.
  */
 export class FeedHttpError extends Error {
   constructor(
     public status: number,
     public feedUrl: string,
     statusText: string,
+    public retryAfterMs?: number,
   ) {
     super(`Feed fetch failed: ${status} ${statusText} (${feedUrl})`);
     this.name = "FeedHttpError";
   }
+}
+
+/**
+ * Whether a feed 4xx status is a transient rate-limit/timeout (429/408) rather
+ * than evidence the feed URL is gone (404/410/403…). Transient statuses get
+ * exponential backoff (honoring `Retry-After`) instead of counting toward
+ * feedUrl invalidation, and are treated as expected — no failure-alert email.
+ */
+export function isTransientFeedHttpStatus(status: number): boolean {
+  return status === 429 || status === 408;
 }
 
 /**

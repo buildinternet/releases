@@ -39,7 +39,7 @@ import { fetchHelpCenter } from "@releases/adapters/helpcenter";
 import { refreshAppStoreListing } from "../lib/appstore-materialize.js";
 import { fetchAndParseVideoFeed, resolveVideoProvider } from "@releases/adapters/video";
 import { loadFetchQuirks, type FetchQuirk } from "@releases/ai-internal/playbook";
-import { FeedHttpError } from "@releases/lib/errors";
+import { FeedHttpError, isTransientFeedHttpStatus } from "@releases/lib/errors";
 import { contentHash } from "@releases/adapters/content-hash";
 import { RELEASES_BOT_UA } from "@releases/adapters/user-agent";
 import type { RawRelease } from "@releases/adapters/types.js";
@@ -633,7 +633,17 @@ export type FetchOneResult =
       /** Session ID returned by the discovery worker's `startManagedFetchSession`. */
       sessionId: string;
     })
-  | (FetchOneBase & { status: "error"; error: string })
+  | (FetchOneBase & {
+      status: "error";
+      error: string;
+      /**
+       * True when the error is a transient feed rate-limit/timeout (429/408).
+       * fetchOne has already stamped an exponential `nextFetchAfter` backoff
+       * (honoring Retry-After); the workflow uses this to treat the failure as
+       * expected — no retry storm, no failure-alert email.
+       */
+      rateLimited?: boolean;
+    })
   | (FetchOneBase & { status: "dry_run" });
 
 export const DEFAULT_FETCH_MAX_ENTRIES = 200;
@@ -1795,10 +1805,44 @@ export async function fetchOne(
       };
     }
 
-    // 4xx on the stored feedUrl: track it via feed4xxStreak rather than the
-    // generic consecutiveErrors backoff. Backoff would push the next retry
-    // out by hours and slow self-healing — we'd rather keep the normal cron
-    // cadence until the streak hits the invalidation threshold.
+    // 429/408 on the feed: transient rate-limit/timeout, NOT a gone URL. Back
+    // off exponentially (at least as long as Retry-After when the server sends
+    // it) via the generic consecutiveErrors ladder, and DON'T touch
+    // feed4xxStreak — a rate-limited feed must never march toward feedUrl
+    // invalidation. Flag the result `rateLimited` so the workflow treats it as
+    // expected: no retry storm, no failure-alert email.
+    if (err instanceof FeedHttpError && isTransientFeedHttpStatus(err.status)) {
+      const newErrors = (source.consecutiveErrors ?? 0) + 1;
+      const backoffMs = Math.min(Math.pow(2, newErrors - 1), 72) * 3600_000;
+      const waitMs = Math.max(backoffMs, err.retryAfterMs ?? 0);
+      const nextFetch = new Date(Date.now() + waitMs).toISOString();
+      await db
+        .update(sources)
+        .set({ consecutiveErrors: newErrors, nextFetchAfter: nextFetch })
+        .where(eq(sources.id, source.id))
+        .catch(() => {});
+      logEvent("warn", {
+        component: "cron-poll-fetch",
+        event: "feed-rate-limited",
+        sourceSlug: source.slug,
+        httpStatus: err.status,
+        retryAfterMs: err.retryAfterMs,
+        nextFetchAfter: nextFetch,
+      });
+      return {
+        releasesFound: 0,
+        releasesInserted: 0,
+        durationMs: Date.now() - start,
+        status: "error" as const,
+        error: err.message,
+        rateLimited: true,
+      };
+    }
+
+    // Other 4xx on the stored feedUrl (404/410/403…): track it via feed4xxStreak
+    // rather than the generic consecutiveErrors backoff. Backoff would push the
+    // next retry out by hours and slow self-healing — we'd rather keep the
+    // normal cron cadence until the streak hits the invalidation threshold.
     if (err instanceof FeedHttpError) {
       const streak = (meta.feed4xxStreak ?? 0) + 1;
       if (streak >= FEED_4XX_INVALIDATE_THRESHOLD) {

@@ -16,6 +16,21 @@ import { dbErrorLogFields } from "@releases/lib/db-errors";
 export const SOURCE_DELETED_SENTINEL = "load-source: source row deleted";
 
 /**
+ * Prefix for the NonRetryableError thrown when a fetch step hits a transient
+ * feed rate-limit/timeout (429/408). fetchOne has already stamped an
+ * exponential `nextFetchAfter` backoff (honoring Retry-After), so the workflow
+ * must NOT retry (that only deepens the rate-limit) and must NOT persist a
+ * `workflow_failures` row — a rate-limited feed is expected churn, not an
+ * actionable failure, so it never drives an alert email. Matched by prefix
+ * (not equality) since the message carries the slug + underlying error.
+ */
+export const RATE_LIMITED_SENTINEL = "fetch-rate-limited";
+
+export function isRateLimited(message: string): boolean {
+  return message.startsWith(RATE_LIMITED_SENTINEL);
+}
+
+/**
  * Cloudflare surfaces this exact message when a Durable Object is reset because
  * a new Worker version was deployed. Workflows run on Durable Objects, so every
  * API-worker deploy resets in-flight `poll-and-fetch` instances mid-step. The
