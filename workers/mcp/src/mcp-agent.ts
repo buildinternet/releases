@@ -130,6 +130,13 @@ export interface Env {
    * matching `X-Releases-Staging-Key` header. See workers/mcp/src/index.ts.
    */
   STAGING_ACCESS_KEY?: SecretBinding;
+  /**
+   * "Sign in with Releases" OAuth resource-server verification (#1483). The AS
+   * origin (issuer + JWKS host) and this worker's expected audience. Both
+   * default to prod in code; staging overrides them to api-staging / mcp-staging.
+   */
+  OAUTH_JWT_ISSUER?: string;
+  OAUTH_JWT_AUDIENCE?: string;
   /** Cloudflare Flagship binding; resolves flags live when present. */
   FLAGS?: FlagshipBinding;
 }

@@ -8,11 +8,39 @@ import {
 import { verifyApiToken } from "@releases/core-internal/api-token-store";
 import { FLAGS, flag } from "@releases/lib/flags";
 import { logEvent } from "@releases/lib/log-event";
+import {
+  isJwtShaped,
+  verifyOAuthJwt,
+  type OAuthJwtConfig,
+  type JWTVerifyGetKey,
+} from "@releases/lib/oauth-jwt";
 import { createDb } from "./db.js";
 import type { Env } from "./mcp-agent.js";
 
 /** Custom header carrying the staging shared secret. Mirrors workers/api. */
 const STAGING_KEY_HEADER = "X-Releases-Staging-Key";
+
+/** `tokenId` prefix for an OAuth-JWT principal (#1483). No api_tokens row exists. */
+const OAUTH_JWT_TOKEN_PREFIX = "oauth_";
+
+/** Default AS origin (issuer) when `OAUTH_JWT_ISSUER` is unset — prod. */
+const DEFAULT_OAUTH_ISSUER = "https://api.releases.sh";
+/** Default audience (this MCP worker) when `OAUTH_JWT_AUDIENCE` is unset — prod. */
+const DEFAULT_OAUTH_AUDIENCE = "https://mcp.releases.sh";
+
+/**
+ * Resource-server config for verifying "Sign in with Releases" OAuth JWTs
+ * (#1483). The MCP worker can't import better-auth (zod-pin), so it verifies
+ * locally with jose against the AS JWKS (`${issuer}/api/auth/jwks`). Issuer +
+ * audience are overridable per environment (staging points at api-staging /
+ * mcp-staging); both default to prod so no new config is required there.
+ */
+function oauthJwtConfig(env: Env): OAuthJwtConfig {
+  return {
+    issuer: env.OAUTH_JWT_ISSUER || DEFAULT_OAUTH_ISSUER,
+    audience: env.OAUTH_JWT_AUDIENCE || DEFAULT_OAUTH_AUDIENCE,
+  };
+}
 
 /**
  * JSON-RPC methods that are MCP protocol overhead, not billable operations.
@@ -73,9 +101,12 @@ export type McpIdentity =
  * the caller gets a non-null `string` without re-narrowing.
  */
 export function machineTokenIdForUsage(identity: McpIdentity): string | null {
-  return identity.kind === "token" && !isUserApiKeyShaped(identity.tokenId)
-    ? identity.tokenId
-    : null;
+  if (identity.kind !== "token") return null;
+  // relu_ user keys (apikey table) and oauth_ JWT principals (no api_tokens row)
+  // have nothing to record in the machine-lane last_used path.
+  if (isUserApiKeyShaped(identity.tokenId)) return null;
+  if (identity.tokenId.startsWith(OAUTH_JWT_TOKEN_PREFIX)) return null;
+  return identity.tokenId;
 }
 
 export type McpAuthResult = { ok: false; response: Response } | { ok: true; identity: McpIdentity };
@@ -152,6 +183,7 @@ async function resolveIdentity(
   presented: string,
   env: Env,
   metered: boolean,
+  jwtKeyResolver?: JWTVerifyGetKey,
 ): Promise<McpIdentity | { rateLimited: true }> {
   if (!presented) return ANONYMOUS;
   if (isUserApiKeyShaped(presented)) {
@@ -168,6 +200,26 @@ async function resolveIdentity(
       return { kind: "token", scopes: res.scopes, tokenId: res.tokenId, token: presented };
     // An invalid/unknown token is ignored rather than rejected, so public reads
     // stay open; the staging gate below still applies.
+    return ANONYMOUS;
+  }
+  // "Sign in with Releases" OAuth JWT (#1483). Verified locally against the AS
+  // JWKS — additive: a verification failure falls through to anonymous read,
+  // exactly like an invalid relk_, so the unauthenticated MCP path is never
+  // gated. `token: null` (no forwardable credential) routes the downstream
+  // lookup fallback through the root key, same as the relu_ lane, and leaves the
+  // staging gate to the staging key.
+  if (isJwtShaped(presented)) {
+    const cfg = oauthJwtConfig(env);
+    if (jwtKeyResolver) cfg.keyResolver = jwtKeyResolver; // test seam — avoids JWKS fetch
+    const verified = await verifyOAuthJwt(presented, cfg);
+    if (verified && verified.scopes.length > 0) {
+      return {
+        kind: "token",
+        scopes: verified.scopes,
+        tokenId: `${OAUTH_JWT_TOKEN_PREFIX}${verified.subject ?? "m2m"}`,
+        token: null,
+      };
+    }
     return ANONYMOUS;
   }
   const rootKey = await getSecretWithFallback(env.RELEASES_API_KEY, env.RELEASED_API_KEY).catch(
@@ -188,10 +240,14 @@ async function resolveIdentity(
  * shared key. CORS preflight (OPTIONS) always passes; an unresolvable staging
  * secret fails open (same as the binding being absent).
  */
-export async function resolveMcpAuth(request: Request, env: Env): Promise<McpAuthResult> {
+export async function resolveMcpAuth(
+  request: Request,
+  env: Env,
+  opts?: { jwtKeyResolver?: JWTVerifyGetKey },
+): Promise<McpAuthResult> {
   const presented = bearer(request);
   const metered = await isMeteredMcpMethod(request);
-  const resolved = await resolveIdentity(presented, env, metered);
+  const resolved = await resolveIdentity(presented, env, metered, opts?.jwtKeyResolver);
   if ("rateLimited" in resolved) return { ok: false, response: rateLimited() };
   const identity = resolved;
 

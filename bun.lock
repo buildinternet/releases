@@ -29,6 +29,7 @@
         "drizzle-kit": "^0.31.10",
         "hono": "^4.12.23",
         "husky": "^9.1.7",
+        "jose": "^6.2.2",
         "lint-staged": "^17.0.7",
         "oxlint": "^1.68.0",
         "portless": "^0.13.1",
@@ -101,6 +102,7 @@
       "dependencies": {
         "@anthropic-ai/sdk": "catalog:",
         "@buildinternet/releases-core": "workspace:*",
+        "jose": "^6.2.2",
       },
     },
     "packages/rendering": {
@@ -193,6 +195,7 @@
       },
       "devDependencies": {
         "@cloudflare/workers-types": "^4.20260603.1",
+        "jose": "^6.2.2",
         "wrangler": "^4.97.0",
       },
     },
