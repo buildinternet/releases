@@ -24,7 +24,7 @@ import {
 // (#1458) drift gates.
 describe("OAuth entitlement drift gate (worker ↔ web)", () => {
   it("IDENTITY_SCOPES are identical", () => {
-    expect([...WEB_IDENTITY_SCOPES]).toEqual([...API_IDENTITY_SCOPES]);
+    expect(WEB_IDENTITY_SCOPES).toEqual(API_IDENTITY_SCOPES);
   });
 
   it("ROLE_LADDER is identical", () => {
