@@ -21,6 +21,8 @@ Dedup via `UNIQUE(source_id, url)` and the shared `RELEASE_URL_UPSERT` config in
 
 Smart fetch (cron): `consecutiveNoChange` / `consecutiveErrors` counters on the `sources` table drive exponential backoff (no_change: 1h–48h, errors: 1h–72h). The full retier logic is in [remote-mode.md → Feed change detection + retier](remote-mode.md).
 
+Feed 4xx splits two ways (`fetchOne`): **404/410/403…** are treated as a gone/renamed URL and increment `metadata.feed4xxStreak` (no backoff) toward `FEED_4XX_INVALIDATE_THRESHOLD = 5`, after which the stored `feedUrl` is flushed for re-discovery. **429/408** (`isTransientFeedHttpStatus`) are transient rate-limit/timeout signals, NOT a gone URL: they take the `consecutiveErrors` exponential backoff (waiting at least as long as the server's `Retry-After` when present) and never touch `feed4xxStreak`. A 429 is also flagged `rateLimited` on the fetch result so the poll-and-fetch workflow treats it as expected churn — it throws `NonRetryableError` (no retry storm) and skips the `workflow_failures` row, so a rate-limited feed never fires a failure-alert email.
+
 ## Exclusion and suppression
 
 - **Ignored URLs** are org-scoped (`ignored_urls`, requires `orgId`); **blocked URLs** are global (`blocked_urls`, spam/bad domains). Both are checked by `isUrlExcluded()` before insert.
