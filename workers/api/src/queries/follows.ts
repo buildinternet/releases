@@ -1,6 +1,7 @@
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { organizations, products } from "@buildinternet/releases-core/schema";
 import type { AnyDb } from "../db.js";
+import { IN_ARRAY_CHUNK_SIZE } from "../lib/d1-limits.js";
 import { userFollows, type FollowTargetType } from "../db/schema-follows.js";
 
 /** A user's follow, enriched with the target entity's display fields. */
@@ -130,16 +131,15 @@ export async function removeFollow(
 }
 
 /** D1 caps a prepared statement at 100 bound params; `inArray` binds one per
- * id, so chunk lookups at 90 ids (repo convention) and concat the results. */
-const ID_CHUNK = 90;
-
+ * id, so chunk lookups at `IN_ARRAY_CHUNK_SIZE` (90, repo convention) and
+ * concat the results. */
 async function fetchInChunks<T>(
   ids: string[],
   run: (chunk: string[]) => Promise<T[]>,
 ): Promise<T[]> {
   const out: T[] = [];
-  for (let i = 0; i < ids.length; i += ID_CHUNK) {
-    out.push(...(await run(ids.slice(i, i + ID_CHUNK))));
+  for (let i = 0; i < ids.length; i += IN_ARRAY_CHUNK_SIZE) {
+    out.push(...(await run(ids.slice(i, i + IN_ARRAY_CHUNK_SIZE))));
   }
   return out;
 }
@@ -150,10 +150,11 @@ async function fetchInChunks<T>(
  * whose org/product no longer resolves is omitted.
  *
  * Set-based, constant query count (not N+1): read the ordered follow rows, then
- * partition their ids by type and hydrate orgs and products in two batched
- * `IN (...)` queries (chunked at 90 ids for D1's 100-bind cap, so a >90-follow
- * power user can't 500). Finally re-walk the original ordered rows against the
- * resulting id→entity maps, dropping misses, to preserve newest-first order.
+ * partition their ids by type and hydrate orgs and products in two concurrent
+ * batched `IN (...)` queries (chunked at 90 ids for D1's 100-bind cap, so a
+ * >90-follow power user can't 500). Finally re-walk the original ordered rows
+ * against the resulting id→entity maps, dropping misses, to preserve
+ * newest-first order.
  */
 export async function listFollows(db: AnyDb, userId: string): Promise<EnrichedFollow[]> {
   const rows = (await db
@@ -176,8 +177,9 @@ export async function listFollows(db: AnyDb, userId: string): Promise<EnrichedFo
     ...new Set(rows.filter((r) => r.targetType === "product").map((r) => r.targetId)),
   ];
 
-  // Batched org hydration. Soft-deleted rows are dropped (orphans); hidden orgs
-  // are still followable, matching resolveFollowTarget — orgSlug is always null.
+  // Hydrate orgs and products. They hit different tables and neither block
+  // reads the other's rows, so run the two batched queries concurrently —
+  // their latencies overlap instead of stacking.
   type OrgRow = {
     id: string;
     name: string;
@@ -185,31 +187,6 @@ export async function listFollows(db: AnyDb, userId: string): Promise<EnrichedFo
     avatarUrl: string | null;
     deletedAt: string | null;
   };
-  const orgRows: OrgRow[] = orgIds.length
-    ? await fetchInChunks(
-        orgIds,
-        (chunk) =>
-          db
-            .select({
-              id: organizations.id,
-              name: organizations.name,
-              slug: organizations.slug,
-              avatarUrl: organizations.avatarUrl,
-              deletedAt: organizations.deletedAt,
-            })
-            .from(organizations)
-            .where(inArray(organizations.id, chunk))
-            .all() as Promise<OrgRow[]>,
-      )
-    : [];
-  const orgById = new Map<string, FollowTargetEntity>();
-  for (const r of orgRows) {
-    if (r.deletedAt) continue;
-    orgById.set(r.id, { name: r.name, slug: r.slug, avatarUrl: r.avatarUrl, orgSlug: null });
-  }
-
-  // Batched product hydration. orgSlug comes from the LEFT JOIN to the owning
-  // org (null if absent); soft-deleted products are dropped as orphans.
   type ProductRow = {
     id: string;
     name: string;
@@ -218,25 +195,55 @@ export async function listFollows(db: AnyDb, userId: string): Promise<EnrichedFo
     deletedAt: string | null;
     orgSlug: string | null;
   };
-  const productRows: ProductRow[] = productIds.length
-    ? await fetchInChunks(
-        productIds,
-        (chunk) =>
-          db
-            .select({
-              id: products.id,
-              name: products.name,
-              slug: products.slug,
-              avatarUrl: products.avatarUrl,
-              deletedAt: products.deletedAt,
-              orgSlug: organizations.slug,
-            })
-            .from(products)
-            .leftJoin(organizations, eq(organizations.id, products.orgId))
-            .where(inArray(products.id, chunk))
-            .all() as Promise<ProductRow[]>,
-      )
-    : [];
+  const [orgRows, productRows] = await Promise.all([
+    // Soft-deleted rows are dropped (orphans); hidden orgs are still followable,
+    // matching resolveFollowTarget — orgSlug is always null.
+    orgIds.length
+      ? fetchInChunks(
+          orgIds,
+          (chunk) =>
+            db
+              .select({
+                id: organizations.id,
+                name: organizations.name,
+                slug: organizations.slug,
+                avatarUrl: organizations.avatarUrl,
+                deletedAt: organizations.deletedAt,
+              })
+              .from(organizations)
+              .where(inArray(organizations.id, chunk))
+              .all() as Promise<OrgRow[]>,
+        )
+      : Promise.resolve<OrgRow[]>([]),
+    // orgSlug comes from the LEFT JOIN to the owning org (null if absent);
+    // soft-deleted products are dropped as orphans.
+    productIds.length
+      ? fetchInChunks(
+          productIds,
+          (chunk) =>
+            db
+              .select({
+                id: products.id,
+                name: products.name,
+                slug: products.slug,
+                avatarUrl: products.avatarUrl,
+                deletedAt: products.deletedAt,
+                orgSlug: organizations.slug,
+              })
+              .from(products)
+              .leftJoin(organizations, eq(organizations.id, products.orgId))
+              .where(inArray(products.id, chunk))
+              .all() as Promise<ProductRow[]>,
+        )
+      : Promise.resolve<ProductRow[]>([]),
+  ]);
+
+  const orgById = new Map<string, FollowTargetEntity>();
+  for (const r of orgRows) {
+    if (r.deletedAt) continue;
+    orgById.set(r.id, { name: r.name, slug: r.slug, avatarUrl: r.avatarUrl, orgSlug: null });
+  }
+
   const productById = new Map<string, FollowTargetEntity>();
   for (const r of productRows) {
     if (r.deletedAt) continue;

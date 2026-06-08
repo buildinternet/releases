@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useSession } from "@/lib/auth-client";
 import { useFollows } from "@/components/follows-provider";
 import { OrgAvatar } from "@/components/org-avatar";
+import { InfiniteScrollTrigger } from "@/components/infinite-scroll-trigger";
+import { useInfiniteScroll } from "@/hooks/use-infinite-scroll";
 import { listFollows, getFeed } from "@/lib/follows";
 import { formatRelativeDate, pluralReleases } from "@/lib/formatters";
 import type { Follow, ReleaseLatestItem } from "@buildinternet/releases-api-types";
@@ -109,10 +111,19 @@ export function FollowingClient() {
     }
   }, [loadingMore, hasMore, page]);
 
+  // IntersectionObserver auto-load + a keyboard-reachable trailing button,
+  // shared with the collection/category timelines.
+  const triggerRef = useInfiniteScroll<HTMLButtonElement>({
+    hasMore,
+    loading: loadingMore,
+    onLoadMore: () => void loadMore(),
+  });
+
   // Map org-slug → { name, avatarUrl } from the follows list so each release's
   // byline can show a logo without a backend join. Org follows key by their own
-  // slug; product follows contribute their parent `orgSlug` (no avatar of the
-  // org itself, but the name is unavailable — products carry the product name).
+  // slug with the org's name/avatar; product follows fall back to keying by
+  // their parent `orgSlug` with the product's own name/avatar (we don't carry
+  // the org's), used only until an org follow supplies a better chip.
   const orgChips = useMemo(() => {
     const m = new Map<string, OrgChip>();
     for (const f of followsList) {
@@ -209,16 +220,12 @@ export function FollowingClient() {
               )}
 
               {hasMore && (
-                <div className="py-6 text-center">
-                  <button
-                    type="button"
-                    onClick={() => void loadMore()}
-                    disabled={loadingMore}
-                    className="rounded-md border border-stone-200 bg-white px-5 py-2 text-[13px] font-medium text-stone-500 transition-colors hover:border-stone-300 disabled:opacity-50 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-400 dark:hover:border-stone-600"
-                  >
-                    {loadingMore ? "Loading…" : "Load more"}
-                  </button>
-                </div>
+                <InfiniteScrollTrigger
+                  triggerRef={triggerRef}
+                  loading={loadingMore}
+                  error={!!error}
+                  onClick={() => void loadMore()}
+                />
               )}
             </div>
           )}
