@@ -183,7 +183,9 @@ export function FollowingClient() {
           {!loading && !error && feedItems.length === 0 && (
             <div className="rounded-lg border border-stone-200 bg-white px-5 py-10 text-center dark:border-stone-800 dark:bg-stone-900">
               <p className="text-sm text-stone-500 dark:text-stone-400">
-                Follow some organizations or products to build your feed.
+                {followsList.length === 0
+                  ? "You're not following any organizations or products yet."
+                  : "No releases yet from the organizations and products you follow."}
               </p>
               <Link
                 href="/"
