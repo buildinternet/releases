@@ -2,6 +2,10 @@ import { createMcpHandler } from "agents/mcp";
 import { isHtmlRequest, renderLandingPage } from "./landing.js";
 import { createServer, type Env } from "./mcp-agent.js";
 import { resolveMcpAuth, machineTokenIdForUsage } from "./auth.js";
+import {
+  isProtectedResourceMetadataPath,
+  protectedResourceMetadataResponse,
+} from "./well-known.js";
 import { touchLastUsed } from "@releases/core-internal/api-token-store";
 import { FLAGS, flag } from "@releases/lib/flags";
 import { createDb } from "./db.js";
@@ -23,12 +27,24 @@ async function handle(
     });
   }
 
+  // RFC 9728 OAuth protected-resource metadata, required by the MCP auth spec so
+  // a client can discover this resource's authorization server + canonical URI.
+  // In prod (no STAGING_ACCESS_KEY) it is public discovery, short-circuited before
+  // auth like /robots.txt. On staging it must clear the staging access gate like
+  // every other route, so it is deferred until after resolveMcpAuth below.
+  const wantsMetadata = request.method === "GET" && isProtectedResourceMetadataPath(url.pathname);
+  if (wantsMetadata && !env.STAGING_ACCESS_KEY) {
+    return protectedResourceMetadataResponse(env);
+  }
+
   // Resolve the caller's identity (relk_ token → scopes, static key → root,
   // else anonymous read) and enforce the staging access gate in one pass. The
   // gate runs above createMcpHandler so MCP routing is only reached once the
   // caller clears it; per-tool scope enforcement happens inside createServer.
   const auth = await resolveMcpAuth(request, env);
   if (!auth.ok) return auth.response;
+  // Staging: the gate has now passed, so serve the (otherwise public) metadata.
+  if (wantsMetadata) return protectedResourceMetadataResponse(env);
   const { identity } = auth;
   // Record token usage (throttled, fire-and-forget) so the admin surface can
   // audit last-used across both the API and MCP workers. relu_ user keys are
