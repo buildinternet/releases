@@ -227,7 +227,6 @@ export type Env = {
     // When "true", all relk_… tokens are rejected without a DB lookup.
     API_TOKENS_DISABLED?: string;
     USER_API_KEYS_ENABLED?: string;
-    USER_FOLLOWS_ENABLED?: string;
     // Rollout gate for the device-authorization (RFC 8628) CLI login path —
     // registers the deviceAuthorization() + bearer() plugins. See @releases/lib/flags
     // (deviceAuthorizationEnabled). Default off.

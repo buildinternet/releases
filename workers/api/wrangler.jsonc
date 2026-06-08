@@ -175,7 +175,6 @@
     "ENVIRONMENT": "production",
     "WEB_BOT_AUTH_ENABLED": "true",
     "USER_API_KEYS_ENABLED": "false",
-    "USER_FOLLOWS_ENABLED": "false",
     "DEVICE_AUTHORIZATION_ENABLED": "false",
     // Comma-separated audience URIs accepted in JWT access tokens issued by the
     // OAuth provider. The API worker origin (BETTER_AUTH_URL) is always included;
@@ -608,7 +607,6 @@
         "ENVIRONMENT": "staging",
         "WEB_BOT_AUTH_ENABLED": "false",
         "USER_API_KEYS_ENABLED": "false",
-        "USER_FOLLOWS_ENABLED": "false",
         "DEVICE_AUTHORIZATION_ENABLED": "false",
         // Staging issuer/baseURL — overrides the inherited top-level prod value so
         // createAuth's baseURL and oauthValidAudiences() resolve to the staging

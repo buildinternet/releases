@@ -362,11 +362,29 @@ function recordAuth(
 }
 
 /**
- * Build a cookie-session gate behind a feature flag. When the flag is off the
- * surface is dark (404). Otherwise it resolves the Better Auth session from the
- * request cookie (no session → 401) and attaches a minimal `{ user }` to the
- * context for downstream handlers. Used for both the api-keys self-serve surface
- * and the follows `/v1/me/*` surface so there is one session-resolution path.
+ * Resolve the Better Auth cookie session and attach a minimal `{ user }` to the
+ * context for downstream handlers; 401 when there's no session. No
+ * WWW-Authenticate challenge — this is a cookie-session gate, not a Bearer
+ * scheme, and "Cookie" is not a registered RFC 7235 auth scheme. The shared
+ * session-resolution path for every signed-in self-serve surface.
+ */
+const requireSessionBase: MiddlewareHandler<Env> = async (c, next) => {
+  const auth = await getOrCreateAuth(c);
+  const session = await auth.api.getSession({ headers: c.req.raw.headers });
+  if (!session?.user?.id) {
+    return c.json({ error: "unauthorized", message: "Sign in required" }, 401);
+  }
+  c.set("session", {
+    user: { id: session.user.id, email: session.user.email, name: session.user.name },
+  });
+  await next();
+};
+
+/**
+ * Wrap `requireSessionBase` behind a feature flag — when the flag is off the
+ * surface is dark (404). Reserve this for surfaces that genuinely need a runtime
+ * rollout gate; a plain session gate (no flag) is the default for shipped
+ * features (see AGENTS.md → feature flags).
  */
 function requireSessionWithFlag(
   flagDef: FlagDef,
@@ -376,31 +394,18 @@ function requireSessionWithFlag(
     if (!(await flag(c.env.FLAGS, envValue(c.env), flagDef))) {
       return c.json({ error: "not_found", message: "Not found" }, 404);
     }
-    const auth = await getOrCreateAuth(c);
-    const session = await auth.api.getSession({ headers: c.req.raw.headers });
-    if (!session?.user?.id) {
-      // No WWW-Authenticate challenge: this is a cookie-session gate, not a Bearer
-      // scheme, and "Cookie" is not a registered RFC 7235 auth scheme.
-      return c.json({ error: "unauthorized", message: "Sign in required" }, 401);
-    }
-    c.set("session", {
-      user: { id: session.user.id, email: session.user.email, name: session.user.name },
-    });
-    await next();
+    return requireSessionBase(c, next);
   };
 }
 
-/** Self-serve API key surface gate (`/v1/api-keys`). */
+/** Self-serve API key surface gate (`/v1/api-keys`) — flag-gated rollout. */
 export const requireSession: MiddlewareHandler<Env> = requireSessionWithFlag(
   FLAGS.userApiKeysEnabled,
   (e) => e.USER_API_KEYS_ENABLED,
 );
 
-/** User follows + feed surface gate (`/v1/me/*`). */
-export const requireFollowsSession: MiddlewareHandler<Env> = requireSessionWithFlag(
-  FLAGS.userFollowsEnabled,
-  (e) => e.USER_FOLLOWS_ENABLED,
-);
+/** User follows + feed surface gate (`/v1/me/*`) — enabled by default, no flag. */
+export const requireFollowsSession: MiddlewareHandler<Env> = requireSessionBase;
 
 function createAuthMiddleware(opts: {
   allowPublicReads: boolean;
