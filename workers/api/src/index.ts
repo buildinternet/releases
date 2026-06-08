@@ -289,6 +289,12 @@ export type Env = {
     // Signing secret. Cloudflare Secrets Store binding in prod; a plain string
     // is accepted too (local .dev.vars / wrangler var). Required in prod.
     BETTER_AUTH_SECRET?: SecretBinding | string;
+    // Local-dev fallback for the signing secret (plain string, `.dev.vars` only).
+    // The same-named Secrets Store binding above shadows a plain `BETTER_AUTH_SECRET`
+    // line in `wrangler dev`, so local dev sets THIS distinct var to get a stable
+    // secret. Preferred only when the binding is unresolvable; never bound in prod.
+    // See resolveSigningSecret in src/auth/index.ts and issue #1425.
+    BETTER_AUTH_SECRET_DEV?: string;
     // Better Auth Infrastructure ("dash") API key — connects this backend to the
     // hosted admin/analytics dashboard at dash.better-auth.com via the dash()
     // plugin. Secrets Store binding in prod; plain string locally (.dev.vars).
