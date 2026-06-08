@@ -13,14 +13,8 @@ import {
 import { SOURCE_TYPES } from "@buildinternet/releases-core/source-enums";
 import { releaseCoverage } from "@releases/db/schema-coverage.js";
 import type { Env } from "../index.js";
-import {
-  orgWhere,
-  sourceMatchByIdOrSlug,
-  parseBoolParam,
-  parseReleaseMedia,
-  parseTimeWindow,
-} from "../utils.js";
-import { getLatestReleasesAcross } from "../queries/releases.js";
+import { orgWhere, sourceMatchByIdOrSlug, parseBoolParam, parseTimeWindow } from "../utils.js";
+import { getLatestReleasesAcross, mapLatestRowToReleaseItem } from "../queries/releases.js";
 import { parseExcludeSourceTypes } from "../lib/source-types.js";
 import {
   buildLatestCacheKey,
@@ -278,30 +272,7 @@ releaseRoutes.get(
         until,
         limit: count,
       });
-      return rows.map((r) => ({
-        id: r.id,
-        version: r.version,
-        type: r.type,
-        title: r.title,
-        summary: r.summary,
-        titleGenerated: r.title_generated,
-        titleShort: r.title_short,
-        publishedAt: r.published_at,
-        url: r.url,
-        media: parseReleaseMedia(r.media, mediaOrigin),
-        source: {
-          slug: r.source_slug,
-          name: r.source_name,
-          type: r.source_type,
-          orgSlug: r.org_slug,
-        },
-        product: r.product_slug
-          ? { slug: r.product_slug, name: r.product_name ?? r.product_slug }
-          : null,
-        coverageCount: r.coverage_count,
-        contentChars: r.content_chars,
-        contentTokens: r.content_tokens,
-      }));
+      return rows.map((r) => mapLatestRowToReleaseItem(r, mediaOrigin));
     };
 
     // Only the unfiltered homepage/CLI shape (and any explicitly allowlisted

@@ -1,4 +1,11 @@
+import { sql } from "drizzle-orm";
+import type { BaseSQLiteDatabase } from "drizzle-orm/sqlite-core";
+import type { ReleaseLatestItem } from "@buildinternet/releases-api-types";
 import { COVERAGE_COUNT_EXPR } from "@releases/core-internal/release-coverage-sql";
+import { parseReleaseMedia } from "../utils.js";
+
+// oxlint-disable-next-line no-explicit-any -- matches D1Db in prod, BunSQLite in tests
+type AnyDb = BaseSQLiteDatabase<any, any, any, any>;
 
 export type LatestReleaseRow = {
   id: string;
@@ -128,4 +135,91 @@ export async function getLatestReleasesAcross(
 
   const { results } = await stmt.all<LatestReleaseRow>();
   return results;
+}
+
+/**
+ * Map a raw `LatestReleaseRow` (from D1 or bun:sqlite) to the wire-protocol
+ * `ReleaseLatestItem` shape. Extracted so both the `/releases/latest` handler
+ * and the personalized feed (`getFollowedReleases`) render identically.
+ */
+export function mapLatestRowToReleaseItem(
+  r: LatestReleaseRow,
+  mediaOrigin: string,
+): ReleaseLatestItem {
+  return {
+    id: r.id,
+    version: r.version,
+    type: r.type,
+    title: r.title,
+    summary: r.summary,
+    titleGenerated: r.title_generated,
+    titleShort: r.title_short,
+    publishedAt: r.published_at,
+    url: r.url,
+    media: parseReleaseMedia(r.media, mediaOrigin),
+    source: {
+      slug: r.source_slug,
+      name: r.source_name,
+      type: r.source_type,
+      orgSlug: r.org_slug,
+    },
+    product: r.product_slug
+      ? { slug: r.product_slug, name: r.product_name ?? r.product_slug }
+      : null,
+    coverageCount: r.coverage_count,
+    contentChars: r.content_chars,
+    contentTokens: r.content_tokens,
+  } as ReleaseLatestItem;
+}
+
+export interface FollowedReleasesParams {
+  limit: number;
+  offset: number;
+}
+
+/**
+ * Releases from everything a user follows, newest first. "Follow an org =
+ * everything" is encoded by the two EXISTS sub-queries: a row matches if the
+ * user follows its source's org OR its source's product. References
+ * `user_follows` directly in SQL, so the bound-parameter count is constant
+ * regardless of how many entities the user follows. Visibility filters mirror
+ * `getLatestReleasesAcross`.
+ */
+export async function getFollowedReleases(
+  db: AnyDb,
+  userId: string,
+  params: FollowedReleasesParams,
+): Promise<LatestReleaseRow[]> {
+  return db.all<LatestReleaseRow>(sql`
+    SELECT r.id, r.version, r.title, r.summary, r.title_generated, r.title_short, r.type,
+           r.published_at, r.url, r.media,
+           r.content_chars, r.content_tokens,
+           s.slug AS source_slug, s.name AS source_name, s.type AS source_type,
+           o.slug AS org_slug,
+           p.slug AS product_slug, p.name AS product_name,
+           ${sql.raw(COVERAGE_COUNT_EXPR)} AS coverage_count
+    FROM releases_visible r
+    INNER JOIN sources_active s ON s.id = r.source_id
+    LEFT JOIN organizations o ON o.id = s.org_id
+    LEFT JOIN products_active p ON p.id = s.product_id
+    WHERE (s.is_hidden = 0 OR s.is_hidden IS NULL)
+      AND (o.is_hidden = 0 OR o.is_hidden IS NULL)
+      AND (o.deleted_at IS NULL)
+      AND (r.suppressed IS NULL OR r.suppressed = 0)
+      AND (r.prerelease IS NULL OR r.prerelease = 0)
+      AND (
+        EXISTS (SELECT 1 FROM user_follows uf
+                WHERE uf.user_id = ${userId} AND uf.target_type = 'org'
+                  AND uf.target_id = s.org_id)
+        OR EXISTS (SELECT 1 FROM user_follows uf
+                   WHERE uf.user_id = ${userId} AND uf.target_type = 'product'
+                     AND uf.target_id = s.product_id)
+      )
+    ORDER BY
+      CASE WHEN r.published_at IS NOT NULL THEN 0 ELSE 1 END,
+      r.published_at DESC,
+      r.fetched_at DESC,
+      r.id DESC
+    LIMIT ${params.limit} OFFSET ${params.offset}
+  `);
 }
