@@ -118,6 +118,14 @@ export const FLAGS = {
     env: "DEVICE_AUTHORIZATION_ENABLED",
     default: false,
   },
+  // Rollout gate: user follows + personalized feed. default:false →
+  // the /v1/me/* surface is dark (404) until flipped on in BOTH Flagship apps
+  // (releases-platform and releases-platform-staging). Off = identical to today.
+  userFollowsEnabled: {
+    key: "user-follows-enabled",
+    env: "USER_FOLLOWS_ENABLED",
+    default: false,
+  },
   cacheDisabled: { key: "cache-disabled", env: "CACHE_DISABLED", default: false },
   indexingDisabled: { key: "indexing-disabled", env: "INDEXING_DISABLED", default: false },
   extractToolLoopEnabled: {
