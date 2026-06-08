@@ -21,27 +21,23 @@ beforeEach(async () => {
   await h.db
     .insert(products)
     .values({ id: "prd_p", name: "Widget", slug: "widget", orgId: "org_a" });
-  await h.db
-    .insert(sources)
-    .values({
-      id: "src_org",
-      name: "Blog",
-      slug: "blog",
-      type: "feed",
-      url: "https://a/blog",
-      orgId: "org_a",
-    });
-  await h.db
-    .insert(sources)
-    .values({
-      id: "src_prd",
-      name: "Notes",
-      slug: "notes",
-      type: "feed",
-      url: "https://a/notes",
-      orgId: "org_a",
-      productId: "prd_p",
-    });
+  await h.db.insert(sources).values({
+    id: "src_org",
+    name: "Blog",
+    slug: "blog",
+    type: "feed",
+    url: "https://a/blog",
+    orgId: "org_a",
+  });
+  await h.db.insert(sources).values({
+    id: "src_prd",
+    name: "Notes",
+    slug: "notes",
+    type: "feed",
+    url: "https://a/notes",
+    orgId: "org_a",
+    productId: "prd_p",
+  });
   await h.db.insert(organizations).values({ id: "org_b", name: "Other", slug: "other" });
   await h.db
     .insert(sources)
@@ -68,7 +64,7 @@ describe("getFollowedReleases", () => {
   it("following an org includes its products' releases (org follow = everything)", async () => {
     await addFollow(h.db, "u1", "org", "org_a");
     const rows = await getFollowedReleases(h.db, "u1", { limit: 50, offset: 0 });
-    const ids = rows.map((r) => r.id).sort();
+    const ids = rows.map((r) => r.id).toSorted();
     expect(ids).toEqual(["rel_org", "rel_prd"]);
     expect(ids).not.toContain("rel_b");
   });

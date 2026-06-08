@@ -128,20 +128,22 @@ export async function listFollows(db: AnyDb, userId: string): Promise<EnrichedFo
     .where(eq(userFollows.userId, userId))
     .all();
 
-  const out: EnrichedFollow[] = [];
-  for (const r of rows) {
-    const entity = await resolveFollowTarget(db, r.targetType, r.targetId);
-    if (!entity) continue; // drop orphans
-    out.push({
-      targetType: r.targetType,
-      targetId: r.targetId,
-      name: entity.name,
-      slug: entity.slug,
-      avatarUrl: entity.avatarUrl,
-      orgSlug: r.targetType === "product" ? entity.orgSlug : null,
-      createdAt: r.createdAt.toISOString(),
-    });
-  }
+  const resolved = await Promise.all(
+    rows.map(async (r: (typeof rows)[number]) => {
+      const entity = await resolveFollowTarget(db, r.targetType, r.targetId);
+      if (!entity) return null;
+      return {
+        targetType: r.targetType,
+        targetId: r.targetId,
+        name: entity.name,
+        slug: entity.slug,
+        avatarUrl: entity.avatarUrl,
+        orgSlug: r.targetType === "product" ? entity.orgSlug : null,
+        createdAt: r.createdAt.toISOString(),
+      } satisfies EnrichedFollow;
+    }),
+  );
+  const out = resolved.filter((x): x is EnrichedFollow => x !== null);
   out.sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0));
   return out;
 }
