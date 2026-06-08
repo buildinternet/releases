@@ -148,6 +148,19 @@ grants `read`/`write`/`admin` on those surfaces.
   gate on the previously-unauthenticated MCP path (constraint carried from
   #1482). JWT principals have no `api_tokens` row, so the `last_used_at` machine
   lane is skipped for their `oauth_<sub>` token id.
+- **Discovery surface.** The REST API worker is itself an OAuth resource server,
+  so it serves its own RFC 9728 metadata at
+  `GET /.well-known/oauth-protected-resource` (`{ resource: <API origin>,
+authorization_servers: [<origin>/api/auth], scopes_supported,
+bearer_methods_supported }`, built by `buildApiProtectedResourceMetadata` in
+  `oauth-discovery.ts`), mirroring the MCP worker's surface (see
+  [mcp.md → OAuth discovery surface](mcp.md#oauth-discovery-surface-rfc-9728)).
+  `resource` is the bare origin (= the verified `aud`); the issuer carries the
+  `/api/auth` basePath. The verifier fetches JWKS from
+  `${issuer}/api/auth/jwks` server-to-server, so the **staging access gate
+  exempts `/api/auth/jwks`** (`STAGING_GATE_EXEMPT_PATHS` in
+  `middleware/staging-access.ts`) — that outbound fetch can't carry the staging
+  key, and JWKS is public key material in prod anyway.
 
 ## On-demand AI admin endpoints
 

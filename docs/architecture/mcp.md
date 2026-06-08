@@ -51,6 +51,8 @@ The MCP authorization spec (2025-06-18) requires an MCP server, acting as an OAu
 
 **Deliberate stance — anonymous read is preserved.** The MCP server is a public changelog registry, so this is _not_ a fully-protected resource: a **tokenless** request still resolves to anonymous `read` and never receives a 401. Only a request that presents an invalid OAuth credential is challenged. This intentionally diverges from the spec's "401 on any tokenless connect" model, which would break public read.
 
+The REST API worker is also an OAuth resource server and serves its own RFC 9728 metadata at `api.releases.sh/.well-known/oauth-protected-resource` (`resource` = the API origin); see [remote-mode.md → Auth model](remote-mode.md#auth-model). Its server-to-server JWKS fetch is why the staging access gate exempts `/api/auth/jwks`.
+
 ## MCP App UIs (`workers/mcp/ui/`)
 
 Hosts that support the MCP Apps extension (Claude Desktop is the first) render a tool's response as an interactive UI when the tool advertises `_meta.ui.resourceUri`. Each UI is a single self-contained HTML resource registered alongside the existing entity resources. Hosts without UI support fall back to the markdown text in `content[0].text`, so every UI-enabled tool keeps its text rendering intact.
