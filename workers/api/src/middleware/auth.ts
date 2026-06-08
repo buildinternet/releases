@@ -10,6 +10,7 @@ import {
   scopeSatisfies,
   USER_API_KEY_PREFIX,
 } from "@buildinternet/releases-core/api-token";
+import { isJwtShaped, verifyOAuthJwt, type OAuthJwtConfig } from "@releases/lib/oauth-jwt";
 import { createDb } from "../db.js";
 import { touchLastUsed, verifyApiToken } from "./token-store.js";
 import type { Env } from "../index.js";
@@ -20,6 +21,13 @@ export const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
 /** Custom header carrying the trusted-proxy shared secret. */
 export const PROXY_KEY_HEADER = "X-Releases-Proxy-Key";
+
+/**
+ * `tokenId` prefix for an OAuth-JWT principal (#1483). These identities have no
+ * `api_tokens` row, so the machine-lane `last_used_at` UPDATE is skipped for
+ * them — same treatment as the `relu_` user-key lane.
+ */
+export const OAUTH_JWT_TOKEN_PREFIX = "oauth_";
 
 /** Resolved identity attached to the Hono context for downstream handlers. */
 export type AuthContext =
@@ -61,6 +69,24 @@ type ResolvedAuth =
 function bearer(c: Context<Env>): string {
   const header = c.req.header("Authorization") ?? "";
   return header.startsWith("Bearer ") ? header.slice(7) : "";
+}
+
+/**
+ * Resource-server config for verifying "Sign in with Releases" OAuth JWTs
+ * (#1483). The API worker is its own audience: issuer + audience = the
+ * `BETTER_AUTH_URL` origin (the AS origin). Returns null when no origin can be
+ * resolved (e.g. local dev without BETTER_AUTH_URL) — the JWT lane is then
+ * simply inert. The JWKS URL is derived as `${origin}/api/auth/jwks`.
+ */
+function oauthJwtConfig(env: Env["Bindings"]): OAuthJwtConfig | null {
+  if (!env.BETTER_AUTH_URL) return null;
+  let origin: string;
+  try {
+    origin = new URL(env.BETTER_AUTH_URL).origin;
+  } catch {
+    return null;
+  }
+  return { issuer: origin, audience: origin };
 }
 
 /**
@@ -175,6 +201,30 @@ async function resolveAuthUncached(
       return { kind: "none", skip: false };
     const result = await verifyApiToken(createDb(c.env.DB), presented);
     if (result.ok) return { kind: "token", tokenId: result.tokenId, scopes: result.scopes };
+    return { kind: "none", skip: false };
+  }
+
+  // "Sign in with Releases" OAuth JWT access tokens (#1483). Verified locally
+  // against the AS JWKS (no prefix — the static root key is never JWT-shaped, so
+  // this never shadows the root-key compare below). The `scope` claim is already
+  // role-clamped at issuance (entitlement.ts), so the resource server trusts it.
+  // A verification failure (bad sig / wrong iss|aud / expired) falls through to
+  // `none`, identical to an invalid relk_: 401 on a write/admin route, ignored
+  // on a public read.
+  if (isJwtShaped(presented)) {
+    const cfg = oauthJwtConfig(c.env);
+    if (!cfg) return { kind: "none", skip: false };
+    // Test seam: a locally-injected JWKS resolver avoids a network fetch.
+    const resolver = c.get("oauthJwtKeyResolver");
+    if (resolver) cfg.keyResolver = resolver;
+    const verified = await verifyOAuthJwt(presented, cfg);
+    if (verified && verified.scopes.length > 0) {
+      return {
+        kind: "token",
+        tokenId: `oauth_${verified.subject ?? "m2m"}`,
+        scopes: verified.scopes,
+      };
+    }
     return { kind: "none", skip: false };
   }
 
@@ -295,9 +345,10 @@ function recordAuth(
   c.set("auth", auth);
   if (auth.kind !== "token") return;
   const tokenId = auth.tokenId;
-  // User API keys (relu_) are metered by Better Auth's apikey table, not the
-  // api_tokens last_used path; skip the (zero-row) machine-lane UPDATE for them.
-  if (isUserApiKeyShaped(tokenId)) return;
+  // User API keys (relu_) are metered by Better Auth's apikey table, and OAuth
+  // JWT principals (oauth_) have no api_tokens row at all; skip the (zero-row)
+  // machine-lane last_used UPDATE for both.
+  if (isUserApiKeyShaped(tokenId) || tokenId.startsWith(OAUTH_JWT_TOKEN_PREFIX)) return;
   try {
     c.executionCtx.waitUntil(touchLastUsed(createDb(c.env.DB), tokenId).catch(() => undefined));
   } catch {

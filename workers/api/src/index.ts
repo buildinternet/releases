@@ -7,6 +7,7 @@ import {
   tokensAuthMiddleware,
 } from "./middleware/auth.js";
 import type { AuthContext, AuthSessionContext } from "./middleware/auth.js";
+import type { JWTVerifyGetKey } from "@releases/lib/oauth-jwt";
 import { createAuth, authCorsMiddleware, type BetterAuthInstance } from "./auth/index.js";
 import {
   oauthSelfServiceGuard,
@@ -335,6 +336,11 @@ export type Env = {
     session?: AuthSessionContext;
     /** Test seam: an injected Better Auth instance; real requests build one per call. */
     betterAuth?: BetterAuthInstance;
+    /**
+     * Test seam: a local JWKS resolver for OAuth-JWT verification. Real requests
+     * leave this unset and the JWKS is fetched from the AS endpoint.
+     */
+    oauthJwtKeyResolver?: JWTVerifyGetKey;
   };
 };
 

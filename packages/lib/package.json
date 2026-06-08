@@ -15,12 +15,14 @@
     "./log-event": "./src/log-event.ts",
     "./logger": "./src/logger.ts",
     "./ma-rate-limit": "./src/ma-rate-limit.ts",
+    "./oauth-jwt": "./src/oauth-jwt.ts",
     "./prompt-escape": "./src/prompt-escape.ts",
     "./secrets": "./src/secrets.ts",
     "./source-edit": "./src/source-edit.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "catalog:",
-    "@buildinternet/releases-core": "workspace:*"
+    "@buildinternet/releases-core": "workspace:*",
+    "jose": "^6.2.2"
   }
 }

@@ -115,6 +115,40 @@ session-gated self-service write endpoints (`/api/auth/oauth2/{create,update,
 delete}-client`, `/api/auth/oauth2/client/rotate-secret`) are restricted to `role=admin`.
 The #1480 entitlement ceiling still applies regardless of client trust.
 
+### Resource-server JWT verification (#1483)
+
+The REST API worker and the MCP worker accept the AS's JWT access tokens as a
+fifth credential lane (alongside `relk_`, `relu_`, the static root key, and — REST
+only — the Better Auth session cookie). A "Sign in with Releases" token thus
+grants `read`/`write`/`admin` on those surfaces.
+
+- **Shared verifier** — `@releases/lib/oauth-jwt` (`isJwtShaped`,
+  `verifyOAuthJwt`, `extractApiScopes`). Worker-safe and deliberately
+  **better-auth-free**: `workers/mcp` must not import the AS (the zod-pin would
+  split zod and break the MCP SDK's nested-zod tool schemas), so verification is
+  `jose.jwtVerify` against a cached `createRemoteJWKSet(${issuer}/api/auth/jwks)`.
+  It checks the signature, `iss`, `aud`, and `exp`, and returns `null` on any
+  failure (callers treat that exactly like an invalid opaque token).
+- **Scope** comes from the token's `scope` claim, intersected with the
+  `read`/`write`/`admin` ladder. The claim is already clamped to the user's live
+  role at issuance (`customAccessTokenClaims` → entitlement.ts), so the resource
+  server **trusts it and never re-derives scope**.
+- **Issuer / audience.** Issuer = the AS origin (`BETTER_AUTH_URL`,
+  `https://api.releases.sh` in prod). The API worker's own audience is that same
+  origin; the MCP worker's audience is its origin (`https://mcp.releases.sh`,
+  already in `OAUTH_RESOURCE_AUDIENCES`), set via the MCP wrangler vars
+  `OAUTH_JWT_ISSUER` / `OAUTH_JWT_AUDIENCE` (staging overrides both). A token
+  minted for the MCP audience won't pass the API worker's audience check, and
+  vice-versa.
+- **Additive, fail-consistent.** A JWT principal carries no forwardable
+  credential (`token: null`), so MCP downstream `/v1/lookups` calls fall back to
+  the root key (same as the `relu_` lane) and a JWT identity does **not** open
+  the mcp-staging access gate. A verification failure is ignored on a public
+  read (stays public) and rejected on a write/admin route — never a new mandatory
+  gate on the previously-unauthenticated MCP path (constraint carried from
+  #1482). JWT principals have no `api_tokens` row, so the `last_used_at` machine
+  lane is skipped for their `oauth_<sub>` token id.
+
 ## On-demand AI admin endpoints
 
 `POST /v1/workflows/summarize` and `POST /v1/workflows/compare` generate summaries and comparisons via Anthropic on demand. Both are gated by `authMiddleware` and fail with 503 when `ANTHROPIC_API_KEY` is unset. They are distinct from `POST /v1/sources/:slug/summaries`, which upserts a pre-generated row into `release_summaries`. Payload: `summarize` takes exactly one of `source` / `org` (slug or id) plus optional `days` and `instructions`; `compare` takes `sourceA` / `sourceB` plus optional `days`. Each success writes a `usage_log` row tagged with operation `summarize` / `compare`. Prompts live in `workers/api/src/routes/workflows.ts`.
