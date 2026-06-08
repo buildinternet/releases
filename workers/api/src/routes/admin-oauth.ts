@@ -63,7 +63,7 @@ adminOauthRoutes.post("/admin/oauth/clients", async (c) => {
     b.type === "web" || b.type === "native" || b.type === "user-agent-based" ? b.type : undefined;
 
   const input: CreateClientInput = {
-    name: typeof b.name === "string" ? b.name : undefined,
+    name: typeof b.name === "string" && b.name.length > 0 ? b.name : undefined,
     redirectUris,
     scopes,
     trusted: b.trusted === true,
@@ -133,7 +133,9 @@ adminOauthRoutes.patch("/admin/oauth/clients/:clientId", async (c) => {
     actor: "root-key",
   });
 
-  return c.json((await getOAuthClient(adapter, clientId))!);
+  const updated = await getOAuthClient(adapter, clientId);
+  if (!updated) return c.json({ error: "client_not_found" }, 404);
+  return c.json(updated);
 });
 
 adminOauthRoutes.post("/admin/oauth/clients/:clientId/rotate-secret", async (c) => {
