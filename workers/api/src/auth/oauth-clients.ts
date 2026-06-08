@@ -63,6 +63,7 @@ export interface PublicOAuthClient {
   updatedAt: unknown;
 }
 
+/** Returns a 32-character alphabetic string (a-zA-Z). */
 export function generateClientSecret(): string {
   return generateRandomString(32, "a-z", "A-Z");
 }
@@ -96,10 +97,11 @@ export async function createOAuthClient(
 ): Promise<{ client: PublicOAuthClient; secret?: string }> {
   const isPublic = input.tokenEndpointAuthMethod === "none";
   const rawSecret = isPublic ? undefined : generateClientSecret();
+  const storedSecret = rawSecret ? await hashClientSecret(rawSecret) : undefined;
   const now = new Date();
   const data: Record<string, unknown> = {
     clientId: generateRandomString(32, "a-z", "A-Z"),
-    clientSecret: rawSecret ? await hashClientSecret(rawSecret) : undefined,
+    ...(storedSecret ? { clientSecret: storedSecret } : {}),
     name: input.name ?? null,
     redirectUris: input.redirectUris,
     scopes: input.scopes,

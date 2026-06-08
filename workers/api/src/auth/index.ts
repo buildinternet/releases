@@ -16,6 +16,7 @@ import { FLAGS, flag } from "@releases/lib/flags";
 import { USER_API_KEY_PREFIX, DEVICE_AUTH_CLIENT_ID } from "@buildinternet/releases-core/api-token";
 import { oauthAccessTokenClaims, consentScopeViolation } from "./entitlement.js";
 import { scopeToPermissions } from "./api-key-scope.js";
+import { CLIENT_SECRET_PREFIX } from "./oauth-clients.js";
 import {
   USER_API_KEY_MAX_ACTIVE,
   API_KEY_LIMIT_CODE,
@@ -617,7 +618,7 @@ export async function createAuth(
       allowDynamicClientRegistration: false, // sub-project 4 enables this
       // Set-once before first deploy (changing later orphans live tokens). Extends
       // the existing relk_/relu_ credential family. Access tokens are JWTs (no prefix).
-      prefix: { refreshToken: "relo_", clientSecret: "reloc_" },
+      prefix: { refreshToken: "relo_", clientSecret: CLIENT_SECRET_PREFIX },
       // Per-user entitlement backstop + role claim. Runs at every user-token
       // issuance (authorization_code, refresh re-issue) and introspection, so no
       // token can carry scopes beyond the user's live role — even via a
