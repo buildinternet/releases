@@ -38,6 +38,8 @@ Don't `wrangler d1 execute --local --file <migration>` to patch a single table �
 
 Auth brute-force **rate limiting** is D1-backed and **fail-closed in deployed prod** (on whenever `ENVIRONMENT === "production"`, never coupled to the signing secret — a broken secret must not silently drop protection). To skip it during local sign-in testing, set `AUTH_RATE_LIMIT_DISABLED=true` in `workers/api/.dev.vars` (explicit opt-out; defaults OFF so prod stays protected). Otherwise local mirrors prod once the `rate_limit` table exists (`db:reset:local`).
 
+The Better Auth **signing secret** in local dev comes from `BETTER_AUTH_SECRET_DEV` in `workers/api/.dev.vars`, NOT `BETTER_AUTH_SECRET`: the latter is a Secrets Store binding that `wrangler dev` can't resolve locally, and a same-named plain `.dev.vars` line is shadowed by the binding, so the worker silently fell back to an ephemeral per-restart secret (#1425). Set a stable `BETTER_AUTH_SECRET_DEV=<any-string>` to keep local sessions across `dev:api` restarts and make HS256 tokens forgeable for tests; `resolveSigningSecret` prefers it only when the binding is unresolvable (never in prod, where the binding resolves and the var is unset). Never put the prod `BETTER_AUTH_SECRET` on a laptop — it signs every prod session.
+
 ## Workspaces and carved-out packages
 
 Root `package.json` declares `workers/api`, `web`, and `packages/*` as workspaces. `workers/discovery/`, `workers/mcp/`, and `workers/webhooks/` are intentionally excluded — wrangler manages their dependencies independently.

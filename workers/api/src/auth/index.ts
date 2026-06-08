@@ -81,6 +81,34 @@ async function resolveSecret(value: SecretLike): Promise<string | null> {
   }
 }
 
+/**
+ * Resolve the Better Auth signing secret, with a local-dev fallback.
+ *
+ * In deployed envs `BETTER_AUTH_SECRET` is a Secrets Store binding (validated at
+ * deploy). In local `wrangler dev` that binding can't reach the Secrets Store, and
+ * — the footgun — a same-named `.dev.vars` plain string does NOT override it
+ * (wrangler binds the store binding), so the signing secret silently became an
+ * ephemeral per-restart random value (#1425). We therefore read a DISTINCT
+ * plain-string var, `BETTER_AUTH_SECRET_DEV`, and prefer it only when the binding
+ * is unresolvable: local dev gets a stable secret (sessions survive restarts,
+ * tokens are mintable for tests) without the prod secret ever touching a laptop.
+ *
+ * Safe in prod: the binding resolves there so its value wins, and
+ * `BETTER_AUTH_SECRET_DEV` is never bound in deployed envs anyway. Deliberately
+ * NOT gated on `ENVIRONMENT` — local `wrangler dev` defaults `ENVIRONMENT` to
+ * `production`, so such a gate would disable the fallback exactly where it's needed.
+ */
+export async function resolveSigningSecret(env: {
+  BETTER_AUTH_SECRET?: SecretLike;
+  BETTER_AUTH_SECRET_DEV?: string;
+}): Promise<string | null> {
+  // `||`, not `??`: an empty-string secret is never usable, so an empty/unresolved
+  // binding must fall through to the dev var (and an empty dev var to null) — the
+  // same "no usable value" rule getSecretWithFallback uses.
+  const resolved = await resolveSecret(env.BETTER_AUTH_SECRET);
+  return resolved || env.BETTER_AUTH_SECRET_DEV || null;
+}
+
 type SocialProvider = {
   clientId: string;
   clientSecret: string;
@@ -493,16 +521,19 @@ export async function createAuth(
   /** Test-only injection — a capturing email sender and/or an in-memory DB. Production passes neither. */
   deps: CreateAuthDeps = {},
 ) {
-  const secret = (await resolveSecret(env.BETTER_AUTH_SECRET)) ?? undefined;
+  const secret = (await resolveSigningSecret(env)) ?? undefined;
   if (!secret) {
     // Deployed envs supply this via the Secrets Store binding (validated at
-    // deploy). An unresolved secret here is expected only in local `wrangler
-    // dev` (no .dev.vars) — Better Auth falls back to an ephemeral dev secret.
-    // Logged at warn so a genuine deployed-env misconfig surfaces in Workers Logs.
+    // deploy). An unresolved secret here is expected only in local `wrangler dev`
+    // with neither the binding nor `BETTER_AUTH_SECRET_DEV` set — Better Auth then
+    // falls back to an ephemeral dev secret. Logged at warn so a genuine
+    // deployed-env misconfig surfaces in Workers Logs.
     logEvent("warn", {
       component: "auth",
       event: "secret-unresolved",
-      message: "BETTER_AUTH_SECRET unresolved; Better Auth will use an ephemeral dev secret",
+      message:
+        "BETTER_AUTH_SECRET unresolved (and no BETTER_AUTH_SECRET_DEV fallback); " +
+        "Better Auth will use an ephemeral dev secret",
       environment: env.ENVIRONMENT,
     });
   }
