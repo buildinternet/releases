@@ -451,6 +451,24 @@ app.get("/.well-known/oauth-authorization-server", async (c) =>
 app.get("/.well-known/openid-configuration", async (c) =>
   forwardWellKnown(await createAuth(c.env), "openid-configuration", c.req.url, c.req.raw.headers),
 );
+// RFC 8414 §3.1 path-aware form. Our issuer carries a path component
+// (`https://api.releases.sh/api/auth`), so a strict client constructs the
+// metadata URL by INSERTING the well-known segment between host and path —
+// `…/.well-known/oauth-authorization-server/api/auth` — rather than appending
+// it. Serve those alongside the root aliases so issuer-derived discovery
+// resolves either way. `forwardWellKnown` rewrites to the Better Auth path
+// regardless of the inbound path, so the same handler answers both forms.
+app.get("/.well-known/oauth-authorization-server/api/auth", async (c) =>
+  forwardWellKnown(
+    await createAuth(c.env),
+    "oauth-authorization-server",
+    c.req.url,
+    c.req.raw.headers,
+  ),
+);
+app.get("/.well-known/openid-configuration/api/auth", async (c) =>
+  forwardWellKnown(await createAuth(c.env), "openid-configuration", c.req.url, c.req.raw.headers),
+);
 app.get("/.well-known/oauth-protected-resource", (c) =>
   Response.json(buildApiProtectedResourceMetadata(c.env), {
     headers: { "Cache-Control": "public, max-age=3600" },

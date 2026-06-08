@@ -213,4 +213,27 @@ describe("forwardWellKnown discovery alias", () => {
     expect(seenPath).toBe("/api/auth/.well-known/openid-configuration");
     expect(res.headers.get("access-control-allow-origin")).toBe("*");
   });
+
+  it("forwards the RFC 8414 path-aware inbound form to the same Better Auth path", async () => {
+    // Issuer = https://api.releases.sh/api/auth, so a strict client builds
+    // `/.well-known/oauth-authorization-server/api/auth`. forwardWellKnown
+    // replaces the inbound path wholesale, so the path-aware route resolves to
+    // the same upstream document as the root alias.
+    let seenPath: string | undefined;
+    const fakeAuth = {
+      handler: async (req: Request) => {
+        seenPath = new URL(req.url).pathname;
+        return new Response("{}", { status: 200, headers: { "content-type": "application/json" } });
+      },
+    };
+    const res = await forwardWellKnown(
+      fakeAuth,
+      "oauth-authorization-server",
+      "https://api.releases.localhost/.well-known/oauth-authorization-server/api/auth",
+      new Headers(),
+    );
+    expect(seenPath).toBe("/api/auth/.well-known/oauth-authorization-server");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("access-control-allow-origin")).toBe("*");
+  });
 });
