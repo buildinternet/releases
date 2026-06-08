@@ -37,6 +37,7 @@ import { sweepSearchQueries } from "./cron/sweep-search-queries.js";
 import { sweepTombstones } from "./cron/sweep-tombstones.js";
 import { scanStaleFirecrawlSources } from "./cron/firecrawl-staleness.js";
 import { wellKnownSync } from "./cron/well-known-sync.js";
+import { sweepOauthClients } from "./cron/sweep-oauth-clients.js";
 import { sendAlert, type AlertEnv } from "./lib/send-alert.js";
 import { logEvent } from "@releases/lib/log-event";
 import { dbErrorLogFields } from "@releases/lib/db-errors";
@@ -241,6 +242,12 @@ export type Env = {
     // rows older than this many days are hard-purged by the nightly 05:30 UTC
     // sweep. Default 30. See workers/api/src/cron/sweep-tombstones.ts (#666).
     TOMBSTONE_RETENTION_DAYS?: string;
+    // Stale OAuth-client reaper (nightly 07:00 UTC). Retention window in days
+    // (default 30) for abandoned dynamic-registration clients; the enable flag
+    // gates delete-vs-observe (fallback for `oauth-client-reaper-enabled`). See
+    // workers/api/src/cron/sweep-oauth-clients.ts.
+    OAUTH_CLIENT_REAPER_RETENTION_DAYS?: string;
+    OAUTH_CLIENT_REAPER_ENABLED?: string;
     // Staging-only shared secret — see middleware/staging-access.ts. Absent
     // everywhere outside `[env.staging]`, so the gate no-ops for prod/local.
     STAGING_ACCESS_KEY?: SecretBinding;
@@ -802,6 +809,22 @@ export default {
             FLAGS: env.FLAGS,
             WELL_KNOWN_SYNC_ENABLED: env.WELL_KNOWN_SYNC_ENABLED,
             CRON_ENABLED: env.CRON_ENABLED,
+          }),
+          alertEnv,
+        ),
+      );
+      return;
+    }
+    if (event.cron === "0 7 * * *") {
+      ctx.waitUntil(
+        loggedDispatch(
+          "sweep-oauth-clients-cron",
+          sweepOauthClients({
+            DB: env.DB,
+            CRON_ENABLED: env.CRON_ENABLED,
+            FLAGS: env.FLAGS,
+            OAUTH_CLIENT_REAPER_ENABLED: env.OAUTH_CLIENT_REAPER_ENABLED,
+            OAUTH_CLIENT_REAPER_RETENTION_DAYS: env.OAUTH_CLIENT_REAPER_RETENTION_DAYS,
           }),
           alertEnv,
         ),
