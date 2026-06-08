@@ -88,7 +88,9 @@ export default async function OrgSlugPage({
     if (org.products.length <= 1) {
       permanentRedirect(`/${orgSlug}`);
     }
-    return <ProductView orgSlug={orgSlug} orgName={org.name} product={resolved.product} />;
+    return (
+      <ProductView orgSlug={orgSlug} orgName={org.name} orgId={org.id} product={resolved.product} />
+    );
   }
 
   // Source branch: preserve the legacy `?tab=` deep-link redirect to the
