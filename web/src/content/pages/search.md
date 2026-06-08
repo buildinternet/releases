@@ -22,7 +22,7 @@ Other read-only tools are exposed the same way: `list_organizations`, `get_organ
 
 ## Remote MCP server
 
-Add `https://mcp.releases.sh` to your agent's MCP configuration and call `search` (or any other tool) through the MCP transport. See [/docs/api/mcp](/docs/api/mcp) for the full tool catalog.
+Add `https://mcp.releases.sh/mcp` to your agent's MCP configuration and call `search` (or any other tool) through the MCP transport. See [/docs/api/mcp](/docs/api/mcp) for the full tool catalog.
 
 ## REST API
 
