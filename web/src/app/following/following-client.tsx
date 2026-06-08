@@ -19,17 +19,25 @@ export function FollowingClient() {
 
   useEffect(() => {
     if (!session?.user) return;
+    let cancelled = false;
     setLoading(true);
     setError(null);
     Promise.all([listFollows(), getFeed(1, 30)])
       .then(([fl, feedResp]) => {
+        if (cancelled) return;
         setFollowsList(fl);
         setFeedItems(feedResp.items);
       })
       .catch((err: unknown) => {
+        if (cancelled) return;
         setError(err instanceof Error ? err.message : "Failed to load your feed.");
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [session?.user?.id]);
 
   if (isPending) {
@@ -89,15 +97,19 @@ export function FollowingClient() {
               <FollowRow
                 key={`${f.targetType}:${f.targetId}`}
                 follow={f}
-                onUnfollow={() => {
-                  follows?.toggle(f.targetType, f.targetId).catch(() => {
-                    /* ignore — provider handles rollback */
-                  });
+                onUnfollow={async () => {
+                  // Optimistically drop from the sidebar; restore on failure so the
+                  // local list stays in sync with the provider's own rollback.
                   setFollowsList((prev) =>
                     prev.filter(
                       (x) => !(x.targetType === f.targetType && x.targetId === f.targetId),
                     ),
                   );
+                  try {
+                    await follows?.toggle(f.targetType, f.targetId);
+                  } catch {
+                    setFollowsList((prev) => [...prev, f]);
+                  }
                 }}
               />
             ))}
@@ -153,13 +165,20 @@ function FeedRow({ item }: { item: ReleaseLatestItem }) {
   );
 }
 
-function FollowRow({ follow: f, onUnfollow }: { follow: Follow; onUnfollow: () => void }) {
+function FollowRow({
+  follow: f,
+  onUnfollow,
+}: {
+  follow: Follow;
+  onUnfollow: () => void | Promise<void>;
+}) {
   return (
     <li className="flex items-center justify-between gap-2">
       <span className="text-sm text-stone-700 dark:text-stone-300 truncate">{f.name}</span>
       <button
         type="button"
-        onClick={onUnfollow}
+        onClick={() => void onUnfollow()}
+        aria-label={`Unfollow ${f.name}`}
         className="shrink-0 text-[12px] text-stone-400 dark:text-stone-500 hover:text-stone-700 dark:hover:text-stone-300 transition-colors"
       >
         Unfollow
