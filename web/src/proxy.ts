@@ -43,6 +43,14 @@ export function proxy(request: NextRequest) {
     // Fall through to Next.js so unrelated `.txt` paths (none today) keep working.
   }
 
+  // `/auth.md` is the agent-auth instruction file (served from `public/`), not a
+  // markdown representation of an `/auth` page. Without this guard the suffix
+  // matcher below would rewrite it to `/api/format/auth` and try to render a
+  // (non-existent) "auth" org as markdown. Let it fall through to the static file.
+  if (pathname === "/auth.md") {
+    return NextResponse.next();
+  }
+
   // Explicit suffix routes — skip Accept negotiation.
   if (pathname === "/docs.md") {
     return rewriteTo(request, "/api/docs/index");
