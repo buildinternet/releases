@@ -18,7 +18,9 @@ import {
 import { resolveMcpAuth, machineTokenIdForUsage } from "../../workers/mcp/src/auth.js";
 import type { Env } from "../../workers/mcp/src/mcp-agent.js";
 
-const ISSUER = "https://api.releases.sh";
+// The AS's canonical issuer = Better Auth base URL incl. the /api/auth basePath
+// (matches token `iss` + DEFAULT_OAUTH_ISSUER in workers/mcp/src/auth.ts).
+const ISSUER = "https://api.releases.sh/api/auth";
 const AUDIENCE = "https://mcp.releases.sh";
 
 const mockSecret = (v: string) => ({ get: () => Promise.resolve(v) });

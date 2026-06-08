@@ -17,7 +17,8 @@ import { authMiddleware, publicReadAuthMiddleware } from "../src/middleware/auth
  * token, using the `oauthJwtKeyResolver` context seam so no JWKS is fetched.
  */
 
-const ORIGIN = "https://api.releases.sh"; // issuer === audience for the API worker
+const ORIGIN = "https://api.releases.sh"; // the API worker's audience (the resource identifier)
+const ISSUER = `${ORIGIN}/api/auth`; // the AS's canonical iss (Better Auth base URL incl. basePath)
 
 let privateKey: CryptoKey;
 let keyResolver: JWTVerifyGetKey;
@@ -34,7 +35,7 @@ beforeAll(async () => {
 async function jwt(scope: string, opts: { aud?: string; iss?: string } = {}): Promise<string> {
   return new SignJWT({ scope })
     .setProtectedHeader({ alg: "RS256", kid: "k1" })
-    .setIssuer(opts.iss ?? ORIGIN)
+    .setIssuer(opts.iss ?? ISSUER)
     .setAudience(opts.aud ?? ORIGIN)
     .setSubject("user_42")
     .setIssuedAt()

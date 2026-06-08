@@ -25,8 +25,10 @@
     "USER_API_KEYS_ENABLED": "false",
     "MEDIA_ORIGIN": "https://media.releases.sh",
     // "Sign in with Releases" OAuth resource-server verification (#1483). The AS
-    // origin (issuer + JWKS host) and this worker's expected token audience.
-    "OAUTH_JWT_ISSUER": "https://api.releases.sh",
+    // issuer (Better Auth base URL incl. the /api/auth basePath — matches the
+    // discovery `issuer` + token `iss`; the JWKS host is derived origin-relative)
+    // and this worker's expected token audience.
+    "OAUTH_JWT_ISSUER": "https://api.releases.sh/api/auth",
     "OAUTH_JWT_AUDIENCE": "https://mcp.releases.sh",
     // Embedding provider for semantic search. Default: voyage (voyage-4-lite,
     // requested at 512 dims via output_dimension to match the Vectorize indexes).
@@ -109,8 +111,9 @@
         "USER_API_KEYS_ENABLED": "false",
         "MEDIA_ORIGIN": "https://media.releases.sh",
         "EMBEDDING_PROVIDER": "voyage",
-        // OAuth resource-server verification (#1483) — staging AS + audience.
-        "OAUTH_JWT_ISSUER": "https://api-staging.releases.sh",
+        // OAuth resource-server verification (#1483) — staging AS issuer (incl.
+        // /api/auth basePath, matching token `iss`) + this worker's audience.
+        "OAUTH_JWT_ISSUER": "https://api-staging.releases.sh/api/auth",
         "OAUTH_JWT_AUDIENCE": "https://mcp-staging.releases.sh",
         // Staging-only: emit X-Robots-Tag: noindex and serve a deny-all
         // /robots.txt. Belt-and-suspenders against crawling.

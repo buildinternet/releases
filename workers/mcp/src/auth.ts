@@ -23,8 +23,13 @@ const STAGING_KEY_HEADER = "X-Releases-Staging-Key";
 /** `tokenId` prefix for an OAuth-JWT principal (#1483). No api_tokens row exists. */
 const OAUTH_JWT_TOKEN_PREFIX = "oauth_";
 
-/** Default AS origin (issuer) when `OAUTH_JWT_ISSUER` is unset — prod. */
-const DEFAULT_OAUTH_ISSUER = "https://api.releases.sh";
+/**
+ * Default AS issuer when `OAUTH_JWT_ISSUER` is unset — prod. This is the Better
+ * Auth base URL *including* the `/api/auth` basePath (matches the discovery
+ * `issuer` + token `iss`); the bare origin would fail jose's exact `iss` match
+ * and reject every real token (#1483 issuer-mismatch fix).
+ */
+const DEFAULT_OAUTH_ISSUER = "https://api.releases.sh/api/auth";
 /** Default audience (this MCP worker) when `OAUTH_JWT_AUDIENCE` is unset — prod. */
 const DEFAULT_OAUTH_AUDIENCE = "https://mcp.releases.sh";
 

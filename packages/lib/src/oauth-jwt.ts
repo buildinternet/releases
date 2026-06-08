@@ -18,11 +18,17 @@ export type { JWTVerifyGetKey } from "jose";
 const API_SCOPES = new Set(["read", "write", "admin"]);
 
 export interface OAuthJwtConfig {
-  /** Expected `iss` — the AS origin (e.g. `https://api.releases.sh`). */
+  /**
+   * Expected `iss` — the AS's canonical issuer, which is the Better Auth base
+   * URL *including* its `/api/auth` basePath (matches the discovery `issuer` and
+   * the token `iss` claim), e.g. `https://api.releases.sh/api/auth`. NOT the bare
+   * origin — jose does an exact `iss` match, so a bare-origin issuer rejects
+   * every real token (#1483 issuer-mismatch fix).
+   */
   issuer: string;
   /** Expected `aud` — this resource server's audience (e.g. `https://mcp.releases.sh`). */
   audience: string;
-  /** JWKS endpoint. Defaults to `${issuer}/api/auth/jwks`. */
+  /** JWKS endpoint. Defaults to the issuer's origin + `/api/auth/jwks` (see `defaultJwksUrl`). */
   jwksUrl?: string;
   /**
    * Test seam: a pre-built key resolver (e.g. `createLocalJWKSet(publicJwks)`).
@@ -83,12 +89,27 @@ export function extractApiScopes(payload: JWTPayload): string[] {
   return out;
 }
 
+/**
+ * Default JWKS endpoint for an issuer. The AS's canonical issuer is the Better
+ * Auth base URL *including* its `/api/auth` basePath (matching the discovery
+ * doc's `issuer` and the token `iss` claim), e.g.
+ * `https://api.releases.sh/api/auth`. Resolving `/api/auth/jwks` as an
+ * ORIGIN-relative path (leading slash) yields `${origin}/api/auth/jwks`
+ * regardless of whether `issuer` already carries the `/api/auth` suffix — so a
+ * suffixed issuer doesn't double up to `…/api/auth/api/auth/jwks`. (Earlier
+ * string concatenation broke exactly this way once the issuer was corrected to
+ * the suffixed form; #1483 issuer-mismatch fix.)
+ */
+export function defaultJwksUrl(issuer: string): string {
+  return new URL("/api/auth/jwks", issuer).href;
+}
+
 /** Module-level memo so each JWKS URL is fetched once per cold start / rotation. */
 const remoteKeySets = new Map<string, JWTVerifyGetKey>();
 
 function resolveKeySet(config: OAuthJwtConfig): JWTVerifyGetKey {
   if (config.keyResolver) return config.keyResolver;
-  const url = config.jwksUrl ?? `${config.issuer.replace(/\/+$/, "")}/api/auth/jwks`;
+  const url = config.jwksUrl ?? defaultJwksUrl(config.issuer);
   let set = remoteKeySets.get(url);
   if (!set) {
     set = createRemoteJWKSet(new URL(url));
