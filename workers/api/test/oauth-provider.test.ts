@@ -116,9 +116,43 @@ describe("oauth provider wiring", () => {
     expect(meta.scopes_supported).toEqual(expect.arrayContaining(["read", "write", "admin"]));
   });
 
+  // Guard: the REAL prod config must advertise the DCR registration endpoint AND
+  // accept an UNAUTHENTICATED registration — exactly how off-the-shelf MCP clients
+  // (Inspector, Claude Desktop) self-register before any user login. Both
+  // allowDynamicClientRegistration and allowUnauthenticatedClientRegistration are
+  // load-bearing; this fails loudly if either is flipped back off.
+  it("advertises + accepts unauthenticated dynamic client registration (real config)", async () => {
+    const db = createTestDb();
+    const auth = await createAuth(baseEnv, undefined, { db, sendEmail: () => {} });
+
+    // 1. Discovery advertises the registration endpoint → DCR is on.
+    const metaRes = await auth.handler(
+      new Request("https://api.releases.localhost/api/auth/.well-known/oauth-authorization-server"),
+    );
+    const meta = (await metaRes.json()) as { registration_endpoint?: string };
+    expect(meta.registration_endpoint).toContain("/oauth2/register");
+
+    // 2. A tokenless POST to /oauth2/register succeeds → unauthenticated DCR is on.
+    //    No session cookie, public PKCE client — the MCP client registration flow.
+    const regRes = await auth.handler(
+      new Request("https://api.releases.localhost/api/auth/oauth2/register", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          client_name: "MCP Inspector",
+          redirect_uris: ["https://app.example.com/callback"],
+          token_endpoint_auth_method: "none",
+        }),
+      }),
+    );
+    expect(regRes.ok).toBe(true);
+    const registered = await db.select().from(oauthClient);
+    expect(registered).toHaveLength(1);
+  });
+
   // Strongest adapter-mapping check: a real Better Auth write to oauth_client via
-  // the dynamic-registration endpoint (enabled ONLY in this test instance; prod
-  // keeps it OFF). Proves the plugin model name + field keys map to our columns.
+  // the dynamic-registration endpoint. Also exercised by the real config above;
+  // here it isolates the plugin model name + field-key → column mapping.
   it("writes a registered client to oauth_client through the adapter", async () => {
     const db = createTestDb();
     const auth = betterAuth({

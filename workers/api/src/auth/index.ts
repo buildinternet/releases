@@ -627,12 +627,13 @@ export async function createAuth(
     }),
     // OAuth 2.0 / OIDC authorization server ("Sign in with Releases"). Issues
     // JWT access tokens (the adjacent jwt() plugin signs them + exposes JWKS)
-    // and serves discovery metadata. INERT until an admin provisions a client:
-    // dynamic client registration is OFF and there is no consent page yet, so
-    // only an admin-created skip_consent client can complete a flow. Consent UI,
-    // public registration, per-user scope entitlement, and resource-server
-    // verification are later sub-projects. No feature flag — see the AS-foundation
-    // spec (a kill switch guards nothing a not-yet-provisioned client wouldn't).
+    // and serves discovery metadata. Consent UI, per-user scope entitlement, and
+    // resource-server JWT verification have all shipped, and dynamic client
+    // registration (RFC 7591) is now ON so agent-run MCP clients can self-register
+    // without an admin pre-provisioning each one. No feature flag — every issued
+    // token is role-clamped at issuance (customAccessTokenClaims below) and DCR
+    // clients are untrusted (consent required) + PKCE-required, so turning it on
+    // grants no scope a user's role doesn't already allow.
     jwt(),
     oauthProvider({
       // ABSOLUTE web-origin URLs (not relative): the plugin redirects the browser
@@ -646,7 +647,28 @@ export async function createAuth(
       consentPage: `${env.WEB_BASE_URL ?? "https://releases.sh"}/oauth/consent`, // page built in sub-project 3; path provisional
       scopes: ["openid", "profile", "email", "offline_access", "read", "write", "admin"],
       validAudiences: oauthValidAudiences(env),
-      allowDynamicClientRegistration: false, // sub-project 4 enables this
+      // RFC 7591 dynamic client registration. ON so off-the-shelf MCP clients
+      // (Claude Desktop, MCP Inspector, agent runtimes) self-register a client_id
+      // via the public /oauth2/register endpoint instead of an admin minting one.
+      // Safe because DCR clients are untrusted (always hit the consent page), PKCE
+      // is required for them, and every token they obtain is role-clamped by
+      // customAccessTokenClaims below. FOLLOW-UP: a reaper for stale/unused
+      // oauth_application rows (each registration is a row on a public endpoint).
+      allowDynamicClientRegistration: true,
+      // Allow registration WITHOUT a prior session. Off-the-shelf MCP clients hit
+      // /oauth2/register BEFORE any user login, so DCR is inert for them without
+      // this — the endpoint would 401 every tokenless registration. This is what
+      // makes registration truly public (unauthenticated + row-creating), hence the
+      // explicit rate limit below and the stale-row reaper follow-up. The plugin
+      // notes this flag will be deprecated once the MCP protocol settles on Client
+      // ID Metadata Documents / `software_statement`; revisit the lane then.
+      allowUnauthenticatedClientRegistration: true,
+      // Explicit abuse ceiling on the unauthenticated /oauth2/register endpoint —
+      // pinned in-repo rather than inheriting the plugin's library default so the
+      // limit is auditable here and can't silently drift. Enforced only when Better
+      // Auth's core limiter is on (deployed prod; see `rateLimit.enabled` below).
+      // 5/min/IP: a legitimate client registers once; this caps spray registration.
+      rateLimit: { register: { window: 60, max: 5 } },
       // Set-once before first deploy (changing later orphans live tokens). Extends
       // the existing relk_/relu_ credential family. Access tokens are JWTs (no prefix).
       prefix: { refreshToken: "relo_", clientSecret: CLIENT_SECRET_PREFIX },
