@@ -30,3 +30,9 @@ export const USER_API_KEYS_ENABLED = process.env.NEXT_PUBLIC_USER_API_KEYS === "
  * backend registers the device plugin. `NEXT_PUBLIC_*` is inlined at build time.
  */
 export const DEVICE_AUTH_ENABLED = process.env.NEXT_PUBLIC_DEVICE_AUTH_ENABLED === "true";
+
+/**
+ * User follows + personalized feed. Mirrors the server `user-follows-enabled`
+ * Flagship flag. Build-time inlined; "true" string check like the others.
+ */
+export const USER_FOLLOWS_ENABLED = process.env.NEXT_PUBLIC_USER_FOLLOWS === "true";
