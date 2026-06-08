@@ -11,8 +11,7 @@ import { Hono } from "hono";
 import type { Context } from "hono";
 import { SafeUrlSchema } from "@better-auth/core/utils/redirect-uri";
 import { logEvent } from "@releases/lib/log-event";
-import { createAuth } from "../auth/index.js";
-import { execWaitUntil } from "../middleware/auth.js";
+import { getOrCreateAuth } from "../middleware/auth.js";
 import {
   createOAuthClient,
   listOAuthClients,
@@ -28,7 +27,7 @@ import type { Env } from "../index.js";
 export const adminOauthRoutes = new Hono<Env>();
 
 async function getAdapter(c: Context<Env>): Promise<OAuthClientAdapter> {
-  const auth = c.get("betterAuth") ?? (await createAuth(c.env, execWaitUntil(c)));
+  const auth = await getOrCreateAuth(c);
   return (await auth.$context).adapter as unknown as OAuthClientAdapter;
 }
 
@@ -122,24 +121,22 @@ adminOauthRoutes.patch("/admin/oauth/clients/:clientId", async (c) => {
     return c.json({ error: "nothing to update: provide disabled and/or trusted (boolean)" }, 400);
   }
 
+  const disabled = typeof b.disabled === "boolean" ? b.disabled : undefined;
+  const trusted = typeof b.trusted === "boolean" ? b.trusted : undefined;
+
   const adapter = await getAdapter(c);
-  const found = await updateClientFlags(adapter, clientId, {
-    disabled: typeof b.disabled === "boolean" ? b.disabled : undefined,
-    trusted: typeof b.trusted === "boolean" ? b.trusted : undefined,
-  });
-  if (!found) return c.json({ error: "client_not_found" }, 404);
+  const updated = await updateClientFlags(adapter, clientId, { disabled, trusted });
+  if (!updated) return c.json({ error: "client_not_found" }, 404);
 
   logEvent("info", {
     component: "auth",
     event: "oauth-client-updated",
     clientId,
-    disabled: typeof b.disabled === "boolean" ? b.disabled : undefined,
-    trusted: typeof b.trusted === "boolean" ? b.trusted : undefined,
+    disabled,
+    trusted,
     actor: "root-key",
   });
 
-  const updated = await getOAuthClient(adapter, clientId);
-  if (!updated) return c.json({ error: "client_not_found" }, 404);
   return c.json(updated);
 });
 

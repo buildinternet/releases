@@ -8,13 +8,24 @@
  * Register on the four write paths in index.ts BEFORE the /api/auth/* handler.
  */
 import type { MiddlewareHandler } from "hono";
-import { createAuth } from "./index.js";
-import { execWaitUntil } from "../middleware/auth.js";
+import { getOrCreateAuth } from "../middleware/auth.js";
 import type { Env } from "../index.js";
+
+/**
+ * The oauth-provider plugin's user self-service *write* client endpoints —
+ * the surface this guard locks to admins. Register the guard on exactly these
+ * in index.ts. Read/public endpoints are intentionally excluded.
+ */
+export const OAUTH_SELF_SERVICE_WRITE_PATHS = [
+  "/api/auth/oauth2/create-client",
+  "/api/auth/oauth2/update-client",
+  "/api/auth/oauth2/delete-client",
+  "/api/auth/oauth2/client/rotate-secret",
+] as const;
 
 export function oauthSelfServiceGuard(): MiddlewareHandler<Env> {
   return async (c, next) => {
-    const auth = c.get("betterAuth") ?? (await createAuth(c.env, execWaitUntil(c)));
+    const auth = await getOrCreateAuth(c);
     let role: string | null | undefined;
     try {
       const session = await auth.api.getSession({ headers: c.req.raw.headers });

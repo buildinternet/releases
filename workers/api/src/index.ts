@@ -8,7 +8,10 @@ import {
 } from "./middleware/auth.js";
 import type { AuthContext, AuthSessionContext } from "./middleware/auth.js";
 import { createAuth, authCorsMiddleware, type BetterAuthInstance } from "./auth/index.js";
-import { oauthSelfServiceGuard } from "./auth/oauth-self-service-guard.js";
+import {
+  oauthSelfServiceGuard,
+  OAUTH_SELF_SERVICE_WRITE_PATHS,
+} from "./auth/oauth-self-service-guard.js";
 import { forwardWellKnown } from "./oauth-discovery.js";
 import type { AuthEmailBinding } from "./auth/email.js";
 import { classifySignInFailure, redactIp, makeAuthAudit } from "./auth/audit.js";
@@ -438,12 +441,6 @@ app.get("/.well-known/openid-configuration", async (c) =>
 // admins. The provisioning path is the root-key /v1/admin/oauth route; this
 // removes the "any logged-in user can register a client" surface while leaving
 // the consent-flow read endpoints (public-client*) untouched. See #1482.
-const OAUTH_SELF_SERVICE_WRITE_PATHS = [
-  "/api/auth/oauth2/create-client",
-  "/api/auth/oauth2/update-client",
-  "/api/auth/oauth2/delete-client",
-  "/api/auth/oauth2/client/rotate-secret",
-];
 for (const p of OAUTH_SELF_SERVICE_WRITE_PATHS) {
   app.use(p, oauthSelfServiceGuard());
 }

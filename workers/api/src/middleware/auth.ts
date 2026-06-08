@@ -42,6 +42,15 @@ export function execWaitUntil(c: Context<Env>): ((p: Promise<unknown>) => void) 
   }
 }
 
+/**
+ * Resolve the request's Better Auth instance: the injected `betterAuth` test
+ * seam if present, else a fresh per-request instance. Mirrors the
+ * `c.get("db") ?? createDb(...)` lazy-init + test-injection pattern.
+ */
+export async function getOrCreateAuth(c: Context<Env>) {
+  return c.get("betterAuth") ?? (await createAuth(c.env, execWaitUntil(c)));
+}
+
 type ResolvedAuth =
   | { kind: "root"; scopes: string[] }
   | { kind: "token"; tokenId: string; scopes: string[] }

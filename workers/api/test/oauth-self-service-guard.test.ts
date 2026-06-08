@@ -1,16 +1,12 @@
 import { describe, it, expect } from "bun:test";
 import { Hono } from "hono";
-import { oauthSelfServiceGuard } from "../src/auth/oauth-self-service-guard.js";
-
-const WRITE_PATHS = [
-  "/api/auth/oauth2/create-client",
-  "/api/auth/oauth2/update-client",
-  "/api/auth/oauth2/delete-client",
-  "/api/auth/oauth2/client/rotate-secret",
-];
+import {
+  oauthSelfServiceGuard,
+  OAUTH_SELF_SERVICE_WRITE_PATHS as WRITE_PATHS,
+} from "../src/auth/oauth-self-service-guard.js";
 
 /** `role`: "admin"|"user"|null (no session)|"throw" (getSession rejects). */
-function appFor(role: string | null | "throw", path = WRITE_PATHS[0]) {
+function appFor(role: string | null | "throw", path: string = WRITE_PATHS[0]) {
   // Minimal fake Better Auth instance: only api.getSession is exercised.
   const fakeAuth = {
     api: {
@@ -53,9 +49,11 @@ describe("oauthSelfServiceGuard", () => {
   });
 
   it("guards every write path for a non-admin (no path slips through)", async () => {
-    for (const p of WRITE_PATHS) {
-      const res = await appFor("user", p).request(p, { method: "POST" });
-      expect(res.status).toBe(403);
-    }
+    await Promise.all(
+      WRITE_PATHS.map(async (p) => {
+        const res = await appFor("user", p).request(p, { method: "POST" });
+        expect(res.status).toBe(403);
+      }),
+    );
   });
 });

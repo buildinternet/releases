@@ -142,54 +142,24 @@ export async function getOAuthClient(
   return row ? toPublicClient(row) : null;
 }
 
-/** Returns false when the client does not exist. */
-export async function setClientDisabled(
-  adapter: OAuthClientAdapter,
-  clientId: string,
-  disabled: boolean,
-): Promise<boolean> {
-  const row = await adapter.findOne({ model: OAUTH_CLIENT_MODEL, where: byClientId(clientId) });
-  if (!row) return false;
-  await adapter.update({
-    model: OAUTH_CLIENT_MODEL,
-    where: byClientId(clientId),
-    update: { disabled, updatedAt: new Date() },
-  });
-  return true;
-}
-
-/** Returns false when the client does not exist. */
-export async function setClientTrusted(
-  adapter: OAuthClientAdapter,
-  clientId: string,
-  trusted: boolean,
-): Promise<boolean> {
-  const row = await adapter.findOne({ model: OAUTH_CLIENT_MODEL, where: byClientId(clientId) });
-  if (!row) return false;
-  await adapter.update({
-    model: OAUTH_CLIENT_MODEL,
-    where: byClientId(clientId),
-    update: { skipConsent: trusted, updatedAt: new Date() },
-  });
-  return true;
-}
-
 /**
- * Apply disabled and/or skipConsent in a single update. Returns false when the
- * client does not exist. Pass only the fields you intend to change.
+ * Apply disabled and/or skipConsent in a single update. Returns the updated
+ * public client, or null when the client does not exist. Pass only the fields
+ * you intend to change.
  */
 export async function updateClientFlags(
   adapter: OAuthClientAdapter,
   clientId: string,
   fields: { disabled?: boolean; trusted?: boolean },
-): Promise<boolean> {
+): Promise<PublicOAuthClient | null> {
   const row = await adapter.findOne({ model: OAUTH_CLIENT_MODEL, where: byClientId(clientId) });
-  if (!row) return false;
-  const update: Record<string, unknown> = { updatedAt: new Date() };
+  if (!row) return null;
+  const now = new Date();
+  const update: Record<string, unknown> = { updatedAt: now };
   if (typeof fields.disabled === "boolean") update.disabled = fields.disabled;
   if (typeof fields.trusted === "boolean") update.skipConsent = fields.trusted;
   await adapter.update({ model: OAUTH_CLIENT_MODEL, where: byClientId(clientId), update });
-  return true;
+  return toPublicClient({ ...row, ...update });
 }
 
 export type RotateResult =

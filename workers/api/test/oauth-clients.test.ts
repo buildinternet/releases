@@ -85,8 +85,7 @@ describe("createOAuthClient", () => {
 import {
   listOAuthClients,
   getOAuthClient,
-  setClientDisabled,
-  setClientTrusted,
+  updateClientFlags,
   rotateClientSecret,
   deleteOAuthClient,
 } from "../src/auth/oauth-clients.js";
@@ -114,32 +113,26 @@ describe("oauth-clients read + mutate", () => {
     expect(await getOAuthClient(adapter, "missing")).toBeNull();
   });
 
-  it("setClientDisabled flips the column and reports not-found", async () => {
+  it("updateClientFlags sets disabled+trusted atomically, returns the client, and reports not-found", async () => {
     const adapter = await makeAdapter();
     const { client } = await seed(adapter);
-    expect(await setClientDisabled(adapter, client.clientId, true)).toBe(true);
+    const updated = await updateClientFlags(adapter, client.clientId, {
+      disabled: true,
+      trusted: true,
+    });
+    expect(updated?.disabled).toBe(true);
+    expect(updated?.trusted).toBe(true);
     const row = await adapter.findOne({
       model: "oauthClient",
       where: [{ field: "clientId", value: client.clientId }],
     });
     expect(Boolean(row?.disabled)).toBe(true);
-    // Re-enable: the production use case is temporarily disabling then restoring a client.
-    expect(await setClientDisabled(adapter, client.clientId, false)).toBe(true);
-    const reenabled = await adapter.findOne({
-      model: "oauthClient",
-      where: [{ field: "clientId", value: client.clientId }],
-    });
-    expect(Boolean(reenabled?.disabled)).toBe(false);
-    expect(await setClientDisabled(adapter, "missing", true)).toBe(false);
-  });
-
-  it("setClientTrusted toggles skip_consent", async () => {
-    const adapter = await makeAdapter();
-    const { client } = await seed(adapter);
-    expect(await setClientTrusted(adapter, client.clientId, true)).toBe(true);
-    const got = await getOAuthClient(adapter, client.clientId);
-    expect(got?.trusted).toBe(true);
-    expect(await setClientTrusted(adapter, "missing", true)).toBe(false);
+    expect(Boolean(row?.skipConsent)).toBe(true);
+    // partial update leaves the other flag untouched
+    const reenabled = await updateClientFlags(adapter, client.clientId, { disabled: false });
+    expect(reenabled?.disabled).toBe(false);
+    expect(reenabled?.trusted).toBe(true);
+    expect(await updateClientFlags(adapter, "missing", { disabled: true })).toBeNull();
   });
 
   it("rotateClientSecret changes the stored hash; new secret verifies", async () => {
