@@ -64,6 +64,31 @@ repos groups those sources under one product.
   `bun run gen:releases-schema` and served at
   `https://releases.sh/schemas/releases.json`.
 
+### Sweep capping + due-filtering (#1440)
+
+Each pass issues one outbound fetch per entity (the org pass can cost a second
+for an avatar mirror), so an uncapped sweep would cross Cloudflare's
+1000-subrequest-per-invocation ceiling as the corpus grows. The sweep is
+self-limiting:
+
+- **Due-filter.** Each entity carries `metadata.wellKnownSweptAt`, stamped via
+  `json_set` after the reconciler returns on **every** outcome (applied,
+  unchanged, fetch-skipped, errored) — a clock distinct from
+  `metadata.selfDeclared.syncedAt`, which only advances on a successful apply.
+  An entity swept within `WELL_KNOWN_SWEEP_INTERVAL_HOURS` (default **168 / 7
+  days**) is skipped; never-swept rows (`NULL`) are always due.
+- **Hard cap, oldest-first.** Each pass processes at most
+  `WELL_KNOWN_MAX_PER_RUN` (default **250**) entities, ordered by
+  `wellKnownSweptAt ASC` (NULLs first). Worst-case subrequests are
+  `cap × 2 + cap = cap × 3` (≤ 750 at the default), comfortably under the
+  ceiling. Because deferred rows are the oldest, they lead the next run, so the
+  whole corpus is covered across runs rather than starving the tail.
+- **No silent caps.** The `sweep-done` event logs `orgProcessed` /
+  `sourceProcessed` and `orgCapped` / `sourceCapped` so a backlog is visible.
+
+Both knobs are numeric env vars (intentionally not Flagship), with a floor of 1
+and a fallback to the default on an invalid value.
+
 ## Out of scope (Tier 2 / future)
 
 Self-serve source declaration (`changelogs[]`), org-identity from a repo file,
