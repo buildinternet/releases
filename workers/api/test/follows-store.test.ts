@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { eq } from "drizzle-orm";
 import { createTestDb, type TestDatabase } from "../../../tests/db-helper.js";
 import { organizations, products } from "@buildinternet/releases-core/schema";
 import { user } from "../src/db/schema-auth.js";
@@ -74,5 +75,15 @@ describe("follows store", () => {
     await addFollow(h.db, "u1", "org", "org_a");
     await addFollow(h.db, "u2", "product", "prd_a");
     expect(await listFollows(h.db, "u1")).toHaveLength(1);
+  });
+
+  it("listFollows drops orphans — soft-deleting the target removes it from the list", async () => {
+    await addFollow(h.db, "u1", "org", "org_a");
+    expect(await listFollows(h.db, "u1")).toHaveLength(1);
+    await h.db
+      .update(organizations)
+      .set({ deletedAt: new Date().toISOString() })
+      .where(eq(organizations.id, "org_a"));
+    expect(await listFollows(h.db, "u1")).toHaveLength(0);
   });
 });

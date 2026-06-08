@@ -142,6 +142,6 @@ export async function listFollows(db: AnyDb, userId: string): Promise<EnrichedFo
       createdAt: r.createdAt.toISOString(),
     });
   }
-  out.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+  out.sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0));
   return out;
 }
