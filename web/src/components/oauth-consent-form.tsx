@@ -12,27 +12,19 @@ const buttonClass =
 const approveClass = `${buttonClass} border-green-600/40 bg-green-50 text-green-800 hover:bg-green-100 dark:border-green-500/40 dark:bg-green-950/40 dark:text-green-300 dark:hover:bg-green-950/60`;
 const denyClass = `${buttonClass} border-stone-300 bg-white text-stone-800 hover:bg-stone-50 dark:border-stone-700 dark:bg-stone-950 dark:text-stone-100 dark:hover:bg-stone-900`;
 
-/**
- * The oauthProvider server plugin is generic (`oauthProvider<O>(options)`) so
- * TypeScript cannot resolve `ReturnType<typeof oauthProvider>` → the plugin
- * endpoints don't land on the inferred `authClient` type. We declare the two
- * methods we actually call here and use a narrow cast so callers remain typed.
- */
-type OAuthProviderMethods = {
-  getOAuthClientPublic: (opts: {
-    query: { client_id: string };
-  }) => Promise<{ data: OAuthClient | null; error: { message?: string } | null }>;
-  oauth2Consent: (opts: { accept: boolean; scope?: string; oauth_query?: string }) => Promise<{
-    data: { redirect: boolean; url: string } | null;
-    error: { message?: string } | null;
-  }>;
-};
+// IMPORTANT: call the oauth-provider endpoints by their LITERAL paths via
+// `authClient.$fetch`, NOT as named methods. The client half of the plugin
+// (`oauthProviderClient`) registers only a fetch hook (it injects the signed
+// `oauth_query`) — it does NOT register typed action methods. So a call like
+// `authClient.oauth2Consent(...)` falls through to Better Auth's generic proxy,
+// which maps the camelCase name to `/oauth2-consent` (hyphen) and 404s; the real
+// route is `/oauth2/consent` (slash). `$fetch` with the exact path sidesteps the
+// name→path mangling, and the oauth_query hook still wraps the request.
 
-// Narrow cast: only used for the two endpoints above. oauthProvider is a
-// generic function so its return type doesn't propagate through
-// InferPluginEndpoints — the methods exist at runtime but TypeScript can't
-// infer them. Using `unknown` first prevents unsound widening.
-const oauthClient = authClient as unknown as OAuthProviderMethods;
+/** Consent endpoint response — the redirect target (auth code or error). */
+type ConsentResult = { redirect_uri?: string };
+/** OAuth error body shape returned by the AS on a rejected request. */
+type OAuthError = { error_description?: string; message?: string };
 
 /**
  * OAuth consent form rendered on /oauth/consent. Reads the signed OAuth params
@@ -64,7 +56,13 @@ export function OauthConsentForm() {
     }
     let cancelled = false;
     (async () => {
-      const { data } = await oauthClient.getOAuthClientPublic({ query: { client_id: clientId } });
+      // GET /api/auth/oauth2/public-client?client_id=… (session-gated; the
+      // credentialed auth client sends the cookie). Returns OAuth metadata-named
+      // fields (client_name / client_uri / logo_uri).
+      const { data } = await authClient.$fetch<OAuthClient>("/oauth2/public-client", {
+        method: "GET",
+        query: { client_id: clientId },
+      });
       if (!cancelled) {
         if (data) setClient(data);
         setClientLoading(false);
@@ -81,22 +79,26 @@ export function OauthConsentForm() {
     if (busy) return;
     setBusy(kind);
     setError(null);
-    const { data, error: err } = await oauthClient.oauth2Consent({
-      accept: kind === "approve",
-      scope: kind === "approve" ? grantable.join(" ") : undefined,
-      // The oauthProviderClient fetch hook auto-injects the signed oauth_query;
-      // this explicit value is a fallback in case the hook doesn't fire (e.g.
-      // during SSR or when the plugin is not fully initialised).
-      oauth_query:
-        typeof window !== "undefined" ? window.location.search.replace(/^\?/, "") : undefined,
+    // POST /api/auth/oauth2/consent → { redirect_uri }. The oauthProviderClient
+    // fetch hook injects the signed oauth_query; we also pass it explicitly so the
+    // request is self-contained regardless of whether the hook fires.
+    const { data, error: err } = await authClient.$fetch<ConsentResult>("/oauth2/consent", {
+      method: "POST",
+      body: {
+        accept: kind === "approve",
+        scope: kind === "approve" ? grantable.join(" ") : undefined,
+        oauth_query:
+          typeof window !== "undefined" ? window.location.search.replace(/^\?/, "") : undefined,
+      },
     });
     if (err) {
-      setError(err.message ?? "Something went wrong. Please try again.");
+      const e = err as OAuthError;
+      setError(e.error_description ?? e.message ?? "Something went wrong. Please try again.");
       setBusy(null);
       return;
     }
-    if (data?.url) {
-      window.location.href = data.url;
+    if (data?.redirect_uri) {
+      window.location.href = data.redirect_uri;
     } else {
       setBusy(null);
     }
