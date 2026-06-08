@@ -9,20 +9,35 @@ This runbook turns the queryable signal into alertable monitors.
 See [logging.md → Auth audit events](../architecture/logging.md) for the full event table and
 field shapes.
 
-## Why monitors are created in the Axiom UI (not in-repo)
+## The monitors (live in Axiom)
 
-There is **no monitors-as-code path in this repo and no programmatic create path available**:
+All three are **created and live** (#1432), as **Threshold** monitors routed to the shared team
+notifier `sajiFns75aNFy3xSXH` (the "Email" notifier → zach@releases.sh, the same channel as the
+existing managed-agent monitors):
 
-- The only Axiom credential the project holds is `AXIOM_OTEL_TOKEN` in the root `.env` — an
-  **OTel ingest** token, which cannot manage monitors.
-- The Axiom MCP server (`mcp__axiom__*`) exposes only read tools for monitors
-  (`checkMonitors`, `getMonitorHistory`) — it can query datasets and create _dashboards_, but
-  **not create monitors**.
+| Monitor                     | ID                   | Run window / every | Alert when     |
+| --------------------------- | -------------------- | ------------------ | -------------- |
+| Auth: sign-in-failure spike | `9JK6fn2uu8TkaG3qRt` | 5m / 5m            | `count_ >= 20` |
+| Auth: rate-limited surge    | `TVk9n6aRt4hN1zLdru` | 10m / 5m           | `count_ >= 10` |
+| Auth: admin security action | `v9m7KpJw6pQfH1MoKW` | 10m / 10m          | `count_ >= 1`  |
 
-So each monitor below is created **manually** in the Axiom dashboard (Monitors → New monitor →
-_Match event_ / _Threshold_), pasting the APL and threshold given here. The issue calls for
-exactly this: build via the Axiom UI, start permissive, tighten once human auth sees real
-traffic. All queries below were validated against live `releases-cloudflare-logs` data.
+### Recreating / editing them programmatically
+
+Monitor write goes through the **Axiom management API**, not the repo or the MCP:
+
+- `POST` (create) / `PUT` (update) `https://api.axiom.co/v2/monitors` with a management token —
+  `AXIOM_MGMT_TOKEN` in the root `.env` (scoped for monitor + notifier write). This is **distinct
+  from `AXIOM_OTEL_TOKEN`**, which is an OTel _ingest_ token and cannot manage monitors.
+- The Axiom MCP server (`mcp__axiom__*`) exposes only **read** monitor tools (`checkMonitors`,
+  `getMonitorHistory`) plus dataset/dashboard tools — it cannot create monitors, so the management
+  API is the automation path. `checkMonitors` is the quickest way to verify state.
+- Threshold monitor body shape: `{ name, description, aplQuery, type:"Threshold",
+operator:"AboveOrEqual", threshold, intervalMinutes, rangeMinutes, triggerFromNRuns:1,
+notifierIds:[…] }`. The query must return a single scalar (`summarize count()` / `sum()`) and
+  must NOT carry its own time filter — the monitor applies `rangeMinutes` as the window.
+
+Thresholds start permissive (see Tuning); all queries were validated against live
+`releases-cloudflare-logs` data.
 
 ## Field-extraction primer (APL)
 
@@ -120,13 +135,10 @@ review, not because protection has failed.
 | extend event = tostring(p['event'])
 | where event in ('role-changed', 'oauth-client-created', 'oauth-client-updated',
                   'oauth-client-deleted', 'oauth-client-secret-rotated')
-| project _time, event,
-          clientId   = tostring(p['clientId']),
-          targetEmail = tostring(p['targetEmail']),
-          fromRole   = tostring(p['fromRole']),
-          toRole     = tostring(p['toRole']),
-          actor      = tostring(p['actor'])
+| summarize count()
 ```
+
+To drill into _which_ action fired, swap `summarize count()` for a `project _time, event, clientId = tostring(p['clientId']), targetEmail = tostring(p['targetEmail']), fromRole = tostring(p['fromRole']), toRole = tostring(p['toRole']), actor = tostring(p['actor'])` query in the Axiom console.
 
 > Do **not** add an `environment` filter here — these events are logged via `logEvent` directly
 > and carry no `environment` field, so filtering on it drops every row.
