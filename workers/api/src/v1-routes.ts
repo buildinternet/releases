@@ -40,6 +40,7 @@ import { adminSourcesRoutes } from "./routes/admin-sources.js";
 import { adminOrgDependentsRoutes } from "./routes/admin-org-dependents.js";
 import { adminBatchRunsRoutes } from "./routes/admin-batch-runs.js";
 import { adminUsersRoutes } from "./routes/admin-users.js";
+import { adminOauthRoutes } from "./routes/admin-oauth.js";
 import { errataRoutes } from "./routes/errata.js";
 import { webhooksRoutes } from "./routes/webhooks.js";
 import { workflowsRoutes } from "./routes/workflows.js";
@@ -93,6 +94,7 @@ export function mountV1Routes(v1: Hono<Env>) {
   v1.route("/", adminOrgDependentsRoutes);
   v1.route("/", adminBatchRunsRoutes);
   v1.route("/", adminUsersRoutes);
+  v1.route("/", adminOauthRoutes);
   v1.route("/", errataRoutes);
   v1.route("/", webhooksRoutes);
   v1.route("/", workflowsRoutes);

@@ -841,3 +841,6 @@ export async function createAuth(
     },
   });
 }
+
+/** The resolved Better Auth instance type (used as a Hono context test seam). */
+export type BetterAuthInstance = Awaited<ReturnType<typeof createAuth>>;

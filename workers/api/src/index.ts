@@ -7,7 +7,7 @@ import {
   tokensAuthMiddleware,
 } from "./middleware/auth.js";
 import type { AuthContext, AuthSessionContext } from "./middleware/auth.js";
-import { createAuth, authCorsMiddleware } from "./auth/index.js";
+import { createAuth, authCorsMiddleware, type BetterAuthInstance } from "./auth/index.js";
 import { forwardWellKnown } from "./oauth-discovery.js";
 import type { AuthEmailBinding } from "./auth/email.js";
 import { classifySignInFailure, redactIp, makeAuthAudit } from "./auth/audit.js";
@@ -329,6 +329,8 @@ export type Env = {
   Variables: {
     auth?: AuthContext;
     session?: AuthSessionContext;
+    /** Test seam: an injected Better Auth instance; real requests build one per call. */
+    betterAuth?: BetterAuthInstance;
   };
 };
 
