@@ -58,10 +58,13 @@ export const authClient = createAuthClient({
     // (so nothing to gate at construction); the pages themselves are flag-gated.
     // The CLI does NOT use this client — it speaks the raw HTTP endpoints directly.
     deviceAuthorizationClient(),
-    // OAuth provider client — infers typed methods from the server oauthProvider
-    // plugin (authClient.oauth2Consent, authClient.oauth2PublicClient, …) and a
-    // fetch hook that injects the signed `oauth_query` into consent POSTs. Drives
-    // the /oauth/consent page. Inert until that page calls it.
+    // OAuth provider client — registers ONLY a fetch hook that injects the signed
+    // `oauth_query` into consent POSTs. It does NOT register callable action
+    // methods: `authClient.oauth2Consent(...)` would fall through to the generic
+    // proxy and hit `/oauth2-consent` (404) instead of `/oauth2/consent`. So the
+    // /oauth/consent page calls the endpoints by their LITERAL paths via
+    // `authClient.$fetch("/oauth2/consent" | "/oauth2/public-client", …)`; the hook
+    // still wraps those. Inert until that page calls it.
     oauthProviderClient(),
   ],
 });
