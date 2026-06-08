@@ -24,6 +24,18 @@ touches it) and from the public-read OpenAPI coverage gate. Its credentialed COR
 carved out alongside `/api/auth/*` in `index.ts`. This bucket is for first-party,
 current-user browser operations; it is not a general extension point.
 
+The same session-authed bucket covers `/v1/me/*` — the user follows and personalized
+feed surface. Like `/v1/api-keys`, these routes require a Better Auth cookie session
+(`requireFollowsSession`), are absent from both `publicReadRoutes` and `adminRoutes`,
+and use the same credentialed CORS carve-out in `index.ts`. Unlike `/v1/api-keys`,
+they are **not** behind a feature flag — follows is enabled by default; the gate is
+purely the cookie session (no session → 401). Endpoints:
+
+- `GET /v1/me/follows` — list the signed-in user's follows, enriched with each target's display fields (name, slug, avatarUrl, orgSlug for products), newest first.
+- `POST /v1/me/follows { targetType, targetId }` — add a follow (idempotent; `targetType` is `"org"` or `"product"`).
+- `DELETE /v1/me/follows/:targetType/:targetId` — remove a follow (idempotent).
+- `GET /v1/me/feed` — paginated release feed across all followed entities; an org follow implicitly includes all of that org's products (org follow = its products too). Page/offset-paginated (`?page=&limit=`, the standard `ListResponse` envelope), newest-first.
+
 ## Entity resolution: IDs over slugs
 
 Entity resolution prefers IDs over slugs; IDs are immutable, so prefer them in new clients.

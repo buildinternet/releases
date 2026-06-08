@@ -25,6 +25,7 @@ import { getAppInfo, type AppInfo } from "@/lib/app-source";
 import { sourceIdPath } from "@/lib/links";
 import { ProductAdminMenu } from "@/components/product-admin-menu";
 import { EntityNotice } from "@/components/entity-notice";
+import { FollowButton } from "@/components/follow-button";
 import { isLocalAdminEnabled } from "@/lib/local-admin-flag";
 import { formatSourceDate, shortUrl } from "@/lib/source-display";
 
@@ -173,6 +174,9 @@ export async function ProductView({
         {product.description && (
           <p className="text-sm text-stone-500 dark:text-stone-400 mt-1">{product.description}</p>
         )}
+        <div className="mt-3">
+          <FollowButton targetType="product" targetId={product.id} label={product.name} />
+        </div>
         {appEntries.length > 0 && (
           <div className="flex items-center gap-2 mt-3">
             <span className="text-xs text-stone-400 dark:text-stone-500">Available on</span>

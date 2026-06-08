@@ -1,5 +1,5 @@
 import type { Context, MiddlewareHandler } from "hono";
-import { FLAGS, flag } from "@releases/lib/flags";
+import { FLAGS, flag, type FlagDef } from "@releases/lib/flags";
 import { getSecret, getSecretWithFallback } from "@releases/lib/secrets";
 import { logEvent } from "@releases/lib/log-event";
 import {
@@ -362,21 +362,16 @@ function recordAuth(
 }
 
 /**
- * Gate the session-authed self-serve surface (`/v1/api-keys`). When the
- * `user-api-keys-enabled` flag is off, the feature is dark → 404. Otherwise
- * resolve the Better Auth session from the request cookie; no session → 401.
- * On success, attach a minimal `{ user }` to the context for the handlers.
+ * Resolve the Better Auth cookie session and attach a minimal `{ user }` to the
+ * context for downstream handlers; 401 when there's no session. No
+ * WWW-Authenticate challenge — this is a cookie-session gate, not a Bearer
+ * scheme, and "Cookie" is not a registered RFC 7235 auth scheme. The shared
+ * session-resolution path for every signed-in self-serve surface.
  */
-export const requireSession: MiddlewareHandler<Env> = async (c, next) => {
-  if (!(await flag(c.env.FLAGS, c.env.USER_API_KEYS_ENABLED, FLAGS.userApiKeysEnabled))) {
-    return c.json({ error: "not_found", message: "Not found" }, 404);
-  }
-  const waitUntil = execWaitUntil(c);
-  const auth = await createAuth(c.env, waitUntil);
+const requireSessionBase: MiddlewareHandler<Env> = async (c, next) => {
+  const auth = await getOrCreateAuth(c);
   const session = await auth.api.getSession({ headers: c.req.raw.headers });
   if (!session?.user?.id) {
-    // No WWW-Authenticate challenge: this is a cookie-session gate, not a Bearer
-    // scheme, and "Cookie" is not a registered RFC 7235 auth scheme.
     return c.json({ error: "unauthorized", message: "Sign in required" }, 401);
   }
   c.set("session", {
@@ -384,6 +379,33 @@ export const requireSession: MiddlewareHandler<Env> = async (c, next) => {
   });
   await next();
 };
+
+/**
+ * Wrap `requireSessionBase` behind a feature flag — when the flag is off the
+ * surface is dark (404). Reserve this for surfaces that genuinely need a runtime
+ * rollout gate; a plain session gate (no flag) is the default for shipped
+ * features (see AGENTS.md → feature flags).
+ */
+function requireSessionWithFlag(
+  flagDef: FlagDef,
+  envValue: (e: Env["Bindings"]) => string | undefined,
+): MiddlewareHandler<Env> {
+  return async (c, next) => {
+    if (!(await flag(c.env.FLAGS, envValue(c.env), flagDef))) {
+      return c.json({ error: "not_found", message: "Not found" }, 404);
+    }
+    return requireSessionBase(c, next);
+  };
+}
+
+/** Self-serve API key surface gate (`/v1/api-keys`) — flag-gated rollout. */
+export const requireSession: MiddlewareHandler<Env> = requireSessionWithFlag(
+  FLAGS.userApiKeysEnabled,
+  (e) => e.USER_API_KEYS_ENABLED,
+);
+
+/** User follows + feed surface gate (`/v1/me/*`) — enabled by default, no flag. */
+export const requireFollowsSession: MiddlewareHandler<Env> = requireSessionBase;
 
 function createAuthMiddleware(opts: {
   allowPublicReads: boolean;

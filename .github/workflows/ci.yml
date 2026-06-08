@@ -156,7 +156,8 @@ jobs:
             'packages/core/src/schema.ts' \
             'src/db/schema-coverage.ts' \
             'workers/api/src/db/schema-cron.ts' \
-            'workers/api/src/db/schema-auth.ts' || true)
+            'workers/api/src/db/schema-auth.ts' \
+            'workers/api/src/db/schema-follows.ts' || true)
           if [ -z "$schema_changed" ]; then
             echo "No schema files changed — pairing check skipped."
             exit 0

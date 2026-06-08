@@ -155,3 +155,13 @@ registry path (`org` / `org/slug`) and `href` is an external URL — at most one
 ## Fetch Log workflow drawer (dev-only)
 
 On the dev-gated Fetch Log tab, clicking a Fetch Plan row opens a per-source ingestion-pipeline drawer: an adaptive vertical stage list (topology from `describeWorkflowStages` in `@releases/adapters/workflow-stages`) annotated with current state and last-run outcome derived from `fetch_log` + `usage_log` + `sources` via `GET /v1/status/source-workflow`. Phase 1 is derived-data only; per-stage timing instrumentation is a documented Phase 2. Spec: `docs/superpowers/specs/2026-05-31-per-source-workflow-viz-design.md`.
+
+## Follows + personalized feed
+
+Signed-in users can follow orgs and products; an org follow implicitly covers all of that org's products on the feed (org follow = everything under it).
+
+**Follow state** is loaded client-side once per page visit via `FollowsProvider` (`web/src/components/follows-provider.tsx`) — a single `GET /v1/me/follows` call whose result is held in React context and updated optimistically on follow/unfollow. The surface follows the same gate as the rest of the auth UI (`NEXT_PUBLIC_AUTH_UI_ENABLED` + `NEXT_PUBLIC_BETTER_AUTH_URL`) — there is no separate follows feature flag; `FollowButton` still renders nothing for signed-out visitors (the provider is null), and the `/following` page server-gates on the same auth-UI condition.
+
+**`FollowButton`** (`web/src/components/follow-button.tsx`) reads from `FollowsProvider` context, calls `POST /v1/me/follows` or `DELETE /v1/me/follows/:targetType/:targetId` on click, and applies an optimistic local toggle with a rollback on error. It appears on org and product detail pages for signed-in users.
+
+**`/following` page** (`web/src/app/following/page.tsx`) is the personalized feed: a newest-first release list (reusing the `ReleaseLatestItem` component) drawn from `GET /v1/me/feed`, with a same-page sidebar listing all current follows and offering unfollow actions. The feed is cursor-paginated and empty-stated with a prompt to follow orgs or products when the user has no follows yet.
