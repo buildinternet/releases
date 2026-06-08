@@ -11,6 +11,8 @@ const keyOf = (t: FollowTarget, id: string): Key => `${t}:${id}`;
 
 interface FollowsCtx {
   ready: boolean;
+  /** Whether a user session is present. Drives the follow button's sign-in redirect. */
+  signedIn: boolean;
   isFollowing: (t: FollowTarget, id: string) => boolean;
   toggle: (t: FollowTarget, id: string) => Promise<void>;
 }
@@ -55,6 +57,7 @@ function FollowsProviderInner({ children }: { children: React.ReactNode }) {
     };
   }, [session?.user?.id]);
 
+  const signedIn = Boolean(session?.user);
   const isFollowing = useCallback((t: FollowTarget, id: string) => keys.has(keyOf(t, id)), [keys]);
 
   const toggle = useCallback(async (t: FollowTarget, id: string) => {
@@ -85,8 +88,8 @@ function FollowsProviderInner({ children }: { children: React.ReactNode }) {
   }, []);
 
   const value = useMemo<FollowsCtx>(
-    () => ({ ready, isFollowing, toggle }),
-    [ready, isFollowing, toggle],
+    () => ({ ready, signedIn, isFollowing, toggle }),
+    [ready, signedIn, isFollowing, toggle],
   );
   return <Context.Provider value={value}>{children}</Context.Provider>;
 }

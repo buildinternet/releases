@@ -1,13 +1,16 @@
 "use client";
 
 import { useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import type { FollowTarget } from "@buildinternet/releases-api-types";
 import { useFollows } from "./follows-provider";
 
 /**
- * Follow/unfollow toggle for an org or product. Renders nothing when follows is
- * disabled or the user is signed out (`useFollows()` is null), so detail pages
- * stay unchanged for anonymous visitors.
+ * Follow/unfollow toggle for an org or product. Renders nothing only when the
+ * follows feature is disabled (`useFollows()` is null). For signed-out visitors
+ * the button still shows as a "Follow" call-to-action, but a click routes to
+ * `/login?redirect=<current path>` instead of silently failing the unauthorized
+ * write — once signed back in, the user lands where they left off.
  */
 export function FollowButton({
   targetType,
@@ -19,6 +22,8 @@ export function FollowButton({
   label?: string;
 }) {
   const follows = useFollows();
+  const router = useRouter();
+  const pathname = usePathname();
   const [busy, setBusy] = useState(false);
   if (!follows || !follows.ready) return null;
 
@@ -28,6 +33,10 @@ export function FollowButton({
       type="button"
       disabled={busy}
       onClick={async () => {
+        if (!follows.signedIn) {
+          router.push(`/login?redirect=${encodeURIComponent(pathname)}`);
+          return;
+        }
         setBusy(true);
         try {
           await follows.toggle(targetType, targetId);
