@@ -168,6 +168,13 @@ export const ReleasesWithMediaResponseSchema = z.array(ReleaseWithMediaRowSchema
 export const ReleaseDetailOrgSchema = z.object({
   slug: z.string(),
   name: z.string(),
+  /**
+   * Resolved org avatar URL (the `organizations.avatar_url` column). `null`
+   * when the org has no stored avatar. Additive — older servers omit it, so
+   * treat `undefined` as `null`. Mirrors the `orgAvatarUrl` field on the
+   * related-rail feed.
+   */
+  avatarUrl: z.string().nullable().optional(),
 });
 
 /**
@@ -199,6 +206,13 @@ export const ReleaseDetailResponseSchema = z.object({
   sourceSlug: z.string().nullable(),
   sourceType: z.enum(SOURCE_TYPES).nullable(),
   org: ReleaseDetailOrgSchema.nullable(),
+  /**
+   * Owning product, when the release's source is grouped under a product
+   * (`sources.product_id`). `null` when the source has no product. Additive —
+   * older servers omit this field; treat `undefined` as `null`. Reuses the
+   * `{ slug, name }` shape from the latest feed.
+   */
+  product: ReleaseLatestProductSchema.nullable().optional(),
   composition: ReleaseCompositionSchema.nullable(),
   appStore: AppStoreSourceInfoSchema.nullable().optional(),
   video: VideoSourceInfoSchema.nullable().optional(),

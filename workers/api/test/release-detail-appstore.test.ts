@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { organizations, sources, releases } from "@buildinternet/releases-core/schema";
+import { organizations, products, sources, releases } from "@buildinternet/releases-core/schema";
 import { sourceRoutes } from "../src/routes/sources.js";
 import { createTestDb, createTestApp } from "./setup";
 
@@ -72,5 +72,85 @@ describe("GET /v1/releases/:id appstore", () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as { appStore?: unknown };
     expect(body.appStore ?? null).toBeNull();
+  });
+});
+
+describe("GET /v1/releases/:id org + product", () => {
+  it("surfaces org.avatarUrl and the owning product when grouped", async () => {
+    const db = createTestDb();
+    await db.insert(organizations).values({
+      id: "org_g",
+      slug: "google",
+      name: "Google",
+      category: "cloud",
+      avatarUrl: "https://media.releases.sh/orgs/google.png",
+    });
+    await db
+      .insert(products)
+      .values({ id: "prod_chrome", slug: "chrome", name: "Chrome", orgId: "org_g" });
+    await db.insert(sources).values({
+      id: "src_chrome",
+      slug: "chrome-releases",
+      name: "Chrome Releases",
+      type: "feed",
+      url: "https://chrome.test/feed",
+      orgId: "org_g",
+      productId: "prod_chrome",
+    });
+    await db.insert(releases).values({
+      id: "rel_chrome",
+      sourceId: "src_chrome",
+      title: "Extended Stable 148",
+      content: "Notes",
+      url: "https://chrome.test/148",
+      publishedAt: "2026-06-08T00:00:00Z",
+    });
+
+    const app = createTestApp(db, sourceRoutes);
+    const res = await app(new Request("http://x/v1/releases/rel_chrome"));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      org?: { slug: string; name: string; avatarUrl?: string | null };
+      product?: { slug: string; name: string } | null;
+    };
+    expect(body.org).toEqual({
+      slug: "google",
+      name: "Google",
+      avatarUrl: "https://media.releases.sh/orgs/google.png",
+    });
+    expect(body.product).toEqual({ slug: "chrome", name: "Chrome" });
+  });
+
+  it("returns product null when the source is not grouped under a product", async () => {
+    const db = createTestDb();
+    await db
+      .insert(organizations)
+      .values({ id: "org_n", slug: "acme", name: "Acme", category: "cloud" });
+    await db.insert(sources).values({
+      id: "src_plain",
+      slug: "acme-feed",
+      name: "Acme",
+      type: "feed",
+      url: "https://acme.test/feed",
+      orgId: "org_n",
+    });
+    await db.insert(releases).values({
+      id: "rel_plain",
+      sourceId: "src_plain",
+      title: "Acme 1.0",
+      content: "Notes",
+      url: "https://acme.test/1",
+      publishedAt: "2026-05-27T00:00:00Z",
+    });
+
+    const app = createTestApp(db, sourceRoutes);
+    const res = await app(new Request("http://x/v1/releases/rel_plain"));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      org?: { avatarUrl?: string | null };
+      product?: { slug: string; name: string } | null;
+    };
+    expect(body.product ?? null).toBeNull();
+    expect(body.org?.avatarUrl ?? null).toBeNull();
   });
 });

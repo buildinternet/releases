@@ -26,6 +26,8 @@ import { appStoreIconUrl } from "@/lib/app-source";
 import { deriveFeedTitle } from "@/lib/release-title";
 import { VideoEmbed } from "@/components/video-embed";
 import { resolveVideoEmbed } from "@/lib/video-source";
+import { OrgAvatar } from "@/components/org-avatar";
+import { productPath } from "@/lib/links";
 
 export async function generateMetadata({
   params,
@@ -114,8 +116,14 @@ export default async function ReleaseDetailPage({ params }: { params: Promise<{ 
   // product name. See web/src/lib/release-title.ts.
   const { descriptive, versionLabel } = deriveFeedTitle(release);
   const heading = descriptive ?? versionLabel ?? release.title;
-  // Breadcrumb crumb stays tight: the version when present, else the heading.
-  const crumbLabel = versionLabel ?? heading;
+  // Breadcrumb leaf: the product page when the source is grouped under a
+  // product, else the source. The release title is intentionally not a crumb —
+  // it leads the H1 directly below. One descriptor feeds both the visible trail
+  // and the JSON-LD BreadcrumbList so the two can't drift.
+  const leafName = release.product ? release.product.name : release.sourceName || "Release";
+  const leafPath = release.product
+    ? productPath(release.org?.slug ?? null, release.product.slug)
+    : sourcePath;
   // Version subtitle, shown only when the descriptive title is leading the H1.
   const showVersionSubtitle = !!descriptive && !!versionLabel;
   const trimmedSummary = release.summary?.trim();
@@ -123,7 +131,9 @@ export default async function ReleaseDetailPage({ params }: { params: Promise<{ 
   const adminEnabled = isLocalAdminEnabled();
 
   const releaseUrl = `https://releases.sh/release/${id}`;
-  const sourceUrl = `https://releases.sh${sourcePath}`;
+  // Structured-data breadcrumb mirrors the visible trail: Home → Org → leaf,
+  // where the leaf is the product (when grouped) or the source.
+  const leafItem = `https://releases.sh${leafPath}`;
   const breadcrumbItems = [
     { "@type": "ListItem", position: 1, name: "Home", item: "https://releases.sh" },
     ...(release.org
@@ -134,13 +144,9 @@ export default async function ReleaseDetailPage({ params }: { params: Promise<{ 
             name: release.org.name,
             item: `https://releases.sh/${release.org.slug}`,
           },
-          { "@type": "ListItem", position: 3, name: release.sourceName, item: sourceUrl },
-          { "@type": "ListItem", position: 4, name: crumbLabel || "Release", item: releaseUrl },
+          { "@type": "ListItem", position: 3, name: leafName, item: leafItem },
         ]
-      : [
-          { "@type": "ListItem", position: 2, name: release.sourceName, item: sourceUrl },
-          { "@type": "ListItem", position: 3, name: crumbLabel || "Release", item: releaseUrl },
-        ]),
+      : [{ "@type": "ListItem", position: 2, name: leafName, item: leafItem }]),
   ];
   const jsonLd = {
     "@context": "https://schema.org",
@@ -169,24 +175,32 @@ export default async function ReleaseDetailPage({ params }: { params: Promise<{ 
       />
       <Header />
       <div className="max-w-3xl mx-auto px-6">
-        {/* Breadcrumb */}
-        <div className="pt-5 text-[13px] text-stone-400 dark:text-stone-500">
+        {/* Breadcrumb: [org logo] Org / Product (or Source). The release title
+            is not repeated here — it leads the H1 directly below. */}
+        <div className="pt-5 flex items-center gap-1.5 text-[13px] text-stone-400 dark:text-stone-500">
           {release.org && (
             <>
+              <OrgAvatar
+                avatarUrl={release.org.avatarUrl ?? null}
+                githubHandle={null}
+                name={release.org.name}
+                size={18}
+              />
               <Link
                 href={`/${release.org.slug}`}
                 className="hover:text-stone-600 dark:hover:text-stone-300"
               >
                 {release.org.name}
               </Link>
-              <span className="mx-1.5">/</span>
+              <span className="text-stone-300 dark:text-stone-600">/</span>
             </>
           )}
-          <Link href={sourcePath} className="hover:text-stone-600 dark:hover:text-stone-300">
-            {release.sourceName}
+          <Link
+            href={leafPath}
+            className="text-stone-600 dark:text-stone-300 font-medium hover:text-stone-900 dark:hover:text-stone-100"
+          >
+            {leafName}
           </Link>
-          <span className="mx-1.5">/</span>
-          <span className="text-stone-600 dark:text-stone-300 font-medium">{crumbLabel}</span>
         </div>
 
         {/* Header */}
