@@ -14,6 +14,11 @@ import {
   type OAuthJwtConfig,
   type JWTVerifyGetKey,
 } from "@releases/lib/oauth-jwt";
+import {
+  DEFAULT_OAUTH_AUDIENCE,
+  DEFAULT_OAUTH_ISSUER,
+  wwwAuthenticateChallenge,
+} from "./well-known.js";
 import { createDb } from "./db.js";
 import type { Env } from "./mcp-agent.js";
 
@@ -24,21 +29,12 @@ const STAGING_KEY_HEADER = "X-Releases-Staging-Key";
 const OAUTH_JWT_TOKEN_PREFIX = "oauth_";
 
 /**
- * Default AS issuer when `OAUTH_JWT_ISSUER` is unset — prod. This is the Better
- * Auth base URL *including* the `/api/auth` basePath (matches the discovery
- * `issuer` + token `iss`); the bare origin would fail jose's exact `iss` match
- * and reject every real token (#1483 issuer-mismatch fix).
- */
-const DEFAULT_OAUTH_ISSUER = "https://api.releases.sh/api/auth";
-/** Default audience (this MCP worker) when `OAUTH_JWT_AUDIENCE` is unset — prod. */
-const DEFAULT_OAUTH_AUDIENCE = "https://mcp.releases.sh";
-
-/**
  * Resource-server config for verifying "Sign in with Releases" OAuth JWTs
  * (#1483). The MCP worker can't import better-auth (zod-pin), so it verifies
  * locally with jose against the AS JWKS (`${issuer}/api/auth/jwks`). Issuer +
  * audience are overridable per environment (staging points at api-staging /
- * mcp-staging); both default to prod so no new config is required there.
+ * mcp-staging); both default to prod (shared with the discovery metadata in
+ * well-known.ts) so no new config is required there.
  */
 function oauthJwtConfig(env: Env): OAuthJwtConfig {
   return {
@@ -138,6 +134,26 @@ function rateLimited(): Response {
 }
 
 /**
+ * RFC 9728 §5.1 challenge for a presented-but-invalid OAuth JWT — a 401 with a
+ * `WWW-Authenticate` header pointing the client at this resource's metadata so a
+ * compliant MCP client can discover the AS and re-authenticate (e.g. after token
+ * expiry). Only the OAuth JWT lane reaches here; the no-credential, relk_, and
+ * relu_ lanes still fall open to anonymous read, so public read is never gated.
+ */
+function invalidTokenChallenge(request: Request): Response {
+  return new Response(
+    JSON.stringify({ error: "invalid_token", message: "The access token is invalid or expired" }),
+    {
+      status: 401,
+      headers: {
+        "Content-Type": "application/json",
+        "WWW-Authenticate": wwwAuthenticateChallenge(request.url),
+      },
+    },
+  );
+}
+
+/**
  * Verify + meter a relu_ user key by authenticating it against the API worker's
  * `GET /v1/tokens/me` over the service binding. The API worker's existing auth
  * middleware verifies and meters the key exactly once; we read back the resolved
@@ -189,7 +205,7 @@ async function resolveIdentity(
   env: Env,
   metered: boolean,
   jwtKeyResolver?: JWTVerifyGetKey,
-): Promise<McpIdentity | { rateLimited: true }> {
+): Promise<McpIdentity | { rateLimited: true } | { invalidToken: true }> {
   if (!presented) return ANONYMOUS;
   if (isUserApiKeyShaped(presented)) {
     if (await flag(env.FLAGS, env.API_TOKENS_DISABLED, FLAGS.apiTokensDisabled)) return ANONYMOUS;
@@ -208,11 +224,12 @@ async function resolveIdentity(
     return ANONYMOUS;
   }
   // "Sign in with Releases" OAuth JWT (#1483). Verified locally against the AS
-  // JWKS — additive: a verification failure falls through to anonymous read,
-  // exactly like an invalid relk_, so the unauthenticated MCP path is never
-  // gated. `token: null` (no forwardable credential) routes the downstream
-  // lookup fallback through the root key, same as the relu_ lane, and leaves the
-  // staging gate to the staging key.
+  // JWKS. `token: null` (no forwardable credential) routes the downstream lookup
+  // fallback through the root key, same as the relu_ lane, and leaves the staging
+  // gate to the staging key. Unlike the relk_/relu_ lanes, a presented-but-invalid
+  // OAuth JWT is NOT silently downgraded to anonymous: it returns a discovery
+  // challenge (401 + WWW-Authenticate) so a compliant MCP client can re-auth.
+  // No-credential requests never reach here, so public read stays open.
   if (isJwtShaped(presented)) {
     const cfg = oauthJwtConfig(env);
     if (jwtKeyResolver) cfg.keyResolver = jwtKeyResolver; // test seam — avoids JWKS fetch
@@ -225,7 +242,7 @@ async function resolveIdentity(
         token: null,
       };
     }
-    return ANONYMOUS;
+    return { invalidToken: true };
   }
   const rootKey = await getSecretWithFallback(env.RELEASES_API_KEY, env.RELEASED_API_KEY).catch(
     () => null,
@@ -254,6 +271,9 @@ export async function resolveMcpAuth(
   const metered = await isMeteredMcpMethod(request);
   const resolved = await resolveIdentity(presented, env, metered, opts?.jwtKeyResolver);
   if ("rateLimited" in resolved) return { ok: false, response: rateLimited() };
+  // A presented-but-invalid OAuth JWT → discovery challenge, ahead of the staging
+  // gate (the challenge is a 401 either way and points only at public metadata).
+  if ("invalidToken" in resolved) return { ok: false, response: invalidTokenChallenge(request) };
   const identity = resolved;
 
   if (env.STAGING_ACCESS_KEY && request.method !== "OPTIONS") {

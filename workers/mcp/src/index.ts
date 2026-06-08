@@ -2,6 +2,10 @@ import { createMcpHandler } from "agents/mcp";
 import { isHtmlRequest, renderLandingPage } from "./landing.js";
 import { createServer, type Env } from "./mcp-agent.js";
 import { resolveMcpAuth, machineTokenIdForUsage } from "./auth.js";
+import {
+  isProtectedResourceMetadataPath,
+  protectedResourceMetadataResponse,
+} from "./well-known.js";
 import { touchLastUsed } from "@releases/core-internal/api-token-store";
 import { FLAGS, flag } from "@releases/lib/flags";
 import { createDb } from "./db.js";
@@ -21,6 +25,14 @@ async function handle(
         "Cache-Control": "public, max-age=3600",
       },
     });
+  }
+
+  // RFC 9728 OAuth protected-resource metadata, required by the MCP auth spec so
+  // a client can discover this resource's authorization server + canonical URI.
+  // Served before resolveMcpAuth (like /robots.txt) so it stays public — and
+  // gate-exempt on staging — exactly like the AS's public JWKS.
+  if (request.method === "GET" && isProtectedResourceMetadataPath(url.pathname)) {
+    return protectedResourceMetadataResponse(env);
   }
 
   // Resolve the caller's identity (relk_ token → scopes, static key → root,
