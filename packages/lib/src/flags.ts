@@ -73,7 +73,6 @@ export const FLAGS = {
   webBotAuthEnabled: { key: "web-bot-auth-enabled", env: "WEB_BOT_AUTH_ENABLED", default: false },
   invalidationEnabled: { key: "invalidation-enabled", env: "INVALIDATION_ENABLED", default: false },
   indexnowEnabled: { key: "indexnow-enabled", env: "INDEXNOW_ENABLED", default: false },
-  enableAiTools: { key: "enable-ai-tools", env: "ENABLE_AI_TOOLS", default: false },
   maSessionsDisabled: { key: "ma-sessions-disabled", env: "MA_SESSIONS_DISABLED", default: false },
   batchSummarizeEnabled: {
     key: "batch-summarize-enabled",

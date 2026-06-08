@@ -22,8 +22,6 @@ These tools are auto-discovered from the MCP server. Use them for all read opera
 - **list_catalog** — List catalog entries (products + standalone sources).
 - **list_organizations** — Search/list organizations
 - **get_organization** — Detailed view of a single org
-- **summarize_changes** — AI-generated summary of recent changes for a product
-- **compare_products** — AI comparison between two products
 
 If any MCP read tool returns a permission-denied error, treat it as non-fatal — fall back to web search and proceed.
 

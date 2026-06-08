@@ -2,7 +2,6 @@ import { logEvent } from "@releases/lib/log-event";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { createDb } from "./db.js";
-import { buildAnthropicClient } from "@releases/lib/anthropic-client.js";
 import { hydrateMediaUrls } from "@releases/rendering/media-url.js";
 import {
   search,
@@ -16,8 +15,6 @@ import {
   listCollections,
   getCollection,
   getCollectionReleases,
-  summarizeChanges,
-  compareProducts,
   AmbiguousEntityError,
   ambiguousEntityToolResult,
   type SearchToolReturn,
@@ -29,12 +26,11 @@ import { logMcpSearch, deriveMcpClientKind, type McpSearchCommand } from "./lib/
 import { buildSearchMeta } from "./lib/pagination.js";
 import type { SearchMode } from "@buildinternet/releases-core/schema";
 import { KIND_VALUES, type Kind } from "@buildinternet/releases-core/kinds";
-import { scopeSatisfies, type ApiScope } from "@buildinternet/releases-core/api-token";
-import { scopeErrorText } from "./scope-error.js";
+import { scopeSatisfies } from "@buildinternet/releases-core/api-token";
 import { parseCoordinate } from "@buildinternet/releases-core/lookup-coordinate";
 import type { LookupResultPayload } from "@buildinternet/releases-api-types";
 import { getSecret, getSecretWithFallback } from "@releases/lib/secrets";
-import { FLAGS, flag, type FlagshipBinding } from "@releases/lib/flags";
+import { type FlagshipBinding } from "@releases/lib/flags";
 
 /**
  * Render the lookup payload as a markdown rail appended to the tool's text
@@ -81,11 +77,6 @@ type SecretBinding = { get(): Promise<string> };
 
 export interface Env {
   DB: D1Database;
-  ANTHROPIC_API_KEY: SecretBinding;
-  /** Optional Cloudflare AI Gateway passthrough — see docs/architecture/ai-gateway.md. */
-  ANTHROPIC_BASE_URL?: string;
-  AI_GATEWAY_TOKEN?: SecretBinding;
-  ENABLE_AI_TOOLS?: string;
   MEDIA_ORIGIN?: string;
   // Vectorize indexes for semantic search (read-only usage from MCP).
   RELEASES_INDEX: VectorizeIndex;
@@ -155,20 +146,13 @@ const READ_ONLY_HINTS = {
   openWorldHint: false,
 } as const;
 
-const AI_READ_HINTS = {
-  readOnlyHint: true,
-  destructiveHint: false,
-  idempotentHint: false,
-  openWorldHint: false,
-} as const;
-
 /**
  * `title` appears twice in a tool registration — once as the top-level
  * display name (MCP 2025-11-25 spec) and once inside `annotations.title`
  * (older field older clients still read). Build both from a single string
  * so they can't drift.
  */
-function titled(title: string, hints: typeof READ_ONLY_HINTS | typeof AI_READ_HINTS) {
+function titled(title: string, hints: typeof READ_ONLY_HINTS) {
   return { title, annotations: { title, ...hints } };
 }
 
@@ -203,14 +187,6 @@ const paginationFields = {
 
 function withPagination<T extends Record<string, z.ZodTypeAny>>(schema: T) {
   return { ...schema, ...paginationFields };
-}
-
-/** Tool-level scope failure surfaced to the model (not a protocol error). */
-function scopeError(required: ApiScope): ToolResult {
-  return {
-    content: [{ type: "text", text: scopeErrorText(required) }],
-    isError: true,
-  };
 }
 
 export interface CreateServerOptions {
@@ -260,19 +236,6 @@ export async function createServer(env: Env, ctx?: ExecutionContext, opts?: Crea
   const requestClientKind = deriveMcpClientKind(requestUserAgent);
   const authScopes = opts?.authScopes ?? ["read"];
   const authToken = opts?.authToken ?? null;
-  const aiToolsEnabled = await flag(env.FLAGS, env.ENABLE_AI_TOOLS, FLAGS.enableAiTools);
-
-  /**
-   * Wrap a tool handler so it returns a scope error unless the caller's scopes
-   * satisfy `required`. Outermost wrapper — runs before any DB / AI work.
-   */
-  function requireScope<T>(
-    required: ApiScope,
-    handler: (params: T) => Promise<ToolResult>,
-  ): (params: T) => Promise<ToolResult> {
-    return async (params: T) =>
-      scopeSatisfies(authScopes, required) ? handler(params) : scopeError(required);
-  }
 
   /** Hydrate portable /_media/ URLs in tool text output. */
   function withMedia<T>(handler: (params: T) => Promise<ToolResult>) {
@@ -432,23 +395,6 @@ export async function createServer(env: Env, ctx?: ExecutionContext, opts?: Crea
     } catch (err) {
       logEvent("error", { component: "mcp-lookup", event: "fallback-failed", err });
     }
-  }
-
-  // Lazily resolve the Anthropic client once per server instance
-  let anthropicClient: ReturnType<typeof buildAnthropicClient> | undefined;
-  async function getAnthropic(): Promise<ReturnType<typeof buildAnthropicClient>> {
-    if (!anthropicClient) {
-      const [apiKey, gatewayToken] = await Promise.all([
-        getSecret(env.ANTHROPIC_API_KEY),
-        getSecret(env.AI_GATEWAY_TOKEN).catch(() => ""),
-      ]);
-      anthropicClient = buildAnthropicClient({
-        apiKey: apiKey ?? "",
-        baseURL: env.ANTHROPIC_BASE_URL,
-        gatewayToken: gatewayToken || undefined, // null and "" both falsy → undefined
-      });
-    }
-    return anthropicClient;
   }
 
   server.registerTool(
@@ -849,62 +795,8 @@ export async function createServer(env: Env, ctx?: ExecutionContext, opts?: Crea
     withMedia(async (params) => getRelease(db, params)),
   );
 
-  if (aiToolsEnabled) {
-    server.registerTool(
-      "summarize_changes",
-      {
-        ...titled("Summarize changes", AI_READ_HINTS),
-        description: "Get an AI-generated summary of recent changes for a product",
-        inputSchema: {
-          product: z
-            .string()
-            .describe(
-              "Source identifier: src_ id or org-scoped coordinate orgSlug/sourceSlug (e.g. 'vercel/next-js'). Bare slugs without an org prefix are not accepted.",
-            ),
-          days: z.number().optional().describe("Look back this many days (default 30)"),
-          instructions: z
-            .string()
-            .optional()
-            .describe(
-              "Additional guidance for the summary (e.g. what to focus on, audience, format)",
-            ),
-        },
-      },
-      requireScope(
-        "write",
-        withMedia(async (params) => {
-          const anthropic = await getAnthropic();
-          return summarizeChanges(db, params, anthropic);
-        }),
-      ),
-    );
-
-    server.registerTool(
-      "compare_products",
-      {
-        ...titled("Compare products", AI_READ_HINTS),
-        description: "Compare recent changes between two products",
-        inputSchema: {
-          products: z
-            .array(z.string())
-            .describe(
-              "Array of exactly two source identifiers to compare. Each entry must be a src_ id or an org-scoped coordinate orgSlug/sourceSlug (e.g. 'vercel/next-js'). Bare slugs without an org prefix are not accepted.",
-            ),
-          days: z.number().optional().describe("Look back this many days (default 30)"),
-        },
-      },
-      requireScope(
-        "write",
-        withMedia(async (params) => {
-          const anthropic = await getAnthropic();
-          return compareProducts(db, params, anthropic);
-        }),
-      ),
-    );
-  }
-
   registerResources(server, db, mediaOrigin);
-  registerPrompts(server, db, { aiTools: aiToolsEnabled });
+  registerPrompts(server, db);
 
   return server;
 }

@@ -20,8 +20,6 @@ Connected via the Releases MCP server. Use for all read/search operations:
 - **get_latest_releases** — Recent releases for a product or organization
 - **list_organizations** — Search/list organizations
 - **get_organization** — Detailed view of a single org (accounts, tags, sources, products, aliases)
-- **summarize_changes** — AI-generated summary of recent changes
-- **compare_products** — AI comparison between two products
 
 ### CLI commands (writes + utilities)
 

@@ -1,7 +1,8 @@
 /**
  * Per-tool scope enforcement for the MCP worker (scoped API tokens — Phase 2).
- * Read tools stay open to an anonymous (implicit read) caller; AI tools require
- * `write` and short-circuit with an insufficient_scope tool error otherwise.
+ * Read tools stay open to an anonymous (implicit read) caller. The only
+ * write-gated path left is the on-demand `/v1/lookups` fallback inside `search`
+ * (gated directly via `scopeSatisfies`), exercised elsewhere.
  */
 import { describe, it, expect, beforeAll, afterAll } from "bun:test";
 import { Database } from "bun:sqlite";
@@ -21,7 +22,6 @@ afterAll(() => sqlite.close());
 function makeEnv(overrides: Partial<Env> = {}): Env {
   return {
     DB: makeD1Shim(sqlite),
-    ANTHROPIC_API_KEY: { get: async () => "" },
     RELEASES_INDEX: {} as Env["RELEASES_INDEX"],
     ENTITIES_INDEX: {} as Env["ENTITIES_INDEX"],
     CHANGELOG_CHUNKS_INDEX: {} as Env["CHANGELOG_CHUNKS_INDEX"],
@@ -52,25 +52,5 @@ describe("MCP scope enforcement", () => {
   it("read tools work for an anonymous (default read) caller", async () => {
     const res = await callTool(makeEnv(), {}, "list_organizations", {});
     expect(res.isError).toBeFalsy();
-  });
-
-  it("AI tools reject a read-only caller with insufficient_scope", async () => {
-    const env = makeEnv({ ENABLE_AI_TOOLS: "true" });
-    const res = await callTool(env, { authScopes: ["read"] }, "summarize_changes", {
-      product: "vercel/next-js",
-    });
-    expect(res.isError).toBe(true);
-    expect(res.content[0]?.text ?? "").toContain("insufficient_scope");
-  });
-
-  it("AI tools do NOT short-circuit on scope for a write caller (gets past the guard)", async () => {
-    // With write scope the guard passes; the handler then runs and fails on the
-    // empty Anthropic key / missing data — the point is the failure is NOT the
-    // scope error, proving the guard let the call through.
-    const env = makeEnv({ ENABLE_AI_TOOLS: "true" });
-    const res = await callTool(env, { authScopes: ["write"] }, "summarize_changes", {
-      product: "vercel/next-js",
-    });
-    expect(res.content[0]?.text ?? "").not.toContain("insufficient_scope");
   });
 });

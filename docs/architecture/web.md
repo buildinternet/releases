@@ -51,7 +51,7 @@ Dynamic routes carry `revalidate = 86400` so first-render cost amortizes across 
 
 ## On-demand lookup field in search responses
 
-`GET /v1/search` (lexical + hybrid) and the MCP `search` / `search_releases` tools include a `lookup` field when the query parses as a `{org}/{repo}` GitHub coordinate **and** the in-DB search returned zero hits (no orgs, no catalog entries, no release/changelog-chunk hits). When either condition fails, the route skips the lookup call and `lookup` is `null`. Shape:
+`GET /v1/search` (lexical + hybrid) and the MCP `search` tool include a `lookup` field when the query parses as a `{org}/{repo}` GitHub coordinate **and** the in-DB search returned zero hits (no orgs, no catalog entries, no release/changelog-chunk hits). When either condition fails, the route skips the lookup call and `lookup` is `null`. Shape:
 
 ```ts
 lookup: {

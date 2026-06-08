@@ -5,8 +5,7 @@ import { createTestDb, clearAllTables, type TestDatabase } from "../db-helper.js
 import { asD1, createMcpTestClient } from "../mcp-test-helpers.js";
 import { registerPrompts } from "../../workers/mcp/src/prompts.js";
 
-const linkPrompts = (db: TestDatabase["db"], aiTools: boolean) =>
-  createMcpTestClient(registerPrompts, asD1(db), { aiTools });
+const linkPrompts = (db: TestDatabase["db"]) => createMcpTestClient(registerPrompts, asD1(db));
 
 async function seed(db: TestDatabase["db"]) {
   const vercel = { id: newOrgId(), name: "Vercel", slug: "vercel" };
@@ -46,7 +45,7 @@ describe("MCP prompts + completion", () => {
   });
 
   it("lists the three priming prompts", async () => {
-    const link = await linkPrompts(fixture.db, false);
+    const link = await linkPrompts(fixture.db);
     try {
       const { prompts } = await link.client.listPrompts();
       const names = prompts.map((p) => p.name).toSorted();
@@ -56,8 +55,8 @@ describe("MCP prompts + completion", () => {
     }
   });
 
-  it("whats_new falls back to get_latest_releases when AI tools are off", async () => {
-    const link = await linkPrompts(fixture.db, false);
+  it("whats_new instructs the LLM to call get_latest_releases", async () => {
+    const link = await linkPrompts(fixture.db);
     try {
       const result = await link.client.getPrompt({
         name: "whats_new",
@@ -74,26 +73,8 @@ describe("MCP prompts + completion", () => {
     }
   });
 
-  it("whats_new prefers summarize_changes when AI tools are on", async () => {
-    const link = await linkPrompts(fixture.db, true);
-    try {
-      const result = await link.client.getPrompt({
-        name: "whats_new",
-        arguments: { product: "nextjs" },
-      });
-      const text = firstText(result.messages[0]);
-      expect(text).toContain("summarize_changes");
-      // default window: 30 days
-      expect(text).toContain("30");
-      // AI branch should not also instruct the LLM to call the fallback tool.
-      expect(text).not.toContain("get_latest_releases");
-    } finally {
-      await link.close();
-    }
-  });
-
-  it("compare_products names both products in the prompt body", async () => {
-    const link = await linkPrompts(fixture.db, true);
+  it("compare_products names both products and routes to get_latest_releases", async () => {
+    const link = await linkPrompts(fixture.db);
     try {
       const result = await link.client.getPrompt({
         name: "compare_products",
@@ -102,14 +83,14 @@ describe("MCP prompts + completion", () => {
       const text = firstText(result.messages[0]);
       expect(text).toContain("nextjs");
       expect(text).toContain("turborepo");
-      expect(text).toContain("compare_products");
+      expect(text).toContain("get_latest_releases");
     } finally {
       await link.close();
     }
   });
 
   it("catch_me_up queues the overview then the recent releases", async () => {
-    const link = await linkPrompts(fixture.db, false);
+    const link = await linkPrompts(fixture.db);
     try {
       const result = await link.client.getPrompt({
         name: "catch_me_up",
@@ -129,7 +110,7 @@ describe("MCP prompts + completion", () => {
   });
 
   it("completes product args via ref/prompt", async () => {
-    const link = await linkPrompts(fixture.db, true);
+    const link = await linkPrompts(fixture.db);
     try {
       const result = await link.client.complete({
         ref: { type: "ref/prompt", name: "whats_new" },
@@ -147,7 +128,7 @@ describe("MCP prompts + completion", () => {
   it("matches prompt arg by substring, not just prefix", async () => {
     // "repo" only appears mid-slug of "turborepo" — prefix-only completion
     // would miss this.
-    const link = await linkPrompts(fixture.db, true);
+    const link = await linkPrompts(fixture.db);
     try {
       const result = await link.client.complete({
         ref: { type: "ref/prompt", name: "whats_new" },
@@ -160,7 +141,7 @@ describe("MCP prompts + completion", () => {
   });
 
   it("completes organization arg on catch_me_up", async () => {
-    const link = await linkPrompts(fixture.db, false);
+    const link = await linkPrompts(fixture.db);
     try {
       const result = await link.client.complete({
         ref: { type: "ref/prompt", name: "catch_me_up" },
@@ -174,10 +155,10 @@ describe("MCP prompts + completion", () => {
 
   it("interpolates coordinate-form completions into the prompt body unchanged", async () => {
     // Regression: completion previously returned bare slugs that downstream
-    // tools (summarize_changes / compare_products / get_latest_releases /
-    // get_catalog_entry) reject with `bare_slug_rejected`. Coordinates round-
-    // trip cleanly, so the prompt body must preserve them verbatim.
-    const link = await linkPrompts(fixture.db, true);
+    // tools (get_latest_releases / get_catalog_entry) reject with
+    // `bare_slug_rejected`. Coordinates round-trip cleanly, so the prompt body
+    // must preserve them verbatim.
+    const link = await linkPrompts(fixture.db);
     try {
       const completion = await link.client.complete({
         ref: { type: "ref/prompt", name: "whats_new" },

@@ -49,9 +49,9 @@ export const completeOrgSlug = (db: D1Db, value: string) =>
 
 /**
  * Catalog completers return `org/slug` coordinates, not bare slugs. The
- * downstream tools (`summarize_changes`, `compare_products`,
- * `get_latest_releases`, `get_catalog_entry`) reject bare slugs because per-org
- * slug uniqueness (#690) makes them ambiguous, so handing back a bare slug
+ * downstream tools (`get_latest_releases`, `get_catalog_entry`) reject bare
+ * slugs because per-org slug uniqueness (#690) makes them ambiguous, so
+ * handing back a bare slug
  * would invite a 400 on the next tool call. Org completion stays bare because
  * `organizations.slug` is still globally unique.
  *

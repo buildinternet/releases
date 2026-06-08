@@ -17,7 +17,6 @@ const notCalled = () => {
 function stubEnv(overrides: Partial<Env> = {}): Env {
   return {
     DB: { prepare: notCalled, batch: notCalled, exec: notCalled } as unknown as Env["DB"],
-    ANTHROPIC_API_KEY: { get: async () => "" },
     RELEASES_INDEX: {} as Env["RELEASES_INDEX"],
     ENTITIES_INDEX: {} as Env["ENTITIES_INDEX"],
     CHANGELOG_CHUNKS_INDEX: {} as Env["CHANGELOG_CHUNKS_INDEX"],
@@ -84,22 +83,6 @@ describe("MCP tool annotations", () => {
         | undefined;
       expect(meta?.ui?.resourceUri).toBe(expectedUri);
       expect(meta?.["ui/resourceUri"]).toBe(expectedUri);
-    }
-  });
-
-  it("flips idempotentHint off for AI tools (LLM output varies)", async () => {
-    const aiTools = await listTools(stubEnv({ ENABLE_AI_TOOLS: "true" }));
-    const summarize = aiTools.find((t) => t.name === "summarize_changes");
-    const compare = aiTools.find((t) => t.name === "compare_products");
-    expect(summarize).toBeDefined();
-    expect(compare).toBeDefined();
-    for (const tool of [summarize!, compare!]) {
-      expect(tool.annotations?.readOnlyHint).toBe(true);
-      expect(tool.annotations?.destructiveHint).toBe(false);
-      expect(tool.annotations?.idempotentHint).toBe(false);
-      expect(tool.annotations?.openWorldHint).toBe(false);
-      expect(tool.title).toBeString();
-      expect(tool.annotations?.title).toBe(tool.title);
     }
   });
 });

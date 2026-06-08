@@ -9,10 +9,10 @@ The [/search](https://releases.sh/search) page is a browser form — fine for hu
 
 ## WebMCP (browser agents)
 
-When a user loads any releases.sh page, the site registers a `search_releases` tool on `navigator.modelContext`. Browser-resident agents can call it without any authentication:
+When a user loads any releases.sh page, the site registers a `search` tool on `navigator.modelContext`. Browser-resident agents can call it without any authentication:
 
 ```js
-const result = await navigator.modelContext.callTool("search_releases", {
+const result = await navigator.modelContext.callTool("search", {
   query: "streaming",
   limit: 10,
 });
@@ -22,7 +22,7 @@ Other read-only tools are exposed the same way: `list_organizations`, `get_organ
 
 ## Remote MCP server
 
-Add `https://mcp.releases.sh` to your agent's MCP configuration and call `search_releases` (or any other tool) through the MCP transport. See [/docs/api/mcp](/docs/api/mcp) for the full tool catalog.
+Add `https://mcp.releases.sh/mcp` to your agent's MCP configuration and call `search` (or any other tool) through the MCP transport. See [/docs/api/mcp](/docs/api/mcp) for the full tool catalog.
 
 ## REST API
 

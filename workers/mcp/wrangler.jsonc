@@ -21,7 +21,6 @@
     },
   },
   "vars": {
-    "ENABLE_AI_TOOLS": "false",
     "USER_API_KEYS_ENABLED": "false",
     "MEDIA_ORIGIN": "https://media.releases.sh",
     // "Sign in with Releases" OAuth resource-server verification (#1483). The AS
@@ -33,9 +32,6 @@
     // Embedding provider for semantic search. Default: voyage (voyage-4-lite,
     // requested at 512 dims via output_dimension to match the Vectorize indexes).
     "EMBEDDING_PROVIDER": "voyage",
-    // Route Anthropic SDK calls through Cloudflare AI Gateway.
-    // See docs/architecture/ai-gateway.md. Gateway runs in authenticated mode.
-    "ANTHROPIC_BASE_URL": "https://gateway.ai.cloudflare.com/v1/b082600d280d44fd5da3501bc1bffe2f/releases/anthropic",
   },
   "d1_databases": [
     {
@@ -70,19 +66,9 @@
   // present a Bearer to the API worker's admin-gated /v1/lookups route.
   "secrets_store_secrets": [
     {
-      "binding": "ANTHROPIC_API_KEY",
-      "store_id": "a887a71cab084105b79706df23380723",
-      "secret_name": "ANTHROPIC_API_KEY",
-    },
-    {
       "binding": "VOYAGE_API_KEY",
       "store_id": "a887a71cab084105b79706df23380723",
       "secret_name": "VOYAGER_API_KEY",
-    },
-    {
-      "binding": "AI_GATEWAY_TOKEN",
-      "store_id": "a887a71cab084105b79706df23380723",
-      "secret_name": "AI_GATEWAY_TOKEN",
     },
     {
       "binding": "RELEASED_API_KEY",
@@ -107,7 +93,6 @@
       "name": "releases-mcp-staging",
       "routes": [{ "pattern": "mcp-staging.releases.sh", "custom_domain": true }],
       "vars": {
-        "ENABLE_AI_TOOLS": "false",
         "USER_API_KEYS_ENABLED": "false",
         "MEDIA_ORIGIN": "https://media.releases.sh",
         "EMBEDDING_PROVIDER": "voyage",
@@ -118,9 +103,6 @@
         // Staging-only: emit X-Robots-Tag: noindex and serve a deny-all
         // /robots.txt. Belt-and-suspenders against crawling.
         "INDEXING_DISABLED": "true",
-        // Route Anthropic SDK calls through Cloudflare AI Gateway.
-        // See docs/architecture/ai-gateway.md. Flip on prod after staging burn-in.
-        "ANTHROPIC_BASE_URL": "https://gateway.ai.cloudflare.com/v1/b082600d280d44fd5da3501bc1bffe2f/releases-staging/anthropic",
       },
       "d1_databases": [
         {
@@ -135,11 +117,6 @@
       "kv_namespaces": [{ "binding": "EMBED_CACHE", "id": "7737ccafd37a43fc9d2365c9a2d7ebca" }],
       "secrets_store_secrets": [
         {
-          "binding": "ANTHROPIC_API_KEY",
-          "store_id": "a887a71cab084105b79706df23380723",
-          "secret_name": "ANTHROPIC_API_KEY",
-        },
-        {
           "binding": "VOYAGE_API_KEY",
           "store_id": "a887a71cab084105b79706df23380723",
           "secret_name": "VOYAGER_API_KEY",
@@ -148,11 +125,6 @@
           "binding": "STAGING_ACCESS_KEY",
           "store_id": "a887a71cab084105b79706df23380723",
           "secret_name": "STAGING_ACCESS_KEY",
-        },
-        {
-          "binding": "AI_GATEWAY_TOKEN",
-          "store_id": "a887a71cab084105b79706df23380723",
-          "secret_name": "AI_GATEWAY_TOKEN_STAGING",
         },
         {
           "binding": "RELEASED_API_KEY",

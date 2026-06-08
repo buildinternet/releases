@@ -7,7 +7,6 @@ Optional Cloudflare AI Gateway proxy in front of every direct Anthropic SDK call
 Covered when `ANTHROPIC_BASE_URL` is set:
 
 - `workers/api` — `admin-ai` summarize + compare routes, scrape-agent cron preflight
-- `workers/mcp` — AI-backed tools (`summarizeChanges`, `compareProducts`)
 - `workers/discovery` — extract-deps agent/incremental paths only (managed-agents sessions are routed direct, see below)
 - `scripts/run-eval-task.ts` — local eval runner
 - `scripts/generate-release-content.ts` — operational backfill / regenerate tool (#1474)
