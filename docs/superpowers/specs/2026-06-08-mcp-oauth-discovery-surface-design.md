@@ -75,9 +75,12 @@ A pure, unit-testable builder + a public route.
   client's `resource` round-trips: AS `checkResource` accepts it, mints a JWT with that
   `aud`, and the resource server's jose `aud` check matches.
 
-- **Route** — in `workers/mcp/src/index.ts`, served **before** `resolveMcpAuth` (same
-  position as the existing `/robots.txt` short-circuit, so it is gate-exempt on staging
-  and public on prod, like the AS's public JWKS):
+- **Route** — in `workers/mcp/src/index.ts`. In prod (no `STAGING_ACCESS_KEY`) it is
+  served **before** `resolveMcpAuth` (same position as the existing `/robots.txt`
+  short-circuit) so it is public discovery, like the AS's public JWKS. On staging it is
+  deferred until **after** the staging access gate so it stays opaque like every other
+  route (a harness already carries the staging key; this matches the AS JWKS, which is
+  also gated on staging):
   - `GET /.well-known/oauth-protected-resource`
   - `GET /.well-known/oauth-protected-resource/mcp` (RFC 9728 §3.1 path-insertion — some
     clients derive the well-known from the `/mcp` transport path)
@@ -93,7 +96,7 @@ from **a presented OAuth JWT that fails verification** (→ `401` + `WWW-Authent
 - Scope the change to the **OAuth JWT lane only.** A JWT-shaped bearer that fails
   `verifyOAuthJwt` (or verifies with zero API scopes) → the auth result becomes a 401
   carrying:
-  ```
+  ```text
   WWW-Authenticate: Bearer error="invalid_token", resource_metadata="<absolute metadata URL>"
   ```
   The `resource_metadata` URL is built from the request origin +
@@ -141,8 +144,12 @@ from **a presented OAuth JWT that fails verification** (→ `401` + `WWW-Authent
     no matching key) → `401` with the exact `WWW-Authenticate` header + `resource_metadata`.
   - valid JWT → unchanged identity, no challenge.
   - invalid `relk_` → still anonymous (regression guard for the deliberately-unchanged lane).
-- Route: well-known served before the staging gate (returns the doc even with a staging
-  key bound and absent).
+  - staging gate precedes the challenge: an invalid JWT with the gate bound but no staging
+    key → generic `401` (no `WWW-Authenticate`); with the staging key → the challenge.
+- Metadata builder / path matcher / response builder / challenge string are unit-tested
+  directly. The `index.ts` route wiring is not unit-tested (its `agents/mcp` import is
+  unresolvable under root `bun test`, same as the rest of `index.ts`); it mirrors the
+  `/robots.txt` short-circuit and is covered by deployed-surface checks post-merge.
 - `bun test` green; `tsc --noEmit` clean on root + `workers/mcp` (zod-pin intact — no new
   deps).
 
@@ -150,7 +157,8 @@ from **a presented OAuth JWT that fails verification** (→ `401` + `WWW-Authent
 
 - `workers/mcp/src/well-known.ts` — NEW: `buildProtectedResourceMetadata`, the metadata
   type, the WWW-Authenticate challenge-header builder, shared default issuer/audience.
-- `workers/mcp/src/index.ts` — add the two well-known GET routes before `resolveMcpAuth`.
+- `workers/mcp/src/index.ts` — add the two well-known GET routes: public pre-auth in prod,
+  deferred past the staging gate when `STAGING_ACCESS_KEY` is bound.
 - `workers/mcp/src/auth.ts` — distinguish invalid-OAuth-JWT from anonymous; emit the 401
   challenge from `resolveMcpAuth`.
 - `workers/mcp/test/*` — unit + auth tests above.

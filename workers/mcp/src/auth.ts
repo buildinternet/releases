@@ -271,24 +271,32 @@ export async function resolveMcpAuth(
   const metered = await isMeteredMcpMethod(request);
   const resolved = await resolveIdentity(presented, env, metered, opts?.jwtKeyResolver);
   if ("rateLimited" in resolved) return { ok: false, response: rateLimited() };
-  // A presented-but-invalid OAuth JWT → discovery challenge, ahead of the staging
-  // gate (the challenge is a 401 either way and points only at public metadata).
-  if ("invalidToken" in resolved) return { ok: false, response: invalidTokenChallenge(request) };
-  const identity = resolved;
 
+  // Staging gate FIRST — it must run before any OAuth discovery challenge so
+  // mcp-staging stays opaque to invalid-credential probes (the generic 401, not
+  // the WWW-Authenticate hint). An invalid OAuth JWT cannot bridge the gate (it
+  // has no token identity), so on staging it falls to the generic 401 unless a
+  // staging key is also presented. In prod (no STAGING_ACCESS_KEY) the gate is
+  // skipped and the challenge below fires as usual.
   if (env.STAGING_ACCESS_KEY && request.method !== "OPTIONS") {
     const stagingSecret = await getSecret(env.STAGING_ACCESS_KEY).catch(() => null);
+    const bridges =
+      !("invalidToken" in resolved) &&
+      // Only the `relk_` token bridge (raw token present) opens the gate, not a
+      // `relu_` user identity — those carry `token: null`, so a user key must
+      // still supply the staging key to reach mcp-staging.
+      ((resolved.kind === "token" && resolved.token !== null) || resolved.kind === "root");
     const passes =
       !stagingSecret ||
       request.headers.get(STAGING_KEY_HEADER) === stagingSecret ||
       presented === stagingSecret ||
-      // Only the `relk_` token bridge (raw token present) opens the gate, not a
-      // `relu_` user identity — those carry `token: null`, so a user key must
-      // still supply the staging key to reach mcp-staging.
-      (identity.kind === "token" && identity.token !== null) ||
-      identity.kind === "root";
+      bridges;
     if (!passes) return { ok: false, response: unauthorized() };
   }
 
-  return { ok: true, identity };
+  // A presented-but-invalid OAuth JWT → discovery challenge (only reachable once
+  // the staging gate, if any, has passed).
+  if ("invalidToken" in resolved) return { ok: false, response: invalidTokenChallenge(request) };
+
+  return { ok: true, identity: resolved };
 }

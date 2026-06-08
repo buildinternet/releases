@@ -38,14 +38,17 @@ beforeAll(async () => {
   keyResolver = createLocalJWKSet({ keys: [jwk] });
 });
 
-async function jwt(scope: string, opts: { aud?: string } = {}): Promise<string> {
+async function jwt(
+  scope: string,
+  opts: { aud?: string; exp?: string | number } = {},
+): Promise<string> {
   return new SignJWT({ scope })
     .setProtectedHeader({ alg: "RS256", kid: "k1" })
     .setIssuer(ISSUER)
     .setAudience(opts.aud ?? AUDIENCE)
     .setSubject("user_42")
     .setIssuedAt()
-    .setExpirationTime("5m")
+    .setExpirationTime(opts.exp ?? "5m")
     .sign(privateKey);
 }
 
@@ -124,6 +127,19 @@ describe("MCP OAuth-JWT lane", () => {
     }
   });
 
+  it("challenges an expired JWT with 401 + WWW-Authenticate", async () => {
+    // exp 60s in the past → jose rejects on the `exp` claim.
+    const expired = await jwt("read", { exp: Math.floor(Date.now() / 1000) - 60 });
+    const r = await resolveMcpAuth(req({ Authorization: `Bearer ${expired}` }), env(), {
+      jwtKeyResolver: keyResolver,
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.response.status).toBe(401);
+      expect(r.response.headers.get("WWW-Authenticate")).toBe(EXPECTED_CHALLENGE);
+    }
+  });
+
   it("a JWT verifying with zero API scopes is challenged, not silently anonymous", async () => {
     // openid/profile only → no read/write/admin → not a usable API principal.
     const r = await resolveMcpAuth(
@@ -134,7 +150,36 @@ describe("MCP OAuth-JWT lane", () => {
       },
     );
     expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.response.status).toBe(401);
+    if (!r.ok) {
+      expect(r.response.status).toBe(401);
+      expect(r.response.headers.get("WWW-Authenticate")).toBe(EXPECTED_CHALLENGE);
+    }
+  });
+
+  it("the staging gate precedes the invalid-token challenge (staging stays opaque)", async () => {
+    const stagingEnv = env({ STAGING_ACCESS_KEY: mockSecret("stage-key") as never });
+    const bad = await jwt("admin", { aud: "https://elsewhere.example.com" });
+    // No staging key → the gate returns its generic 401 BEFORE the OAuth
+    // challenge, so the discovery header is NOT leaked on staging.
+    const blocked = await resolveMcpAuth(req({ Authorization: `Bearer ${bad}` }), stagingEnv, {
+      jwtKeyResolver: keyResolver,
+    });
+    expect(blocked.ok).toBe(false);
+    if (!blocked.ok) {
+      expect(blocked.response.status).toBe(401);
+      expect(blocked.response.headers.get("WWW-Authenticate")).toBeNull();
+    }
+    // With the staging key → the gate passes and the invalid token is challenged.
+    const challenged = await resolveMcpAuth(
+      req({ Authorization: `Bearer ${bad}`, "X-Releases-Staging-Key": "stage-key" }),
+      stagingEnv,
+      { jwtKeyResolver: keyResolver },
+    );
+    expect(challenged.ok).toBe(false);
+    if (!challenged.ok) {
+      expect(challenged.response.status).toBe(401);
+      expect(challenged.response.headers.get("WWW-Authenticate")).toBe(EXPECTED_CHALLENGE);
+    }
   });
 
   it("does not record machine-lane usage for an oauth_ principal", async () => {

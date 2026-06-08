@@ -29,9 +29,11 @@ async function handle(
 
   // RFC 9728 OAuth protected-resource metadata, required by the MCP auth spec so
   // a client can discover this resource's authorization server + canonical URI.
-  // Served before resolveMcpAuth (like /robots.txt) so it stays public — and
-  // gate-exempt on staging — exactly like the AS's public JWKS.
-  if (request.method === "GET" && isProtectedResourceMetadataPath(url.pathname)) {
+  // In prod (no STAGING_ACCESS_KEY) it is public discovery, short-circuited before
+  // auth like /robots.txt. On staging it must clear the staging access gate like
+  // every other route, so it is deferred until after resolveMcpAuth below.
+  const wantsMetadata = request.method === "GET" && isProtectedResourceMetadataPath(url.pathname);
+  if (wantsMetadata && !env.STAGING_ACCESS_KEY) {
     return protectedResourceMetadataResponse(env);
   }
 
@@ -41,6 +43,8 @@ async function handle(
   // caller clears it; per-tool scope enforcement happens inside createServer.
   const auth = await resolveMcpAuth(request, env);
   if (!auth.ok) return auth.response;
+  // Staging: the gate has now passed, so serve the (otherwise public) metadata.
+  if (wantsMetadata) return protectedResourceMetadataResponse(env);
   const { identity } = auth;
   // Record token usage (throttled, fire-and-forget) so the admin surface can
   // audit last-used across both the API and MCP workers. relu_ user keys are
