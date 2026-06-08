@@ -3,6 +3,7 @@ import {
   oneTapClient,
   magicLinkClient,
   deviceAuthorizationClient,
+  lastLoginMethodClient,
 } from "better-auth/client/plugins";
 import { dashClient } from "@better-auth/infra/client";
 import { oauthProviderClient } from "@better-auth/oauth-provider/client";
@@ -58,6 +59,13 @@ export const authClient = createAuthClient({
     // (so nothing to gate at construction); the pages themselves are flag-gated.
     // The CLI does NOT use this client — it speaks the raw HTTP endpoints directly.
     deviceAuthorizationClient(),
+    // Last-login-method (client half). Reads the non-httpOnly
+    // `better-auth.last_used_login_method` cookie the server plugin sets — scoped
+    // to `.releases.sh`, so it's readable here on the web origin even though the
+    // worker (api.releases.sh) set it — and exposes `getLastUsedLoginMethod()` /
+    // `isLastUsedLoginMethod()`. The sign-in form uses it to badge the method the
+    // returning user last used. Cookie carries only a method name, no PII.
+    lastLoginMethodClient(),
     // OAuth provider client — registers ONLY a fetch hook that injects the signed
     // `oauth_query` into consent POSTs. It does NOT register callable action
     // methods: `authClient.oauth2Consent(...)` would fall through to the generic
@@ -79,4 +87,5 @@ export const {
   resetPassword,
   sendVerificationEmail,
   oneTap,
+  getLastUsedLoginMethod,
 } = authClient;

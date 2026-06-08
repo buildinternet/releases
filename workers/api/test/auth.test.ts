@@ -7,6 +7,7 @@ import { createTestDb } from "./setup";
 import { user, session, account, verification, deviceCode } from "../src/db/schema-auth.js";
 import {
   buildSocialProviders,
+  resolveLastLoginMethodOverride,
   authTrustedOrigins,
   authCorsMiddleware,
   deriveCookieDomain,
@@ -49,6 +50,28 @@ describe("buildSocialProviders gating", () => {
 
   it("treats empty strings as absent", () => {
     expect(buildSocialProviders({ googleClientId: "id", googleClientSecret: "" })).toEqual({});
+  });
+});
+
+describe("resolveLastLoginMethodOverride", () => {
+  it("maps the One Tap callback path to google (the default resolver misses it)", () => {
+    expect(resolveLastLoginMethodOverride("/one-tap/callback")).toBe("google");
+  });
+
+  it("returns null for paths the plugin's default resolver already handles", () => {
+    // These fall through to Better Auth's built-in resolution, so the override
+    // must NOT shadow them: /callback/google → "google", /sign-in/email → "email",
+    // /magic-link/verify → "magic-link".
+    expect(resolveLastLoginMethodOverride("/callback/google")).toBeNull();
+    expect(resolveLastLoginMethodOverride("/sign-in/email")).toBeNull();
+    expect(resolveLastLoginMethodOverride("/magic-link/verify")).toBeNull();
+  });
+
+  it("returns null for unknown, empty, or absent paths", () => {
+    expect(resolveLastLoginMethodOverride("/some/other/path")).toBeNull();
+    expect(resolveLastLoginMethodOverride("")).toBeNull();
+    expect(resolveLastLoginMethodOverride(null)).toBeNull();
+    expect(resolveLastLoginMethodOverride(undefined)).toBeNull();
   });
 });
 
