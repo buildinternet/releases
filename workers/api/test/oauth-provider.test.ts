@@ -68,11 +68,30 @@ describe("oauthValidAudiences", () => {
       BETTER_AUTH_URL: "https://api.releases.sh",
       OAUTH_RESOURCE_AUDIENCES: "https://mcp.releases.sh, https://api.releases.sh",
     } as never);
-    expect(auds).toEqual(["https://api.releases.sh", "https://mcp.releases.sh"]);
+    // Both slash-forms of each distinct origin, deduped, input-form first.
+    expect(auds).toEqual([
+      "https://api.releases.sh",
+      "https://api.releases.sh/",
+      "https://mcp.releases.sh",
+      "https://mcp.releases.sh/",
+    ]);
   });
 
-  it("falls back to the api origin when nothing is configured", () => {
-    expect(oauthValidAudiences({} as never)).toEqual(["https://api.releases.sh"]);
+  it("emits the trailing-slash form an MCP client requests as its resource", () => {
+    // `new URL("https://mcp.releases.sh").href` → "https://mcp.releases.sh/",
+    // so the plugin's exact-match resource check must find the slash variant.
+    const auds = oauthValidAudiences({
+      BETTER_AUTH_URL: "https://api.releases.sh",
+      OAUTH_RESOURCE_AUDIENCES: "https://mcp.releases.sh",
+    } as never);
+    expect(auds).toContain("https://mcp.releases.sh/");
+  });
+
+  it("falls back to the api origin (both forms) when nothing is configured", () => {
+    expect(oauthValidAudiences({} as never)).toEqual([
+      "https://api.releases.sh",
+      "https://api.releases.sh/",
+    ]);
   });
 });
 

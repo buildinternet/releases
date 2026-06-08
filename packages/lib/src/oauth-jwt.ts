@@ -119,6 +119,20 @@ function resolveKeySet(config: OAuthJwtConfig): JWTVerifyGetKey {
 }
 
 /**
+ * Both slash-forms of an audience/resource URL: the value as given plus its
+ * trailing-slash counterpart (slash added if absent, stripped if present).
+ * Shared by the resource-server verifier ({@link verifyOAuthJwt}) and the AS
+ * allow-list (`oauthValidAudiences`) so the set the AS accepts as a `resource`
+ * is exactly the set the RS accepts as an `aud` — see the comment on the
+ * `audience` option in {@link verifyOAuthJwt} for why both forms occur in the
+ * wild. Order-stable (input first) and idempotent on the pair.
+ */
+export function audienceVariants(aud: string): string[] {
+  const toggled = aud.endsWith("/") ? aud.replace(/\/+$/, "") : `${aud}/`;
+  return toggled === aud ? [aud] : [aud, toggled];
+}
+
+/**
  * Verify an OAuth JWT access token against the AS JWKS. Checks signature,
  * `iss`, `aud`, and `exp` (jose enforces expiry). Returns the projected token on
  * success, or `null` on ANY failure (bad signature, wrong issuer/audience,
@@ -132,7 +146,17 @@ export async function verifyOAuthJwt(
   try {
     const { payload } = await jwtVerify(token, resolveKeySet(config), {
       issuer: config.issuer,
-      audience: config.audience,
+      // Accept both the bare-origin and trailing-slash forms of the audience.
+      // The AS stamps `aud` verbatim from the client's RFC 8707 `resource`
+      // parameter, and MCP clients derive that resource via WHATWG URL
+      // normalization — `new URL("https://mcp.releases.sh").href` is
+      // `"https://mcp.releases.sh/"` — so a root-hosted resource server sees
+      // tokens whose `aud` carries a trailing slash even though our configured
+      // audience does not (and vice-versa for clients that honor the bare
+      // protected-resource `resource` value). jose does exact per-entry string
+      // matching, so we must offer both. Kept in lockstep with the AS allow-list
+      // (`oauthValidAudiences`), which emits the same pair.
+      audience: audienceVariants(config.audience),
     });
     const role = (payload as Record<string, unknown>)["https://releases.sh/role"];
     return {
