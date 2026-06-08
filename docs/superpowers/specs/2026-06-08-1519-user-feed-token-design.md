@@ -22,15 +22,21 @@ reliably, so the credential rides in the URL as an opaque per-user **feed token*
    revoke).
 5. **No feature flag** — the cookie session (management lane) and the token (read
    lane) are the only gates, consistent with how follows shipped.
+6. **Reversible token (re-revealable)** — the feed serves only publicly-available
+   release data and carries no PII or identity, so the token is stored recoverably
+   and the full feed URL can be re-displayed on every visit (the calendar-`.ics`
+   model), not shown once. The UI warns the user to keep the URL private (anyone
+   holding it can read their follow list's feed); losing it is a rotate, not a
+   re-subscribe.
 
 ## Token
 
 ### Wire format
 
 `relf_<lookupId>_<secret>` — mirrors `relk_` exactly: 12-char base62 `lookupId`
-(non-secret, indexed) + 32-char base62 `secret` (~190 bits, CSPRNG). Only the
-SHA-256 hash of the secret is stored; the full token is shown **once** at
-mint/rotate time and is never retrievable again.
+(non-secret, indexed) + 32-char base62 `secret` (~190 bits, CSPRNG). Per decision 6
+the token is stored **recoverably** — the `secret` is persisted plaintext (not
+hashed) so the management lane can re-display the full feed URL on any visit.
 
 Added to `packages/core/src/api-token.ts` (pure, zod-free — good fit):
 
@@ -39,9 +45,10 @@ Added to `packages/core/src/api-token.ts` (pure, zod-free — good fit):
 - `parseFeedToken(raw): { lookupId, secret } | null`
 - `isFeedTokenShaped(raw): boolean`
 
-Reuses the existing `hashSecret()` and `constantTimeEqual()` verbatim. The `relf_`
-lane is **only** ever presented in the `/v1/feed/:token` path — never as a Bearer —
-so it never reaches the global auth middleware and needs no routing there.
+Reuses the existing `constantTimeEqual()` verbatim for secret comparison (no
+hashing — the secret is stored plaintext per decision 6). The `relf_` lane is
+**only** ever presented in the `/v1/feed/:token` path — never as a Bearer — so it
+never reaches the global auth middleware and needs no routing there.
 
 ### Storage
 
@@ -54,7 +61,7 @@ user**:
 | `id`           | text PK             | typed `uft_…`                                 |
 | `user_id`      | text NOT NULL       | FK → `user(id)` ON DELETE CASCADE; **unique** |
 | `lookup_id`    | text NOT NULL       | plaintext, unique-indexed (resolve key)       |
-| `token_hash`   | text NOT NULL       | SHA-256 hex of the secret                     |
+| `secret`       | text NOT NULL       | plaintext secret (reversible; see decision 6) |
 | `created_at`   | integer (timestamp) | `$defaultFn(() => new Date())`                |
 | `last_used_at` | integer (timestamp) | nullable; best-effort on each feed fetch      |
 
@@ -77,8 +84,8 @@ island needs a paired migration, same as `schema-follows` did).
 - `:token` accepts a `.atom` or `.rss` suffix (stripped in-handler) or bare; both
   serve the same Atom document (every reader accepts Atom — a separate RSS-2.0
   serializer is YAGNI).
-- Resolve: `parseFeedToken` → `SELECT … WHERE lookup_id = ?` → `constantTimeEqual(
-hashSecret(secret), row.token_hash)` → `userId`.
+- Resolve: `parseFeedToken` → `SELECT … WHERE lookup_id = ?` →
+  `constantTimeEqual(secret, row.secret)` → `userId`.
 - On match: `getFollowedReleases(db, userId, { limit: ATOM_DEFAULT_MAX_ENTRIES })` →
   `userFeedToAtom(...)`.
 - Headers: `Content-Type: application/atom+xml; charset=utf-8`,
@@ -97,10 +104,9 @@ so unit tests mount them behind an injected session exactly like the follows han
 Nested under `/me/feed` (the token is a sub-resource of the personalized feed — avoids
 a kebab compound noun):
 
-- `GET /v1/me/feed/token` → `{ token: { lookupId, createdAt, lastUsedAt } | null }`.
-  Metadata only — **never** the secret.
-- `POST /v1/me/feed/token` → mint-or-rotate; returns `{ feedUrl, lookupId, createdAt }`
-  with the **full tokenized URL exactly once**.
+- `GET /v1/me/feed/token` → `{ token: FeedToken | null }` — includes the **full
+  re-revealable `feedUrl`** (decision 6), so the UI can show + copy it on any visit.
+- `POST /v1/me/feed/token` → mint-or-rotate; returns the `FeedToken` (new `feedUrl`).
 - `DELETE /v1/me/feed/token` → revoke (delete the row); `{ success: true }`.
 
 `feedUrl` is built from the API worker's own request origin
@@ -141,18 +147,20 @@ In `web/src/app/following/following-client.tsx`, add a card that talks to the
 management endpoints with credentialed (cookie) fetch:
 
 - **No token:** "Generate a private feed URL" button → `POST` → reveal the URL with a
-  **Copy** button (held in component state for the session — show-once).
-- **Has token:** masked indicator (`relf_<lookupId>_••••`), `created` / `last fetched`
-  timestamps, **Copy** (only available right after generate/rotate, since the secret
-  isn't re-fetchable), **Rotate** (confirm — warns it breaks existing reader
-  subscriptions), **Revoke** (confirm).
+  **Copy** button.
+- **Has token:** the full `feedUrl` (re-revealable via `GET`), a **Copy** button,
+  `created` / `last fetched` timestamps, **Rotate** (confirm — warns it breaks
+  existing reader subscriptions), **Revoke** (confirm).
+- A short inline note: *"Keep this URL private — anyone with it can read your feed.
+  Rotate to invalidate the old one."* (Decision 6 — the data is public, but the URL
+  is still personal to your follow list.)
 
 ## api-types
 
-Additive wire types in `packages/api-types` (consumed by web):
+Additive wire type in `packages/api-types` (consumed by web). One shape serves both
+`GET` (wrapped in `{ token }`) and `POST`, since the token is re-revealable:
 
-- `FeedTokenInfo` — `{ lookupId: string; createdAt: string; lastUsedAt: string | null }`
-- `FeedTokenMint` — `{ feedUrl: string; lookupId: string; createdAt: string }`
+- `FeedToken` — `{ feedUrl: string; lookupId: string; createdAt: string; lastUsedAt: string | null }`
 
 ## Error handling summary
 
@@ -168,7 +176,7 @@ Additive wire types in `packages/api-types` (consumed by web):
 ## Testing
 
 - **Core** (`packages/core`): `generateFeedToken` → `parseFeedToken` round-trip;
-  prefix/shape checks; hash + constant-time verify.
+  prefix/shape checks; `constantTimeEqual` accept/reject.
 - **Rendering** (`packages/rendering`): `userFeedToAtom` snapshot — entries, self/alt
   links, `feedId` from `lookupId`, empty-feed case.
 - **Routes** (`workers/api/test`): feed render for a resolvable token; 404 for
