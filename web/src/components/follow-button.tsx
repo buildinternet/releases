@@ -12,9 +12,11 @@ import { useFollows } from "./follows-provider";
 export function FollowButton({
   targetType,
   targetId,
+  label,
 }: {
   targetType: FollowTarget;
   targetId: string;
+  label?: string;
 }) {
   const follows = useFollows();
   const [busy, setBusy] = useState(false);
@@ -37,10 +39,11 @@ export function FollowButton({
       }}
       className={
         following
-          ? "rounded-md border border-stone-300 dark:border-stone-700 px-3 py-1 text-sm text-stone-600 dark:text-stone-300 disabled:opacity-60"
-          : "rounded-md bg-stone-900 dark:bg-stone-100 px-3 py-1 text-sm text-white dark:text-stone-900 disabled:opacity-60"
+          ? "rounded-md border border-stone-300 dark:border-stone-700 px-3 py-1 text-sm text-stone-600 transition-colors hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-60 dark:text-stone-300 dark:hover:bg-stone-800"
+          : "rounded-md bg-stone-900 dark:bg-stone-100 px-3 py-1 text-sm text-white transition-colors hover:bg-stone-800 disabled:cursor-not-allowed disabled:opacity-60 dark:text-stone-900 dark:hover:bg-stone-200"
       }
       aria-pressed={following}
+      {...(label ? { "aria-label": following ? `Following ${label}` : `Follow ${label}` } : {})}
     >
       {following ? "Following" : "Follow"}
     </button>

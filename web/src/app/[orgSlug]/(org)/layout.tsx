@@ -85,7 +85,7 @@ export default async function OrgLayout({
         )}
         {org.id && (
           <div className="mt-3">
-            <FollowButton targetType="org" targetId={org.id} />
+            <FollowButton targetType="org" targetId={org.id} label={org.name} />
           </div>
         )}
         <CliCommand identifier={org.slug} />
