@@ -126,3 +126,82 @@ export async function createOAuthClient(
     secret: rawSecret ? CLIENT_SECRET_PREFIX + rawSecret : undefined,
   };
 }
+
+const byClientId = (clientId: string): AdapterWhere[] => [{ field: "clientId", value: clientId }];
+
+export async function listOAuthClients(adapter: OAuthClientAdapter): Promise<PublicOAuthClient[]> {
+  const rows = await adapter.findMany({ model: OAUTH_CLIENT_MODEL });
+  return rows.map(toPublicClient);
+}
+
+export async function getOAuthClient(
+  adapter: OAuthClientAdapter,
+  clientId: string,
+): Promise<PublicOAuthClient | null> {
+  const row = await adapter.findOne({ model: OAUTH_CLIENT_MODEL, where: byClientId(clientId) });
+  return row ? toPublicClient(row) : null;
+}
+
+/** Returns false when the client does not exist. */
+export async function setClientDisabled(
+  adapter: OAuthClientAdapter,
+  clientId: string,
+  disabled: boolean,
+): Promise<boolean> {
+  const row = await adapter.findOne({ model: OAUTH_CLIENT_MODEL, where: byClientId(clientId) });
+  if (!row) return false;
+  await adapter.update({
+    model: OAUTH_CLIENT_MODEL,
+    where: byClientId(clientId),
+    update: { disabled, updatedAt: new Date() },
+  });
+  return true;
+}
+
+/** Returns false when the client does not exist. */
+export async function setClientTrusted(
+  adapter: OAuthClientAdapter,
+  clientId: string,
+  trusted: boolean,
+): Promise<boolean> {
+  const row = await adapter.findOne({ model: OAUTH_CLIENT_MODEL, where: byClientId(clientId) });
+  if (!row) return false;
+  await adapter.update({
+    model: OAUTH_CLIENT_MODEL,
+    where: byClientId(clientId),
+    update: { skipConsent: trusted, updatedAt: new Date() },
+  });
+  return true;
+}
+
+export type RotateResult =
+  | { status: "ok"; secret: string }
+  | { status: "not_found" }
+  | { status: "public_no_secret" };
+
+export async function rotateClientSecret(
+  adapter: OAuthClientAdapter,
+  clientId: string,
+): Promise<RotateResult> {
+  const row = await adapter.findOne({ model: OAUTH_CLIENT_MODEL, where: byClientId(clientId) });
+  if (!row) return { status: "not_found" };
+  if (row.public) return { status: "public_no_secret" };
+  const rawSecret = generateClientSecret();
+  await adapter.update({
+    model: OAUTH_CLIENT_MODEL,
+    where: byClientId(clientId),
+    update: { clientSecret: await hashClientSecret(rawSecret), updatedAt: new Date() },
+  });
+  return { status: "ok", secret: CLIENT_SECRET_PREFIX + rawSecret };
+}
+
+/** Returns false when the client does not exist. */
+export async function deleteOAuthClient(
+  adapter: OAuthClientAdapter,
+  clientId: string,
+): Promise<boolean> {
+  const row = await adapter.findOne({ model: OAUTH_CLIENT_MODEL, where: byClientId(clientId) });
+  if (!row) return false;
+  await adapter.delete({ model: OAUTH_CLIENT_MODEL, where: byClientId(clientId) });
+  return true;
+}

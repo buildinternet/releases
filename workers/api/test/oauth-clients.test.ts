@@ -81,3 +81,95 @@ describe("createOAuthClient", () => {
     expect(client.trusted).toBe(true);
   });
 });
+
+import {
+  listOAuthClients,
+  getOAuthClient,
+  setClientDisabled,
+  setClientTrusted,
+  rotateClientSecret,
+  deleteOAuthClient,
+} from "../src/auth/oauth-clients.js";
+
+import type { CreateClientInput } from "../src/auth/oauth-clients.js";
+
+async function seed(adapter: OAuthClientAdapter, over: Partial<CreateClientInput> = {}) {
+  return createOAuthClient(adapter, {
+    redirectUris: ["https://app.example.com/cb"],
+    scopes: ["read"],
+    ...over,
+  });
+}
+
+describe("oauth-clients read + mutate", () => {
+  it("list and get omit the secret", async () => {
+    const adapter = await makeAdapter();
+    const { client } = await seed(adapter);
+    const list = await listOAuthClients(adapter);
+    expect(list).toHaveLength(1);
+    expect(list[0]).not.toHaveProperty("clientSecret");
+    const got = await getOAuthClient(adapter, client.clientId);
+    expect(got?.clientId).toBe(client.clientId);
+    expect(got).not.toHaveProperty("clientSecret");
+    expect(await getOAuthClient(adapter, "missing")).toBeNull();
+  });
+
+  it("setClientDisabled flips the column and reports not-found", async () => {
+    const adapter = await makeAdapter();
+    const { client } = await seed(adapter);
+    expect(await setClientDisabled(adapter, client.clientId, true)).toBe(true);
+    const row = await adapter.findOne({
+      model: "oauthClient",
+      where: [{ field: "clientId", value: client.clientId }],
+    });
+    expect(Boolean(row?.disabled)).toBe(true);
+    expect(await setClientDisabled(adapter, "missing", true)).toBe(false);
+  });
+
+  it("setClientTrusted toggles skip_consent", async () => {
+    const adapter = await makeAdapter();
+    const { client } = await seed(adapter);
+    expect(await setClientTrusted(adapter, client.clientId, true)).toBe(true);
+    const got = await getOAuthClient(adapter, client.clientId);
+    expect(got?.trusted).toBe(true);
+  });
+
+  it("rotateClientSecret changes the stored hash; new secret verifies", async () => {
+    const adapter = await makeAdapter();
+    const { client, secret } = await seed(adapter);
+    const before = (
+      await adapter.findOne({
+        model: "oauthClient",
+        where: [{ field: "clientId", value: client.clientId }],
+      })
+    )?.clientSecret;
+    const res = await rotateClientSecret(adapter, client.clientId);
+    expect(res.status).toBe("ok");
+    if (res.status !== "ok") throw new Error("unreachable");
+    expect(res.secret).toMatch(new RegExp(`^${CLIENT_SECRET_PREFIX}`));
+    expect(res.secret).not.toBe(secret);
+    const after = (
+      await adapter.findOne({
+        model: "oauthClient",
+        where: [{ field: "clientId", value: client.clientId }],
+      })
+    )?.clientSecret;
+    expect(after).not.toBe(before);
+    expect(after).toBe(await hashClientSecret(res.secret.slice(CLIENT_SECRET_PREFIX.length)));
+  });
+
+  it("rotateClientSecret refuses a public client and reports not-found", async () => {
+    const adapter = await makeAdapter();
+    const { client } = await seed(adapter, { tokenEndpointAuthMethod: "none" });
+    expect((await rotateClientSecret(adapter, client.clientId)).status).toBe("public_no_secret");
+    expect((await rotateClientSecret(adapter, "missing")).status).toBe("not_found");
+  });
+
+  it("deleteOAuthClient removes the row", async () => {
+    const adapter = await makeAdapter();
+    const { client } = await seed(adapter);
+    expect(await deleteOAuthClient(adapter, client.clientId)).toBe(true);
+    expect(await getOAuthClient(adapter, client.clientId)).toBeNull();
+    expect(await deleteOAuthClient(adapter, client.clientId)).toBe(false);
+  });
+});
