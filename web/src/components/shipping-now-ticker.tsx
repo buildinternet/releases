@@ -100,6 +100,14 @@ function PlayGlyph() {
 function Card({ slide }: { slide: Slide }) {
   const { release, relative, extraCount } = slide;
   const video = videoRowInfoFromWire(release.source.video);
+  // A slot is keyed per (org, product), so a release on a specific product
+  // (Google → Chrome) reads as just the org name without disambiguation. Lead
+  // the header with the product name when present, dimming the org after a
+  // middot — matching the "Product · Org" treatment in collection views. Skip
+  // it for single-product orgs where the product name just echoes the org.
+  const orgName = release.source.org.name;
+  const productName = release.source.product?.name?.trim();
+  const showProduct = !!productName && productName.toLowerCase() !== orgName.toLowerCase();
   return (
     <Link
       href={`/release/${release.id}`}
@@ -125,7 +133,17 @@ function Card({ slide }: { slide: Slide }) {
           />
         ) : null}
         <span className="font-medium text-[13px] text-stone-900 dark:text-stone-100 truncate flex-1">
-          {release.source.org.name}
+          {showProduct ? (
+            <>
+              {productName}
+              <span className="font-normal text-stone-400 dark:text-stone-500">
+                {" · "}
+                {orgName}
+              </span>
+            </>
+          ) : (
+            orgName
+          )}
         </span>
         {relative && (
           <span className="font-mono text-[11px] text-stone-400 dark:text-stone-500 whitespace-nowrap">
@@ -154,7 +172,7 @@ function Card({ slide }: { slide: Slide }) {
         {extraCount > 0 && (
           <span
             className="text-[11px] text-stone-500 dark:text-stone-400 whitespace-nowrap ml-auto"
-            title={`${extraCount} more recent release${extraCount === 1 ? "" : "s"} from ${release.source.org.name}`}
+            title={`${extraCount} more recent release${extraCount === 1 ? "" : "s"} from ${showProduct ? productName : orgName}`}
           >
             +{extraCount} more
           </span>

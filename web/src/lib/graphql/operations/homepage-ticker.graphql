@@ -15,6 +15,7 @@ query HomepageTicker($limit: Int!, $exclude: [SourceType!]!) {
         }
         product {
           slug
+          name
         }
         appStore {
           platform
