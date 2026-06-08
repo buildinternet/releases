@@ -13,7 +13,7 @@ import {
   oauthSelfServiceGuard,
   OAUTH_SELF_SERVICE_WRITE_PATHS,
 } from "./auth/oauth-self-service-guard.js";
-import { forwardWellKnown } from "./oauth-discovery.js";
+import { forwardWellKnown, buildApiProtectedResourceMetadata } from "./oauth-discovery.js";
 import type { AuthEmailBinding } from "./auth/email.js";
 import { classifySignInFailure, redactIp, makeAuthAudit } from "./auth/audit.js";
 import { publicRateLimitMiddleware } from "./middleware/rate-limit.js";
@@ -428,9 +428,12 @@ app.use("*", async (c, next) => {
   c.res.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
 });
 
-// Apex OAuth/OIDC discovery aliases — registered before any auth gate so
-// discovery stays public. Protected-resource metadata is NOT here; that belongs
-// to the resource servers (later sub-project). See oauth-discovery.ts.
+// Apex OAuth/OIDC discovery aliases — public (no per-route token auth). The two
+// AS-metadata aliases forward to Better Auth; the protected-resource metadata is
+// the REST API's OWN RFC 9728 document — it is itself an OAuth resource server
+// (#1483 verifies "Sign in with Releases" JWTs whose `aud` is this origin),
+// mirroring the MCP worker's surface. See oauth-discovery.ts. CORS for these
+// non-/api/auth paths is handled by the wildcard `publicReadCors` above.
 app.get("/.well-known/oauth-authorization-server", async (c) =>
   forwardWellKnown(
     await createAuth(c.env),
@@ -441,6 +444,11 @@ app.get("/.well-known/oauth-authorization-server", async (c) =>
 );
 app.get("/.well-known/openid-configuration", async (c) =>
   forwardWellKnown(await createAuth(c.env), "openid-configuration", c.req.url, c.req.raw.headers),
+);
+app.get("/.well-known/oauth-protected-resource", (c) =>
+  Response.json(buildApiProtectedResourceMetadata(c.env), {
+    headers: { "Cache-Control": "public, max-age=3600" },
+  }),
 );
 
 // Lock the oauth-provider plugin's self-service *write* client endpoints to
