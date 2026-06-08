@@ -348,6 +348,8 @@
     // Daily at 04:30 UTC: batch summarization (self-gates via BATCH_SUMMARIZE_ENABLED). See #971.
     // Daily at 05:00 UTC: delete search_queries rows older than SEARCH_QUERY_RETENTION_DAYS (#575).
     // Daily at 05:30 UTC: hard-purge tombstoned orgs/sources/products older than TOMBSTONE_RETENTION_DAYS (#666).
+    // Daily at 06:00 UTC: well-known config sync sweep.
+    // Daily at 07:00 UTC: reap stale dynamic-registration OAuth clients (observe-only until oauth-client-reaper-enabled).
     "crons": [
       "0 * * * *",
       "0 1 * * *",
@@ -357,6 +359,7 @@
       "0 5 * * *",
       "30 5 * * *",
       "0 6 * * *",
+      "0 7 * * *",
     ],
   },
   // State is per-colo, not global. `period` must be 10 or 60 (CF constraint).

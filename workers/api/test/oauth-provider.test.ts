@@ -150,6 +150,30 @@ describe("oauth provider wiring", () => {
     expect(registered).toHaveLength(1);
   });
 
+  // Security guard: now that DCR is public + unauthenticated, the register
+  // endpoint is the untrusted client's only input. A dangerous redirect scheme
+  // (javascript:/data:/…) would execute in the authorizing user's browser, so the
+  // plugin validates redirect_uris with SafeUrlSchema. Lock that in: a
+  // `javascript:` redirect must be rejected and write no client row.
+  it("rejects a javascript: redirect_uri on dynamic registration (real config)", async () => {
+    const db = createTestDb();
+    const auth = await createAuth(baseEnv, undefined, { db, sendEmail: () => {} });
+    const res = await auth.handler(
+      new Request("https://api.releases.localhost/api/auth/oauth2/register", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          client_name: "Evil",
+          redirect_uris: ["javascript:alert(document.cookie)"],
+          token_endpoint_auth_method: "none",
+        }),
+      }),
+    );
+    expect(res.ok).toBe(false);
+    const registered = await db.select().from(oauthClient);
+    expect(registered).toHaveLength(0);
+  });
+
   // Strongest adapter-mapping check: a real Better Auth write to oauth_client via
   // the dynamic-registration endpoint. Also exercised by the real config above;
   // here it isolates the plugin model name + field-key → column mapping.

@@ -154,6 +154,18 @@ export const FLAGS = {
     env: "OPENROUTER_ENABLED",
     default: false,
   },
+  // Rollout gate for the stale OAuth-client reaper cron (sweep-oauth-clients).
+  // default:false → the nightly sweep runs in OBSERVE-ONLY mode (logs the
+  // reapable candidates without deleting), so you can watch what it would purge
+  // in Axiom first. Flip ON in BOTH Flagship apps to actually delete abandoned
+  // dynamic-registration clients (untrusted, never consented, no tokens, older
+  // than the retention window). The cron always runs when crons are on; this flag
+  // only gates delete-vs-observe.
+  oauthClientReaperEnabled: {
+    key: "oauth-client-reaper-enabled",
+    env: "OAUTH_CLIENT_REAPER_ENABLED",
+    default: false,
+  },
 } as const satisfies Record<string, FlagDef>;
 
 /** Layered fallback: var value if set, else the hardcoded default. */
