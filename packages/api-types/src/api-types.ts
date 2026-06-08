@@ -786,6 +786,46 @@ export type ReleaseStreamMessage = z.infer<typeof ReleaseStreamMessageSchema>;
 
 export type ReleaseSummaryItem = z.infer<typeof ReleaseSummaryItemSchema>;
 
+// ── Follows ──
+
+/** What a user can follow. */
+export type FollowTarget = "org" | "product";
+
+/** A user's follow, enriched for rendering (returned by GET /v1/me/follows). */
+export interface Follow {
+  targetType: FollowTarget;
+  targetId: string;
+  name: string;
+  slug: string;
+  avatarUrl: string | null;
+  /** Owning org slug for product follows (null for org follows). */
+  orgSlug: string | null;
+  createdAt: string;
+}
+
+/** GET /v1/me/follows response. */
+export interface FollowsListResponse {
+  follows: Follow[];
+}
+
+/** POST /v1/me/follows request body. */
+export interface FollowRequest {
+  targetType: FollowTarget;
+  targetId: string;
+}
+
+/** POST/DELETE /v1/me/follows response. */
+export interface FollowMutationResponse {
+  success: true;
+  following: boolean;
+}
+
+/**
+ * GET /v1/me/feed response — the personalized release feed. Reuses the same item
+ * shape as /v1/releases/latest (ReleaseLatestItem) inside the standard list envelope.
+ */
+export type PersonalizedFeedResponse = ListResponse<ReleaseLatestItem>;
+
 // ── Search ──
 
 export type SearchOrgHit = z.infer<typeof SearchOrgHitSchema>;
