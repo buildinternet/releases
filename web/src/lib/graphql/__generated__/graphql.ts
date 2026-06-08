@@ -31,7 +31,7 @@ export type HomepageTickerQuery = {
       titleShort: string | null;
       source: {
         org: { slug: string; name: string; avatarUrl: string | null };
-        product: { slug: string } | null;
+        product: { slug: string; name: string } | null;
         appStore: { platform: AppStorePlatform; iconUrl: string | null } | null;
         video: { provider: VideoProvider } | null;
       };
@@ -40,7 +40,7 @@ export type HomepageTickerQuery = {
 };
 
 export const HomepageTickerDocument = {
-  __meta__: { hash: "sha256:1c128a7f4643dd4c66286993bca00bec42aaa507a80814f5550636228597c5d4" },
+  __meta__: { hash: "sha256:eb15101c1fc45e4d3bc46bceb18b929e840f636c694ac36b498e32280e9873cc" },
   kind: "Document",
   definitions: [
     {
@@ -129,6 +129,7 @@ export const HomepageTickerDocument = {
                                 kind: "SelectionSet",
                                 selections: [
                                   { kind: "Field", name: { kind: "Name", value: "slug" } },
+                                  { kind: "Field", name: { kind: "Name", value: "name" } },
                                 ],
                               },
                             },
