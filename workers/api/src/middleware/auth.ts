@@ -73,10 +73,14 @@ function bearer(c: Context<Env>): string {
 
 /**
  * Resource-server config for verifying "Sign in with Releases" OAuth JWTs
- * (#1483). The API worker is its own audience: issuer + audience = the
- * `BETTER_AUTH_URL` origin (the AS origin). Returns null when no origin can be
+ * (#1483). The API worker is its own audience (the bare `BETTER_AUTH_URL`
+ * origin — the resource identifier a client requests via RFC 8707 `resource`),
+ * but the `iss` it must match is the AS's canonical issuer: the origin PLUS the
+ * `/api/auth` basePath (what the discovery doc advertises and the token `iss`
+ * carries). Using the bare origin as issuer rejected every real token (jose
+ * exact-match) — #1483 issuer-mismatch fix. Returns null when no origin can be
  * resolved (e.g. local dev without BETTER_AUTH_URL) — the JWT lane is then
- * simply inert. The JWKS URL is derived as `${origin}/api/auth/jwks`.
+ * simply inert. The JWKS URL is derived origin-relative as `${origin}/api/auth/jwks`.
  */
 function oauthJwtConfig(env: Env["Bindings"]): OAuthJwtConfig | null {
   if (!env.BETTER_AUTH_URL) return null;
@@ -86,7 +90,7 @@ function oauthJwtConfig(env: Env["Bindings"]): OAuthJwtConfig | null {
   } catch {
     return null;
   }
-  return { issuer: origin, audience: origin };
+  return { issuer: `${origin}/api/auth`, audience: origin };
 }
 
 /**

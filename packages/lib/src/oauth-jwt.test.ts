@@ -7,7 +7,13 @@ import {
   type JWTVerifyGetKey,
   type CryptoKey,
 } from "jose";
-import { isJwtShaped, extractApiScopes, verifyOAuthJwt, type OAuthJwtConfig } from "./oauth-jwt.js";
+import {
+  isJwtShaped,
+  extractApiScopes,
+  verifyOAuthJwt,
+  defaultJwksUrl,
+  type OAuthJwtConfig,
+} from "./oauth-jwt.js";
 
 const ISSUER = "https://api.releases.sh";
 const AUDIENCE = "https://mcp.releases.sh";
@@ -79,7 +85,46 @@ describe("extractApiScopes", () => {
   });
 });
 
+describe("defaultJwksUrl", () => {
+  // The AS's canonical issuer carries the /api/auth basePath; the derivation
+  // must stay origin-relative so it never doubles up to …/api/auth/api/auth/jwks
+  // (the #1483 issuer-mismatch regression).
+  it("derives ${origin}/api/auth/jwks from a suffixed issuer", () => {
+    expect(defaultJwksUrl("https://api.releases.sh/api/auth")).toBe(
+      "https://api.releases.sh/api/auth/jwks",
+    );
+    expect(defaultJwksUrl("https://api-staging.releases.sh/api/auth")).toBe(
+      "https://api-staging.releases.sh/api/auth/jwks",
+    );
+  });
+  it("derives the same URL from a bare origin (robust either way)", () => {
+    expect(defaultJwksUrl("https://api.releases.sh")).toBe("https://api.releases.sh/api/auth/jwks");
+  });
+});
+
 describe("verifyOAuthJwt", () => {
+  // Regression for #1483: the AS stamps `iss = <base>/api/auth` (Better Auth's
+  // baseURL includes the basePath). A resource server configured with the bare
+  // origin used to reject every real token on jose's exact `iss` match. With the
+  // issuer corrected to the suffixed form, a real-shaped token verifies.
+  it("verifies a token issued with the AS's /api/auth issuer", async () => {
+    const issuer = "https://api.releases.sh/api/auth";
+    const token = await sign({ scope: "openid read", issuer });
+    const res = await verifyOAuthJwt(token, { issuer, audience: AUDIENCE, keyResolver });
+    expect(res).not.toBeNull();
+    expect(res!.scopes).toEqual(["read"]);
+  });
+
+  it("rejects a token whose iss is the bare origin when the AS issuer is suffixed", async () => {
+    const token = await sign({ scope: "read", issuer: "https://api.releases.sh" });
+    const res = await verifyOAuthJwt(token, {
+      issuer: "https://api.releases.sh/api/auth",
+      audience: AUDIENCE,
+      keyResolver,
+    });
+    expect(res).toBeNull();
+  });
+
   it("verifies a well-formed token and projects scopes + role + subject", async () => {
     const token = await sign({
       scope: "openid read write",
