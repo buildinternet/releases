@@ -59,6 +59,23 @@ describe("admin oauth client routes", () => {
     expect(res.status).toBe(400);
   });
 
+  it("POST rejects invalid optional enums/grants with 400 instead of coercing", async () => {
+    const app = await makeApp();
+    const base = { redirectUris: ["https://a/cb"], scopes: ["read"] };
+    const badAuthMethod = await app.request(
+      "/admin/oauth/clients",
+      json({ ...base, tokenEndpointAuthMethod: "basic" }),
+    );
+    expect(badAuthMethod.status).toBe(400);
+    const badType = await app.request("/admin/oauth/clients", json({ ...base, type: "spa" }));
+    expect(badType.status).toBe(400);
+    const badGrant = await app.request(
+      "/admin/oauth/clients",
+      json({ ...base, grantTypes: ["password"] }),
+    );
+    expect(badGrant.status).toBe(400);
+  });
+
   it("GET list never includes the secret", async () => {
     const app = await makeApp();
     await app.request(

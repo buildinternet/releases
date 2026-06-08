@@ -19,7 +19,7 @@ and is therefore error-prone.
 
 Separately, `@better-auth/oauth-provider` auto-mounts **session-gated,
 HTTP-exposed** self-service client endpoints (`/api/auth/oauth2/create-client`,
-`/oauth2/update-client`, `/oauth2/client/rotate-secret`, `/oauth2/delete-client`).
+`/api/auth/oauth2/update-client`, `/api/auth/oauth2/client/rotate-secret`, `/api/auth/oauth2/delete-client`).
 These have been reachable by any logged-in user since #1479. They are
 owner-scoped, cannot set `skip_consent`, and issued-token scope is still capped
 by the user's role — but they are an open client-registration surface, which is
@@ -38,7 +38,7 @@ not fail-closed for a first-party-only AS.
    `releases-cli` repo in a separate PR (mirroring #288).
 3. **Lock down the plugin's self-service write endpoints to admin-only.** A Hono
    pre-filter blocks `/api/auth/oauth2/{create,update,delete}-client` and
-   `/oauth2/client/rotate-secret` for sessions whose user role is not `admin`.
+   `/api/auth/oauth2/client/rotate-secret` for sessions whose user role is not `admin`.
    The public/read endpoints (`public-client`, `public-client-prelogin`,
    `get-client`, `get-clients`) are left untouched — the #1480 consent screen
    reads `public-client(-prelogin)`.

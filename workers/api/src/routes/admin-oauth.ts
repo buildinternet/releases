@@ -58,23 +58,40 @@ adminOauthRoutes.post("/admin/oauth/clients", async (c) => {
     }
   }
 
-  const tokenEndpointAuthMethod =
-    b.tokenEndpointAuthMethod === "none" ||
-    b.tokenEndpointAuthMethod === "client_secret_basic" ||
-    b.tokenEndpointAuthMethod === "client_secret_post"
-      ? b.tokenEndpointAuthMethod
-      : undefined;
-  const type =
-    b.type === "web" || b.type === "native" || b.type === "user-agent-based" ? b.type : undefined;
+  // Reject invalid optional enums/arrays outright rather than silently coercing
+  // them to a default — a typo'd auth method or grant type should surface, not
+  // be quietly swapped for client_secret_basic.
+  const AUTH_METHODS = ["none", "client_secret_basic", "client_secret_post"];
+  const CLIENT_TYPES = ["web", "native", "user-agent-based"];
+  const GRANT_TYPES = ["authorization_code", "client_credentials", "refresh_token"];
+
+  if (
+    b.tokenEndpointAuthMethod !== undefined &&
+    !AUTH_METHODS.includes(b.tokenEndpointAuthMethod as string)
+  ) {
+    return c.json({ error: "invalid_tokenEndpointAuthMethod", allowed: AUTH_METHODS }, 400);
+  }
+  if (b.type !== undefined && !CLIENT_TYPES.includes(b.type as string)) {
+    return c.json({ error: "invalid_type", allowed: CLIENT_TYPES }, 400);
+  }
+  let grantTypes: string[] | undefined;
+  if (b.grantTypes !== undefined) {
+    const g = asStringArray(b.grantTypes);
+    if (!g || !g.every((x) => GRANT_TYPES.includes(x))) {
+      return c.json({ error: "invalid_grantTypes", allowed: GRANT_TYPES }, 400);
+    }
+    grantTypes = g;
+  }
 
   const input: CreateClientInput = {
     name: typeof b.name === "string" && b.name.length > 0 ? b.name : undefined,
     redirectUris,
     scopes,
     trusted: b.trusted === true,
-    tokenEndpointAuthMethod,
-    type,
-    grantTypes: asStringArray(b.grantTypes) ?? undefined,
+    tokenEndpointAuthMethod:
+      b.tokenEndpointAuthMethod as CreateClientInput["tokenEndpointAuthMethod"],
+    type: b.type as CreateClientInput["type"],
+    grantTypes,
     requirePKCE: typeof b.requirePKCE === "boolean" ? b.requirePKCE : undefined,
     clientUri: typeof b.clientUri === "string" ? b.clientUri : undefined,
     logoUri: typeof b.logoUri === "string" ? b.logoUri : undefined,

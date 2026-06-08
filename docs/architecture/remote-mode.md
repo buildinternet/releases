@@ -112,7 +112,7 @@ role provisioning).
 
 All mutations emit an audited `logEvent` (`actor: "root-key"`). The plugin's
 session-gated self-service write endpoints (`/api/auth/oauth2/{create,update,
-delete}-client`, `/oauth2/client/rotate-secret`) are restricted to `role=admin`.
+delete}-client`, `/api/auth/oauth2/client/rotate-secret`) are restricted to `role=admin`.
 The #1480 entitlement ceiling still applies regardless of client trust.
 
 ## On-demand AI admin endpoints
