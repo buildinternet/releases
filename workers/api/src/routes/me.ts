@@ -19,6 +19,8 @@ import {
   feedTokenString,
   feedAtomUrl,
 } from "../queries/feed-tokens.js";
+import { getDigestPrefs, setDigestCadence } from "../queries/digest-prefs.js";
+import { DIGEST_CADENCES, type DigestCadence } from "../db/schema-digest-prefs.js";
 import type { FeedToken } from "@buildinternet/releases-api-types";
 
 function isFollowTargetType(v: unknown): v is FollowTargetType {
@@ -148,6 +150,27 @@ meHandlers.delete("/me/feed/token", async (c) => {
   const db = createDb(c.env.DB);
   await deleteFeedToken(db, session.user.id);
   return c.json({ success: true });
+});
+
+meHandlers.get("/me/digest", async (c) => {
+  const session = c.get("session");
+  if (!session) return c.json({ error: "unauthorized", message: "Sign in required" }, 401);
+  const db = createDb(c.env.DB);
+  const row = await getDigestPrefs(db, session.user.id);
+  return c.json({ cadence: row?.cadence ?? "off" });
+});
+
+meHandlers.put("/me/digest", async (c) => {
+  const session = c.get("session");
+  if (!session) return c.json({ error: "unauthorized", message: "Sign in required" }, 401);
+  const body = await c.req.json<{ cadence?: unknown }>().catch(() => ({}) as { cadence?: unknown });
+  const cadence = body.cadence;
+  if (typeof cadence !== "string" || !(DIGEST_CADENCES as readonly string[]).includes(cadence)) {
+    return c.json({ error: "bad_request", message: "cadence must be off|daily|weekly" }, 400);
+  }
+  const db = createDb(c.env.DB);
+  const row = await setDigestCadence(db, session.user.id, cadence as DigestCadence);
+  return c.json({ cadence: row.cadence });
 });
 
 /** Production composition: session-or-Bearer principal gate, then the handlers. */
