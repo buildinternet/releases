@@ -384,7 +384,25 @@ export function deriveCookieDomain(env: Bindings): string | undefined {
  * the `/v1/me/digest` cadence write — Better Auth's own `/api/auth/*` routes are
  * POST/GET only, so both are no-ops there. The allow-list must cover every method
  * any `/v1/me/*` handler uses or the browser blocks that verb's preflight.
+ *
+ * The Sentinel client (`sentinelClient`, #1544) stamps every `/api/auth/*` request
+ * with custom `X-Visitor-Id` / `X-Request-Id` fingerprint headers (and `X-PoW-Solution`
+ * on a proof-of-work challenge retry). These MUST be in `allowHeaders` or the browser
+ * blocks the cross-origin preflight for EVERY auth call — get-session, Google One Tap,
+ * and the regular SSO callback alike. {@link AUTH_CORS_ALLOWED_HEADERS} is asserted in
+ * sync with the headers the sentinel client actually sets by a drift test (auth.test.ts)
+ * that scans `@better-auth/infra`'s client bundle, so a future package bump that adds a
+ * header fails CI instead of silently breaking sign-in.
  */
+export const AUTH_CORS_ALLOWED_HEADERS = [
+  "Content-Type",
+  "Authorization",
+  // Sentinel client fingerprint / PoW headers — see the note above.
+  "X-Visitor-Id",
+  "X-Request-Id",
+  "X-PoW-Solution",
+] as const;
+
 export function authCorsMiddleware(): MiddlewareHandler<Env> {
   return cors({
     origin: (origin, c) => {
@@ -395,7 +413,7 @@ export function authCorsMiddleware(): MiddlewareHandler<Env> {
       if (env.ENVIRONMENT !== "production" && isLoopbackOrigin(origin)) return origin;
       return null;
     },
-    allowHeaders: ["Content-Type", "Authorization"],
+    allowHeaders: [...AUTH_CORS_ALLOWED_HEADERS],
     allowMethods: ["POST", "GET", "PUT", "DELETE", "OPTIONS"],
     exposeHeaders: ["Content-Length"],
     maxAge: 600,

@@ -10,9 +10,12 @@ import {
   resolveLastLoginMethodOverride,
   authTrustedOrigins,
   authCorsMiddleware,
+  AUTH_CORS_ALLOWED_HEADERS,
   deriveCookieDomain,
   createAuth,
 } from "../src/auth/index.js";
+import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { DEVICE_AUTH_CLIENT_ID } from "@buildinternet/releases-core/api-token";
 import { magicLinkTemplate, type AuthEmailMessage } from "../src/auth/email.js";
 
@@ -204,8 +207,65 @@ describe("authCorsMiddleware origin allow-list", () => {
       .filter(Boolean);
   }
 
+  // Read back the request headers the preflight advertises as allowed. The Sentinel
+  // client (#1544) stamps every /api/auth/* call with X-Visitor-Id / X-Request-Id (and
+  // X-PoW-Solution on a challenge retry); if any are missing from Access-Control-Allow-
+  // Headers the browser blocks the cross-origin preflight for EVERY auth request —
+  // get-session, Google One Tap, and the regular SSO callback alike.
+  async function preflightAllowedHeaders(requestHeaders: string): Promise<string[]> {
+    const app = new Hono();
+    app.use("/api/auth/*", authCorsMiddleware());
+    app.get("/api/auth/ok", (c) => c.text("ok"));
+    const res = await app.request(
+      "/api/auth/ok",
+      {
+        method: "OPTIONS",
+        headers: {
+          Origin: "https://releases.sh",
+          "Access-Control-Request-Method": "POST",
+          "Access-Control-Request-Headers": requestHeaders,
+        },
+      },
+      { ENVIRONMENT: "production" } as never,
+    );
+    return (res.headers.get("access-control-allow-headers") ?? "")
+      .split(",")
+      .map((h) => h.trim().toLowerCase())
+      .filter(Boolean);
+  }
+
   it("allows PUT so /v1/me/digest cadence writes clear the preflight", async () => {
     expect(await preflightMethods("PUT")).toContain("PUT");
+  });
+
+  it("allows the Sentinel fingerprint headers so auth requests clear the preflight", async () => {
+    const allowed = await preflightAllowedHeaders("x-visitor-id, x-request-id, x-pow-solution");
+    expect(allowed).toContain("x-visitor-id");
+    expect(allowed).toContain("x-request-id");
+    expect(allowed).toContain("x-pow-solution");
+  });
+
+  // Drift guard: the regression in #1544 was the auth CORS allow-list falling behind the
+  // headers the sentinel client sends. Rather than re-hardcode "the three headers we know
+  // about today", read the headers the INSTALLED @better-auth/infra client actually stamps
+  // onto outgoing requests (`.set("X-…")` in its browser bundle) and assert every one is in
+  // AUTH_CORS_ALLOWED_HEADERS. A package bump that introduces a new custom header now fails
+  // here instead of silently breaking sign-in in production.
+  it("CORS allow-list covers every custom header the sentinel client sends", () => {
+    const require = createRequire(import.meta.url);
+    const clientBundle = readFileSync(require.resolve("@better-auth/infra/client"), "utf8");
+    const sentHeaders = new Set<string>();
+    for (const m of clientBundle.matchAll(/\.set\(\s*["'](X-[A-Za-z0-9-]+)["']/g)) {
+      sentHeaders.add(m[1].toLowerCase());
+    }
+    // Sanity: the scan must find the known fingerprint headers, or the bundle shape changed
+    // and the regex needs revisiting (a silently-empty match set would make this test inert).
+    expect(sentHeaders.has("x-request-id")).toBe(true);
+    expect(sentHeaders.has("x-visitor-id")).toBe(true);
+
+    const allowed = new Set(AUTH_CORS_ALLOWED_HEADERS.map((h) => h.toLowerCase()));
+    const missing = [...sentHeaders].filter((h) => !allowed.has(h));
+    expect(missing).toEqual([]);
   });
 
   it("reflects the releases.sh family in production", async () => {
