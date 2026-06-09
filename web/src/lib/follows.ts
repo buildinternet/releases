@@ -5,6 +5,8 @@
  */
 
 import type {
+  DigestCadence,
+  DigestPrefsResponse,
   FeedToken,
   FeedTokenResponse,
   Follow,
@@ -74,4 +76,25 @@ export async function revokeFeedToken(): Promise<void> {
   });
   if (!res.ok)
     throw new Error(await errorMessage(res, `Failed to revoke feed URL (${res.status})`));
+}
+
+// ── Digest preferences (/v1/me/digest) ──────────────────────────────────────
+
+export async function getDigestCadence(): Promise<DigestCadence> {
+  const res = await fetch(`${apiBase()}/v1/me/digest`, { credentials: "include" });
+  if (!res.ok)
+    throw new Error(await errorMessage(res, `Failed to load digest setting (${res.status})`));
+  return ((await res.json()) as DigestPrefsResponse).cadence;
+}
+
+export async function setDigestCadence(cadence: DigestCadence): Promise<DigestCadence> {
+  const res = await fetch(`${apiBase()}/v1/me/digest`, {
+    method: "PUT",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ cadence }),
+  });
+  if (!res.ok)
+    throw new Error(await errorMessage(res, `Failed to update digest setting (${res.status})`));
+  return ((await res.json()) as DigestPrefsResponse).cadence;
 }

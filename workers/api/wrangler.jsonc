@@ -58,6 +58,14 @@
     // Sender for user-facing auth email (AUTH_EMAIL binding; see src/auth/email.ts).
     "AUTH_EMAIL_FROM": "noreply@releases.sh",
     "AUTH_EMAIL_FROM_NAME": "Releases",
+    // Digest email sender (AUTH_EMAIL binding). Must be in allowed_sender_addresses.
+    "DIGEST_EMAIL_FROM": "digests@releases.sh",
+    // Digest cron tunables. Max recipients processed per cron fire; max releases
+    // shown per email. Safe defaults are baked into send-digests.ts when absent.
+    "DIGEST_MAX_PER_RUN": "500",
+    "DIGEST_MAX_RELEASES": "50",
+    // API worker public origin — used to build unsubscribe URLs in digest emails.
+    "API_BASE_URL": "https://api.releases.sh",
     // Kill switch for the open POST /v1/feedback endpoint (releases feedback).
     "FEEDBACK_DISABLED": "false",
     // Per-IP rate limiter for /v1/feedback (binding FEEDBACK_RATE_LIMITER). On
@@ -225,11 +233,15 @@
   // Two Email bindings. SEND_EMAIL = Email Routing (internal ops notifications,
   // reaches only account-verified destinations). AUTH_EMAIL = Email Sending
   // (user-facing verification + password-reset mail to arbitrary recipients),
-  // sender-locked to noreply@releases.sh. Requires Email Sending enabled on the
-  // account + releases.sh verified for Email Sending (DKIM) — see the spec.
+  // sender-locked to noreply@releases.sh and digests@releases.sh. Requires
+  // Email Sending enabled on the account + releases.sh verified for Email
+  // Sending (DKIM) — see the spec.
   "send_email": [
     { "name": "SEND_EMAIL" },
-    { "name": "AUTH_EMAIL", "allowed_sender_addresses": ["noreply@releases.sh"] },
+    {
+      "name": "AUTH_EMAIL",
+      "allowed_sender_addresses": ["noreply@releases.sh", "digests@releases.sh"],
+    },
   ],
   "durable_objects": {
     "bindings": [
@@ -323,6 +335,8 @@
     // Daily at 05:30 UTC: hard-purge tombstoned orgs/sources/products older than TOMBSTONE_RETENTION_DAYS (#666).
     // Daily at 06:00 UTC: well-known config sync sweep.
     // Daily at 07:00 UTC: reap stale dynamic-registration OAuth clients (observe-only until oauth-client-reaper-enabled).
+    // Daily at 13:00 UTC: send daily digests to subscribed users (#1518).
+    // Mondays at 13:00 UTC: send weekly digests to subscribed users (#1518).
     "crons": [
       "0 * * * *",
       "0 1 * * *",
@@ -333,6 +347,8 @@
       "30 5 * * *",
       "0 6 * * *",
       "0 7 * * *",
+      "0 13 * * *",
+      "0 13 * * 1",
     ],
   },
   // State is per-colo, not global. `period` must be 10 or 60 (CF constraint).
@@ -520,6 +536,12 @@
         "EMAIL_FROM": "notifications@releases.sh",
         "AUTH_EMAIL_FROM": "noreply@releases.sh",
         "AUTH_EMAIL_FROM_NAME": "Releases",
+        // Digest email vars — mirrors prod; crons are disabled in staging so
+        // these are only consulted via the admin POST trigger path.
+        "DIGEST_EMAIL_FROM": "digests@releases.sh",
+        "DIGEST_MAX_PER_RUN": "500",
+        "DIGEST_MAX_RELEASES": "50",
+        "API_BASE_URL": "https://api-staging.releases.sh",
         "FEEDBACK_DISABLED": "false",
         // Staging has no FEEDBACK_RATE_LIMITER binding (no `unsafe` block); the
         // handler no-ops the limiter there. Vars kept for parity.
@@ -611,7 +633,10 @@
       },
       "send_email": [
         { "name": "SEND_EMAIL" },
-        { "name": "AUTH_EMAIL", "allowed_sender_addresses": ["noreply@releases.sh"] },
+        {
+          "name": "AUTH_EMAIL",
+          "allowed_sender_addresses": ["noreply@releases.sh", "digests@releases.sh"],
+        },
       ],
       "durable_objects": {
         "bindings": [

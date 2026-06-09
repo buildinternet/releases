@@ -9,6 +9,7 @@ import { InfiniteScrollTrigger } from "@/components/infinite-scroll-trigger";
 import { useInfiniteScroll } from "@/hooks/use-infinite-scroll";
 import { getFeed } from "@/lib/follows";
 import { formatRelativeDate, pluralReleases } from "@/lib/formatters";
+import { DigestCard } from "./digest-card";
 import { FeedTokenCard } from "./feed-token-card";
 import type { Follow, ReleaseLatestItem } from "@buildinternet/releases-api-types";
 
@@ -239,6 +240,7 @@ export function FollowingClient() {
 
         {/* Right: feed card + manage follows */}
         <aside className="space-y-6">
+          <DigestCard />
           <FeedTokenCard />
 
           <div>

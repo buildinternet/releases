@@ -40,6 +40,7 @@ import { adminSourcesRoutes } from "./routes/admin-sources.js";
 import { adminOrgDependentsRoutes } from "./routes/admin-org-dependents.js";
 import { adminBatchRunsRoutes } from "./routes/admin-batch-runs.js";
 import { adminUsersRoutes } from "./routes/admin-users.js";
+import { adminDigestRoutes } from "./routes/admin-digest.js";
 import { adminOauthRoutes } from "./routes/admin-oauth.js";
 import { errataRoutes } from "./routes/errata.js";
 import { webhooksRoutes } from "./routes/webhooks.js";
@@ -55,6 +56,7 @@ import { apiTokenRoutes } from "./routes/api-tokens.js";
 import { userApiKeyRoutes } from "./routes/user-api-keys.js";
 import { meRoutes } from "./routes/me.js";
 import { feedRoutes } from "./routes/feed.js";
+import { digestRoutes } from "./routes/digest.js";
 import { changelogRoutes } from "./routes/changelog.js";
 import { firecrawlRoutes } from "./routes/firecrawl.js";
 import { mountOpenApi } from "./openapi.js";
@@ -96,6 +98,7 @@ export function mountV1Routes(v1: Hono<Env>) {
   v1.route("/", adminOrgDependentsRoutes);
   v1.route("/", adminBatchRunsRoutes);
   v1.route("/", adminUsersRoutes);
+  v1.route("/", adminDigestRoutes);
   v1.route("/", adminOauthRoutes);
   v1.route("/", errataRoutes);
   v1.route("/", webhooksRoutes);
@@ -111,6 +114,7 @@ export function mountV1Routes(v1: Hono<Env>) {
   v1.route("/", userApiKeyRoutes);
   v1.route("/", meRoutes);
   v1.route("/", feedRoutes);
+  v1.route("/", digestRoutes);
   v1.route("/", changelogRoutes);
   v1.route("/", firecrawlRoutes);
   // `graphqlRoutes` is intentionally NOT mounted here — it carries its own

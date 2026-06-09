@@ -5,6 +5,7 @@
  */
 import type { FinalizeRunParams } from "../db/cron-runs-dao.js";
 import type { TopSearchRow } from "./search-queries-top.js";
+import { escapeHtml } from "./html-escape.js";
 
 export type CronReportStatus = FinalizeRunParams["status"];
 
@@ -106,15 +107,6 @@ function totalErrors(r: CronReportResults): number {
   let n = 0;
   for (const o of r.perOrg) n += o.errors;
   return n;
-}
-
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
 }
 
 export function formatCronReport(report: CronReport): FormattedReport {

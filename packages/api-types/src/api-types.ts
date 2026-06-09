@@ -855,6 +855,21 @@ export interface FeedTokenResponse {
  */
 export type PersonalizedFeedResponse = ListResponse<ReleaseLatestItem>;
 
+// ── Digest emails ──
+
+/** How often a user wants a digest email. `off` = no emails. */
+export type DigestCadence = "off" | "daily" | "weekly";
+
+/** GET /v1/me/digest response — the caller's current cadence. */
+export interface DigestPrefsResponse {
+  cadence: DigestCadence;
+}
+
+/** PUT /v1/me/digest request body. */
+export interface DigestPrefsRequest {
+  cadence: DigestCadence;
+}
+
 // ── Search ──
 
 export type SearchOrgHit = z.infer<typeof SearchOrgHitSchema>;

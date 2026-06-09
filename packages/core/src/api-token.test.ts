@@ -5,6 +5,9 @@ import {
   parseFeedToken,
   isFeedTokenShaped,
   constantTimeEqual,
+  DIGEST_TOKEN_PREFIX,
+  generateDigestToken,
+  isDigestTokenShaped,
 } from "./api-token.js";
 
 describe("feed tokens (relf_)", () => {
@@ -33,5 +36,24 @@ describe("feed tokens (relf_)", () => {
     const { secret } = generateFeedToken();
     expect(constantTimeEqual(secret, secret)).toBe(true);
     expect(constantTimeEqual(secret, secret.slice(0, -1) + "X")).toBe(false);
+  });
+});
+
+describe("digest token", () => {
+  it("generates a prefixed, shaped token", () => {
+    const t = generateDigestToken();
+    expect(t.startsWith(DIGEST_TOKEN_PREFIX)).toBe(true);
+    expect(isDigestTokenShaped(t)).toBe(true);
+    expect(t.length).toBeGreaterThan(DIGEST_TOKEN_PREFIX.length + 20);
+  });
+
+  it("generates distinct tokens", () => {
+    expect(generateDigestToken()).not.toBe(generateDigestToken());
+  });
+
+  it("rejects non-digest shapes", () => {
+    expect(isDigestTokenShaped("relf_abc")).toBe(false);
+    expect(isDigestTokenShaped("relk_abc")).toBe(false);
+    expect(isDigestTokenShaped("")).toBe(false);
   });
 });
