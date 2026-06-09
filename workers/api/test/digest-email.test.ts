@@ -29,7 +29,7 @@ describe("buildDigestEmail", () => {
       recipientName: "T",
       cadence: "daily",
       releases: [
-        rel({}),
+        rel({ titleShort: "ShortHeadline", title: "RawLongTitle" }),
         rel({
           id: "rel_2",
           title: "Second",
@@ -41,7 +41,8 @@ describe("buildDigestEmail", () => {
       unsubscribeUrl: "https://api.releases.sh/v1/digest/unsubscribe/reld_x",
     });
     expect(subject).toContain("2");
-    expect(text).toContain("Thing"); // titleShort preferred, matching the feed UI
+    expect(text).toContain("ShortHeadline"); // titleShort preferred over title, matching the feed UI
+    expect(text).not.toContain("RawLongTitle");
     expect(text).toContain("https://releases.sh/release/rel_1");
     expect(text).toContain("reld_x");
     expect(html).toContain("Unsubscribe");
@@ -64,6 +65,7 @@ describe("sendDigestEmail", () => {
       },
     );
     expect(res.sent).toBe(false);
+    expect(res.reason).toBe("no_binding");
   });
 
   it("sends with a List-Unsubscribe header through the binding", async () => {
