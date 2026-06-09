@@ -428,34 +428,47 @@ export const requireSession: MiddlewareHandler<Env> = requireSessionWithFlag(
  *   • "Sign in with Releases" OAuth JWTs — the `sub` claim is the user id.
  *
  * `relk_…` machine tokens and the static root key are NOT user principals (no
- * owning user), so they resolve to null here and the caller gets a 401 — follows
- * require a real signed-in user. Email/name are left empty: the `/v1/me/*`
- * handlers only read `user.id`, and neither lane hands us the user's profile
- * without an extra lookup we don't need.
+ * owning user), so they resolve to `none` here and the caller gets a 401 —
+ * follows require a real signed-in user. Email/name are left empty: the
+ * `/v1/me/*` handlers only read `user.id`, and neither lane hands us the user's
+ * profile without an extra lookup we don't need.
+ *
+ * Outcomes are a three-way union, NOT `user | null`: a `relu_` key that
+ * Better Auth rate-limits resolves to `rate_limited` (distinct from `none`) so
+ * the caller can answer 429 instead of 401 — mirroring `createAuthMiddleware`.
+ * Every other verify failure stays `none` → 401.
  */
-async function resolveBearerUser(
-  c: Context<Env>,
-  presented: string,
-): Promise<AuthSessionContext["user"] | null> {
+type BearerPrincipal =
+  | { kind: "user"; user: AuthSessionContext["user"] }
+  | { kind: "rate_limited" }
+  | { kind: "none" };
+
+async function resolveBearerUser(c: Context<Env>, presented: string): Promise<BearerPrincipal> {
   if (isUserApiKeyShaped(presented)) {
-    if (await flag(c.env.FLAGS, c.env.API_TOKENS_DISABLED, FLAGS.apiTokensDisabled)) return null;
+    if (await flag(c.env.FLAGS, c.env.API_TOKENS_DISABLED, FLAGS.apiTokensDisabled))
+      return { kind: "none" };
     if (!(await flag(c.env.FLAGS, c.env.USER_API_KEYS_ENABLED, FLAGS.userApiKeysEnabled)))
-      return null;
+      return { kind: "none" };
     const v = await verifyUserKey(c, presented);
-    if (v.ok && v.userId) return { id: v.userId, email: "", name: "" };
-    return null;
+    if (v.ok)
+      return v.userId
+        ? { kind: "user", user: { id: v.userId, email: "", name: "" } }
+        : { kind: "none" };
+    // Surface a rate-limited key so the caller can 429; other failures → 401.
+    return v.rateLimited ? { kind: "rate_limited" } : { kind: "none" };
   }
   if (isJwtShaped(presented)) {
     const cfg = oauthJwtConfig(c.env);
-    if (!cfg) return null;
+    if (!cfg) return { kind: "none" };
     // Test seam: a locally-injected JWKS resolver avoids a network fetch.
     const resolver = c.get("oauthJwtKeyResolver");
     if (resolver) cfg.keyResolver = resolver;
     const verified = await verifyOAuthJwt(presented, cfg);
-    if (verified?.subject) return { id: verified.subject, email: "", name: "" };
-    return null;
+    if (verified?.subject)
+      return { kind: "user", user: { id: verified.subject, email: "", name: "" } };
+    return { kind: "none" };
   }
-  return null;
+  return { kind: "none" };
 }
 
 /**
@@ -477,10 +490,14 @@ export const requireFollowsPrincipal: MiddlewareHandler<Env> = async (c, next) =
   }
   const presented = bearer(c);
   if (presented) {
-    const user = await resolveBearerUser(c, presented);
-    if (user) {
-      c.set("session", { user });
+    const resolved = await resolveBearerUser(c, presented);
+    if (resolved.kind === "user") {
+      c.set("session", { user: resolved.user });
       return next();
+    }
+    if (resolved.kind === "rate_limited") {
+      // A rate-limited user key answers 429 (not 401), matching the catalog API.
+      return c.json({ error: "rate_limited", message: "API key rate limit exceeded" }, 429);
     }
     // A credential was presented but mapped to no user — mark it invalid so a
     // Bearer client can tell "wrong/expired token" from "no token".

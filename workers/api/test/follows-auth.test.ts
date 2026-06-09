@@ -139,4 +139,14 @@ describe("requireFollowsPrincipal", () => {
     const res = await a.request("/v1/me/follows", bearer("relu_abc.secret"), env);
     expect(res.status).toBe(401);
   });
+
+  it("429s a rate-limited relu_ key (not 401), matching the catalog API", async () => {
+    const { app: a, env } = app({
+      sessionUser: null,
+      verifyApiKey: async () => ({ valid: false, error: { code: "RATE_LIMITED" } }),
+    });
+    const res = await a.request("/v1/me/follows", bearer("relu_abc.secret"), env);
+    expect(res.status).toBe(429);
+    expect(((await res.json()) as { error: string }).error).toBe("rate_limited");
+  });
 });
