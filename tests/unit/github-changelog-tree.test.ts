@@ -1,4 +1,5 @@
 import { describe, it, expect, afterEach } from "bun:test";
+import { restoreGlobalFetch } from "../global-fetch";
 import {
   discoverChangelogPathsViaTree,
   buildGitHubHeaders,
@@ -11,14 +12,12 @@ function mkSource(url = "https://github.com/owner/repo"): Source {
 }
 
 type FetchHandler = (url: string) => Response;
-let originalFetch: typeof fetch;
 function installFetch(handler: FetchHandler) {
-  originalFetch = globalThis.fetch;
   (globalThis as { fetch: typeof fetch }).fetch = (async (input: RequestInfo | URL) =>
     handler(typeof input === "string" ? input : input.toString())) as typeof fetch;
 }
 afterEach(() => {
-  (globalThis as { fetch: typeof fetch }).fetch = originalFetch;
+  restoreGlobalFetch();
 });
 
 function json(body: unknown, status = 200): Response {

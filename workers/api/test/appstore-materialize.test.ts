@@ -3,10 +3,10 @@ import { organizations, products, sources, releases } from "@buildinternet/relea
 import { eq } from "drizzle-orm";
 import { sourceRoutes } from "../src/routes/sources.js";
 import { createTestDb, createTestApp } from "./setup";
+import { restoreGlobalFetch } from "../../../tests/global-fetch";
 
-const realFetch = globalThis.fetch;
 afterEach(() => {
-  globalThis.fetch = realFetch;
+  restoreGlobalFetch();
 });
 
 const LISTING = JSON.stringify({
@@ -34,7 +34,7 @@ describe("POST /v1/sources/appstore", () => {
   it("materializes org + product + source + first release from a store URL", async () => {
     const db = createTestDb();
     globalThis.fetch = (async () =>
-      new Response(LISTING, { status: 200 })) as unknown as typeof realFetch;
+      new Response(LISTING, { status: 200 })) as unknown as typeof fetch;
     const app = createTestApp(db, [sourceRoutes], { env: {} });
 
     const res = await app(
@@ -66,7 +66,7 @@ describe("POST /v1/sources/appstore", () => {
   it("is idempotent — a second call returns the existing source, no duplicate", async () => {
     const db = createTestDb();
     globalThis.fetch = (async () =>
-      new Response(LISTING, { status: 200 })) as unknown as typeof realFetch;
+      new Response(LISTING, { status: 200 })) as unknown as typeof fetch;
     const app = createTestApp(db, [sourceRoutes], { env: {} });
     const body = JSON.stringify({ url: "https://apps.apple.com/us/app/id324684580" });
     const init = { method: "POST", headers: { "content-type": "application/json" }, body };
@@ -87,7 +87,7 @@ describe("POST /v1/sources/appstore", () => {
     globalThis.fetch = (async () =>
       new Response(JSON.stringify({ resultCount: 0, results: [] }), {
         status: 200,
-      })) as unknown as typeof realFetch;
+      })) as unknown as typeof fetch;
     const app = createTestApp(db, [sourceRoutes], { env: {} });
     const res = await app(
       new Request("https://x.test/v1/sources/appstore", {

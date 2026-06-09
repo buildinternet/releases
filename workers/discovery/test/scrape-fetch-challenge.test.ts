@@ -11,6 +11,7 @@
  */
 
 import { describe, it, expect, mock, beforeEach, afterEach } from "bun:test";
+import { restoreGlobalFetch } from "../../../tests/global-fetch";
 
 const mockSource = {
   id: "src_test",
@@ -88,8 +89,6 @@ function buildApiFetcher() {
   };
 }
 
-const originalFetch = globalThis.fetch;
-
 describe("scrapeFetch Cloudflare challenge detection", () => {
   beforeEach(() => {
     capturedFetchLogPayloads = [];
@@ -99,7 +98,7 @@ describe("scrapeFetch Cloudflare challenge detection", () => {
   });
 
   afterEach(() => {
-    globalThis.fetch = originalFetch;
+    restoreGlobalFetch();
   });
 
   it("short-circuits to a blocked/bot_challenge signal on a challenge interstitial", async () => {

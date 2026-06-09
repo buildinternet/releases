@@ -9,9 +9,9 @@ import {
   releases,
 } from "@buildinternet/releases-core/schema";
 import { eq } from "drizzle-orm";
+import { restoreGlobalFetch } from "../global-fetch";
 
 let testDb: TestDatabase;
-const realFetch = globalThis.fetch;
 
 function mockFetch(handler: (url: string) => Response) {
   globalThis.fetch = mock((url: string | URL) =>
@@ -52,7 +52,7 @@ beforeEach(() => {
 
 afterEach(() => {
   testDb.cleanup();
-  globalThis.fetch = realFetch;
+  restoreGlobalFetch();
 });
 
 async function callRoute(env: ReturnType<typeof makeEnv>, body: unknown): Promise<Response> {

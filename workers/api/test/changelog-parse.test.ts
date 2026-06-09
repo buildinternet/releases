@@ -1,14 +1,13 @@
 import { describe, it, expect, afterEach } from "bun:test";
 import { changelogRoutes } from "../src/routes/changelog.js";
 import type { Env } from "../src/index.js";
+import { restoreGlobalFetch } from "../../../tests/global-fetch";
 
 const TEST_ENV = {} as Env["Bindings"];
 
 type FetchHandler = (url: string) => Response | Promise<Response>;
-let originalFetch: typeof fetch;
 
 function installFetch(handler: FetchHandler) {
-  originalFetch = globalThis.fetch;
   (globalThis as { fetch: typeof fetch }).fetch = (async (
     input: RequestInfo | URL,
   ): Promise<Response> => {
@@ -18,7 +17,7 @@ function installFetch(handler: FetchHandler) {
 }
 
 afterEach(() => {
-  (globalThis as { fetch: typeof fetch }).fetch = originalFetch;
+  restoreGlobalFetch();
 });
 
 function json(body: unknown, status = 200): Response {

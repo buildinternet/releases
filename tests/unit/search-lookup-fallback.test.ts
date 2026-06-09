@@ -7,9 +7,9 @@ import {
   releases,
   sources,
 } from "@buildinternet/releases-core/schema";
+import { restoreGlobalFetch } from "../global-fetch";
 
 let testDb: TestDatabase;
-const realFetch = globalThis.fetch;
 
 function mockFetch(handler: (url: string) => Response) {
   globalThis.fetch = mock((url: string | URL) =>
@@ -52,7 +52,7 @@ beforeEach(() => {
 
 afterEach(() => {
   testDb.cleanup();
-  globalThis.fetch = realFetch;
+  restoreGlobalFetch();
 });
 
 /** Minimal stub that satisfies Hono's ExecutionContext requirement. */

@@ -16,6 +16,7 @@ import {
 } from "../../workers/api/src/workflows/poll-and-fetch";
 import type { PollAndFetchWorkflowEnv } from "../../workers/api/src/workflows/poll-and-fetch";
 import { mkFakeStep, mkFetch, mkVectorize } from "./_workflow-test-helpers";
+import { restoreGlobalFetch } from "../global-fetch";
 import { CACHEABLE_DEFAULT_SHAPES } from "../../workers/api/src/lib/latest-cache";
 import { purgeKeysForHomepageTicker } from "../../workers/api/src/graphql/persisted";
 
@@ -83,16 +84,14 @@ async function runWorkflow(env: PollAndFetchWorkflowEnv, sourceId = "src_a1") {
 // ── Tests ──
 
 describe("PollAndFetchWorkflow", () => {
-  let realFetch: typeof globalThis.fetch;
   let invalidationCalls: Array<{ nReleases: number; sourceId: string }>;
 
   beforeEach(() => {
-    realFetch = globalThis.fetch;
     invalidationCalls = [];
   });
 
   afterEach(() => {
-    globalThis.fetch = realFetch;
+    restoreGlobalFetch();
   });
 
   /** LATEST_CACHE stub that records every .delete() call the workflow makes. */

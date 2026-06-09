@@ -1,4 +1,5 @@
 import { describe, it, expect, afterEach } from "bun:test";
+import { restoreGlobalFetch } from "../global-fetch";
 import {
   fetchChangelogFiles,
   discoverChangelogPaths,
@@ -39,10 +40,8 @@ function mkSource(overrides: Partial<Source> = {}): Source {
 }
 
 type FetchHandler = (url: string) => Response | Promise<Response>;
-let originalFetch: typeof fetch;
 
 function installFetch(handler: FetchHandler) {
-  originalFetch = globalThis.fetch;
   (globalThis as { fetch: typeof fetch }).fetch = (async (
     input: RequestInfo | URL,
   ): Promise<Response> => {
@@ -52,7 +51,7 @@ function installFetch(handler: FetchHandler) {
 }
 
 function restoreFetch() {
-  (globalThis as { fetch: typeof fetch }).fetch = originalFetch;
+  restoreGlobalFetch();
 }
 
 function json(body: unknown, status = 200): Response {

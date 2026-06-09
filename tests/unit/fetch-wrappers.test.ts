@@ -9,6 +9,7 @@ import {
   DISCOVERY_USER_AGENT,
   DISCOVERY_REQUESTED_WITH,
 } from "../../workers/discovery/src/identity";
+import { restoreGlobalFetch } from "../global-fetch";
 
 /**
  * Regression tests for #550. The wrappers must NOT forward the original `init`
@@ -126,7 +127,6 @@ describe("withDiscoveryIdentity", () => {
 
 describe("directApiFetcher", () => {
   it("rewrites placeholder URLs for string inputs", async () => {
-    const orig = globalThis.fetch;
     const seen: string[] = [];
     globalThis.fetch = (async (input: any) => {
       seen.push(typeof input === "string" ? input : input.url);
@@ -138,12 +138,11 @@ describe("directApiFetcher", () => {
       await f.fetch("https://api/v1/sources");
       expect(seen[0]).toBe("https://api-staging.releases.sh/v1/sources");
     } finally {
-      globalThis.fetch = orig;
+      restoreGlobalFetch();
     }
   });
 
   it("rewrites placeholder URLs for Request inputs (so wrapper-upgraded requests still resolve)", async () => {
-    const orig = globalThis.fetch;
     const seen: string[] = [];
     globalThis.fetch = (async (input: any) => {
       seen.push(input instanceof Request ? input.url : String(input));
@@ -159,7 +158,7 @@ describe("directApiFetcher", () => {
       await f.fetch(req);
       expect(seen[0]).toBe("https://api-staging.releases.sh/v1/sources");
     } finally {
-      globalThis.fetch = orig;
+      restoreGlobalFetch();
     }
   });
 });

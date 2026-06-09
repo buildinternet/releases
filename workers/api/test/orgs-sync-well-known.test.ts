@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { organizations } from "@buildinternet/releases-core/schema";
 import { createTestDb, createTestApp, type TestDb } from "./setup.js";
 import { orgRoutes } from "../src/routes/orgs.js";
+import { restoreGlobalFetch } from "../../../tests/global-fetch";
 
 function fakeR2() {
   const store = new Map<string, unknown>();
@@ -22,9 +23,8 @@ type SyncResult = {
 
 describe("POST /v1/orgs/:slug/sync-well-known", () => {
   let db: TestDb;
-  const realFetch = globalThis.fetch;
   afterEach(() => {
-    globalThis.fetch = realFetch;
+    restoreGlobalFetch();
   });
 
   beforeEach(async () => {

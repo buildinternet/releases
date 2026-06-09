@@ -24,6 +24,7 @@ import {
   resolveCrawlIncludePatterns,
   type CrawlDeps,
 } from "../../workers/discovery/src/scrape-fetch";
+import { restoreGlobalFetch } from "../global-fetch";
 
 // ── Fixtures ────────────────────────────────────────────────────────
 
@@ -462,7 +463,6 @@ function mockFetchForCrawl(returnJobId: string): {
 } {
   const capturedBodies: unknown[] = [];
   const capturedRequests: CapturedRequest[] = [];
-  const original = globalThis.fetch;
 
   // @ts-expect-error — overriding globalThis.fetch for test isolation
   globalThis.fetch = async (url: unknown, init?: RequestInit) => {
@@ -481,7 +481,7 @@ function mockFetchForCrawl(returnJobId: string): {
 
   return {
     restore: () => {
-      globalThis.fetch = original;
+      restoreGlobalFetch();
     },
     capturedBodies,
     capturedRequests,

@@ -19,11 +19,11 @@ import {
   sourceChangelogFiles,
 } from "@buildinternet/releases-core/schema";
 import { fetchOne } from "../src/cron/poll-fetch.js";
+import { restoreGlobalFetch } from "../../../tests/global-fetch";
 
 // ── fetch mock ──────────────────────────────────────────────────────────────
 
 type FetchHandler = (url: string) => Response | Promise<Response>;
-const originalFetch: typeof fetch = globalThis.fetch;
 const fetchedUrls: string[] = [];
 
 function installFetch(handler: FetchHandler) {
@@ -38,7 +38,7 @@ function installFetch(handler: FetchHandler) {
 }
 
 function restoreFetch() {
-  (globalThis as { fetch: typeof fetch }).fetch = originalFetch;
+  restoreGlobalFetch();
 }
 
 function json(body: unknown, status = 200): Response {
