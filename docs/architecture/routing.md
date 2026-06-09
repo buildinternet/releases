@@ -7,7 +7,7 @@ How the API worker's route namespace is organized: where CRUD vs. job triggers v
 Three buckets, by intent:
 
 - **Resource CRUD** → canonical path `/v1/<resource>/...`, auth gated by the `adminRoutes` allowlist in `workers/api/src/index.ts` (this includes `/v1/lookups`).
-- **Job / side-effect triggers** (summarize, compare, embed backfills, notifications-test) → `/v1/workflows/<job-name>` in `workers/api/src/routes/workflows.ts`.
+- **Job / side-effect triggers** (batch-summarize, batch-enrich, embed backfills, notifications-test) → `/v1/workflows/<job-name>` in `workers/api/src/routes/workflows.ts`.
 - **Admin-only telemetry** that fits neither bucket (cron-runs list/detail, embed/status, `admin/logs/*`, search-queries, the cross-org overview manifest under `admin/overviews`) → stays under `/v1/admin/...`.
 
 Do **not** add new `/v1/admin/*` endpoints for CRUD or for async triggers — those belong on the canonical path or under `/v1/workflows/*` respectively. Existing `/v1/admin/*` CRUD is tech debt (#494).
