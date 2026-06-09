@@ -586,6 +586,9 @@ v1.use("/api-keys/*", publicRateLimitMiddleware);
 v1.use("/me/follows", publicRateLimitMiddleware);
 v1.use("/me/*", publicRateLimitMiddleware);
 
+// Token-authenticated personalized feed — rate-limited but not under publicReadAuth.
+v1.use("/feed/:token", publicRateLimitMiddleware);
+
 // Cache-Control for read-heavy GET endpoints
 v1.use("/stats", cacheControl(300, { staleWhileRevalidate: 60, isPublic: true }));
 v1.use("/orgs", cacheControl(60, { staleWhileRevalidate: 30, isPublic: true }));
