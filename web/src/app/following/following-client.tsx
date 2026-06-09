@@ -9,6 +9,7 @@ import { InfiniteScrollTrigger } from "@/components/infinite-scroll-trigger";
 import { useInfiniteScroll } from "@/hooks/use-infinite-scroll";
 import { listFollows, getFeed } from "@/lib/follows";
 import { formatRelativeDate, pluralReleases } from "@/lib/formatters";
+import { FeedTokenCard } from "./feed-token-card";
 import type { Follow, ReleaseLatestItem } from "@buildinternet/releases-api-types";
 
 const FEED_PAGE_SIZE = 30;
@@ -231,40 +232,44 @@ export function FollowingClient() {
           )}
         </section>
 
-        {/* Right: manage follows */}
-        <aside>
-          <h2 className="mb-4 text-[11px] font-semibold uppercase tracking-[0.18em] text-stone-400 dark:text-stone-500">
-            Your follows
-          </h2>
+        {/* Right: feed card + manage follows */}
+        <aside className="space-y-6">
+          <FeedTokenCard />
 
-          {followsList.length === 0 && !loading ? (
-            <p className="text-sm text-stone-400 dark:text-stone-500">
-              Not following anything yet.
-            </p>
-          ) : (
-            <ul className="space-y-1">
-              {followsList.map((f) => (
-                <FollowRow
-                  key={`${f.targetType}:${f.targetId}`}
-                  follow={f}
-                  onUnfollow={async () => {
-                    // Optimistically drop from the sidebar; restore on failure so
-                    // the local list stays in sync with the provider's rollback.
-                    setFollowsList((prev) =>
-                      prev.filter(
-                        (x) => !(x.targetType === f.targetType && x.targetId === f.targetId),
-                      ),
-                    );
-                    try {
-                      await follows?.toggle(f.targetType, f.targetId);
-                    } catch {
-                      setFollowsList((prev) => [...prev, f]);
-                    }
-                  }}
-                />
-              ))}
-            </ul>
-          )}
+          <div>
+            <h2 className="mb-4 text-[11px] font-semibold uppercase tracking-[0.18em] text-stone-400 dark:text-stone-500">
+              Your follows
+            </h2>
+
+            {followsList.length === 0 && !loading ? (
+              <p className="text-sm text-stone-400 dark:text-stone-500">
+                Not following anything yet.
+              </p>
+            ) : (
+              <ul className="space-y-1">
+                {followsList.map((f) => (
+                  <FollowRow
+                    key={`${f.targetType}:${f.targetId}`}
+                    follow={f}
+                    onUnfollow={async () => {
+                      // Optimistically drop from the sidebar; restore on failure so
+                      // the local list stays in sync with the provider's rollback.
+                      setFollowsList((prev) =>
+                        prev.filter(
+                          (x) => !(x.targetType === f.targetType && x.targetId === f.targetId),
+                        ),
+                      );
+                      try {
+                        await follows?.toggle(f.targetType, f.targetId);
+                      } catch {
+                        setFollowsList((prev) => [...prev, f]);
+                      }
+                    }}
+                  />
+                ))}
+              </ul>
+            )}
+          </div>
         </aside>
       </div>
     </div>
