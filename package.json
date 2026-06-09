@@ -45,7 +45,7 @@
     "lint:fix": "oxlint --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "test": "bun test packages/ && bun test tests/ web/ workers/",
+    "test": "bun test packages/ && bun test tests/ web/ workers/discovery workers/mcp workers/webhooks && bun test workers/api",
     "eval:evaluation": "bun test ./tests/evals/evaluation.eval.ts --timeout 30000",
     "eval:marketing": "bun tests/evals/marketing-classifier.eval.ts",
     "eval:summary": "bun tests/evals/release-summary.eval.ts",
