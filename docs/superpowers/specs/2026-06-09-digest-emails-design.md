@@ -127,9 +127,12 @@ New `workers/api/src/lib/digest-email.ts`:
   published date, and a link to the release page on `releases.sh`.
 - **Footer:** **Manage preferences** (→ `/following`) and one-click **Unsubscribe** (the
   `reld_` token URL).
-- **`List-Unsubscribe` + `List-Unsubscribe-Post` headers** (RFC 8058) **if the binding
-  accepts custom headers** — see Open questions. The in-body unsubscribe link is the
-  guaranteed fallback regardless.
+- **`List-Unsubscribe` + `List-Unsubscribe-Post` headers** (RFC 8058) via the binding's
+  `headers` object — confirmed supported by Cloudflare Email Service (custom non-reserved
+  headers are allowlisted; From/To/Subject must stay in the API fields). The current
+  `AuthEmailBinding` type in `src/auth/email.ts` does not declare `headers`, so the plan
+  adds an optional `headers?: Record<string, string>` field to it. The in-body unsubscribe
+  link is kept as a belt-and-suspenders fallback.
 
 ## Endpoints
 
@@ -177,6 +180,11 @@ Additive — CLI/MCP can adopt later without a breaking change. Published on the
 - **Flag:** `digest-emails-enabled` (both Flagship apps, default off).
 - **Vars** (`workers/api/wrangler.jsonc`): `DIGEST_EMAIL_FROM=digests@releases.sh`,
   `DIGEST_MAX_PER_RUN`, `DIGEST_MAX_RELEASES`.
+- **Sender allowlist:** add `digests@releases.sh` to the `AUTH_EMAIL` binding's
+  `allowed_sender_addresses` in **both** the prod and staging `send_email` blocks of
+  `workers/api/wrangler.jsonc` (currently `["noreply@releases.sh"]`). `releases.sh` is
+  already DKIM-verified for Email Sending, so no new domain verification is needed — only
+  the per-address allowlist entry, or the binding rejects the `digests@` sender.
 - **Crons:** two new triggers (prod only).
 - **Migration:** `user_digest_prefs` island + paired SQL.
 
@@ -198,15 +206,20 @@ enabled` off or `CRON_ENABLED` off → no-op; one failed send doesn't abort the 
 Use the existing injected-`betterAuth` / session test seam and the in-memory D1 fixture
 helper (`tests/db-helper.ts`).
 
-## Open questions for the implementation plan
+## Binding findings (resolved)
 
-1. **`AUTH_EMAIL.send` custom headers** — confirm whether the binding's `send()` accepts a
-   `headers` field for `List-Unsubscribe` / `List-Unsubscribe-Post`. If not, decide between
-   extending the binding wrapper (e.g. the `mimetext`/`EmailMessage` path) or shipping the
-   body-link unsubscribe alone for v1.
-2. **From-address acceptance** — confirm `digests@releases.sh` is an accepted sender on the
-   `AUTH_EMAIL` binding's verified domain (no per-address allowlist beyond domain
-   verification).
+Both former open questions are resolved against the live config / Cloudflare docs:
+
+1. **Custom headers — supported.** The Cloudflare Email Service `send()` accepts a `headers`
+   object; `List-Unsubscribe` / `List-Unsubscribe-Post` are valid (reserved/platform headers
+   and From/To/Cc/Bcc/Subject/Reply-To are rejected — those use the API fields). Limits: ≤20
+   non-`X-` headers, 2 KB/value, 16 KB total. The plan extends `AuthEmailBinding` with an
+   optional `headers?: Record<string, string>`.
+2. **Sender address — allowlisted, not just domain-verified.** `releases.sh` is DKIM-verified
+   for Email Sending, but the `AUTH_EMAIL` binding pins `allowed_sender_addresses` to
+   `["noreply@releases.sh"]`. The plan must add `digests@releases.sh` to that array in **both**
+   the prod and staging `send_email` blocks of `workers/api/wrangler.jsonc`, or the binding
+   rejects the digest sender. No new domain verification needed.
 
 ## Out of scope
 
