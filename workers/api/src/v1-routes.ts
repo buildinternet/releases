@@ -55,6 +55,7 @@ import { apiTokenRoutes } from "./routes/api-tokens.js";
 import { userApiKeyRoutes } from "./routes/user-api-keys.js";
 import { meRoutes } from "./routes/me.js";
 import { feedRoutes } from "./routes/feed.js";
+import { digestRoutes } from "./routes/digest.js";
 import { changelogRoutes } from "./routes/changelog.js";
 import { firecrawlRoutes } from "./routes/firecrawl.js";
 import { mountOpenApi } from "./openapi.js";
@@ -111,6 +112,7 @@ export function mountV1Routes(v1: Hono<Env>) {
   v1.route("/", userApiKeyRoutes);
   v1.route("/", meRoutes);
   v1.route("/", feedRoutes);
+  v1.route("/", digestRoutes);
   v1.route("/", changelogRoutes);
   v1.route("/", firecrawlRoutes);
   // `graphqlRoutes` is intentionally NOT mounted here — it carries its own

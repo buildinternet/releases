@@ -588,6 +588,8 @@ v1.use("/me/*", publicRateLimitMiddleware);
 
 // Token-authenticated personalized feed — rate-limited but not under publicReadAuth.
 v1.use("/feed/:token", publicRateLimitMiddleware);
+// Token-authenticated unsubscribe — rate-limited, not under publicReadAuth.
+v1.use("/digest/unsubscribe/:token", publicRateLimitMiddleware);
 
 // Cache-Control for read-heavy GET endpoints
 v1.use("/stats", cacheControl(300, { staleWhileRevalidate: 60, isPublic: true }));
