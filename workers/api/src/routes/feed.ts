@@ -46,7 +46,9 @@ feedRoutes.get("/feed/:token", async (c) => {
   }
 
   const etag = atomEtag(body);
-  const lastModified = formatLastModified(new Date().toISOString());
+  const lastModified = formatLastModified(
+    releases.length ? (releases[0].publishedAt ?? null) : null,
+  );
   if (
     shouldReturn304(
       etag,
@@ -58,9 +60,11 @@ feedRoutes.get("/feed/:token", async (c) => {
     return c.body(null, 304, { ETag: etag });
   }
 
-  return c.body(body, 200, {
+  const headers: Record<string, string> = {
     "Content-Type": "application/atom+xml; charset=utf-8",
     "Cache-Control": "private, no-store",
     ETag: etag,
-  });
+  };
+  if (lastModified) headers["Last-Modified"] = lastModified;
+  return c.body(body, 200, headers);
 });
