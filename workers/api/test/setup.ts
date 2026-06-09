@@ -1,8 +1,21 @@
-import { mock } from "bun:test";
+import { mock, afterEach } from "bun:test";
 import { Hono, type ErrorHandler } from "hono";
 import { createTestDb as createSnapshotDb, type TestDb } from "../../../tests/db-helper";
 
 export type { TestDb };
+
+// ── pristine globalThis.fetch capture (#1553) ────────────────────────────────
+// This preload runs once per test process, before any test module body — so
+// fetch is guaranteed pristine here. Capture it on a well-known global that
+// `tests/global-fetch.ts` reads, and register a process-wide `afterEach` net so
+// a mock installed by any test can never leak into the next file, regardless of
+// bun's file-execution order. `??=` keeps the first (pristine) capture if the
+// preload ever runs more than once.
+const fetchGlobal = globalThis as { __REAL_FETCH__?: typeof fetch };
+fetchGlobal.__REAL_FETCH__ ??= globalThis.fetch;
+afterEach(() => {
+  globalThis.fetch = fetchGlobal.__REAL_FETCH__!;
+});
 
 // Stub out cloudflare:workers so Bun can import Durable Objects and
 // WorkflowEntrypoints outside a Worker runtime.

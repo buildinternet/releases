@@ -1,6 +1,7 @@
 import { describe, it, expect, afterEach } from "bun:test";
 import { changelogRoutes } from "../src/routes/changelog.js";
 import type { Env } from "../src/index.js";
+import { restoreGlobalFetch } from "../../../tests/global-fetch";
 
 // The route only reads `c.env.GITHUB_TOKEN` (via getSecret, which returns null
 // for an undefined binding → anonymous GitHub access). Nothing else on Env is
@@ -8,10 +9,8 @@ import type { Env } from "../src/index.js";
 const TEST_ENV = {} as Env["Bindings"];
 
 type FetchHandler = (url: string) => Response | Promise<Response>;
-let originalFetch: typeof fetch;
 
 function installFetch(handler: FetchHandler) {
-  originalFetch = globalThis.fetch;
   (globalThis as { fetch: typeof fetch }).fetch = (async (
     input: RequestInfo | URL,
   ): Promise<Response> => {
@@ -21,7 +20,7 @@ function installFetch(handler: FetchHandler) {
 }
 
 afterEach(() => {
-  (globalThis as { fetch: typeof fetch }).fetch = originalFetch;
+  restoreGlobalFetch();
 });
 
 function json(body: unknown, status = 200): Response {

@@ -3,10 +3,10 @@ import { organizations, sources, releases } from "@buildinternet/releases-core/s
 import { eq } from "drizzle-orm";
 import { fetchOne } from "../src/cron/poll-fetch.js";
 import { createTestDb } from "./setup";
+import { restoreGlobalFetch } from "../../../tests/global-fetch";
 
-const realFetch = globalThis.fetch;
 afterEach(() => {
-  globalThis.fetch = realFetch;
+  restoreGlobalFetch();
 });
 
 const FEED_URL =

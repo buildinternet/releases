@@ -5,8 +5,7 @@ import {
   CLEARED_FEED_FIELDS,
 } from "@releases/adapters/feed";
 import { FeedHttpError } from "@releases/lib/errors";
-
-const realFetch = globalThis.fetch;
+import { restoreGlobalFetch } from "../global-fetch";
 
 function stubFetch(status: number, statusText = ""): void {
   globalThis.fetch = mock(
@@ -14,9 +13,7 @@ function stubFetch(status: number, statusText = ""): void {
   ) as unknown as typeof fetch;
 }
 
-afterEach(() => {
-  globalThis.fetch = realFetch;
-});
+afterEach(restoreGlobalFetch);
 
 const MINIMAL_ATOM = `<?xml version="1.0"?><feed xmlns="http://www.w3.org/2005/Atom"><id>t</id><title>T</title></feed>`;
 

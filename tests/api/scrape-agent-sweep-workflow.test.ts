@@ -9,6 +9,7 @@ import {
   ScrapeAgentSweepWorkflow,
   type ScrapeAgentSweepWorkflowEnv,
 } from "../../workers/api/src/workflows/scrape-agent-sweep";
+import { restoreGlobalFetch } from "../global-fetch";
 
 /**
  * Fake WorkflowStep. For `step.do`, runs the callback inline. Honors
@@ -144,16 +145,13 @@ async function runWorkflow(env: ScrapeAgentSweepWorkflowEnv) {
 }
 
 describe("ScrapeAgentSweepWorkflow (E2E)", () => {
-  let realFetch: typeof globalThis.fetch;
-
   beforeEach(() => {
-    realFetch = globalThis.fetch;
     // Default: Anthropic preflight succeeds.
     globalThis.fetch = (async () => new Response("{}", { status: 200 })) as unknown as typeof fetch;
   });
 
   afterEach(() => {
-    globalThis.fetch = realFetch;
+    restoreGlobalFetch();
   });
 
   it("happy path: 3 orgs -> 3 dispatches -> status done", async () => {

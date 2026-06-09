@@ -14,6 +14,7 @@
 
 import { describe, it, expect, mock, beforeEach, afterEach } from "bun:test";
 import { CrawlTimeoutError } from "@releases/lib/errors";
+import { restoreGlobalFetch } from "../../../tests/global-fetch";
 
 const mockSource = {
   id: "src_crawl",
@@ -89,8 +90,6 @@ function buildApiFetcher() {
   };
 }
 
-const originalFetch = globalThis.fetch;
-
 describe("scrapeFetch crawl-timeout short-circuit", () => {
   beforeEach(() => {
     capturedFetchLogPayloads = [];
@@ -100,7 +99,7 @@ describe("scrapeFetch crawl-timeout short-circuit", () => {
   });
 
   afterEach(() => {
-    globalThis.fetch = originalFetch;
+    restoreGlobalFetch();
   });
 
   it("writes crawl_timeout (not no_change) when the crawl throws a timeout", async () => {

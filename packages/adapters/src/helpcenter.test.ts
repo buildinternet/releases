@@ -7,6 +7,13 @@ import {
   type ZendeskArticle,
 } from "./helpcenter.js";
 
+// Restore the pristine fetch captured by the test preload (#1553). The shared
+// tests/global-fetch helper isn't imported here — packages/adapters tsconfig
+// rootDir ("src") forbids the cross-package path — so restore inline.
+function restoreGlobalFetch() {
+  globalThis.fetch = (globalThis as { __REAL_FETCH__?: typeof fetch }).__REAL_FETCH__!;
+}
+
 const baseUrl = "https://support.zendesk.com";
 const feedUrl = `${baseUrl}/api/v2/help_center/en-us/sections/4405298847002/articles.json?per_page=100&sort_by=created_at&sort_order=desc`;
 
@@ -73,10 +80,7 @@ describe("mapZendeskArticles", () => {
   });
 });
 
-const realFetch = globalThis.fetch;
-afterEach(() => {
-  globalThis.fetch = realFetch;
-});
+afterEach(restoreGlobalFetch);
 
 describe("fetchZendeskArticles", () => {
   test("follows next_page pagination and accumulates articles", async () => {
