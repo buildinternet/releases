@@ -42,6 +42,8 @@ import { loadFetchQuirks, type FetchQuirk } from "@releases/ai-internal/playbook
 import { FeedHttpError, isTransientFeedHttpStatus } from "@releases/lib/errors";
 import { contentHash } from "@releases/adapters/content-hash";
 import { RELEASES_BOT_UA } from "@releases/adapters/user-agent";
+import { fetchCloudflareMarkdown } from "@releases/adapters/cloudflare";
+import { getSecret } from "@releases/lib/secrets";
 import type { RawRelease } from "@releases/adapters/types.js";
 import {
   discoverChangelogPaths,
@@ -871,6 +873,143 @@ export async function delegateScrapeToDiscovery(
     durationMs,
     status: "delegated" as const,
     sessionId: result.sessionId,
+  };
+}
+
+/** Just the Browser Rendering credentials {@link renderCheckOne} needs. */
+export interface RenderCheckEnv {
+  CLOUDFLARE_ACCOUNT_ID?: { get(): Promise<string | null> } | { get(): Promise<string> };
+  CLOUDFLARE_API_TOKEN?: { get(): Promise<string | null> } | { get(): Promise<string> };
+}
+
+/** Result of a render dry-run probe ({@link renderCheckOne}). */
+export interface RenderCheckResult {
+  status: "dry_run" | "error";
+  /** True when the headless render returned non-empty markdown. */
+  rendered: boolean;
+  /** Distinct same-origin candidate links discovered on the rendered index. */
+  candidateCount: number;
+  /** A few example candidate URLs, for the operator to eyeball. */
+  sampleUrls: string[];
+  durationMs: number;
+  error?: string;
+}
+
+/** Markdown links `](href)` and bare http(s) URLs. Used with `matchAll` (which
+ * resets `lastIndex` per call), so the shared `g`-flagged instance is safe. */
+const CANDIDATE_LINK_RE = /\]\((https?:\/\/[^)\s]+)\)|(?<![(\w])(https?:\/\/[^)\s\]]+)/g;
+
+/**
+ * Markdown-link + bare-URL extraction, restricted to the index's own origin and
+ * excluding the index URL itself. This is a coarse "did the render expose
+ * release links" signal, not a parser — nav/footer links on-origin count too,
+ * so a healthy index reads as "dozens of candidates" and a broken (empty-shell)
+ * render reads as ~0. Exported for unit testing.
+ */
+export function extractCandidateLinks(markdown: string, baseUrl: string): string[] {
+  let origin: string;
+  let normalizedBase: string;
+  try {
+    const u = new URL(baseUrl);
+    origin = u.origin;
+    normalizedBase = u.href.replace(/#.*$/, "").replace(/\/$/, "");
+  } catch {
+    return [];
+  }
+  const found = new Set<string>();
+  for (const m of markdown.matchAll(CANDIDATE_LINK_RE)) {
+    const raw = m[1] ?? m[2];
+    if (!raw) continue;
+    let href: string;
+    try {
+      const u = new URL(raw);
+      if (u.origin !== origin) continue;
+      href = u.href.replace(/#.*$/, "").replace(/\/$/, "");
+    } catch {
+      continue;
+    }
+    if (href === normalizedBase) continue;
+    found.add(href);
+  }
+  return [...found];
+}
+
+/**
+ * Render dry-run probe (#1528). Renders a client-rendered scrape source's index
+ * once via Cloudflare Browser Rendering and reports how many candidate release
+ * links the rendered page exposes — WITHOUT the managed-agent extraction loop
+ * (no Haiku/Sonnet, no discovery-worker session). The cheap "can the cron's
+ * render actually see releases here, or is it hitting an empty JS shell?" check
+ * that onboarding a `renderRequired` source previously had no way to answer.
+ *
+ * Writes a `dry_run` fetch_log row so the probe is visible in observability but
+ * never mutates source state or inserts releases.
+ */
+export async function renderCheckOne(
+  db: ReturnType<typeof drizzle>,
+  source: Source,
+  env: RenderCheckEnv,
+): Promise<RenderCheckResult> {
+  const start = Date.now();
+  // getSecret throws on a transient Secrets Store failure; soft-fail to null so
+  // absent/unreachable creds surface as a clean error rather than an exception.
+  // The two bindings are independent — resolve them concurrently.
+  const [accountId, apiToken] = await Promise.all([
+    getSecret(env.CLOUDFLARE_ACCOUNT_ID).catch(() => null),
+    getSecret(env.CLOUDFLARE_API_TOKEN).catch(() => null),
+  ]);
+  if (!accountId || !apiToken) {
+    const durationMs = Date.now() - start;
+    logEvent("warn", {
+      component: "cron-poll-fetch",
+      event: "render-check-no-creds",
+      sourceSlug: source.slug,
+      durationMs,
+    });
+    return {
+      status: "error",
+      rendered: false,
+      candidateCount: 0,
+      sampleUrls: [],
+      durationMs,
+      error: "Cloudflare Browser Rendering credentials not configured",
+    };
+  }
+
+  const markdown = await fetchCloudflareMarkdown(source.url, accountId, apiToken).catch(() => null);
+  const durationMs = Date.now() - start;
+  const rendered = !!markdown?.trim();
+  const candidates = rendered ? extractCandidateLinks(markdown!, source.url) : [];
+
+  // A dry_run fetch_log row keeps the probe visible without touching source
+  // state. releasesFound carries the candidate count; nothing is inserted.
+  await db
+    .insert(fetchLog)
+    .values({
+      sourceId: source.id,
+      sessionId: null,
+      releasesFound: candidates.length,
+      releasesInserted: 0,
+      durationMs,
+      status: "dry_run",
+    })
+    .catch(() => {});
+
+  logEvent(rendered ? "info" : "warn", {
+    component: "cron-poll-fetch",
+    event: "render-check",
+    sourceSlug: source.slug,
+    rendered,
+    candidateCount: candidates.length,
+    durationMs,
+  });
+
+  return {
+    status: "dry_run",
+    rendered,
+    candidateCount: candidates.length,
+    sampleUrls: candidates.slice(0, 5),
+    durationMs,
   };
 }
 
