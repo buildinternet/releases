@@ -24,12 +24,22 @@ touches it) and from the public-read OpenAPI coverage gate. Its credentialed COR
 carved out alongside `/api/auth/*` in `index.ts`. This bucket is for first-party,
 current-user browser operations; it is not a general extension point.
 
-The same session-authed bucket covers `/v1/me/*` — the user follows and personalized
-feed surface. Like `/v1/api-keys`, these routes require a Better Auth cookie session
-(`requireFollowsSession`), are absent from both `publicReadRoutes` and `adminRoutes`,
-and use the same credentialed CORS carve-out in `index.ts`. Unlike `/v1/api-keys`,
-they are **not** behind a feature flag — follows is enabled by default; the gate is
-purely the cookie session (no session → 401). Endpoints:
+The `/v1/me/*` user-follows and personalized-feed surface sits in its own
+principal-gated bucket (`requireFollowsPrincipal`), absent from both
+`publicReadRoutes` and `adminRoutes` and using the same credentialed CORS carve-out
+in `index.ts`. Unlike `/v1/api-keys` it is **not** behind a feature flag — follows is
+enabled by default.
+
+The gate resolves a user from **either** a Better Auth session (cookie, or a
+device-login Bearer session token via the `bearer()` plugin) **or** a Bearer **user**
+credential — a `relu_` user key (whose `userId` the verify returns) or a "Sign in with
+Releases" OAuth JWT (whose `sub` is the user id). This lets the CLI and MCP server —
+which authenticate by Bearer, not a cookie — manage a user's follows. Unlike the
+catalog API it is **not** scope-gated: a read-only `relu_` key still manages its
+OWNER'S follows, exactly as that user's session would (follows are personal account
+state, not a catalog write). Machine principals (`relk_`) and root have no owning user
+and are refused (401); a presented-but-unresolvable Bearer credential gets a 401 with
+`WWW-Authenticate: …error="invalid_token"`. Endpoints:
 
 - `GET /v1/me/follows` — list the signed-in user's follows, enriched with each target's display fields (name, slug, avatarUrl, orgSlug for products), newest first.
 - `POST /v1/me/follows { targetType, targetId }` — add a follow (idempotent; `targetType` is `"org"` or `"product"`).

@@ -74,6 +74,7 @@ describe("resolveMcpAuth — identity (prod, no staging gate)", () => {
         scopes: ["read", "write"],
         tokenId: "tok_w",
         token,
+        userToken: null, // relk_ is a machine principal — no owning user
       });
   });
 
@@ -260,6 +261,7 @@ describe("resolveMcpAuth — relu_ user keys", () => {
         scopes: ["read", "write"],
         tokenId: "relu_",
         token: null,
+        userToken: RELU, // raw relu_ forwarded so follows tools can act as the user
       });
     expect(calls.length).toBe(1);
     expect(calls[0].url).toContain("/v1/tokens/me");
@@ -396,25 +398,44 @@ describe("machineTokenIdForUsage", () => {
         scopes: ["read"],
         tokenId: "tok_x",
         token: "relk_x",
+        userToken: null,
       }),
     ).toBe("tok_x");
   });
 
   it("relu_ user key ⇒ null (metered by Better Auth, no api_tokens row)", () => {
     expect(
-      machineTokenIdForUsage({ kind: "token", scopes: ["read"], tokenId: "relu_", token: null }),
+      machineTokenIdForUsage({
+        kind: "token",
+        scopes: ["read"],
+        tokenId: "relu_",
+        token: null,
+        userToken: "relu_x",
+      }),
     ).toBeNull();
   });
 
   it("root ⇒ null", () => {
     expect(
-      machineTokenIdForUsage({ kind: "root", scopes: ["*"], tokenId: null, token: null }),
+      machineTokenIdForUsage({
+        kind: "root",
+        scopes: ["*"],
+        tokenId: null,
+        token: null,
+        userToken: null,
+      }),
     ).toBeNull();
   });
 
   it("anonymous ⇒ null", () => {
     expect(
-      machineTokenIdForUsage({ kind: "anonymous", scopes: ["read"], tokenId: null, token: null }),
+      machineTokenIdForUsage({
+        kind: "anonymous",
+        scopes: ["read"],
+        tokenId: null,
+        token: null,
+        userToken: null,
+      }),
     ).toBeNull();
   });
 });
