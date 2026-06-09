@@ -12,6 +12,15 @@ function newDigestPrefsId(): string {
   return `udp_${crypto.randomUUID()}`;
 }
 
+/**
+ * `new Date` truncated to whole seconds. The Drizzle `mode: "timestamp"` columns
+ * store Unix seconds, so a sub-second in-memory Date would not equal a round-tripped
+ * DB read. Use this for every timestamp written by this module.
+ */
+function nowSeconds(): Date {
+  return new Date(Math.floor(Date.now() / 1000) * 1000);
+}
+
 /** A digest send target: the user's address + their watermark + manage token. */
 export interface DigestRecipient {
   userId: string;
@@ -42,9 +51,7 @@ export async function setDigestCadence(
   userId: string,
   cadence: DigestCadence,
 ): Promise<UserDigestPrefs> {
-  // SQLite stores timestamps as integer seconds; truncate to avoid a precision
-  // mismatch between the returned in-memory row and a subsequent DB read.
-  const now = new Date(Math.floor(Date.now() / 1000) * 1000);
+  const now = nowSeconds();
   const existing = await getDigestPrefs(db, userId);
 
   if (!existing) {
@@ -91,7 +98,7 @@ export async function unsubscribeByToken(db: AnyDb, raw: string): Promise<boolea
   if (row.cadence !== "off") {
     await db
       .update(userDigestPrefs)
-      .set({ cadence: "off", updatedAt: new Date() })
+      .set({ cadence: "off", updatedAt: nowSeconds() })
       .where(eq(userDigestPrefs.userId, row.userId));
   }
   return true;
@@ -131,6 +138,6 @@ export async function advanceDigestWatermark(
 ): Promise<void> {
   await db
     .update(userDigestPrefs)
-    .set({ lastDigestAt: runStart, updatedAt: new Date() })
+    .set({ lastDigestAt: runStart, updatedAt: nowSeconds() })
     .where(eq(userDigestPrefs.userId, userId));
 }
