@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, Fragment } from "react";
 import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import { remarkPlugins } from "@/lib/markdown-plugins";
@@ -47,6 +47,8 @@ const searchPreviewComponents: Record<string, any> = {
 };
 /* eslint-enable @typescript-eslint/no-explicit-any */
 import { SourceTypeIcon } from "./source-type-icon";
+import { OrgAvatar } from "./org-avatar";
+import { AppIcon } from "./app-icon";
 import { FallbackImage } from "./fallback-image";
 import { AppStoreIcon } from "./app-store-icon";
 import { PlayBadge } from "./play-badge";
@@ -418,6 +420,99 @@ function useMarkdownHighlight(tokens: string[]) {
   );
 }
 
+/**
+ * Joins 1–N secondary fragments with a "·" separator, dropping empty parts and
+ * returning null when nothing remains (so the row's secondary line collapses
+ * entirely rather than rendering an empty span). Shared by the org and product
+ * hit rows, which otherwise duplicate the same separator markup and guard.
+ */
+function joinMeta(parts: React.ReactNode[]): React.ReactNode {
+  const shown = parts.filter(Boolean);
+  if (shown.length === 0) return null;
+  return shown.map((part, i) => (
+    <Fragment key={i}>
+      {i > 0 && <span className="text-stone-300 dark:text-stone-700"> · </span>}
+      {part}
+    </Fragment>
+  ));
+}
+
+/** Stacked-layers glyph tile — the visual cue for a collection. */
+function CollectionTile({ size = 36 }: { size?: number }) {
+  return (
+    <div
+      className="flex shrink-0 items-center justify-center rounded-md bg-stone-100 text-stone-400 dark:bg-stone-800 dark:text-stone-500"
+      style={{ width: size, height: size }}
+      aria-hidden
+    >
+      <svg
+        width={size * 0.5}
+        height={size * 0.5}
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M12 2 2 7l10 5 10-5-10-5Z" />
+        <path d="m2 17 10 5 10-5" />
+        <path d="m2 12 10 5 10-5" />
+      </svg>
+    </div>
+  );
+}
+
+/**
+ * Shared row for the org / product / collection hit sections. Search used to
+ * render each of these as a flat text-only box, which gave the entity sections
+ * no leading visual and no hierarchy against the thumbnail-bearing release
+ * cards below. This consolidates them into one layout — a leading visual slot
+ * (avatar / monogram / glyph), a bold primary name with optional trailing cue,
+ * and a muted secondary line — matching how the same entities render in the
+ * catalog, org table, and collection rails.
+ */
+function EntityHitRow({
+  href,
+  visual,
+  name,
+  tokens,
+  trailing,
+  secondary,
+  footer,
+}: {
+  href: string;
+  visual: React.ReactNode;
+  name: string;
+  tokens: string[];
+  trailing?: React.ReactNode;
+  secondary?: React.ReactNode;
+  footer?: React.ReactNode;
+}) {
+  return (
+    <Link
+      href={href}
+      className="flex items-start gap-3 rounded-lg border border-stone-200 p-3 transition-colors hover:bg-stone-50 dark:border-stone-800 dark:hover:bg-stone-900"
+    >
+      <span className="mt-0.5">{visual}</span>
+      <span className="min-w-0 flex-1">
+        <span className="flex items-center gap-2">
+          <span className="truncate text-sm font-medium text-stone-900 dark:text-stone-100">
+            <Highlight text={name} tokens={tokens} />
+          </span>
+          {trailing}
+        </span>
+        {secondary && (
+          <span className="mt-0.5 block truncate text-xs text-stone-400 dark:text-stone-500">
+            {secondary}
+          </span>
+        )}
+        {footer}
+      </span>
+    </Link>
+  );
+}
+
 export function SearchResults({
   query,
   results,
@@ -503,25 +598,26 @@ export function SearchResults({
               </h2>
               <div className="space-y-2">
                 {results.orgs.map((org: SearchOrgHit) => (
-                  <Link
+                  <EntityHitRow
                     key={org.slug}
                     href={`/${org.slug}`}
-                    className="block p-3 rounded-lg border border-stone-200 dark:border-stone-800 hover:bg-stone-50 dark:hover:bg-stone-900 transition-colors"
-                  >
-                    <span className="font-medium">
-                      <Highlight text={org.name} tokens={tokens} />
-                    </span>
-                    {org.category && (
-                      <span className="ml-2 text-xs text-stone-400">
+                    name={org.name}
+                    tokens={tokens}
+                    visual={
+                      <OrgAvatar
+                        avatarUrl={org.avatarUrl}
+                        githubHandle={null}
+                        name={org.name}
+                        size={36}
+                      />
+                    }
+                    secondary={joinMeta([
+                      org.category && (
                         <Highlight text={categoryDisplayName(org.category)} tokens={tokens} />
-                      </span>
-                    )}
-                    {org.domain && (
-                      <span className="ml-2 text-xs text-stone-400">
-                        <Highlight text={org.domain} tokens={tokens} />
-                      </span>
-                    )}
-                  </Link>
+                      ),
+                      org.domain && <Highlight text={org.domain} tokens={tokens} />,
+                    ])}
+                  />
                 ))}
               </div>
             </section>
@@ -539,21 +635,28 @@ export function SearchResults({
                     p.entryType === "source" && p.sourceSlug
                       ? sourcePath(p.orgSlug, p.sourceSlug)
                       : productPath(p.orgSlug, p.slug);
+                  const category = p.category ? categoryDisplayName(p.category) : null;
                   return (
-                    <Link
+                    <EntityHitRow
                       key={p.slug}
                       href={href}
-                      className="block p-3 rounded-lg border border-stone-200 dark:border-stone-800 hover:bg-stone-50 dark:hover:bg-stone-900 transition-colors"
-                    >
-                      <span className="font-medium">
-                        <Highlight text={p.name} tokens={tokens} />
-                      </span>
-                      {p.orgName && (
-                        <span className="ml-2 text-xs text-stone-400">
-                          by <Highlight text={p.orgName} tokens={tokens} />
-                        </span>
-                      )}
-                    </Link>
+                      name={p.name}
+                      tokens={tokens}
+                      visual={<AppIcon iconUrl={null} name={p.name} size={36} />}
+                      trailing={
+                        p.entryType === "source" && p.sourceType ? (
+                          <SourceTypeIcon type={p.sourceType} size={14} />
+                        ) : undefined
+                      }
+                      secondary={joinMeta([
+                        p.orgName && (
+                          <>
+                            by <Highlight text={p.orgName} tokens={tokens} />
+                          </>
+                        ),
+                        category && <Highlight text={category} tokens={tokens} />,
+                      ])}
+                    />
                   );
                 })}
               </div>
@@ -570,30 +673,28 @@ export function SearchResults({
               </h2>
               <div className="space-y-2">
                 {collectionsHits.map((c) => (
-                  <Link
+                  <EntityHitRow
                     key={c.slug}
                     href={`/collections/${c.slug}`}
-                    className="block p-3 rounded-lg border border-stone-200 dark:border-stone-800 hover:bg-stone-50 dark:hover:bg-stone-900 transition-colors"
-                  >
-                    <div className="flex items-baseline gap-2 flex-wrap">
-                      <span className="font-medium">
-                        <Highlight text={c.name} tokens={tokens} />
-                      </span>
-                      <span className="text-xs text-stone-400">
+                    name={c.name}
+                    tokens={tokens}
+                    visual={<CollectionTile size={36} />}
+                    trailing={
+                      <span className="shrink-0 text-[11px] tabular-nums text-stone-400 dark:text-stone-500">
                         {c.memberCount === 1 ? "1 member" : `${c.memberCount} members`}
                       </span>
-                    </div>
-                    {c.description && (
-                      <p className="text-xs text-stone-500 dark:text-stone-400 mt-1">
-                        <Highlight text={c.description} tokens={tokens} />
-                      </p>
-                    )}
-                    {c.via === "member" && c.matchedOrgSlugs && c.matchedOrgSlugs.length > 0 && (
-                      <p className="text-[11px] text-stone-400 mt-1">
-                        Includes {c.matchedOrgSlugs.join(", ")}
-                      </p>
-                    )}
-                  </Link>
+                    }
+                    secondary={
+                      c.description ? <Highlight text={c.description} tokens={tokens} /> : null
+                    }
+                    footer={
+                      c.via === "member" && c.matchedOrgSlugs && c.matchedOrgSlugs.length > 0 ? (
+                        <span className="mt-1 block text-[11px] text-stone-400 dark:text-stone-500">
+                          Includes {c.matchedOrgSlugs.join(", ")}
+                        </span>
+                      ) : undefined
+                    }
+                  />
                 ))}
               </div>
             </section>
