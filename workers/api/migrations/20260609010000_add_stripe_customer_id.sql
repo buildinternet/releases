@@ -1,0 +1,11 @@
+-- Add user.stripe_customer_id for the Better Auth Stripe plugin (`@better-auth/stripe`).
+-- Paired with the stripeCustomerId field in workers/api/src/db/schema-auth.ts (the
+-- schema↔migration pairing gate in ci.yml watches that file). Nullable text: the
+-- plugin writes the linked Stripe Customer id on sign-up (`createCustomerOnSignUp`)
+-- once the Stripe secrets are provisioned and the plugin mounts; existing rows and
+-- users who signed up earlier stay NULL until a customer is created for them.
+--
+-- This is billing groundwork — customer management only. Subscriptions are not
+-- enabled, so the plugin's `subscription` table is intentionally NOT created here;
+-- enabling subscriptions later will need its own paired migration.
+ALTER TABLE user ADD COLUMN stripe_customer_id text;

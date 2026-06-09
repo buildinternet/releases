@@ -7,6 +7,7 @@ import { createTestDb } from "./setup";
 import { user, session, account, verification, deviceCode } from "../src/db/schema-auth.js";
 import {
   buildSocialProviders,
+  buildStripePlugin,
   resolveLastLoginMethodOverride,
   authTrustedOrigins,
   authCorsMiddleware,
@@ -53,6 +54,27 @@ describe("buildSocialProviders gating", () => {
 
   it("treats empty strings as absent", () => {
     expect(buildSocialProviders({ googleClientId: "id", googleClientSecret: "" })).toEqual({});
+  });
+});
+
+describe("buildStripePlugin gating", () => {
+  it("returns null when neither secret is present", () => {
+    expect(buildStripePlugin({})).toBeNull();
+  });
+
+  it("requires BOTH the secret key and the webhook secret", () => {
+    expect(buildStripePlugin({ secretKey: "sk_test_x" })).toBeNull();
+    expect(buildStripePlugin({ webhookSecret: "whsec_x" })).toBeNull();
+  });
+
+  it("treats empty strings as absent", () => {
+    expect(buildStripePlugin({ secretKey: "sk_test_x", webhookSecret: "" })).toBeNull();
+    expect(buildStripePlugin({ secretKey: "", webhookSecret: "whsec_x" })).toBeNull();
+  });
+
+  it("mounts the stripe plugin when both secrets resolve", () => {
+    const plugin = buildStripePlugin({ secretKey: "sk_test_x", webhookSecret: "whsec_x" });
+    expect(plugin?.id).toBe("stripe");
   });
 });
 

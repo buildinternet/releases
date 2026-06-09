@@ -23,6 +23,7 @@
     "@better-auth/api-key": "^1.6.15",
     "@better-auth/core": "^1.6.15",
     "@better-auth/oauth-provider": "^1.6.15",
+    "@better-auth/stripe": "^1.6.15",
     "@better-auth/utils": "^0.4.1",
     "better-auth": "^1.6.15",
     "dataloader": "^2.2.3",
@@ -31,6 +32,7 @@
     "hono": "^4.12.23",
     "hono-openapi": "^1.3.0",
     "mimetext": "^3.0.24",
+    "stripe": "^22.2.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {

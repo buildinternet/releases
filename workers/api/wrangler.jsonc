@@ -443,6 +443,24 @@
       "store_id": "a887a71cab084105b79706df23380723",
       "secret_name": "GOOGLE_CLIENT_SECRET",
     },
+    // Stripe customer registration (`@better-auth/stripe`). STRIPE_SECRET_KEY is the
+    // account API key; STRIPE_WEBHOOK_SECRET is the signing secret for the
+    // /api/auth/stripe/webhook endpoint (from the Stripe dashboard webhook). Both
+    // resolving activates the plugin (buildStripePlugin in src/auth/index.ts) — a
+    // Stripe Customer is created on sign-up and linked via user.stripeCustomerId.
+    // Bound here for prod (the default env); the [env.staging] block below does NOT
+    // inherit these, so staging stays Stripe-less until its own sandbox secrets are
+    // provisioned and bound there (the plugin is gated, so the absence is inert).
+    {
+      "binding": "STRIPE_SECRET_KEY",
+      "store_id": "a887a71cab084105b79706df23380723",
+      "secret_name": "STRIPE_SECRET_KEY",
+    },
+    {
+      "binding": "STRIPE_WEBHOOK_SECRET",
+      "store_id": "a887a71cab084105b79706df23380723",
+      "secret_name": "STRIPE_WEBHOOK_SECRET",
+    },
     {
       "binding": "VOYAGE_API_KEY",
       "store_id": "a887a71cab084105b79706df23380723",

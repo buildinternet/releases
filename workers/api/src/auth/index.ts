@@ -13,6 +13,8 @@ import { adminAc, userAc } from "better-auth/plugins/admin/access";
 import { oauthProvider } from "@better-auth/oauth-provider";
 import { dash, sentinel } from "@better-auth/infra";
 import { apiKey } from "@better-auth/api-key";
+import { stripe as stripePlugin } from "@better-auth/stripe";
+import Stripe from "stripe";
 import type { BetterAuthPlugin } from "better-auth";
 import { APIError, createAuthMiddleware, getSessionFromCtx } from "better-auth/api";
 import { cors } from "hono/cors";
@@ -161,6 +163,47 @@ export function buildSocialProviders(creds: {
     providers.github = { clientId: creds.githubClientId, clientSecret: creds.githubClientSecret };
   }
   return providers;
+}
+
+/**
+ * Build the Better Auth Stripe plugin (`@better-auth/stripe`), GATED on BOTH the
+ * secret API key and the webhook signing secret resolving — the same graceful-
+ * degradation seam as `dash()` / `sentinel()` / the social providers. Absent
+ * either → returns `null` and the plugin is omitted entirely: no Stripe client is
+ * constructed and no Stripe writes happen, so the feature is inert until the
+ * secrets are provisioned. Present both → it mounts, and a Stripe Customer is
+ * created on every sign-up (`createCustomerOnSignUp`) and linked to the user via
+ * the `stripeCustomerId` column. Dropping the two secrets into the environment
+ * activates it with zero code change — the "billing-ready" seam.
+ *
+ * Customer management ONLY for now: `subscription` is left disabled (the plugin's
+ * default), so no `subscription` table is touched. This is the billing foundation
+ * — getting every user registered as a Stripe Customer — not billing itself.
+ *
+ * Worker-compat: the Stripe Node SDK's default HTTP transport isn't available on
+ * Cloudflare Workers, so the client is constructed with the Fetch HTTP client.
+ * Webhook signature verification (the plugin calls `constructEventAsync`
+ * internally) uses WebCrypto on Workers — no extra wiring needed. `apiVersion` is
+ * left at the SDK default so its value always matches the installed SDK's types.
+ *
+ * Not split into a pure-config half + a separate construction step (unlike
+ * `buildSocialProviders`) because the plugin requires a live `stripeClient`
+ * instance; the `Stripe` constructor performs no network I/O, so this stays
+ * cheap and unit-testable (the gating is asserted via the resolved plugin id).
+ */
+export function buildStripePlugin(creds: {
+  secretKey?: string | null;
+  webhookSecret?: string | null;
+}): BetterAuthPlugin | null {
+  if (!creds.secretKey || !creds.webhookSecret) return null;
+  const stripeClient = new Stripe(creds.secretKey, {
+    httpClient: Stripe.createFetchHttpClient(),
+  });
+  return stripePlugin({
+    stripeClient,
+    stripeWebhookSecret: creds.webhookSecret,
+    createCustomerOnSignUp: true,
+  }) as BetterAuthPlugin;
 }
 
 /**
@@ -655,6 +698,16 @@ export async function createAuth(
   // so it is only USEFUL with that one also on.
   const deviceAuthOn = true;
 
+  // Stripe customer registration (`@better-auth/stripe`). Built only when BOTH the
+  // secret key and webhook signing secret resolve — same fail-safe seam as
+  // dash()/sentinel()/social. Inert (null → omitted) until the secrets are
+  // provisioned; once present, a Stripe Customer is created on every sign-up and
+  // linked via user.stripeCustomerId. See `buildStripePlugin`.
+  const stripeInstance = buildStripePlugin({
+    secretKey: await resolveSecret(env.STRIPE_SECRET_KEY),
+    webhookSecret: await resolveSecret(env.STRIPE_WEBHOOK_SECRET),
+  });
+
   // Google One Tap (`/api/auth/one-tap/*`): the popup renders on the web origin
   // with the PUBLIC client id and posts the Google ID token here for verification.
   // Gated on Google being configured — the endpoint only verifies a Google ID
@@ -867,6 +920,11 @@ export async function createAuth(
     lastLoginMethod({
       customResolveMethod: (ctx) => resolveLastLoginMethodOverride(ctx.path),
     }),
+    // Stripe customer registration — mounts only when both Stripe secrets resolve
+    // (see `buildStripePlugin`). Adds the `stripeCustomerId` user field + the
+    // sign-up customer-creation hook and serves the webhook at
+    // /api/auth/stripe/webhook (handled by the existing /api/auth/* catch-all).
+    ...(stripeInstance ? [stripeInstance] : []),
   ];
 
   return betterAuth({
