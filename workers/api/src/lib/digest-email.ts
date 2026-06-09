@@ -46,7 +46,10 @@ function groupByOrg(
     const key = r.source.orgSlug ?? r.source.name;
     let g = groups.get(key);
     if (!g) {
-      g = { orgSlug: r.source.orgSlug, orgName: r.source.name, items: [] };
+      // Heading is the org's display name ("Cloudflare"), not a source name
+      // ("Cloudflare workerd"). Fall back to the source name only when the
+      // source has no owning org (orgName/orgSlug null).
+      g = { orgSlug: r.source.orgSlug, orgName: r.source.orgName ?? r.source.name, items: [] };
       groups.set(key, g);
     }
     g.items.push(r);

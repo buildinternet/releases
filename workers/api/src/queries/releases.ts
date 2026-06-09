@@ -18,6 +18,7 @@ export type LatestReleaseRow = {
   source_name: string;
   source_type: string;
   org_slug: string | null;
+  org_name: string | null;
   product_slug: string | null;
   product_name: string | null;
   type: string;
@@ -112,7 +113,7 @@ export async function getLatestReleasesAcross(
            r.published_at, r.url, r.media,
            r.content_chars, r.content_tokens,
            s.slug AS source_slug, s.name AS source_name, s.type AS source_type,
-           o.slug AS org_slug,
+           o.slug AS org_slug, o.name AS org_name,
            p.slug AS product_slug, p.name AS product_name,
            ${COVERAGE_COUNT_EXPR} AS coverage_count
     FROM ${releasesTable} r
@@ -159,6 +160,7 @@ export function mapLatestRowToReleaseItem(
       name: r.source_name,
       type: r.source_type,
       orgSlug: r.org_slug,
+      orgName: r.org_name,
     },
     product: r.product_slug
       ? { slug: r.product_slug, name: r.product_name ?? r.product_slug }
@@ -196,7 +198,7 @@ export async function getFollowedReleases(
            r.published_at, r.url, r.media,
            r.content_chars, r.content_tokens,
            s.slug AS source_slug, s.name AS source_name, s.type AS source_type,
-           o.slug AS org_slug,
+           o.slug AS org_slug, o.name AS org_name,
            p.slug AS product_slug, p.name AS product_name,
            ${sql.raw(COVERAGE_COUNT_EXPR)} AS coverage_count
     FROM releases_visible r
