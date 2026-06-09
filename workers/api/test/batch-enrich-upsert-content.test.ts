@@ -103,14 +103,24 @@ describe("POST /sources/:id/releases/batch — enrich mode (#1526)", () => {
   });
 
   it("enrich mode skips title-dedup so a same-title scrape row reaches the upsert", async () => {
-    const db = mkDb();
-    await seed(db, "scrape");
+    // A NEW URL whose title matches the existing stub: default mode title-drops
+    // it (scrape #1410), enrich mode skips the pre-filter so it inserts.
+    const SAME_TITLE_NEW_URL = { ...FULL, url: `${PAGE}/dark-mode-v2` };
 
-    // In default mode a NEW-url same-title scrape row is title-dropped; enrich
-    // mode skips that pre-filter. Here the URL matches, so it updates in place.
-    const res = await batch(db, { mode: "upsert-content", releases: [FULL] });
-    const inserted = ((await res.json()) as { inserted: number }).inserted;
-    expect(inserted).toBe(1);
+    const dbDefault = mkDb();
+    await seed(dbDefault, "scrape");
+    const defRes = await batch(dbDefault, { releases: [SAME_TITLE_NEW_URL] });
+    expect(((await defRes.json()) as { inserted: number }).inserted).toBe(0); // title-dropped
+
+    const dbEnrich = mkDb();
+    await seed(dbEnrich, "scrape");
+    const enrRes = await batch(dbEnrich, {
+      mode: "upsert-content",
+      releases: [SAME_TITLE_NEW_URL],
+    });
+    expect(((await enrRes.json()) as { inserted: number }).inserted).toBe(1); // dedup skipped
+    const rows = await db_count(dbEnrich);
+    expect(rows).toBe(2); // existing stub + the new-URL row
   });
 
   it("enrich mode does not wipe stored content when incoming content is blank", async () => {
@@ -125,4 +135,37 @@ describe("POST /sources/:id/releases/batch — enrich mode (#1526)", () => {
     const [row] = await db.select().from(releases).where(eq(releases.url, REL_URL));
     expect(row!.content).toBe("One-line index summary.");
   });
+
+  it("rejects an unrecognised mode with 400 (typo never silently disables enrich)", async () => {
+    const db = mkDb();
+    await seed(db, "scrape");
+
+    const res = await batch(db, { mode: "upsert_content", releases: [FULL] });
+    expect(res.status).toBe(400);
+    expect((await res.json()) as { error: string }).toMatchObject({ error: "bad_request" });
+
+    // The stub is untouched — the bad request never reached the upsert.
+    const [row] = await db.select().from(releases).where(eq(releases.url, REL_URL));
+    expect(row!.content).toBe("One-line index summary.");
+  });
+
+  it("enrich mode is idempotent — an unchanged re-POST is a no-op (0 affected)", async () => {
+    const db = mkDb();
+    await seed(db, "scrape");
+
+    // First enrich applies the full body; the second, identical re-POST changes
+    // nothing, so the WHERE drops the row and `inserted` (affected rows) is 0.
+    await batch(db, { mode: "upsert-content", releases: [FULL] });
+    const again = await batch(db, { mode: "upsert-content", releases: [FULL] });
+    expect(((await again.json()) as { inserted: number }).inserted).toBe(0);
+
+    const [row] = await db.select().from(releases).where(eq(releases.url, REL_URL));
+    expect(row!.content).toBe(FULL.content);
+    expect(row!.media).toBe(FULL.media);
+  });
 });
+
+async function db_count(db: TestDb): Promise<number> {
+  const rows = await db.select().from(releases).where(eq(releases.sourceId, "src_h"));
+  return rows.length;
+}

@@ -727,8 +727,9 @@ const postReleasesBatchHandler = async (c: import("hono").Context<Env>) => {
     // re-POSTs OVERWRITE content/media instead of the default fill-don't-clobber,
     // and the scrape title-dedup pre-filter is skipped so same-title rows reach
     // the URL upsert. Default (omitted) keeps the fill-only behaviour every cron
-    // / MA re-fetch relies on.
-    mode?: "upsert-content";
+    // / MA re-fetch relies on. Typed loosely so a typo can be rejected (below)
+    // rather than silently coerced to the default.
+    mode?: string;
     releases: Array<{
       version?: string | null;
       title: string;
@@ -741,7 +742,6 @@ const postReleasesBatchHandler = async (c: import("hono").Context<Env>) => {
       prerelease?: boolean;
     }>;
   }>();
-  const enrichMode = body?.mode === "upsert-content";
 
   // Validate the payload shape before touching `body.releases`. The deny filter
   // and the insert loop below both iterate it, so a malformed body (missing or
@@ -756,6 +756,24 @@ const postReleasesBatchHandler = async (c: import("hono").Context<Env>) => {
     });
     return c.json({ error: "bad_request", message: "`releases` must be an array" }, 400);
   }
+
+  // Reject an unrecognised `mode` rather than silently coercing it to the default
+  // fill-only path — a typo like "upsert_content" would otherwise quietly disable
+  // the enrichment an operator deliberately asked for (#1526).
+  if (body.mode !== undefined && body.mode !== "upsert-content") {
+    logEvent("warn", {
+      component: "sources-batch",
+      event: "invalid-batch-mode",
+      sourceId: src.id,
+      slug: src.slug,
+      mode: body.mode,
+    });
+    return c.json(
+      { error: "bad_request", message: '`mode` must be omitted or "upsert-content"' },
+      400,
+    );
+  }
+  const enrichMode = body.mode === "upsert-content";
 
   // Defense-in-depth `feedUrlDeny` (#1335). The cron poll-fetch path drops
   // locale-suffixed translation dupes in-memory, but every managed-agent fetch

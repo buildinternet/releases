@@ -49,19 +49,25 @@ export const RELEASE_URL_UPSERT = {
  * on the cron/MA re-fetch path, so a routine re-fetch that yields sparser content
  * can never clobber a good row. Content is taken only when non-empty (a blank
  * incoming body never wipes a stored one); media is taken only when non-empty
- * (`NULL`/`''`/`'[]'` never wipes stored media). A no-op row (blank content AND
- * blank media) is filtered by the WHERE so it doesn't churn the row.
+ * (`NULL`/`''`/`'[]'` never wipes stored media).
+ *
+ * Idempotent: a field is only updated when the incoming value actually DIFFERS
+ * from the stored one (null-safe `IS NOT`, so a `NULL`→non-empty media transition
+ * still fires while an unchanged value does not), and the WHERE drops a row whose
+ * content and media are both unchanged — so re-POSTing identical content is a
+ * genuine no-op that doesn't churn the row or inflate the affected-row count.
  */
-const MEDIA_HAS_CONTENT = sql`excluded.media IS NOT NULL AND excluded.media NOT IN ('', '[]')`;
+const CONTENT_CHANGED = sql`excluded.content != '' AND excluded.content IS NOT releases.content`;
+const MEDIA_CHANGED = sql`excluded.media IS NOT NULL AND excluded.media NOT IN ('', '[]') AND excluded.media IS NOT releases.media`;
 
 export const RELEASE_CONTENT_UPSERT = {
   target: [releases.sourceId, releases.url],
   set: {
-    content: sql`CASE WHEN excluded.content != '' THEN excluded.content ELSE releases.content END`,
-    contentHash: sql`CASE WHEN excluded.content != '' THEN excluded.content_hash ELSE releases.content_hash END`,
-    contentChars: sql`CASE WHEN excluded.content != '' THEN excluded.content_chars ELSE releases.content_chars END`,
-    contentTokens: sql`CASE WHEN excluded.content != '' THEN excluded.content_tokens ELSE releases.content_tokens END`,
-    media: sql`CASE WHEN ${MEDIA_HAS_CONTENT} THEN excluded.media ELSE releases.media END`,
+    content: sql`CASE WHEN ${CONTENT_CHANGED} THEN excluded.content ELSE releases.content END`,
+    contentHash: sql`CASE WHEN ${CONTENT_CHANGED} THEN excluded.content_hash ELSE releases.content_hash END`,
+    contentChars: sql`CASE WHEN ${CONTENT_CHANGED} THEN excluded.content_chars ELSE releases.content_chars END`,
+    contentTokens: sql`CASE WHEN ${CONTENT_CHANGED} THEN excluded.content_tokens ELSE releases.content_tokens END`,
+    media: sql`CASE WHEN ${MEDIA_CHANGED} THEN excluded.media ELSE releases.media END`,
   },
-  where: sql`(excluded.content != '') OR (${MEDIA_HAS_CONTENT})`,
+  where: sql`(${CONTENT_CHANGED}) OR (${MEDIA_CHANGED})`,
 };
