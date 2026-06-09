@@ -170,6 +170,20 @@ When the source has `metadata.firecrawl.enabled`, no `markdown` is supplied, and
 
 Not wired into any cron — runs only when explicitly POSTed. See `docs/superpowers/specs/2026-05-30-backfill-source-durable-workflow-r2-design.md` (durable path) and `docs/superpowers/specs/2026-05-30-backfill-source-primitive-design.md` (original synchronous design).
 
+## First-party staleness signal + render dry-run (#1528)
+
+A client-rendered scrape source (e.g. Harvey's `/release-notes`, whose cards are injected by JS) can silently go stale: the steady-state cron render reaches an empty shell, or the change-detector probe never trips, and the source quietly returns 0 new releases indefinitely with no signal. Firecrawl monitoring papered over this gap; these two pieces make the reliability check first-party so Firecrawl is a hedge, not a requirement.
+
+**Staleness scan (`cron/source-staleness.ts`).** A daily warn-only scan, modeled on `scanStaleFirecrawlSources` and riding the `0 4 * * *` tick (an hour after the retier at `0 3`, so it reads fresh `medianGapDays`). It flags a source only when all of:
+
+- **Established cadence** — `medianGapDays != null` (the retier has seen ≥3 releases of history). A new/sparse source has no baseline to call "overdue" against, so it's never flagged. This keeps warn volume low.
+- **Actively monitored** — a `lastPolledAt`/`lastFetchedAt` within `SOURCE_STALE_POLL_RECENCY_DAYS` (default 3). A source we've stopped polling is a different failure (force-drain's job), not "stale despite fetching".
+- **Overdue** — newest non-suppressed release older than `max(SOURCE_STALE_FLOOR_DAYS=14, medianGapDays × SOURCE_STALE_MULTIPLIER=3)`. A fast cadence gets a tight window; a slow (monthly) one isn't false-flagged. A never-produced source uses `createdAt` as the clock.
+
+Firecrawl-owned sources are excluded (covered by `scanStaleFirecrawlSources`). Emits `warn`-level `stale-source` events on the `source-staleness` component (alerting via Workers Logs / Axiom); no DB mutation, no cost, no feature flag.
+
+**Render dry-run probe (`renderCheckOne`, route `POST /v1/sources/:id/fetch?dryRun=true`).** For a client-rendered scrape source (`crawlEnabled` or `renderRequired`), the probe renders the index once via Cloudflare Browser Rendering (`fetchCloudflareMarkdown`, `networkidle2`) and reports how many distinct same-origin candidate links the rendered page exposes — **without** the managed-agent extraction loop (no Haiku/Sonnet, no discovery-worker session). A populated index reads as "dozens of candidates"; a broken empty-shell render reads as `rendered: false` / ~0. Writes a `dry_run` `fetch_log` row for observability but never mutates source state or inserts releases. The cheap "can the cron's render actually see releases here?" check onboarding previously had no way to answer. CLI: `releases source fetch <source> --dry-run` (single source; feed/GitHub sources fall back to reporting candidate releases parsed).
+
 ## Further reading
 
 - Design + plan (dated, historical): `docs/superpowers/specs/2026-05-29-firecrawl-monitoring-integration-design.md` and `docs/superpowers/plans/2026-05-29-firecrawl-monitoring-integration.md`. These predate the live-API findings — the webhook delivers a diff (not markdown), and `diff.text` is hunkless; see the correction notes at the top of each.

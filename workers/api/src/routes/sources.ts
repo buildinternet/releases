@@ -106,7 +106,7 @@ import { sourceToMarkdown, releaseToMarkdown } from "@releases/rendering/formatt
 import { filterJunkMedia } from "@releases/rendering/media-filter.js";
 import { processMediaForR2, selectExistingReleaseUrls } from "../lib/media-ingest.js";
 import { saveRawSnapshot, type RawFormat } from "../lib/raw-snapshot.js";
-import { fetchOne, embedReleasesForSource } from "../cron/poll-fetch.js";
+import { fetchOne, renderCheckOne, embedReleasesForSource } from "../cron/poll-fetch.js";
 import {
   getSourceMeta,
   isGitHubFetched,
@@ -607,7 +607,7 @@ const postSourceFetchRoute = describeRoute({
   tags: ["Sources"],
   summary: "Trigger a source fetch",
   description:
-    "Triggers an immediate fetch for the source identified by slug or `src_…` ID. For feed/GitHub sources (or scrape sources with a discovered feedUrl) the server performs the fetch inline and returns the result. For scrape/agent sources without a feedUrl, the server sets `changeDetectedAt` to flag the source for CLI pickup and returns `{ queued: true }`. Optional query params: `?sessionId=` (associates the fetch with a discovery session), `?dryRun=true` (runs the parser but does not write to D1), `?max=N` (limits entries parsed). Auth inherited from `publicReadAuthMiddleware`'s non-SAFE_METHODS branch — Bearer token required.",
+    "Triggers an immediate fetch for the source identified by slug or `src_…` ID. For feed/GitHub sources (or scrape sources with a discovered feedUrl) the server performs the fetch inline and returns the result. For scrape/agent sources without a feedUrl, the server sets `changeDetectedAt` to flag the source for CLI pickup and returns `{ queued: true }`. Optional query params: `?sessionId=` (associates the fetch with a discovery session), `?dryRun=true` (runs the parser but does not write to D1; for a client-rendered scrape source — `crawlEnabled`/`renderRequired` — instead renders the index once and returns `{ renderCheck: true, candidateCount, sampleUrls, … }` without the managed-agent extraction loop), `?max=N` (limits entries parsed). Auth inherited from `publicReadAuthMiddleware`'s non-SAFE_METHODS branch — Bearer token required.",
   security: [{ bearerAuth: [] }],
   responses: {
     200: {
@@ -632,6 +632,7 @@ sourceRoutes.post("/sources/:slug/fetch", postSourceFetchRoute, async (c) => {
   let responsePayload: Record<string, unknown>;
 
   const meta = getSourceMeta(src);
+  const dryRun = c.req.query("dryRun") === "true" || c.req.query("dryRun") === "1";
   if (
     src.type === "feed" ||
     isGitHubFetched(src, meta) ||
@@ -642,7 +643,6 @@ sourceRoutes.post("/sources/:slug/fetch", postSourceFetchRoute, async (c) => {
     // Feed, GitHub, App Store, and scrape sources with a discovered feedUrl: fetch server-side
     const githubToken = (await getSecret(c.env.GITHUB_TOKEN)) ?? undefined;
     const sessionId = c.req.query("sessionId") ?? undefined;
-    const dryRun = c.req.query("dryRun") === "true" || c.req.query("dryRun") === "1";
     const maxRaw = c.req.query("max");
     const maxParsed = maxRaw ? Number.parseInt(maxRaw, 10) : null;
     if (maxRaw && (!Number.isFinite(maxParsed) || maxParsed! <= 0)) {
@@ -684,6 +684,21 @@ sourceRoutes.post("/sources/:slug/fetch", postSourceFetchRoute, async (c) => {
         }),
       );
     }
+  } else if (
+    dryRun &&
+    src.type === "scrape" &&
+    (meta.crawlEnabled === true || meta.renderRequired === true)
+  ) {
+    // Render dry-run probe (#1528): a client-rendered scrape source's steady-
+    // state fetch renders the index via Browser Rendering. `?dryRun=true` here
+    // renders it once and reports candidate-link count WITHOUT the managed-agent
+    // extraction loop — the cheap "is the render seeing releases or an empty
+    // shell?" check onboarding previously couldn't answer.
+    const result = await renderCheckOne(db, src, {
+      CLOUDFLARE_ACCOUNT_ID: c.env.CLOUDFLARE_ACCOUNT_ID,
+      CLOUDFLARE_API_TOKEN: c.env.CLOUDFLARE_API_TOKEN,
+    });
+    responsePayload = { renderCheck: true, ...result };
   } else {
     // Scrape and agent sources: flag for CLI pickup
     await db

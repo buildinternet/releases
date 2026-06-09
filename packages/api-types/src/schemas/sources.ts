@@ -475,13 +475,27 @@ export const CreateSourceSummaryResponseSchema = z.object({
 // ── Source fetch trigger (POST /sources/:slug/fetch) ──
 
 /**
- * Response shape for `POST /v1/sources/:slug/fetch`. Two branches:
+ * Response shape for `POST /v1/sources/:slug/fetch`. Three branches:
  *   - Feed/GitHub/scraped-with-feed sources: `{ fetched: true, releasesInserted, … }`
  *   - Scrape/agent sources (flagged for CLI pickup): `{ queued: true, type: "flagged" }`
+ *   - Render dry-run probe (`?dryRun=true` on a client-rendered scrape source):
+ *     `{ renderCheck: true, rendered, candidateCount, sampleUrls, … }`
  */
 export const SourceFetchResponseSchema = z.union([
   z.looseObject({ fetched: z.literal(true) }),
   z.object({ queued: z.literal(true), type: z.string() }),
+  // Render dry-run probe (#1528): renders a client-rendered scrape source's
+  // index once and reports candidate links found, without the managed-agent
+  // extraction loop.
+  z.looseObject({
+    renderCheck: z.literal(true),
+    status: z.enum(["dry_run", "error"]),
+    rendered: z.boolean(),
+    candidateCount: z.number().int(),
+    sampleUrls: z.array(z.string()),
+    durationMs: z.number().int(),
+    error: z.string().optional(),
+  }),
 ]);
 
 // ── Source content-hash check (POST /sources/:slug/content-hash) ──

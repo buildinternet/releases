@@ -36,6 +36,7 @@ import { forceDrainSweep } from "./cron/force-drain-sweep.js";
 import { sweepSearchQueries } from "./cron/sweep-search-queries.js";
 import { sweepTombstones } from "./cron/sweep-tombstones.js";
 import { scanStaleFirecrawlSources } from "./cron/firecrawl-staleness.js";
+import { scanStaleSources } from "./cron/source-staleness.js";
 import { wellKnownSync } from "./cron/well-known-sync.js";
 import { sweepOauthClients } from "./cron/sweep-oauth-clients.js";
 import { sendDigests } from "./cron/send-digests.js";
@@ -270,6 +271,12 @@ export type Env = {
     // Hours since a firecrawl source's last run before the hourly staleness
     // scan flags it (monitor stopped delivering). Default 48. See option A.
     FIRECRAWL_STALE_HOURS?: string;
+    // First-party source staleness scan (#1528): warn when an established-cadence
+    // source we still poll has stopped producing. All optional with defaults
+    // (floor 14d, multiplier 3×, poll-recency 3d). See cron/source-staleness.ts.
+    SOURCE_STALE_FLOOR_DAYS?: string;
+    SOURCE_STALE_MULTIPLIER?: string;
+    SOURCE_STALE_POLL_RECENCY_DAYS?: string;
     // Cloudflare Flagship binding (prod + staging apps; absent in local dev /
     // tests → flag() falls back to the wrangler var). See @releases/lib/flags.
     FLAGS?: FlagshipBinding;
@@ -872,6 +879,22 @@ export default {
             FORCE_DRAIN_CRON_ENABLED: env.FORCE_DRAIN_CRON_ENABLED,
             FORCE_DRAIN_STALE_HOURS: env.FORCE_DRAIN_STALE_HOURS,
             FORCE_SWEEP_MAX_SESSIONS: env.FORCE_SWEEP_MAX_SESSIONS,
+          }),
+          alertEnv,
+        ),
+      );
+      // First-party source staleness scan (#1528). Runs daily, an hour after the
+      // retier (0 3) so it reads fresh medianGapDays. Warn-only observability —
+      // no mutation, no cost — so it rides this tick rather than its own cron.
+      ctx.waitUntil(
+        loggedDispatch(
+          "source-staleness-cron",
+          scanStaleSources({
+            DB: env.DB,
+            CRON_ENABLED: env.CRON_ENABLED,
+            SOURCE_STALE_FLOOR_DAYS: env.SOURCE_STALE_FLOOR_DAYS,
+            SOURCE_STALE_MULTIPLIER: env.SOURCE_STALE_MULTIPLIER,
+            SOURCE_STALE_POLL_RECENCY_DAYS: env.SOURCE_STALE_POLL_RECENCY_DAYS,
           }),
           alertEnv,
         ),
