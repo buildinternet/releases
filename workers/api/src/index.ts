@@ -98,7 +98,7 @@ export type Env = {
     // binding is wired (always in prod), else inlines `scrapeAgentSweep()` in
     // `ctx.waitUntil`. See issue #482.
     SCRAPE_AGENT_WORKFLOW?: Workflow;
-    // The 2-hourly poll-and-fetch cron fans out one `POLL_AND_FETCH_WORKFLOW`
+    // The hourly poll-and-fetch cron fans out one `POLL_AND_FETCH_WORKFLOW`
     // instance per due source when this binding is wired (always in prod), else
     // inlines `pollAndFetch()` in `ctx.waitUntil`. See issue #486.
     POLL_AND_FETCH_WORKFLOW?: Workflow;

@@ -1182,13 +1182,12 @@ export async function ingestRawReleases(
   const enrichMap = await buildEnrichMap(db, source, meta, rawReleases, env);
 
   // Media pre-pass. Always unwrap Next.js/Vercel optimizer proxy URLs so
-  // downstream readers see the underlying CDN asset. When ingest-time R2
-  // upload is enabled (#1177) and the bucket is bound, additionally drop junk
-  // (favicons / avatars / pixels) and mirror survivors into `released-media`
-  // so reads resolve a same-origin `r2Url`. Sequential per release (the
-  // helper bounds image concurrency within); fail-open — any image-level
-  // failure keeps the third-party URL. Flag-off / unbound bucket = today's
-  // verbatim behavior.
+  // downstream readers see the underlying CDN asset. When the `MEDIA` bucket
+  // is bound (#1177), additionally drop junk (favicons / avatars / pixels) and
+  // mirror survivors into `released-media` so reads resolve a same-origin
+  // `r2Url`. Sequential per release (the helper bounds image concurrency
+  // within); fail-open — any image-level failure keeps the third-party URL. An
+  // unbound `MEDIA` bucket = today's verbatim behavior.
   const r2UploadEnabled = env.MEDIA != null;
   // GIF→MP4 transcode (#1368): store ingested GIFs as small MP4s. Gated on its own
   // flag AND the transform binding being bound; off → GIFs mirror verbatim.

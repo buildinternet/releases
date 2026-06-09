@@ -812,10 +812,10 @@ const postReleasesBatchHandler = async (c: import("hono").Context<Env>) => {
     // those omit `content` (the publish payload doesn't need it).
     const clusterRows: Array<{ id: string; version: string | null; content: string }> = [];
 
-    // Ingest-time R2 media upload (#1177). When enabled + the bucket is bound,
+    // Ingest-time R2 media upload (#1177). When the `MEDIA` bucket is bound,
     // drop junk and mirror surviving images to `released-media` before insert
     // so reads resolve a same-origin `r2Url`. Sequential per release (the
-    // helper bounds image concurrency within); fail-open. Flag-off / unbound
+    // helper bounds image concurrency within); fail-open. An unbound `MEDIA`
     // bucket => the agent-provided media JSON is stored verbatim, as today.
     const r2UploadEnabled = c.env.MEDIA != null;
     // GIF→MP4 ingest transcode (#1368): store ingested GIFs as small MP4s when the
