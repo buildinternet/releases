@@ -1,5 +1,6 @@
 import type { ReleaseLatestItem } from "@buildinternet/releases-api-types";
 import { logEvent } from "@releases/lib/log-event";
+import { escapeHtml } from "./html-escape.js";
 import type { AuthEmailBinding } from "../auth/email.js";
 
 export interface DigestEmailEnv {
@@ -24,16 +25,6 @@ export type DigestEmailInput = DigestEmailContent & { to: string };
 
 const DEFAULT_FROM = "digests@releases.sh";
 const FROM_NAME = "Releases";
-
-/** Escape the five HTML-significant chars for safe interpolation into markup. */
-function esc(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
 
 function bestTitle(r: ReleaseLatestItem): string {
   return r.titleShort || r.titleGenerated || r.title || r.version || "Update";
@@ -70,14 +61,10 @@ export function buildDigestEmail(content: DigestEmailContent): {
 } {
   const { releases, baseUrl, manageUrl, unsubscribeUrl, cadence } = content;
   const n = releases.length;
-  const period = cadence === "daily" ? "daily" : "weekly";
-  const subject = `Your ${period} Releases digest — ${n} update${n === 1 ? "" : "s"}`;
+  const subject = `Your ${cadence} Releases digest — ${n} update${n === 1 ? "" : "s"}`;
   const groups = groupByOrg(releases);
 
-  const textLines: string[] = [
-    `Your ${period} Releases digest — ${n} update${n === 1 ? "" : "s"}`,
-    "",
-  ];
+  const textLines: string[] = [subject, ""];
   for (const g of groups) {
     textLines.push(g.orgName.toUpperCase());
     for (const r of g.items) {
@@ -94,21 +81,23 @@ export function buildDigestEmail(content: DigestEmailContent): {
   const text = textLines.join("\n");
 
   const htmlParts: string[] = [
-    `<h1 style="font:600 18px system-ui,sans-serif">Your ${period} Releases digest — ${n} update${n === 1 ? "" : "s"}</h1>`,
+    `<h1 style="font:600 18px system-ui,sans-serif">${escapeHtml(subject)}</h1>`,
   ];
   for (const g of groups) {
     const orgHeading = g.orgSlug
-      ? `<a href="${esc(`${baseUrl}/${g.orgSlug}`)}" style="color:#111;text-decoration:none">${esc(g.orgName)}</a>`
-      : esc(g.orgName);
+      ? `<a href="${escapeHtml(`${baseUrl}/${g.orgSlug}`)}" style="color:#111;text-decoration:none">${escapeHtml(g.orgName)}</a>`
+      : escapeHtml(g.orgName);
     htmlParts.push(
       `<h2 style="font:600 14px system-ui,sans-serif;margin-top:20px">${orgHeading}</h2>`,
     );
     for (const r of g.items) {
-      const prod = r.product ? ` <span style="color:#888">(${esc(r.product.name)})</span>` : "";
+      const prod = r.product
+        ? ` <span style="color:#888">(${escapeHtml(r.product.name)})</span>`
+        : "";
       htmlParts.push(
         `<p style="margin:8px 0;font:14px system-ui,sans-serif">` +
-          `<a href="${esc(releaseUrl(baseUrl, r))}" style="font-weight:600;color:#1a56db;text-decoration:none">${esc(bestTitle(r))}</a>${prod}` +
-          (r.summary ? `<br><span style="color:#444">${esc(r.summary)}</span>` : "") +
+          `<a href="${escapeHtml(releaseUrl(baseUrl, r))}" style="font-weight:600;color:#1a56db;text-decoration:none">${escapeHtml(bestTitle(r))}</a>${prod}` +
+          (r.summary ? `<br><span style="color:#444">${escapeHtml(r.summary)}</span>` : "") +
           `</p>`,
       );
     }
@@ -116,8 +105,8 @@ export function buildDigestEmail(content: DigestEmailContent): {
   htmlParts.push(
     `<hr style="margin-top:24px;border:none;border-top:1px solid #eee">` +
       `<p style="font:12px system-ui,sans-serif;color:#888">` +
-      `<a href="${esc(manageUrl)}" style="color:#888">Manage your digest</a> · ` +
-      `<a href="${esc(unsubscribeUrl)}" style="color:#888">Unsubscribe</a></p>`,
+      `<a href="${escapeHtml(manageUrl)}" style="color:#888">Manage your digest</a> · ` +
+      `<a href="${escapeHtml(unsubscribeUrl)}" style="color:#888">Unsubscribe</a></p>`,
   );
   const html = htmlParts.join("");
 

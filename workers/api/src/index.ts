@@ -857,10 +857,14 @@ export default {
       );
       return;
     }
-    if (event.cron === "0 13 * * *") {
+    // Daily (`0 13 * * *`) and weekly-Monday (`0 13 * * 1`) digests are delivered
+    // as separate scheduled events with distinct cron strings, so on Mondays both
+    // fire — each targets its own cadence's subscribers.
+    if (event.cron === "0 13 * * *" || event.cron === "0 13 * * 1") {
+      const cadence = event.cron === "0 13 * * 1" ? "weekly" : "daily";
       ctx.waitUntil(
         loggedDispatch(
-          "digest-daily-cron",
+          `digest-${cadence}-cron`,
           sendDigests(
             {
               DB: env.DB,
@@ -876,33 +880,7 @@ export default {
               API_BASE_URL: env.API_BASE_URL,
               ENVIRONMENT: env.ENVIRONMENT,
             },
-            { cadence: "daily", runStart: new Date(event.scheduledTime) },
-          ),
-          alertEnv,
-        ),
-      );
-      return;
-    }
-    if (event.cron === "0 13 * * 1") {
-      ctx.waitUntil(
-        loggedDispatch(
-          "digest-weekly-cron",
-          sendDigests(
-            {
-              DB: env.DB,
-              AUTH_EMAIL: env.AUTH_EMAIL,
-              DIGEST_EMAIL_FROM: env.DIGEST_EMAIL_FROM,
-              WEB_BASE_URL: env.WEB_BASE_URL,
-              MEDIA_ORIGIN: env.MEDIA_ORIGIN,
-              FLAGS: env.FLAGS,
-              DIGEST_EMAILS_ENABLED: env.DIGEST_EMAILS_ENABLED,
-              CRON_ENABLED: env.CRON_ENABLED,
-              DIGEST_MAX_PER_RUN: env.DIGEST_MAX_PER_RUN,
-              DIGEST_MAX_RELEASES: env.DIGEST_MAX_RELEASES,
-              API_BASE_URL: env.API_BASE_URL,
-              ENVIRONMENT: env.ENVIRONMENT,
-            },
-            { cadence: "weekly", runStart: new Date(event.scheduledTime) },
+            { cadence, runStart: new Date(event.scheduledTime) },
           ),
           alertEnv,
         ),

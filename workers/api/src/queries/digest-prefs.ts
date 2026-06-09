@@ -138,6 +138,6 @@ export async function advanceDigestWatermark(
 ): Promise<void> {
   await db
     .update(userDigestPrefs)
-    .set({ lastDigestAt: runStart, updatedAt: nowSeconds() })
+    .set({ lastDigestAt: runStart, updatedAt: runStart })
     .where(eq(userDigestPrefs.userId, userId));
 }

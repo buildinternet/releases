@@ -4,6 +4,7 @@ import { createDb } from "../db.js";
 import { listDigestRecipients, advanceDigestWatermark } from "../queries/digest-prefs.js";
 import { getFollowedReleases, mapLatestRowToReleaseItem } from "../queries/releases.js";
 import { sendDigestEmail } from "../lib/digest-email.js";
+import { parsePositiveInt } from "./feed-enrich.js";
 import type { AuthEmailBinding } from "../auth/email.js";
 
 export interface SendDigestsEnv {
@@ -31,11 +32,6 @@ export interface SendDigestsArgs {
 
 const DEFAULT_MAX_PER_RUN = 500;
 const DEFAULT_MAX_RELEASES = 50;
-
-function parsePositive(raw: string | undefined, def: number): number {
-  const n = Number(raw);
-  return Number.isFinite(n) && n > 0 ? Math.floor(n) : def;
-}
 
 /**
  * Build the absolute unsubscribe URL. Points at the API worker (it serves
@@ -65,12 +61,13 @@ export async function sendDigests(env: SendDigestsEnv, args: SendDigestsArgs): P
   }
 
   const db = env._drizzleOverride ?? createDb(env.DB);
-  const maxPerRun = parsePositive(env.DIGEST_MAX_PER_RUN, DEFAULT_MAX_PER_RUN);
-  const maxReleases = parsePositive(env.DIGEST_MAX_RELEASES, DEFAULT_MAX_RELEASES);
+  const maxPerRun = parsePositiveInt(env.DIGEST_MAX_PER_RUN, DEFAULT_MAX_PER_RUN);
+  const maxReleases = parsePositiveInt(env.DIGEST_MAX_RELEASES, DEFAULT_MAX_RELEASES);
   const baseUrl = env.WEB_BASE_URL ?? "https://releases.sh";
   const apiOrigin = env.API_BASE_URL ?? "https://api.releases.sh";
   const mediaOrigin = env.MEDIA_ORIGIN ?? "";
   const before = runStart.toISOString();
+  const manageUrl = `${baseUrl}/following`;
 
   const recipients = await listDigestRecipients(db, cadence, maxPerRun);
   let sentCount = 0;
@@ -96,7 +93,7 @@ export async function sendDigests(env: SendDigestsEnv, args: SendDigestsArgs): P
       cadence,
       releases: releaseItems,
       baseUrl,
-      manageUrl: `${baseUrl}/following`,
+      manageUrl,
       unsubscribeUrl: unsubscribeUrlFor(apiOrigin, recip.manageToken),
     });
     if (res.sent) {
