@@ -23,6 +23,8 @@ export interface AuthEmailBinding {
     subject: string;
     html?: string;
     text?: string;
+    /** Custom headers (e.g. List-Unsubscribe). Cloudflare rejects reserved/API-field headers. */
+    headers?: Record<string, string>;
   }): Promise<{ messageId?: string }>;
 }
 
