@@ -16,7 +16,7 @@ import { and, count, desc, eq, or, sql, type SQL } from "drizzle-orm";
 import { releases } from "@buildinternet/releases-core/schema";
 import { filterJunkMedia } from "@releases/rendering/media-filter.js";
 import { isGifUrl } from "@releases/adapters/media-classify.js";
-import { detectInlineVideos } from "@releases/rendering/video-embed.js";
+import { detectInlineVideos, VIDEO_EMBED_HOST_HINTS } from "@releases/rendering/video-embed.js";
 import { processMediaForR2, type MediaTransformBinding } from "./media-ingest.js";
 import type { createDb } from "../db.js";
 
@@ -145,13 +145,10 @@ export interface VideoBackfillReport {
  * `releasesUpdated > 0`, not `remaining === 0`.
  */
 function videoCandidateFilter(sourceId?: string, releaseId?: string): SQL | undefined {
+  // Derived from the detector's own host table (`VIDEO_EMBED_HOST_HINTS`) so the
+  // prefilter can't narrow below detection when a provider/host is added.
   const hostLike = or(
-    sql`${releases.content} LIKE '%wistia.%'`,
-    sql`${releases.content} LIKE '%wi.st%'`,
-    sql`${releases.content} LIKE '%loom.com%'`,
-    sql`${releases.content} LIKE '%vimeo.com%'`,
-    sql`${releases.content} LIKE '%youtube.%'`,
-    sql`${releases.content} LIKE '%youtu.be%'`,
+    ...VIDEO_EMBED_HOST_HINTS.map((h) => sql`${releases.content} LIKE ${`%${h}%`}`),
   );
   return and(
     hostLike,

@@ -118,6 +118,18 @@ const MATCHERS: ProviderMatcher[] = [
   },
 ];
 
+/**
+ * Distinct provider host substrings backing the `MATCHERS` above. Exported so a
+ * coarse SQL prefilter (the #1549 backfill candidate scan) derives its host
+ * `LIKE` list from the same source of truth as detection instead of hardcoding
+ * one that silently drifts when a provider/host is added. Substring-safe: a body
+ * containing one of these MAY carry a video — `detectInlineVideos` is the real
+ * per-row gate.
+ */
+export const VIDEO_EMBED_HOST_HINTS: readonly string[] = Array.from(
+  new Set(MATCHERS.flatMap((m) => m.hosts)),
+);
+
 function matcherForHost(hostname: string): ProviderMatcher | null {
   const host = hostname.toLowerCase();
   for (const m of MATCHERS) {

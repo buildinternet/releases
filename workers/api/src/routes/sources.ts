@@ -3426,7 +3426,9 @@ sourceRoutes.patch(
             FLAGS.mediaGifTranscodeEnabled,
           ));
         const processed = await processMediaForR2(
-          filterJunkMedia(toMirror.filter((m) => typeof m.url === "string")),
+          // `MediaItemSchema.url` is `z.string()`, so the validated body guarantees
+          // a string url on every item — no need to re-filter for it here.
+          filterJunkMedia(toMirror),
           {
             db,
             bucket: c.env.MEDIA,
