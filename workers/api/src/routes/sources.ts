@@ -33,7 +33,7 @@ import {
 import { SOURCE_TYPES, type SourceType } from "@buildinternet/releases-core/source-enums";
 import { parseKindParam, isValidKind, KIND_VALUES } from "@buildinternet/releases-core/kinds";
 import { buildListResponse, parseListPagination } from "../lib/pagination.js";
-import { RELEASE_URL_UPSERT } from "@releases/core-internal/release-upsert";
+import { RELEASE_URL_UPSERT, RELEASE_CONTENT_UPSERT } from "@releases/core-internal/release-upsert";
 import { daysAgoIso, inferMonthOnlyDate } from "@buildinternet/releases-core/dates";
 import { parseCompositionFromMetadata } from "@buildinternet/releases-core/composition";
 import { parseNotice, setNoticeInMetadata } from "@buildinternet/releases-core/notice";
@@ -723,6 +723,12 @@ const postReleasesBatchHandler = async (c: import("hono").Context<Env>) => {
   if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
 
   const body = await c.req.json<{
+    // `mode: "upsert-content"` is a DELIBERATE enrichment pass (#1526): same-URL
+    // re-POSTs OVERWRITE content/media instead of the default fill-don't-clobber,
+    // and the scrape title-dedup pre-filter is skipped so same-title rows reach
+    // the URL upsert. Default (omitted) keeps the fill-only behaviour every cron
+    // / MA re-fetch relies on.
+    mode?: "upsert-content";
     releases: Array<{
       version?: string | null;
       title: string;
@@ -735,6 +741,7 @@ const postReleasesBatchHandler = async (c: import("hono").Context<Env>) => {
       prerelease?: boolean;
     }>;
   }>();
+  const enrichMode = body?.mode === "upsert-content";
 
   // Validate the payload shape before touching `body.releases`. The deny filter
   // and the insert loop below both iterate it, so a malformed body (missing or
@@ -780,7 +787,10 @@ const postReleasesBatchHandler = async (c: import("hono").Context<Env>) => {
   // re-fetch's slug(title) anchor for the SAME release don't collide under
   // UNIQUE(source_id, url), so the entry lands twice. Collapse by normalized title
   // (scrape-scoped; feed/github/appstore carry stable real URLs). Kill-switchable.
-  if (src.type === "scrape" && body.releases.length > 0) {
+  // Skipped entirely in enrich mode (#1526): a deliberate content re-POST carries
+  // the SAME title as the row it updates, so title-dedup would drop the very rows
+  // the operator means to enrich; the URL upsert is the right discriminator there.
+  if (src.type === "scrape" && body.releases.length > 0 && !enrichMode) {
     const dedupDisabled = await flag(
       c.env.FLAGS,
       c.env.SCRAPE_TITLE_DEDUP_DISABLED,
@@ -832,12 +842,16 @@ const postReleasesBatchHandler = async (c: import("hono").Context<Env>) => {
     if (r2UploadEnabled) {
       // Skip releases whose URL already exists: RELEASE_URL_UPSERT never updates
       // the `media` column on conflict, so mirroring their images to R2 would
-      // upload bytes the upsert immediately discards.
-      const existingMediaUrls = await selectExistingReleaseUrls(
-        db,
-        src.id,
-        body.releases.map((r) => r.url),
-      );
+      // upload bytes the upsert immediately discards. In enrich mode (#1526) the
+      // upsert DOES overwrite media, so existing URLs must be processed too —
+      // skip the skip.
+      const existingMediaUrls = enrichMode
+        ? new Set<string>()
+        : await selectExistingReleaseUrls(
+            db,
+            src.id,
+            body.releases.map((r) => r.url),
+          );
       for (let i = 0; i < body.releases.length; i++) {
         const rel = body.releases[i]!;
         if (rel.url != null && existingMediaUrls.has(rel.url)) continue;
@@ -907,11 +921,13 @@ const postReleasesBatchHandler = async (c: import("hono").Context<Env>) => {
       // RELEASE_URL_UPSERT has a conditional WHERE clause that causes the
       // database to omit rows where the update didn't apply. The returned
       // rows are the authoritative set of affected ids + content.
+      // In enrich mode (#1526) the clobbering RELEASE_CONTENT_UPSERT overwrites
+      // content/media on a same-URL collision instead of fill-only.
       // oxlint-disable-next-line no-await-in-loop -- D1 chunked insert (100 bind param limit)
       const rows = await db
         .insert(releases)
         .values(chunk)
-        .onConflictDoUpdate(RELEASE_URL_UPSERT)
+        .onConflictDoUpdate(enrichMode ? RELEASE_CONTENT_UPSERT : RELEASE_URL_UPSERT)
         .returning({
           id: releases.id,
           title: releases.title,

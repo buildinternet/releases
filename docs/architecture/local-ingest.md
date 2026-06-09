@@ -67,6 +67,12 @@ The out-of-scope AI fields stay settable, case by case:
 - **At insert time:** the single-release insert `POST /v1/sources/:slug/releases` accepts `summary?`/`titleGenerated?`/`titleShort?` — use it instead of `/batch` when enrichment should land in the same write.
 - **Bulk, after the fact:** `bun scripts/generate-release-content.ts --orgs=<slug>`.
 
+### Content enrichment via `/batch` (`mode: "upsert-content"`)
+
+The default `/batch` upsert is **fill-don't-clobber** (`RELEASE_URL_UPSERT`, #958): on a same-URL collision it only writes content/media when the stored row is _empty_. That protects routine cron/MA re-fetches from a sparser re-extraction overwriting a good row — but it also means a **deliberate second pass cannot replace a non-empty stub** (seed index summaries first, then re-POST the full detail-page body), and for scrape sources the title-dedup pre-filter (#1410) can drop the same-title re-POST before the upsert even runs.
+
+`mode: "upsert-content"` at the top level of the `/batch` body opts into the clobbering `RELEASE_CONTENT_UPSERT` (#1526): same-URL collisions **overwrite** content/contentHash/size and media when the incoming row carries them, the scrape title-dedup pre-filter is skipped, and the R2 media pre-pass processes existing URLs too (so media re-mirrors). A blank incoming `content`/`media` never wipes a stored value. It is opt-in only — the default path is unchanged, so a normal re-fetch can never clobber. The `url` must match the seeded row exactly (enrich keys on URL); if the URL scheme changed, hard-delete + re-seed instead.
+
 ## Pointers
 
 - Skill: `src/agent/skills/local-ingest/SKILL.md` + `preflight.ts`.

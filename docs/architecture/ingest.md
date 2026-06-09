@@ -13,7 +13,7 @@ Source `type` selects the fetch adapter: `github`, `scrape`, `feed`, `agent`, `a
 
 ## Dedup and batched inserts
 
-Dedup via `UNIQUE(source_id, url)` and the shared `RELEASE_URL_UPSERT` config in `@releases/core-internal/release-upsert` — on URL collision, content is backfilled when incoming is non-empty and existing is empty.
+Dedup via `UNIQUE(source_id, url)` and the shared `RELEASE_URL_UPSERT` config in `@releases/core-internal/release-upsert` — on URL collision, content is backfilled when incoming is non-empty and existing is empty (fill-don't-clobber). For a deliberate enrichment pass, `POST /v1/.../releases/batch` accepts a top-level `mode: "upsert-content"` that swaps in the clobbering `RELEASE_CONTENT_UPSERT` (overwrite content/media on same-URL collision, skip the scrape title-dedup pre-filter) — opt-in only, so the default re-fetch path stays fill-only (#1526).
 
 **D1's hard limit is 100 bound parameters per prepared statement**, so batch INSERTs chunk at `floor(100 / binds_per_row)` per statement. For `releases` (13 binds/row) that's 7 rows per statement; `inArray(...)` lookups chunk at 90 IDs. Raising a chunk size without re-checking bind count surfaces as a 500 on `/releases/batch`.
 
