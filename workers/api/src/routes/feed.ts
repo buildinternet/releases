@@ -46,6 +46,15 @@ feedRoutes.get("/feed/:token", async (c) => {
   const lastModified = formatLastModified(
     releases.length ? (releases[0].publishedAt ?? null) : null,
   );
+
+  // Validator + cache headers shared by the 200 and 304 responses so a
+  // conditional GET preserves the same caching contract either way.
+  const cacheHeaders: Record<string, string> = {
+    "Cache-Control": "private, no-store",
+    ETag: etag,
+  };
+  if (lastModified) cacheHeaders["Last-Modified"] = lastModified;
+
   if (
     shouldReturn304(
       etag,
@@ -54,14 +63,11 @@ feedRoutes.get("/feed/:token", async (c) => {
       c.req.header("if-modified-since") ?? null,
     )
   ) {
-    return c.body(null, 304, { ETag: etag });
+    return c.body(null, 304, cacheHeaders);
   }
 
-  const headers: Record<string, string> = {
+  return c.body(body, 200, {
     "Content-Type": "application/atom+xml; charset=utf-8",
-    "Cache-Control": "private, no-store",
-    ETag: etag,
-  };
-  if (lastModified) headers["Last-Modified"] = lastModified;
-  return c.body(body, 200, headers);
+    ...cacheHeaders,
+  });
 });

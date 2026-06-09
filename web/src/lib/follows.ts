@@ -50,7 +50,10 @@ export async function getFeed(page = 1, limit = 30): Promise<PersonalizedFeedRes
 
 export async function getFeedToken(): Promise<FeedToken | null> {
   const res = await fetch(`${apiBase()}/v1/me/feed/token`, { credentials: "include" });
-  if (!res.ok) return null;
+  // The endpoint returns 200 `{ token: null }` when the user has no token — that
+  // is the only `null` path. Any non-OK status is a real failure (auth/5xx), so
+  // throw (consistent with the sibling helpers) rather than masking it as "no token".
+  if (!res.ok) throw new Error(await errorMessage(res, `Failed to load feed URL (${res.status})`));
   return ((await res.json()) as FeedTokenResponse).token;
 }
 

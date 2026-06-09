@@ -16,7 +16,9 @@ export function FeedTokenCard() {
   useEffect(() => {
     getFeedToken()
       .then((t) => setToken(t))
-      .catch(() => setToken(null))
+      .catch((err: unknown) =>
+        setError(err instanceof Error ? err.message : "Failed to load your feed URL."),
+      )
       .finally(() => setLoading(false));
   }, []);
 
