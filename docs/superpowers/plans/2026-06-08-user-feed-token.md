@@ -14,31 +14,32 @@
 
 ## File Structure
 
-| File | Responsibility | Action |
-|------|----------------|--------|
-| `packages/core/src/api-token.ts` | `relf_` token generate/parse/shape helpers | Modify |
-| `packages/core/src/api-token.test.ts` | Token helper tests | Modify (or create) |
-| `packages/api-types/src/api-types.ts` | `FeedToken` + `FeedTokenResponse` wire types | Modify |
-| `workers/api/src/db/schema-feed-tokens.ts` | `user_feed_tokens` schema island | Create |
-| `workers/api/migrations/20260608010000_add_user_feed_tokens.sql` | Paired migration | Create |
-| `workers/api/src/queries/feed-tokens.ts` | upsert / get / delete / resolve-by-token | Create |
-| `workers/api/test/feed-tokens-query.test.ts` | Query unit tests | Create |
-| `packages/rendering/src/atom.ts` | `userFeedToAtom` formatter + `"user"` scope | Modify |
-| `packages/rendering/src/atom.test.ts` | Formatter snapshot tests | Modify |
-| `workers/api/src/routes/me.ts` | `GET/POST/DELETE /me/feed/token` handlers | Modify |
-| `workers/api/test/feed-token-routes.test.ts` | Management-lane route tests | Create |
-| `workers/api/src/routes/feed.ts` | Public `GET /v1/feed/:token` read lane | Create |
-| `workers/api/src/v1-routes.ts` | Mount `feedRoutes` | Modify |
-| `workers/api/src/index.ts` | Rate-limit `.use` for `/feed/*` | Modify |
-| `workers/api/test/feed-read-route.test.ts` | Read-lane route tests | Create |
-| `web/src/lib/api.ts` (or following-client) | Management-endpoint fetch helpers | Modify |
-| `web/src/app/following/following-client.tsx` | "Your feed" card | Modify |
+| File                                                             | Responsibility                               | Action             |
+| ---------------------------------------------------------------- | -------------------------------------------- | ------------------ |
+| `packages/core/src/api-token.ts`                                 | `relf_` token generate/parse/shape helpers   | Modify             |
+| `packages/core/src/api-token.test.ts`                            | Token helper tests                           | Modify (or create) |
+| `packages/api-types/src/api-types.ts`                            | `FeedToken` + `FeedTokenResponse` wire types | Modify             |
+| `workers/api/src/db/schema-feed-tokens.ts`                       | `user_feed_tokens` schema island             | Create             |
+| `workers/api/migrations/20260608010000_add_user_feed_tokens.sql` | Paired migration                             | Create             |
+| `workers/api/src/queries/feed-tokens.ts`                         | upsert / get / delete / resolve-by-token     | Create             |
+| `workers/api/test/feed-tokens-query.test.ts`                     | Query unit tests                             | Create             |
+| `packages/rendering/src/atom.ts`                                 | `userFeedToAtom` formatter + `"user"` scope  | Modify             |
+| `packages/rendering/src/atom.test.ts`                            | Formatter snapshot tests                     | Modify             |
+| `workers/api/src/routes/me.ts`                                   | `GET/POST/DELETE /me/feed/token` handlers    | Modify             |
+| `workers/api/test/feed-token-routes.test.ts`                     | Management-lane route tests                  | Create             |
+| `workers/api/src/routes/feed.ts`                                 | Public `GET /v1/feed/:token` read lane       | Create             |
+| `workers/api/src/v1-routes.ts`                                   | Mount `feedRoutes`                           | Modify             |
+| `workers/api/src/index.ts`                                       | Rate-limit `.use` for `/feed/*`              | Modify             |
+| `workers/api/test/feed-read-route.test.ts`                       | Read-lane route tests                        | Create             |
+| `web/src/lib/api.ts` (or following-client)                       | Management-endpoint fetch helpers            | Modify             |
+| `web/src/app/following/following-client.tsx`                     | "Your feed" card                             | Modify             |
 
 ---
 
 ## Task 1: Core `relf_` feed token helpers
 
 **Files:**
+
 - Modify: `packages/core/src/api-token.ts`
 - Test: `packages/core/src/api-token.test.ts`
 
@@ -144,6 +145,7 @@ git commit -m "feat(core): relf_ feed token generate/parse/shape helpers (#1519)
 ## Task 2: `FeedToken` wire types
 
 **Files:**
+
 - Modify: `packages/api-types/src/api-types.ts`
 
 - [ ] **Step 1: Add the types**
@@ -189,6 +191,7 @@ git commit -m "feat(api-types): FeedToken + FeedTokenResponse wire types (#1519)
 ## Task 3: `user_feed_tokens` schema island + migration
 
 **Files:**
+
 - Create: `workers/api/src/db/schema-feed-tokens.ts`
 - Create: `workers/api/migrations/20260608010000_add_user_feed_tokens.sql`
 
@@ -281,6 +284,7 @@ git commit -m "feat(api): user_feed_tokens schema island + migration (#1519)"
 ## Task 4: Feed-token queries
 
 **Files:**
+
 - Create: `workers/api/src/queries/feed-tokens.ts`
 - Test: `workers/api/test/feed-tokens-query.test.ts`
 
@@ -408,11 +412,7 @@ export async function upsertFeedToken(db: AnyDb, userId: string): Promise<Minted
 
 /** Fetch the user's token row (without forcing the caller to know the secret). */
 export async function getFeedToken(db: AnyDb, userId: string): Promise<UserFeedToken | null> {
-  const row = await db
-    .select()
-    .from(userFeedTokens)
-    .where(eq(userFeedTokens.userId, userId))
-    .get();
+  const row = await db.select().from(userFeedTokens).where(eq(userFeedTokens.userId, userId)).get();
   return row ?? null;
 }
 
@@ -464,6 +464,7 @@ git commit -m "feat(api): feed-token queries — upsert/get/delete/resolve (#151
 ## Task 5: `userFeedToAtom` formatter
 
 **Files:**
+
 - Modify: `packages/rendering/src/atom.ts`
 - Test: `packages/rendering/src/atom.test.ts`
 
@@ -501,10 +502,7 @@ describe("userFeedToAtom", () => {
   const selfUrl = "https://api.releases.sh/v1/feed/relf_abc_def.atom";
 
   it("renders followed releases with a stable user feed id and self link", () => {
-    const xml = userFeedToAtom(
-      { releases: [latestItem()], lookupId: "abc", selfUrl },
-      opts,
-    );
+    const xml = userFeedToAtom({ releases: [latestItem()], lookupId: "abc", selfUrl }, opts);
     expect(xml).toContain("<feed");
     expect(xml).toContain("<title>Your followed releases</title>");
     expect(xml).toContain(`tag:releases.sh,2005:user/abc`);
@@ -535,11 +533,13 @@ In `packages/rendering/src/atom.ts`:
 (a) Extend the `FeedShell.scope` union (around line 134) from:
 
 ```ts
-  scope: "org" | "source" | "collection" | "category" | "product";
+scope: "org" | "source" | "collection" | "category" | "product";
 ```
+
 to:
+
 ```ts
-  scope: "org" | "source" | "collection" | "category" | "product" | "user";
+scope: "org" | "source" | "collection" | "category" | "product" | "user";
 ```
 
 (b) Add the import for `ReleaseLatestItem` to the existing type import block at the top (around line 9):
@@ -615,6 +615,7 @@ git commit -m "feat(rendering): userFeedToAtom formatter + user scope (#1519)"
 ## Task 6: Management lane — `GET/POST/DELETE /me/feed/token`
 
 **Files:**
+
 - Modify: `workers/api/src/routes/me.ts`
 - Test: `workers/api/test/feed-token-routes.test.ts`
 
@@ -795,6 +796,7 @@ git commit -m "feat(api): /me/feed/token mint/rotate/revoke management lane (#15
 ## Task 7: Public read lane — `GET /v1/feed/:token`
 
 **Files:**
+
 - Create: `workers/api/src/routes/feed.ts`
 - Modify: `workers/api/src/v1-routes.ts`
 - Modify: `workers/api/src/index.ts`
@@ -859,11 +861,7 @@ describe("GET /v1/feed/:token", () => {
 
   it("404s for an unknown (well-formed) token", async () => {
     const { a, env } = app();
-    const res = await a.request(
-      `/feed/relf_${"a".repeat(12)}_${"b".repeat(32)}.atom`,
-      {},
-      env,
-    );
+    const res = await a.request(`/feed/relf_${"a".repeat(12)}_${"b".repeat(32)}.atom`, {}, env);
     expect(res.status).toBe(404);
   });
 
@@ -913,7 +911,10 @@ feedRoutes.get("/feed/:token", async (c) => {
   const userId = await resolveFeedToken(db, raw);
   if (!userId) return c.json({ error: "not_found" }, 404);
 
-  const rows = await getFollowedReleases(db, userId, { limit: ATOM_DEFAULT_MAX_ENTRIES, offset: 0 });
+  const rows = await getFollowedReleases(db, userId, {
+    limit: ATOM_DEFAULT_MAX_ENTRIES,
+    offset: 0,
+  });
   const mediaOrigin = c.env.MEDIA_ORIGIN ?? "";
   const releases = rows.map((r) => mapLatestRowToReleaseItem(r, mediaOrigin));
 
@@ -956,7 +957,7 @@ import { feedRoutes } from "./routes/feed.js";
 and mount it alongside the other `v1.route("/", …)` calls (after line 111, near `meRoutes`):
 
 ```ts
-  v1.route("/", feedRoutes);
+v1.route("/", feedRoutes);
 ```
 
 - [ ] **Step 5: Add rate limiting for the feed path**
@@ -991,6 +992,7 @@ git commit -m "feat(api): public GET /v1/feed/:token Atom read lane (#1519)"
 ## Task 8: Web "Your feed" card on `/following`
 
 **Files:**
+
 - Modify: `web/src/app/following/following-client.tsx`
 
 This task has no unit test (it's a client component wired to live endpoints); verify by type-check + manual review. Keep the data-fetching in a small local helper.
@@ -1007,7 +1009,7 @@ Add a `FeedTokenCard` component in `following-client.tsx` (or a sibling file `fe
 - On mount, `GET ${API_BASE}/v1/me/feed/token` with `credentials: "include"`, set state `{ token: FeedToken | null }`.
 - **No token:** render a "Generate a private feed URL" button → `POST ${API_BASE}/v1/me/feed/token` (`credentials: "include"`) → store the returned `FeedToken`.
 - **Has token:** render the `feedUrl` in a read-only input + a **Copy** button (`navigator.clipboard.writeText`), the `createdAt`/`lastUsedAt` timestamps, a **Rotate** button (`window.confirm("Rotate your feed URL? Existing reader subscriptions will stop working.")` → `POST` → replace state), and a **Revoke** button (`window.confirm("Revoke your feed URL?")` → `DELETE` → set token to null).
-- Render the inline note: *"Keep this URL private — anyone with it can read your followed-releases feed. Rotate to invalidate the old one."*
+- Render the inline note: _"Keep this URL private — anyone with it can read your followed-releases feed. Rotate to invalidate the old one."_
 
 Concrete component (adjust the API-base import to match what the file already uses — e.g. `process.env.NEXT_PUBLIC_RELEASES_API_URL` or an existing `apiBase` helper):
 
@@ -1082,8 +1084,8 @@ export function FeedTokenCard() {
             </button>
           </div>
           <p className="text-xs text-muted-foreground">
-            Keep this URL private — anyone with it can read your followed-releases feed.
-            Rotate to invalidate the old one.
+            Keep this URL private — anyone with it can read your followed-releases feed. Rotate to
+            invalidate the old one.
           </p>
           <div className="flex gap-3 text-sm">
             <button onClick={rotate} className="text-muted-foreground hover:underline">
@@ -1140,6 +1142,7 @@ Expected: PASS. If format fails, run `bun run format` and amend.
 - [ ] **Step 4: Apply the migration to local D1 and smoke the worker (optional but recommended)**
 
 Run: `bun run db:reset:local` then start `bun run dev:api`, sign in locally, and:
+
 - `POST` then `GET https://…/v1/me/feed/token` (cookie) → confirm the same `feedUrl`.
 - Open the `feedUrl` in a browser → confirm a valid Atom document.
 - Revoke → confirm the feed URL 404s.

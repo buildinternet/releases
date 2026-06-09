@@ -151,8 +151,8 @@ management endpoints with credentialed (cookie) fetch:
 - **Has token:** the full `feedUrl` (re-revealable via `GET`), a **Copy** button,
   `created` / `last fetched` timestamps, **Rotate** (confirm — warns it breaks
   existing reader subscriptions), **Revoke** (confirm).
-- A short inline note: *"Keep this URL private — anyone with it can read your feed.
-  Rotate to invalidate the old one."* (Decision 6 — the data is public, but the URL
+- A short inline note: _"Keep this URL private — anyone with it can read your feed.
+  Rotate to invalidate the old one."_ (Decision 6 — the data is public, but the URL
   is still personal to your follow list.)
 
 ## api-types
