@@ -6,6 +6,8 @@
 
 import { buildAnthropicClient } from "@releases/lib/anthropic-client.js";
 import { logEvent } from "@releases/lib/log-event.js";
+import { getSecret, type SecretBinding } from "@releases/lib/secrets";
+import { buildOpenRouterExtractModel } from "@releases/adapters/extract";
 import type { Source } from "@buildinternet/releases-core/schema";
 import type { ExtractDeps, ExtractRepo, UsageEntry } from "@releases/adapters/extract";
 
@@ -24,6 +26,20 @@ export interface WorkerDepsEnv {
   apiKey: string;
   sessionId?: string;
   extractToolLoopEnabled?: boolean;
+  /**
+   * OpenRouter extraction lane (issue #1536). When `openrouterEnabled` (the
+   * resolved `openrouter-enabled` flag) is true AND `extractModel` is non-empty
+   * AND `openRouterApiKey` resolves, the large-body tool-loop routes through the
+   * AI-SDK path on this model instead of the Anthropic SDK loop. Any missing
+   * piece → Anthropic path (fail open). The flag is resolved once per session by
+   * the caller (mirrors `extractToolLoopEnabled`).
+   * NOTE: the OPENROUTER_API_KEY secret is NOT yet bound in the discovery
+   * worker's wrangler.jsonc — binding it is a prerequisite to enable this lane.
+   */
+  openrouterEnabled?: boolean;
+  openRouterApiKey?: SecretBinding;
+  openRouterBaseURL?: string;
+  extractModel?: string;
 }
 
 /**
@@ -148,11 +164,38 @@ function buildWorkerRepo(env: WorkerDepsEnv): ExtractRepo {
   };
 }
 
-export function buildWorkerExtractDeps(env: WorkerDepsEnv): ExtractDeps {
+/**
+ * Resolve the OpenRouter extraction model, or `undefined` to keep the Anthropic
+ * tool-loop. Fail-open at every step: flag off, no `EXTRACT_MODEL`, an
+ * unresolvable/missing key, or any throw → `undefined` (Anthropic path).
+ */
+async function resolveAiSdkExtractModel(
+  env: WorkerDepsEnv,
+): Promise<{ model: unknown; label: string } | undefined> {
+  try {
+    if (!env.openrouterEnabled) return undefined;
+    const model = env.extractModel?.trim();
+    if (!model) return undefined;
+    const apiKey = await getSecret(env.openRouterApiKey).catch(() => null);
+    if (!apiKey) return undefined;
+    const baseURL = env.openRouterBaseURL?.trim();
+    return {
+      model: buildOpenRouterExtractModel({ apiKey, model, ...(baseURL ? { baseURL } : {}) }),
+      label: model,
+    };
+  } catch {
+    // Any unexpected failure → Anthropic path.
+    return undefined;
+  }
+}
+
+export async function buildWorkerExtractDeps(env: WorkerDepsEnv): Promise<ExtractDeps> {
   const cloudflare =
     env.cloudflareAccountId && env.cloudflareApiToken
       ? { accountId: env.cloudflareAccountId, apiToken: env.cloudflareApiToken }
       : null;
+
+  const aiSdk = await resolveAiSdkExtractModel(env);
 
   // The worker ships its own @anthropic-ai/sdk copy (isolated node_modules);
   // the package types resolve via the root workspace copy. Both are the same
@@ -174,5 +217,6 @@ export function buildWorkerExtractDeps(env: WorkerDepsEnv): ExtractDeps {
     cloudflare,
     repo: buildWorkerRepo(env),
     extractToolLoopEnabled: env.extractToolLoopEnabled ?? false,
+    ...(aiSdk ? { aiSdkModel: aiSdk.model, aiSdkModelLabel: aiSdk.label } : {}),
   };
 }

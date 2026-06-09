@@ -32,6 +32,14 @@ export interface FirecrawlExtractDeps {
    * DB write failure never aborts an extraction.
    */
   logUsageFn?: (entry: FirecrawlExtractUsageEntry) => Promise<void>;
+  /**
+   * OpenRouter extraction model (issue #1536), resolved by the caller (which has
+   * `env`) via `resolveExtractAiSdkModel`. Inert on this path today: firecrawl
+   * extraction never opts into the tool-loop (`useToolLoop` is unset), so it
+   * always takes the one-shot Anthropic tier — threaded for consistency + future.
+   */
+  aiSdkModel?: unknown;
+  aiSdkModelLabel?: string;
 }
 
 /** Token-usage subset every extraction result exposes — the bits we log. */
@@ -113,6 +121,9 @@ export async function extractFirecrawlMarkdown(
     logger: deps.logger,
     cloudflare: null,
     extractToolLoopEnabled: false,
+    ...(deps.aiSdkModel
+      ? { aiSdkModel: deps.aiSdkModel, aiSdkModelLabel: deps.aiSdkModelLabel }
+      : {}),
     repo: {
       peekContentHash: async () => false,
       commitContentHash: async () => {},
@@ -245,6 +256,9 @@ export async function extractChangelogAllWindows(
     logger: deps.logger,
     cloudflare: null,
     extractToolLoopEnabled: false,
+    ...(deps.aiSdkModel
+      ? { aiSdkModel: deps.aiSdkModel, aiSdkModelLabel: deps.aiSdkModelLabel }
+      : {}),
     repo: {
       peekContentHash: async () => false,
       commitContentHash: async () => {},

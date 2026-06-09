@@ -80,6 +80,16 @@ export interface ScrapeEnv {
   /** `true` to enable tool-loop extraction for large bodies globally. */
   extractToolLoopEnabled?: boolean;
   /**
+   * OpenRouter extraction lane (issue #1536) — resolved once per session and
+   * threaded into `buildWorkerExtractDeps`. Fail-open: any missing piece keeps
+   * the Anthropic tool-loop. (OPENROUTER_API_KEY is not yet bound in this
+   * worker's wrangler.jsonc; binding it is a prerequisite to enable the lane.)
+   */
+  openrouterEnabled?: boolean;
+  openRouterApiKey?: { get(): Promise<string> };
+  openRouterBaseURL?: string;
+  extractModel?: string;
+  /**
    * `true` to capture the scraped markdown body as a raw snapshot (#1283).
    * The discovery worker has no D1/R2, so `runScrapePath` POSTs the body to the
    * API worker's raw-snapshot endpoint for later re-extraction (#1284).
@@ -520,7 +530,7 @@ export async function scrapeFetch(env: ScrapeEnv, sourceIdentifier: string): Pro
     return `Error: source ${source.slug} is type "${source.type}", not scrape/agent`;
   }
 
-  const deps = buildWorkerExtractDeps({
+  const deps = await buildWorkerExtractDeps({
     anthropicApiKey: env.anthropicApiKey,
     anthropicBaseURL: env.anthropicBaseURL,
     aiGatewayToken: env.aiGatewayToken,
@@ -530,6 +540,10 @@ export async function scrapeFetch(env: ScrapeEnv, sourceIdentifier: string): Pro
     apiKey: env.apiKey,
     sessionId: env.sessionId,
     extractToolLoopEnabled: env.extractToolLoopEnabled ?? false,
+    openrouterEnabled: env.openrouterEnabled,
+    openRouterApiKey: env.openRouterApiKey,
+    openRouterBaseURL: env.openRouterBaseURL,
+    extractModel: env.extractModel,
   });
 
   const meta = getSourceMeta(source);
@@ -568,7 +582,7 @@ async function runAgentPath(
   source: Source,
   meta: ReturnType<typeof getSourceMeta>,
   guidance: { parseInstructions?: string; playbookContext?: string },
-  deps: ReturnType<typeof buildWorkerExtractDeps>,
+  deps: Awaited<ReturnType<typeof buildWorkerExtractDeps>>,
   start: number,
 ): Promise<string> {
   if (meta.fetchUrl) {
@@ -634,7 +648,7 @@ async function runScrapePath(
   source: Source,
   meta: ReturnType<typeof getSourceMeta>,
   guidance: { parseInstructions?: string; playbookContext?: string },
-  deps: ReturnType<typeof buildWorkerExtractDeps>,
+  deps: Awaited<ReturnType<typeof buildWorkerExtractDeps>>,
   start: number,
 ): Promise<string> {
   // Cloudflare Browser Rendering + crawl silently render origin error pages

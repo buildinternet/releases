@@ -21,6 +21,7 @@ import { RELEASES_BOT_UA } from "@releases/adapters/user-agent";
 import { logEvent } from "@releases/lib/log-event";
 import { getSecret } from "@releases/lib/secrets";
 import { getAnthropicKey, resolveGatewayOpts } from "../lib/anthropic.js";
+import { resolveExtractAiSdkModel } from "../lib/extract-model.js";
 import { buildAnthropicClient } from "@releases/lib/anthropic-client.js";
 import { planWindowOffsets } from "../lib/firecrawl-extract.js";
 import { logUsage } from "../lib/usage-log.js";
@@ -242,12 +243,18 @@ export class BackfillSourceWorkflow extends WorkflowEntrypoint<
               apiKey,
               ...(await resolveGatewayOpts(env)),
             });
+            // OpenRouter extraction lane (issue #1536). Resolves to undefined
+            // (Anthropic path) unless the flag is on + EXTRACT_MODEL + key are
+            // set. Inert here today: this path never sets `useToolLoop`, so it
+            // always takes the one-shot tier; wired for consistency + future use.
+            const aiSdk = await resolveExtractAiSdkModel(env);
             const extractDeps: ExtractDeps = {
               anthropicClient,
               agentModel: BACKFILL_EXTRACT_MODEL,
               logger: backfillLogger,
               cloudflare: null,
               extractToolLoopEnabled: false,
+              ...(aiSdk ? { aiSdkModel: aiSdk.model, aiSdkModelLabel: aiSdk.label } : {}),
               repo: {
                 peekContentHash: async () => false,
                 commitContentHash: async () => {},

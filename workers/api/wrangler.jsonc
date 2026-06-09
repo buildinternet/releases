@@ -101,6 +101,10 @@
     // regression vs. Haiku — summaries are user-facing. The daily batch path is
     // unaffected (always Anthropic).
     "SUMMARIZE_MODEL": "",
+    // OpenRouter model for the large-body EXTRACTION tool-loop (issue #1536).
+    // Consulted only when `openrouter-enabled` is on; empty → extraction stays on
+    // Anthropic (fail-open). OPENROUTER_API_KEY is already bound below.
+    "EXTRACT_MODEL": "",
     // Smear window for the per-source jitter at the head of PollAndFetchWorkflow.
     // Set to "0" to disable; see FANOUT_JITTER_WINDOW_MAX_MS for the upper clamp.
     // See workers/api/src/workflows/poll-and-fetch.ts.
@@ -589,6 +593,9 @@
         // `openrouter-enabled` flag. UNSET until the eval picks a candidate;
         // empty → stays on Anthropic Haiku (fail-open). Mirrors prod.
         "SUMMARIZE_MODEL": "",
+        // OpenRouter extraction model (issue #1536); gated by `openrouter-enabled`.
+        // Empty → stays on Anthropic (fail-open). Mirrors prod.
+        "EXTRACT_MODEL": "",
         // Mirrors prod flag; not read in staging (CRON_ENABLED=false). See #971.
         "BATCH_SUMMARIZE_ENABLED": "false",
         "BATCH_SUMMARIZE_MAX_COST_USD": "10",

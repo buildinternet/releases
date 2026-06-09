@@ -1,10 +1,13 @@
 /**
- * SPIKE (issue #1536) — port of `extract-with-tools.ts` onto the Vercel AI SDK v6.
+ * The OpenRouter / Vercel-AI-SDK extraction path — a provider-agnostic port of
+ * `extract-with-tools.ts` (the Anthropic-SDK large-body tool-loop). The worker
+ * resolves an OpenRouter `LanguageModel` (DeepSeek) when the `openrouter-enabled`
+ * flag is on + an `EXTRACT_MODEL` + key are configured, and routes the tool-loop
+ * here instead of the Anthropic SDK loop; off, the Anthropic path is unchanged.
  *
- * Goal of the spike: prove we can drive the large-body extraction tool-loop
- * through a provider-agnostic SDK (so DeepSeek-via-OpenRouter becomes a model
- * swap, not a rewrite) WITHOUT losing the two things that make the lane cheap
- * and reliable on Anthropic today:
+ * Driving the loop through a provider-agnostic SDK makes DeepSeek-via-OpenRouter
+ * a model swap, not a rewrite — WITHOUT losing the two things that make the lane
+ * cheap and reliable on Anthropic today:
  *
  *   1. The STATIC system-prefix cache breakpoint (the ~50K-token base+TOOLLOOP
  *      prompt + tool schemas, shared byte-for-byte across sources).
@@ -16,12 +19,10 @@
  * sliding one — the AI SDK owns the loop, but `prepareStep` lets us mutate the
  * exact message array sent each step, which is where the breakpoints live.
  *
- * NOT production-wired: the caller injects a ready `LanguageModel` (Anthropic
- * today; `createOpenRouter(...)(model)` to swap). Flag + per-lane model-var
- * selection at the deps construction sites is deliberately out of scope for the
- * spike — see the issue for the wiring plan. The loop contract (opts/result/
- * LoopFallbackError) is reused verbatim from the Anthropic implementation so a
- * future switch is a call-site change, not a type change.
+ * The caller injects a ready `LanguageModel` (OpenRouter in prod;
+ * `anthropicSpikeModel(...)` in the parity test). The loop contract
+ * (opts/result/LoopFallbackError) is reused verbatim from the Anthropic
+ * implementation so the switch is a call-site change, not a type change.
  */
 
 import { createAnthropic } from "@ai-sdk/anthropic";
@@ -56,8 +57,9 @@ import {
 } from "./extract-with-tools.js";
 import type { ExtractedEntry, ExtractLogger } from "./types.js";
 
-/** Spike deps: a ready AI-SDK model + a logger. The production seam would build
- *  `model` from a flag (Anthropic vs OpenRouter) + a per-lane model var. */
+/** Deps: a ready AI-SDK model + a logger. The worker builds `model` via
+ *  `buildOpenRouterExtractModel` (OpenRouter/DeepSeek) when the flag + key +
+ *  `EXTRACT_MODEL` are configured; the parity test injects `anthropicSpikeModel`. */
 export interface AiSdkExtractDeps {
   model: LanguageModel;
   logger: ExtractLogger;
@@ -286,9 +288,9 @@ export async function extractWithToolsAiSdk(
   throw new LoopFallbackError("no_terminal_call", makePartial());
 }
 
-/** Spike convenience: build an Anthropic AI-SDK model that captures wire
- *  requests via an injected `fetch` (used by the parity test). The OpenRouter
- *  sibling would be `createOpenRouter({ apiKey })(model)` — same `LanguageModel`. */
+/** Test-only: build an Anthropic AI-SDK model that captures wire requests via an
+ *  injected `fetch` (used by the parity test). The production sibling is
+ *  `buildOpenRouterExtractModel` — both return the same `LanguageModel`. */
 export function anthropicSpikeModel(opts: {
   apiKey: string;
   model: string;
