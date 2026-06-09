@@ -1,6 +1,6 @@
 # `releases-dev` plugin (monorepo developer build)
 
-Internal Claude Code plugin shipped from `buildinternet/releases`. Bundles every skill in `src/agent/skills/`, the `discovery` / `worker` / `grader` subagents, the `/releases` command, and the hosted MCP connection.
+Internal Claude Code plugin shipped from `buildinternet/releases`. Bundles every skill in `src/agent/skills/`, the `grader` subagent, the `/releases` command, and the hosted MCP connection.
 
 **This plugin is for people developing the monorepo, not end users.** Anyone querying the registry — including engineers at other companies — should install the public `releases` and `releases-admin` plugins from the [`buildinternet/releases-cli`](https://github.com/buildinternet/releases-cli) marketplace instead. The CLI plugins ship the same public-facing skills with a tighter audience split (reader vs admin) and a versioned release process.
 
@@ -11,13 +11,13 @@ Internal Claude Code plugin shipped from `buildinternet/releases`. Bundles every
 /plugin install releases-dev@releases-monorepo
 ```
 
-Reload Claude Code; `/releases`, the MCP tools at `mcp.releases.sh`, the discovery/worker/grader subagents, and the auto-triggering skills should all be available.
+Reload Claude Code; `/releases`, the MCP tools at `mcp.releases.sh`, the `grader` subagent, and the auto-triggering skills should all be available.
 
 ## Layout
 
 - **`.claude-plugin/marketplace.json`** (repo root) — single source of plugin definition truth. References `./src/agent/skills/*` canonically and the assets under `./plugins/claude/releases/` for agents, commands, and `.mcp.json`. `strict: false` on the plugin entry means the marketplace entry IS the entire definition — there is no per-plugin `plugin.json`.
 - **`./src/agent/skills/<name>/SKILL.md`** — the canonical home for every skill. Managed agents (discovery + worker workers in production) read from here directly; the plugin references the same paths, so there is no mirror tree and no sync script.
-- **`./plugins/claude/releases/agents/{discovery,worker,grader}.md`** — subagent prompts. `discovery` and `worker` are the prompts the managed agents production workers use (kept in step with `src/agent/managed-discovery.ts`). `grader` is a local-only rubric subagent used when iterating on managed-agent rubrics.
+- **`./plugins/claude/releases/agents/grader.md`** — a local-only rubric subagent used when iterating on managed-agent rubrics. The production discovery/worker prompts live in `src/agent/managed-discovery.ts` (not here), and the OSS CLI's `releases-admin` plugin is what ships operator-facing `discovery`/`worker` agents — this plugin deliberately no longer mirrors them, since nothing in the monorepo invoked the copies and they only drifted from the TS source.
 - **`./plugins/claude/releases/commands/releases.md`** — the `/releases` slash command.
 - **`./plugins/claude/releases/.mcp.json`** — points Claude Code at `https://mcp.releases.sh/mcp`.
 
@@ -25,11 +25,11 @@ Reload Claude Code; `/releases`, the MCP tools at `mcp.releases.sh`, the discove
 
 The user-facing OSS CLI ([`buildinternet/releases-cli`](https://github.com/buildinternet/releases-cli)) publishes two plugins via its own marketplace:
 
-| Plugin                     | Audience           | Bundles                                                            |
-| -------------------------- | ------------------ | ------------------------------------------------------------------ |
-| `releases`                 | Reader             | Hosted MCP, `/releases`, public reader skills                      |
-| `releases-admin`           | Operator           | `discovery` + `worker` agents, operator playbook skills            |
-| `releases-dev` (this repo) | Monorepo developer | Everything above + the 4 monorepo-only skills + the `grader` agent |
+| Plugin                     | Audience           | Bundles                                                                          |
+| -------------------------- | ------------------ | -------------------------------------------------------------------------------- |
+| `releases`                 | Reader             | Hosted MCP, `/releases`, public reader skills                                    |
+| `releases-admin`           | Operator           | `discovery` + `worker` agents, operator playbook skills                          |
+| `releases-dev` (this repo) | Monorepo developer | Hosted MCP, `/releases`, all public + 4 monorepo-only skills, the `grader` agent |
 
 Six skills exist in both repos as hand-maintained copies — that drift is a known follow-up tracked separately from the marketplace rename. See [#1087](https://github.com/buildinternet/releases/issues/1087) for the cross-repo skill drift discussion.
 

@@ -170,7 +170,7 @@ The rubric defines a three-layer routing rule: target-shaped facts go in the pla
 
 The monorepo publishes a single Claude Code plugin named **`releases-dev`** via `.claude-plugin/marketplace.json` at the repo root. It targets monorepo developers — end users install the public `releases` / `releases-admin` plugins from the [`buildinternet/releases-cli`](https://github.com/buildinternet/releases-cli) marketplace instead. The two repos publish under different marketplace identities to avoid the silent name shadowing that motivated the rename (see [#1087](https://github.com/buildinternet/releases/issues/1087)).
 
-**Components:** every skill in `src/agent/skills/` (referenced by path, no mirror), the `discovery` / `worker` / `grader` agents under `plugins/claude/releases/agents/`, the `/releases` command, and the `.mcp.json` pointing at `mcp.releases.sh`.
+**Components:** every skill in `src/agent/skills/` (referenced by path, no mirror), the `grader` agent under `plugins/claude/releases/agents/`, the `/releases` command, and the `.mcp.json` pointing at `mcp.releases.sh`. The production discovery/worker prompts live in `managed-discovery.ts`, not here; the OSS CLI's `releases-admin` plugin is what ships operator-facing `discovery`/`worker` agents. This plugin used to mirror them too, but the copies were never invoked from the monorepo and only drifted from the TS source, so they were dropped.
 
 **Manifest layout:** `strict: false` on the plugin entry means the marketplace.json IS the entire definition. There is no per-plugin `plugin.json`; adding one back would create a conflict and the plugin would fail to load.
 
