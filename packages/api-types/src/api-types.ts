@@ -880,6 +880,8 @@ export type SearchSourceHit = z.infer<typeof SearchSourceHitSchema>;
 export interface RawSourceHit extends SearchSourceHit {
   productName?: string;
   productCategory?: string;
+  /** Owning org's avatar URL — folded onto the catalog hit for the byline avatar. */
+  orgAvatarUrl?: string | null;
   /** Entity taxonomy kind from the `sources.kind` column. */
   entityKind?: string | null;
 }
@@ -905,6 +907,7 @@ export function foldSourcesIntoCatalog(
         name: s.productName ?? s.name,
         orgSlug: s.orgSlug,
         orgName: s.orgName,
+        orgAvatarUrl: s.orgAvatarUrl ?? null,
         category: s.productCategory ?? null,
         entryType: "product",
         kind: undefined,
@@ -916,6 +919,7 @@ export function foldSourcesIntoCatalog(
         name: s.name,
         orgSlug: s.orgSlug,
         orgName: s.orgName,
+        orgAvatarUrl: s.orgAvatarUrl ?? null,
         category: null,
         entryType: "source",
         kind: (s.entityKind as SearchCatalogHit["kind"]) ?? undefined,

@@ -48,7 +48,6 @@ const searchPreviewComponents: Record<string, any> = {
 /* eslint-enable @typescript-eslint/no-explicit-any */
 import { SourceTypeIcon } from "./source-type-icon";
 import { OrgAvatar } from "./org-avatar";
-import { AppIcon } from "./app-icon";
 import { FallbackImage } from "./fallback-image";
 import { AppStoreIcon } from "./app-store-icon";
 import { PlayBadge } from "./play-badge";
@@ -482,7 +481,9 @@ function EntityHitRow({
   footer,
 }: {
   href: string;
-  visual: React.ReactNode;
+  /** Leading visual (avatar / glyph). Omitted for entities with no image of
+   *  their own — e.g. products, which carry the org avatar inline instead. */
+  visual?: React.ReactNode;
   name: string;
   tokens: string[];
   trailing?: React.ReactNode;
@@ -494,10 +495,10 @@ function EntityHitRow({
       href={href}
       className="flex items-start gap-3 rounded-lg border border-stone-200 p-3 transition-colors hover:bg-stone-50 dark:border-stone-800 dark:hover:bg-stone-900"
     >
-      <span className="mt-0.5">{visual}</span>
+      {visual && <span className="mt-0.5">{visual}</span>}
       <span className="min-w-0 flex-1">
-        <span className="flex items-center gap-2">
-          <span className="truncate text-sm font-medium text-stone-900 dark:text-stone-100">
+        <span className="flex min-w-0 items-center gap-2">
+          <span className="min-w-0 flex-1 truncate text-sm font-medium text-stone-900 dark:text-stone-100">
             <Highlight text={name} tokens={tokens} />
           </span>
           {trailing}
@@ -642,7 +643,6 @@ export function SearchResults({
                       href={href}
                       name={p.name}
                       tokens={tokens}
-                      visual={<AppIcon iconUrl={null} name={p.name} size={36} />}
                       trailing={
                         p.entryType === "source" && p.sourceType ? (
                           <SourceTypeIcon type={p.sourceType} size={14} />
@@ -650,9 +650,18 @@ export function SearchResults({
                       }
                       secondary={joinMeta([
                         p.orgName && (
-                          <>
-                            by <Highlight text={p.orgName} tokens={tokens} />
-                          </>
+                          <span className="inline-flex items-center gap-1 align-middle">
+                            by
+                            {p.orgAvatarUrl && (
+                              <OrgAvatar
+                                avatarUrl={p.orgAvatarUrl}
+                                githubHandle={null}
+                                name={p.orgName}
+                                size={14}
+                              />
+                            )}
+                            <Highlight text={p.orgName} tokens={tokens} />
+                          </span>
                         ),
                         category && <Highlight text={category} tokens={tokens} />,
                       ])}
