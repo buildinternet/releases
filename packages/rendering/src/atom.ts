@@ -11,6 +11,7 @@ import type {
   SourceDetail,
   OrgReleaseItem,
   CollectionReleaseItem,
+  ReleaseLatestItem,
 } from "@buildinternet/releases-api-types";
 
 export interface AtomFeedOptions {
@@ -131,7 +132,7 @@ function buildEntry(input: EntryInput, baseUrl: string): { xml: string; updated:
 // ── Feed assembly ────────────────────────────────────────────────────
 
 interface FeedShell {
-  scope: "org" | "source" | "collection" | "category" | "product";
+  scope: "org" | "source" | "collection" | "category" | "product" | "user";
   slug: string;
   title: string;
   subtitle?: string;
@@ -289,6 +290,39 @@ export function productReleasesToAtom(
       selfUrl: `${feedPath}.atom`,
       alternateUrl: productPage,
       authorName: params.productName,
+      entries,
+    },
+    opts,
+  );
+}
+
+/**
+ * Atom feed for a signed-in user's personalized follows feed. Aggregates
+ * releases across every org/product they follow. The feed is served behind a
+ * tokenized URL (`selfUrl`); `lookupId` (non-secret) seeds a stable feed id so
+ * the id never embeds the secret. `alternateUrl` points at the web /following page.
+ */
+export function userFeedToAtom(
+  params: { releases: ReleaseLatestItem[]; lookupId: string; selfUrl: string },
+  opts: AtomFeedOptions,
+): string {
+  const entries: EntryInput[] = params.releases.map((release) => ({
+    release: release as ReleaseItem,
+    sourceSlug: release.source.slug,
+    sourceName: release.source.name,
+    orgName: null,
+    linkHref: release.id ? `${opts.baseUrl}/release/${release.id}` : release.url,
+  }));
+
+  return buildFeed(
+    {
+      scope: "user",
+      slug: params.lookupId,
+      title: "Your followed releases",
+      subtitle: "Releases from the organizations and products you follow on Releases.",
+      selfUrl: params.selfUrl,
+      alternateUrl: `${opts.baseUrl}/following`,
+      authorName: "Releases",
       entries,
     },
     opts,
