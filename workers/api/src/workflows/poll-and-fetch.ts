@@ -45,7 +45,6 @@ import { resolveSummarizeModel } from "../lib/text-model.js";
 import { IN_ARRAY_CHUNK_SIZE } from "../lib/d1-limits.js";
 import { logUsage } from "../lib/usage-log.js";
 import { makeBotFetch } from "../lib/web-bot-auth-fetch.js";
-import { FLAGS, flag } from "@releases/lib/flags";
 
 /**
  * Environment for the workflow. Bindings follow the same shape as the API
@@ -56,7 +55,6 @@ export type PollAndFetchWorkflowEnv = InvalidationEnv &
   AnthropicEnv & {
     DB: D1Database;
     CRON_ENABLED?: string;
-    SCRAPE_CHANGE_DETECT_ENABLED?: string;
     GITHUB_TOKEN?: { get(): Promise<string> };
     RELEASES_INDEX?: unknown;
     CHANGELOG_CHUNKS_INDEX?: unknown;
@@ -89,8 +87,7 @@ export type PollAndFetchWorkflowEnv = InvalidationEnv &
     FEED_THIN_CHARS?: string;
     CLOUDFLARE_ACCOUNT_ID?: { get(): Promise<string> };
     CLOUDFLARE_API_TOKEN?: { get(): Promise<string> };
-    /** Ingest-time R2 media upload (#1177): kill switch + `released-media` bucket. */
-    MEDIA_R2_UPLOAD_ENABLED?: string;
+    /** Ingest-time R2 media upload (#1177): `released-media` bucket. */
     MEDIA?: R2Bucket;
     /** TEST-ONLY: bypass drizzle(env.DB) and use the provided instance directly. */
     _drizzleOverride?: unknown;
@@ -486,11 +483,8 @@ export class PollAndFetchWorkflow extends WorkflowEntrypoint<
       }
 
       const now = new Date();
-      const changeDetectEnabled = await flag(
-        env.FLAGS,
-        env.SCRAPE_CHANGE_DETECT_ENABLED,
-        FLAGS.scrapeChangeDetectEnabled,
-      );
+      // Scrape/agent change-detection (#517) is always on now.
+      const changeDetectEnabled = true;
 
       // Poll phase: HEAD check (feed sources) or mark-changed (github). For
       // scrape-no-feed / agent sources the flag opens a quirks-driven detector

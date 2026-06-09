@@ -75,8 +75,6 @@ export type Env = {
     WEBHOOK_DELIVERY_QUEUE: Queue<unknown>;
     MEDIA: R2Bucket;
     MEDIA_ORIGIN?: string;
-    /** Ingest-time R2 media upload kill switch (#1177); default off. */
-    MEDIA_R2_UPLOAD_ENABLED?: string;
     /** Scrape title-dedup kill switch (#1410); default off (i.e. dedup ON). */
     SCRAPE_TITLE_DEDUP_DISABLED?: string;
     /**
@@ -97,28 +95,22 @@ export type Env = {
     CRON_ENABLED?: string;
     SCRAPE_AGENT_CRON_ENABLED?: string;
     SCRAPE_AGENT_MAX_SESSIONS?: string;
-    // Feature flag: when "true", the 01:00 UTC cron kicks a
-    // `SCRAPE_AGENT_WORKFLOW` instance instead of inlining
-    // `scrapeAgentSweep()` in `ctx.waitUntil`. See issue #482.
-    SCRAPE_AGENT_USE_WORKFLOW?: string;
+    // The 01:00 UTC cron kicks a `SCRAPE_AGENT_WORKFLOW` instance when this
+    // binding is wired (always in prod), else inlines `scrapeAgentSweep()` in
+    // `ctx.waitUntil`. See issue #482.
     SCRAPE_AGENT_WORKFLOW?: Workflow;
-    // Feature flag: when "true", the 2-hourly poll-and-fetch cron fans out
-    // one `POLL_AND_FETCH_WORKFLOW` instance per due source instead of
-    // inlining `pollAndFetch()` in `ctx.waitUntil`. See issue #486.
-    POLL_FETCH_USE_WORKFLOW?: string;
+    // The hourly poll-and-fetch cron fans out one `POLL_AND_FETCH_WORKFLOW`
+    // instance per due source when this binding is wired (always in prod), else
+    // inlines `pollAndFetch()` in `ctx.waitUntil`. See issue #486.
     POLL_AND_FETCH_WORKFLOW?: Workflow;
     // Summary workflow kicked once per hourly fan-out. Sleeps 10 min then
     // emails any failures recorded in `workflow_failures` by per-source
     // instances. Optional — absent → no alert (safe default).
     POLL_FETCH_SUMMARY_WORKFLOW?: Workflow;
-    // Feature flag: when "true", `POST /v1/sources` dispatches an
-    // `ONBOARD_SOURCE_WORKFLOW` instance for the playbook + embed + backfill
-    // tail instead of riding `c.executionCtx.waitUntil(...)`. See issue #493.
-    ONBOARD_USE_WORKFLOW?: string;
+    // `POST /v1/sources` dispatches an `ONBOARD_SOURCE_WORKFLOW` instance for the
+    // playbook + embed + backfill tail when this binding is wired (always in
+    // prod), else rides `c.executionCtx.waitUntil(...)`. See issue #493.
     ONBOARD_SOURCE_WORKFLOW?: Workflow;
-    // Daily well-known sync (two-pass: org identity + github source→product
-    // mapping). Self-gates via well-known-sync-enabled (default on).
-    WELL_KNOWN_SYNC_ENABLED?: string;
     // Batch summarization workflow (issue #971). Cron at 04:30 UTC; self-gates
     // via BATCH_SUMMARIZE_ENABLED. Admin POST trigger runs unconditionally.
     BATCH_SUMMARIZE_ENABLED?: string;
@@ -136,11 +128,6 @@ export type Env = {
     BATCH_ENRICH_ENABLED?: string;
     BATCH_ENRICH_MAX_COST_USD?: string;
     BATCH_ENRICH_WORKFLOW?: Workflow;
-    // Feature flag: when "true", poll-and-fetch widens its candidate set to
-    // include scrape/agent sources with no feedUrl and routes them through
-    // change-detector branches defined in the org playbook's `fetchQuirks`
-    // frontmatter. Default off. See #517.
-    SCRAPE_CHANGE_DETECT_ENABLED?: string;
     // Feature flag: when "true", the 04:00 UTC cron force-drains stranded
     // scrape/agent sources (unreliable quirk or stale beyond
     // FORCE_DRAIN_STALE_HOURS) into the scrape-agent-sweep inbox. Default
@@ -229,10 +216,6 @@ export type Env = {
     // When "true", all relk_… tokens are rejected without a DB lookup.
     API_TOKENS_DISABLED?: string;
     USER_API_KEYS_ENABLED?: string;
-    // Rollout gate for the device-authorization (RFC 8628) CLI login path —
-    // registers the deviceAuthorization() + bearer() plugins. See @releases/lib/flags
-    // (deviceAuthorizationEnabled). Default off.
-    DEVICE_AUTHORIZATION_ENABLED?: string;
     // When "true", `/v1/search` and the MCP search tools skip writing rows to
     // `search_queries`. Default off → logging on. See workers/api/src/lib/log-search.ts.
     SEARCH_QUERY_LOG_DISABLED?: string;
@@ -254,12 +237,11 @@ export type Env = {
     STAGING_ACCESS_KEY?: SecretBinding;
     // Errata memory store ID — destination for POST /v1/errata/:orgId. See #537.
     MEMORY_STORE_ERRATA_ID?: string;
-    // IndexNow integration (#649). When INDEXNOW_ENABLED="true", new releases
-    // ping api.indexnow.org so search engines pick up the org/source/product
-    // changes immediately. Off everywhere by default; staging stays off via
-    // INDEXING_DISABLED. Key is hosted at https://releases.sh/{INDEXNOW_KEY}.txt
-    // by web/src/proxy.ts.
-    INDEXNOW_ENABLED?: string;
+    // IndexNow integration (#649). New releases ping api.indexnow.org so search
+    // engines pick up the org/source/product changes immediately. Always on now;
+    // staging suppresses it via INDEXING_DISABLED, and a missing INDEXNOW_KEY is
+    // a no-op. Key is hosted at https://releases.sh/{INDEXNOW_KEY}.txt by
+    // web/src/proxy.ts.
     INDEXNOW_KEY?: SecretBinding;
     // Public web base URL — used by the IndexNow helper to build canonical
     // URLs. Defaults to https://releases.sh when unset.
@@ -832,8 +814,6 @@ export default {
             DB: env.DB,
             MEDIA: env.MEDIA,
             MEDIA_ORIGIN: env.MEDIA_ORIGIN,
-            FLAGS: env.FLAGS,
-            WELL_KNOWN_SYNC_ENABLED: env.WELL_KNOWN_SYNC_ENABLED,
             CRON_ENABLED: env.CRON_ENABLED,
           }),
           alertEnv,
@@ -956,15 +936,13 @@ export default {
         logEvent("warn", { component: "scrape-agent-cron", event: "discovery-worker-missing" });
         return;
       }
-      // Feature-flag the Workflows-based path. Behavior is identical to
-      // the inline sweep — the workflow resolves secrets + runs the same
-      // pipeline step-by-step so a partial failure doesn't strand the
-      // tail of the dispatch list. See issue #482.
-      if (await flag(env.FLAGS, env.SCRAPE_AGENT_USE_WORKFLOW, FLAGS.scrapeAgentUseWorkflow)) {
-        if (!env.SCRAPE_AGENT_WORKFLOW) {
-          logEvent("warn", { component: "scrape-agent-cron", event: "workflow-binding-missing" });
-          return;
-        }
+      // Run the Workflows-based path whenever the binding is wired (always in
+      // prod). Behavior is identical to the inline sweep — the workflow
+      // resolves secrets + runs the same pipeline step-by-step so a partial
+      // failure doesn't strand the tail of the dispatch list. The inline
+      // `scrapeAgentSweep` below stays as the fallback when the binding is
+      // absent (e.g. a deployment without the Workflow configured). See #482.
+      if (env.SCRAPE_AGENT_WORKFLOW) {
         ctx.waitUntil(
           loggedDispatch(
             "scrape-agent-cron",
@@ -1029,15 +1007,12 @@ export default {
       ),
     );
 
-    // Feature-flag the Workflows-based poll-and-fetch path. When flipped,
-    // the cron fans out one workflow instance per due source so a single
-    // transient failure (usually a Voyage 429 mid-embed) no longer silently
-    // drops vectors. See issue #486.
-    if (await flag(env.FLAGS, env.POLL_FETCH_USE_WORKFLOW, FLAGS.pollFetchUseWorkflow)) {
-      if (!env.POLL_AND_FETCH_WORKFLOW) {
-        logEvent("warn", { component: "poll-fetch-cron", event: "workflow-binding-missing" });
-        return;
-      }
+    // Run the Workflows-based poll-and-fetch path whenever the binding is
+    // wired (always in prod): the cron fans out one workflow instance per due
+    // source so a single transient failure (usually a Voyage 429 mid-embed) no
+    // longer silently drops vectors. The inline `pollAndFetch` below stays as
+    // the fallback when the binding is absent. See issue #486.
+    if (env.POLL_AND_FETCH_WORKFLOW) {
       ctx.waitUntil(
         loggedDispatch("poll-fetch-cron", fanOutPollAndFetch(env, event.scheduledTime), alertEnv),
       );
@@ -1051,7 +1026,6 @@ export default {
           DB: env.DB,
           GITHUB_TOKEN: githubToken,
           CRON_ENABLED: env.CRON_ENABLED,
-          SCRAPE_CHANGE_DETECT_ENABLED: env.SCRAPE_CHANGE_DETECT_ENABLED,
           RELEASES_INDEX: env.RELEASES_INDEX,
           CHANGELOG_CHUNKS_INDEX: env.CHANGELOG_CHUNKS_INDEX,
           EMBEDDING_PROVIDER: env.EMBEDDING_PROVIDER,
@@ -1062,8 +1036,8 @@ export default {
           LATEST_CACHE: env.LATEST_CACHE,
           INVALIDATION_ENABLED: env.INVALIDATION_ENABLED,
           DISCOVERY_WORKER: env.DISCOVERY_WORKER,
-          // Without these the inline-cron fallback (POLL_FETCH_USE_WORKFLOW
-          // !== "true") would fetch unsigned even when signing is enabled.
+          // Without these the inline-cron fallback (no POLL_AND_FETCH_WORKFLOW
+          // binding) would fetch unsigned even when signing is enabled.
           WEB_BOT_AUTH_ENABLED: env.WEB_BOT_AUTH_ENABLED,
           WEB_BOT_AUTH_PRIVATE_KEY: env.WEB_BOT_AUTH_PRIVATE_KEY,
           FLAGS: env.FLAGS,
@@ -1137,13 +1111,7 @@ async function fanOutPollAndFetch(env: Env["Bindings"], scheduledTime: number): 
   const dispatchErrorDetail: Array<{ orgSlug: string; error: string }> = [];
 
   try {
-    const due = await queryDueSources(db, new Date(), {
-      changeDetectEnabled: await flag(
-        env.FLAGS,
-        env.SCRAPE_CHANGE_DETECT_ENABLED,
-        FLAGS.scrapeChangeDetectEnabled,
-      ),
-    });
+    const due = await queryDueSources(db, new Date(), { changeDetectEnabled: true });
     candidates = due.length;
     if (due.length === 0) {
       logEvent("info", { component: "poll-fetch-cron", event: "no-due-sources" });

@@ -35,33 +35,12 @@ export interface FlagDef {
  * Kill-switch flags whose absence should mean "feature on" must set `default: true`.
  */
 export const FLAGS = {
-  pollFetchUseWorkflow: {
-    key: "poll-fetch-use-workflow",
-    env: "POLL_FETCH_USE_WORKFLOW",
-    default: false,
-  },
-  scrapeAgentUseWorkflow: {
-    key: "scrape-agent-use-workflow",
-    env: "SCRAPE_AGENT_USE_WORKFLOW",
-    default: false,
-  },
-  onboardUseWorkflow: { key: "onboard-use-workflow", env: "ONBOARD_USE_WORKFLOW", default: false },
-  mediaR2UploadEnabled: {
-    key: "media-r2-upload-enabled",
-    env: "MEDIA_R2_UPLOAD_ENABLED",
-    default: false,
-  },
   mediaGifTranscodeEnabled: {
     key: "media-gif-transcode-enabled",
     env: "MEDIA_GIF_TRANSCODE_ENABLED",
     default: false,
   },
   feedEnrichEnabled: { key: "feed-enrich-enabled", env: "FEED_ENRICH_ENABLED", default: false },
-  scrapeChangeDetectEnabled: {
-    key: "scrape-change-detect-enabled",
-    env: "SCRAPE_CHANGE_DETECT_ENABLED",
-    default: false,
-  },
   // Kill switch (#1410): scrape-source title-dedup is ON by default (default:false
   // → not disabled); flip to true in Flagship to roll back. Collapses same-source
   // same-normalized-title rows that anchor URLs (`<page>#<slug>`) fail to dedup.
@@ -72,7 +51,6 @@ export const FLAGS = {
   },
   webBotAuthEnabled: { key: "web-bot-auth-enabled", env: "WEB_BOT_AUTH_ENABLED", default: false },
   invalidationEnabled: { key: "invalidation-enabled", env: "INVALIDATION_ENABLED", default: false },
-  indexnowEnabled: { key: "indexnow-enabled", env: "INDEXNOW_ENABLED", default: false },
   maSessionsDisabled: { key: "ma-sessions-disabled", env: "MA_SESSIONS_DISABLED", default: false },
   batchSummarizeEnabled: {
     key: "batch-summarize-enabled",
@@ -106,17 +84,6 @@ export const FLAGS = {
     env: "USER_API_KEYS_ENABLED",
     default: false,
   },
-  // Rollout gate: the OAuth 2.0 Device Authorization Grant (RFC 8628) path that
-  // backs `releases login` from the CLI — registers the `deviceAuthorization()` +
-  // `bearer()` plugins and their endpoints. default:false → OFF until the web
-  // /device verification pages ship; flip on in BOTH Flagship apps. Device login
-  // mints relu_ user keys, so it is only useful with `user-api-keys-enabled` ALSO
-  // on (the /v1/api-keys create route the CLI calls is gated on that flag).
-  deviceAuthorizationEnabled: {
-    key: "device-authorization-enabled",
-    env: "DEVICE_AUTHORIZATION_ENABLED",
-    default: false,
-  },
   cacheDisabled: { key: "cache-disabled", env: "CACHE_DISABLED", default: false },
   indexingDisabled: { key: "indexing-disabled", env: "INDEXING_DISABLED", default: false },
   extractToolLoopEnabled: {
@@ -133,11 +100,6 @@ export const FLAGS = {
     key: "raw-snapshot-capture-enabled",
     env: "RAW_SNAPSHOT_CAPTURE_ENABLED",
     default: false,
-  },
-  wellKnownSyncEnabled: {
-    key: "well-known-sync-enabled",
-    env: "WELL_KNOWN_SYNC_ENABLED",
-    default: true,
   },
   digestEmailsEnabled: {
     key: "digest-emails-enabled",

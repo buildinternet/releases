@@ -38,6 +38,7 @@ const INLINE_CHECKS = [
       "inferSelectionMode",
       "filterByDateWindow",
       "unescapeHtmlEntities",
+      "extractOpener",
       "lintOverviewBody",
       "deriveCitationOffsets",
       "budgetGate",

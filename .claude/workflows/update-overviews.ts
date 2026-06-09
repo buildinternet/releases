@@ -55,13 +55,18 @@ function unescapeHtmlEntities(s) {
   return s.replace(/&amp;|&lt;|&gt;|&quot;|&#39;/g, (m) => map[m]);
 }
 
+function extractOpener(body) {
+  const text = typeof body === "string" ? body : "";
+  const trimmed = text.trim();
+  const sm = trimmed.match(/^[\s\S]*?[.!?](?=\s|$)/);
+  return (sm ? sm[0] : trimmed.split("\n")[0] || "").trim();
+}
+
 function lintOverviewBody(body, orgName) {
   const text = typeof body === "string" ? body : "";
   const violations = [];
   if (/^#{1,6}\s/m.test(text)) violations.push("markdown-heading");
-  const trimmed = text.trim();
-  const sm = trimmed.match(/^[\s\S]*?[.!?](?=\s|$)/);
-  const opener = (sm ? sm[0] : trimmed.split("\n")[0] || "").trim();
+  const opener = extractOpener(text);
   const openerWords = opener.replace(/[*`_]/g, "").split(/\s+/).filter(Boolean);
   if (openerWords.length > 25) violations.push("opener-too-long");
   const name = typeof orgName === "string" ? orgName.trim() : "";
@@ -220,6 +225,28 @@ const WRITE_SCHEMA = {
 };
 
 // ── Local prompt helpers (not shared; fine to keep here) ─────────────────────
+
+// Count the words in the body's opening sentence via the SHARED extractOpener
+// helper lintOverviewBody uses, applying the same `*`_` strip the lint applies
+// before counting. Sharing the extraction keeps this count from drifting from
+// the rule that fired. Lets the corrective pass tell the model exactly how far
+// over the 25-word opener cap it was — far more actionable than the bare
+// "opener-too-long" code, the most common residual violation.
+function openerWordCount(body) {
+  return extractOpener(body).replace(/[*`_]/g, "").split(/\s+/).filter(Boolean).length;
+}
+
+// Turn raw violation codes into the corrective hints the regen prompt echoes.
+// Only opener-too-long is enriched (with the measured word count); everything
+// else passes through verbatim.
+function correctiveHints(violations, body) {
+  return (violations || []).map((v) =>
+    v === "opener-too-long"
+      ? `opener-too-long (your opening sentence was ${openerWordCount(body)} words — rewrite it to 25 words or fewer)`
+      : v,
+  );
+}
+
 function genPrompt(slug, corrective) {
   const fix =
     corrective && corrective.length
@@ -273,6 +300,54 @@ function decodeCitations(gen) {
     : [];
 }
 
+// Render the run-summary markdown deterministically in-script so the report
+// agent's only job is a verbatim file write — not formatting numbers from a
+// template, which is what failed to land (reportWritten:false) in past sweeps.
+// The date/time comes from the run-dir basename (Date.now() is unavailable in
+// workflow scripts), which already encodes <YYYY-MM-DD-HHMM>.
+function renderSummaryMarkdown(inputs, runDir, status) {
+  const m = String(runDir || "").match(/(\d{4}-\d{2}-\d{2})-(\d{2})(\d{2})-update-overviews\/?$/);
+  const when = m ? `${m[1]} ${m[2]}:${m[3]} (run-local)` : "(date unknown)";
+  const lint = inputs.lintFlagged || [];
+  const fetchErrors = inputs.fetchErrors || [];
+  const stripped = inputs.citationsStripped || [];
+  const lintLine = lint.length
+    ? lint.map((r) => `${r.slug} (${(r.violations || []).join(", ")})`).join(", ")
+    : "none";
+  return [
+    "# Overview sweep — update-overviews",
+    "",
+    `**Status:** ${status}`,
+    `**Date:** ${when}`,
+    `**Mode:** ${inputs.mode} · fetch=${inputs.fetchPlan}`,
+    "",
+    "## Result",
+    "",
+    "| Metric | Value |",
+    "| --- | --- |",
+    `| Candidates | ${inputs.candidates} |`,
+    `| Targets | ${inputs.targets} (cappedOut ${inputs.cappedOut}) |`,
+    `| Generated + written | ${inputs.generated} |`,
+    `| Empty-window skips | ${inputs.emptyWindow} |`,
+    `| Fetch errors | ${fetchErrors.length} |`,
+    `| Lint-flagged (uploaded anyway) | ${lint.length} |`,
+    `| Prior citations stripped to zero | ${stripped.length} |`,
+    `| Deferred for budget | ${inputs.deferredForBudget} |`,
+    "",
+    "## Cost",
+    "",
+    `${inputs.spentTokens} output tokens this turn (budget.spent(), excludes this summary write); session sub-agent tokens, no managed-agent bill — except any needsFetch source fetches.`,
+    "",
+    "## Findings",
+    "",
+    `- **Lint-flagged, review recommended:** ${lintLine}. Uploaded as-is; the single corrective regen pass did not bring them clean.`,
+    `- **Empty-window skips:** ${inputs.emptyWindow} (no-ops — nothing to say in the window).`,
+    `- **Fetch errors:** ${fetchErrors.length ? fetchErrors.join(", ") + " (regen correctly skipped — never regenerated on stale data)" : "none"}.`,
+    `- **Prior citations stripped to zero:** ${stripped.length ? stripped.join(", ") : "none"}.`,
+    "",
+  ].join("\n");
+}
+
 async function regenOneOrg(t) {
   const slug = t.slug;
   let gen = await agent(genPrompt(slug, null), {
@@ -291,7 +366,7 @@ async function regenOneOrg(t) {
   let violations = lintOverviewBody(body, orgName);
 
   if (violations.length) {
-    const gen2 = await agent(genPrompt(slug, violations), {
+    const gen2 = await agent(genPrompt(slug, correctiveHints(violations, body)), {
       label: `gen-fix:${slug}`,
       phase: "Generate",
       model: GEN_MODEL,
@@ -566,15 +641,18 @@ let rep = null;
 if (!SUMMARY_PATH) {
   log("report: no isolated run dir — skipping summary.md (sweep results are in the return value)");
 } else {
+  const summaryMd = renderSummaryMarkdown(summaryInputs, RUN_DIR, status);
   rep = await agent(
-    `Write the maintenance run summary for this overview sweep to this EXACT absolute path (do not derive it from \`work status\` — it is already resolved): ${SUMMARY_PATH}
+    `Write the overview-sweep run summary to this EXACT absolute path: ${SUMMARY_PATH}
 
-Steps IN ORDER:
-1. Write the file at ${SUMMARY_PATH} following docs/architecture/maintenance-workspace.md's summary.md template (status, per-org result table, cost, what changed, findings). Use these numbers VERBATIM (do not invent): ${JSON.stringify(summaryInputs)}.
-   Cost line, exactly: "${spentTokens} output tokens this turn (budget.spent(), excludes this summary write); session sub-agent tokens, no managed-agent bill — except any needsFetch source fetches." Stamp the date via \`date -u +%FT%TZ\`. Call out as findings: lint-flagged bodies (uploaded anyway — operator should review), empty-window skips (no-ops), fetch errors (regen correctly skipped), and any org where a prior overview's citations were stripped to zero.
-2. Self-verify it landed at that exact path: run \`test -f "${SUMMARY_PATH}" && echo EXISTS || echo MISSING\`. If MISSING, write it again and re-check. Only set wrote=true once the check prints EXISTS.
+The file content is already rendered below as SUMMARY_MD — write it byte-for-byte. Do NOT reformat it, summarize it, recompute any numbers, or add anything. Steps IN ORDER:
+1. Write SUMMARY_MD verbatim to ${SUMMARY_PATH}.
+2. Self-verify it landed: run \`test -f "${SUMMARY_PATH}" && echo EXISTS || echo MISSING\`. If MISSING, write it again and re-check. Only set wrote=true once the check prints EXISTS.
 3. Do NOT run \`releases admin work end\` — this workflow does not use the shared run pointer.
-4. Return reportPath=${SUMMARY_PATH} and wrote = whether the test -f check printed EXISTS.`,
+4. Return reportPath=${SUMMARY_PATH} and wrote = whether the test -f check printed EXISTS.
+
+SUMMARY_MD:
+${summaryMd}`,
     {
       label: "run-report",
       phase: "Report",
@@ -608,7 +686,10 @@ return {
     status: r.status,
     note: r.note || r.writeError,
   })),
-  lintFlagged: lintFlagged.length,
+  // Surface the flagged slugs + their violations, not just a count, so the
+  // operator can act on them without digging the run transcript. Same shape as
+  // the summaryInputs entry the report agent receives.
+  lintFlagged: lintFlagged.map((r) => ({ slug: r.slug, violations: r.violations })),
   citationsStripped: citationsStripped.map((r) => r.slug),
   deferredForBudget,
   actualCostTokens: spentTokens,

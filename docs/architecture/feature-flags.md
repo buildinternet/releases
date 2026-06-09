@@ -29,16 +29,11 @@ Default = current prod value. Note the polarity split: `*-enabled` flags are **o
 
 ### Enabled in prod (default `true`)
 
-| Flag key                       | Default | What it controls                                                                                                 |
-| ------------------------------ | ------- | ---------------------------------------------------------------------------------------------------------------- |
-| `poll-fetch-use-workflow`      | `true`  | Routes the hourly poll-and-fetch ingest through the Cloudflare Workflow path. Off = rollback to the inline cron. |
-| `scrape-agent-use-workflow`    | `true`  | Routes the daily scrape-agent discovery sweep through the Workflow path. Off = inline cron.                      |
-| `onboard-use-workflow`         | `true`  | Runs source onboarding through the Workflow path instead of inline.                                              |
-| `scrape-change-detect-enabled` | `true`  | Content-hash change detection on scrape fetches — unchanged pages short-circuit instead of re-extracting.        |
-| `batch-summarize-enabled`      | `true`  | Post-ingest batch auto-summarize (Haiku title/short-title/summary generation).                                   |
-| `indexnow-enabled`             | `true`  | Submits new/updated release URLs to IndexNow for faster search-engine pickup.                                    |
-| `feed-enrich-enabled`          | `true`  | Enriches summary-only feed items by fetching the linked page and extracting full content before insert.          |
-| `web-bot-auth-enabled`         | `true`  | Signs outbound fetches with RFC 9421 Web Bot Auth signatures.                                                    |
+| Flag key                  | Default | What it controls                                                                                        |
+| ------------------------- | ------- | ------------------------------------------------------------------------------------------------------- |
+| `batch-summarize-enabled` | `true`  | Post-ingest batch auto-summarize (Haiku title/short-title/summary generation).                          |
+| `feed-enrich-enabled`     | `true`  | Enriches summary-only feed items by fetching the linked page and extracting full content before insert. |
+| `web-bot-auth-enabled`    | `true`  | Signs outbound fetches with RFC 9421 Web Bot Auth signatures.                                           |
 
 ### Disabled in prod (default `false`)
 
@@ -47,7 +42,6 @@ Default = current prod value. Note the polarity split: `*-enabled` flags are **o
 | `rate-limit-enabled`           | `false` | Public read-path rate limiting. Off = no limiting.                                                                                                                                                                                                                       |
 | `invalidation-enabled`         | `false` | Cache-invalidation workflow. Off = not running.                                                                                                                                                                                                                          |
 | `batch-overview-enabled`       | `false` | Batch org-overview (AI knowledge-page) generation workflow. Off = manual/agent-driven only.                                                                                                                                                                              |
-| `media-r2-upload-enabled`      | `false` | Mirrors release media to the R2 bucket at ingest. Off = third-party media URLs stored verbatim.                                                                                                                                                                          |
 | `extract-toolloop-enabled`     | `false` | Multi-round tool-use extraction path for large bodies (>50K tokens). Off = one-shot inline extraction only.                                                                                                                                                              |
 | `raw-snapshot-capture-enabled` | `false` | Steady-state scrape path captures the scraped markdown as a raw snapshot (#1283) for cheap re-extraction (#1284). Off = only deep-Firecrawl backfills + the Firecrawl webhook persist raw. Read by the **discovery worker** (`RAW_SNAPSHOT_CAPTURE_ENABLED`).            |
 | `enable-ai-tools`              | `false` | Gates the MCP AI-generation tools. Off = those tools not exposed.                                                                                                                                                                                                        |

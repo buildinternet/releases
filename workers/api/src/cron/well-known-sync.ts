@@ -1,7 +1,6 @@
 import { isNull, eq, and, or, lt, sql, asc } from "drizzle-orm";
 import { organizations, sources } from "@buildinternet/releases-core/schema";
 import { createDb } from "../db.js";
-import { flag, FLAGS, type FlagshipBinding } from "@releases/lib/flags";
 import { logEvent } from "@releases/lib/log-event";
 import { syncOrgWellKnown } from "../lib/well-known/reconcile-org.js";
 import { syncSourceRepo } from "../lib/well-known/reconcile-source.js";
@@ -10,8 +9,6 @@ export interface WellKnownSyncEnv {
   DB: D1Database;
   MEDIA: R2Bucket;
   MEDIA_ORIGIN?: string;
-  FLAGS?: FlagshipBinding;
-  WELL_KNOWN_SYNC_ENABLED?: string;
   CRON_ENABLED?: string;
   /**
    * Re-check interval, in hours. An entity swept more recently than this is
@@ -75,11 +72,6 @@ export async function wellKnownSync(env: WellKnownSyncEnv): Promise<void> {
     logEvent("info", { component: "well-known", event: "cron-disabled" });
     return;
   }
-  if (!(await flag(env.FLAGS, env.WELL_KNOWN_SYNC_ENABLED, FLAGS.wellKnownSyncEnabled))) {
-    logEvent("info", { component: "well-known", event: "flag-off" });
-    return;
-  }
-
   const db = env._drizzleOverride ?? createDb(env.DB);
   const mediaOrigin = env.MEDIA_ORIGIN ?? "https://media.releases.sh";
 

@@ -32,29 +32,6 @@
     // The spend cap (#1058) + per-source KV lock (#1059) bound worst-case cost
     // (~$4/sweep); dial down here if needed.
     "SCRAPE_AGENT_MAX_SESSIONS": "20",
-    // Feature flag for the Workflows-based scrape-agent sweep (see issue #482).
-    // Staging wiring validated in #484 (manual instance trigger, clean
-    // completion). Prod flipped to "true" on 2026-04-22. To roll back,
-    // flip to "false" — `scrapeAgentSweep()` in cron/ is still the
-    // fallback path.
-    "SCRAPE_AGENT_USE_WORKFLOW": "true",
-    // Feature flag for the Workflows-based poll-and-fetch cron (see issue #486).
-    // When true, the hourly cron fans out one POLL_AND_FETCH_WORKFLOW instance
-    // per due source (gated by tier: normal=4h, low=24h) so mid-embed 429s no
-    // longer silently drop Vectorize rows. Rollback: flip to "false".
-    "POLL_FETCH_USE_WORKFLOW": "true",
-    // Feature flag for the Workflows-based onboarding tail (see issue #493).
-    // When true, `POST /v1/sources` dispatches an `ONBOARD_SOURCE_WORKFLOW`
-    // instance for the playbook + embed + backfill chain instead of riding
-    // `c.executionCtx.waitUntil(...)`. Rollback: flip to "false" — the inline
-    // `waitUntil` fallback is still wired in the route.
-    "ONBOARD_USE_WORKFLOW": "true",
-    // Feature flag for scrape-no-feed / agent change detection (#517). When
-    // true, `queryDueSources` widens its filter to include type IN
-    // ('scrape','agent') AND feedUrl IS NULL, and `pollOne` routes each via
-    // the detector specified in the playbook's `fetchQuirks` frontmatter
-    // (#516). Kill-switch: flip to "false" to revert to feed-only polling.
-    "SCRAPE_CHANGE_DETECT_ENABLED": "true",
     // Feature flag for the daily force-drain cron (#518). When true, the
     // 04:00 UTC cron flags stranded scrape/agent sources (unreliable quirk
     // or `last_fetched_at` older than FORCE_DRAIN_STALE_HOURS) so the
@@ -158,9 +135,6 @@
     // not the web origin. Drives OAuth callback + cross-subdomain cookie domain
     // (.releases.sh). Local dev sets https://api.releases.localhost via .dev.vars.
     "BETTER_AUTH_URL": "https://api.releases.sh",
-    // IndexNow ingest pings (#649). On in prod; staging stays off. The
-    // ownership file is served by web/src/proxy.ts at /{INDEXNOW_KEY}.txt.
-    "INDEXNOW_ENABLED": "true",
     // Feed content enrichment (#feed-enrich). When a feed item arrives
     // summary-only, follow its link and capture the full article via cheap
     // fetch → AI extract, escalating to Cloudflare Browser Rendering only when
@@ -183,7 +157,6 @@
     "ENVIRONMENT": "production",
     "WEB_BOT_AUTH_ENABLED": "true",
     "USER_API_KEYS_ENABLED": "false",
-    "DEVICE_AUTHORIZATION_ENABLED": "false",
     // Comma-separated audience URIs accepted in JWT access tokens issued by the
     // OAuth provider. The API worker origin (BETTER_AUTH_URL) is always included;
     // this var adds remote resource servers (first consumer: the MCP worker).
@@ -302,7 +275,7 @@
       "class_name": "PollFetchSummaryWorkflow",
     },
     {
-      // One instance per `POST /v1/sources` create when ONBOARD_USE_WORKFLOW=true.
+      // One instance per `POST /v1/sources` create (when this binding is wired).
       // Walks playbook → embed → backfill-fetch with per-step retries. See #493.
       "name": "onboard-source",
       "binding": "ONBOARD_SOURCE_WORKFLOW",
@@ -507,9 +480,9 @@
       "store_id": "a887a71cab084105b79706df23380723",
       "secret_name": "CLOUDFLARE_API_TOKEN",
     },
-    // IndexNow ownership key. Provision in Secrets Store before flipping
-    // INDEXNOW_ENABLED on. The same value must also live in Vercel env so
-    // web/src/proxy.ts can serve the ownership file at /{key}.txt.
+    // IndexNow ownership key. A missing key makes the IndexNow ping a no-op.
+    // The same value must also live in Vercel env so web/src/proxy.ts can serve
+    // the ownership file at /{key}.txt.
     {
       "binding": "INDEXNOW_KEY",
       "store_id": "a887a71cab084105b79706df23380723",
@@ -548,17 +521,6 @@
         "CRON_ENABLED": "false",
         "SCRAPE_AGENT_CRON_ENABLED": "false",
         "SCRAPE_AGENT_MAX_SESSIONS": "0",
-        // Mirrors the prod flag so wrangler doesn't warn about config
-        // drift. Not read in staging (no cron → no `scheduled()` event).
-        "SCRAPE_AGENT_USE_WORKFLOW": "false",
-        // Mirrors prod flag; not read in staging (CRON_ENABLED=false). See #486.
-        "POLL_FETCH_USE_WORKFLOW": "false",
-        // Mirrors prod flag. Onboarding is request-path (not cron-gated), so this
-        // does flip behavior in staging if turned on — leave at "false" until
-        // staging-side validation is needed. See #493.
-        "ONBOARD_USE_WORKFLOW": "false",
-        // Mirrors prod default; not read in staging (CRON_ENABLED=false). See #517.
-        "SCRAPE_CHANGE_DETECT_ENABLED": "false",
         // Off in staging — CRON_ENABLED=false means no cron fires anyway, but
         // keep the flag explicitly off so an accidental staging cron flip
         // doesn't dispatch managed-agent sessions against staging. See #518.
@@ -615,11 +577,10 @@
         // Mirrors prod default; not read in staging (CRON_ENABLED=false means no
         // cron fires, so PollAndFetchWorkflow instances are never dispatched).
         "FANOUT_JITTER_WINDOW_MS": "300000",
-        // Mirrors prod default; the helper also short-circuits on
-        // INDEXING_DISABLED=true, so even if this is flipped on, staging
-        // never fires. See workers/api/src/lib/indexnow.ts.
+        // IndexNow always attempts now, but the helper short-circuits on
+        // INDEXING_DISABLED=true (set in staging), so staging never pings.
+        // See workers/api/src/lib/indexnow.ts.
         "WEB_BASE_URL": "https://releases.sh",
-        "INDEXNOW_ENABLED": "false",
         // Feed content enrichment (#feed-enrich): ON in staging so this is the
         // validation surface before prod flips on. No cron fires here
         // (CRON_ENABLED=false), so the forward poll-fetch path never auto-runs;
@@ -632,7 +593,6 @@
         "ENVIRONMENT": "staging",
         "WEB_BOT_AUTH_ENABLED": "false",
         "USER_API_KEYS_ENABLED": "false",
-        "DEVICE_AUTHORIZATION_ENABLED": "false",
         // Staging issuer/baseURL — overrides the inherited top-level prod value so
         // createAuth's baseURL and oauthValidAudiences() resolve to the staging
         // origin (OAuth issuer, JWT `aud`, discovery metadata), not api.releases.sh.
@@ -808,9 +768,8 @@
           "secret_name": "BETTER_AUTH_SECRET",
         },
         // Bound for parity with prod so wrangler doesn't warn about
-        // missing inheritance. The staging vars keep INDEXNOW_ENABLED=false
-        // and INDEXING_DISABLED=true, so the helper short-circuits before
-        // ever calling .get() on this binding.
+        // missing inheritance. The staging var INDEXING_DISABLED=true makes the
+        // helper short-circuit before ever calling .get() on this binding.
         {
           "binding": "INDEXNOW_KEY",
           "store_id": "a887a71cab084105b79706df23380723",

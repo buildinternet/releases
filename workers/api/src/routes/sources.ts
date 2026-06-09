@@ -33,7 +33,7 @@ import {
 import { SOURCE_TYPES, type SourceType } from "@buildinternet/releases-core/source-enums";
 import { parseKindParam, isValidKind, KIND_VALUES } from "@buildinternet/releases-core/kinds";
 import { buildListResponse, parseListPagination } from "../lib/pagination.js";
-import { RELEASE_URL_UPSERT } from "@releases/core-internal/release-upsert";
+import { RELEASE_URL_UPSERT, RELEASE_CONTENT_UPSERT } from "@releases/core-internal/release-upsert";
 import { daysAgoIso, inferMonthOnlyDate } from "@buildinternet/releases-core/dates";
 import { parseCompositionFromMetadata } from "@buildinternet/releases-core/composition";
 import { parseNotice, setNoticeInMetadata } from "@buildinternet/releases-core/notice";
@@ -670,7 +670,6 @@ sourceRoutes.post("/sources/:slug/fetch", postSourceFetchRoute, async (c) => {
         WEBHOOK_DELIVERY_QUEUE: c.env.WEBHOOK_DELIVERY_QUEUE,
         DB: c.env.DB,
         DISCOVERY_WORKER: c.env.DISCOVERY_WORKER,
-        MEDIA_R2_UPLOAD_ENABLED: c.env.MEDIA_R2_UPLOAD_ENABLED,
         MEDIA: c.env.MEDIA,
         FLAGS: c.env.FLAGS,
       },
@@ -723,6 +722,13 @@ const postReleasesBatchHandler = async (c: import("hono").Context<Env>) => {
   if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
 
   const body = await c.req.json<{
+    // `mode: "upsert-content"` is a DELIBERATE enrichment pass (#1526): same-URL
+    // re-POSTs OVERWRITE content/media instead of the default fill-don't-clobber,
+    // and the scrape title-dedup pre-filter is skipped so same-title rows reach
+    // the URL upsert. Default (omitted) keeps the fill-only behaviour every cron
+    // / MA re-fetch relies on. Typed loosely so a typo can be rejected (below)
+    // rather than silently coerced to the default.
+    mode?: string;
     releases: Array<{
       version?: string | null;
       title: string;
@@ -749,6 +755,24 @@ const postReleasesBatchHandler = async (c: import("hono").Context<Env>) => {
     });
     return c.json({ error: "bad_request", message: "`releases` must be an array" }, 400);
   }
+
+  // Reject an unrecognised `mode` rather than silently coercing it to the default
+  // fill-only path — a typo like "upsert_content" would otherwise quietly disable
+  // the enrichment an operator deliberately asked for (#1526).
+  if (body.mode !== undefined && body.mode !== "upsert-content") {
+    logEvent("warn", {
+      component: "sources-batch",
+      event: "invalid-batch-mode",
+      sourceId: src.id,
+      slug: src.slug,
+      mode: body.mode,
+    });
+    return c.json(
+      { error: "bad_request", message: '`mode` must be omitted or "upsert-content"' },
+      400,
+    );
+  }
+  const enrichMode = body.mode === "upsert-content";
 
   // Defense-in-depth `feedUrlDeny` (#1335). The cron poll-fetch path drops
   // locale-suffixed translation dupes in-memory, but every managed-agent fetch
@@ -780,7 +804,10 @@ const postReleasesBatchHandler = async (c: import("hono").Context<Env>) => {
   // re-fetch's slug(title) anchor for the SAME release don't collide under
   // UNIQUE(source_id, url), so the entry lands twice. Collapse by normalized title
   // (scrape-scoped; feed/github/appstore carry stable real URLs). Kill-switchable.
-  if (src.type === "scrape" && body.releases.length > 0) {
+  // Skipped entirely in enrich mode (#1526): a deliberate content re-POST carries
+  // the SAME title as the row it updates, so title-dedup would drop the very rows
+  // the operator means to enrich; the URL upsert is the right discriminator there.
+  if (src.type === "scrape" && body.releases.length > 0 && !enrichMode) {
     const dedupDisabled = await flag(
       c.env.FLAGS,
       c.env.SCRAPE_TITLE_DEDUP_DISABLED,
@@ -813,14 +840,12 @@ const postReleasesBatchHandler = async (c: import("hono").Context<Env>) => {
     // those omit `content` (the publish payload doesn't need it).
     const clusterRows: Array<{ id: string; version: string | null; content: string }> = [];
 
-    // Ingest-time R2 media upload (#1177). When enabled + the bucket is bound,
+    // Ingest-time R2 media upload (#1177). When the `MEDIA` bucket is bound,
     // drop junk and mirror surviving images to `released-media` before insert
     // so reads resolve a same-origin `r2Url`. Sequential per release (the
-    // helper bounds image concurrency within); fail-open. Flag-off / unbound
+    // helper bounds image concurrency within); fail-open. An unbound `MEDIA`
     // bucket => the agent-provided media JSON is stored verbatim, as today.
-    const r2UploadEnabled =
-      (await flag(c.env.FLAGS, c.env.MEDIA_R2_UPLOAD_ENABLED, FLAGS.mediaR2UploadEnabled)) &&
-      c.env.MEDIA != null;
+    const r2UploadEnabled = c.env.MEDIA != null;
     // GIF→MP4 ingest transcode (#1368): store ingested GIFs as small MP4s when the
     // transform binding is bound + the flag is on; off => GIFs mirror verbatim.
     const transcodeGif =
@@ -832,12 +857,16 @@ const postReleasesBatchHandler = async (c: import("hono").Context<Env>) => {
     if (r2UploadEnabled) {
       // Skip releases whose URL already exists: RELEASE_URL_UPSERT never updates
       // the `media` column on conflict, so mirroring their images to R2 would
-      // upload bytes the upsert immediately discards.
-      const existingMediaUrls = await selectExistingReleaseUrls(
-        db,
-        src.id,
-        body.releases.map((r) => r.url),
-      );
+      // upload bytes the upsert immediately discards. In enrich mode (#1526) the
+      // upsert DOES overwrite media, so existing URLs must be processed too —
+      // skip the skip.
+      const existingMediaUrls = enrichMode
+        ? new Set<string>()
+        : await selectExistingReleaseUrls(
+            db,
+            src.id,
+            body.releases.map((r) => r.url),
+          );
       for (let i = 0; i < body.releases.length; i++) {
         const rel = body.releases[i]!;
         if (rel.url != null && existingMediaUrls.has(rel.url)) continue;
@@ -907,11 +936,13 @@ const postReleasesBatchHandler = async (c: import("hono").Context<Env>) => {
       // RELEASE_URL_UPSERT has a conditional WHERE clause that causes the
       // database to omit rows where the update didn't apply. The returned
       // rows are the authoritative set of affected ids + content.
+      // In enrich mode (#1526) the clobbering RELEASE_CONTENT_UPSERT overwrites
+      // content/media on a same-URL collision instead of fill-only.
       // oxlint-disable-next-line no-await-in-loop -- D1 chunked insert (100 bind param limit)
       const rows = await db
         .insert(releases)
         .values(chunk)
-        .onConflictDoUpdate(RELEASE_URL_UPSERT)
+        .onConflictDoUpdate(enrichMode ? RELEASE_CONTENT_UPSERT : RELEASE_URL_UPSERT)
         .returning({
           id: releases.id,
           title: releases.title,
@@ -2507,7 +2538,6 @@ sourceRoutes.post(
         WEBHOOK_DELIVERY_QUEUE: c.env.WEBHOOK_DELIVERY_QUEUE,
         DB: c.env.DB,
         DISCOVERY_WORKER: c.env.DISCOVERY_WORKER,
-        MEDIA_R2_UPLOAD_ENABLED: c.env.MEDIA_R2_UPLOAD_ENABLED,
         MEDIA: c.env.MEDIA,
         FLAGS: c.env.FLAGS,
       },
@@ -2713,10 +2743,9 @@ sourceRoutes.post(
       c.executionCtx.waitUntil(embedSourceSideEffect(c.env, db, source.id));
     };
 
-    if (
-      (await flag(c.env.FLAGS, c.env.ONBOARD_USE_WORKFLOW, FLAGS.onboardUseWorkflow)) &&
-      c.env.ONBOARD_SOURCE_WORKFLOW
-    ) {
+    // Use the Workflow path whenever its binding is wired (always in prod);
+    // fall back to the inline tail when it isn't configured.
+    if (c.env.ONBOARD_SOURCE_WORKFLOW) {
       const skipBackfill = c.req.header("x-onboard-mode") === "manual";
       const workflow = c.env.ONBOARD_SOURCE_WORKFLOW;
       // Fire-and-forget: control-plane RPC must not block the response.
