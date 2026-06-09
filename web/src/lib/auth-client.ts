@@ -20,6 +20,18 @@ import { oauthProviderClient } from "@better-auth/oauth-provider/client";
 const GOOGLE_ONE_TAP_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
 
 /**
+ * Sentinel project-scoped identify ingestion endpoint — the browser POSTs its
+ * device-identify data here. Must be the SAME project URL the worker passes to the
+ * server `sentinel()` plugin as `kvUrl` (its `BETTER_AUTH_IDENTIFY_URL`, e.g.
+ * `https://kv.better-auth.com/projects/<id>`), exposed publicly here because the
+ * ingestion call happens client-side. Unset → the client falls back to Better Auth's
+ * default GLOBAL ingestion endpoint and logs "Default global identify ingestion is
+ * active but not recommended" — functional, but the client telemetry isn't scoped to
+ * our project. Setting it silences that warning and scopes identify to our project.
+ */
+const SENTINEL_IDENTIFY_URL = process.env.NEXT_PUBLIC_BETTER_AUTH_IDENTIFY_URL;
+
+/**
  * Better Auth browser client. Points at the API worker (where the auth instance
  * lives), NOT the web origin — `NEXT_PUBLIC_BETTER_AUTH_URL` must be the worker
  * base URL (prod: https://api.releases.sh, local: https://api.releases.localhost).
@@ -49,8 +61,13 @@ export const authClient = createAuthClient({
     // challenge and retries — so a legit user briefly caught by a "challenge" action
     // (bots / suspicious IP) sails through instead of seeing a 423. No API key here
     // (it lives server-side); inert when the server plugin isn't mounted. Registered
-    // unconditionally, like dashClient().
-    sentinelClient({ autoSolveChallenge: true }),
+    // unconditionally, like dashClient(). `identifyUrl` points client-side identify
+    // ingestion at our project endpoint (see SENTINEL_IDENTIFY_URL); omitted when unset
+    // so local dev just falls back to the library default.
+    sentinelClient({
+      autoSolveChallenge: true,
+      ...(SENTINEL_IDENTIFY_URL ? { identifyUrl: SENTINEL_IDENTIFY_URL } : {}),
+    }),
     // Magic link — registers the `signIn.magicLink` method. No secret and nothing to
     // gate at construction (mirrors the always-on server plugin); whether the UI
     // surfaces a button is controlled separately by NEXT_PUBLIC_AUTH_MAGIC_LINK in
