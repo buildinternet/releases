@@ -57,6 +57,23 @@ export function unescapeHtmlEntities(s) {
 }
 
 /**
+ * Extract a body's opening "sentence": the run up to the first sentence-final
+ * punctuation (`. ! ?` followed by whitespace or end), else the first line.
+ * Returned RAW (markdown emphasis intact) because callers differ — the opener
+ * word-count strips `*`_`, but lintOverviewBody's org-as-subject check needs the
+ * leading `**` to survive. Shared by lintOverviewBody and the workflow's
+ * openerWordCount so the corrective hint's count can't drift from the lint rule.
+ * @param {string} body
+ * @returns {string}
+ */
+export function extractOpener(body) {
+  const text = typeof body === "string" ? body : "";
+  const trimmed = text.trim();
+  const sm = trimmed.match(/^[\s\S]*?[.!?](?=\s|$)/);
+  return (sm ? sm[0] : trimmed.split("\n")[0] || "").trim();
+}
+
+/**
  * Lint an overview body against the maintaining-orgs HARD style rules. Returns a
  * list of violation codes (empty = clean). Operates on the already-decoded body.
  * @param {string} body
@@ -67,9 +84,7 @@ export function lintOverviewBody(body, orgName) {
   const text = typeof body === "string" ? body : "";
   const violations = [];
   if (/^#{1,6}\s/m.test(text)) violations.push("markdown-heading");
-  const trimmed = text.trim();
-  const sm = trimmed.match(/^[\s\S]*?[.!?](?=\s|$)/);
-  const opener = (sm ? sm[0] : trimmed.split("\n")[0] || "").trim();
+  const opener = extractOpener(text);
   const openerWords = opener.replace(/[*`_]/g, "").split(/\s+/).filter(Boolean);
   if (openerWords.length > 25) violations.push("opener-too-long");
   const name = typeof orgName === "string" ? orgName.trim() : "";

@@ -3,6 +3,7 @@ import {
   inferSelectionMode,
   filterByDateWindow,
   unescapeHtmlEntities,
+  extractOpener,
   lintOverviewBody,
   deriveCitationOffsets,
   budgetGate,
@@ -65,6 +66,24 @@ test("unescapeHtmlEntities: single pass over the five entities", () => {
   expect(unescapeHtmlEntities("&quot;x&quot; &#39;y&#39;")).toBe("\"x\" 'y'");
   // non-strings pass through untouched
   expect(unescapeHtmlEntities(null)).toBeNull();
+});
+
+test("extractOpener: first sentence, first-line fallback, raw markdown preserved", () => {
+  // first sentence-final punctuation wins, trailing content dropped
+  expect(extractOpener("Shipped X. Then Y.")).toBe("Shipped X.");
+  // no sentence punctuation -> first line
+  expect(extractOpener("A bold headline\nbody follows")).toBe("A bold headline");
+  // raw: markdown emphasis is NOT stripped (lint's org-subject check relies on it)
+  expect(extractOpener("**Acme** shipped a planner.")).toBe("**Acme** shipped a planner.");
+  expect(extractOpener("")).toBe("");
+});
+
+test("extractOpener: lintOverviewBody opener-length agrees with a 26-word count", () => {
+  // 26 words -> over the 25-word cap; the shared extractor backs both the lint
+  // rule and the workflow's openerWordCount, so they can't disagree.
+  const opener = Array.from({ length: 26 }, (_, i) => `w${i}`).join(" ") + ".";
+  expect(lintOverviewBody(opener, "Acme")).toContain("opener-too-long");
+  expect(extractOpener(opener).split(/\s+/).filter(Boolean).length).toBe(26);
 });
 
 test("lintOverviewBody: clean body has no violations", () => {

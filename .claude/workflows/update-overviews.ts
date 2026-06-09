@@ -55,13 +55,18 @@ function unescapeHtmlEntities(s) {
   return s.replace(/&amp;|&lt;|&gt;|&quot;|&#39;/g, (m) => map[m]);
 }
 
+function extractOpener(body) {
+  const text = typeof body === "string" ? body : "";
+  const trimmed = text.trim();
+  const sm = trimmed.match(/^[\s\S]*?[.!?](?=\s|$)/);
+  return (sm ? sm[0] : trimmed.split("\n")[0] || "").trim();
+}
+
 function lintOverviewBody(body, orgName) {
   const text = typeof body === "string" ? body : "";
   const violations = [];
   if (/^#{1,6}\s/m.test(text)) violations.push("markdown-heading");
-  const trimmed = text.trim();
-  const sm = trimmed.match(/^[\s\S]*?[.!?](?=\s|$)/);
-  const opener = (sm ? sm[0] : trimmed.split("\n")[0] || "").trim();
+  const opener = extractOpener(text);
   const openerWords = opener.replace(/[*`_]/g, "").split(/\s+/).filter(Boolean);
   if (openerWords.length > 25) violations.push("opener-too-long");
   const name = typeof orgName === "string" ? orgName.trim() : "";
@@ -221,17 +226,14 @@ const WRITE_SCHEMA = {
 
 // ── Local prompt helpers (not shared; fine to keep here) ─────────────────────
 
-// Count the words in the body's opening sentence, using the SAME extraction
-// lintOverviewBody applies (first sentence-final punctuation, else first line;
-// markdown emphasis stripped). Lets the corrective pass tell the model exactly
-// how far over the 25-word opener cap it was, which is far more actionable than
-// the bare "opener-too-long" code — the most common residual violation.
+// Count the words in the body's opening sentence via the SHARED extractOpener
+// helper lintOverviewBody uses, applying the same `*`_` strip the lint applies
+// before counting. Sharing the extraction keeps this count from drifting from
+// the rule that fired. Lets the corrective pass tell the model exactly how far
+// over the 25-word opener cap it was — far more actionable than the bare
+// "opener-too-long" code, the most common residual violation.
 function openerWordCount(body) {
-  const text = typeof body === "string" ? body : "";
-  const trimmed = text.trim();
-  const sm = trimmed.match(/^[\s\S]*?[.!?](?=\s|$)/);
-  const opener = (sm ? sm[0] : trimmed.split("\n")[0] || "").trim();
-  return opener.replace(/[*`_]/g, "").split(/\s+/).filter(Boolean).length;
+  return extractOpener(body).replace(/[*`_]/g, "").split(/\s+/).filter(Boolean).length;
 }
 
 // Turn raw violation codes into the corrective hints the regen prompt echoes.
