@@ -173,18 +173,39 @@ async function resolveAiSdkExtractModel(
   env: WorkerDepsEnv,
 ): Promise<{ model: unknown; label: string } | undefined> {
   try {
-    if (!env.openrouterEnabled) return undefined;
+    if (!env.openrouterEnabled) return undefined; // off by default — silent (expected path)
     const model = env.extractModel?.trim();
-    if (!model) return undefined;
+    if (!model) {
+      // Flag on but lane not finished — warn so the silent Anthropic fallback is diagnosable.
+      logEvent("warn", {
+        component: "extract-deps",
+        event: "openrouter-misconfigured",
+        reason: "EXTRACT_MODEL empty",
+      });
+      return undefined;
+    }
     const apiKey = await getSecret(env.openRouterApiKey).catch(() => null);
-    if (!apiKey) return undefined;
+    if (!apiKey) {
+      logEvent("warn", {
+        component: "extract-deps",
+        event: "openrouter-misconfigured",
+        reason: "OPENROUTER_API_KEY unresolved",
+        model,
+      });
+      return undefined;
+    }
     const baseURL = env.openRouterBaseURL?.trim();
     return {
       model: buildOpenRouterExtractModel({ apiKey, model, ...(baseURL ? { baseURL } : {}) }),
       label: model,
     };
-  } catch {
-    // Any unexpected failure → Anthropic path.
+  } catch (err) {
+    // Any unexpected failure → Anthropic path (fail open).
+    logEvent("warn", {
+      component: "extract-deps",
+      event: "openrouter-resolve-failed",
+      err: err instanceof Error ? err : String(err),
+    });
     return undefined;
   }
 }

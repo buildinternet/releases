@@ -215,6 +215,12 @@ export class BackfillSourceWorkflow extends WorkflowEntrypoint<
       },
     );
 
+    // OpenRouter extraction lane (issue #1536). Resolved ONCE here, not per
+    // window — the flag + secret reads shouldn't repeat each iteration. Inert on
+    // this path today: backfill never sets `useToolLoop`, so extraction always
+    // takes the one-shot Anthropic tier; wired for consistency + future use.
+    const aiSdk = await resolveExtractAiSdkModel(env);
+
     // ── Steps 4+: extract-window-N ──────────────────────────────────────────
     // Each window is its own step.do so Cloudflare can retry or resume at the
     // window boundary. Results are collected for aggregation in the final step.
@@ -243,11 +249,6 @@ export class BackfillSourceWorkflow extends WorkflowEntrypoint<
               apiKey,
               ...(await resolveGatewayOpts(env)),
             });
-            // OpenRouter extraction lane (issue #1536). Resolves to undefined
-            // (Anthropic path) unless the flag is on + EXTRACT_MODEL + key are
-            // set. Inert here today: this path never sets `useToolLoop`, so it
-            // always takes the one-shot tier; wired for consistency + future use.
-            const aiSdk = await resolveExtractAiSdkModel(env);
             const extractDeps: ExtractDeps = {
               anthropicClient,
               agentModel: BACKFILL_EXTRACT_MODEL,

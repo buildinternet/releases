@@ -11,6 +11,7 @@
  */
 import { buildOpenRouterExtractModel } from "@releases/adapters/extract";
 import { flag, FLAGS, type FlagshipBinding } from "@releases/lib/flags";
+import { logEvent } from "@releases/lib/log-event";
 import { getSecret, type SecretBinding } from "@releases/lib/secrets";
 
 export interface ExtractModelEnv {
@@ -32,17 +33,38 @@ export async function resolveExtractAiSdkModel(
 ): Promise<{ model: unknown; label: string } | undefined> {
   try {
     const useOpenRouter = await flag(env.FLAGS, env.OPENROUTER_ENABLED, FLAGS.openrouterEnabled);
-    if (!useOpenRouter) return undefined;
+    if (!useOpenRouter) return undefined; // off by default — silent (expected path)
     const model = env.EXTRACT_MODEL?.trim();
-    if (!model) return undefined;
+    if (!model) {
+      // Flag on but lane not finished — warn so the silent Anthropic fallback is diagnosable.
+      logEvent("warn", {
+        component: "extract-model",
+        event: "openrouter-misconfigured",
+        reason: "EXTRACT_MODEL empty",
+      });
+      return undefined;
+    }
     const apiKey = await getSecret(env.OPENROUTER_API_KEY).catch(() => null);
-    if (!apiKey) return undefined;
+    if (!apiKey) {
+      logEvent("warn", {
+        component: "extract-model",
+        event: "openrouter-misconfigured",
+        reason: "OPENROUTER_API_KEY unresolved",
+        model,
+      });
+      return undefined;
+    }
     const baseURL = env.OPENROUTER_BASE_URL?.trim();
     return {
       model: buildOpenRouterExtractModel({ apiKey, model, ...(baseURL ? { baseURL } : {}) }),
       label: model,
     };
-  } catch {
+  } catch (err) {
+    logEvent("warn", {
+      component: "extract-model",
+      event: "openrouter-resolve-failed",
+      err: err instanceof Error ? err : String(err),
+    });
     return undefined;
   }
 }

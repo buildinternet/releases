@@ -100,8 +100,9 @@ export interface Env {
    * through the AI-SDK/OpenRouter (DeepSeek) path when the `openrouter-enabled`
    * flag is on AND `EXTRACT_MODEL` is non-empty AND `OPENROUTER_API_KEY`
    * resolves; otherwise the Anthropic loop runs (fail open). `EXTRACT_MODEL` is
-   * a wrangler var (default ""); the OPENROUTER_API_KEY secret is NOT yet bound
-   * in this worker — binding it is a prerequisite to enable.
+   * a wrangler var (default ""); the OPENROUTER_API_KEY secret binding is
+   * configured in wrangler.jsonc (prod + staging), so enabling the lane only
+   * needs the flag on and a non-empty `EXTRACT_MODEL`.
    */
   EXTRACT_MODEL?: string;
   OPENROUTER_API_KEY?: SecretBinding;

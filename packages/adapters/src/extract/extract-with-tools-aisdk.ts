@@ -108,11 +108,20 @@ export async function extractWithToolsAiSdk(
   let toolChars = 0;
   let toolRounds = 0;
   let handlerErr: string | null = null;
+  // Real usage totals, filled from the SDK result once it's available. The
+  // fallback partials (LoopPartialUsage) carry these so extractFromBody
+  // attributes the loop's pre-fallback spend instead of undercounting to zero.
+  // The handler-error path throws before any result, so it legitimately reports
+  // zeros (the SDK emitted no usage).
+  let usedInput = 0;
+  let usedOutput = 0;
+  let usedCacheRead = 0;
+  let usedCacheWrite = 0;
   const makePartial = (): LoopPartialUsage => ({
-    totalInput: 0,
-    totalOutput: 0,
-    cacheReadTokens: 0,
-    cacheWriteTokens: 0,
+    totalInput: usedInput,
+    totalOutput: usedOutput,
+    cacheReadTokens: usedCacheRead,
+    cacheWriteTokens: usedCacheWrite,
     toolRounds,
     toolChars,
   });
@@ -251,6 +260,12 @@ export async function extractWithToolsAiSdk(
   // for the DeepSeek lane, where reasoning bills as output (see #1536).
   const cacheReadTokens = usage.inputTokenDetails?.cacheReadTokens ?? 0;
   const cacheWriteTokens = usage.inputTokenDetails?.cacheWriteTokens ?? 0;
+  // Mirror the real totals into the fallback-partial accumulators so any
+  // post-result LoopFallbackError below attributes the spend it already incurred.
+  usedInput = totalInput;
+  usedOutput = totalOutput;
+  usedCacheRead = cacheReadTokens;
+  usedCacheWrite = cacheWriteTokens;
 
   // ── Terminal: find the extract_releases call across all steps. ──
   const terminal = result.steps

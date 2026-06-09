@@ -24,6 +24,7 @@
     "./extract": "./src/extract/index.ts",
     "./extract/shared": "./src/extract/shared.ts",
     "./extract/types": "./src/extract/types.ts",
+    "./extract/aisdk": "./src/extract/extract-with-tools-aisdk.ts",
     "./github-probe": "./src/github-probe.ts"
   },
   "dependencies": {
