@@ -116,7 +116,6 @@ export async function pollAndFetch(
     InvalidationEnv & {
       DB: D1Database;
       CRON_ENABLED?: string;
-      SCRAPE_CHANGE_DETECT_ENABLED?: string;
     },
 ): Promise<void> {
   if (env.CRON_ENABLED === "false") {
@@ -126,11 +125,8 @@ export async function pollAndFetch(
 
   const db = drizzle(env.DB);
   const now = new Date();
-  const changeDetectEnabled = await flag(
-    env.FLAGS,
-    env.SCRAPE_CHANGE_DETECT_ENABLED,
-    FLAGS.scrapeChangeDetectEnabled,
-  );
+  // Scrape/agent change-detection (#517) is always on now.
+  const changeDetectEnabled = true;
 
   // Query sources due for a poll
   const dueSources = await queryDueSources(db, now, { changeDetectEnabled });
@@ -691,8 +687,6 @@ export interface FetchOneEnv extends IndexNowEnv, TextModelEnv {
   WEB_BOT_AUTH_PRIVATE_KEY?: { get(): Promise<string> };
   // Ingest-time R2 media upload (#1177). Kill switch as a string (Workers env
   // vars are strings); default off. `MEDIA` is the `released-media` R2 bucket
-  // binding — absent or flag-off => media is stored verbatim as today.
-  MEDIA_R2_UPLOAD_ENABLED?: string;
   /** Scrape title-dedup kill switch (#1410); default off (i.e. dedup ON). */
   SCRAPE_TITLE_DEDUP_DISABLED?: string;
   MEDIA?: R2Bucket;
@@ -1196,9 +1190,7 @@ export async function ingestRawReleases(
   // helper bounds image concurrency within); fail-open — any image-level
   // failure keeps the third-party URL. Flag-off / unbound bucket = today's
   // verbatim behavior.
-  const r2UploadEnabled =
-    (await flag(env.FLAGS, env.MEDIA_R2_UPLOAD_ENABLED, FLAGS.mediaR2UploadEnabled)) &&
-    env.MEDIA != null;
+  const r2UploadEnabled = env.MEDIA != null;
   // GIF→MP4 transcode (#1368): store ingested GIFs as small MP4s. Gated on its own
   // flag AND the transform binding being bound; off → GIFs mirror verbatim.
   const transcodeGif =

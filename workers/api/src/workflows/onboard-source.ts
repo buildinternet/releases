@@ -54,8 +54,7 @@ export type OnboardSourceWorkflowEnv = InvalidationEnv &
     WEB_BOT_AUTH_PRIVATE_KEY?: { get(): Promise<string> };
     CLOUDFLARE_ACCOUNT_ID?: { get(): Promise<string> };
     CLOUDFLARE_API_TOKEN?: { get(): Promise<string> };
-    /** Ingest-time R2 media upload (#1177): kill switch + `released-media` bucket. */
-    MEDIA_R2_UPLOAD_ENABLED?: string;
+    /** Ingest-time R2 media upload (#1177): `released-media` bucket. */
     MEDIA?: R2Bucket;
     /** TEST-ONLY: bypass drizzle(env.DB) and use the provided instance directly. */
     _drizzleOverride?: unknown;

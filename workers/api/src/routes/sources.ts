@@ -670,7 +670,6 @@ sourceRoutes.post("/sources/:slug/fetch", postSourceFetchRoute, async (c) => {
         WEBHOOK_DELIVERY_QUEUE: c.env.WEBHOOK_DELIVERY_QUEUE,
         DB: c.env.DB,
         DISCOVERY_WORKER: c.env.DISCOVERY_WORKER,
-        MEDIA_R2_UPLOAD_ENABLED: c.env.MEDIA_R2_UPLOAD_ENABLED,
         MEDIA: c.env.MEDIA,
         FLAGS: c.env.FLAGS,
       },
@@ -818,9 +817,7 @@ const postReleasesBatchHandler = async (c: import("hono").Context<Env>) => {
     // so reads resolve a same-origin `r2Url`. Sequential per release (the
     // helper bounds image concurrency within); fail-open. Flag-off / unbound
     // bucket => the agent-provided media JSON is stored verbatim, as today.
-    const r2UploadEnabled =
-      (await flag(c.env.FLAGS, c.env.MEDIA_R2_UPLOAD_ENABLED, FLAGS.mediaR2UploadEnabled)) &&
-      c.env.MEDIA != null;
+    const r2UploadEnabled = c.env.MEDIA != null;
     // GIF→MP4 ingest transcode (#1368): store ingested GIFs as small MP4s when the
     // transform binding is bound + the flag is on; off => GIFs mirror verbatim.
     const transcodeGif =
@@ -2507,7 +2504,6 @@ sourceRoutes.post(
         WEBHOOK_DELIVERY_QUEUE: c.env.WEBHOOK_DELIVERY_QUEUE,
         DB: c.env.DB,
         DISCOVERY_WORKER: c.env.DISCOVERY_WORKER,
-        MEDIA_R2_UPLOAD_ENABLED: c.env.MEDIA_R2_UPLOAD_ENABLED,
         MEDIA: c.env.MEDIA,
         FLAGS: c.env.FLAGS,
       },
@@ -2713,10 +2709,9 @@ sourceRoutes.post(
       c.executionCtx.waitUntil(embedSourceSideEffect(c.env, db, source.id));
     };
 
-    if (
-      (await flag(c.env.FLAGS, c.env.ONBOARD_USE_WORKFLOW, FLAGS.onboardUseWorkflow)) &&
-      c.env.ONBOARD_SOURCE_WORKFLOW
-    ) {
+    // Use the Workflow path whenever its binding is wired (always in prod);
+    // fall back to the inline tail when it isn't configured.
+    if (c.env.ONBOARD_SOURCE_WORKFLOW) {
       const skipBackfill = c.req.header("x-onboard-mode") === "manual";
       const workflow = c.env.ONBOARD_SOURCE_WORKFLOW;
       // Fire-and-forget: control-plane RPC must not block the response.

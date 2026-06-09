@@ -564,15 +564,15 @@ describe("magic link", () => {
 });
 
 // ── Device authorization (RFC 8628) ──
-// The OAuth 2.0 Device Authorization Grant backing `releases login`. Flag-gated
-// behind DEVICE_AUTHORIZATION_ENABLED: when on, createAuth registers both the
-// deviceAuthorization() plugin AND bearer() (the CLI carries the device-flow
-// session token as `Authorization: Bearer` to the /v1/api-keys create route, and
-// bearer() is what makes getSession honor that header). These exercise the real
-// createAuth() over the migrated test DB (createTestDb applies the device_code
-// migration), so a schema mismatch would throw on insert and fail here.
+// The OAuth 2.0 Device Authorization Grant backing `releases login`. createAuth
+// always registers both the deviceAuthorization() plugin AND bearer() (the CLI
+// carries the device-flow session token as `Authorization: Bearer` to the
+// /v1/api-keys create route, and bearer() is what makes getSession honor that
+// header). These exercise the real createAuth() over the migrated test DB
+// (createTestDb applies the device_code migration), so a schema mismatch would
+// throw on insert and fail here.
 
-describe("device-authorization plugin gating", () => {
+describe("device-authorization plugin", () => {
   // WEB_BASE_URL is deliberately a DIFFERENT host than BETTER_AUTH_URL so the
   // verification_uri assertion below proves the approval URL lands on the web
   // origin (where /device is served), not the API origin (where it 404s).
@@ -582,34 +582,19 @@ describe("device-authorization plugin gating", () => {
     BETTER_AUTH_SECRET: "test-secret-do-not-use-in-prod-0123456789",
   };
 
-  it("registers device-authorization + bearer when the flag is on", async () => {
-    const auth = await createAuth(
-      { ...baseEnv, DEVICE_AUTHORIZATION_ENABLED: "true" } as never,
-      undefined,
-      { db: createTestDb(), sendEmail: () => {} },
-    );
-    const ids = pluginIds(auth);
-    expect(ids).toContain("device-authorization");
-    expect(ids).toContain("bearer");
-  });
-
-  it("omits both when the flag is off (default)", async () => {
+  it("registers device-authorization + bearer", async () => {
     const auth = await createAuth(baseEnv as never, undefined, {
       db: createTestDb(),
       sendEmail: () => {},
     });
     const ids = pluginIds(auth);
-    expect(ids).not.toContain("device-authorization");
-    expect(ids).not.toContain("bearer");
+    expect(ids).toContain("device-authorization");
+    expect(ids).toContain("bearer");
   });
 
   it("issues a device + user code and writes a pending row for the known client id", async () => {
     const db = createTestDb();
-    const auth = await createAuth(
-      { ...baseEnv, DEVICE_AUTHORIZATION_ENABLED: "true" } as never,
-      undefined,
-      { db, sendEmail: () => {} },
-    );
+    const auth = await createAuth(baseEnv as never, undefined, { db, sendEmail: () => {} });
 
     const res = await auth.api.deviceCode({ body: { client_id: DEVICE_AUTH_CLIENT_ID } });
     expect(res.user_code).toBeTruthy();
@@ -628,11 +613,10 @@ describe("device-authorization plugin gating", () => {
   });
 
   it("rejects an unknown client id (validateClient fail-closed)", async () => {
-    const auth = await createAuth(
-      { ...baseEnv, DEVICE_AUTHORIZATION_ENABLED: "true" } as never,
-      undefined,
-      { db: createTestDb(), sendEmail: () => {} },
-    );
+    const auth = await createAuth(baseEnv as never, undefined, {
+      db: createTestDb(),
+      sendEmail: () => {},
+    });
     await expect(auth.api.deviceCode({ body: { client_id: "evil-client" } })).rejects.toThrow();
   });
 });

@@ -43,10 +43,9 @@ ladder.
 
 **Browser login (`releases login`, device authorization).** Users mint a `relu_`
 key without copy-pasting a token via the OAuth 2.0 Device Authorization Grant
-(RFC 8628). Better Auth's `deviceAuthorization()` + `bearer()` plugins are
-registered in `workers/api/src/auth/index.ts`, gated by the
-`device-authorization-enabled` flag (and, since it issues through the user-key
-route, `user-api-keys-enabled` must also be on). Flow: the CLI POSTs
+(RFC 8628). Better Auth's `deviceAuthorization()` + `bearer()` plugins are always
+registered in `workers/api/src/auth/index.ts` (and, since login issues through
+the user-key route, `user-api-keys-enabled` must also be on). Flow: the CLI POSTs
 `/api/auth/device/code` (client id `releases-cli`; a fail-closed `validateClient`
 allow-list rejects any other id), the user approves at the web `/device` page,
 and the CLI polls `/api/auth/device/token` until it gets a **session access
@@ -236,7 +235,7 @@ Session management: `task list` shows active sessions, `task cancel <id>` reques
 
 Cron polling: The API Worker runs an hourly `scheduled` handler that polls feed sources and fetches changed ones directly. Configure `GITHUB_TOKEN` as a Worker secret for GitHub source access. Tier intervals are controlled by `fetchPriority` on each source.
 
-Workflows-based ingest (issue #486, follow-on to #482): the daily scrape-agent sweep at 01:00 UTC runs as a Cloudflare Workflow in prod (`SCRAPE_AGENT_USE_WORKFLOW=true`) — each dispatch phase gets its own `step.do` boundary so a mid-sweep failure doesn't strand the tail. The hourly poll-and-fetch cron has the same treatment behind `POLL_FETCH_USE_WORKFLOW=true`: the cron queries due sources (tier intervals still apply — normal=4h, low=24h — so only a fraction of sources are due on any given hour) and `createBatch`es one `POLL_AND_FETCH_WORKFLOW` instance per source, with step-level retries around `fetch-and-persist`, `embed-releases`, `refresh-changelog-file`, `embed-changelog-chunks`, and `invalidate-latest-cache`. The embed steps get 5 retries × 30s exponential — the whole reason for the migration is ride-out tolerance for Voyage 429s mid-source. `packages/search/src/embed-releases.ts` and `embed-changelog-pipeline.ts` accept an opt-in `throwOnError` so the workflow can actually observe failures; default callers stay fire-and-forget. Inline `pollAndFetch()` remains the rollback path — one-line flag flip.
+Workflows-based ingest (issue #486, follow-on to #482): the daily scrape-agent sweep at 01:00 UTC runs as a Cloudflare Workflow whenever the `SCRAPE_AGENT_WORKFLOW` binding is wired (always in prod) — each dispatch phase gets its own `step.do` boundary so a mid-sweep failure doesn't strand the tail. The hourly poll-and-fetch cron has the same treatment whenever `POLL_AND_FETCH_WORKFLOW` is bound: the cron queries due sources (tier intervals still apply — normal=4h, low=24h — so only a fraction of sources are due on any given hour) and `createBatch`es one `POLL_AND_FETCH_WORKFLOW` instance per source, with step-level retries around `fetch-and-persist`, `embed-releases`, `refresh-changelog-file`, `embed-changelog-chunks`, and `invalidate-latest-cache`. The embed steps get 5 retries × 30s exponential — the whole reason for the migration is ride-out tolerance for Voyage 429s mid-source. `packages/search/src/embed-releases.ts` and `embed-changelog-pipeline.ts` accept an opt-in `throwOnError` so the workflow can actually observe failures; default callers stay fire-and-forget. Inline `pollAndFetch()` remains the fallback when the Workflow binding is absent.
 
 ## Display URL vs. fetch routing
 

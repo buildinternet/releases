@@ -24,7 +24,6 @@ interface SecretBindingLike {
 }
 
 export interface IndexNowEnv {
-  INDEXNOW_ENABLED?: string;
   INDEXING_DISABLED?: string;
   INDEXNOW_KEY?: SecretBindingLike;
   WEB_BASE_URL?: string;
@@ -64,8 +63,6 @@ export async function submitToIndexNow(
 ): Promise<SubmitResult> {
   const sourceSlug = opts.source.slug;
 
-  if (!(await flag(env.FLAGS, env.INDEXNOW_ENABLED, FLAGS.indexnowEnabled)))
-    return logSkip(sourceSlug, "flag_off");
   if (await flag(env.FLAGS, env.INDEXING_DISABLED, FLAGS.indexingDisabled))
     return logSkip(sourceSlug, "indexing_disabled");
   if (!env.INDEXNOW_KEY) return logSkip(sourceSlug, "no_key_binding");
@@ -146,8 +143,6 @@ export async function notifyIndexNowForSource(
   // Run every gate that doesn't need slug lookups before touching D1, so
   // disabled / hidden / no-op publishes don't burn a query per release.
   const sourceSlug = source.slug;
-  if (!(await flag(env.FLAGS, env.INDEXNOW_ENABLED, FLAGS.indexnowEnabled)))
-    return logSkip(sourceSlug, "flag_off");
   if (await flag(env.FLAGS, env.INDEXING_DISABLED, FLAGS.indexingDisabled))
     return logSkip(sourceSlug, "indexing_disabled");
   if (!env.INDEXNOW_KEY) return logSkip(sourceSlug, "no_key_binding");

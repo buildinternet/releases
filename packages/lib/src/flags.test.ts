@@ -26,38 +26,38 @@ const throwingBinding: FlagshipBinding = {
 describe("flag()", () => {
   it("returns the Flagship value when the binding yields one", async () => {
     // Flagship says true even though the var is unset and default is false.
-    expect(await flag(bindingReturning(true), undefined, FLAGS.pollFetchUseWorkflow)).toBe(true);
-    expect(await flag(bindingReturning(false), "true", FLAGS.pollFetchUseWorkflow)).toBe(false);
+    expect(await flag(bindingReturning(true), undefined, FLAGS.cacheDisabled)).toBe(true);
+    expect(await flag(bindingReturning(false), "true", FLAGS.cacheDisabled)).toBe(false);
   });
 
   it("consults Flagship with the flag key and the computed fallback as defaultValue", async () => {
     const stub = bindingReturning(false);
-    await flag(stub, "true", FLAGS.pollFetchUseWorkflow);
-    expect(stub.lastCall).toEqual({ key: "poll-fetch-use-workflow", defaultValue: true });
+    await flag(stub, "true", FLAGS.cacheDisabled);
+    expect(stub.lastCall).toEqual({ key: "cache-disabled", defaultValue: true });
 
     // Var unset → the hardcoded default flows through as the defaultValue.
     const stub2 = bindingReturning(false);
-    await flag(stub2, undefined, FLAGS.pollFetchUseWorkflow);
-    expect(stub2.lastCall).toEqual({ key: "poll-fetch-use-workflow", defaultValue: false });
+    await flag(stub2, undefined, FLAGS.cacheDisabled);
+    expect(stub2.lastCall).toEqual({ key: "cache-disabled", defaultValue: false });
   });
 
   it("falls back to the var value when the binding is absent", async () => {
-    expect(await flag(undefined, "true", FLAGS.pollFetchUseWorkflow)).toBe(true);
-    expect(await flag(undefined, "false", FLAGS.pollFetchUseWorkflow)).toBe(false);
+    expect(await flag(undefined, "true", FLAGS.cacheDisabled)).toBe(true);
+    expect(await flag(undefined, "false", FLAGS.cacheDisabled)).toBe(false);
   });
 
   it("falls back to the hardcoded default when both binding and var are absent", async () => {
-    expect(await flag(undefined, undefined, FLAGS.pollFetchUseWorkflow)).toBe(false);
+    expect(await flag(undefined, undefined, FLAGS.cacheDisabled)).toBe(false);
   });
 
   it("collapses an eval error to the var/default fallback", async () => {
-    expect(await flag(throwingBinding, "true", FLAGS.pollFetchUseWorkflow)).toBe(true);
-    expect(await flag(throwingBinding, undefined, FLAGS.pollFetchUseWorkflow)).toBe(false);
+    expect(await flag(throwingBinding, "true", FLAGS.cacheDisabled)).toBe(true);
+    expect(await flag(throwingBinding, undefined, FLAGS.cacheDisabled)).toBe(false);
   });
 
   it('treats any non-"true" string as false (var semantics)', async () => {
-    expect(await flag(undefined, "1", FLAGS.pollFetchUseWorkflow)).toBe(false);
-    expect(await flag(undefined, "", FLAGS.pollFetchUseWorkflow)).toBe(false);
+    expect(await flag(undefined, "1", FLAGS.cacheDisabled)).toBe(false);
+    expect(await flag(undefined, "", FLAGS.cacheDisabled)).toBe(false);
   });
 });
 
@@ -84,39 +84,35 @@ const echoingBinding: FlagshipBinding = {
 
 describe("flagState()", () => {
   it("reads on/off from the var when the binding is absent", async () => {
-    expect(await flagState(undefined, "true", FLAGS.pollFetchUseWorkflow)).toBe("on");
-    expect(await flagState(undefined, "false", FLAGS.pollFetchUseWorkflow)).toBe("off");
+    expect(await flagState(undefined, "true", FLAGS.cacheDisabled)).toBe("on");
+    expect(await flagState(undefined, "false", FLAGS.cacheDisabled)).toBe("off");
   });
 
   it("returns unset when neither binding nor var supplies a value", async () => {
-    expect(await flagState(undefined, undefined, FLAGS.pollFetchUseWorkflow)).toBe("unset");
+    expect(await flagState(undefined, undefined, FLAGS.cacheDisabled)).toBe("unset");
   });
 
   it("reads an explicit Flagship value (present key wins over the probe defaults)", async () => {
-    expect(await flagState(bindingReturning(true), undefined, FLAGS.pollFetchUseWorkflow)).toBe(
-      "on",
-    );
-    expect(await flagState(bindingReturning(false), undefined, FLAGS.pollFetchUseWorkflow)).toBe(
-      "off",
-    );
+    expect(await flagState(bindingReturning(true), undefined, FLAGS.cacheDisabled)).toBe("on");
+    expect(await flagState(bindingReturning(false), undefined, FLAGS.cacheDisabled)).toBe("off");
   });
 
   it("returns unset when the Flagship key is absent (probe defaults differ)", async () => {
-    expect(await flagState(echoingBinding, undefined, FLAGS.pollFetchUseWorkflow)).toBe("unset");
+    expect(await flagState(echoingBinding, undefined, FLAGS.cacheDisabled)).toBe("unset");
   });
 
   it("falls back to the var when the Flagship key is absent", async () => {
-    expect(await flagState(echoingBinding, "true", FLAGS.pollFetchUseWorkflow)).toBe("on");
-    expect(await flagState(echoingBinding, "false", FLAGS.pollFetchUseWorkflow)).toBe("off");
+    expect(await flagState(echoingBinding, "true", FLAGS.cacheDisabled)).toBe("on");
+    expect(await flagState(echoingBinding, "false", FLAGS.cacheDisabled)).toBe("off");
   });
 
   it("lets Flagship win over the var when the key is present", async () => {
-    expect(await flagState(bindingReturning(true), "false", FLAGS.pollFetchUseWorkflow)).toBe("on");
+    expect(await flagState(bindingReturning(true), "false", FLAGS.cacheDisabled)).toBe("on");
   });
 
   it("collapses an eval error to the var, else unset", async () => {
-    expect(await flagState(throwingBinding, "true", FLAGS.pollFetchUseWorkflow)).toBe("on");
-    expect(await flagState(throwingBinding, undefined, FLAGS.pollFetchUseWorkflow)).toBe("unset");
+    expect(await flagState(throwingBinding, "true", FLAGS.cacheDisabled)).toBe("on");
+    expect(await flagState(throwingBinding, undefined, FLAGS.cacheDisabled)).toBe("unset");
   });
 });
 
