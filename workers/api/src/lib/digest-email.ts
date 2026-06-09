@@ -36,7 +36,7 @@ function esc(s: string): string {
 }
 
 function bestTitle(r: ReleaseLatestItem): string {
-  return r.title || r.titleShort || r.titleGenerated || r.version || "Update";
+  return r.titleShort || r.titleGenerated || r.title || r.version || "Update";
 }
 
 function releaseUrl(baseUrl: string, r: ReleaseLatestItem): string {

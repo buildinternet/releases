@@ -41,7 +41,7 @@ describe("buildDigestEmail", () => {
       unsubscribeUrl: "https://api.releases.sh/v1/digest/unsubscribe/reld_x",
     });
     expect(subject).toContain("2");
-    expect(text).toContain("Thing shipped");
+    expect(text).toContain("Thing"); // titleShort preferred, matching the feed UI
     expect(text).toContain("https://releases.sh/release/rel_1");
     expect(text).toContain("reld_x");
     expect(html).toContain("Unsubscribe");
