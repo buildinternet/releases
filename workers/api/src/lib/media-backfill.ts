@@ -1,7 +1,7 @@
 /**
- * R2 backfill for releases stored before (or while) ingest-time R2 mirroring
- * (`MEDIA_R2_UPLOAD_ENABLED`) was off, so their `media` still points at
- * third-party URLs with no `r2Key`.
+ * R2 backfill for releases stored before ingest-time R2 mirroring was active
+ * (or while the `MEDIA` bucket binding was unbound), so their `media` still
+ * points at third-party URLs with no `r2Key`.
  *
  * The standard ingest upsert never touches `media` on conflict
  * (`RELEASE_URL_UPSERT`) and the ingest media pre-pass skips already-stored URLs

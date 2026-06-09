@@ -3,8 +3,9 @@
  * same DB side effects — each phase becomes a `step.do` boundary so partial
  * failure doesn't strand the tail of the sweep.
  *
- * Kicked from `scheduled()` when `SCRAPE_AGENT_USE_WORKFLOW=true`. The
- * existing `scrapeAgentSweep(env)` remains the default path. See issue #482.
+ * Kicked from `scheduled()` whenever the `SCRAPE_AGENT_WORKFLOW` binding is
+ * wired (always in prod). The inline `scrapeAgentSweep(env)` is the
+ * binding-absent fallback. See issue #482.
  */
 
 import { WorkflowEntrypoint } from "cloudflare:workers";

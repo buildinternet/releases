@@ -611,20 +611,15 @@ export async function createAuth(
   // paired in schema-auth.ts + migration 20260604010000_add_user_last_active_at.sql.
   const dashApiKey = await resolveSecret(env.BETTER_AUTH_API_KEY);
 
-  // Two flagged rollouts of the same flavor (Flagship → var → default false):
-  //  • userApiKeysOn — the relu_ user-key path; when off, apiKey() and its
-  //    self-serve endpoints aren't registered. Mirrors the middleware/auth.ts gate.
-  //  • deviceAuthOn — the device-authorization (RFC 8628) path backing
-  //    `releases login`; when off, neither deviceAuthorization() nor bearer() is
-  //    registered, so the device endpoints simply don't exist. Device login mints
-  //    relu_ keys via the /v1/api-keys route (gated on userApiKeysEnabled), so it is
-  //    only USEFUL with that one also on.
-  // Read concurrently — independent flags, and createAuth runs per request, so with a
-  // real Flagship binding each read is its own round-trip.
-  const [userApiKeysOn, deviceAuthOn] = await Promise.all([
-    flag(env.FLAGS, env.USER_API_KEYS_ENABLED, FLAGS.userApiKeysEnabled),
-    flag(env.FLAGS, env.DEVICE_AUTHORIZATION_ENABLED, FLAGS.deviceAuthorizationEnabled),
-  ]);
+  // userApiKeysOn — the relu_ user-key path (Flagship → var → default false); when
+  // off, apiKey() and its self-serve endpoints aren't registered. Mirrors the
+  // middleware/auth.ts gate.
+  const userApiKeysOn = await flag(env.FLAGS, env.USER_API_KEYS_ENABLED, FLAGS.userApiKeysEnabled);
+  // deviceAuthOn — the device-authorization (RFC 8628) path backing `releases login`.
+  // The deviceAuthorization() + bearer() plugins are always registered now. Device
+  // login mints relu_ keys via the /v1/api-keys route (gated on userApiKeysEnabled),
+  // so it is only USEFUL with that one also on.
+  const deviceAuthOn = true;
 
   // Google One Tap (`/api/auth/one-tap/*`): the popup renders on the web origin
   // with the PUBLIC client id and posts the Google ID token here for verification.

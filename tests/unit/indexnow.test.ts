@@ -24,7 +24,6 @@ const SOURCE: IndexNowSource = {
 
 function envOn(overrides: Partial<IndexNowEnv> = {}): IndexNowEnv {
   return {
-    INDEXNOW_ENABLED: "true",
     INDEXNOW_KEY: KEY,
     WEB_BASE_URL: "https://releases.sh",
     ...overrides,
@@ -57,17 +56,6 @@ describe("buildUrls", () => {
 });
 
 describe("submitToIndexNow skip conditions", () => {
-  it("skips when flag is off", async () => {
-    const fetchImpl = stubFetch();
-    const result = await submitToIndexNow(envOn({ INDEXNOW_ENABLED: "false" }), {
-      nReleases: 1,
-      source: SOURCE,
-      fetchImpl: fetchImpl.fn,
-    });
-    expect(result).toEqual({ status: "skipped", reason: "flag_off" });
-    expect(fetchImpl.calls).toHaveLength(0);
-  });
-
   it("skips when INDEXING_DISABLED is true (staging)", async () => {
     const fetchImpl = stubFetch();
     const result = await submitToIndexNow(envOn({ INDEXING_DISABLED: "true" }), {
@@ -225,7 +213,6 @@ describe("notifyIndexNowForSource gates", () => {
   };
 
   const cases: Array<[string, IndexNowEnv, Source, number, string]> = [
-    ["INDEXNOW_ENABLED=false", envOn({ INDEXNOW_ENABLED: "false" }), SOURCE_ROW, 1, "flag_off"],
     [
       "INDEXING_DISABLED=true",
       envOn({ INDEXING_DISABLED: "true" }),

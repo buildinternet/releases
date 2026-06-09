@@ -59,8 +59,7 @@ repos groups those sources under one product.
 
 - `POST /v1/orgs/:slug/sync-well-known` (write scope), `?dryRun=1` to preview.
 - Daily sweep (`0 6 * * *`), two passes (org domain files, then github repo
-  files), gated by the Flagship flag `well-known-sync-enabled` (**default on**;
-  it is a kill switch). The schema is generated from the api-types zod source via
+  files). The schema is generated from the api-types zod source via
   `bun run gen:releases-schema` and served at
   `https://releases.sh/schemas/releases.json`.
 

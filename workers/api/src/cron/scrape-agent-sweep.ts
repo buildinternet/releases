@@ -153,9 +153,9 @@ type CandidateQueryResult = {
  * fast path (no count query). Firecrawl-owned sources are excluded — their
  * monitor owns the fetch.
  *
- * Agent sources (#517) join the sweep once the `SCRAPE_CHANGE_DETECT_ENABLED`
- * cron pipeline flags them. The /update dispatcher handles both types
- * identically, so widening the filter is safe.
+ * Agent sources (#517) join the sweep once the change-detect cron pipeline
+ * flags them. The /update dispatcher handles both types identically, so
+ * widening the filter is safe.
  */
 export async function queryCandidates(
   db: any,

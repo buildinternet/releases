@@ -35,7 +35,6 @@ export interface WorkflowFetchEnv extends InvalidationEnv, AnthropicEnv {
   DISCOVERY_WORKER?: DiscoveryWorkerRpc;
   WEB_BOT_AUTH_ENABLED?: string;
   WEB_BOT_AUTH_PRIVATE_KEY?: { get(): Promise<string> };
-  MEDIA_R2_UPLOAD_ENABLED?: string;
   MEDIA?: R2Bucket;
   MEDIA_TRANSFORM?: MediaTransformBinding;
   MEDIA_GIF_TRANSCODE_ENABLED?: string;
@@ -98,7 +97,6 @@ export async function buildFetchOneEnv(env: WorkflowFetchEnv): Promise<GuardedFe
     DISCOVERY_WORKER: env.DISCOVERY_WORKER,
     WEB_BOT_AUTH_ENABLED: env.WEB_BOT_AUTH_ENABLED,
     WEB_BOT_AUTH_PRIVATE_KEY: env.WEB_BOT_AUTH_PRIVATE_KEY,
-    MEDIA_R2_UPLOAD_ENABLED: env.MEDIA_R2_UPLOAD_ENABLED,
     MEDIA: env.MEDIA,
     MEDIA_TRANSFORM: env.MEDIA_TRANSFORM,
     MEDIA_GIF_TRANSCODE_ENABLED: env.MEDIA_GIF_TRANSCODE_ENABLED,

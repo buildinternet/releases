@@ -116,7 +116,6 @@ export async function pollAndFetch(
     InvalidationEnv & {
       DB: D1Database;
       CRON_ENABLED?: string;
-      SCRAPE_CHANGE_DETECT_ENABLED?: string;
     },
 ): Promise<void> {
   if (env.CRON_ENABLED === "false") {
@@ -126,11 +125,8 @@ export async function pollAndFetch(
 
   const db = drizzle(env.DB);
   const now = new Date();
-  const changeDetectEnabled = await flag(
-    env.FLAGS,
-    env.SCRAPE_CHANGE_DETECT_ENABLED,
-    FLAGS.scrapeChangeDetectEnabled,
-  );
+  // Scrape/agent change-detection (#517) is always on now.
+  const changeDetectEnabled = true;
 
   // Query sources due for a poll
   const dueSources = await queryDueSources(db, now, { changeDetectEnabled });
@@ -271,10 +267,9 @@ export async function queryDueSources(
   // don't store a feedUrl — they use the GitHub releases API directly), OR
   // carry a `metadata.githubUrl` fetch override (#831 — scrape sources opting
   // into the GitHub releases API while keeping a human-readable canonical URL).
-  // Behind SCRAPE_CHANGE_DETECT_ENABLED (#517), also include scrape/agent
-  // sources with no feedUrl — `pollOne` routes those to a detector from the
-  // playbook's `fetchQuirks` (unreliable class is a no-op, so the widened
-  // filter doesn't explode poll volume).
+  // Also include scrape/agent sources with no feedUrl (#517) — `pollOne` routes
+  // those to a detector from the playbook's `fetchQuirks` (unreliable class is a
+  // no-op, so the widened filter doesn't explode poll volume).
   const pollable = opts?.changeDetectEnabled
     ? sql`(json_extract(${sourcesVisible.metadata}, '$.feedUrl') IS NOT NULL OR json_extract(${sourcesVisible.metadata}, '$.githubUrl') IS NOT NULL OR ${sourcesVisible.type} = 'github' OR ${sourcesVisible.type} = 'appstore' OR ${sourcesVisible.type} IN ('scrape','agent'))`
     : sql`(json_extract(${sourcesVisible.metadata}, '$.feedUrl') IS NOT NULL OR json_extract(${sourcesVisible.metadata}, '$.githubUrl') IS NOT NULL OR ${sourcesVisible.type} = 'github' OR ${sourcesVisible.type} = 'appstore')`;
@@ -691,8 +686,6 @@ export interface FetchOneEnv extends IndexNowEnv, TextModelEnv {
   WEB_BOT_AUTH_PRIVATE_KEY?: { get(): Promise<string> };
   // Ingest-time R2 media upload (#1177). Kill switch as a string (Workers env
   // vars are strings); default off. `MEDIA` is the `released-media` R2 bucket
-  // binding — absent or flag-off => media is stored verbatim as today.
-  MEDIA_R2_UPLOAD_ENABLED?: string;
   /** Scrape title-dedup kill switch (#1410); default off (i.e. dedup ON). */
   SCRAPE_TITLE_DEDUP_DISABLED?: string;
   MEDIA?: R2Bucket;
@@ -1189,16 +1182,13 @@ export async function ingestRawReleases(
   const enrichMap = await buildEnrichMap(db, source, meta, rawReleases, env);
 
   // Media pre-pass. Always unwrap Next.js/Vercel optimizer proxy URLs so
-  // downstream readers see the underlying CDN asset. When ingest-time R2
-  // upload is enabled (#1177) and the bucket is bound, additionally drop junk
-  // (favicons / avatars / pixels) and mirror survivors into `released-media`
-  // so reads resolve a same-origin `r2Url`. Sequential per release (the
-  // helper bounds image concurrency within); fail-open — any image-level
-  // failure keeps the third-party URL. Flag-off / unbound bucket = today's
-  // verbatim behavior.
-  const r2UploadEnabled =
-    (await flag(env.FLAGS, env.MEDIA_R2_UPLOAD_ENABLED, FLAGS.mediaR2UploadEnabled)) &&
-    env.MEDIA != null;
+  // downstream readers see the underlying CDN asset. When the `MEDIA` bucket
+  // is bound (#1177), additionally drop junk (favicons / avatars / pixels) and
+  // mirror survivors into `released-media` so reads resolve a same-origin
+  // `r2Url`. Sequential per release (the helper bounds image concurrency
+  // within); fail-open — any image-level failure keeps the third-party URL. An
+  // unbound `MEDIA` bucket = today's verbatim behavior.
+  const r2UploadEnabled = env.MEDIA != null;
   // GIF→MP4 transcode (#1368): store ingested GIFs as small MP4s. Gated on its own
   // flag AND the transform binding being bound; off → GIFs mirror verbatim.
   const transcodeGif =
@@ -1327,8 +1317,8 @@ export async function ingestRawReleases(
   }
 
   // Fire-and-forget IndexNow ping for the org/source/product surfaces whose
-  // lastmod just shifted. Skips itself when INDEXNOW_ENABLED is unset, so
-  // staging and dev are no-ops by default. Per-release URLs are intentionally
+  // lastmod just shifted. No-ops when INDEXING_DISABLED (staging) or the
+  // INDEXNOW_KEY binding is absent (dev). Per-release URLs are intentionally
   // out of scope — see https://github.com/buildinternet/releases/issues/649.
   if (visiblePublishRows.length > 0) {
     await notifyIndexNowForSource(
