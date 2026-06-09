@@ -14,7 +14,7 @@ export const digestRoutes = new Hono<Env>();
  * human-clickable confirmation that also unsubscribes.
  */
 async function handleUnsubscribe(c: Context<Env>) {
-  const raw = c.req.param("token");
+  const raw = c.req.param("token") ?? "";
   const db = createDb(c.env.DB);
   const ok = await unsubscribeByToken(db, raw);
   if (!ok) return c.json({ error: "not_found" }, 404);
