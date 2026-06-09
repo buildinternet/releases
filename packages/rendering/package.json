@@ -10,7 +10,8 @@
     "./markdown-plugins": "./src/markdown-plugins.ts",
     "./media": "./src/media.ts",
     "./media-url": "./src/media-url.ts",
-    "./media-filter": "./src/media-filter.ts"
+    "./media-filter": "./src/media-filter.ts",
+    "./video-embed": "./src/video-embed.ts"
   },
   "dependencies": {
     "@buildinternet/releases-api-types": "workspace:*",
