@@ -72,6 +72,7 @@ Classify the page shape (`releases admin discovery evaluate <url> --json` report
 
 - **Single-page changelog** → one fetch in Step 4.
 - **Index → detail** → enumerate the per-release URLs. Prefer `/sitemap.xml` (the preflight surfaced it) filtered to the changelog path; otherwise parse the index HTML for per-release links.
+- **Client-rendered index** → the index is a JS shell whose cards load via a client-side fetch, so `curl`/non-JS scrape returns **zero** entries. Enumerate by rendering: drive the index with Claude in Chrome (or fan out a rendering sub-agent), paginating if the list is windowed, and collect the per-release links. **Then check whether the _detail_ pages are statically rendered** — they often are even when the index isn't — and if so bulk-`curl` those directly (HTML→markdown locally, no render, no AI bill). Harvey's `help.harvey.ai/release-notes` is exactly this: client-rendered index, static detail pages. Don't conclude "no releases" from an empty non-JS scrape of the index.
 
 Cap to a recent window (default **~25–50** most-recent releases) and **log what you skipped** — never silently truncate. Re-runs are idempotent, so a deeper backfill later just adds rows.
 
@@ -82,6 +83,7 @@ Reuse the **`parsing-changelogs`** conventions for type/version/date/media (see 
 - **A few pages:** fetch and extract inline in this agent.
 - **Many pages:** fan out parallel sub-agents — one URL-slice each, each returning records in the batch schema. Use the `Agent`-tool dispatch pattern from **`seeding-playbooks`** (and **superpowers:dispatching-parallel-agents** for the fan-out discipline). Do **not** fetch release URLs in the parent agent — delegate to keep the parent's context clean.
 - **Parent-saves caveat:** sub-agents may be blocked from making the batch write (permission limits). Plan for it — have each sub-agent **return** its records in its result, and let the parent (you) do the writes in Step 5. Same pattern `seeding-playbooks` uses for note-saving.
+- **Extract media — don't ship text-only.** Pull the images/video out of each release body and populate `media`, unwrapping `_next/image` / `_vercel/image` optimizer wrappers to the underlying CDN URL (`normalizeMediaUrl` from `packages/rendering/src/media-url.ts`). A text-only first pass is a common miss caught only on operator review (Harvey shipped text-only, then had to re-extract `_next/image` → `cdn.sanity.io` and re-seed); the enrichment re-POST is `mode: "upsert-content"` (Step 5).
 
 Each record must match the batch schema (see Step 5) and the parity rules.
 
@@ -119,7 +121,8 @@ Per-release fields (the real accepted shape — `workers/api/src/routes/sources.
 }
 ```
 
-- **Idempotent.** Upserts on `UNIQUE(source_id, url)`, backfilling empty content/media on collision. Safe to re-run and to page — same `url` updates rather than duplicates.
+- **Idempotent.** Upserts on `UNIQUE(source_id, url)`, **fill-don't-clobber**: on collision it only backfills content/media when the stored row is _empty_, so a re-run never overwrites a good row. Safe to re-run and to page — same `url` updates rather than duplicates.
+- **Enrichment re-POST (`mode: "upsert-content"`).** Because the default is fill-only, re-POSTing **richer content for a URL that already has content** is a no-op — the stub stays. For a deliberate second pass (seed index summaries first, then full detail-page bodies + media), add `"mode": "upsert-content"` at the top level of the batch body: it **overwrites** content/media on a same-URL collision and skips the scrape title-dedup pre-filter (#1526). Use it only for intentional enrichment; the default path stays fill-only so a routine re-fetch can't clobber. **The `url` must be identical to the seeded row** — enrich keys on URL, so a changed URL scheme inserts a duplicate instead. If the URL scheme changed, re-seed instead: `releases release delete --source <src_…> --hard` then a fresh `/batch` (default mode).
 - **Auth.** Requires `write` scope; the static `RELEASES_API_KEY` (root) satisfies it. `.env` autoloads `RELEASES_API_URL` + `RELEASES_API_KEY` in this repo.
 - **No AI on insert** (see Cost contract).
 
@@ -148,7 +151,7 @@ for (let i = 0; i < all.length; i += 50) {
 releases tail <slug> --json   # or: get_latest_releases (typed tool)
 ```
 
-Confirm releases have non-empty **titles, dates, and content**. If results are thin (empty content, missing dates), fix the extraction and **re-run** — the upsert is idempotent, so backfilling content onto existing rows is safe.
+Confirm releases have non-empty **titles, dates, content, and media**. If a row is _empty_, fix the extraction and **re-run** — the default upsert backfills empty rows safely. If a row already has _thin-but-non-empty_ content (e.g. an index-summary stub you now want to replace with the full body), a plain re-run is a no-op — use the `mode: "upsert-content"` enrichment re-POST from Step 5.
 
 ### Step 7 — Playbook note
 
