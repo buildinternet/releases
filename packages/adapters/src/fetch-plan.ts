@@ -59,8 +59,8 @@ const FEED_LABELS: Record<string, string> = {
 
 function resolveStrategy(source: Source, meta: SourceMetadata): FetchStrategy {
   // Precedence mirrors queryDueSources / the fetch dispatcher in poll-fetch.ts.
-  // This describes the source's CONFIGURED strategy, not flag-gated poll
-  // eligibility (e.g. scrape/agent sources only poll when SCRAPE_CHANGE_DETECT_ENABLED).
+  // This describes the source's CONFIGURED strategy, not poll eligibility
+  // (which source types `queryDueSources` admits to the poll).
   if (isGitHubFetched(source, meta)) return "github";
   if (isAppStoreFetched(source)) return "appstore";
   if (isVideoFetched(source)) return "video";

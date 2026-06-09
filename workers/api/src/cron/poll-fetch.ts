@@ -267,10 +267,9 @@ export async function queryDueSources(
   // don't store a feedUrl — they use the GitHub releases API directly), OR
   // carry a `metadata.githubUrl` fetch override (#831 — scrape sources opting
   // into the GitHub releases API while keeping a human-readable canonical URL).
-  // Behind SCRAPE_CHANGE_DETECT_ENABLED (#517), also include scrape/agent
-  // sources with no feedUrl — `pollOne` routes those to a detector from the
-  // playbook's `fetchQuirks` (unreliable class is a no-op, so the widened
-  // filter doesn't explode poll volume).
+  // Also include scrape/agent sources with no feedUrl (#517) — `pollOne` routes
+  // those to a detector from the playbook's `fetchQuirks` (unreliable class is a
+  // no-op, so the widened filter doesn't explode poll volume).
   const pollable = opts?.changeDetectEnabled
     ? sql`(json_extract(${sourcesVisible.metadata}, '$.feedUrl') IS NOT NULL OR json_extract(${sourcesVisible.metadata}, '$.githubUrl') IS NOT NULL OR ${sourcesVisible.type} = 'github' OR ${sourcesVisible.type} = 'appstore' OR ${sourcesVisible.type} IN ('scrape','agent'))`
     : sql`(json_extract(${sourcesVisible.metadata}, '$.feedUrl') IS NOT NULL OR json_extract(${sourcesVisible.metadata}, '$.githubUrl') IS NOT NULL OR ${sourcesVisible.type} = 'github' OR ${sourcesVisible.type} = 'appstore')`;
@@ -1319,8 +1318,8 @@ export async function ingestRawReleases(
   }
 
   // Fire-and-forget IndexNow ping for the org/source/product surfaces whose
-  // lastmod just shifted. Skips itself when INDEXNOW_ENABLED is unset, so
-  // staging and dev are no-ops by default. Per-release URLs are intentionally
+  // lastmod just shifted. No-ops when INDEXING_DISABLED (staging) or the
+  // INDEXNOW_KEY binding is absent (dev). Per-release URLs are intentionally
   // out of scope — see https://github.com/buildinternet/releases/issues/649.
   if (visiblePublishRows.length > 0) {
     await notifyIndexNowForSource(
