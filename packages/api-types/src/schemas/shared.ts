@@ -10,6 +10,13 @@ export const MediaItemSchema = z.object({
   url: z.string(),
   alt: z.string().optional(),
   r2Url: z.string().optional(),
+  // For `type: "video"` items promoted from a hosted-video link found inline in
+  // a release body (Wistia/Loom/Vimeo/YouTube), `url` holds the poster/thumbnail
+  // (mirrored to R2 like any image) and `linkUrl` holds the human watch URL the
+  // play-card links out to. Absent for ordinary image/gif media. See
+  // `detectInlineVideos` in `@releases/rendering/video-embed` and web's
+  // release-content video card.
+  linkUrl: z.string().optional(),
 });
 
 /**

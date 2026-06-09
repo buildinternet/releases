@@ -3,12 +3,49 @@ import { createRemarkPlugins } from "@/lib/markdown-plugins";
 import { rehypeShikiPlugin } from "@/lib/shiki";
 import { detailMarkdownComponents } from "@/components/markdown-components";
 import { FallbackImage } from "@/components/fallback-image";
+import { PlayBadge } from "@/components/play-badge";
+import { releaseThumbUrl, IMG_TRANSFORM_ON } from "@/lib/media";
 
 interface MediaItem {
   type: "image" | "video" | "gif";
   url: string;
   alt?: string;
   r2Url?: string;
+  /** Watch URL for a hosted-video card (#1549); present on `type: "video"`. */
+  linkUrl?: string;
+}
+
+/**
+ * Read-only play-thumbnail card for a hosted video promoted from an inline body
+ * link (#1549). Links out to the provider's watch page (`linkUrl`) — no iframe
+ * embed yet (deferred: CSP / third-party-JS surface). The poster is the
+ * R2-mirrored oEmbed thumbnail.
+ */
+function InlineVideoCard({ poster, href, alt }: { poster: string; href: string; alt?: string }) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label={alt ? `Watch video: ${alt}` : "Watch video"}
+      className="group relative block aspect-video w-full max-w-xl overflow-hidden rounded-lg border border-stone-200 bg-black no-underline dark:border-stone-800"
+    >
+      <FallbackImage
+        src={releaseThumbUrl(poster, 1280)}
+        alt={alt || ""}
+        width={1280}
+        height={720}
+        className="h-full w-full object-cover"
+        unoptimized={IMG_TRANSFORM_ON || undefined}
+      />
+      <PlayBadge />
+      {alt && (
+        <span className="absolute inset-x-0 bottom-0 truncate bg-gradient-to-t from-black/70 to-transparent px-3 pb-2 pt-6 text-sm font-medium text-white">
+          {alt}
+        </span>
+      )}
+    </a>
+  );
 }
 
 function stripLeadingTitle(content: string, title: string | null): string {
@@ -38,6 +75,16 @@ function MediaGallery({ media, content }: { media: MediaItem[]; content: string 
   return (
     <div className="flex flex-wrap gap-3 mt-4">
       {extra.map((item, i) => {
+        if (item.type === "video" && item.linkUrl) {
+          return (
+            <InlineVideoCard
+              key={i}
+              poster={item.r2Url ?? item.url}
+              href={item.linkUrl}
+              alt={item.alt}
+            />
+          );
+        }
         if (item.type === "image" || item.type === "gif") {
           const src = item.r2Url ?? item.url;
           return (

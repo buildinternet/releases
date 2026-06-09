@@ -57,6 +57,7 @@ import { dedupeByExistingTitle } from "@buildinternet/releases-core/title-dedup"
 import { selectExistingReleaseKeys } from "../lib/title-dedup.js";
 import { normalizeMediaUrl } from "@releases/rendering/media-url.js";
 import { filterJunkMedia } from "@releases/rendering/media-filter.js";
+import { detectInlineVideos } from "@releases/rendering/video-embed.js";
 import {
   processMediaForR2,
   selectExistingReleaseUrls,
@@ -1354,11 +1355,24 @@ export async function ingestRawReleases(
       raw.media && raw.media.length > 0 ? raw.media : (enrich?.media ?? raw.media ?? []);
     // oxlint-disable-next-line no-map-spread -- copy-on-write required; m is an adapter-returned object
     const base = rawMedia.map((m) => ({ ...m, url: normalizeMediaUrl(m.url) }));
-    let finalMedia = base;
     const isNewRelease = raw.url == null || !existingMediaUrls.has(raw.url);
-    if (r2UploadEnabled && isNewRelease && base.length > 0) {
+    // Promote hosted-video links found inline in the body (Wistia/Loom/Vimeo/
+    // YouTube) into a `type: "video"` media item carrying the oEmbed poster
+    // (`url`, mirrored to R2 like any image) + watch URL (`linkUrl`) so the web
+    // renders a play-thumbnail card instead of a bare link (#1549). Fail-open:
+    // an unresolvable embed yields nothing and the bare link stays. Only for
+    // new releases — re-detecting on every fire would re-fetch oEmbed for rows
+    // we won't re-insert. The release body is the only inline-asset source we
+    // promote (deliberately narrow vs. mirroring all inline images).
+    const inlineVideos = isNewRelease
+      ? // oxlint-disable-next-line no-await-in-loop -- sequential per release; helper bounds oEmbed concurrency internally
+        await detectInlineVideos(enrich?.content ?? raw.content)
+      : [];
+    const withVideos = inlineVideos.length > 0 ? [...base, ...inlineVideos] : base;
+    let finalMedia = withVideos;
+    if (r2UploadEnabled && isNewRelease && withVideos.length > 0) {
       // oxlint-disable-next-line no-await-in-loop -- sequential per release; helper bounds image concurrency internally
-      finalMedia = await processMediaForR2(filterJunkMedia(base), {
+      finalMedia = await processMediaForR2(filterJunkMedia(withVideos), {
         db,
         bucket: env.MEDIA!,
         sourceId: source.id,

@@ -127,6 +127,16 @@ The `released-media` R2 bucket also holds org avatars (`orgs/{slug}.{ext}`, writ
 
 `FallbackImage` / `FallbackPlainImage` in `web/src/components/fallback-image.tsx` show an "Image unavailable" placeholder when a third-party URL fails to load.
 
+### Inline hosted-video cards (#1549)
+
+Release bodies sometimes link out to a hosted video (`[Video](https://fast.wistia.com/embed/iframe/<id>)`) that would otherwise render as an easy-to-miss text link. The cron `poll-fetch` media pre-pass scans each **new** release's body for known video-embed providers (Wistia / Loom / Vimeo / YouTube) via `detectInlineVideos` (`packages/rendering/src/video-embed.ts`), resolves a poster + title + canonical watch URL from the provider's **oEmbed** endpoint, and appends a `{ type: "video", url: <poster>, alt: <title>, linkUrl: <watchUrl> }` entry to `media[]`. From there it rides the existing `processMediaForR2` path — the poster is mirrored to `released-media` like any image, so the card serves same-origin.
+
+This is the first case of promoting an **inline body asset** into mirrored `media[]` (today only the per-release hero lands there). It is deliberately **special-cased to video** rather than generalized to all inline images: a hosted-video embed is a low-cardinality, high-value signal, whereas inline images are numerous and noisy (icons, spacers, decorative crops) and promoting all of them would balloon `media[]` and R2 cost. Generalizing inline-image mirroring is a possible follow-up.
+
+Fail-open and bounded: detection is pure/synchronous, oEmbed resolution has a per-call timeout and is capped at 4 videos/release, and any failure (unrecognised URL, non-ok / garbage oEmbed, missing thumbnail) yields no entry — the bare link stays exactly as today. No feature flag (read-only thumbnail + link is low-risk; mirroring already gates on the `MEDIA` binding).
+
+The web renders these as a **read-only play-thumbnail card** (`InlineVideoCard` in `web/src/app/release/[id]/release-content.tsx`) that links out to `linkUrl` with a `PlayBadge` overlay — distinct from the click-to-play `VideoEmbed` iframe facade used by `type: "video"` _sources_. An inline iframe embed for these body-promoted videos is a deferred follow-up (CSP / third-party-JS surface). Distinct from the YouTube `type: "video"` source path, which models a whole channel as a source.
+
 ## Entity notices
 
 A **notice** is one small curator-set note attached to an org, product, or
