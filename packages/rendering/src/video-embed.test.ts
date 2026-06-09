@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import {
+  canonicalVideoFromUrl,
   detectInlineVideoLinks,
   detectInlineVideos,
   resolveInlineVideo,
@@ -14,8 +15,10 @@ describe("detectInlineVideoLinks", () => {
     expect(links[0]).toMatchObject({
       provider: "wistia",
       id: "wh6pjz981z",
-      watchUrl: "https://fast.wistia.com/medias/wh6pjz981z",
+      // Embed form is the public click target (medias/<id> redirects to login).
+      watchUrl: "https://fast.wistia.com/embed/iframe/wh6pjz981z",
     });
+    // oEmbed still keys off the documented medias/<id> URL.
     expect(links[0]!.oembedUrl).toBe(
       "https://fast.wistia.com/oembed?url=https%3A%2F%2Ffast.wistia.com%2Fmedias%2Fwh6pjz981z",
     );
@@ -105,7 +108,7 @@ const WISTIA_LINK: DetectedVideoLink = {
   provider: "wistia",
   id: "wh6pjz981z",
   matchedUrl: "https://fast.wistia.com/embed/iframe/wh6pjz981z",
-  watchUrl: "https://fast.wistia.com/medias/wh6pjz981z",
+  watchUrl: "https://fast.wistia.com/embed/iframe/wh6pjz981z",
   oembedUrl: "https://fast.wistia.com/oembed?url=...",
 };
 
@@ -133,7 +136,7 @@ describe("resolveInlineVideo", () => {
       type: "video",
       url: "https://embed-ssl.wistia.com/deliveries/abc.jpg?image_crop_resized=960x540",
       alt: "Space planning: CAD Upload",
-      linkUrl: "https://fast.wistia.com/medias/wh6pjz981z",
+      linkUrl: "https://fast.wistia.com/embed/iframe/wh6pjz981z",
     });
   });
 
@@ -144,7 +147,7 @@ describe("resolveInlineVideo", () => {
     expect(media).toEqual({
       type: "video",
       url: "https://x/t.jpg",
-      linkUrl: "https://fast.wistia.com/medias/wh6pjz981z",
+      linkUrl: "https://fast.wistia.com/embed/iframe/wh6pjz981z",
     });
   });
 
@@ -196,7 +199,7 @@ describe("detectInlineVideos", () => {
         type: "video",
         url: "https://x/w.jpg",
         alt: "W",
-        linkUrl: "https://fast.wistia.com/medias/wh6pjz981z",
+        linkUrl: "https://fast.wistia.com/embed/iframe/wh6pjz981z",
       },
     ]);
   });
@@ -226,5 +229,59 @@ describe("detectInlineVideos", () => {
     const media = await detectInlineVideos("just text", { fetchImpl });
     expect(call).toBe(0);
     expect(media).toEqual([]);
+  });
+});
+
+describe("canonicalVideoFromUrl", () => {
+  it("collapses every Wistia URL form to the same id + embed watchUrl", () => {
+    const forms = [
+      "https://fast.wistia.com/embed/iframe/wh6pjz981z",
+      "https://fast.wistia.com/medias/wh6pjz981z",
+      "https://acme.wistia.com/embed/medias/wh6pjz981z.jsonp",
+    ];
+    for (const href of forms) {
+      expect(canonicalVideoFromUrl(href)).toEqual({
+        provider: "wistia",
+        id: "wh6pjz981z",
+        // Embed form is the public click target (medias/<id> redirects to login).
+        watchUrl: "https://fast.wistia.com/embed/iframe/wh6pjz981z",
+      });
+    }
+  });
+
+  it("collapses every YouTube URL form to the same id", () => {
+    const forms = [
+      "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+      "https://www.youtube.com/embed/dQw4w9WgXcQ",
+      "https://www.youtube.com/shorts/dQw4w9WgXcQ",
+      "https://youtu.be/dQw4w9WgXcQ",
+    ];
+    for (const href of forms) {
+      expect(canonicalVideoFromUrl(href)).toEqual({
+        provider: "youtube",
+        id: "dQw4w9WgXcQ",
+        watchUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+      });
+    }
+  });
+
+  it("matches Loom share + Vimeo player/bare forms", () => {
+    expect(canonicalVideoFromUrl("https://www.loom.com/share/deadbeef00")).toEqual({
+      provider: "loom",
+      id: "deadbeef00",
+      watchUrl: "https://www.loom.com/share/deadbeef00",
+    });
+    expect(canonicalVideoFromUrl("https://player.vimeo.com/video/123456789")).toEqual({
+      provider: "vimeo",
+      id: "123456789",
+      watchUrl: "https://vimeo.com/123456789",
+    });
+  });
+
+  it("returns null for non-video, unrecognised, or unparseable URLs", () => {
+    expect(canonicalVideoFromUrl("https://example.com/video/foo")).toBeNull();
+    expect(canonicalVideoFromUrl("https://www.youtube.com/feed/subscriptions")).toBeNull();
+    expect(canonicalVideoFromUrl("https://wistia.com.evil.com/medias/abc123")).toBeNull();
+    expect(canonicalVideoFromUrl("not a url")).toBeNull();
   });
 });

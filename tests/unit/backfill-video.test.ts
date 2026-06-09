@@ -17,7 +17,8 @@ let testDb: TestDatabase;
 const WISTIA_BODY =
   "Watch the demo: [Video](https://fast.wistia.com/embed/iframe/wh6pjz981z) — enjoy.";
 const POSTER_URL = "https://embed-ssl.wistia.com/deliveries/poster.png";
-const WATCH_URL = "https://fast.wistia.com/medias/wh6pjz981z";
+// Embed form is the public click target (medias/<id> redirects to login).
+const WATCH_URL = "https://fast.wistia.com/embed/iframe/wh6pjz981z";
 
 /** fetch mock: oEmbed endpoint → JSON; poster URL → 2KB png; everything else 404. */
 function makeFetch(): { fn: typeof fetch; oembedCalls: number; posterCalls: number } {
