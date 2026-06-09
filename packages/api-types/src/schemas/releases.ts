@@ -26,6 +26,9 @@ export const ReleaseLatestSourceSchema = z.object({
   name: z.string(),
   type: z.enum(SOURCE_TYPES),
   orgSlug: z.string().nullable(),
+  /** Owning org's display name (e.g. "Cloudflare"), distinct from the source
+   *  name. Null when the source has no org. Additive — older responses omit it. */
+  orgName: z.string().nullable().optional(),
 });
 
 export const ReleaseLatestProductSchema = z.object({

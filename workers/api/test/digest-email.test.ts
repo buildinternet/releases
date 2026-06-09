@@ -14,7 +14,7 @@ function rel(over: Partial<ReleaseLatestItem>): ReleaseLatestItem {
     publishedAt: "2026-06-08T00:00:00.000Z",
     url: "https://acme.com/changelog/1",
     media: [],
-    source: { slug: "blog", name: "Acme Blog", type: "feed", orgSlug: "acme" },
+    source: { slug: "blog", name: "Acme Blog", type: "feed", orgSlug: "acme", orgName: "Acme" },
     product: { slug: "widget", name: "Widget" },
     coverageCount: 0,
     contentChars: null,
@@ -33,7 +33,13 @@ describe("buildDigestEmail", () => {
         rel({
           id: "rel_2",
           title: "Second",
-          source: { slug: "blog", name: "Acme Blog", type: "feed", orgSlug: "acme" },
+          source: {
+            slug: "blog",
+            name: "Acme Blog",
+            type: "feed",
+            orgSlug: "acme",
+            orgName: "Acme",
+          },
         }),
       ],
       baseUrl: "https://releases.sh",
@@ -47,6 +53,26 @@ describe("buildDigestEmail", () => {
     expect(text).toContain("reld_x");
     expect(html).toContain("Unsubscribe");
     expect(html).toContain("https://releases.sh/following");
+    // Heading is the org's display name, not the source name.
+    expect(text).toContain("ACME");
+    expect(text).not.toContain("Acme Blog");
+    expect(html).toContain(">Acme</a>");
+  });
+
+  it("falls back to the source name when the source has no org", () => {
+    const { text } = buildDigestEmail({
+      recipientName: null,
+      cadence: "daily",
+      releases: [
+        rel({
+          source: { slug: "indie", name: "Indie Feed", type: "feed", orgSlug: null, orgName: null },
+        }),
+      ],
+      baseUrl: "https://releases.sh",
+      manageUrl: "https://releases.sh/following",
+      unsubscribeUrl: "https://api.releases.sh/v1/digest/unsubscribe/reld_x",
+    });
+    expect(text).toContain("INDIE FEED");
   });
 });
 
