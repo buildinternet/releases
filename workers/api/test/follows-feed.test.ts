@@ -87,4 +87,25 @@ describe("getFollowedReleases", () => {
     const page2 = await getFollowedReleases(h.db, "u1", { limit: 1, offset: 1 });
     expect(page2.map((r) => r.id)).toEqual(["rel_org"]);
   });
+
+  it("filters by the published-date watermark window", async () => {
+    await addFollow(h.db, "u1", "org", "org_a");
+    await h.db.insert(releases).values([
+      { id: "rel_old", sourceId: "src_org", title: "Old", content: "x", url: "https://a/1",
+        publishedAt: "2026-01-01T00:00:00.000Z", fetchedAt: "2026-01-01T00:00:00.000Z" },
+      { id: "rel_in", sourceId: "src_org", title: "In window", content: "x", url: "https://a/2",
+        publishedAt: "2026-06-05T00:00:00.000Z", fetchedAt: "2026-06-05T00:00:00.000Z" },
+      { id: "rel_future", sourceId: "src_org", title: "After runStart", content: "x", url: "https://a/3",
+        publishedAt: "2026-06-09T23:00:00.000Z", fetchedAt: "2026-06-09T23:00:00.000Z" },
+    ]);
+
+    const rows = await getFollowedReleases(h.db, "u1", {
+      limit: 50,
+      offset: 0,
+      publishedAfter: "2026-06-01T00:00:00.000Z",
+      publishedBefore: "2026-06-09T13:00:00.000Z",
+    });
+
+    expect(rows.map((r) => r.id)).toEqual(["rel_in"]);
+  });
 });

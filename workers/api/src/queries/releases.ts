@@ -172,6 +172,10 @@ export function mapLatestRowToReleaseItem(
 export interface FollowedReleasesParams {
   limit: number;
   offset: number;
+  /** Inclusive-exclusive lower bound: only releases with published_at > this ISO string. */
+  publishedAfter?: string | null;
+  /** Upper bound: only releases with published_at <= this ISO string. */
+  publishedBefore?: string | null;
 }
 
 /**
@@ -204,6 +208,8 @@ export async function getFollowedReleases(
       AND (o.deleted_at IS NULL)
       AND (r.suppressed IS NULL OR r.suppressed = 0)
       AND (r.prerelease IS NULL OR r.prerelease = 0)
+      ${params.publishedAfter ? sql`AND r.published_at > ${params.publishedAfter}` : sql``}
+      ${params.publishedBefore ? sql`AND r.published_at <= ${params.publishedBefore}` : sql``}
       AND (
         EXISTS (SELECT 1 FROM user_follows uf
                 WHERE uf.user_id = ${userId} AND uf.target_type = 'org'
