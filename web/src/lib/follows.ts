@@ -12,21 +12,7 @@ import type {
   FollowsListResponse,
   PersonalizedFeedResponse,
 } from "@buildinternet/releases-api-types";
-
-function apiBase(): string {
-  const url = process.env.NEXT_PUBLIC_BETTER_AUTH_URL;
-  if (!url) throw new Error("NEXT_PUBLIC_BETTER_AUTH_URL is not set");
-  return url.replace(/\/$/, "");
-}
-
-async function errorMessage(res: Response, fallback: string): Promise<string> {
-  try {
-    const body = (await res.json()) as { message?: string };
-    return body.message ?? fallback;
-  } catch {
-    return fallback;
-  }
-}
+import { apiBase, errorMessage } from "./user-api";
 
 export async function listFollows(): Promise<Follow[]> {
   const res = await fetch(`${apiBase()}/v1/me/follows`, { credentials: "include" });

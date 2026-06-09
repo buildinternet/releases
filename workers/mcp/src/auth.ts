@@ -90,9 +90,23 @@ export async function isMeteredMcpMethod(request: Request): Promise<boolean> {
  * forward the caller's own credential instead of borrowing the root key.
  */
 export type McpIdentity =
-  | { kind: "root"; scopes: string[]; tokenId: null; token: null }
-  | { kind: "token"; scopes: string[]; tokenId: string; token: string | null }
-  | { kind: "anonymous"; scopes: string[]; tokenId: null; token: null };
+  | { kind: "root"; scopes: string[]; tokenId: null; token: null; userToken: null }
+  | {
+      kind: "token";
+      scopes: string[];
+      tokenId: string;
+      token: string | null;
+      /**
+       * The raw Bearer credential when this identity is a USER principal (a
+       * `relu_` user key or an OAuth JWT) — forwarded by the per-user follows
+       * tools to `/v1/me/*` so they act as the user. Null for machine principals
+       * (`relk_`), which have no owning user. Distinct from `token` (the
+       * on-demand-lookup credential, deliberately null for user lanes so that
+       * fallback runs as root, not as the metered user key).
+       */
+      userToken: string | null;
+    }
+  | { kind: "anonymous"; scopes: string[]; tokenId: null; token: null; userToken: null };
 
 /**
  * The `api_tokens` tokenId whose `last_used_at` should be recorded for this
@@ -112,7 +126,13 @@ export function machineTokenIdForUsage(identity: McpIdentity): string | null {
 
 export type McpAuthResult = { ok: false; response: Response } | { ok: true; identity: McpIdentity };
 
-const ANONYMOUS: McpIdentity = { kind: "anonymous", scopes: ["read"], tokenId: null, token: null };
+const ANONYMOUS: McpIdentity = {
+  kind: "anonymous",
+  scopes: ["read"],
+  tokenId: null,
+  token: null,
+  userToken: null,
+};
 
 function bearer(request: Request): string {
   const header = request.headers.get("Authorization") ?? "";
@@ -181,7 +201,15 @@ async function resolveUserKey(
       ? body.scopes.filter((s): s is string => typeof s === "string")
       : [];
     if (scopes.length === 0) return ANONYMOUS; // defensive: empty scope never authenticates
-    return { kind: "token", scopes, tokenId: USER_API_KEY_PREFIX, token: null };
+    // `userToken: presented` — the raw relu_ key, so the follows tools can act as
+    // this user against /v1/me/* (the only place the user credential is needed).
+    return {
+      kind: "token",
+      scopes,
+      tokenId: USER_API_KEY_PREFIX,
+      token: null,
+      userToken: presented,
+    };
   } catch (err) {
     logEvent("warn", {
       component: "mcp-auth",
@@ -218,7 +246,14 @@ async function resolveIdentity(
     if (await flag(env.FLAGS, env.API_TOKENS_DISABLED, FLAGS.apiTokensDisabled)) return ANONYMOUS;
     const res = await verifyApiToken(createDb(env.DB), presented);
     if (res.ok)
-      return { kind: "token", scopes: res.scopes, tokenId: res.tokenId, token: presented };
+      // relk_ is a machine principal (no owning user) — userToken null.
+      return {
+        kind: "token",
+        scopes: res.scopes,
+        tokenId: res.tokenId,
+        token: presented,
+        userToken: null,
+      };
     // An invalid/unknown token is ignored rather than rejected, so public reads
     // stay open; the staging gate below still applies.
     return ANONYMOUS;
@@ -240,6 +275,9 @@ async function resolveIdentity(
         scopes: verified.scopes,
         tokenId: `${OAUTH_JWT_TOKEN_PREFIX}${verified.subject ?? "m2m"}`,
         token: null,
+        // `userToken: presented` — the raw JWT, forwarded by the follows tools to
+        // /v1/me/* (which verifies it locally; no second meter, unlike relu_).
+        userToken: presented,
       };
     }
     return { invalidToken: true };
@@ -248,7 +286,7 @@ async function resolveIdentity(
     () => null,
   );
   if (rootKey && presented === rootKey) {
-    return { kind: "root", scopes: [ROOT_SCOPE], tokenId: null, token: null };
+    return { kind: "root", scopes: [ROOT_SCOPE], tokenId: null, token: null, userToken: null };
   }
   return ANONYMOUS;
 }

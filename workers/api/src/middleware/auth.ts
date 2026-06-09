@@ -102,10 +102,12 @@ function oauthJwtConfig(env: Env["Bindings"]): OAuthJwtConfig | null {
 async function verifyUserKey(
   c: Context<Env>,
   presented: string,
-): Promise<{ ok: true; scopes: string[]; keyId: string } | { ok: false; rateLimited: boolean }> {
-  const waitUntil = execWaitUntil(c);
+): Promise<
+  | { ok: true; scopes: string[]; keyId: string; userId: string | null }
+  | { ok: false; rateLimited: boolean }
+> {
   try {
-    const auth = await createAuth(c.env, waitUntil);
+    const auth = await getOrCreateAuth(c);
     // apiKey() is registered conditionally (flag-gated), so betterAuth's inferred
     // `api` type doesn't statically expose verifyApiKey. We only reach here when the
     // flag is on (checked in resolveAuthUncached), so the endpoint is mounted; assert
@@ -115,7 +117,11 @@ async function verifyUserKey(
         verifyApiKey?: (a: { body: { key: string } }) => Promise<{
           valid: boolean;
           error?: { code?: string | null } | null;
-          key?: { id?: string; permissions?: Record<string, string[]> | null } | null;
+          key?: {
+            id?: string;
+            userId?: string | null;
+            permissions?: Record<string, string[]> | null;
+          } | null;
         }>;
       }
     ).verifyApiKey;
@@ -124,7 +130,12 @@ async function verifyUserKey(
     if (result.valid && result.key) {
       const scopes = apiScopesFromPermissions(result.key.permissions);
       if (scopes.length > 0)
-        return { ok: true, scopes, keyId: result.key.id ?? presented.slice(0, 12) };
+        return {
+          ok: true,
+          scopes,
+          keyId: result.key.id ?? presented.slice(0, 12),
+          userId: result.key.userId ?? null,
+        };
       return { ok: false, rateLimited: false };
     }
     const code = result.error?.code ?? "";
@@ -404,8 +415,97 @@ export const requireSession: MiddlewareHandler<Env> = requireSessionWithFlag(
   (e) => e.USER_API_KEYS_ENABLED,
 );
 
-/** User follows + feed surface gate (`/v1/me/*`) — enabled by default, no flag. */
-export const requireFollowsSession: MiddlewareHandler<Env> = requireSessionBase;
+/**
+ * Resolve a Bearer credential to the user it belongs to (id only — the follows
+ * handlers key on `user.id`). Two user-owned lanes:
+ *
+ *   • `relu_…` user API keys — the key row carries `userId`; gated by the same
+ *     flags as the machine path (`apiTokensDisabled` kill switch +
+ *     `userApiKeysEnabled` rollout), and metered/rate-limited by Better Auth's
+ *     verify. Unlike the catalog API this is NOT scope-gated: a read-only relu_
+ *     key still manages its OWNER'S follows, exactly as that user's cookie
+ *     session would — follows are personal account state, not a catalog write.
+ *   • "Sign in with Releases" OAuth JWTs — the `sub` claim is the user id.
+ *
+ * `relk_…` machine tokens and the static root key are NOT user principals (no
+ * owning user), so they resolve to `none` here and the caller gets a 401 —
+ * follows require a real signed-in user. Email/name are left empty: the
+ * `/v1/me/*` handlers only read `user.id`, and neither lane hands us the user's
+ * profile without an extra lookup we don't need.
+ *
+ * Outcomes are a three-way union, NOT `user | null`: a `relu_` key that
+ * Better Auth rate-limits resolves to `rate_limited` (distinct from `none`) so
+ * the caller can answer 429 instead of 401 — mirroring `createAuthMiddleware`.
+ * Every other verify failure stays `none` → 401.
+ */
+type BearerPrincipal =
+  | { kind: "user"; user: AuthSessionContext["user"] }
+  | { kind: "rate_limited" }
+  | { kind: "none" };
+
+async function resolveBearerUser(c: Context<Env>, presented: string): Promise<BearerPrincipal> {
+  if (isUserApiKeyShaped(presented)) {
+    if (await flag(c.env.FLAGS, c.env.API_TOKENS_DISABLED, FLAGS.apiTokensDisabled))
+      return { kind: "none" };
+    if (!(await flag(c.env.FLAGS, c.env.USER_API_KEYS_ENABLED, FLAGS.userApiKeysEnabled)))
+      return { kind: "none" };
+    const v = await verifyUserKey(c, presented);
+    if (v.ok)
+      return v.userId
+        ? { kind: "user", user: { id: v.userId, email: "", name: "" } }
+        : { kind: "none" };
+    // Surface a rate-limited key so the caller can 429; other failures → 401.
+    return v.rateLimited ? { kind: "rate_limited" } : { kind: "none" };
+  }
+  if (isJwtShaped(presented)) {
+    const cfg = oauthJwtConfig(c.env);
+    if (!cfg) return { kind: "none" };
+    // Test seam: a locally-injected JWKS resolver avoids a network fetch.
+    const resolver = c.get("oauthJwtKeyResolver");
+    if (resolver) cfg.keyResolver = resolver;
+    const verified = await verifyOAuthJwt(presented, cfg);
+    if (verified?.subject)
+      return { kind: "user", user: { id: verified.subject, email: "", name: "" } };
+    return { kind: "none" };
+  }
+  return { kind: "none" };
+}
+
+/**
+ * User follows + feed gate (`/v1/me/*`) — enabled by default, no flag. Resolves a
+ * principal from EITHER a Better Auth session (cookie, or a device-login Bearer
+ * session token via the `bearer()` plugin) OR a Bearer user credential (`relu_`
+ * key / OAuth JWT) so CLI + MCP callers — which authenticate by Bearer, not a
+ * cookie — can manage their follows too. Session is tried first; the Bearer-user
+ * lanes are the fallback. 401 when neither resolves.
+ */
+export const requireFollowsPrincipal: MiddlewareHandler<Env> = async (c, next) => {
+  const auth = await getOrCreateAuth(c);
+  const session = await auth.api.getSession({ headers: c.req.raw.headers });
+  if (session?.user?.id) {
+    c.set("session", {
+      user: { id: session.user.id, email: session.user.email, name: session.user.name },
+    });
+    return next();
+  }
+  const presented = bearer(c);
+  if (presented) {
+    const resolved = await resolveBearerUser(c, presented);
+    if (resolved.kind === "user") {
+      c.set("session", { user: resolved.user });
+      return next();
+    }
+    if (resolved.kind === "rate_limited") {
+      // A rate-limited user key answers 429 (not 401), matching the catalog API.
+      return c.json({ error: "rate_limited", message: "API key rate limit exceeded" }, 429);
+    }
+    // A credential was presented but mapped to no user — mark it invalid so a
+    // Bearer client can tell "wrong/expired token" from "no token".
+    c.header("WWW-Authenticate", 'Bearer realm="releases-api", error="invalid_token"');
+    return c.json({ error: "unauthorized", message: "Invalid credential" }, 401);
+  }
+  return c.json({ error: "unauthorized", message: "Sign in required" }, 401);
+};
 
 function createAuthMiddleware(opts: {
   allowPublicReads: boolean;

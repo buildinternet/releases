@@ -1,6 +1,6 @@
 import { Hono, type Context } from "hono";
 import { createDb } from "../db.js";
-import { requireFollowsSession } from "../middleware/auth.js";
+import { requireFollowsPrincipal } from "../middleware/auth.js";
 import { parseListPagination, buildListResponse } from "../lib/pagination.js";
 import {
   addFollow,
@@ -28,7 +28,7 @@ function isFollowTargetType(v: unknown): v is FollowTargetType {
 /**
  * Self-serve follow + personalized-feed handlers, defined WITHOUT auth so unit
  * tests can mount them behind an injected session (mirrors userApiKeyHandlers).
- * Production composes them under `requireFollowsSession` via `meRoutes`.
+ * Production composes them under `requireFollowsPrincipal` via `meRoutes`.
  */
 export const meHandlers = new Hono<Env>();
 
@@ -150,7 +150,7 @@ meHandlers.delete("/me/feed/token", async (c) => {
   return c.json({ success: true });
 });
 
-/** Production composition: flag-gated session, then the handlers. */
+/** Production composition: session-or-Bearer principal gate, then the handlers. */
 export const meRoutes = new Hono<Env>();
-meRoutes.use("/me/*", requireFollowsSession);
+meRoutes.use("/me/*", requireFollowsPrincipal);
 meRoutes.route("/", meHandlers);

@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { createTestDb, type TestDatabase } from "../../../tests/db-helper.js";
 import { organizations, products } from "@buildinternet/releases-core/schema";
 import { user } from "../src/db/schema-auth.js";
+import { userFollows } from "../src/db/schema-follows.js";
 import {
   addFollow,
   removeFollow,
@@ -85,5 +86,48 @@ describe("follows store", () => {
       .set({ deletedAt: new Date().toISOString() })
       .where(eq(organizations.id, "org_a"));
     expect(await listFollows(h.db, "u1")).toHaveLength(0);
+  });
+
+  it("enriches a mixed org+product list newest-first with the product's owning-org slug", async () => {
+    // Explicit, distinct timestamps so newest-first ordering is deterministic
+    // (the integer `created_at` column has second granularity — two follows
+    // added in the same second would tie).
+    await h.db.insert(userFollows).values([
+      {
+        id: "fol_org",
+        userId: "u1",
+        targetType: "org",
+        targetId: "org_a",
+        createdAt: new Date(1000),
+      },
+      {
+        id: "fol_prod",
+        userId: "u1",
+        targetType: "product",
+        targetId: "prd_a",
+        createdAt: new Date(2000),
+      },
+    ]);
+    const rows = await listFollows(h.db, "u1");
+    expect(rows).toHaveLength(2);
+    // Product follow is newer → first; its orgSlug resolves via the aliased join.
+    expect(rows[0]).toMatchObject({
+      targetType: "product",
+      targetId: "prd_a",
+      name: "Widget",
+      slug: "widget",
+      orgSlug: "acme",
+    });
+    // Org follow carries a null orgSlug (matches resolveFollowTarget).
+    expect(rows[1]).toMatchObject({ targetType: "org", targetId: "org_a", orgSlug: null });
+  });
+
+  it("drops a follow whose product target was hard-deleted (join miss)", async () => {
+    await addFollow(h.db, "u1", "product", "prd_a");
+    await addFollow(h.db, "u1", "org", "org_a");
+    await h.db.delete(products).where(eq(products.id, "prd_a"));
+    const rows = await listFollows(h.db, "u1");
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ targetType: "org", targetId: "org_a" });
   });
 });

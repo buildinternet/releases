@@ -7,7 +7,7 @@ import { useFollows } from "@/components/follows-provider";
 import { OrgAvatar } from "@/components/org-avatar";
 import { InfiniteScrollTrigger } from "@/components/infinite-scroll-trigger";
 import { useInfiniteScroll } from "@/hooks/use-infinite-scroll";
-import { listFollows, getFeed } from "@/lib/follows";
+import { getFeed } from "@/lib/follows";
 import { formatRelativeDate, pluralReleases } from "@/lib/formatters";
 import { FeedTokenCard } from "./feed-token-card";
 import type { Follow, ReleaseLatestItem } from "@buildinternet/releases-api-types";
@@ -60,25 +60,30 @@ function groupByDay(items: ReleaseLatestItem[]): DayBucket[] {
 export function FollowingClient() {
   const { data: session, isPending } = useSession();
   const follows = useFollows();
+  // The enriched follow list is owned by FollowsProvider (already fetched once
+  // for the follow buttons), so the sidebar reads it from there instead of
+  // re-fetching GET /v1/me/follows. The provider also owns optimistic add/remove
+  // and the post-toggle refetch, so this page never mutates the list directly.
+  const followsList = follows?.follows ?? [];
+  const followsReady = follows?.ready ?? false;
 
   const [feedItems, setFeedItems] = useState<ReleaseLatestItem[]>([]);
-  const [followsList, setFollowsList] = useState<Follow[]>([]);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Initial load: follows + first feed page.
+  // Initial load: the first feed page. The follow list comes from the provider
+  // (above), so it's no longer fetched here.
   useEffect(() => {
     if (!session?.user) return;
     let cancelled = false;
     setLoading(true);
     setError(null);
-    Promise.all([listFollows(), getFeed(1, FEED_PAGE_SIZE)])
-      .then(([fl, feedResp]) => {
+    getFeed(1, FEED_PAGE_SIZE)
+      .then((feedResp) => {
         if (cancelled) return;
-        setFollowsList(fl);
         setFeedItems(feedResp.items);
         setPage(1);
         setHasMore(feedResp.pagination.hasMore);
@@ -241,7 +246,7 @@ export function FollowingClient() {
               Your follows
             </h2>
 
-            {followsList.length === 0 && !loading ? (
+            {followsList.length === 0 && followsReady ? (
               <p className="text-sm text-stone-400 dark:text-stone-500">
                 Not following anything yet.
               </p>
@@ -251,20 +256,10 @@ export function FollowingClient() {
                   <FollowRow
                     key={`${f.targetType}:${f.targetId}`}
                     follow={f}
-                    onUnfollow={async () => {
-                      // Optimistically drop from the sidebar; restore on failure so
-                      // the local list stays in sync with the provider's rollback.
-                      setFollowsList((prev) =>
-                        prev.filter(
-                          (x) => !(x.targetType === f.targetType && x.targetId === f.targetId),
-                        ),
-                      );
-                      try {
-                        await follows?.toggle(f.targetType, f.targetId);
-                      } catch {
-                        setFollowsList((prev) => [...prev, f]);
-                      }
-                    }}
+                    // The provider owns the optimistic drop, error rollback, and
+                    // post-success refetch — `followsList` reflects all three.
+                    // Swallow the re-thrown error (provider already rolled back).
+                    onUnfollow={() => follows?.toggle(f.targetType, f.targetId)?.catch(() => {})}
                   />
                 ))}
               </ul>

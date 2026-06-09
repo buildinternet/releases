@@ -80,6 +80,7 @@ async function handle(
     userAgent: request.headers.get("user-agent"),
     authScopes: identity.scopes,
     authToken: identity.token,
+    userToken: identity.userToken,
   });
   return createMcpHandler(server)(request, env, ctx);
 }

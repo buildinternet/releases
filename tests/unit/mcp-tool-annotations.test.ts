@@ -41,31 +41,54 @@ describe("MCP tool annotations", () => {
     tools = await listTools(stubEnv());
   });
 
-  it("exposes the public read-only tool surface", () => {
+  // The per-user follows tools (#1520) mutate the caller's account, so they are
+  // NOT read-only. They're still listed in tools/list (gating is at call time via
+  // the user credential), so the surface includes them.
+  const MUTATION_TOOLS = new Set(["follow", "unfollow"]);
+
+  it("exposes the full tool surface (read-only catalog + per-user follows)", () => {
     const names = tools.map((t) => t.name).toSorted();
     expect(names).toEqual([
+      "follow",
       "get_catalog_entry",
       "get_collection",
       "get_collection_releases",
       "get_latest_releases",
       "get_organization",
+      "get_personalized_feed",
       "get_release",
       "list_catalog",
       "list_collections",
+      "list_follows",
       "list_organizations",
       "lookup_domain",
       "search",
+      "unfollow",
     ]);
   });
 
   it("marks every data-read tool as read-only, idempotent, closed-world", () => {
     for (const tool of tools) {
+      if (MUTATION_TOOLS.has(tool.name)) continue;
       expect(tool.annotations?.readOnlyHint).toBe(true);
       expect(tool.annotations?.destructiveHint).toBe(false);
       expect(tool.annotations?.idempotentHint).toBe(true);
       expect(tool.annotations?.openWorldHint).toBe(false);
       expect(tool.annotations?.title).toBeString();
       expect(tool.title).toBeString();
+    }
+  });
+
+  it("marks the follows mutation tools as non-read-only but idempotent", () => {
+    for (const name of MUTATION_TOOLS) {
+      const tool = tools.find((t) => t.name === name);
+      expect(tool, `expected ${name} in tools list`).toBeDefined();
+      expect(tool!.annotations?.readOnlyHint).toBe(false);
+      expect(tool!.annotations?.destructiveHint).toBe(false);
+      expect(tool!.annotations?.idempotentHint).toBe(true);
+      expect(tool!.annotations?.openWorldHint).toBe(false);
+      expect(tool!.annotations?.title).toBeString();
+      expect(tool!.title).toBeString();
     }
   });
 
