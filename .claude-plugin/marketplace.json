@@ -3,13 +3,13 @@
   "owner": {
     "name": "Build Internet"
   },
-  "description": "Internal Claude Code plugin for the buildinternet/releases monorepo — operator skills, managed-agent prompts, and the grader subagent used to develop the Releases.sh registry.",
+  "description": "Internal Claude Code plugin for the buildinternet/releases monorepo — operator skills and the grader subagent used to develop the Releases.sh registry.",
   "plugins": [
     {
       "name": "releases-dev",
       "source": "./",
-      "description": "Monorepo developer plugin for buildinternet/releases. Bundles every skill in src/agent/skills/, the discovery/worker/grader subagents, the /releases command, and the hosted MCP connection. Use this when working in the monorepo; end users should install `releases` and `releases-admin` from the buildinternet/releases-cli marketplace instead.",
-      "version": "0.4.0",
+      "description": "Monorepo developer plugin for buildinternet/releases. Bundles every skill in src/agent/skills/, the grader subagent, the /releases command, and the hosted MCP connection. Use this when working in the monorepo; end users should install `releases` and `releases-admin` from the buildinternet/releases-cli marketplace instead.",
+      "version": "0.5.0",
       "author": {
         "name": "Build Internet"
       },
@@ -28,11 +28,7 @@
         "./src/agent/skills/regenerating-overviews",
         "./src/agent/skills/seeding-playbooks"
       ],
-      "agents": [
-        "./plugins/claude/releases/agents/discovery.md",
-        "./plugins/claude/releases/agents/worker.md",
-        "./plugins/claude/releases/agents/grader.md"
-      ],
+      "agents": ["./plugins/claude/releases/agents/grader.md"],
       "commands": "./plugins/claude/releases/commands",
       "mcpServers": "./plugins/claude/releases/.mcp.json"
     }
