@@ -1,0 +1,136 @@
+import { and, eq } from "drizzle-orm";
+import { generateDigestToken, isDigestTokenShaped } from "@buildinternet/releases-core/api-token";
+import type { AnyDb } from "../db.js";
+import {
+  userDigestPrefs,
+  type UserDigestPrefs,
+  type DigestCadence,
+} from "../db/schema-digest-prefs.js";
+import { user } from "../db/schema-auth.js";
+
+function newDigestPrefsId(): string {
+  return `udp_${crypto.randomUUID()}`;
+}
+
+/** A digest send target: the user's address + their watermark + manage token. */
+export interface DigestRecipient {
+  userId: string;
+  email: string;
+  name: string | null;
+  lastDigestAt: Date | null;
+  manageToken: string;
+}
+
+/** Fetch the user's prefs row, or null if they've never set a preference. */
+export async function getDigestPrefs(db: AnyDb, userId: string): Promise<UserDigestPrefs | null> {
+  const row = await db
+    .select()
+    .from(userDigestPrefs)
+    .where(eq(userDigestPrefs.userId, userId))
+    .get();
+  return row ?? null;
+}
+
+/**
+ * Set the caller's cadence. Creates the row (minting a manage token) on first
+ * call. Stamps `last_digest_at = now` ONLY on an off→on transition, so re-enabling
+ * starts a fresh window (no backlog) while switching daily↔weekly preserves it.
+ * Idempotent. Returns the resulting row.
+ */
+export async function setDigestCadence(
+  db: AnyDb,
+  userId: string,
+  cadence: DigestCadence,
+): Promise<UserDigestPrefs> {
+  // SQLite stores timestamps as integer seconds; truncate to avoid a precision
+  // mismatch between the returned in-memory row and a subsequent DB read.
+  const now = new Date(Math.floor(Date.now() / 1000) * 1000);
+  const existing = await getDigestPrefs(db, userId);
+
+  if (!existing) {
+    const row: UserDigestPrefs = {
+      id: newDigestPrefsId(),
+      userId,
+      cadence,
+      lastDigestAt: cadence === "off" ? null : now,
+      manageToken: generateDigestToken(),
+      createdAt: now,
+      updatedAt: now,
+    };
+    await db.insert(userDigestPrefs).values(row);
+    return row;
+  }
+
+  const enabling = existing.cadence === "off" && cadence !== "off";
+  await db
+    .update(userDigestPrefs)
+    .set({ cadence, updatedAt: now, ...(enabling ? { lastDigestAt: now } : {}) })
+    .where(eq(userDigestPrefs.userId, userId));
+
+  return {
+    ...existing,
+    cadence,
+    updatedAt: now,
+    lastDigestAt: enabling ? now : existing.lastDigestAt,
+  };
+}
+
+/**
+ * Resolve a presented `reld_` manage token and set that user's cadence to `off`.
+ * Returns true on a successful (idempotent) unsubscribe, false on an unknown or
+ * malformed token. Never throws.
+ */
+export async function unsubscribeByToken(db: AnyDb, raw: string): Promise<boolean> {
+  if (!isDigestTokenShaped(raw)) return false;
+  const row = await db
+    .select()
+    .from(userDigestPrefs)
+    .where(eq(userDigestPrefs.manageToken, raw))
+    .get();
+  if (!row) return false;
+  if (row.cadence !== "off") {
+    await db
+      .update(userDigestPrefs)
+      .set({ cadence: "off", updatedAt: new Date() })
+      .where(eq(userDigestPrefs.userId, row.userId));
+  }
+  return true;
+}
+
+/**
+ * All users due for a digest at the given cadence whose email is verified, joined
+ * to their auth address. Capped at `limit` (oldest watermark first so a backlog
+ * drains across runs). Unverified addresses are never returned.
+ */
+export async function listDigestRecipients(
+  db: AnyDb,
+  cadence: Exclude<DigestCadence, "off">,
+  limit: number,
+): Promise<DigestRecipient[]> {
+  return db
+    .select({
+      userId: userDigestPrefs.userId,
+      email: user.email,
+      name: user.name,
+      lastDigestAt: userDigestPrefs.lastDigestAt,
+      manageToken: userDigestPrefs.manageToken,
+    })
+    .from(userDigestPrefs)
+    .innerJoin(user, eq(user.id, userDigestPrefs.userId))
+    .where(and(eq(userDigestPrefs.cadence, cadence), eq(user.emailVerified, true)))
+    .orderBy(userDigestPrefs.lastDigestAt)
+    .limit(limit)
+    .all();
+}
+
+/** Advance a user's watermark to the cron run start after a successful send. */
+export async function advanceDigestWatermark(
+  db: AnyDb,
+  userId: string,
+  runStart: Date,
+): Promise<void> {
+  await db
+    .update(userDigestPrefs)
+    .set({ lastDigestAt: runStart, updatedAt: new Date() })
+    .where(eq(userDigestPrefs.userId, userId));
+}
