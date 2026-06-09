@@ -44,7 +44,25 @@ export interface OpenRouterOptions {
   timeoutMs?: number;
   /** Optional Broadcast observability tags (see `OpenRouterTrace`). */
   trace?: OpenRouterTrace;
+  /**
+   * Top-level OpenRouter Broadcast grouping id (NOT inside `trace`). Collapses
+   * related requests — a conversation or agent workflow — into one trace. The
+   * intended consumer is the extraction tool-loop, which fires many OpenRouter
+   * calls per source-fetch: a shared `sessionId` groups all rounds into a single
+   * trace. Single-shot lanes (marketing-classifier, summarize) can leave it unset.
+   * Sent as both the `session_id` body field and the `x-session-id` header.
+   * Truncated to 128 chars defensively.
+   */
+  sessionId?: string;
+  /**
+   * Top-level OpenRouter Broadcast end-user id (NOT inside `trace`). Associates
+   * traces with a specific end-user. Optional; truncated to 128 chars defensively.
+   */
+  user?: string;
 }
+
+/** OpenRouter caps `session_id` / `user` at 128 chars; clamp defensively. */
+const MAX_TRACE_FIELD_LEN = 128;
 
 /**
  * Map the camelCase trace tags to OpenRouter's snake_case `trace` body shape,
@@ -91,6 +109,9 @@ export async function openRouterChat(
 ): Promise<OpenRouterResult> {
   const base = (opts.baseURL ?? DEFAULT_BASE).replace(/\/$/, "");
   const trace = serializeTrace(opts.trace);
+  // Top-level Broadcast grouping fields (NOT inside `trace`); clamp to 128 chars.
+  const sessionId = opts.sessionId ? opts.sessionId.slice(0, MAX_TRACE_FIELD_LEN) : undefined;
+  const user = opts.user ? opts.user.slice(0, MAX_TRACE_FIELD_LEN) : undefined;
   const res = await fetchImpl(`${base}/chat/completions`, {
     method: "POST",
     headers: {
@@ -101,6 +122,8 @@ export async function openRouterChat(
       // display-name headers so the app name shows regardless of which OpenRouter
       // honors; attribution itself rides on `HTTP-Referer` either way.
       ...(opts.title ? { "X-Title": opts.title, "X-OpenRouter-Title": opts.title } : {}),
+      // Belt-and-suspenders: the docs accept `session_id` via header too.
+      ...(sessionId ? { "x-session-id": sessionId } : {}),
     },
     body: JSON.stringify({
       model: opts.model,
@@ -113,6 +136,9 @@ export async function openRouterChat(
       usage: { include: true },
       // Broadcast observability tags — inert until Broadcast is configured.
       ...(trace ? { trace } : {}),
+      // Top-level Broadcast grouping fields — omitted entirely when unset.
+      ...(sessionId ? { session_id: sessionId } : {}),
+      ...(user ? { user } : {}),
     }),
     signal: AbortSignal.timeout(opts.timeoutMs ?? DEFAULT_TIMEOUT_MS),
   });

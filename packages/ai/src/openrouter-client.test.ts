@@ -104,6 +104,60 @@ describe("openRouterChat", () => {
     expect(sent.trace).toBeUndefined();
   });
 
+  it("sends session_id + user as top-level body fields and an x-session-id header when set", async () => {
+    const f = fakeFetch(200, { choices: [{ message: { content: "x" } }], usage: {} });
+    await openRouterChat(
+      {
+        apiKey: "k",
+        model: "m",
+        sessionId: "fetch-src_abc123",
+        user: "org:acme",
+      },
+      { system: "s", user: "u", maxTokens: 1 },
+      f as unknown as typeof fetch,
+    );
+    const init = (f.mock.calls[0] as unknown as [string, RequestInit])[1];
+    const headers = init.headers as Record<string, string>;
+    expect(headers["x-session-id"]).toBe("fetch-src_abc123");
+    const sent = JSON.parse(init.body as string);
+    expect(sent.session_id).toBe("fetch-src_abc123");
+    expect(sent.user).toBe("org:acme");
+  });
+
+  it("omits session_id/user (body + header) entirely when unset", async () => {
+    const f = fakeFetch(200, { choices: [{ message: { content: "x" } }], usage: {} });
+    await openRouterChat(
+      { apiKey: "k", model: "m" },
+      { system: "s", user: "u", maxTokens: 1 },
+      f as unknown as typeof fetch,
+    );
+    const init = (f.mock.calls[0] as unknown as [string, RequestInit])[1];
+    const headers = init.headers as Record<string, string>;
+    expect(headers["x-session-id"]).toBeUndefined();
+    const sent = JSON.parse(init.body as string);
+    expect("session_id" in sent).toBe(false);
+    expect("user" in sent).toBe(false);
+  });
+
+  it("truncates session_id and user to 128 chars (body + header)", async () => {
+    const f = fakeFetch(200, { choices: [{ message: { content: "x" } }], usage: {} });
+    const longSession = "s".repeat(200);
+    const longUser = "u".repeat(200);
+    await openRouterChat(
+      { apiKey: "k", model: "m", sessionId: longSession, user: longUser },
+      { system: "s", user: "u", maxTokens: 1 },
+      f as unknown as typeof fetch,
+    );
+    const init = (f.mock.calls[0] as unknown as [string, RequestInit])[1];
+    const headers = init.headers as Record<string, string>;
+    expect(headers["x-session-id"]).toBe("s".repeat(128));
+    const sent = JSON.parse(init.body as string);
+    expect(sent.session_id).toBe("s".repeat(128));
+    expect(sent.session_id.length).toBe(128);
+    expect(sent.user).toBe("u".repeat(128));
+    expect(sent.user.length).toBe(128);
+  });
+
   it("throws with status + truncated body on non-2xx", async () => {
     const f = fakeFetch(429, "rate limited");
     expect(
