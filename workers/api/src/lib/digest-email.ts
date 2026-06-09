@@ -34,6 +34,51 @@ function releaseUrl(baseUrl: string, r: ReleaseLatestItem): string {
   return `${baseUrl}/release/${r.id}`;
 }
 
+// GitHub releases are version-tag drops (the "SDK-style" rows). In the web
+// timelines they collapse into a compact per-product commit-log rollup instead
+// of a hero card; the digest mirrors that so a burst of version bumps reads as
+// one tidy line per product rather than N near-identical paragraphs. Kept as a
+// local literal check (not the web `isTag` helper, which lives in a component
+// the worker must not import).
+function isTagRelease(r: ReleaseLatestItem): boolean {
+  return r.source.type === "github";
+}
+
+function partitionOrgItems(items: ReleaseLatestItem[]): {
+  posts: ReleaseLatestItem[];
+  tags: ReleaseLatestItem[];
+} {
+  const posts: ReleaseLatestItem[] = [];
+  const tags: ReleaseLatestItem[] = [];
+  for (const r of items) (isTagRelease(r) ? tags : posts).push(r);
+  return { posts, tags };
+}
+
+/**
+ * Collapse a day's GitHub version tags into per-product buckets (product when
+ * bound, else source), preserving input (published-desc) order — the email
+ * analogue of `rollupTags` in the web timeline.
+ */
+function groupTagsByProduct(
+  tags: ReleaseLatestItem[],
+): Array<{ label: string; items: ReleaseLatestItem[] }> {
+  const groups = new Map<string, { label: string; items: ReleaseLatestItem[] }>();
+  for (const r of tags) {
+    const key = r.product?.slug ?? r.source.slug;
+    let g = groups.get(key);
+    if (!g) {
+      g = { label: r.product?.name ?? r.source.name, items: [] };
+      groups.set(key, g);
+    }
+    g.items.push(r);
+  }
+  return [...groups.values()];
+}
+
+function versionLabel(r: ReleaseLatestItem): string {
+  return r.version || r.title || "—";
+}
+
 /** Group releases by owning org slug, preserving input (published-desc) order. */
 function groupByOrg(
   releases: ReleaseLatestItem[],
@@ -70,11 +115,20 @@ export function buildDigestEmail(content: DigestEmailContent): {
   const textLines: string[] = [subject, ""];
   for (const g of groups) {
     textLines.push(g.orgName.toUpperCase());
-    for (const r of g.items) {
+    const { posts, tags } = partitionOrgItems(g.items);
+    for (const r of posts) {
       const prod = r.product ? ` (${r.product.name})` : "";
       textLines.push(`  • ${bestTitle(r)}${prod}`);
       if (r.summary) textLines.push(`    ${r.summary}`);
       textLines.push(`    ${releaseUrl(baseUrl, r)}`);
+    }
+    // Version-tag rollup: one product header, then a line per version. Keeps a
+    // string of SDK bumps compact instead of one bullet each.
+    for (const tg of groupTagsByProduct(tags)) {
+      textLines.push(`  ${tg.label} (${tg.items.length})`);
+      for (const r of tg.items) {
+        textLines.push(`    ${versionLabel(r)} — ${releaseUrl(baseUrl, r)}`);
+      }
     }
     textLines.push("");
   }
@@ -93,7 +147,8 @@ export function buildDigestEmail(content: DigestEmailContent): {
     htmlParts.push(
       `<h2 style="font:600 14px system-ui,sans-serif;margin-top:20px">${orgHeading}</h2>`,
     );
-    for (const r of g.items) {
+    const { posts, tags } = partitionOrgItems(g.items);
+    for (const r of posts) {
       const prod = r.product
         ? ` <span style="color:#888">(${escapeHtml(r.product.name)})</span>`
         : "";
@@ -101,6 +156,21 @@ export function buildDigestEmail(content: DigestEmailContent): {
         `<p style="margin:8px 0;font:14px system-ui,sans-serif">` +
           `<a href="${escapeHtml(releaseUrl(baseUrl, r))}" style="font-weight:600;color:#1a56db;text-decoration:none">${escapeHtml(bestTitle(r))}</a>${prod}` +
           (r.summary ? `<br><span style="color:#444">${escapeHtml(r.summary)}</span>` : "") +
+          `</p>`,
+      );
+    }
+    // Version-tag rollup: one line per product, versions as monospace pill links
+    // — the email analogue of the timeline's commit-log rollup.
+    for (const tg of groupTagsByProduct(tags)) {
+      const pills = tg.items
+        .map(
+          (r) =>
+            `<a href="${escapeHtml(releaseUrl(baseUrl, r))}" style="display:inline-block;font:12px ui-monospace,monospace;color:#475569;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:4px;padding:1px 6px;margin:0 4px 4px 0;text-decoration:none">${escapeHtml(versionLabel(r))}</a>`,
+        )
+        .join("");
+      htmlParts.push(
+        `<p style="margin:8px 0;font:14px system-ui,sans-serif">` +
+          `<span style="font-weight:600;color:#444">${escapeHtml(tg.label)}</span> ${pills}` +
           `</p>`,
       );
     }

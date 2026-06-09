@@ -59,6 +59,34 @@ describe("buildDigestEmail", () => {
     expect(html).toContain(">Acme</a>");
   });
 
+  it("collapses GitHub version tags into a per-product rollup", () => {
+    const ghSource = {
+      slug: "sdk",
+      name: "acme/sdk",
+      type: "github" as const,
+      orgSlug: "acme",
+      orgName: "Acme",
+    };
+    const { text, html } = buildDigestEmail({
+      recipientName: "T",
+      cadence: "daily",
+      releases: [
+        rel({ id: "t1", title: "v4.2.1", version: "4.2.1", summary: null, source: ghSource }),
+        rel({ id: "t2", title: "v4.2.0", version: "4.2.0", summary: null, source: ghSource }),
+      ],
+      baseUrl: "https://releases.sh",
+      manageUrl: "https://releases.sh/following",
+      unsubscribeUrl: "https://api.releases.sh/v1/digest/unsubscribe/reld_x",
+    });
+    // Product header once, both versions as links, no per-version hero paragraph.
+    expect(text).toContain("Widget (2)");
+    expect(text).toContain("4.2.1 — https://releases.sh/release/t1");
+    expect(text).toContain("4.2.0 — https://releases.sh/release/t2");
+    expect(html).toContain(">4.2.1</a>");
+    expect(html).toContain(">4.2.0</a>");
+    expect(html).toContain("https://releases.sh/release/t2");
+  });
+
   it("falls back to the source name when the source has no org", () => {
     const { text } = buildDigestEmail({
       recipientName: null,
