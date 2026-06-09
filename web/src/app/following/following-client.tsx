@@ -9,6 +9,8 @@ import { InfiniteScrollTrigger } from "@/components/infinite-scroll-trigger";
 import { useInfiniteScroll } from "@/hooks/use-infinite-scroll";
 import { getFeed } from "@/lib/follows";
 import { formatRelativeDate, pluralReleases } from "@/lib/formatters";
+import { normalizeVersionLabel } from "@/lib/release-title";
+import { isTag, rollupTags, type TagListItem } from "@/components/collection-timeline-rollup";
 import { DigestCard } from "./digest-card";
 import { FeedTokenCard } from "./feed-token-card";
 import type { Follow, ReleaseLatestItem } from "@buildinternet/releases-api-types";
@@ -275,7 +277,34 @@ export function FollowingClient() {
 
 // ── Day section ──────────────────────────────────────────────────
 
+// A feed item carrying the synthesized `org` segment `rollupTags` needs to key
+// its buckets. The personalized feed is cross-org, so — unlike the single-org
+// collection feed — the bucket key must include the owning org or two products
+// that share a slug across orgs would merge. Derived from the source's org.
+type TaggedFeedItem = ReleaseLatestItem & { org: { slug: string; name: string } };
+
+function withOrgKey(item: ReleaseLatestItem): TaggedFeedItem {
+  return {
+    ...item,
+    org: { slug: item.source.orgSlug ?? "", name: item.source.orgName ?? item.source.name },
+  };
+}
+
 function DaySection({ day, orgChips }: { day: DayBucket; orgChips: Map<string, OrgChip> }) {
+  // Split each day into narrative "posts" (hero cards) and GitHub version
+  // "tags" (the SDK-style commit-log rollup), mirroring the collection
+  // timeline's OrgSection. Posts lead; the compact tag block follows so a burst
+  // of version bumps doesn't bury the richer release notes above it.
+  const { posts, tagItems } = useMemo(() => {
+    const postList: ReleaseLatestItem[] = [];
+    const tagList: TaggedFeedItem[] = [];
+    for (const r of day.items) {
+      if (isTag(r)) tagList.push(withOrgKey(r));
+      else postList.push(r);
+    }
+    return { posts: postList, tagItems: rollupTags(tagList) };
+  }, [day.items]);
+
   return (
     <section className="mt-6 first:mt-0">
       <div className="flex items-baseline gap-3 border-b border-stone-200 pb-2 pt-2 dark:border-stone-800">
@@ -299,11 +328,162 @@ function DaySection({ day, orgChips }: { day: DayBucket; orgChips: Map<string, O
       </div>
 
       <ul className="mt-3 flex flex-col gap-3">
-        {day.items.map((item) => (
+        {posts.map((item) => (
           <FeedRow key={item.id} item={item} orgChips={orgChips} />
         ))}
+
+        {tagItems.length > 0 && (
+          <li className="overflow-hidden rounded-lg border border-stone-200 bg-white dark:border-stone-800 dark:bg-stone-900">
+            {tagItems.map((item, i) => (
+              <FeedTagItem key={tagKey(item)} item={item} index={i} orgChips={orgChips} />
+            ))}
+          </li>
+        )}
       </ul>
     </section>
+  );
+}
+
+// ── SDK / version-tag rollup (mirrors collection-timeline's TagItem) ──────
+
+function tagKey(item: TagListItem<TaggedFeedItem>): string {
+  if (item.kind === "single")
+    return `s:${item.release.id ?? item.release.url ?? item.release.title}`;
+  return `r:${item.groupKey}`;
+}
+
+function Caret({ open }: { open: boolean }) {
+  return (
+    <svg
+      width={10}
+      height={10}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={3}
+      className={`shrink-0 transition-transform ${open ? "rotate-90" : ""}`}
+      aria-hidden
+    >
+      <path d="M9 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function FeedTagItem({
+  item,
+  index,
+  orgChips,
+}: {
+  item: TagListItem<TaggedFeedItem>;
+  index: number;
+  orgChips: Map<string, OrgChip>;
+}) {
+  const [open, setOpen] = useState(false);
+  const topBorder = index === 0 ? "" : "border-t border-stone-200 dark:border-stone-800";
+
+  if (item.kind === "single") {
+    return (
+      <div className={topBorder}>
+        <FeedCommitRow release={item.release} orgChips={orgChips} />
+      </div>
+    );
+  }
+
+  // Collapsed: one line per product/source group with the newest few version
+  // tags inline; expands to a compact row per release. The day header above
+  // supplies the date, so the label stays date-free — same as collections.
+  const pills = item.releases.slice(0, 3);
+  const overflow = item.releases.length - pills.length;
+  const chip = orgChips.get(item.releases[0].source.orgSlug ?? "");
+
+  return (
+    <div className={topBorder}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-stone-500 hover:text-stone-800 dark:text-stone-400 dark:hover:text-stone-200"
+      >
+        <Caret open={open} />
+        <OrgAvatar
+          avatarUrl={chip?.avatarUrl ?? null}
+          githubHandle={null}
+          name={chip?.name ?? item.label}
+          size={16}
+        />
+        <span className="text-[12.5px] font-medium text-stone-700 dark:text-stone-200">
+          {item.label}
+        </span>
+        <span className="font-mono text-[12px] tabular-nums text-stone-400 dark:text-stone-500">
+          · {item.releases.length} {pluralReleases(item.releases.length)}
+        </span>
+        {!open && (
+          <span className="ml-1 inline-flex min-w-0 flex-wrap items-center gap-1">
+            {pills.map((r) => (
+              <span
+                key={r.id ?? r.url ?? r.title}
+                className="whitespace-nowrap rounded border border-stone-200 bg-stone-100 px-1.5 py-px font-mono text-[10.5px] text-stone-500 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-400"
+              >
+                {normalizeVersionLabel(r.version) ?? r.title}
+              </span>
+            ))}
+            {overflow > 0 && (
+              <span className="text-[11px] text-stone-400 dark:text-stone-500">+{overflow}</span>
+            )}
+          </span>
+        )}
+      </button>
+      {open &&
+        item.releases.map((r) => (
+          <div
+            key={r.id ?? r.url ?? r.title}
+            className="border-t border-l-2 border-stone-200 border-l-stone-300 dark:border-stone-800 dark:border-l-stone-700"
+          >
+            <FeedCommitRow release={r} orgChips={orgChips} />
+          </div>
+        ))}
+    </div>
+  );
+}
+
+function FeedCommitRow({
+  release,
+  orgChips,
+}: {
+  release: TaggedFeedItem;
+  orgChips: Map<string, OrgChip>;
+}) {
+  const versionLabel = normalizeVersionLabel(release.version) ?? release.title;
+  const productLabel = release.product?.name ?? release.source.name;
+  const summary = release.summary?.trim() || "";
+  const chip = orgChips.get(release.source.orgSlug ?? "");
+
+  return (
+    <Link
+      href={`/release/${release.id}`}
+      className="grid grid-cols-[auto_auto_1fr] items-center gap-3 px-3 py-2.5 hover:bg-stone-50 dark:hover:bg-stone-900/60"
+    >
+      <span className="flex items-center gap-2 min-w-0">
+        <OrgAvatar
+          avatarUrl={chip?.avatarUrl ?? null}
+          githubHandle={null}
+          name={chip?.name ?? productLabel}
+          size={16}
+        />
+        <span className="max-w-[140px] truncate text-[12.5px] font-medium text-stone-700 dark:text-stone-200">
+          {productLabel}
+        </span>
+      </span>
+      <span className="whitespace-nowrap rounded border border-stone-200 bg-stone-100 px-1.5 py-0.5 font-mono text-[12px] font-medium text-stone-900 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-100">
+        {versionLabel}
+      </span>
+      <span
+        className="min-w-0 truncate text-[12.5px] text-stone-500 dark:text-stone-400"
+        title={summary}
+      >
+        {summary || (release.title !== versionLabel ? release.title : "")}
+      </span>
+    </Link>
   );
 }
 
