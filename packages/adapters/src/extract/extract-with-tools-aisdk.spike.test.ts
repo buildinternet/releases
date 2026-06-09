@@ -157,4 +157,55 @@ describe("extractWithToolsAiSdk (spike) — cache-breakpoint parity", () => {
       expect(b.cache_control).toBeUndefined();
     }
   });
+
+  it("forces tool_choice=extract_releases on the final step (reasoning-model recovery)", async () => {
+    // The smoke run showed reasoning-first models loop without committing the
+    // terminal; the loop forces it on the last allowed step. Here the model only
+    // ever asks for slices — the forced step is what makes it terminate.
+    const requests: Array<{ tool_choice?: { type: string; name?: string } }> = [];
+    let forcedSeen = false;
+
+    const mockFetch = (async (_url: string, init: RequestInit) => {
+      const body = JSON.parse(init.body as string) as {
+        tool_choice?: { type: string; name?: string };
+      };
+      requests.push(body);
+      // Anthropic represents a forced specific tool as { type: "tool", name }.
+      const forced =
+        body.tool_choice?.type === "tool" && body.tool_choice.name === "extract_releases";
+      if (forced) {
+        forcedSeen = true;
+        return anthropicResponse(
+          [
+            {
+              type: "tool_use",
+              id: "toolu_final",
+              name: "extract_releases",
+              input: { releases: [{ title: "forced", content: "x", isBreaking: false }] },
+            },
+          ],
+          { input_tokens: 10, output_tokens: 5 },
+        );
+      }
+      // Otherwise keep stalling with slice requests (never volunteers the terminal).
+      return anthropicResponse(
+        [{ type: "tool_use", id: "toolu_s", name: "get_slice", input: { start: 0, length: 10 } }],
+        { input_tokens: 10, output_tokens: 5 },
+      );
+    }) as unknown as typeof globalThis.fetch;
+
+    const deps: AiSdkExtractDeps = {
+      model: anthropicSpikeModel({
+        apiKey: "sk-test",
+        model: "claude-haiku-4-5",
+        fetch: mockFetch,
+      }),
+      logger: silentLogger,
+    };
+
+    const result = await extractWithToolsAiSdk(makeOpts(), deps);
+    expect(forcedSeen).toBe(true);
+    expect(result.entries).toHaveLength(1);
+    expect(result.entries[0]!.title).toBe("forced");
+  });
 });

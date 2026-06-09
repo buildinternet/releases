@@ -206,12 +206,19 @@ export async function extractWithToolsAiSdk(
       // +1 leaves room for the "force extract_releases now" final turn the
       // hand-rolled loop allows after exhausting rounds.
       stopWhen: [hasToolCall("extract_releases"), stepCountIs(MAX_ROUNDS + 1)],
-      prepareStep: ({ messages }) => {
+      prepareStep: ({ messages, stepNumber }) => {
         // System (with its static breakpoint) is the separate `system` param and
         // is constant across steps; here we only rotate the sliding breakpoint
         // onto the most-recent tool turn (clearing any prior placement).
         clearSlidingBreakpoints(messages);
         setSlidingBreakpoint(messages);
+        // On the final allowed step, FORCE the terminal — the AI-SDK analogue of
+        // the hand-rolled loop's "you've used max rounds, call extract_releases
+        // now" turn. Without this, reasoning-first models (DeepSeek) loop to
+        // max_rounds without ever committing the terminal call.
+        if (stepNumber >= MAX_ROUNDS) {
+          return { messages, toolChoice: { type: "tool", toolName: "extract_releases" } };
+        }
         return { messages };
       },
     });
