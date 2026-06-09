@@ -3331,7 +3331,7 @@ sourceRoutes.patch(
     tags: ["Releases"],
     summary: "Update a release",
     description:
-      "Partially updates a release. All body fields are optional — only supplied fields are written. Required-non-null columns (`title`, `content`) must be strings when present; the nullable string columns (`version`, `url`, `publishedAt`, `contentHash`) accept a string or `null`. The three AI-generated fields (`summary`, `titleGenerated`, `titleShort`) accept `null` to explicitly clear the stored value. The `composition` field accepts a `{bugs, features, enhancements}` object to replace the stored counts, or `null` to clear them — neighbouring keys in `metadata` are preserved (JSON-merged via `json_set` / `json_remove`). Non-whitelisted fields are rejected by the schema's `.strict()` mode; a body whose sanitized whitelist is empty after `version` normalization also returns `400`. When any of `content`, `title`, `summary`, `titleGenerated`, or `titleShort` is updated the release vector is re-embedded asynchronously. Response is the raw release row (no joined source / org metadata, no parsed `media`) — re-fetch via `GET /v1/releases/:id` for the augmented shape.\n\nAuth inherited from `publicReadAuthMiddleware`'s non-SAFE_METHODS branch — Bearer token required.",
+      "Partially updates a release. All body fields are optional — only supplied fields are written. Required-non-null columns (`title`, `content`) must be strings when present; the nullable string columns (`version`, `url`, `publishedAt`, `contentHash`) accept a string or `null`. The three AI-generated fields (`summary`, `titleGenerated`, `titleShort`) accept `null` to explicitly clear the stored value. The `composition` field accepts a `{bugs, features, enhancements}` object to replace the stored counts, or `null` to clear them — neighbouring keys in `metadata` are preserved (JSON-merged via `json_set` / `json_remove`). The `media` field accepts an array of media items (`{type, url, alt?, r2Key?, r2Url?, linkUrl?}`) and REPLACES the release's stored `media[]` wholesale; items whose `url` is not already a same-origin (`MEDIA_ORIGIN`) URL and that carry no `r2Key` are run through the ingest R2 mirror (poster/image fetched, content-hash-keyed, `put` to `released-media`, `r2Key` stamped) when the `MEDIA` bucket is bound — fail-open, leaving the third-party URL in place on any error. Non-whitelisted fields are rejected by the schema's `.strict()` mode; a body whose sanitized whitelist is empty after `version` normalization (and with no `media`) also returns `400`. When any of `content`, `title`, `summary`, `titleGenerated`, or `titleShort` is updated the release vector is re-embedded asynchronously. Response is the raw release row (no joined source / org metadata, no parsed `media`) — re-fetch via `GET /v1/releases/:id` for the augmented shape.\n\nAuth inherited from `publicReadAuthMiddleware`'s non-SAFE_METHODS branch — Bearer token required.",
     security: [{ bearerAuth: [] }],
     responses: {
       200: {
@@ -3384,18 +3384,63 @@ sourceRoutes.patch(
         typeof body.version === "string" ? (sanitizeVersion(body.version) ?? null) : null;
     }
 
-    if (Object.keys(updates).length === 0) {
+    // `media` is set below (after the row lookup) because the R2 mirror needs the
+    // source id; count it here so a media-only payload doesn't trip the empty
+    // check, and an actually-empty body (no media either) still 400s.
+    if (Object.keys(updates).length === 0 && body.media === undefined) {
       return c.json({ error: "bad_request", message: "No writable fields supplied" }, 400);
     }
 
     // Join sources so we have the source row available for the re-embed side
-    // effect without a second round-trip after the update.
+    // effect (and the media-mirror sourceId) without a second round-trip.
     const [row] = await db
       .select({ release: releases, source: sources })
       .from(releases)
       .innerJoin(sources, eq(sources.id, releases.sourceId))
       .where(eq(releases.id, id));
     if (!row) return c.json({ error: "not_found", message: "Release not found" }, 404);
+
+    if (body.media !== undefined) {
+      // Wholesale REPLACE of the release's stored media[] (curator manual edit).
+      // Mirror any not-yet-mirrored item through the ingest R2 path so posters /
+      // images land in `released-media` and get `r2Key` stamped — same gate as
+      // ingest (`env.MEDIA != null`). Items already on the media origin or
+      // carrying an `r2Key` pass through untouched (no needless re-fetch).
+      // Fail-open: `processMediaForR2` leaves an item's third-party URL in place
+      // on any fetch/size/type/put error. An unbound `MEDIA` bucket stores the
+      // supplied media verbatim. The resulting JSON is stored the same way
+      // ingest stores it (`JSON.stringify` of the media array).
+      const mediaOrigin = c.env.MEDIA_ORIGIN ?? "";
+      const supplied = body.media;
+      const alreadyMirrored = (m: { url: string; r2Key?: string }): boolean =>
+        (typeof m.r2Key === "string" && m.r2Key.length > 0) ||
+        (mediaOrigin.length > 0 && m.url.startsWith(`${mediaOrigin}/`));
+      if (c.env.MEDIA != null) {
+        const passthrough = supplied.filter(alreadyMirrored);
+        const toMirror = supplied.filter((m) => !alreadyMirrored(m));
+        const transcodeGif =
+          c.env.MEDIA_TRANSFORM != null &&
+          (await flag(
+            c.env.FLAGS,
+            c.env.MEDIA_GIF_TRANSCODE_ENABLED,
+            FLAGS.mediaGifTranscodeEnabled,
+          ));
+        const processed = await processMediaForR2(
+          filterJunkMedia(toMirror.filter((m) => typeof m.url === "string")),
+          {
+            db,
+            bucket: c.env.MEDIA,
+            sourceId: row.source.id,
+            releaseId: id,
+            mediaTransform: c.env.MEDIA_TRANSFORM,
+            transcodeGif,
+          },
+        );
+        updates.media = JSON.stringify([...passthrough, ...processed]);
+      } else {
+        updates.media = JSON.stringify(supplied);
+      }
+    }
 
     const [updated] = await db.update(releases).set(updates).where(eq(releases.id, id)).returning();
     if (!updated) return c.json({ error: "not_found", message: "Release not found" }, 404);

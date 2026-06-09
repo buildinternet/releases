@@ -11,6 +11,9 @@ import {
   runGifTranscodeBackfill,
   GIF_BACKFILL_DEFAULT_LIMIT,
   GIF_BACKFILL_MAX_LIMIT,
+  runVideoBackfill,
+  VIDEO_BACKFILL_DEFAULT_LIMIT,
+  VIDEO_BACKFILL_MAX_LIMIT,
 } from "../lib/media-backfill.js";
 import {
   enrichFeedItem,
@@ -1620,6 +1623,98 @@ workflowsRoutes.post("/workflows/backfill-gif-mp4", async (c) => {
     ...report,
   });
   return c.json({ scope: ident ?? "all", ...report });
+});
+
+// ── POST /workflows/backfill-video ───────────────────────────────────────────
+//
+// Operator-triggered retrofit of the inline hosted-video card (#1549) onto
+// releases ingested before that ingest hook existed. The card renders in web
+// purely from a `media[]` item with `type:"video"` + `linkUrl` — it does NOT
+// scan markdown at render time — and that item is written ONLY at ingest for new
+// releases (poll-fetch `isNewRelease` gate). So existing releases that link out
+// to a Wistia/Loom/Vimeo/YouTube video never got the card; this route adds it.
+//
+// Built on the same primitives as the manual media edit (Part 1) and
+// `backfill-media`: for each candidate it re-runs `detectInlineVideos`
+// (detect → oEmbed poster/title/watch-URL), mirrors the poster via
+// `processMediaForR2`, and APPENDS the resulting `type:"video"` item(s) to the
+// existing `media[]` (preserving the row id + hero image + all other items).
+// Idempotent — a video already present (matched by `linkUrl`) is skipped, so
+// re-running adds nothing. Scope a single release with `releaseId` (rel_…) or a
+// whole source with `sourceId` (src_…); `all: true` sweeps every source.
+// `dryRun` (default) reports the candidate count without writing. No feature
+// flag: admin-gated, idempotent, fail-open (an unresolvable embed is a no-op).
+//
+// Body: { releaseId?, sourceId?, all?, limit?, dryRun? }
+
+interface BackfillVideoBody {
+  releaseId?: string;
+  sourceId?: string;
+  all?: boolean;
+  limit?: number;
+  dryRun?: boolean;
+}
+
+workflowsRoutes.post("/workflows/backfill-video", async (c) => {
+  const db = createDb(c.env.DB);
+  const body = await c.req.json<BackfillVideoBody>().catch(() => ({}) as BackfillVideoBody);
+
+  const bucket = c.env.MEDIA;
+  if (!bucket) {
+    return c.json({ error: "service_unavailable", message: "MEDIA bucket not bound" }, 503);
+  }
+
+  const releaseId = body.releaseId?.trim();
+  const sourceId = body.sourceId?.trim();
+
+  // Require an explicit scope — a single release, a single source, or `all` —
+  // so a dropped/typo'd id can't silently sweep the whole table.
+  if (!releaseId && !sourceId && body.all !== true) {
+    return c.json(
+      {
+        error: "bad_request",
+        message: "Provide a typed `releaseId` (rel_…), a typed `sourceId` (src_…), or `all: true`",
+      },
+      400,
+    );
+  }
+  if (releaseId && !releaseId.startsWith("rel_")) {
+    return c.json({ error: "bad_request", message: "Pass a typed release ID (rel_…)" }, 400);
+  }
+  if (sourceId && !isSourceId(sourceId)) {
+    return c.json(
+      {
+        error: "bare_slug_rejected",
+        message:
+          "Pass a typed source ID (src_…). Resolve a slug via /v1/orgs/{orgSlug}/sources/{sourceSlug} first.",
+      },
+      400,
+    );
+  }
+
+  const rawLimit = Number(body.limit ?? VIDEO_BACKFILL_DEFAULT_LIMIT);
+  const limit = Number.isFinite(rawLimit)
+    ? Math.min(Math.max(Math.floor(rawLimit), 1), VIDEO_BACKFILL_MAX_LIMIT)
+    : VIDEO_BACKFILL_DEFAULT_LIMIT;
+  const dryRun = body.dryRun !== false; // default to a dry run for safety
+
+  const report = await runVideoBackfill(db, bucket, {
+    releaseId: releaseId || undefined,
+    sourceId: sourceId || undefined,
+    limit,
+    dryRun,
+  });
+
+  const scope = releaseId || sourceId || "all";
+  logEvent("info", {
+    component: "backfill-video",
+    event: "done",
+    releaseId: releaseId ?? null,
+    sourceId: sourceId ?? null,
+    all: body.all === true,
+    ...report,
+  });
+  return c.json({ scope, ...report });
 });
 
 // ── POST /workflows/backfill-source ──────────────────────────────────────────

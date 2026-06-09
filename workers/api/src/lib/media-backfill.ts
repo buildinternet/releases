@@ -12,10 +12,11 @@
  * Pairs with the `POST /v1/workflows/backfill-media` route. Sibling of
  * `lib/source-backfill.ts`.
  */
-import { and, count, desc, eq, sql } from "drizzle-orm";
+import { and, count, desc, eq, or, sql, type SQL } from "drizzle-orm";
 import { releases } from "@buildinternet/releases-core/schema";
 import { filterJunkMedia } from "@releases/rendering/media-filter.js";
 import { isGifUrl } from "@releases/adapters/media-classify.js";
+import { detectInlineVideos } from "@releases/rendering/video-embed.js";
 import { processMediaForR2, type MediaTransformBinding } from "./media-ingest.js";
 import type { createDb } from "../db.js";
 
@@ -115,6 +116,143 @@ export async function runMediaBackfill(
   }
 
   const [remainingRow] = await db.select({ c: count() }).from(releases).where(needsBackfill);
+  report.remaining = Number(remainingRow?.c ?? 0);
+  return report;
+}
+
+// ── Inline hosted-video backfill (#1549 retrofit) ────────────────────────────
+
+export const VIDEO_BACKFILL_DEFAULT_LIMIT = 50;
+export const VIDEO_BACKFILL_MAX_LIMIT = 200;
+
+export interface VideoBackfillReport {
+  /** Rows examined this batch. */
+  scanned: number;
+  /** Rows whose media[] gained at least one new video item. */
+  releasesUpdated: number;
+  /** Individual `type:"video"` items appended across all rows. */
+  videosAppended: number;
+  /** Rows still matching the candidate filter (full pending count on dryRun). */
+  remaining: number;
+  dryRun: boolean;
+}
+
+/**
+ * SQL prefilter: a release body that references a known video-embed provider
+ * host. Cheap substring match; `detectInlineVideos` is the real per-row gate.
+ * The `remaining` count after a write is approximate — a row whose every embed
+ * was already promoted still matches this LIKE — so the operator should loop on
+ * `releasesUpdated > 0`, not `remaining === 0`.
+ */
+function videoCandidateFilter(sourceId?: string, releaseId?: string): SQL | undefined {
+  const hostLike = or(
+    sql`${releases.content} LIKE '%wistia.%'`,
+    sql`${releases.content} LIKE '%wi.st%'`,
+    sql`${releases.content} LIKE '%loom.com%'`,
+    sql`${releases.content} LIKE '%vimeo.com%'`,
+    sql`${releases.content} LIKE '%youtube.%'`,
+    sql`${releases.content} LIKE '%youtu.be%'`,
+  );
+  return and(
+    hostLike,
+    eq(releases.suppressed, false),
+    ...(releaseId ? [eq(releases.id, releaseId)] : []),
+    ...(sourceId ? [eq(releases.sourceId, sourceId)] : []),
+  );
+}
+
+/**
+ * Retrofit the inline hosted-video card (#1549) onto releases ingested before
+ * that ingest hook existed. For each candidate release this re-runs the exact
+ * ingest detection (`detectInlineVideos` → oEmbed poster/title/watch-URL),
+ * mirrors the poster via `processMediaForR2`, and APPENDS the resulting
+ * `type:"video"` item(s) to the existing `media[]` — preserving the row's
+ * `rel_` id, its hero image, and every other media item. Idempotent: a video
+ * already present (matched by `linkUrl`) is skipped, so re-running adds nothing.
+ *
+ * Mirrors the `runMediaBackfill` shape: bounded by `limit`, `dryRun` reports the
+ * candidate count without writing, scope by `releaseId` (single) or `sourceId`
+ * (sweep). Fail-open per release — an unresolvable embed yields no item and the
+ * row is left untouched. `fetchImpl` is injectable so tests never hit oEmbed or
+ * the poster CDN.
+ */
+export async function runVideoBackfill(
+  db: ReturnType<typeof createDb>,
+  bucket: R2Bucket,
+  opts: {
+    sourceId?: string;
+    releaseId?: string;
+    limit: number;
+    dryRun: boolean;
+    /** Injectable for tests; forwarded to detectInlineVideos + processMediaForR2. */
+    fetchImpl?: typeof fetch;
+    now?: () => string;
+  },
+): Promise<VideoBackfillReport> {
+  const filter = videoCandidateFilter(opts.sourceId, opts.releaseId);
+
+  const candidates = await db
+    .select({
+      id: releases.id,
+      sourceId: releases.sourceId,
+      content: releases.content,
+      media: releases.media,
+    })
+    .from(releases)
+    .where(filter)
+    .orderBy(desc(releases.publishedAt))
+    .limit(opts.limit);
+
+  const report: VideoBackfillReport = {
+    scanned: candidates.length,
+    releasesUpdated: 0,
+    videosAppended: 0,
+    remaining: 0,
+    dryRun: opts.dryRun,
+  };
+
+  if (!opts.dryRun) {
+    for (const row of candidates) {
+      const existing = parseStoredMedia(row.media);
+      // Dedup against video items already present (by watch URL = linkUrl).
+      const haveLinks = new Set(
+        existing
+          .map((m) => (m as { linkUrl?: string }).linkUrl)
+          .filter((l): l is string => typeof l === "string" && l.length > 0),
+      );
+      // oxlint-disable-next-line no-await-in-loop -- bounded by `limit`; helper bounds oEmbed concurrency internally
+      const detected = await detectInlineVideos(row.content, { fetchImpl: opts.fetchImpl });
+      const fresh = detected.filter((v) => !haveLinks.has(v.linkUrl));
+      if (fresh.length === 0) continue;
+
+      // Mirror each new poster to R2 (same path as ingest), then append. A
+      // poster that fails its fetch/gate keeps its third-party URL (fail-open).
+      // oxlint-disable-next-line no-await-in-loop -- bounded by `limit`; helper bounds image concurrency internally
+      const mirrored = await processMediaForR2(filterJunkMedia(fresh), {
+        db,
+        bucket,
+        sourceId: row.sourceId,
+        releaseId: row.id,
+        fetchImpl: opts.fetchImpl,
+        now: opts.now,
+      });
+      // `filterJunkMedia` could in principle drop a poster (it won't for a real
+      // oEmbed thumbnail); guard against an empty append so we don't write a
+      // no-op + bump the counter.
+      if (mirrored.length === 0) continue;
+
+      const merged = [...existing, ...mirrored];
+      // oxlint-disable-next-line no-await-in-loop
+      await db
+        .update(releases)
+        .set({ media: JSON.stringify(merged) })
+        .where(eq(releases.id, row.id));
+      report.releasesUpdated++;
+      report.videosAppended += mirrored.length;
+    }
+  }
+
+  const [remainingRow] = await db.select({ c: count() }).from(releases).where(filter);
   report.remaining = Number(remainingRow?.c ?? 0);
   return report;
 }

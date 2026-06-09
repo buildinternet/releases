@@ -9,6 +9,13 @@ export const MediaItemSchema = z.object({
   type: z.enum(["image", "video", "gif"]),
   url: z.string(),
   alt: z.string().optional(),
+  // R2 object key (`releases/<hash>.<ext>`) for media mirrored into the
+  // `released-media` bucket; read paths resolve it to a same-origin `r2Url`
+  // (`resolveR2Url`). Stamped by `processMediaForR2` at ingest / manual edit and
+  // part of the stored `media[]` JSON — surfaced on the wire so a curator round-
+  // tripping `media` through `PATCH /v1/releases/:id` can preserve an already-
+  // mirrored item without forcing a re-fetch.
+  r2Key: z.string().optional(),
   r2Url: z.string().optional(),
   // For `type: "video"` items promoted from a hosted-video link found inline in
   // a release body (Wistia/Loom/Vimeo/YouTube), `url` holds the poster/thumbnail

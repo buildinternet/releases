@@ -243,6 +243,12 @@ export const UpdateReleaseBodySchema = z
     titleShort: z.string().nullable().optional(),
     // `null` removes `$.composition` from metadata; an object replaces it.
     composition: ReleaseCompositionSchema.nullable().optional(),
+    // Replace the release's stored `media[]` wholesale (curator manual edit).
+    // Items whose `url` is not already an R2/`media.releases.sh` origin are run
+    // through the ingest R2 mirror (`processMediaForR2`) so posters/images land
+    // in `released-media` and get `r2Key`/`r2Url` stamped — same path as ingest.
+    // Reuses the shared `MediaItemSchema` (type/url/alt/r2Url/r2Key/linkUrl).
+    media: z.array(MediaItemSchema).optional(),
   })
   .strict();
 
