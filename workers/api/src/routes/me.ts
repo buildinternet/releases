@@ -17,6 +17,7 @@ import {
   getFeedToken,
   deleteFeedToken,
   feedTokenString,
+  feedAtomUrl,
 } from "../queries/feed-tokens.js";
 import type { FeedToken } from "@buildinternet/releases-api-types";
 
@@ -109,7 +110,7 @@ meHandlers.get("/me/feed", async (c) => {
  * (api.releases.sh in prod; the portless host in local dev). No env dependency.
  */
 function feedUrlFor(c: Context<Env>, token: string): string {
-  return `${new URL(c.req.url).origin}/v1/feed/${token}.atom`;
+  return feedAtomUrl(new URL(c.req.url).origin, token);
 }
 
 meHandlers.get("/me/feed/token", async (c) => {

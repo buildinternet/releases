@@ -32,8 +32,7 @@ describe("feed-token queries", () => {
     const row = await getFeedToken(h.db, "u1");
     expect(row?.lookupId).toBe(minted.lookupId);
 
-    const userId = await resolveFeedToken(h.db, minted.token);
-    expect(userId).toBe("u1");
+    expect((await resolveFeedToken(h.db, minted.token))?.userId).toBe("u1");
   });
 
   it("rotate (second upsert) invalidates the previous token", async () => {
@@ -41,7 +40,7 @@ describe("feed-token queries", () => {
     const second = await upsertFeedToken(h.db, "u1");
     expect(second.token).not.toBe(first.token);
     expect(await resolveFeedToken(h.db, first.token)).toBeNull();
-    expect(await resolveFeedToken(h.db, second.token)).toBe("u1");
+    expect((await resolveFeedToken(h.db, second.token))?.userId).toBe("u1");
     // Still exactly one row for the user.
     expect((await getFeedToken(h.db, "u1"))?.lookupId).toBe(second.lookupId);
   });

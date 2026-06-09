@@ -1,5 +1,6 @@
 import { and, eq, isNull, lt, or } from "drizzle-orm";
 import {
+  FEED_TOKEN_PREFIX,
   generateFeedToken,
   parseFeedToken,
   constantTimeEqual,
@@ -28,25 +29,29 @@ export interface MintedFeedToken {
 
 /** Build the full `relf_<lookupId>_<secret>` token string from a stored row. */
 export function feedTokenString(row: Pick<UserFeedToken, "lookupId" | "secret">): string {
-  return `relf_${row.lookupId}_${row.secret}`;
+  return `${FEED_TOKEN_PREFIX}${row.lookupId}_${row.secret}`;
+}
+
+/** The canonical public Atom feed URL for a token, given the serving origin. */
+export function feedAtomUrl(origin: string, token: string): string {
+  return `${origin}/v1/feed/${token}.atom`;
 }
 
 /**
- * Mint-or-rotate the caller's single feed token. Deletes any existing row for
- * the user, then inserts a fresh one (so rotation invalidates the old secret).
+ * Mint-or-rotate the caller's single feed token. Atomically upserts on the
+ * unique userId index, so rotation replaces lookupId+secret+createdAt and
+ * clears lastUsedAt in a single statement.
  */
 export async function upsertFeedToken(db: AnyDb, userId: string): Promise<MintedFeedToken> {
   const { token, lookupId, secret } = generateFeedToken();
   const createdAt = new Date();
-  await db.delete(userFeedTokens).where(eq(userFeedTokens.userId, userId));
-  await db.insert(userFeedTokens).values({
-    id: newFeedTokenId(),
-    userId,
-    lookupId,
-    secret,
-    createdAt,
-    lastUsedAt: null,
-  });
+  await db
+    .insert(userFeedTokens)
+    .values({ id: newFeedTokenId(), userId, lookupId, secret, createdAt, lastUsedAt: null })
+    .onConflictDoUpdate({
+      target: userFeedTokens.userId,
+      set: { lookupId, secret, createdAt, lastUsedAt: null },
+    });
   return { token, lookupId, createdAt };
 }
 
@@ -62,10 +67,14 @@ export async function deleteFeedToken(db: AnyDb, userId: string): Promise<void> 
 }
 
 /**
- * Resolve a presented `relf_…` token to its owning userId, or null. Looks up by
- * the non-secret lookupId, then constant-time compares the secret. Never throws.
+ * Resolve a presented `relf_…` token to its owning user + lookupId, or null.
+ * Looks up by the non-secret lookupId, then constant-time compares the secret.
+ * Never throws.
  */
-export async function resolveFeedToken(db: AnyDb, raw: string): Promise<string | null> {
+export async function resolveFeedToken(
+  db: AnyDb,
+  raw: string,
+): Promise<{ userId: string; lookupId: string } | null> {
   const parsed = parseFeedToken(raw);
   if (!parsed) return null;
   const row = await db
@@ -78,7 +87,7 @@ export async function resolveFeedToken(db: AnyDb, raw: string): Promise<string |
     return null;
   }
   if (!constantTimeEqual(parsed.secret, row.secret)) return null;
-  return row.userId;
+  return { userId: row.userId, lookupId: row.lookupId };
 }
 
 /**

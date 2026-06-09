@@ -4,12 +4,13 @@ import { useEffect, useState } from "react";
 import type { FeedToken } from "@buildinternet/releases-api-types";
 import { getFeedToken, mintFeedToken, revokeFeedToken } from "@/lib/follows";
 import { formatRelativeDate } from "@/lib/formatters";
+import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
 
 export function FeedTokenCard() {
   const [token, setToken] = useState<FeedToken | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const { copied, copy } = useCopyToClipboard();
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -51,13 +52,6 @@ export function FeedTokenCard() {
     }
   }
 
-  function copy() {
-    if (!token) return;
-    void navigator.clipboard.writeText(token.feedUrl);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
-  }
-
   if (loading) return null;
 
   return (
@@ -83,7 +77,7 @@ export function FeedTokenCard() {
             />
             <button
               type="button"
-              onClick={copy}
+              onClick={() => copy(token.feedUrl)}
               className="shrink-0 rounded border border-stone-200 px-3 py-1 text-[13px] text-stone-700 hover:border-stone-300 hover:text-stone-900 dark:border-stone-700 dark:text-stone-300 dark:hover:border-stone-600 dark:hover:text-stone-100"
             >
               {copied ? "Copied" : "Copy"}
