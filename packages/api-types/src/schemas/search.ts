@@ -40,6 +40,9 @@ export const SearchCatalogHitSchema = z.object({
   name: z.string(),
   orgSlug: z.string().nullable(),
   orgName: z.string().nullable(),
+  /** Owning org's avatar URL, for a small inline byline avatar. Products have
+   *  no avatar of their own, so the web row anchors on the org's instead. */
+  orgAvatarUrl: z.string().nullable().optional(),
   // Loose `z.string().nullable()` rather than the canonical `CategorySchema`
   // enum because `foldSourcesIntoCatalog` and the catalog-search handlers
   // pass `s.productCategory` / `o.category` through without validating

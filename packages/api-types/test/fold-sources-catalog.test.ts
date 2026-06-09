@@ -42,6 +42,7 @@ describe("foldSourcesIntoCatalog", () => {
         name: "Product Y",
         orgSlug: "acme",
         orgName: "Acme",
+        orgAvatarUrl: null,
         category: null,
         entryType: "product",
         kind: undefined,
@@ -56,5 +57,17 @@ describe("foldSourcesIntoCatalog", () => {
     );
     expect(result).toHaveLength(1);
     expect(result[0]).toMatchObject({ slug: "blog", entryType: "source", sourceSlug: "blog" });
+  });
+
+  it("carries the owning org's avatar onto the folded catalog hit", () => {
+    const avatar = "https://media.releases.sh/orgs/acme.png";
+    const result = foldSourcesIntoCatalog(
+      [],
+      [
+        src({ slug: "y-feed", productSlug: "y", productName: "Product Y", orgAvatarUrl: avatar }),
+        src({ slug: "blog", productSlug: null, orgAvatarUrl: avatar }),
+      ],
+    );
+    expect(result.map((r) => r.orgAvatarUrl)).toEqual([avatar, avatar]);
   });
 });

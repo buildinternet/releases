@@ -118,7 +118,7 @@ export async function searchOrgs(
       )`;
 
   return db.all<SearchOrgHit>(sql`
-    SELECT DISTINCT o.slug, o.name, o.domain, NULL as avatarUrl, o.category
+    SELECT DISTINCT o.slug, o.name, o.domain, o.avatar_url as avatarUrl, o.category
     FROM organizations_active o
     LEFT JOIN domain_aliases da ON da.org_id = o.id
     WHERE (${likeContains(sql`o.name`, query)} OR ${likeContains(sql`o.slug`, query)}
@@ -149,8 +149,8 @@ export async function searchProducts(
         )`
       : sql``;
   return db.all<SearchCatalogHit>(sql`
-    SELECT DISTINCT p.slug, p.name, o.slug as orgSlug, o.name as orgName, p.category,
-           'product' as entryType, p.kind
+    SELECT DISTINCT p.slug, p.name, o.slug as orgSlug, o.name as orgName,
+           o.avatar_url as orgAvatarUrl, p.category, 'product' as entryType, p.kind
     FROM products_active p
     INNER JOIN organizations_active o ON o.id = p.org_id
     LEFT JOIN domain_aliases da ON da.product_id = p.id
@@ -181,6 +181,7 @@ export async function searchSources(
   // (foldSourcesIntoCatalog drops it today).
   return db.all<RawSourceHit>(sql`
     SELECT s.slug, s.name, s.type, o.slug as orgSlug, o.name as orgName,
+           o.avatar_url as orgAvatarUrl,
            p.slug as productSlug, p.name as productName, p.category as productCategory,
            s.kind as entityKind, s.stargazers_count as stars
     FROM sources_active s
