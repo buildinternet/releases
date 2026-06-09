@@ -380,8 +380,10 @@ export function deriveCookieDomain(env: Bindings): string | undefined {
  * production. Keeping the two in lockstep means CORS never silently blocks an origin
  * Better Auth already trusts.
  *
- * `DELETE` is allowed for the `/v1/api-keys/:id` revoke endpoint — Better Auth's
- * own `/api/auth/*` routes are POST/GET only, so it's a no-op there.
+ * `DELETE` is allowed for the `/v1/api-keys/:id` revoke endpoint, and `PUT` for
+ * the `/v1/me/digest` cadence write — Better Auth's own `/api/auth/*` routes are
+ * POST/GET only, so both are no-ops there. The allow-list must cover every method
+ * any `/v1/me/*` handler uses or the browser blocks that verb's preflight.
  */
 export function authCorsMiddleware(): MiddlewareHandler<Env> {
   return cors({
@@ -394,7 +396,7 @@ export function authCorsMiddleware(): MiddlewareHandler<Env> {
       return null;
     },
     allowHeaders: ["Content-Type", "Authorization"],
-    allowMethods: ["POST", "GET", "DELETE", "OPTIONS"],
+    allowMethods: ["POST", "GET", "PUT", "DELETE", "OPTIONS"],
     exposeHeaders: ["Content-Length"],
     maxAge: 600,
     credentials: true,

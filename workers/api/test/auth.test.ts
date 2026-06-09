@@ -179,6 +179,35 @@ describe("authCorsMiddleware origin allow-list", () => {
     return res.headers.get("access-control-allow-origin");
   }
 
+  // Read back the methods the preflight advertises. The session-authed self-serve
+  // surface (/v1/me/*) shares this middleware and includes PUT (/v1/me/digest sets
+  // cadence), so the cross-origin preflight must allow it or the browser blocks the
+  // toggle as a CORS violation.
+  async function preflightMethods(requestMethod: string): Promise<string[]> {
+    const app = new Hono();
+    app.use("/api/auth/*", authCorsMiddleware());
+    app.get("/api/auth/ok", (c) => c.text("ok"));
+    const res = await app.request(
+      "/api/auth/ok",
+      {
+        method: "OPTIONS",
+        headers: {
+          Origin: "https://releases.sh",
+          "Access-Control-Request-Method": requestMethod,
+        },
+      },
+      { ENVIRONMENT: "production" } as never,
+    );
+    return (res.headers.get("access-control-allow-methods") ?? "")
+      .split(",")
+      .map((m) => m.trim().toUpperCase())
+      .filter(Boolean);
+  }
+
+  it("allows PUT so /v1/me/digest cadence writes clear the preflight", async () => {
+    expect(await preflightMethods("PUT")).toContain("PUT");
+  });
+
   it("reflects the releases.sh family in production", async () => {
     expect(await preflightOrigin("https://releases.sh", { ENVIRONMENT: "production" })).toBe(
       "https://releases.sh",
