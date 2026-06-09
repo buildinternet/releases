@@ -3,6 +3,7 @@ import { createTestDb, type TestDatabase } from "../db-helper.js";
 import { sourceRoutes } from "../../workers/api/src/routes/sources.js";
 import { organizations, sources, releases } from "@buildinternet/releases-core/schema";
 import { eq } from "drizzle-orm";
+import { restoreGlobalFetch } from "../global-fetch";
 
 /**
  * Part 1 — manual media editing via PATCH /v1/releases/:id { media: [...] }.
@@ -12,7 +13,6 @@ import { eq } from "drizzle-orm";
  */
 
 let testDb: TestDatabase;
-const realFetch = globalThis.fetch;
 
 interface PutCall {
   key: string;
@@ -92,7 +92,7 @@ beforeEach(async () => {
 
 afterEach(() => {
   testDb.cleanup();
-  globalThis.fetch = realFetch;
+  restoreGlobalFetch();
 });
 
 describe("PATCH /v1/releases/:id media editing", () => {

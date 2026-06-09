@@ -11,15 +11,15 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { sourceRoutes } from "../src/routes/sources.js";
 import { createTestDb, createTestApp } from "./setup";
+import { restoreGlobalFetch } from "../../../tests/global-fetch";
 
 const FIXTURE = readFileSync(
   join(import.meta.dir, "../../../packages/adapters/test/fixtures/youtube-playlist.xml"),
   "utf8",
 );
 
-const realFetch = globalThis.fetch;
 afterEach(() => {
-  globalThis.fetch = realFetch;
+  restoreGlobalFetch();
 });
 
 describe("POST /v1/sources/video", () => {
@@ -78,7 +78,7 @@ describe("POST /v1/sources/video", () => {
     // Stub the feed fetch — resolveFeed for a playlist URL is pure (no network),
     // but fetchAndParseVideoFeed will be called and needs to not hit real YouTube.
     globalThis.fetch = (async () =>
-      new Response(FIXTURE, { status: 200 })) as unknown as typeof realFetch;
+      new Response(FIXTURE, { status: 200 })) as unknown as typeof fetch;
     const app = createTestApp(db, [sourceRoutes], { env: {} });
 
     const res = await app(
@@ -104,7 +104,7 @@ describe("POST /v1/sources/video", () => {
     });
 
     globalThis.fetch = (async () =>
-      new Response(FIXTURE, { status: 200 })) as unknown as typeof realFetch;
+      new Response(FIXTURE, { status: 200 })) as unknown as typeof fetch;
 
     const app = createTestApp(db, [sourceRoutes], { env: {} });
 
@@ -140,7 +140,7 @@ describe("POST /v1/sources/video", () => {
     });
 
     globalThis.fetch = (async () =>
-      new Response(FIXTURE, { status: 200 })) as unknown as typeof realFetch;
+      new Response(FIXTURE, { status: 200 })) as unknown as typeof fetch;
 
     const app = createTestApp(db, [sourceRoutes], { env: {} });
     const body = JSON.stringify({

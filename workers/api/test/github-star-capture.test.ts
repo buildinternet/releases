@@ -3,10 +3,10 @@ import { organizations, sources } from "@buildinternet/releases-core/schema";
 import { eq } from "drizzle-orm";
 import { fetchOne } from "../src/cron/poll-fetch.js";
 import { createTestDb } from "./setup";
+import { restoreGlobalFetch } from "../../../tests/global-fetch";
 
-const realFetch = globalThis.fetch;
 afterEach(() => {
-  globalThis.fetch = realFetch;
+  restoreGlobalFetch();
 });
 
 describe("github fetchOne — star capture", () => {

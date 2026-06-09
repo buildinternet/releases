@@ -1,10 +1,9 @@
 import { describe, test, expect, afterEach, mock } from "bun:test";
 import { probeRepo } from "../../packages/adapters/src/github-probe.js";
+import { restoreGlobalFetch } from "../global-fetch";
 
 const TOKEN = "test-token";
 const env = { GITHUB_TOKEN: TOKEN } as { GITHUB_TOKEN?: string };
-
-const realFetch = globalThis.fetch;
 
 function mockFetchOnce(handler: (url: string, init?: RequestInit) => Response) {
   globalThis.fetch = mock((url: string | URL, init?: RequestInit) =>
@@ -12,9 +11,7 @@ function mockFetchOnce(handler: (url: string, init?: RequestInit) => Response) {
   ) as unknown as typeof fetch;
 }
 
-afterEach(() => {
-  globalThis.fetch = realFetch;
-});
+afterEach(restoreGlobalFetch);
 
 describe("probeRepo", () => {
   test("returns exists+hasReleases for a public repo with a release tag", async () => {

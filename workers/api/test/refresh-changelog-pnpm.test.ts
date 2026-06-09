@@ -12,13 +12,11 @@ import { drizzle } from "drizzle-orm/bun-sqlite";
 import { applyMigrations } from "../../../tests/db-helper";
 import { organizations, sources, sourceChangelogFiles } from "@buildinternet/releases-core/schema";
 import { refreshChangelogFile } from "../src/cron/poll-fetch.js";
+import { restoreGlobalFetch } from "../../../tests/global-fetch";
 
 // ── fetch mock ──────────────────────────────────────────────────────────────
 
 type FetchHandler = (url: string) => Response | Promise<Response>;
-// Capture the real fetch at module load so restoreFetch can never roll back
-// to a mock or to undefined if a test throws before installFetch runs.
-const originalFetch: typeof fetch = globalThis.fetch;
 
 function installFetch(handler: FetchHandler) {
   (globalThis as { fetch: typeof fetch }).fetch = (async (
@@ -30,7 +28,7 @@ function installFetch(handler: FetchHandler) {
 }
 
 function restoreFetch() {
-  (globalThis as { fetch: typeof fetch }).fetch = originalFetch;
+  restoreGlobalFetch();
 }
 
 function json(body: unknown, status = 200): Response {

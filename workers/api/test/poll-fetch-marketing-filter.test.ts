@@ -27,6 +27,7 @@ import { eq } from "drizzle-orm";
 import { applyMigrations, ensureBatchShim } from "../../../tests/db-helper";
 import { organizations, sources, releases } from "@buildinternet/releases-core/schema";
 import type { RawRelease } from "@releases/adapters/types";
+import { restoreGlobalFetch } from "../../../tests/global-fetch";
 
 // ── feed-adapter stub ───────────────────────────────────────────────────────
 //
@@ -115,7 +116,6 @@ const { fetchOne } = await import("../src/cron/poll-fetch.js");
 // above.
 
 type FetchHandler = (input: RequestInfo | URL, init?: RequestInit) => Response | Promise<Response>;
-let realFetch: typeof fetch | undefined;
 const requestedUrls: string[] = [];
 
 function urlOf(input: RequestInfo | URL): string {
@@ -136,9 +136,7 @@ function installFetch(handler: FetchHandler) {
 }
 
 function restoreFetch() {
-  if (realFetch !== undefined) {
-    (globalThis as { fetch: typeof fetch }).fetch = realFetch;
-  }
+  restoreGlobalFetch();
 }
 
 function anthropicJson(verdict: { marketing: boolean; reason: string }): Response {
@@ -233,7 +231,6 @@ function makeEnv(opts: { withAnthropic: boolean }): unknown {
 
 describe("fetchOne — metadata.marketingFilter", () => {
   beforeEach(() => {
-    if (realFetch === undefined) realFetch = globalThis.fetch;
     feedFetchCalls.length = 0;
     nextFeedReleases = ITEMS_FOR_CLASSIFICATION;
   });

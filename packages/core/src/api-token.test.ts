@@ -35,7 +35,12 @@ describe("feed tokens (relf_)", () => {
   it("constantTimeEqual matches the stored secret and rejects a wrong one", () => {
     const { secret } = generateFeedToken();
     expect(constantTimeEqual(secret, secret)).toBe(true);
-    expect(constantTimeEqual(secret, secret.slice(0, -1) + "X")).toBe(false);
+    // Flip the last char to one guaranteed different from it — appending a fixed
+    // letter would collide (false-negative) ~1/62 of the time when the random
+    // BASE62 secret already ends in that letter.
+    const last = secret.slice(-1);
+    const wrong = secret.slice(0, -1) + (last === "A" ? "B" : "A");
+    expect(constantTimeEqual(secret, wrong)).toBe(false);
   });
 });
 

@@ -14,6 +14,7 @@
  */
 
 import { describe, it, expect, mock, beforeEach, afterEach } from "bun:test";
+import { restoreGlobalFetch } from "../../../tests/global-fetch";
 
 const BR_EMPTY_ERROR = "Cloudflare Browser Rendering returned no content";
 
@@ -100,8 +101,6 @@ function buildApiFetcher() {
   };
 }
 
-const originalFetch = globalThis.fetch;
-
 function runScrapeFetch() {
   return import("../src/scrape-fetch.js").then(({ scrapeFetch }) =>
     scrapeFetch(
@@ -126,7 +125,7 @@ describe("scrapeFetch render:false fallback when Browser Rendering is empty", ()
   });
 
   afterEach(() => {
-    globalThis.fetch = originalFetch;
+    restoreGlobalFetch();
   });
 
   it("falls back to a render:false fetch (with auth) and uses its content", async () => {

@@ -69,9 +69,14 @@ const MATCHERS: ProviderMatcher[] = [
       const m = u.pathname.match(/\/(?:embed\/(?:iframe|medias)|medias)\/([A-Za-z0-9]+)/);
       return m ? m[1]! : null;
     },
-    watchUrl: (id) => `https://fast.wistia.com/medias/${id}`,
-    oembedUrl: (_id, watchUrl) =>
-      `https://fast.wistia.com/oembed?url=${encodeURIComponent(watchUrl)}`,
+    // The publicly-loadable embed form. The prettier `fast.wistia.com/medias/<id>`
+    // URL 302-redirects anonymous viewers to a login page (`/session/new`),
+    // whereas `/embed/iframe/<id>` returns 200 and loads the player for everyone,
+    // so it's the correct click target for the play-card. oEmbed still keys off
+    // the documented `medias/<id>` URL (derived from the id, below).
+    watchUrl: (id) => `https://fast.wistia.com/embed/iframe/${id}`,
+    oembedUrl: (id) =>
+      `https://fast.wistia.com/oembed?url=${encodeURIComponent(`https://fast.wistia.com/medias/${id}`)}`,
   },
   {
     provider: "loom",
@@ -136,6 +141,43 @@ function matcherForHost(hostname: string): ProviderMatcher | null {
     if (m.hosts.some((h) => host === h || host.endsWith(`.${h}`))) return m;
   }
   return null;
+}
+
+/** A canonicalized video reference: which provider, the stable id, and the
+ *  public watch URL. */
+export interface CanonicalVideo {
+  provider: VideoEmbedProvider;
+  /** The provider's stable video id — the same id across every URL form. */
+  id: string;
+  /** Canonical, publicly-loadable watch URL for this id. */
+  watchUrl: string;
+}
+
+/**
+ * Map an arbitrary URL to its provider + canonical video id (+ watch URL), or
+ * null if it isn't a recognised hosted-video URL. Pure + synchronous — no
+ * network. Built on the same `matcherForHost` + `extractId` logic as
+ * {@link detectInlineVideoLinks}, so every URL form for a given video
+ * (`embed/iframe/<id>`, `medias/<id>`, `share/<id>`, `watch?v=<id>`,
+ * `youtu.be/<id>`, …) collapses to the SAME `{ provider, id }`.
+ *
+ * The web `a`-renderer uses this to (a) decide whether a body link is a
+ * video-embed URL and (b) match it to a stored `media[]` item BY ID — matching
+ * on the id (not a raw watch-URL string) so rows whose stored `linkUrl` predates
+ * a `watchUrl` change (e.g. the old Wistia `medias/<id>` form) still match.
+ */
+export function canonicalVideoFromUrl(href: string): CanonicalVideo | null {
+  let u: URL;
+  try {
+    u = new URL(href);
+  } catch {
+    return null;
+  }
+  const matcher = matcherForHost(u.hostname);
+  if (!matcher) return null;
+  const id = matcher.extractId(u);
+  if (!id) return null;
+  return { provider: matcher.provider, id, watchUrl: matcher.watchUrl(id) };
 }
 
 /** URL-like tokens in a markdown/HTML body — links, raw URLs, href/src attrs. */

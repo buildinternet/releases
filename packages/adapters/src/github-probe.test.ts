@@ -1,9 +1,11 @@
 import { afterEach, expect, it } from "bun:test";
 import { probeRepo } from "./github-probe.js";
 
-const realFetch = globalThis.fetch;
+// Restore the pristine fetch captured by the test preload (#1553). The shared
+// tests/global-fetch helper isn't imported here — packages/adapters tsconfig
+// rootDir ("src") forbids the cross-package path — so restore inline.
 afterEach(() => {
-  globalThis.fetch = realFetch;
+  globalThis.fetch = (globalThis as { __REAL_FETCH__?: typeof fetch }).__REAL_FETCH__!;
 });
 
 it("captures stargazers_count from the repo response", async () => {

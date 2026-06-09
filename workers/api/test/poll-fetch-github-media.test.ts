@@ -17,6 +17,7 @@ import { organizations, sources, releases } from "@buildinternet/releases-core/s
 import { extractMediaFromMarkdown } from "@releases/adapters/feed.js";
 import type { MediaRef } from "@releases/rendering/media.js";
 import { fetchOne } from "../src/cron/poll-fetch.js";
+import { restoreGlobalFetch } from "../../../tests/global-fetch";
 
 // ── unit: extractMediaFromMarkdown ───────────────────────────────────────────
 
@@ -125,7 +126,6 @@ describe("extractMediaFromMarkdown", () => {
 // ── integration: fetchOne with GitHub source ─────────────────────────────────
 
 type FetchHandler = (url: string) => Response | Promise<Response>;
-const originalFetch: typeof fetch = globalThis.fetch;
 
 function installFetch(handler: FetchHandler) {
   (globalThis as { fetch: typeof fetch }).fetch = (async (
@@ -137,7 +137,7 @@ function installFetch(handler: FetchHandler) {
 }
 
 function restoreFetch() {
-  (globalThis as { fetch: typeof fetch }).fetch = originalFetch;
+  restoreGlobalFetch();
 }
 
 function jsonResponse(body: unknown, status = 200): Response {

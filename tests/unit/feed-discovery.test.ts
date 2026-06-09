@@ -1,11 +1,8 @@
 import { describe, it, expect, afterEach } from "bun:test";
 import { discoverFeed } from "../../packages/adapters/src/feed";
+import { restoreGlobalFetch } from "../global-fetch";
 
-const realFetch = globalThis.fetch;
-
-afterEach(() => {
-  globalThis.fetch = realFetch;
-});
+afterEach(restoreGlobalFetch);
 
 /**
  * Build a minimal stub for globalThis.fetch that routes requests by URL.

@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { describe, it, expect, beforeEach, afterEach } from "bun:test";
+import { describe, it, expect, afterEach } from "bun:test";
 import { Database } from "bun:sqlite";
 import { drizzle } from "drizzle-orm/bun-sqlite";
 import { sources, organizations, knowledgePages } from "@buildinternet/releases-core/schema";
@@ -8,6 +8,7 @@ import { workflowFailures } from "../../workers/api/src/db/schema-workflow-failu
 import { OnboardSourceWorkflow } from "../../workers/api/src/workflows/onboard-source";
 import type { OnboardSourceWorkflowEnv } from "../../workers/api/src/workflows/onboard-source";
 import { mkFakeStep, mkFetch, mkVectorize } from "./_workflow-test-helpers";
+import { restoreGlobalFetch } from "../global-fetch";
 
 function mkDb(opts: { type?: "feed" | "scrape" | "agent"; feedUrl?: string } = {}) {
   const sqlite = new Database(":memory:");
@@ -76,12 +77,8 @@ async function runWorkflow(
 }
 
 describe("OnboardSourceWorkflow", () => {
-  let realFetch: typeof globalThis.fetch;
-  beforeEach(() => {
-    realFetch = globalThis.fetch;
-  });
   afterEach(() => {
-    globalThis.fetch = realFetch;
+    restoreGlobalFetch();
   });
 
   it("happy path (feed): playbook → embed → backfill", async () => {

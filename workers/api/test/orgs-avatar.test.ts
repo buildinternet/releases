@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { organizations } from "@buildinternet/releases-core/schema";
 import { createTestDb, createTestApp, type TestDb } from "./setup";
 import { orgRoutes } from "../src/routes/orgs";
+import { restoreGlobalFetch } from "../../../tests/global-fetch";
 
 function pngBytes(w: number, h: number): Uint8Array {
   const header = [
@@ -65,7 +66,6 @@ describe("POST /orgs/:slug/avatar (#1406)", () => {
   let db: TestDb;
   let R2: ReturnType<typeof fakeR2>;
   let fetchApi: (req: Request) => Response | Promise<Response>;
-  const realFetch = globalThis.fetch;
 
   beforeEach(async () => {
     db = createTestDb();
@@ -78,7 +78,7 @@ describe("POST /orgs/:slug/avatar (#1406)", () => {
     });
   });
   afterEach(() => {
-    globalThis.fetch = realFetch;
+    restoreGlobalFetch();
   });
 
   const post = (slug: string, body: unknown) =>

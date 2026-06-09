@@ -17,10 +17,10 @@ import { organizations, sources, releases } from "@buildinternet/releases-core/s
 import { eq } from "drizzle-orm";
 import { sourceRoutes } from "../src/routes/sources.js";
 import { createTestDb, createTestApp } from "./setup";
+import { restoreGlobalFetch } from "../../../tests/global-fetch";
 
-const realFetch = globalThis.fetch;
 afterEach(() => {
-  globalThis.fetch = realFetch;
+  restoreGlobalFetch();
 });
 
 const LISTING = JSON.stringify({
@@ -73,7 +73,7 @@ describe("POST /v1/sources/:id/fetch — appstore eligibility", () => {
     const db = createTestDb();
     await seedAppStoreSource(db);
     globalThis.fetch = (async () =>
-      new Response(LISTING, { status: 200 })) as unknown as typeof realFetch;
+      new Response(LISTING, { status: 200 })) as unknown as typeof fetch;
     const app = createTestApp(db, [sourceRoutes], { env: { STATUS_HUB: statusHubStub } });
 
     // Typed-id bare path works without an org-scoped prefix.

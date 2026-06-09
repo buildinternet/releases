@@ -13,6 +13,7 @@ import {
   fetchAppStore,
   type AppStoreListing,
 } from "@releases/adapters/appstore";
+import { restoreGlobalFetch } from "../global-fetch";
 
 const listing: AppStoreListing = JSON.parse(
   readFileSync(join(import.meta.dirname, "../fixtures/appstore/spotify-ios.json"), "utf-8"),
@@ -127,9 +128,8 @@ describe("appStoreCoordFromSource", () => {
 });
 
 describe("resolveAppStore (network)", () => {
-  const realFetch = globalThis.fetch;
   afterEach(() => {
-    globalThis.fetch = realFetch;
+    restoreGlobalFetch();
   });
 
   it("requests the macSoftware entity for macos and returns the listing", async () => {

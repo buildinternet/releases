@@ -9,12 +9,12 @@ import { drizzle } from "drizzle-orm/bun-sqlite";
 import { eq } from "drizzle-orm";
 import { applyMigrations, ensureBatchShim } from "../../../tests/db-helper.js";
 import { organizations, sources, fetchLog } from "@buildinternet/releases-core/schema";
+import { restoreGlobalFetch } from "../../../tests/global-fetch";
 
 const { renderCheckOne, extractCandidateLinks } = await import("../src/cron/poll-fetch.js");
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let db: any;
-const realFetch = globalThis.fetch;
 
 beforeEach(() => {
   const sqlite = new Database(":memory:");
@@ -24,7 +24,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  globalThis.fetch = realFetch;
+  restoreGlobalFetch();
 });
 
 function seedSource(url = "https://example.com/release-notes") {
