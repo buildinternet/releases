@@ -6,6 +6,7 @@ import {
   getFeedToken,
   deleteFeedToken,
   resolveFeedToken,
+  touchFeedTokenLastUsed,
 } from "../src/queries/feed-tokens.js";
 
 let h: TestDatabase;
@@ -57,5 +58,31 @@ describe("feed-token queries", () => {
     expect(
       await resolveFeedToken(h.db, "relf_" + "a".repeat(12) + "_" + "b".repeat(32)),
     ).toBeNull();
+  });
+
+  it("touchFeedTokenLastUsed stamps lastUsedAt from null, then skips within throttle window", async () => {
+    const minted = await upsertFeedToken(h.db, "u1");
+
+    // Initially null.
+    const before = await getFeedToken(h.db, "u1");
+    expect(before?.lastUsedAt).toBeNull();
+
+    // First touch — sets lastUsedAt.
+    const t0 = new Date(1_000_000_000_000);
+    await touchFeedTokenLastUsed(h.db, minted.lookupId, t0);
+    const after1 = await getFeedToken(h.db, "u1");
+    expect(after1?.lastUsedAt?.getTime()).toBe(t0.getTime());
+
+    // Second touch within throttle window (30 s later) — no update.
+    const t1 = new Date(t0.getTime() + 30_000);
+    await touchFeedTokenLastUsed(h.db, minted.lookupId, t1);
+    const after2 = await getFeedToken(h.db, "u1");
+    expect(after2?.lastUsedAt?.getTime()).toBe(t0.getTime()); // unchanged
+
+    // Third touch past throttle window (61 s later) — updates.
+    const t2 = new Date(t0.getTime() + 61_000);
+    await touchFeedTokenLastUsed(h.db, minted.lookupId, t2);
+    const after3 = await getFeedToken(h.db, "u1");
+    expect(after3?.lastUsedAt?.getTime()).toBe(t2.getTime());
   });
 });

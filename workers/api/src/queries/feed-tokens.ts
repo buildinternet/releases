@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq, isNull, lt, or } from "drizzle-orm";
 import {
   generateFeedToken,
   parseFeedToken,
@@ -6,6 +6,14 @@ import {
 } from "@buildinternet/releases-core/api-token";
 import type { AnyDb } from "../db.js";
 import { userFeedTokens, type UserFeedToken } from "../db/schema-feed-tokens.js";
+
+// Fixed-length dummy secret (matches the 32-char SECRET_LEN) so a missing
+// lookupId still incurs one constant-time comparison — uniform timing across
+// "unknown token" and "wrong secret", mirroring api-token-store.ts.
+const DUMMY_FEED_SECRET = "0".repeat(32);
+
+/** How long after a successful feed-token auth before we rewrite last_used_at again. */
+const FEED_TOKEN_TOUCH_THROTTLE_MS = 60_000;
 
 function newFeedTokenId(): string {
   return `uft_${crypto.randomUUID()}`;
@@ -65,15 +73,32 @@ export async function resolveFeedToken(db: AnyDb, raw: string): Promise<string |
     .from(userFeedTokens)
     .where(eq(userFeedTokens.lookupId, parsed.lookupId))
     .get();
-  if (!row) return null;
+  if (!row) {
+    constantTimeEqual(parsed.secret, DUMMY_FEED_SECRET);
+    return null;
+  }
   if (!constantTimeEqual(parsed.secret, row.secret)) return null;
   return row.userId;
 }
 
-/** Best-effort: stamp last_used_at. Caller should not await on the hot path. */
-export async function touchFeedTokenLastUsed(db: AnyDb, lookupId: string): Promise<void> {
+/**
+ * Record last-used, throttled: only rewrites if the previous value is null or
+ * older than the throttle window. Single conditional UPDATE — safe to call
+ * fire-and-forget via waitUntil on the hot path.
+ */
+export async function touchFeedTokenLastUsed(
+  db: AnyDb,
+  lookupId: string,
+  now: Date = new Date(),
+): Promise<void> {
+  const cutoff = new Date(now.getTime() - FEED_TOKEN_TOUCH_THROTTLE_MS);
   await db
     .update(userFeedTokens)
-    .set({ lastUsedAt: new Date() })
-    .where(eq(userFeedTokens.lookupId, lookupId));
+    .set({ lastUsedAt: now })
+    .where(
+      and(
+        eq(userFeedTokens.lookupId, lookupId),
+        or(isNull(userFeedTokens.lastUsedAt), lt(userFeedTokens.lastUsedAt, cutoff)),
+      ),
+    );
 }
