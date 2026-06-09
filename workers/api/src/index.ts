@@ -298,6 +298,12 @@ export type Env = {
     // Absent → the dash plugin stays off (no keyless outbound calls). See
     // src/auth/index.ts.
     BETTER_AUTH_API_KEY?: SecretBinding | string;
+    // Project-scoped Better Auth Infrastructure KV "identify" endpoint backing the
+    // sentinel() security plugin, e.g. https://kv.better-auth.com/projects/<id>.
+    // A plain var (a project URL, not a secret); paired with BETTER_AUTH_API_KEY —
+    // sentinel() mounts only when BOTH resolve. Absent → no Sentinel checks. See
+    // src/auth/index.ts.
+    BETTER_AUTH_IDENTIFY_URL?: string;
     // Public base URL of THIS worker (where the auth handler lives), e.g.
     // https://api.releases.sh. Drives OAuth callback + cookie-domain derivation.
     // Local: set via .dev.vars to https://api.releases.localhost, or omit to let

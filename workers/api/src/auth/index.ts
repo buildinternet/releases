@@ -11,7 +11,7 @@ import {
 } from "better-auth/plugins";
 import { adminAc, userAc } from "better-auth/plugins/admin/access";
 import { oauthProvider } from "@better-auth/oauth-provider";
-import { dash } from "@better-auth/infra";
+import { dash, sentinel } from "@better-auth/infra";
 import { apiKey } from "@better-auth/api-key";
 import type { BetterAuthPlugin } from "better-auth";
 import { APIError, createAuthMiddleware, getSessionFromCtx } from "better-auth/api";
@@ -613,6 +613,20 @@ export async function createAuth(
   // paired in schema-auth.ts + migration 20260604010000_add_user_last_active_at.sql.
   const dashApiKey = await resolveSecret(env.BETTER_AUTH_API_KEY);
 
+  // Sentinel (Better Auth Infrastructure abuse/security protection) shares the
+  // BETTER_AUTH_API_KEY credential with dash() and talks to the *project-scoped*
+  // KV "identify" endpoint — BETTER_AUTH_IDENTIFY_URL, e.g.
+  // `https://kv.better-auth.com/projects/<id>` — onto which the plugin appends
+  // `/identify/:requestId`, `/email/validate`, etc. The plugin's own default
+  // (`https://kv.better-auth.com`, no project) is the WRONG target, so the URL
+  // must be supplied as `kvUrl`. Workers read config from `env` bindings, not
+  // `process.env`, so neither the key nor the URL is auto-discovered — pass both
+  // explicitly. Sentinel mounts only when BOTH resolve: a missing key (or a
+  // worker that never set the project URL) must NOT start making mis-targeted
+  // outbound calls on every auth request. Same graceful-degradation seam as
+  // dash()/social — absence is the natural off-switch, so no feature flag.
+  const sentinelIdentifyUrl = env.BETTER_AUTH_IDENTIFY_URL;
+
   // userApiKeysOn — the relu_ user-key path (Flagship → var → default false); when
   // off, apiKey() and its self-serve endpoints aren't registered. Mirrors the
   // middleware/auth.ts gate.
@@ -644,6 +658,38 @@ export async function createAuth(
   // `waitUntil` seam as verify/reset so it outlives the response on Workers.
   const plugins = [
     ...(dashApiKey ? [dash({ apiKey: dashApiKey, activityTracking: { enabled: true } })] : []),
+    // Sentinel security/abuse protection. CONSERVATIVE action posture: hard-block
+    // only the unambiguous cases — a compromised password at signup (HaveIBeenPwned
+    // k-anonymity; only the first 5 hash chars leave the worker) and credential
+    // stuffing once a visitor crosses the block threshold — and issue a non-blocking
+    // Proof-of-Work CHALLENGE (the web sentinelClient auto-solves it; see
+    // web/src/lib/auth-client.ts) for bots, suspicious IPs, and the first
+    // credential-stuffing threshold. Impossible travel and stale-account
+    // reactivation are LOG-only: observe in the Security dashboard before enforcing,
+    // per the plugin's own best practice. emailNormalization dedupes Gmail-dot/plus
+    // aliases so one human can't silently fork into multiple accounts. This rides
+    // ALONGSIDE — not instead of — Better Auth's D1-backed brute-force rate limiting
+    // (rateLimit below). Tune actions up once real traffic is visible.
+    ...(dashApiKey && sentinelIdentifyUrl
+      ? [
+          sentinel({
+            apiKey: dashApiKey,
+            kvUrl: sentinelIdentifyUrl,
+            security: {
+              credentialStuffing: {
+                enabled: true,
+                thresholds: { challenge: 3, block: 5 },
+              },
+              compromisedPassword: { enabled: true, action: "block" },
+              botBlocking: { action: "challenge" },
+              suspiciousIpBlocking: { action: "challenge" },
+              impossibleTravel: { enabled: true, action: "log" },
+              staleUsers: { enabled: true, staleDays: 90, action: "log", notifyUser: true },
+              emailNormalization: { enabled: true },
+            },
+          }),
+        ]
+      : []),
     ...(socialProviders.google ? [oneTap({ clientId: socialProviders.google.clientId })] : []),
     magicLink({
       expiresIn: 60 * 15,
