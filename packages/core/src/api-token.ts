@@ -126,6 +126,25 @@ export function isFeedTokenShaped(raw: string): boolean {
 }
 
 /**
+ * Wire prefix for per-user digest manage tokens — the credential embedded in the
+ * one-click unsubscribe URL in a digest email (`/v1/digest/unsubscribe/reld_…`).
+ * Distinct from `relk_`/`relu_`/`relf_` so it's secret-scanning friendly and never
+ * collides with the other lanes. A single opaque secret (no lookupId split): it is
+ * only matched by exact equality on a unique-indexed column, and toggling a user's
+ * own digest off is low-sensitivity. Reuses the base62 secret generator.
+ */
+export const DIGEST_TOKEN_PREFIX = "reld_";
+
+export function generateDigestToken(): string {
+  return `${DIGEST_TOKEN_PREFIX}${genSecret()}`;
+}
+
+/** Cheap prefix check — routes a path credential to the digest-token resolver. */
+export function isDigestTokenShaped(raw: string): boolean {
+  return raw.startsWith(DIGEST_TOKEN_PREFIX);
+}
+
+/**
  * Wire prefix for Better Auth-issued, user-owned API keys. Distinct from the
  * machine-lane `API_TOKEN_PREFIX` (`relk_`) so the auth middleware routes a
  * presented credential to exactly one verifier. Set as the plugin's
