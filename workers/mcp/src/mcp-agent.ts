@@ -22,6 +22,7 @@ import {
 } from "./tools.js";
 import { registerResources, RELEASE_FEED_UI_URI } from "./resources.js";
 import { registerPrompts } from "./prompts.js";
+import { registerFollowsTools } from "./follows-tools.js";
 import { logMcpSearch, deriveMcpClientKind, type McpSearchCommand } from "./lib/log-search.js";
 import { buildSearchMeta } from "./lib/pagination.js";
 import type { SearchMode } from "@buildinternet/releases-core/schema";
@@ -209,6 +210,13 @@ export interface CreateServerOptions {
    * borrowed root key (confused-deputy fix).
    */
   authToken?: string | null;
+  /**
+   * Raw Bearer credential of a USER principal (`relu_` user key or OAuth JWT),
+   * forwarded by the per-user follows tools to `/v1/me/*` so they act as the
+   * signed-in user. Null for anonymous / machine (`relk_`) / root callers, which
+   * have no owning user — the follows tools refuse those.
+   */
+  userToken?: string | null;
 }
 
 export async function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServerOptions) {
@@ -236,6 +244,7 @@ export async function createServer(env: Env, ctx?: ExecutionContext, opts?: Crea
   const requestClientKind = deriveMcpClientKind(requestUserAgent);
   const authScopes = opts?.authScopes ?? ["read"];
   const authToken = opts?.authToken ?? null;
+  const userToken = opts?.userToken ?? null;
 
   /** Hydrate portable /_media/ URLs in tool text output. */
   function withMedia<T>(handler: (params: T) => Promise<ToolResult>) {
@@ -795,6 +804,7 @@ export async function createServer(env: Env, ctx?: ExecutionContext, opts?: Crea
     withMedia(async (params) => getRelease(db, params)),
   );
 
+  registerFollowsTools(server, env, { userToken });
   registerResources(server, db, mediaOrigin);
   registerPrompts(server, db);
 
