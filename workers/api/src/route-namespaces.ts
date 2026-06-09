@@ -56,6 +56,7 @@ export const adminRoutes = [
   "admin/batch-runs",
   "admin/users",
   "admin/oauth",
+  "admin/digest",
   "errata",
   "webhooks",
   "workflows",

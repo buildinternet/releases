@@ -130,6 +130,58 @@ export async function listDigestRecipients(
     .all();
 }
 
+/**
+ * Ensure a prefs row exists for the user, minting a manage token, WITHOUT
+ * changing their cadence. Returns the existing row untouched, or a freshly
+ * created `off` row. Used by the admin test-send route so a test email carries a
+ * real, working unsubscribe link even for a user who never set a preference.
+ */
+export async function ensureDigestPrefs(db: AnyDb, userId: string): Promise<UserDigestPrefs> {
+  const existing = await getDigestPrefs(db, userId);
+  if (existing) return existing;
+  const now = nowSeconds();
+  const row: UserDigestPrefs = {
+    id: newDigestPrefsId(),
+    userId,
+    cadence: "off",
+    lastDigestAt: null,
+    manageToken: generateDigestToken(),
+    createdAt: now,
+    updatedAt: now,
+  };
+  await db.insert(userDigestPrefs).values(row);
+  return row;
+}
+
+/**
+ * Resolve a digest send target by userId OR email (for the dev/admin test-send
+ * route). Looks the user up in the auth table, then ensures a prefs row so the
+ * test email has a working unsubscribe link. Returns null if no such user. Does
+ * NOT require email verification — a developer testing the path may use an
+ * unverified address.
+ */
+export async function resolveDigestTestRecipient(
+  db: AnyDb,
+  by: { userId?: string; email?: string },
+): Promise<DigestRecipient | null> {
+  const where = by.userId ? eq(user.id, by.userId) : by.email ? eq(user.email, by.email) : null;
+  if (!where) return null;
+  const found = await db
+    .select({ id: user.id, email: user.email, name: user.name })
+    .from(user)
+    .where(where)
+    .get();
+  if (!found) return null;
+  const prefs = await ensureDigestPrefs(db, found.id);
+  return {
+    userId: found.id,
+    email: found.email,
+    name: found.name,
+    lastDigestAt: prefs.lastDigestAt,
+    manageToken: prefs.manageToken,
+  };
+}
+
 /** Advance a user's watermark to the cron run start after a successful send. */
 export async function advanceDigestWatermark(
   db: AnyDb,
