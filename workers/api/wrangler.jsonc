@@ -265,7 +265,10 @@
   // Sending (DKIM) — see the spec.
   "send_email": [
     { "name": "SEND_EMAIL" },
-    { "name": "AUTH_EMAIL", "allowed_sender_addresses": ["noreply@releases.sh", "digests@releases.sh"] },
+    {
+      "name": "AUTH_EMAIL",
+      "allowed_sender_addresses": ["noreply@releases.sh", "digests@releases.sh"],
+    },
   ],
   "durable_objects": {
     "bindings": [
@@ -670,7 +673,10 @@
       },
       "send_email": [
         { "name": "SEND_EMAIL" },
-        { "name": "AUTH_EMAIL", "allowed_sender_addresses": ["noreply@releases.sh", "digests@releases.sh"] },
+        {
+          "name": "AUTH_EMAIL",
+          "allowed_sender_addresses": ["noreply@releases.sh", "digests@releases.sh"],
+        },
       ],
       "durable_objects": {
         "bindings": [
