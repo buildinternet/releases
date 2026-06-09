@@ -331,6 +331,15 @@ export type Env = {
     GOOGLE_CLIENT_SECRET?: SecretBinding | string;
     GITHUB_CLIENT_ID?: SecretBinding | string;
     GITHUB_CLIENT_SECRET?: SecretBinding | string;
+    // Stripe (`@better-auth/stripe`) — GATED on BOTH resolving (same seam as the
+    // social pairs): present → a Stripe Customer is created on sign-up and linked
+    // via user.stripeCustomerId; absent either → the plugin is omitted (no Stripe
+    // calls). Secrets Store bindings in prod (add them to the store + wrangler.jsonc
+    // before binding — see the GitHub note there), plain strings locally (.dev.vars).
+    // STRIPE_SECRET_KEY is the account API key; STRIPE_WEBHOOK_SECRET is the signing
+    // secret for the /api/auth/stripe/webhook endpoint. See auth/index.ts.
+    STRIPE_SECRET_KEY?: SecretBinding | string;
+    STRIPE_WEBHOOK_SECRET?: SecretBinding | string;
     // Cloudflare Email Sending binding for USER-FACING auth mail (verification +
     // password reset). Object-form send → arbitrary recipients. Distinct from
     // SEND_EMAIL (Email Routing, internal-only, verified-destinations). Absent →

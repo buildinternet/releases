@@ -19,7 +19,8 @@ import { sqliteTable, text, integer, index } from "drizzle-orm/sqlite-core";
  * Paired migrations live in workers/api/migrations/ (20260604000000 initial tables,
  * 20260604010000 the dash lastActiveAt column, 20260604020000 the rate-limit store,
  * 20260604030000 the api-key store, 20260605000000 the device-code store,
- * 20260607010000 the admin-plugin role/ban columns).
+ * 20260607010000 the admin-plugin role/ban columns, 20260609010000 the Stripe
+ * customer id).
  * The schema↔migration pairing gate in ci.yml watches this file.
  */
 
@@ -54,6 +55,15 @@ export const user = sqliteTable("user", {
   banned: integer("banned", { mode: "boolean" }),
   banReason: text("ban_reason"),
   banExpires: integer("ban_expires", { mode: "timestamp" }),
+  // Better Auth Stripe plugin (`@better-auth/stripe`). The id of the Stripe
+  // Customer linked to this user — written on sign-up when the plugin is mounted
+  // (`createCustomerOnSignUp`, gated on the Stripe secrets resolving in
+  // auth/index.ts). Nullable: existing rows and users who signed up before the
+  // plugin was provisioned have no Stripe customer until one is created. This is
+  // billing groundwork (customer management only); subscriptions are not enabled
+  // yet, so the plugin's `subscription` table is intentionally absent. Paired
+  // migration: 20260609010000_add_stripe_customer_id.sql.
+  stripeCustomerId: text("stripe_customer_id"),
 });
 
 export const session = sqliteTable(
