@@ -135,6 +135,11 @@
     // not the web origin. Drives OAuth callback + cross-subdomain cookie domain
     // (.releases.sh). Local dev sets https://api.releases.localhost via .dev.vars.
     "BETTER_AUTH_URL": "https://api.releases.sh",
+    // Project-scoped Better Auth Infrastructure KV "identify" endpoint for the
+    // sentinel() security plugin. A project URL, not a secret (the credential is
+    // BETTER_AUTH_API_KEY in Secrets Store); sentinel() mounts only when both
+    // resolve. See src/auth/index.ts.
+    "BETTER_AUTH_IDENTIFY_URL": "https://kv.better-auth.com/projects/U2pO0qgccJ5s4wxCtzTpOlgKvH3Q0V1Z",
     // Feed content enrichment (#feed-enrich). When a feed item arrives
     // summary-only, follow its link and capture the full article via cheap
     // fetch → AI extract, escalating to Cloudflare Browser Rendering only when

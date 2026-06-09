@@ -5,7 +5,7 @@ import {
   deviceAuthorizationClient,
   lastLoginMethodClient,
 } from "better-auth/client/plugins";
-import { dashClient } from "@better-auth/infra/client";
+import { dashClient, sentinelClient } from "@better-auth/infra/client";
 import { oauthProviderClient } from "@better-auth/oauth-provider/client";
 
 /**
@@ -42,6 +42,15 @@ export const authClient = createAuthClient({
     // admin/audit endpoints are reachable from this client. No API key here — the
     // client plugin only exposes the endpoints; the key lives server-side.
     dashClient(),
+    // Client half of Sentinel (the server-side sentinel() plugin lives in
+    // workers/api/src/auth/index.ts). It attaches a stable device fingerprint via
+    // the `X-Visitor-Id` header (feeding credential-stuffing + abuse detection) and,
+    // with `autoSolveChallenge`, transparently solves the server's Proof-of-Work
+    // challenge and retries — so a legit user briefly caught by a "challenge" action
+    // (bots / suspicious IP) sails through instead of seeing a 423. No API key here
+    // (it lives server-side); inert when the server plugin isn't mounted. Registered
+    // unconditionally, like dashClient().
+    sentinelClient({ autoSolveChallenge: true }),
     // Magic link — registers the `signIn.magicLink` method. No secret and nothing to
     // gate at construction (mirrors the always-on server plugin); whether the UI
     // surfaces a button is controlled separately by NEXT_PUBLIC_AUTH_MAGIC_LINK in
