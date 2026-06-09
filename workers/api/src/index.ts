@@ -38,6 +38,7 @@ import { sweepTombstones } from "./cron/sweep-tombstones.js";
 import { scanStaleFirecrawlSources } from "./cron/firecrawl-staleness.js";
 import { wellKnownSync } from "./cron/well-known-sync.js";
 import { sweepOauthClients } from "./cron/sweep-oauth-clients.js";
+import { sendDigests } from "./cron/send-digests.js";
 import { sendAlert, type AlertEnv } from "./lib/send-alert.js";
 import { logEvent } from "@releases/lib/log-event";
 import { dbErrorLogFields } from "@releases/lib/db-errors";
@@ -343,6 +344,19 @@ export type Env = {
     // Sender address + display name for AUTH_EMAIL. Default noreply@releases.sh / "Releases".
     AUTH_EMAIL_FROM?: string;
     AUTH_EMAIL_FROM_NAME?: string;
+    // Digest email sender address. Falls back to AUTH_EMAIL_FROM / noreply@releases.sh.
+    DIGEST_EMAIL_FROM?: string;
+    // Digest cron tunables. DIGEST_MAX_PER_RUN caps recipients processed per cron
+    // fire; DIGEST_MAX_RELEASES caps releases shown per email. Both default to
+    // safe values in send-digests.ts when absent.
+    DIGEST_MAX_PER_RUN?: string;
+    DIGEST_MAX_RELEASES?: string;
+    // Kill switch for the digest-emails cron (checked alongside the
+    // digest-emails-enabled Flagship flag). Set to "true" to enable.
+    DIGEST_EMAILS_ENABLED?: string;
+    // Public REST API origin — used to build unsubscribe URLs in digest emails.
+    // Falls back to https://api.releases.sh when absent.
+    API_BASE_URL?: string;
   };
   Variables: {
     auth?: AuthContext;
@@ -838,6 +852,58 @@ export default {
             OAUTH_CLIENT_REAPER_ENABLED: env.OAUTH_CLIENT_REAPER_ENABLED,
             OAUTH_CLIENT_REAPER_RETENTION_DAYS: env.OAUTH_CLIENT_REAPER_RETENTION_DAYS,
           }),
+          alertEnv,
+        ),
+      );
+      return;
+    }
+    if (event.cron === "0 13 * * *") {
+      ctx.waitUntil(
+        loggedDispatch(
+          "digest-daily-cron",
+          sendDigests(
+            {
+              DB: env.DB,
+              AUTH_EMAIL: env.AUTH_EMAIL,
+              DIGEST_EMAIL_FROM: env.DIGEST_EMAIL_FROM,
+              WEB_BASE_URL: env.WEB_BASE_URL,
+              MEDIA_ORIGIN: env.MEDIA_ORIGIN,
+              FLAGS: env.FLAGS,
+              DIGEST_EMAILS_ENABLED: env.DIGEST_EMAILS_ENABLED,
+              CRON_ENABLED: env.CRON_ENABLED,
+              DIGEST_MAX_PER_RUN: env.DIGEST_MAX_PER_RUN,
+              DIGEST_MAX_RELEASES: env.DIGEST_MAX_RELEASES,
+              API_BASE_URL: env.API_BASE_URL,
+              ENVIRONMENT: env.ENVIRONMENT,
+            },
+            { cadence: "daily", runStart: new Date(event.scheduledTime) },
+          ),
+          alertEnv,
+        ),
+      );
+      return;
+    }
+    if (event.cron === "0 13 * * 1") {
+      ctx.waitUntil(
+        loggedDispatch(
+          "digest-weekly-cron",
+          sendDigests(
+            {
+              DB: env.DB,
+              AUTH_EMAIL: env.AUTH_EMAIL,
+              DIGEST_EMAIL_FROM: env.DIGEST_EMAIL_FROM,
+              WEB_BASE_URL: env.WEB_BASE_URL,
+              MEDIA_ORIGIN: env.MEDIA_ORIGIN,
+              FLAGS: env.FLAGS,
+              DIGEST_EMAILS_ENABLED: env.DIGEST_EMAILS_ENABLED,
+              CRON_ENABLED: env.CRON_ENABLED,
+              DIGEST_MAX_PER_RUN: env.DIGEST_MAX_PER_RUN,
+              DIGEST_MAX_RELEASES: env.DIGEST_MAX_RELEASES,
+              API_BASE_URL: env.API_BASE_URL,
+              ENVIRONMENT: env.ENVIRONMENT,
+            },
+            { cadence: "weekly", runStart: new Date(event.scheduledTime) },
+          ),
           alertEnv,
         ),
       );
