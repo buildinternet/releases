@@ -333,9 +333,6 @@ export type Env = {
     // safe values in send-digests.ts when absent.
     DIGEST_MAX_PER_RUN?: string;
     DIGEST_MAX_RELEASES?: string;
-    // Kill switch for the digest-emails cron (checked alongside the
-    // digest-emails-enabled Flagship flag). Set to "true" to enable.
-    DIGEST_EMAILS_ENABLED?: string;
     // Public REST API origin — used to build unsubscribe URLs in digest emails.
     // Falls back to https://api.releases.sh when absent.
     API_BASE_URL?: string;
@@ -852,8 +849,6 @@ export default {
               DIGEST_EMAIL_FROM: env.DIGEST_EMAIL_FROM,
               WEB_BASE_URL: env.WEB_BASE_URL,
               MEDIA_ORIGIN: env.MEDIA_ORIGIN,
-              FLAGS: env.FLAGS,
-              DIGEST_EMAILS_ENABLED: env.DIGEST_EMAILS_ENABLED,
               CRON_ENABLED: env.CRON_ENABLED,
               DIGEST_MAX_PER_RUN: env.DIGEST_MAX_PER_RUN,
               DIGEST_MAX_RELEASES: env.DIGEST_MAX_RELEASES,

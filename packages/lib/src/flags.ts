@@ -101,11 +101,6 @@ export const FLAGS = {
     env: "RAW_SNAPSHOT_CAPTURE_ENABLED",
     default: false,
   },
-  digestEmailsEnabled: {
-    key: "digest-emails-enabled",
-    env: "DIGEST_EMAILS_ENABLED",
-    default: false,
-  },
   // Single switch for the secondary AI lanes (marketing classifier, live release
   // summarizer, …) on the TextModel seam. OFF → those lanes use Anthropic Haiku.
   // Flip ON in Flagship to route every such lane that ALSO has an OpenRouter model

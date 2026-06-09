@@ -4,6 +4,15 @@
 **Depends on:** user follows + personalized feed (PR #1514, live), per-user RSS/Atom feed + `relf_` token (PR #1529, live)
 **Status:** design approved 2026-06-09
 
+> **Amendment (2026-06-09, post-implementation):** the `digest-emails-enabled`
+> Flagship flag described below was **dropped** before merge — digests ship
+> enabled with no feature flag, matching the follows feature. The per-user opt-in
+> (cadence defaults to `off`) plus the existing `CRON_ENABLED` operational switch
+> are the only gates. References to the flag in the sections below are historical.
+> A root-key `POST /v1/admin/digest/test` on-demand test-send was also added for
+> development (bypasses the schedule + verified-email filter; never advances the
+> watermark unless asked).
+
 ## Summary
 
 Opt-in daily/weekly email digests of new releases from the orgs/products a signed-in

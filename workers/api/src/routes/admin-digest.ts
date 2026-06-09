@@ -5,9 +5,9 @@
  *   POST /v1/admin/digest/test
  *   { userId?, email?, cadence?: "daily"|"weekly", sinceDays?: number, advanceWatermark?: boolean }
  *
- * Sends a single digest to one user *right now*, bypassing the cron schedule,
- * the `digest-emails-enabled` flag, and the email-verified filter — it's an
- * explicit operator action for testing the render + delivery path. The lookback
+ * Sends a single digest to one user *right now*, bypassing the cron schedule
+ * and the email-verified filter — it's an explicit operator action for testing
+ * the render + delivery path. The lookback
  * window is `sinceDays` (default 7), independent of the user's real watermark;
  * the watermark is left untouched unless `advanceWatermark: true` is passed, so
  * the same test can be re-run repeatedly.

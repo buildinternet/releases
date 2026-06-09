@@ -1,5 +1,4 @@
 import { logEvent } from "@releases/lib/log-event";
-import { flag, FLAGS, type FlagshipBinding } from "@releases/lib/flags";
 import { createDb, type AnyDb } from "../db.js";
 import {
   listDigestRecipients,
@@ -19,8 +18,6 @@ export interface SendDigestsEnv {
   /** API worker's own public origin — used for unsubscribe URLs. Falls back to https://api.releases.sh. */
   API_BASE_URL?: string;
   MEDIA_ORIGIN?: string;
-  FLAGS?: FlagshipBinding;
-  DIGEST_EMAILS_ENABLED?: string;
   CRON_ENABLED?: string;
   DIGEST_MAX_PER_RUN?: string;
   DIGEST_MAX_RELEASES?: string;
@@ -103,17 +100,14 @@ export async function gatherAndSendDigest(
  * user: select releases published in `(last_digest_at, runStart]` from everything
  * they follow; if none, skip (watermark unchanged); else send and advance the
  * watermark to `runStart`. Per-recipient failures are logged and never abort the
- * loop. Gated by CRON_ENABLED + the digest-emails-enabled flag.
+ * loop. Gated only by CRON_ENABLED — there is no feature flag; the per-user
+ * opt-in (cadence defaults to off) is what keeps mail from going out broadly.
  */
 export async function sendDigests(env: SendDigestsEnv, args: SendDigestsArgs): Promise<void> {
   const { cadence, runStart } = args;
 
   if (env.CRON_ENABLED === "false") {
     logEvent("info", { component: "digest", event: "cron-disabled", cadence });
-    return;
-  }
-  if (!(await flag(env.FLAGS, env.DIGEST_EMAILS_ENABLED, FLAGS.digestEmailsEnabled))) {
-    logEvent("info", { component: "digest", event: "flag-off", cadence });
     return;
   }
 

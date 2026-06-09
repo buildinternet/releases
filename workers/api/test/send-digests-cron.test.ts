@@ -26,7 +26,6 @@ function env(over: Record<string, unknown> = {}) {
     DIGEST_MAX_PER_RUN: "100",
     DIGEST_MAX_RELEASES: "50",
     CRON_ENABLED: "true",
-    DIGEST_EMAILS_ENABLED: "true",
     _drizzleOverride: h.db as any,
     ...over,
   } as any;
@@ -99,14 +98,6 @@ describe("sendDigests cron", () => {
 
   it("no-ops when CRON_ENABLED=false", async () => {
     await sendDigests(env({ CRON_ENABLED: "false" }), { cadence: "daily", runStart: new Date() });
-    expect(sent.length).toBe(0);
-  });
-
-  it("no-ops when the flag is off", async () => {
-    await sendDigests(env({ DIGEST_EMAILS_ENABLED: "false" }), {
-      cadence: "daily",
-      runStart: new Date(),
-    });
     expect(sent.length).toBe(0);
   });
 });
