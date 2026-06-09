@@ -96,6 +96,36 @@ export function isApiTokenShaped(raw: string): boolean {
 }
 
 /**
+ * Wire prefix for per-user feed tokens — the credential embedded in a
+ * personalized Atom feed URL (`/v1/feed/relf_<lookupId>_<secret>.atom`).
+ * Distinct from `relk_`/`relu_` so it's secret-scanning friendly and never
+ * collides with the Bearer auth lanes (it's only ever presented in the feed
+ * path). Same lookupId/secret structure as `relk_`; reuse the base62 generators.
+ */
+export const FEED_TOKEN_PREFIX = "relf_";
+
+const FEED_TOKEN_RE = new RegExp(
+  `^${FEED_TOKEN_PREFIX}([0-9A-Za-z]{${LOOKUP_LEN}})_([0-9A-Za-z]{${SECRET_LEN}})$`,
+);
+
+export function generateFeedToken(): GeneratedApiToken {
+  const lookupId = genLookup();
+  const secret = genSecret();
+  return { token: `${FEED_TOKEN_PREFIX}${lookupId}_${secret}`, lookupId, secret };
+}
+
+export function parseFeedToken(raw: string): ParsedApiToken | null {
+  const m = raw.trim().match(FEED_TOKEN_RE);
+  if (!m) return null;
+  return { lookupId: m[1], secret: m[2] };
+}
+
+/** Cheap prefix check — routes a path credential to the feed-token resolver. */
+export function isFeedTokenShaped(raw: string): boolean {
+  return raw.startsWith(FEED_TOKEN_PREFIX);
+}
+
+/**
  * Wire prefix for Better Auth-issued, user-owned API keys. Distinct from the
  * machine-lane `API_TOKEN_PREFIX` (`relk_`) so the auth middleware routes a
  * presented credential to exactly one verifier. Set as the plugin's

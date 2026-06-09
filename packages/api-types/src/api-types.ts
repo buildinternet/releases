@@ -830,6 +830,26 @@ export interface FollowMutationResponse {
 }
 
 /**
+ * A user's personalized feed token, including the full re-revealable feed URL.
+ * The token is reversible (stored recoverably) because the feed serves only
+ * public release data and carries no PII — so the URL can be re-displayed and
+ * copied on any visit (see #1519 design, decision 6). One per user.
+ */
+export interface FeedToken {
+  /** Absolute, tokenized Atom URL — e.g. https://api.releases.sh/v1/feed/relf_…_….atom */
+  feedUrl: string;
+  /** Non-secret public handle (for masked display). */
+  lookupId: string;
+  createdAt: string;
+  lastUsedAt: string | null;
+}
+
+/** `GET /v1/me/feed/token` — the token, or null if the user has none yet. */
+export interface FeedTokenResponse {
+  token: FeedToken | null;
+}
+
+/**
  * GET /v1/me/feed response — the personalized release feed. Reuses the same item
  * shape as /v1/releases/latest (ReleaseLatestItem) inside the standard list envelope.
  */

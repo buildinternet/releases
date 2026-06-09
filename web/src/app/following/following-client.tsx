@@ -9,6 +9,7 @@ import { InfiniteScrollTrigger } from "@/components/infinite-scroll-trigger";
 import { useInfiniteScroll } from "@/hooks/use-infinite-scroll";
 import { getFeed } from "@/lib/follows";
 import { formatRelativeDate, pluralReleases } from "@/lib/formatters";
+import { FeedTokenCard } from "./feed-token-card";
 import type { Follow, ReleaseLatestItem } from "@buildinternet/releases-api-types";
 
 const FEED_PAGE_SIZE = 30;
@@ -236,30 +237,34 @@ export function FollowingClient() {
           )}
         </section>
 
-        {/* Right: manage follows */}
-        <aside>
-          <h2 className="mb-4 text-[11px] font-semibold uppercase tracking-[0.18em] text-stone-400 dark:text-stone-500">
-            Your follows
-          </h2>
+        {/* Right: feed card + manage follows */}
+        <aside className="space-y-6">
+          <FeedTokenCard />
 
-          {followsList.length === 0 && followsReady ? (
-            <p className="text-sm text-stone-400 dark:text-stone-500">
-              Not following anything yet.
-            </p>
-          ) : (
-            <ul className="space-y-1">
-              {followsList.map((f) => (
-                <FollowRow
-                  key={`${f.targetType}:${f.targetId}`}
-                  follow={f}
-                  // The provider owns the optimistic drop, error rollback, and
-                  // post-success refetch — `followsList` reflects all three.
-                  // Swallow the re-thrown error (provider already rolled back).
-                  onUnfollow={() => follows?.toggle(f.targetType, f.targetId)?.catch(() => {})}
-                />
-              ))}
-            </ul>
-          )}
+          <div>
+            <h2 className="mb-4 text-[11px] font-semibold uppercase tracking-[0.18em] text-stone-400 dark:text-stone-500">
+              Your follows
+            </h2>
+
+            {followsList.length === 0 && followsReady ? (
+              <p className="text-sm text-stone-400 dark:text-stone-500">
+                Not following anything yet.
+              </p>
+            ) : (
+              <ul className="space-y-1">
+                {followsList.map((f) => (
+                  <FollowRow
+                    key={`${f.targetType}:${f.targetId}`}
+                    follow={f}
+                    // The provider owns the optimistic drop, error rollback, and
+                    // post-success refetch — `followsList` reflects all three.
+                    // Swallow the re-thrown error (provider already rolled back).
+                    onUnfollow={() => follows?.toggle(f.targetType, f.targetId)?.catch(() => {})}
+                  />
+                ))}
+              </ul>
+            )}
+          </div>
         </aside>
       </div>
     </div>

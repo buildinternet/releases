@@ -1,6 +1,10 @@
 import { describe, it, expect } from "bun:test";
-import { sourceToAtom, orgReleasesToAtom, productReleasesToAtom } from "./atom.js";
-import type { SourceDetail, OrgReleaseItem } from "@buildinternet/releases-api-types";
+import { sourceToAtom, orgReleasesToAtom, productReleasesToAtom, userFeedToAtom } from "./atom.js";
+import type {
+  SourceDetail,
+  OrgReleaseItem,
+  ReleaseLatestItem,
+} from "@buildinternet/releases-api-types";
 
 const BASE = "https://releases.sh";
 
@@ -263,5 +267,49 @@ describe("productReleasesToAtom", () => {
     );
     expect(xml).toStartWith('<?xml version="1.0" encoding="utf-8"?>');
     expect(xml).toInclude("<title>Turborepo release notes</title>");
+  });
+});
+
+function latestItem(over: Partial<ReleaseLatestItem> = {}): ReleaseLatestItem {
+  return {
+    id: "rel_1",
+    version: "1.0.0",
+    type: "feature",
+    title: "Shipped a thing",
+    summary: "We shipped a thing.",
+    titleGenerated: null,
+    titleShort: null,
+    publishedAt: "2026-06-01",
+    url: "https://acme.example/releases/1",
+    media: [],
+    source: { slug: "acme-blog", name: "Acme Blog", type: "feed", orgSlug: "acme" },
+    product: null,
+    coverageCount: 0,
+    contentChars: 0,
+    contentTokens: 0,
+    ...over,
+  } as ReleaseLatestItem;
+}
+
+describe("userFeedToAtom", () => {
+  const opts = { baseUrl: "https://releases.sh" };
+  const selfUrl = "https://api.releases.sh/v1/feed/relf_abc_def.atom";
+
+  it("renders followed releases with a stable user feed id and self link", () => {
+    const xml = userFeedToAtom({ releases: [latestItem()], lookupId: "abc", selfUrl }, opts);
+    expect(xml).toContain("<feed");
+    expect(xml).toContain("<title>Your followed releases</title>");
+    expect(xml).toContain(`tag:releases.sh,2005:user/abc`);
+    expect(xml).toContain(`href="${selfUrl}"`);
+    expect(xml).toContain("https://releases.sh/release/rel_1");
+    expect(xml).toContain("https://releases.sh/following");
+    expect(xml).toContain("Shipped a thing");
+  });
+
+  it("renders a valid empty feed when the user follows nothing", () => {
+    const xml = userFeedToAtom({ releases: [], lookupId: "abc", selfUrl }, opts);
+    expect(xml).toContain("<feed");
+    expect(xml).toContain("</feed>");
+    expect(xml).not.toContain("<entry>");
   });
 });

@@ -5,6 +5,8 @@
  */
 
 import type {
+  FeedToken,
+  FeedTokenResponse,
   Follow,
   FollowTarget,
   FollowsListResponse,
@@ -42,4 +44,34 @@ export async function getFeed(page = 1, limit = 30): Promise<PersonalizedFeedRes
   });
   if (!res.ok) throw new Error(await errorMessage(res, `Failed to load feed (${res.status})`));
   return (await res.json()) as PersonalizedFeedResponse;
+}
+
+// ── Feed token (/v1/me/feed/token) ──────────────────────────────────────────
+
+export async function getFeedToken(): Promise<FeedToken | null> {
+  const res = await fetch(`${apiBase()}/v1/me/feed/token`, { credentials: "include" });
+  // The endpoint returns 200 `{ token: null }` when the user has no token — that
+  // is the only `null` path. Any non-OK status is a real failure (auth/5xx), so
+  // throw (consistent with the sibling helpers) rather than masking it as "no token".
+  if (!res.ok) throw new Error(await errorMessage(res, `Failed to load feed URL (${res.status})`));
+  return ((await res.json()) as FeedTokenResponse).token;
+}
+
+export async function mintFeedToken(): Promise<FeedToken> {
+  const res = await fetch(`${apiBase()}/v1/me/feed/token`, {
+    method: "POST",
+    credentials: "include",
+  });
+  if (!res.ok)
+    throw new Error(await errorMessage(res, `Failed to generate feed URL (${res.status})`));
+  return (await res.json()) as FeedToken;
+}
+
+export async function revokeFeedToken(): Promise<void> {
+  const res = await fetch(`${apiBase()}/v1/me/feed/token`, {
+    method: "DELETE",
+    credentials: "include",
+  });
+  if (!res.ok)
+    throw new Error(await errorMessage(res, `Failed to revoke feed URL (${res.status})`));
 }
