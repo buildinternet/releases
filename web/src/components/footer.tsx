@@ -11,6 +11,7 @@ const COLUMNS: FooterColumn[] = [
     title: "Product",
     links: [
       { label: "Why", href: "/docs/why" },
+      { label: "What's New", href: "/updates" },
       { label: "Live Updates", href: "/live" },
       { label: "Collections", href: "/collections" },
       { label: "Categories", href: "/categories" },
