@@ -10,7 +10,7 @@ This repo is private. The conventions below cover the shape of changes so PRs st
 bun install
 ```
 
-Working in a git worktree? Run `./scripts/setup-worktree.sh` once after `git worktree add` — it installs dependencies and copies `.env` + `web/.env.local` from the main checkout. Claude Code sessions trigger the dependency install automatically via a `SessionStart` hook; the script is for terminal-driven bootstraps.
+Working in a git worktree? Claude Code worktrees are self-bootstrapping: env files (`.env`, `web/.env.local`, `.dev.vars`) are copied from the main checkout via [`.worktreeinclude`](.worktreeinclude), and the dependency install runs automatically via a `SessionStart` hook. For terminal-driven worktrees created with a plain `git worktree add` (where neither hook fires), run `./scripts/setup-worktree.sh` once to install dependencies and copy the same env files.
 
 The monorepo no longer ships a local CLI. If you need `releases <cmd>` while working on backend changes, clone [buildinternet/releases-cli](https://github.com/buildinternet/releases-cli) alongside this repo and point it at a local API worker (`bun run dev:api`) via `RELEASES_API_URL=http://localhost:8787`.
 
