@@ -116,7 +116,21 @@ async function resolveTextModel(
         env,
       );
     }
-    // key/model not configured → fall through to Anthropic (fail open)
+    if (model && !orKey) {
+      // Lane is configured (model var set) but OPENROUTER_API_KEY didn't resolve —
+      // warn so this silent fail-open to Anthropic is diagnosable, mirroring
+      // resolveExtractAiSdkModel's `openrouter-misconfigured`. An EMPTY model var
+      // is the intentional per-lane off switch and stays quiet (falls through
+      // without a warn). This is the only signal a misconfigured api-worker lane
+      // leaves — the marketing/summarize path otherwise swallows the failure.
+      logEvent("warn", {
+        component: "text-model",
+        event: "openrouter-misconfigured",
+        lane: opts.generationName,
+        reason: "OPENROUTER_API_KEY unresolved",
+      });
+    }
+    // key/model not usable → fall through to Anthropic (fail open)
   }
 
   // Key + gateway opts are independent secret/var reads — resolve concurrently.
