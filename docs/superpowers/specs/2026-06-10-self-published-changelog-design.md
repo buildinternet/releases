@@ -1,7 +1,14 @@
 # Self-published changelog — publishing releases.sh's own changelog on releases.sh
 
 **Date:** 2026-06-10
-**Status:** Design approved; Phase 2 to be planned next.
+**Status:** Phase 1 (seed) shipped & verified live 2026-06-10. Phase 2 (engine) not yet planned.
+
+**Phase 1 outcome (2026-06-10):** Org `releases-sh` (name "Releases", domain `releases.sh`)
+and push-only `agent` source `product-changelog` (`src_LNrMz-rrFa2OD27mBUfaT`) created in
+prod; 37 daily rollups (May 1 – June 9, 2026; 125 bullets) upserted via `/batch`; avatar
+set from the site mark. Note: the slugs `releases` and `changelog` are both **reserved** by
+the API, so the org slug is `releases-sh` and the source slug is `product-changelog` (the
+display names are still "Releases" / "Changelog").
 
 ## Summary
 
@@ -14,8 +21,8 @@ gated by human review.
 
 The work is staged:
 
-- **Phase 1 — Seed the showcase (now, ~no code):** onboard the org/product/source and
-  hand-curate a handful of recent daily rollups via `/batch`. Delivers a live, real,
+- **Phase 1 — Seed the showcase (now, ~no code):** onboard the org + a push-only source
+  and hand-curate a handful of recent daily rollups via `/batch`. Delivers a live, real,
   good-looking page immediately.
 - **Phase 2 — The daily engine (the build):** two GitHub Actions that draft a daily
   rollup from merged PRs (AI-curated), open it as a PR for human approval, and publish
@@ -23,8 +30,8 @@ The work is staged:
 
 ## Goals
 
-- Occupy a publishing surface we already ship: the org/product page + AI overview + Atom
-  feed + MCP + follows + digest + search. No new _reader_ code.
+- Occupy a publishing surface we already ship: the org page + AI overview + Atom feed +
+  MCP + follows + digest + search. No new _reader_ code.
 - Dogfood the real product loop — our **write** path (`/batch`) and our **AI
   summarization/classification** stack (`packages/ai`) — on our own content.
 - Keep the changelog **low-noise**: a curated, rolled-up digest, never one entry per
@@ -57,33 +64,34 @@ The work is staged:
 
 ## Decisions
 
-| #             | Decision                             | Choice                                                                                | Notes                                                                                                     |
-| ------------- | ------------------------------------ | ------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| Role          | What is this for?                    | Staged: showcase now → canonical destination later                                    | Low risk to start, clear path to "primary."                                                               |
-| Engine        | How do entries flow in?              | Canonical markdown in repo → CI push to `/batch` (Approach A)                         | Durable, PR-reviewed, welded to shipping; dogfoods the write path.                                        |
-| Cadence       | How are entries cut?                 | **Daily date rollups**, skip quiet days                                               | One `rollup` per active day; all-internal days produce nothing.                                           |
-| Org modeling  | How do we model ourselves?           | Org **Build Internet** → product **Releases** (like Vercel→Next.js)                   | Reversible registry data; can flip to a brand-first single "Releases" org.                                |
-| `url` / dedup | Stable key for `/batch` idempotency  | Synthetic on-site permalink per date, e.g. `https://releases.sh/changelog/2026-06-10` | A small route resolves it; "view source" points at our own page (correct for a self-published changelog). |
-| AI autonomy   | How much does AI publish on its own? | Draft-PR → human approve (v1)                                                         | Auto-merge for high-confidence days deferred.                                                             |
+| #             | Decision                             | Choice                                                                                | Notes                                                                                                                                                           |
+| ------------- | ------------------------------------ | ------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Role          | What is this for?                    | Staged: showcase now → canonical destination later                                    | Low risk to start, clear path to "primary."                                                                                                                     |
+| Engine        | How do entries flow in?              | Canonical markdown in repo → CI push to `/batch` (Approach A)                         | Durable, PR-reviewed, welded to shipping; dogfoods the write path.                                                                                              |
+| Cadence       | How are entries cut?                 | **Daily date rollups**, skip quiet days                                               | One `rollup` per active day; all-internal days produce nothing.                                                                                                 |
+| Org modeling  | How do we model ourselves?           | A single org **Releases** (slug `releases`), one push-only source — no product        | Brand-first and simplest to understand; releases hang off one source. (Build Internet→Releases considered for cross-product future-proofing; chose simplicity.) |
+| `url` / dedup | Stable key for `/batch` idempotency  | Synthetic on-site permalink per date, e.g. `https://releases.sh/changelog/2026-06-10` | A small route resolves it; "view source" points at our own page (correct for a self-published changelog).                                                       |
+| AI autonomy   | How much does AI publish on its own? | Draft-PR → human approve (v1)                                                         | Auto-merge for high-confidence days deferred.                                                                                                                   |
 
 ## Architecture
 
 ### Identity in the registry
 
-Onboarded exactly like any third-party company:
+Onboarded exactly like any third-party company, kept deliberately minimal:
 
-- **Org** = Build Internet; **Product** = Releases.
-- **Source** = a **push-only** source under that product: no `metadata.feedUrl` /
-  `metadata.githubUrl`, and excluded from the poll-fetch cron (nothing to scrape). It
-  exists solely to own the published releases. Writes arrive via `/batch`.
-- **Reading home** = the existing org/product page (timeline, AI overview, Atom, MCP,
-  follows, digest, search). No reader code is written.
+- **Org** = Releases (slug `releases`), domain `releases.sh`, with an avatar. The org _is_
+  the product — no separate product row.
+- **Source** = a **push-only** source under the org: no `metadata.feedUrl` /
+  `metadata.githubUrl`, excluded from the poll-fetch cron (nothing to scrape). It exists
+  solely to own the published releases. Writes arrive via `/batch`.
+- **Reading home** = the existing org page (timeline, AI overview, Atom, MCP, follows,
+  digest, search). No reader code is written.
 
 ### Phase 1 — Seed the showcase (now, ~no code)
 
 Use existing endpoints / the `managing-sources` + `local-ingest` tooling to:
 
-1. Create the org (Build Internet), product (Releases), and the push-only source.
+1. Create the org (Releases) and the push-only source.
 2. Hand-curate ~10–20 recent user-facing highlights into a handful of **backdated daily
    rollups** and upsert them via `/batch`.
 3. Verify the page renders: timeline, overview, Atom, MCP, search.
@@ -126,7 +134,7 @@ merged PRs ──daily cron──▶ AI curate + group + rewrite ──▶ chang
                                             on-merge Action ─▶ POST /v1/releases/batch (rollup)
                                                                 │
                                                                 ▼
-                       releases.sh org/product page · Atom · MCP · digest · search
+                          releases.sh org page · Atom · MCP · digest · search
 ```
 
 ### Noise control (the core constraint), in three layers
@@ -173,8 +181,8 @@ Fixed
 
 ## Testing
 
-- **Phase 1:** manual verification that the org/product/source exist and the seeded
-  rollups render across page, Atom, MCP, and search.
+- **Phase 1:** manual verification that the org + source exist and the seeded rollups
+  render across page, Atom, MCP, and search.
 - **Phase 2:**
   - Unit-test the curation filter (conventional-commit classification + AI verdict shape)
     and the markdown→`/batch` payload mapping against fixtures.
@@ -185,8 +193,9 @@ Fixed
 ## Operational / safety
 
 - **Phase 1 writes to the production registry.** Creating the org and seeding releases is
-  an outward, not-trivially-reversible action; the exact org slug, product, source, and
-  the specific seeded entries are confirmed with the user before any prod write.
+  an outward, not-trivially-reversible action; the org slug, the source, and the specific
+  seeded entries are confirmed with the user before any prod write, and the drafted entries
+  are reviewed before they go public.
 - **Phase 2 publish Action needs a write-scoped credential** (`relk_`/`relu_` or root) in
   CI to call `/batch`. Stored as a GitHub Actions secret; scoped to `write`.
 
@@ -203,5 +212,5 @@ Fixed
 - Exact prompt + model for the curate/compose step (reuse `packages/ai`; pick during
   Phase 2 planning).
 - Whether the per-date `url` resolves to a dedicated `/changelog/[date]` route or an anchor
-  on the product page.
+  on the org page.
 - Auto-merge for high-confidence days (explicitly deferred from v1).
