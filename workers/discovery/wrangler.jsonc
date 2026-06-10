@@ -49,7 +49,9 @@
     // OpenRouter model id (e.g. "deepseek/deepseek-v4-pro") to route extraction
     // there. OPENROUTER_API_KEY is bound below; the resolver still fails open to
     // Anthropic unless the flag is on AND this var is non-empty.
-    "EXTRACT_MODEL": "",
+    // Set to deepseek-v4-pro after the extraction eval showed corpus-wide parity
+    // with Sonnet-4.6 (issue #1536); reasoning is disabled in the OpenRouter model.
+    "EXTRACT_MODEL": "deepseek/deepseek-v4-pro",
   },
   "containers": [
     {
@@ -165,7 +167,7 @@
         "RAW_SNAPSHOT_CAPTURE_ENABLED": "false",
         // OpenRouter extraction lane (issue #1536). Empty → stays on Anthropic
         // (OPENROUTER_API_KEY is bound below; flag + non-empty var still required).
-        "EXTRACT_MODEL": "",
+        "EXTRACT_MODEL": "deepseek/deepseek-v4-pro",
       },
       "containers": [
         {
