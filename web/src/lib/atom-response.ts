@@ -42,6 +42,9 @@ export function atomResponse(
       status: 304,
       headers: {
         ETag: etag,
+        // Carry the directive on the revalidation response too, so a feed that
+        // is already crawled stays out of the index on its next 304.
+        "X-Robots-Tag": "noindex",
         ...(lastModifiedHeader ? { "Last-Modified": lastModifiedHeader } : {}),
       },
     });
@@ -50,6 +53,14 @@ export function atomResponse(
   return new NextResponse(body, {
     headers: {
       "Content-Type": "application/atom+xml; charset=utf-8",
+      // A feed is a machine artifact, never a search result. It's advertised via
+      // `rel=alternate` and the sidebar's format links, so Google crawls the
+      // `.atom` URLs and tries to index the XML as a page — surfacing as
+      // "Duplicate without user-selected canonical" in Search Console (the same
+      // feed is also reachable at the legacy `/product/` alias). `noindex` keeps
+      // feeds crawlable but out of the index; do NOT block them in robots.txt or
+      // Google can't see this header.
+      "X-Robots-Tag": "noindex",
       ETag: etag,
       // Short shared cache + revalidate so feed readers get timely updates
       // but origin load stays reasonable under burst polling.

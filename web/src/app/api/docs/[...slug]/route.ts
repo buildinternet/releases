@@ -1,9 +1,12 @@
+import { type NextRequest } from "next/server";
 import { notFound } from "next/navigation";
 import matter from "gray-matter";
 import { adminDocs } from "@/flags";
+import { getBaseUrl } from "@/lib/base-url";
 import { loadDoc, stripAdminBlocks, keepAdminBlocks } from "@/lib/docs";
+import { markdownResponse } from "@/lib/markdown-response";
 
-export async function GET(_req: Request, { params }: { params: Promise<{ slug: string[] }> }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ slug: string[] }> }) {
   const { slug: slugParts } = await params;
   const slug = slugParts.join("/") || "index";
 
@@ -24,10 +27,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ slug: s
     : stripAdminBlocks(parsed.content);
   const body = matter.stringify(transformed.trimStart(), parsed.data);
 
-  return new Response(body, {
-    headers: {
-      "Content-Type": "text/markdown; charset=utf-8",
-      "Cache-Control": "public, max-age=300, s-maxage=3600",
-    },
+  const canonicalPath = slug === "index" ? "/docs" : `/docs/${slug}`;
+  return markdownResponse(body, {
+    cache: "semi-static",
+    canonical: `${getBaseUrl(req)}${canonicalPath}`,
   });
 }

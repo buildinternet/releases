@@ -14,6 +14,10 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     return formatErrorResponse(err, "Release not found");
   }
   return markdownResponse(releaseToMarkdown(release, { baseUrl: getBaseUrl(request) }), {
+    // No standalone `/release/:id` HTML page exists, so there's no canonical
+    // twin to consolidate to — keep this agent/CLI artifact out of the index,
+    // matching the `.json`/`.atom` treatment.
     cache: "dynamic",
+    noindex: true,
   });
 }

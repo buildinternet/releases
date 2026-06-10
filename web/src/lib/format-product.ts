@@ -1,10 +1,11 @@
-import { NextResponse, type NextRequest } from "next/server";
+import { type NextRequest } from "next/server";
 import { api, type ProductDetail } from "@/lib/api";
 import { ATOM_DEFAULT_MAX_ENTRIES } from "@/lib/atom";
 import { productAtomResponse } from "@/lib/atom-response";
 import { getBaseUrl } from "@/lib/base-url";
 import { formatErrorResponse } from "@/lib/format-error";
 import { productToMarkdown } from "@/lib/formatters";
+import { jsonFormatResponse } from "@/lib/json-response";
 import { markdownResponse } from "@/lib/markdown-response";
 import type { Format } from "@/lib/request";
 
@@ -37,13 +38,18 @@ export async function productFormatResponse(
     return productAtomResponse(request, orgSlug, product, feed);
   }
 
+  const baseUrl = getBaseUrl(request);
+
   if (format === "md") {
     return markdownResponse(
       productToMarkdown(product, orgSlug, {
-        baseUrl: getBaseUrl(request),
+        baseUrl,
         recentReleases: feed.releases,
       }),
-      { cache: "dynamic" },
+      // Canonical is the bare product page (#1190), the same URL the HTML page
+      // self-canonicals to — so the legacy `/product/` and bare `.md` both
+      // consolidate there.
+      { cache: "dynamic", canonical: `${baseUrl}/${orgSlug}/${product.slug}` },
     );
   }
 
@@ -51,5 +57,5 @@ export async function productFormatResponse(
   // fields, so the product detail is safe to serve verbatim — mirrors the org
   // format route. `releases` + `pagination` are attached the same way the
   // source detail carries them inline.
-  return NextResponse.json({ ...product, releases: feed.releases, pagination: feed.pagination });
+  return jsonFormatResponse({ ...product, releases: feed.releases, pagination: feed.pagination });
 }

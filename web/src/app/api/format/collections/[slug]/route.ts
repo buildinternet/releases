@@ -1,10 +1,11 @@
-import { NextRequest, NextResponse } from "next/server";
+import { type NextRequest } from "next/server";
 import { api } from "@/lib/api";
 import { ATOM_DEFAULT_MAX_ENTRIES } from "@/lib/atom";
 import { collectionAtomResponse } from "@/lib/atom-response";
 import { getBaseUrl } from "@/lib/base-url";
 import { formatErrorResponse } from "@/lib/format-error";
 import { collectionToMarkdown, collectionReleaseFeedToMarkdown } from "@/lib/formatters";
+import { jsonFormatResponse } from "@/lib/json-response";
 import { markdownResponse } from "@/lib/markdown-response";
 import { getFormat } from "@/lib/request";
 
@@ -44,7 +45,10 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       feed.pagination,
       { baseUrl },
     );
-    return markdownResponse(`${detail}\n## Recent Releases\n\n${releases}`, { cache: "dynamic" });
+    return markdownResponse(`${detail}\n## Recent Releases\n\n${releases}`, {
+      cache: "dynamic",
+      canonical: `${baseUrl}/collections/${slug}`,
+    });
   }
 
   let collection, feed;
@@ -56,5 +60,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   } catch (err) {
     return formatErrorResponse(err, "Collection not found");
   }
-  return NextResponse.json({ ...collection, releases: feed.releases, pagination: feed.pagination });
+  return jsonFormatResponse({
+    ...collection,
+    releases: feed.releases,
+    pagination: feed.pagination,
+  });
 }
