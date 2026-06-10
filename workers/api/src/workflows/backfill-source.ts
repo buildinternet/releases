@@ -21,6 +21,7 @@ import { RELEASES_BOT_UA } from "@releases/adapters/user-agent";
 import { logEvent } from "@releases/lib/log-event";
 import { getSecret } from "@releases/lib/secrets";
 import { getAnthropicKey, resolveGatewayOpts } from "../lib/anthropic.js";
+import { resolveExtractAiSdkModel } from "../lib/extract-model.js";
 import { buildAnthropicClient } from "@releases/lib/anthropic-client.js";
 import { planWindowOffsets } from "../lib/firecrawl-extract.js";
 import { logUsage } from "../lib/usage-log.js";
@@ -214,6 +215,12 @@ export class BackfillSourceWorkflow extends WorkflowEntrypoint<
       },
     );
 
+    // OpenRouter extraction lane (issue #1536). Resolved ONCE here, not per
+    // window — the flag + secret reads shouldn't repeat each iteration. Inert on
+    // this path today: backfill never sets `useToolLoop`, so extraction always
+    // takes the one-shot Anthropic tier; wired for consistency + future use.
+    const aiSdk = await resolveExtractAiSdkModel(env);
+
     // ── Steps 4+: extract-window-N ──────────────────────────────────────────
     // Each window is its own step.do so Cloudflare can retry or resume at the
     // window boundary. Results are collected for aggregation in the final step.
@@ -248,6 +255,7 @@ export class BackfillSourceWorkflow extends WorkflowEntrypoint<
               logger: backfillLogger,
               cloudflare: null,
               extractToolLoopEnabled: false,
+              ...(aiSdk ? { aiSdkModel: aiSdk.model, aiSdkModelLabel: aiSdk.label } : {}),
               repo: {
                 peekContentHash: async () => false,
                 commitContentHash: async () => {},

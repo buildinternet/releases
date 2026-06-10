@@ -514,6 +514,14 @@ export class ManagedAgentsSession extends DurableObject<Env> {
         this.env.RAW_SNAPSHOT_CAPTURE_ENABLED,
         FLAGS.rawSnapshotCapture,
       );
+      // OpenRouter extraction lane (issue #1536) — resolve the flag once per
+      // session; the key + EXTRACT_MODEL are read inside buildWorkerExtractDeps,
+      // which fails open to the Anthropic loop when any piece is missing.
+      const openrouterEnabled = await flag(
+        this.env.FLAGS,
+        this.env.OPENROUTER_ENABLED,
+        FLAGS.openrouterEnabled,
+      );
 
       const scrapeHandler =
         cfAccountId && cfApiToken
@@ -530,6 +538,10 @@ export class ManagedAgentsSession extends DurableObject<Env> {
                   sessionId,
                   extractToolLoopEnabled,
                   captureRawSnapshots,
+                  openrouterEnabled,
+                  openRouterApiKey: this.env.OPENROUTER_API_KEY,
+                  openRouterBaseURL: this.env.OPENROUTER_BASE_URL,
+                  extractModel: this.env.EXTRACT_MODEL,
                   signedFetch,
                 },
                 sourceIdentifier,

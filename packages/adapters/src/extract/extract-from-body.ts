@@ -188,26 +188,36 @@ export async function extractFromBody(
         ? opts.body.slice(0, MAX_BODY_CHARS_TOOLLOOP) + "\n\n[Content truncated]"
         : opts.body;
 
+    // Pass the base prompt and guidance SEPARATELY so the loop can emit
+    // per-source parseInstructions + the org playbook in a trailing system block,
+    // after the cache breakpoint — keeping the static prefix shareable across
+    // sources while still delivering guidance to the model. (Folding it into
+    // systemPrompt here previously wedged it mid-prefix.) Sources like
+    // posthog-changelog, which rely on parseInstructions to point at the right
+    // slice of a 700+ item flat array, still get it.
+    const loopOpts = {
+      body: bodyForLoop,
+      systemPrompt: opts.systemPrompt,
+      guidance: opts.guidance,
+      userMessage: opts.userMessage,
+      sourceUrl: opts.sourceUrl,
+      fetchUrl: opts.fetchUrl,
+      approxTokens,
+    };
+
     try {
-      const result = await extractWithTools(
-        {
-          body: bodyForLoop,
-          // Pass the base prompt and guidance SEPARATELY so extractWithTools can
-          // emit per-source parseInstructions + the org playbook in a trailing
-          // system block, after the cache breakpoint — keeping the static prefix
-          // shareable across sources while still delivering guidance to the model.
-          // (Folding it into systemPrompt here previously wedged it mid-prefix.)
-          // Sources like posthog-changelog, which rely on parseInstructions to
-          // point at the right slice of a 700+ item flat array, still get it.
-          systemPrompt: opts.systemPrompt,
-          guidance: opts.guidance,
-          userMessage: opts.userMessage,
-          sourceUrl: opts.sourceUrl,
-          fetchUrl: opts.fetchUrl,
-          approxTokens,
-        },
-        deps,
-      );
+      let result;
+      if (deps.aiSdkModel) {
+        // OpenRouter/AI-SDK lane (flag on + EXTRACT_MODEL + key resolved). Dynamic
+        // import keeps `ai` out of the static graph for Anthropic-only callers.
+        const { extractWithToolsAiSdk } = await import("./extract-with-tools-aisdk.js");
+        result = await extractWithToolsAiSdk(loopOpts, {
+          model: deps.aiSdkModel as Parameters<typeof extractWithToolsAiSdk>[1]["model"],
+          logger: deps.logger,
+        });
+      } else {
+        result = await extractWithTools(loopOpts, deps);
+      }
       return {
         entries: result.entries,
         totalInput: result.totalInput,
@@ -219,8 +229,9 @@ export async function extractFromBody(
         fallbackReason: null,
         cacheReadTokens: result.cacheReadTokens,
         cacheWriteTokens: result.cacheWriteTokens,
-        // Tool-loop runs on the agentic (Sonnet-class) model, not oneShotModel.
-        modelUsed: deps.agentModel,
+        // Tool-loop runs on the agentic (Sonnet-class) model on the Anthropic
+        // path; the AI-SDK lane reports its own `EXTRACT_MODEL` label when set.
+        modelUsed: deps.aiSdkModel ? (deps.aiSdkModelLabel ?? deps.agentModel) : deps.agentModel,
       };
     } catch (err) {
       const isLoopErr = err instanceof LoopFallbackError;

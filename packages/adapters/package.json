@@ -24,14 +24,18 @@
     "./extract": "./src/extract/index.ts",
     "./extract/shared": "./src/extract/shared.ts",
     "./extract/types": "./src/extract/types.ts",
+    "./extract/aisdk": "./src/extract/extract-with-tools-aisdk.ts",
     "./github-probe": "./src/github-probe.ts"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "^3",
     "@anthropic-ai/sdk": "catalog:",
     "@buildinternet/releases-core": "workspace:*",
+    "@openrouter/ai-sdk-provider": "^2.9",
     "@releases/core-internal": "workspace:*",
     "@releases/lib": "workspace:*",
     "@rowanmanning/feed-parser": "^2.1.3",
+    "ai": "^6",
     "fast-xml-parser": "^5.8.0",
     "jsonpath-plus": "^10.4.0",
     "linkedom": "^0.18.12",

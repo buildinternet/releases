@@ -280,6 +280,11 @@ export type Env = {
     // Cloudflare Flagship binding (prod + staging apps; absent in local dev /
     // tests → flag() falls back to the wrangler var). See @releases/lib/flags.
     FLAGS?: FlagshipBinding;
+    // OpenRouter model for the large-body extraction tool-loop (issue #1536).
+    // Consulted only when `openrouter-enabled` is on + OPENROUTER_API_KEY (bound
+    // below) resolves; empty → extraction stays on Anthropic (fail-open). Read by
+    // resolveExtractAiSdkModel in the firecrawl-ingest / backfill workflows.
+    EXTRACT_MODEL?: string;
     // ── Better Auth (human user sessions; a separate layer from the relk_
     // machine tokens). The auth instance is served at /api/auth/* — see
     // src/auth/index.ts. ──

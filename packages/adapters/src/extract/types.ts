@@ -86,6 +86,18 @@ export interface ExtractDeps {
    * Per-source override: set source.metadata.extractStrategy = "toolloop".
    */
   extractToolLoopEnabled: boolean;
+  /**
+   * When set (worker resolved an OpenRouter extract model), the tool-loop routes
+   * through extract-with-tools-aisdk instead of the Anthropic SDK loop. Typed
+   * `unknown` to keep the `ai` types out of this shared package's surface.
+   */
+  aiSdkModel?: unknown;
+  /**
+   * Label for the model behind `aiSdkModel` (e.g. the OpenRouter `EXTRACT_MODEL`
+   * id), reported as `modelUsed` on the AI-SDK tool-loop path so cost
+   * attribution reflects the real model. Ignored when `aiSdkModel` is unset.
+   */
+  aiSdkModelLabel?: string;
 }
 
 export interface ExtractRepo {

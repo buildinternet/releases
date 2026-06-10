@@ -39,6 +39,9 @@ export interface TextModelEnv extends AnthropicEnv {
   OPENROUTER_BASE_URL?: string;
   MARKETING_CLASSIFIER_MODEL?: string;
   SUMMARIZE_MODEL?: string;
+  /** OpenRouter model for the large-body extraction tool-loop (issue #1536); empty
+   *  → extraction stays on Anthropic. Read by `resolveExtractAiSdkModel`, not here. */
+  EXTRACT_MODEL?: string;
   /** Single switch for the secondary AI lanes. Flagship-driven; var optional. */
   OPENROUTER_ENABLED?: string;
 }

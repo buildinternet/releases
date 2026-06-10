@@ -48,6 +48,7 @@
     "test": "bun test packages/ && bun test tests/ web/ workers/discovery workers/mcp workers/webhooks && bun test workers/api",
     "eval:evaluation": "bun test ./tests/evals/evaluation.eval.ts --timeout 30000",
     "eval:marketing": "bun tests/evals/marketing-classifier.eval.ts",
+    "eval:extraction": "bun tests/evals/extraction.eval.ts",
     "eval:summary": "bun tests/evals/release-summary.eval.ts",
     "eval:overview": "bun tests/evals/overview.eval.ts",
     "eval:tool-ux-report": "bun tests/evals/tool-ux-report.ts",

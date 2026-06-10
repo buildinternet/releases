@@ -96,6 +96,20 @@ export interface Env {
   /** "true" to enable tool-loop extraction for large bodies globally. */
   EXTRACT_TOOLLOOP_ENABLED?: string;
   /**
+   * OpenRouter extraction lane (issue #1536). The large-body tool-loop routes
+   * through the AI-SDK/OpenRouter (DeepSeek) path when the `openrouter-enabled`
+   * flag is on AND `EXTRACT_MODEL` is non-empty AND `OPENROUTER_API_KEY`
+   * resolves; otherwise the Anthropic loop runs (fail open). `EXTRACT_MODEL` is
+   * a wrangler var (default ""); the OPENROUTER_API_KEY secret binding is
+   * configured in wrangler.jsonc (prod + staging), so enabling the lane only
+   * needs the flag on and a non-empty `EXTRACT_MODEL`.
+   */
+  EXTRACT_MODEL?: string;
+  OPENROUTER_API_KEY?: SecretBinding;
+  OPENROUTER_BASE_URL?: string;
+  /** Optional wrangler-var override for the `openrouter-enabled` flag (Flagship wins). */
+  OPENROUTER_ENABLED?: string;
+  /**
    * "true" to capture the scraped markdown body as a raw snapshot (#1283).
    * Resolved once per session against the FLAGS binding and threaded into
    * ScrapeEnv.captureRawSnapshots; when on, runScrapePath POSTs the body to the

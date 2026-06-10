@@ -22,6 +22,7 @@ import { logEvent } from "@releases/lib/log-event";
 import { getSecret } from "@releases/lib/secrets";
 import { FirecrawlError } from "@releases/lib/errors";
 import { getAnthropicKey, resolveGatewayOpts } from "../lib/anthropic.js";
+import { resolveExtractAiSdkModel } from "../lib/extract-model.js";
 import { buildAnthropicClient } from "@releases/lib/anthropic-client.js";
 import { extractFirecrawlMarkdown } from "../lib/firecrawl-extract.js";
 import { logUsage } from "../lib/usage-log.js";
@@ -183,6 +184,10 @@ export class FirecrawlIngestWorkflow extends WorkflowEntrypoint<
           apiKey,
           ...(await resolveGatewayOpts(env)),
         });
+        // OpenRouter extraction lane (issue #1536) — undefined unless the flag is
+        // on + EXTRACT_MODEL + key are set. Inert here today (firecrawl extraction
+        // never opts into the tool-loop), threaded for consistency + future use.
+        const aiSdk = await resolveExtractAiSdkModel(env);
         const result = await extractFirecrawlMarkdown(
           markdown,
           source,
@@ -191,6 +196,7 @@ export class FirecrawlIngestWorkflow extends WorkflowEntrypoint<
             agentModel: FIRECRAWL_EXTRACT_MODEL,
             logger: workerLogger,
             logUsageFn: (entry) => logUsage(db, { ...entry, sourceId }, "firecrawl-ingest"),
+            ...(aiSdk ? { aiSdkModel: aiSdk.model, aiSdkModelLabel: aiSdk.label } : {}),
           },
           { pageUrl: attributeUrl },
         );
