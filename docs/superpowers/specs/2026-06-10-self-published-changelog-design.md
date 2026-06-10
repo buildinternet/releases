@@ -1,14 +1,18 @@
 # Self-published changelog — publishing releases.sh's own changelog on releases.sh
 
 **Date:** 2026-06-10
-**Status:** Phase 1 (seed) shipped & verified live 2026-06-10. Phase 2 (engine) not yet planned.
+**Status:** Phase 1 (seed) shipped & verified live 2026-06-10; org overview generated. Phase 2 (engine) tracked in [buildinternet/releases#1567](https://github.com/buildinternet/releases/issues/1567).
 
 **Phase 1 outcome (2026-06-10):** Org `releases-sh` (name "Releases", domain `releases.sh`)
 and push-only `agent` source `product-changelog` (`src_LNrMz-rrFa2OD27mBUfaT`) created in
 prod; 37 daily rollups (May 1 – June 9, 2026; 125 bullets) upserted via `/batch`; avatar
 set from the site mark. Note: the slugs `releases` and `changelog` are both **reserved** by
 the API, so the org slug is `releases-sh` and the source slug is `product-changelog` (the
-display names are still "Releases" / "Changelog").
+display names are still "Releases" / "Changelog"). Org overview generated against the
+production prompt (`packages/ai/src/overview-content.ts`) and uploaded via
+`admin overview update` — note the `admin overview batch` selector skips orgs with
+`autoGenerateContent: false` (the default at creation), so single-org regen goes through
+`update`, not `batch`.
 
 ## Summary
 
