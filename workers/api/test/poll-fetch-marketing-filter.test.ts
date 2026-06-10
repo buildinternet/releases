@@ -37,21 +37,18 @@ import { restoreGlobalFetch } from "../../../tests/global-fetch";
 let nextFeedReleases: RawRelease[] = [];
 const feedFetchCalls: Array<{ feedUrl: string }> = [];
 
-// Bun's `mock.module` is process-global — once we register this stub it
-// applies to every later-evaluated test file. The branch helpers (isGitHubFetched,
-// effectiveGitHubUrl) and getSourceMeta therefore have to match production
-// behavior, not just whatever we'd write inline for the marketing tests, or
-// downstream tests like poll-fetch-github-override.test.ts break.
-
-type StubSource = { type?: string; url: string; metadata: string | null };
-type StubMeta = { feedUrl?: string; feedType?: string; githubUrl?: string };
-
-const parseMeta = (src: StubSource): StubMeta =>
-  src.metadata ? (JSON.parse(src.metadata) as StubMeta) : {};
-
 // Spread the real adapter so exports the fetch path imports transitively
 // (e.g. extractMediaFromMarkdown) resolve to their real implementations; only
 // the entry points this test controls are overridden below (#1391).
+//
+// Bun's `mock.module` is process-global and irreversible (AGENTS.md) — once we
+// register this stub it applies to every later-evaluated test file. So we
+// deliberately do NOT override the github-override-path helpers
+// (`getSourceMeta`, `isGitHubFetched`, `effectiveGitHubUrl`,
+// `synthesizeReleaseUrl`): `...actualFeed` supplies the real, template-faithful
+// implementations, and leaking a hand-rolled copy into the real-feed override
+// test (poll-fetch-github-override.test.ts) is exactly what produced the
+// deterministic CI flake in #1565.
 const actualFeed = await import("@releases/adapters/feed.js");
 
 mock.module("@releases/adapters/feed.js", () => ({
@@ -63,20 +60,10 @@ mock.module("@releases/adapters/feed.js", () => ({
     feedEtag: undefined,
     feedLastModified: undefined,
   },
-  getSourceMeta: parseMeta,
   // Change-detector helpers — not exercised by the marketing-filter tests but
   // poll-fetch.ts imports them, so they have to resolve to functions.
   headCheckUrl: async () => ({ status: "changed" as const }),
   bodyHashCheck: async () => ({ status: "unchanged" as const, responseMs: 0 }),
-  isGitHubFetched: (src: StubSource, meta?: StubMeta) => {
-    if (src.type === "github") return true;
-    const m = meta ?? parseMeta(src);
-    return typeof m.githubUrl === "string" && m.githubUrl.length > 0;
-  },
-  effectiveGitHubUrl: (src: StubSource, meta?: StubMeta) => {
-    const m = meta ?? parseMeta(src);
-    return m.githubUrl ?? src.url;
-  },
   filterByCategoryAllow: (items: RawRelease[]) => ({ kept: items, dropped: 0 }),
   // The actual stub — returns canned RawRelease data from per-test state and
   // captures the call shape for assertions.
@@ -88,19 +75,6 @@ mock.module("@releases/adapters/feed.js", () => ({
       lastModified: undefined,
       contentLength: undefined,
     };
-  },
-  synthesizeReleaseUrl: (args: { sourceUrl: string; version: string; template?: string }) => {
-    if (!args.template) {
-      const stripped = args.version.replace(/^v/i, "");
-      return `${args.sourceUrl}#${stripped.replace(/\./g, "-")}`;
-    }
-    return args.template
-      .split("${sourceUrl}")
-      .join(args.sourceUrl)
-      .split("${versionDashed}")
-      .join(args.version.replace(/\./g, "-"))
-      .split("${version}")
-      .join(args.version);
   },
 }));
 
