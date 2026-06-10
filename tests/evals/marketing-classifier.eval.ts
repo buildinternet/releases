@@ -14,18 +14,13 @@
  */
 import { readFileSync } from "fs";
 import { join } from "path";
-import Anthropic from "@anthropic-ai/sdk";
 import {
   classifyMarketing,
   MODEL,
   type MarketingClassifierInput,
 } from "@releases/ai-internal/marketing-classifier";
-import {
-  anthropicTextModel,
-  openRouterTextModel,
-  type TextModel,
-} from "@releases/ai-internal/text-model";
 import { gradeBinary, type BinaryCase, type BinaryPrediction } from "./graders";
+import { resolveEvalModel } from "./judge-model";
 import { saveRun } from "./results";
 
 const ACCURACY_FLOOR = 0.85; // headroom for 1-run noise across the fixture set
@@ -38,42 +33,14 @@ interface MarketingFixture {
   expected: { isMarketing: boolean; reason?: string };
 }
 
-/**
- * Build the TextModel under test. Defaults to Anthropic Haiku (production
- * baseline); when OPENROUTER_API_KEY + EVAL_MODEL are set, evaluates that
- * OpenRouter candidate against the same prompt + fixtures.
- */
-function buildEvalModel(): { model: TextModel; label: string } | null {
-  const orKey = process.env.OPENROUTER_API_KEY;
-  const orModel = process.env.EVAL_MODEL?.trim();
-  if (orKey && orModel) {
-    return {
-      model: openRouterTextModel({
-        apiKey: orKey,
-        model: orModel,
-        ...(process.env.OPENROUTER_BASE_URL?.trim()
-          ? { baseURL: process.env.OPENROUTER_BASE_URL.trim() }
-          : {}),
-        referer: "https://releases.sh",
-        title: "Releases",
-        // Tag eval runs so Broadcast traces stay separate from prod traffic.
-        trace: { generationName: "marketing-classifier-eval", environment: "eval" },
-      }),
-      label: `openrouter:${orModel}`,
-    };
-  }
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (apiKey) {
-    return {
-      model: anthropicTextModel(new Anthropic({ apiKey }), MODEL),
-      label: `anthropic:${MODEL}`,
-    };
-  }
-  return null;
-}
-
 async function main() {
-  const picked = buildEvalModel();
+  // The model under test: Anthropic Haiku (production baseline) by default, or an
+  // OpenRouter candidate when OPENROUTER_API_KEY + EVAL_MODEL are set. See ./judge-model.ts.
+  const picked = resolveEvalModel({
+    anthropicModel: MODEL,
+    generationName: "marketing-classifier-eval",
+    orModelEnvVar: "EVAL_MODEL",
+  });
   if (!picked) {
     console.error(
       "No provider key set (ANTHROPIC_API_KEY, or OPENROUTER_API_KEY + EVAL_MODEL) — skipping marketing eval (no spend).",

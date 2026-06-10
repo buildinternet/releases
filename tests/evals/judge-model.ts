@@ -1,6 +1,11 @@
 /**
- * Shared rubric-judge plumbing for the LLM-as-judge eval suites
- * (`release-summary.eval.ts`, `overview.eval.ts`).
+ * Shared eval-model plumbing for the local eval suites: the cross-provider
+ * "model under test" resolver ({@link resolveEvalModel}) used by the model-comparison
+ * evals (`marketing-classifier`, `release-summary`, `article-extract`), and the
+ * LLM-as-judge helpers (`resolveJudgeModel` / `runJudge`) used by the rubric-judged
+ * suites (`release-summary.eval.ts`, `overview.eval.ts`). Both build a
+ * provider-agnostic `TextModel` from env — OpenRouter when a candidate model is
+ * configured, the Anthropic production baseline otherwise.
  *
  * The judge runs on a cheap OpenRouter model by default (Gemini 2.5 Flash via
  * the provider-agnostic `TextModel` seam) — a spike found it ~15x cheaper and
@@ -14,7 +19,7 @@
  * slug (needs `OPENROUTER_API_KEY`). e.g. `JUDGE_MODEL=claude-sonnet-4-6` to go
  * back to Sonnet, or `JUDGE_MODEL=google/gemini-2.5-flash-lite` for cheaper.
  */
-import type Anthropic from "@anthropic-ai/sdk";
+import Anthropic from "@anthropic-ai/sdk";
 import {
   anthropicTextModel,
   openRouterTextModel,
@@ -35,6 +40,62 @@ export function extractJudgeJson(raw: string): string | null {
   const end = candidate.lastIndexOf("}");
   if (start === -1 || end === -1 || end <= start) return null;
   return candidate.slice(start, end + 1);
+}
+
+export interface EvalModelOptions {
+  /** Anthropic model id used as the production-baseline default (the eval's `MODEL`). */
+  anthropicModel: string;
+  /** Broadcast trace tag (`generationName`) distinguishing this eval's OpenRouter runs. */
+  generationName: string;
+  /** Env var naming the OpenRouter candidate model — `EVAL_MODEL` or `EVAL_OPENROUTER_MODEL`. */
+  orModelEnvVar: string;
+  /**
+   * Reuse an existing Anthropic client (e.g. the one a judged eval already built)
+   * instead of constructing one from `ANTHROPIC_API_KEY`. When provided, the
+   * Anthropic fallback is always available, so the result is never null.
+   */
+  client?: Anthropic;
+}
+
+/**
+ * Resolve the cross-provider "model under test" for a local eval. Defaults to
+ * the production-baseline Anthropic model; when `OPENROUTER_API_KEY` + the named
+ * OpenRouter model env var are both set, evaluates that OpenRouter candidate
+ * against the same prompt + fixtures (`OPENROUTER_BASE_URL` optionally routes
+ * through an AI Gateway sub-path). The returned `label` is the `<provider>:<model>`
+ * id used for run attribution. Returns null only when no provider key is
+ * available (no `client` and no `ANTHROPIC_API_KEY`) — the caller skips the run.
+ */
+export function resolveEvalModel(
+  opts: EvalModelOptions,
+): { model: TextModel; label: string } | null {
+  const orKey = process.env.OPENROUTER_API_KEY?.trim();
+  const orModel = process.env[opts.orModelEnvVar]?.trim();
+  if (orKey && orModel) {
+    return {
+      model: openRouterTextModel({
+        apiKey: orKey,
+        model: orModel,
+        ...(process.env.OPENROUTER_BASE_URL?.trim()
+          ? { baseURL: process.env.OPENROUTER_BASE_URL.trim() }
+          : {}),
+        referer: "https://releases.sh",
+        title: "Releases",
+        // Tag eval runs so Broadcast traces stay separate from prod traffic.
+        trace: { generationName: opts.generationName, environment: "eval" },
+      }),
+      label: `openrouter:${orModel}`,
+    };
+  }
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const client = opts.client ?? (apiKey ? new Anthropic({ apiKey }) : null);
+  if (client) {
+    return {
+      model: anthropicTextModel(client, opts.anthropicModel),
+      label: `anthropic:${opts.anthropicModel}`,
+    };
+  }
+  return null;
 }
 
 /** Default judge: a cheap OpenRouter model. Override with the `JUDGE_MODEL` env var. */

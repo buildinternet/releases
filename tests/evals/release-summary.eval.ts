@@ -13,15 +13,11 @@ import {
   MODEL as SUMMARY_MODEL,
   type SummarizeReleaseInput,
 } from "@releases/ai-internal/release-content";
-import {
-  anthropicTextModel,
-  openRouterTextModel,
-  type TextModel,
-} from "@releases/ai-internal/text-model";
+import { type TextModel } from "@releases/ai-internal/text-model";
 import { buildGraderPrompt } from "@releases/ai-internal/grader-prompt";
 import { gradeStructural, type StructuralSpec } from "./graders";
 import type { FieldResult } from "./helpers";
-import { resolveJudgeModel, runJudge } from "./judge-model";
+import { resolveEvalModel, resolveJudgeModel, runJudge } from "./judge-model";
 import { saveRun } from "./results";
 
 const TITLE_SHORT_MAX_CHARS = 120;
@@ -77,23 +73,18 @@ async function main() {
   // model output/latency for the baseline, not production routing.
   const client = new Anthropic({ apiKey });
 
-  // The model under test. Defaults to Anthropic Haiku (the production baseline).
-  // To eval an OpenRouter candidate for the summarizer lane, set
-  // EVAL_OPENROUTER_MODEL (e.g. "google/gemini-3.1-flash-lite") + OPENROUTER_API_KEY.
-  // The judge (when --judge) is selected independently via JUDGE_MODEL.
-  const orModel = process.env.EVAL_OPENROUTER_MODEL?.trim();
-  const orKey = process.env.OPENROUTER_API_KEY?.trim();
-  const summaryModel: TextModel =
-    orModel && orKey
-      ? openRouterTextModel({
-          apiKey: orKey,
-          model: orModel,
-          referer: "https://releases.sh",
-          title: "Releases",
-          // Tag eval runs so Broadcast traces stay separate from prod traffic.
-          trace: { generationName: "summarize-eval", environment: "eval" },
-        })
-      : anthropicTextModel(client, SUMMARY_MODEL);
+  // The model under test. Defaults to Anthropic Haiku (the production baseline);
+  // EVAL_OPENROUTER_MODEL (e.g. "google/gemini-3.1-flash-lite") + OPENROUTER_API_KEY
+  // eval an OpenRouter candidate for the summarizer lane. Reuses `client` for the
+  // Anthropic fallback (so it shares the judge's client) — guaranteed non-null
+  // here since ANTHROPIC_API_KEY is already validated above. The judge (when
+  // --judge) is selected independently via JUDGE_MODEL. See ./judge-model.ts.
+  const summaryModel: TextModel = resolveEvalModel({
+    anthropicModel: SUMMARY_MODEL,
+    generationName: "summarize-eval",
+    orModelEnvVar: "EVAL_OPENROUTER_MODEL",
+    client,
+  })!.model;
   console.error(`model under test: ${summaryModel.id}`);
   const rubric = useJudge
     ? readFileSync(
