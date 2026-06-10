@@ -14,6 +14,7 @@
  */
 
 import { and, desc, eq, gte, inArray, sql } from "drizzle-orm";
+import type { SQL } from "drizzle-orm";
 import type { DrizzleD1Database } from "drizzle-orm/d1";
 import { organizations, products, releases, sources } from "@buildinternet/releases-core/schema";
 // Relative import to the root src/ so this resolves correctly in both
@@ -57,6 +58,23 @@ const DEFAULT_MAX_ROWS = 500;
  */
 export function summarizeNotOptedOut() {
   return sql`(json_extract(${sources.metadata}, '$.summarize') IS NULL OR json_extract(${sources.metadata}, '$.summarize') != 0)`;
+}
+
+/**
+ * The eligibility predicates shared by every AI content-generation SELECT — the
+ * cron `generateContentForReleases`, the batch `fetchEligibleReleases`, and the
+ * on-demand generate-content route: org `auto_generate_content` opt-in, the
+ * per-source `metadata.summarize` opt-out, and skipping coverage-side rows.
+ * Spread into the caller's `and(...)`; the caller must join `organizations`,
+ * `sources`, and `releaseCoverage`. `ignoreAutoGate` drops ONLY the org opt-in
+ * (an explicit operator override) — the per-source opt-out always holds.
+ */
+export function summarizeEligibilityConds(opts: { ignoreAutoGate?: boolean } = {}): SQL[] {
+  return [
+    ...(opts.ignoreAutoGate ? [] : [eq(organizations.autoGenerateContent, true)]),
+    summarizeNotOptedOut(),
+    sql`${releaseCoverage.coverageId} IS NULL`,
+  ];
 }
 
 /**

@@ -15,7 +15,7 @@ import { organizations, products, releases, sources } from "@buildinternet/relea
 import type { Source } from "@buildinternet/releases-core/schema";
 import type { ReleaseComposition } from "@buildinternet/releases-core/composition";
 import { buildCompositionMetadataSet } from "@releases/core-internal/composition-metadata";
-import { summarizeNotOptedOut } from "@releases/core-internal/eligibility";
+import { summarizeEligibilityConds } from "@releases/core-internal/eligibility";
 import { releaseCoverage } from "@releases/db/schema-coverage.js";
 import {
   SOURCE_DELETED_SENTINEL,
@@ -204,9 +204,14 @@ export async function generateContentForReleases(
   env: PollAndFetchWorkflowEnv,
   source: Source,
   insertedIds: string[],
-): Promise<void> {
+  // `ignoreAutoGenerateGate` drops the org-level `auto_generate_content` opt-in
+  // (for an explicit operator trigger that wants content regardless). The
+  // per-source `metadata.summarize=false` opt-out is still honored — that's a
+  // deliberate "never summarize this source" signal, not a rollout gate.
+  opts: { ignoreAutoGenerateGate?: boolean } = {},
+): Promise<number> {
   // Hidden sources skip AI features per existing convention.
-  if (source.isHidden === true) return;
+  if (source.isHidden === true) return 0;
 
   // Order matters: SELECT before secret-store fetch. Most orgs are opted out,
   // and the empty-result path saves a Secrets Store round-trip per non-opted
@@ -226,11 +231,11 @@ export async function generateContentForReleases(
   const rows: ContentRow[] = [];
   for (let i = 0; i < insertedIds.length; i += IN_ARRAY_CHUNK_SIZE) {
     const chunk = insertedIds.slice(i, i + IN_ARRAY_CHUNK_SIZE);
-    // eslint-disable-next-line no-await-in-loop -- D1 chunked SELECT (100 bind param limit)
     // Skip coverage-side rows: they're hidden from read paths by default, so
     // summarizing them is a pure waste. The LEFT JOIN keeps canonical and
     // unlinked rows; the IS NULL filter drops anything that's already linked
     // as coverage to another release.
+    // eslint-disable-next-line no-await-in-loop -- D1 chunked SELECT (100 bind param limit)
     const chunkRows: ContentRow[] = await db
       .select({
         id: releases.id,
@@ -250,15 +255,13 @@ export async function generateContentForReleases(
       .where(
         and(
           inArray(releases.id, chunk),
-          eq(organizations.autoGenerateContent, true),
-          summarizeNotOptedOut(),
-          sql`${releaseCoverage.coverageId} IS NULL`,
+          ...summarizeEligibilityConds({ ignoreAutoGate: opts.ignoreAutoGenerateGate }),
         ),
       );
     rows.push(...chunkRows);
   }
 
-  if (rows.length === 0) return;
+  if (rows.length === 0) return 0;
 
   if (rows.length > MAX_AUTOGEN_ROWS_PER_FIRE) {
     logEvent("warn", {
@@ -268,14 +271,14 @@ export async function generateContentForReleases(
       candidateCount: rows.length,
       cap: MAX_AUTOGEN_ROWS_PER_FIRE,
     });
-    return;
+    return 0;
   }
 
   // Provider/model decided here: Anthropic Haiku via gateway by default, or a
   // cheap OpenRouter model when `openrouter-enabled` is on + a model is configured.
   // Fail-open: null means no usable provider (no Anthropic key) — skip.
   const model = await resolveSummarizeModel(env);
-  if (!model) return;
+  if (!model) return 0;
 
   const startedAt = Date.now();
 
@@ -425,6 +428,8 @@ export async function generateContentForReleases(
     totalTokens,
     durationMs: Date.now() - startedAt,
   });
+
+  return generated;
 }
 
 export class PollAndFetchWorkflow extends WorkflowEntrypoint<
