@@ -22,14 +22,9 @@
  */
 import { readFileSync, readdirSync } from "fs";
 import { basename, join } from "path";
-import Anthropic from "@anthropic-ai/sdk";
 import { extractArticle, MODEL } from "@releases/ai-internal/article-extract";
-import {
-  anthropicTextModel,
-  openRouterTextModel,
-  type TextModel,
-} from "@releases/ai-internal/text-model";
 import { gradeArticle, type ArticleSpec } from "./graders";
+import { resolveEvalModel } from "./judge-model";
 import { saveRun } from "./results";
 
 interface ArticleFixture {
@@ -51,42 +46,15 @@ function loadFixtures(dir: string): ArticleFixture[] {
     });
 }
 
-/**
- * Build the TextModel under test. Defaults to Anthropic Haiku (production
- * baseline); when OPENROUTER_API_KEY + EVAL_OPENROUTER_MODEL are set, evaluates
- * that OpenRouter candidate against the same prompt + fixtures.
- */
-function buildEvalModel(): { model: TextModel; label: string } | null {
-  const orKey = process.env.OPENROUTER_API_KEY?.trim();
-  const orModel = process.env.EVAL_OPENROUTER_MODEL?.trim();
-  if (orKey && orModel) {
-    return {
-      model: openRouterTextModel({
-        apiKey: orKey,
-        model: orModel,
-        ...(process.env.OPENROUTER_BASE_URL?.trim()
-          ? { baseURL: process.env.OPENROUTER_BASE_URL.trim() }
-          : {}),
-        referer: "https://releases.sh",
-        title: "Releases",
-        // Tag eval runs so Broadcast traces stay separate from prod traffic.
-        trace: { generationName: "feed-enrich-eval", environment: "eval" },
-      }),
-      label: `openrouter:${orModel}`,
-    };
-  }
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (apiKey) {
-    return {
-      model: anthropicTextModel(new Anthropic({ apiKey }), MODEL),
-      label: `anthropic:${MODEL}`,
-    };
-  }
-  return null;
-}
-
 async function main() {
-  const picked = buildEvalModel();
+  // The model under test: Anthropic Haiku (production baseline) by default, or an
+  // OpenRouter candidate for the feed-enrich lane when OPENROUTER_API_KEY +
+  // EVAL_OPENROUTER_MODEL are set. See ./judge-model.ts.
+  const picked = resolveEvalModel({
+    anthropicModel: MODEL,
+    generationName: "feed-enrich-eval",
+    orModelEnvVar: "EVAL_OPENROUTER_MODEL",
+  });
   if (!picked) {
     console.error(
       "No provider key set (ANTHROPIC_API_KEY, or OPENROUTER_API_KEY + EVAL_OPENROUTER_MODEL) — skipping article-extract eval (no spend).",
