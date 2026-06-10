@@ -27,6 +27,12 @@ const feedCalls: FeedCall[] = [];
 // Spread the real adapter so exports the fetch path imports transitively
 // (e.g. extractMediaFromMarkdown) resolve to their real implementations; only
 // the entry points this test controls are overridden below (#1391).
+//
+// Note we do NOT override the github-override-path helpers (getSourceMeta,
+// synthesizeReleaseUrl, …): `mock.module` is process-global (AGENTS.md), so a
+// hand-rolled copy would leak into the real-feed override test
+// (poll-fetch-github-override.test.ts) — the #1565 flake. `...actualFeed`
+// supplies the real implementations.
 const actualFeed = await import("@releases/adapters/feed.js");
 
 mock.module("@releases/adapters/feed.js", () => ({
@@ -39,8 +45,6 @@ mock.module("@releases/adapters/feed.js", () => ({
     feedEtag: undefined,
     feedLastModified: undefined,
   },
-  getSourceMeta: (src: { metadata: string | null }) =>
-    src.metadata ? JSON.parse(src.metadata) : {},
   headCheckUrl: async () => ({ changed: true }),
   bodyHashCheck: async () => ({ status: "unchanged", responseMs: 0 }),
   fetchAndParseFeed: async (

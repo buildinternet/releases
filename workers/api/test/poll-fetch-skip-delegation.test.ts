@@ -29,23 +29,21 @@ import type { RawRelease } from "@releases/adapters/types";
 let nextFeedReleases: RawRelease[] = [];
 const feedFetchCalls: string[] = [];
 
-type StubSource = { type?: string; url: string; metadata: string | null };
-type StubMeta = {
-  feedUrl?: string;
-  feedType?: string;
-  githubUrl?: string;
-  crawlEnabled?: boolean;
-  feedContentDepth?: string;
-};
-
-const parseMeta = (src: StubSource): StubMeta =>
-  src.metadata ? (JSON.parse(src.metadata) as StubMeta) : {};
-
 // Spread the real adapter as the base so exports the fetch path imports
 // transitively — e.g. `htmlToMarkdown` via cron/feed-enrich.ts — resolve to
 // their real (pure) implementations. Only the entry points this test needs to
 // control are overridden below. Without the spread, every newly-imported feed
 // export silently breaks this mock's ESM bindings at module-eval time (#1391).
+//
+// IMPORTANT: do NOT override the github-override-path helpers
+// (`getSourceMeta`, `isGitHubFetched`, `effectiveGitHubUrl`,
+// `synthesizeReleaseUrl`). `mock.module` is process-global and irreversible
+// (AGENTS.md), so any override here leaks into the real-feed override test
+// (poll-fetch-github-override.test.ts) when Bun evaluates this file first.
+// This file's old hand-rolled `synthesizeReleaseUrl` dropped the
+// `releaseUrlTemplate` arg, so the leak made that test synthesize the default
+// `#anchor` URL instead of the templated one — a deterministic CI flake (#1565).
+// `...actualFeed` already supplies the real, template-faithful implementations.
 const actualFeed = await import("@releases/adapters/feed.js");
 
 mock.module("@releases/adapters/feed.js", () => ({
@@ -57,18 +55,8 @@ mock.module("@releases/adapters/feed.js", () => ({
     feedEtag: undefined,
     feedLastModified: undefined,
   },
-  getSourceMeta: parseMeta,
   headCheckUrl: async () => ({ status: "changed" as const }),
   bodyHashCheck: async () => ({ status: "unchanged" as const, responseMs: 0 }),
-  isGitHubFetched: (src: StubSource, meta?: StubMeta) => {
-    if (src.type === "github") return true;
-    const m = meta ?? parseMeta(src);
-    return typeof m.githubUrl === "string" && m.githubUrl.length > 0;
-  },
-  effectiveGitHubUrl: (src: StubSource, meta?: StubMeta) => {
-    const m = meta ?? parseMeta(src);
-    return m.githubUrl ?? src.url;
-  },
   filterByCategoryAllow: (items: RawRelease[]) => ({ kept: items, dropped: 0 }),
   fetchAndParseFeed: async (feedUrl: string) => {
     feedFetchCalls.push(feedUrl);
@@ -78,10 +66,6 @@ mock.module("@releases/adapters/feed.js", () => ({
       lastModified: undefined,
       contentLength: undefined,
     };
-  },
-  synthesizeReleaseUrl: (args: { sourceUrl: string; version: string; template?: string }) => {
-    const stripped = args.version.replace(/^v/i, "");
-    return `${args.sourceUrl}#${stripped.replace(/\./g, "-")}`;
   },
   extractMediaFromMarkdown: (_body: string) => [],
 }));

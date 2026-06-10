@@ -6,6 +6,7 @@ import {
   gradeCitations,
   countOverviewWords,
   countOverviewMedia,
+  gradeArticle,
 } from "./graders";
 
 describe("gradeBinary", () => {
@@ -213,5 +214,47 @@ describe("gradeCitations", () => {
   it("respects minCitations=0 for thin sources", () => {
     const r = gradeCitations(body, [], sources, { minCitations: 0 });
     expect(r.passed).toBe(true);
+  });
+});
+
+describe("gradeArticle", () => {
+  it("passes when the body has every mustContain phrase and no mustNotContain phrase", () => {
+    const failures = gradeArticle(
+      { title: "T", mustContain: ["real body"], mustNotContain: ["nav junk"], minChars: 5 },
+      "## Heading\n\nreal body text",
+    );
+    expect(failures).toEqual([]);
+  });
+
+  it("flags a dropped or paraphrased mustContain phrase", () => {
+    const failures = gradeArticle(
+      { title: "T", mustContain: ["verbatim phrase"] },
+      "a paraphrased rewrite that omits it",
+    );
+    expect(failures).toHaveLength(1);
+    expect(failures[0]).toContain("verbatim phrase");
+  });
+
+  it("flags leaked chrome / other-article text", () => {
+    const failures = gradeArticle(
+      { title: "T", mustNotContain: ["More updates"] },
+      "real body\n\nMore updates: other release",
+    );
+    expect(failures[0]).toContain("More updates");
+  });
+
+  it("maxChars catches a shell page that yields a substantial body", () => {
+    const failures = gradeArticle({ title: "T", maxChars: 50 }, "x".repeat(120));
+    expect(failures[0]).toContain("too long");
+  });
+
+  it("maxChars passes an empty or short shell extraction", () => {
+    expect(gradeArticle({ title: "T", maxChars: 200 }, "")).toEqual([]);
+    expect(gradeArticle({ title: "T", maxChars: 200 }, "short index intro")).toEqual([]);
+  });
+
+  it("minChars flags a too-short real body", () => {
+    const failures = gradeArticle({ title: "T", minChars: 100 }, "too short");
+    expect(failures[0]).toContain("too short");
   });
 });

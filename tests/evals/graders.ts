@@ -389,3 +389,40 @@ export function gradeCitations(
 
   return { passed: fields.every((f) => f.passed), fields };
 }
+
+// ── Article extraction grading (feed-enrich) ──────────────────────────
+
+export interface ArticleSpec {
+  title: string;
+  mustContain?: string[];
+  mustNotContain?: string[];
+  /** Upper bound on body length — for shell/index pages, the extracted body must
+   *  stay below the enrichment thin-floor so production discards it. */
+  maxChars?: number;
+  minChars?: number;
+}
+
+/**
+ * Structural check for single-article extraction. Returns every failed
+ * expectation (an empty array == pass): `mustContain` phrases must survive
+ * VERBATIM (also catches paraphrasing, since a reworded body won't contain the
+ * exact phrase); `mustNotContain` phrases (chrome / other-article text) must be
+ * dropped; `maxChars` caps a shell/index page's body below the enrichment floor;
+ * `minChars` floors a real body.
+ */
+export function gradeArticle(spec: ArticleSpec, content: string): string[] {
+  const failures: string[] = [];
+  if (spec.maxChars != null && content.length > spec.maxChars) {
+    failures.push(`body too long for a shell page: ${content.length} > ${spec.maxChars}`);
+  }
+  if (spec.minChars != null && content.length < spec.minChars) {
+    failures.push(`body too short: ${content.length} < ${spec.minChars}`);
+  }
+  for (const needle of spec.mustContain ?? []) {
+    if (!content.includes(needle)) failures.push(`missing (dropped or paraphrased): "${needle}"`);
+  }
+  for (const banned of spec.mustNotContain ?? []) {
+    if (content.includes(banned)) failures.push(`leaked chrome / other article: "${banned}"`);
+  }
+  return failures;
+}

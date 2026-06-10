@@ -1,5 +1,10 @@
 import { describe, expect, it } from "bun:test";
-import { resolveMarketingModel, resolveSummarizeModel, type TextModelEnv } from "./text-model.js";
+import {
+  resolveArticleExtractModel,
+  resolveMarketingModel,
+  resolveSummarizeModel,
+  type TextModelEnv,
+} from "./text-model.js";
 import type { FlagshipBinding } from "@releases/lib/flags";
 
 /** Flagship stub: `true`/`false` = present key with that value; absent key echoes the default. */
@@ -87,5 +92,34 @@ describe("resolveSummarizeModel — model var is the per-lane gate", () => {
     });
     const model = await resolveSummarizeModel(env);
     expect(model?.id.startsWith("openrouter:")).toBe(true);
+  });
+});
+
+describe("resolveArticleExtractModel — feed-enrich lane, FEED_ENRICH_MODEL is the gate", () => {
+  it("switch ON + FEED_ENRICH_MODEL set → OpenRouter", async () => {
+    const env = baseEnv({
+      FLAGS: flagsBinding({ "openrouter-enabled": true }),
+      FEED_ENRICH_MODEL: "google/gemini-2.5-flash-lite",
+    });
+    const model = await resolveArticleExtractModel(env);
+    expect(model?.id.startsWith("openrouter:")).toBe(true);
+  });
+
+  it("switch ON + FEED_ENRICH_MODEL empty → stays on Anthropic", async () => {
+    const env = baseEnv({
+      FLAGS: flagsBinding({ "openrouter-enabled": true }),
+      FEED_ENRICH_MODEL: "",
+    });
+    const model = await resolveArticleExtractModel(env);
+    expect(model?.id.startsWith("anthropic:")).toBe(true);
+  });
+
+  it("switch OFF → Anthropic even with the model set", async () => {
+    const env = baseEnv({
+      FLAGS: flagsBinding({}),
+      FEED_ENRICH_MODEL: "google/gemini-2.5-flash-lite",
+    });
+    const model = await resolveArticleExtractModel(env);
+    expect(model?.id.startsWith("anthropic:")).toBe(true);
   });
 });

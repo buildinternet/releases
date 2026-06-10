@@ -2,15 +2,23 @@
  * Single-article extraction — turn the markdown of one web page into the clean,
  * verbatim main article body, dropping nav / sidebars / footers / "more posts"
  * lists. Used by feed enrichment when a summary-only feed item's full content
- * lives at its link. Worker-safe: caller constructs the Anthropic client.
+ * lives at its link.
+ *
+ * Worker-safe: the caller constructs the `TextModel` (so the worker can route
+ * the lane through AI Gateway Haiku or a cheap OpenRouter model behind the
+ * `openrouter-enabled` switch, while the eval / script path hits a provider
+ * directly) — exactly like the `classifyMarketing` / `summarizeRelease` siblings.
  *
  * Deliberately NOT the multi-entry extractor (`@releases/adapters/extract`) —
  * this is one known article, so a single one-shot text call with a verbatim
  * (extract-not-rewrite) instruction is cheaper and higher-fidelity.
  */
-import type Anthropic from "@anthropic-ai/sdk";
 import { extractTagged } from "./release-content";
+import type { TextModel, TextModelUsage } from "./text-model";
 
+/** Anthropic default the caller builds the fallback `TextModel` from. The async
+ *  Message-Batches enrichment path (`enrich-apply.ts`) also reuses it directly —
+ *  OpenRouter has no Batches API, so that 50%-off lane stays on Anthropic. */
 export const MODEL = "claude-haiku-4-5";
 
 /** Cap on page markdown sent to the model. Article pages are small; this guards
@@ -24,12 +32,10 @@ export const MAX_INPUT_CHARS = 60_000;
  *  rather than being discarded. */
 export const MAX_OUTPUT_TOKENS = 8192;
 
-export interface ArticleExtractUsage {
-  input: number;
-  output: number;
-  cacheCreate: number;
-  cacheRead: number;
-}
+/** Per-call token usage from one extraction. Alias of the seam's `TextModelUsage`
+ *  — the `TextModel` now owns this shape (and carries OpenRouter's reported
+ *  `costUsd`); kept as a named export for the feed-enrich call sites. */
+export type ArticleExtractUsage = TextModelUsage;
 
 export const SYSTEM_PROMPT = `You extract the main article body from the markdown of a single web page.
 
@@ -85,32 +91,15 @@ export function parseArticleResponse(raw: string): string {
 }
 
 export async function extractArticle(
-  client: Anthropic,
-  args: { markdown: string; title: string; model?: string },
+  model: TextModel,
+  args: { markdown: string; title: string },
 ): Promise<{ content: string; usage: ArticleExtractUsage }> {
-  const res = await client.messages.create({
-    model: args.model ?? MODEL,
-    max_tokens: MAX_OUTPUT_TOKENS,
-    system: [{ type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } }],
-    messages: [
-      { role: "user", content: buildArticleInput({ markdown: args.markdown, title: args.title }) },
-    ],
+  const { text: raw, usage } = await model.complete({
+    system: SYSTEM_PROMPT,
+    user: buildArticleInput({ markdown: args.markdown, title: args.title }),
+    maxTokens: MAX_OUTPUT_TOKENS,
+    cacheSystem: true,
   });
 
-  const raw = res.content
-    .filter((b): b is Extract<typeof b, { type: "text" }> => b.type === "text")
-    .map((b) => b.text)
-    .join("");
-
-  const content = parseArticleResponse(raw);
-
-  return {
-    content,
-    usage: {
-      input: res.usage.input_tokens,
-      output: res.usage.output_tokens,
-      cacheCreate: res.usage.cache_creation_input_tokens ?? 0,
-      cacheRead: res.usage.cache_read_input_tokens ?? 0,
-    },
-  };
+  return { content: parseArticleResponse(raw), usage };
 }

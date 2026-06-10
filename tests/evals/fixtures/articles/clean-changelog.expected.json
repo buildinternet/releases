@@ -1,0 +1,11 @@
+{
+  "title": "Scheduled exports are now generally available",
+  "mustContain": [
+    "schedule recurring exports of any saved view",
+    "Cron-style schedules",
+    "Delivery receipts",
+    "Existing manual exports keep working unchanged"
+  ],
+  "mustNotContain": ["Skip to content", "Sign in", "Subscribe to the changelog", "© 2026 Acme"],
+  "minChars": 300
+}

@@ -15,10 +15,10 @@ import {
   MODEL as ARTICLE_MODEL,
   type ArticleExtractUsage,
 } from "@releases/ai-internal/article-extract";
+import { splitModelId } from "@releases/ai-internal/text-model";
 import { logEvent } from "@releases/lib/log-event";
 import { getSecret } from "@releases/lib/secrets";
-import { buildAnthropicClient } from "@releases/lib/anthropic-client.js";
-import { getAnthropicKey, resolveGatewayOpts, type AnthropicEnv } from "../lib/anthropic.js";
+import { resolveArticleExtractModel, type TextModelEnv } from "../lib/text-model.js";
 import { makeBotFetch } from "../lib/web-bot-auth-fetch.js";
 import { FLAGS, flag, type FlagshipBinding } from "@releases/lib/flags";
 import { IN_ARRAY_CHUNK_SIZE } from "../lib/d1-limits.js";
@@ -155,12 +155,16 @@ export function makeExtractArticleFn(
     title: string,
   ) => Promise<{ content: string; usage?: ArticleExtractUsage }>,
   onUsage?: (usage: ArticleExtractUsage, model: string) => Promise<void>,
+  /** Model id recorded on the `usage_log` row. Defaults to the Anthropic Haiku
+   *  baseline; `buildEnrichDeps` passes the actually-resolved model (which may
+   *  be a cheap OpenRouter model when the lane is switched over). */
+  modelId: string = ARTICLE_MODEL,
 ): EnrichDeps["extractArticleFn"] {
   return async ({ markdown, title }) => {
     const result = await runExtract(markdown, title);
     if (onUsage && result.usage) {
       try {
-        await onUsage(result.usage, ARTICLE_MODEL);
+        await onUsage(result.usage, modelId);
       } catch {
         // fail-open: usage log write must not break enrichment
       }
@@ -169,9 +173,10 @@ export function makeExtractArticleFn(
   };
 }
 
-/** Env shape `buildEnrichDeps` needs: Anthropic key + gateway routing, plus the
- *  optional Cloudflare Browser-Rendering secret bindings. */
-export interface EnrichDepsEnv extends AnthropicEnv {
+/** Env shape `buildEnrichDeps` needs: the text-model lane config (Anthropic key +
+ *  gateway routing, the `openrouter-enabled` switch + `FEED_ENRICH_MODEL`), plus
+ *  the optional Cloudflare Browser-Rendering secret bindings for render escalation. */
+export interface EnrichDepsEnv extends TextModelEnv {
   CLOUDFLARE_ACCOUNT_ID?: { get(): Promise<string | null> } | { get(): Promise<string> };
   CLOUDFLARE_API_TOKEN?: { get(): Promise<string | null> } | { get(): Promise<string> };
   WEB_BOT_AUTH_ENABLED?: string;
@@ -195,9 +200,12 @@ export async function buildEnrichDeps(
   thinChars: number,
   db?: UsageLogDb,
 ): Promise<EnrichDeps | null> {
-  const apiKey = await getAnthropicKey(env);
-  if (!apiKey) return null;
-  const client = buildAnthropicClient({ apiKey, ...(await resolveGatewayOpts(env)) });
+  // The resolved model carries the lane's provider routing AND emits an `ai_usage`
+  // event per call (provider/model/lane = "feed-enrich"), so the Axiom telemetry
+  // matches the marketing/summarize lanes. Returns null only when no provider is
+  // usable (no Anthropic key) — same skip-silently contract as before.
+  const model = await resolveArticleExtractModel(env);
+  if (!model) return null;
 
   // getSecret caches per-isolate and throws on transient failure; soft-fail to
   // null so absent / unreachable creds simply disable render escalation.
@@ -209,17 +217,14 @@ export async function buildEnrichDeps(
       : null;
 
   const extractArticleFn = makeExtractArticleFn(
-    async (markdown, title) => {
-      const result = await extractArticle(client, { markdown, title, model: ARTICLE_MODEL });
-      return { content: result.content, usage: result.usage };
-    },
+    (markdown, title) => extractArticle(model, { markdown, title }),
     db
-      ? (usage, model) =>
+      ? (usage, usedModel) =>
           logUsage(
             db,
             {
               operation: "enrich-extract",
-              model,
+              model: usedModel,
               inputTokens: usage.input,
               outputTokens: usage.output,
               cacheReadTokens: usage.cacheRead,
@@ -228,6 +233,9 @@ export async function buildEnrichDeps(
             "feed-enrich",
           )
       : undefined,
+    // Record the actually-resolved model (Haiku or the OpenRouter id) on usage_log,
+    // not the hard-coded Anthropic default.
+    splitModelId(model.id).model,
   );
 
   const fetchImpl = await makeBotFetch(env);
