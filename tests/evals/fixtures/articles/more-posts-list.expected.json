@@ -1,0 +1,16 @@
+{
+  "title": "Realtime presence for collaborative documents",
+  "mustContain": [
+    "show who else is viewing or editing in realtime",
+    "Share → Privacy → Hide collaborators",
+    "no performance cost for solo editing"
+  ],
+  "mustNotContain": [
+    "Faster cold starts for edge functions",
+    "Two-factor authentication via passkeys",
+    "Redesigned billing dashboard",
+    "See all updates",
+    "Careers"
+  ],
+  "minChars": 250
+}

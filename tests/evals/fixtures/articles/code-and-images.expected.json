@@ -1,0 +1,12 @@
+{
+  "title": "SDK v3.2: typed query builder",
+  "mustContain": [
+    "fully-typed query builder",
+    "npm install @orbit/sdk@3.2",
+    ".orderBy(\"created_at\", \"desc\")",
+    "Minimum TypeScript version is now 5.4",
+    "query-builder-types.png"
+  ],
+  "mustNotContain": ["[Home](/)", "[Reference](/ref)"],
+  "minChars": 300
+}

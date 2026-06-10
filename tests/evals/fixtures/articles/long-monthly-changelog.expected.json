@@ -1,0 +1,15 @@
+{
+  "title": "April 2026 — everything we shipped",
+  "mustContain": [
+    "cost-based optimizer",
+    "Snowflake reverse-sync",
+    "SCIM provisioning",
+    "HELIO-APRIL-2026-COMPLETE"
+  ],
+  "mustNotContain": [
+    "March 2026 — schema diffing and faster imports",
+    "See all releases",
+    "© 2026 Helio Data"
+  ],
+  "minChars": 1500
+}

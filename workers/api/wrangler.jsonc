@@ -108,6 +108,16 @@
     // Set to deepseek-v4-pro after the extraction eval showed corpus-wide parity
     // with Sonnet-4.6 (issue #1536); reasoning is disabled in the OpenRouter model.
     "EXTRACT_MODEL": "deepseek/deepseek-v4-pro",
+    // OpenRouter model for the feed-enrichment single-article extractor. Consulted
+    // only when `openrouter-enabled` is on; empty → enrichment stays on Anthropic
+    // Haiku (fail-open). Set to deepseek-v4-flash after the article-extract eval
+    // (`bun run eval:article-extract`) showed deterministic 5/5 parity with Haiku on
+    // body fidelity + other-article exclusion at ~85% lower per-call cost. Reasoning
+    // stays at the model default (ON) here — unlike the #1536 tool-loop it improves
+    // shell-page detection and does not truncate (verified on a long-changelog
+    // fixture). The async Message-Batches enrichment path is unaffected (always
+    // Anthropic; OpenRouter has no Batches API).
+    "FEED_ENRICH_MODEL": "deepseek/deepseek-v4-flash",
     // Smear window for the per-source jitter at the head of PollAndFetchWorkflow.
     // Set to "0" to disable; see FANOUT_JITTER_WINDOW_MAX_MS for the upper clamp.
     // See workers/api/src/workflows/poll-and-fetch.ts.
@@ -599,6 +609,10 @@
         // OpenRouter extraction model (issue #1536); gated by `openrouter-enabled`.
         // Empty → stays on Anthropic (fail-open). Mirrors prod.
         "EXTRACT_MODEL": "deepseek/deepseek-v4-pro",
+        // OpenRouter feed-enrichment article model; gated by `openrouter-enabled`.
+        // deepseek-v4-flash per the article-extract eval. Empty → Anthropic Haiku
+        // (fail-open). Mirrors prod.
+        "FEED_ENRICH_MODEL": "deepseek/deepseek-v4-flash",
         // Mirrors prod flag; not read in staging (CRON_ENABLED=false). See #971.
         "BATCH_SUMMARIZE_ENABLED": "false",
         "BATCH_SUMMARIZE_MAX_COST_USD": "10",
