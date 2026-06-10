@@ -1,0 +1,8 @@
+# Files copied from the main checkout into Claude Code worktrees on creation.
+# Uses .gitignore syntax; only matching files that are ALSO gitignored are
+# copied, so tracked files are never duplicated. Dependency install is handled
+# separately by the SessionStart hook (Claude sessions) or setup-worktree.sh.
+# https://code.claude.com/docs/en/worktrees#copy-gitignored-files-into-worktrees
+.env
+web/.env.local
+.dev.vars
