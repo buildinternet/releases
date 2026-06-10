@@ -38,7 +38,7 @@ import {
   collections,
   collectionMembers,
 } from "@buildinternet/releases-core/schema";
-import { summarizeNotOptedOut } from "@releases/core-internal/eligibility";
+import { summarizeEligibilityConds } from "@releases/core-internal/eligibility";
 import { daysAgoIso } from "@buildinternet/releases-core/dates";
 import { sourceMatchByIdOrSlug, isSourceId } from "../utils.js";
 import { getAnthropicKey, resolveGatewayOpts } from "../lib/anthropic.js";
@@ -1361,7 +1361,7 @@ workflowsRoutes.post("/workflows/enrich-feed-content", async (c) => {
 // the cron (org `auto_generate_content` + per-source `metadata.summarize`), so a
 // non-opted org yields zero candidates. Synchronous; cap via `limit`.
 //
-// Body: { sourceId? | sourceSlug?, releaseIds?, regenerate?, limit?, dryRun? }
+// Body: { sourceId? | sourceSlug?, releaseIds?, regenerate?, ignoreAutoGate?, limit?, dryRun? }
 // Returns: { source, scanned, generated, regenerate, dryRun }
 
 interface GenerateContentBody {
@@ -1369,6 +1369,7 @@ interface GenerateContentBody {
   sourceSlug?: string;
   releaseIds?: string[];
   regenerate?: boolean;
+  ignoreAutoGate?: boolean;
   limit?: number;
   dryRun?: boolean;
 }
@@ -1378,6 +1379,9 @@ export interface GenerateContentOpts {
   releaseIds?: string[];
   /** Clear + re-summarize rows that already have generated content. */
   regenerate: boolean;
+  /** Drop the org `auto_generate_content` opt-in (force generation). The
+   *  per-source `metadata.summarize=false` opt-out is still honored. Default false. */
+  ignoreAutoGate?: boolean;
   limit: number;
   dryRun: boolean;
 }
@@ -1392,8 +1396,9 @@ export interface GenerateContentReport {
 }
 
 export interface GenerateContentDeps {
-  /** Summarize the given release ids — the route wraps `generateContentForReleases`. */
-  generate: (ids: string[]) => Promise<void>;
+  /** Summarize the given release ids and return how many got generated content —
+   *  the route wraps `generateContentForReleases`, which reports that count. */
+  generate: (ids: string[]) => Promise<number>;
 }
 
 /**
@@ -1408,11 +1413,11 @@ export async function runGenerateContent(
   opts: GenerateContentOpts,
   deps: GenerateContentDeps,
 ): Promise<GenerateContentReport> {
+  // Same eligibility gate generateContentForReleases applies internally, so the
+  // dry-run count matches what it will actually summarize.
   const conds = [
     eq(releases.sourceId, source.id),
-    eq(organizations.autoGenerateContent, true),
-    summarizeNotOptedOut(),
-    sql`${releaseCoverage.coverageId} IS NULL`,
+    ...summarizeEligibilityConds({ ignoreAutoGate: opts.ignoreAutoGate }),
   ];
   if (opts.releaseIds && opts.releaseIds.length > 0) {
     conds.push(inArray(releases.id, opts.releaseIds));
@@ -1450,21 +1455,9 @@ export async function runGenerateContent(
     }
   }
 
-  await deps.generate(ids);
-
-  // Post-count what actually got generated content (regenerate clears then refills;
-  // fill only adds), so the report reflects rows the gate/body-cap didn't drop.
-  let generated = 0;
-  for (let i = 0; i < ids.length; i += IN_ARRAY_CHUNK_SIZE) {
-    const chunk = ids.slice(i, i + IN_ARRAY_CHUNK_SIZE);
-    // eslint-disable-next-line no-await-in-loop -- chunked under the D1 bind cap
-    const [row] = await db
-      .select({ n: count() })
-      .from(releases)
-      .where(and(inArray(releases.id, chunk), sql`${releases.titleGenerated} IS NOT NULL`));
-    generated += Number(row?.n ?? 0);
-  }
-  report.generated = generated;
+  // generateContentForReleases reports how many rows it populated (skipping
+  // boilerplate / body-cap / errors), so no post-count query is needed.
+  report.generated = await deps.generate(ids);
   return report;
 }
 
@@ -1506,12 +1499,13 @@ workflowsRoutes.post("/workflows/generate-content", async (c) => {
   const rawLimit = Number(body.limit ?? 25);
   const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(Math.floor(rawLimit), 1), 100) : 25;
   const regenerate = body.regenerate === true;
+  const ignoreAutoGate = body.ignoreAutoGate === true;
   const dryRun = body.dryRun !== false; // default to a dry run for safety
 
   const report = await runGenerateContent(
     db,
     { id: src.id },
-    { releaseIds, regenerate, limit, dryRun },
+    { releaseIds, regenerate, ignoreAutoGate, limit, dryRun },
     {
       // Lazy import: poll-and-fetch.ts pulls `cloudflare:workers`, which only
       // resolves in the Workers runtime (mirrors the enrich-feed-content route).
@@ -1520,15 +1514,18 @@ workflowsRoutes.post("/workflows/generate-content", async (c) => {
       generate: async (ids) => {
         const { generateContentForReleases } = await import("../workflows/poll-and-fetch.js");
         const GEN_CHUNK = 20;
+        let total = 0;
         for (let off = 0; off < ids.length; off += GEN_CHUNK) {
           // eslint-disable-next-line no-await-in-loop -- sequential keeps inference cost bounded
-          await generateContentForReleases(
+          total += await generateContentForReleases(
             db as never,
             c.env as never,
             src as never,
             ids.slice(off, off + GEN_CHUNK),
+            { ignoreAutoGenerateGate: ignoreAutoGate },
           );
         }
+        return total;
       },
     },
   );

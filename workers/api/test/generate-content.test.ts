@@ -57,7 +57,7 @@ async function seed(db: ReturnType<typeof mkDb>, opts: { autoGen?: boolean } = {
   return src;
 }
 
-/** Simulate generateContentForReleases by populating generated fields on the passed ids. */
+/** Simulate generateContentForReleases: populate generated fields, return the count. */
 function makeGenerate(db: ReturnType<typeof mkDb>) {
   const calls: string[][] = [];
   const fn = async (ids: string[]) => {
@@ -68,12 +68,13 @@ function makeGenerate(db: ReturnType<typeof mkDb>) {
         .set({ titleGenerated: "GEN", titleShort: "G", summary: "S" })
         .where(inArray(releases.id, ids));
     }
+    return ids.length;
   };
   return { fn, calls };
 }
 
 /** No-op summarizer: lets a regenerate run observe the NULLing without repopulation. */
-const noopGenerate = async (_ids: string[]) => {};
+const noopGenerate = async (_ids: string[]) => 0;
 
 describe("runGenerateContent", () => {
   it("fill mode (default) selects only releases lacking generated content", async () => {
@@ -139,6 +140,21 @@ describe("runGenerateContent", () => {
     );
     expect(report.scanned).toBe(0);
     expect(g.calls.length).toBe(0);
+  });
+
+  it("ignoreAutoGate forces generation for a non-opted org", async () => {
+    const db = mkDb();
+    const src = await seed(db, { autoGen: false });
+    const g = makeGenerate(db);
+    const report = await runGenerateContent(
+      db,
+      { id: src.id },
+      { regenerate: false, ignoreAutoGate: true, limit: 25, dryRun: false },
+      { generate: g.fn },
+    );
+    // Without ignoreAutoGate this org yields 0 (see the eligibility-gate test).
+    expect(report.scanned).toBe(2);
+    expect(g.calls.flat().toSorted()).toEqual(["rel_1", "rel_3"]);
   });
 
   it("scopes to explicit releaseIds when provided", async () => {
