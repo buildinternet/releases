@@ -1,10 +1,11 @@
-import { NextRequest, NextResponse } from "next/server";
+import { type NextRequest } from "next/server";
 import { api } from "@/lib/api";
 import { orgToMarkdown } from "@/lib/formatters";
 import { ATOM_DEFAULT_MAX_ENTRIES } from "@/lib/atom";
 import { orgAtomResponse } from "@/lib/atom-response";
 import { getBaseUrl } from "@/lib/base-url";
 import { formatErrorResponse } from "@/lib/format-error";
+import { jsonFormatResponse } from "@/lib/json-response";
 import { markdownResponse } from "@/lib/markdown-response";
 import { getFormat } from "@/lib/request";
 
@@ -41,6 +42,7 @@ export async function GET(
     const baseUrl = getBaseUrl(request);
     return markdownResponse(orgToMarkdown(org, { baseUrl, recentReleases: feed.releases }), {
       cache: "dynamic",
+      canonical: `${baseUrl}/${orgSlug}`,
     });
   }
 
@@ -54,5 +56,5 @@ export async function GET(
   // The API's public-read endpoints gate admin-only fields (e.g. playbook)
   // behind isValidBearerAuth. The web no longer forwards the admin bearer on
   // these calls, so the response is safe to serve verbatim.
-  return NextResponse.json(org);
+  return jsonFormatResponse(org);
 }

@@ -6,6 +6,8 @@ import { sourceAtomResponse } from "@/lib/atom-response";
 import { getBaseUrl } from "@/lib/base-url";
 import { formatErrorResponse } from "@/lib/format-error";
 import { productFormatResponse } from "@/lib/format-product";
+import { jsonFormatResponse } from "@/lib/json-response";
+import { markdownResponse } from "@/lib/markdown-response";
 import { getFormat } from "@/lib/request";
 
 export async function GET(
@@ -64,8 +66,9 @@ export async function GET(
 
   if (format === "md") {
     const baseUrl = getBaseUrl(request);
-    return new NextResponse(sourceToMarkdown(source, { baseUrl }), {
-      headers: { "Content-Type": "text/markdown; charset=utf-8" },
+    return markdownResponse(sourceToMarkdown(source, { baseUrl }), {
+      cache: "dynamic",
+      canonical: `${baseUrl}/${orgSlug}/${source.slug}`,
     });
   }
 
@@ -73,5 +76,5 @@ export async function GET(
     return sourceAtomResponse(request, source);
   }
 
-  return NextResponse.json(source);
+  return jsonFormatResponse(source);
 }

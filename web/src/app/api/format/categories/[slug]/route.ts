@@ -6,6 +6,7 @@ import { categoryAtomResponse } from "@/lib/atom-response";
 import { getBaseUrl } from "@/lib/base-url";
 import { formatErrorResponse } from "@/lib/format-error";
 import { categoryReleaseFeedToMarkdown } from "@/lib/formatters";
+import { jsonFormatResponse } from "@/lib/json-response";
 import { markdownResponse } from "@/lib/markdown-response";
 import { getFormat } from "@/lib/request";
 
@@ -41,7 +42,10 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const body = categoryReleaseFeedToMarkdown(slug, name, feed.releases, feed.pagination, {
       baseUrl,
     });
-    return markdownResponse(body, { cache: "dynamic" });
+    return markdownResponse(body, {
+      cache: "dynamic",
+      canonical: `${baseUrl}/categories/${slug}`,
+    });
   }
 
   let detail, feed;
@@ -53,7 +57,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   } catch (err) {
     return formatErrorResponse(err, "Category not found");
   }
-  return NextResponse.json({
+  return jsonFormatResponse({
     slug,
     name,
     orgs: detail.orgs,

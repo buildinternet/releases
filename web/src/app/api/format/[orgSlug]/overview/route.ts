@@ -3,6 +3,8 @@ import { api } from "@/lib/api";
 import { overviewToMarkdown } from "@/lib/formatters";
 import { getBaseUrl } from "@/lib/base-url";
 import { formatErrorResponse } from "@/lib/format-error";
+import { jsonFormatResponse } from "@/lib/json-response";
+import { markdownResponse } from "@/lib/markdown-response";
 import { getFormat } from "@/lib/request";
 
 export async function GET(
@@ -29,10 +31,12 @@ export async function GET(
 
   if (format === "md") {
     const baseUrl = getBaseUrl(request);
-    return new NextResponse(overviewToMarkdown(overview, { baseUrl, orgSlug }), {
-      headers: { "Content-Type": "text/markdown; charset=utf-8" },
+    return markdownResponse(overviewToMarkdown(overview, { baseUrl, orgSlug }), {
+      cache: "dynamic",
+      // The overview content also renders on the org page; consolidate there.
+      canonical: `${baseUrl}/${orgSlug}`,
     });
   }
 
-  return NextResponse.json(overview);
+  return jsonFormatResponse(overview);
 }

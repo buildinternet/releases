@@ -236,7 +236,7 @@ export async function ProductView({
               availableSourceTypes={availableSourceTypes}
             />
           </div>
-          <Sidebar sections={sidebarSections} formatPath={`/${orgSlug}/product/${productSlug}`} />
+          <Sidebar sections={sidebarSections} formatPath={`/${orgSlug}/${productSlug}`} />
         </div>
       </div>
     </div>
