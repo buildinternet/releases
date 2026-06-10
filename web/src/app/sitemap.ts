@@ -22,10 +22,33 @@ type StaticRoute = {
 
 const ALWAYS_PUBLIC: StaticRoute[] = [
   { path: "/", changeFrequency: "hourly", priority: 1.0 },
+  { path: "/updates", changeFrequency: "daily", priority: 0.7 },
   { path: "/live", changeFrequency: "always", priority: 0.6 },
   { path: "/search", changeFrequency: "weekly", priority: 0.5 },
   { path: "/categories", changeFrequency: "weekly", priority: 0.5 },
 ];
+
+// The self-changelog org (see the /updates page). Per-day rollup permalinks
+// live at /updates/<date>; enumerate them so each entry is independently
+// indexable. Kept to its own guarded fetch so a failure degrades gracefully.
+const UPDATES_ORG_SLUG = "releases-sh";
+
+async function updatesEntries(): Promise<MetadataRoute.Sitemap> {
+  try {
+    const feed = await api.orgReleases(UPDATES_ORG_SLUG, { limit: 100 });
+    return feed.releases
+      .map((r) => (r.publishedAt ?? "").slice(0, 10))
+      .filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d))
+      .map((d) => ({
+        url: `${BASE_URL}/updates/${d}`,
+        lastModified: new Date(`${d}T12:00:00Z`),
+        changeFrequency: "monthly" as const,
+        priority: 0.5,
+      }));
+  } catch {
+    return [];
+  }
+}
 
 const STATUS_ROUTES: StaticRoute[] = [
   { path: "/admin/status", changeFrequency: "daily", priority: 0.4 },
@@ -110,5 +133,5 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     if (!(err instanceof ApiSetupError)) throw err;
   }
 
-  return [...staticEntries, ...dynamicEntries];
+  return [...staticEntries, ...dynamicEntries, ...(await updatesEntries())];
 }

@@ -68,14 +68,14 @@ The work is staged:
 
 ## Decisions
 
-| #             | Decision                             | Choice                                                                                | Notes                                                                                                                                                           |
-| ------------- | ------------------------------------ | ------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Role          | What is this for?                    | Staged: showcase now → canonical destination later                                    | Low risk to start, clear path to "primary."                                                                                                                     |
-| Engine        | How do entries flow in?              | Canonical markdown in repo → CI push to `/batch` (Approach A)                         | Durable, PR-reviewed, welded to shipping; dogfoods the write path.                                                                                              |
-| Cadence       | How are entries cut?                 | **Daily date rollups**, skip quiet days                                               | One `rollup` per active day; all-internal days produce nothing.                                                                                                 |
-| Org modeling  | How do we model ourselves?           | A single org **Releases** (slug `releases`), one push-only source — no product        | Brand-first and simplest to understand; releases hang off one source. (Build Internet→Releases considered for cross-product future-proofing; chose simplicity.) |
-| `url` / dedup | Stable key for `/batch` idempotency  | Synthetic on-site permalink per date, e.g. `https://releases.sh/changelog/2026-06-10` | A small route resolves it; "view source" points at our own page (correct for a self-published changelog).                                                       |
-| AI autonomy   | How much does AI publish on its own? | Draft-PR → human approve (v1)                                                         | Auto-merge for high-confidence days deferred.                                                                                                                   |
+| #             | Decision                             | Choice                                                                              | Notes                                                                                                                                                           |
+| ------------- | ------------------------------------ | ----------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Role          | What is this for?                    | Staged: showcase now → canonical destination later                                  | Low risk to start, clear path to "primary."                                                                                                                     |
+| Engine        | How do entries flow in?              | Canonical markdown in repo → CI push to `/batch` (Approach A)                       | Durable, PR-reviewed, welded to shipping; dogfoods the write path.                                                                                              |
+| Cadence       | How are entries cut?                 | **Daily date rollups**, skip quiet days                                             | One `rollup` per active day; all-internal days produce nothing.                                                                                                 |
+| Org modeling  | How do we model ourselves?           | A single org **Releases** (slug `releases`), one push-only source — no product      | Brand-first and simplest to understand; releases hang off one source. (Build Internet→Releases considered for cross-product future-proofing; chose simplicity.) |
+| `url` / dedup | Stable key for `/batch` idempotency  | Synthetic on-site permalink per date, e.g. `https://releases.sh/updates/2026-06-10` | A small route resolves it; "view source" points at our own page (correct for a self-published changelog).                                                       |
+| AI autonomy   | How much does AI publish on its own? | Draft-PR → human approve (v1)                                                       | Auto-merge for high-confidence days deferred.                                                                                                                   |
 
 ## Architecture
 
@@ -215,6 +215,9 @@ Fixed
 
 - Exact prompt + model for the curate/compose step (reuse `packages/ai`; pick during
   Phase 2 planning).
-- Whether the per-date `url` resolves to a dedicated `/changelog/[date]` route or an anchor
-  on the org page.
+- ~~Whether the per-date `url` resolves to a dedicated route or an anchor.~~ **Resolved
+  2026-06-10:** shipped a branded `/updates` page (the public face of the `releases-sh` org)
+  plus `/updates/[date]` permalinks; the 37 rollups' `url` was repointed from
+  `/changelog/<date>` to `/updates/<date>`. Footer + sitemap updated. (Slug `updates` is free;
+  only the singular `update` is reserved.)
 - Auto-merge for high-confidence days (explicitly deferred from v1).
