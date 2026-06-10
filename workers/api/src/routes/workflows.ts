@@ -24,7 +24,7 @@ import {
 import { sendCronReport } from "../lib/notifications.js";
 import { sendEmail } from "../lib/email.js";
 import type { CronReport, CronReportStatus } from "../lib/cron-report.js";
-import { createDb } from "../db.js";
+import { createDb, type AnyDb } from "../db.js";
 import {
   organizations,
   organizationsPublic,
@@ -38,6 +38,7 @@ import {
   collections,
   collectionMembers,
 } from "@buildinternet/releases-core/schema";
+import { summarizeNotOptedOut } from "@releases/core-internal/eligibility";
 import { daysAgoIso } from "@buildinternet/releases-core/dates";
 import { sourceMatchByIdOrSlug, isSourceId } from "../utils.js";
 import { getAnthropicKey, resolveGatewayOpts } from "../lib/anthropic.js";
@@ -1338,6 +1339,196 @@ workflowsRoutes.post("/workflows/enrich-feed-content", async (c) => {
       regenerate: async (ids) => {
         const { generateContentForReleases } = await import("../workflows/poll-and-fetch.js");
         await generateContentForReleases(db as never, c.env as never, src as never, ids);
+      },
+    },
+  );
+
+  return c.json({ source: { id: src.id, slug: src.slug }, ...report });
+});
+
+// ── POST /workflows/generate-content ─────────────────────────────────────────
+//
+// Operator-triggered AI content generation: run a source's releases through the
+// live summarizer lane (`generateContentForReleases` → resolveSummarizeModel) to
+// populate title_generated / title_short / summary. Two modes:
+//   - fill (default): only releases that have no generated content yet.
+//   - regenerate: ALL eligible releases, clearing existing generated fields first
+//     (the primitive's UPDATE is `title_generated IS NULL`-guarded, i.e. fill-only,
+//     so a regenerate has to NULL them so they get repopulated).
+//
+// Unlike the cron/ingest path this is decoupled from a fetch — it generates
+// content for releases that already exist. Respects the same eligibility gate as
+// the cron (org `auto_generate_content` + per-source `metadata.summarize`), so a
+// non-opted org yields zero candidates. Synchronous; cap via `limit`.
+//
+// Body: { sourceId? | sourceSlug?, releaseIds?, regenerate?, limit?, dryRun? }
+// Returns: { source, scanned, generated, regenerate, dryRun }
+
+interface GenerateContentBody {
+  sourceId?: string;
+  sourceSlug?: string;
+  releaseIds?: string[];
+  regenerate?: boolean;
+  limit?: number;
+  dryRun?: boolean;
+}
+
+export interface GenerateContentOpts {
+  /** Restrict to these specific release ids (still source- + eligibility-scoped). */
+  releaseIds?: string[];
+  /** Clear + re-summarize rows that already have generated content. */
+  regenerate: boolean;
+  limit: number;
+  dryRun: boolean;
+}
+
+export interface GenerateContentReport {
+  /** Candidate releases selected (and, when not a dry run, handed to `generate`). */
+  scanned: number;
+  /** Candidates carrying generated content after the run (0 on dry runs). */
+  generated: number;
+  regenerate: boolean;
+  dryRun: boolean;
+}
+
+export interface GenerateContentDeps {
+  /** Summarize the given release ids — the route wraps `generateContentForReleases`. */
+  generate: (ids: string[]) => Promise<void>;
+}
+
+/**
+ * Testable core of POST /workflows/generate-content. Selection mirrors
+ * `generateContentForReleases`'s own SELECT (org opt-in, per-source opt-out,
+ * skip coverage-side rows) so the dry-run count matches what will actually be
+ * summarized. The summarizer is injected so unit tests run without AI.
+ */
+export async function runGenerateContent(
+  db: AnyDb,
+  source: { id: string },
+  opts: GenerateContentOpts,
+  deps: GenerateContentDeps,
+): Promise<GenerateContentReport> {
+  const conds = [
+    eq(releases.sourceId, source.id),
+    eq(organizations.autoGenerateContent, true),
+    summarizeNotOptedOut(),
+    sql`${releaseCoverage.coverageId} IS NULL`,
+  ];
+  if (opts.releaseIds && opts.releaseIds.length > 0) {
+    conds.push(inArray(releases.id, opts.releaseIds));
+  }
+  // Fill mode only targets rows missing generated content; regenerate takes all.
+  if (!opts.regenerate) conds.push(sql`${releases.titleGenerated} IS NULL`);
+
+  const candidates: { id: string }[] = await db
+    .select({ id: releases.id })
+    .from(releases)
+    .innerJoin(sources, eq(sources.id, releases.sourceId))
+    .innerJoin(organizations, eq(organizations.id, sources.orgId))
+    .leftJoin(releaseCoverage, eq(releaseCoverage.coverageId, releases.id))
+    .where(and(...conds))
+    .limit(opts.limit);
+
+  const ids = candidates.map((r) => r.id);
+  const report: GenerateContentReport = {
+    scanned: ids.length,
+    generated: 0,
+    regenerate: opts.regenerate,
+    dryRun: opts.dryRun,
+  };
+  if (opts.dryRun || ids.length === 0) return report;
+
+  // Regenerate: clear generated fields so the fill-only primitive repopulates them.
+  if (opts.regenerate) {
+    for (let i = 0; i < ids.length; i += IN_ARRAY_CHUNK_SIZE) {
+      const chunk = ids.slice(i, i + IN_ARRAY_CHUNK_SIZE);
+      // eslint-disable-next-line no-await-in-loop -- chunked under the D1 bind cap
+      await db
+        .update(releases)
+        .set({ titleGenerated: null, titleShort: null, summary: null })
+        .where(inArray(releases.id, chunk));
+    }
+  }
+
+  await deps.generate(ids);
+
+  // Post-count what actually got generated content (regenerate clears then refills;
+  // fill only adds), so the report reflects rows the gate/body-cap didn't drop.
+  let generated = 0;
+  for (let i = 0; i < ids.length; i += IN_ARRAY_CHUNK_SIZE) {
+    const chunk = ids.slice(i, i + IN_ARRAY_CHUNK_SIZE);
+    // eslint-disable-next-line no-await-in-loop -- chunked under the D1 bind cap
+    const [row] = await db
+      .select({ n: count() })
+      .from(releases)
+      .where(and(inArray(releases.id, chunk), sql`${releases.titleGenerated} IS NOT NULL`));
+    generated += Number(row?.n ?? 0);
+  }
+  report.generated = generated;
+  return report;
+}
+
+workflowsRoutes.post("/workflows/generate-content", async (c) => {
+  const db = createDb(c.env.DB);
+  const body = await c.req.json<GenerateContentBody>().catch(() => ({}) as GenerateContentBody);
+
+  const ident = body.sourceId?.trim() || body.sourceSlug?.trim();
+  if (!ident) {
+    return c.json({ error: "bad_request", message: "Provide `sourceId` or `sourceSlug`" }, 400);
+  }
+  // Bare slugs are ambiguous across orgs post-#690 — require a typed `src_…` ID.
+  if (!isSourceId(ident)) {
+    return c.json(
+      {
+        error: "bare_slug_rejected",
+        message:
+          "Pass a typed source ID (src_…). Bare slugs are ambiguous across orgs — resolve via /v1/orgs/{orgSlug}/sources/{sourceSlug} or /v1/lookups/source-by-slug first.",
+      },
+      400,
+    );
+  }
+
+  const [src] = await db
+    .select({
+      id: sources.id,
+      slug: sources.slug,
+      name: sources.name,
+      orgId: sources.orgId,
+      isHidden: sources.isHidden,
+    })
+    .from(sources)
+    .where(sourceMatchByIdOrSlug(ident));
+  if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
+
+  const releaseIds = Array.isArray(body.releaseIds)
+    ? body.releaseIds.filter((x): x is string => typeof x === "string" && x.length > 0)
+    : undefined;
+  const rawLimit = Number(body.limit ?? 25);
+  const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(Math.floor(rawLimit), 1), 100) : 25;
+  const regenerate = body.regenerate === true;
+  const dryRun = body.dryRun !== false; // default to a dry run for safety
+
+  const report = await runGenerateContent(
+    db,
+    { id: src.id },
+    { releaseIds, regenerate, limit, dryRun },
+    {
+      // Lazy import: poll-and-fetch.ts pulls `cloudflare:workers`, which only
+      // resolves in the Workers runtime (mirrors the enrich-feed-content route).
+      // Chunk under MAX_AUTOGEN_ROWS_PER_FIRE (20) — generateContentForReleases
+      // bails on a larger batch, same as BatchEnrichWorkflow.
+      generate: async (ids) => {
+        const { generateContentForReleases } = await import("../workflows/poll-and-fetch.js");
+        const GEN_CHUNK = 20;
+        for (let off = 0; off < ids.length; off += GEN_CHUNK) {
+          // eslint-disable-next-line no-await-in-loop -- sequential keeps inference cost bounded
+          await generateContentForReleases(
+            db as never,
+            c.env as never,
+            src as never,
+            ids.slice(off, off + GEN_CHUNK),
+          );
+        }
       },
     },
   );
