@@ -96,11 +96,12 @@
     "MARKETING_CLASSIFIER_MODEL": "google/gemini-2.5-flash-lite",
     // OpenRouter cheap-call model for the *live* poll-fetch summarizer. Consulted
     // only when `openrouter-enabled` is on; empty → the summarizer stays on
-    // Anthropic Haiku (fail-open). Intentionally UNSET until the release-content
-    // eval (`bun run eval:summary`) picks a candidate that shows no quality
-    // regression vs. Haiku — summaries are user-facing. The daily batch path is
+    // Anthropic Haiku (fail-open). Set to gemini-2.5-flash-lite after the
+    // release-content eval (`bun run eval:summary -- --judge`, issue #1469) showed
+    // it matches-or-beats Haiku across repeated runs (~13.8 vs ~12.3 of 16, with
+    // tighter variance) at a fraction of the cost. The daily batch path is
     // unaffected (always Anthropic).
-    "SUMMARIZE_MODEL": "",
+    "SUMMARIZE_MODEL": "google/gemini-2.5-flash-lite",
     // OpenRouter model for the large-body EXTRACTION tool-loop (issue #1536).
     // Consulted only when `openrouter-enabled` is on; empty → extraction stays on
     // Anthropic (fail-open). OPENROUTER_API_KEY is already bound below.
@@ -592,9 +593,9 @@
         // `openrouter-enabled` flag. Mirrors prod.
         "MARKETING_CLASSIFIER_MODEL": "google/gemini-2.5-flash-lite",
         // OpenRouter cheap-call model for the live summarizer; gated by the
-        // `openrouter-enabled` flag. UNSET until the eval picks a candidate;
-        // empty → stays on Anthropic Haiku (fail-open). Mirrors prod.
-        "SUMMARIZE_MODEL": "",
+        // `openrouter-enabled` flag. Set to gemini-2.5-flash-lite per the
+        // eval (#1469); empty → stays on Anthropic Haiku (fail-open). Mirrors prod.
+        "SUMMARIZE_MODEL": "google/gemini-2.5-flash-lite",
         // OpenRouter extraction model (issue #1536); gated by `openrouter-enabled`.
         // Empty → stays on Anthropic (fail-open). Mirrors prod.
         "EXTRACT_MODEL": "deepseek/deepseek-v4-pro",
