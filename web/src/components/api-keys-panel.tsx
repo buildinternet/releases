@@ -23,6 +23,22 @@ function formatDate(iso: string | null): string {
   return Number.isNaN(d.getTime()) ? "—" : d.toLocaleDateString();
 }
 
+/** Coarse relative-time label for "last used" — keys may never have authed a request. */
+function formatLastUsed(iso: string | null): string {
+  if (!iso) return "never used";
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return "never used";
+  const diffMs = Date.now() - then;
+  const minutes = Math.round(diffMs / 60_000);
+  if (minutes < 1) return "last used just now";
+  if (minutes < 60) return `last used ${minutes}m ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `last used ${hours}h ago`;
+  const days = Math.round(hours / 24);
+  if (days < 30) return `last used ${days}d ago`;
+  return `last used ${formatDate(iso)}`;
+}
+
 export function ApiKeysPanel() {
   const { data: sessionData, isPending } = useSession();
   const user = sessionData?.user;
@@ -195,7 +211,7 @@ export function ApiKeysPanel() {
                   </p>
                   <p className="mt-0.5 font-mono text-xs text-stone-500 dark:text-stone-400">
                     {k.start ? `${k.start}…` : "relu_…"} · {k.scope ?? "read"} · created{" "}
-                    {formatDate(k.createdAt)}
+                    {formatDate(k.createdAt)} · {formatLastUsed(k.lastRequest)}
                     {k.expiresAt ? ` · expires ${formatDate(k.expiresAt)}` : ""}
                   </p>
                 </div>
