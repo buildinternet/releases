@@ -1,4 +1,5 @@
-// Pure window math for the daily draft. `today`/`latest` are ISO dates (UTC).
+// Pure window math for the daily draft. `today`/`latest` are calendar dates
+// ("YYYY-MM-DD") in whatever zone the caller brackets days by (ET in prod).
 export interface DraftWindow {
   sinceIso: string;
   untilIso: string;

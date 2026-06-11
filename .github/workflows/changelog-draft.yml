@@ -10,7 +10,7 @@ on:
         description: "Override end date YYYY-MM-DD (with 'since')"
         required: false
   schedule:
-    - cron: "0 13 * * *" # 13:00 UTC daily — drafts the previous UTC day
+    - cron: "0 13 * * *" # 13:00 UTC daily (9am EDT / 8am EST) — drafts the previous Eastern day
 
 concurrency:
   group: changelog-draft
@@ -67,16 +67,33 @@ jobs:
             include/exclude rules, the conventional-commit prior, the format, and the voice. The
             top sections of CHANGELOG.md are your voice/density reference.
 
-            For each day from ${{ steps.window.outputs.since }} through
-            ${{ steps.window.outputs.until }} (inclusive, UTC):
-              1. List PRs merged that day:
+            Changelog days are Eastern (America/New_York) calendar days, NOT UTC days. GitHub
+            timestamps are UTC; bucket each PR into its Eastern day using these UTC ranges
+            (a PR belongs to the day where startUtc <= mergedAt < endUtc — ISO timestamps
+            compare as plain strings):
+            ${{ steps.window.outputs.day_bounds }}
+
+            The window to draft is ${{ steps.window.outputs.since }} through
+            ${{ steps.window.outputs.until }} (inclusive). The first entry in the ranges above
+            is one day BEFORE the window — an overlap guard, handled in step 4.
+
+              1. List every PR merged in the window with ONE search:
                  gh pr list --state merged --base main --json number,title,body,mergedAt,labels \
-                   --search "merged:<DAY>" --limit 100
+                   --search "merged:${{ steps.window.outputs.search_start }}..${{ steps.window.outputs.search_end }}" \
+                   --limit 200
+                 Bucket the results by Eastern day. Ignore any PR that falls outside every
+                 listed range.
               2. Keep only user-facing changes per the style guide; inspect a PR's diff with
                  `gh pr diff <number>` when its user impact is unclear.
-              3. If there are user-facing survivors, PREPEND a `## <Month D, YYYY>` section to
-                 CHANGELOG.md (newest at the top, directly under the `# Changelog` preamble), with
-                 **Added**/**Changed**/**Fixed** sections. A quiet/all-internal day → write nothing.
+              3. For each window day with user-facing survivors, PREPEND a `## <Month D, YYYY>`
+                 section to CHANGELOG.md (newest at the top, directly under the `# Changelog`
+                 preamble), with **Added**/**Changed**/**Fixed** sections. A quiet/all-internal
+                 day → write nothing.
+              4. Overlap-guard day (the day before the window): if CHANGELOG.md already has a
+                 section for it, treat it as already curated — do NOT rewrite or reorder it;
+                 only APPEND a clearly user-facing PR that is missing from it (the publish step
+                 updates the published entry in place). If it has no section, treat it like a
+                 window day.
 
             If you wrote nothing, stop and open no PR.
             If CHANGELOG.md changed, commit it on a new branch named
