@@ -9,6 +9,7 @@
     "./anthropic-pricing": "./src/anthropic-pricing.ts",
     "./config": "./src/config.ts",
     "./db-errors": "./src/db-errors.ts",
+    "./entity-match": "./src/entity-match.ts",
     "./errors": "./src/errors.ts",
     "./flags": "./src/flags.ts",
     "./legacy-env": "./src/legacy-env.ts",

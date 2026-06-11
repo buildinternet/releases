@@ -814,6 +814,21 @@ export interface CollectionSemanticHit {
   score: number;
 }
 
+/**
+ * Relevance floor for semantic collection hits. The collections corpus is
+ * tiny (~a dozen vectors), so a nearest-neighbor query always returns
+ * *something* — without a floor, every query gets the same collections
+ * reshuffled ("dark mode" → "Auth & Identity" at 0.42). Calibrated against
+ * live scores (2026-06-11): genuine topical matches score 0.59–0.81, filler
+ * tops out around 0.49. Applies to both /v1/search and the MCP search tool.
+ */
+export const COLLECTION_SEMANTIC_MIN_SCORE = 0.55;
+
+/** Drop semantic collection matches below the relevance floor. */
+export function filterCollectionMatches<T extends { score: number }>(matches: T[]): T[] {
+  return matches.filter((m) => m.score >= COLLECTION_SEMANTIC_MIN_SCORE);
+}
+
 export interface CollectionSemanticResponse {
   degraded: boolean;
   degradedReason?: string;
@@ -850,7 +865,7 @@ async function runCollectionsSemanticInternal(
       returnMetadata: "none",
       filter: { type: "collection" },
     });
-    matches = res.matches.map((m) => ({ id: m.id, score: m.score }));
+    matches = filterCollectionMatches(res.matches.map((m) => ({ id: m.id, score: m.score })));
   } catch (err) {
     return {
       degraded: true,

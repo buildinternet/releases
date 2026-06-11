@@ -1,5 +1,10 @@
 import { test, expect } from "bun:test";
-import { recencyBoost, videoInfoFromMetadata } from "./hybrid-search-worker.js";
+import {
+  recencyBoost,
+  videoInfoFromMetadata,
+  filterCollectionMatches,
+  COLLECTION_SEMANTIC_MIN_SCORE,
+} from "./hybrid-search-worker.js";
 
 const DAY_MS = 86_400_000;
 
@@ -65,4 +70,40 @@ test("videoInfoFromMetadata: missing metadata returns null", () => {
 test("videoInfoFromMetadata: unrecognised provider returns null", () => {
   const meta = JSON.stringify({ video: { provider: "twitch" } });
   expect(videoInfoFromMetadata("video", meta)).toBeNull();
+});
+
+// ── filterCollectionMatches ───────────────────────────────────────────
+//
+// Scores mirror a live calibration (2026-06-11): genuinely relevant
+// collections scored 0.59–0.81 while every-query filler ("dark mode" →
+// "Auth & Identity") scored 0.25–0.49. The floor sits between the bands so
+// topical queries keep their hits and feature-intent queries get none.
+
+test("filterCollectionMatches: drops the sub-floor filler band", () => {
+  const matches = [
+    { id: "col_auth", score: 0.42 },
+    { id: "col_browser", score: 0.49 },
+    { id: "col_jobs", score: 0.25 },
+  ];
+  expect(filterCollectionMatches(matches)).toEqual([]);
+});
+
+test("filterCollectionMatches: keeps genuinely relevant scores", () => {
+  const matches = [
+    { id: "col_scraping", score: 0.81 },
+    { id: "col_agents", score: 0.68 },
+    { id: "col_frontend", score: 0.59 },
+    { id: "col_noise", score: 0.46 },
+  ];
+  expect(filterCollectionMatches(matches).map((m) => m.id)).toEqual([
+    "col_scraping",
+    "col_agents",
+    "col_frontend",
+  ]);
+});
+
+test("filterCollectionMatches: floor is inclusive at the constant", () => {
+  expect(filterCollectionMatches([{ id: "col_x", score: COLLECTION_SEMANTIC_MIN_SCORE }])).toEqual([
+    { id: "col_x", score: COLLECTION_SEMANTIC_MIN_SCORE },
+  ]);
 });
