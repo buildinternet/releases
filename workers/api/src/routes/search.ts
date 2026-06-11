@@ -25,6 +25,7 @@ import {
   searchReleasesFromMatchedEntities,
   searchCollectionsDirect,
   findCollectionsByMemberOrgs,
+  attachCollectionPreviews,
   type RawSearchReleaseRow,
 } from "../queries/search.js";
 import { runHybridSearch, runCollectionsSemantic, type HybridMode } from "../lib/search-hybrid.js";
@@ -668,11 +669,9 @@ searchRoutes.get(
         maybeEmbed(lookup);
       }
 
-      const collectionsHits = mergeCollectionHits(
-        collectionsDirectLexical,
-        [],
-        collectionsMember,
-        limit,
+      const collectionsHits = await attachCollectionPreviews(
+        db,
+        mergeCollectionHits(collectionsDirectLexical, [], collectionsMember, limit),
       );
       const result = {
         query: q,
@@ -813,11 +812,14 @@ searchRoutes.get(
       via: "direct" as const,
       score: h.score,
     }));
-    const collectionsHits = mergeCollectionHits(
-      collectionsDirectLexical,
-      collectionsSemanticHits,
-      collectionsMember,
-      limit,
+    const collectionsHits = await attachCollectionPreviews(
+      db,
+      mergeCollectionHits(
+        collectionsDirectLexical,
+        collectionsSemanticHits,
+        collectionsMember,
+        limit,
+      ),
     );
 
     const result = {

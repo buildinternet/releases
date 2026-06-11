@@ -1,11 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { api, ApiSetupError, type CollectionListItem, type CollectionMember } from "@/lib/api";
+import { api, ApiSetupError, type CollectionListItem } from "@/lib/api";
 import { Header } from "@/components/header";
-import { OrgAvatar } from "@/components/org-avatar";
+import { MemberFacepile } from "@/components/member-facepile";
 import { PageHeader } from "@/components/page-header";
 import { SetupMessage } from "@/components/setup-message";
-import { memberKey } from "@/lib/member-key";
 
 const TITLE = "Collections";
 const DESCRIPTION =
@@ -74,7 +73,7 @@ export default async function CollectionsListPage() {
                       </div>
                     )}
                     {c.previewMembers && c.previewMembers.length > 0 && (
-                      <MemberPreview members={c.previewMembers} totalCount={c.memberCount} />
+                      <MemberFacepile members={c.previewMembers} totalCount={c.memberCount} />
                     )}
                   </div>
                   <div className="shrink-0 text-[12px] tabular-nums text-stone-400 dark:text-stone-500">
@@ -86,51 +85,6 @@ export default async function CollectionsListPage() {
           </ul>
         )}
       </div>
-    </div>
-  );
-}
-
-function MemberPreview({
-  members,
-  totalCount,
-}: {
-  members: CollectionMember[];
-  totalCount: number;
-}) {
-  const remaining = totalCount - members.length;
-  return (
-    <div className="mt-2 flex items-center gap-1.5 text-[12px] text-stone-500 dark:text-stone-400">
-      <div className="flex -space-x-1.5">
-        {members.map((m) => {
-          const avatar =
-            m.kind === "org"
-              ? { avatarUrl: m.avatarUrl, githubHandle: m.githubHandle, name: m.name }
-              : {
-                  avatarUrl: m.org.avatarUrl,
-                  githubHandle: m.org.githubHandle,
-                  name: m.org.name,
-                };
-          const title = m.kind === "org" ? m.name : `${m.name} · ${m.org.name}`;
-          return (
-            <span
-              key={memberKey(m)}
-              title={title}
-              className="ring-2 ring-white dark:ring-stone-950 rounded-full"
-            >
-              <OrgAvatar
-                avatarUrl={avatar.avatarUrl}
-                githubHandle={avatar.githubHandle}
-                name={avatar.name}
-                size={20}
-              />
-            </span>
-          );
-        })}
-      </div>
-      <span className="truncate">
-        {members.map((m) => m.name).join(", ")}
-        {remaining > 0 && ` + ${remaining} more`}
-      </span>
     </div>
   );
 }

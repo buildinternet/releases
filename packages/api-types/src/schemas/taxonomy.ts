@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { CategorySchema } from "./shared.js";
-import { CollectionReleaseItemSchema } from "./collections.js";
+import { CollectionMemberSchema, CollectionReleaseItemSchema } from "./collections.js";
 
 /**
  * Org rollup row shared by category and tag detail responses. Slim by
@@ -38,6 +38,16 @@ export const CategoryListItemSchema = z.object({
   aliases: z.array(z.string()),
   orgCount: z.number().int().min(0),
   productCount: z.number().int().min(0),
+  /**
+   * A small mixed-kind preview (capped at 3) of the orgs and products in this
+   * category, so the list page can render an inline avatar facepile without a
+   * second round trip — same shape and intent as a collection's
+   * `previewMembers`. Org entries are surfaced first (they carry the avatar);
+   * product entries fill any remaining slots and dedupe against orgs already
+   * shown. The list page derives "+N more" from `orgCount + productCount`.
+   * Optional on the wire so older workers mid-rollout don't trip the schema.
+   */
+  previewMembers: z.array(CollectionMemberSchema).optional(),
 });
 
 export const CategoryListResponseSchema = z.array(CategoryListItemSchema);

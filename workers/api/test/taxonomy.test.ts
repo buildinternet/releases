@@ -74,6 +74,75 @@ describe("GET /v1/categories", () => {
     expect(bySlug.get("devops")).toMatchObject({ name: "DevOps" });
   });
 
+  it("returns an avatar facepile preview: orgs first (avatar-bearing sorted ahead), products fill remaining slots and dedupe by parent org", async () => {
+    const db = mkDb();
+    await db.insert(organizations).values([
+      // AI has 3 orgs, so its preview is all orgs and never reaches products.
+      // Avatar-bearing rows sort ahead of avatar-less ones, then by name.
+      {
+        id: "org_beta",
+        slug: "beta",
+        name: "Beta",
+        category: "ai",
+        avatarUrl: "https://x/beta.png",
+      },
+      { id: "org_alpha", slug: "alpha", name: "Alpha", category: "ai" }, // no avatar → sorts last
+      {
+        id: "org_gamma",
+        slug: "gamma",
+        name: "Gamma",
+        category: "ai",
+        avatarUrl: "https://x/gamma.png",
+      },
+      // Commerce has a single org, so its preview falls through to products.
+      {
+        id: "org_shopify",
+        slug: "shopify",
+        name: "Shopify",
+        category: "commerce",
+        avatarUrl: "https://x/shop.png",
+      },
+      // Parent of a commerce product but itself uncategorized — only surfaces
+      // via the product, contributing a distinct avatar to the facepile.
+      { id: "org_stripe", slug: "stripe-co", name: "Stripe", avatarUrl: "https://x/stripe.png" },
+    ]);
+    await db.insert(products).values([
+      // AI product is ignored — AI already has 3 orgs filling the preview.
+      { id: "prod_claude", slug: "claude-app", name: "Claude", orgId: "org_beta", category: "ai" },
+      // Commerce products: `checkout` (parent stripe-co, not a commerce org) is
+      // added; `pay` is skipped because its parent shopify is already shown.
+      {
+        id: "prod_checkout",
+        slug: "checkout",
+        name: "Checkout",
+        orgId: "org_stripe",
+        category: "commerce",
+      },
+      { id: "prod_pay", slug: "pay", name: "Pay", orgId: "org_shopify", category: "commerce" },
+    ]);
+
+    const fetch = mkApp(db);
+    const res = await fetch(new Request("http://test/v1/categories"));
+    const body = (await res.json()) as Array<{
+      slug: string;
+      previewMembers?: Array<{ kind: string; slug: string; org?: { slug: string } }>;
+    }>;
+    const bySlug = new Map(body.map((c) => [c.slug, c]));
+
+    // Orgs only, capped at 3, avatar-bearing first (Beta, Gamma) then avatar-less (Alpha).
+    const ai = bySlug.get("ai")!.previewMembers!;
+    expect(ai.map((m) => `${m.kind}:${m.slug}`)).toEqual(["org:beta", "org:gamma", "org:alpha"]);
+
+    // Single org, then a product fills the next slot; the product sharing the
+    // already-shown org (shopify) is deduped out.
+    const commerce = bySlug.get("commerce")!.previewMembers!;
+    expect(commerce.map((m) => `${m.kind}:${m.slug}`)).toEqual(["org:shopify", "product:checkout"]);
+    expect(commerce[1].org?.slug).toBe("stripe-co");
+
+    // Empty buckets carry an empty preview, never undefined member entries.
+    expect(bySlug.get("design")!.previewMembers).toEqual([]);
+  });
+
   it("excludes soft-deleted orgs and their products from counts", async () => {
     const db = mkDb();
     await db.insert(organizations).values([
