@@ -8,6 +8,7 @@ import {
 } from "@buildinternet/releases-core/schema";
 import { toFtsMatchQuery } from "@buildinternet/releases-core/fts";
 import { likeContains } from "@buildinternet/releases-core/sql-like";
+import { rankEntityCandidate, type EntityMatchFields } from "@releases/lib/entity-match";
 import { COVERAGE_COUNT_EXPR } from "@releases/core-internal/release-coverage-sql";
 import type { D1Db } from "../db.js";
 import type {
@@ -103,6 +104,48 @@ function sourceIdInList(sourceIds: string[]) {
   )})`;
 }
 
+// ── Entity matching ───────────────────────────────────────────────────
+//
+// The entity helpers below candidate via SQL `LIKE %q%` (cheap, index-free,
+// and a strict superset of what we keep), then post-filter and rank in TS
+// through `rankEntityCandidate`. Substring-only candidates — "ai" hitting
+// React Em·ai·l or the `.ai` TLD — are dropped, and the survivors order by
+// match tier (exact > name prefix > name word > slug/domain > category)
+// instead of the alphabetical ORDER BY that used to stand in for relevance.
+
+/**
+ * SQL-side candidate cap. Entity tables are small (hundreds of rows), so a
+ * wide fetch keeps the TS post-filter from missing boundary matches that an
+ * early `LIMIT ${limit}` would have truncated alphabetically.
+ */
+const ENTITY_CANDIDATE_LIMIT = 400;
+
+/**
+ * Rank LIKE candidates by `rankEntityCandidate` tier, drop substring-only
+ * rows, tie-break alphabetically, and trim to the caller's limit.
+ */
+function rankCandidates<T extends { name: string }>(
+  candidates: T[],
+  query: string,
+  limit: number,
+  toFields: (c: T) => EntityMatchFields,
+): T[] {
+  return candidates
+    .flatMap((c) => {
+      const tier = rankEntityCandidate(toFields(c), query);
+      return tier === null ? [] : [{ c, tier }];
+    })
+    .toSorted((a, b) => a.tier - b.tier || a.c.name.localeCompare(b.c.name))
+    .slice(0, limit)
+    .map((x) => x.c);
+}
+
+/** Split a `GROUP_CONCAT(domain)` column back into hostnames (commas can't
+ * appear inside a hostname, so the default separator is unambiguous). */
+function splitConcat(value: string | null): string[] {
+  return value ? value.split(",") : [];
+}
+
 export async function searchOrgs(
   db: D1Db,
   query: string,
@@ -118,16 +161,25 @@ export async function searchOrgs(
         WHERE s2.org_id = o.id
       )`;
 
-  return db.all<SearchOrgHit>(sql`
-    SELECT DISTINCT o.slug, o.name, o.domain, o.avatar_url as avatarUrl, o.category
+  const candidates = await db.all<SearchOrgHit & { aliasDomains: string | null }>(sql`
+    SELECT o.slug, o.name, o.domain, o.avatar_url as avatarUrl, o.category,
+           GROUP_CONCAT(da.domain) as aliasDomains
     FROM organizations_active o
     LEFT JOIN domain_aliases da ON da.org_id = o.id
     WHERE (${likeContains(sql`o.name`, query)} OR ${likeContains(sql`o.slug`, query)}
-      OR ${likeContains(sql`o.domain`, query)} OR ${likeContains(sql`da.domain`, query)})
+      OR ${likeContains(sql`o.domain`, query)} OR ${likeContains(sql`da.domain`, query)}
+      OR ${likeContains(sql`o.category`, query)})
       ${opts.orgId ? sql`AND o.id = ${opts.orgId}` : sql``}
       ${nonEmptyClause}
-    ORDER BY o.name LIMIT ${limit}
+    GROUP BY o.id
+    ORDER BY o.name LIMIT ${ENTITY_CANDIDATE_LIMIT}
   `);
+  return rankCandidates(candidates, query, limit, (c) => ({
+    name: c.name,
+    slug: c.slug,
+    domains: [c.domain, ...splitConcat(c.aliasDomains)],
+    categories: [c.category],
+  })).map(({ aliasDomains: _drop, ...hit }) => hit);
 }
 
 export async function searchProducts(
@@ -149,9 +201,10 @@ export async function searchProducts(
             AND sa.id IN ${sourceIdInList(opts.sourceIds)}
         )`
       : sql``;
-  return db.all<SearchCatalogHit>(sql`
-    SELECT DISTINCT p.slug, p.name, o.slug as orgSlug, o.name as orgName,
-           o.avatar_url as orgAvatarUrl, p.category, 'product' as entryType, p.kind
+  const candidates = await db.all<SearchCatalogHit & { aliasDomains: string | null }>(sql`
+    SELECT p.slug, p.name, o.slug as orgSlug, o.name as orgName,
+           o.avatar_url as orgAvatarUrl, p.category, 'product' as entryType, p.kind,
+           GROUP_CONCAT(da.domain) as aliasDomains
     FROM products_active p
     INNER JOIN organizations_active o ON o.id = p.org_id
     LEFT JOIN domain_aliases da ON da.product_id = p.id
@@ -160,8 +213,14 @@ export async function searchProducts(
       ${opts.orgId ? sql`AND o.id = ${opts.orgId}` : sql``}
       ${opts.kind ? sql`AND p.kind = ${opts.kind}` : sql``}
       ${sourceIdExistsClause}
-    ORDER BY p.name LIMIT ${limit}
+    GROUP BY p.id
+    ORDER BY p.name LIMIT ${ENTITY_CANDIDATE_LIMIT}
   `);
+  return rankCandidates(candidates, query, limit, (c) => ({
+    name: c.name,
+    slug: c.slug,
+    domains: splitConcat(c.aliasDomains),
+  })).map(({ aliasDomains: _drop, ...hit }) => hit);
 }
 
 export async function searchSources(
@@ -180,8 +239,8 @@ export async function searchSources(
   // `s.stargazers_count as stars` is selected for the SearchSourceHit shape;
   // catalog-hit surfacing of stars is deferred with the search-results render
   // (foldSourcesIntoCatalog drops it today).
-  return db.all<RawSourceHit>(sql`
-    SELECT s.slug, s.name, s.type, o.slug as orgSlug, o.name as orgName,
+  const candidates = await db.all<RawSourceHit & { url: string | null }>(sql`
+    SELECT s.slug, s.name, s.type, s.url, o.slug as orgSlug, o.name as orgName,
            o.avatar_url as orgAvatarUrl,
            p.slug as productSlug, p.name as productName, p.category as productCategory,
            s.kind as entityKind, s.stargazers_count as stars
@@ -194,8 +253,13 @@ export async function searchSources(
       ${opts.orgId ? sql`AND s.org_id = ${opts.orgId}` : sql``}
       ${opts.kind ? sql`AND s.kind = ${opts.kind}` : sql``}
       ${sourceIdClause}
-    ORDER BY s.name LIMIT ${limit}
+    ORDER BY s.name LIMIT ${ENTITY_CANDIDATE_LIMIT}
   `);
+  return rankCandidates(candidates, query, limit, (c) => ({
+    name: c.name,
+    slug: c.slug,
+    urls: [c.url],
+  })).map(({ url: _drop, ...hit }) => hit);
 }
 
 export async function searchReleasesFts(
