@@ -1,5 +1,11 @@
 import { test, expect } from "bun:test";
-import { wordMatch, domainLabelMatch, urlMatch, rankEntityCandidate } from "./entity-match.js";
+import {
+  wordMatch,
+  domainLabelMatch,
+  urlMatch,
+  rankEntityCandidate,
+  rankEntityCandidates,
+} from "./entity-match.js";
 
 // Cases mirror the live noise audit that motivated word-boundary matching
 // (search "ai" surfaced CodeRabbit via coderabbit.ai and React Email via
@@ -167,4 +173,43 @@ test("rankEntityCandidate: urls rank with slug/domain tier", () => {
   );
   const viaDomain = rankEntityCandidate({ name: "Resend", domains: ["react.email"] }, "react");
   expect(viaUrl).toBe(viaDomain!);
+});
+
+// ── rankEntityCandidates (batch) ──────────────────────────────────────
+
+test("rankEntityCandidates: drops substring-only rows and orders by tier", () => {
+  const candidates = [
+    { name: "Granola", slug: "granola", domain: "granola.ai", category: "Productivity" },
+    { name: "Moonshot AI", slug: "moonshot-ai", domain: "moonshot.ai", category: "AI" },
+    { name: "OpenAI", slug: "openai", domain: "openai.com", category: "AI" },
+    { name: "Anthropic", slug: "anthropic", domain: "anthropic.com", category: "AI" },
+    { name: "xAI", slug: "xai", domain: "x.ai", category: "AI" },
+  ];
+  const ranked = rankEntityCandidates(candidates, "ai", 20, (c) => ({
+    name: c.name,
+    slug: c.slug,
+    domains: [c.domain],
+    categories: [c.category],
+  }));
+  const names = ranked.map((c) => c.name);
+  // Granola only matched via the .ai TLD — dropped.
+  expect(names).not.toContain("Granola");
+  // Word/camel name hits (alpha within tier) outrank the category-only hit.
+  expect(names.slice(0, 3)).toEqual(["Moonshot AI", "OpenAI", "xAI"]);
+  expect(names.indexOf("Anthropic")).toBeGreaterThan(names.indexOf("xAI"));
+});
+
+test("rankEntityCandidates: trims to limit after ranking, not before", () => {
+  const candidates = [
+    // Alphabetically first but only a category match (tier 4).
+    { name: "Aardvark", slug: "aardvark", category: "AI" },
+    // A real name hit that an alphabetical pre-trim would have dropped.
+    { name: "xAI", slug: "xai", category: "AI" },
+  ];
+  const ranked = rankEntityCandidates(candidates, "ai", 1, (c) => ({
+    name: c.name,
+    slug: c.slug,
+    categories: [c.category],
+  }));
+  expect(ranked.map((c) => c.name)).toEqual(["xAI"]);
 });

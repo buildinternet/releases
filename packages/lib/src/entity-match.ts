@@ -117,3 +117,35 @@ export function rankEntityCandidate(fields: EntityMatchFields, query: string): n
   if (fields.categories?.some((c) => wordMatch(c, query) !== null)) return 4;
   return null;
 }
+
+/**
+ * SQL-side candidate cap for the entity search paths. Entity tables are small
+ * (hundreds of rows), so a wide LIKE fetch keeps the TS post-filter from
+ * missing boundary matches that an early `LIMIT n` would have truncated
+ * alphabetically. Shared by the API and MCP workers so both surfaces fetch
+ * the same candidate window before ranking.
+ */
+export const ENTITY_CANDIDATE_LIMIT = 400;
+
+/**
+ * Rank a batch of LIKE candidates by `rankEntityCandidate` tier, drop the
+ * substring-only rows, tie-break alphabetically by name, and trim to `limit`.
+ * `toFields` projects each candidate onto the fields the ranker reads, so a
+ * caller can carry extra columns (alias domains, raw URLs) through the rank
+ * and strip them afterwards.
+ */
+export function rankEntityCandidates<T extends { name: string }>(
+  candidates: T[],
+  query: string,
+  limit: number,
+  toFields: (candidate: T) => EntityMatchFields,
+): T[] {
+  return candidates
+    .flatMap((c) => {
+      const tier = rankEntityCandidate(toFields(c), query);
+      return tier === null ? [] : [{ c, tier }];
+    })
+    .toSorted((a, b) => a.tier - b.tier || a.c.name.localeCompare(b.c.name))
+    .slice(0, limit)
+    .map((x) => x.c);
+}
