@@ -1374,6 +1374,10 @@ interface GenerateContentBody {
   dryRun?: boolean;
 }
 
+/** Per-invocation row cap — the route's `limit` clamp and the post-fetch
+ *  auto-fill in routes/sources.ts (#1579) share this bound. */
+export const GENERATE_CONTENT_MAX_LIMIT = 100;
+
 export interface GenerateContentOpts {
   /** Restrict to these specific release ids (still source- + eligibility-scoped). */
   releaseIds?: string[];
@@ -1461,6 +1465,46 @@ export async function runGenerateContent(
   return report;
 }
 
+/**
+ * Standard `deps.generate` for `runGenerateContent`: the live summarizer lane,
+ * chunked under MAX_AUTOGEN_ROWS_PER_FIRE (20) — generateContentForReleases
+ * bails on a larger batch, same as BatchEnrichWorkflow. Shared by the route
+ * below and the post-fetch auto-fill in routes/sources.ts (#1579) so
+ * generate-content stays the only write path for the generated fields.
+ */
+export function buildGenerateContentDeps(
+  db: AnyDb,
+  env: Env["Bindings"],
+  src: { id: string; slug: string; name: string; orgId: string; isHidden: boolean | null },
+  opts: { ignoreAutoGate?: boolean } = {},
+): GenerateContentDeps {
+  return {
+    // Lazy import: poll-and-fetch.ts pulls `cloudflare:workers`, which only
+    // resolves in the Workers runtime. A static import would break tooling that
+    // loads the route module under plain Bun (the OpenAPI coverage check).
+    // Structural cast: src may be a partial {id,slug,name,orgId,isHidden};
+    // generateContentForReleases only reads isHidden/slug/id so the partial is
+    // safe at runtime; db and env are cast to satisfy the typed workflow-env
+    // shape difference.
+    generate: async (ids) => {
+      const { generateContentForReleases } = await import("../workflows/poll-and-fetch.js");
+      const GEN_CHUNK = 20;
+      let total = 0;
+      for (let off = 0; off < ids.length; off += GEN_CHUNK) {
+        // eslint-disable-next-line no-await-in-loop -- sequential keeps inference cost bounded
+        total += await generateContentForReleases(
+          db as never,
+          env as never,
+          src as never,
+          ids.slice(off, off + GEN_CHUNK),
+          { ignoreAutoGenerateGate: opts.ignoreAutoGate },
+        );
+      }
+      return total;
+    },
+  };
+}
+
 workflowsRoutes.post("/workflows/generate-content", async (c) => {
   const db = createDb(c.env.DB);
   const body = await c.req.json<GenerateContentBody>().catch(() => ({}) as GenerateContentBody);
@@ -1497,7 +1541,9 @@ workflowsRoutes.post("/workflows/generate-content", async (c) => {
     ? body.releaseIds.filter((x): x is string => typeof x === "string" && x.length > 0)
     : undefined;
   const rawLimit = Number(body.limit ?? 25);
-  const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(Math.floor(rawLimit), 1), 100) : 25;
+  const limit = Number.isFinite(rawLimit)
+    ? Math.min(Math.max(Math.floor(rawLimit), 1), GENERATE_CONTENT_MAX_LIMIT)
+    : 25;
   const regenerate = body.regenerate === true;
   const ignoreAutoGate = body.ignoreAutoGate === true;
   const dryRun = body.dryRun !== false; // default to a dry run for safety
@@ -1506,28 +1552,7 @@ workflowsRoutes.post("/workflows/generate-content", async (c) => {
     db,
     { id: src.id },
     { releaseIds, regenerate, ignoreAutoGate, limit, dryRun },
-    {
-      // Lazy import: poll-and-fetch.ts pulls `cloudflare:workers`, which only
-      // resolves in the Workers runtime (mirrors the enrich-feed-content route).
-      // Chunk under MAX_AUTOGEN_ROWS_PER_FIRE (20) — generateContentForReleases
-      // bails on a larger batch, same as BatchEnrichWorkflow.
-      generate: async (ids) => {
-        const { generateContentForReleases } = await import("../workflows/poll-and-fetch.js");
-        const GEN_CHUNK = 20;
-        let total = 0;
-        for (let off = 0; off < ids.length; off += GEN_CHUNK) {
-          // eslint-disable-next-line no-await-in-loop -- sequential keeps inference cost bounded
-          total += await generateContentForReleases(
-            db as never,
-            c.env as never,
-            src as never,
-            ids.slice(off, off + GEN_CHUNK),
-            { ignoreAutoGenerateGate: ignoreAutoGate },
-          );
-        }
-        return total;
-      },
-    },
+    buildGenerateContentDeps(db, c.env, src, { ignoreAutoGate }),
   );
 
   return c.json({ source: { id: src.id, slug: src.slug }, ...report });

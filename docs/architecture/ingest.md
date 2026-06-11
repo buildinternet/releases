@@ -36,6 +36,8 @@ Three Haiku 4.5 passes can run inside `fetchOne` between parse and insert. All a
 
 The `release-content` pass (`@releases/ai-internal/release-content`) generates `title_generated` / `title_short` / `summary`. It is shared by `scripts/generate-release-content.ts` and the ingest-time hook.
 
+A manual `POST /v1/sources/:id/fetch` that inserts releases also triggers the `generate-content` fill pass for that source (up to 100 unfilled rows, via `waitUntil` after the response), so onboarding fetches land display-ready instead of waiting for an operator to run `POST /v1/workflows/generate-content` by hand (#1579). Same gates as the cron path — org `auto_generate_content` opt-in, per-source `metadata.summarize` opt-out — and fail-open: a summarize failure never fails the fetch.
+
 ### Marketing classifier
 
 Vendor blogs that mix product news with case studies / newsletters / event recaps opt in via `metadata.marketingFilter = true`. `fetchOne` runs each newly-parsed item through `classifyMarketing` (Haiku 4.5, `@releases/ai-internal/marketing-classifier`) before insert; items the model tags as marketing get inserted with `suppressed = true` and `suppressedReason = "marketing_classifier:<slug>"` (slugs: `case_study`, `newsletter`, `event_recap`, `partner_announcement`, `positioning_piece`, `localized_marketing`, `unspecified`). Suppressed-at-insert IDs are excluded from `insertedIds` so the downstream publish / embed / auto-summarize steps skip them. Fail-open on any classifier error — log warn and insert visibly. Cap: 20 items per fire (above that, skip classification and insert visibly; operators backfill via `POST /v1/releases/:id/suppress`). Optional `metadata.marketingFilterHint: string` carries source-specific guidance into the prompt.
