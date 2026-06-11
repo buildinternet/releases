@@ -37,7 +37,7 @@ For experiments that change the prompt, edit `SYSTEM_PROMPT` in place on a branc
 
 ## When to Use
 
-- **Backfill before/after flipping a new org's `auto_generate_content` opt-in.** Forward-going generation is automatic; pre-existing rows aren't touched until something regenerates them.
+- **Backfill before/after flipping a new org's `auto_generate_content` opt-in.** Forward-going generation is automatic, and a manual `source fetch` that inserts new rows also fills up to 100 of that source's null rows (#1582) — enough for most single-source onboards. Reach for this skill when the gap is larger, spans sources, or no new rows are landing to trigger the fill.
 - **Prompt iteration.** Try a prompt change against ~5–20 recent releases on a known org, compare side-by-side, decide whether to ship.
 - **Provider / model bake-offs.** Re-run a fixed candidate set across providers using the same `buildReleaseBlock` input.
 - **Patch-ups after an ingest hiccup** — e.g. the model returned malformed XML and the inserted row has nulls, or a known prompt bug was fixed and a 24-hour window needs a sweep.
@@ -45,7 +45,7 @@ For experiments that change the prompt, edit `SYSTEM_PROMPT` in place on a branc
 When **not** to use this:
 
 - **Large backfills (>200 rows).** Prefer `bun scripts/generate-release-content.ts --orgs=… --since=… --apply`. The Batches API gives a 50% discount and runs offline; local sub-agents pay full price and consume your session's token budget.
-- **Live ingest gaps.** The poll-fetch workflow already generates content at ingest time when the org is opted in. If new rows are landing with nulls, the bug is in the worker, not in this skill.
+- **Live ingest gaps.** The poll-fetch workflow already generates content at ingest time when the org is opted in, and a manual `source fetch` that inserts rows follows up with a fill pass over the source's remaining nulls (up to 100). If new rows are landing with nulls, the bug is in the worker, not in this skill.
 
 ## Step 1: Pick candidates
 
