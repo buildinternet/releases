@@ -1,0 +1,86 @@
+name: Changelog draft
+
+on:
+  workflow_dispatch:
+    inputs:
+      since:
+        description: "Override start date YYYY-MM-DD (with 'until')"
+        required: false
+      until:
+        description: "Override end date YYYY-MM-DD (with 'since')"
+        required: false
+  # Enable after dry-run validation (rollout):
+  # schedule:
+  #   - cron: "0 13 * * *" # 13:00 UTC daily — drafts the previous UTC day
+
+concurrency:
+  group: changelog-draft
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+  id-token: write
+
+env:
+  BUN_VERSION: "1.3.13"
+
+jobs:
+  draft:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Skip if an open draft PR already exists
+        id: existing
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          count=$(gh pr list --state open --search "head:changelog/draft" --json number --jq 'length')
+          echo "open=$count" >> "$GITHUB_OUTPUT"
+          if [ "$count" != "0" ]; then echo "An open changelog draft PR exists; skipping."; fi
+
+      - name: Resolve window
+        id: window
+        if: steps.existing.outputs.open == '0'
+        env:
+          INPUT_SINCE: ${{ github.event.inputs.since }}
+          INPUT_UNTIL: ${{ github.event.inputs.until }}
+        run: bun scripts/changelog/compute-window.ts
+
+      - name: Draft the changelog
+        if: steps.existing.outputs.open == '0' && steps.window.outputs.skip == 'false'
+        uses: anthropics/claude-code-action@62238ddb33772a079b0a6d8665a1ff3043583067 # v1.0.114
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          claude_args: '--allowed-tools "Bash(gh pr:*),Bash(gh api:*),Bash(git:*),Read,Edit,Write"'
+          prompt: |
+            You are drafting the daily self-changelog for releases.sh.
+
+            FIRST read docs/changelog-style.md in full — it defines the audience, the
+            include/exclude rules, the conventional-commit prior, the format, and the voice. The
+            top sections of CHANGELOG.md are your voice/density reference.
+
+            For each day from ${{ steps.window.outputs.since }} through
+            ${{ steps.window.outputs.until }} (inclusive, UTC):
+              1. List PRs merged that day:
+                 gh pr list --state merged --base main --json number,title,body,mergedAt,labels \
+                   --search "merged:<DAY>" --limit 100
+              2. Keep only user-facing changes per the style guide; inspect a PR's diff with
+                 `gh pr diff <number>` when its user impact is unclear.
+              3. If there are user-facing survivors, PREPEND a `## <Month D, YYYY>` section to
+                 CHANGELOG.md (newest at the top, directly under the `# Changelog` preamble), with
+                 **Added**/**Changed**/**Fixed** sections. A quiet/all-internal day → write nothing.
+
+            If you wrote nothing, stop and open no PR.
+            If CHANGELOG.md changed, commit it on a new branch named
+            `changelog/draft-${{ steps.window.outputs.until }}` and open a PR titled
+            `changelog: ${{ steps.window.outputs.since }}..${{ steps.window.outputs.until }}`
+            with a one-line body listing the dates you drafted. Do not merge it.
