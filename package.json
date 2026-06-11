@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "dev:web": "cd web && portless run --name ${PORTLESS_NAME:-releases} sh -c 'bun run dev -- --port $PORT'",
-    "dev:api": "portless run --name api.${PORTLESS_NAME:-releases} sh -c 'wrangler dev --config workers/api/wrangler.jsonc --port $PORT --ip 127.0.0.1'",
+    "dev:api": "bun run db:migrate:local && portless run --name api.${PORTLESS_NAME:-releases} sh -c 'wrangler dev --config workers/api/wrangler.jsonc --port $PORT --ip 127.0.0.1'",
     "dev:discovery": "portless run --name discovery.${PORTLESS_NAME:-releases} sh -c 'wrangler dev --config workers/discovery/wrangler.jsonc --port $PORT --ip 127.0.0.1'",
     "dev:mcp": "portless run --name mcp.${PORTLESS_NAME:-releases} sh -c 'wrangler dev --config workers/mcp/wrangler.jsonc --port $PORT --ip 127.0.0.1'",
     "preview:web": "cd web && RELEASES_API_URL=${RELEASES_API_URL:-${RELEASED_API_URL:-http://localhost:8787}} bun run dev -- --port 3000",
@@ -40,7 +40,7 @@
     "db:studio": "bun drizzle-kit studio",
     "db:studio:d1": "bun drizzle-kit studio --config drizzle-d1.config.ts",
     "db:query": "wrangler d1 execute released-db --local --config workers/api/wrangler.jsonc --command",
-    "db:pull": "rm -rf workers/api/.wrangler/state/v3/d1 && wrangler d1 export released-db --remote --no-schema --table organizations --table org_accounts --table sources --table releases --table usage_log --table fetch_log --table ignored_urls --output /tmp/releases-d1-export.sql --config workers/api/wrangler.jsonc && bun run db:migrate:local && sqlite3 $(find workers/api/.wrangler -name '*.sqlite' | head -1) < /tmp/releases-d1-export.sql && rm /tmp/releases-d1-export.sql",
+    "db:pull": "./scripts/db-pull.sh",
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
     "format": "prettier --write .",
