@@ -85,7 +85,7 @@ What shipped (`web/`):
   deduped case-insensitively, capped with an ellipsis. Returns `null` when no member is more
   descriptive than its bare version.
 - `OrgReleaseList` gains an opt-in `showRollupSummary` prop, threaded to `ReleaseRollupRow`
-  as `showSummary`. When set and the card is collapsed, it renders the joined line as a
+  under the same name. When set and the card is collapsed, it renders the joined line as a
   muted, two-line-clamped subtitle under the pills. **Off by default** — generic
   org/monorepo rollups stay terse; only `/updates` opts in.
 - `web/src/app/updates/page.tsx` passes `showRollupSummary`. No swap of `OrgReleaseList` —
