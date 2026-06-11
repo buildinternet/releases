@@ -8,7 +8,7 @@ import {
 } from "@buildinternet/releases-core/schema";
 import { toFtsMatchQuery } from "@buildinternet/releases-core/fts";
 import { likeContains } from "@buildinternet/releases-core/sql-like";
-import { rankEntityCandidate, type EntityMatchFields } from "@releases/lib/entity-match";
+import { rankEntityCandidates, ENTITY_CANDIDATE_LIMIT } from "@releases/lib/entity-match";
 import { COVERAGE_COUNT_EXPR } from "@releases/core-internal/release-coverage-sql";
 import type { D1Db } from "../db.js";
 import type {
@@ -108,37 +108,12 @@ function sourceIdInList(sourceIds: string[]) {
 //
 // The entity helpers below candidate via SQL `LIKE %q%` (cheap, index-free,
 // and a strict superset of what we keep), then post-filter and rank in TS
-// through `rankEntityCandidate`. Substring-only candidates — "ai" hitting
-// React Em·ai·l or the `.ai` TLD — are dropped, and the survivors order by
-// match tier (exact > name prefix > name word > slug/domain > category)
-// instead of the alphabetical ORDER BY that used to stand in for relevance.
-
-/**
- * SQL-side candidate cap. Entity tables are small (hundreds of rows), so a
- * wide fetch keeps the TS post-filter from missing boundary matches that an
- * early `LIMIT ${limit}` would have truncated alphabetically.
- */
-const ENTITY_CANDIDATE_LIMIT = 400;
-
-/**
- * Rank LIKE candidates by `rankEntityCandidate` tier, drop substring-only
- * rows, tie-break alphabetically, and trim to the caller's limit.
- */
-function rankCandidates<T extends { name: string }>(
-  candidates: T[],
-  query: string,
-  limit: number,
-  toFields: (c: T) => EntityMatchFields,
-): T[] {
-  return candidates
-    .flatMap((c) => {
-      const tier = rankEntityCandidate(toFields(c), query);
-      return tier === null ? [] : [{ c, tier }];
-    })
-    .toSorted((a, b) => a.tier - b.tier || a.c.name.localeCompare(b.c.name))
-    .slice(0, limit)
-    .map((x) => x.c);
-}
+// through `rankEntityCandidates` (@releases/lib/entity-match — shared with the
+// MCP worker so both surfaces stay in lockstep). Substring-only candidates —
+// "ai" hitting React Em·ai·l or the `.ai` TLD — are dropped, and the survivors
+// order by match tier (exact > name prefix > name word > slug/domain >
+// category) instead of the alphabetical ORDER BY that used to stand in for
+// relevance.
 
 /** Split a `GROUP_CONCAT(domain)` column back into hostnames (commas can't
  * appear inside a hostname, so the default separator is unambiguous). */
@@ -174,7 +149,7 @@ export async function searchOrgs(
     GROUP BY o.id
     ORDER BY o.name LIMIT ${ENTITY_CANDIDATE_LIMIT}
   `);
-  return rankCandidates(candidates, query, limit, (c) => ({
+  return rankEntityCandidates(candidates, query, limit, (c) => ({
     name: c.name,
     slug: c.slug,
     domains: [c.domain, ...splitConcat(c.aliasDomains)],
@@ -216,7 +191,7 @@ export async function searchProducts(
     GROUP BY p.id
     ORDER BY p.name LIMIT ${ENTITY_CANDIDATE_LIMIT}
   `);
-  return rankCandidates(candidates, query, limit, (c) => ({
+  return rankEntityCandidates(candidates, query, limit, (c) => ({
     name: c.name,
     slug: c.slug,
     domains: splitConcat(c.aliasDomains),
@@ -255,7 +230,7 @@ export async function searchSources(
       ${sourceIdClause}
     ORDER BY s.name LIMIT ${ENTITY_CANDIDATE_LIMIT}
   `);
-  return rankCandidates(candidates, query, limit, (c) => ({
+  return rankEntityCandidates(candidates, query, limit, (c) => ({
     name: c.name,
     slug: c.slug,
     urls: [c.url],

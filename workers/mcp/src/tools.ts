@@ -27,6 +27,7 @@ import {
 import { nowIso, timeAgo, resolveDateParam } from "@buildinternet/releases-core/dates";
 import { toFtsMatchQuery } from "@buildinternet/releases-core/fts";
 import { likeContains } from "@buildinternet/releases-core/sql-like";
+import { rankEntityCandidates, ENTITY_CANDIDATE_LIMIT } from "@releases/lib/entity-match";
 import type { Kind } from "@buildinternet/releases-core/kinds";
 import { resolveCategoryInput } from "@releases/core-internal/category-alias";
 import { normalizeDomain } from "@buildinternet/releases-core/domain";
@@ -408,6 +409,14 @@ function sourceIdInList(sourceIds: string[]) {
     sourceIds.slice(0, 90).map((id) => sql`${id}`),
     sql`, `,
   )})`;
+}
+
+/** Split a `GROUP_CONCAT(domain)` column back into hostnames (commas can't
+ * appear inside a hostname, so the default separator is unambiguous). Mirrors
+ * the API worker's helper so the entity-match domain ranking sees the same
+ * alias set. */
+function splitConcat(value: string | null): string[] {
+  return value ? value.split(",") : [];
 }
 
 /**
@@ -1929,15 +1938,36 @@ export async function search(
             category: orgScope.category,
           },
         ])
-      : db.all(sql`
-          SELECT DISTINCT o.slug, o.name, o.domain, o.category
-          FROM organizations o
-          LEFT JOIN domain_aliases da ON da.org_id = o.id
-          WHERE (${likeContains(sql`o.name`, q)} OR ${likeContains(sql`o.slug`, q)}
-            OR ${likeContains(sql`o.domain`, q)} OR ${likeContains(sql`da.domain`, q)})
-            ${includeEmpty ? sql`` : sql`AND ${ORG_HAS_VISIBLE_RELEASE}`}
-          ORDER BY o.name LIMIT ${limit}
-        `)
+      : // Wide LIKE candidate fetch, then post-filter + rank in TS through
+        // `rankEntityCandidates` (shared with the API worker) so "ai" no longer
+        // surfaces every `.ai` TLD or mid-word hit, alphabetically. GROUP_CONCAT
+        // carries the alias domains through for domain-label ranking.
+        (async () => {
+          const candidates = await db.all<{
+            slug: string;
+            name: string;
+            domain: string | null;
+            category: string | null;
+            aliasDomains: string | null;
+          }>(sql`
+            SELECT o.slug, o.name, o.domain, o.category,
+                   GROUP_CONCAT(da.domain) as aliasDomains
+            FROM organizations o
+            LEFT JOIN domain_aliases da ON da.org_id = o.id
+            WHERE (${likeContains(sql`o.name`, q)} OR ${likeContains(sql`o.slug`, q)}
+              OR ${likeContains(sql`o.domain`, q)} OR ${likeContains(sql`da.domain`, q)}
+              OR ${likeContains(sql`o.category`, q)})
+              ${includeEmpty ? sql`` : sql`AND ${ORG_HAS_VISIBLE_RELEASE}`}
+            GROUP BY o.id
+            ORDER BY o.name LIMIT ${ENTITY_CANDIDATE_LIMIT}
+          `);
+          return rankEntityCandidates(candidates, q, limit, (c) => ({
+            name: c.name,
+            slug: c.slug,
+            domains: [c.domain, ...splitConcat(c.aliasDomains)],
+            categories: [c.category],
+          })).map(({ aliasDomains: _drop, ...org }) => org);
+        })()
     : Promise.resolve([]);
 
   const catalogP: Promise<SearchCatalogHit[]> = wanted.has("catalog")
@@ -1958,32 +1988,53 @@ export async function search(
           productSourceIds && productSourceIds.length > 0
             ? sql`AND s.id IN ${sourceIdInList(productSourceIds)}`
             : sql``;
+        // Both arms fetch a wide LIKE candidate window, then post-filter +
+        // rank in TS through `rankEntityCandidates` (shared with the API
+        // worker). Products rank on name/slug + alias domains (GROUP_CONCAT
+        // carries the aliases through); sources rank on name/slug + the raw
+        // URL (host labels + path segments, never the TLD).
         const [productRows, sourceRows] = await Promise.all([
-          db.all<SearchCatalogHit>(sql`
-            SELECT DISTINCT p.slug, p.name, o.slug as orgSlug, o.name as orgName,
-                   p.category, 'product' as entryType, p.kind
-            FROM products_active p
-            LEFT JOIN organizations o ON o.id = p.org_id
-            LEFT JOIN domain_aliases da ON da.product_id = p.id
-            WHERE (${likeContains(sql`p.name`, q)} OR ${likeContains(sql`p.slug`, q)} OR ${likeContains(sql`da.domain`, q)})
-              ${orgScope ? sql`AND p.org_id = ${orgScope.id}` : sql``}
-              ${params.kind ? sql`AND p.kind = ${params.kind}` : sql``}
-              ${productScopeClause}
-            ORDER BY p.name LIMIT ${limit}
-          `),
-          db.all<RawSourceHit>(sql`
-            SELECT s.slug, s.name, s.type, o.slug as orgSlug, o.name as orgName,
-                   p.slug as productSlug, p.name as productName, p.category as productCategory,
-                   s.kind as entityKind
-            FROM sources_visible s
-            LEFT JOIN products_active p ON p.id = s.product_id
-            LEFT JOIN organizations o ON o.id = s.org_id
-            WHERE (${likeContains(sql`s.name`, q)} OR ${likeContains(sql`s.slug`, q)} OR ${likeContains(sql`s.url`, q)})
-              ${orgScope ? sql`AND s.org_id = ${orgScope.id}` : sql``}
-              ${params.kind ? sql`AND s.kind = ${params.kind}` : sql``}
-              ${sourceScopeClause}
-            ORDER BY s.name LIMIT ${limit}
-          `),
+          (async () => {
+            const candidates = await db.all<SearchCatalogHit & { aliasDomains: string | null }>(sql`
+              SELECT p.slug, p.name, o.slug as orgSlug, o.name as orgName,
+                     p.category, 'product' as entryType, p.kind,
+                     GROUP_CONCAT(da.domain) as aliasDomains
+              FROM products_active p
+              LEFT JOIN organizations o ON o.id = p.org_id
+              LEFT JOIN domain_aliases da ON da.product_id = p.id
+              WHERE (${likeContains(sql`p.name`, q)} OR ${likeContains(sql`p.slug`, q)} OR ${likeContains(sql`da.domain`, q)})
+                ${orgScope ? sql`AND p.org_id = ${orgScope.id}` : sql``}
+                ${params.kind ? sql`AND p.kind = ${params.kind}` : sql``}
+                ${productScopeClause}
+              GROUP BY p.id
+              ORDER BY p.name LIMIT ${ENTITY_CANDIDATE_LIMIT}
+            `);
+            return rankEntityCandidates(candidates, q, limit, (c) => ({
+              name: c.name,
+              slug: c.slug,
+              domains: splitConcat(c.aliasDomains),
+            })).map(({ aliasDomains: _drop, ...hit }) => hit);
+          })(),
+          (async () => {
+            const candidates = await db.all<RawSourceHit & { url: string | null }>(sql`
+              SELECT s.slug, s.name, s.type, s.url, o.slug as orgSlug, o.name as orgName,
+                     p.slug as productSlug, p.name as productName, p.category as productCategory,
+                     s.kind as entityKind
+              FROM sources_visible s
+              LEFT JOIN products_active p ON p.id = s.product_id
+              LEFT JOIN organizations o ON o.id = s.org_id
+              WHERE (${likeContains(sql`s.name`, q)} OR ${likeContains(sql`s.slug`, q)} OR ${likeContains(sql`s.url`, q)})
+                ${orgScope ? sql`AND s.org_id = ${orgScope.id}` : sql``}
+                ${params.kind ? sql`AND s.kind = ${params.kind}` : sql``}
+                ${sourceScopeClause}
+              ORDER BY s.name LIMIT ${ENTITY_CANDIDATE_LIMIT}
+            `);
+            return rankEntityCandidates(candidates, q, limit, (c) => ({
+              name: c.name,
+              slug: c.slug,
+              urls: [c.url],
+            })).map(({ url: _drop, ...hit }) => hit);
+          })(),
         ]);
         return foldSourcesIntoCatalog(productRows, sourceRows);
       })()
