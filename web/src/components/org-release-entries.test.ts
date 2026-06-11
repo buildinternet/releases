@@ -1,6 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import type { OrgReleaseItem } from "@/lib/api";
-import { buildFeedEntries, entryDayKey, type FeedEntry } from "./org-release-entries";
+import {
+  buildFeedEntries,
+  entryDayKey,
+  rollupSummaryLine,
+  type FeedEntry,
+} from "./org-release-entries";
 
 // Minimal OrgReleaseItem fixture — buildFeedEntries only reads
 // source/product/version/title/publishedAt/url, so we cast a partial.
@@ -133,5 +138,77 @@ describe("buildFeedEntries", () => {
     // appstore keyed per-source, github keyed source — two independent rollups,
     // each landing at its newest member in published-desc order.
     expect(rollupLabels(entries)).toEqual(["slack-ios", "slack-sdk"]);
+  });
+});
+
+// A rollup member as `rollupSummaryLine` reads it: only the title-hierarchy
+// fields matter (delegated to deriveFeedTitle).
+type SummaryMember = {
+  title: string;
+  version: string | null;
+  titleShort?: string | null;
+  titleGenerated?: string | null;
+};
+function member(o: Partial<SummaryMember> & { version?: string | null }): SummaryMember {
+  return {
+    title: o.title ?? o.version ?? "",
+    version: o.version ?? null,
+    titleShort: o.titleShort ?? null,
+    titleGenerated: o.titleGenerated ?? null,
+  };
+}
+
+describe("rollupSummaryLine", () => {
+  test("joins distinct member headlines with a middot", () => {
+    const line = rollupSummaryLine([
+      member({ version: "v0.62.0", titleShort: "follows + feed verbs" }),
+      member({ version: "v0.61.0", titleShort: "leaner get/latest/list" }),
+    ]);
+    expect(line).toBe("follows + feed verbs · leaner get/latest/list");
+  });
+
+  test("prefers titleShort over a bare-version title", () => {
+    // title is just the version restated; titleShort carries the real gist.
+    const line = rollupSummaryLine([
+      member({ version: "v0.62.0", title: "v0.62.0", titleShort: "media in --json" }),
+    ]);
+    expect(line).toBe("media in --json");
+  });
+
+  test("skips members whose only label is a bare version", () => {
+    const line = rollupSummaryLine([
+      member({ version: "v0.62.0", titleShort: "admin webhooks" }),
+      member({ version: "v0.61.0", title: "v0.61.0" }), // no descriptive content
+    ]);
+    expect(line).toBe("admin webhooks");
+  });
+
+  test("dedupes identical headlines case-insensitively", () => {
+    const line = rollupSummaryLine([
+      member({ version: "v3.0.1", titleShort: "Bug fixes" }),
+      member({ version: "v3.0.0", titleShort: "bug fixes" }),
+    ]);
+    expect(line).toBe("Bug fixes");
+  });
+
+  test("caps at the limit and appends an ellipsis when there are more", () => {
+    const line = rollupSummaryLine(
+      [
+        member({ version: "v4", titleShort: "a" }),
+        member({ version: "v3", titleShort: "b" }),
+        member({ version: "v2", titleShort: "c" }),
+        member({ version: "v1", titleShort: "d" }),
+      ],
+      3,
+    );
+    expect(line).toBe("a · b · c …");
+  });
+
+  test("returns null when no member has anything more descriptive than its version", () => {
+    const line = rollupSummaryLine([
+      member({ version: "v0.62.0", title: "v0.62.0" }),
+      member({ version: "v0.61.0", title: "0.61.0" }),
+    ]);
+    expect(line).toBeNull();
   });
 });

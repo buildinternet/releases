@@ -1,0 +1,141 @@
+# CLI changelog on `/updates` — design
+
+**Date:** 2026-06-11
+**Status:** approved, ready for implementation plan
+**Related:** [self-published changelog design](2026-06-10-self-published-changelog-design.md), self-changelog Phase 2 (#1567/#1572), SDK version-tag rollup (#1541)
+
+## Problem
+
+Yesterday we shipped the project's own product changelog on `/updates` — a date-keyed
+stream of daily `rollup` releases for the web app / platform, published from a running
+`CHANGELOG.md` into the `releases-sh` org's push-only `agent` source `product-changelog`.
+
+That covered the platform but not the **CLI**, which is a different shape:
+
+- Published to npm as `@buildinternet/releases` (currently **v0.62.0**), versioned with
+  **changesets**; every version cuts a git tag + a **GitHub Release** with already-written,
+  human-readable notes (changeset summaries, grouped Minor/Patch).
+- Ships **fast** — sometimes 2–3 versions in a single day.
+- Genuinely a **separate product** from the web app/registry, living out-of-tree in
+  `buildinternet/releases-cli`.
+
+So the core tension is **version-keyed (CLI) vs. date-keyed (platform)**, and **separate
+product vs. one unified stream**. We want the CLI's release notes on `/updates` without
+cluttering the day with one row per version when several ship the same day.
+
+## Decisions (locked during brainstorm)
+
+1. **Data:** The CLI becomes a real **GitHub source** under a new **"CLI" product** in the
+   `releases-sh` org — one release row per version, auto-ingested from GitHub Releases.
+2. **Layout:** One unified `/updates` **day spine**. Each day shows the platform rollup and,
+   when the CLI shipped, a single **combined CLI card** with `vX.Y` version pills. Same-day
+   versions combine into one card; each version stays a real, linkable release row.
+3. **Voice:** Per-version friendly `titleShort` summaries (already produced by the GitHub
+   ingest summarizer) joined into the CLI card's line. Raw changeset notes stay on the
+   per-version detail page.
+
+## Why this shape
+
+The CLI already produces excellent release notes via changesets. The GitHub fetch adapter
+ingests GitHub Releases **with their bodies** (`packages/adapters/src/github.ts`:
+`tag_name` → `version`, `body` → `content`, dedup on the release `html_url`), fetches
+**immediately on source-create with no managed-agent cost**, and the ingest pipeline runs
+the Haiku/Gemini summarizer so each version gets a `titleShort`/`summary` for free. The
+version-keyed GitHub path avoids the invented-version quirk that hit the date-rollups
+(that quirk only appears on version-less rollups). Result: ~zero ongoing maintenance, and
+the interesting work is purely the `/updates` presentation.
+
+## Architecture
+
+### 1. Data model — one-time seed, no schema change
+
+- `POST /v1/products` → product **"CLI"** under `releases-sh`. Slug `cli` (confirmed not in
+  `packages/core/src/reserved-slugs.ts`; fallback `releases-cli`). Set `category`/`kind` so
+  it reads as a developer tool. `url: https://github.com/buildinternet/releases-cli`.
+- `POST /v1/sources` → **GitHub** source, `url:
+https://github.com/buildinternet/releases-cli`, `productSlug: cli`, `type: github`. The
+  existing `product-changelog` source keeps `isPrimary`. Creation auto-fetches all ~62
+  releases; each lands with `version` = tag, `content` = changeset body, and a
+  summarizer-generated `titleShort`/`summary`.
+- **Verify** the generated `titleShort`s read cleanly; spot-fix any outliers via
+  `generate-content` regenerate.
+
+The seed is reversible (delete source + product; releases cascade/hard-delete) and
+idempotent on re-fetch (dedup on `(source_id, url)`).
+
+### 2. Presentation — all in `web/`
+
+> **Implementation note (2026-06-11):** the day spine and the same-day version-pill rollup
+> the brainstorm approved **already exist**. `buildFeedEntries` (`web/src/components/
+org-release-entries.ts`) groups the org feed by calendar day and collapses same-day
+> GitHub-tag clusters per `product ?? source` (via `rollupTags`/`isTag`), and
+> `ReleaseRollupRow` (`org-release-list.tsx`) renders the collapsed card — caret + product
+> label + `· N releases` + `v0.60 v0.61 v0.62` pills, expandable to per-version rows. The
+> platform daily rollup (agent source, not a tag) stays a flat one-per-day row. So adding
+> the CLI as a GitHub source under a "CLI" product makes `/updates` render the approved
+> layout with **no new grouping component**. The only presentation delta is the per-version
+> _voice_ (decision 3): the collapsed card showed pills but no prose. The build reduced to
+> the bullets below.
+
+What shipped (`web/`):
+
+- `rollupSummaryLine(releases, limit = 3)` — pure helper in `org-release-entries.ts`
+  (unit-tested in `org-release-entries.test.ts`). Joins each member's descriptive headline
+  (`titleShort → titleGenerated → non-bare title`, via the shared `deriveFeedTitle`),
+  deduped case-insensitively, capped with an ellipsis. Returns `null` when no member is more
+  descriptive than its bare version.
+- `OrgReleaseList` gains an opt-in `showRollupSummary` prop, threaded to `ReleaseRollupRow`
+  under the same name. When set and the card is collapsed, it renders the joined line as a
+  muted, two-line-clamped subtitle under the pills. **Off by default** — generic
+  org/monorepo rollups stay terse; only `/updates` opts in.
+- `web/src/app/updates/page.tsx` passes `showRollupSummary`. No swap of `OrgReleaseList` —
+  the existing component already day-groups, rolls up, and load-mores; we just turned on the
+  summary line.
+
+The discriminators (`source.slug === "product-changelog"` for platform; `isTag` /
+`product.slug === "cli"` for CLI) are implicit in the existing rollup-eligibility logic
+(`isRollupEligible = isTag || isAppStore`), so no explicit branching was needed.
+
+### 3. What we get for free
+
+Because the CLI is a real product+source, it also gains its own product page
+(`/releases-sh/cli` route family), Atom feed inclusion, search indexing, and
+**follows/digests** — where the same `rollupTags` pill treatment (PR #1541) already
+applies. No extra work for any of those.
+
+## Known effects to accept (out of v1 scope to change)
+
+- The generic `/releases-sh/releases` org page and `/releases-sh.atom` feed will now
+  include CLI versions interleaved with platform rollups. That's the honest full feed;
+  `/updates` is the curated face. Accepted.
+- The org **overview** briefing is generated from recent releases, so it'll begin
+  mentioning CLI shipping. Accepted for v1; scoping the overview to the changelog source is
+  a later option if it dilutes the platform story.
+- **Rollout ordering:** the seed makes CLI versions appear on the _existing_ `/updates`
+  (ungrouped) the moment the source exists. So **deploy the grouping code first, seed
+  second** — otherwise `/updates` briefly shows flat, ungrouped CLI rows.
+
+## Testing
+
+- Pure day-spine/rollup helper: bun unit tests over fixture feeds — same-day multi-version,
+  single-version day, platform-only day, CLI-only day, empty feed, ordering.
+- Component render: the CLI card renders pills + joined line; pills link to detail.
+- Visual check on the page against seeded (or fixture) data before go-live.
+
+## Build order (as built)
+
+1. ~~Pure grouping/rollup helper~~ — already exists (`buildFeedEntries`/`rollupTags`).
+2. `rollupSummaryLine` pure helper + tests (TDD). ✅
+3. Opt-in `showRollupSummary` prop on `OrgReleaseList` → `ReleaseRollupRow`; `/updates`
+   opts in. ✅
+4. Tests + tsc + lint green. ✅ Visual check deferred to rollout (needs seeded data).
+5. **Rollout:** deploy web → seed CLI product + GitHub source → verify per-version
+   `titleShort`s + the grouped `/updates` page.
+
+## Out of scope
+
+- Dedicated `/updates/cli` page or bespoke CLI pipeline (rejected: re-authors notes the
+  GitHub Release already gives us).
+- Folding CLI versions into the daily draft engine / cross-repo reach (rejected: loses
+  per-version structure).
+- Overview scoping, per-version inline expand (links to detail suffice for v1).

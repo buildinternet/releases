@@ -79,6 +79,7 @@ export default async function UpdatesPage() {
             multipleSourcesExist={org.sources.length > 1}
             availableSourceTypes={Array.from(new Set(org.sources.map((s) => s.type)))}
             orgAvatarUrl={orgAvatarUrl}
+            showRollupSummary
           />
         </div>
       </div>
