@@ -30,6 +30,9 @@ export interface ChangelogSection {
 
 export function isoToTitle(dateIso: string): string {
   const [y, m, d] = dateIso.split("-").map(Number);
+  if (!MONTHS[m - 1] || Number.isNaN(d) || Number.isNaN(y)) {
+    throw new Error(`Invalid ISO date: ${dateIso}`);
+  }
   return `${MONTHS[m - 1]} ${d}, ${y}`;
 }
 

@@ -14,6 +14,10 @@ describe("date <-> title", () => {
     expect(titleToIso("Unreleased")).toBeNull();
     expect(titleToIso("Notes")).toBeNull();
   });
+  test("isoToTitle throws on malformed input", () => {
+    expect(() => isoToTitle("")).toThrow();
+    expect(() => isoToTitle("2026-13-40")).toThrow();
+  });
 });
 
 describe("parseChangelog", () => {
@@ -46,5 +50,9 @@ preamble line
   test("empty file → no sections", () => {
     expect(parseChangelog("")).toEqual([]);
     expect(parseChangelog("# Changelog\n\njust a preamble")).toEqual([]);
+  });
+  test("deeper (###) headings stay inside the section body", () => {
+    const s = parseChangelog("## June 1, 2026\n\n### Sub\n- x");
+    expect(s[0].body).toBe("### Sub\n- x");
   });
 });
