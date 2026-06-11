@@ -255,6 +255,7 @@ export {
   CategorySchema,
   NoticeSchema,
 } from "./schemas/shared.js";
+export { SiteNoticeSchema, SiteNoticeResponseSchema } from "./schemas/site-notice.js";
 export {
   OrgListItemSchema,
   OrgListResponseSchema,
