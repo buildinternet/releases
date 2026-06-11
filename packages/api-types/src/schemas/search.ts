@@ -8,6 +8,7 @@ import {
 } from "./shared.js";
 import { SourceTypeSchema } from "./sources.js";
 import { LookupStatusSchema } from "./lookups.js";
+import { CollectionMemberSchema } from "./collections.js";
 
 /**
  * Org hit on the unified `/v1/search` response. The list is built either
@@ -130,6 +131,14 @@ export const SearchCollectionHitSchema = z.object({
   score: z.number().optional(),
   /** Result-set org slugs that triggered this rollup. Always present on `via=member`. */
   matchedOrgSlugs: z.array(z.string()).optional(),
+  /**
+   * A small org preview (capped at 3) for an inline avatar facepile on the
+   * search card, mirroring the collections list page. Org-kind only — search's
+   * `memberCount` counts orgs, so the facepile and its "+N more" stay
+   * consistent. Attached after hit merge; optional on the wire so older workers
+   * mid-rollout don't trip the schema.
+   */
+  previewMembers: z.array(CollectionMemberSchema).optional(),
 });
 
 /**

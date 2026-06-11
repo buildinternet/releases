@@ -13,6 +13,7 @@ import type {
   SearchChunkHit,
 } from "@/lib/api";
 import { collapsedMarkdownComponents } from "./markdown-components";
+import { MemberFacepile } from "@/components/member-facepile";
 
 /**
  * In-body heading overrides for search previews. The feed card already
@@ -697,11 +698,22 @@ export function SearchResults({
                       c.description ? <Highlight text={c.description} tokens={tokens} /> : null
                     }
                     footer={
-                      c.via === "member" && c.matchedOrgSlugs && c.matchedOrgSlugs.length > 0 ? (
-                        <span className="mt-1 block text-[11px] text-stone-400 dark:text-stone-500">
-                          Includes {c.matchedOrgSlugs.join(", ")}
-                        </span>
-                      ) : undefined
+                      <>
+                        {c.previewMembers && c.previewMembers.length > 0 && (
+                          <MemberFacepile
+                            members={c.previewMembers}
+                            totalCount={c.memberCount}
+                            className="mt-1.5"
+                          />
+                        )}
+                        {c.via === "member" &&
+                          c.matchedOrgSlugs &&
+                          c.matchedOrgSlugs.length > 0 && (
+                            <span className="mt-1 block text-[11px] text-stone-400 dark:text-stone-500">
+                              Includes {c.matchedOrgSlugs.join(", ")}
+                            </span>
+                          )}
+                      </>
                     }
                   />
                 ))}

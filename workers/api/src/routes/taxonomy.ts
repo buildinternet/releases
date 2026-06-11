@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { describeRoute, resolver } from "hono-openapi";
 import { hideInProduction } from "../openapi.js";
-import { eq, count, isNotNull, inArray } from "drizzle-orm";
+import { eq, count, isNotNull, inArray, sql } from "drizzle-orm";
 import { createDb } from "../db.js";
 import {
   organizationsPublic,
@@ -35,6 +35,7 @@ import type {
   CategoryDetail,
   CategoryListItem,
   CategoryReleaseItem,
+  CollectionMember,
   TagDetail,
   UpdateCategoryRequest,
 } from "@buildinternet/releases-api-types";
@@ -106,6 +107,82 @@ function resolveCategoryDisplay(slug: string, meta: CategoryMetaRow | undefined)
   };
 }
 
+// Avatar facepile preview on `GET /v1/categories`. Cap shown on the wire; fetch
+// a couple extra candidates per bucket so the org/product dedupe below still has
+// `PREVIEW_LIMIT` to work with.
+const PREVIEW_LIMIT = 3;
+const PREVIEW_FETCH = 6;
+
+type OrgPreviewRow = {
+  category: string;
+  slug: string;
+  name: string;
+  domain: string | null;
+  avatarUrl: string | null;
+};
+type ProductPreviewRow = {
+  category: string;
+  productSlug: string;
+  productName: string;
+  productDescription: string | null;
+  orgSlug: string;
+  orgName: string;
+  orgDomain: string | null;
+  orgAvatarUrl: string | null;
+};
+
+const groupBy = <T extends { category: string }>(rows: T[]): Map<string, T[]> => {
+  const m = new Map<string, T[]>();
+  for (const r of rows) {
+    const arr = m.get(r.category);
+    if (arr) arr.push(r);
+    else m.set(r.category, [r]);
+  }
+  return m;
+};
+
+// Build the mixed-kind facepile preview for one category: orgs first (they carry
+// the avatar), then products fill any remaining slots, skipping products whose
+// parent org is already shown so the same logo never repeats. `githubHandle` is
+// null — the same trade-off the category *detail* page makes — so the preview
+// avoids a per-row `org_accounts` lookup; OrgAvatar falls back to a monogram.
+function buildCategoryPreview(
+  orgs: OrgPreviewRow[],
+  products: ProductPreviewRow[],
+): CollectionMember[] {
+  const preview: CollectionMember[] = orgs.slice(0, PREVIEW_LIMIT).map((o) => ({
+    kind: "org",
+    slug: o.slug,
+    name: o.name,
+    domain: o.domain,
+    avatarUrl: o.avatarUrl,
+    githubHandle: null,
+    description: null,
+  }));
+  if (preview.length < PREVIEW_LIMIT) {
+    const shownOrgSlugs = new Set(orgs.map((o) => o.slug));
+    for (const p of products) {
+      if (preview.length >= PREVIEW_LIMIT) break;
+      if (shownOrgSlugs.has(p.orgSlug)) continue;
+      shownOrgSlugs.add(p.orgSlug);
+      preview.push({
+        kind: "product",
+        slug: p.productSlug,
+        name: p.productName,
+        description: p.productDescription,
+        org: {
+          slug: p.orgSlug,
+          name: p.orgName,
+          domain: p.orgDomain,
+          avatarUrl: p.orgAvatarUrl,
+          githubHandle: null,
+        },
+      });
+    }
+  }
+  return preview;
+}
+
 // Empty categories are returned with zero counts so the response advertises
 // the full taxonomy — including buckets that don't exist in the DB yet.
 taxonomyRoutes.get(
@@ -125,7 +202,7 @@ taxonomyRoutes.get(
   async (c) => {
     const db = createDb(c.env.DB);
 
-    const [orgRows, productRows, metaRows] = await Promise.all([
+    const [orgRows, productRows, metaRows, orgPreviewRows, productPreviewRows] = await Promise.all([
       db
         .select({ category: organizationsPublic.category, count: count() })
         .from(organizationsPublic)
@@ -146,11 +223,41 @@ taxonomyRoutes.get(
         })
         .from(categories)
         .where(inArray(categories.slug, [...CATEGORIES])),
+      // Top-N orgs/products per category for the facepile preview. Windowed so
+      // the scan returns ~PREVIEW_FETCH rows per bucket instead of the whole
+      // catalog; avatar-bearing rows sort first so the preview shows logos.
+      db.all<OrgPreviewRow>(sql`
+        SELECT category, slug, name, domain, avatarUrl FROM (
+          SELECT op.category AS category, op.slug AS slug, op.name AS name,
+                 op.domain AS domain, op.avatar_url AS avatarUrl,
+                 ROW_NUMBER() OVER (
+                   PARTITION BY op.category ORDER BY (op.avatar_url IS NULL), op.name
+                 ) AS rn
+          FROM ${organizationsPublic} op
+          WHERE op.category IS NOT NULL
+        ) WHERE rn <= ${PREVIEW_FETCH}
+      `),
+      db.all<ProductPreviewRow>(sql`
+        SELECT category, productSlug, productName, productDescription,
+               orgSlug, orgName, orgDomain, orgAvatarUrl FROM (
+          SELECT pa.category AS category, pa.slug AS productSlug, pa.name AS productName,
+                 pa.description AS productDescription, op.slug AS orgSlug, op.name AS orgName,
+                 op.domain AS orgDomain, op.avatar_url AS orgAvatarUrl,
+                 ROW_NUMBER() OVER (
+                   PARTITION BY pa.category ORDER BY (op.avatar_url IS NULL), pa.name
+                 ) AS rn
+          FROM ${productsActive} pa
+          INNER JOIN ${organizationsPublic} op ON op.id = pa.org_id
+          WHERE pa.category IS NOT NULL
+        ) WHERE rn <= ${PREVIEW_FETCH}
+      `),
     ]);
 
     const orgCounts = toCategoryCountMap(orgRows);
     const productCounts = toCategoryCountMap(productRows);
     const metaMap = toMetaMap(metaRows.map(toMetaRow));
+    const orgPreviewByCat = groupBy(orgPreviewRows);
+    const productPreviewByCat = groupBy(productPreviewRows);
 
     const body: CategoryListItem[] = CATEGORIES.map((slug) => {
       const display = resolveCategoryDisplay(slug, metaMap.get(slug));
@@ -161,6 +268,10 @@ taxonomyRoutes.get(
         aliases: display.aliases,
         orgCount: orgCounts.get(slug) ?? 0,
         productCount: productCounts.get(slug) ?? 0,
+        previewMembers: buildCategoryPreview(
+          orgPreviewByCat.get(slug) ?? [],
+          productPreviewByCat.get(slug) ?? [],
+        ),
       };
     });
     return c.json(body);

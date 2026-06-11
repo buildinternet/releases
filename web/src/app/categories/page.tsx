@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { api, ApiSetupError, type CategoryListItem } from "@/lib/api";
 import { Header } from "@/components/header";
+import { MemberFacepile } from "@/components/member-facepile";
 import { PageHeader } from "@/components/page-header";
 import { SetupMessage } from "@/components/setup-message";
 
@@ -53,44 +54,30 @@ export default async function CategoriesListPage() {
         <ul className="divide-y divide-stone-200 dark:divide-stone-800">
           {categories.map((c) => (
             <li key={c.slug} className="py-4">
-              <Link
-                href={`/categories/${c.slug}`}
-                className="group flex items-start justify-between gap-4"
-              >
-                <div className="min-w-0">
-                  <div className="text-base font-semibold text-stone-900 dark:text-stone-100 group-hover:text-stone-600 dark:group-hover:text-stone-300">
-                    {c.name}
-                  </div>
-                  <div className="mt-0.5 text-sm text-stone-500 dark:text-stone-400">
-                    {c.description ?? (
-                      <>
-                        Releases from orgs and products bucketed as{" "}
-                        <span className="font-medium">{c.name}</span>.
-                      </>
-                    )}
-                  </div>
+              <Link href={`/categories/${c.slug}`} className="group block min-w-0">
+                <div className="text-base font-semibold text-stone-900 dark:text-stone-100 group-hover:text-stone-600 dark:group-hover:text-stone-300">
+                  {c.name}
                 </div>
-                <CountBadges orgCount={c.orgCount} productCount={c.productCount} />
+                {/* Byline only when a curator set a custom description — the old
+                    "Releases from orgs and products bucketed as X" boilerplate
+                    added nothing. The page-level <meta> description (set above)
+                    keeps a generic fallback so the route is never blank for SEO. */}
+                {c.description && (
+                  <div className="mt-0.5 text-sm text-stone-500 dark:text-stone-400">
+                    {c.description}
+                  </div>
+                )}
+                {c.previewMembers && c.previewMembers.length > 0 && (
+                  <MemberFacepile
+                    members={c.previewMembers}
+                    totalCount={c.orgCount + c.productCount}
+                  />
+                )}
               </Link>
             </li>
           ))}
         </ul>
       </div>
-    </div>
-  );
-}
-
-function CountBadges({ orgCount, productCount }: { orgCount: number; productCount: number }) {
-  return (
-    <div className="shrink-0 flex flex-col items-end gap-0.5 text-[12px] tabular-nums text-stone-400 dark:text-stone-500">
-      <span>
-        {orgCount} {orgCount === 1 ? "org" : "orgs"}
-      </span>
-      {productCount > 0 && (
-        <span>
-          {productCount} {productCount === 1 ? "product" : "products"}
-        </span>
-      )}
     </div>
   );
 }

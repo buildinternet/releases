@@ -1,4 +1,4 @@
-import { asc, eq, or, sql } from "drizzle-orm";
+import { asc, eq, inArray, or, sql } from "drizzle-orm";
 import {
   domainAliases,
   organizationsActive,
@@ -16,6 +16,7 @@ import type {
   SearchCatalogHit,
   RawSourceHit,
   SearchCollectionHit,
+  CollectionMember,
 } from "@buildinternet/releases-api-types";
 
 /**
@@ -441,6 +442,63 @@ export async function findCollectionsByMemberOrgs(
     }
   }
   return [...byCollection.values()].slice(0, limit);
+}
+
+/**
+ * Attach a small org-avatar preview to already-merged collection hits so the
+ * search card can render the same facepile as the collections list page. Runs
+ * once over the final hit set (after `mergeCollectionHits`) rather than threading
+ * previews through each origin query. Org-kind only and capped at 3 — search's
+ * `memberCount` counts org members, so the facepile's "+N more" stays consistent.
+ * `githubHandle` is null (avatar falls back to the stored URL / a monogram),
+ * matching the category preview's trade-off.
+ */
+export async function attachCollectionPreviews(
+  db: D1Db,
+  hits: SearchCollectionHit[],
+): Promise<SearchCollectionHit[]> {
+  const COLLECTION_PREVIEW_LIMIT = 3;
+  if (hits.length === 0) return hits;
+  const rows = await db
+    .select({
+      collectionSlug: collections.slug,
+      slug: organizationsPublic.slug,
+      name: organizationsPublic.name,
+      domain: organizationsPublic.domain,
+      avatarUrl: organizationsPublic.avatarUrl,
+    })
+    .from(collectionMembers)
+    .innerJoin(collections, eq(collections.id, collectionMembers.collectionId))
+    .innerJoin(organizationsPublic, eq(organizationsPublic.id, collectionMembers.orgId))
+    .where(
+      inArray(
+        collections.slug,
+        hits.map((h) => h.slug),
+      ),
+    )
+    .orderBy(collectionMembers.position, organizationsPublic.name);
+
+  const previewBySlug = new Map<string, CollectionMember[]>();
+  for (const r of rows) {
+    const arr = previewBySlug.get(r.collectionSlug) ?? [];
+    if (arr.length < COLLECTION_PREVIEW_LIMIT) {
+      arr.push({
+        kind: "org",
+        slug: r.slug,
+        name: r.name,
+        domain: r.domain,
+        avatarUrl: r.avatarUrl,
+        githubHandle: null,
+        description: null,
+      });
+    }
+    previewBySlug.set(r.collectionSlug, arr);
+  }
+
+  return hits.map((h) => {
+    const previewMembers = previewBySlug.get(h.slug);
+    return previewMembers && previewMembers.length > 0 ? { ...h, previewMembers } : h;
+  });
 }
 
 /**
