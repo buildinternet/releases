@@ -5,8 +5,10 @@ import { SearchBar } from "./search-bar";
 import { SearchTrigger } from "./search-trigger";
 import { AccountNav } from "./account-nav";
 import { GITHUB_REPO_URL, visibleNavItems } from "./nav-items";
+import { isLocalAdminEnabled } from "@/lib/local-admin-flag";
 
 export function Header() {
+  const adminEnabled = isLocalAdminEnabled();
   return (
     <header
       className="relative z-40 border-b border-stone-200 dark:border-stone-800 px-6 py-4 flex items-center gap-4 sm:gap-6"
@@ -51,7 +53,7 @@ export function Header() {
         <SearchBar className="hidden lg:block w-full max-w-[420px]" autoFocus={false} />
         <SearchTrigger className="hidden sm:flex lg:hidden w-fit" />
       </div>
-      <MobileNav />
+      <MobileNav adminEnabled={adminEnabled} />
       <nav className="hidden sm:flex shrink-0 items-center gap-5 text-sm text-stone-500 dark:text-stone-400">
         {visibleNavItems().map((item) => (
           <Link
@@ -74,7 +76,7 @@ export function Header() {
           </svg>
         </a>
         <ThemeToggle />
-        <AccountNav />
+        <AccountNav adminEnabled={adminEnabled} />
       </nav>
     </header>
   );
