@@ -36,6 +36,7 @@ const nextConfig: NextConfig = {
   transpilePackages: [
     "@buildinternet/releases-core",
     "@buildinternet/releases-api-types",
+    "@releases/lib",
     "@releases/rendering",
   ],
   images: {

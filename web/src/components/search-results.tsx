@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useMemo, Fragment } from "react";
+import { useCallback, useMemo, useState, Fragment } from "react";
 import Link from "next/link";
+import { wordMatch } from "@releases/lib/entity-match";
 import ReactMarkdown from "react-markdown";
 import { remarkPlugins } from "@/lib/markdown-plugins";
 import { categoryDisplayName } from "@buildinternet/releases-core/categories";
@@ -60,15 +61,22 @@ import { Highlight, rehypeHighlightTokens, tokenizeQuery } from "./highlight";
 import { formatDate } from "@/lib/formatters";
 import { productPath, sourcePath, sourceOrProductPath } from "@/lib/links";
 
-type SearchFilter = "all" | "orgs" | "products" | "collections" | "releases";
+import { SEARCH_FILTERS as FILTERS, type SearchFilter } from "@/lib/search-filter";
 
-const FILTERS: { value: SearchFilter; label: string }[] = [
-  { value: "all", label: "All" },
-  { value: "orgs", label: "Organizations" },
-  { value: "products", label: "Products" },
-  { value: "collections", label: "Collections" },
-  { value: "releases", label: "Releases" },
-];
+export type { SearchFilter };
+
+/**
+ * Section caps for the "All" tab. Tier 1's server-side ranking made "first
+ * hit = best hit" trustworthy, so the All view shows only the top few of
+ * each entity section with a "Show all N →" link into the dedicated tab —
+ * instead of dumping every section in full (19 orgs before the first
+ * release, ~5 screens of scroll for "ai").
+ */
+const ALL_VIEW_CAPS: Record<"orgs" | "products" | "collections", number> = {
+  orgs: 4,
+  products: 3,
+  collections: 3,
+};
 
 /**
  * A single item in the interleaved "Releases" section — either a full
@@ -309,7 +317,7 @@ function ResultCard({
         )}
       </div>
       <div className="flex gap-3">
-        <div className="flex-1 min-w-0 max-h-[4.5em] overflow-hidden">{children}</div>
+        {children && <div className="flex-1 min-w-0 max-h-[4.5em] overflow-hidden">{children}</div>}
         {thumbnail && (
           // Video hits overlay a play badge so the still reads as playable,
           // matching the feed video row. The card itself links to the release
@@ -331,8 +339,10 @@ function ResultCard({
 }
 
 function ReleaseResultCard({ hit, tokens }: { hit: SearchReleaseHit; tokens: string[] }) {
+  // `||` (not `??`) so an empty content string still falls back to the
+  // summary — a card with a title but no snippet reads as broken.
   const body = useMemo(
-    () => stripLeadingTitle(hit.content ?? hit.summary, hit.title),
+    () => stripLeadingTitle(hit.content || hit.summary, hit.title),
     [hit.content, hit.summary, hit.title],
   );
   const thumbnail = useMemo(() => {
@@ -349,7 +359,10 @@ function ReleaseResultCard({ hit, tokens }: { hit: SearchReleaseHit; tokens: str
   // reads as a lookup.
   const appStore = appRowInfoFromWire(hit.appStore, hit.sourceName);
   const video = videoRowInfoFromWire(hit.video);
-  const heading = appStore ? appStore.appName : video ? hit.title : hit.version || hit.title;
+  // Rollups are usually date-titled ("June 9, 2026"), which reads as a
+  // duplicate of the byline date — prefer the generated short title there.
+  const baseTitle = (hit.type === "rollup" && hit.titleShort) || hit.title;
+  const heading = appStore ? appStore.appName : video ? hit.title : hit.version || baseTitle;
   const rehypePlugins = useMarkdownHighlight(tokens);
 
   return (
@@ -370,15 +383,17 @@ function ReleaseResultCard({ hit, tokens }: { hit: SearchReleaseHit; tokens: str
       video={video}
       version={hit.version}
     >
-      <div className={resultMarkdownClasses}>
-        <ReactMarkdown
-          remarkPlugins={remarkPlugins}
-          rehypePlugins={rehypePlugins}
-          components={searchPreviewComponents}
-        >
-          {body}
-        </ReactMarkdown>
-      </div>
+      {body.trim() ? (
+        <div className={resultMarkdownClasses}>
+          <ReactMarkdown
+            remarkPlugins={remarkPlugins}
+            rehypePlugins={rehypePlugins}
+            components={searchPreviewComponents}
+          >
+            {body}
+          </ReactMarkdown>
+        </div>
+      ) : null}
     </ResultCard>
   );
 }
@@ -515,14 +530,49 @@ function EntityHitRow({
   );
 }
 
+/** "Show all N →" footer that jumps from a capped All-view section into the
+ *  entity's dedicated tab. */
+function ShowAllLink({
+  count,
+  label,
+  onClick,
+}: {
+  count: number;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className="mt-2 text-xs text-stone-500 hover:text-stone-700 dark:text-stone-400 dark:hover:text-stone-300"
+    >
+      Show all {count} {label} →
+    </button>
+  );
+}
+
 export function SearchResults({
   query,
   results,
+  initialFilter = "all",
 }: {
   query?: string;
   results: UnifiedSearchResponse | null;
+  initialFilter?: SearchFilter;
 }) {
-  const [filter, setFilter] = useState<SearchFilter>("all");
+  const [filter, setFilterState] = useState<SearchFilter>(initialFilter);
+
+  // Tabs deep-link: `?filter=releases` survives reload/share. Written with
+  // replaceState (same pattern as the provider's query sync) so switching
+  // tabs never triggers a Next navigation or RSC fetch.
+  const setFilter = useCallback((value: SearchFilter) => {
+    setFilterState(value);
+    const params = new URLSearchParams(window.location.search);
+    if (value === "all") params.delete("filter");
+    else params.set("filter", value);
+    const qs = params.toString();
+    window.history.replaceState(window.history.state, "", qs ? `/search?${qs}` : "/search");
+  }, []);
 
   const tokens = useMemo(() => tokenizeQuery(query), [query]);
 
@@ -558,23 +608,58 @@ export function SearchResults({
       (showCollections && collectionsHits.length > 0) ||
       (showReleases && rankedHits.length > 0));
 
+  const counts: Record<Exclude<SearchFilter, "all">, number> = {
+    orgs: results?.orgs.length ?? 0,
+    products: results?.catalog.length ?? 0,
+    collections: collectionsHits.length,
+    releases: rankedHits.length,
+  };
+
+  // Entity intent: when the query reads as a lookup of a specific org or
+  // product (its name matches exactly or as a prefix), the entity sections
+  // lead and releases follow; for everything else releases lead. Detected
+  // client-side against the top-ranked hit — Tier 1's server ranking
+  // guarantees the best entity match arrives first, and tier numbers are
+  // deliberately not on the wire.
+  const entityIntent = useMemo(() => {
+    const q = (query ?? "").trim();
+    if (!q || !results) return false;
+    const strong = (kind: ReturnType<typeof wordMatch>) => kind === "exact" || kind === "prefix";
+    return (
+      strong(wordMatch(results.orgs[0]?.name, q)) || strong(wordMatch(results.catalog[0]?.name, q))
+    );
+  }, [query, results]);
+
+  // The "All" tab caps each entity section to its top hits.
+  const capped = filter === "all";
+
   return (
     <>
       {results && (
         <div className="flex gap-1.5 flex-wrap mt-3">
-          {FILTERS.map((f) => (
-            <button
-              key={f.value}
-              onClick={() => setFilter(f.value)}
-              className={`px-2.5 py-1 text-xs rounded-md transition-colors ${
-                filter === f.value
-                  ? "bg-stone-800 text-stone-100 dark:bg-stone-200 dark:text-stone-900"
-                  : "text-stone-500 hover:text-stone-700 dark:hover:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800"
-              }`}
-            >
-              {f.label}
-            </button>
-          ))}
+          {FILTERS.map((f) => {
+            const count = f.value === "all" ? null : counts[f.value];
+            const empty = count === 0;
+            return (
+              <button
+                key={f.value}
+                onClick={() => setFilter(f.value)}
+                disabled={empty}
+                className={`px-2.5 py-1 text-xs rounded-md transition-colors ${
+                  filter === f.value
+                    ? "bg-stone-800 text-stone-100 dark:bg-stone-200 dark:text-stone-900"
+                    : empty
+                      ? "text-stone-300 dark:text-stone-700 cursor-default"
+                      : "text-stone-500 hover:text-stone-700 dark:hover:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800"
+                }`}
+              >
+                {f.label}
+                {count !== null && count > 0 && (
+                  <span className="ml-1 tabular-nums opacity-60">{count}</span>
+                )}
+              </button>
+            );
+          })}
         </div>
       )}
 
@@ -591,167 +676,230 @@ export function SearchResults({
       )}
 
       {results && filteredHasResults && (
-        <div className="mt-6 space-y-8">
-          {/* Orgs */}
-          {showOrgs && results.orgs.length > 0 && (
-            <section>
-              <h2 className="text-xs font-medium uppercase tracking-wider text-stone-400 mb-3">
-                Organizations
-              </h2>
-              <div className="space-y-2">
-                {results.orgs.map((org: SearchOrgHit) => (
-                  <EntityHitRow
-                    key={org.slug}
-                    href={`/${org.slug}`}
-                    name={org.name}
-                    tokens={tokens}
-                    visual={
-                      <OrgAvatar
-                        avatarUrl={org.avatarUrl}
-                        githubHandle={null}
-                        name={org.name}
-                        size={36}
-                      />
-                    }
-                    secondary={joinMeta([
-                      org.category && (
-                        <Highlight text={categoryDisplayName(org.category)} tokens={tokens} />
-                      ),
-                      org.domain && <Highlight text={org.domain} tokens={tokens} />,
-                    ])}
-                  />
-                ))}
-              </div>
-            </section>
-          )}
-
-          {/* Products */}
-          {showProducts && results.catalog.length > 0 && (
-            <section>
-              <h2 className="text-xs font-medium uppercase tracking-wider text-stone-400 mb-3">
-                Products
-              </h2>
-              <div className="space-y-2">
-                {results.catalog.map((p: SearchCatalogHit) => {
-                  const href =
-                    p.entryType === "source" && p.sourceSlug
-                      ? sourcePath(p.orgSlug, p.sourceSlug)
-                      : productPath(p.orgSlug, p.slug);
-                  const category = p.category ? categoryDisplayName(p.category) : null;
-                  return (
-                    <EntityHitRow
-                      key={p.slug}
-                      href={href}
-                      name={p.name}
-                      tokens={tokens}
-                      trailing={
-                        p.entryType === "source" && p.sourceType ? (
-                          <SourceTypeIcon type={p.sourceType} size={14} />
-                        ) : undefined
-                      }
-                      secondary={joinMeta([
-                        p.orgName && (
-                          <span className="inline-flex items-center gap-1 align-middle">
-                            by
-                            {p.orgAvatarUrl && (
-                              <OrgAvatar
-                                avatarUrl={p.orgAvatarUrl}
-                                githubHandle={null}
-                                name={p.orgName}
-                                size={14}
-                              />
-                            )}
-                            <Highlight text={p.orgName} tokens={tokens} />
-                          </span>
-                        ),
-                        category && <Highlight text={category} tokens={tokens} />,
-                      ])}
-                    />
-                  );
-                })}
-              </div>
-            </section>
-          )}
-
-          {/* Collections — direct hits sort ahead of member rollups; member
-              rollups carry a list of result-set org slugs that triggered
-              the rollup so we can render an "includes X, Y" affordance. */}
-          {showCollections && collectionsHits.length > 0 && (
-            <section>
-              <h2 className="text-xs font-medium uppercase tracking-wider text-stone-400 mb-3">
-                Collections
-              </h2>
-              <div className="space-y-2">
-                {collectionsHits.map((c) => (
-                  <EntityHitRow
-                    key={c.slug}
-                    href={`/collections/${c.slug}`}
-                    name={c.name}
-                    tokens={tokens}
-                    visual={<CollectionTile size={36} />}
-                    trailing={
-                      <span className="shrink-0 text-[11px] tabular-nums text-stone-400 dark:text-stone-500">
-                        {c.memberCount === 1 ? "1 member" : `${c.memberCount} members`}
-                      </span>
-                    }
-                    secondary={
-                      c.description ? <Highlight text={c.description} tokens={tokens} /> : null
-                    }
-                    footer={
-                      <>
-                        {c.previewMembers && c.previewMembers.length > 0 && (
-                          <MemberFacepile
-                            members={c.previewMembers}
-                            totalCount={c.memberCount}
-                            className="mt-1.5"
-                          />
-                        )}
-                        {c.via === "member" &&
-                          c.matchedOrgSlugs &&
-                          c.matchedOrgSlugs.length > 0 && (
-                            <span className="mt-1 block text-[11px] text-stone-400 dark:text-stone-500">
-                              Includes {c.matchedOrgSlugs.join(", ")}
-                            </span>
-                          )}
-                      </>
-                    }
-                  />
-                ))}
-              </div>
-            </section>
-          )}
-
-          {/* Releases + CHANGELOG chunks, interleaved by relevance score.
-              Search intentionally drops the feed's timeline rail because
-              hits are ranked, not chronological — a gutter of dates would
-              imply an order that doesn't exist. */}
-          {showReleases && rankedHits.length > 0 && (
-            <section>
-              <h2 className="text-xs font-medium uppercase tracking-wider text-stone-400 mb-3">
-                Releases
-              </h2>
-              <div>
-                {rankedHits.map((entry, i) => {
-                  if (entry.kind === "release") {
-                    const r = entry.hit;
-                    return (
-                      <ReleaseResultCard key={`release:${r.id}:${i}`} hit={r} tokens={tokens} />
-                    );
-                  }
-                  const c = entry.hit;
-                  return (
-                    <ChunkResultCard
-                      key={`chunk:${c.sourceSlug}:${c.offset}:${i}`}
-                      hit={c}
-                      tokens={tokens}
-                    />
-                  );
-                })}
-              </div>
-            </section>
-          )}
-        </div>
+        <SearchSections
+          results={results}
+          tokens={tokens}
+          capped={capped}
+          entityIntent={entityIntent}
+          setFilter={setFilter}
+          showOrgs={showOrgs}
+          showProducts={showProducts}
+          showCollections={showCollections}
+          showReleases={showReleases}
+          collectionsHits={collectionsHits}
+          rankedHits={rankedHits}
+        />
       )}
     </>
   );
+}
+
+/**
+ * The result sections, ordered by intent: entity sections lead when the
+ * query reads as an org/product lookup, releases lead otherwise. On the
+ * "All" tab each entity section is capped to its top hits with a
+ * "Show all N →" link into the dedicated tab.
+ */
+function SearchSections({
+  results,
+  tokens,
+  capped,
+  entityIntent,
+  setFilter,
+  showOrgs,
+  showProducts,
+  showCollections,
+  showReleases,
+  collectionsHits,
+  rankedHits,
+}: {
+  results: UnifiedSearchResponse;
+  tokens: string[];
+  capped: boolean;
+  entityIntent: boolean;
+  setFilter: (value: SearchFilter) => void;
+  showOrgs: boolean;
+  showProducts: boolean;
+  showCollections: boolean;
+  showReleases: boolean;
+  collectionsHits: NonNullable<UnifiedSearchResponse["collections"]>;
+  rankedHits: RankedHit[];
+}) {
+  const visibleOrgs = capped ? results.orgs.slice(0, ALL_VIEW_CAPS.orgs) : results.orgs;
+  const visibleProducts = capped
+    ? results.catalog.slice(0, ALL_VIEW_CAPS.products)
+    : results.catalog;
+  const visibleCollections = capped
+    ? collectionsHits.slice(0, ALL_VIEW_CAPS.collections)
+    : collectionsHits;
+
+  const orgsSection = showOrgs && results.orgs.length > 0 && (
+    <section key="orgs">
+      <h2 className="text-xs font-medium uppercase tracking-wider text-stone-400 mb-3">
+        Organizations
+      </h2>
+      <div className={capped ? "grid gap-2 sm:grid-cols-2" : "space-y-2"}>
+        {visibleOrgs.map((org: SearchOrgHit) => (
+          <EntityHitRow
+            key={org.slug}
+            href={`/${org.slug}`}
+            name={org.name}
+            tokens={tokens}
+            visual={
+              <OrgAvatar avatarUrl={org.avatarUrl} githubHandle={null} name={org.name} size={36} />
+            }
+            secondary={joinMeta([
+              org.category && (
+                <Highlight text={categoryDisplayName(org.category)} tokens={tokens} />
+              ),
+              org.domain && <Highlight text={org.domain} tokens={tokens} />,
+            ])}
+          />
+        ))}
+      </div>
+      {capped && results.orgs.length > visibleOrgs.length && (
+        <ShowAllLink
+          count={results.orgs.length}
+          label="organizations"
+          onClick={() => setFilter("orgs")}
+        />
+      )}
+    </section>
+  );
+
+  const productsSection = showProducts && results.catalog.length > 0 && (
+    <section key="products">
+      <h2 className="text-xs font-medium uppercase tracking-wider text-stone-400 mb-3">Products</h2>
+      <div className="space-y-2">
+        {visibleProducts.map((p: SearchCatalogHit) => {
+          const href =
+            p.entryType === "source" && p.sourceSlug
+              ? sourcePath(p.orgSlug, p.sourceSlug)
+              : productPath(p.orgSlug, p.slug);
+          const category = p.category ? categoryDisplayName(p.category) : null;
+          return (
+            <EntityHitRow
+              key={p.slug}
+              href={href}
+              name={p.name}
+              tokens={tokens}
+              trailing={
+                p.entryType === "source" && p.sourceType ? (
+                  <SourceTypeIcon type={p.sourceType} size={14} />
+                ) : undefined
+              }
+              secondary={joinMeta([
+                p.orgName && (
+                  <span className="inline-flex items-center gap-1 align-middle">
+                    by
+                    {p.orgAvatarUrl && (
+                      <OrgAvatar
+                        avatarUrl={p.orgAvatarUrl}
+                        githubHandle={null}
+                        name={p.orgName}
+                        size={14}
+                      />
+                    )}
+                    <Highlight text={p.orgName} tokens={tokens} />
+                  </span>
+                ),
+                category && <Highlight text={category} tokens={tokens} />,
+              ])}
+            />
+          );
+        })}
+      </div>
+      {capped && results.catalog.length > visibleProducts.length && (
+        <ShowAllLink
+          count={results.catalog.length}
+          label="products"
+          onClick={() => setFilter("products")}
+        />
+      )}
+    </section>
+  );
+
+  // Collections — direct hits sort ahead of member rollups; member rollups
+  // carry a list of result-set org slugs that triggered the rollup so we can
+  // render an "includes X, Y" affordance.
+  const collectionsSection = showCollections && collectionsHits.length > 0 && (
+    <section key="collections">
+      <h2 className="text-xs font-medium uppercase tracking-wider text-stone-400 mb-3">
+        Collections
+      </h2>
+      <div className="space-y-2">
+        {visibleCollections.map((c) => (
+          <EntityHitRow
+            key={c.slug}
+            href={`/collections/${c.slug}`}
+            name={c.name}
+            tokens={tokens}
+            visual={<CollectionTile size={36} />}
+            trailing={
+              <span className="shrink-0 text-[11px] tabular-nums text-stone-400 dark:text-stone-500">
+                {c.memberCount === 1 ? "1 member" : `${c.memberCount} members`}
+              </span>
+            }
+            secondary={c.description ? <Highlight text={c.description} tokens={tokens} /> : null}
+            footer={
+              <>
+                {c.previewMembers && c.previewMembers.length > 0 && (
+                  <MemberFacepile
+                    members={c.previewMembers}
+                    totalCount={c.memberCount}
+                    className="mt-1.5"
+                  />
+                )}
+                {c.via === "member" && c.matchedOrgSlugs && c.matchedOrgSlugs.length > 0 && (
+                  <span className="mt-1 block text-[11px] text-stone-400 dark:text-stone-500">
+                    Includes {c.matchedOrgSlugs.join(", ")}
+                  </span>
+                )}
+              </>
+            }
+          />
+        ))}
+      </div>
+      {capped && collectionsHits.length > visibleCollections.length && (
+        <ShowAllLink
+          count={collectionsHits.length}
+          label="collections"
+          onClick={() => setFilter("collections")}
+        />
+      )}
+    </section>
+  );
+
+  // Releases + CHANGELOG chunks, interleaved by relevance score. Search
+  // intentionally drops the feed's timeline rail because hits are ranked,
+  // not chronological — a gutter of dates would imply an order that
+  // doesn't exist.
+  const releasesSection = showReleases && rankedHits.length > 0 && (
+    <section key="releases">
+      <h2 className="text-xs font-medium uppercase tracking-wider text-stone-400 mb-3">Releases</h2>
+      <div>
+        {rankedHits.map((entry, i) => {
+          if (entry.kind === "release") {
+            const r = entry.hit;
+            return <ReleaseResultCard key={`release:${r.id}:${i}`} hit={r} tokens={tokens} />;
+          }
+          const c = entry.hit;
+          return (
+            <ChunkResultCard
+              key={`chunk:${c.sourceSlug}:${c.offset}:${i}`}
+              hit={c}
+              tokens={tokens}
+            />
+          );
+        })}
+      </div>
+    </section>
+  );
+
+  const entitySections = [orgsSection, productsSection, collectionsSection];
+  const ordered = entityIntent
+    ? [...entitySections, releasesSection]
+    : [releasesSection, ...entitySections];
+
+  return <div className="mt-6 space-y-8">{ordered}</div>;
 }

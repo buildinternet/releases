@@ -71,6 +71,10 @@ function syncUrl(value: string, range: SearchRangeKey): void {
   // Omit the default so the common past-year case keeps a clean URL; any other
   // window (incl. "any") is written explicitly so deep links restore it.
   if (range !== DEFAULT_RANGE) params.set("range", range);
+  // The active tab is owned by SearchResults (`?filter=`); carry it over so a
+  // query keystroke doesn't wipe the tab out of the URL.
+  const filter = new URLSearchParams(window.location.search).get("filter");
+  if (filter) params.set("filter", filter);
   const qs = params.toString();
   const url = qs ? `/search?${qs}` : "/search";
   // Shallow URL update: keeps `/search?q=&range=` shareable and the

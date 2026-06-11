@@ -17,7 +17,7 @@ export type WordMatchKind = "exact" | "prefix" | "word";
 /** True when position `i` in `text` starts a word: string start, after a
  * non-alphanumeric character, or a camelCase lower→upper transition
  * ("OpenAI" → boundary before "AI"). */
-function isWordBoundary(text: string, i: number): boolean {
+export function isWordBoundary(text: string, i: number): boolean {
   if (i === 0) return true;
   const prev = text[i - 1];
   if (!/[a-zA-Z0-9]/.test(prev)) return true;
