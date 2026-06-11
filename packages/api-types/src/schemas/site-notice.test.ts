@@ -37,6 +37,13 @@ describe("SiteNoticeSchema", () => {
     expect(SiteNoticeSchema.safeParse({ ...valid, href: "ftp://x.y" }).success).toBe(false);
     expect(SiteNoticeSchema.safeParse({ ...valid, href: "updates" }).success).toBe(false);
   });
+  it("rejects javascript:/data: schemes and protocol-relative hrefs", () => {
+    expect(SiteNoticeSchema.safeParse({ ...valid, href: "javascript:alert(1)" }).success).toBe(
+      false,
+    );
+    expect(SiteNoticeSchema.safeParse({ ...valid, href: "data:text/html,x" }).success).toBe(false);
+    expect(SiteNoticeSchema.safeParse({ ...valid, href: "//evil.com" }).success).toBe(false);
+  });
 });
 
 describe("SiteNoticeResponseSchema", () => {

@@ -1,11 +1,15 @@
 import { z } from "zod";
 import { SITE_NOTICE_PLACEMENTS } from "@buildinternet/releases-core/site-notice";
 
-/** Absolute http(s) URL or a site-relative path beginning with "/". */
+/**
+ * Absolute http(s) URL or a site-relative path beginning with a single "/".
+ * Rejects other schemes (javascript:, data:, …) and protocol-relative "//host"
+ * so a stored href can never become an unexpected-scheme or off-site link.
+ */
 const HrefSchema = z
   .string()
   .max(500)
-  .refine((h) => /^https?:\/\//.test(h) || h.startsWith("/"), {
+  .refine((h) => /^https?:\/\//.test(h) || (h.startsWith("/") && !h.startsWith("//")), {
     message: "href must be an absolute http(s) URL or a site-relative path",
   });
 

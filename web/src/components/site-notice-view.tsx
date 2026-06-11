@@ -34,26 +34,35 @@ export function SiteNoticeView({
   if (dismissed) return null;
 
   const fg = readableTextColor(notice.color);
-  const link =
-    notice.href != null ? (
-      notice.href.startsWith("/") ? (
-        <Link
-          href={notice.href}
-          className="font-semibold underline underline-offset-2 hover:no-underline"
-        >
-          {notice.linkText ?? notice.href}
-        </Link>
-      ) : (
-        <a
-          href={notice.href}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="font-semibold underline underline-offset-2 hover:no-underline"
-        >
-          {notice.linkText ?? notice.href}
-        </a>
-      )
-    ) : null;
+  // Defense-in-depth: only render a link for a root-relative path (not a
+  // protocol-relative "//host") or an http(s) URL. The API schema + admin form
+  // already validate href, but the live preview renders unvalidated form state,
+  // so never trust a value with an unexpected scheme (javascript:, data:, …).
+  const safeHref =
+    notice.href &&
+    ((notice.href.startsWith("/") && !notice.href.startsWith("//")) ||
+      /^https?:\/\//i.test(notice.href))
+      ? notice.href
+      : null;
+  const link = safeHref ? (
+    safeHref.startsWith("/") ? (
+      <Link
+        href={safeHref}
+        className="font-semibold underline underline-offset-2 hover:no-underline"
+      >
+        {notice.linkText ?? safeHref}
+      </Link>
+    ) : (
+      <a
+        href={safeHref}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="font-semibold underline underline-offset-2 hover:no-underline"
+      >
+        {notice.linkText ?? safeHref}
+      </a>
+    )
+  ) : null;
 
   function dismiss() {
     try {
