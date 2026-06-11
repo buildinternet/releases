@@ -4,6 +4,7 @@ import { Header } from "@/components/header";
 import { SearchBar } from "@/components/search-bar";
 import { SearchProvider } from "@/components/search-provider";
 import { SearchResultsLive } from "@/components/search-results-live";
+import { parseSearchFilter } from "@/lib/search-filter";
 import { SearchCliHint } from "@/components/search-cli-hint";
 import { SearchTimeframe } from "@/components/search-timeframe";
 import { parseRangeKey, rangeSince } from "@/lib/search-range";
@@ -27,10 +28,13 @@ async function initialResults(q?: string, since?: string): Promise<UnifiedSearch
 export default async function SearchPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; range?: string }>;
+  searchParams: Promise<{ q?: string; range?: string; filter?: string }>;
 }) {
-  const { q, range: rangeParam } = await searchParams;
+  const { q, range: rangeParam, filter: filterParam } = await searchParams;
   const range = parseRangeKey(rangeParam);
+  // Tab deep link (`?filter=releases`) — parsed server-side so the SSR pass
+  // renders the same tab the client hydrates into.
+  const filter = parseSearchFilter(filterParam);
   // Server-fetch the first page of results for deep links / no-JS / first paint,
   // honoring the timeframe window so old releases don't rank on top by default.
   // After hydration the SearchProvider takes over with client-side live search,
@@ -48,7 +52,7 @@ export default async function SearchPage({
             <SearchTimeframe />
           </div>
           <SearchCliHint />
-          <SearchResultsLive />
+          <SearchResultsLive initialFilter={filter} />
         </div>
       </div>
     </SearchProvider>

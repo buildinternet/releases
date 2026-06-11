@@ -1,5 +1,6 @@
 import type React from "react";
 import type { Element, Nodes, Parents, Root, RootContent, Text } from "hast";
+import { isWordBoundary } from "@releases/lib/entity-match";
 
 type RehypeTransformer = (tree: Root) => void;
 type RehypePlugin<Options> = (options: Options) => RehypeTransformer;
@@ -30,16 +31,37 @@ function buildMatcher(tokens: string[]): RegExp | null {
   return new RegExp(`(?:${tokens.map(escapeRegex).join("|")})`, "gi");
 }
 
-type Segment = { type: "text"; value: string } | { type: "match"; value: string };
+export type MatchRange = { start: number; end: number };
 
-function segmentText(text: string, re: RegExp): Segment[] {
-  const segments: Segment[] = [];
-  let last = 0;
+/**
+ * Find token occurrences that start at a word boundary. Substring matching
+ * alone made "ai" render Em·ai·l-style fragments that look broken; anchoring
+ * each occurrence with `isWordBoundary` mirrors the server's entity-match
+ * semantics ("AI" in "OpenAI" highlights, "ai" in "Email" doesn't).
+ */
+export function matchRanges(text: string, tokens: string[]): MatchRange[] {
+  const re = buildMatcher(tokens);
+  if (!re || !text) return [];
+  const ranges: MatchRange[] = [];
   for (const match of text.matchAll(re)) {
     const start = match.index ?? 0;
+    if (!isWordBoundary(text, start)) continue;
+    ranges.push({ start, end: start + match[0].length });
+  }
+  return ranges;
+}
+
+type Segment = { type: "text"; value: string } | { type: "match"; value: string };
+
+function segmentText(text: string, tokens: string[]): Segment[] {
+  const ranges = matchRanges(text, tokens);
+  if (!ranges.length) return [{ type: "text", value: text }];
+  const segments: Segment[] = [];
+  let last = 0;
+  for (const { start, end } of ranges) {
     if (start > last) segments.push({ type: "text", value: text.slice(last, start) });
-    segments.push({ type: "match", value: match[0] });
-    last = start + match[0].length;
+    segments.push({ type: "match", value: text.slice(start, end) });
+    last = end;
   }
   if (last < text.length) segments.push({ type: "text", value: text.slice(last) });
   return segments;
@@ -53,10 +75,9 @@ export function Highlight({
   tokens: string[];
 }): React.ReactNode {
   if (!text) return null;
-  const re = buildMatcher(tokens);
-  if (!re) return text;
-  const segments = segmentText(text, re);
-  if (segments.length <= 1) return text;
+  if (!tokens.length) return text;
+  const segments = segmentText(text, tokens);
+  if (segments.length <= 1 && segments[0]?.type !== "match") return text;
   return (
     <>
       {segments.map((seg, i) =>
@@ -78,22 +99,21 @@ export function Highlight({
  * so we don't gild inline code or fenced blocks.
  */
 export const rehypeHighlightTokens: RehypePlugin<{ tokens: string[] }> = (options) => {
-  const re = buildMatcher(options.tokens);
   return (tree) => {
-    if (!re) return;
-    walk(tree, re);
+    if (!options.tokens.length) return;
+    walk(tree, options.tokens);
   };
 };
 
-function walk(node: Parents, re: RegExp): void {
+function walk(node: Parents, tokens: string[]): void {
   const out: RootContent[] = [];
   for (const child of node.children) {
     if (child.type === "text") {
-      out.push(...splitHastText(child, re));
+      out.push(...splitHastText(child, tokens));
       continue;
     }
     if (isElement(child) && !SKIP_TAGS.has(child.tagName) && hasChildren(child)) {
-      walk(child, re);
+      walk(child, tokens);
     }
     out.push(child);
   }
@@ -108,8 +128,8 @@ function hasChildren(node: Nodes): node is Parents {
   return "children" in node && Array.isArray(node.children);
 }
 
-function splitHastText(node: Text, re: RegExp): RootContent[] {
-  const segments = segmentText(node.value, re);
+function splitHastText(node: Text, tokens: string[]): RootContent[] {
+  const segments = segmentText(node.value, tokens);
   if (segments.length <= 1) return [node];
   return segments.map<RootContent>((seg) =>
     seg.type === "match"
