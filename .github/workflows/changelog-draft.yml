@@ -9,9 +9,8 @@ on:
       until:
         description: "Override end date YYYY-MM-DD (with 'since')"
         required: false
-  # Enable after dry-run validation (rollout):
-  # schedule:
-  #   - cron: "0 13 * * *" # 13:00 UTC daily — drafts the previous UTC day
+  schedule:
+    - cron: "0 13 * * *" # 13:00 UTC daily — drafts the previous UTC day
 
 concurrency:
   group: changelog-draft
