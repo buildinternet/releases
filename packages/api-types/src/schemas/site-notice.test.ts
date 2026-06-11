@@ -37,6 +37,14 @@ describe("SiteNoticeSchema", () => {
     expect(SiteNoticeSchema.safeParse({ ...valid, href: "ftp://x.y" }).success).toBe(false);
     expect(SiteNoticeSchema.safeParse({ ...valid, href: "updates" }).success).toBe(false);
   });
+  it("rejects linkText without an href (dead CTA)", () => {
+    const { href, ...noHref } = valid; // keeps linkText
+    expect(SiteNoticeSchema.safeParse(noHref).success).toBe(false);
+  });
+  it("accepts href without linkText", () => {
+    const { linkText, ...noLinkText } = valid;
+    expect(SiteNoticeSchema.safeParse(noLinkText).success).toBe(true);
+  });
   it("rejects javascript:/data: schemes and protocol-relative hrefs", () => {
     expect(SiteNoticeSchema.safeParse({ ...valid, href: "javascript:alert(1)" }).success).toBe(
       false,

@@ -40,8 +40,10 @@ export function NoticeForm({ current }: { current: StoredSiteNotice | null }) {
   const preview: StoredSiteNotice = {
     active: true,
     message: message || "Your notice preview",
-    linkText: linkText || undefined,
-    href: href || undefined,
+    // Mirror the save handler (trim → undefined when empty) so the preview
+    // matches exactly what gets persisted.
+    linkText: linkText.trim() || undefined,
+    href: href.trim() || undefined,
     placement,
     color: colorValid ? color : DEFAULT_SITE_NOTICE_COLOR,
     dismissible,

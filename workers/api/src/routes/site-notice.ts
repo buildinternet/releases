@@ -1,9 +1,10 @@
 import { Hono } from "hono";
 import { describeRoute, resolver } from "hono-openapi";
 import { SiteNoticeResponseSchema, SiteNoticeSchema } from "@buildinternet/releases-api-types";
+import { logEvent } from "@releases/lib/log-event";
 import type { Env } from "../index.js";
 import { createDb } from "../db.js";
-import { isValidBearerAuth } from "../middleware/auth.js";
+import { isValidBearerAuth, resolveAuthIdentity } from "../middleware/auth.js";
 import { validateJson } from "../lib/validate.js";
 import { getStoredSiteNotice, putStoredSiteNotice } from "../queries/site-settings.js";
 
@@ -62,7 +63,26 @@ siteNoticeRoutes.put(
   validateJson(SiteNoticeSchema),
   async (c) => {
     const db = createDb(c.env.DB);
+    const previous = await getStoredSiteNotice(db);
     const notice = await putStoredSiteNotice(db, c.req.valid("json"));
+    // Audit who published/changed/deactivated the site-wide notice (mirrors the
+    // role-change audit). Message is public content, so it's safe to record.
+    const identity = await resolveAuthIdentity(c);
+    const actor =
+      identity?.kind === "root"
+        ? "root-key"
+        : identity?.kind === "token"
+          ? identity.tokenId
+          : "unknown";
+    logEvent("info", {
+      component: "site-notice",
+      event: "notice-changed",
+      action: !previous ? "created" : !notice.active && previous.active ? "deactivated" : "updated",
+      actor,
+      active: notice.active,
+      placement: notice.placement,
+      message: notice.message,
+    });
     return c.json({ notice });
   },
 );

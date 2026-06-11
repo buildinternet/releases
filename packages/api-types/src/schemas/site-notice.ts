@@ -14,10 +14,12 @@ const HrefSchema = z
   });
 
 /**
- * Editable site-notice payload. Kept structurally in sync with the
- * `SiteNotice` interface in `@buildinternet/releases-core/site-notice`.
+ * Editable site-notice fields. Kept structurally in sync with the
+ * `SiteNotice` interface in `@buildinternet/releases-core/site-notice`. Split
+ * from the refined `SiteNoticeSchema` below so the response schema can `.extend()`
+ * it (a `.refine()` returns a non-extendable effect).
  */
-export const SiteNoticeSchema = z.object({
+const SiteNoticeFieldsSchema = z.object({
   active: z.boolean(),
   message: z.string().min(1).max(280),
   linkText: z.string().min(1).max(60).optional(),
@@ -27,7 +29,17 @@ export const SiteNoticeSchema = z.object({
   dismissible: z.boolean(),
 });
 
+/**
+ * Editable site-notice payload. A bare `linkText` with no `href` renders nothing
+ * (the view only draws a link when there's a target), so require `href` whenever
+ * `linkText` is set.
+ */
+export const SiteNoticeSchema = SiteNoticeFieldsSchema.refine((n) => !(n.linkText && !n.href), {
+  message: "href is required when linkText is set",
+  path: ["href"],
+});
+
 /** GET /v1/site-notice response: the stored notice (+updatedAt) or null. */
 export const SiteNoticeResponseSchema = z.object({
-  notice: SiteNoticeSchema.extend({ updatedAt: z.string() }).nullable(),
+  notice: SiteNoticeFieldsSchema.extend({ updatedAt: z.iso.datetime() }).nullable(),
 });
