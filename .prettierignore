@@ -12,3 +12,5 @@ plugins/claude-code/skills
 packages/*/dist
 tests/evals/fixtures/tool-ux/runs
 packages/api-types/graphql/schema.graphql
+# Generated + agent-appended; format owned by scripts/changelog/changelog-md.ts (renderChangelog)
+CHANGELOG.md
