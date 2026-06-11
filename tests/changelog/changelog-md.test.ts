@@ -56,3 +56,69 @@ preamble line
     expect(s[0].body).toBe("### Sub\n- x");
   });
 });
+
+import {
+  renderChangelog,
+  diffChangelog,
+  sectionToRelease,
+  planPublish,
+} from "../../scripts/changelog/changelog-md";
+
+describe("renderChangelog", () => {
+  test("newest-first, has preamble, round-trips with parseChangelog", () => {
+    const md = renderChangelog([
+      { dateIso: "2026-06-08", body: "**Fixed**\n- C" },
+      { dateIso: "2026-06-09", body: "**Added**\n- A" },
+    ]);
+    expect(md.startsWith("# Changelog")).toBe(true);
+    const s = parseChangelog(md);
+    expect(s.map((x) => x.dateIso)).toEqual(["2026-06-09", "2026-06-08"]);
+    expect(s[0].body).toBe("**Added**\n- A");
+  });
+});
+
+describe("diffChangelog", () => {
+  const before =
+    "# Changelog\n\n## June 9, 2026\n\n**Added**\n- A\n\n## June 8, 2026\n\n**Fixed**\n- C";
+  test("detects added, modified, and ignores unchanged", () => {
+    const after =
+      "# Changelog\n\n## June 10, 2026\n\n**Added**\n- NEW\n\n## June 9, 2026\n\n**Added**\n- A EDITED\n\n## June 8, 2026\n\n**Fixed**\n- C";
+    const d = diffChangelog(before, after);
+    expect(d.added).toEqual(["2026-06-10"]);
+    expect(d.modified).toEqual(["2026-06-09"]);
+  });
+  test("empty before → every section is added", () => {
+    const d = diffChangelog("", before);
+    expect(d.added).toEqual(["2026-06-09", "2026-06-08"]);
+    expect(d.modified).toEqual([]);
+  });
+  test("identical before/after → nothing changed", () => {
+    expect(diffChangelog(before, before)).toEqual({ added: [], modified: [] });
+  });
+});
+
+describe("sectionToRelease + planPublish", () => {
+  test("maps a section to the /batch release shape", () => {
+    const r = sectionToRelease({
+      dateIso: "2026-06-09",
+      title: "June 9, 2026",
+      body: "**Added**\n- A",
+    });
+    expect(r).toEqual({
+      title: "June 9, 2026",
+      content: "**Added**\n- A",
+      url: "https://releases.sh/updates/2026-06-09",
+      publishedAt: "2026-06-09T12:00:00Z",
+      type: "rollup",
+    });
+  });
+  test("planPublish returns added/modified + releases for changed dates only", () => {
+    const before = "# Changelog\n\n## June 9, 2026\n\n**Added**\n- A";
+    const after =
+      "# Changelog\n\n## June 10, 2026\n\n**Added**\n- NEW\n\n## June 9, 2026\n\n**Added**\n- A";
+    const plan = planPublish(before, after);
+    expect(plan.added).toEqual(["2026-06-10"]);
+    expect(plan.modified).toEqual([]);
+    expect(plan.releases.map((r) => r.url)).toEqual(["https://releases.sh/updates/2026-06-10"]);
+  });
+});
