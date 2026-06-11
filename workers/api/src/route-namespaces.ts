@@ -34,6 +34,9 @@ export const publicReadRoutes = [
   // persistence). POST → Bearer required via publicReadAuthMiddleware's
   // non-SAFE_METHODS branch, mirroring the source-scoped changelog probe.
   "changelog",
+  // /site-notice: public GET (active notice, cached). PUT is admin-gated inside
+  // the handler (isValidBearerAuth) on top of the namespace write gate.
+  "site-notice",
 ] as const;
 
 /** Admin-only namespaces: every method requires `authMiddleware`. */
