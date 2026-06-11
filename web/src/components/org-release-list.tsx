@@ -7,7 +7,12 @@ import type { SourceType } from "@buildinternet/releases-core/source-enums";
 import { useDebounced } from "@/hooks/use-debounced";
 import { useInfiniteScroll } from "@/hooks/use-infinite-scroll";
 import { InfiniteScrollTrigger } from "./infinite-scroll-trigger";
-import { buildFeedEntries, entryDayKey, type RollupItem } from "./org-release-entries";
+import {
+  buildFeedEntries,
+  entryDayKey,
+  rollupSummaryLine,
+  type RollupItem,
+} from "./org-release-entries";
 import { Caret } from "./caret";
 import { ReleaseFilterInput } from "./release-filter-input";
 import { AppStoreIcon } from "./app-store-icon";
@@ -26,6 +31,13 @@ interface OrgReleaseListProps {
   product?: string;
   /** Resolved org avatar URL (incl. GitHub fallback) for the image lightbox byline. */
   orgAvatarUrl?: string | null;
+  /**
+   * Render a muted one-line gist (joined member headlines) under each collapsed
+   * version-pill rollup. Opt-in for the branded `/updates` changelog so the CLI
+   * card reads with the per-version voice; off everywhere else to keep generic
+   * org/monorepo rollups terse.
+   */
+  showRollupSummary?: boolean;
 }
 
 // Source types collapse into two filter groups for the user-facing tabs.
@@ -48,6 +60,7 @@ export function OrgReleaseList({
   availableSourceTypes,
   product,
   orgAvatarUrl,
+  showRollupSummary,
 }: OrgReleaseListProps) {
   const [filterGroup, setFilterGroup] = useState<FilterGroup>("all");
   const [includePrereleases, setIncludePrereleases] = useState(false);
@@ -273,6 +286,7 @@ export function OrgReleaseList({
                   orgSlug={orgSlug}
                   multipleSourcesExist={multipleSourcesExist}
                   orgAvatarUrl={orgAvatarUrl}
+                  showSummary={showRollupSummary}
                 />
               );
             }
@@ -324,18 +338,24 @@ function ReleaseRollupRow({
   orgSlug,
   multipleSourcesExist,
   orgAvatarUrl,
+  showSummary,
 }: {
   item: RollupItem;
   hideDate?: boolean;
   orgSlug: string;
   multipleSourcesExist: boolean;
   orgAvatarUrl?: string | null;
+  /** Render the joined member-headline gist under the collapsed header (the /updates changelog). */
+  showSummary?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const newest = item.releases[0];
   const count = item.releases.length;
   const pills = item.releases.slice(0, 3);
   const overflow = count - pills.length;
+  // Joined per-version gist for the collapsed card (opt-in, /updates only). Null
+  // when no member is more descriptive than its bare version.
+  const summary = showSummary ? rollupSummaryLine(item.releases) : null;
   // App Store rollups (keyed per-source, #1236) get the app icon on the
   // collapsed header so the cluster reads as "this app" at a glance. #1206
   const appInfo = appRowInfoFromWire(newest.source.appStore, newest.source.name);
@@ -393,6 +413,11 @@ function ReleaseRollupRow({
               </span>
             )}
           </button>
+          {!open && summary && (
+            <p className="mt-1.5 text-[13px] leading-snug text-stone-500 dark:text-stone-400 line-clamp-2">
+              {summary}
+            </p>
+          )}
         </div>
       </article>
       {open &&

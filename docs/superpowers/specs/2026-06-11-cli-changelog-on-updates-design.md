@@ -65,30 +65,36 @@ idempotent on re-fetch (dedup on `(source_id, url)`).
 
 ### 2. Presentation — all in `web/`
 
-Reuse, don't reinvent: the day's CLI versions collapse through the existing
-`rollupTags()` / `isTag()` in `web/src/components/collection-timeline-rollup.ts`
-(`isTag(r) = r.source.type === "github"`; bucket key `${orgSlug}::${productSlug}` — a "CLI"
-product gives a clean bucket).
+> **Implementation note (2026-06-11):** the day spine and the same-day version-pill rollup
+> the brainstorm approved **already exist**. `buildFeedEntries` (`web/src/components/
+org-release-entries.ts`) groups the org feed by calendar day and collapses same-day
+> GitHub-tag clusters per `product ?? source` (via `rollupTags`/`isTag`), and
+> `ReleaseRollupRow` (`org-release-list.tsx`) renders the collapsed card — caret + product
+> label + `· N releases` + `v0.60 v0.61 v0.62` pills, expandable to per-version rows. The
+> platform daily rollup (agent source, not a tag) stays a flat one-per-day row. So adding
+> the CLI as a github source under a "CLI" product makes `/updates` render the approved
+> layout with **no new grouping component**. The only presentation delta is the per-version
+> _voice_ (decision 3): the collapsed card showed pills but no prose. The build reduced to
+> the bullets below.
 
-New, pure, unit-tested helper that turns the org release feed into a day spine:
+What shipped (`web/`):
 
-- **Input:** the `releases-sh` org release array (already SSR-seeded + cursor-paginated in
-  `web/src/app/updates/page.tsx`).
-- **Discriminate** each release:
-  - _Platform_ = `source.slug === "product-changelog"` (`type: rollup`).
-  - _CLI_ = `isTag(r)` / `product?.slug === "cli"`.
-- **Group by calendar day** of `publishedAt` (newest day first).
-- Within a day:
-  - Platform block: render the rollup as today.
-  - CLI block: feed the day's CLI releases through `rollupTags()` → one
-    `vX.Y vX.Y vX.Y` pill group; the joined `titleShort`s become the summary line; each
-    pill links to that version's on-site release detail. A single-version day skips the
-    rollup and shows one entry.
-- Days with only-platform, only-CLI, or both all render cleanly.
+- `rollupSummaryLine(releases, limit = 3)` — pure helper in `org-release-entries.ts`
+  (unit-tested in `org-release-entries.test.ts`). Joins each member's descriptive headline
+  (`titleShort → titleGenerated → non-bare title`, via the shared `deriveFeedTitle`),
+  deduped case-insensitively, capped with an ellipsis. Returns `null` when no member is more
+  descriptive than its bare version.
+- `OrgReleaseList` gains an opt-in `showRollupSummary` prop, threaded to `ReleaseRollupRow`
+  as `showSummary`. When set and the card is collapsed, it renders the joined line as a
+  muted, two-line-clamped subtitle under the pills. **Off by default** — generic
+  org/monorepo rollups stay terse; only `/updates` opts in.
+- `web/src/app/updates/page.tsx` passes `showRollupSummary`. No swap of `OrgReleaseList` —
+  the existing component already day-groups, rolls up, and load-mores; we just turned on the
+  summary line.
 
-New CLI day-card component renders the pill group + joined-summary line + per-version
-links. `web/src/app/updates/page.tsx` swaps `OrgReleaseList` for the grouped list,
-preserving the SSR seed + cursor load-more (re-group on append).
+The discriminators (`source.slug === "product-changelog"` for platform; `isTag` /
+`product.slug === "cli"` for CLI) are implicit in the existing rollup-eligibility logic
+(`isRollupEligible = isTag || isAppStore`), so no explicit branching was needed.
 
 ### 3. What we get for free
 
@@ -116,13 +122,15 @@ applies. No extra work for any of those.
 - Component render: the CLI card renders pills + joined line; pills link to detail.
 - Visual check on the page against seeded (or fixture) data before go-live.
 
-## Build order
+## Build order (as built)
 
-1. Pure grouping/rollup helper (TDD).
-2. CLI day-card component.
-3. Wire `/updates` page to the grouped list.
-4. Tests + visual check.
-5. **Rollout:** deploy web → seed product + github source → verify summaries + grouped page.
+1. ~~Pure grouping/rollup helper~~ — already exists (`buildFeedEntries`/`rollupTags`).
+2. `rollupSummaryLine` pure helper + tests (TDD). ✅
+3. Opt-in `showRollupSummary` prop on `OrgReleaseList` → `ReleaseRollupRow`; `/updates`
+   opts in. ✅
+4. Tests + tsc + lint green. ✅ Visual check deferred to rollout (needs seeded data).
+5. **Rollout:** deploy web → seed CLI product + github source → verify per-version
+   `titleShort`s + the grouped `/updates` page.
 
 ## Out of scope
 

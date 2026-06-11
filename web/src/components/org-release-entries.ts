@@ -1,4 +1,5 @@
 import type { OrgReleaseItem } from "@/lib/api";
+import { deriveFeedTitle, type FeedTitleInput } from "@/lib/release-title";
 import { isAppStore, isTag, rollupTags, type TagListItem } from "./collection-timeline-rollup";
 
 // Sources whose same-day clusters fold into a rollup row: GitHub tags (keyed
@@ -43,6 +44,31 @@ export function buildFeedEntries(releases: OrgReleaseItem[]): FeedEntry[] {
     i = j;
   }
   return entries;
+}
+
+/**
+ * A muted one-line gist for a collapsed rollup card: the distinct descriptive
+ * headlines of its members — `titleShort → titleGenerated → non-bare title`, via
+ * the shared `deriveFeedTitle` — joined with " · ". Used on `/updates` so the
+ * combined CLI card reads with the friendly per-version voice without expanding.
+ * Members whose only label is a bare version contribute nothing; returns `null`
+ * when none of them are more descriptive than their version number. Caps at
+ * `limit` distinct headlines, appending an ellipsis when there are more.
+ */
+export function rollupSummaryLine(releases: readonly FeedTitleInput[], limit = 3): string | null {
+  const seen = new Set<string>();
+  const parts: string[] = [];
+  for (const r of releases) {
+    const descriptive = deriveFeedTitle(r).descriptive;
+    if (!descriptive) continue;
+    const key = descriptive.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    parts.push(descriptive);
+  }
+  if (parts.length === 0) return null;
+  if (parts.length <= limit) return parts.join(" · ");
+  return parts.slice(0, limit).join(" · ") + " …";
 }
 
 function appendDayEntries(out: FeedEntry[], dayReleases: OrgReleaseItem[]) {
