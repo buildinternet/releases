@@ -10,6 +10,7 @@ import { WebMcpProvider } from "@/components/webmcp-provider";
 import { SearchHotkey } from "@/components/search-hotkey";
 import { LightboxProvider } from "@/components/lightbox";
 import { Footer } from "@/components/footer";
+import { SiteNotice } from "@/components/site-notice";
 import "./globals.css";
 import { apiBaseUrl } from "@/lib/env";
 
@@ -73,6 +74,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             <LightboxProvider>
               <ViewTransition default="auto">
                 <main id="main" className="flex-1 flex flex-col">
+                  <SiteNotice slot="banner" />
                   {children}
                 </main>
               </ViewTransition>

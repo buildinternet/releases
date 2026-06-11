@@ -7,6 +7,7 @@ import { HomepageTickerDocument } from "@/lib/graphql/__generated__/graphql";
 import type { HomepageTickerQuery } from "@/lib/graphql/__generated__/graphql";
 import { ConveyorBackdrop } from "@/components/conveyor-backdrop";
 import { Header } from "@/components/header";
+import { SiteNotice } from "@/components/site-notice";
 import { JsonLd } from "@/components/json-ld";
 import { SetupMessage } from "@/components/setup-message";
 import { OrgTable } from "@/components/org-table";
@@ -361,6 +362,11 @@ export default async function HomePage() {
             </div>
           </div>
         </div>
+      </div>
+      {/* Home-only site notice (card placement). Renders nothing unless an
+          active notice is set to placement "home". */}
+      <div className="px-6 pt-6">
+        <SiteNotice slot="home" />
       </div>
       {/* "Get Started" install widget — kept below the animated masthead band so
           its faint label and tab text retain full contrast (no blocks behind it).
