@@ -93,6 +93,7 @@ if (addedIds.length) {
     releaseIds: addedIds,
     regenerate: false,
     dryRun: false,
+    limit: 100, // cover a clamped multi-day push (candidate SELECT defaults to 25)
   });
 }
 if (modifiedIds.length) {
@@ -101,6 +102,7 @@ if (modifiedIds.length) {
     releaseIds: modifiedIds,
     regenerate: true,
     dryRun: false,
+    limit: 100, // cover a clamped multi-day push (candidate SELECT defaults to 25)
   });
 }
 
