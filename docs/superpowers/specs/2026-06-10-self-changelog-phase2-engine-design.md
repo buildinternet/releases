@@ -163,9 +163,12 @@ reach fork PRs, so the admin token is safe.)
 3. `POST /v1/sources/src_LNrMz-rrFa2OD27mBUfaT/releases/batch` with
    `{ mode: "upsert-content", releases: [...] }` — inserts new days, clobbers edited bodies,
    idempotent on `(source_id, url)`.
-4. Resolve the pushed dates to release IDs (`GET …/releases`, match `publishedAt` date), then
-   `POST /v1/workflows/generate-content { sourceId, releaseIds:[…], regenerate:true, dryRun:false }`
-   for exactly those days.
+4. Resolve the pushed dates to release IDs (`GET …/releases`, match `publishedAt` date), then call
+   `POST /v1/workflows/generate-content` **scoped to those IDs**, splitting by change kind:
+   **added** dates → `regenerate:false` (fill; only the new day's summary is missing); **modified**
+   dates → `regenerate:true` (a correction must re-roll the summary). This is what makes a bootstrap
+   merge a safe no-op: the exported sections already match live content (so `/batch` upsert-content
+   changes nothing) and already have summaries (so fill finds nothing to do).
 5. Log the result; non-zero exit on any HTTP error so a failed publish is visible in Actions.
 
 The section-parse + section-change-detection is the **pure, unit-tested core** (no network), with a
@@ -203,10 +206,11 @@ Run once, by hand, to seed `CHANGELOG.md` from the 62 live rollups:
 3. Commit. After this, `CHANGELOG.md` covers Mar 25 – Jun 9, the watermark logic has history, and
    the draft agent has in-repo examples. Not part of the recurring engine.
 
-**Land the bootstrap commit _before_ the publish workflow exists** (rollout step 1 precedes step
-2). Otherwise the 62-section commit would trigger the publish workflow and re-push + `regenerate`
-all 62 live entries — wasteful and liable to re-introduce summarizer version artifacts on entries
-that are currently clean.
+**Recommended:** land the bootstrap commit before the publish workflow exists (rollout step 1
+precedes step 2). With the fill-for-added / regenerate-for-modified rule above, landing them
+together is also safe — the exported sections match live content and summaries, so the triggered
+publish run is a no-op (upsert-content sees no diff; fill finds nothing to generate). Sequencing
+just keeps the first run obviously clean and avoids relying on that no-op behavior.
 
 ## File inventory
 
