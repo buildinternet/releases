@@ -148,6 +148,11 @@ import {
   IN_ARRAY_CHUNK_SIZE,
 } from "../lib/d1-limits.js";
 import { invalidateLatestCache } from "../lib/latest-cache.js";
+import {
+  runGenerateContent,
+  buildGenerateContentDeps,
+  GENERATE_CONTENT_MAX_LIMIT,
+} from "./workflows.js";
 import { notifyIndexNowForSource } from "../lib/indexnow.js";
 import { clusterAndPersistCascades } from "../lib/cluster-cascades.js";
 import { resolveOrgSlug, resolveProductSlug } from "../lib/slug-lookups.js";
@@ -681,6 +686,31 @@ sourceRoutes.post("/sources/:slug/fetch", postSourceFetchRoute, async (c) => {
         invalidateLatestCache(c.env, {
           nReleases: result.releasesInserted,
           cause: src.id,
+        }),
+      );
+      // A manual fetch lands rows with null title_generated / title_short /
+      // summary — only the cron workflow summarizes at ingest (#1579). Run the
+      // same fill pass POST /workflows/generate-content uses over this source's
+      // unfilled rows, async + fail-open so a summarize failure never fails the
+      // fetch. Eligibility (org auto_generate_content opt-in + per-source
+      // metadata.summarize opt-out) lives in the candidate SELECT, so a
+      // non-opted source yields zero candidates and never touches the model.
+      // Best-effort: a runtime eviction mid-pass just leaves rows for the next
+      // trigger or a manual generate-content run.
+      c.executionCtx.waitUntil(
+        runGenerateContent(
+          db,
+          { id: src.id },
+          { regenerate: false, limit: GENERATE_CONTENT_MAX_LIMIT, dryRun: false },
+          buildGenerateContentDeps(db, c.env, src),
+        ).catch((err) => {
+          logEvent("error", {
+            component: "source-fetch",
+            event: "post-fetch-generate-content-failed",
+            sourceId: src.id,
+            slug: src.slug,
+            err: err instanceof Error ? err : String(err),
+          });
         }),
       );
     }

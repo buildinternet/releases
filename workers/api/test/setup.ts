@@ -72,14 +72,22 @@ export function createTestApp(
   db: TestDb,
   // oxlint-disable-next-line no-explicit-any
   routes: any | any[],
-  opts: { env?: Record<string, unknown>; onError?: ErrorHandler } = {},
+  opts: {
+    env?: Record<string, unknown>;
+    onError?: ErrorHandler;
+    // Override the no-op context — e.g. to collect waitUntil promises so a
+    // test can await post-response side effects before asserting DB state.
+    executionCtx?: ExecutionContext;
+  } = {},
 ): (req: Request) => Response | Promise<Response> {
   // Spread first so an accidental opts.env.DB can't shadow the injected handle.
   const fakeEnv = { ...opts.env, DB: db };
-  const fakeCtx = {
-    waitUntil: () => {},
-    passThroughOnException: () => {},
-  } as unknown as ExecutionContext;
+  const fakeCtx =
+    opts.executionCtx ??
+    ({
+      waitUntil: () => {},
+      passThroughOnException: () => {},
+    } as unknown as ExecutionContext);
   const app = new Hono();
   if (opts.onError) app.onError(opts.onError);
   const v1 = new Hono();
