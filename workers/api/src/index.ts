@@ -655,9 +655,14 @@ v1.use("/sources/:slug/activity", cacheControl(120, { staleWhileRevalidate: 60, 
 v1.use("/sources/:slug/heatmap", cacheControl(120, { staleWhileRevalidate: 60, isPublic: true }));
 v1.use("/search", cacheControl(30, { staleWhileRevalidate: 30, isPublic: true }), varyOnAccept());
 v1.use("/related/*", cacheControl(300, { staleWhileRevalidate: 60, isPublic: true }));
+// Single-release detail: same 60s/SWR-30 profile as the other single-entity
+// reads (/orgs/:slug, /sources/:slug, /products/:slug). The old 120s/SWR-60
+// let downstream caches serve up to ~3 minutes of staleness right after
+// generate-content / PATCH wrote title_short/summary (#1580). There is no
+// worker-side cache to bust — this header IS the freshness contract.
 v1.use(
   "/releases/:id",
-  cacheControl(120, { staleWhileRevalidate: 60, isPublic: true }),
+  cacheControl(60, { staleWhileRevalidate: 30, isPublic: true }),
   varyOnAccept(),
 );
 v1.use("/status/fetch-log", cacheControl(15));

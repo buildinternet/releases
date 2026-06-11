@@ -115,6 +115,10 @@ MCP `list_*` results expose pagination via `_meta.pagination` (page variant matc
 
 Audited 2026-05-05: `get_latest_releases` is the only feed-shaped MCP tool — every other tool is catalog (`list_*`), single-row (`get_*`), search, or AI generation. **New feed-shaped tools must use cursor + `_meta.pagination { kind: "cursor" }`.**
 
+## Read-path freshness (Cache-Control)
+
+Public GET routes advertise per-route `Cache-Control` headers (registered in `workers/api/src/index.ts`; `cacheControl()` is headers-only — there is no worker-side response cache to invalidate, so the header IS the freshness contract any downstream HTTP cache may honor). Single-entity reads — including `GET /v1/releases/:id` (#1580) — use `public, max-age=60, stale-while-revalidate=30`, so a just-written field (e.g. generate-content's `title_short`/`summary`) can read stale for up to ~90s through a caching intermediary; read back through an uncached route (the source-releases list) or wait out the window before concluding a write failed.
+
 ## OpenAPI coverage gate (#894 Phase 3)
 
 Every method registered under a `publicReadRoutes` prefix (defined in `workers/api/src/route-namespaces.ts`) must appear in `/v1/openapi.json`. Enforced by `scripts/check-openapi-coverage.ts`, run as a step in the CI `test` job.
