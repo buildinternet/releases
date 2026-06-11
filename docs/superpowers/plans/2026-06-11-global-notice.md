@@ -13,6 +13,7 @@
 ## File Structure
 
 **Create:**
+
 - `packages/core/src/site-notice.ts` — `SiteNotice` type, constants, `readableTextColor()`, `isHexColor()`, `StoredSiteNotice`.
 - `packages/core/src/site-notice.test.ts` — unit tests for the pure helpers.
 - `packages/api-types/src/schemas/site-notice.ts` — `SiteNoticeSchema`, `SiteNoticeResponseSchema`.
@@ -33,6 +34,7 @@
 - `web/src/app/admin/site-notice/notice-form.tsx` — client edit form.
 
 **Modify:**
+
 - `packages/core/package.json` — add the `./site-notice` export.
 - `packages/api-types/src/api-types.ts` — re-export the new schemas.
 - `workers/api/src/route-namespaces.ts` — add `"site-notice"` to `publicReadRoutes`.
@@ -49,6 +51,7 @@
 ## Task 1: Core `SiteNotice` type + pure helpers
 
 **Files:**
+
 - Create: `packages/core/src/site-notice.ts`
 - Test: `packages/core/src/site-notice.test.ts`
 - Modify: `packages/core/package.json`
@@ -202,6 +205,7 @@ git commit -m "feat(core): SiteNotice type + readableTextColor/isHexColor helper
 ## Task 2: api-types `SiteNoticeSchema` + response schema
 
 **Files:**
+
 - Create: `packages/api-types/src/schemas/site-notice.ts`
 - Create: `packages/api-types/src/schemas/site-notice.test.ts`
 - Modify: `packages/api-types/src/api-types.ts`
@@ -336,6 +340,7 @@ git commit -m "feat(api-types): SiteNoticeSchema + SiteNoticeResponseSchema"
 ## Task 3: D1 `site_settings` table + island + queries
 
 **Files:**
+
 - Create: `workers/api/migrations/20260611000000_add_site_settings.sql`
 - Create: `workers/api/src/db/schema-site-settings.ts`
 - Create: `workers/api/src/queries/site-settings.ts`
@@ -392,7 +397,11 @@ Create `workers/api/src/queries/site-settings.ts`:
 
 ```ts
 import { eq } from "drizzle-orm";
-import { SITE_NOTICE_KEY, type SiteNotice, type StoredSiteNotice } from "@buildinternet/releases-core/site-notice";
+import {
+  SITE_NOTICE_KEY,
+  type SiteNotice,
+  type StoredSiteNotice,
+} from "@buildinternet/releases-core/site-notice";
 import type { AnyDb } from "../db.js";
 import { siteSettings } from "../db/schema-site-settings.js";
 
@@ -462,6 +471,7 @@ git commit -m "feat(api): site_settings island table + get/put site-notice queri
 ## Task 4: API route module (`GET` public + `PUT` admin)
 
 **Files:**
+
 - Create: `workers/api/src/routes/site-notice.ts`
 - Create: `tests/unit/site-notice-route.test.ts`
 - Modify: `workers/api/src/route-namespaces.ts`
@@ -638,7 +648,10 @@ siteNoticeRoutes.put(
     description: "Admin only. Upserts the single site notice. Set `active: false` to hide it.",
     security: [{ bearerAuth: [] }],
     responses: {
-      200: { description: "The stored notice", content: { "application/json": { schema: resolver(SiteNoticeResponseSchema) } } },
+      200: {
+        description: "The stored notice",
+        content: { "application/json": { schema: resolver(SiteNoticeResponseSchema) } },
+      },
       403: { description: "Caller lacks admin scope" },
     },
   }),
@@ -678,9 +691,10 @@ In `workers/api/src/v1-routes.ts`, import and mount it. Add the import near the 
 ```ts
 import { siteNoticeRoutes } from "./routes/site-notice.js";
 ```
+
 ```ts
-  v1.route("/", statsRoutes);
-  v1.route("/", siteNoticeRoutes);
+v1.route("/", statsRoutes);
+v1.route("/", siteNoticeRoutes);
 ```
 
 - [ ] **Step 5: Run the test to verify it passes**
@@ -708,6 +722,7 @@ git commit -m "feat(api): GET/PUT /v1/site-notice routes (public read, admin wri
 ## Task 5: Web reader + slot selector + admin flag
 
 **Files:**
+
 - Modify: `web/src/lib/api.ts`
 - Create: `web/src/lib/site-notice.ts`
 - Create: `web/src/lib/site-notice.test.ts`
@@ -769,7 +784,10 @@ In `web/src/lib/api.ts`, add a `siteNotice` method inside the exported `api` obj
 Create `web/src/lib/site-notice.ts`:
 
 ```ts
-import type { StoredSiteNotice, SiteNoticePlacement } from "@buildinternet/releases-core/site-notice";
+import type {
+  StoredSiteNotice,
+  SiteNoticePlacement,
+} from "@buildinternet/releases-core/site-notice";
 import { api } from "./api";
 
 /**
@@ -838,6 +856,7 @@ git commit -m "feat(web): site-notice reader (fail-open), slot selector, admin f
 ## Task 6: Web server actions (read raw + publish)
 
 **Files:**
+
 - Create: `web/src/app/actions/site-notice.ts`
 
 No unit test (server actions need a live API + admin key; covered by manual verification in Task 11). Mirrors `setOrgNoticeAction` exactly for the gate + fetch + error shape.
@@ -924,6 +943,7 @@ git commit -m "feat(web): site-notice server actions (admin read + publish)"
 ## Task 7: Presentational view + server wrapper
 
 **Files:**
+
 - Create: `web/src/components/site-notice-view.tsx`
 - Create: `web/src/components/site-notice.tsx`
 
@@ -971,7 +991,10 @@ export function SiteNoticeView({
   const link =
     notice.href != null ? (
       notice.href.startsWith("/") ? (
-        <Link href={notice.href} className="font-semibold underline underline-offset-2 hover:no-underline">
+        <Link
+          href={notice.href}
+          className="font-semibold underline underline-offset-2 hover:no-underline"
+        >
           {notice.linkText ?? notice.href}
         </Link>
       ) : (
@@ -1066,6 +1089,7 @@ git commit -m "feat(web): SiteNoticeView (banner/card + dismiss) and server wrap
 ## Task 8: Mount the banner + card
 
 **Files:**
+
 - Modify: `web/src/app/layout.tsx`
 - Modify: `web/src/app/page.tsx`
 
@@ -1076,11 +1100,12 @@ In `web/src/app/layout.tsx`, add the import and render `<SiteNotice slot="banner
 ```tsx
 import { SiteNotice } from "@/components/site-notice";
 ```
+
 ```tsx
-                <main id="main" className="flex-1 flex flex-col">
-                  <SiteNotice slot="banner" />
-                  {children}
-                </main>
+<main id="main" className="flex-1 flex flex-col">
+  <SiteNotice slot="banner" />
+  {children}
+</main>
 ```
 
 (`RootLayout` is already an async server component, and `<SiteNotice>` awaits internally — no other change needed.)
@@ -1092,6 +1117,7 @@ In `web/src/app/page.tsx`, add the import and render `<SiteNotice slot="home" />
 ```tsx
 import { SiteNotice } from "@/components/site-notice";
 ```
+
 ```tsx
       </div>
       {/* Home-only site notice (card placement). Renders nothing unless an
@@ -1117,6 +1143,7 @@ git commit -m "feat(web): mount site-notice banner (layout) and card (home)"
 ## Task 9: Admin hub + site-notice admin page + form
 
 **Files:**
+
 - Create: `web/src/app/admin/page.tsx`
 - Create: `web/src/app/admin/site-notice/page.tsx`
 - Create: `web/src/app/admin/site-notice/notice-form.tsx`
@@ -1135,7 +1162,11 @@ import { isLocalAdminEnabled } from "@/lib/local-admin-flag";
 export const metadata: Metadata = { title: "Admin" };
 
 const TOOLS = [
-  { href: "/admin/site-notice", title: "Site notice", desc: "Publish a site-wide banner or home-page card." },
+  {
+    href: "/admin/site-notice",
+    title: "Site notice",
+    desc: "Publish a site-wide banner or home-page card.",
+  },
   { href: "/admin/status", title: "Status", desc: "Live fetch-log + system status dashboard." },
   { href: "/admin/api-tokens", title: "API tokens", desc: "Mint and revoke scoped API tokens." },
 ];
@@ -1236,7 +1267,9 @@ export function NoticeForm({ current }: { current: StoredSiteNotice | null }) {
   const [message, setMessage] = useState(current?.message ?? "");
   const [linkText, setLinkText] = useState(current?.linkText ?? "");
   const [href, setHref] = useState(current?.href ?? "");
-  const [placement, setPlacement] = useState<SiteNotice["placement"]>(current?.placement ?? "banner");
+  const [placement, setPlacement] = useState<SiteNotice["placement"]>(
+    current?.placement ?? "banner",
+  );
   const [color, setColor] = useState(current?.color ?? DEFAULT_SITE_NOTICE_COLOR);
   const [dismissible, setDismissible] = useState(current?.dismissible ?? false);
   const [saving, setSaving] = useState(false);
@@ -1297,7 +1330,11 @@ export function NoticeForm({ current }: { current: StoredSiteNotice | null }) {
           <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-stone-500">
             Link text
           </label>
-          <input value={linkText} onChange={(e) => setLinkText(e.target.value)} className={inputClass} />
+          <input
+            value={linkText}
+            onChange={(e) => setLinkText(e.target.value)}
+            className={inputClass}
+          />
         </div>
         <div>
           <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-stone-500">
@@ -1359,7 +1396,11 @@ export function NoticeForm({ current }: { current: StoredSiteNotice | null }) {
       </div>
 
       <label className="flex items-center gap-2 text-sm text-stone-700 dark:text-stone-200">
-        <input type="checkbox" checked={dismissible} onChange={(e) => setDismissible(e.target.checked)} />
+        <input
+          type="checkbox"
+          checked={dismissible}
+          onChange={(e) => setDismissible(e.target.checked)}
+        />
         Visitors can dismiss it
       </label>
 
@@ -1403,6 +1444,7 @@ git commit -m "feat(web): admin hub + site-notice admin page and form"
 ## Task 10: Dropdown "Admin" link
 
 **Files:**
+
 - Modify: `web/src/components/header.tsx`
 - Modify: `web/src/components/account-nav.tsx`
 - Modify: `web/src/components/mobile-nav.tsx`
@@ -1418,16 +1460,17 @@ import { isLocalAdminEnabled } from "@/lib/local-admin-flag";
 Inside `export function Header() {`, add as the first line:
 
 ```tsx
-  const adminEnabled = isLocalAdminEnabled();
+const adminEnabled = isLocalAdminEnabled();
 ```
 
 Pass it to both nav components:
 
 ```tsx
-      <MobileNav adminEnabled={adminEnabled} />
+<MobileNav adminEnabled={adminEnabled} />
 ```
+
 ```tsx
-        <AccountNav adminEnabled={adminEnabled} />
+<AccountNav adminEnabled={adminEnabled} />
 ```
 
 - [ ] **Step 2: Forward the prop through `MobileNav`**
@@ -1437,8 +1480,9 @@ In `web/src/components/mobile-nav.tsx`, change the signature and forward the pro
 ```tsx
 export function MobileNav({ adminEnabled = false }: { adminEnabled?: boolean }) {
 ```
+
 ```tsx
-              <AccountNav variant="mobile" adminEnabled={adminEnabled} />
+<AccountNav variant="mobile" adminEnabled={adminEnabled} />
 ```
 
 - [ ] **Step 3: Render the Admin link in `AccountNav`**
@@ -1469,29 +1513,33 @@ function AccountNavInner({ variant, adminEnabled }: { variant: Variant; adminEna
 In the **mobile** branch, add the Admin link right after the `Following` link (before the `USER_API_KEYS_ENABLED` block):
 
 ```tsx
-        {adminEnabled && (
-          <Link
-            href="/admin"
-            className="mt-2 block py-1 text-left text-stone-500 hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100"
-          >
-            Admin
-          </Link>
-        )}
+{
+  adminEnabled && (
+    <Link
+      href="/admin"
+      className="mt-2 block py-1 text-left text-stone-500 hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100"
+    >
+      Admin
+    </Link>
+  );
+}
 ```
 
 In the **desktop** dropdown, add the Admin link right after the `Following` `<Link>` (before the `USER_API_KEYS_ENABLED` block):
 
 ```tsx
-            {adminEnabled && (
-              <Link
-                href="/admin"
-                role="menuitem"
-                onClick={() => setOpen(false)}
-                className="mt-3 block w-full border border-stone-300 px-3 py-1.5 text-center text-sm text-stone-700 transition hover:bg-stone-50 dark:border-stone-700 dark:text-stone-200 dark:hover:bg-stone-900"
-              >
-                Admin
-              </Link>
-            )}
+{
+  adminEnabled && (
+    <Link
+      href="/admin"
+      role="menuitem"
+      onClick={() => setOpen(false)}
+      className="mt-3 block w-full border border-stone-300 px-3 py-1.5 text-center text-sm text-stone-700 transition hover:bg-stone-50 dark:border-stone-700 dark:text-stone-200 dark:hover:bg-stone-900"
+    >
+      Admin
+    </Link>
+  );
+}
 ```
 
 - [ ] **Step 4: Typecheck + commit**
@@ -1533,6 +1581,7 @@ Expected: exit 0.
 - [ ] **Step 5: Manual smoke (local, against a dev API with an admin key)**
 
 With `dev:api` + `dev:web` running and `RELEASES_API_KEY` configured:
+
 1. Sign in, open the account dropdown → confirm **Admin** appears → click it → `/admin` lists Site notice / Status / API tokens.
 2. Open **Site notice**, set a message + placement **Top banner** + a color + Active, Save → confirm the thin banner appears across the top of every page within ~60s.
 3. Switch placement to **Home card**, Save → confirm the banner disappears and a card shows on the home page only.
