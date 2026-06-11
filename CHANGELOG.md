@@ -3,6 +3,12 @@
 The product changelog for releases.sh, published to its own registry. Drafted daily from merged
 PRs and reviewed via PR. See docs/changelog-style.md for the voice and curation rules.
 
+## June 10, 2026
+
+**Added**
+- `/updates` — releases.sh now publishes its own product changelog at releases.sh/updates, with daily entries and per-day permalink pages going back to May 1.
+- API key last-used time — the account page now shows when each read-only API key was last used, or marks it as never used, making it easy to spot stale keys before revoking them.
+
 ## June 9, 2026
 
 **Added**
