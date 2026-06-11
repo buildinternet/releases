@@ -39,6 +39,7 @@ import type {
   ResolveResponse,
 } from "@buildinternet/releases-api-types";
 import { parseCoordinate } from "@buildinternet/releases-core/lookup-coordinate";
+import type { StoredSiteNotice } from "@buildinternet/releases-core/site-notice";
 import { apiBaseUrl, serverApiKey } from "./env";
 
 export type {
@@ -327,6 +328,8 @@ export function emptyResults(query: string): UnifiedSearchResponse {
 
 export const api = {
   stats: () => fetchApi<Stats>("/v1/stats"),
+  siteNotice: () =>
+    fetchApi<{ notice: StoredSiteNotice | null }>("/v1/site-notice", { next: { revalidate: 60 } }),
   latestReleases: async (
     opts: { count?: number; excludeSourceTypes?: string[] } = {},
   ): Promise<LatestReleaseItem[]> => {

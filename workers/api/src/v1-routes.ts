@@ -11,6 +11,7 @@
 import type { Hono } from "hono";
 import type { Env } from "./index.js";
 import { statsRoutes } from "./routes/stats.js";
+import { siteNoticeRoutes } from "./routes/site-notice.js";
 import { orgRoutes } from "./routes/orgs.js";
 import { sitemapRoutes } from "./routes/sitemap.js";
 import { sourceRoutes } from "./routes/sources.js";
@@ -74,6 +75,7 @@ export function mountV1Routes(v1: Hono<Env>) {
   mountWebhooksReplay(v1, (c) => c.env);
   v1.route("/", sessionRoutes);
   v1.route("/", statsRoutes);
+  v1.route("/", siteNoticeRoutes);
   v1.route("/", orgRoutes);
   v1.route("/", sitemapRoutes);
   v1.route("/", productRoutes);

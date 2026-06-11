@@ -22,9 +22,15 @@ const AUTH_ENABLED = AUTH_UI_ENABLED && Boolean(process.env.NEXT_PUBLIC_BETTER_A
 
 type Variant = "desktop" | "mobile";
 
-export function AccountNav({ variant = "desktop" }: { variant?: Variant }) {
+export function AccountNav({
+  variant = "desktop",
+  adminEnabled = false,
+}: {
+  variant?: Variant;
+  adminEnabled?: boolean;
+}) {
   if (!AUTH_ENABLED) return null;
-  return <AccountNavInner variant={variant} />;
+  return <AccountNavInner variant={variant} adminEnabled={adminEnabled} />;
 }
 
 function initialOf(name: string | undefined, email: string): string {
@@ -69,7 +75,7 @@ function UserAvatar({
   return <span aria-hidden="true">{initialOf(user.name ?? undefined, user.email)}</span>;
 }
 
-function AccountNavInner({ variant }: { variant: Variant }) {
+function AccountNavInner({ variant, adminEnabled }: { variant: Variant; adminEnabled: boolean }) {
   const router = useRouter();
   const { data, isPending } = useSession();
   const [open, setOpen] = useState(false);
@@ -129,6 +135,14 @@ function AccountNavInner({ variant }: { variant: Variant }) {
         >
           Following
         </Link>
+        {adminEnabled && (
+          <Link
+            href="/admin"
+            className="mt-2 block py-1 text-left text-stone-500 hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100"
+          >
+            Admin
+          </Link>
+        )}
         {USER_API_KEYS_ENABLED && (
           <Link
             href="/account"
@@ -201,6 +215,16 @@ function AccountNavInner({ variant }: { variant: Variant }) {
             >
               Following
             </Link>
+            {adminEnabled && (
+              <Link
+                href="/admin"
+                role="menuitem"
+                onClick={() => setOpen(false)}
+                className="mt-3 block w-full border border-stone-300 px-3 py-1.5 text-center text-sm text-stone-700 transition hover:bg-stone-50 dark:border-stone-700 dark:text-stone-200 dark:hover:bg-stone-900"
+              >
+                Admin
+              </Link>
+            )}
             {USER_API_KEYS_ENABLED && (
               <Link
                 href="/account"
