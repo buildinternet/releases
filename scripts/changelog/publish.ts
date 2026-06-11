@@ -55,13 +55,31 @@ const batch = await post(`/v1/sources/${SOURCE_ID}/releases/batch`, {
 });
 console.log("batch:", JSON.stringify(batch));
 
-// 2) Resolve the pushed dates to release IDs.
-const listRes = await fetch(`${BASE}/v1/sources/${SOURCE_ID}/releases?limit=100`, {
-  headers: { Authorization: `Bearer ${KEY}` },
-});
-const list = (await listRes.json()) as { releases: { id: string; publishedAt: string }[] };
+// 2) Resolve the pushed dates to release IDs. The list endpoint caps at limit=100,
+//    so paginate by cursor — but short-circuit as soon as every changed date is
+//    resolved (the changed days are the newest entries, so page 1 usually suffices).
+const wantedDates = new Set([...plan.added, ...plan.modified]);
 const idByDate = new Map<string, string>();
-for (const r of list.releases ?? []) idByDate.set((r.publishedAt ?? "").slice(0, 10), r.id);
+let cursor: string | null = null;
+do {
+  const url = new URL(`${BASE}/v1/sources/${SOURCE_ID}/releases`);
+  url.searchParams.set("limit", "100");
+  if (cursor) url.searchParams.set("cursor", cursor);
+  const listRes = await fetch(url, { headers: { Authorization: `Bearer ${KEY}` } });
+  if (!listRes.ok) {
+    console.error(`GET ${url.pathname} → HTTP ${listRes.status}: ${await listRes.text()}`);
+    process.exit(1);
+  }
+  const page = (await listRes.json()) as {
+    releases: { id: string; publishedAt: string | null }[];
+    pagination: { nextCursor: string | null };
+  };
+  for (const r of page.releases ?? []) {
+    const d = (r.publishedAt ?? "").slice(0, 10);
+    if (wantedDates.has(d) && !idByDate.has(d)) idByDate.set(d, r.id);
+  }
+  cursor = page.pagination?.nextCursor ?? null;
+} while (cursor && idByDate.size < wantedDates.size);
 
 const ids = (dates: string[]) =>
   dates.map((d) => idByDate.get(d)).filter((x): x is string => Boolean(x));
