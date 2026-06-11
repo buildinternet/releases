@@ -286,7 +286,7 @@ export function OrgReleaseList({
                   orgSlug={orgSlug}
                   multipleSourcesExist={multipleSourcesExist}
                   orgAvatarUrl={orgAvatarUrl}
-                  showSummary={showRollupSummary}
+                  showRollupSummary={showRollupSummary}
                 />
               );
             }
@@ -338,7 +338,7 @@ function ReleaseRollupRow({
   orgSlug,
   multipleSourcesExist,
   orgAvatarUrl,
-  showSummary,
+  showRollupSummary,
 }: {
   item: RollupItem;
   hideDate?: boolean;
@@ -346,7 +346,7 @@ function ReleaseRollupRow({
   multipleSourcesExist: boolean;
   orgAvatarUrl?: string | null;
   /** Render the joined member-headline gist under the collapsed header (the /updates changelog). */
-  showSummary?: boolean;
+  showRollupSummary?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const newest = item.releases[0];
@@ -355,7 +355,7 @@ function ReleaseRollupRow({
   const overflow = count - pills.length;
   // Joined per-version gist for the collapsed card (opt-in, /updates only). Null
   // when no member is more descriptive than its bare version.
-  const summary = showSummary ? rollupSummaryLine(item.releases) : null;
+  const summary = showRollupSummary ? rollupSummaryLine(item.releases) : null;
   // App Store rollups (keyed per-source, #1236) get the app icon on the
   // collapsed header so the cluster reads as "this app" at a glance. #1206
   const appInfo = appRowInfoFromWire(newest.source.appStore, newest.source.name);
