@@ -10,13 +10,13 @@ import Link from "next/link";
  */
 const USE_CASES: { title: string; body: string; prompt: string }[] = [
   {
-    title: "Scout the competition",
-    body: "Agents research what other companies in your space are shipping and turn it into roadmap input — no links pasted in, no tabs.",
-    prompt: "What did our competitors ship this quarter that we haven't?",
+    title: "Spot emerging trends",
+    body: "Agents read what's shipping across your space and surface the patterns — the week everyone added a CLI, the shift toward task-based model routing — as roadmap context.",
+    prompt: "What product trends are emerging across coding tools this quarter?",
   },
   {
-    title: "Catch integrations early",
-    body: "Spot when another product ships an integration with yours — or when a competitor picks up a complementary one you don't have.",
+    title: "Catch new integrations",
+    body: "See when products in your ecosystem ship integrations with yours, or with the tools your users already rely on.",
     prompt: "Who announced integrations with our platform in the last 90 days?",
   },
   {
