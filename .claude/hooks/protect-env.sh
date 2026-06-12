@@ -18,7 +18,13 @@ INPUT=$(cat)
 TOOL=$(printf '%s' "$INPUT" | jq -r '.tool_name // empty')
 
 is_protected() {
-  case "$(basename "$1")" in
+  # Lowercase the basename first: APFS (macOS) and NTFS resolve paths
+  # case-insensitively, so `.ENV` is the SAME file as `.env`. Matching
+  # case-sensitively here would let a differently-cased name slip past the
+  # guard. Keep this normalization if you edit the patterns below.
+  local name
+  name=$(basename "$1" | tr '[:upper:]' '[:lower:]')
+  case "$name" in
     *.example | *.sample | *.template) return 1 ;;
     .env | .env.* | .dev.vars | *.dev.vars) return 0 ;;
     *) return 1 ;;
