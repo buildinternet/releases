@@ -9,6 +9,9 @@ import { isLocalAdminEnabled } from "@/lib/local-admin-flag";
 
 export function Header() {
   const adminEnabled = isLocalAdminEnabled();
+  // Local dev gets a loud orange "DEV" badge so the environment is unmistakable
+  // at a glance; deployed preview/prod keep the subtle gray "preview" chip.
+  const isLocalDev = process.env.NODE_ENV === "development";
   return (
     <header
       className="relative z-40 border-b border-stone-200 dark:border-stone-800 px-6 py-4 flex items-center gap-4 sm:gap-6"
@@ -45,9 +48,15 @@ export function Header() {
           <rect x="14" y="40" width="36" height="6" rx="1.5" fill="oklch(0.60 0.18 252)" />
         </svg>
         releases.sh
-        <span className="text-[10px] font-medium uppercase tracking-wider text-stone-400 dark:text-stone-500 border border-stone-300 dark:border-stone-700 rounded px-1.5 py-0.5 leading-none">
-          preview
-        </span>
+        {isLocalDev ? (
+          <span className="text-[10px] font-bold uppercase tracking-wider text-stone-950 bg-amber-400 rounded px-1.5 py-0.5 leading-none">
+            dev
+          </span>
+        ) : (
+          <span className="text-[10px] font-medium uppercase tracking-wider text-stone-400 dark:text-stone-500 border border-stone-300 dark:border-stone-700 rounded px-1.5 py-0.5 leading-none">
+            preview
+          </span>
+        )}
       </Link>
       <div className="flex min-w-0 flex-1 justify-center">
         <SearchBar className="hidden lg:block w-full max-w-[420px]" autoFocus={false} />
