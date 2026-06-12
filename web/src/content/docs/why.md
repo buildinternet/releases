@@ -15,6 +15,7 @@ That matters because changelogs have no standard. Teams publish in GitHub releas
 - **One feed across sources.** GitHub releases, GitHub CHANGELOG files, marketing blogs, public-facing release-notes pages, RSS/Atom, and JSON feeds all normalize into the same shape — org, product, title, date, summary, categories, tags. The launch post that never made it into a tag is in there too.
 - **Product-level signal, not commit noise.** Releases are scoped to orgs and products and summarized for humans, so a roadmap review or competitive scan doesn't drown in dependency-bumps and CI tweaks — and picks up the marketing-side announcements that GitHub never sees in the first place.
 - **With AI, products now change daily.** Markets move faster than any human reader can keep up with. Releases gives your agents a live view of what's shipping across the tools you depend on and the competitors you're tracking, so research prompts and weekly reviews stay current without manual hunting.
+- **Signal agents can act on, not just report.** As agents get more autonomous, landscape awareness stops being a digest and becomes an input: trend lines across your industry and adjacent ones are the signal an agent can use to steer its own roadmap — noticing what's emerging and deciding what's worth building next.
 
 ## Get started
 
