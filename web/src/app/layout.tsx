@@ -49,7 +49,13 @@ const THEME_SCRIPT = `(function(){try{var d=document.documentElement;var stored=
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const themeCookie = (await cookies()).get("theme")?.value;
   const initialTheme = themeCookie === "light" || themeCookie === "dark" ? themeCookie : "system";
-  const htmlClassName = [jetbrainsMono.variable, initialTheme === "system" ? null : initialTheme]
+  // scroll-smooth: in-page anchor jumps (e.g. the homepage "what agents use
+  // this for" link) glide instead of teleporting.
+  const htmlClassName = [
+    "scroll-smooth",
+    jetbrainsMono.variable,
+    initialTheme === "system" ? null : initialTheme,
+  ]
     .filter(Boolean)
     .join(" ");
 

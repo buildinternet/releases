@@ -15,7 +15,7 @@ import { InstallStepsInline, InstallStepsSidebar } from "@/components/install-st
 import { ShippingNowTicker } from "@/components/shipping-now-ticker";
 import { TerminalSession, type TerminalTab } from "@/components/terminal-session";
 import { SignupCta } from "@/components/signup-cta";
-import { AgentUseCases } from "@/components/agent-use-cases";
+import { AgentUseCases, AgentUseCasesJumpLink } from "@/components/agent-use-cases";
 import { formatStars } from "@/lib/format-stars";
 import {
   FeaturedCollections,
@@ -390,8 +390,8 @@ export default async function HomePage() {
           ariaLabel="Example releases CLI session"
         />
         <SignupCta />
+        <AgentUseCasesJumpLink />
       </div>
-      <AgentUseCases />
       {latest.length > 0 && <ShippingNowTicker releases={latest} />}
       <div className="max-w-[1240px] mx-auto px-6 pb-12 xl:grid xl:grid-cols-[minmax(0,1fr)_320px] xl:gap-12">
         <aside className="hidden xl:block xl:order-2 xl:pt-2">
@@ -427,6 +427,10 @@ export default async function HomePage() {
           </Link>
         </div>
       </div>
+      {/* Intro material lives below the changing content (ticker + tables):
+          returning visitors get fresh releases first; the jump link under the
+          demo carries first-timers down here. */}
+      <AgentUseCases />
     </div>
   );
 }

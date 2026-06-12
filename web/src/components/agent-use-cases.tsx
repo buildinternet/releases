@@ -4,31 +4,38 @@ import Link from "next/link";
  * Homepage block spelling out the non-obvious agent use cases — the
  * landscape-awareness jobs ("what is the rest of the market shipping?") that
  * don't read off the CLI demo on their own. Static copy; each card pairs a
- * one-line job description with the kind of prompt an agent answers using the
- * registry. Sits directly under the demo so "here's the tool" flows into
- * "here's why an agent reaches for it".
+ * short job description with a plain-spoken prompt an agent answers using the
+ * registry. Lives at the very bottom of the page (intro material; returning
+ * visitors get the changing content first) — {@link AgentUseCasesJumpLink}
+ * under the demo deep-links here for first-timers.
  */
+const SECTION_ID = "why-agents";
+
 const USE_CASES: { title: string; body: string; prompt: string }[] = [
   {
     title: "Spot emerging trends",
-    body: "Agents read what's shipping across your space and surface the patterns — the week everyone added a CLI, the shift toward task-based model routing — as roadmap context.",
-    prompt: "What product trends are emerging across coding tools this quarter?",
+    body: "Agents read across your whole space and surface the patterns — the week everyone added a CLI, the shift toward task-based model routing.",
+    prompt: "What's trending across dev tools this quarter?",
   },
   {
     title: "Catch new integrations",
-    body: "See when products in your ecosystem ship integrations with yours, or with the tools your users already rely on.",
-    prompt: "Who announced integrations with our platform in the last 90 days?",
+    body: "Know when products in your ecosystem ship integrations with yours, or with the tools your users rely on.",
+    prompt: "Who's shipped integrations with us lately?",
   },
   {
-    title: "Vet tools before adopting",
-    body: "Before recommending a dependency or vendor, an agent checks what they've shipped lately and how fast they're moving.",
-    prompt: "Is this SDK still actively shipping? What changed in the past six months?",
+    title: "Stay current on your stack",
+    body: "A rundown of everything your tools shipped — including launches that never made it into a version tag.",
+    prompt: "What shipped across our stack this week?",
   },
 ];
 
 export function AgentUseCases() {
   return (
-    <section aria-labelledby="agent-use-cases-heading" className="max-w-3xl mx-auto px-6 pb-12">
+    <section
+      id={SECTION_ID}
+      aria-labelledby="agent-use-cases-heading"
+      className="max-w-3xl mx-auto px-6 pb-12 scroll-mt-8"
+    >
       <div className="text-center mb-5">
         <h2
           id="agent-use-cases-heading"
@@ -66,5 +73,23 @@ export function AgentUseCases() {
         </Link>
       </p>
     </section>
+  );
+}
+
+/**
+ * Small footnote link under the CLI demo that jumps to the use-case section
+ * at the bottom of the page. Same visual treatment as {@link SignupCta}'s
+ * footnote so the two stack as quiet siblings.
+ */
+export function AgentUseCasesJumpLink() {
+  return (
+    <p className="mt-3 text-center text-[12px] text-stone-400 dark:text-stone-500">
+      <a
+        href={`#${SECTION_ID}`}
+        className="underline decoration-stone-300 dark:decoration-stone-600 underline-offset-2 hover:text-stone-600 dark:hover:text-stone-300"
+      >
+        New here? See what agents use this for
+      </a>
+    </p>
   );
 }
