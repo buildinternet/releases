@@ -3,6 +3,19 @@
 The product changelog for releases.sh, published to its own registry. Drafted daily from merged
 PRs and reviewed via PR. See docs/changelog-style.md for the voice and curation rules.
 
+## June 11, 2026
+
+**Added**
+- Site-wide notices — admins can post a banner or homepage card with a configurable color and an optional dismiss button.
+- Avatar facepile previews on category pages and collection search results — up to three member logos so you can recognize what's inside at a glance.
+
+**Changed**
+- Search entity matching now uses word boundaries and relevance ranking — searching "ai" shows AI-focused orgs and products, not every `.ai` TLD. The web search page adds a capped "All" tab with per-section "show all →" links, URL-synced tabs (`?filter=`), and word-boundary highlights. The MCP `search` tool now uses the same matching logic.
+
+**Fixed**
+- Source fetch now auto-generates AI titles and summaries for newly-inserted releases in the same request, without waiting for the next cron run.
+- Release detail API responses are now stale for at most ~90 seconds (down from ~3 minutes).
+
 ## June 10, 2026
 
 **Added**
