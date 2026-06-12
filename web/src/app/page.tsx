@@ -393,7 +393,25 @@ export default async function HomePage() {
         </aside>
         <div className="xl:order-1 max-w-4xl xl:max-w-none w-full mx-auto">
           <FeaturedCollectionsCollapsible collections={featuredCollections} />
-          {orgsForTable.length > 0 && <OrgTable orgs={orgsForTable} />}
+          {orgsForTable.length > 0 && (
+            <>
+              {/* Neutral sibling to the amber "Recent" ticker heading above:
+                  same uppercase/bold/tracking treatment, stone tones instead of
+                  amber, signalling the table below is a featured subset (the
+                  "Browse all N orgs" link spells out the full catalog). */}
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-stone-400 dark:text-stone-500" aria-hidden="true">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 2l2.9 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l7.1-1.01L12 2z" />
+                  </svg>
+                </span>
+                <h2 className="text-[11px] font-bold uppercase tracking-wider text-stone-600 dark:text-stone-300">
+                  Featured
+                </h2>
+              </div>
+              <OrgTable orgs={orgsForTable} />
+            </>
+          )}
           <Link
             href="/catalog"
             className="mt-6 inline-block text-[12px] text-stone-400 dark:text-stone-500 underline decoration-stone-300 dark:decoration-stone-600 underline-offset-2 hover:text-stone-600 dark:hover:text-stone-300"
