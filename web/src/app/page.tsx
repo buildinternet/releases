@@ -389,8 +389,11 @@ export default async function HomePage() {
           animate
           ariaLabel="Example releases CLI session"
         />
-        <SignupCta />
+        {/* Chip first, footnote second: the jump chip is the louder of the two
+            (button-ish, for first-timers), the signup line stays quiet fine
+            print beneath it. */}
         <AgentUseCasesJumpLink />
+        <SignupCta />
       </div>
       {latest.length > 0 && <ShippingNowTicker releases={latest} />}
       <div className="max-w-[1240px] mx-auto px-6 pb-12 xl:grid xl:grid-cols-[minmax(0,1fr)_320px] xl:gap-12">

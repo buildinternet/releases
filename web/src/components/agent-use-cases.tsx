@@ -3,29 +3,30 @@ import Link from "next/link";
 /**
  * Homepage block spelling out the non-obvious agent use cases — the
  * landscape-awareness jobs ("what is the rest of the market shipping?") that
- * don't read off the CLI demo on their own. Static copy; each card pairs a
- * short job description with a plain-spoken prompt an agent answers using the
- * registry. Lives at the very bottom of the page (intro material; returning
- * visitors get the changing content first) — {@link AgentUseCasesJumpLink}
- * under the demo deep-links here for first-timers.
+ * don't read off the CLI demo on their own. Prompt-first: each entry leads
+ * with the plain-spoken question an agent answers using the registry, with a
+ * one-line answer beneath — a quiet list, no cards, matching the page's
+ * terminal idiom. Lives at the very bottom of the page (intro material;
+ * returning visitors get the changing content first) —
+ * {@link AgentUseCasesJumpLink} under the demo deep-links here for
+ * first-timers.
  */
 const SECTION_ID = "why-agents";
 
-const USE_CASES: { title: string; body: string; prompt: string }[] = [
+const USE_CASES: { prompt: string; answer: string }[] = [
   {
-    title: "Spot emerging trends",
-    body: "Agents read across your whole space and surface the patterns — the week everyone added a CLI, the shift toward task-based model routing.",
-    prompt: "What's trending across dev tools this quarter?",
-  },
-  {
-    title: "Catch new integrations",
-    body: "Know when products in your ecosystem ship integrations with yours, or with the tools your users rely on.",
-    prompt: "Who's shipped integrations with us lately?",
-  },
-  {
-    title: "Stay current on your stack",
-    body: "A rundown of everything your tools shipped — including launches that never made it into a version tag.",
     prompt: "What shipped across our stack this week?",
+    answer:
+      "Everything your tools released — including launches that never made it into a version tag.",
+  },
+  {
+    prompt: "Who's shipped integrations with us lately?",
+    answer: "Products in your ecosystem plugging into yours, or into the tools your users rely on.",
+  },
+  {
+    prompt: "What's emerging across our industry that we should build next?",
+    answer:
+      "Trend lines from your space and adjacent ones — read as roadmap input, not a news digest.",
   },
 ];
 
@@ -34,37 +35,39 @@ export function AgentUseCases() {
     <section
       id={SECTION_ID}
       aria-labelledby="agent-use-cases-heading"
-      className="max-w-3xl mx-auto px-6 pb-12 scroll-mt-8"
+      className="max-w-xl mx-auto px-6 pb-16 scroll-mt-8"
     >
-      <div className="text-center mb-5">
+      <div className="text-center mb-6">
+        {/* Deliberately NOT the RECENT/FEATURED micro-label treatment: those
+            label data tables, this is narrative framing for first-timers and
+            needs to read as a heading, not a tag. */}
         <h2
           id="agent-use-cases-heading"
-          className="text-[11px] font-bold uppercase tracking-wider text-stone-600 dark:text-stone-300"
+          className="text-[17px] font-semibold tracking-tight text-stone-900 dark:text-stone-100"
         >
-          Why agents query this
+          What agents ask
         </h2>
         <p className="mt-1.5 text-[13px] text-stone-500 dark:text-stone-400">
           Pulling the latest GitHub release is the easy part. The point is the rest of the landscape
           — launches, vendor changelogs, and announcements your agent can reason over.
         </p>
       </div>
-      <div className="grid gap-3 sm:grid-cols-3">
+      <ul className="space-y-5">
         {USE_CASES.map((uc) => (
-          <div
-            key={uc.title}
-            className="rounded-lg border border-stone-200 dark:border-stone-800 bg-stone-50 dark:bg-stone-900/40 p-4 flex flex-col gap-2"
-          >
-            <h3 className="text-[13px] font-semibold text-stone-900 dark:text-stone-100">
-              {uc.title}
-            </h3>
-            <p className="text-[12px] leading-snug text-stone-500 dark:text-stone-400">{uc.body}</p>
-            <p className="mt-auto pt-1 font-mono text-[11px] leading-snug text-stone-400 dark:text-stone-500">
+          <li key={uc.prompt}>
+            <p className="font-mono text-[13px] leading-snug text-stone-700 dark:text-stone-200">
+              <span aria-hidden="true" className="select-none text-stone-400 dark:text-stone-600">
+                &gt;{" "}
+              </span>
               &ldquo;{uc.prompt}&rdquo;
             </p>
-          </div>
+            <p className="mt-1 pl-4 text-[13px] leading-snug text-stone-500 dark:text-stone-400">
+              {uc.answer}
+            </p>
+          </li>
         ))}
-      </div>
-      <p className="mt-4 text-center text-[12px] text-stone-400 dark:text-stone-500">
+      </ul>
+      <p className="mt-6 text-center text-[12px] text-stone-400 dark:text-stone-500">
         <Link
           href="/docs/why"
           className="underline decoration-stone-300 dark:decoration-stone-600 underline-offset-2 hover:text-stone-600 dark:hover:text-stone-300"
@@ -77,18 +80,34 @@ export function AgentUseCases() {
 }
 
 /**
- * Small footnote link under the CLI demo that jumps to the use-case section
- * at the bottom of the page. Same visual treatment as {@link SignupCta}'s
- * footnote so the two stack as quiet siblings.
+ * Chip-style anchor under the CLI demo that jumps to the use-case section at
+ * the bottom of the page. Deliberately NOT the underlined-footnote treatment
+ * {@link SignupCta} uses — two identical stacked footnotes read as one blob
+ * of fine print, and this one earns the button-ish affordance (it navigates
+ * within the page; the chevron signals the scroll).
  */
 export function AgentUseCasesJumpLink() {
   return (
-    <p className="mt-3 text-center text-[12px] text-stone-400 dark:text-stone-500">
+    <p className="mt-4 text-center">
       <a
         href={`#${SECTION_ID}`}
-        className="underline decoration-stone-300 dark:decoration-stone-600 underline-offset-2 hover:text-stone-600 dark:hover:text-stone-300"
+        className="inline-flex items-center gap-1.5 rounded-full border border-stone-200 bg-stone-50 px-3 py-1 text-[12px] text-stone-500 transition-colors hover:border-stone-300 hover:text-stone-700 dark:border-stone-700 dark:bg-stone-800/60 dark:text-stone-400 dark:hover:border-stone-600 dark:hover:text-stone-200"
       >
         New here? See what agents use this for
+        <svg
+          width="10"
+          height="10"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M12 5v14" />
+          <path d="m19 12-7 7-7-7" />
+        </svg>
       </a>
     </p>
   );
