@@ -14,6 +14,8 @@ import { OrgTable } from "@/components/org-table";
 import { InstallStepsInline, InstallStepsSidebar } from "@/components/install-steps";
 import { ShippingNowTicker } from "@/components/shipping-now-ticker";
 import { TerminalSession, type TerminalTab } from "@/components/terminal-session";
+import { SignupCta } from "@/components/signup-cta";
+import { formatStars } from "@/lib/format-stars";
 import {
   FeaturedCollections,
   FeaturedCollectionsCollapsible,
@@ -354,8 +356,10 @@ export default async function HomePage() {
                 sources
               </span>
               <span>
+                {/* Compact (35.6k) rather than the precise count — the hero
+                    stat is a scale signal, not a ledger. */}
                 <strong className="text-stone-600 dark:text-stone-300">
-                  {(stats?.releases ?? 0).toLocaleString()}
+                  {formatStars(stats?.releases ?? 0)}
                 </strong>{" "}
                 releases
               </span>
@@ -384,6 +388,7 @@ export default async function HomePage() {
           animate
           ariaLabel="Example releases CLI session"
         />
+        <SignupCta />
       </div>
       {latest.length > 0 && <ShippingNowTicker releases={latest} />}
       <div className="max-w-[1240px] mx-auto px-6 pb-12 xl:grid xl:grid-cols-[minmax(0,1fr)_320px] xl:gap-12">
