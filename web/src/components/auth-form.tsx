@@ -48,6 +48,38 @@ const GOOGLE_ONE_TAP_ENABLED =
  */
 const MAGIC_LINK_ENABLED = process.env.NEXT_PUBLIC_AUTH_MAGIC_LINK === "true";
 
+/**
+ * In local dev the API worker can't deliver real auth email — the AUTH_EMAIL
+ * Cloudflare Email Sending binding only sends from a deployed env, and `wrangler dev`
+ * simulates the send. So the normal "check your email" copy is a lie locally and
+ * developers get stuck waiting for mail that never comes. Under `next dev`,
+ * `NODE_ENV` is "development" (Next.js inlines it at build); a production build —
+ * Vercel prod or any preview — sets it to "production", so this notice ships to zero
+ * real users with no env var to remember. The worker logs the verify/sign-in link to
+ * the `dev:api` console (see workers/api/src/auth/email.ts); this banner points there.
+ */
+const DEV_EMAIL_NOTICE = process.env.NODE_ENV === "development";
+
+/**
+ * Dev-only banner warning that auth emails aren't delivered locally and pointing to
+ * the `dev:api` console for the link. `compact` trims the copy for the pre-submit
+ * spot on the form (vs. the fuller version on the check-email panel). Renders nothing
+ * outside local dev.
+ */
+function DevEmailNotice({ compact = false }: { compact?: boolean }) {
+  if (!DEV_EMAIL_NOTICE) return null;
+  return (
+    <div className="border border-amber-300 bg-amber-50 px-3 py-2.5 text-[13px] leading-5 text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200">
+      <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em]">
+        Dev mode
+      </span>{" "}
+      {compact
+        ? "Auth emails aren't delivered locally — after submitting, copy the link from your dev:api console."
+        : "No email is actually sent in local dev. Copy the verification / sign-in link from your dev:api console to continue."}
+    </div>
+  );
+}
+
 const PROVIDER_META: Record<"google" | "github", { label: string; icon: ReactNode }> = {
   google: {
     label: "Google",
@@ -346,6 +378,7 @@ export function AuthForm({ mode, redirectTo = "/" }: { mode: Mode; redirectTo?: 
             )}
           </p>
         </div>
+        <DevEmailNotice />
         {error && (
           <p className="text-sm text-red-600 dark:text-red-400" role="alert">
             {error}

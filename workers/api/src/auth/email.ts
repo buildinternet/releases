@@ -6,12 +6,28 @@
  *
  * `sendAuthEmail` NEVER throws: a missing binding or a send failure degrades to a
  * logged event and a `{ sent: false }` result, so it can't surface as an unhandled
- * rejection inside Better Auth's request flow. It always logs the action. The link
- * itself (a single-use verify/reset token) is logged ONLY in local development —
- * `ENVIRONMENT` unset or `"development"` — so a dev run can finish the flow by
- * copy-pasting the URL from Worker logs. Every DEPLOYED environment (production AND
- * staging both carry a concrete `ENVIRONMENT`) omits it, so a shared log sink never
- * carries the token.
+ * rejection inside Better Auth's request flow. It always logs the action.
+ *
+ * The single-use verify/reset/sign-in link is surfaced in logs so a dev run can
+ * finish the flow by copy-pasting the URL from the `dev:api` Worker console (the
+ * Cloudflare Email Sending binding doesn't deliver real mail under `wrangler dev`).
+ * The link is logged ONLY when this is not a deployed env, decided by `devLogLink`:
+ * a non-prod `ENVIRONMENT` (unset / `"development"`) OR the local-only `DEV_MODE`
+ * var. The `DEV_MODE` arm is the resilience backstop for the footgun where local
+ * `wrangler dev` inherits the top-level `ENVIRONMENT: "production"` var: `DEV_MODE`
+ * is set in `.dev.vars` and is NEVER present in a deployed env, so it cleanly tells
+ * local apart from prod where `ENVIRONMENT` alone can't (the same discriminator
+ * `resolveSigningSecret` uses). When `devLogLink` is on, the token is logged on
+ * EVERY outcome — including a "sent" success, since `wrangler dev` may simulate the
+ * send without delivering, so a bare success log would otherwise leave nothing to
+ * act on.
+ *
+ * Every deployed env (production AND staging carry a concrete `ENVIRONMENT` and no
+ * `DEV_MODE`) logs neither the body nor the URL on ANY branch — a successful send, a
+ * transient failure, AND a missing-binding misconfiguration all keep the single-use
+ * token out of the shared log sink. A missing binding in prod stays loudly
+ * observable via the `email-no-binding` event plus its subject + recipient, just
+ * without the live credential.
  */
 import { logEvent } from "@releases/lib/log-event";
 
@@ -33,6 +49,12 @@ export type AuthEmailEnv = {
   AUTH_EMAIL_FROM?: string;
   AUTH_EMAIL_FROM_NAME?: string;
   ENVIRONMENT?: string;
+  /**
+   * Local-only flag (`.dev.vars`, never set in a deployed env). When `"true"` the
+   * recovery link is surfaced in logs even though local `wrangler dev` reports
+   * `ENVIRONMENT: "production"`. See the module header and `resolveSigningSecret`.
+   */
+  DEV_MODE?: string;
 };
 
 /** A fully-rendered email (subject + both bodies); the recipient is `to`. */
@@ -50,6 +72,17 @@ export type SendAuthEmailResult =
 const DEFAULT_FROM = "noreply@releases.sh";
 const DEFAULT_FROM_NAME = "Releases";
 
+/**
+ * Pull the first http(s) URL out of a rendered text body so the dev log can carry a
+ * single, copy-pasteable line instead of burying the link inside the multi-line
+ * `body`. The templates always embed exactly the verify/reset/sign-in URL on its own
+ * line, so a whitespace-bounded match is reliable here. Returns undefined if none is
+ * found (callers fall back to `(see body)`).
+ */
+function firstUrl(text: string): string | undefined {
+  return text.match(/https?:\/\/\S+/)?.[0];
+}
+
 export async function sendAuthEmail(
   env: AuthEmailEnv,
   msg: AuthEmailMessage,
@@ -57,19 +90,28 @@ export async function sendAuthEmail(
   const addr = env.AUTH_EMAIL_FROM || DEFAULT_FROM;
   const name = env.AUTH_EMAIL_FROM_NAME || DEFAULT_FROM_NAME;
   const from = `${name} <${addr}>`;
-  // Surface the token link in the log ONLY in local development. Every deployed
-  // environment (production AND staging) sets a concrete `ENVIRONMENT`, so a
-  // single-use token is never written to a shared log sink.
-  const logLink = !env.ENVIRONMENT || env.ENVIRONMENT === "development";
+  // Is this a non-deployed (local) run, where surfacing the single-use token link in
+  // logs is the only way to finish the flow? True for a non-prod ENVIRONMENT (unset /
+  // "development") OR the local-only DEV_MODE var — the latter catches local
+  // `wrangler dev`, which inherits the top-level ENVIRONMENT: "production" var and so
+  // can't be told apart from prod by ENVIRONMENT alone. A deployed env sets neither,
+  // so the token is NEVER written to a shared log sink on any branch below.
+  const devLogLink =
+    !env.ENVIRONMENT || env.ENVIRONMENT === "development" || env.DEV_MODE === "true";
+  const url = firstUrl(msg.text);
 
   if (!env.AUTH_EMAIL) {
     logEvent("warn", {
       component: "auth",
       event: "email-no-binding",
-      message: `AUTH_EMAIL binding absent; "${msg.subject}" not sent to ${msg.to}`,
-      // The link lives in the body — local dev only, so the flow can be finished
-      // from logs; never logged in a deployed env (single-use token).
-      ...(logLink ? { body: msg.text } : {}),
+      // Loud + greppable: the binding is missing → this email did NOT send. The
+      // recovery URL is included ONLY in a local env — a missing binding in real
+      // prod must not write a live token to a shared log sink; the event + subject +
+      // recipient keep the misconfiguration observable without the credential.
+      message: devLogLink
+        ? `AUTH EMAIL NOT SENT (no AUTH_EMAIL binding) — open this URL to finish "${msg.subject}" for ${msg.to}: ${url ?? "(see body)"}`
+        : `AUTH EMAIL NOT SENT (no AUTH_EMAIL binding) for "${msg.subject}" to ${msg.to}`,
+      ...(devLogLink ? { body: msg.text } : {}),
       environment: env.ENVIRONMENT,
     });
     return { sent: false, reason: "no_binding" };
@@ -86,7 +128,13 @@ export async function sendAuthEmail(
     logEvent("info", {
       component: "auth",
       event: "email-sent",
-      message: `Sent "${msg.subject}" to ${msg.to}`,
+      // A "sent" success under `wrangler dev` may be SIMULATED (no real delivery),
+      // so in a non-prod env surface the link too — don't strand a dev on a success
+      // log that never reached an inbox. Real prod keeps the token out of logs.
+      message: devLogLink
+        ? `AUTH EMAIL sent in dev (may not be delivered) — open this URL to finish "${msg.subject}" for ${msg.to}: ${url ?? "(see body)"}`
+        : `Sent "${msg.subject}" to ${msg.to}`,
+      ...(devLogLink ? { body: msg.text } : {}),
       environment: env.ENVIRONMENT,
     });
     return { sent: true, messageId: res?.messageId };
@@ -94,10 +142,13 @@ export async function sendAuthEmail(
     logEvent("error", {
       component: "auth",
       event: "email-send-failed",
-      message: `Failed to send "${msg.subject}" to ${msg.to}`,
+      message: devLogLink
+        ? `AUTH EMAIL NOT SENT (send failed) — open this URL to finish "${msg.subject}" for ${msg.to}: ${url ?? "(see body)"}`
+        : `Failed to send "${msg.subject}" to ${msg.to}`,
       error: err instanceof Error ? err.message : String(err),
-      // Single-use token in the body: local dev only (see above).
-      ...(logLink ? { body: msg.text } : {}),
+      // Single-use token in the body: non-prod only — a transient prod send failure
+      // must not write a live token to a shared log sink.
+      ...(devLogLink ? { body: msg.text } : {}),
       environment: env.ENVIRONMENT,
     });
     return { sent: false, reason: "error" };
