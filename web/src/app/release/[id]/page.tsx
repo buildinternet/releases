@@ -302,6 +302,7 @@ export default async function ReleaseDetailPage({ params }: { params: Promise<{ 
             title={release.title}
             media={media}
             repoUrl={repoUrl}
+            sourceUrl={release.url}
           />
           <Suspense fallback={null}>
             <AlsoCoveredBy anchorReleaseId={release.id} />

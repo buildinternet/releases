@@ -19,6 +19,7 @@ import type { VideoRowInfo } from "@/lib/video-source";
 import { EXTERNAL_UGC_REL } from "@/lib/sanitize";
 import { deriveFeedTitle } from "@/lib/release-title";
 import { markdownComponents, collapsedMarkdownComponents } from "./markdown-components";
+import { rewriteRelativeLinks, originFromUrl } from "@releases/rendering/rewrite-links";
 import { formatDate } from "@/lib/formatters";
 import { RollupBadge } from "./rollup-badge";
 import { ClusterChip } from "./cluster-chip";
@@ -160,10 +161,11 @@ export function ReleaseListItem({
   const [isOverflowing, setIsOverflowing] = useState(false);
   const rowId = useId();
   const contentRef = useRef<HTMLDivElement>(null);
-  const markdownContent = useMemo(
-    () => stripLeadingTitle(release.content || release.summary, release.title),
-    [release.content, release.summary, release.title],
-  );
+  const markdownContent = useMemo(() => {
+    const raw = stripLeadingTitle(release.content || release.summary, release.title);
+    const base = originFromUrl(release.url);
+    return base ? rewriteRelativeLinks(raw, base) : raw;
+  }, [release.content, release.summary, release.title, release.url]);
 
   const thumbnail = useMemo(
     () => release.media?.find((m) => m.type === "image" || m.type === "gif") ?? null,
