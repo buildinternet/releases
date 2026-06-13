@@ -182,6 +182,22 @@ describe("GET /sitemap", () => {
     expect(result.sources.map((s) => s.slug)).toEqual(["corp-visible"]);
   });
 
+  test("excludes on_demand orgs from the sitemap", async () => {
+    const db = testDatabase.db;
+    db.insert(organizations)
+      .values([
+        { name: "Curated Org", slug: "curated-org", discovery: "curated" },
+        { name: "On Demand Org", slug: "on-demand-org", discovery: "on_demand", isHidden: true },
+      ])
+      .run();
+
+    const result = await callSitemap();
+
+    // Only the curated org should appear — on_demand orgs are excluded by
+    // the organizations_public view (#1603).
+    expect(result.orgs.map((o) => o.slug)).toEqual(["curated-org"]);
+  });
+
   test("emits one product entry per org/product, grouped by org slug", async () => {
     const db = testDatabase.db;
     const [o1] = db

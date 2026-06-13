@@ -245,6 +245,7 @@ export async function runLookup(
           name: orgName,
           slug: orgSlug,
           discovery: "on_demand",
+          isHidden: true,
         })
         .onConflictDoNothing();
 

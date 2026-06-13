@@ -285,6 +285,9 @@ describe("POST /v1/lookups", () => {
     expect(orgs).toHaveLength(1);
     expect(orgs[0]?.discovery).toBe("on_demand");
     expect(orgs[0]?.name).toBe("Acme");
+    // On-demand orgs must be hidden so they don't leak into the sitemap or
+    // public listings (#1603).
+    expect(orgs[0]?.isHidden).toBe(true);
   });
 
   test("bare repo slug wins under per-org uniqueness even if another org has the same slug", async () => {

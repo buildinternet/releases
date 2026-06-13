@@ -178,6 +178,17 @@ export const ReleaseDetailOrgSchema = z.object({
    * related-rail feed.
    */
   avatarUrl: z.string().nullable().optional(),
+  /**
+   * How the org was created. Additive — older servers omit it; treat
+   * `undefined` as `"curated"`. Used by the web to emit `noindex` on
+   * on-demand-materialized org pages.
+   */
+  discovery: z.enum(["curated", "agent", "on_demand"]).optional(),
+  /**
+   * Whether the org is hidden from public listings. Additive — older servers
+   * omit it; treat `undefined` as `false`. Used by the web to emit `noindex`.
+   */
+  isHidden: z.boolean().optional(),
 });
 
 /**
@@ -219,6 +230,12 @@ export const ReleaseDetailResponseSchema = z.object({
   composition: ReleaseCompositionSchema.nullable(),
   appStore: AppStoreSourceInfoSchema.nullable().optional(),
   video: VideoSourceInfoSchema.nullable().optional(),
+  /**
+   * Whether the release's source is hidden from public listings. Additive —
+   * older servers omit it; treat `undefined` as `false`. Used by the web to
+   * emit `noindex` on pages whose source is an on-demand-materialized stub.
+   */
+  sourceIsHidden: z.boolean().optional(),
 });
 
 /**

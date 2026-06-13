@@ -3255,9 +3255,12 @@ sourceRoutes.get(
         sourceSlug: sourcesActive.slug,
         sourceType: sourcesActive.type,
         sourceMetadata: sourcesActive.metadata,
+        sourceIsHidden: sourcesActive.isHidden,
         orgSlug: organizationsActive.slug,
         orgName: organizationsActive.name,
         orgAvatarUrl: organizationsActive.avatarUrl,
+        orgDiscovery: organizationsActive.discovery,
+        orgIsHidden: organizationsActive.isHidden,
         productSlug: productsActive.slug,
         productName: productsActive.name,
       })
@@ -3275,14 +3278,25 @@ sourceRoutes.get(
       sourceSlug,
       sourceType,
       sourceMetadata,
+      sourceIsHidden,
       orgSlug,
       orgName,
       orgAvatarUrl,
+      orgDiscovery,
+      orgIsHidden,
       productSlug,
       productName,
     } = rows[0];
     const org =
-      orgSlug && orgName ? { slug: orgSlug, name: orgName, avatarUrl: orgAvatarUrl } : null;
+      orgSlug && orgName
+        ? {
+            slug: orgSlug,
+            name: orgName,
+            avatarUrl: orgAvatarUrl,
+            discovery: orgDiscovery ?? undefined,
+            isHidden: orgIsHidden ?? undefined,
+          }
+        : null;
     const product = productSlug && productName ? { slug: productSlug, name: productName } : null;
     const appStore = appStoreSourceInfo(sourceType ?? "", sourceMetadata);
     const video = videoSourceInfo(sourceType ?? "", sourceMetadata);
@@ -3304,6 +3318,7 @@ sourceRoutes.get(
       sourceName,
       sourceSlug,
       sourceType,
+      sourceIsHidden: sourceIsHidden ?? undefined,
       org,
       product,
       composition,

@@ -48,9 +48,14 @@ export async function generateMetadata({
       .replace(/\s+/g, " ")
       .trim();
     const description = stripped.length > 160 ? stripped.slice(0, 157) + "..." : stripped;
+    const shouldNoIndex =
+      release.sourceIsHidden === true ||
+      release.org?.discovery === "on_demand" ||
+      release.org?.isHidden === true;
     return {
       title: `${titleHeading} — ${release.sourceName}`,
       description: description || `${heading} release notes for ${release.sourceName}`,
+      ...(shouldNoIndex ? { robots: { index: false, follow: true } } : {}),
       openGraph: {
         type: "article",
         url: `/release/${id}`,
