@@ -3,6 +3,18 @@
 The product changelog for releases.sh, published to its own registry. Drafted daily from merged
 PRs and reviewed via PR. See docs/changelog-style.md for the voice and curation rules.
 
+## June 12, 2026
+
+**Added**
+- "What agents ask" section on the homepage — three example prompts showing what the platform answers for agents tracking their stack, ecosystem integrations, and industry trends.
+
+**Changed**
+- Homepage refreshes: the org table now has a "Featured" heading; the hero release count displays in compact form (35.6k-style); signed-out visitors see a signup link under the CLI demo.
+- Status removed from the top navigation — it remains accessible via the Admin dropdown.
+
+**Fixed**
+- Coverage siblings in the "N other posts cover this launch" rail no longer link to suppressed pages that return 404 — they render as plain, non-linked rows.
+
 ## June 11, 2026
 
 **Added**
