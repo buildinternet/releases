@@ -11,7 +11,8 @@
     "./media": "./src/media.ts",
     "./media-url": "./src/media-url.ts",
     "./media-filter": "./src/media-filter.ts",
-    "./video-embed": "./src/video-embed.ts"
+    "./video-embed": "./src/video-embed.ts",
+    "./rewrite-links": "./src/rewrite-links.ts"
   },
   "dependencies": {
     "@buildinternet/releases-api-types": "workspace:*",

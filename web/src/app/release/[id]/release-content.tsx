@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import ReactMarkdown from "react-markdown";
 import { canonicalVideoFromUrl } from "@releases/rendering/video-embed";
+import { rewriteRelativeLinks, originFromUrl } from "@releases/rendering/rewrite-links";
 import { createRemarkPlugins } from "@/lib/markdown-plugins";
 import { rehypeShikiPlugin } from "@/lib/shiki";
 import { detailMarkdownComponents } from "@/components/markdown-components";
@@ -157,13 +158,20 @@ export function ReleaseContent({
   title,
   media,
   repoUrl,
+  sourceUrl,
 }: {
   content: string;
   title: string;
   media: MediaItem[];
   repoUrl?: string | null;
+  /** Canonical URL of the release (e.g. `release.url`). Its origin is used to
+   *  absolutize root-relative links in the body so they resolve to the vendor's
+   *  domain rather than releases.sh. */
+  sourceUrl?: string | null;
 }) {
-  const markdownContent = stripLeadingTitle(content, title);
+  const base = originFromUrl(sourceUrl);
+  const rawContent = stripLeadingTitle(content, title);
+  const markdownContent = base ? rewriteRelativeLinks(rawContent, base) : rawContent;
   const remarkPlugins = createRemarkPlugins({ repoUrl });
   const components = buildDetailComponents(media);
 
