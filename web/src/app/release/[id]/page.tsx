@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { safeStringifyJsonLd } from "@/lib/json-ld";
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
 import Link from "next/link";
 import { Suspense, ViewTransition } from "react";
 import { api, API_URL, ApiSetupError } from "@/lib/api";
@@ -87,6 +87,27 @@ export default async function ReleaseDetailPage({ params }: { params: Promise<{ 
           <SetupMessage message={err.message} steps={err.setup} />
         </div>
       );
+    }
+    // The release is suppressed, deleted, or coverage-only (all return 404
+    // from GET /v1/releases/:id via the releases_visible filter). Before
+    // giving up, check whether this id is a coverage-side row with a live
+    // canonical: if so, 301 to the canonical detail page so crawlers and
+    // humans land somewhere useful.
+    //
+    // Ideal status for a permanently-removed release with no canonical sibling
+    // is 410 Gone, but Next.js App Router server components don't expose a
+    // direct 410 path — the only hooks are notFound() (→ 404) and
+    // permanentRedirect() (→ 308). notFound() is the closest safe fallback;
+    // a custom Route Handler or middleware could emit a true 410 if needed.
+    try {
+      const coverage = await api.coverage(id);
+      if (coverage.role === "coverage" && coverage.canonical.sibling != null) {
+        // The canonical is visible — send the crawler/user there permanently (301).
+        permanentRedirect(`/release/${coverage.canonical.canonicalId}`);
+      }
+    } catch {
+      // Coverage lookup failed (network error, parse error) — fall through
+      // to notFound() so we don't accidentally swallow the original error.
     }
     notFound();
   }
