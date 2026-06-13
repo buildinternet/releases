@@ -752,8 +752,17 @@ export interface ReleaseDetail {
   /**
    * Owning org. `avatarUrl` is the resolved `organizations.avatar_url`
    * (nullable; `.optional()` for mid-deploy / pinned-worker tolerance).
+   * `discovery` and `isHidden` are additive — older servers omit them.
    */
-  org: { slug: string; name: string; avatarUrl?: string | null } | null;
+  org: {
+    slug: string;
+    name: string;
+    avatarUrl?: string | null;
+    /** How the org was created. Additive — older servers omit it. */
+    discovery?: "curated" | "agent" | "on_demand";
+    /** Whether the org is hidden from public listings. Additive — older servers omit it. */
+    isHidden?: boolean;
+  } | null;
   /**
    * Owning product, when the source is grouped under one (`sources.product_id`).
    * `null` when ungrouped; `.optional()` so older servers that omit it still type.
@@ -767,6 +776,11 @@ export interface ReleaseDetail {
   appStore?: { platform: "ios" | "macos"; iconUrl: string | null } | null;
   /** Video provider tag, present only when `sourceType === "video"`. */
   video?: { provider: "youtube" | "vimeo" | "wistia" } | null;
+  /**
+   * Whether the release's source is hidden from public listings. Additive —
+   * older servers omit it; treat `undefined` as `false`.
+   */
+  sourceIsHidden?: boolean;
 }
 
 export type ReleaseCoverageSibling = z.infer<typeof ReleaseCoverageSiblingSchema>;

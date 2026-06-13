@@ -22,9 +22,11 @@ export async function generateMetadata({
   try {
     const org = await getOrg(orgSlug);
     const lastModified = lastModifiedAt(org);
+    const shouldNoIndex = org.discovery === "on_demand" || org.isHidden === true;
     return {
       title: `${org.name} Releases & Latest Updates`,
       description: `Latest releases, product updates, and tracked sources for ${org.name} — updated ${currentPeriod()}.`,
+      ...(shouldNoIndex ? { robots: { index: false, follow: true } } : {}),
       openGraph: {
         type: "website",
         url: `/${orgSlug}`,

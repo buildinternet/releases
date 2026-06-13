@@ -113,7 +113,7 @@ describe("GET /v1/releases/:id org + product", () => {
       org?: { slug: string; name: string; avatarUrl?: string | null };
       product?: { slug: string; name: string } | null;
     };
-    expect(body.org).toEqual({
+    expect(body.org).toMatchObject({
       slug: "google",
       name: "Google",
       avatarUrl: "https://media.releases.sh/orgs/google.png",

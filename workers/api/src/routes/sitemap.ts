@@ -4,7 +4,7 @@ import { hideInProduction } from "../openapi.js";
 import { eq, inArray, max, and, sql } from "drizzle-orm";
 import { createDb } from "../db.js";
 import {
-  organizationsActive,
+  organizationsPublic,
   sourcesActive,
   productsActive,
   releases,
@@ -37,13 +37,13 @@ sitemapRoutes.get(
 
     const orgRows = await db
       .select({
-        id: organizationsActive.id,
-        slug: organizationsActive.slug,
+        id: organizationsPublic.id,
+        slug: organizationsPublic.slug,
         lastActivity: max(sourcesActive.lastFetchedAt),
       })
-      .from(organizationsActive)
-      .leftJoin(sourcesActive, eq(sourcesActive.orgId, organizationsActive.id))
-      .groupBy(organizationsActive.id);
+      .from(organizationsPublic)
+      .leftJoin(sourcesActive, eq(sourcesActive.orgId, organizationsPublic.id))
+      .groupBy(organizationsPublic.id);
 
     // Collections are independent of orgs (they reference orgs but live as
     // their own top-level resource), so always pull them — even when no orgs

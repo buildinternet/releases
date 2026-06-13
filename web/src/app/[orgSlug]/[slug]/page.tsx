@@ -16,7 +16,11 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { orgSlug, slug } = await params;
   try {
-    const resolved = await getResolved(orgSlug, slug);
+    const [resolved, org] = await Promise.all([
+      getResolved(orgSlug, slug),
+      getOrg(orgSlug).catch(() => null),
+    ]);
+    const orgIsHidden = org?.isHidden === true || org?.discovery === "on_demand";
     if (resolved.kind === "product") {
       const product = resolved.product;
       // Product canonical is the BARE form now (links.ts is flipped). The
@@ -26,6 +30,7 @@ export async function generateMetadata({
         title: `${product.name} Release Notes & Changelog`,
         description:
           product.description ?? `Release notes, changelog, and updates for ${product.name}.`,
+        ...(orgIsHidden ? { robots: { index: false, follow: true } } : {}),
         openGraph: { type: "website", url: `/${orgSlug}/${slug}` },
         alternates: {
           canonical: `/${orgSlug}/${slug}`,
@@ -42,9 +47,11 @@ export async function generateMetadata({
     }
     const source = resolved.source;
     const orgName = source.org?.name ?? orgSlug;
+    const shouldNoIndex = source.isHidden || source.discovery === "on_demand" || orgIsHidden;
     return {
       title: `${source.name} — ${orgName}`,
       description: `Release notes, changelog, and version history for ${source.name} by ${orgName} — updated ${currentPeriod()}.`,
+      ...(shouldNoIndex ? { robots: { index: false, follow: true } } : {}),
       openGraph: { type: "website", url: `/${orgSlug}/${slug}` },
       alternates: {
         canonical: `/${orgSlug}/${slug}`,
