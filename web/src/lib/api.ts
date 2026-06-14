@@ -35,6 +35,8 @@ import type {
   CollectionMemberProduct,
   CollectionReleaseItem,
   CollectionReleasesResponse,
+  CollectionDailySummary,
+  CollectionDailySummariesResponse,
   OverviewPageItem,
   ResolveResponse,
 } from "@buildinternet/releases-api-types";
@@ -93,6 +95,8 @@ export type {
   CollectionMemberProduct,
   CollectionReleaseItem,
   CollectionReleasesResponse,
+  CollectionDailySummary,
+  CollectionDailySummariesResponse,
 };
 
 export const API_URL = apiBaseUrl() ?? "http://localhost:3456";
@@ -512,6 +516,15 @@ export const api = {
     const qs = params.toString();
     return fetchApi<CollectionReleasesResponse>(
       `/v1/collections/${slug}/releases${qs ? `?${qs}` : ""}`,
+    );
+  },
+  collectionDailySummaries: (slug: string, from?: string, to?: string) => {
+    const qs = new URLSearchParams();
+    if (from) qs.set("from", from);
+    if (to) qs.set("to", to);
+    const suffix = qs.toString() ? `?${qs}` : "";
+    return fetchApi<CollectionDailySummariesResponse>(
+      `/v1/collections/${slug}/daily-summaries${suffix}`,
     );
   },
   sourceChangelog: (
