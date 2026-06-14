@@ -23,6 +23,7 @@ import { InfiniteScrollTrigger } from "./infinite-scroll-trigger";
 import { isTag, rollupTags, type TagListItem } from "./collection-timeline-rollup";
 import { Caret } from "./caret";
 import { pluralReleases } from "@/lib/formatters";
+import { deriveFeedTitle, normalizeVersionLabel } from "@/lib/release-title";
 
 interface CollectionTimelineProps {
   /**
@@ -111,6 +112,41 @@ const preBadgeClass =
 
 function findThumbnail(release: CollectionReleaseItem) {
   return release.media?.find((m) => m.type === "image" || m.type === "gif") ?? null;
+}
+
+// Descriptive headline for a release card, matching the org feed's hierarchy
+// (`deriveFeedTitle`): AI smart-brevity title → AI long title → a raw title
+// that isn't merely the version → the version label → "Release". This is why
+// the collection view now leads with the enriched headline instead of the raw
+// `title` column.
+function releaseHeading(release: CollectionReleaseItem): string {
+  const { descriptive, versionLabel } = deriveFeedTitle(release);
+  return descriptive ?? versionLabel ?? release.title ?? "Release";
+}
+
+// Measures whether a height-clamped element actually has hidden overflow, so
+// "Show more" (and the fade) only appear when there's real content to reveal.
+// `enabled` is the collapsed state — once expanded we stop measuring (the
+// button is gone for good; expansion is one-way by design). A ResizeObserver
+// re-measures so late-loading markdown/images/syntax highlighting that grows
+// the body still flips the flag.
+function useOverflowClamp<T extends HTMLElement>(enabled: boolean) {
+  const ref = useRef<T>(null);
+  const [overflowing, setOverflowing] = useState(false);
+  useEffect(() => {
+    if (!enabled) {
+      setOverflowing(false);
+      return;
+    }
+    const el = ref.current;
+    if (!el) return;
+    const measure = () => setOverflowing(el.scrollHeight - el.clientHeight > 1);
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [enabled]);
+  return { ref, overflowing };
 }
 
 export function CollectionTimeline({
@@ -426,40 +462,16 @@ function groupByOrg(releases: CollectionReleaseItem[]) {
 
 // ── Day section ─────────────────────────────────────────────────
 
-function DailySummaryHeader({ summary }: { summary: CollectionDailySummary }) {
+// Unified day header: the date line is the anchor at the top, and the AI daily
+// summary (when present) nests directly beneath it so it unambiguously belongs
+// to this day. Previously the summary rendered as a separate box *above* the
+// date, which read as if it described the day before. Rendered as a section
+// header (bottom border, no card chrome) so it stays visually distinct from the
+// release cards below and never out-weighs a release title.
+function DayHeader({ day, summary }: { day: DayBucket; summary: CollectionDailySummary | null }) {
   return (
-    <div className="mb-3 rounded-lg border border-stone-200 dark:border-stone-800 bg-stone-50 dark:bg-stone-900/40 px-4 py-3">
-      <h3 className="text-[15px] font-semibold text-stone-900 dark:text-stone-100">
-        {summary.title}
-      </h3>
-      <p className="mt-0.5 text-[13px] text-stone-600 dark:text-stone-400">{summary.summary}</p>
-      {summary.takeaways.length > 0 && (
-        <ul className="mt-2 space-y-1 pl-4 list-disc marker:text-stone-400 dark:marker:text-stone-600">
-          {summary.takeaways.map((t, i) => (
-            <li key={i} className="text-[13px] text-stone-700 dark:text-stone-300">
-              {t}
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}
-
-function DaySection({
-  day,
-  orgsBySlug,
-  summary,
-}: {
-  day: DayBucket;
-  orgsBySlug: Map<string, CollectionMemberOrg>;
-  summary: CollectionDailySummary | null;
-}) {
-  const orgGroups = groupByOrg(day.releases);
-  return (
-    <section className="mt-6">
-      {summary && <DailySummaryHeader summary={summary} />}
-      <div className="flex items-baseline gap-3 pt-2 pb-2 border-b border-stone-200 dark:border-stone-800">
+    <header className="pt-2 pb-3 border-b border-stone-200 dark:border-stone-800">
+      <div className="flex items-baseline gap-3">
         {day.iso ? (
           <>
             <span className="text-[11px] font-semibold uppercase tracking-wider text-stone-400 dark:text-stone-500">
@@ -478,6 +490,48 @@ function DaySection({
           {day.releases.length} {pluralReleases(day.releases.length)}
         </span>
       </div>
+      {summary && (
+        <div className="mt-2">
+          <h2 className="text-[15px] font-semibold tracking-tight text-stone-900 dark:text-stone-100 leading-snug">
+            {summary.title}
+          </h2>
+          <p className="mt-1 text-[13px] text-stone-600 dark:text-stone-400 leading-relaxed">
+            {summary.summary}
+          </p>
+          {summary.takeaways.length > 0 && (
+            <ul className="mt-2 flex flex-col gap-1">
+              {summary.takeaways.map((t, i) => (
+                <li
+                  key={i}
+                  className="flex gap-2 text-[12.5px] text-stone-500 dark:text-stone-400 leading-relaxed"
+                >
+                  <span aria-hidden className="select-none text-stone-300 dark:text-stone-600">
+                    —
+                  </span>
+                  <span>{t}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </header>
+  );
+}
+
+function DaySection({
+  day,
+  orgsBySlug,
+  summary,
+}: {
+  day: DayBucket;
+  orgsBySlug: Map<string, CollectionMemberOrg>;
+  summary: CollectionDailySummary | null;
+}) {
+  const orgGroups = groupByOrg(day.releases);
+  return (
+    <section className="mt-6">
+      <DayHeader day={day} summary={summary} />
       <div className="flex flex-col gap-4 mt-4">
         {orgGroups.map((g) => (
           <OrgSection key={g.orgSlug} group={g} orgMeta={orgsBySlug.get(g.orgSlug)} />
@@ -503,6 +557,10 @@ function OrgSection({
     return split;
   }, [group.releases]);
   const tagItems = useMemo(() => rollupTags(tags), [tags]);
+  // Group posts the same way tags roll up: 2+ posts sharing a product collapse
+  // into one card (product named once, each version a subsection); lone posts
+  // keep the full hero treatment.
+  const postItems = useMemo(() => rollupTags(posts), [posts]);
 
   return (
     <div>
@@ -525,9 +583,13 @@ function OrgSection({
       </div>
 
       <div className="flex flex-col gap-3">
-        {posts.map((r) => (
-          <PostHero key={r.id ?? r.url ?? r.title} release={r} />
-        ))}
+        {postItems.map((item) =>
+          item.kind === "single" ? (
+            <PostHero key={tagKey(item)} release={item.release} />
+          ) : (
+            <ProductPostGroup key={tagKey(item)} label={item.label} releases={item.releases} />
+          ),
+        )}
 
         {tagItems.length > 0 && (
           <div className="rounded-lg border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 overflow-hidden">
@@ -552,11 +614,15 @@ function tagKey(item: TagListItem) {
 function PostHero({ release }: { release: CollectionReleaseItem }) {
   const [expanded, setExpanded] = useState(false);
   const thumbnail = findThumbnail(release);
-  const heading = release.title || release.version || "Release";
+  // Lead with the enriched headline (matches the org feed) instead of the raw
+  // `title` column, which is often a terse "Session Folders".
+  const heading = releaseHeading(release);
+  const versionLabel = normalizeVersionLabel(release.version);
   // Render the full body when available so "Show more" actually reveals new
-  // content. The collapsed view is height-capped via line-clamp; expanded
-  // unlocks it.
+  // content. The collapsed view is height-capped; expanded unlocks it. The
+  // button only appears when the body actually overflows that cap.
   const body = release.content || release.summary || "";
+  const { ref: clampRef, overflowing } = useOverflowClamp<HTMLDivElement>(!expanded);
 
   return (
     <article
@@ -579,7 +645,13 @@ function PostHero({ release }: { release: CollectionReleaseItem }) {
             heading
           )}
         </h3>
+        {versionLabel && versionLabel !== heading && (
+          <div className="mt-1 font-mono text-[11.5px] text-stone-400 dark:text-stone-500">
+            {versionLabel}
+          </div>
+        )}
         <div
+          ref={clampRef}
           className={`mt-2.5 text-stone-600 dark:text-stone-400 ${
             expanded ? "" : "max-h-[6.5em] overflow-hidden relative"
           }`}
@@ -593,14 +665,16 @@ function PostHero({ release }: { release: CollectionReleaseItem }) {
               {body}
             </ReactMarkdown>
           </div>
-          {!expanded && (
+          {!expanded && overflowing && (
             <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-6 bg-gradient-to-t from-white dark:from-stone-900 to-transparent" />
           )}
         </div>
         <div className="flex items-center gap-3 mt-3 text-[12px]">
-          <button type="button" onClick={() => setExpanded((v) => !v)} className={subduedLinkClass}>
-            {expanded ? "Show less" : "Show more"}
-          </button>
+          {!expanded && overflowing && (
+            <button type="button" onClick={() => setExpanded(true)} className={subduedLinkClass}>
+              Show more
+            </button>
+          )}
           {release.url && (
             <a
               href={release.url}
@@ -632,6 +706,130 @@ function PostHero({ release }: { release: CollectionReleaseItem }) {
         </div>
       )}
     </article>
+  );
+}
+
+// ── Grouped product posts ──────────────────────────────────────
+//
+// When a product ships 2+ posts in one day, collapse them into a single card:
+// the product name is stated once in the header, and each release becomes a
+// versioned subsection below. Makes incremental same-product updates read as a
+// set instead of N repetitive hero cards.
+function ProductPostGroup({
+  label,
+  releases,
+}: {
+  label: string;
+  releases: CollectionReleaseItem[];
+}) {
+  return (
+    <div className="rounded-lg border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 overflow-hidden">
+      <div className="flex items-center gap-2 px-5 py-3 border-b border-stone-200 dark:border-stone-800">
+        <h3 className="m-0 text-[15px] font-semibold tracking-tight text-stone-900 dark:text-stone-100">
+          {label}
+        </h3>
+        <span className="text-[11px] text-stone-400 dark:text-stone-500 font-mono tabular-nums">
+          {releases.length} updates
+        </span>
+      </div>
+      {releases.map((release) => (
+        <PostVersionRow key={release.id ?? release.url ?? release.title} release={release} />
+      ))}
+    </div>
+  );
+}
+
+function PostVersionRow({ release }: { release: CollectionReleaseItem }) {
+  const [expanded, setExpanded] = useState(false);
+  const { descriptive, versionLabel } = deriveFeedTitle(release);
+  // The product name already heads the group, so a subsection leads with its
+  // version. The descriptive headline rides alongside when it adds something
+  // beyond the version (it won't for bare "v2.1.176"-style titles).
+  const heading = versionLabel ?? descriptive ?? release.title ?? "Update";
+  const subhead = descriptive && descriptive !== heading ? descriptive : null;
+  const body = release.content || release.summary || "";
+  const thumbnail = findThumbnail(release);
+  const { ref: clampRef, overflowing } = useOverflowClamp<HTMLDivElement>(!expanded);
+
+  return (
+    <div className="px-5 py-4 border-t border-stone-200 dark:border-stone-800 first:border-t-0">
+      <div className="flex items-baseline gap-2 flex-wrap">
+        <span className="font-mono text-[12px] font-medium text-stone-900 dark:text-stone-100">
+          {release.id ? (
+            <Link href={`/release/${release.id}`} className="hover:underline underline-offset-2">
+              {heading}
+            </Link>
+          ) : (
+            heading
+          )}
+        </span>
+        {subhead && (
+          <span className="text-[13px] text-stone-600 dark:text-stone-400">{subhead}</span>
+        )}
+        {release.prerelease && (
+          <span title="Pre-release (beta, rc, nightly, preview)" className={preBadgeClass}>
+            pre
+          </span>
+        )}
+        <ClusterChip count={release.coverageCount} />
+      </div>
+      <div
+        className={`mt-2 grid gap-4 ${
+          thumbnail ? "md:grid-cols-[minmax(0,1fr)_minmax(0,200px)]" : ""
+        }`}
+      >
+        <div className="min-w-0">
+          <div
+            ref={clampRef}
+            className={`text-stone-600 dark:text-stone-400 ${
+              expanded ? "" : "max-h-[6.5em] overflow-hidden relative"
+            }`}
+          >
+            <div className={markdownClasses}>
+              <ReactMarkdown
+                remarkPlugins={remarkPlugins}
+                rehypePlugins={[rehypeShikiPlugin]}
+                components={expanded ? markdownComponents : collapsedMarkdownComponents}
+              >
+                {body}
+              </ReactMarkdown>
+            </div>
+            {!expanded && overflowing && (
+              <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-6 bg-gradient-to-t from-white dark:from-stone-900 to-transparent" />
+            )}
+          </div>
+          <div className="flex items-center gap-3 mt-2 text-[12px]">
+            {!expanded && overflowing && (
+              <button type="button" onClick={() => setExpanded(true)} className={subduedLinkClass}>
+                Show more
+              </button>
+            )}
+            {release.url && (
+              <a
+                href={release.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={`${subduedLinkClass} inline-flex items-center gap-1`}
+              >
+                Read post
+                <ExternalLinkIcon size={11} />
+              </a>
+            )}
+          </div>
+        </div>
+        {thumbnail && (
+          <div className="flex items-start justify-center">
+            <FallbackImage
+              src={thumbnail.r2Url ?? thumbnail.url}
+              alt={thumbnail.alt || heading}
+              width={200}
+              height={130}
+              className="rounded-md object-cover w-full h-auto max-h-40 border border-stone-200 dark:border-stone-800"
+            />
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 
