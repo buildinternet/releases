@@ -548,7 +548,9 @@ export function parseRss(xml: string): RawRelease[] {
       publishedAt: dateRaw ? new Date(dateRaw) : undefined,
       version: extractVersionFromTitle(item.title),
       isBreaking: detectBreaking(item.title, body),
-      media: extractMedia(body),
+      // Some feeds put raw markdown in content:encoded (see htmlToMarkdown);
+      // the HTML-tag extractor misses markdown `![alt](url)` images there.
+      media: containsHtmlTags(body) ? extractMedia(body) : extractMediaFromMarkdown(body),
       categories: categories.length > 0 ? categories : undefined,
     });
   }
@@ -926,23 +928,49 @@ function getTurndown(): TurndownService {
 }
 
 /**
+ * Real HTML always carries at least one element tag. Some feeds violate the
+ * RSS `content:encoded` contract (which reserves the field for HTML) and stuff
+ * raw **markdown** in there instead — OpenAI's Codex changelog is one. Running
+ * Turndown over markdown escapes every `#`, `[`, `*`, `` ` `` and collapses the
+ * hard-wrapped newlines into a single wall of text (see
+ * rel_HOLmi6zZTBBzrOqy5C4ig). Detecting the absence of tags lets us pass such
+ * content through untouched instead of mangling it.
+ */
+function containsHtmlTags(s: string): boolean {
+  return /<\/?[a-z][a-z0-9-]*(\s[^>]*)?>/i.test(s);
+}
+
+/** nbsp→space, collapse 3+ newlines, trim — the tail every feed-markdown path shares. */
+function normalizeFeedMarkdown(md: string): string {
+  return md
+    .replace(/ /g, " ") // nbsp→space
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+/**
  * Convert HTML to markdown via Turndown over a linkedom DOM. See
  * `reencodeCodeText` for why the body is pre-processed before parsing.
+ *
+ * If the input has no HTML tags it is already markdown (or plain text), so it
+ * is returned as-is — only nbsp-normalized and trimmed — rather than escaped
+ * and whitespace-collapsed by Turndown.
  */
 export function htmlToMarkdown(html: string): string {
   if (!html || !html.trim()) return "";
+  if (!containsHtmlTags(html)) return normalizeFeedMarkdown(html);
   const safe = reencodeCodeText(html);
   const { document } = parseHTML(`<!doctype html><html><body>${safe}</body></html>`);
   // linkedom's HTMLBodyElement is structurally compatible with the DOM
   // HTMLElement @types/turndown expects but not nominally identical, so the
   // double cast satisfies TS without lying about a single hop.
   const md = getTurndown().turndown(document.body as unknown as HTMLElement);
-  return md
-    .replace(/ /g, " ") // nbsp→space
-    .replace(/^([-*+])   /gm, "$1 ") // collapse Turndown's 4-char list indent at root
-    .replace(/^(\d+)\.  /gm, "$1. ")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
+  return normalizeFeedMarkdown(
+    md
+      .replace(/ /g, " ") // nbsp→space before the list-indent fixes below
+      .replace(/^([-*+])   /gm, "$1 ") // collapse Turndown's 4-char list indent at root
+      .replace(/^(\d+)\.  /gm, "$1. "),
+  );
 }
 
 export function decodeHtmlEntities(text: string): string {
