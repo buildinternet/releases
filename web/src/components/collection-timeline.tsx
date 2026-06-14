@@ -14,6 +14,7 @@ import {
   type CollectionMember,
   type CollectionMemberOrg,
   type CollectionReleaseItem,
+  type CollectionDailySummary,
 } from "@/lib/api";
 import { memberKey } from "@/lib/member-key";
 import { tabButtonClass } from "@/lib/styles";
@@ -43,6 +44,12 @@ interface CollectionTimelineProps {
    * (like the category page) pass an array of `kind: "org"` entries.
    */
   members: CollectionMember[];
+  /**
+   * Optional map from YYYY-MM-DD (Eastern Time) to the AI-generated daily
+   * summary for that day. Only the collection page passes this; the category
+   * page omits it and the timeline renders fine without it.
+   */
+  summaryByDate?: Map<string, CollectionDailySummary>;
 }
 
 function memberAvatar(m: CollectionMember) {
@@ -62,18 +69,33 @@ function sourceTypesForFilter(filter: TypeFilter): string | null {
   return null;
 }
 
-const dayKey = (iso: string | null) => (iso ? iso.slice(0, 10) : "unknown");
+// All date bucketing and display uses Eastern Time so client-rendered day
+// boundaries match the server's `summary_date` column (which the API writes
+// in America/New_York).
+const ET_DAY_FMT = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "America/New_York",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+const ET_WEEKDAY_FMT = new Intl.DateTimeFormat("en-US", {
+  weekday: "short",
+  timeZone: "America/New_York",
+});
+const ET_DAY_LABEL_FMT = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  day: "numeric",
+  year: "numeric",
+  timeZone: "America/New_York",
+});
+
+const dayKey = (iso: string | null) => (iso ? ET_DAY_FMT.format(new Date(iso)) : "unknown");
 
 function fmtWeekday(iso: string) {
-  return new Date(iso).toLocaleDateString("en-US", { weekday: "short", timeZone: "UTC" });
+  return ET_WEEKDAY_FMT.format(new Date(iso));
 }
 function fmtDay(iso: string) {
-  return new Date(iso).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    timeZone: "UTC",
-  });
+  return ET_DAY_LABEL_FMT.format(new Date(iso));
 }
 
 const markdownClasses =
@@ -97,6 +119,7 @@ export function CollectionTimeline({
   initialReleases,
   initialCursor,
   members,
+  summaryByDate,
 }: CollectionTimelineProps) {
   const [releases, setReleases] = useState(initialReleases);
   const [cursor, setCursor] = useState(initialCursor);
@@ -344,7 +367,12 @@ export function CollectionTimeline({
       ) : (
         <div className="mt-2">
           {days.map((day) => (
-            <DaySection key={day.key} day={day} orgsBySlug={orgsBySlug} />
+            <DaySection
+              key={day.key}
+              day={day}
+              orgsBySlug={orgsBySlug}
+              summary={summaryByDate?.get(day.key) ?? null}
+            />
           ))}
         </div>
       )}
@@ -398,16 +426,39 @@ function groupByOrg(releases: CollectionReleaseItem[]) {
 
 // ── Day section ─────────────────────────────────────────────────
 
+function DailySummaryHeader({ summary }: { summary: CollectionDailySummary }) {
+  return (
+    <div className="mb-3 rounded-lg border border-stone-200 dark:border-stone-800 bg-stone-50 dark:bg-stone-900/40 px-4 py-3">
+      <h3 className="text-[15px] font-semibold text-stone-900 dark:text-stone-100">
+        {summary.title}
+      </h3>
+      <p className="mt-0.5 text-[13px] text-stone-600 dark:text-stone-400">{summary.summary}</p>
+      {summary.takeaways.length > 0 && (
+        <ul className="mt-2 space-y-1 pl-4 list-disc marker:text-stone-400 dark:marker:text-stone-600">
+          {summary.takeaways.map((t, i) => (
+            <li key={i} className="text-[13px] text-stone-700 dark:text-stone-300">
+              {t}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 function DaySection({
   day,
   orgsBySlug,
+  summary,
 }: {
   day: DayBucket;
   orgsBySlug: Map<string, CollectionMemberOrg>;
+  summary: CollectionDailySummary | null;
 }) {
   const orgGroups = groupByOrg(day.releases);
   return (
     <section className="mt-6">
+      {summary && <DailySummaryHeader summary={summary} />}
       <div className="flex items-baseline gap-3 pt-2 pb-2 border-b border-stone-200 dark:border-stone-800">
         {day.iso ? (
           <>

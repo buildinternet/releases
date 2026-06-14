@@ -85,6 +85,8 @@ export const CollectionDetailSchema = z.object({
   description: z.string().nullable(),
   /** Whether the collection is promoted on the homepage. */
   isFeatured: z.boolean(),
+  /** Per-collection enable toggle for the nightly daily-summary generation. */
+  dailySummaryEnabled: z.boolean(),
   members: z.array(CollectionMemberSchema),
   /** @deprecated Use `members`. Org-only subset, kept for back-compat. */
   orgs: z.array(CollectionMemberOrgSchema),
@@ -141,6 +143,8 @@ export const CollectionRowSchema = z.object({
   name: z.string(),
   description: z.string().nullable(),
   isFeatured: z.boolean(),
+  /** Per-collection enable toggle for the nightly daily-summary generation. */
+  dailySummaryEnabled: z.boolean(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -163,6 +167,8 @@ export const UpdateCollectionRequestSchema = z.object({
   description: z.string().max(2000).nullable().optional(),
   /** Promote / demote the collection on the homepage. */
   isFeatured: z.boolean().optional(),
+  /** Enable or disable the nightly daily-summary generation for this collection. */
+  dailySummaryEnabled: z.boolean().optional(),
 });
 
 /**
@@ -227,4 +233,19 @@ export const AddCollectionMemberResponseSchema = z.object({
   orgId: z.string().optional(),
   productId: z.string().optional(),
   position: z.number().int(),
+});
+
+/** One daily summary row returned by `GET /v1/collections/:slug/daily-summaries`. */
+export const CollectionDailySummarySchema = z.object({
+  /** Eastern calendar day, YYYY-MM-DD. */
+  date: z.string(),
+  title: z.string(),
+  summary: z.string(),
+  takeaways: z.array(z.string()),
+  releaseCount: z.number().int().nonnegative(),
+});
+
+/** Response envelope for `GET /v1/collections/:slug/daily-summaries`. */
+export const CollectionDailySummariesResponseSchema = z.object({
+  summaries: z.array(CollectionDailySummarySchema),
 });

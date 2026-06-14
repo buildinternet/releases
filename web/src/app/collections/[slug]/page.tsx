@@ -7,6 +7,7 @@ import {
   ApiSetupError,
   type CollectionDetail,
   type CollectionReleasesResponse,
+  type CollectionDailySummary,
 } from "@/lib/api";
 import { Header } from "@/components/header";
 import { JsonLd } from "@/components/json-ld";
@@ -18,6 +19,7 @@ import { buildFeedPageJsonLd } from "@/lib/schema-org";
 
 const getCollection = cache((slug: string) => api.collectionDetail(slug));
 const getCollectionReleases = cache((slug: string) => api.collectionReleases(slug, { limit: 20 }));
+const getCollectionDailySummaries = cache((slug: string) => api.collectionDailySummaries(slug));
 
 export async function generateMetadata({
   params,
@@ -64,6 +66,12 @@ export default async function CollectionPage({ params }: { params: Promise<{ slu
     }
     notFound();
   }
+
+  const summariesRes = await getCollectionDailySummaries(slug).catch((err) => {
+    console.error("daily-summaries fetch failed:", err);
+    return { summaries: [] as CollectionDailySummary[] };
+  });
+  const summaryByDate = new Map(summariesRes.summaries.map((s) => [s.date, s]));
 
   const collectionUrl = `https://releases.sh/collections/${slug}`;
   const jsonLd = buildFeedPageJsonLd(releases.releases, {
@@ -113,6 +121,7 @@ export default async function CollectionPage({ params }: { params: Promise<{ slu
             initialReleases={releases.releases}
             initialCursor={releases.pagination.nextCursor}
             members={detail.members}
+            summaryByDate={summaryByDate}
           />
         </div>
       </div>

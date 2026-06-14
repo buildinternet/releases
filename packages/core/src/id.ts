@@ -21,6 +21,7 @@ export const newCronRunId = () => `crun_${nanoid()}`;
 export const newTelemetryEventId = () => `tel_${nanoid()}`;
 export const newSearchQueryId = () => `sq_${nanoid()}`;
 export const newCollectionId = () => `col_${nanoid()}`;
+export const newCollectionDailySummaryId = () => `cds_${nanoid()}`;
 export const newBatchRunId = () => `bat_${nanoid()}`;
 export function newWebhookSubscriptionId(): string {
   return `whk_${nanoid(16)}`;
@@ -31,13 +32,20 @@ export const newFeedbackId = () => `fb_${nanoid()}`;
 export const newRecommendationId = () => `rec_${nanoid()}`;
 export const newRawSnapshotId = () => `snap_${nanoid()}`;
 
-export type EntityType = "release" | "source" | "org" | "product" | "unknown";
+export type EntityType =
+  | "release"
+  | "source"
+  | "org"
+  | "product"
+  | "collectionDailySummary"
+  | "unknown";
 
 const ID_PREFIXES: Record<string, EntityType> = {
   rel_: "release",
   src_: "source",
   org_: "org",
   prod_: "product",
+  cds_: "collectionDailySummary",
 };
 
 // nanoid() default alphabet is A-Za-z0-9_- and length 21

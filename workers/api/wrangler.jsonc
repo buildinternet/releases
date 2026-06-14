@@ -356,6 +356,7 @@
     // Daily at 05:00 UTC: delete search_queries rows older than SEARCH_QUERY_RETENTION_DAYS (#575).
     // Daily at 05:30 UTC: hard-purge tombstoned orgs/sources/products older than TOMBSTONE_RETENTION_DAYS (#666).
     // Daily at 06:00 UTC: well-known config sync sweep.
+    // Daily at 06:15 UTC: generate collection daily summaries.
     // Daily at 07:00 UTC: reap stale dynamic-registration OAuth clients (observe-only until oauth-client-reaper-enabled).
     // Daily at 13:00 UTC: send daily digests to subscribed users (#1518).
     // Mondays at 13:00 UTC: send weekly digests to subscribed users (#1518).
@@ -368,6 +369,7 @@
       "0 5 * * *",
       "30 5 * * *",
       "0 6 * * *",
+      "15 6 * * *",
       "0 7 * * *",
       "0 13 * * *",
       "0 13 * * 1",

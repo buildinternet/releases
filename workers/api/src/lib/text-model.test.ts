@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import {
   resolveArticleExtractModel,
+  resolveCollectionSummaryModel,
   resolveMarketingModel,
   resolveSummarizeModel,
   type TextModelEnv,
@@ -120,6 +121,37 @@ describe("resolveArticleExtractModel — feed-enrich lane, FEED_ENRICH_MODEL is 
       FEED_ENRICH_MODEL: "google/gemini-2.5-flash-lite",
     });
     const model = await resolveArticleExtractModel(env);
+    expect(model?.id.startsWith("anthropic:")).toBe(true);
+  });
+});
+
+describe("resolveCollectionSummaryModel — collection-daily-summary lane", () => {
+  // Reuses the shared SUMMARIZE_MODEL var (same "summarize cheaply" task as the
+  // release summarizer) rather than its own model config.
+  it("switch ON + SUMMARIZE_MODEL set → OpenRouter", async () => {
+    const env = baseEnv({
+      FLAGS: flagsBinding({ "openrouter-enabled": true }),
+      SUMMARIZE_MODEL: "meta-llama/llama-3.1-8b-instruct",
+    });
+    const model = await resolveCollectionSummaryModel(env);
+    expect(model?.id.startsWith("openrouter:")).toBe(true);
+  });
+
+  it("switch ON + SUMMARIZE_MODEL empty → stays on Anthropic", async () => {
+    const env = baseEnv({
+      FLAGS: flagsBinding({ "openrouter-enabled": true }),
+      SUMMARIZE_MODEL: "",
+    });
+    const model = await resolveCollectionSummaryModel(env);
+    expect(model?.id.startsWith("anthropic:")).toBe(true);
+  });
+
+  it("switch OFF → Anthropic even with the model set", async () => {
+    const env = baseEnv({
+      FLAGS: flagsBinding({}),
+      SUMMARIZE_MODEL: "meta-llama/llama-3.1-8b-instruct",
+    });
+    const model = await resolveCollectionSummaryModel(env);
     expect(model?.id.startsWith("anthropic:")).toBe(true);
   });
 });

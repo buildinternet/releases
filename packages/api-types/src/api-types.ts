@@ -225,6 +225,8 @@ import type {
   ResolvedCollectionMemberSchema,
   ReplaceCollectionMembersResponseSchema,
   AddCollectionMemberResponseSchema,
+  CollectionDailySummarySchema,
+  CollectionDailySummariesResponseSchema,
 } from "./schemas/collections.js";
 import type {
   OrgOverviewResponseSchema,
@@ -463,6 +465,8 @@ export {
   ResolvedCollectionMemberSchema,
   ReplaceCollectionMembersResponseSchema,
   AddCollectionMemberResponseSchema,
+  CollectionDailySummarySchema,
+  CollectionDailySummariesResponseSchema,
 } from "./schemas/collections.js";
 export {
   OrgOverviewResponseSchema,
@@ -1223,6 +1227,10 @@ export type ReplaceCollectionMembersResponse = z.infer<
   typeof ReplaceCollectionMembersResponseSchema
 >;
 export type AddCollectionMemberResponse = z.infer<typeof AddCollectionMemberResponseSchema>;
+export type CollectionDailySummary = z.infer<typeof CollectionDailySummarySchema>;
+export type CollectionDailySummariesResponse = z.infer<
+  typeof CollectionDailySummariesResponseSchema
+>;
 
 // ── Releases (enriched) ──
 

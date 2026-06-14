@@ -137,3 +137,81 @@ export function timeAgo(isoDate: string | null): string | null {
   if (days < 30) return `${days}d ago`;
   return `${Math.floor(days / 30)}mo ago`;
 }
+
+// ── Eastern-Time day helpers ──────────────────────────────────────
+// Daily collection summaries are bucketed by Eastern calendar day (the
+// product audience + the self-changelog cron both use ET). No tz library:
+// Intl handles the DST math.
+
+const ET_DATE_FMT = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "America/New_York",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
+/** The Eastern calendar day (`YYYY-MM-DD`) for a UTC instant. */
+export function etDayKey(instant: string | Date): string {
+  const d = typeof instant === "string" ? new Date(instant) : instant;
+  return ET_DATE_FMT.format(d); // en-CA renders ISO-style YYYY-MM-DD
+}
+
+const ET_OFFSET_FMT = new Intl.DateTimeFormat("en-US", {
+  timeZone: "America/New_York",
+  hourCycle: "h23",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+});
+
+/** Offset (minutes east of UTC) of America/New_York at a given instant. */
+function etOffsetMinutes(at: Date): number {
+  const p = Object.fromEntries(ET_OFFSET_FMT.formatToParts(at).map((x) => [x.type, x.value]));
+  const asUtc = Date.UTC(
+    Number(p.year),
+    Number(p.month) - 1,
+    Number(p.day),
+    Number(p.hour),
+    Number(p.minute),
+    Number(p.second),
+  );
+  return Math.round((asUtc - at.getTime()) / 60_000);
+}
+
+/**
+ * True if `s` is a strict `YYYY-MM-DD` key naming a real calendar date. Rejects
+ * bad shapes (`2026/01/01`, `2026-1-1`, `garbage`) and impossible dates
+ * (`2026-13-01`, `2026-02-30`). Callers validate untrusted date-key params with
+ * this before feeding them to the day-key helpers below.
+ */
+export function isDateKey(s: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
+  const [y, m, d] = s.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  return dt.getUTCFullYear() === y && dt.getUTCMonth() === m - 1 && dt.getUTCDate() === d;
+}
+
+/** Add (or subtract) whole days to a `YYYY-MM-DD` key, returning a `YYYY-MM-DD` key. */
+export function addDaysToDateKey(dateKey: string, days: number): string {
+  const [y, m, d] = dateKey.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
+}
+
+/** UTC instant of Eastern midnight starting `dateKey`. */
+function etMidnightUtc(dateKey: string): string {
+  const [y, m, d] = dateKey.split("-").map(Number);
+  const guess = Date.UTC(y, m - 1, d, 0, 0, 0);
+  const offset = etOffsetMinutes(new Date(guess));
+  return new Date(guess - offset * 60_000).toISOString();
+}
+
+/** The `[startUtc, endUtc)` instants bounding an Eastern calendar day. */
+export function etDayBoundsUtc(dateKey: string): { startUtc: string; endUtc: string } {
+  return {
+    startUtc: etMidnightUtc(dateKey),
+    endUtc: etMidnightUtc(addDaysToDateKey(dateKey, 1)),
+  };
+}

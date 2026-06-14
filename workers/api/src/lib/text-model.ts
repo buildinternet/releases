@@ -39,6 +39,9 @@ export interface TextModelEnv extends AnthropicEnv {
   OPENROUTER_API_KEY?: SecretBinding;
   OPENROUTER_BASE_URL?: string;
   MARKETING_CLASSIFIER_MODEL?: string;
+  /** OpenRouter model for the summarization lanes (release summaries AND collection
+   *  daily summaries — both are "summarize this content cheaply"); empty → stay on
+   *  Anthropic Haiku. Read by `resolveSummarizeModel` + `resolveCollectionSummaryModel`. */
   SUMMARIZE_MODEL?: string;
   /** OpenRouter model for the feed-enrichment single-article extractor; empty →
    *  the lane stays on Anthropic Haiku. Read by `resolveArticleExtractModel`. */
@@ -169,5 +172,17 @@ export function resolveArticleExtractModel(env: TextModelEnv): Promise<TextModel
     orModel: env.FEED_ENRICH_MODEL,
     anthropicModel: ANTHROPIC_ARTICLE_MODEL,
     generationName: "feed-enrich",
+  });
+}
+
+// Reuses the shared SUMMARIZE_MODEL lane var (and its Anthropic Haiku fallback) —
+// a collection daily summary is the same "summarize content cheaply" task as a
+// release summary, so it rides the same model config rather than defining its own.
+// Only the generationName differs, to keep the two lanes separable in usage/cost.
+export function resolveCollectionSummaryModel(env: TextModelEnv): Promise<TextModel | null> {
+  return resolveTextModel(env, {
+    orModel: env.SUMMARIZE_MODEL,
+    anthropicModel: ANTHROPIC_SUMMARIZE_MODEL,
+    generationName: "collection-daily-summary",
   });
 }

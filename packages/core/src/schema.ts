@@ -30,6 +30,7 @@ import {
   newSearchQueryId,
   newWebhookSubscriptionId,
   newCollectionId,
+  newCollectionDailySummaryId,
   newBatchRunId,
   newApiTokenId,
   newFeedbackId,
@@ -247,6 +248,11 @@ export const collections = sqliteTable("collections", {
   // home page's featured-collections sidebar block. Toggle via
   // PATCH /v1/collections/:slug { isFeatured: true }. Default false.
   isFeatured: integer("is_featured", { mode: "boolean" }).notNull().default(false),
+  // Per-collection on/off for the nightly daily-summary generation. Default
+  // true — collections opt OUT, not in. Toggle via PATCH /v1/collections/:slug.
+  dailySummaryEnabled: integer("daily_summary_enabled", { mode: "boolean" })
+    .notNull()
+    .default(true),
 });
 
 // A member is either an org (`org_id` set, `product_id` null) or a single
@@ -286,6 +292,39 @@ export const collectionMembers = sqliteTable(
       "collection_members_xor_kind",
       sql`(${table.orgId} IS NOT NULL) <> (${table.productId} IS NOT NULL)`,
     ),
+  ],
+);
+
+// One brief AI rollup per (collection, Eastern calendar day): a headline,
+// a one-line summary, and bullet takeaways covering that day's releases
+// across the collection's members. Written by the nightly
+// collection-summaries cron; read by GET /v1/collections/:slug/daily-summaries
+// and rendered as a header on each day group in the collection timeline.
+export const collectionDailySummaries = sqliteTable(
+  "collection_daily_summaries",
+  {
+    id: text("id").primaryKey().$defaultFn(newCollectionDailySummaryId),
+    collectionId: text("collection_id")
+      .notNull()
+      .references(() => collections.id, { onDelete: "cascade" }),
+    // Eastern calendar day being summarized, as YYYY-MM-DD.
+    summaryDate: text("summary_date").notNull(),
+    title: text("title").notNull(),
+    summary: text("summary").notNull(),
+    // JSON array of bullet strings.
+    takeaways: text("takeaways").notNull().default("[]"),
+    releaseCount: integer("release_count").notNull().default(0),
+    // `<provider>:<model>` that produced this row.
+    modelId: text("model_id"),
+    generatedAt: text("generated_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
+    updatedAt: text("updated_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
+  },
+  (table) => [
+    uniqueIndex("idx_collection_daily_summaries_day").on(table.collectionId, table.summaryDate),
   ],
 );
 
@@ -545,6 +584,8 @@ export type Collection = typeof collections.$inferSelect;
 export type NewCollection = typeof collections.$inferInsert;
 export type CollectionMember = typeof collectionMembers.$inferSelect;
 export type NewCollectionMember = typeof collectionMembers.$inferInsert;
+export type CollectionDailySummary = typeof collectionDailySummaries.$inferSelect;
+export type NewCollectionDailySummary = typeof collectionDailySummaries.$inferInsert;
 export type FetchLog = typeof fetchLog.$inferSelect;
 export type NewFetchLog = typeof fetchLog.$inferInsert;
 
