@@ -542,7 +542,7 @@ export function parseRss(xml: string): RawRelease[] {
       .filter((c): c is string => Boolean(c));
     releases.push({
       title: item.title,
-      content: htmlToMarkdown(body),
+      content: feedBodyToMarkdown(body),
       contentFromSummary: !hasDistinctBody,
       url: feedItemUrl(item),
       publishedAt: dateRaw ? new Date(dateRaw) : undefined,
@@ -928,20 +928,13 @@ function getTurndown(): TurndownService {
 }
 
 /**
- * Some feeds violate the RSS `content:encoded` contract (which reserves the
- * field for HTML) and stuff raw **markdown** in there instead — OpenAI's Codex
- * changelog is one. Running Turndown over markdown escapes every `#`, `[`, `*`,
- * `` ` `` and collapses the hard-wrapped newlines into a single wall of text
- * (see rel_HOLmi6zZTBBzrOqy5C4ig), so we want to detect markdown bodies and
- * pass them through untouched.
- *
- * We key off *block-level* HTML, not the presence of any tag: markdown bodies
- * routinely carry inline HTML (`<kbd>`, `<a>`, `<code>` — often decoded from
- * `&lt;…&gt;` entities by the feed parser) that a markdown renderer passes
- * through fine, and treating those as "HTML" would send the whole body back
- * through Turndown. Real HTML changelog content always wraps text in block
- * containers (`<p>`, `<div>`, `<ul>`/`<li>`, headings, tables…); their absence
- * is the reliable "this is markdown" signal.
+ * Does this string contain *block-level* HTML? We key off block containers,
+ * not the presence of any tag: a markdown body routinely carries inline HTML
+ * (`<kbd>`, `<a>`, `<code>` — often decoded from `&lt;…&gt;` entities by the
+ * feed parser) that a markdown renderer passes through fine. Real HTML
+ * changelog content always wraps text in block containers (`<p>`, `<div>`,
+ * `<ul>`/`<li>`, headings, tables…); their absence is the reliable "this body
+ * is markdown, not HTML" signal — see `feedBodyToMarkdown`.
  */
 function hasHtmlBlockTags(s: string): boolean {
   return /<(?:p|div|h[1-6]|ul|ol|li|table|thead|tbody|tfoot|tr|td|th|blockquote|pre|section|article|header|footer|nav|aside|main|figure|figcaption|dl|dt|dd)(?:[\s/>])/i.test(
@@ -958,16 +951,25 @@ function normalizeFeedMarkdown(md: string): string {
 }
 
 /**
+ * Turn a feed item body into markdown. `content:encoded` is spec'd as HTML, but
+ * some feeds (OpenAI's Codex changelog, Auth0) put raw **markdown** there
+ * instead. Running Turndown over markdown escapes every `#`, `[`, `*`, `` ` ``
+ * and collapses the hard-wrapped newlines into a wall of text (see
+ * rel_HOLmi6zZTBBzrOqy5C4ig). When the body has no block-level HTML we treat it
+ * as already-markdown and pass it through untouched; otherwise it's real HTML
+ * and goes through Turndown.
+ */
+function feedBodyToMarkdown(body: string): string {
+  if (!body || !body.trim()) return "";
+  return hasHtmlBlockTags(body) ? htmlToMarkdown(body) : normalizeFeedMarkdown(body);
+}
+
+/**
  * Convert HTML to markdown via Turndown over a linkedom DOM. See
  * `reencodeCodeText` for why the body is pre-processed before parsing.
- *
- * If the input has no block-level HTML tags it is treated as markdown (or
- * plain text) and returned as-is — only nbsp-normalized and trimmed — rather
- * than escaped and whitespace-collapsed by Turndown. See `hasHtmlBlockTags`.
  */
 export function htmlToMarkdown(html: string): string {
   if (!html || !html.trim()) return "";
-  if (!hasHtmlBlockTags(html)) return normalizeFeedMarkdown(html);
   const safe = reencodeCodeText(html);
   const { document } = parseHTML(`<!doctype html><html><body>${safe}</body></html>`);
   // linkedom's HTMLBodyElement is structurally compatible with the DOM
