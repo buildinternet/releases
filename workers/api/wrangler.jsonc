@@ -118,6 +118,11 @@
     // fixture). The async Message-Batches enrichment path is unaffected (always
     // Anthropic; OpenRouter has no Batches API).
     "FEED_ENRICH_MODEL": "deepseek/deepseek-v4-flash",
+    // OpenRouter model for the collection daily-summary lane (nightly 06:15 UTC
+    // cron). Empty default keeps the lane on Anthropic Haiku until a cheap
+    // OpenRouter model id is evaluated and set in prod. Gated by the same
+    // `openrouter-enabled` Flagship switch as the other secondary AI lanes.
+    "COLLECTION_SUMMARY_MODEL": "",
     // Smear window for the per-source jitter at the head of PollAndFetchWorkflow.
     // Set to "0" to disable; see FANOUT_JITTER_WINDOW_MAX_MS for the upper clamp.
     // See workers/api/src/workflows/poll-and-fetch.ts.
@@ -356,6 +361,7 @@
     // Daily at 05:00 UTC: delete search_queries rows older than SEARCH_QUERY_RETENTION_DAYS (#575).
     // Daily at 05:30 UTC: hard-purge tombstoned orgs/sources/products older than TOMBSTONE_RETENTION_DAYS (#666).
     // Daily at 06:00 UTC: well-known config sync sweep.
+    // Daily at 06:15 UTC: generate collection daily summaries.
     // Daily at 07:00 UTC: reap stale dynamic-registration OAuth clients (observe-only until oauth-client-reaper-enabled).
     // Daily at 13:00 UTC: send daily digests to subscribed users (#1518).
     // Mondays at 13:00 UTC: send weekly digests to subscribed users (#1518).
@@ -368,6 +374,7 @@
       "0 5 * * *",
       "30 5 * * *",
       "0 6 * * *",
+      "15 6 * * *",
       "0 7 * * *",
       "0 13 * * *",
       "0 13 * * 1",

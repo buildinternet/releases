@@ -40,6 +40,7 @@ import { scanStaleSources } from "./cron/source-staleness.js";
 import { wellKnownSync } from "./cron/well-known-sync.js";
 import { sweepOauthClients } from "./cron/sweep-oauth-clients.js";
 import { sendDigests } from "./cron/send-digests.js";
+import { runCollectionSummaries } from "./cron/collection-summaries.js";
 import { sendAlert, type AlertEnv } from "./lib/send-alert.js";
 import { logEvent } from "@releases/lib/log-event";
 import { dbErrorLogFields } from "@releases/lib/db-errors";
@@ -285,6 +286,19 @@ export type Env = {
     // below) resolves; empty → extraction stays on Anthropic (fail-open). Read by
     // resolveExtractAiSdkModel in the firecrawl-ingest / backfill workflows.
     EXTRACT_MODEL?: string;
+    // OpenRouter model for the collection daily-summary lane; empty → stay on
+    // Anthropic Haiku. Read by resolveCollectionSummaryModel via TextModelEnv.
+    COLLECTION_SUMMARY_MODEL?: string;
+    // How many recent ET days to back-fill if a summary row is missing (default 2).
+    // Read by runCollectionSummaries.
+    COLLECTION_SUMMARY_CATCHUP_DAYS?: string;
+    // OpenRouter cheap-call lane config. OPENROUTER_API_KEY is the Secrets Store
+    // binding; OPENROUTER_BASE_URL overrides the default endpoint; OPENROUTER_ENABLED
+    // is the Flagship/var kill switch. Read by resolveTextModel (TextModelEnv) for
+    // all secondary AI lanes: marketing-classifier, summarize, collection-summary.
+    OPENROUTER_ENABLED?: string;
+    OPENROUTER_API_KEY?: SecretBinding;
+    OPENROUTER_BASE_URL?: string;
     // ── Better Auth (human user sessions; a separate layer from the relk_
     // machine tokens). The auth instance is served at /api/auth/* — see
     // src/auth/index.ts. ──
@@ -845,6 +859,32 @@ export default {
             MEDIA_ORIGIN: env.MEDIA_ORIGIN,
             CRON_ENABLED: env.CRON_ENABLED,
           }),
+          alertEnv,
+        ),
+      );
+      return;
+    }
+    if (event.cron === "15 6 * * *") {
+      ctx.waitUntil(
+        loggedDispatch(
+          "collection-summaries-cron",
+          runCollectionSummaries(
+            {
+              DB: env.DB,
+              CRON_ENABLED: env.CRON_ENABLED,
+              COLLECTION_SUMMARY_CATCHUP_DAYS: env.COLLECTION_SUMMARY_CATCHUP_DAYS,
+              COLLECTION_SUMMARY_MODEL: env.COLLECTION_SUMMARY_MODEL,
+              ENVIRONMENT: env.ENVIRONMENT,
+              FLAGS: env.FLAGS,
+              OPENROUTER_ENABLED: env.OPENROUTER_ENABLED,
+              OPENROUTER_API_KEY: env.OPENROUTER_API_KEY,
+              OPENROUTER_BASE_URL: env.OPENROUTER_BASE_URL,
+              ANTHROPIC_API_KEY: env.ANTHROPIC_API_KEY,
+              ANTHROPIC_BASE_URL: env.ANTHROPIC_BASE_URL,
+              AI_GATEWAY_TOKEN: env.AI_GATEWAY_TOKEN,
+            },
+            new Date(event.scheduledTime),
+          ),
           alertEnv,
         ),
       );
