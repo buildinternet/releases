@@ -8,9 +8,6 @@
 import { extractTagged } from "./release-content";
 import type { TextModel } from "./text-model";
 
-/** Anthropic fail-open model when the OpenRouter lane is unusable. */
-export const MODEL = "claude-haiku-4-5";
-
 /** Cap on the model's response: ~90-char title + 1-line summary + ~5 bullets. */
 export const MAX_OUTPUT_TOKENS = 512;
 

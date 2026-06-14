@@ -118,11 +118,6 @@
     // fixture). The async Message-Batches enrichment path is unaffected (always
     // Anthropic; OpenRouter has no Batches API).
     "FEED_ENRICH_MODEL": "deepseek/deepseek-v4-flash",
-    // OpenRouter model for the collection daily-summary lane (nightly 06:15 UTC
-    // cron). Empty default keeps the lane on Anthropic Haiku until a cheap
-    // OpenRouter model id is evaluated and set in prod. Gated by the same
-    // `openrouter-enabled` Flagship switch as the other secondary AI lanes.
-    "COLLECTION_SUMMARY_MODEL": "",
     // Smear window for the per-source jitter at the head of PollAndFetchWorkflow.
     // Set to "0" to disable; see FANOUT_JITTER_WINDOW_MAX_MS for the upper clamp.
     // See workers/api/src/workflows/poll-and-fetch.ts.

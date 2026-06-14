@@ -10,10 +10,12 @@
 import Anthropic from "@anthropic-ai/sdk";
 import {
   summarizeCollectionDay,
-  MODEL as COLLECTION_MODEL,
   type CollectionDayInput,
   type CollectionSummaryResult,
 } from "@releases/ai-internal/collection-summary";
+// Anthropic baseline = the shared summarization model (the collection daily-summary
+// lane reuses the SUMMARIZE_MODEL config + this Haiku fallback, not a bespoke one).
+import { MODEL as COLLECTION_MODEL } from "@releases/ai-internal/release-content";
 import type { TextModel } from "@releases/ai-internal/text-model";
 import { buildGraderPrompt } from "@releases/ai-internal/grader-prompt";
 import { OVERVIEW_BANNED_WORDS } from "./graders";

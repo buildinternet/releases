@@ -286,9 +286,10 @@ export type Env = {
     // below) resolves; empty → extraction stays on Anthropic (fail-open). Read by
     // resolveExtractAiSdkModel in the firecrawl-ingest / backfill workflows.
     EXTRACT_MODEL?: string;
-    // OpenRouter model for the collection daily-summary lane; empty → stay on
-    // Anthropic Haiku. Read by resolveCollectionSummaryModel via TextModelEnv.
-    COLLECTION_SUMMARY_MODEL?: string;
+    // OpenRouter model for the shared summarization lane (release summaries AND
+    // collection daily summaries); empty → stay on Anthropic Haiku. Read by
+    // resolveSummarizeModel + resolveCollectionSummaryModel via TextModelEnv.
+    SUMMARIZE_MODEL?: string;
     // How many recent ET days to back-fill if a summary row is missing (default 2).
     // Read by runCollectionSummaries.
     COLLECTION_SUMMARY_CATCHUP_DAYS?: string;
@@ -873,7 +874,7 @@ export default {
               DB: env.DB,
               CRON_ENABLED: env.CRON_ENABLED,
               COLLECTION_SUMMARY_CATCHUP_DAYS: env.COLLECTION_SUMMARY_CATCHUP_DAYS,
-              COLLECTION_SUMMARY_MODEL: env.COLLECTION_SUMMARY_MODEL,
+              SUMMARIZE_MODEL: env.SUMMARIZE_MODEL,
               ENVIRONMENT: env.ENVIRONMENT,
               FLAGS: env.FLAGS,
               OPENROUTER_ENABLED: env.OPENROUTER_ENABLED,
