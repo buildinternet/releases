@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { Header } from "@/components/header";
 import { ResetPasswordForm } from "@/components/reset-password-form";
-import { AUTH_UI_ENABLED } from "@/lib/auth-ui";
+import { AUTH_CONFIGURED } from "@/lib/auth-ui";
 
 export const metadata: Metadata = {
   title: "Set a new password",
@@ -17,7 +17,7 @@ export default async function ResetPasswordPage({
 }: {
   searchParams: Promise<{ token?: string | string[]; error?: string | string[] }>;
 }) {
-  if (!AUTH_UI_ENABLED) notFound();
+  if (!AUTH_CONFIGURED) notFound();
   const params = await searchParams;
   const token = typeof params.token === "string" ? params.token : undefined;
   const hasError = Boolean(params.error) || !token;

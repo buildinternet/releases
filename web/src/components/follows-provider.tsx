@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useSession } from "@/lib/auth-client";
-import { AUTH_UI_ENABLED } from "@/lib/auth-ui";
+import { AUTH_CONFIGURED } from "@/lib/auth-ui";
 import type { Follow, FollowTarget } from "@buildinternet/releases-api-types";
 import { listFollows, follow as apiFollow, unfollow as apiUnfollow } from "@/lib/follows";
 
@@ -34,7 +34,7 @@ export function useFollows(): FollowsCtx | null {
 }
 
 export function FollowsProvider({ children }: { children: React.ReactNode }) {
-  const enabled = AUTH_UI_ENABLED && Boolean(process.env.NEXT_PUBLIC_BETTER_AUTH_URL);
+  const enabled = AUTH_CONFIGURED;
   if (!enabled) return <>{children}</>;
   return <FollowsProviderInner>{children}</FollowsProviderInner>;
 }

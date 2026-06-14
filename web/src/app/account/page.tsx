@@ -2,26 +2,30 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Header } from "@/components/header";
 import { ApiKeysPanel } from "@/components/api-keys-panel";
-import { AUTH_UI_ENABLED, USER_API_KEYS_ENABLED } from "@/lib/auth-ui";
+import { PasskeysPanel } from "@/components/passkeys-panel";
+import { AUTH_CONFIGURED, USER_API_KEYS_ENABLED } from "@/lib/auth-ui";
 
 export const metadata: Metadata = {
   title: "Account",
-  description: "Manage your releases.sh account and API keys.",
+  description: "Manage your releases.sh account, passkeys, and API keys.",
   alternates: { canonical: "/account" },
   robots: { index: false, follow: false },
 };
 
 export default function AccountPage() {
-  // Dark unless the auth UI master switch AND the API-keys reveal flag are on,
-  // and the Better Auth client base URL is configured (else useSession 404s).
-  if (!AUTH_UI_ENABLED || !USER_API_KEYS_ENABLED || !process.env.NEXT_PUBLIC_BETTER_AUTH_URL) {
+  // Dark only when the Better Auth client base URL is unconfigured (else
+  // useSession 404s). Passkeys are always available; the API-keys panel still
+  // rides its own reveal flag (USER_API_KEYS_ENABLED), mirroring the server-side
+  // `user-api-keys-enabled` Flagship gate.
+  if (!AUTH_CONFIGURED) {
     notFound();
   }
   return (
     <div className="min-h-screen">
       <Header />
-      <div className="mx-auto w-full max-w-3xl px-6 py-12">
-        <ApiKeysPanel />
+      <div className="mx-auto w-full max-w-3xl space-y-16 px-6 py-12">
+        <PasskeysPanel />
+        {USER_API_KEYS_ENABLED && <ApiKeysPanel />}
       </div>
     </div>
   );

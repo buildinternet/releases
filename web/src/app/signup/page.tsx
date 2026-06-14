@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { Header } from "@/components/header";
 import { AuthForm } from "@/components/auth-form";
 import { safeRedirect } from "@/lib/auth-redirect";
-import { AUTH_UI_ENABLED } from "@/lib/auth-ui";
+import { AUTH_CONFIGURED } from "@/lib/auth-ui";
 
 export const metadata: Metadata = {
   title: "Create an account",
@@ -17,7 +17,7 @@ export default async function SignupPage({
 }: {
   searchParams: Promise<{ redirect?: string | string[] }>;
 }) {
-  if (!AUTH_UI_ENABLED) notFound();
+  if (!AUTH_CONFIGURED) notFound();
   const { redirect } = await searchParams;
   const redirectTo = safeRedirect(redirect);
 

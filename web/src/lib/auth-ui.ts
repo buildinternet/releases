@@ -1,18 +1,17 @@
 /**
- * Master switch for the human-auth UI surface — the header sign-in/account control
- * and the `/login` + `/signup` routes. **Off unless `NEXT_PUBLIC_AUTH_UI_ENABLED`
- * is exactly `"true"`.**
- *
- * Keeps the surface dark in any environment that hasn't explicitly opted in —
- * notably production, where the Better Auth backend is live but human auth isn't
- * wired to anything yet and open email/password signup (no verification / auth
- * rate-limit tuning) shouldn't be publicly exposed. Flip it on in local dev (and
- * later in prod, once human auth has a purpose) to reveal the surface.
- *
- * `NEXT_PUBLIC_*` is inlined at build time, so this gates both the client header
- * control and the server-rendered route guards from a single value.
+ * Whether the human-auth UI surface (header sign-in/account control, `/login` +
+ * `/signup`, password reset, passkeys, etc.) can function — i.e. the Better Auth
+ * client base URL is configured. This is an **environment prerequisite, not a
+ * feature flag**: without `NEXT_PUBLIC_BETTER_AUTH_URL` the client resolves
+ * `/api/auth/*` against the *web* origin (which has no auth handler) and
+ * `useSession` 404s every page, so the surface must stay dark. The prior
+ * `NEXT_PUBLIC_AUTH_UI_ENABLED` master kill-switch has been retired — human auth is
+ * live (email verification is required, brute-force rate limiting is on), so the
+ * surface is no longer gated behind an explicit opt-in; it simply follows whether
+ * the backend URL is wired. `NEXT_PUBLIC_*` is inlined at build time, so this gates
+ * both the client header control and the server-rendered route guards.
  */
-export const AUTH_UI_ENABLED = process.env.NEXT_PUBLIC_AUTH_UI_ENABLED === "true";
+export const AUTH_CONFIGURED = Boolean(process.env.NEXT_PUBLIC_BETTER_AUTH_URL);
 
 /**
  * Reveal the self-serve API Keys panel (`/account`). **Off unless

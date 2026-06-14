@@ -175,8 +175,10 @@ export function AuthForm({ mode, redirectTo = "/" }: { mode: Mode; redirectTo?: 
   // Dedicated pending flag for the magic-link send so its button shows "Sending..."
   // without coupling to the password submit's `pending`.
   const [magicSending, setMagicSending] = useState(false);
+  // Dedicated pending flag for the explicit "Sign in with a passkey" button.
+  const [passkeyPending, setPasskeyPending] = useState(false);
 
-  const busy = pending || social !== null || magicSending;
+  const busy = pending || social !== null || magicSending || passkeyPending;
 
   // Auto-prompt Google One Tap on mount (login + signup surfaces). On success,
   // soft-navigate to the post-auth target like the email/social flows do, rather
@@ -197,11 +199,64 @@ export function AuthForm({ mode, redirectTo = "/" }: { mode: Mode; redirectTo?: 
     }).catch(() => {});
   }, [router, target]);
 
+  // Passkey conditional UI (autofill). On the login surface, if the browser
+  // supports conditional mediation, open a non-modal passkey request so the email
+  // field's autofill dropdown can offer a saved passkey. Selecting one signs the
+  // user in and we soft-navigate like the other flows; if the browser lacks support
+  // or the user ignores it, the explicit "Sign in with a passkey" button below is
+  // the fallback. All failure modes (no support, user dismissal, no passkey) are
+  // non-fatal — the request just never resolves, so we swallow errors. `cancelled`
+  // guards against a post-unmount navigation.
+  useEffect(() => {
+    if (mode !== "login") return;
+    const PKC = typeof window !== "undefined" ? window.PublicKeyCredential : undefined;
+    if (!PKC || typeof PKC.isConditionalMediationAvailable !== "function") return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        if (!(await PKC.isConditionalMediationAvailable()) || cancelled) return;
+        const res = await signIn.passkey({ autoFill: true });
+        if (cancelled || !res || res.error) return;
+        router.push(target);
+        router.refresh();
+      } catch {
+        // No support / user dismissal / no passkey — all non-fatal.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [mode, router, target]);
+
   // Absolute callback URL on THIS web origin — the verify link redirects here
   // after the worker verifies + auto-signs-in (a relative URL would resolve
   // against the worker's baseURL and strand the user on api.releases.sh).
   function callbackURL(): string {
     return new URL(target, window.location.origin).toString();
+  }
+
+  // Explicit passkey sign-in (the button below). Opens the modal WebAuthn prompt;
+  // on success soft-navigate to the post-auth target. The register/sign-in passkey
+  // responses always resolve with a data object carrying `error` (per the plugin
+  // docs — `throw: true` has no effect), so we check `error` rather than catch; the
+  // catch covers a user-cancelled or unsupported ceremony that rejects.
+  async function onPasskey() {
+    if (busy) return;
+    setError(null);
+    setPasskeyPending(true);
+    try {
+      const result = await signIn.passkey();
+      if (result?.error) {
+        setError(result.error.message ?? "Could not sign in with a passkey. Please try again.");
+        return;
+      }
+      router.push(target);
+      router.refresh();
+    } catch {
+      setError("Passkey sign-in was cancelled or isn't available on this device.");
+    } finally {
+      setPasskeyPending(false);
+    }
   }
 
   async function resend() {
@@ -455,7 +510,10 @@ export function AuthForm({ mode, redirectTo = "/" }: { mode: Mode; redirectTo?: 
             name="email"
             type="email"
             required
-            autoComplete="email"
+            // `webauthn` (last token) opts the email field into passkey conditional
+            // UI on the login surface — see the autofill effect above. Login-only so
+            // the signup field stays a plain email input.
+            autoComplete={mode === "login" ? "email webauthn" : "email"}
             placeholder="you@example.com"
             className={inputClass}
           />
@@ -513,6 +571,22 @@ export function AuthForm({ mode, redirectTo = "/" }: { mode: Mode; redirectTo?: 
           {pending ? pendingLabel : submitLabel}
           {lastMethod === "email" && <LastUsedBadge />}
         </button>
+
+        {/* Passkey sign-in (login only). `type="button"` so it doesn't trip the
+            password field's required/minLength validation. Always shown — the
+            passkey plugin is always registered server-side; the modal prompt simply
+            reports "no passkey" if the user has none. */}
+        {mode === "login" && (
+          <button
+            type="button"
+            onClick={onPasskey}
+            disabled={busy}
+            className="relative inline-flex h-10 w-full items-center justify-center border border-stone-300 bg-white px-4 text-sm font-medium text-stone-800 transition hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-stone-700 dark:bg-stone-950 dark:text-stone-100 dark:hover:bg-stone-900"
+          >
+            {passkeyPending ? "Waiting for your device…" : "Sign in with a passkey"}
+            {lastMethod === "passkey" && <LastUsedBadge />}
+          </button>
+        )}
 
         {/* Passwordless alternative. `type="button"` so it reads the email from the
             form without tripping the password field's required/minLength validation. */}
