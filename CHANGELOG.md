@@ -3,6 +3,15 @@
 The product changelog for releases.sh, published to its own registry. Drafted daily from merged
 PRs and reviewed via PR. See docs/changelog-style.md for the voice and curation rules.
 
+## June 13, 2026
+
+**Added**
+- Passkey sign-in — use Face ID, Touch ID, or a hardware security key to authenticate. Manage, rename, and remove passkeys from the account settings page.
+
+**Fixed**
+- Relative links in ingested release notes (e.g. `/docs`, `./changelog`) now resolve against the vendor's domain when rendered — no more broken in-page navigation.
+- Coverage-side release URLs now redirect to the canonical release page instead of returning 404.
+
 ## June 12, 2026
 
 **Added**
