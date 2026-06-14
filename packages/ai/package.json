@@ -12,6 +12,7 @@
     "./openrouter-client": "./src/openrouter-client.ts",
     "./playbook": "./src/playbook.ts",
     "./providers": "./src/providers.ts",
+    "./collection-summary": "./src/collection-summary.ts",
     "./release-content": "./src/release-content.ts",
     "./overview-content": "./src/overview-content.ts",
     "./overview-citations": "./src/overview-citations.ts",
