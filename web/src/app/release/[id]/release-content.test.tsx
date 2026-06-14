@@ -5,6 +5,7 @@ import {
   matchVideoMedia,
   MediaGallery,
   type MediaItem,
+  ReleaseContent,
 } from "./release-content.tsx";
 
 const VIDEO_ITEM: MediaItem = {
@@ -78,6 +79,40 @@ describe("inline a renderer (buildDetailComponents)", () => {
     const html = renderToStaticMarkup(A({ href: "https://example.com/docs", children: "Docs" }));
     expect(html).toContain('href="https://example.com/docs"');
     expect(html).toContain("Docs");
+  });
+});
+
+describe("ReleaseContent empty-body placeholder", () => {
+  it("renders a placeholder when there is no body and no media", () => {
+    const html = renderToStaticMarkup(
+      ReleaseContent({ content: "", title: "v2.1.177", media: [] }),
+    );
+    expect(html).toContain("This release contains no details.");
+  });
+
+  it("renders the placeholder when the body is only the leading title", () => {
+    // stripLeadingTitle removes the H1 that duplicates the title, leaving nothing.
+    const html = renderToStaticMarkup(
+      ReleaseContent({ content: "# v2.1.177\n", title: "v2.1.177", media: [] }),
+    );
+    expect(html).toContain("This release contains no details.");
+  });
+
+  it("does NOT render the placeholder when media is present without body text", () => {
+    const img: MediaItem = { type: "image", url: "https://cdn.example.com/shot.png" };
+    const html = renderToStaticMarkup(
+      ReleaseContent({ content: "", title: "v2.1.177", media: [img] }),
+    );
+    expect(html).not.toContain("This release contains no details.");
+    expect(html).toContain("shot.png");
+  });
+
+  it("does NOT render the placeholder when the body has content", () => {
+    const html = renderToStaticMarkup(
+      ReleaseContent({ content: "Fixed a bug.", title: "v2.1.177", media: [] }),
+    );
+    expect(html).not.toContain("This release contains no details.");
+    expect(html).toContain("Fixed a bug.");
   });
 });
 
