@@ -215,11 +215,5 @@ jobs:
         #   bun scripts/render-managed-agents.ts
         run: bun scripts/render-managed-agents.ts --check
 
-      - name: Validate Claude Code plugin marketplace manifest
-        # Catches schema bugs in .claude-plugin/marketplace.json before they
-        # reach a user's /plugin install. --strict treats unrecognized fields
-        # and missing metadata as failures, not warnings.
-        run: bunx --package=@anthropic-ai/claude-code claude plugin validate . --strict
-
       - name: Run tests
         run: bun run test

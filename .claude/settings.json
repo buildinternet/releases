@@ -1,4 +1,10 @@
 {
+  "extraKnownMarketplaces": {
+    "releases": {
+      "source": { "source": "github", "repo": "buildinternet/releases-cli" }
+    }
+  },
+  "enabledPlugins": { "releases@releases": true },
   "permissions": {
     "allow": [
       "Bash(npx tsc:*)",
@@ -12,14 +18,6 @@
       "mcp__claude-in-chrome__tabs_context_mcp",
       "mcp__claude-in-chrome__find"
     ]
-  },
-  "extraKnownMarketplaces": {
-    "releases-monorepo": {
-      "source": {
-        "source": "github",
-        "repo": "buildinternet/releases"
-      }
-    }
   },
   "hooks": {
     "SessionStart": [

@@ -2,7 +2,7 @@
 
 A **local-ingest path** for onboarding a changelog: a local Claude Code agent fetches the pages, extracts release records itself (optionally fanning out to parallel sub-agents), and writes them through the existing batch-upsert endpoint — **without dispatching the remote managed agent (MA)**.
 
-This is an assembly of production-tested building blocks, not new infrastructure. The capability lives in the **`local-ingest` skill** (`src/agent/skills/local-ingest/`), a Claude-Code-local operator skill alongside `seeding-playbooks`. A companion `--local` handoff flag on `releases admin source fetch` lives in the OSS CLI repo ([buildinternet/releases-cli](https://github.com/buildinternet/releases-cli)) and only stages the work — no extraction in the thin client.
+This is an assembly of production-tested building blocks, not new infrastructure. The capability lives in the **`local-ingest` skill** (`.claude/skills/local-ingest/`), a Claude-Code-local operator skill alongside `seeding-playbooks`. A companion `--local` handoff flag on `releases admin source fetch` lives in the OSS CLI repo ([buildinternet/releases-cli](https://github.com/buildinternet/releases-cli)) and only stages the work — no extraction in the thin client.
 
 ## Why
 
@@ -44,12 +44,12 @@ The batch endpoint deliberately omits the AI fields (`title_generated` / `title_
 
 - **Batch write, no AI on insert** — `POST /v1/sources/:slug/releases/batch` and the org-scoped `/v1/orgs/:orgSlug/sources/:sourceSlug/releases/batch` (handler `postReleasesBatchHandler`, `workers/api/src/routes/sources.ts`). Body `{ releases: [{ version?, title, content, url?, contentHash?, publishedAt?, media?, type?, prerelease? }] }`. Upserts on `UNIQUE(source_id, url)` — idempotent, safe to re-run and page. Requires `write` scope; the static `RELEASES_API_KEY` (root) satisfies it.
 - **Pure extract libs (optional, "Approach A")** — `packages/adapters/src/extract/*` (`extractFromBody`, `extractWithTools`, `runDirectFetchExtraction`). `ExtractDeps.cloudflare` is nullable and `repo` can be a noop, so they run with just an Anthropic key (proof: `scripts/smoke-toolloop.ts`). These packages are `private: true` — monorepo-only, never the thin CLI.
-- **Shared conventions** — `src/agent/skills/{parsing-changelogs,managing-sources,finding-changelogs}` carry the release `type`, version-format, date-normalization, media-unwrap, and dedup rules the local output must match.
+- **Shared conventions** — `.claude/skills/{parsing-changelogs,managing-sources,finding-changelogs}` carry the release `type`, version-format, date-normalization, media-unwrap, and dedup rules the local output must match.
 - **Media unwrap** — `normalizeMediaUrl` (`packages/rendering/src/media-url.ts`) strips `_next/image` / Vercel optimizer wrappers.
 
 ## Preflight: the Content-Signal opt-out gate
 
-The skill's mandatory first step is `src/agent/skills/local-ingest/preflight.ts <url>` — it fetches `robots.txt` (following apex→www redirects), parses Cloudflare's [Content Signals](https://developers.cloudflare.com/bots/additional-configurations/managed-robots-txt/) policy, and gates on exit code: `0` proceed, `1` refuse, `2` unknown (surface to user).
+The skill's mandatory first step is `.claude/skills/local-ingest/preflight.ts <url>` — it fetches `robots.txt` (following apex→www redirects), parses Cloudflare's [Content Signals](https://developers.cloudflare.com/bots/additional-configurations/managed-robots-txt/) policy, and gates on exit code: `0` proceed, `1` refuse, `2` unknown (surface to user).
 
 It **refuses** when the publisher declares `ai-input=no` or `ai-train=no` anywhere in robots.txt. `conductor.build` (`Content-Signal: ai-train=no, search=yes, ai-input=no`) is the regression target and must be refused.
 
@@ -75,7 +75,7 @@ The default `/batch` upsert is **fill-don't-clobber** (`RELEASE_URL_UPSERT`, #95
 
 ## Pointers
 
-- Skill: `src/agent/skills/local-ingest/SKILL.md` + `preflight.ts`.
+- Skill: `.claude/skills/local-ingest/SKILL.md` + `preflight.ts`.
 - Batch / single-insert / PATCH handlers: `workers/api/src/routes/sources.ts`.
 - MA model choice (what local-ingest avoids): `workers/discovery/src/managed-agents-session.ts`.
 - Extract libs + smoke: `packages/adapters/src/extract/`, `scripts/smoke-toolloop.ts`.

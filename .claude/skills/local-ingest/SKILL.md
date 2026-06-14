@@ -40,7 +40,7 @@ The negative signal that confirms no MA ran: in Axiom `releases-cloudflare-logs`
 Run the opt-out check before fetching or writing **anything**:
 
 ```bash
-bun src/agent/skills/local-ingest/preflight.ts <url> --json
+bun .claude/skills/local-ingest/preflight.ts <url> --json
 ```
 
 It fetches `robots.txt` (following apex→www redirects), parses the Cloudflare **Content Signals** policy, and gates on exit code:

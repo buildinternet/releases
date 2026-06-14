@@ -2,4 +2,4 @@
 *
 
 # Agent skills (copied to /usr/share/releases/skills/ and .claude/skills/ in Dockerfile)
-!src/agent/skills/
+!.claude/skills/

@@ -14,6 +14,16 @@ Working in a git worktree? Claude Code worktrees are self-bootstrapping: env fil
 
 The monorepo no longer ships a local CLI. If you need `releases <cmd>` while working on backend changes, clone [buildinternet/releases-cli](https://github.com/buildinternet/releases-cli) alongside this repo and point it at a local API worker (`bun run dev:api`) via `RELEASES_API_URL=http://localhost:8787`.
 
+### Claude Code plugins
+
+The repo's `.claude/settings.json` registers the public [CLI marketplace](https://github.com/buildinternet/releases-cli) and suggests the consumer `releases` plugin (the `/releases` changelog-lookup command plus reader skills). After you trust the repo folder, Claude Code prompts to install it — accept or decline; nothing is force-installed. If you operate/maintain sources, also install the `releases-admin` plugin (operator playbooks + discovery/worker agents) from the same marketplace:
+
+```
+/plugin install releases-admin@releases
+```
+
+It isn't auto-suggested because it expects admin access to the hosted registry. The monorepo's own skills under `.claude/skills/` load natively and take precedence over same-named plugin skills, so installing these plugins won't shadow them.
+
 ## Environment variables
 
 Copy `.env.example` to `.env` and fill in:
@@ -93,7 +103,7 @@ Parsing + discovery evals used to live in this repo but followed the CLI into [b
 
 ## Deployment
 
-Workers auto-deploy on merges to `main` via `.github/workflows/deploy-workers.yml` — the workflow path-filters so only the workers whose code changed are rebuilt, fans out across `production` and `staging`, and runs `wrangler d1 migrations apply` against each environment's DB before the new code starts serving (so additive schema lands first). Managed agents + skills auto-deploy the same way via `.github/workflows/deploy-managed-agents.yml`, path-filtered on `src/shared/agent-tools.ts`, `src/shared/worker-prompt.ts`, `src/shared/discovery-prompt.ts`, `src/agent/skills/**`, and `scripts/sync-agent-skills.ts`. Both workflows expose `workflow_dispatch` for manual redeploys.
+Workers auto-deploy on merges to `main` via `.github/workflows/deploy-workers.yml` — the workflow path-filters so only the workers whose code changed are rebuilt, fans out across `production` and `staging`, and runs `wrangler d1 migrations apply` against each environment's DB before the new code starts serving (so additive schema lands first). Managed agents + skills auto-deploy the same way via `.github/workflows/deploy-managed-agents.yml`, path-filtered on `src/shared/agent-tools.ts`, `src/shared/worker-prompt.ts`, `src/shared/discovery-prompt.ts`, `.claude/skills/**`, and `scripts/sync-agent-skills.ts`. Both workflows expose `workflow_dispatch` for manual redeploys.
 
 To deploy manually from the project root, set `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` in `.env` (Bun autoloads it) and run:
 

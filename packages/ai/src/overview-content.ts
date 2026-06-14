@@ -2,7 +2,7 @@
  * Build the Anthropic request shape for an org overview. Worker-safe: caller
  * constructs the Anthropic client and decides between live or Batches API.
  *
- * The system prompt is a port of the block in `src/agent/skills/regenerating-overviews/SKILL.md`.
+ * The system prompt is a port of the block in `.claude/skills/regenerating-overviews/SKILL.md`.
  * The skill remains canonical for agent-driven runs; co-evolve both copies
  * when iterating. Releases are passed as `search_result` content blocks so
  * the model emits inline citations linking each claim back to its source (#846).
@@ -21,7 +21,7 @@ const RELEASE_CONTENT_CHARS = 1000;
 
 /**
  * The production system prompt. Verbatim port of the block in
- * `src/agent/skills/regenerating-overviews/SKILL.md` (lines 58-94 of that file).
+ * `.claude/skills/regenerating-overviews/SKILL.md` (lines 58-94 of that file).
  * Co-evolve both copies when iterating.
  */
 export const SYSTEM_PROMPT = `You write concise knowledge pages summarizing a software organization's recent changelog activity. The audience is developers who want to quickly understand what's happening with this project.

@@ -5,7 +5,7 @@ Two Anthropic managed agents handle changelog work, sharing the same tools (`AGE
 - **Discovery agent** (`claude-sonnet-4-6`) — Onboarding, evaluation, and judgment-heavy tasks. System prompt: `src/shared/discovery-prompt.ts`.
 - **Worker agent** (`claude-haiku-4-5`) — Fetches, updates, and mechanical operations at ~3x lower cost. System prompt: `src/shared/worker-prompt.ts`. The discovery worker DO routes `mode: "update"` sessions to this agent via `ANTHROPIC_WORKER_AGENT_ID`.
 
-Both agents are auto-deployed by `.github/workflows/deploy-managed-agents.yml` on any push to `main` that touches `src/shared/agent-tools.ts`, `src/shared/worker-prompt.ts`, `src/shared/discovery-prompt.ts`, `src/agent/skills/**`, or `scripts/sync-agent-skills.ts` — live Anthropic state stays in lockstep with `main`. For local / ad-hoc deploys: `bun run deploy:agents` (both), `deploy:agents:discovery`, or `deploy:agents:worker`. Agent IDs and skill mappings live in `scripts/agent-skills.json` (prod) and `scripts/agent-skills.staging.json` (staging).
+Both agents are auto-deployed by `.github/workflows/deploy-managed-agents.yml` on any push to `main` that touches `src/shared/agent-tools.ts`, `src/shared/worker-prompt.ts`, `src/shared/discovery-prompt.ts`, `.claude/skills/**`, or `scripts/sync-agent-skills.ts` — live Anthropic state stays in lockstep with `main`. For local / ad-hoc deploys: `bun run deploy:agents` (both), `deploy:agents:discovery`, or `deploy:agents:worker`. Agent IDs and skill mappings live in `scripts/agent-skills.json` (prod) and `scripts/agent-skills.staging.json` (staging).
 
 ### Per-environment agents
 
@@ -71,7 +71,7 @@ Scope: this covers the two discovery environments only. The staging eval agent's
 
 After each managed-agent session ends — both successful completions and terminal failures (provider `session.error`, retries-exhausted idle) — the discovery DO retrieves the final usage envelope via `client.beta.sessions.retrieve(session.id)` (the shared `captureFinalUsage` helper) and computes a list-price USD estimate using `@releases/lib/anthropic-pricing`. The full block — `inputTokens`, `outputTokens`, `cacheWriteTokens`, `cacheReadTokens`, `model`, and `estimatedUsd` — is forwarded to StatusHub via the `session:complete` / `session:error` events and stored on `SessionState.usage`. The web `/status` page renders it under each session card with an `≈ $` qualifier. The dollar figure is from list prices (not the actual billed amount) — for ground truth use the Anthropic console or AI Gateway dashboards. Pricing constants for new models go in `packages/lib/src/anthropic-pricing.ts`. See #657.
 
-- **Agent skills** live in this monorepo at `src/agent/skills/`. Each skill is a `SKILL.md` with YAML frontmatter. Skills are uploaded to the managed agent definition via `bun run deploy:skills`.
+- **Agent skills** live in this monorepo at `.claude/skills/`. Each skill is a `SKILL.md` with YAML frontmatter. Skills are uploaded to the managed agent definition via `bun run deploy:skills`.
 - **Deterministic pipeline** (ingest, incremental, summarize) stays as direct Messages API calls — not routed through the agent.
 - **URL evaluation** runs pre-checks only (provider detection, feed discovery) via `POST /v1/evaluate`. The discovery agent handles deeper evaluation when needed.
 
@@ -156,7 +156,7 @@ Agents operate on three layers of fetch guidance:
 
 | Layer                 | Scope      | Location                                     | Example                                     |
 | --------------------- | ---------- | -------------------------------------------- | ------------------------------------------- |
-| **Global skills**     | All orgs   | `src/agent/skills/**/SKILL.md`               | `parsing-changelogs`, `managing-sources`    |
+| **Global skills**     | All orgs   | `.claude/skills/**/SKILL.md`                 | `parsing-changelogs`, `managing-sources`    |
 | **Playbook**          | One org    | `knowledge_pages` rows with `scope=playbook` | "Vercel canary releases ship empty content" |
 | **parseInstructions** | One source | `sources.parseInstructions` column           | "Skip entries tagged `marketing`"           |
 
@@ -166,24 +166,18 @@ Playbook notes are written by the discovery/worker agents themselves — inline 
 
 The rubric defines a three-layer routing rule: target-shaped facts go in the playbook; adapter/harness errors route to the `releases-tool-notes` memory store; raw org observations route to the `releases-errata` store. Agents use it to keep playbooks tight and skill-shaped instead of letting transient bugs and onboarding narration pollute the body. `seeding-playbooks` is the bulk-orchestration wrapper — it dispatches sub-agents that follow the same rubric to write or rewrite many playbooks in parallel.
 
-## Claude Code Plugin
+## Claude Code integration
 
-The monorepo publishes a single Claude Code plugin named **`releases-dev`** via `.claude-plugin/marketplace.json` at the repo root. It targets monorepo developers — end users install the public `releases` / `releases-admin` plugins from the [`buildinternet/releases-cli`](https://github.com/buildinternet/releases-cli) marketplace instead. The two repos publish under different marketplace identities to avoid the silent name shadowing that motivated the rename (see [#1087](https://github.com/buildinternet/releases/issues/1087)).
+The monorepo's Claude Code assets live under `.claude/` and auto-load on a trusted clone — no plugin, no marketplace, no `/plugin install`. The audience is monorepo developers, who already have the checkout, so native `.claude/` discovery is all that's needed. End users who don't have the repo install the public `releases` / `releases-admin` plugins from the [`buildinternet/releases-cli`](https://github.com/buildinternet/releases-cli) marketplace instead. (This repo previously shipped a `releases-dev` plugin via a root `.claude-plugin/marketplace.json`; that was redundant ceremony for an audience that already has the working tree, so it was collapsed into `.claude/`.)
 
-**Components:** every skill in `src/agent/skills/` (referenced by path, no mirror), the `grader` agent under `plugins/claude/releases/agents/`, the `/releases` command, and the `.mcp.json` pointing at `mcp.releases.sh`. The production discovery/worker prompts live in `managed-discovery.ts`, not here; the OSS CLI's `releases-admin` plugin is what ships operator-facing `discovery`/`worker` agents. This plugin used to mirror them too, but the copies were never invoked from the monorepo and only drifted from the TS source, so they were dropped.
+**Components:**
 
-**Manifest layout:** `strict: false` on the plugin entry means the marketplace.json IS the entire definition. There is no per-plugin `plugin.json`; adding one back would create a conflict and the plugin would fail to load.
-
-**Install (monorepo developers):**
-
-```bash
-/plugin marketplace add buildinternet/releases
-/plugin install releases-dev@releases-monorepo
-```
-
-**Validate:** `claude plugin validate . --strict` from the repo root. The same command runs in CI on every PR.
+- `.claude/skills/` — every skill; the canonical source for BOTH managed agents and local Claude Code (see below).
+- `.claude/agents/` — local eval/grader subagents (`rubric-grader`, `overview-writer`). The production discovery/worker prompts live in `managed-discovery.ts` and the `src/shared/*-prompt.ts` builders, not here; the OSS CLI's `releases-admin` plugin ships the operator-facing `discovery`/`worker` agents.
+- `.claude/commands/` — repo-local slash commands (e.g. `/discover-changelog`). The consumer-facing `/releases` lookup command is not here — it ships in the public `releases` plugin from the OSS CLI marketplace, so duplicating it in the monorepo only invited drift.
+- `.mcp.json` (repo root) — points Claude Code at `mcp.releases.sh`.
 
 **Skill sources of truth.** Two skill trees coexist but no longer copy:
 
-- `src/agent/skills/` (this monorepo) is the canonical source for managed agents AND for this repo's `releases-dev` plugin. The marketplace.json references these paths directly via `./src/agent/skills/<name>`. No mirror tree, no sync script. After editing `src/agent/skills/<skill>/SKILL.md`, run `bun run deploy:skills` to push the managed-agents update; the plugin picks up the change with no extra step.
-- The OSS CLI at [`buildinternet/releases-cli`](https://github.com/buildinternet/releases-cli) ships its own `skills/` tree (publishes `@buildinternet/releases-skills` + the `releases` / `releases-admin` plugins) that includes the six user-oriented skills plus `releases-cli` / `releases-mcp`. When you edit one of the six shared skills here, mirror the change into the OSS CLI so the published package doesn't drift. Cross-repo skill drift is a known follow-up tracked separately from the marketplace rename.
+- `.claude/skills/` (this monorepo) is the canonical source for managed agents AND local Claude Code. Claude Code auto-discovers it natively — it is the only project skill directory the host scans. The managed-agent deploy reads the same tree: `scripts/sync-agent-skills.ts` (`bun run deploy:skills`, `SKILLS_DIR = .claude/skills`) uploads each skill to the Anthropic Skills API and attaches it to the agents by `skill_id`. So after editing `.claude/skills/<skill>/SKILL.md`, run `bun run deploy:skills` to push the managed-agents update; local Claude Code picks the edit up on the next session with no extra step.
+- The OSS CLI at [`buildinternet/releases-cli`](https://github.com/buildinternet/releases-cli) ships its own `skills/` tree (publishes `@buildinternet/releases-skills` + the `releases` / `releases-admin` plugins) that includes the six user-oriented skills plus `releases-cli` / `releases-mcp`. When you edit one of the six shared skills here, mirror the change into the OSS CLI so the published package doesn't drift. Cross-repo skill drift is a known follow-up (see [#1087](https://github.com/buildinternet/releases/issues/1087)).
