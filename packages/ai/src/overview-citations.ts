@@ -2,7 +2,7 @@
  * Extract `{ body, citations }` from an Anthropic overview-generation response.
  *
  * Implements the running-offset algorithm from
- * `src/agent/skills/regenerating-overviews/SKILL.md` lines 154-170.
+ * `.claude/skills/regenerating-overviews/SKILL.md` lines 154-170.
  *
  * The shape mirrors the `RegenerateOverviewBodySchema.citations` wire format:
  *   { startIndex, endIndex, sourceUrl, title, citedText }

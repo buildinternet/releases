@@ -60,7 +60,7 @@ const WORKER_AGENT_NAME = "Releases Worker Agent";
 // ── Config ───────────────────────────────────────────────────────
 
 const PROJECT_ROOT = resolve(import.meta.dir, "..");
-const SKILLS_DIR = resolve(PROJECT_ROOT, "src/agent/skills");
+const SKILLS_DIR = resolve(PROJECT_ROOT, ".claude/skills");
 
 type DeployEnv = "production" | "staging";
 type AgentKind = "discovery" | "worker" | "coordinator";

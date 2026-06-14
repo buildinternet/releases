@@ -13,7 +13,7 @@ on:
       - src/shared/worker-prompt.ts
       - src/shared/discovery-prompt.ts
       - src/shared/coordinator-prompt.ts
-      - src/agent/skills/**
+      - .claude/skills/**
       - scripts/sync-agent-skills.ts
       # CATEGORIES is embedded verbatim in every agent's system prompt, so a
       # taxonomy change shifts the deployed prompt even when no prompt builder

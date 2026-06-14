@@ -17,23 +17,16 @@ The user-facing CLI (`@buildinternet/releases`) ships separately from [buildinte
 | `workers/webhooks/`  | Signs + delivers `release.created` events (HMAC-SHA256, retry/DLQ) — [docs](docs/webhooks.md) |
 | `web/`               | Next.js frontend, deploys on Vercel                                                           |
 | `packages/`          | Shared code — `core` + `api-types` publish to npm; the rest are private workspaces            |
-| `src/agent/`         | Managed-agents discovery + worker harness, plus `src/agent/skills/` (canonical skill home)    |
-| `.claude-plugin/`    | Claude Code plugin manifest (`releases-dev`) and its assets                                   |
+| `src/agent/`         | Managed-agents discovery + worker harness (prompt builder + shared types)                     |
+| `.claude/`           | Claude Code config — `skills/` (canonical skill home), `agents/`, `commands/`, `workflows/`   |
 
 Per-package detail and project conventions live in [AGENTS.md](AGENTS.md); architecture deep-dives in [docs/architecture/](docs/architecture/).
 
 ## Consumer surfaces
 
-**Claude Code plugin** — this repo publishes the `releases-dev` plugin (marketplace `releases-monorepo`) for monorepo developers. (End users want the public `releases` / `releases-admin` plugins from the CLI repo instead.) A trusted clone prompts you to install via `.claude/settings.json`, or manually:
+**Claude Code (monorepo developers)** — everything under `.claude/` auto-loads on a trusted clone, no install step: the skills in `.claude/skills/`, the eval agents in `.claude/agents/` (`rubric-grader`, `overview-writer`), the `/releases` command, and the hosted MCP tools from the repo-root `.mcp.json`. End users who don't have the repo checked out want the public `releases` / `releases-admin` plugins from the [CLI repo](https://github.com/buildinternet/releases-cli) instead.
 
-```bash
-/plugin marketplace add buildinternet/releases
-/plugin install releases-dev@releases-monorepo
-```
-
-It bundles the hosted MCP tools, every skill in `src/agent/skills/`, the `discovery` / `worker` / `grader` agents, and the `/releases` command. See [plugins/claude/releases/README.md](plugins/claude/releases/README.md).
-
-**Standalone skills** — install the bundled skills into any agent (Claude Code / Codex / Cursor / OpenCode) without the full plugin:
+**Standalone skills** — install the published skills into any agent (Claude Code / Codex / Cursor / OpenCode) without checking out the monorepo:
 
 ```bash
 npx skills add buildinternet/releases-cli

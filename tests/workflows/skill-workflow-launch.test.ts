@@ -9,7 +9,7 @@ import { readdirSync } from "node:fs";
 // end-to-end, but it fails the moment any skill's recipe points at a missing script
 // or drifts (back) to launching a project workflow by name.
 
-const SKILLS_DIR = "src/agent/skills";
+const SKILLS_DIR = ".claude/skills";
 const WORKFLOWS_DIR = ".claude/workflows";
 
 async function read(path: string): Promise<string> {

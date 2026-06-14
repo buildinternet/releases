@@ -13,14 +13,6 @@
       "mcp__claude-in-chrome__find"
     ]
   },
-  "extraKnownMarketplaces": {
-    "releases-monorepo": {
-      "source": {
-        "source": "github",
-        "repo": "buildinternet/releases"
-      }
-    }
-  },
   "hooks": {
     "SessionStart": [
       {

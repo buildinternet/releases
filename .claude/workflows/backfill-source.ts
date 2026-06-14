@@ -322,7 +322,7 @@ do {
   attempt++;
   const pf = await agent(
     `Run the local-ingest opt-out preflight and report its verdict EXACTLY.
-Command: \`bun src/agent/skills/local-ingest/preflight.ts ${resolved.url} --json\`
+Command: \`bun .claude/skills/local-ingest/preflight.ts ${resolved.url} --json\`
 Exit 0 → "proceed", exit 1 → "refuse", exit 2 → "unknown". Return the verdict, the sitemaps array it prints, and a one-line reason.`,
     { label: `preflight#${attempt}`, phase: "Preflight", model: "haiku", schema: PREFLIGHT_SCHEMA },
   );
