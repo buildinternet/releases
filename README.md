@@ -24,7 +24,7 @@ Per-package detail and project conventions live in [AGENTS.md](AGENTS.md); archi
 
 ## Consumer surfaces
 
-**Claude Code (monorepo developers)** — everything under `.claude/` auto-loads on a trusted clone, no install step: the skills in `.claude/skills/`, the eval agents in `.claude/agents/` (`rubric-grader`, `overview-writer`), the `/releases` command, and the hosted MCP tools from the repo-root `.mcp.json`. End users who don't have the repo checked out want the public `releases` / `releases-admin` plugins from the [CLI repo](https://github.com/buildinternet/releases-cli) instead.
+**Claude Code (monorepo developers)** — everything under `.claude/` auto-loads on a trusted clone, no install step: the skills in `.claude/skills/`, the eval agents in `.claude/agents/` (`rubric-grader`, `overview-writer`), the repo-local commands in `.claude/commands/`, and the hosted MCP tools from the repo-root `.mcp.json`. End users who don't have the repo checked out want the public `releases` / `releases-admin` plugins from the [CLI repo](https://github.com/buildinternet/releases-cli) instead.
 
 **Standalone skills** — install the published skills into any agent (Claude Code / Codex / Cursor / OpenCode) without checking out the monorepo:
 

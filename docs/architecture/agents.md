@@ -174,7 +174,7 @@ The monorepo's Claude Code assets live under `.claude/` and auto-load on a trust
 
 - `.claude/skills/` — every skill; the canonical source for BOTH managed agents and local Claude Code (see below).
 - `.claude/agents/` — local eval/grader subagents (`rubric-grader`, `overview-writer`). The production discovery/worker prompts live in `managed-discovery.ts` and the `src/shared/*-prompt.ts` builders, not here; the OSS CLI's `releases-admin` plugin ships the operator-facing `discovery`/`worker` agents.
-- `.claude/commands/releases.md` — the `/releases` slash command.
+- `.claude/commands/` — repo-local slash commands (e.g. `/discover-changelog`). The consumer-facing `/releases` lookup command is not here — it ships in the public `releases` plugin from the OSS CLI marketplace, so duplicating it in the monorepo only invited drift.
 - `.mcp.json` (repo root) — points Claude Code at `mcp.releases.sh`.
 
 **Skill sources of truth.** Two skill trees coexist but no longer copy:
