@@ -1,4 +1,10 @@
 {
+  "extraKnownMarketplaces": {
+    "releases": {
+      "source": { "source": "github", "repo": "buildinternet/releases-cli" }
+    }
+  },
+  "enabledPlugins": { "releases@releases": true },
   "permissions": {
     "allow": [
       "Bash(npx tsc:*)",
