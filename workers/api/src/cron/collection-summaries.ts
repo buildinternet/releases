@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { logEvent } from "@releases/lib/log-event";
 import { etDayKey, etDayBoundsUtc, addDaysToDateKey } from "@buildinternet/releases-core/dates";
 import { summarizeCollectionDay } from "@releases/ai-internal/collection-summary";
@@ -22,16 +22,27 @@ export interface CollectionSummariesEnv extends TextModelEnv {
   _drizzleOverride?: ReturnType<typeof createDb>;
 }
 
-/** Generate summaries for one ET day across every enabled collection. Exported for tests. */
+/**
+ * Generate summaries for one ET day across every enabled collection. Exported
+ * for tests. Pass `opts.collectionId` to scope the run to a single collection
+ * (used by the on-demand workflow trigger); omit it for the full nightly sweep.
+ */
 export async function generateCollectionSummariesForDay(
   db: AnyDb,
   model: TextModel,
   date: string,
+  opts?: { collectionId?: string },
 ): Promise<{ generated: number; skipped: number; failed: number }> {
   const cols = await db
     .select({ id: collections.id, name: collections.name })
     .from(collections)
-    .where(eq(collections.dailySummaryEnabled, true));
+    // `and()` drops `undefined`, so with no collectionId this is the full sweep.
+    .where(
+      and(
+        eq(collections.dailySummaryEnabled, true),
+        opts?.collectionId ? eq(collections.id, opts.collectionId) : undefined,
+      ),
+    );
 
   const window = etDayBoundsUtc(date);
   let generated = 0;

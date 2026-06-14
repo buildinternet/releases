@@ -39,7 +39,7 @@ import {
   collectionMembers,
 } from "@buildinternet/releases-core/schema";
 import { summarizeEligibilityConds } from "@releases/core-internal/eligibility";
-import { daysAgoIso } from "@buildinternet/releases-core/dates";
+import { daysAgoIso, etDayKey, addDaysToDateKey } from "@buildinternet/releases-core/dates";
 import { sourceMatchByIdOrSlug, isSourceId } from "../utils.js";
 import { getAnthropicKey, resolveGatewayOpts } from "../lib/anthropic.js";
 import { embedAndUpsertReleases, type EmbedReleaseInput } from "@releases/search/embed-releases.js";
@@ -91,6 +91,8 @@ import {
   type SourceBackfillReport,
 } from "../lib/source-backfill.js";
 import { loadRawSnapshot } from "../lib/raw-snapshot.js";
+import { generateCollectionSummariesForDay } from "../cron/collection-summaries.js";
+import { resolveCollectionSummaryModel } from "../lib/text-model.js";
 
 export const workflowsRoutes = new Hono<Env>();
 
@@ -2395,4 +2397,55 @@ workflowsRoutes.post("/workflows/reextract-source", async (c) => {
       format: snap.format,
     },
   });
+});
+
+// ── POST /workflows/collection-summaries ─────────────────────────────────────
+//
+// On-demand trigger for the nightly collection daily-summary generation.
+// Admin-gated (workflows namespace). Mirrors the cron but accepts an explicit
+// `date` (ET day key), a `collectionId` scope, and a `dryRun` flag.
+//
+// Runs SYNCHRONOUSLY in the request. With no `collectionId` it sweeps every
+// enabled collection in one request — fine for today's small curated set; there
+// is no Cloudflare Workflow binding for this op. Pass `collectionId` to scope
+// the run to a single collection.
+
+interface CollectionSummariesBody {
+  /** Limit the run to a single collection (typed `col_…` id). */
+  collectionId?: string;
+  /** ET day to summarize (YYYY-MM-DD). Defaults to yesterday ET. */
+  date?: string;
+  /** When true, skip AI generation and return the resolved date only. */
+  dryRun?: boolean;
+}
+
+workflowsRoutes.post("/workflows/collection-summaries", async (c) => {
+  const body = await c.req
+    .json<CollectionSummariesBody>()
+    .catch(() => ({}) as CollectionSummariesBody);
+
+  const date = body.date?.trim() || addDaysToDateKey(etDayKey(new Date()), -1);
+  const collectionId = typeof body.collectionId === "string" ? body.collectionId : undefined;
+
+  // Preview short-circuit comes BEFORE model resolution — a dry run reports the
+  // resolved scope without needing (or paying for) an AI model.
+  if (body.dryRun === true) {
+    return c.json({ date, dryRun: true, collectionId });
+  }
+
+  const model = await resolveCollectionSummaryModel(c.env);
+  if (!model) {
+    return c.json(
+      {
+        error: "no_model",
+        message:
+          "No AI model configured for collection summaries (ANTHROPIC_API_KEY or OPENROUTER_API_KEY required)",
+      },
+      503,
+    );
+  }
+
+  const db = createDb(c.env.DB);
+  const result = await generateCollectionSummariesForDay(db, model, date, { collectionId });
+  return c.json({ date, ...result });
 });

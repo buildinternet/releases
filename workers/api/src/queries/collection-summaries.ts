@@ -8,6 +8,7 @@ import {
   releasesVisible,
   sourcesActive,
 } from "@buildinternet/releases-core/schema";
+import { addDaysToDateKey } from "@buildinternet/releases-core/dates";
 import type { AnyDb } from "../db.js";
 import type { CollectionDayRelease } from "@releases/ai-internal/collection-summary";
 
@@ -111,7 +112,8 @@ export async function listCollectionDailySummaries(
       and(
         eq(collectionDailySummaries.collectionId, collectionId),
         gte(collectionDailySummaries.summaryDate, from),
-        lt(collectionDailySummaries.summaryDate, addExclusiveUpper(to)),
+        // `to` is inclusive at the API; bump to an exclusive upper bound.
+        lt(collectionDailySummaries.summaryDate, addDaysToDateKey(to, 1)),
       ),
     )
     .orderBy(desc(collectionDailySummaries.summaryDate));
@@ -122,12 +124,6 @@ export async function listCollectionDailySummaries(
     takeaways: safeParseTakeaways(r.takeaways),
     releaseCount: r.releaseCount,
   }));
-}
-
-// `to` is inclusive at the API; bump to an exclusive upper bound on YYYY-MM-DD.
-function addExclusiveUpper(to: string): string {
-  const [y, m, d] = to.split("-").map(Number);
-  return new Date(Date.UTC(y, m - 1, d + 1)).toISOString().slice(0, 10);
 }
 
 function safeParseTakeaways(raw: string): string[] {

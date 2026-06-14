@@ -28,7 +28,9 @@ import {
   productById,
   findProductForOrgSlug,
 } from "../utils.js";
+import { etDayKey, addDaysToDateKey } from "@buildinternet/releases-core/dates";
 import { getCollectionReleasesFeed } from "../queries/orgs.js";
+import { listCollectionDailySummaries } from "../queries/collection-summaries.js";
 import { parseSourceTypesLenient } from "../lib/source-types.js";
 import { wantsMarkdown, markdownResponse } from "../middleware/content-negotiation.js";
 import { collectionReleaseFeedToMarkdown } from "@releases/rendering/formatters.js";
@@ -37,6 +39,7 @@ import {
   CollectionListResponseSchema,
   CollectionDetailSchema,
   CollectionReleasesResponseSchema,
+  CollectionDailySummariesResponseSchema,
   CollectionRowSchema,
   CreateCollectionRequestSchema,
   UpdateCollectionRequestSchema,
@@ -75,6 +78,7 @@ function rowToWire(row: typeof collections.$inferSelect): CollectionRow {
     name: row.name,
     description: row.description,
     isFeatured: row.isFeatured,
+    dailySummaryEnabled: row.dailySummaryEnabled,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -644,6 +648,7 @@ collectionRoutes.get(
       name: collection.name,
       description: collection.description,
       isFeatured: collection.isFeatured,
+      dailySummaryEnabled: collection.dailySummaryEnabled,
       members,
       orgs,
     };
@@ -820,6 +825,65 @@ collectionRoutes.get(
   },
 );
 
+collectionRoutes.get(
+  "/collections/:slug/daily-summaries",
+  describeRoute({
+    tags: ["Collections"],
+    summary: "Daily AI summaries for a collection",
+    description:
+      "Returns AI-generated daily summaries for the collection within the given date window (ET calendar days, inclusive). Defaults to the last 30 days. Rows are ordered newest-first. Summaries are generated nightly by the collection-summaries cron and only exist for days where the collection had at least one visible release.",
+    parameters: [
+      {
+        name: "slug",
+        in: "path",
+        required: true,
+        schema: { type: "string" },
+        description: "Collection slug.",
+      },
+      {
+        name: "from",
+        in: "query",
+        required: false,
+        schema: { type: "string" },
+        description: "Inclusive start date (YYYY-MM-DD, ET). Defaults to 30 days ago.",
+      },
+      {
+        name: "to",
+        in: "query",
+        required: false,
+        schema: { type: "string" },
+        description: "Inclusive end date (YYYY-MM-DD, ET). Defaults to today.",
+      },
+    ],
+    responses: {
+      200: {
+        description: "Daily summaries for the collection.",
+        content: {
+          "application/json": { schema: resolver(CollectionDailySummariesResponseSchema) },
+        },
+      },
+      404: {
+        description: "No collection with that slug.",
+        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      },
+    },
+  }),
+  async (c) => {
+    const slug = c.req.param("slug");
+    const db = createDb(c.env.DB);
+
+    const collection = await findCollectionBySlug(db, slug);
+    if (!collection) return c.json({ error: "not_found", message: "Collection not found" }, 404);
+
+    const now = new Date();
+    const from = c.req.query("from") ?? addDaysToDateKey(etDayKey(now), -30);
+    const to = c.req.query("to") ?? etDayKey(now);
+
+    const summaries = await listCollectionDailySummaries(db, collection.id, from, to);
+    return c.json({ summaries });
+  },
+);
+
 // ── Admin writes ──────────────────────────────────────────────────────────
 // All non-GET methods on /v1/collections inherit auth from
 // `publicReadAuthMiddleware` (SAFE_METHODS check) — same model as products and
@@ -979,6 +1043,9 @@ collectionRoutes.patch(
     }
     if (body.isFeatured !== undefined) {
       updates.isFeatured = body.isFeatured;
+    }
+    if (body.dailySummaryEnabled !== undefined) {
+      updates.dailySummaryEnabled = body.dailySummaryEnabled;
     }
 
     if (Object.keys(updates).length === 0) {
