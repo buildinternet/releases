@@ -38,6 +38,21 @@ describe("htmlToMarkdown markdown passthrough", () => {
     expect(out).not.toContain("# Codex app ###");
   });
 
+  it("treats markdown with inline HTML (e.g. <kbd>) as markdown, not HTML", () => {
+    // The Codex feed wraps key combos in <kbd> (decoded from &lt;kbd&gt;);
+    // inline tags must not flip an otherwise-markdown body into the Turndown
+    // path, which would escape the surrounding markdown.
+    const input = `### Shortcuts
+
+- Added <kbd>Cmd</kbd>+<kbd>Enter</kbd> as a shortcut, see [the docs](/docs).`;
+    const out = htmlToMarkdown(input);
+    expect(out).not.toContain("\\[");
+    expect(out).not.toContain("\\#");
+    expect(out).toContain("### Shortcuts");
+    expect(out).toContain("[the docs](/docs)");
+    expect(out).toContain("<kbd>Cmd</kbd>");
+  });
+
   it("still converts real HTML content via Turndown", () => {
     const out = htmlToMarkdown(
       '<h1>Title</h1><p>Some <strong>bold</strong> text with a <a href="https://example.com">link</a>.</p><ul><li>one</li><li>two</li></ul>',
