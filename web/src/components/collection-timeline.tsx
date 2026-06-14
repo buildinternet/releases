@@ -462,44 +462,110 @@ function groupByOrg(releases: CollectionReleaseItem[]) {
 
 // ── Day section ─────────────────────────────────────────────────
 
-// Unified day header: the date line is the anchor at the top, and the AI daily
-// summary (when present) nests directly beneath it so it unambiguously belongs
-// to this day. Previously the summary rendered as a separate box *above* the
-// date, which read as if it described the day before. Rendered as a section
-// header (bottom border, no card chrome) so it stays visually distinct from the
-// release cards below and never out-weighs a release title.
-function DayHeader({ day, summary }: { day: DayBucket; summary: CollectionDailySummary | null }) {
+// Distinct orgs that shipped in a day, first-appearance order, each paired with
+// its avatar metadata. Feeds the day-header facepile — an at-a-glance cue for
+// whether a day touches something you follow.
+function dayOrgs(day: DayBucket, orgsBySlug: Map<string, CollectionMemberOrg>) {
+  const seen = new Set<string>();
+  const out: { slug: string; name: string; meta?: CollectionMemberOrg }[] = [];
+  for (const r of day.releases) {
+    if (seen.has(r.org.slug)) continue;
+    seen.add(r.org.slug);
+    out.push({ slug: r.org.slug, name: r.org.name, meta: orgsBySlug.get(r.org.slug) });
+  }
+  return out;
+}
+
+// Overlapping avatar stack of the day's orgs. Mirrors `MemberFacepile`'s ring +
+// negative-margin treatment, but avatar-only (no name list) since it's a
+// glanceable header cue, not a member roster.
+function DayFacepile({ orgs }: { orgs: ReturnType<typeof dayOrgs> }) {
+  const MAX = 6;
+  const shown = orgs.slice(0, MAX);
+  const extra = orgs.length - shown.length;
+  return (
+    <div className="flex items-center gap-1.5">
+      <div className="flex -space-x-1.5">
+        {shown.map((o) => (
+          <span
+            key={o.slug}
+            title={o.name}
+            className="rounded-full ring-2 ring-white dark:ring-stone-950"
+          >
+            <OrgAvatar
+              avatarUrl={o.meta?.avatarUrl ?? null}
+              githubHandle={o.meta?.githubHandle ?? null}
+              name={o.meta?.name ?? o.name}
+              size={20}
+            />
+          </span>
+        ))}
+      </div>
+      {extra > 0 && (
+        <span className="text-[11px] text-stone-400 dark:text-stone-500 font-mono tabular-nums">
+          +{extra}
+        </span>
+      )}
+    </div>
+  );
+}
+
+// Day header. The date line is the anchor; the org facepile rides its right
+// edge as a glanceable "who shipped today" cue. The AI daily summary, when
+// present, sits directly beneath in its own distinct card (tinted background +
+// sparkle) so it reads as a special editorial block rather than just more body
+// text — modeled on the org-overview card treatment.
+function DayHeader({
+  day,
+  orgsBySlug,
+  summary,
+}: {
+  day: DayBucket;
+  orgsBySlug: Map<string, CollectionMemberOrg>;
+  summary: CollectionDailySummary | null;
+}) {
+  const orgs = dayOrgs(day, orgsBySlug);
   return (
     <header className="pt-2 pb-3 border-b border-stone-200 dark:border-stone-800">
-      <div className="flex items-baseline gap-3">
-        {day.iso ? (
-          <>
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-stone-400 dark:text-stone-500">
-              {fmtWeekday(day.iso)}
-            </span>
+      <div className="flex items-center gap-3">
+        <div className="flex items-baseline gap-3">
+          {day.iso ? (
+            <>
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-stone-400 dark:text-stone-500">
+                {fmtWeekday(day.iso)}
+              </span>
+              <span className="text-[13px] font-medium text-stone-800 dark:text-stone-200">
+                {fmtDay(day.iso)}
+              </span>
+            </>
+          ) : (
             <span className="text-[13px] font-medium text-stone-800 dark:text-stone-200">
-              {fmtDay(day.iso)}
+              Undated
             </span>
-          </>
-        ) : (
-          <span className="text-[13px] font-medium text-stone-800 dark:text-stone-200">
-            Undated
+          )}
+          <span className="text-[11px] text-stone-400 dark:text-stone-500 font-mono tabular-nums">
+            {day.releases.length} {pluralReleases(day.releases.length)}
           </span>
-        )}
-        <span className="text-[11px] text-stone-400 dark:text-stone-500 font-mono tabular-nums">
-          {day.releases.length} {pluralReleases(day.releases.length)}
-        </span>
+        </div>
+        <div className="flex-1" />
+        {orgs.length > 0 && <DayFacepile orgs={orgs} />}
       </div>
       {summary && (
-        <div className="mt-2">
-          <h2 className="text-[15px] font-semibold tracking-tight text-stone-900 dark:text-stone-100 leading-snug">
+        <div className="mt-3 rounded-lg border border-stone-200 dark:border-stone-800 bg-stone-50 dark:bg-stone-900/50 px-4 py-3.5">
+          <div className="flex items-center gap-2">
+            <SparkleIcon size={14} className="shrink-0 text-stone-400 dark:text-stone-500" />
+            <span className="text-[11px] font-medium uppercase tracking-wide text-stone-400 dark:text-stone-500">
+              Daily summary
+            </span>
+          </div>
+          <h2 className="mt-1.5 text-[15px] font-semibold tracking-tight text-stone-900 dark:text-stone-100 leading-snug">
             {summary.title}
           </h2>
           <p className="mt-1 text-[13px] text-stone-600 dark:text-stone-400 leading-relaxed">
             {summary.summary}
           </p>
           {summary.takeaways.length > 0 && (
-            <ul className="mt-2 flex flex-col gap-1">
+            <ul className="mt-2.5 flex flex-col gap-1">
               {summary.takeaways.map((t, i) => (
                 <li
                   key={i}
@@ -531,7 +597,7 @@ function DaySection({
   const orgGroups = groupByOrg(day.releases);
   return (
     <section className="mt-6">
-      <DayHeader day={day} summary={summary} />
+      <DayHeader day={day} orgsBySlug={orgsBySlug} summary={summary} />
       <div className="flex flex-col gap-4 mt-4">
         {orgGroups.map((g) => (
           <OrgSection key={g.orgSlug} group={g} orgMeta={orgsBySlug.get(g.orgSlug)} />
@@ -742,11 +808,12 @@ function ProductPostGroup({
 function PostVersionRow({ release }: { release: CollectionReleaseItem }) {
   const [expanded, setExpanded] = useState(false);
   const { descriptive, versionLabel } = deriveFeedTitle(release);
-  // The product name already heads the group, so a subsection leads with its
-  // version. The descriptive headline rides alongside when it adds something
-  // beyond the version (it won't for bare "v2.1.176"-style titles).
-  const heading = versionLabel ?? descriptive ?? release.title ?? "Update";
-  const subhead = descriptive && descriptive !== heading ? descriptive : null;
+  // Lead with the descriptive headline — it's the useful part. The version is
+  // secondary metadata, demoted to a small dim mono tag beside it. Falls back to
+  // the version (then raw title) when there's no descriptive headline, e.g. a
+  // bare "v2.1.176" release.
+  const headline = descriptive ?? versionLabel ?? release.title ?? "Update";
+  const versionTag = versionLabel && versionLabel !== headline ? versionLabel : null;
   const body = release.content || release.summary || "";
   const thumbnail = findThumbnail(release);
   const { ref: clampRef, overflowing } = useOverflowClamp<HTMLDivElement>(!expanded);
@@ -754,17 +821,19 @@ function PostVersionRow({ release }: { release: CollectionReleaseItem }) {
   return (
     <div className="px-5 py-4 border-t border-stone-200 dark:border-stone-800 first:border-t-0">
       <div className="flex items-baseline gap-2 flex-wrap">
-        <span className="font-mono text-[12px] font-medium text-stone-900 dark:text-stone-100">
+        <span className="text-[14px] font-medium tracking-tight text-stone-900 dark:text-stone-100 leading-snug">
           {release.id ? (
             <Link href={`/release/${release.id}`} className="hover:underline underline-offset-2">
-              {heading}
+              {headline}
             </Link>
           ) : (
-            heading
+            headline
           )}
         </span>
-        {subhead && (
-          <span className="text-[13px] text-stone-600 dark:text-stone-400">{subhead}</span>
+        {versionTag && (
+          <span className="font-mono text-[11.5px] text-stone-400 dark:text-stone-500">
+            {versionTag}
+          </span>
         )}
         {release.prerelease && (
           <span title="Pre-release (beta, rc, nightly, preview)" className={preBadgeClass}>
@@ -821,7 +890,7 @@ function PostVersionRow({ release }: { release: CollectionReleaseItem }) {
           <div className="flex items-start justify-center">
             <FallbackImage
               src={thumbnail.r2Url ?? thumbnail.url}
-              alt={thumbnail.alt || heading}
+              alt={thumbnail.alt || headline}
               width={200}
               height={130}
               className="rounded-md object-cover w-full h-auto max-h-40 border border-stone-200 dark:border-stone-800"
@@ -978,6 +1047,22 @@ function CommitLogRow({ release }: { release: CollectionReleaseItem }) {
 }
 
 // ── Small icons ────────────────────────────────────────────────
+
+// Four-point sparkle — marks the AI-generated daily summary block.
+function SparkleIcon({ size = 14, className }: { size?: number; className?: string }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      aria-hidden="true"
+      className={className}
+    >
+      <path d="M12 2c.3 3.6 1.4 5.6 3 7s3.4 2.4 7 3c-3.6.3-5.6 1.4-7 3s-2.4 3.4-3 7c-.3-3.6-1.4-5.6-3-7s-3.4-2.4-7-3c3.6-.3 5.6-1.4 7-3s2.4-3.4 3-7z" />
+    </svg>
+  );
+}
 
 function ExternalLinkIcon({ size = 12 }: { size?: number }) {
   return (
