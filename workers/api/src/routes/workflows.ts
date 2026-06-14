@@ -39,7 +39,12 @@ import {
   collectionMembers,
 } from "@buildinternet/releases-core/schema";
 import { summarizeEligibilityConds } from "@releases/core-internal/eligibility";
-import { daysAgoIso, etDayKey, addDaysToDateKey } from "@buildinternet/releases-core/dates";
+import {
+  daysAgoIso,
+  etDayKey,
+  addDaysToDateKey,
+  isDateKey,
+} from "@buildinternet/releases-core/dates";
 import { sourceMatchByIdOrSlug, isSourceId } from "../utils.js";
 import { getAnthropicKey, resolveGatewayOpts } from "../lib/anthropic.js";
 import { embedAndUpsertReleases, type EmbedReleaseInput } from "@releases/search/embed-releases.js";
@@ -2417,6 +2422,8 @@ interface CollectionSummariesBody {
   date?: string;
   /** When true, skip AI generation and return the resolved date only. */
   dryRun?: boolean;
+  /** When true, regenerate even if a summary already exists for that day. */
+  force?: boolean;
 }
 
 workflowsRoutes.post("/workflows/collection-summaries", async (c) => {
@@ -2424,13 +2431,18 @@ workflowsRoutes.post("/workflows/collection-summaries", async (c) => {
     .json<CollectionSummariesBody>()
     .catch(() => ({}) as CollectionSummariesBody);
 
-  const date = body.date?.trim() || addDaysToDateKey(etDayKey(new Date()), -1);
+  const rawDate = body.date?.trim();
+  if (rawDate && !isDateKey(rawDate)) {
+    return c.json({ error: "bad_date", message: "date must be a YYYY-MM-DD calendar date" }, 400);
+  }
+  const date = rawDate || addDaysToDateKey(etDayKey(new Date()), -1);
   const collectionId = typeof body.collectionId === "string" ? body.collectionId : undefined;
+  const force = body.force === true;
 
   // Preview short-circuit comes BEFORE model resolution — a dry run reports the
   // resolved scope without needing (or paying for) an AI model.
   if (body.dryRun === true) {
-    return c.json({ date, dryRun: true, collectionId });
+    return c.json({ date, dryRun: true, collectionId, force });
   }
 
   const model = await resolveCollectionSummaryModel(c.env);
@@ -2446,6 +2458,6 @@ workflowsRoutes.post("/workflows/collection-summaries", async (c) => {
   }
 
   const db = createDb(c.env.DB);
-  const result = await generateCollectionSummariesForDay(db, model, date, { collectionId });
+  const result = await generateCollectionSummariesForDay(db, model, date, { collectionId, force });
   return c.json({ date, ...result });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { etDayKey, etDayBoundsUtc, addDaysToDateKey } from "./dates";
+import { etDayKey, etDayBoundsUtc, addDaysToDateKey, isDateKey } from "./dates";
 
 describe("etDayKey", () => {
   test("maps a UTC instant to its Eastern calendar day", () => {
@@ -43,5 +43,21 @@ describe("addDaysToDateKey", () => {
   test("adds and subtracts whole days on a YYYY-MM-DD key", () => {
     expect(addDaysToDateKey("2026-06-11", -1)).toBe("2026-06-10");
     expect(addDaysToDateKey("2026-06-30", 1)).toBe("2026-07-01");
+  });
+});
+
+describe("isDateKey", () => {
+  test("accepts real YYYY-MM-DD calendar dates", () => {
+    expect(isDateKey("2026-06-11")).toBe(true);
+    expect(isDateKey("2024-02-29")).toBe(true); // leap day
+  });
+  test("rejects bad shapes and impossible dates", () => {
+    expect(isDateKey("2026-6-1")).toBe(false);
+    expect(isDateKey("2026/06/11")).toBe(false);
+    expect(isDateKey("garbage")).toBe(false);
+    expect(isDateKey("")).toBe(false);
+    expect(isDateKey("2026-13-01")).toBe(false);
+    expect(isDateKey("2026-02-30")).toBe(false);
+    expect(isDateKey("2026-06-11T00:00:00Z")).toBe(false);
   });
 });

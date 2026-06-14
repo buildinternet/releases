@@ -28,7 +28,7 @@ import {
   productById,
   findProductForOrgSlug,
 } from "../utils.js";
-import { etDayKey, addDaysToDateKey } from "@buildinternet/releases-core/dates";
+import { etDayKey, addDaysToDateKey, isDateKey } from "@buildinternet/releases-core/dates";
 import { getCollectionReleasesFeed } from "../queries/orgs.js";
 import { listCollectionDailySummaries } from "../queries/collection-summaries.js";
 import { parseSourceTypesLenient } from "../lib/source-types.js";
@@ -862,6 +862,10 @@ collectionRoutes.get(
           "application/json": { schema: resolver(CollectionDailySummariesResponseSchema) },
         },
       },
+      400: {
+        description: "Malformed `from`/`to` date (must be YYYY-MM-DD).",
+        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      },
       404: {
         description: "No collection with that slug.",
         content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
@@ -876,8 +880,16 @@ collectionRoutes.get(
     if (!collection) return c.json({ error: "not_found", message: "Collection not found" }, 404);
 
     const now = new Date();
-    const from = c.req.query("from") ?? addDaysToDateKey(etDayKey(now), -30);
-    const to = c.req.query("to") ?? etDayKey(now);
+    const fromParam = c.req.query("from");
+    const toParam = c.req.query("to");
+    if ((fromParam && !isDateKey(fromParam)) || (toParam && !isDateKey(toParam))) {
+      return c.json(
+        { error: "bad_date", message: "from/to must be YYYY-MM-DD calendar dates" },
+        400,
+      );
+    }
+    const from = fromParam ?? addDaysToDateKey(etDayKey(now), -30);
+    const to = toParam ?? etDayKey(now);
 
     const summaries = await listCollectionDailySummaries(db, collection.id, from, to);
     return c.json({ summaries });

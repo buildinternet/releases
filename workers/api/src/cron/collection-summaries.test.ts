@@ -7,7 +7,11 @@ import {
   releases,
   sources,
 } from "@buildinternet/releases-core/schema";
-import { generateCollectionSummariesForDay } from "./collection-summaries";
+import {
+  generateCollectionSummariesForDay,
+  runCollectionSummaries,
+  type CollectionSummariesEnv,
+} from "./collection-summaries";
 import {
   listCollectionDailySummaries,
   upsertCollectionDailySummary,
@@ -148,5 +152,61 @@ describe("generateCollectionSummariesForDay", () => {
     const rows = await listCollectionDailySummaries(db, "col_dup", "2026-06-11", "2026-06-11");
     expect(rows).toHaveLength(1);
     expect(rows[0].title).toBe("Pre-existing");
+  });
+
+  test("force regenerates an existing row in place", async () => {
+    const { db } = createTestDb();
+    await seedLiveCollection(db);
+    await upsertCollectionDailySummary(db, {
+      collectionId: "col_live",
+      summaryDate: "2026-06-11",
+      title: "Old",
+      summary: "old",
+      takeaways: ["old"],
+      releaseCount: 99,
+      modelId: "openrouter:test",
+    });
+
+    const result = await generateCollectionSummariesForDay(db, fakeModel(), "2026-06-11", {
+      force: true,
+    });
+    expect(result.generated).toBe(1);
+
+    const rows = await listCollectionDailySummaries(db, "col_live", "2026-06-11", "2026-06-11");
+    expect(rows).toHaveLength(1);
+    expect(rows[0].title).toBe("Day"); // replaced
+    expect(rows[0].releaseCount).toBe(1);
+  });
+});
+
+describe("runCollectionSummaries", () => {
+  // scheduledTime is 2026-06-12 ET, so the i=1 catch-up day is 2026-06-11 —
+  // the day seedLiveCollection puts a release on.
+  const scheduledTime = new Date("2026-06-12T15:00:00.000Z");
+
+  function env(db: ReturnType<typeof createTestDb>["db"], extra?: Partial<CollectionSummariesEnv>) {
+    return {
+      DB: undefined as unknown as D1Database,
+      _drizzleOverride: db,
+      _modelOverride: fakeModel(),
+      ...extra,
+    } satisfies CollectionSummariesEnv;
+  }
+
+  test("CRON_ENABLED=false short-circuits before any work", async () => {
+    const { db } = createTestDb();
+    await seedLiveCollection(db);
+    await runCollectionSummaries(env(db, { CRON_ENABLED: "false" }), scheduledTime);
+    const rows = await listCollectionDailySummaries(db, "col_live", "2026-06-11", "2026-06-11");
+    expect(rows).toHaveLength(0);
+  });
+
+  test("summarizes the just-closed ET day within the catch-up window", async () => {
+    const { db } = createTestDb();
+    await seedLiveCollection(db);
+    await runCollectionSummaries(env(db, { COLLECTION_SUMMARY_CATCHUP_DAYS: "2" }), scheduledTime);
+    const rows = await listCollectionDailySummaries(db, "col_live", "2026-06-11", "2026-06-11");
+    expect(rows).toHaveLength(1);
+    expect(rows[0].title).toBe("Day");
   });
 });

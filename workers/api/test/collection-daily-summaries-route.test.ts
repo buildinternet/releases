@@ -82,6 +82,19 @@ describe("GET /v1/collections/:slug/daily-summaries", () => {
     expect(body.error).toBe("not_found");
   });
 
+  it("returns 400 for a malformed from/to date", async () => {
+    const db = mkDb();
+    await seed(db);
+    const fetch = mkApp(db);
+
+    const res = await fetch(
+      new Request("http://test/v1/collections/ds-test-collection/daily-summaries?from=garbage"),
+    );
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as any;
+    expect(body.error).toBe("bad_date");
+  });
+
   it("returns an empty summaries array when no rows match the window", async () => {
     const db = mkDb();
     await seed(db);
@@ -158,7 +171,42 @@ describe("POST /v1/workflows/collection-summaries", () => {
     );
     expect(res.status).toBe(200);
     const body = (await res.json()) as any;
-    expect(body).toEqual({ date: "2026-06-11", dryRun: true, collectionId: undefined });
+    expect(body).toEqual({
+      date: "2026-06-11",
+      dryRun: true,
+      collectionId: undefined,
+      force: false,
+    });
+  });
+
+  it("returns 400 for a malformed date", async () => {
+    const db = mkDb();
+    const fetch = createTestApp(db, workflowsRoutes);
+
+    const res = await fetch(
+      new Request(
+        "http://test/v1/workflows/collection-summaries",
+        json("POST", { date: "2026-13-99", dryRun: true }),
+      ),
+    );
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as any;
+    expect(body.error).toBe("bad_date");
+  });
+
+  it("dryRun: true echoes force: true", async () => {
+    const db = mkDb();
+    const fetch = createTestApp(db, workflowsRoutes);
+
+    const res = await fetch(
+      new Request(
+        "http://test/v1/workflows/collection-summaries",
+        json("POST", { date: "2026-06-11", dryRun: true, force: true }),
+      ),
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(body.force).toBe(true);
   });
 
   it("dryRun: true echoes the collectionId scope", async () => {

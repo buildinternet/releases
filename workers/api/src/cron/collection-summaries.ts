@@ -19,19 +19,23 @@ export interface CollectionSummariesEnv extends TextModelEnv {
   /** How many recent ET days to back-fill if a row is missing (default 2). */
   COLLECTION_SUMMARY_CATCHUP_DAYS?: string;
   /** TEST-ONLY: use this drizzle handle instead of createDb(env.DB). */
-  _drizzleOverride?: ReturnType<typeof createDb>;
+  _drizzleOverride?: AnyDb;
+  /** TEST-ONLY: use this model instead of resolveCollectionSummaryModel(env). */
+  _modelOverride?: TextModel;
 }
 
 /**
  * Generate summaries for one ET day across every enabled collection. Exported
  * for tests. Pass `opts.collectionId` to scope the run to a single collection
  * (used by the on-demand workflow trigger); omit it for the full nightly sweep.
+ * `opts.force` regenerates a day that already has a row (the on-demand trigger's
+ * manual-regeneration path); the cron never sets it, so a day is summarized once.
  */
 export async function generateCollectionSummariesForDay(
   db: AnyDb,
   model: TextModel,
   date: string,
-  opts?: { collectionId?: string },
+  opts?: { collectionId?: string; force?: boolean },
 ): Promise<{ generated: number; skipped: number; failed: number }> {
   const cols = await db
     .select({ id: collections.id, name: collections.name })
@@ -51,10 +55,12 @@ export async function generateCollectionSummariesForDay(
 
   for (const col of cols) {
     try {
-      const existing = await listCollectionDailySummaries(db, col.id, date, date);
-      if (existing.length > 0) {
-        skipped++;
-        continue;
+      if (!opts?.force) {
+        const existing = await listCollectionDailySummaries(db, col.id, date, date);
+        if (existing.length > 0) {
+          skipped++;
+          continue;
+        }
       }
 
       const members = await getCollectionMembers(db, col.id);
@@ -109,7 +115,7 @@ export async function runCollectionSummaries(
     return;
   }
 
-  const model = await resolveCollectionSummaryModel(env);
+  const model = env._modelOverride ?? (await resolveCollectionSummaryModel(env));
   if (!model) {
     logEvent("warn", { component: "collection-summaries", event: "no-model" });
     return;

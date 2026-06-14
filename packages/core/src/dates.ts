@@ -181,6 +181,19 @@ function etOffsetMinutes(at: Date): number {
   return Math.round((asUtc - at.getTime()) / 60_000);
 }
 
+/**
+ * True if `s` is a strict `YYYY-MM-DD` key naming a real calendar date. Rejects
+ * bad shapes (`2026/01/01`, `2026-1-1`, `garbage`) and impossible dates
+ * (`2026-13-01`, `2026-02-30`). Callers validate untrusted date-key params with
+ * this before feeding them to the day-key helpers below.
+ */
+export function isDateKey(s: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
+  const [y, m, d] = s.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  return dt.getUTCFullYear() === y && dt.getUTCMonth() === m - 1 && dt.getUTCDate() === d;
+}
+
 /** Add (or subtract) whole days to a `YYYY-MM-DD` key, returning a `YYYY-MM-DD` key. */
 export function addDaysToDateKey(dateKey: string, days: number): string {
   const [y, m, d] = dateKey.split("-").map(Number);
