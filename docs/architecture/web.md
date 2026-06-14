@@ -110,6 +110,16 @@ Web: `web/src/app/collections/[slug]/page.tsx` renders the header + member chips
 
 Seed model: the first collection (`frontier-ai-labs`) is created via migration (`20260507000003_seed_frontier_ai_labs.sql`); the CLI admin commands are the layer above the write API. Membership is intentionally curated — orgs onboarded later are not retroactively added to existing collections.
 
+### Daily summaries
+
+A brief per-(collection, Eastern-Time day) rollup — a headline `title`, a one-line `summary`, and bullet `takeaways` — generated together in a single cheap text-model pass and rendered as a header above each day's group in the collection timeline. The artifact mirrors release-level title/summary, scoped to a day instead of a single release.
+
+- **Storage:** dedicated `collection_daily_summaries` table (`id`, `collection_id`, `summary_date` `YYYY-MM-DD` ET, `title`, `summary`, `takeaways` JSON, `release_count`, `model_id`, timestamps), `UNIQUE(collection_id, summary_date)` for idempotent upsert. Per-collection `collections.daily_summary_enabled` (default `true`) gates generation. Not `knowledge_pages` — those are one living page per entity; these are many short date-keyed rows.
+- **Day boundary:** Eastern Time, via `etDayKey` / `etDayBoundsUtc` / `addDaysToDateKey` from `@buildinternet/releases-core/dates` (DST-aware). The day window's releases are read through the same visible-views the feed uses (`releasesVisible`/`sourcesActive`/…), so a summary covers exactly what the timeline shows (suppressed/coverage rows excluded).
+- **Generation:** nightly cron (`workers/api/src/cron/collection-summaries.ts`, tick `15 6 * * *`) over **closed** ET days only, gated by `CRON_ENABLED`, with a bounded catch-up (`COLLECTION_SUMMARY_CATCHUP_DAYS`). Skips a day with 0 releases (no row, no AI call); per-collection try/catch. The model resolves through the cheap OpenRouter lane (`resolveCollectionSummaryModel` → `COLLECTION_SUMMARY_MODEL`, governed by the `openrouter-enabled` Flagship switch), Anthropic Haiku as the fail-open fallback. The prompt/parser live in `packages/ai/src/collection-summary.ts` (tagged `<title>`/`<summary>`/`<takeaways>` output).
+- **API:** `GET /v1/collections/:slug/daily-summaries?from=&to=` returns the rows for an inclusive ET range (defaults applied), newest first; additive to the unchanged releases feed. On-demand/dry-run regeneration via the admin-gated `POST /v1/workflows/collection-summaries { collectionId?, date?, dryRun? }`.
+- **Forward-only at launch** — no historical backfill in v1 (a backfill workflow can reuse the same generator later).
+
 ## Media handling
 
 At ingest time, `normalizeMediaUrl()` in `packages/rendering/src/media-url.ts` rewrites Next.js/Vercel image-optimizer proxy URLs (`/_next/image?url=...`, including Next `basePath` variants) to the underlying CDN asset — those proxy endpoints 404 for off-origin fetchers, so the raw `url` query param is extracted and stored instead.

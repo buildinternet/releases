@@ -15,6 +15,7 @@
 ## File Structure
 
 **Create:**
+
 - `workers/api/migrations/20260614000000_add_collection_daily_summaries.sql` — DDL: new table + `daily_summary_enabled` column.
 - `packages/ai/src/collection-summary.ts` — prompt, input builder, parser, `summarizeCollectionDay`.
 - `packages/ai/src/collection-summary.test.ts` — parser/builder unit tests.
@@ -26,6 +27,7 @@
 - `tests/evals/collection-summary.eval.ts` — on-demand prompt-quality eval (not CI-gated).
 
 **Modify:**
+
 - `packages/core/src/id.ts` — add `newCollectionDailySummaryId` + `ID_PREFIXES` entry.
 - `packages/core/src/schema.ts` — `collectionDailySummaries` table + `dailySummaryEnabled` on `collections`.
 - `packages/core/src/dates.ts` — `etDayKey`, `etDayBoundsUtc`, `addDaysToDateKey` helpers.
@@ -46,6 +48,7 @@
 ## Task 1: ET date helpers in core
 
 **Files:**
+
 - Modify: `packages/core/src/dates.ts`
 - Test: `packages/core/src/dates.test.ts`
 
@@ -183,6 +186,7 @@ git commit -m "feat(core): Eastern-Time day-bucketing helpers"
 ## Task 2: Typed id + schema table + paired migration
 
 **Files:**
+
 - Modify: `packages/core/src/id.ts`
 - Modify: `packages/core/src/schema.ts`
 - Create: `workers/api/migrations/20260614000000_add_collection_daily_summaries.sql`
@@ -323,6 +327,7 @@ git commit -m "feat(db): collection_daily_summaries table + daily_summary_enable
 ## Task 3: AI prompt module (`collection-summary.ts`)
 
 **Files:**
+
 - Create: `packages/ai/src/collection-summary.ts`
 - Test: `packages/ai/src/collection-summary.test.ts`
 
@@ -344,8 +349,18 @@ const INPUT: CollectionDayInput = {
   collectionName: "Coding agents",
   date: "2026-06-11",
   releases: [
-    { org: "Anthropic", product: "Claude Code", title: "Sub-agents land in Claude Code", summary: "Spawn parallel sub-agents." },
-    { org: "Cursor", product: null, title: "Background agents GA", summary: "Background agents are generally available." },
+    {
+      org: "Anthropic",
+      product: "Claude Code",
+      title: "Sub-agents land in Claude Code",
+      summary: "Spawn parallel sub-agents.",
+    },
+    {
+      org: "Cursor",
+      product: null,
+      title: "Background agents GA",
+      summary: "Background agents are generally available.",
+    },
   ],
 };
 
@@ -369,7 +384,10 @@ describe("parseCollectionSummary", () => {
     expect(parseCollectionSummary(raw)).toEqual({
       title: "Labs pile on agentic coding",
       summary: "Three labs shipped agent updates today.",
-      takeaways: ["Anthropic added sub-agents to Claude Code", "Cursor shipped background agents GA"],
+      takeaways: [
+        "Anthropic added sub-agents to Claude Code",
+        "Cursor shipped background agents GA",
+      ],
     });
   });
 
@@ -378,7 +396,8 @@ describe("parseCollectionSummary", () => {
   });
 
   test("tolerates surrounding prose and zero bullets", () => {
-    const raw = "Here you go:\n<title>Quiet day</title><summary>One SDK bump.</summary><takeaways></takeaways>";
+    const raw =
+      "Here you go:\n<title>Quiet day</title><summary>One SDK bump.</summary><takeaways></takeaways>";
     expect(parseCollectionSummary(raw)).toEqual({
       title: "Quiet day",
       summary: "One SDK bump.",
@@ -581,6 +600,7 @@ git commit -m "feat(ai): collection daily-summary prompt + parser"
 ## Task 4: Worker text-model lane
 
 **Files:**
+
 - Modify: `workers/api/src/lib/text-model.ts`
 - Test: `workers/api/src/lib/text-model.test.ts`
 
@@ -666,6 +686,7 @@ git commit -m "feat(api): collection-summary text-model lane"
 ## Task 5: Query helpers + DAO
 
 **Files:**
+
 - Modify: `workers/api/src/queries/collection-summaries.ts` (create)
 - Test: `workers/api/src/queries/collection-summaries.test.ts` (expand)
 
@@ -924,6 +945,7 @@ git commit -m "feat(api): collection daily-summary queries + DAO"
 ## Task 6: Cron sweep
 
 **Files:**
+
 - Create: `workers/api/src/cron/collection-summaries.ts`
 - Test: `workers/api/src/cron/collection-summaries.test.ts`
 
@@ -956,7 +978,13 @@ describe("generateCollectionSummariesForDay", () => {
     const { db } = createTestDb();
     await db.insert(collections).values({ id: "col_a", slug: "a", name: "A" });
     let called = false;
-    const model = { ...fakeModel(), complete: async () => { called = true; return fakeModel().complete({} as any); } };
+    const model = {
+      ...fakeModel(),
+      complete: async () => {
+        called = true;
+        return fakeModel().complete({} as any);
+      },
+    };
 
     await generateCollectionSummariesForDay(db, model, "2026-06-11");
 
@@ -967,7 +995,9 @@ describe("generateCollectionSummariesForDay", () => {
 
   test("respects daily_summary_enabled = false", async () => {
     const { db } = createTestDb();
-    await db.insert(collections).values({ id: "col_off", slug: "off", name: "Off", dailySummaryEnabled: false });
+    await db
+      .insert(collections)
+      .values({ id: "col_off", slug: "off", name: "Off", dailySummaryEnabled: false });
     await generateCollectionSummariesForDay(db, fakeModel(), "2026-06-11");
     const rows = await listCollectionDailySummaries(db, "col_off", "2026-06-11", "2026-06-11");
     expect(rows).toHaveLength(0);
@@ -1125,6 +1155,7 @@ git commit -m "feat(api): nightly collection daily-summary cron"
 ## Task 7: API route + on-demand workflow
 
 **Files:**
+
 - Modify: `packages/api-types/src/schemas/collections.ts`
 - Modify: `packages/api-types/src/api-types.ts`
 - Modify: `workers/api/src/routes/collections.ts`
@@ -1152,7 +1183,9 @@ In `packages/api-types/src/api-types.ts`, add both schemas to the import + re-ex
 
 ```ts
 export type CollectionDailySummary = z.infer<typeof CollectionDailySummarySchema>;
-export type CollectionDailySummariesResponse = z.infer<typeof CollectionDailySummariesResponseSchema>;
+export type CollectionDailySummariesResponse = z.infer<
+  typeof CollectionDailySummariesResponseSchema
+>;
 ```
 
 - [ ] **Step 2: Write the failing route test**
@@ -1168,11 +1201,33 @@ import { collections, collectionDailySummaries } from "@buildinternet/releases-c
 describe("GET /v1/collections/:slug/daily-summaries", () => {
   test("returns summaries within the date range, newest first", async () => {
     const { db } = createTestDb();
-    await db.insert(collections).values({ id: "col_x", slug: "coding-agents", name: "Coding agents" });
+    await db
+      .insert(collections)
+      .values({ id: "col_x", slug: "coding-agents", name: "Coding agents" });
     const now = new Date().toISOString();
     await db.insert(collectionDailySummaries).values([
-      { id: "cds_1", collectionId: "col_x", summaryDate: "2026-06-10", title: "T10", summary: "s", takeaways: '["a"]', releaseCount: 1, generatedAt: now, updatedAt: now },
-      { id: "cds_2", collectionId: "col_x", summaryDate: "2026-06-11", title: "T11", summary: "s", takeaways: '["b","c"]', releaseCount: 2, generatedAt: now, updatedAt: now },
+      {
+        id: "cds_1",
+        collectionId: "col_x",
+        summaryDate: "2026-06-10",
+        title: "T10",
+        summary: "s",
+        takeaways: '["a"]',
+        releaseCount: 1,
+        generatedAt: now,
+        updatedAt: now,
+      },
+      {
+        id: "cds_2",
+        collectionId: "col_x",
+        summaryDate: "2026-06-11",
+        title: "T11",
+        summary: "s",
+        takeaways: '["b","c"]',
+        releaseCount: 2,
+        generatedAt: now,
+        updatedAt: now,
+      },
     ]);
 
     const res = await app.request(
@@ -1188,11 +1243,7 @@ describe("GET /v1/collections/:slug/daily-summaries", () => {
 
   test("404 for an unknown collection", async () => {
     const { db } = createTestDb();
-    const res = await app.request(
-      "/v1/collections/nope/daily-summaries",
-      {},
-      { DB: db as any },
-    );
+    const res = await app.request("/v1/collections/nope/daily-summaries", {}, { DB: db as any });
     expect(res.status).toBe(404);
   });
 });
@@ -1219,12 +1270,32 @@ collectionRoutes.get(
       "Per-(collection, Eastern-day) rollups: a headline title, a one-line summary, and bullet takeaways for the releases that shipped that day across the collection's members. `from`/`to` are inclusive YYYY-MM-DD ET dates; omit for the last 30 days. Newest first.",
     parameters: [
       { name: "slug", in: "path", required: true, schema: { type: "string" } },
-      { name: "from", in: "query", required: false, schema: { type: "string" }, description: "Inclusive start date (YYYY-MM-DD, ET)." },
-      { name: "to", in: "query", required: false, schema: { type: "string" }, description: "Inclusive end date (YYYY-MM-DD, ET)." },
+      {
+        name: "from",
+        in: "query",
+        required: false,
+        schema: { type: "string" },
+        description: "Inclusive start date (YYYY-MM-DD, ET).",
+      },
+      {
+        name: "to",
+        in: "query",
+        required: false,
+        schema: { type: "string" },
+        description: "Inclusive end date (YYYY-MM-DD, ET).",
+      },
     ],
     responses: {
-      200: { description: "Daily summaries.", content: { "application/json": { schema: resolver(CollectionDailySummariesResponseSchema) } } },
-      404: { description: "No collection with that slug.", content: { "application/json": { schema: resolver(ErrorResponseSchema) } } },
+      200: {
+        description: "Daily summaries.",
+        content: {
+          "application/json": { schema: resolver(CollectionDailySummariesResponseSchema) },
+        },
+      },
+      404: {
+        description: "No collection with that slug.",
+        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      },
     },
   }),
   async (c) => {
@@ -1263,7 +1334,8 @@ In the same file (or the workflows route module if `/v1/workflows/*` lives elsew
 // Admin-gated by the same middleware as the other /v1/workflows/* jobs.
 workflowRoutes.post("/workflows/collection-summaries", async (c) => {
   const body = await c.req.json().catch(() => ({}) as Record<string, unknown>);
-  const date = typeof body.date === "string" ? body.date : addDaysToDateKey(etDayKey(new Date()), -1);
+  const date =
+    typeof body.date === "string" ? body.date : addDaysToDateKey(etDayKey(new Date()), -1);
   const dryRun = body.dryRun === true;
   const db = createDb(c.env.DB);
   const model = await resolveCollectionSummaryModel(c.env);
@@ -1308,6 +1380,7 @@ git commit -m "feat(api): daily-summaries route + on-demand workflow"
 ## Task 8: Cron wiring + config
 
 **Files:**
+
 - Modify: `workers/api/src/index.ts`
 - Modify: `workers/api/wrangler.jsonc`
 
@@ -1324,31 +1397,31 @@ import { runCollectionSummaries } from "./cron/collection-summaries.js";
 2. In the `scheduled()` handler, add a dispatch block for a new cron string. Use `0 6 * * *` (06:00 UTC ≈ 01:00–02:00 ET — the prior ET day is fully closed). It shares the tick with `well-known-sync` (`0 6 * * *`); add the call inside that block OR give it a distinct minute. To keep dispatch sites isolated, use `15 6 * * *`:
 
 ```ts
-    if (event.cron === "15 6 * * *") {
-      ctx.waitUntil(
-        loggedDispatch(
-          "collection-summaries-cron",
-          runCollectionSummaries(
-            {
-              DB: env.DB,
-              CRON_ENABLED: env.CRON_ENABLED,
-              FLAGS: env.FLAGS,
-              ENVIRONMENT: env.ENVIRONMENT,
-              OPENROUTER_ENABLED: env.OPENROUTER_ENABLED,
-              OPENROUTER_API_KEY: env.OPENROUTER_API_KEY,
-              OPENROUTER_BASE_URL: env.OPENROUTER_BASE_URL,
-              COLLECTION_SUMMARY_MODEL: env.COLLECTION_SUMMARY_MODEL,
-              COLLECTION_SUMMARY_CATCHUP_DAYS: env.COLLECTION_SUMMARY_CATCHUP_DAYS,
-              ANTHROPIC_API_KEY: env.ANTHROPIC_API_KEY,
-              // + the same Anthropic gateway/env fields the other AI-lane crons pass
-            },
-            new Date(event.scheduledTime),
-          ),
-          alertEnv,
-        ),
-      );
-      return;
-    }
+if (event.cron === "15 6 * * *") {
+  ctx.waitUntil(
+    loggedDispatch(
+      "collection-summaries-cron",
+      runCollectionSummaries(
+        {
+          DB: env.DB,
+          CRON_ENABLED: env.CRON_ENABLED,
+          FLAGS: env.FLAGS,
+          ENVIRONMENT: env.ENVIRONMENT,
+          OPENROUTER_ENABLED: env.OPENROUTER_ENABLED,
+          OPENROUTER_API_KEY: env.OPENROUTER_API_KEY,
+          OPENROUTER_BASE_URL: env.OPENROUTER_BASE_URL,
+          COLLECTION_SUMMARY_MODEL: env.COLLECTION_SUMMARY_MODEL,
+          COLLECTION_SUMMARY_CATCHUP_DAYS: env.COLLECTION_SUMMARY_CATCHUP_DAYS,
+          ANTHROPIC_API_KEY: env.ANTHROPIC_API_KEY,
+          // + the same Anthropic gateway/env fields the other AI-lane crons pass
+        },
+        new Date(event.scheduledTime),
+      ),
+      alertEnv,
+    ),
+  );
+  return;
+}
 ```
 
 3. Add `COLLECTION_SUMMARY_MODEL?: string;` and `COLLECTION_SUMMARY_CATCHUP_DAYS?: string;` to the worker `Env` `Bindings` interface (next to `SUMMARIZE_MODEL`). Match the exact Anthropic env fields passed by `batch-summarize`/`feed-enrich` so the lane resolves identically.
@@ -1380,6 +1453,7 @@ git commit -m "feat(api): wire collection-summaries cron + COLLECTION_SUMMARY_MO
 ## Task 9: Web rendering
 
 **Files:**
+
 - Modify: `web/src/lib/api.ts`
 - Modify: `web/src/app/collections/[slug]/page.tsx`
 - Modify: `web/src/components/collection-timeline.tsx`
@@ -1455,14 +1529,16 @@ Import the type: `import type { CollectionDailySummary } from "@buildinternet/re
 4. Thread it into the render loop (line ~346):
 
 ```tsx
-          {days.map((day) => (
-            <DaySection
-              key={day.key}
-              day={day}
-              orgsBySlug={orgsBySlug}
-              summary={summaryByDate?.get(day.key) ?? null}
-            />
-          ))}
+{
+  days.map((day) => (
+    <DaySection
+      key={day.key}
+      day={day}
+      orgsBySlug={orgsBySlug}
+      summary={summaryByDate?.get(day.key) ?? null}
+    />
+  ));
+}
 ```
 
 - [ ] **Step 4: Render the header in `DaySection`**
@@ -1512,6 +1588,7 @@ git commit -m "feat(web): daily summary headers on the collection timeline"
 ## Task 10: On-demand prompt eval (not CI-gated)
 
 **Files:**
+
 - Create: `tests/evals/collection-summary.eval.ts`
 
 - [ ] **Step 1: Write the eval**
