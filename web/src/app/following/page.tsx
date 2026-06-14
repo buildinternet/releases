@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Header } from "@/components/header";
-import { AUTH_UI_ENABLED } from "@/lib/auth-ui";
+import { AUTH_CONFIGURED } from "@/lib/auth-ui";
 import { FollowingClient } from "./following-client";
 
 export const metadata: Metadata = {
@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 };
 
 export default function FollowingPage() {
-  if (!AUTH_UI_ENABLED || !process.env.NEXT_PUBLIC_BETTER_AUTH_URL) {
+  if (!AUTH_CONFIGURED) {
     notFound();
   }
   return (

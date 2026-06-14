@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { Header } from "@/components/header";
 import { DeviceVerifyForm } from "@/components/device-verify-form";
-import { AUTH_UI_ENABLED, DEVICE_AUTH_ENABLED } from "@/lib/auth-ui";
+import { AUTH_CONFIGURED, DEVICE_AUTH_ENABLED } from "@/lib/auth-ui";
 
 export const metadata: Metadata = {
   title: "Connect a device",
@@ -15,7 +15,7 @@ export const metadata: Metadata = {
 export default function DevicePage() {
   // Dark unless the auth UI master switch AND the device-auth reveal flag are on,
   // and the Better Auth client base URL is configured (else the client 404s).
-  if (!AUTH_UI_ENABLED || !DEVICE_AUTH_ENABLED || !process.env.NEXT_PUBLIC_BETTER_AUTH_URL) {
+  if (!AUTH_CONFIGURED || !DEVICE_AUTH_ENABLED) {
     notFound();
   }
 

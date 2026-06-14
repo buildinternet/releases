@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { Header } from "@/components/header";
 import { ForgotPasswordForm } from "@/components/forgot-password-form";
-import { AUTH_UI_ENABLED } from "@/lib/auth-ui";
+import { AUTH_CONFIGURED } from "@/lib/auth-ui";
 
 export const metadata: Metadata = {
   title: "Reset password",
@@ -13,7 +13,7 @@ export const metadata: Metadata = {
 };
 
 export default function ForgotPasswordPage() {
-  if (!AUTH_UI_ENABLED) notFound();
+  if (!AUTH_CONFIGURED) notFound();
 
   return (
     <div className="min-h-screen">

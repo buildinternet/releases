@@ -4,7 +4,14 @@ import { cors } from "hono/cors";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { createTestDb } from "./setup";
-import { user, session, account, verification, deviceCode } from "../src/db/schema-auth.js";
+import {
+  user,
+  session,
+  account,
+  verification,
+  deviceCode,
+  passkey,
+} from "../src/db/schema-auth.js";
 import {
   buildSocialProviders,
   buildStripePlugin,
@@ -13,6 +20,7 @@ import {
   authCorsMiddleware,
   AUTH_CORS_ALLOWED_HEADERS,
   deriveCookieDomain,
+  derivePasskeyRp,
   createAuth,
 } from "../src/auth/index.js";
 import { readFileSync } from "node:fs";
@@ -133,6 +141,40 @@ describe("deriveCookieDomain", () => {
     expect(
       deriveCookieDomain({ BETTER_AUTH_URL: "http://localhost:8787" } as never),
     ).toBeUndefined();
+  });
+});
+
+describe("derivePasskeyRp", () => {
+  it("derives rpID (host) + origin from the WEB origin, NOT the API origin", () => {
+    // The crux: the ceremony runs on the web origin, so rpID/origin must point
+    // there — never at api.releases.sh (the plugin's baseURL-derived default).
+    expect(derivePasskeyRp({ WEB_BASE_URL: "https://releases.sh" })).toEqual({
+      rpID: "releases.sh",
+      rpName: "Releases",
+      origin: "https://releases.sh",
+    });
+  });
+
+  it("uses the portless web host locally (rpID releases.localhost)", () => {
+    expect(derivePasskeyRp({ WEB_BASE_URL: "https://releases.localhost" })).toEqual({
+      rpID: "releases.localhost",
+      rpName: "Releases",
+      origin: "https://releases.localhost",
+    });
+  });
+
+  it("drops a path/port to the bare origin and never includes a trailing slash", () => {
+    expect(derivePasskeyRp({ WEB_BASE_URL: "http://localhost:3000/login" })).toEqual({
+      rpID: "localhost",
+      rpName: "Releases",
+      origin: "http://localhost:3000",
+    });
+  });
+
+  it("falls back to the prod web origin when WEB_BASE_URL is unset/unparseable", () => {
+    const expected = { rpID: "releases.sh", rpName: "Releases", origin: "https://releases.sh" };
+    expect(derivePasskeyRp({})).toEqual(expected);
+    expect(derivePasskeyRp({ WEB_BASE_URL: "not a url" })).toEqual(expected);
   });
 });
 
@@ -671,6 +713,34 @@ describe("magic link", () => {
     await auth.api.magicLinkVerify({ query: { token }, headers: {} });
     // Second use of the same token must fail (atomic single-use consume).
     await expect(auth.api.magicLinkVerify({ query: { token }, headers: {} })).rejects.toThrow();
+  });
+});
+
+// ── Passkeys (WebAuthn / FIDO2) ──
+// Like magic link, the passkey plugin needs no credential pair, so it's ALWAYS
+// registered. The relying-party config is pinned to the WEB origin (derivePasskeyRp).
+// These run the real createAuth() over the migrated test DB (createTestDb applies
+// the passkey migration), so a schema/model mismatch would surface here.
+
+describe("passkey plugin", () => {
+  const env = {
+    BETTER_AUTH_URL: "https://api.releases.localhost",
+    WEB_BASE_URL: "https://releases.localhost",
+    BETTER_AUTH_SECRET: "test-secret-do-not-use-in-prod-0123456789",
+  } as never;
+
+  it("always registers the passkey plugin (no credential gating)", async () => {
+    const auth = await createAuth(env, undefined, { db: createTestDb(), sendEmail: () => {} });
+    expect(pluginIds(auth)).toContain("passkey");
+  });
+
+  it("the paired migration creates a queryable `passkey` table", async () => {
+    // Proves the 20260613000000_add_passkey migration applied: a select against the
+    // table the drizzleAdapter schema map references resolves (empty), rather than
+    // throwing "no such table". A schema↔migration drift would fail here on insert.
+    const db = createTestDb();
+    await createAuth(env, undefined, { db, sendEmail: () => {} });
+    expect(await db.select().from(passkey)).toEqual([]);
   });
 });
 

@@ -20,7 +20,7 @@ import { sqliteTable, text, integer, index } from "drizzle-orm/sqlite-core";
  * 20260604010000 the dash lastActiveAt column, 20260604020000 the rate-limit store,
  * 20260604030000 the api-key store, 20260605000000 the device-code store,
  * 20260607010000 the admin-plugin role/ban columns, 20260609010000 the Stripe
- * customer id).
+ * customer id, 20260613000000 the passkey store).
  * The schema↔migration pairing gate in ci.yml watches this file.
  */
 
@@ -318,6 +318,45 @@ export const jwks = sqliteTable("jwks", {
   expiresAt: integer("expires_at", { mode: "timestamp" }),
 });
 
+/**
+ * Better Auth passkey plugin (`@better-auth/passkey`) store — WebAuthn / FIDO2
+ * credentials, one row per registered passkey. `userId` is the owning user
+ * (cascade on user delete); `publicKey` is the base64 COSE public key,
+ * `credentialID` the credential id, `counter` the signature counter, and
+ * `deviceType` / `backedUp` / `transports` the authenticator characteristics.
+ * `aaguid` is the authenticator-MODEL id (not device- or user-specific), used to
+ * label a passkey in the UI via the plugin's `getAuthenticatorName` lookup.
+ *
+ * The field set + property KEYS are mandated by the plugin's schema — note the
+ * camelCase `credentialID` (capital ID) and `publicKey`; the drizzle adapter
+ * resolves fields by key, while SQL columns stay snake_case (same split as the
+ * other auth tables). `userId` and `credentialID` carry the plugin's declared
+ * indexes. Paired migration: 20260613000000_add_passkey.sql.
+ */
+export const passkey = sqliteTable(
+  "passkey",
+  {
+    id: text("id").primaryKey(),
+    name: text("name"),
+    publicKey: text("public_key").notNull(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    credentialID: text("credential_id").notNull(),
+    counter: integer("counter").notNull(),
+    deviceType: text("device_type").notNull(),
+    backedUp: integer("backed_up", { mode: "boolean" }).notNull(),
+    transports: text("transports"),
+    // Optional in the plugin schema; the adapter stamps it on registration.
+    createdAt: integer("created_at", { mode: "timestamp" }),
+    aaguid: text("aaguid"),
+  },
+  (t) => [
+    index("idx_passkey_user_id").on(t.userId),
+    index("idx_passkey_credential_id").on(t.credentialID),
+  ],
+);
+
 export type AuthUser = typeof user.$inferSelect;
 export type AuthSession = typeof session.$inferSelect;
 export type AuthAccount = typeof account.$inferSelect;
@@ -330,3 +369,4 @@ export type AuthOAuthAccessToken = typeof oauthAccessToken.$inferSelect;
 export type AuthOAuthRefreshToken = typeof oauthRefreshToken.$inferSelect;
 export type AuthOAuthConsent = typeof oauthConsent.$inferSelect;
 export type AuthJwks = typeof jwks.$inferSelect;
+export type AuthPasskey = typeof passkey.$inferSelect;

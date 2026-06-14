@@ -11,6 +11,7 @@ import {
 } from "better-auth/plugins";
 import { adminAc, userAc } from "better-auth/plugins/admin/access";
 import { oauthProvider } from "@better-auth/oauth-provider";
+import { passkey as passkeyPlugin } from "@better-auth/passkey";
 import { dash, sentinel } from "@better-auth/infra";
 import { apiKey } from "@better-auth/api-key";
 import { stripe as stripePlugin } from "@better-auth/stripe";
@@ -48,6 +49,7 @@ import {
   oauthRefreshToken,
   oauthConsent,
   jwks,
+  passkey,
 } from "../db/schema-auth.js";
 import type { Env } from "../index.js";
 import {
@@ -319,6 +321,13 @@ export function authTrustedOrigins(env: Bindings): string[] {
 const DEFAULT_AUTH_ORIGIN = "https://api.releases.sh";
 
 /**
+ * Product display name Better Auth surfaces in OTP/passkey prompts, the hosted
+ * dashboard, and transactional emails. Single source so the betterAuth `appName`
+ * and the passkey `rpName` ({@link derivePasskeyRp}) can't drift apart.
+ */
+const APP_NAME = "Releases";
+
+/**
  * Valid `aud` values for issued OAuth access tokens: the origin of this AS
  * (`BETTER_AUTH_URL`) unioned with every comma-separated entry of
  * `OAUTH_RESOURCE_AUDIENCES` (the resource servers — e.g. the MCP worker). Pure
@@ -405,6 +414,44 @@ export function deriveCookieDomain(env: Bindings): string | undefined {
     return "." + parts.slice(1).join(".");
   } catch {
     return undefined;
+  }
+}
+
+/**
+ * WebAuthn relying-party config for the passkey plugin. The crux: the WebAuthn
+ * ceremony runs in the BROWSER on the WEB origin (releases.sh), NOT on this API
+ * worker's origin (api.releases.sh). Left to its defaults the passkey plugin
+ * derives `rpID` and `origin` from `baseURL` — the API origin — which makes the
+ * browser's rpID/origin checks reject every registration and authentication. So
+ * we derive them from `WEB_BASE_URL` instead:
+ *
+ *  • `rpID` is the web HOST (`releases.sh`). A passkey scoped to the apex is
+ *    usable from both `releases.sh` and `api.releases.sh` because rpID must be a
+ *    registrable suffix of the page origin and the apex is a suffix of itself.
+ *  • `origin` is the full web ORIGIN (`https://releases.sh`) — the value the
+ *    browser writes into clientDataJSON, which the plugin verifies verbatim (no
+ *    trailing slash).
+ *  • `rpName` is the human-facing label shown in the OS/browser passkey prompt.
+ *
+ * Prod/staging set `WEB_BASE_URL`; the fallback keeps the prod web origin so a
+ * missing var degrades to the right host rather than the API host. Locally
+ * `WEB_BASE_URL` is the portless web origin (`https://releases.localhost`),
+ * yielding rpID `releases.localhost` — valid for WebAuthn dev. A worktree-prefixed
+ * dev host (`feat-x.releases.localhost`) won't match this single origin, so passkey
+ * testing in a worktree needs `WEB_BASE_URL` pointed at that exact host. Pure +
+ * exported so it's unit-testable in isolation (mirrors `deriveCookieDomain`).
+ */
+export function derivePasskeyRp(env: { WEB_BASE_URL?: string }): {
+  rpID: string;
+  rpName: string;
+  origin: string;
+} {
+  const base = env.WEB_BASE_URL ?? "https://releases.sh";
+  try {
+    const url = new URL(base);
+    return { rpID: url.hostname, rpName: APP_NAME, origin: url.origin };
+  } catch {
+    return { rpID: "releases.sh", rpName: APP_NAME, origin: "https://releases.sh" };
   }
 }
 
@@ -770,6 +817,15 @@ export async function createAuth(
         scheduleSend(() => sendEmail(msg));
       },
     }),
+    // Passkeys (WebAuthn / FIDO2). Always registered — like magic link it needs no
+    // credential pair, only the relying-party config. `rpID`/`origin` are pinned to
+    // the WEB origin (where the browser runs the ceremony), NOT this API worker's
+    // origin; see `derivePasskeyRp` for why the plugin's baseURL-derived defaults are
+    // wrong here. The challenge cookie the plugin sets rides the cross-subdomain
+    // `.releases.sh` cookie domain configured in `advanced` below, so the
+    // register/authenticate round-trips (both to this worker) carry it. The `passkey`
+    // table is wired into the drizzleAdapter schema map below.
+    passkeyPlugin(derivePasskeyRp(env)),
     // OAuth 2.0 / OIDC authorization server ("Sign in with Releases"). Issues
     // JWT access tokens (the adjacent jwt() plugin signs them + exposes JWKS)
     // and serves discovery metadata. Consent UI, per-user scope entitlement, and
@@ -930,8 +986,8 @@ export async function createAuth(
   return betterAuth({
     // Display name Better Auth surfaces in OTP/passkey labels, the hosted
     // dashboard, and the verification/reset transactional emails. Resolves the
-    // dashboard's "Missing Application Name" insight.
-    appName: "Releases",
+    // dashboard's "Missing Application Name" insight. See {@link APP_NAME}.
+    appName: APP_NAME,
     secret,
     // Fallback keeps the oauth-provider plugin's issuer (`new URL(baseURL)`)
     // parseable when BETTER_AUTH_URL is unset; prod/staging always set it.
@@ -953,6 +1009,7 @@ export async function createAuth(
         oauthRefreshToken,
         oauthConsent,
         jwks,
+        passkey,
       },
     }),
     emailAndPassword: {

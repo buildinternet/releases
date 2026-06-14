@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { Header } from "@/components/header";
 import { DeviceApproveForm } from "@/components/device-approve-form";
-import { AUTH_UI_ENABLED, DEVICE_AUTH_ENABLED } from "@/lib/auth-ui";
+import { AUTH_CONFIGURED, DEVICE_AUTH_ENABLED } from "@/lib/auth-ui";
 
 export const metadata: Metadata = {
   title: "Approve device",
@@ -13,7 +13,7 @@ export const metadata: Metadata = {
 };
 
 export default function DeviceApprovePage() {
-  if (!AUTH_UI_ENABLED || !DEVICE_AUTH_ENABLED || !process.env.NEXT_PUBLIC_BETTER_AUTH_URL) {
+  if (!AUTH_CONFIGURED || !DEVICE_AUTH_ENABLED) {
     notFound();
   }
 

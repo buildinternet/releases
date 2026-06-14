@@ -7,6 +7,7 @@ import {
 } from "better-auth/client/plugins";
 import { dashClient, sentinelClient } from "@better-auth/infra/client";
 import { oauthProviderClient } from "@better-auth/oauth-provider/client";
+import { passkeyClient } from "@better-auth/passkey/client";
 
 /**
  * Google One Tap client id. Unlike the worker's `GOOGLE_CLIENT_ID` (a server
@@ -100,6 +101,12 @@ export const authClient = createAuthClient({
     // `authClient.$fetch("/oauth2/consent" | "/oauth2/public-client", …)`; the hook
     // still wraps those. Inert until that page calls it.
     oauthProviderClient(),
+    // Passkeys (WebAuthn / FIDO2) — client half of the always-on server `passkey()`
+    // plugin. Registers `authClient.passkey.*` (add / list / rename / delete) and
+    // `signIn.passkey` (used by the /account passkeys panel and the sign-in form's
+    // passkey button + conditional-UI autofill). Takes no options; the relying-party
+    // config lives server-side. Inert until a caller invokes it.
+    passkeyClient(),
   ],
 });
 
@@ -114,4 +121,5 @@ export const {
   sendVerificationEmail,
   oneTap,
   getLastUsedLoginMethod,
+  passkey,
 } = authClient;

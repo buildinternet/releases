@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useSession } from "@/lib/auth-client";
-import { AUTH_UI_ENABLED } from "@/lib/auth-ui";
+import { AUTH_CONFIGURED } from "@/lib/auth-ui";
 
 /**
  * Signed-out-only footnote under the home-page CLI demo nudging account
@@ -14,7 +14,7 @@ import { AUTH_UI_ENABLED } from "@/lib/auth-ui";
  * `NEXT_PUBLIC_BETTER_AUTH_URL` are checked in a hook-free wrapper so
  * `useSession` is never invoked where `/api/auth/*` can't be served.
  */
-const AUTH_ENABLED = AUTH_UI_ENABLED && Boolean(process.env.NEXT_PUBLIC_BETTER_AUTH_URL);
+const AUTH_ENABLED = AUTH_CONFIGURED;
 
 export function SignupCta() {
   if (!AUTH_ENABLED) return null;
