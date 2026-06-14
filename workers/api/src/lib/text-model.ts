@@ -25,6 +25,7 @@ import {
 import { MODEL as ANTHROPIC_MARKETING_MODEL } from "@releases/ai-internal/marketing-classifier";
 import { MODEL as ANTHROPIC_SUMMARIZE_MODEL } from "@releases/ai-internal/release-content";
 import { MODEL as ANTHROPIC_ARTICLE_MODEL } from "@releases/ai-internal/article-extract";
+import { MODEL as ANTHROPIC_COLLECTION_SUMMARY_MODEL } from "@releases/ai-internal/collection-summary";
 import { buildAnthropicClient } from "@releases/lib/anthropic-client.js";
 import { flag, FLAGS, type FlagshipBinding } from "@releases/lib/flags";
 import { logEvent } from "@releases/lib/log-event";
@@ -46,6 +47,8 @@ export interface TextModelEnv extends AnthropicEnv {
   /** OpenRouter model for the large-body extraction tool-loop (issue #1536); empty
    *  → extraction stays on Anthropic. Read by `resolveExtractAiSdkModel`, not here. */
   EXTRACT_MODEL?: string;
+  /** OpenRouter model for the collection daily-summary lane; empty → stay on Anthropic Haiku. */
+  COLLECTION_SUMMARY_MODEL?: string;
   /** Single switch for the secondary AI lanes. Flagship-driven; var optional. */
   OPENROUTER_ENABLED?: string;
 }
@@ -169,5 +172,13 @@ export function resolveArticleExtractModel(env: TextModelEnv): Promise<TextModel
     orModel: env.FEED_ENRICH_MODEL,
     anthropicModel: ANTHROPIC_ARTICLE_MODEL,
     generationName: "feed-enrich",
+  });
+}
+
+export function resolveCollectionSummaryModel(env: TextModelEnv): Promise<TextModel | null> {
+  return resolveTextModel(env, {
+    orModel: env.COLLECTION_SUMMARY_MODEL,
+    anthropicModel: ANTHROPIC_COLLECTION_SUMMARY_MODEL,
+    generationName: "collection-daily-summary",
   });
 }
