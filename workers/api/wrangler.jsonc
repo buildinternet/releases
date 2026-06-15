@@ -94,14 +94,25 @@
     // Anthropic Haiku. OpenRouter is called directly (not fronted by the CF AI
     // Gateway — no double-hop, per docs/architecture/ai-gateway.md Layer 1).
     "MARKETING_CLASSIFIER_MODEL": "google/gemini-2.5-flash-lite",
-    // OpenRouter cheap-call model for the *live* poll-fetch summarizer. Consulted
-    // only when `openrouter-enabled` is on; empty → the summarizer stays on
-    // Anthropic Haiku (fail-open). Set to gemini-2.5-flash-lite after the
-    // release-content eval (`bun run eval:summary -- --judge`, issue #1469) showed
-    // it matches-or-beats Haiku across repeated runs (~13.8 vs ~12.3 of 16, with
-    // tighter variance) at a fraction of the cost. The daily batch path is
-    // unaffected (always Anthropic).
-    "SUMMARIZE_MODEL": "google/gemini-2.5-flash-lite",
+    // OpenRouter cheap-call model for the *live* poll-fetch summarizer AND the
+    // nightly collection-daily-summary cron (both consume SUMMARIZE_MODEL).
+    // Consulted only when `openrouter-enabled` is on; empty → both stay on
+    // Anthropic Haiku (fail-open). The daily release batch path is unaffected
+    // (always Anthropic).
+    //
+    // deepseek-v4-flash after the #1633 bench (`bun run eval:summary` +
+    // `eval:collection-summary -- --judge`, judge=gemini-2.5-flash): on
+    // collection summaries it clearly beats gemini-2.5-flash-lite (3/4 vs 1/4
+    // satisfied — tighter, version-free, honest quiet-day summaries); on
+    // release-content it is at parity (11 vs 12 of 16, within judge noise) with
+    // zero starvation at the 280-token cap — at lower per-call cost than
+    // gemini-flash-lite. DeepSeek V4 is a reasoning model; the summarize lanes
+    // disable reasoning via the OpenRouter transport (resolveSummarizeModel /
+    // resolveCollectionSummaryModel set reasoning:{enabled:false}) so the small
+    // token budget is not spent thinking, and exclude the GMICloud provider whose
+    // DeepSeek latency is an outlier. (Prior baseline: gemini-2.5-flash-lite, set
+    // per the #1469 release-content eval.)
+    "SUMMARIZE_MODEL": "deepseek/deepseek-v4-flash",
     // OpenRouter model for the large-body EXTRACTION tool-loop (issue #1536).
     // Consulted only when `openrouter-enabled` is on; empty → extraction stays on
     // Anthropic (fail-open). OPENROUTER_API_KEY is already bound below.
@@ -604,10 +615,11 @@
         // OpenRouter cheap-call model (marketing classifier); gated by the
         // `openrouter-enabled` flag. Mirrors prod.
         "MARKETING_CLASSIFIER_MODEL": "google/gemini-2.5-flash-lite",
-        // OpenRouter cheap-call model for the live summarizer; gated by the
-        // `openrouter-enabled` flag. Set to gemini-2.5-flash-lite per the
-        // eval (#1469); empty → stays on Anthropic Haiku (fail-open). Mirrors prod.
-        "SUMMARIZE_MODEL": "google/gemini-2.5-flash-lite",
+        // OpenRouter cheap-call model for the live summarizer + collection daily
+        // summaries; gated by the `openrouter-enabled` flag. deepseek-v4-flash per
+        // the #1633 bench (reasoning disabled + GMICloud excluded by the summarize
+        // lanes); empty → stays on Anthropic Haiku (fail-open). Mirrors prod.
+        "SUMMARIZE_MODEL": "deepseek/deepseek-v4-flash",
         // OpenRouter extraction model (issue #1536); gated by `openrouter-enabled`.
         // Empty → stays on Anthropic (fail-open). Mirrors prod.
         "EXTRACT_MODEL": "deepseek/deepseek-v4-pro",
