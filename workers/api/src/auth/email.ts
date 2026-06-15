@@ -215,6 +215,38 @@ export function resetPasswordTemplate(opts: { url: string }): {
 }
 
 /**
+ * Email-change confirmation. Sent to the user's CURRENT (old) address when they
+ * request a new email from the account page — clicking the link confirms the
+ * change and switches the account over. Going to the existing inbox is the
+ * security property: an attacker who momentarily holds a session still can't move
+ * the account to an address they control without access to the current mailbox.
+ * The new address is named in the copy so the recipient can spot an unexpected
+ * request and ignore it.
+ */
+export function changeEmailTemplate(opts: { url: string; newEmail: string }): {
+  subject: string;
+  text: string;
+  html: string;
+} {
+  const safeUrl = escapeHrefUrl(opts.url);
+  const subject = "Confirm your new Releases email address";
+  const text = [
+    `We received a request to change your Releases email address to ${opts.newEmail}.`,
+    "",
+    "Confirm the change here:",
+    opts.url,
+    "",
+    "This link expires in 1 hour. If you didn't request this, you can ignore this email — your address won't change.",
+  ].join("\n");
+  const html = [
+    `<p>We received a request to change your Releases email address to ${opts.newEmail}.</p>`,
+    `<p><a href="${safeUrl}">Confirm new email</a></p>`,
+    "<p>This link expires in 1 hour. If you didn't request this, you can ignore this email — your address won't change.</p>",
+  ].join("");
+  return { subject, text, html };
+}
+
+/**
  * Passwordless magic-link sign-in email. Clicking the link authenticates the user
  * (and auto-creates a verified account for an unknown email — see the magicLink
  * plugin in index.ts). Shorter expiry copy than verify/reset: a login link lives 15

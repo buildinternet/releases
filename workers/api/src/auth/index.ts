@@ -57,6 +57,7 @@ import {
   verifyEmailTemplate,
   resetPasswordTemplate,
   magicLinkTemplate,
+  changeEmailTemplate,
   type AuthEmailMessage,
 } from "./email.js";
 import {
@@ -1040,6 +1041,25 @@ export async function createAuth(
       // Audit: a successful email verification (the auto-sign-in that follows logs
       // its own `sign-in-success` via the session.create hook below).
       afterEmailVerification: auditAfterEmailVerification(audit),
+    },
+    user: {
+      // Self-serve email change from the account page (`/api/auth/change-email`).
+      // Default-off in Better Auth; opt in here. Every user reaches us verified
+      // (requireEmailVerification above), so the flow that matters is the
+      // verified-user path: `sendChangeEmailConfirmation` fires and a confirmation
+      // link is emailed to the user's CURRENT address — the change only lands once
+      // that link is clicked. `updateEmailWithoutVerification` is left default-off
+      // so an email is NEVER switched without a confirming click. Routes through the
+      // same `scheduleSend` → `waitUntil` seam as verify/reset so the send outlives
+      // the response on Workers; the binding-absent case degrades to a logged
+      // no-send (see sendAuthEmail), never a crash.
+      changeEmail: {
+        enabled: true,
+        sendChangeEmailConfirmation: async ({ user: u, newEmail, url }) => {
+          const msg: AuthEmailMessage = { to: u.email, ...changeEmailTemplate({ url, newEmail }) };
+          scheduleSend(() => sendEmail(msg));
+        },
+      },
     },
     socialProviders,
     plugins,

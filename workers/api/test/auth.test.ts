@@ -22,6 +22,7 @@ import {
   deriveCookieDomain,
   derivePasskeyRp,
   createAuth,
+  type BetterAuthInstance,
 } from "../src/auth/index.js";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -584,6 +585,85 @@ describe("email verification gate", () => {
     ).rejects.toThrow();
     // sendOnSignIn: a fresh verification email is sent on the unverified sign-in.
     expect(captured.length).toBeGreaterThanOrEqual(2);
+  });
+});
+
+// ── Integration: self-serve email change ──
+// `user.changeEmail.enabled` is on, so a verified user can request a new address
+// and a confirmation link is mailed to their CURRENT address (the change lands
+// only on click). These run the real createAuth() over the migrated test DB with a
+// capturing sender, authenticating the change-email call with the session cookie
+// minted by auto-sign-in-after-verification.
+
+describe("change email", () => {
+  const env = {
+    BETTER_AUTH_URL: "https://api.releases.localhost",
+    BETTER_AUTH_SECRET: "test-secret-do-not-use-in-prod-0123456789",
+  } as never;
+
+  /** Build a `cookie` request header from every Set-Cookie the response carried. */
+  function cookieHeader(headers: Headers): string {
+    return headers
+      .getSetCookie()
+      .map((c) => c.split(";")[0])
+      .join("; ");
+  }
+
+  /** Sign up + verify an account, returning the auth-cookie header for its session. */
+  async function verifiedSession(
+    auth: BetterAuthInstance,
+    captured: AuthEmailMessage[],
+    email: string,
+  ): Promise<string> {
+    await auth.api.signUpEmail({
+      body: { email, password: "correct-horse-battery", name: "User" },
+    });
+    const link = captured[0]?.text.match(/https?:\/\/\S*verify-email\S*/)?.[0];
+    if (!link) throw new Error("no verify-email link in sign-up email");
+    const token = new URL(link).searchParams.get("token")!;
+    // autoSignInAfterVerification → verifying mints a session; grab its cookie.
+    const { headers } = await auth.api.verifyEmail({
+      query: { token },
+      returnHeaders: true,
+    });
+    return cookieHeader(headers);
+  }
+
+  it("enables change-email and confirms to the CURRENT address", async () => {
+    const db = createTestDb();
+    const captured: AuthEmailMessage[] = [];
+    const auth = await createAuth(env, undefined, {
+      db,
+      sendEmail: (m) => {
+        captured.push(m);
+      },
+    });
+
+    const cookie = await verifiedSession(auth, captured, "old@example.com");
+    captured.length = 0; // drop the sign-up verification email
+
+    const res = await auth.api.changeEmail({
+      body: { newEmail: "new@example.com" },
+      headers: { cookie },
+    });
+    expect(res.status).toBe(true);
+
+    // The confirmation goes to the OLD address (the security property), names the
+    // new address, and carries a verify token. The user row is unchanged until the
+    // link is clicked.
+    expect(captured).toHaveLength(1);
+    expect(captured[0]?.to).toBe("old@example.com");
+    expect(captured[0]?.text).toContain("new@example.com");
+    expect(captured[0]?.text).toMatch(/\/verify-email\?token=[\w-]+/);
+    const users = await db.select().from(user);
+    expect(users[0]?.email).toBe("old@example.com");
+  });
+
+  it("rejects an unauthenticated change-email request", async () => {
+    const auth = await createAuth(env, undefined, { db: createTestDb(), sendEmail: () => {} });
+    await expect(
+      auth.api.changeEmail({ body: { newEmail: "x@example.com" }, headers: {} }),
+    ).rejects.toThrow();
   });
 });
 
