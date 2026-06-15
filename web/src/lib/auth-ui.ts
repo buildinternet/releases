@@ -14,6 +14,54 @@
 export const AUTH_CONFIGURED = Boolean(process.env.NEXT_PUBLIC_BETTER_AUTH_URL);
 
 /**
+ * Whether the CURRENT browser origin can actually complete an auth flow, or is a
+ * preview/branch deployment where sign-in is structurally broken.
+ *
+ * Auth is pinned to the canonical web-domain family derived from the API worker
+ * base (`NEXT_PUBLIC_BETTER_AUTH_URL`): the worker drops that host's leftmost
+ * label to scope the session cookie cross-subdomain (`api.releases.sh` →
+ * `.releases.sh`), its credentialed CORS reflects only that family, and the
+ * passkey relying-party id is the web hostname. So from an off-family origin —
+ * e.g. a Vercel branch deploy like `*.vercel.app` — every path fails at once:
+ * the `.releases.sh` cookie is never sent (cross-site, blocked outright on
+ * mobile), CORS rejects the origin, and WebAuthn throws a `SecurityError` on the
+ * rpID mismatch. The visible symptom is a generic "couldn't sign in" with no
+ * hint that the deployment URL is the cause — this lets the UI say so instead.
+ *
+ * `deriveCookieDomain()` in `workers/api/src/auth/index.ts` is the server twin of
+ * this leftmost-label drop; keep the two in step.
+ *
+ * Returns `{ supported: false, canonicalOrigin }` on an off-family origin so the
+ * caller can warn and point users at the real site, or `{ supported: true }`
+ * everywhere auth can work (the common case) AND whenever support can't be
+ * determined (no `window`, auth URL unset/unparseable, or a base host we can't
+ * meaningfully split) — fail open, never warn spuriously.
+ */
+export function authOriginSupport():
+  | { supported: true }
+  | { supported: false; canonicalOrigin: string } {
+  const authUrl = process.env.NEXT_PUBLIC_BETTER_AUTH_URL;
+  if (!authUrl || typeof window === "undefined") return { supported: true };
+  let base: URL;
+  try {
+    base = new URL(authUrl);
+  } catch {
+    return { supported: true };
+  }
+  // Mirror deriveCookieDomain: the registrable base is the worker host minus its
+  // leftmost label (api.releases.sh → releases.sh). A result with no dot left
+  // (e.g. a bare `api.localhost` → `localhost`) is too coarse to scope a
+  // cross-site cookie to, so we can't reason about it — fail open.
+  const labels = base.hostname.split(".");
+  if (labels.length < 2) return { supported: true };
+  const baseDomain = labels.slice(1).join(".");
+  if (!baseDomain.includes(".")) return { supported: true };
+  const host = window.location.hostname;
+  if (host === baseDomain || host.endsWith(`.${baseDomain}`)) return { supported: true };
+  return { supported: false, canonicalOrigin: `${base.protocol}//${baseDomain}` };
+}
+
+/**
  * Reveal the self-serve API Keys panel (`/account`). **Off unless
  * `NEXT_PUBLIC_USER_API_KEYS` is exactly `"true"`.** Mirrors the server-side
  * `user-api-keys-enabled` Flagship flag so the panel stays dark until the backend
