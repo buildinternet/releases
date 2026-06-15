@@ -11,6 +11,7 @@ import {
   getLastUsedLoginMethod,
 } from "@/lib/auth-client";
 import { safeRedirect } from "@/lib/auth-redirect";
+import { authOriginSupport } from "@/lib/auth-ui";
 import { SOCIAL_PROVIDERS, PROVIDER_META } from "@/lib/social-providers";
 
 type Mode = "login" | "signup";
@@ -67,6 +68,33 @@ function DevEmailNotice({ compact = false }: { compact?: boolean }) {
   );
 }
 
+/**
+ * Hard warning shown when the form is loaded from an origin where auth can't
+ * work — a Vercel branch/preview deploy (`*.vercel.app`) rather than the
+ * canonical `releases.sh` family. Every sign-in path (cookies, social, passkey,
+ * magic link) fails on such an origin, and the underlying errors are opaque
+ * catch-alls, so we say so up front and link to the working site (preserving the
+ * current path + redirect query). Renders nothing on a supported origin.
+ */
+function UnsupportedOriginNotice({ href }: { href: string }) {
+  return (
+    <div
+      className="border border-amber-300 bg-amber-50 px-3 py-2.5 text-[13px] leading-5 text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200"
+      role="alert"
+    >
+      <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em]">
+        Preview deploy
+      </span>{" "}
+      Sign-in isn&apos;t available on this deployment URL — session cookies, SSO, and passkeys are
+      tied to the main domain.{" "}
+      <a href={href} className="font-medium underline underline-offset-2">
+        Continue on releases.sh
+      </a>{" "}
+      to sign in.
+    </div>
+  );
+}
+
 /** Map a Better Auth client error to friendly copy, falling back to its message. */
 function prettyError(error: { message?: string } | null, mode: Mode): string {
   const msg = error?.message?.trim();
@@ -115,6 +143,21 @@ export function AuthForm({ mode, redirectTo = "/" }: { mode: Mode; redirectTo?: 
   useEffect(() => {
     if (mode === "login") setLastMethod(getLastUsedLoginMethod());
   }, [mode]);
+
+  // When loaded from a non-canonical origin (a Vercel branch/preview deploy),
+  // every auth path is structurally broken — warn and link to the real site.
+  // Computed in an effect because it reads `window.location`; the server renders
+  // null and hydrates to the same, so no mismatch. Holds the href to continue on
+  // (canonical origin + current path + redirect query), or null when supported.
+  const [unsupportedHref, setUnsupportedHref] = useState<string | null>(null);
+  useEffect(() => {
+    const res = authOriginSupport();
+    if (!res.supported) {
+      setUnsupportedHref(
+        `${res.canonicalOrigin}${window.location.pathname}${window.location.search}`,
+      );
+    }
+  }, []);
 
   // After a sign-up, the user has NO session (verification is required) — show a
   // "check your email" panel instead of redirecting. On an unverified sign-in the
@@ -386,6 +429,7 @@ export function AuthForm({ mode, redirectTo = "/" }: { mode: Mode; redirectTo?: 
             )}
           </p>
         </div>
+        {unsupportedHref && <UnsupportedOriginNotice href={unsupportedHref} />}
         <DevEmailNotice />
         {error && (
           <p className="text-sm text-red-600 dark:text-red-400" role="alert">
@@ -406,6 +450,7 @@ export function AuthForm({ mode, redirectTo = "/" }: { mode: Mode; redirectTo?: 
 
   return (
     <div className="space-y-6">
+      {unsupportedHref && <UnsupportedOriginNotice href={unsupportedHref} />}
       {SOCIAL_PROVIDERS.length > 0 && (
         <>
           <div className="grid gap-3">
