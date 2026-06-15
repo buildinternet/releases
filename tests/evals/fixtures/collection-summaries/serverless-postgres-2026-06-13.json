@@ -1,0 +1,14 @@
+{
+  "input": {
+    "collectionName": "Serverless Postgres",
+    "date": "2026-06-13",
+    "releases": [
+      {
+        "org": "Supabase",
+        "product": "CLI",
+        "title": "Supabase CLI v2.107.0-beta.13 dependency update",
+        "summary": null
+      }
+    ]
+  }
+}
