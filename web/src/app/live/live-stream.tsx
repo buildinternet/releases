@@ -1,17 +1,19 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import type { MediaItem } from "@buildinternet/releases-api-types";
 import { CliCommand } from "@/components/cli-command";
 import { LocalTimestamp } from "@/components/local-timestamp";
-import { OrgAvatar } from "@/components/org-avatar";
+import { orgAvatarSrc } from "@/components/org-avatar";
 import { SourceTypeIcon } from "@/components/source-type-icon";
 import { FallbackImage } from "@/components/fallback-image";
 import { PlayBadge } from "@/components/play-badge";
 import { ExternalLinkIcon } from "@/components/external-link-icon";
 import { deriveFeedTitle } from "@/lib/release-title";
 import { releaseThumbUrl, IMG_TRANSFORM_ON } from "@/lib/media";
+import { isOptimizableImage } from "@/lib/sanitize";
 import { useFaviconBadge } from "@/hooks/use-favicon-badge";
 import { useReleaseStream, type LiveRelease } from "@/hooks/use-release-stream";
 
@@ -94,6 +96,25 @@ function MediaPreview({ release, heading }: { release: LiveRelease; heading: str
   return null;
 }
 
+// Org avatar for the byline. Unlike the shared `OrgAvatar`, this omits itself
+// entirely when there's no resolvable image (no stored avatar and no GitHub
+// handle) or when the image fails to load — no initial-letter monogram.
+function BylineAvatar({ src }: { src: string }) {
+  const [failed, setFailed] = useState(false);
+  if (failed) return null;
+  return (
+    <Image
+      src={src}
+      alt=""
+      width={18}
+      height={18}
+      className="rounded-full shrink-0"
+      unoptimized={!isOptimizableImage(src)}
+      onError={() => setFailed(true)}
+    />
+  );
+}
+
 function ReleaseCard({ release }: { release: LiveRelease }) {
   const { descriptive, versionLabel } = deriveFeedTitle({
     title: release.title ?? "",
@@ -107,45 +128,40 @@ function ReleaseCard({ release }: { release: LiveRelease }) {
   const heading = descriptive ?? versionLabel ?? release.title ?? "Release";
   const versionTag = versionLabel && versionLabel !== heading ? versionLabel : null;
   const org = release.org;
-  const orgName = org?.name ?? release.source.name;
+  // Byline leads with the product/source (the specific thing shipped) and
+  // trails with the org as dim attribution — the company is context, not the
+  // headline. `OrgSection`/search-results use the same hierarchy.
+  const productLabel = release.product?.name ?? release.source.name;
+  const orgName = org?.name ?? null;
   const orgSlug = org?.slug ?? null;
+  const avatarSrc = orgAvatarSrc(org?.avatarUrl ?? null, org?.githubHandle ?? null, 18);
+  // Drop the org name when it just restates the product/source label (e.g.
+  // PostHog / PostHog) — same dedup as the search-results byline.
+  const showOrg = !!orgName && !productLabel.toLowerCase().startsWith(orgName.toLowerCase());
 
   return (
     <article className="border border-stone-200 dark:border-stone-800 rounded-lg bg-white dark:bg-stone-900 px-4 py-3.5">
-      {/* Identity row: avatar + org / product, source line beneath, timestamp right */}
-      <div className="flex items-center gap-2.5">
-        <OrgAvatar
-          avatarUrl={org?.avatarUrl ?? null}
-          githubHandle={org?.githubHandle ?? null}
-          name={orgName}
-          size={28}
-        />
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-1.5 min-w-0">
-            {orgSlug ? (
-              <Link
-                href={`/${orgSlug}`}
-                className="text-[13px] font-semibold tracking-tight text-stone-800 dark:text-stone-100 hover:underline truncate"
-              >
-                {orgName}
-              </Link>
-            ) : (
-              <span className="text-[13px] font-semibold tracking-tight text-stone-800 dark:text-stone-100 truncate">
-                {orgName}
-              </span>
-            )}
-            {release.product && (
-              <span className="text-[12px] text-stone-400 dark:text-stone-500 truncate">
-                · {release.product.name}
-              </span>
-            )}
-          </div>
+      {/* Byline: [avatar] product/source · org — small attribution, timestamp right */}
+      <div className="flex items-center gap-2">
+        <div className="flex min-w-0 flex-1 items-center gap-1.5 text-[12px]">
+          {avatarSrc && <BylineAvatar src={avatarSrc} />}
           <Link
             href={`/source/${release.source.slug}`}
-            className="text-[11px] text-stone-400 dark:text-stone-500 hover:underline"
+            className="font-medium text-stone-700 dark:text-stone-200 hover:underline truncate"
           >
-            {release.source.name}
+            {productLabel}
           </Link>
+          {showOrg &&
+            (orgSlug ? (
+              <Link
+                href={`/${orgSlug}`}
+                className="shrink-0 text-stone-400 dark:text-stone-500 hover:text-stone-600 dark:hover:text-stone-300"
+              >
+                · {orgName}
+              </Link>
+            ) : (
+              <span className="shrink-0 text-stone-400 dark:text-stone-500">· {orgName}</span>
+            ))}
         </div>
         {release.publishedAt && (
           <LocalTimestamp
