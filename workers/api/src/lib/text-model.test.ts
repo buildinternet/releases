@@ -64,7 +64,7 @@ describe("resolveMarketingModel — single openrouter-enabled switch", () => {
   });
 
   it("switch OFF → Anthropic", async () => {
-    const env = baseEnv({ FLAGS: flagsBinding({}) });
+    const env = baseEnv({ FLAGS: flagsBinding({ "openrouter-enabled": false }) });
     const model = await resolveMarketingModel(env);
     expect(model?.id.startsWith("anthropic:")).toBe(true);
   });
@@ -79,7 +79,12 @@ describe("resolveMarketingModel — single openrouter-enabled switch", () => {
   it("ignores a stray legacy per-lane flag (consolidated away)", async () => {
     // `marketing-classifier-openrouter` no longer exists. With the global switch
     // off, a leftover Flagship key of that name must have no effect → Anthropic.
-    const env = baseEnv({ FLAGS: flagsBinding({ "marketing-classifier-openrouter": true }) });
+    const env = baseEnv({
+      FLAGS: flagsBinding({
+        "openrouter-enabled": false,
+        "marketing-classifier-openrouter": true,
+      }),
+    });
     const model = await resolveMarketingModel(env);
     expect(model?.id.startsWith("anthropic:")).toBe(true);
   });
@@ -103,16 +108,21 @@ describe("resolveMarketingModel — single openrouter-enabled switch", () => {
   });
 
   it("returns null when no Anthropic key is available for the fallback", async () => {
-    const env = baseEnv({ FLAGS: flagsBinding({}), ANTHROPIC_API_KEY: undefined });
+    const env = baseEnv({
+      FLAGS: flagsBinding({ "openrouter-enabled": false }),
+      ANTHROPIC_API_KEY: undefined,
+    });
     const model = await resolveMarketingModel(env);
     expect(model).toBeNull();
   });
 });
 
 describe("resolveSummarizeModel — model var is the per-lane gate", () => {
-  it("switch ON + SUMMARIZE_MODEL empty (the prod config) → stays on Anthropic", async () => {
-    // The summarizer ships with SUMMARIZE_MODEL="" so it stays on Anthropic even
-    // when the global switch is on — the empty model var is the definitional gate.
+  it("switch ON + SUMMARIZE_MODEL empty → stays on Anthropic", async () => {
+    // An empty SUMMARIZE_MODEL keeps the lane on Anthropic even when the global
+    // switch is on — the empty model var is the definitional per-lane gate. (Prod
+    // actually sets SUMMARIZE_MODEL=google/gemini-2.5-flash-lite; this exercises
+    // the empty-gate fallback, not the deployed value.)
     const env = baseEnv({
       FLAGS: flagsBinding({ "openrouter-enabled": true }),
       SUMMARIZE_MODEL: "",
@@ -162,7 +172,7 @@ describe("resolveArticleExtractModel — feed-enrich lane, FEED_ENRICH_MODEL is 
 
   it("switch OFF → Anthropic even with the model set", async () => {
     const env = baseEnv({
-      FLAGS: flagsBinding({}),
+      FLAGS: flagsBinding({ "openrouter-enabled": false }),
       FEED_ENRICH_MODEL: "google/gemini-2.5-flash-lite",
     });
     const model = await resolveArticleExtractModel(env);
@@ -193,7 +203,7 @@ describe("resolveCollectionSummaryModel — collection-daily-summary lane", () =
 
   it("switch OFF → Anthropic even with the model set", async () => {
     const env = baseEnv({
-      FLAGS: flagsBinding({}),
+      FLAGS: flagsBinding({ "openrouter-enabled": false }),
       SUMMARIZE_MODEL: "meta-llama/llama-3.1-8b-instruct",
     });
     const model = await resolveCollectionSummaryModel(env);

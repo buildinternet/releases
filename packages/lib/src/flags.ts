@@ -102,19 +102,26 @@ export const FLAGS = {
     default: false,
   },
   // Single switch for the secondary AI lanes (marketing classifier, live release
-  // summarizer, …) on the TextModel seam. OFF → those lanes use Anthropic Haiku.
-  // Flip ON in Flagship to route every such lane that ALSO has an OpenRouter model
-  // var configured (e.g. MARKETING_CLASSIFIER_MODEL) onto OpenRouter at runtime; a
-  // lane with an empty model var stays on Anthropic regardless (fail-open). This is
-  // the ONLY OpenRouter toggle — there are no per-lane flags; per-lane control is
-  // "set the model var or leave it empty". Resolved in
-  // workers/api/src/lib/text-model.ts (resolveTextModel). OpenRouter is called
-  // directly, never fronted by the CF AI Gateway (no double-hop) — see
-  // docs/architecture/ai-gateway.md.
+  // summarizer, feed enrichment, large-body extraction, …) on the TextModel seam.
+  // ON → route every such lane that ALSO has an OpenRouter model var configured
+  // (e.g. MARKETING_CLASSIFIER_MODEL, SUMMARIZE_MODEL, EXTRACT_MODEL) onto
+  // OpenRouter at runtime; a lane with an empty model var stays on Anthropic Haiku
+  // regardless (fail-open). This is the ONLY OpenRouter toggle — there are no
+  // per-lane flags; per-lane control is "set the model var or leave it empty".
+  // Resolved in workers/api/src/lib/text-model.ts (resolveTextModel) +
+  // extract-model.ts. OpenRouter is called directly, never fronted by the CF AI
+  // Gateway (no double-hop) — see docs/architecture/ai-gateway.md.
+  //
+  // default:true — OpenRouter is the established prod default for these lanes (the
+  // prod wrangler vars point SUMMARIZE_MODEL / EXTRACT_MODEL / FEED_ENRICH_MODEL at
+  // OpenRouter models), so the safe last-resort fallback (Flagship unreachable AND
+  // OPENROUTER_ENABLED var unset) is ON, matching the deployed reality rather than
+  // silently dropping the whole fleet back to Anthropic Haiku. Flip OFF in Flagship
+  // to kill-switch every OpenRouter lane back to Anthropic at once.
   openrouterEnabled: {
     key: "openrouter-enabled",
     env: "OPENROUTER_ENABLED",
-    default: false,
+    default: true,
   },
   // Rollout gate for the stale OAuth-client reaper cron (sweep-oauth-clients).
   // default:false → the nightly sweep runs in OBSERVE-ONLY mode (logs the
