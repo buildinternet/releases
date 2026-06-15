@@ -2,7 +2,7 @@
 
 import { webApiHeaders } from "@/lib/api";
 import { isApiScope, type ApiScope } from "@buildinternet/releases-core/api-token";
-import { adminActionEnv } from "@/lib/admin-action";
+import { adminActionEnv, type AdminActionEnv } from "@/lib/admin-action";
 
 const REQUEST_TIMEOUT_MS = 10_000;
 
@@ -41,20 +41,25 @@ export interface MintedTokenRow extends PublicTokenRow {
  * per-user JWT in production (the API enforces `admin` scope). Every failure
  * mode — no admin credential, network error, timeout, non-2xx, or malformed
  * body — is normalized to an `{ ok: false; error }` result so callers never throw.
+ *
+ * Pass a pre-resolved `env` to reuse one credential across several calls — a
+ * multi-step action (e.g. `revokeTokenAction`'s lookup-then-revoke) otherwise
+ * re-mints the per-user JWT once per call.
  */
 async function adminFetch<T>(
   path: string,
   init?: RequestInit,
+  env?: AdminActionEnv,
 ): Promise<{ ok: true; data: T } | { ok: false; error: string }> {
-  const env = await adminActionEnv();
-  if ("error" in env) return { ok: false, error: env.error };
+  const resolved = env ?? (await adminActionEnv());
+  if ("error" in resolved) return { ok: false, error: resolved.error };
   let res: Response;
   try {
-    res = await fetch(`${env.apiUrl}${path}`, {
+    res = await fetch(`${resolved.apiUrl}${path}`, {
       cache: "no-store",
       ...init,
       headers: webApiHeaders({
-        Authorization: `Bearer ${env.apiSecret}`,
+        Authorization: `Bearer ${resolved.bearer}`,
         "Content-Type": "application/json",
       }),
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
@@ -126,18 +131,30 @@ export async function revokeTokenAction(
 ): Promise<{ ok: true; token: PublicTokenRow } | { ok: false; error: string }> {
   if (!id) return { ok: false, error: "Token ID is required." };
 
+  // Resolve the credential once and thread it through both calls below: in prod
+  // each `adminActionEnv()` mints a fresh per-user JWT, so resolving per-call
+  // would mint twice for a single revoke.
+  const env = await adminActionEnv();
+  if ("error" in env) return { ok: false, error: env.error };
+
   // Enforce the owner boundary on the write path too: resolve the token first
   // and only revoke it if it belongs to the primary owner this surface manages,
   // never an arbitrary id.
-  const lookup = await adminFetch<PublicTokenRow>(`/v1/tokens/${encodeURIComponent(id)}`);
+  const lookup = await adminFetch<PublicTokenRow>(
+    `/v1/tokens/${encodeURIComponent(id)}`,
+    undefined,
+    env,
+  );
   if (!lookup.ok) return lookup;
   if (!isPrimaryOwner(lookup.data)) {
     return { ok: false, error: "This token is not managed by this page." };
   }
 
-  const r = await adminFetch<PublicTokenRow>(`/v1/tokens/${encodeURIComponent(id)}/revoke`, {
-    method: "POST",
-  });
+  const r = await adminFetch<PublicTokenRow>(
+    `/v1/tokens/${encodeURIComponent(id)}/revoke`,
+    { method: "POST" },
+    env,
+  );
   if (!r.ok) return r;
   return { ok: true, token: r.data };
 }

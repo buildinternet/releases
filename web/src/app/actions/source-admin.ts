@@ -29,7 +29,7 @@ export async function setSourceNoticeAction(input: {
       method: "PATCH",
       headers: webApiHeaders({
         "Content-Type": "application/json",
-        Authorization: `Bearer ${env.apiSecret}`,
+        Authorization: `Bearer ${env.bearer}`,
       }),
       body: JSON.stringify({ notice: input.notice }),
       cache: "no-store",
@@ -67,7 +67,7 @@ export async function setSourceMetadataAction(input: {
       method: "PATCH",
       headers: webApiHeaders({
         "Content-Type": "application/json",
-        Authorization: `Bearer ${env.apiSecret}`,
+        Authorization: `Bearer ${env.bearer}`,
       }),
       body: JSON.stringify(input.patch),
       cache: "no-store",
@@ -103,7 +103,7 @@ export async function promoteSourceAction(input: {
       method: "PATCH",
       headers: webApiHeaders({
         "Content-Type": "application/json",
-        Authorization: `Bearer ${env.apiSecret}`,
+        Authorization: `Bearer ${env.bearer}`,
       }),
       body: JSON.stringify({ isHidden: false }),
       cache: "no-store",
@@ -142,7 +142,7 @@ export async function renameSourceAction(input: {
       method: "PATCH",
       headers: webApiHeaders({
         "Content-Type": "application/json",
-        Authorization: `Bearer ${env.apiSecret}`,
+        Authorization: `Bearer ${env.bearer}`,
       }),
       body: JSON.stringify({ name: input.name }),
       cache: "no-store",
@@ -181,7 +181,7 @@ export async function setFetchPriorityAction(input: {
       method: "PATCH",
       headers: webApiHeaders({
         "Content-Type": "application/json",
-        Authorization: `Bearer ${env.apiSecret}`,
+        Authorization: `Bearer ${env.bearer}`,
       }),
       body: JSON.stringify({ fetchPriority: input.priority }),
       cache: "no-store",
@@ -225,7 +225,7 @@ export async function syncFirecrawlAction(input: {
       method: "POST",
       headers: webApiHeaders({
         "Content-Type": "application/json",
-        Authorization: `Bearer ${env.apiSecret}`,
+        Authorization: `Bearer ${env.bearer}`,
       }),
       body: JSON.stringify(payload),
       cache: "no-store",

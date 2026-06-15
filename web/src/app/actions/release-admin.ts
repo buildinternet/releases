@@ -20,7 +20,7 @@ export async function suppressReleaseAction(input: {
       method: "POST",
       headers: webApiHeaders({
         "Content-Type": "application/json",
-        Authorization: `Bearer ${env.apiSecret}`,
+        Authorization: `Bearer ${env.bearer}`,
       }),
       body: JSON.stringify(input.reason?.trim() ? { reason: input.reason.trim() } : {}),
       cache: "no-store",
@@ -51,7 +51,7 @@ export async function deleteReleaseAction(input: {
     res = await fetch(`${env.apiUrl}/v1/releases/${encodeURIComponent(input.id)}`, {
       method: "DELETE",
       headers: webApiHeaders({
-        Authorization: `Bearer ${env.apiSecret}`,
+        Authorization: `Bearer ${env.bearer}`,
       }),
       cache: "no-store",
     });

@@ -4,9 +4,15 @@ import { isLocalAdminEnabled } from "@/lib/local-admin-flag";
 import { webApiHeaders } from "@/lib/api";
 import { apiBaseUrl, serverApiKey } from "./env";
 
+/** Resolved admin credential: the API base URL and a Bearer token to present. */
+export interface AdminActionEnv {
+  apiUrl: string;
+  bearer: string;
+}
+
 /**
- * Resolve `{ apiUrl, apiSecret }` for an admin server action, where `apiSecret`
- * is a Bearer credential the admin API accepts:
+ * Resolve `{ apiUrl, bearer }` for an admin server action, where `bearer` is a
+ * Bearer credential the admin API accepts:
  *
  *  - **Local dev** (`isLocalAdminEnabled()`): the root `RELEASES_API_KEY`, as before.
  *  - **Production**: a short-lived, per-user JWT minted from the CALLER's Better
@@ -14,25 +20,19 @@ import { apiBaseUrl, serverApiKey } from "./env";
  *    issuance, so the API authorizes the operation at the caller's role — a
  *    non-admin's token carries `read` only and admin routes 403. No shared
  *    admin secret sits on the web server; the only credential is the user's own.
- *
- * (Field name `apiSecret` is kept so the many `Bearer ${env.apiSecret}` call
- * sites are unchanged; it holds the root key in dev and the user JWT in prod.)
  */
-export async function adminActionEnv(): Promise<
-  { apiUrl: string; apiSecret: string } | { error: string }
-> {
+export async function adminActionEnv(): Promise<AdminActionEnv | { error: string }> {
   const apiUrl = apiBaseUrl() ?? "http://localhost:3456";
 
   if (isLocalAdminEnabled()) {
-    const apiSecret = serverApiKey();
-    if (!apiSecret)
-      return { error: "RELEASES_API_KEY (or legacy RELEASED_API_KEY) not configured." };
-    return { apiUrl, apiSecret };
+    const bearer = serverApiKey();
+    if (!bearer) return { error: "RELEASES_API_KEY (or legacy RELEASED_API_KEY) not configured." };
+    return { apiUrl, bearer };
   }
 
   const jwt = await mintUserJwt(apiUrl);
   if (!jwt) return { error: "Admin actions require an admin session." };
-  return { apiUrl, apiSecret: jwt };
+  return { apiUrl, bearer: jwt };
 }
 
 /**
