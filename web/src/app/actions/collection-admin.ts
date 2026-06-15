@@ -7,9 +7,10 @@ import { adminActionEnv } from "@/lib/admin-action";
 type ActionResult = { ok: true } | { ok: false; error: string };
 
 /**
- * Toggle a collection's homepage-featured flag. Local-dev admin only — the
- * gate is re-checked inside `adminActionEnv()` so a stray invocation in
- * production cannot mutate state.
+ * Toggle a collection's homepage-featured flag. The credential comes from
+ * `adminActionEnv()` (root key in local dev; the caller's role-clamped per-user
+ * JWT in production), so the API enforces `admin` scope — a non-admin caller is
+ * refused with a 403.
  */
 export async function setCollectionFeaturedAction(input: {
   slug: string;

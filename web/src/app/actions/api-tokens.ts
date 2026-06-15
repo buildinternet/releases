@@ -2,10 +2,19 @@
 
 import { webApiHeaders } from "@/lib/api";
 import { isApiScope, type ApiScope } from "@buildinternet/releases-core/api-token";
-import { PRIMARY_OWNER } from "@/lib/api-tokens-admin-flag";
 import { adminActionEnv } from "@/lib/admin-action";
 
 const REQUEST_TIMEOUT_MS = 10_000;
+
+/**
+ * The fixed "primary owner" principal used for all tokens minted through this
+ * admin page. The list view filters to only these tokens — not the full system
+ * token table.
+ */
+const PRIMARY_OWNER = {
+  principalType: "user",
+  principalId: "usr_web_admin",
+} as const;
 
 export interface PublicTokenRow {
   id: string;
