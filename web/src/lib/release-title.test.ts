@@ -1,5 +1,33 @@
 import { describe, it, expect } from "bun:test";
-import { deriveFeedTitle, normalizeVersionLabel, titleIsBareVersion } from "./release-title";
+import {
+  clampTitle,
+  deriveFeedTitle,
+  normalizeVersionLabel,
+  titleIsBareVersion,
+} from "./release-title";
+
+describe("clampTitle", () => {
+  it("leaves short titles untouched", () => {
+    expect(clampTitle("Short title — Acme", 60)).toBe("Short title — Acme");
+  });
+
+  it("truncates on a word boundary with an ellipsis when over the limit", () => {
+    const long =
+      "An extremely long descriptive release headline that keeps going well past the limit — Acme";
+    const out = clampTitle(long, 60);
+    expect(out.length).toBeLessThanOrEqual(60);
+    expect(out.endsWith("…")).toBe(true);
+    expect(out).not.toContain("  ");
+    // Cuts at a space, not mid-word.
+    expect(long.startsWith(out.slice(0, -1))).toBe(true);
+  });
+
+  it("hard-cuts when there is no late word boundary", () => {
+    const out = clampTitle("a".repeat(80), 60);
+    expect(out.length).toBe(60);
+    expect(out.endsWith("…")).toBe(true);
+  });
+});
 
 describe("normalizeVersionLabel", () => {
   it("prepends v to numeric versions", () => {

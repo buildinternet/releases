@@ -24,7 +24,7 @@ import { ReleaseAdminMenu } from "@/components/release-admin-menu";
 import { AdminOnly } from "@/components/admin-only";
 import { FallbackImage } from "@/components/fallback-image";
 import { appStoreIconUrl } from "@/lib/app-source";
-import { deriveFeedTitle } from "@/lib/release-title";
+import { clampTitle, deriveFeedTitle } from "@/lib/release-title";
 import { VideoEmbed } from "@/components/video-embed";
 import { resolveVideoEmbed } from "@/lib/video-source";
 import { OrgAvatar } from "@/components/org-avatar";
@@ -54,7 +54,9 @@ export async function generateMetadata({
       release.org?.discovery === "on_demand" ||
       release.org?.isHidden === true;
     return {
-      title: `${titleHeading} — ${release.sourceName}`,
+      // Clamp so the <title> doesn't run long enough for search engines to
+      // truncate it; the global `%s — releases.sh` template still adds the brand.
+      title: clampTitle(`${titleHeading} — ${release.sourceName}`),
       description: description || `${heading} release notes for ${release.sourceName}`,
       ...(shouldNoIndex ? { robots: { index: false, follow: true } } : {}),
       openGraph: {

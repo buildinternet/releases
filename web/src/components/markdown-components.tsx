@@ -8,34 +8,29 @@ import { GifVideo } from "./gif-video";
 interface MarkdownComponentOptions {
   imgClass?: string;
   videoClass?: string;
-  /** When true, demote markdown headings by 2 levels (h1→h3, h2→h4, …, capped at
-   *  h6). Use inside release cards so changelog headings sit below the card's
-   *  own h2 in the page outline rather than colliding with page-level headings.
-   *  HTML5's sectioning-content "scoped outline" is not implemented by any
-   *  browser or crawler, so explicit demotion is the only fix. */
-  demoteHeadings?: boolean;
+  /** Levels to demote markdown headings by (capped at h6); `0` leaves them as-is.
+   *  Body content must never out-rank the heading that owns it in the page
+   *  outline: release *cards* carry their own h2, so card bodies demote by `2`
+   *  (h1→h3); the release *detail* page's title is the page h1, so its body
+   *  demotes by `1` (h1→h2) to keep exactly one h1 per page. HTML5's
+   *  sectioning-content "scoped outline" is implemented by no browser or
+   *  crawler, so explicit demotion is the only fix. */
+  demoteHeadings?: 0 | 1 | 2;
 }
 
 const defaults: Required<MarkdownComponentOptions> = {
   imgClass: "my-2 max-h-80 object-contain",
   videoClass: "my-3 max-w-lg",
-  demoteHeadings: false,
+  demoteHeadings: 0,
 };
 
-const HEADING_DEMOTION_MAP: Record<string, "h3" | "h4" | "h5" | "h6"> = {
-  h1: "h3",
-  h2: "h4",
-  h3: "h5",
-  h4: "h6",
-  h5: "h6",
-  h6: "h6",
-};
-
-function buildHeadingDemotions(): Record<string, any> {
+function buildHeadingDemotions(by: 1 | 2): Record<string, any> {
   const demoted: Record<string, any> = {};
-  for (const [from, to] of Object.entries(HEADING_DEMOTION_MAP)) {
-    const Tag = to;
-    demoted[from] = ({ children, node: _node, ...rest }: any) => <Tag {...rest}>{children}</Tag>;
+  for (let level = 1; level <= 6; level++) {
+    const Tag = `h${Math.min(level + by, 6)}`;
+    demoted[`h${level}`] = ({ children, node: _node, ...rest }: any) => (
+      <Tag {...rest}>{children}</Tag>
+    );
   }
   return demoted;
 }
@@ -48,7 +43,7 @@ export function createMarkdownComponents(opts: MarkdownComponentOptions = {}): R
   const { imgClass, videoClass, demoteHeadings } = { ...defaults, ...opts };
 
   return {
-    ...(demoteHeadings ? buildHeadingDemotions() : {}),
+    ...(demoteHeadings ? buildHeadingDemotions(demoteHeadings) : {}),
     img: (props: any) => {
       const src = props.src as string | undefined;
       if (!isSafeImgSrc(src)) return null;
@@ -142,12 +137,16 @@ export function createMarkdownComponents(opts: MarkdownComponentOptions = {}): R
 
 /** Default components for list/card views (compact embeds). Demotes headings
  *  so the release card's own h2 stays the highest level in its subtree. */
-export const markdownComponents = createMarkdownComponents({ demoteHeadings: true });
+export const markdownComponents = createMarkdownComponents({ demoteHeadings: 2 });
 
 /** Detail page components (larger embeds). */
 export const detailMarkdownComponents = createMarkdownComponents({
   imgClass: "my-3",
   videoClass: "my-4 max-w-2xl",
+  // The detail page renders the release title as the page's single <h1>; demote
+  // body headings by one so changelog `#`/`##` headings start at h2 and don't
+  // create extra h1s.
+  demoteHeadings: 1,
 });
 
 /**
@@ -155,7 +154,7 @@ export const detailMarkdownComponents = createMarkdownComponents({
  * Used for truncated/preview views.
  */
 export const collapsedMarkdownComponents: Record<string, any> = {
-  ...createMarkdownComponents({ demoteHeadings: true }),
+  ...createMarkdownComponents({ demoteHeadings: 2 }),
   img: () => null,
   a: (props: any) => {
     const href = props.href as string | undefined;

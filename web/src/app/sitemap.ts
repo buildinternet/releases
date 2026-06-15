@@ -20,11 +20,15 @@ type StaticRoute = {
   priority: number;
 };
 
+// A sitemap should list only canonical, indexable, content-bearing URLs.
+// Deliberately excluded:
+//   - /search — `robots: index:false`; a noindex URL must not be in the sitemap.
+//   - /live — a real-time feed whose content duplicates the homepage + /updates;
+//     it carries no unique indexable value, and a `changeFrequency: "always"`
+//     entry just burns crawl budget. Still reachable in-nav, just not submitted.
 const ALWAYS_PUBLIC: StaticRoute[] = [
   { path: "/", changeFrequency: "hourly", priority: 1.0 },
   { path: "/updates", changeFrequency: "daily", priority: 0.7 },
-  { path: "/live", changeFrequency: "always", priority: 0.6 },
-  { path: "/search", changeFrequency: "weekly", priority: 0.5 },
   { path: "/categories", changeFrequency: "weekly", priority: 0.5 },
 ];
 

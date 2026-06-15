@@ -33,7 +33,9 @@ export const metadata: Metadata = {
     type: "website",
     siteName: "releases.sh",
     locale: "en_US",
-    url: "https://releases.sh",
+    // No `url` here on purpose: a hardcoded site-wide og:url leaks onto every
+    // page that doesn't set its own, so the og:url disagrees with the page's
+    // canonical. Each page sets `openGraph.url` to match its canonical instead.
   },
   twitter: {
     card: "summary_large_image",
