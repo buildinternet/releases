@@ -62,21 +62,26 @@ Skip releases with no user-facing change: dependency bumps, internal tooling / b
 Rank what to lead with and what to cut: breaking changes/deprecations > security or data-loss fixes > new user-facing capabilities > notable correctness fixes > minor improvements > internal/chore (skip). The title, summary, and first bullet all lead with the highest-impact change of the day.
 </priority_order>
 
+<weight_by_impact>
+Products do not get equal space — weight by user impact. The biggest user-facing story of the day leads and may take one or two bullets; everything else gets less. A product whose day was only routine churn — many small releases, minor fixes, version bumps with no standout — gets ONE terse bullet at most, or is dropped if a more important story needs the room. A CLI that shipped ten routine releases is NOT equal to a genuine new capability or a security fix; do not give them the same weight. When the whole day is routine (no standout across any product), say so plainly — "A maintenance day across the platform CLIs" — rather than inflating churn into a list of equal bullets.
+</weight_by_impact>
+
 <title_format>
-- A news-headline characterization of the DAY across the collection, not of one release. Prefer a theme ("Labs pile on agentic coding", "Quiet day, one SDK bump") over enumerating products or counts.
-- Sentence case. Preserve product names, proper nouns, and standard acronyms (API, CLI, SDK, MCP). Do NOT put a version number in the title.
+- A news-headline characterization of the DAY across the collection, not of one release. When two or more products ship the same KIND of change, name that theme ("Labs tighten enterprise access controls") instead of listing products ("OpenAI, Anthropic update admin settings"). When one item clearly dominates, lead the title with it. Avoid enumerating products or counts.
+- Sentence case (not Title Case). Preserve product names, proper nouns, and standard acronyms (API, CLI, SDK, MCP). Do NOT put a version number in the title.
 - Target 30-70 characters. Hard cap 90. No trailing punctuation, no quotation marks, no markdown.
 </title_format>
 
 <summary_format>
 - Exactly one sentence describing the day at a glance, leading with the most significant change. Name the substance, not the count: "Claude Code gained managed-model enforcement while Devin added Slack-triggered sessions" — NOT "Anthropic released three updates".
+- Name a CONCRETE change, never a hollow abstraction. "The AI SDK patched SSRF and replay vulnerabilities" passes; "the day focused on enhancing security and adding new capabilities" FAILS — it says nothing. If the day is genuinely routine, characterize it as such ("A maintenance day across the platform CLIs, with the AI SDK's SSRF patch the only user-facing change") rather than dressing up churn.
 - Plain factual prose. No markdown, no opening filler ("Today", "This is"), no marketing language. Do not merely restate the title.
 </summary_format>
 
 <takeaways_format>
 - Zero to five bullets. Name the product as the actor and the change as the substance: "Claude Code now restricts which models are available via managed settings". Do NOT lead with or foreground a version number — "Next.js v16.3.0-canary.51 prevents a fallback flash" should read "Next.js fixes a premature Suspense fallback flash in dev". A version may appear as a trailing aside at most, never as the subject.
 - Drop a redundant org prefix when the product name already identifies it: write "Claude Code", not "Anthropic Claude Code". Name the org only to disambiguate.
-- One product per bullet (see consolidate_by_product); one factual claim per bullet. Keep bullets tight — roughly one line (~30 words). Consolidating means leading with the most important change, not chaining every detail with "and … and". No ticket/PR numbers, no marketing intensifiers. Plain text — no markdown bullets or links (the wrapper renders the list).
+- One product per bullet (see consolidate_by_product); one factual claim per bullet. Keep bullets tight — roughly one line (~30 words). Consolidating means leading with the most important change, not chaining every detail with "and … and". Cut vague tails ("and build process changes", "and various improvements") — end on a concrete change or stop. No ticket/PR numbers, no marketing intensifiers. Plain text — no markdown bullets or links (the wrapper renders the list).
 - When several products ship the same KIND of thing, group them into one bullet ("Cursor, Windsurf, and Copilot all added background agents"). Fewer, denser bullets beat padding to five.
 - On a quiet day, do not repeat across layers: if a single release carries the day, let the title and summary state it and leave takeaways empty rather than restating it a third time.
 </takeaways_format>`;

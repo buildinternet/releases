@@ -28,6 +28,15 @@ criteria are checkable against those inputs.
 - **Summary names substance, not a count.** "Claude Code gained managed-model enforcement
   while Devin added Slack-triggered sessions" passes; "Anthropic released three updates" fails.
   The summary does not merely restate the title.
+- **No hollow abstraction.** The summary names a concrete change. "The AI SDK patched SSRF and
+  replay vulnerabilities" passes; "the day focused on enhancing security and adding new
+  capabilities" is a fail — it conveys nothing. On a genuinely routine day, an honest
+  characterization ("a maintenance day across the platform CLIs, with X the only user-facing
+  change") passes; dressing churn up as meaningful news fails.
+- **Title names the theme when one exists.** When two or more products ship the same KIND of
+  change, the title names the trend ("Labs tighten enterprise access controls") rather than
+  listing products ("OpenAI, Anthropic update admin settings"). When one item dominates, the
+  title leads with it.
 - **No redundant restatement across layers.** On a quiet day carried by a single release, the
   title and summary should state it and takeaways should be empty rather than saying the same
   fact a third time. Title + summary + one takeaway all restating one trivial release is a fail.
@@ -50,6 +59,21 @@ criteria are checkable against those inputs.
 - **Bullets stay tight.** Aim for roughly one line each (~30 words). Consolidation means leading
   with the most important changes, not concatenating every detail with "and … and". A run-on
   bullet that chains four or more distinct changes is a fail — split or trim.
+- **No vague tails.** A bullet should end on a concrete change, not trail off into "and build
+  process changes" or "and various improvements". Such a tail is a fail — trim it.
+
+## Weighting (the right things lead, by impact)
+
+- **Products are weighted by user impact, not given equal space.** The biggest user-facing story
+  of the day leads and may take one or two bullets; lesser items get less. A genuine new
+  capability or security fix and a product's routine version churn cannot occupy equal bullet
+  weight — that is a fail.
+- **Routine churn consolidates or drops.** A product whose day was only minor releases / version
+  bumps with no standout gets one terse bullet at most, or is omitted when a more important story
+  needs the room. A day of ten routine CLI releases rendered as several equal bullets is a fail.
+- **Honest about quiet days.** When no item across any product stands out, the artifact says so
+  ("a maintenance day across the platform CLIs") rather than inflating churn into a balanced
+  roundup that implies more happened than did.
 
 ## Voice (release notes, not changelog)
 
