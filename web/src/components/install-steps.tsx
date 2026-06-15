@@ -50,9 +50,9 @@ function CodeBlock({
       type="button"
       onClick={() => copy(command)}
       aria-label={copied ? "Copied" : `Copy command: ${command}`}
-      className={`${surface} w-full text-left rounded px-3 py-2 flex items-center justify-between gap-2 cursor-pointer hover:border-stone-300 dark:hover:border-stone-700 transition-colors`}
+      className={`${surface} w-full text-left rounded px-3 py-2 flex items-start justify-between gap-2 cursor-pointer hover:border-stone-300 dark:hover:border-stone-700 transition-colors`}
     >
-      <code className="text-[12px] font-mono text-stone-700 dark:text-stone-300 overflow-x-auto whitespace-nowrap pointer-events-none [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <code className="min-w-0 flex-1 text-[12px] font-mono text-stone-700 dark:text-stone-300 whitespace-pre-wrap break-words pointer-events-none">
         <CommandSyntax command={command} />
       </code>
       <span className="shrink-0 text-stone-400 dark:text-stone-500">
@@ -72,7 +72,7 @@ function CodeWithLauncher({
   variant?: "boxed" | "inline";
 }) {
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-start gap-2">
       <div className="min-w-0 flex-1">
         <CodeBlock command={command} variant={variant} />
       </div>
