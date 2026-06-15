@@ -61,14 +61,14 @@ export function InstallTabs() {
         ))}
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex items-start gap-2">
         <button
           type="button"
           onClick={() => copy(current.command)}
           aria-label={copied ? "Copied" : `Copy command: ${current.command}`}
-          className="min-w-0 flex-1 text-left bg-stone-100 dark:bg-stone-900 border border-t-0 border-stone-200 dark:border-stone-700 rounded-b-lg px-4 py-3 flex items-center justify-between gap-3 cursor-pointer hover:bg-stone-200 dark:hover:bg-stone-800/80 transition-colors"
+          className="min-w-0 flex-1 text-left bg-stone-100 dark:bg-stone-900 border border-t-0 border-stone-200 dark:border-stone-700 rounded-b-lg px-4 py-3 flex items-start justify-between gap-3 cursor-pointer hover:bg-stone-200 dark:hover:bg-stone-800/80 transition-colors"
         >
-          <code className="text-[13px] font-mono text-stone-700 dark:text-stone-300 overflow-x-auto whitespace-nowrap pointer-events-none [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <code className="min-w-0 flex-1 text-[13px] font-mono text-stone-700 dark:text-stone-300 whitespace-pre-wrap break-words pointer-events-none">
             <CommandSyntax command={current.command} />
           </code>
           <span className="shrink-0 p-1.5 text-stone-400 dark:text-stone-500">
