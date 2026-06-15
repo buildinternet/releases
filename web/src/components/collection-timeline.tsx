@@ -790,8 +790,10 @@ function ProductPostGroup({
 }) {
   return (
     <div className="rounded-lg border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 overflow-hidden">
-      <div className="flex items-center gap-2 px-5 py-3 border-b border-stone-200 dark:border-stone-800">
-        <h3 className="m-0 text-[15px] font-semibold tracking-tight text-stone-900 dark:text-stone-100">
+      {/* Tinted header band frames the product as the container so the (now
+          bolder) per-version headlines below read as its children, not siblings. */}
+      <div className="flex items-center gap-2 px-5 py-3 border-b border-stone-200 dark:border-stone-800 bg-stone-50 dark:bg-stone-900/40">
+        <h3 className="m-0 text-[13px] font-semibold uppercase tracking-wide text-stone-500 dark:text-stone-400">
           {label}
         </h3>
         <span className="text-[11px] text-stone-400 dark:text-stone-500 font-mono tabular-nums">
@@ -821,7 +823,7 @@ function PostVersionRow({ release }: { release: CollectionReleaseItem }) {
   return (
     <div className="px-5 py-4 border-t border-stone-200 dark:border-stone-800 first:border-t-0">
       <div className="flex items-baseline gap-2 flex-wrap">
-        <span className="text-[14px] font-medium tracking-tight text-stone-900 dark:text-stone-100 leading-snug">
+        <span className="text-[15px] font-semibold tracking-tight text-stone-900 dark:text-stone-100 leading-snug">
           {release.id ? (
             <Link href={`/release/${release.id}`} className="hover:underline underline-offset-2">
               {headline}
@@ -843,7 +845,7 @@ function PostVersionRow({ release }: { release: CollectionReleaseItem }) {
         <ClusterChip count={release.coverageCount} />
       </div>
       <div
-        className={`mt-2 grid gap-4 ${
+        className={`mt-2.5 grid gap-4 ${
           thumbnail ? "md:grid-cols-[minmax(0,1fr)_minmax(0,200px)]" : ""
         }`}
       >
