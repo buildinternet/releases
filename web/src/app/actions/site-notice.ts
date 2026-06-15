@@ -17,7 +17,7 @@ export async function getSiteNoticeAdminAction(): Promise<StoredSiteNotice | nul
   if ("error" in env) return null;
   try {
     const res = await fetch(`${env.apiUrl}/v1/site-notice`, {
-      headers: webApiHeaders({ Authorization: `Bearer ${env.apiSecret}` }),
+      headers: webApiHeaders({ Authorization: `Bearer ${env.bearer}` }),
       cache: "no-store",
     });
     if (!res.ok) return null;
@@ -39,7 +39,7 @@ export async function setSiteNoticeAction(notice: SiteNotice): Promise<ActionRes
       method: "PUT",
       headers: webApiHeaders({
         "Content-Type": "application/json",
-        Authorization: `Bearer ${env.apiSecret}`,
+        Authorization: `Bearer ${env.bearer}`,
       }),
       body: JSON.stringify(notice),
       cache: "no-store",

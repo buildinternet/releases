@@ -20,7 +20,7 @@ export async function setOrgHiddenAction(input: {
       method: "PATCH",
       headers: webApiHeaders({
         "Content-Type": "application/json",
-        Authorization: `Bearer ${env.apiSecret}`,
+        Authorization: `Bearer ${env.bearer}`,
       }),
       body: JSON.stringify({ isHidden: input.hidden }),
       cache: "no-store",
@@ -53,7 +53,7 @@ export async function setOrgAutoGenerateContentAction(input: {
       method: "PATCH",
       headers: webApiHeaders({
         "Content-Type": "application/json",
-        Authorization: `Bearer ${env.apiSecret}`,
+        Authorization: `Bearer ${env.bearer}`,
       }),
       body: JSON.stringify({ autoGenerateContent: input.enabled }),
       cache: "no-store",
@@ -85,7 +85,7 @@ export async function setOrgFeaturedAction(input: {
       method: "PATCH",
       headers: webApiHeaders({
         "Content-Type": "application/json",
-        Authorization: `Bearer ${env.apiSecret}`,
+        Authorization: `Bearer ${env.bearer}`,
       }),
       body: JSON.stringify({ featured: input.featured }),
       cache: "no-store",
@@ -123,7 +123,7 @@ export async function setOrgNoticeAction(input: {
       method: "PATCH",
       headers: webApiHeaders({
         "Content-Type": "application/json",
-        Authorization: `Bearer ${env.apiSecret}`,
+        Authorization: `Bearer ${env.bearer}`,
       }),
       body: JSON.stringify({ notice: input.notice }),
       cache: "no-store",
@@ -159,7 +159,7 @@ export async function renameOrgAction(input: {
       method: "PATCH",
       headers: webApiHeaders({
         "Content-Type": "application/json",
-        Authorization: `Bearer ${env.apiSecret}`,
+        Authorization: `Bearer ${env.bearer}`,
       }),
       body: JSON.stringify({ name: input.name }),
       cache: "no-store",

@@ -8,7 +8,7 @@ import { GITHUB_REPO_URL, visibleNavItems } from "./nav-items";
 import { isLocalAdminEnabled } from "@/lib/local-admin-flag";
 
 export function Header() {
-  const adminEnabled = isLocalAdminEnabled();
+  const devAdmin = isLocalAdminEnabled();
   // Local dev gets a loud orange "DEV" badge so the environment is unmistakable
   // at a glance; deployed preview/prod keep the subtle gray "preview" chip.
   const isLocalDev = process.env.NODE_ENV === "development";
@@ -62,7 +62,7 @@ export function Header() {
         <SearchBar className="hidden lg:block w-full max-w-[420px]" autoFocus={false} />
         <SearchTrigger className="hidden sm:flex lg:hidden w-fit" />
       </div>
-      <MobileNav adminEnabled={adminEnabled} />
+      <MobileNav devAdmin={devAdmin} />
       <nav className="hidden sm:flex shrink-0 items-center gap-5 text-sm text-stone-500 dark:text-stone-400">
         {visibleNavItems().map((item) => (
           <Link
@@ -85,7 +85,7 @@ export function Header() {
           </svg>
         </a>
         <ThemeToggle />
-        <AccountNav adminEnabled={adminEnabled} />
+        <AccountNav devAdmin={devAdmin} />
       </nav>
     </header>
   );

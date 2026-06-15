@@ -28,7 +28,7 @@ export async function setProductNoticeAction(input: {
       method: "PATCH",
       headers: webApiHeaders({
         "Content-Type": "application/json",
-        Authorization: `Bearer ${env.apiSecret}`,
+        Authorization: `Bearer ${env.bearer}`,
       }),
       body: JSON.stringify({ notice: input.notice }),
       cache: "no-store",
@@ -66,7 +66,7 @@ export async function renameProductAction(input: {
       method: "PATCH",
       headers: webApiHeaders({
         "Content-Type": "application/json",
-        Authorization: `Bearer ${env.apiSecret}`,
+        Authorization: `Bearer ${env.bearer}`,
       }),
       body: JSON.stringify({ name: input.name }),
       cache: "no-store",

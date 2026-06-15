@@ -25,7 +25,7 @@ export async function setCollectionFeaturedAction(input: {
       method: "PATCH",
       headers: webApiHeaders({
         "Content-Type": "application/json",
-        Authorization: `Bearer ${env.apiSecret}`,
+        Authorization: `Bearer ${env.bearer}`,
       }),
       body: JSON.stringify({ isFeatured: input.featured }),
       cache: "no-store",

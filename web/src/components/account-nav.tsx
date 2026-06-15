@@ -23,13 +23,14 @@ type Variant = "desktop" | "mobile";
 
 export function AccountNav({
   variant = "desktop",
-  adminEnabled = false,
+  devAdmin = false,
 }: {
   variant?: Variant;
-  adminEnabled?: boolean;
+  /** Server-evaluated local-dev admin override; OR'd with the session role. */
+  devAdmin?: boolean;
 }) {
   if (!AUTH_ENABLED) return null;
-  return <AccountNavInner variant={variant} adminEnabled={adminEnabled} />;
+  return <AccountNavInner variant={variant} devAdmin={devAdmin} />;
 }
 
 function initialOf(name: string | undefined, email: string): string {
@@ -74,7 +75,7 @@ function UserAvatar({
   return <span aria-hidden="true">{initialOf(user.name ?? undefined, user.email)}</span>;
 }
 
-function AccountNavInner({ variant, adminEnabled }: { variant: Variant; adminEnabled: boolean }) {
+function AccountNavInner({ variant, devAdmin }: { variant: Variant; devAdmin: boolean }) {
   const router = useRouter();
   const { data, isPending } = useSession();
   const [open, setOpen] = useState(false);
@@ -109,7 +110,7 @@ function AccountNavInner({ variant, adminEnabled }: { variant: Variant; adminEna
 
   const user = data?.user;
   const role = (user as { role?: string } | undefined)?.role ?? null;
-  const showAdmin = computeIsAdmin(role, adminEnabled);
+  const showAdmin = computeIsAdmin(role, devAdmin);
 
   if (variant === "mobile") {
     if (!user) {
