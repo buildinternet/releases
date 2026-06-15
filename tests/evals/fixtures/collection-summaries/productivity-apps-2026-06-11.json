@@ -1,0 +1,38 @@
+{
+  "input": {
+    "collectionName": "Productivity Apps",
+    "date": "2026-06-11",
+    "releases": [
+      {
+        "org": "Figma",
+        "product": "Figma",
+        "title": "Figma Community profiles redesigned for better showcase",
+        "summary": "Figma Community profiles have been redesigned to better showcase your work, process, and identity."
+      },
+      {
+        "org": "Linear",
+        "product": "Linear",
+        "title": "Linear 2026.18 enables coding sessions with Linear Agent",
+        "summary": "Linear Agent can now write code using Claude Code and Codex, enabling users to triage, plan, review, and ship within Linear. This feature allows cloud-based coding sessions that pull in workspace context, and enables automation for investigating and fixing new issues. Dozens of bug fixes are also included across agents, diffs, editor, and more."
+      },
+      {
+        "org": "Slack",
+        "product": "Node SDK",
+        "title": "@slack/web-api@7.17.0",
+        "summary": null
+      },
+      {
+        "org": "Slack",
+        "product": "Node SDK",
+        "title": "@slack/cli-hooks@1.3.3",
+        "summary": null
+      },
+      {
+        "org": "Slack",
+        "product": "Node SDK",
+        "title": "@slack/cli-test@4.0.0",
+        "summary": null
+      }
+    ]
+  }
+}

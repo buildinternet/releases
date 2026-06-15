@@ -1,0 +1,32 @@
+{
+  "input": {
+    "collectionName": "Coding Agents",
+    "date": "2026-06-12",
+    "releases": [
+      {
+        "org": "Cognition",
+        "product": "Devin",
+        "title": "Devin June 12, 2026 adds session folders and !ultra Slack command",
+        "summary": "Session Folders allow grouping sessions into named folders in the sidebar, and users can now start Devin Ultra sessions directly from Slack with the `!ultra` command, or switch between Ultra and Fast modes mid-session. Devin now adds emoji reactions only to explicit sleep or archive commands, and markdown files created during a session render with a preview toggle. Enterprise admins can also enable/disable web search, and the \"Users\" tab has been renamed to \"Members\"."
+      },
+      {
+        "org": "Anthropic",
+        "product": "Claude Code",
+        "title": "v2.1.177",
+        "summary": null
+      },
+      {
+        "org": "Anthropic",
+        "product": "Claude Code",
+        "title": "Claude Code v2.1.176 generates session titles in conversation language and improves Bedrock credential caching",
+        "summary": "Session titles are now generated in the language of your conversation, with an option to pin a specific language. Bedrock credential caching has been improved to cache credentials until their expiration instead of a fixed hour. Fixed multiple issues across session stability, Remote Control functionality, background sessions, and tool path matching."
+      },
+      {
+        "org": "Anthropic",
+        "product": "Claude Code",
+        "title": "Claude Code v2.1.175 enforces available models in managed settings",
+        "summary": "The new `enforceAvailableModels` managed setting constrains the default model according to the `availableModels` allowlist. When enabled, a default model that would resolve to a disallowed model falls back to the first allowed model, and user or project settings cannot override a managed `availableModels` list."
+      }
+    ]
+  }
+}

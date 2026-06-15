@@ -1,0 +1,140 @@
+{
+  "input": {
+    "collectionName": "Auth & Identity",
+    "date": "2026-06-11",
+    "releases": [
+      {
+        "org": "Better Auth",
+        "product": "better-auth",
+        "title": "better-auth v1.6.17 adds experimental oauthPopup plugin and hardens replay protection",
+        "summary": "An experimental oauthPopup plugin was added for popup-based OAuth sign-in, enabling sign-in inside cross-site iframes. Dozens of race conditions and replay vulnerabilities were fixed across various authentication flows, including email OTP, password resets, and API key verification, to ensure atomicity under concurrent requests."
+      },
+      {
+        "org": "Clerk",
+        "product": "Clerk Changelog",
+        "title": "Clerk adds multi-value mapping for SAML custom attributes",
+        "summary": "SAML custom attributes can now map every value an identity provider sends into an array on publicMetadata, instead of keeping only the first. This feature is off by default, and existing custom attributes remain unchanged."
+      },
+      {
+        "org": "Supabase",
+        "product": "Auth",
+        "title": "Supabase Auth rc2.190.0-rc.27 checksum release",
+        "summary": null
+      },
+      {
+        "org": "Clerk",
+        "product": "JavaScript SDK",
+        "title": "Clerk Express v2.1.26 dependency update",
+        "summary": null
+      },
+      {
+        "org": "Clerk",
+        "product": "JavaScript SDK",
+        "title": "Clerk JavaScript SDK @clerk/nextjs@7.5.2 dependency update",
+        "summary": null
+      },
+      {
+        "org": "Clerk",
+        "product": "JavaScript SDK",
+        "title": "Clerk JS SDK @clerk/shared@4.17.1 deprecates unsafeMetadata in user.update()",
+        "summary": "The `unsafeMetadata` parameter is deprecated when passed to `user.update()`. Use `user.updateMetadata()` for partial updates with deep-merge semantics, or continue using `user.update()` for full-replacement behavior. TypeScript declarations have been restored per-module for improved type resolution."
+      },
+      {
+        "org": "Clerk",
+        "product": "JavaScript SDK",
+        "title": "Clerk JS SDK @clerk/astro@3.4.2 internal tooling update",
+        "summary": null
+      },
+      {
+        "org": "Clerk",
+        "product": "JavaScript SDK",
+        "title": "Clerk JavaScript SDK @clerk/testing@2.1.1 patch change",
+        "summary": null
+      },
+      {
+        "org": "Clerk",
+        "product": "JavaScript SDK",
+        "title": "Clerk React Router @clerk/react-router@3.4.2 dependency update",
+        "summary": null
+      },
+      {
+        "org": "Clerk",
+        "product": "JavaScript SDK",
+        "title": "Clerk Fastify SDK @clerk/fastify@3.1.36 dependency update",
+        "summary": null
+      },
+      {
+        "org": "Clerk",
+        "product": "JavaScript SDK",
+        "title": "Clerk JavaScript SDK @clerk/backend@3.7.0 adds organization and user metadata replacement",
+        "summary": "Added `replaceOrganizationMetadata` for full replacement of organization metadata and `replaceUserMetadata` for full replacement of user metadata. The `updateOrganizationMetadata` and `updateUserMetadata` methods provide partial updates via deep-merge semantics, while older parameters on `updateOrganization()` and `updateUser()` are now deprecated."
+      },
+      {
+        "org": "Clerk",
+        "product": "JavaScript SDK",
+        "title": "Clerk JavaScript SDK @clerk/expo-passkeys@1.1.4 dependency update",
+        "summary": null
+      },
+      {
+        "org": "Clerk",
+        "product": "JavaScript SDK",
+        "title": "Clerk Expo SDK @clerk/expo@3.4.2 updates clerk-ios and build pipeline",
+        "summary": "The bundled clerk-ios SDK has been updated from 1.2.1 to 1.2.2. The build pipeline was migrated to tsdown and TypeScript 6.0, an internal tooling change with no intended runtime behavior changes."
+      },
+      {
+        "org": "Clerk",
+        "product": "JavaScript SDK",
+        "title": "Clerk Nuxt SDK @clerk/nuxt@2.6.2 dependency update",
+        "summary": null
+      },
+      {
+        "org": "Clerk",
+        "product": "JavaScript SDK",
+        "title": "Clerk JavaScript SDK @clerk/chrome-extension@3.1.35 dependency update",
+        "summary": null
+      },
+      {
+        "org": "Clerk",
+        "product": "JavaScript SDK",
+        "title": "Clerk JavaScript SDK @clerk/hono@0.1.36 internal release",
+        "summary": null
+      },
+      {
+        "org": "Clerk",
+        "product": "JavaScript SDK",
+        "title": "Clerk JavaScript SDK @clerk/react@6.9.1 dependency update",
+        "summary": null
+      },
+      {
+        "org": "Clerk",
+        "product": "JavaScript SDK",
+        "title": "Clerk JavaScript SDK @clerk/tanstack-react-start@1.4.2 dependency update",
+        "summary": null
+      },
+      {
+        "org": "Clerk",
+        "product": "JavaScript SDK",
+        "title": "Clerk UI SDK @clerk/ui@1.16.1 fixes checkout button label",
+        "summary": "Fixed the checkout button label from showing \"Start free trial\" when adding seats during a free trial period. The build pipeline was internally migrated to tsdown and TypeScript 6.0."
+      },
+      {
+        "org": "Clerk",
+        "product": "JavaScript SDK",
+        "title": "Clerk JavaScript SDK @clerk/vue@2.4.2 dependency update",
+        "summary": null
+      },
+      {
+        "org": "Clerk",
+        "product": "JavaScript SDK",
+        "title": "Clerk JavaScript SDK @clerk/localizations@4.8.1 internal release",
+        "summary": null
+      },
+      {
+        "org": "Clerk",
+        "product": "JavaScript SDK",
+        "title": "Clerk JavaScript SDK @clerk/clerk-js@6.16.1 deprecates unsafeMetadata in user.update()",
+        "summary": "The `unsafeMetadata` parameter is deprecated in `user.update()`. Use `user.updateMetadata()` for partial updates with deep-merge semantics. A build pipeline migration to tsdown and TypeScript 6.0 is also included."
+      }
+    ]
+  }
+}

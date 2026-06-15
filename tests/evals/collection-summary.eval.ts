@@ -7,10 +7,10 @@
  * Never part of `bun test`. Each run costs roughly one Haiku call per fixture.
  * Results are persisted to ~/.releases/evals/results/collection-summary-*.json.
  */
+import { readFileSync } from "fs";
 import Anthropic from "@anthropic-ai/sdk";
 import {
   summarizeCollectionDay,
-  type CollectionDayInput,
   type CollectionSummaryResult,
 } from "@releases/ai-internal/collection-summary";
 // Anthropic baseline = the shared summarization model (the collection daily-summary
@@ -18,80 +18,22 @@ import {
 import { MODEL as COLLECTION_MODEL } from "@releases/ai-internal/release-content";
 import type { TextModel } from "@releases/ai-internal/text-model";
 import { buildGraderPrompt } from "@releases/ai-internal/grader-prompt";
+import {
+  loadCollectionSummaryFixtures,
+  collectionSummaryRubricPath,
+  type CollectionFixture,
+} from "./collection-summary-fixtures";
 import { OVERVIEW_BANNED_WORDS } from "./graders";
 import type { FieldResult } from "./helpers";
 import { resolveEvalModel, resolveJudgeModel, runJudge } from "./judge-model";
 import { saveRun } from "./results";
 
-// ── Inline fixtures ────────────────────────────────────────────────────────
+// ── Fixtures ─────────────────────────────────────────────────────────────────
+//
+// Real day-windows captured from the prod backfill, one JSON file per fixture
+// under fixtures/collection-summaries/. See collection-summary-fixtures.ts.
 
-interface CollectionFixture {
-  name: string;
-  input: CollectionDayInput;
-}
-
-const FIXTURES: CollectionFixture[] = [
-  {
-    name: "busy-day-coding-agents",
-    input: {
-      collectionName: "Coding Agents",
-      date: "2025-10-14",
-      releases: [
-        {
-          org: "Anthropic",
-          product: "Claude",
-          title: "Claude 3.7 Sonnet — extended thinking and tool use improvements",
-          summary:
-            "Deeper reasoning mode with configurable thinking budgets and faster parallel tool use.",
-        },
-        {
-          org: "Cursor",
-          product: null,
-          title: "Cursor 0.42: background agents and terminal integration",
-          summary:
-            "Long-running background agents can now run shell commands and watch test output while you keep editing.",
-        },
-        {
-          org: "OpenAI",
-          product: "Codex CLI",
-          title: "Codex CLI 1.4 — multi-file diffs and auto-apply",
-          summary:
-            "The CLI now proposes multi-file diffs and applies them with a single keypress, skipping the copy-paste loop.",
-        },
-        {
-          org: "GitHub",
-          product: "Copilot",
-          title: "Copilot Workspace: shareable task snapshots",
-          summary:
-            "Workspace sessions can be exported and shared as a URL so teammates can inspect or resume planning sessions.",
-        },
-        {
-          org: "Codeium",
-          product: "Windsurf",
-          title: "Windsurf Editor 1.9 — Cascade memory and project indexing",
-          summary:
-            "Cascade retains context across sessions using a project index, cutting repeated context injections.",
-        },
-      ],
-    },
-  },
-  {
-    name: "quiet-day-single-sdk-bump",
-    input: {
-      collectionName: "Coding Agents",
-      date: "2025-10-22",
-      releases: [
-        {
-          org: "Anthropic",
-          product: null,
-          title: "anthropic-sdk-python 0.39.1 — deprecation warnings for legacy params",
-          summary:
-            "Adds runtime deprecation notices for the old stop_sequences API before it is removed in 0.40.",
-        },
-      ],
-    },
-  },
-];
+const FIXTURES: CollectionFixture[] = loadCollectionSummaryFixtures();
 
 // ── Inline structural grader ───────────────────────────────────────────────
 //
@@ -213,12 +155,10 @@ function gradeCollectionSummary(result: CollectionSummaryResult): {
 
 // ── Judge helper ───────────────────────────────────────────────────────────
 
-const COLLECTION_JUDGE_RUBRIC = `
-- The title and summary must be supported by the listed releases; no invented products or releases.
-- No marketing language or adjectives not supported by the source data.
-- The title characterizes the day as a whole; the summary adds a sentence of context.
-- Each takeaway must reference only orgs/products present in the provided releases list.
-`.trim();
+// Wired to the rubric FILE (src/shared/rubrics/collection-summary.md), the same
+// pattern overview.eval.ts uses — the rubric is the single source of truth for
+// what "good" means, shared by grader and the production prompt's intent.
+const COLLECTION_JUDGE_RUBRIC = readFileSync(collectionSummaryRubricPath(), "utf8");
 
 async function judgeFixture(
   model: TextModel,
@@ -246,10 +186,12 @@ async function judgeFixture(
   const prompt = buildGraderPrompt({
     rubric: COLLECTION_JUDGE_RUBRIC,
     artifact,
-    rubricLabel: "collection-summary",
+    rubricLabel: "collection-summary.md",
   });
 
-  return runJudge(model, prompt, 2048);
+  // The rubric carries ~20 criteria, each wanting an evidence quote, so give the
+  // judge room to emit the full per-criterion JSON without truncating.
+  return runJudge(model, prompt, 4096);
 }
 
 // ── Main ───────────────────────────────────────────────────────────────────
