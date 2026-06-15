@@ -4,7 +4,18 @@ import { buildReleaseEventPayloads } from "../../workers/api/src/events/build-ev
 describe("buildReleaseEventPayloads", () => {
   it("maps inserted rows + source context to the wire shape", () => {
     const events = buildReleaseEventPayloads({
-      src: { name: "Claude Code", slug: "claude-code" },
+      src: {
+        name: "Claude Code",
+        slug: "claude-code",
+        type: "github",
+        org: {
+          slug: "anthropic",
+          name: "Anthropic",
+          avatarUrl: "https://media.releases.sh/orgs/anthropic.png",
+          githubHandle: "anthropics",
+        },
+        product: { slug: "claude-code", name: "Claude Code" },
+      },
       inserted: [
         {
           id: "rel_a",
@@ -31,6 +42,14 @@ describe("buildReleaseEventPayloads", () => {
       publishedAt: "2026-04-18T10:00:00Z",
       sourceName: "Claude Code",
       sourceSlug: "claude-code",
+      sourceType: "github",
+      org: {
+        slug: "anthropic",
+        name: "Anthropic",
+        avatarUrl: "https://media.releases.sh/orgs/anthropic.png",
+        githubHandle: "anthropics",
+      },
+      product: { slug: "claude-code", name: "Claude Code" },
       summary: null,
       titleGenerated: null,
       titleShort: null,
@@ -40,6 +59,16 @@ describe("buildReleaseEventPayloads", () => {
     });
     expect(events[1].media).toEqual([]);
     expect(events[1].version).toBeNull();
+  });
+
+  it("yields null org/product and undefined sourceType when source context is absent", () => {
+    const events = buildReleaseEventPayloads({
+      src: { name: "Orphan", slug: "orphan" },
+      inserted: [{ id: "r", title: "t", version: null, publishedAt: null, media: null }],
+    });
+    expect(events[0].org).toBeNull();
+    expect(events[0].product).toBeNull();
+    expect(events[0].sourceType).toBeUndefined();
   });
 
   it("silently yields empty media when the JSON blob is malformed", () => {
