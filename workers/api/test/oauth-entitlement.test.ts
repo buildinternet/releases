@@ -289,3 +289,36 @@ describe("absolute consent/login redirect origin", () => {
     expect(provider?.options?.consentPage).toBe("https://releases.localhost/oauth/consent");
   });
 });
+
+describe("jwt plugin resource-server config", () => {
+  it("pins issuer/audience to the API verifier's expectations and clamps the payload", async () => {
+    const auth = await createAuth(wiringEnv, undefined, {
+      db: createTestDb(),
+      sendEmail: () => {},
+    });
+    const jwtPlugin = (auth.options.plugins ?? []).find((p: { id: string }) => p.id === "jwt") as
+      | {
+          options?: {
+            disableSettingJwtHeader?: boolean;
+            jwt?: {
+              issuer?: string;
+              audience?: string;
+              definePayload?: (info: { user: { role?: string | null } }) => unknown;
+            };
+          };
+        }
+      | undefined;
+    expect(jwtPlugin).toBeDefined();
+    expect(jwtPlugin?.options?.jwt?.issuer).toBe("https://api.releases.localhost/api/auth");
+    expect(jwtPlugin?.options?.jwt?.audience).toBe("https://api.releases.localhost");
+    expect(jwtPlugin?.options?.disableSettingJwtHeader).toBe(true);
+    expect(jwtPlugin?.options?.jwt?.definePayload?.({ user: { role: "admin" } })).toEqual({
+      scope: "openid profile email offline_access read write admin",
+      "https://releases.sh/role": "admin",
+    });
+    expect(jwtPlugin?.options?.jwt?.definePayload?.({ user: { role: "user" } })).toEqual({
+      scope: "openid profile email offline_access read",
+      "https://releases.sh/role": "user",
+    });
+  });
+});
