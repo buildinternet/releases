@@ -15,7 +15,7 @@ export async function setCollectionFeaturedAction(input: {
   slug: string;
   featured: boolean;
 }): Promise<ActionResult> {
-  const env = adminActionEnv();
+  const env = await adminActionEnv();
   if ("error" in env) return { ok: false, error: env.error };
 
   let res: Response;

@@ -1,20 +1,57 @@
 import "server-only";
+import { cookies } from "next/headers";
 import { isLocalAdminEnabled } from "@/lib/local-admin-flag";
+import { webApiHeaders } from "@/lib/api";
 import { apiBaseUrl, serverApiKey } from "./env";
 
 /**
- * Resolve the API base URL + admin secret for a dev-local admin server action,
- * or return an error when the local-admin gate is closed or the key is unset.
- * Shared by the org/release admin actions so the gate + env resolution lives
- * in one place. Re-checks the gate here as defense-in-depth — a stray
- * invocation in production cannot mutate state.
+ * Resolve `{ apiUrl, apiSecret }` for an admin server action, where `apiSecret`
+ * is a Bearer credential the admin API accepts:
+ *
+ *  - **Local dev** (`isLocalAdminEnabled()`): the root `RELEASES_API_KEY`, as before.
+ *  - **Production**: a short-lived, per-user JWT minted from the CALLER's Better
+ *    Auth session via `GET /api/auth/token`. Its scope is role-clamped at
+ *    issuance, so the API authorizes the operation at the caller's role — a
+ *    non-admin's token carries `read` only and admin routes 403. No shared
+ *    admin secret sits on the web server; the only credential is the user's own.
+ *
+ * (Field name `apiSecret` is kept so the many `Bearer ${env.apiSecret}` call
+ * sites are unchanged; it holds the root key in dev and the user JWT in prod.)
  */
-export function adminActionEnv(): { apiUrl: string; apiSecret: string } | { error: string } {
-  if (!isLocalAdminEnabled()) {
-    return { error: "Admin actions are disabled in this environment." };
-  }
+export async function adminActionEnv(): Promise<
+  { apiUrl: string; apiSecret: string } | { error: string }
+> {
   const apiUrl = apiBaseUrl() ?? "http://localhost:3456";
-  const apiSecret = serverApiKey();
-  if (!apiSecret) return { error: "RELEASES_API_KEY (or legacy RELEASED_API_KEY) not configured." };
-  return { apiUrl, apiSecret };
+
+  if (isLocalAdminEnabled()) {
+    const apiSecret = serverApiKey();
+    if (!apiSecret)
+      return { error: "RELEASES_API_KEY (or legacy RELEASED_API_KEY) not configured." };
+    return { apiUrl, apiSecret };
+  }
+
+  const jwt = await mintUserJwt(apiUrl);
+  if (!jwt) return { error: "Admin actions require an admin session." };
+  return { apiUrl, apiSecret: jwt };
+}
+
+/**
+ * Mint the caller's session JWT from `GET /api/auth/token`, forwarding the
+ * incoming `.releases.sh` session cookie. Returns null when there is no session
+ * (anonymous caller) or the request fails — the caller then surfaces an error.
+ */
+async function mintUserJwt(apiUrl: string): Promise<string | null> {
+  const cookie = (await cookies()).toString();
+  if (!cookie) return null;
+  try {
+    const res = await fetch(`${apiUrl}/api/auth/token`, {
+      headers: webApiHeaders({ Cookie: cookie }),
+      cache: "no-store",
+    });
+    if (!res.ok) return null;
+    const body = (await res.json()) as { token?: string };
+    return body.token ?? null;
+  } catch {
+    return null;
+  }
 }

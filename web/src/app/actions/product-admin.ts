@@ -18,7 +18,7 @@ export async function setProductNoticeAction(input: {
   productSlug: string;
   notice: Notice | null;
 }): Promise<ActionResult> {
-  const env = adminActionEnv();
+  const env = await adminActionEnv();
   if ("error" in env) return { ok: false, error: env.error };
 
   const path = `/v1/orgs/${encodeURIComponent(input.orgSlug)}/products/${encodeURIComponent(input.productSlug)}`;
@@ -56,7 +56,7 @@ export async function renameProductAction(input: {
   productSlug: string;
   name: string;
 }): Promise<ActionResult> {
-  const env = adminActionEnv();
+  const env = await adminActionEnv();
   if ("error" in env) return { ok: false, error: env.error };
 
   const path = `/v1/orgs/${encodeURIComponent(input.orgSlug)}/products/${encodeURIComponent(input.productSlug)}`;

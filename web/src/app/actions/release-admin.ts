@@ -11,7 +11,7 @@ export async function suppressReleaseAction(input: {
   reason?: string;
   redirectTo?: string;
 }): Promise<ActionResult> {
-  const env = adminActionEnv();
+  const env = await adminActionEnv();
   if ("error" in env) return { ok: false, error: env.error };
 
   let res: Response;
@@ -43,7 +43,7 @@ export async function deleteReleaseAction(input: {
   id: string;
   redirectTo?: string;
 }): Promise<ActionResult> {
-  const env = adminActionEnv();
+  const env = await adminActionEnv();
   if ("error" in env) return { ok: false, error: env.error };
 
   let res: Response;

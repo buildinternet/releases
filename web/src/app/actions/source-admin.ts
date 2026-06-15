@@ -19,7 +19,7 @@ export async function setSourceNoticeAction(input: {
   sourceSlug: string;
   notice: Notice | null;
 }): Promise<ActionResult> {
-  const env = adminActionEnv();
+  const env = await adminActionEnv();
   if ("error" in env) return { ok: false, error: env.error };
 
   const path = `/v1/orgs/${encodeURIComponent(input.orgSlug)}/sources/${encodeURIComponent(input.sourceSlug)}`;
@@ -57,7 +57,7 @@ export async function setSourceMetadataAction(input: {
   sourceSlug: string;
   patch: Record<string, unknown>;
 }): Promise<ActionResult> {
-  const env = adminActionEnv();
+  const env = await adminActionEnv();
   if ("error" in env) return { ok: false, error: env.error };
 
   const path = `/v1/orgs/${encodeURIComponent(input.orgSlug)}/sources/${encodeURIComponent(input.sourceSlug)}/metadata`;
@@ -93,7 +93,7 @@ export async function promoteSourceAction(input: {
   orgSlug: string;
   sourceSlug: string;
 }): Promise<ActionResult> {
-  const env = adminActionEnv();
+  const env = await adminActionEnv();
   if ("error" in env) return { ok: false, error: env.error };
 
   const path = `/v1/orgs/${encodeURIComponent(input.orgSlug)}/sources/${encodeURIComponent(input.sourceSlug)}`;
@@ -132,7 +132,7 @@ export async function renameSourceAction(input: {
   sourceSlug: string;
   name: string;
 }): Promise<ActionResult> {
-  const env = adminActionEnv();
+  const env = await adminActionEnv();
   if ("error" in env) return { ok: false, error: env.error };
 
   const path = `/v1/orgs/${encodeURIComponent(input.orgSlug)}/sources/${encodeURIComponent(input.sourceSlug)}`;
@@ -171,7 +171,7 @@ export async function setFetchPriorityAction(input: {
   sourceSlug: string;
   priority: "normal" | "low" | "paused";
 }): Promise<ActionResult> {
-  const env = adminActionEnv();
+  const env = await adminActionEnv();
   if ("error" in env) return { ok: false, error: env.error };
 
   const path = `/v1/orgs/${encodeURIComponent(input.orgSlug)}/sources/${encodeURIComponent(input.sourceSlug)}`;
@@ -212,7 +212,7 @@ export async function syncFirecrawlAction(input: {
   enabled: boolean;
   schedule?: string;
 }): Promise<ActionResult> {
-  const env = adminActionEnv();
+  const env = await adminActionEnv();
   if ("error" in env) return { ok: false, error: env.error };
 
   const path = `/v1/sources/${encodeURIComponent(input.sourceId)}/firecrawl/sync`;

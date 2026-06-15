@@ -13,7 +13,7 @@ type ActionResult = { ok: true } | { ok: false; error: string };
  * or the gate is closed.
  */
 export async function getSiteNoticeAdminAction(): Promise<StoredSiteNotice | null> {
-  const env = adminActionEnv();
+  const env = await adminActionEnv();
   if ("error" in env) return null;
   try {
     const res = await fetch(`${env.apiUrl}/v1/site-notice`, {
@@ -30,7 +30,7 @@ export async function getSiteNoticeAdminAction(): Promise<StoredSiteNotice | nul
 
 /** Publish/update the site notice via PUT /v1/site-notice (admin Bearer). */
 export async function setSiteNoticeAction(notice: SiteNotice): Promise<ActionResult> {
-  const env = adminActionEnv();
+  const env = await adminActionEnv();
   if ("error" in env) return { ok: false, error: env.error };
 
   let res: Response;
