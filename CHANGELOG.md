@@ -3,6 +3,21 @@
 The product changelog for releases.sh, published to its own registry. Drafted daily from merged
 PRs and reviewed via PR. See docs/changelog-style.md for the voice and curation rules.
 
+## June 14, 2026
+
+**Added**
+- Collection daily summaries — AI-generated headline, one-line summary, and bullet takeaways now appear as a date header above each day's releases on collection pages.
+- Account settings now let you change your email address (a confirmation link goes to your current address) and connect or disconnect linked social sign-in accounts.
+
+**Changed**
+- Collection timeline rebuilt: same-product releases in a day collapse into a single grouped card; release cards lead with descriptive AI titles instead of raw version strings; "Show more" appears only when content actually overflows.
+
+**Fixed**
+- RSS feeds that deliver raw markdown in `content:encoded` now parse correctly — headings, code spans, and links are preserved instead of being backslash-escaped into plain text.
+- Release pages with no content now show a placeholder instead of a blank body.
+- Long CLI and MCP install commands now wrap instead of clipping in the copy-to-clipboard inputs.
+- The sign-in form on incompatible origins (e.g., preview-deploy URLs) now explains why authentication won't work and links to the canonical site.
+
 ## June 13, 2026
 
 **Added**
