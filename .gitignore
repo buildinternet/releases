@@ -77,3 +77,6 @@ npm/.npmrc
 
 # drizzle-kit generate output — scaffold only, source of truth is workers/api/migrations/
 .drizzle-out/
+
+# Impeccable copy-edit tooling caches — session-local, never committed.
+.impeccable/

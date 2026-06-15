@@ -15,6 +15,7 @@ import { PlatformBadge } from "@/components/platform-badge";
 import { getAppInfo } from "@/lib/app-source";
 import { StateBadge, getHiddenStateBadge } from "@/components/source-table";
 import { SourceAdminMenu } from "@/components/source-admin-menu";
+import { AdminOnly } from "@/components/admin-only";
 import { isLocalAdminEnabled } from "@/lib/local-admin-flag";
 import { SourceTimeline } from "@/components/source-timeline";
 import { CliCommand } from "@/components/cli-command";
@@ -89,7 +90,7 @@ export default async function OrgSlugLayout({
   ];
 
   const hiddenBadge = getHiddenStateBadge(source);
-  const adminEnabled = isLocalAdminEnabled();
+  const devAdmin = isLocalAdminEnabled();
   const sourceMeta = (() => {
     try {
       return JSON.parse(source.metadata || "{}") as {
@@ -128,7 +129,7 @@ export default async function OrgSlugLayout({
           <SourceTypeIcon type={source.type} size={18} />
           {appInfo && <PlatformBadge label={appInfo.label} />}
           {hiddenBadge && <StateBadge label={hiddenBadge.label} title={hiddenBadge.title} />}
-          {adminEnabled && (
+          <AdminOnly devAdmin={devAdmin}>
             <SourceAdminMenu
               orgSlug={source.org?.slug ?? orgSlug}
               sourceSlug={source.slug}
@@ -140,7 +141,7 @@ export default async function OrgSlugLayout({
               isHidden={source.isHidden ?? false}
               notice={source.notice}
             />
-          )}
+          </AdminOnly>
         </div>
         <CliCommand identifier={source.slug} />
         <EntityNotice notice={source.notice} />

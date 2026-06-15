@@ -14,6 +14,7 @@ import { JsonLd } from "@/components/json-ld";
 import { SetupMessage } from "@/components/setup-message";
 import { CollectionTimeline } from "@/components/collection-timeline";
 import { CollectionAdminMenu } from "@/components/collection-admin-menu";
+import { AdminOnly } from "@/components/admin-only";
 import { isLocalAdminEnabled } from "@/lib/local-admin-flag";
 import { buildFeedPageJsonLd } from "@/lib/schema-org";
 
@@ -109,11 +110,11 @@ export default async function CollectionPage({ params }: { params: Promise<{ slu
             {detail.description}
           </p>
         )}
-        {isLocalAdminEnabled() && (
+        <AdminOnly devAdmin={isLocalAdminEnabled()}>
           <div className="mt-3">
             <CollectionAdminMenu slug={slug} isFeatured={detail.isFeatured} />
           </div>
-        )}
+        </AdminOnly>
 
         <div className="mt-7 pb-10">
           <CollectionTimeline

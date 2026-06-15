@@ -16,6 +16,7 @@ import { PlatformBadge } from "@/components/platform-badge";
 import { getAppInfo } from "@/lib/app-source";
 import { StateBadge, getHiddenStateBadge } from "@/components/source-table";
 import { SourceAdminMenu } from "@/components/source-admin-menu";
+import { AdminOnly } from "@/components/admin-only";
 import { isLocalAdminEnabled } from "@/lib/local-admin-flag";
 import { SourceTimeline } from "@/components/source-timeline";
 import { CliCommand } from "@/components/cli-command";
@@ -108,7 +109,7 @@ export default async function SourceByIdLayout({
   ];
 
   const hiddenBadge = getHiddenStateBadge(source);
-  const adminEnabled = isLocalAdminEnabled();
+  const devAdmin = isLocalAdminEnabled();
   const sourceMeta = (() => {
     try {
       return JSON.parse(source.metadata || "{}") as {
@@ -150,17 +151,19 @@ export default async function SourceByIdLayout({
           <SourceTypeIcon type={source.type} size={18} />
           {appInfo && <PlatformBadge label={appInfo.label} />}
           {hiddenBadge && <StateBadge label={hiddenBadge.label} title={hiddenBadge.title} />}
-          {adminEnabled && source.org && (
-            <SourceAdminMenu
-              orgSlug={source.org.slug}
-              sourceSlug={source.slug}
-              name={source.name}
-              marketingFilter={sourceMeta.marketingFilter === true}
-              marketingFilterHint={sourceMeta.marketingFilterHint ?? null}
-              feedContentDepth={sourceMeta.feedContentDepth ?? null}
-              discovery={source.discovery}
-              isHidden={source.isHidden ?? false}
-            />
+          {source.org && (
+            <AdminOnly devAdmin={devAdmin}>
+              <SourceAdminMenu
+                orgSlug={source.org.slug}
+                sourceSlug={source.slug}
+                name={source.name}
+                marketingFilter={sourceMeta.marketingFilter === true}
+                marketingFilterHint={sourceMeta.marketingFilterHint ?? null}
+                feedContentDepth={sourceMeta.feedContentDepth ?? null}
+                discovery={source.discovery}
+                isHidden={source.isHidden ?? false}
+              />
+            </AdminOnly>
           )}
         </div>
         <CliCommand identifier={source.slug} />

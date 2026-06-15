@@ -11,7 +11,7 @@ export async function setOrgHiddenAction(input: {
   slug: string;
   hidden: boolean;
 }): Promise<ActionResult> {
-  const env = adminActionEnv();
+  const env = await adminActionEnv();
   if ("error" in env) return { ok: false, error: env.error };
 
   let res: Response;
@@ -44,7 +44,7 @@ export async function setOrgAutoGenerateContentAction(input: {
   slug: string;
   enabled: boolean;
 }): Promise<ActionResult> {
-  const env = adminActionEnv();
+  const env = await adminActionEnv();
   if ("error" in env) return { ok: false, error: env.error };
 
   let res: Response;
@@ -76,7 +76,7 @@ export async function setOrgFeaturedAction(input: {
   slug: string;
   featured: boolean;
 }): Promise<ActionResult> {
-  const env = adminActionEnv();
+  const env = await adminActionEnv();
   if ("error" in env) return { ok: false, error: env.error };
 
   let res: Response;
@@ -114,7 +114,7 @@ export async function setOrgNoticeAction(input: {
   slug: string;
   notice: Notice | null;
 }): Promise<ActionResult> {
-  const env = adminActionEnv();
+  const env = await adminActionEnv();
   if ("error" in env) return { ok: false, error: env.error };
 
   let res: Response;
@@ -150,7 +150,7 @@ export async function renameOrgAction(input: {
   slug: string;
   name: string;
 }): Promise<ActionResult> {
-  const env = adminActionEnv();
+  const env = await adminActionEnv();
   if ("error" in env) return { ok: false, error: env.error };
 
   let res: Response;

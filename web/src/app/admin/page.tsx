@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Header } from "@/components/header";
-import { isLocalAdminEnabled } from "@/lib/local-admin-flag";
+import { isAdminViewer } from "@/lib/server-session";
 
 export const metadata: Metadata = { title: "Admin" };
 
@@ -16,8 +16,8 @@ const TOOLS = [
   { href: "/admin/api-tokens", title: "API tokens", desc: "Mint and revoke scoped API tokens." },
 ];
 
-export default function AdminHubPage() {
-  if (!isLocalAdminEnabled()) notFound();
+export default async function AdminHubPage() {
+  if (!(await isAdminViewer())) notFound();
   return (
     <div className="min-h-screen">
       <Header />

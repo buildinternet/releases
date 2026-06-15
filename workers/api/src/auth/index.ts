@@ -26,7 +26,7 @@ import { logEvent } from "@releases/lib/log-event";
 import { FLAGS, flag } from "@releases/lib/flags";
 import { audienceVariants } from "@releases/lib/oauth-jwt";
 import { USER_API_KEY_PREFIX, DEVICE_AUTH_CLIENT_ID } from "@buildinternet/releases-core/api-token";
-import { oauthAccessTokenClaims, consentScopeViolation } from "./entitlement.js";
+import { oauthAccessTokenClaims, consentScopeViolation, jwtSessionPayload } from "./entitlement.js";
 import { scopeToPermissions } from "./api-key-scope.js";
 import { CLIENT_SECRET_PREFIX } from "./oauth-clients.js";
 import {
@@ -836,7 +836,31 @@ export async function createAuth(
     // token is role-clamped at issuance (customAccessTokenClaims below) and DCR
     // clients are untrusted (consent required) + PKCE-required, so turning it on
     // grants no scope a user's role doesn't already allow.
-    jwt(),
+    // The jwt() plugin signs the OAuth provider's access tokens AND exposes
+    // GET /api/auth/token — the first-party "session → JWT" path the web admin
+    // actions use. Config here pins that /token JWT to what the resource-server
+    // verifier (oauthJwtConfig / verifyOAuthJwt) checks, and role-clamps its scope:
+    //  - issuer: `${origin}/api/auth` — REQUIRED (the /token default is the bare
+    //    origin, which the verifier rejects). Equals the OAuth tokens' resolved
+    //    `iss` already (baseURL + default basePath), so it does NOT change them.
+    //  - audience: bare `${origin}` — matches the verifier; OAuth tokens set `aud`
+    //    explicitly from the request `resource`, so this never reaches them.
+    //  - definePayload: role-clamped scope (fail-closed) — the security boundary.
+    //    Isolated to /token; OAuth tokens use customAccessTokenClaims (below).
+    //  - disableSettingJwtHeader: mint server-side via /token only; never broadcast
+    //    the scoped JWT to the browser in the set-auth-jwt header on get-session.
+    jwt({
+      disableSettingJwtHeader: true,
+      jwt: {
+        issuer: `${new URL(env.BETTER_AUTH_URL ?? DEFAULT_AUTH_ORIGIN).origin}/api/auth`,
+        audience: new URL(env.BETTER_AUTH_URL ?? DEFAULT_AUTH_ORIGIN).origin,
+        // `user` is the plugin's User type, which doesn't carry `role` statically
+        // (the admin plugin adds it at runtime) — cast at the call, mirroring the
+        // customAccessTokenClaims pattern below. Do NOT annotate the destructured
+        // param, or it can diverge from the plugin's expected callback type.
+        definePayload: ({ user }) => jwtSessionPayload(user as { role?: string | null }),
+      },
+    }),
     oauthProvider({
       // ABSOLUTE web-origin URLs (not relative): the plugin redirects the browser
       // to these verbatim, and a relative path resolves against the request origin

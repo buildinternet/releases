@@ -10,6 +10,7 @@ import {
   assertScopesEntitled,
   oauthAccessTokenClaims,
   consentScopeViolation,
+  jwtSessionPayload,
 } from "../src/auth/entitlement.js";
 import { createAuth } from "../src/auth/index.js";
 import { createTestDb } from "./setup";
@@ -103,6 +104,35 @@ describe("consentScopeViolation", () => {
   });
   it("passes when scope is omitted (token backstop catches over-broad)", () => {
     expect(consentScopeViolation("user", { accept: true })).toBe(false);
+  });
+});
+
+describe("jwtSessionPayload", () => {
+  it("gives an admin the full ladder in the scope claim + role", () => {
+    expect(jwtSessionPayload({ role: "admin" })).toEqual({
+      scope: "openid profile email offline_access read write admin",
+      "https://releases.sh/role": "admin",
+    });
+  });
+  it("gives a plain user read-only scope", () => {
+    expect(jwtSessionPayload({ role: "user" })).toEqual({
+      scope: "openid profile email offline_access read",
+      "https://releases.sh/role": "user",
+    });
+  });
+  it("fails closed for null/unknown role → read-only, role defaults to user", () => {
+    expect(jwtSessionPayload({ role: null })).toEqual({
+      scope: "openid profile email offline_access read",
+      "https://releases.sh/role": "user",
+    });
+    expect(jwtSessionPayload(undefined)).toEqual({
+      scope: "openid profile email offline_access read",
+      "https://releases.sh/role": "user",
+    });
+    expect(jwtSessionPayload({ role: "wizard" })).toEqual({
+      scope: "openid profile email offline_access read",
+      "https://releases.sh/role": "wizard",
+    });
   });
 });
 
@@ -257,5 +287,38 @@ describe("absolute consent/login redirect origin", () => {
     ) as { options?: { loginPage?: string; consentPage?: string } } | undefined;
     expect(provider?.options?.loginPage).toBe("https://releases.localhost/login");
     expect(provider?.options?.consentPage).toBe("https://releases.localhost/oauth/consent");
+  });
+});
+
+describe("jwt plugin resource-server config", () => {
+  it("pins issuer/audience to the API verifier's expectations and clamps the payload", async () => {
+    const auth = await createAuth(wiringEnv, undefined, {
+      db: createTestDb(),
+      sendEmail: () => {},
+    });
+    const jwtPlugin = (auth.options.plugins ?? []).find((p: { id: string }) => p.id === "jwt") as
+      | {
+          options?: {
+            disableSettingJwtHeader?: boolean;
+            jwt?: {
+              issuer?: string;
+              audience?: string;
+              definePayload?: (info: { user: { role?: string | null } }) => unknown;
+            };
+          };
+        }
+      | undefined;
+    expect(jwtPlugin).toBeDefined();
+    expect(jwtPlugin?.options?.jwt?.issuer).toBe("https://api.releases.localhost/api/auth");
+    expect(jwtPlugin?.options?.jwt?.audience).toBe("https://api.releases.localhost");
+    expect(jwtPlugin?.options?.disableSettingJwtHeader).toBe(true);
+    expect(jwtPlugin?.options?.jwt?.definePayload?.({ user: { role: "admin" } })).toEqual({
+      scope: "openid profile email offline_access read write admin",
+      "https://releases.sh/role": "admin",
+    });
+    expect(jwtPlugin?.options?.jwt?.definePayload?.({ user: { role: "user" } })).toEqual({
+      scope: "openid profile email offline_access read",
+      "https://releases.sh/role": "user",
+    });
   });
 });

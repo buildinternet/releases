@@ -1,14 +1,14 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Header } from "@/components/header";
-import { isSiteNoticeAdminEnabled } from "@/lib/site-notice-admin-flag";
+import { isAdminViewer } from "@/lib/server-session";
 import { getSiteNoticeAdminAction } from "@/app/actions/site-notice";
 import { NoticeForm } from "./notice-form";
 
 export const metadata: Metadata = { title: "Site notice" };
 
 export default async function SiteNoticeAdminPage() {
-  if (!isSiteNoticeAdminEnabled()) notFound();
+  if (!(await isAdminViewer())) notFound();
   const current = await getSiteNoticeAdminAction();
   return (
     <div className="min-h-screen">

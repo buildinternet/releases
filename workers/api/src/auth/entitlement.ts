@@ -62,6 +62,25 @@ export function oauthAccessTokenClaims(info: {
 }
 
 /**
+ * Payload for the `jwt()` plugin's `/api/auth/token` endpoint (the first-party
+ * session → JWT path the web admin actions use). The `scope` claim is
+ * role-clamped via {@link entitledScopes} (fail-closed: unknown/null role →
+ * read-only), so the resource server (verifyOAuthJwt) authorizes the caller at
+ * exactly their role — a non-admin can never obtain an admin-scoped token. The
+ * `https://releases.sh/role` claim mirrors the OAuth lane and is informational.
+ */
+export function jwtSessionPayload(user: { role?: string | null } | null | undefined): {
+  scope: string;
+  "https://releases.sh/role": string;
+} {
+  const role = user?.role ?? null;
+  return {
+    scope: entitledScopes(role).join(" "),
+    "https://releases.sh/role": role ?? "user",
+  };
+}
+
+/**
  * True when a `/oauth2/consent` submission grants scopes beyond the user's
  * entitlement. Best-effort early gate: a deny (`accept !== true`) or an omitted
  * `scope` (the plugin then grants all originally-requested scopes) returns false
