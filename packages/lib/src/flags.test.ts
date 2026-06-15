@@ -117,11 +117,11 @@ describe("flagState()", () => {
 });
 
 describe("openrouterEnabled flag", () => {
-  it("is registered with the expected key/env and defaults off", () => {
+  it("is registered with the expected key/env and defaults ON (OpenRouter is the prod default)", () => {
     expect(FLAGS.openrouterEnabled).toEqual({
       key: "openrouter-enabled",
       env: "OPENROUTER_ENABLED",
-      default: false,
+      default: true,
     });
   });
 });

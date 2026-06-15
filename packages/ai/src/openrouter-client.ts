@@ -28,11 +28,59 @@ export interface OpenRouterTrace {
   version?: string;
 }
 
+/**
+ * OpenRouter's unified `reasoning` control, normalized across providers. The
+ * cheap fixed-budget summarize lanes pass `{ enabled: false }`: DeepSeek V4 (and
+ * any other reasoning model) otherwise spends the small `max_tokens` budget on
+ * reasoning tokens and returns empty visible content, which `parseCollection-
+ * Summary` rejects as a missing `<title>`. Inert on non-reasoning models —
+ * OpenRouter normalizes/ignores it — so it is safe to set unconditionally on a
+ * lane that never wants reasoning regardless of which model is configured.
+ */
+export interface OpenRouterReasoning {
+  /** `false` disables reasoning entirely. */
+  enabled?: boolean;
+  effort?: "low" | "medium" | "high";
+  max_tokens?: number;
+  /** Reason internally but omit reasoning from the response. */
+  exclude?: boolean;
+}
+
+/**
+ * OpenRouter provider-routing preferences (a subset of the documented `provider`
+ * object: https://openrouter.ai/docs/guides/routing/provider-selection). Threaded
+ * so a latency-sensitive lane can steer routing per request — e.g. `ignore` a
+ * provider whose latency is an outlier for a given model. Account-wide provider
+ * preferences set in the OpenRouter dashboard apply on top of this; the two
+ * compose (the union of ignored providers is excluded).
+ */
+export interface OpenRouterProviderPrefs {
+  /** Provider slugs to never route to (e.g. `["gmicloud"]`). */
+  ignore?: string[];
+  /** Restrict routing to exactly these provider slugs, in order. */
+  only?: string[];
+  /** Allow falling back to other providers if the preferred ones fail. */
+  allow_fallbacks?: boolean;
+  /** Sort candidate providers by this axis before routing. */
+  sort?: "price" | "throughput" | "latency";
+}
+
 export interface OpenRouterOptions {
   apiKey: string;
   model: string;
   /** Defaults to `https://openrouter.ai/api/v1`. Pass an AI Gateway sub-path to proxy. */
   baseURL?: string;
+  /**
+   * Reasoning control for reasoning-capable models. Omitted from the wire when
+   * unset (provider default applies). See `OpenRouterReasoning`.
+   */
+  reasoning?: OpenRouterReasoning;
+  /**
+   * Provider-routing preferences. Omitted from the wire when unset (OpenRouter's
+   * default routing + any account-level dashboard preferences apply). See
+   * `OpenRouterProviderPrefs`.
+   */
+  provider?: OpenRouterProviderPrefs;
   /**
    * Optional OpenRouter ranking headers. `referer` (sent as `HTTP-Referer`) is
    * the app *identity* — it keys the app page + rankings. `title` is display-only
@@ -134,6 +182,10 @@ export async function openRouterChat(
       ],
       // Ask OpenRouter to include token + cost accounting in the response.
       usage: { include: true },
+      // Reasoning control — omitted entirely when unset (provider default).
+      ...(opts.reasoning ? { reasoning: opts.reasoning } : {}),
+      // Provider-routing preferences — omitted entirely when unset.
+      ...(opts.provider ? { provider: opts.provider } : {}),
       // Broadcast observability tags — inert until Broadcast is configured.
       ...(trace ? { trace } : {}),
       // Top-level Broadcast grouping fields — omitted entirely when unset.
