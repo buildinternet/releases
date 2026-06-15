@@ -3,6 +3,7 @@ import {
   sendAuthEmail,
   verifyEmailTemplate,
   resetPasswordTemplate,
+  changeEmailTemplate,
   type AuthEmailBinding,
   type AuthEmailEnv,
   type AuthEmailMessage,
@@ -24,6 +25,17 @@ describe("auth email templates", () => {
     expect(t.subject.length).toBeGreaterThan(0);
     expect(t.text).toContain("reset-password/tok");
     expect(t.html).toContain("reset-password/tok");
+    expect(t.html).toContain(`href="${url}"`);
+  });
+
+  it("changeEmailTemplate embeds the url + new address and sets a subject", () => {
+    const url = "https://api.releases.localhost/api/auth/verify-email?token=chg123";
+    const t = changeEmailTemplate({ url, newEmail: "new@example.com" });
+    expect(t.subject.length).toBeGreaterThan(0);
+    expect(t.text).toContain("token=chg123");
+    expect(t.text).toContain("new@example.com");
+    expect(t.html).toContain("token=chg123");
+    expect(t.html).toContain("new@example.com");
     expect(t.html).toContain(`href="${url}"`);
   });
 });

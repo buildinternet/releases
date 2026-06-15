@@ -145,4 +145,12 @@ export const {
   oneTap,
   getLastUsedLoginMethod,
   passkey,
+  // Account-settings self-service. These are core Better Auth actions (no plugin):
+  // `changeEmail` requests a confirmation link to the current address (server gated
+  // on `user.changeEmail.enabled`), and `listAccounts` / `linkSocial` /
+  // `unlinkAccount` manage the user's linked credential + social accounts.
+  changeEmail,
+  listAccounts,
+  linkSocial,
+  unlinkAccount,
 } = authClient;
