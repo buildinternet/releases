@@ -24,6 +24,7 @@ import { AppIcon } from "@/components/app-icon";
 import { getAppInfo, type AppInfo } from "@/lib/app-source";
 import { sourceIdPath } from "@/lib/links";
 import { ProductAdminMenu } from "@/components/product-admin-menu";
+import { AdminOnly } from "@/components/admin-only";
 import { EntityNotice } from "@/components/entity-notice";
 import { FollowButton } from "@/components/follow-button";
 import { isLocalAdminEnabled } from "@/lib/local-admin-flag";
@@ -41,7 +42,7 @@ export async function ProductView({
   product: ProductDetail;
 }) {
   const productSlug = product.slug;
-  const adminEnabled = isLocalAdminEnabled();
+  const devAdmin = isLocalAdminEnabled();
   const productRef = { orgSlug, productSlug };
   const activityFrom = daysAgoIso(365 * 2).slice(0, 10);
 
@@ -203,7 +204,7 @@ export async function ProductView({
           </div>
         )}
         <CliCommand identifier={product.slug} />
-        {adminEnabled && (
+        <AdminOnly devAdmin={devAdmin}>
           <div className="mt-2">
             <ProductAdminMenu
               orgSlug={orgSlug}
@@ -212,7 +213,7 @@ export async function ProductView({
               notice={product.notice}
             />
           </div>
-        )}
+        </AdminOnly>
         <EntityNotice notice={product.notice} />
         <div className="flex flex-col md:flex-row gap-10 mt-6 pb-6">
           <div className="flex-1 min-w-0">

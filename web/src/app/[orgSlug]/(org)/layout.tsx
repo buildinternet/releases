@@ -10,6 +10,7 @@ import { OrgTabs } from "@/components/org-tabs";
 import { CliCommand } from "@/components/cli-command";
 import { taxonomySidebarSections, collectionsSidebarSection } from "@/components/taxonomy-chips";
 import { OrgAdminMenu } from "@/components/org-admin-menu";
+import { AdminOnly } from "@/components/admin-only";
 import { EntityNotice } from "@/components/entity-notice";
 import { FollowButton } from "@/components/follow-button";
 import { isLocalAdminEnabled } from "@/lib/local-admin-flag";
@@ -43,7 +44,7 @@ export default async function OrgLayout({
   const collections = await getOrgCollections(orgSlug);
   const hasPlaybook = process.env.NODE_ENV === "development";
   const hasFetchLog = process.env.NODE_ENV === "development";
-  const adminEnabled = isLocalAdminEnabled();
+  const devAdmin = isLocalAdminEnabled();
 
   const sidebarSections = [
     {
@@ -89,7 +90,7 @@ export default async function OrgLayout({
           </div>
         )}
         <CliCommand identifier={org.slug} />
-        {adminEnabled && (
+        <AdminOnly devAdmin={devAdmin}>
           <div className="mt-2">
             <OrgAdminMenu
               orgSlug={org.slug}
@@ -102,7 +103,7 @@ export default async function OrgLayout({
               notice={org.notice}
             />
           </div>
-        )}
+        </AdminOnly>
         <EntityNotice notice={org.notice} />
         <div className="flex flex-col md:flex-row gap-10 mt-6 pb-6">
           <div className="flex-1 min-w-0">

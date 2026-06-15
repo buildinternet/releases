@@ -21,6 +21,7 @@ import { AI_SUMMARY_DISCLAIMER } from "@/lib/copy";
 import { RollupBadge } from "@/components/rollup-badge";
 import { CompositionChip } from "@/components/composition-chip";
 import { ReleaseAdminMenu } from "@/components/release-admin-menu";
+import { AdminOnly } from "@/components/admin-only";
 import { FallbackImage } from "@/components/fallback-image";
 import { appStoreIconUrl } from "@/lib/app-source";
 import { deriveFeedTitle } from "@/lib/release-title";
@@ -154,7 +155,7 @@ export default async function ReleaseDetailPage({ params }: { params: Promise<{ 
   const showVersionSubtitle = !!descriptive && !!versionLabel;
   const trimmedSummary = release.summary?.trim();
   const hasBody = release.content?.trim();
-  const adminEnabled = isLocalAdminEnabled();
+  const devAdmin = isLocalAdminEnabled();
 
   const releaseUrl = `https://releases.sh/release/${id}`;
   // Structured-data breadcrumb mirrors the visible trail: Home → Org → leaf,
@@ -274,7 +275,7 @@ export default async function ReleaseDetailPage({ params }: { params: Promise<{ 
                 View original ↗
               </a>
             )}
-            {adminEnabled && (
+            <AdminOnly devAdmin={devAdmin}>
               <span className="ml-auto">
                 <ReleaseAdminMenu
                   releaseId={release.id}
@@ -282,7 +283,7 @@ export default async function ReleaseDetailPage({ params }: { params: Promise<{ 
                   rawJsonHref={`${API_URL}/v1/releases/${encodeURIComponent(release.id)}`}
                 />
               </span>
-            )}
+            </AdminOnly>
           </div>
           {/* Composition legend + copy-command stack vertically — both are
               inline-flex, so without a block wrapper they collide on one line. */}
