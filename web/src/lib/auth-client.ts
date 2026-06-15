@@ -1,4 +1,5 @@
 import { createAuthClient } from "better-auth/react";
+import type { BetterAuthClientPlugin } from "better-auth/client";
 import {
   oneTapClient,
   magicLinkClient,
@@ -6,6 +7,26 @@ import {
   lastLoginMethodClient,
 } from "better-auth/client/plugins";
 import { dashClient, sentinelClient } from "@better-auth/infra/client";
+
+/**
+ * `@better-auth/infra`'s client plugins ship `.d.ts` types built against an OLDER
+ * `better-auth` (its devDependency is pinned to 1.6.15), so under a newer core the
+ * `getActions` signature on its plugins no longer structurally matches the one
+ * `BetterAuthClientPlugin` now requires. A single non-conforming element in the
+ * `plugins` tuple poisons the whole client's inferred type — stripping `passkey`,
+ * `oneTap`, `magicLink`, `device`, etc. — and breaks `next build`'s type check (#1620).
+ *
+ * This swaps ONLY the offending `getActions` member for the shape the current core
+ * expects, preserving each plugin's `id` / `$InferServerPlugin` / `pathMethods` so
+ * session and action inference for the rest of the client stay intact (a blanket
+ * cast to `BetterAuthClientPlugin` instead erases `$InferServerPlugin` and collapses
+ * `useSession()` to `never`). We never call dash/sentinel action methods on the
+ * client — they're registered only for their endpoint + fetch-hook side effects — so
+ * narrowing `getActions` is lossless. Drop once `@better-auth/infra` ships types
+ * built against this core.
+ */
+const asClientPlugin = <P>(p: P) =>
+  p as unknown as Omit<P, "getActions"> & Pick<BetterAuthClientPlugin, "getActions">;
 import { oauthProviderClient } from "@better-auth/oauth-provider/client";
 import { passkeyClient } from "@better-auth/passkey/client";
 
@@ -54,7 +75,7 @@ export const authClient = createAuthClient({
     // dash() plugin (workers/api/src/auth/index.ts) so the hosted dashboard's
     // admin/audit endpoints are reachable from this client. No API key here — the
     // client plugin only exposes the endpoints; the key lives server-side.
-    dashClient(),
+    asClientPlugin(dashClient()),
     // Client half of Sentinel (the server-side sentinel() plugin lives in
     // workers/api/src/auth/index.ts). It attaches a stable device fingerprint via
     // the `X-Visitor-Id` header (feeding credential-stuffing + abuse detection) and,
@@ -65,10 +86,12 @@ export const authClient = createAuthClient({
     // unconditionally, like dashClient(). `identifyUrl` points client-side identify
     // ingestion at our project endpoint (see SENTINEL_IDENTIFY_URL); omitted when unset
     // so local dev just falls back to the library default.
-    sentinelClient({
-      autoSolveChallenge: true,
-      ...(SENTINEL_IDENTIFY_URL ? { identifyUrl: SENTINEL_IDENTIFY_URL } : {}),
-    }),
+    asClientPlugin(
+      sentinelClient({
+        autoSolveChallenge: true,
+        ...(SENTINEL_IDENTIFY_URL ? { identifyUrl: SENTINEL_IDENTIFY_URL } : {}),
+      }),
+    ),
     // Magic link — registers the `signIn.magicLink` method. No secret and nothing to
     // gate at construction (mirrors the always-on server plugin); whether the UI
     // surfaces a button is controlled separately by NEXT_PUBLIC_AUTH_MAGIC_LINK in
