@@ -11,7 +11,7 @@ import { apiBaseUrl } from "./env";
  * it forces dynamic rendering, which is fine for these low-traffic, non-cached
  * routes.
  */
-export async function getServerSessionRole(): Promise<string | null> {
+async function getServerSessionRole(): Promise<string | null> {
   const base = apiBaseUrl();
   if (!base) return null;
   const cookie = (await cookies()).toString();

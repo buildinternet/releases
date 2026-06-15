@@ -2,7 +2,7 @@
   "version": 1,
   "sessions": {
     "47d37220-b2e5-4b89-bd02-d5630d4b31fa": {
-      "updatedAt": 1781526984807,
+      "updatedAt": 1781527327531,
       "files": {
         "/Users/zachdunn/Code/releases/.claude/worktrees/prod-admin-role-gate/web/src/app/actions/api-tokens.ts": {
           "editCount": 3,
@@ -45,7 +45,7 @@
           "findings": ["broken-image:45"]
         },
         "/Users/zachdunn/Code/releases/.claude/worktrees/prod-admin-role-gate/web/src/lib/server-session.ts": {
-          "editCount": 1,
+          "editCount": 2,
           "findings": []
         },
         "/Users/zachdunn/Code/releases/.claude/worktrees/prod-admin-role-gate/web/src/app/admin/page.tsx": {
