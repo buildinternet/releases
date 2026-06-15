@@ -1,0 +1,13 @@
+-- Add user.display_email — the human-facing display form of the email, preserving
+-- the original casing and (for Gmail) dots that the Sentinel `emailNormalization`
+-- pass strips off the canonical, unique `email` column. Paired with the displayEmail
+-- field in workers/api/src/db/schema-auth.ts (the schema↔migration pairing gate in
+-- ci.yml watches that file).
+--
+-- Nullable text and display-only: the unique `email` column stays the dedup / sign-in
+-- key (so one human can't fork into Dunn.zach@ / dunnzach@ / dunn.zach+tag@ accounts),
+-- while `display_email` carries what the user expects to see. It's captured from the
+-- OAuth provider profile via each provider's `mapProfileToUser` (auth/index.ts
+-- `buildSocialProviders`). Existing rows — and email/password sign-ups, which have no
+-- provider profile carrying the original — stay NULL; read paths fall back to `email`.
+ALTER TABLE user ADD COLUMN display_email text;

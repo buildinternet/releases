@@ -77,3 +77,20 @@ export const USER_API_KEYS_ENABLED = process.env.NEXT_PUBLIC_USER_API_KEYS === "
  * pages are revealed. `NEXT_PUBLIC_*` is inlined at build time.
  */
 export const DEVICE_AUTH_ENABLED = process.env.NEXT_PUBLIC_DEVICE_AUTH_ENABLED === "true";
+
+/**
+ * The email to SHOW the user, preferring the original-cased `displayEmail` the
+ * backend captures from the OAuth profile (e.g. `Dunn.zach@gmail.com`) over the
+ * canonical `email`, which the Sentinel `emailNormalization` pass lowercases and
+ * (for Gmail) strips dots from (`dunnzach@gmail.com`). Falls back to `email` for
+ * rows without a display form — existing users and email/password sign-ups, where
+ * no provider profile carried the original. `displayEmail` is a server-set Better
+ * Auth additional field present on the session user at runtime but absent from the
+ * client's inferred `useSession` type, so it's read via a narrow cast here. Never
+ * use this where the canonical address is required (sign-in identity, dedup, where
+ * to send mail) — only for display.
+ */
+export function displayEmailOf(user: { email: string; displayEmail?: string | null }): string {
+  const display = (user as { displayEmail?: unknown }).displayEmail;
+  return typeof display === "string" && display ? display : user.email;
+}
