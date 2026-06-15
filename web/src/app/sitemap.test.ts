@@ -16,7 +16,29 @@ function urls(payload: SitemapPayload): string[] {
 }
 
 describe("buildEntitySitemapEntries", () => {
-  test("product emits a bare /[org]/[slug] URL (no /product/ segment)", () => {
+  test("product in a multi-product org emits a bare /[org]/[slug] URL (no /product/ segment)", () => {
+    const payload: SitemapPayload = {
+      orgs: [],
+      products: [
+        { orgSlug: "vercel", slug: "turborepo" },
+        { orgSlug: "vercel", slug: "next-js" },
+      ],
+      sources: [],
+      collections: [],
+    };
+
+    const result = urls(payload);
+    expect(result).toContain(`${BASE}/vercel/turborepo`);
+    expect(result).toContain(`${BASE}/vercel/next-js`);
+    expect(result.some((u) => u.includes("/product/"))).toBe(false);
+  });
+
+  test("product in a single-product org is omitted (org page is canonical; the bare URL 308-redirects)", () => {
+    // Mirrors the page's `org.products.length <= 1` collapse redirect
+    // (web/src/app/[orgSlug]/[slug]/page.tsx): for a single-product org the
+    // bare /[org]/[slug] URL permanently redirects to /[org], so listing it
+    // would put a redirecting URL in the sitemap. The /[org] entry (emitted
+    // by the org-entry builder in sitemap.ts) already covers the content.
     const payload: SitemapPayload = {
       orgs: [],
       products: [{ orgSlug: "vercel", slug: "turborepo" }],
@@ -25,11 +47,51 @@ describe("buildEntitySitemapEntries", () => {
     };
 
     const result = urls(payload);
-    expect(result).toContain(`${BASE}/vercel/turborepo`);
-    expect(result.some((u) => u.includes("/product/"))).toBe(false);
+    expect(result).not.toContain(`${BASE}/vercel/turborepo`);
+    // The single-product org contributes no product entries at all.
+    expect(result).toEqual([]);
   });
 
-  test("shadowed source (slug collides with a product, has id) → exactly one /sources/:id, no sub-tabs", () => {
+  test("shadowed source in a multi-product org (slug collides, has id) → exactly one /sources/:id, no sub-tabs", () => {
+    const payload: SitemapPayload = {
+      orgs: [],
+      products: [
+        { orgSlug: "vercel", slug: "turborepo" },
+        { orgSlug: "vercel", slug: "next-js" },
+      ],
+      sources: [
+        {
+          id: "src_abc123",
+          orgSlug: "vercel",
+          slug: "turborepo",
+          latestDate: "2026-03-15T00:00:00Z",
+          hasChangelog: true,
+          hasHighlights: true,
+        },
+      ],
+      collections: [],
+    };
+
+    const result = urls(payload);
+    // The product owns the bare /vercel/turborepo URL; the shadowed source is
+    // routed to /sources/:id and emits nothing else.
+    expect(result).toContain(`${BASE}/sources/src_abc123`);
+    // Exactly one entry for the shadowed source's id.
+    expect(result.filter((u) => u === `${BASE}/sources/src_abc123`)).toHaveLength(1);
+    // No sub-tabs for the shadowed source despite hasChangelog/hasHighlights.
+    expect(result.some((u) => u.endsWith("/sources/src_abc123/changelog"))).toBe(false);
+    expect(result.some((u) => u.endsWith("/sources/src_abc123/highlights"))).toBe(false);
+    // The product (multi-product org) still claims the bare org/slug URL exactly once.
+    expect(result.filter((u) => u === `${BASE}/vercel/turborepo`)).toHaveLength(1);
+  });
+
+  test("shadowed source in a SINGLE-product org → still routed to /sources/:id even though the product entry is filtered", () => {
+    // Regression guard for the single-product filter: shadow detection
+    // (`productKeys`) must be built from the FULL product set, not the
+    // filtered/emitted set. Otherwise filtering the single product would
+    // un-shadow its colliding source, which would then wrongly claim the bare
+    // /[org]/[slug] URL — the same URL that resolves product-first and
+    // 308-redirects at runtime.
     const payload: SitemapPayload = {
       orgs: [],
       products: [{ orgSlug: "vercel", slug: "turborepo" }],
@@ -46,26 +108,23 @@ describe("buildEntitySitemapEntries", () => {
       collections: [],
     };
 
-    const sourceUrls = urls(payload).filter(
-      (u) => u.startsWith(`${BASE}/sources/`) || u.includes("/vercel/turborepo"),
-    );
-    // The product owns the bare /vercel/turborepo URL; the shadowed source is
-    // routed to /sources/:id and emits nothing else.
-    expect(sourceUrls).toContain(`${BASE}/sources/src_abc123`);
-    // Exactly one entry for the shadowed source's id.
-    expect(sourceUrls.filter((u) => u === `${BASE}/sources/src_abc123`)).toHaveLength(1);
-    // No sub-tabs for the shadowed source despite hasChangelog/hasHighlights.
-    expect(urls(payload).some((u) => u.endsWith("/sources/src_abc123/changelog"))).toBe(false);
-    expect(urls(payload).some((u) => u.endsWith("/sources/src_abc123/highlights"))).toBe(false);
-    // And the shadowed source must NOT also claim the bare org/slug URL —
-    // that one belongs to the product entry, which appears exactly once.
-    expect(urls(payload).filter((u) => u === `${BASE}/vercel/turborepo`)).toHaveLength(1);
+    const result = urls(payload);
+    // Source is still shadowed → /sources/:id (a real, non-redirecting page).
+    expect(result).toContain(`${BASE}/sources/src_abc123`);
+    // The product entry is filtered AND the source does not fall back to the
+    // bare URL, so the redirecting /vercel/turborepo never appears.
+    expect(result.some((u) => u === `${BASE}/vercel/turborepo`)).toBe(false);
+    // No sub-tabs for the shadowed source.
+    expect(result).toEqual([`${BASE}/sources/src_abc123`]);
   });
 
   test("non-shadowed source with hasChangelog/hasHighlights → bare URL + both sub-tabs", () => {
     const payload: SitemapPayload = {
       orgs: [],
-      products: [{ orgSlug: "orgX", slug: "some-product" }],
+      products: [
+        { orgSlug: "orgX", slug: "some-product" },
+        { orgSlug: "orgX", slug: "other-product" },
+      ],
       sources: [
         {
           id: "src_def456",
@@ -108,10 +167,13 @@ describe("buildEntitySitemapEntries", () => {
     expect(result).toEqual([`${BASE}/solo/only-source`]);
   });
 
-  test("shadowed source missing an id → degrades to bare URL + sub-tabs (no /sources/undefined)", () => {
+  test("shadowed source in a multi-product org missing an id → degrades to bare URL + sub-tabs (no /sources/undefined)", () => {
     const payload: SitemapPayload = {
       orgs: [],
-      products: [{ orgSlug: "vercel", slug: "turborepo" }],
+      products: [
+        { orgSlug: "vercel", slug: "turborepo" },
+        { orgSlug: "vercel", slug: "next-js" },
+      ],
       sources: [
         {
           // id omitted — simulates a stale/cached payload from an older worker.
