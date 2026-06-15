@@ -29,6 +29,13 @@ export const ReleaseLatestSourceSchema = z.object({
   /** Owning org's display name (e.g. "Cloudflare"), distinct from the source
    *  name. Null when the source has no org. Additive — older responses omit it. */
   orgName: z.string().nullable().optional(),
+  /** Owning org's explicit avatar URL (`organizations.avatar_url`), when set.
+   *  Null/absent when the org has no stored avatar — clients fall back to the
+   *  GitHub handle below, then an initial. Additive — older responses omit it. */
+  orgAvatarUrl: z.string().nullable().optional(),
+  /** Owning org's GitHub handle, used to derive `github.com/<handle>.png` as the
+   *  avatar fallback when `orgAvatarUrl` is unset. Additive — older responses omit it. */
+  orgGithubHandle: z.string().nullable().optional(),
 });
 
 export const ReleaseLatestProductSchema = z.object({

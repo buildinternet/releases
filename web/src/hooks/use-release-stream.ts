@@ -1,7 +1,11 @@
 "use client";
 
 import { useEffect, useReducer, useRef } from "react";
-import type { LatestRelease, MediaItem } from "@buildinternet/releases-api-types";
+import type {
+  LatestRelease,
+  MediaItem,
+  ReleaseLatestItem,
+} from "@buildinternet/releases-api-types";
 
 /**
  * Normalized release shape rendered by /live. Bridges the WebSocket event
@@ -13,7 +17,27 @@ export type LiveRelease = {
   title: string | null;
   version: string | null;
   publishedAt: string | null;
-  source: { slug: string; name: string };
+  source: { slug: string; name: string; type: string | null };
+  /**
+   * Owning-org context for the feed-row avatar + name. Null for orphan sources.
+   * Live (WebSocket) events resolve this at publish time; REST-backfilled rows
+   * read it off the latest response. `avatarUrl`/`githubHandle` drive the avatar
+   * fallback chain — when both are null the avatar renders an initial.
+   */
+  org: {
+    slug: string | null;
+    name: string | null;
+    avatarUrl: string | null;
+    githubHandle: string | null;
+  } | null;
+  /** Owning product, when the source is grouped under one. */
+  product: { slug: string; name: string } | null;
+  /** AI summary + headline variants — null on a brand-new live event (generated post-insert). */
+  summary: string | null;
+  titleGenerated: string | null;
+  titleShort: string | null;
+  /** Image/gif/inline-video media for the inline preview. */
+  media: MediaItem[];
   url?: string;
 };
 
@@ -89,36 +113,49 @@ export type StreamEvent = {
   release: LatestRelease;
 };
 
-/** Shape of an item from GET /v1/releases/latest. Mirrors workers/api/src/routes/releases.ts. */
-export type LatestItem = {
-  id: string;
-  version: string | null;
-  type: string;
-  title: string | null;
-  summary: string | null;
-  publishedAt: string | null;
-  url: string | null;
-  media: MediaItem[];
-  source: { slug: string; name: string; type: string };
-};
-
-export function fromStreamEvent(e: StreamEvent): LiveRelease {
+// Collapse the REST feed's flat `source.org*` fields into a `LiveRelease.org`
+// object, or null when there's no owning org (orphan source). The WebSocket
+// payload already nests `org`, so only this flat→nested bridge needs the helper.
+function orgFrom(source: ReleaseLatestItem["source"]): LiveRelease["org"] {
+  if (!source.orgSlug && !source.orgName) return null;
   return {
-    id: e.release.id,
-    title: e.release.title,
-    version: e.release.version,
-    publishedAt: e.release.publishedAt,
-    source: { slug: e.release.sourceSlug, name: e.release.sourceName },
+    slug: source.orgSlug ?? null,
+    name: source.orgName ?? null,
+    avatarUrl: source.orgAvatarUrl ?? null,
+    githubHandle: source.orgGithubHandle ?? null,
   };
 }
 
-export function fromLatestItem(item: LatestItem): LiveRelease {
+export function fromStreamEvent(e: StreamEvent): LiveRelease {
+  const r = e.release;
+  return {
+    id: r.id,
+    title: r.title,
+    version: r.version,
+    publishedAt: r.publishedAt,
+    source: { slug: r.sourceSlug, name: r.sourceName, type: r.sourceType ?? null },
+    org: r.org ?? null,
+    product: r.product ?? null,
+    summary: r.summary ?? null,
+    titleGenerated: r.titleGenerated ?? null,
+    titleShort: r.titleShort ?? null,
+    media: r.media ?? [],
+  };
+}
+
+export function fromLatestItem(item: ReleaseLatestItem): LiveRelease {
   return {
     id: item.id,
     title: item.title,
     version: item.version,
     publishedAt: item.publishedAt,
-    source: { slug: item.source.slug, name: item.source.name },
+    source: { slug: item.source.slug, name: item.source.name, type: item.source.type },
+    org: orgFrom(item.source),
+    product: item.product ?? null,
+    summary: item.summary ?? null,
+    titleGenerated: item.titleGenerated ?? null,
+    titleShort: item.titleShort ?? null,
+    media: item.media ?? [],
     url: item.url ?? undefined,
   };
 }
@@ -187,7 +224,7 @@ export function useReleaseStream(apiUrl: string): LiveState {
           cache: "no-store",
         });
         if (!res.ok) return;
-        const payload = (await res.json()) as { releases: LatestItem[] };
+        const payload = (await res.json()) as { releases: ReleaseLatestItem[] };
         if (cancelled) return;
         const items = payload.releases ?? [];
         dispatch({ type: "rest-batch", releases: items.map(fromLatestItem) });

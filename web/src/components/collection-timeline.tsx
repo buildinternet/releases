@@ -9,6 +9,7 @@ import { OrgAvatar } from "./org-avatar";
 import { SourceTypeIcon } from "./source-type-icon";
 import { ClusterChip } from "./cluster-chip";
 import { FallbackImage } from "./fallback-image";
+import { ExternalLinkIcon } from "./external-link-icon";
 import { collapsedMarkdownComponents, markdownComponents } from "./markdown-components";
 import {
   type CollectionMember,
@@ -1062,27 +1063,6 @@ function SparkleIcon({ size = 14, className }: { size?: number; className?: stri
       className={className}
     >
       <path d="M12 2c.3 3.6 1.4 5.6 3 7s3.4 2.4 7 3c-3.6.3-5.6 1.4-7 3s-2.4 3.4-3 7c-.3-3.6-1.4-5.6-3-7s-3.4-2.4-7-3c3.6-.3 5.6-1.4 7-3s2.4-3.4 3-7z" />
-    </svg>
-  );
-}
-
-function ExternalLinkIcon({ size = 12 }: { size?: number }) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-      className="inline-flex"
-    >
-      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-      <polyline points="15 3 21 3 21 9" />
-      <line x1="10" y1="14" x2="21" y2="3" />
     </svg>
   );
 }

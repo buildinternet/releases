@@ -15,7 +15,21 @@ export interface InsertedReleaseRow {
 }
 
 export interface BuildEventsInput {
-  src: { name: string; slug: string };
+  src: {
+    name: string;
+    slug: string;
+    /** Source type, surfaced on the event so the live feed can render its icon. */
+    type?: string;
+    /** Owning-org context, resolved by the publisher. `null` for orphan sources. */
+    org?: {
+      slug: string;
+      name: string;
+      avatarUrl: string | null;
+      githubHandle: string | null;
+    } | null;
+    /** Owning product, when the source is grouped under one. */
+    product?: { slug: string; name: string } | null;
+  };
   inserted: InsertedReleaseRow[];
 }
 
@@ -39,6 +53,9 @@ export function buildReleaseEventPayloads(input: BuildEventsInput): ReleaseEvent
     publishedAt: r.publishedAt,
     sourceName: input.src.name,
     sourceSlug: input.src.slug,
+    sourceType: input.src.type,
+    org: input.src.org ?? null,
+    product: input.src.product ?? null,
     summary: null,
     titleGenerated: null,
     titleShort: null,

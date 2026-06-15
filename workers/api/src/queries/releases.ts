@@ -19,6 +19,8 @@ export type LatestReleaseRow = {
   source_type: string;
   org_slug: string | null;
   org_name: string | null;
+  org_avatar_url: string | null;
+  org_github_handle: string | null;
   product_slug: string | null;
   product_name: string | null;
   type: string;
@@ -113,7 +115,10 @@ export async function getLatestReleasesAcross(
            r.published_at, r.url, r.media,
            r.content_chars, r.content_tokens,
            s.slug AS source_slug, s.name AS source_name, s.type AS source_type,
-           o.slug AS org_slug, o.name AS org_name,
+           o.slug AS org_slug, o.name AS org_name, o.avatar_url AS org_avatar_url,
+           (SELECT handle FROM org_accounts
+              WHERE org_id = o.id AND platform = 'github'
+              ORDER BY created_at, id LIMIT 1) AS org_github_handle,
            p.slug AS product_slug, p.name AS product_name,
            ${COVERAGE_COUNT_EXPR} AS coverage_count
     FROM ${releasesTable} r
@@ -161,6 +166,8 @@ export function mapLatestRowToReleaseItem(
       type: r.source_type,
       orgSlug: r.org_slug,
       orgName: r.org_name,
+      orgAvatarUrl: r.org_avatar_url,
+      orgGithubHandle: r.org_github_handle,
     },
     product: r.product_slug
       ? { slug: r.product_slug, name: r.product_name ?? r.product_slug }
@@ -198,7 +205,10 @@ export async function getFollowedReleases(
            r.published_at, r.url, r.media,
            r.content_chars, r.content_tokens,
            s.slug AS source_slug, s.name AS source_name, s.type AS source_type,
-           o.slug AS org_slug, o.name AS org_name,
+           o.slug AS org_slug, o.name AS org_name, o.avatar_url AS org_avatar_url,
+           (SELECT handle FROM org_accounts
+              WHERE org_id = o.id AND platform = 'github'
+              ORDER BY created_at, id LIMIT 1) AS org_github_handle,
            p.slug AS product_slug, p.name AS product_name,
            ${sql.raw(COVERAGE_COUNT_EXPR)} AS coverage_count
     FROM releases_visible r

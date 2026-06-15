@@ -14,7 +14,13 @@ const rel = (id: string, overrides: Partial<LiveRelease> = {}): LiveRelease => (
   title: `Release ${id}`,
   version: "1.0.0",
   publishedAt: "2026-04-23T10:00:00Z",
-  source: { slug: "acme", name: "ACME" },
+  source: { slug: "acme", name: "ACME", type: "scrape" },
+  org: null,
+  product: null,
+  summary: null,
+  titleGenerated: null,
+  titleShort: null,
+  media: [],
   url: undefined,
   ...overrides,
 });
@@ -119,7 +125,7 @@ describe("liveReducer", () => {
 });
 
 describe("normalizers", () => {
-  test("fromStreamEvent maps WS payload to LiveRelease", () => {
+  test("fromStreamEvent maps an enriched WS payload to LiveRelease", () => {
     const out = fromStreamEvent({
       id: "evt_1",
       seq: 5,
@@ -130,9 +136,14 @@ describe("normalizers", () => {
         title: "v1.2.3",
         version: "1.2.3",
         publishedAt: "2026-04-23T10:00:00Z",
-        sourceName: "ACME",
+        sourceName: "ACME Changelog",
         sourceSlug: "acme",
+        sourceType: "github",
+        org: { slug: "acme", name: "ACME", avatarUrl: null, githubHandle: "acme" },
+        product: { slug: "widget", name: "Widget" },
         summary: null,
+        titleGenerated: null,
+        titleShort: null,
         media: [],
       },
     });
@@ -141,29 +152,78 @@ describe("normalizers", () => {
       title: "v1.2.3",
       version: "1.2.3",
       publishedAt: "2026-04-23T10:00:00Z",
-      source: { slug: "acme", name: "ACME" },
-      url: undefined,
+      source: { slug: "acme", name: "ACME Changelog", type: "github" },
+      org: { slug: "acme", name: "ACME", avatarUrl: null, githubHandle: "acme" },
+      product: { slug: "widget", name: "Widget" },
+      summary: null,
+      titleGenerated: null,
+      titleShort: null,
+      media: [],
     });
   });
 
-  test("fromLatestItem maps REST payload to LiveRelease", () => {
+  test("fromStreamEvent leaves org null when an event omits org context", () => {
+    const out = fromStreamEvent({
+      id: "evt_2",
+      seq: 6,
+      ts: 1713880800000,
+      type: "release.created",
+      release: {
+        id: "rel_legacy",
+        title: "v0.0.1",
+        version: "0.0.1",
+        publishedAt: null,
+        sourceName: "Legacy",
+        sourceSlug: "legacy",
+        summary: null,
+        media: [],
+      },
+    });
+    expect(out.org).toBeNull();
+    expect(out.product).toBeNull();
+    expect(out.source.type).toBeNull();
+  });
+
+  test("fromLatestItem maps an enriched REST payload to LiveRelease", () => {
     const out = fromLatestItem({
       id: "rel_b",
       version: null,
       type: "feature",
       title: "Big launch",
-      summary: null,
+      summary: "We shipped a big launch.",
+      titleGenerated: "ACME ships the big launch",
+      titleShort: "Big launch is here",
       publishedAt: "2026-04-23T11:00:00Z",
       url: "https://example.com/blog/big",
-      media: [],
-      source: { slug: "acme", name: "ACME", type: "scrape" },
+      media: [{ type: "image", url: "https://cdn.example.com/hero.png" }],
+      source: {
+        slug: "acme",
+        name: "ACME Blog",
+        type: "scrape",
+        orgSlug: "acme",
+        orgName: "ACME",
+        orgAvatarUrl: "https://media.releases.sh/orgs/acme.png",
+        orgGithubHandle: "acme",
+      },
+      product: { slug: "widget", name: "Widget" },
     });
     expect(out).toEqual({
       id: "rel_b",
       title: "Big launch",
       version: null,
       publishedAt: "2026-04-23T11:00:00Z",
-      source: { slug: "acme", name: "ACME" },
+      source: { slug: "acme", name: "ACME Blog", type: "scrape" },
+      org: {
+        slug: "acme",
+        name: "ACME",
+        avatarUrl: "https://media.releases.sh/orgs/acme.png",
+        githubHandle: "acme",
+      },
+      product: { slug: "widget", name: "Widget" },
+      summary: "We shipped a big launch.",
+      titleGenerated: "ACME ships the big launch",
+      titleShort: "Big launch is here",
+      media: [{ type: "image", url: "https://cdn.example.com/hero.png" }],
       url: "https://example.com/blog/big",
     });
   });

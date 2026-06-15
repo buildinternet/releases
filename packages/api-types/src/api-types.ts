@@ -1265,6 +1265,25 @@ export interface LatestRelease {
   publishedAt: string | null;
   sourceName: string;
   sourceSlug: string;
+  /**
+   * Source type (`github`/`scrape`/`feed`/`agent`/`appstore`/`video`). Lets the
+   * live feed render the source-type icon for a freshly-arrived event. Additive —
+   * older buffered events / pinned workers omit it.
+   */
+  sourceType?: string;
+  /**
+   * Owning-org context, resolved at publish time so the live feed can render an
+   * avatar + org name the instant an event arrives. Nested to match
+   * {@link ReleaseDetail.org} and the build-event input. Additive/nullable:
+   * absent for orphan sources or older buffered events. Avatar fallback chain:
+   * `avatarUrl` → `github.com/<githubHandle>.png` → an initial.
+   */
+  org?: {
+    slug: string;
+    name: string;
+    avatarUrl: string | null;
+    githubHandle: string | null;
+  } | null;
   /** AI-generated summary (#852, renamed in #860). Nullable — most rows unpopulated. */
   summary: string | null;
   /** AI-generated headline (#852, renamed in #860). See {@link ReleaseDetail.titleGenerated}. */
