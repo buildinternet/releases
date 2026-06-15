@@ -10,6 +10,7 @@ import {
   assertScopesEntitled,
   oauthAccessTokenClaims,
   consentScopeViolation,
+  jwtSessionPayload,
 } from "../src/auth/entitlement.js";
 import { createAuth } from "../src/auth/index.js";
 import { createTestDb } from "./setup";
@@ -103,6 +104,35 @@ describe("consentScopeViolation", () => {
   });
   it("passes when scope is omitted (token backstop catches over-broad)", () => {
     expect(consentScopeViolation("user", { accept: true })).toBe(false);
+  });
+});
+
+describe("jwtSessionPayload", () => {
+  it("gives an admin the full ladder in the scope claim + role", () => {
+    expect(jwtSessionPayload({ role: "admin" })).toEqual({
+      scope: "openid profile email offline_access read write admin",
+      "https://releases.sh/role": "admin",
+    });
+  });
+  it("gives a plain user read-only scope", () => {
+    expect(jwtSessionPayload({ role: "user" })).toEqual({
+      scope: "openid profile email offline_access read",
+      "https://releases.sh/role": "user",
+    });
+  });
+  it("fails closed for null/unknown role → read-only, role defaults to user", () => {
+    expect(jwtSessionPayload({ role: null })).toEqual({
+      scope: "openid profile email offline_access read",
+      "https://releases.sh/role": "user",
+    });
+    expect(jwtSessionPayload(undefined)).toEqual({
+      scope: "openid profile email offline_access read",
+      "https://releases.sh/role": "user",
+    });
+    expect(jwtSessionPayload({ role: "wizard" })).toEqual({
+      scope: "openid profile email offline_access read",
+      "https://releases.sh/role": "wizard",
+    });
   });
 });
 
