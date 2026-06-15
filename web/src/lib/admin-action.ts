@@ -47,6 +47,9 @@ async function mintUserJwt(apiUrl: string): Promise<string | null> {
     const res = await fetch(`${apiUrl}/api/auth/token`, {
       headers: webApiHeaders({ Cookie: cookie }),
       cache: "no-store",
+      // Bound the mint so a slow/unreachable API can't hang an admin action
+      // until the outer platform timeout; the abort throws → caught → null.
+      signal: AbortSignal.timeout(10_000),
     });
     if (!res.ok) return null;
     const body = (await res.json()) as { token?: string };

@@ -20,6 +20,9 @@ async function getServerSessionRole(): Promise<string | null> {
     const res = await fetch(`${base}/api/auth/get-session`, {
       headers: webApiHeaders({ Cookie: cookie }),
       cache: "no-store",
+      // Bound the session read so a slow/unreachable API can't hang the
+      // /admin page render; abort throws → caught → null (fail-closed).
+      signal: AbortSignal.timeout(10_000),
     });
     if (!res.ok) return null;
     const body = (await res.json()) as { user?: { role?: string | null } } | null;
