@@ -5,6 +5,12 @@ import { tryFetch } from "@/lib/ssr-fetch";
 import { SourceTable } from "@/components/source-table";
 import { JsonLd } from "@/components/json-ld";
 import { getOrg } from "../../_lib/org-data";
+import { enableOnDemandIsr } from "@/lib/static-params";
+
+// On-demand ISR: render once per org on first request, then serve from cache
+// (revalidated every 60s). See `enableOnDemandIsr`. (#1607)
+export const revalidate = 60;
+export const generateStaticParams = enableOnDemandIsr;
 
 export async function generateMetadata({
   params,

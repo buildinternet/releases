@@ -6,8 +6,12 @@ import { getOrg } from "../_lib/org-data";
 import { getResolved } from "./_lib/resolve";
 import { ProductView } from "./_views/product-view";
 import { SourceView } from "./_views/source-view";
+import { enableOnDemandIsr } from "@/lib/static-params";
 
-const LEGACY_SOURCE_TABS = new Set(["highlights", "changelog"]);
+// On-demand ISR: render once per product/source on first request, then serve
+// from cache (revalidated every 60s). See `enableOnDemandIsr`. (#1607)
+export const revalidate = 60;
+export const generateStaticParams = enableOnDemandIsr;
 
 export async function generateMetadata({
   params,
@@ -73,10 +77,8 @@ export async function generateMetadata({
 
 export default async function OrgSlugPage({
   params,
-  searchParams,
 }: {
   params: Promise<{ orgSlug: string; slug: string }>;
-  searchParams: Promise<{ tab?: string | string[] }>;
 }) {
   const { orgSlug, slug } = await params;
 
@@ -101,13 +103,7 @@ export default async function OrgSlugPage({
     );
   }
 
-  // Source branch: preserve the legacy `?tab=` deep-link redirect to the
-  // path-based sub-tabs. Only a source carries highlights/changelog tabs.
-  const { tab } = await searchParams;
-  const tabValue = Array.isArray(tab) ? tab[0] : tab;
-  if (tabValue && LEGACY_SOURCE_TABS.has(tabValue)) {
-    permanentRedirect(`/${orgSlug}/${slug}/${tabValue}`);
-  }
-
+  // Source branch. Legacy `?tab=highlights|changelog` deep-links are redirected
+  // to the path-based sub-tabs in the routing middleware (`src/proxy.ts`).
   return <SourceView orgSlug={orgSlug} source={resolved.source} />;
 }

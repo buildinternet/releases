@@ -13,8 +13,12 @@ import {
 import { getSourceById } from "./_lib/source-by-id";
 import { getAppInfo } from "@/lib/app-source";
 import { getVideoInfo } from "@/lib/video-source";
+import { enableOnDemandIsr } from "@/lib/static-params";
 
-const LEGACY_SOURCE_TABS = new Set(["highlights", "changelog"]);
+// On-demand ISR: render once per source on first request, then serve from cache
+// (revalidated every 60s). See `enableOnDemandIsr`. (#1607)
+export const revalidate = 60;
+export const generateStaticParams = enableOnDemandIsr;
 
 export async function generateMetadata({
   params,
@@ -96,20 +100,10 @@ function RelatedRails({
   );
 }
 
-export default async function SourceByIdPage({
-  params,
-  searchParams,
-}: {
-  params: Promise<{ id: string }>;
-  searchParams: Promise<{ tab?: string | string[] }>;
-}) {
+export default async function SourceByIdPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { tab } = await searchParams;
-  const tabValue = Array.isArray(tab) ? tab[0] : tab;
-
-  if (tabValue && LEGACY_SOURCE_TABS.has(tabValue)) {
-    permanentRedirect(`/sources/${id}/${tabValue}`);
-  }
+  // Legacy `?tab=highlights|changelog` deep-links are redirected to the
+  // path-based sub-tabs in the routing middleware (`src/proxy.ts`).
 
   let source;
   try {
