@@ -30,7 +30,9 @@ export async function generateMetadata({
   try {
     const detail = await getCollection(slug);
     return {
-      title: detail.name,
+      // Tab/SEO title reads "What's new with <Collection> — releases.sh" (the
+      // "— releases.sh" suffix comes from the root layout title template).
+      title: `What's new with ${detail.name}`,
       description:
         detail.description ?? `Releases from ${detail.members.map((m) => m.name).join(", ")}.`,
       alternates: {
