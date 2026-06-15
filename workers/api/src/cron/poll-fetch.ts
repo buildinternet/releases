@@ -1463,7 +1463,14 @@ export async function ingestRawReleases(
         DB: env.DB,
       },
       {
-        src: { name: source.name, slug: source.slug, orgId: source.orgId, sourceId: source.id },
+        src: {
+          name: source.name,
+          slug: source.slug,
+          orgId: source.orgId,
+          sourceId: source.id,
+          type: source.type,
+          productId: source.productId,
+        },
         inserted: visiblePublishRows,
       },
     );

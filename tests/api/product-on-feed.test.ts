@@ -10,7 +10,13 @@
  * rather than calling the query function directly.
  */
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
-import { organizations, products, sources, releases } from "@buildinternet/releases-core/schema";
+import {
+  organizations,
+  orgAccounts,
+  products,
+  sources,
+  releases,
+} from "@buildinternet/releases-core/schema";
 import { releaseRoutes } from "../../workers/api/src/routes/releases.js";
 import { orgRoutes } from "../../workers/api/src/routes/orgs.js";
 import { createTestDb, type TestDatabase } from "../db-helper.js";
@@ -154,6 +160,62 @@ describe("GET /v1/releases/latest — product field", () => {
     const withoutProd = body.releases.find((r) => r.title === "Release without product");
     expect(withProd!.product).toEqual({ slug: "mixed-prod", name: "mixed-prod-product" });
     expect(withoutProd!.product).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// GET /v1/releases/latest — org avatar fields (live-feed rich cards)
+// ---------------------------------------------------------------------------
+
+describe("GET /v1/releases/latest — org avatar fields", () => {
+  it("surfaces the stored org avatar_url and the GitHub org_accounts handle", async () => {
+    await testDb.db.insert(organizations).values({
+      id: "org_acme",
+      name: "ACME",
+      slug: "acme",
+      discovery: "curated",
+      avatarUrl: "https://media.releases.sh/orgs/acme.png",
+    });
+    await testDb.db.insert(orgAccounts).values({
+      id: "oa_acme_gh",
+      orgId: "org_acme",
+      platform: "github",
+      handle: "acme",
+    });
+    await seedSource({ id: "src_acme", slug: "acme-src" });
+    await seedRelease({ id: "rel_acme", sourceId: "src_acme", title: "Avatar release" });
+
+    const res = await callRelease("/releases/latest");
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      releases: Array<{
+        title: string;
+        source: { orgAvatarUrl?: string | null; orgGithubHandle?: string | null };
+      }>;
+    };
+    const rel = body.releases.find((r) => r.title === "Avatar release");
+    expect(rel).toBeDefined();
+    expect(rel!.source.orgAvatarUrl).toBe("https://media.releases.sh/orgs/acme.png");
+    expect(rel!.source.orgGithubHandle).toBe("acme");
+  });
+
+  it("returns null avatar fields when the org has no avatar and no GitHub account", async () => {
+    await seedOrg("bare");
+    await seedSource({ id: "src_bare", slug: "bare-src", orgSlug: "bare" });
+    await seedRelease({ id: "rel_bare", sourceId: "src_bare", title: "Bare release" });
+
+    const res = await callRelease("/releases/latest");
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      releases: Array<{
+        title: string;
+        source: { orgAvatarUrl?: string | null; orgGithubHandle?: string | null };
+      }>;
+    };
+    const rel = body.releases.find((r) => r.title === "Bare release");
+    expect(rel).toBeDefined();
+    expect(rel!.source.orgAvatarUrl).toBeNull();
+    expect(rel!.source.orgGithubHandle).toBeNull();
   });
 });
 

@@ -14,6 +14,28 @@ export interface ReleaseEventPayload {
   publishedAt: string | null;
   sourceName: string;
   sourceSlug: string;
+  /**
+   * Source type (`github`/`scrape`/`feed`/`agent`/`appstore`/`video`). Lets the
+   * live feed render the source-type icon for a brand-new item. Additive — older
+   * buffered events (and pinned workers) omit it; clients treat `undefined` as
+   * unknown and skip the icon.
+   */
+  sourceType?: string;
+  /**
+   * Owning org context so the live feed can render an avatar + org name the
+   * instant an event arrives, matching the REST-backfilled rows. Resolved at
+   * publish time from the source's `org_id`; absent for orphan sources or when
+   * the publish-time lookup is unavailable. Avatar fallback: `avatarUrl` →
+   * `github.com/<githubHandle>.png` → an initial.
+   */
+  org?: {
+    slug: string;
+    name: string;
+    avatarUrl: string | null;
+    githubHandle: string | null;
+  } | null;
+  /** Owning product (`sources.product_id`), when grouped. `null`/absent when ungrouped. */
+  product?: { slug: string; name: string } | null;
   summary: string | null;
   /**
    * AI-generated headline (#852, renamed in #860). Always null at event time —
