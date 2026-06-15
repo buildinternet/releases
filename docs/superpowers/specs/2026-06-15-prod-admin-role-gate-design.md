@@ -41,22 +41,27 @@ production, without exposing them to non-admin users.
 - A plain Better Auth **session cookie is never accepted** as a scoped principal
   on the REST API — only the root key, a `relk_` token, or an OAuth/JWT bearer.
 
-## Approach: two layers
+## Approach: per-user JWT is the single authoritative gate
 
-**Layer 1 — server-side role check (authoritative).** Every admin server action
-verifies the Better Auth session server-side and requires `user.role === "admin"`
-before doing anything. This alone makes the system correct and safe: non-admins
-are refused server-side and no privileged credential reaches the browser.
+The signed-in user's JWT is minted server-side via `GET /api/auth/token` and used
+to call the admin API route. The JWT's `scope` claim is **role-clamped at
+issuance** (`definePayload` → `scopesForRole(user.role)`), so the API itself is
+the authoritative check:
 
-**Layer 2 — per-user JWT (defense-in-depth).** The action mints the signed-in
-user's JWT via `GET /api/auth/token` and calls the admin API route with it, so
-the API **independently** enforces admin per user.
+- An admin user's JWT carries `admin` scope → the admin route succeeds.
+- A non-admin's JWT carries `read` (or `write` for a curator) → the admin-scoped
+  route returns 403. The role model handles curators correctly: write-scoped
+  edits succeed, admin-only operations 403.
 
-Layering matters because Layer 2 is the only auth-critical surface (see
-Verification gates). Making Layer 1 authoritative means correctness never depends
-on Layer 2: if a gate fails, we ship Layer 1 with a shared `relk_` admin
-credential and Layer 2 becomes a follow-up, with no change to the security
-guarantee.
+This means **no separate server-side role check is needed** in the web action.
+The verification gates below (now both resolved) confirmed the per-user JWT path
+is sound, so the earlier two-layer design — an explicit `get-session` role check
+in front of the JWT — was redundant and has been dropped. The minting _is_ the
+gate. No shared `relk_`/root credential sits on the web server; the only
+credential is the caller's own short-lived, role-clamped JWT.
+
+UI gating (which menus render) is separate and client-side — see below — and is
+cosmetic only: bypassing it just produces a 403 at the API.
 
 ## Scope
 
@@ -88,9 +93,15 @@ plugin:
   `scopesForRole(user.role)` **plus** the `https://releases.sh/role` claim. This
   role-clamp is the security boundary: a non-admin session can never receive a
   JWT carrying `admin` scope.
-- `jwt.issuer = ${origin}/api/auth` and `jwt.audience = ${origin}` — derived from
-  `BETTER_AUTH_URL`, matching exactly what `oauthJwtConfig()` checks (the #1483
-  issuer-suffix detail; the bare-origin audience).
+- `jwt.issuer = ${origin}/api/auth` (computed as
+  `new URL(BETTER_AUTH_URL).origin + "/api/auth"`) and `jwt.audience = ${origin}`
+  (bare origin) — matching exactly what `oauthJwtConfig()` checks. **`jwt.issuer`
+  is required**: without it, the `/token` default issuer is the bare origin
+  (`ctx.context.options.baseURL`), which the API's verifier rejects. Setting it to
+  `${origin}/api/auth` is a **no-op for OAuth access tokens** — that is already
+  their resolved `iss` (`ctx.context.baseURL` = baseURL + default basePath
+  `/api/auth`) — so it fixes `/token` without disturbing the OAuth lane (verified;
+  see Verification gates).
 - `jwt.expirationTime` short (default 15m is fine; minted on demand per action).
 - `disableSettingJwtHeader: true` — the scoped JWT is minted server-side only and
   must never be broadcast to the browser via the `set-auth-jwt` header on
@@ -131,42 +142,54 @@ Replace `adminActionEnv()` (`web/src/lib/admin-action.ts`) with
 
 - **Local dev** (`isLocalAdminEnabled()` true): return today's path — `apiUrl` +
   the root `RELEASES_API_KEY` as `bearer`. Local workflow unchanged.
-- **Production**: read the server session (forwarding `next/headers` cookies to
-  `GET ${api}/api/auth/get-session`). If no session or `role !== "admin"` →
-  `{ error }` (Layer 1). Otherwise mint the per-user JWT via
-  `GET ${api}/api/auth/token` forwarding the same cookie, and return it as
-  `bearer` (Layer 2).
+- **Production**: mint the per-user JWT by forwarding the request's `.releases.sh`
+  cookie (`next/headers`) to `GET ${api}/api/auth/token`, and return the JWT as
+  `bearer`. No session/role pre-check — the JWT is role-clamped at issuance and
+  the API enforces scope. A missing/invalid session makes `/token` fail → return
+  `{ error }`.
 
 Admin actions (`web/src/app/actions/org-admin.ts`, `release-admin.ts`,
 `site-notice.ts`, `api-tokens.ts`, and the source/product menus' actions) change
 `Authorization: Bearer ${env.apiSecret}` → `Bearer ${env.bearer}`. The return
 shape is otherwise preserved, so the edits are mechanical.
 
-The session-cookie read only runs inside server actions (already dynamic), so it
-does not deopt page caching.
+The cookie read only runs inside server actions (already dynamic), so it does not
+deopt page caching. Implementation note to confirm: `GET /api/auth/token`
+authenticates off the forwarded session cookie (no bearer plugin needed for the
+cookie path).
 
 ### 5. Ops prerequisite
 
 The target prod user's `user.role` must be set to `admin` once, via
 `releases admin user set-role` (root-key gated).
 
-## Verification gates (must pass before Layer 2 code)
+## Verification gates — both RESOLVED ✅
 
-1. **`/token` coexistence.** Better Auth's docs say that in OAuth-provider mode
-   (we run `oauthProvider()`) you "MUST disable the `/token` endpoint." We are
-   deliberately keeping it on for first-party use. Verify that keeping `/token`
-   on does not disturb the OAuth2/OIDC discovery document or the `oauth2/token`
-   flow (different paths, but confirm no conflict).
-2. **No payload bleed.** Verify that `jwt.definePayload` / `issuer` / `audience`
-   overrides on the `jwt()` plugin do **not** alter the access tokens issued by
-   `oauthProvider` (those are role-clamped separately via
-   `customAccessTokenClaims`). If they share the signer's payload path, redesign
-   around it.
+Verified by reading the installed Better Auth source (`better-auth@1.6.18`,
+`@better-auth/oauth-provider@1.6.18`).
 
-If either gate fails: ship Layer 1 only, using a dedicated `relk_` admin token
-held server-side (least-privilege vs. the literal root key) instead of the
-per-user JWT. The security guarantee is unchanged; only the API-side
-defense-in-depth is deferred.
+1. **`/token` coexistence — PASS.** `GET /token` (jwt plugin) and
+   `POST /oauth2/token` (oauth provider) are distinct routes, both registered
+   unconditionally; no runtime conflict. `disableSettingJwtHeader` only controls
+   the `set-auth-jwt` header on `/get-session`, not the `/token` route. The docs'
+   "MUST disable `/token`" is a spec-compliance recommendation, not a hard break;
+   keeping it on for first-party server-side use is a deliberate, contained choice.
+2. **No payload bleed — PASS, with one required value.** Traced
+   `createJwtAccessToken` → `signJWT`:
+   - `definePayload` is **isolated** to `/token`; OAuth access tokens build their
+     payload from `customAccessTokenClaims` and never call it.
+   - `jwt.audience` does **not** reach OAuth tokens — they set `aud` explicitly
+     from the request `resource`, so `signJWT` uses that over the plugin default.
+   - `jwt.issuer` **does** feed OAuth tokens
+     (`iss: jwtPluginOptions?.jwt?.issuer ?? ctx.context.baseURL`), but the
+     current value is already `${origin}/api/auth` (`ctx.context.baseURL` =
+     baseURL `https://api.releases.sh` + default basePath `/api/auth`). Setting
+     `jwt.issuer` to exactly `${origin}/api/auth` is **required** to make `/token`
+     tokens verify (their default would be the bare origin) and a **no-op** for
+     OAuth tokens.
+
+No fallback needed. (Had a gate failed, the fallback would have been a
+server-side role check + a dedicated `relk_` admin token held server-side.)
 
 ## Error handling
 
@@ -177,13 +200,17 @@ obtain an admin-scoped JWT even if a UI gate were bypassed.
 
 ## Testing
 
-- **Unit:** `scopesForRole` fail-closed mapping; `getAdminApiAuth` refuses a
-  non-admin / missing session; `definePayload` output shape (scope + role claim).
+- **Unit:** `scopesForRole` fail-closed mapping (unknown/missing → `["read"]`);
+  `definePayload` output shape (space-delimited scope + role claim);
+  `getAdminApiAuth` returns an error when `/token` mint fails (no session).
 - **Integration:** a JWT minted from `/api/auth/token` passes `verifyOAuthJwt`
   with `admin` scope for an admin-role session and `read` only for a `user`-role
-  session; the same JWT authorizes an admin API route (e.g. `PATCH /v1/orgs/:slug`).
+  session; the same JWT authorizes an admin API route (e.g. `PATCH /v1/orgs/:slug`)
+  for admin and 403s for `user`. **Regression:** an OAuth-provider access token's
+  `iss`/`aud`/claims are unchanged after adding the `jwt` plugin config (guards
+  the issuer no-op).
 - **Manual:** signed in as admin in a prod-like build — menus appear, an action
-  succeeds; signed in as a non-admin — no menus, and the API returns 403.
+  succeeds; signed in as a non-admin — no menus, and a forced action 403s.
 
 ## Out of scope / non-goals
 
