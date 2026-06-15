@@ -158,6 +158,37 @@ describe("openRouterChat", () => {
     expect(sent.user.length).toBe(128);
   });
 
+  it("sends `reasoning` and `provider` as top-level body fields when set", async () => {
+    const f = fakeFetch(200, { choices: [{ message: { content: "x" } }], usage: {} });
+    await openRouterChat(
+      {
+        apiKey: "k",
+        model: "deepseek/deepseek-v4-flash",
+        reasoning: { enabled: false },
+        provider: { ignore: ["gmicloud"] },
+      },
+      { system: "s", user: "u", maxTokens: 512 },
+      f as unknown as typeof fetch,
+    );
+    const init = (f.mock.calls[0] as unknown as [string, RequestInit])[1];
+    const sent = JSON.parse(init.body as string);
+    expect(sent.reasoning).toEqual({ enabled: false });
+    expect(sent.provider).toEqual({ ignore: ["gmicloud"] });
+  });
+
+  it("omits `reasoning` and `provider` entirely when unset", async () => {
+    const f = fakeFetch(200, { choices: [{ message: { content: "x" } }], usage: {} });
+    await openRouterChat(
+      { apiKey: "k", model: "m" },
+      { system: "s", user: "u", maxTokens: 1 },
+      f as unknown as typeof fetch,
+    );
+    const init = (f.mock.calls[0] as unknown as [string, RequestInit])[1];
+    const sent = JSON.parse(init.body as string);
+    expect("reasoning" in sent).toBe(false);
+    expect("provider" in sent).toBe(false);
+  });
+
   it("throws with status + truncated body on non-2xx", async () => {
     const f = fakeFetch(429, "rate limited");
     expect(

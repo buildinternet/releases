@@ -22,6 +22,10 @@ import {
   type TextModel,
   type TextModelUsage,
 } from "@releases/ai-internal/text-model";
+import type {
+  OpenRouterProviderPrefs,
+  OpenRouterReasoning,
+} from "@releases/ai-internal/openrouter-client";
 import { MODEL as ANTHROPIC_MARKETING_MODEL } from "@releases/ai-internal/marketing-classifier";
 import { MODEL as ANTHROPIC_SUMMARIZE_MODEL } from "@releases/ai-internal/release-content";
 import { MODEL as ANTHROPIC_ARTICLE_MODEL } from "@releases/ai-internal/article-extract";
@@ -61,6 +65,25 @@ export interface TextModelEnv extends AnthropicEnv {
  */
 const APP_TITLE = "Releases";
 
+/**
+ * Reasoning control for the summarize lanes (release + collection daily). These
+ * lanes cap output at a few hundred tokens, so a reasoning model would spend the
+ * whole budget thinking and return empty content (#1633). Disable reasoning
+ * unconditionally — inert on non-reasoning models like gemini-flash-lite, correct
+ * on DeepSeek V4. Only applies on the OpenRouter path; the Anthropic Haiku
+ * fallback is non-reasoning and ignores it.
+ */
+const SUMMARIZE_REASONING: OpenRouterReasoning = { enabled: false };
+
+/**
+ * Provider-routing preference for the summarize lanes: never route to GMICloud,
+ * whose latency for DeepSeek is an outlier vs. other providers (#1633). This
+ * composes with (does not replace) any account-level "Ignored Providers" set in
+ * the OpenRouter dashboard — the union is excluded — so the exclusion can also be
+ * managed dashboard-side without removing this line.
+ */
+const SUMMARIZE_PROVIDER: OpenRouterProviderPrefs = { ignore: ["gmicloud"] };
+
 /** Anthropic reports no cost; derive a list-price estimate. OpenRouter reports its own via usage.costUsd. */
 function laneCost(provider: string, model: string, usage: TextModelUsage): number | undefined {
   if (provider !== "anthropic") return undefined;
@@ -98,6 +121,10 @@ async function resolveTextModel(
     orModel: string | undefined;
     anthropicModel: string;
     generationName: string;
+    /** OpenRouter reasoning control for this lane (OpenRouter path only). */
+    reasoning?: OpenRouterReasoning;
+    /** OpenRouter provider-routing preferences for this lane (OpenRouter path only). */
+    provider?: OpenRouterProviderPrefs;
   },
 ): Promise<TextModel | null> {
   const useOpenRouter = await flag(env.FLAGS, env.OPENROUTER_ENABLED, FLAGS.openrouterEnabled);
@@ -112,6 +139,8 @@ async function resolveTextModel(
           apiKey: orKey,
           model,
           ...(baseURL ? { baseURL } : {}),
+          ...(opts.reasoning ? { reasoning: opts.reasoning } : {}),
+          ...(opts.provider ? { provider: opts.provider } : {}),
           referer: "https://releases.sh",
           title: APP_TITLE,
           trace: {
@@ -164,6 +193,8 @@ export function resolveSummarizeModel(env: TextModelEnv): Promise<TextModel | nu
     orModel: env.SUMMARIZE_MODEL,
     anthropicModel: ANTHROPIC_SUMMARIZE_MODEL,
     generationName: "summarize-release",
+    reasoning: SUMMARIZE_REASONING,
+    provider: SUMMARIZE_PROVIDER,
   });
 }
 
@@ -184,5 +215,7 @@ export function resolveCollectionSummaryModel(env: TextModelEnv): Promise<TextMo
     orModel: env.SUMMARIZE_MODEL,
     anthropicModel: ANTHROPIC_SUMMARIZE_MODEL,
     generationName: "collection-daily-summary",
+    reasoning: SUMMARIZE_REASONING,
+    provider: SUMMARIZE_PROVIDER,
   });
 }
