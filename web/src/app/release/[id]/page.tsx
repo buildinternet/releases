@@ -179,13 +179,32 @@ export default async function ReleaseDetailPage({ params }: { params: Promise<{ 
     "@context": "https://schema.org",
     "@graph": [
       {
-        "@type": "Article",
+        "@type": "TechArticle",
         headline: heading,
+        // Our generated summary, attributed to us (below) as the page's own
+        // editorial layer — distinct from the derived body it summarizes.
+        ...(trimmedSummary ? { description: trimmedSummary } : {}),
         datePublished: release.publishedAt ?? undefined,
         mainEntityOfPage: { "@type": "WebPage", "@id": releaseUrl },
         url: releaseUrl,
-        author: { "@type": "Organization", name: release.sourceName },
+        // Releases authors this rendition (the enriched headline + the summary);
+        // the underlying changelog is the external source's, expressed via
+        // `sourceOrganization` + `isBasedOn`/`sameAs` below — not via `author`.
+        author: { "@type": "Organization", name: "Releases", url: "https://releases.sh" },
         publisher: { "@type": "Organization", name: "Releases", url: "https://releases.sh" },
+        ...(release.org?.name || release.sourceName
+          ? {
+              sourceOrganization: {
+                "@type": "Organization",
+                name: release.org?.name ?? release.sourceName,
+              },
+            }
+          : {}),
+        // Declare this page as a derivative of the original changelog/release
+        // note it indexes. `isBasedOn` (source provenance) + `sameAs` (same item
+        // on the canonical origin) tell crawlers we aggregate an external source
+        // rather than duplicate it — the correct framing for an aggregator.
+        ...(release.url ? { isBasedOn: release.url, sameAs: release.url } : {}),
       },
       {
         "@type": "BreadcrumbList",
