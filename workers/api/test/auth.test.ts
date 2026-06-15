@@ -15,6 +15,8 @@ import {
 import {
   buildSocialProviders,
   buildStripePlugin,
+  mapDisplayEmail,
+  syncDisplayEmailOnUpdate,
   resolveLastLoginMethodOverride,
   authTrustedOrigins,
   authCorsMiddleware,
@@ -45,24 +47,69 @@ describe("buildSocialProviders gating", () => {
   it("includes google only when id + secret both resolve", () => {
     const p = buildSocialProviders({ googleClientId: "id", googleClientSecret: "sec" });
     // Google carries overrideUserInfoOnSignIn so the imported avatar/name re-sync
-    // from Google on every sign-in (there's no profile-edit surface to clobber).
+    // from Google on every sign-in (there's no profile-edit surface to clobber), and
+    // mapProfileToUser to capture the original-cased displayEmail.
     expect(p.google).toEqual({
       clientId: "id",
       clientSecret: "sec",
       overrideUserInfoOnSignIn: true,
+      mapProfileToUser: mapDisplayEmail,
     });
     expect(p.github).toBeUndefined();
   });
 
-  it("includes github independently of google (no re-sync flag)", () => {
+  it("includes github independently of google (no re-sync flag, still maps displayEmail)", () => {
     const p = buildSocialProviders({ githubClientId: "gid", githubClientSecret: "gsec" });
     expect(Object.keys(p)).toEqual(["github"]);
     // GitHub keeps Better Auth's default import-on-signup; only Google opted into re-sync.
-    expect(p.github).toEqual({ clientId: "gid", clientSecret: "gsec" });
+    // Both providers capture displayEmail from the profile.
+    expect(p.github).toEqual({
+      clientId: "gid",
+      clientSecret: "gsec",
+      mapProfileToUser: mapDisplayEmail,
+    });
   });
 
   it("treats empty strings as absent", () => {
     expect(buildSocialProviders({ googleClientId: "id", googleClientSecret: "" })).toEqual({});
+  });
+});
+
+describe("mapDisplayEmail", () => {
+  it("captures the provider email verbatim (original casing/dots preserved)", () => {
+    expect(mapDisplayEmail({ email: "Dunn.zach@gmail.com" })).toEqual({
+      displayEmail: "Dunn.zach@gmail.com",
+    });
+  });
+
+  it("yields no field when the profile has no usable email (read path falls back)", () => {
+    expect(mapDisplayEmail({})).toEqual({});
+    expect(mapDisplayEmail({ email: null })).toEqual({});
+    expect(mapDisplayEmail({ email: "" })).toEqual({});
+  });
+});
+
+describe("syncDisplayEmailOnUpdate", () => {
+  it("refreshes displayEmail from a changed email so it never goes stale", () => {
+    expect(syncDisplayEmailOnUpdate({ email: "New.Addr@gmail.com" })).toEqual({
+      data: { email: "New.Addr@gmail.com", displayEmail: "New.Addr@gmail.com" },
+    });
+  });
+
+  it("leaves an explicit displayEmail intact (Google override re-import path)", () => {
+    // overrideUserInfoOnSignIn sends BOTH the lowercased email and the original-cased
+    // displayEmail; we must not clobber the cased value with the lowercased email.
+    expect(
+      syncDisplayEmailOnUpdate({
+        email: "dunnzach@gmail.com",
+        displayEmail: "Dunn.zach@gmail.com",
+      }),
+    ).toBeUndefined();
+  });
+
+  it("is a no-op when the update does not touch the email", () => {
+    expect(syncDisplayEmailOnUpdate({ name: "Zach" })).toBeUndefined();
+    expect(syncDisplayEmailOnUpdate({ email: "" })).toBeUndefined();
   });
 });
 

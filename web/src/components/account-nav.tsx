@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { signOut, useSession } from "@/lib/auth-client";
-import { AUTH_CONFIGURED } from "@/lib/auth-ui";
+import { AUTH_CONFIGURED, displayEmailOf } from "@/lib/auth-ui";
 import { computeIsAdmin } from "@/components/admin-only";
 
 /**
@@ -128,7 +128,7 @@ function AccountNavInner({ variant, devAdmin }: { variant: Variant; devAdmin: bo
           </span>
           <div className="min-w-0">
             <p className="text-xs text-stone-400 dark:text-stone-500">Signed in as</p>
-            <p className="truncate text-stone-700 dark:text-stone-200">{user.email}</p>
+            <p className="truncate text-stone-700 dark:text-stone-200">{displayEmailOf(user)}</p>
           </div>
         </div>
         <Link
@@ -204,7 +204,9 @@ function AccountNavInner({ variant, devAdmin }: { variant: Variant; devAdmin: bo
                     {user.name}
                   </p>
                 )}
-                <p className="truncate text-sm text-stone-600 dark:text-stone-300">{user.email}</p>
+                <p className="truncate text-sm text-stone-600 dark:text-stone-300">
+                  {displayEmailOf(user)}
+                </p>
               </div>
             </div>
             <Link

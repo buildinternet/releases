@@ -133,7 +133,51 @@ type SocialProvider = {
    * UI whose values this could clobber. See `buildSocialProviders`.
    */
   overrideUserInfoOnSignIn?: boolean;
+  /**
+   * Map the raw provider profile onto extra user fields at create/override time.
+   * We use it to capture `displayEmail` — the provider's email with its ORIGINAL
+   * casing/dots — before the Sentinel `emailNormalization` pass rewrites the
+   * canonical `email` column (lowercase + Gmail dots stripped). Better Auth merges
+   * the returned object onto the user it creates, and Sentinel's user create/update
+   * hooks spread `...user` (touching only `email`), so `displayEmail` survives. See
+   * `mapDisplayEmail` and the `user.additionalFields.displayEmail` declaration.
+   */
+  mapProfileToUser?: (profile: { email?: string | null }) => { displayEmail?: string };
 };
+
+/**
+ * Capture the provider profile's email verbatim into the `displayEmail` field.
+ * Both the Google (decoded id token) and GitHub (resolved primary email) profiles
+ * expose `.email`; an absent email yields no field (the read path falls back to the
+ * canonical `email`). Shared by every provider so the display form is preserved
+ * uniformly. Pure so it's unit-testable in isolation.
+ */
+export function mapDisplayEmail(profile: { email?: string | null }): { displayEmail?: string } {
+  return typeof profile.email === "string" && profile.email ? { displayEmail: profile.email } : {};
+}
+
+/**
+ * `user.update.before` transform that keeps `displayEmail` from going stale when the
+ * canonical `email` changes (the self-serve change-email confirmation, which applies
+ * `updateUser({ email })`). Sets `displayEmail` to the incoming email so the account
+ * page never shows the OLD address after a change.
+ *
+ * The guard is load-bearing: it acts ONLY when `email` is in the update AND no
+ * explicit `displayEmail` is — because Google's `overrideUserInfoOnSignIn` re-imports
+ * the profile on EVERY sign-in via `mapProfileToUser`, sending an update that carries
+ * BOTH the (lowercased) `email` and the original-cased `displayEmail`. Without the
+ * `displayEmail == null` check we'd overwrite that nicely-cased value with the
+ * lowercased email on every Google sign-in. Returns `{ data }` (Better Auth's
+ * modify-shape) only when it changes something, else `undefined` (a no-op passthrough).
+ * Pure + exported for unit testing.
+ */
+export function syncDisplayEmailOnUpdate(
+  data: Record<string, unknown>,
+): { data: Record<string, unknown> } | undefined {
+  if (typeof data.email !== "string" || data.email === "") return undefined;
+  if (data.displayEmail != null) return undefined;
+  return { data: { ...data, displayEmail: data.email } };
+}
 
 /**
  * Build the `socialProviders` map, **gating each provider on both halves of its
@@ -160,10 +204,15 @@ export function buildSocialProviders(creds: {
       clientId: creds.googleClientId,
       clientSecret: creds.googleClientSecret,
       overrideUserInfoOnSignIn: true,
+      mapProfileToUser: mapDisplayEmail,
     };
   }
   if (creds.githubClientId && creds.githubClientSecret) {
-    providers.github = { clientId: creds.githubClientId, clientSecret: creds.githubClientSecret };
+    providers.github = {
+      clientId: creds.githubClientId,
+      clientSecret: creds.githubClientSecret,
+      mapProfileToUser: mapDisplayEmail,
+    };
   }
   return providers;
 }
@@ -1067,6 +1116,17 @@ export async function createAuth(
       afterEmailVerification: auditAfterEmailVerification(audit),
     },
     user: {
+      // Human-facing display email, preserving the original casing/dots that the
+      // Sentinel `emailNormalization` pass strips off the canonical `email` column.
+      // Declared so the drizzle adapter persists the paired `display_email` column
+      // and Better Auth returns it on the session user. `input: false` keeps it
+      // server-set only — it's populated from the OAuth profile via each provider's
+      // `mapProfileToUser` (see `mapDisplayEmail`), never accepted from a client
+      // sign-up/update body (which would let a caller spoof their own display
+      // email). `returned: true` (the default) surfaces it to the web session.
+      additionalFields: {
+        displayEmail: { type: "string", required: false, input: false },
+      },
       // Self-serve email change from the account page (`/api/auth/change-email`).
       // Default-off in Better Auth; opt in here. Every user reaches us verified
       // (requireEmailVerification above), so the flow that matters is the
@@ -1090,8 +1150,22 @@ export async function createAuth(
     // Audit hooks for sign-up / sign-in-success / sign-out / session-revoked. See
     // audit.ts; the failure stream is logged at the HTTP layer in index.ts. The
     // api-key cap + create/delete audit ride the `apiKeyGovernancePlugin` in
-    // `plugins` above (matcher-scoped to the `/api-key/*` endpoints).
-    databaseHooks: auditDatabaseHooks(audit),
+    // `plugins` above (matcher-scoped to the `/api-key/*` endpoints). Merged with a
+    // `user.update.before` transform that keeps `displayEmail` fresh on an email
+    // change (see `syncDisplayEmailOnUpdate`) — the audit hooks define only
+    // `user.create.after`, so the two `user` sub-keys compose without collision.
+    databaseHooks: (() => {
+      const auditHooks = auditDatabaseHooks(audit);
+      return {
+        ...auditHooks,
+        user: {
+          ...auditHooks.user,
+          update: {
+            before: async (data: Record<string, unknown>) => syncDisplayEmailOnUpdate(data),
+          },
+        },
+      };
+    })(),
     // Per-user scope-entitlement gate on the OAuth consent submission. Rejects a
     // consent that grants scopes beyond the signed-in user's role BEFORE it is
     // persisted (the friendly, early half of the fail-closed pair; the token

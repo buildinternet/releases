@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useSession, changeEmail } from "@/lib/auth-client";
+import { displayEmailOf } from "@/lib/auth-ui";
 
 const labelClass = "block text-sm font-medium text-stone-700 dark:text-stone-200";
 const inputClass =
@@ -43,7 +44,7 @@ export function EmailPanel() {
         setError(res.error.message ?? "Could not change your email. Please try again.");
         return;
       }
-      setConfirmSentTo(user.email);
+      setConfirmSentTo(displayEmailOf(user));
       setNewEmail("");
     } catch {
       setError("Could not change your email. Please try again.");
@@ -100,7 +101,9 @@ export function EmailPanel() {
 
       <div className="border border-stone-200 p-5 dark:border-stone-800">
         <p className="text-sm text-stone-500 dark:text-stone-400">Current email</p>
-        <p className="mt-1 text-sm font-medium text-stone-900 dark:text-stone-100">{user.email}</p>
+        <p className="mt-1 text-sm font-medium text-stone-900 dark:text-stone-100">
+          {displayEmailOf(user)}
+        </p>
       </div>
 
       <form
