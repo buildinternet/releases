@@ -1,14 +1,14 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Header } from "@/components/header";
-import { isApiTokensAdminEnabled } from "@/lib/api-tokens-admin-flag";
+import { isAdminViewer } from "@/lib/server-session";
 import { listMyTokensAction } from "@/app/actions/api-tokens";
 import { TokensAdmin } from "./tokens-admin";
 
 export const metadata: Metadata = { title: "API Tokens" };
 
 export default async function ApiTokensPage() {
-  if (!isApiTokensAdminEnabled()) notFound();
+  if (!(await isAdminViewer())) notFound();
 
   const result = await listMyTokensAction();
   const initialTokens = result.ok ? result.tokens : [];
