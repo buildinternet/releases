@@ -1,7 +1,6 @@
 /// <reference types="react/canary" />
 import type { Metadata } from "next";
 import { JetBrains_Mono } from "next/font/google";
-import { cookies } from "next/headers";
 import Script from "next/script";
 import { ViewTransition } from "react";
 import { ThemeProvider } from "@/components/theme-provider";
@@ -34,7 +33,9 @@ export const metadata: Metadata = {
     type: "website",
     siteName: "releases.sh",
     locale: "en_US",
-    url: "https://releases.sh",
+    // No `url` here on purpose: a hardcoded site-wide og:url leaks onto every
+    // page that doesn't set its own, so the og:url disagrees with the page's
+    // canonical. Each page sets `openGraph.url` to match its canonical instead.
   },
   twitter: {
     card: "summary_large_image",
@@ -46,25 +47,24 @@ export const metadata: Metadata = {
 const THEME_STYLE = `html{background-color:#fafaf9;color:#1c1917;color-scheme:light}html.dark{background-color:#0c0a09;color:#f5f5f4;color-scheme:dark}html.light{background-color:#fafaf9;color:#1c1917;color-scheme:light}@media (prefers-color-scheme: dark){html:not(.light):not(.dark){background-color:#0c0a09;color:#f5f5f4;color-scheme:dark}}body{background:transparent;color:inherit}`;
 const THEME_SCRIPT = `(function(){try{var d=document.documentElement;var stored=localStorage.getItem("theme");var pref=stored==="light"||stored==="dark"?stored:d.dataset.themePreference||"system";var resolved=pref==="dark"||pref==="light"?pref:window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";d.dataset.themePreference=pref;d.classList.remove("light","dark");d.classList.add(resolved);d.style.colorScheme=resolved;}catch(e){}})();`;
 
-export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const themeCookie = (await cookies()).get("theme")?.value;
-  const initialTheme = themeCookie === "light" || themeCookie === "dark" ? themeCookie : "system";
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  // Theme is resolved entirely client-side: THEME_SCRIPT (below, beforeInteractive)
+  // reads localStorage and paints the resolved theme class before first paint,
+  // THEME_STYLE covers the unclassed/system default, and `suppressHydrationWarning`
+  // absorbs the server (unclassed) vs. client (classed) diff. Reading a theme
+  // cookie here would opt every route into dynamic rendering (no-store), defeating
+  // ISR across the whole site — so the server renders the theme-neutral state and
+  // never touches `cookies()`.
+  //
   // scroll-smooth: in-page anchor jumps (e.g. the homepage "what agents use
   // this for" link) glide instead of teleporting.
-  const htmlClassName = [
-    "scroll-smooth",
-    jetbrainsMono.variable,
-    initialTheme === "system" ? null : initialTheme,
-  ]
-    .filter(Boolean)
-    .join(" ");
+  const htmlClassName = ["scroll-smooth", jetbrainsMono.variable].join(" ");
 
   return (
     <html
       lang="en"
       className={htmlClassName}
-      data-theme-preference={initialTheme}
-      style={initialTheme === "system" ? undefined : { colorScheme: initialTheme }}
+      data-theme-preference="system"
       suppressHydrationWarning
     >
       <head>

@@ -21,6 +21,7 @@ export async function generateMetadata({
       title: tag.name,
       description: `Organizations and products tagged ${tag.name}`,
       alternates: { canonical: `/tags/${slug}` },
+      openGraph: { type: "website", url: `/tags/${slug}` },
     };
   } catch {
     return { title: slug };

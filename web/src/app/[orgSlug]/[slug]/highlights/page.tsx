@@ -5,6 +5,12 @@ import { JsonLd } from "@/components/json-ld";
 import { HighlightsView } from "@/components/highlights-view";
 import { buildSourceEntityJsonLd, sourceBreadcrumbItems } from "@/lib/schema-org";
 import { getSource } from "../_lib/source-data";
+import { enableOnDemandIsr } from "@/lib/static-params";
+
+// On-demand ISR: render once per source on first request, then serve from cache
+// (revalidated every 60s). See `enableOnDemandIsr`. (#1607)
+export const revalidate = 60;
+export const generateStaticParams = enableOnDemandIsr;
 
 export async function generateMetadata({
   params,

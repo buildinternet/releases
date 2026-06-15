@@ -70,7 +70,7 @@ export function buildSourceEntityJsonLd(
   return {
     "@type": type,
     // Stable `@id` so an ItemList of releases on the same page can point each
-    // `SoftwareRelease` back at this entity via `isPartOf`.
+    // release node back at this entity via `isPartOf`.
     "@id": sourceUrl,
     name: source.name,
     url: sourceUrl,
@@ -122,7 +122,7 @@ export function sourceBreadcrumbItems(
   ];
 }
 
-/** Subset of a release feed item needed to render a `SoftwareRelease` node.
+/** Subset of a release feed item needed to render a release (`TechArticle`) node.
  *  Structurally satisfied by `OrgReleaseItem`, `CollectionReleaseItem`, and
  *  `CategoryReleaseItem` from `@buildinternet/releases-api-types`. */
 type ReleaseListItemInput = {
@@ -134,7 +134,7 @@ type ReleaseListItemInput = {
 };
 
 /**
- * Builds an `ItemList` of `SoftwareRelease` nodes for a feed page's JSON-LD
+ * Builds an `ItemList` of release (`TechArticle`) nodes for a feed page's JSON-LD
  * `@graph` (org / source / category / collection feeds). Each release links to
  * its canonical `/release/{id}` page when an `id` is present, falling back to
  * the release's external `url`; rows with neither a usable target are skipped.
@@ -154,11 +154,15 @@ export function buildReleaseItemListJsonLd(
       if (!url) return [];
       return [
         {
-          "@type": "SoftwareRelease",
+          // `SoftwareRelease` is not a real schema.org type — each release note
+          // is a `TechArticle` (and the `/release/{id}` page it links to is one
+          // too, per #1630). `version` is the valid CreativeWork property here;
+          // `softwareVersion` only exists on `SoftwareApplication`.
+          "@type": "TechArticle",
           name: release.title,
           url,
           ...(release.publishedAt ? { datePublished: release.publishedAt } : {}),
-          ...(release.version ? { softwareVersion: release.version } : {}),
+          ...(release.version ? { version: release.version } : {}),
           ...(opts.isPartOfId ? { isPartOf: { "@id": opts.isPartOfId } } : {}),
         },
       ];

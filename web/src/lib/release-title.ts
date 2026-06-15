@@ -38,6 +38,21 @@ export function titleIsBareVersion(title: string, version: string | null | undef
   return t === v || stripV(t) === stripV(v);
 }
 
+/**
+ * Clamp a page `<title>` to a length search engines won't truncate awkwardly.
+ * Truncates on a word boundary (when one falls reasonably late) and appends an
+ * ellipsis. The global `%s — releases.sh` template still appends the brand
+ * suffix afterward, so `max` bounds the meaningful portion (~60 chars).
+ */
+export function clampTitle(value: string, max = 60): string {
+  const v = value.trim();
+  if (v.length <= max) return v;
+  const slice = v.slice(0, max - 1);
+  const lastSpace = slice.lastIndexOf(" ");
+  const base = lastSpace > max * 0.6 ? slice.slice(0, lastSpace) : slice;
+  return `${base.trimEnd()}…`;
+}
+
 export interface FeedTitleInput {
   title: string;
   version: string | null;

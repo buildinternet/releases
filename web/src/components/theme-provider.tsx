@@ -50,16 +50,14 @@ function applyTheme(resolved: "light" | "dark") {
   document.documentElement.style.colorScheme = resolved;
 }
 
-function syncThemeCookie(theme: Theme) {
+// Theme is resolved client-side only. We keep the preference mirrored onto a DOM
+// attribute (read back by getInitialTheme + the beforeInteractive bootstrap), but
+// deliberately do NOT persist it to a cookie: a server-readable theme cookie would
+// tempt the root layout back into `cookies()`, which opts every route into dynamic
+// rendering and defeats site-wide ISR. localStorage is the source of truth.
+function syncThemePreference(theme: Theme) {
   if (typeof document === "undefined") return;
   document.documentElement.dataset.themePreference = theme;
-
-  if (theme === "system") {
-    document.cookie = "theme=; Max-Age=0; Path=/; SameSite=Lax";
-    return;
-  }
-
-  document.cookie = `theme=${theme}; Max-Age=31536000; Path=/; SameSite=Lax`;
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
@@ -78,7 +76,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     setThemeState(t);
     themeRef.current = t;
     setSystemPreference(getSystemTheme());
-    syncThemeCookie(t);
+    syncThemePreference(t);
   }, []);
 
   // Apply to DOM whenever resolved changes
@@ -107,7 +105,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     } else {
       localStorage.setItem("theme", t);
     }
-    syncThemeCookie(t);
+    syncThemePreference(t);
   }, []);
 
   const value = useMemo(() => ({ theme, resolved, setTheme }), [theme, resolved, setTheme]);

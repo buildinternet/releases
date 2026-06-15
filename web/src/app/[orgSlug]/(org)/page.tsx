@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { notFound, permanentRedirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import { daysAgoIso } from "@buildinternet/releases-core/dates";
 import { api, ApiSetupError, type OrgHeatmap } from "@/lib/api";
 import { tryFetch } from "@/lib/ssr-fetch";
@@ -9,9 +9,13 @@ import { JsonLd } from "@/components/json-ld";
 import { ProductGrid } from "@/components/product-grid";
 import { buildReleaseItemListJsonLd, currentPeriod, lastModifiedAt } from "@/lib/schema-org";
 import { domainHref } from "@/lib/source-display";
+import { enableOnDemandIsr } from "@/lib/static-params";
 import { getOrg } from "../_lib/org-data";
 
-const LEGACY_ORG_TABS = new Set(["releases", "sources", "playbook", "fetch-log"]);
+// On-demand ISR: render once per org on first request, then serve from cache
+// (revalidated every 60s). See `enableOnDemandIsr`. (#1607)
+export const revalidate = 60;
+export const generateStaticParams = enableOnDemandIsr;
 
 export async function generateMetadata({
   params,
@@ -46,20 +50,12 @@ export async function generateMetadata({
 
 export default async function OrgOverviewPage({
   params,
-  searchParams,
 }: {
   params: Promise<{ orgSlug: string }>;
-  searchParams: Promise<{ tab?: string | string[] }>;
 }) {
   const { orgSlug } = await params;
-  const { tab } = await searchParams;
-  const tabValue = Array.isArray(tab) ? tab[0] : tab;
-
-  // Handled here rather than in next.config.ts so `:orgSlug` can't greedy-match
-  // top-level routes like /status, /docs, etc.
-  if (tabValue && LEGACY_ORG_TABS.has(tabValue)) {
-    permanentRedirect(`/${orgSlug}/${tabValue}`);
-  }
+  // Legacy `?tab=` deep-links are redirected to the path-based tab routes in the
+  // routing middleware (`src/proxy.ts`) so this page can render statically.
 
   const activityFrom = daysAgoIso(365 * 2).slice(0, 10);
 
