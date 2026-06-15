@@ -10,9 +10,28 @@
  * (entitlement.ts → customAccessTokenClaims). The resource server trusts that
  * claim — it never re-derives scope.
  */
-import { jwtVerify, createRemoteJWKSet, type JWTPayload, type JWTVerifyGetKey } from "jose";
+import {
+  jwtVerify,
+  createRemoteJWKSet,
+  createLocalJWKSet,
+  type JWTPayload,
+  type JWTVerifyGetKey,
+} from "jose";
 
 export type { JWTVerifyGetKey } from "jose";
+
+/**
+ * Build a key resolver from an already-fetched JWKS document (`{ keys: [...] }`)
+ * — no network. The self-hosting authorization server (the REST API worker)
+ * verifies its OWN tokens with this, reading its keys in-process, instead of the
+ * remote `createRemoteJWKSet` path: a Cloudflare Worker resolving JWKS by
+ * fetching its own public hostname is a self-subrequest that can be routed to a
+ * (nonexistent) origin and fail, which would reject every otherwise-valid token.
+ * Cross-worker resource servers (e.g. MCP) keep using the remote path.
+ */
+export function localKeyResolver(jwks: unknown): JWTVerifyGetKey {
+  return createLocalJWKSet(jwks as Parameters<typeof createLocalJWKSet>[0]);
+}
 
 /** The API scope ladder, mirrored from `@buildinternet/releases-core/api-token`. */
 const API_SCOPES = new Set(["read", "write", "admin"]);

@@ -10,7 +10,14 @@ import {
   scopeSatisfies,
   USER_API_KEY_PREFIX,
 } from "@buildinternet/releases-core/api-token";
-import { isJwtShaped, verifyOAuthJwt, type OAuthJwtConfig } from "@releases/lib/oauth-jwt";
+import {
+  isJwtShaped,
+  verifyOAuthJwt,
+  localKeyResolver,
+  type OAuthJwtConfig,
+  type JWTVerifyGetKey,
+  type VerifiedOAuthToken,
+} from "@releases/lib/oauth-jwt";
 import { createDb } from "../db.js";
 import { touchLastUsed, verifyApiToken } from "./token-store.js";
 import type { Env } from "../index.js";
@@ -91,6 +98,55 @@ function oauthJwtConfig(env: Env["Bindings"]): OAuthJwtConfig | null {
     return null;
   }
   return { issuer: `${origin}/api/auth`, audience: origin };
+}
+
+// This worker IS the authorization server, so it verifies its OWN OAuth/session
+// JWTs with keys read in-process — never via verifyOAuthJwt's default remote
+// fetch of `${origin}/api/auth/jwks`, which is a self-subrequest to this worker's
+// own public hostname. On Cloudflare such a self-fetch can be routed to a
+// (nonexistent) origin and fail, which would reject every otherwise-valid token
+// (the bug behind admin actions 401ing despite a correctly-minted token).
+// Cross-worker resource servers (MCP) legitimately keep the remote path.
+// Cached module-wide; rebuilt on a verify miss in case the signing key rotated.
+let inProcessJwks: JWTVerifyGetKey | null = null;
+
+async function localJwksResolver(env: Env["Bindings"]): Promise<JWTVerifyGetKey | undefined> {
+  if (inProcessJwks) return inProcessJwks;
+  if (!env.BETTER_AUTH_URL) return undefined;
+  try {
+    const origin = new URL(env.BETTER_AUTH_URL).origin;
+    const auth = await createAuth(env);
+    const res = await auth.handler(new Request(`${origin}/api/auth/jwks`, { method: "GET" }));
+    if (!res.ok) return undefined;
+    inProcessJwks = localKeyResolver(await res.json());
+    return inProcessJwks;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Verify a presented OAuth/session JWT against this worker's keys. Prefers the
+ * in-process JWKS; a context-injected `oauthJwtKeyResolver` (test seam) wins;
+ * falls back to verifyOAuthJwt's remote fetch only when neither is available.
+ * On a miss with the cached in-process set, rebuilds it once and retries so a
+ * key rotation doesn't 401 every caller until the next worker restart.
+ */
+async function verifyPresentedJwt(
+  c: Context<Env>,
+  presented: string,
+): Promise<VerifiedOAuthToken | null> {
+  const cfg = oauthJwtConfig(c.env);
+  if (!cfg) return null;
+  const injected = c.get("oauthJwtKeyResolver");
+  cfg.keyResolver = injected ?? (await localJwksResolver(c.env));
+  let verified = await verifyOAuthJwt(presented, cfg);
+  if (!verified && !injected && inProcessJwks) {
+    inProcessJwks = null;
+    cfg.keyResolver = await localJwksResolver(c.env);
+    verified = await verifyOAuthJwt(presented, cfg);
+  }
+  return verified;
 }
 
 /**
@@ -227,12 +283,7 @@ async function resolveAuthUncached(
   // `none`, identical to an invalid relk_: 401 on a write/admin route, ignored
   // on a public read.
   if (isJwtShaped(presented)) {
-    const cfg = oauthJwtConfig(c.env);
-    if (!cfg) return { kind: "none", skip: false };
-    // Test seam: a locally-injected JWKS resolver avoids a network fetch.
-    const resolver = c.get("oauthJwtKeyResolver");
-    if (resolver) cfg.keyResolver = resolver;
-    const verified = await verifyOAuthJwt(presented, cfg);
+    const verified = await verifyPresentedJwt(c, presented);
     if (verified && verified.scopes.length > 0) {
       return {
         kind: "token",
@@ -458,12 +509,7 @@ async function resolveBearerUser(c: Context<Env>, presented: string): Promise<Be
     return v.rateLimited ? { kind: "rate_limited" } : { kind: "none" };
   }
   if (isJwtShaped(presented)) {
-    const cfg = oauthJwtConfig(c.env);
-    if (!cfg) return { kind: "none" };
-    // Test seam: a locally-injected JWKS resolver avoids a network fetch.
-    const resolver = c.get("oauthJwtKeyResolver");
-    if (resolver) cfg.keyResolver = resolver;
-    const verified = await verifyOAuthJwt(presented, cfg);
+    const verified = await verifyPresentedJwt(c, presented);
     if (verified?.subject)
       return { kind: "user", user: { id: verified.subject, email: "", name: "" } };
     return { kind: "none" };
