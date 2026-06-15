@@ -179,13 +179,18 @@ export default async function ReleaseDetailPage({ params }: { params: Promise<{ 
     "@context": "https://schema.org",
     "@graph": [
       {
-        "@type": "Article",
+        "@type": "TechArticle",
         headline: heading,
         datePublished: release.publishedAt ?? undefined,
         mainEntityOfPage: { "@type": "WebPage", "@id": releaseUrl },
         url: releaseUrl,
         author: { "@type": "Organization", name: release.sourceName },
         publisher: { "@type": "Organization", name: "Releases", url: "https://releases.sh" },
+        // Declare this page as a derivative of the original changelog/release
+        // note it indexes. `isBasedOn` (source provenance) + `sameAs` (same item
+        // on the canonical origin) tell crawlers we aggregate an external source
+        // rather than duplicate it — the correct framing for an aggregator.
+        ...(release.url ? { isBasedOn: release.url, sameAs: release.url } : {}),
       },
       {
         "@type": "BreadcrumbList",

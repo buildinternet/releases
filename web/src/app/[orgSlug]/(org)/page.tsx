@@ -7,7 +7,7 @@ import { ReleaseTimeline } from "@/components/release-timeline";
 import { OverviewView } from "@/components/overview-view";
 import { JsonLd } from "@/components/json-ld";
 import { ProductGrid } from "@/components/product-grid";
-import { currentPeriod, lastModifiedAt } from "@/lib/schema-org";
+import { buildReleaseItemListJsonLd, currentPeriod, lastModifiedAt } from "@/lib/schema-org";
 import { domainHref } from "@/lib/source-display";
 import { getOrg } from "../_lib/org-data";
 
@@ -24,7 +24,7 @@ export async function generateMetadata({
     const lastModified = lastModifiedAt(org);
     const shouldNoIndex = org.discovery === "on_demand" || org.isHidden === true;
     return {
-      title: `${org.name} Releases & Latest Updates`,
+      title: `${org.name} Releases & Latest Updates · ${currentPeriod()}`,
       description: `Latest releases, product updates, and tracked sources for ${org.name} — updated ${currentPeriod()}.`,
       ...(shouldNoIndex ? { robots: { index: false, follow: true } } : {}),
       openGraph: {
@@ -66,8 +66,9 @@ export default async function OrgOverviewPage({
   let org;
   let activityResult;
   let heatmapResult;
+  let releasesResult;
   try {
-    [org, activityResult, heatmapResult] = await Promise.all([
+    [org, activityResult, heatmapResult, releasesResult] = await Promise.all([
       getOrg(orgSlug),
       tryFetch(api.orgActivity(orgSlug, activityFrom), {
         route: `/${orgSlug}`,
@@ -76,6 +77,11 @@ export default async function OrgOverviewPage({
       tryFetch(api.orgHeatmap(orgSlug), {
         route: `/${orgSlug}`,
         event: "org-heatmap-fetch-failed",
+      }),
+      // Drives the JSON-LD release ItemList only; a failure just drops the list.
+      tryFetch(api.orgReleases(orgSlug, { limit: 20 }), {
+        route: `/${orgSlug}`,
+        event: "org-releases-fetch-failed",
       }),
     ]);
   } catch (err) {
@@ -87,17 +93,29 @@ export default async function OrgOverviewPage({
   const heatmap: OrgHeatmap | null = heatmapResult.data;
 
   const orgUrl = `https://releases.sh/${orgSlug}`;
+  const orgNodeId = `${orgUrl}#org`;
+  const releaseListId = `${orgUrl}#releases`;
   const lastModified = lastModifiedAt(org);
+  const releaseItems = releasesResult.data?.releases ?? [];
   const jsonLd = {
     "@context": "https://schema.org",
     "@graph": [
       {
         "@type": "Organization",
+        "@id": orgNodeId,
         name: org.name,
         url: orgUrl,
         ...(org.avatarUrl ? { logo: org.avatarUrl, image: org.avatarUrl } : {}),
         ...(org.domain ? { sameAs: [domainHref(org.domain)] } : {}),
         ...(lastModified ? { dateModified: lastModified } : {}),
+      },
+      {
+        "@type": "CollectionPage",
+        name: `${org.name} Releases & Latest Updates`,
+        url: orgUrl,
+        ...(lastModified ? { dateModified: lastModified } : {}),
+        about: { "@id": orgNodeId },
+        ...(releaseItems.length > 0 ? { mainEntity: { "@id": releaseListId } } : {}),
       },
       {
         "@type": "BreadcrumbList",
@@ -106,6 +124,15 @@ export default async function OrgOverviewPage({
           { "@type": "ListItem", position: 2, name: org.name, item: orgUrl },
         ],
       },
+      ...(releaseItems.length > 0
+        ? [
+            buildReleaseItemListJsonLd(releaseItems, {
+              listId: releaseListId,
+              name: `${org.name} Releases`,
+              isPartOfId: orgNodeId,
+            }),
+          ]
+        : []),
     ],
   };
 

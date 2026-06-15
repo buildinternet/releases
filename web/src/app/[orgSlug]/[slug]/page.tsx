@@ -27,9 +27,10 @@ export async function generateMetadata({
       // bare `.atom` route resolves product-first (#1210), so advertise the
       // product's cross-source feed the same way the source branch does.
       return {
-        title: `${product.name} Release Notes & Changelog`,
+        title: `${product.name} Release Notes & Changelog · ${currentPeriod()}`,
         description:
-          product.description ?? `Release notes, changelog, and updates for ${product.name}.`,
+          product.description ??
+          `Release notes, changelog, and updates for ${product.name} — refreshed ${currentPeriod()}.`,
         ...(orgIsHidden ? { robots: { index: false, follow: true } } : {}),
         openGraph: { type: "website", url: `/${orgSlug}/${slug}` },
         alternates: {
