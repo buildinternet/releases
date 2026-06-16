@@ -7,7 +7,12 @@ import { ReleasesJsonConfigSchema } from "@buildinternet/releases-api-types";
 // /docs/listing: this is the org-identity file the daily sweep reads from
 // https://releases.sh/.well-known/releases.json. Keep it schema-valid.
 describe("public/.well-known/releases.json", () => {
-  const raw = readFileSync(join(process.cwd(), "public", ".well-known", "releases.json"), "utf8");
+  // Resolve relative to this test file — the root `bun test` runs from the
+  // repo root, not web/, so process.cwd() would point at the wrong tree.
+  const raw = readFileSync(
+    join(import.meta.dir, "..", "public", ".well-known", "releases.json"),
+    "utf8",
+  );
 
   it("is valid JSON and conforms to the published releases.json schema", () => {
     const parsed = JSON.parse(raw);
