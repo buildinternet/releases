@@ -29,6 +29,7 @@ import { VideoEmbed } from "@/components/video-embed";
 import { resolveVideoEmbed } from "@/lib/video-source";
 import { OrgAvatar } from "@/components/org-avatar";
 import { productPath } from "@/lib/links";
+import { shouldNoIndexRelease } from "@/lib/release-noindex";
 
 export async function generateMetadata({
   params,
@@ -49,10 +50,7 @@ export async function generateMetadata({
       .replace(/\s+/g, " ")
       .trim();
     const description = stripped.length > 160 ? stripped.slice(0, 157) + "..." : stripped;
-    const shouldNoIndex =
-      release.sourceIsHidden === true ||
-      release.org?.discovery === "on_demand" ||
-      release.org?.isHidden === true;
+    const shouldNoIndex = shouldNoIndexRelease(release);
     return {
       // Clamp so the <title> doesn't run long enough for search engines to
       // truncate it; the global `%s — releases.sh` template still adds the brand.

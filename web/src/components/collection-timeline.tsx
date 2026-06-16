@@ -25,6 +25,7 @@ import { isTag, rollupTags, type TagListItem } from "./collection-timeline-rollu
 import { Caret } from "./caret";
 import { pluralReleases } from "@/lib/formatters";
 import { deriveFeedTitle, normalizeVersionLabel } from "@/lib/release-title";
+import { releaseExcerpt } from "@/lib/release-excerpt";
 
 interface CollectionTimelineProps {
   /**
@@ -123,31 +124,6 @@ function findThumbnail(release: CollectionReleaseItem) {
 function releaseHeading(release: CollectionReleaseItem): string {
   const { descriptive, versionLabel } = deriveFeedTitle(release);
   return descriptive ?? versionLabel ?? release.title ?? "Release";
-}
-
-// Measures whether a height-clamped element actually has hidden overflow, so
-// "Show more" (and the fade) only appear when there's real content to reveal.
-// `enabled` is the collapsed state — once expanded we stop measuring (the
-// button is gone for good; expansion is one-way by design). A ResizeObserver
-// re-measures so late-loading markdown/images/syntax highlighting that grows
-// the body still flips the flag.
-function useOverflowClamp<T extends HTMLElement>(enabled: boolean) {
-  const ref = useRef<T>(null);
-  const [overflowing, setOverflowing] = useState(false);
-  useEffect(() => {
-    if (!enabled) {
-      setOverflowing(false);
-      return;
-    }
-    const el = ref.current;
-    if (!el) return;
-    const measure = () => setOverflowing(el.scrollHeight - el.clientHeight > 1);
-    measure();
-    const ro = new ResizeObserver(measure);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [enabled]);
-  return { ref, overflowing };
 }
 
 export function CollectionTimeline({
@@ -685,11 +661,14 @@ function PostHero({ release }: { release: CollectionReleaseItem }) {
   // `title` column, which is often a terse "Session Folders".
   const heading = releaseHeading(release);
   const versionLabel = normalizeVersionLabel(release.version);
-  // Render the full body when available so "Show more" actually reveals new
-  // content. The collapsed view is height-capped; expanded unlocks it. The
-  // button only appears when the body actually overflows that cap.
-  const body = release.content || release.summary || "";
-  const { ref: clampRef, overflowing } = useOverflowClamp<HTMLDivElement>(!expanded);
+  // Collapsed cards show only an excerpt (summary, else a capped body slice) so
+  // the full verbatim body never reaches server HTML — that lives on the
+  // canonical /release/{id} page (#1606). "Show more" swaps in the full body
+  // client-side; it appears only when there's more than the excerpt to reveal.
+  const fullBody = release.content || release.summary || "";
+  const excerpt = releaseExcerpt(release);
+  const body = expanded ? fullBody : excerpt;
+  const hasMore = fullBody.trim() !== excerpt.trim();
 
   return (
     <article
@@ -717,12 +696,7 @@ function PostHero({ release }: { release: CollectionReleaseItem }) {
             {versionLabel}
           </div>
         )}
-        <div
-          ref={clampRef}
-          className={`mt-2.5 text-stone-600 dark:text-stone-400 ${
-            expanded ? "" : "max-h-[6.5em] overflow-hidden relative"
-          }`}
-        >
+        <div className="mt-2.5 text-stone-600 dark:text-stone-400">
           <div className={markdownClasses}>
             <ReactMarkdown
               remarkPlugins={remarkPlugins}
@@ -732,12 +706,9 @@ function PostHero({ release }: { release: CollectionReleaseItem }) {
               {body}
             </ReactMarkdown>
           </div>
-          {!expanded && overflowing && (
-            <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-6 bg-gradient-to-t from-white dark:from-stone-900 to-transparent" />
-          )}
         </div>
         <div className="flex items-center gap-3 mt-3 text-[12px]">
-          {!expanded && overflowing && (
+          {!expanded && hasMore && (
             <button type="button" onClick={() => setExpanded(true)} className={subduedLinkClass}>
               Show more
             </button>
@@ -817,9 +788,11 @@ function PostVersionRow({ release }: { release: CollectionReleaseItem }) {
   // bare "v2.1.176" release.
   const headline = descriptive ?? versionLabel ?? release.title ?? "Update";
   const versionTag = versionLabel && versionLabel !== headline ? versionLabel : null;
-  const body = release.content || release.summary || "";
+  const fullBody = release.content || release.summary || "";
+  const excerpt = releaseExcerpt(release);
+  const body = expanded ? fullBody : excerpt;
+  const hasMore = fullBody.trim() !== excerpt.trim();
   const thumbnail = findThumbnail(release);
-  const { ref: clampRef, overflowing } = useOverflowClamp<HTMLDivElement>(!expanded);
 
   return (
     <div className="px-5 py-4 border-t border-stone-200 dark:border-stone-800 first:border-t-0">
@@ -851,12 +824,7 @@ function PostVersionRow({ release }: { release: CollectionReleaseItem }) {
         }`}
       >
         <div className="min-w-0">
-          <div
-            ref={clampRef}
-            className={`text-stone-600 dark:text-stone-400 ${
-              expanded ? "" : "max-h-[6.5em] overflow-hidden relative"
-            }`}
-          >
+          <div className="text-stone-600 dark:text-stone-400">
             <div className={markdownClasses}>
               <ReactMarkdown
                 remarkPlugins={remarkPlugins}
@@ -866,12 +834,9 @@ function PostVersionRow({ release }: { release: CollectionReleaseItem }) {
                 {body}
               </ReactMarkdown>
             </div>
-            {!expanded && overflowing && (
-              <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-6 bg-gradient-to-t from-white dark:from-stone-900 to-transparent" />
-            )}
           </div>
           <div className="flex items-center gap-3 mt-2 text-[12px]">
-            {!expanded && overflowing && (
+            {!expanded && hasMore && (
               <button type="button" onClick={() => setExpanded(true)} className={subduedLinkClass}>
                 Show more
               </button>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect, useMemo, useId, ViewTransition } from "react";
+import { useState, useMemo, useId, ViewTransition } from "react";
 import ReactMarkdown from "react-markdown";
 import { remarkPlugins } from "@/lib/markdown-plugins";
 import { rehypeShikiPlugin } from "@/lib/shiki";
@@ -18,6 +18,7 @@ import { appStoreIconUrl, type AppRowInfo } from "@/lib/app-source";
 import type { VideoRowInfo } from "@/lib/video-source";
 import { EXTERNAL_UGC_REL } from "@/lib/sanitize";
 import { deriveFeedTitle } from "@/lib/release-title";
+import { releaseExcerpt } from "@/lib/release-excerpt";
 import { markdownComponents, collapsedMarkdownComponents } from "./markdown-components";
 import { rewriteRelativeLinks, originFromUrl } from "@releases/rendering/rewrite-links";
 import { formatDate } from "@/lib/formatters";
@@ -32,24 +33,6 @@ type RowMeta = Pick<
   LightboxEntry,
   "title" | "dateLabel" | "byline" | "avatarUrl" | "detailHref" | "sourceUrl"
 >;
-
-/** Strip a leading markdown heading that duplicates the release title,
- *  and empty artifacts left by HTML-to-markdown conversion. */
-function stripLeadingTitle(content: string, title: string | null): string {
-  if (!title || !content) return content;
-  const firstNewline = content.indexOf("\n");
-  if (firstNewline === -1) return content;
-  const firstLine = content
-    .slice(0, firstNewline)
-    .replace(/^#+\s+/, "")
-    .trim();
-  if (firstLine.toLowerCase() === title.toLowerCase()) {
-    content = content.slice(firstNewline + 1).trimStart();
-  }
-  // Strip empty markdown artifacts (orphan list items, empty headings)
-  content = content.replace(/^(?:-\s*\n|#+\s*\n)+/, "");
-  return content;
-}
 
 /** One gallery thumbnail, registered with the page lightbox so it joins the
  *  left/right paging set alongside the row's primary thumbnail. */
@@ -132,8 +115,6 @@ function MediaGallery({
   );
 }
 
-const COLLAPSED_MAX_HEIGHT = 72; // ~4.5em at 16px
-
 const markdownClasses =
   "prose prose-sm prose-stone dark:prose-invert max-w-none text-[13px] leading-relaxed [&_h1]:text-sm [&_h1]:font-semibold [&_h1]:mt-2 [&_h1]:mb-1 [&_h2]:text-sm [&_h2]:font-semibold [&_h2]:mt-2 [&_h2]:mb-1 [&_h3]:text-[13px] [&_h3]:font-semibold [&_h3]:mt-1.5 [&_h3]:mb-0.5 [&_ul]:my-1 [&_ul]:pl-4 [&_li]:my-0 [&_p]:my-1 [&_a]:text-stone-600 dark:[&_a]:text-stone-400 [&_a]:no-underline [&_code]:text-[13px] [&_code]:bg-stone-100 dark:[&_code]:bg-stone-800 [&_code]:px-1 [&_code]:rounded [&_code::before]:content-none [&_code::after]:content-none";
 
@@ -158,11 +139,11 @@ export function ReleaseListItem({
   avatarUrl?: string | null;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const [isOverflowing, setIsOverflowing] = useState(false);
   const rowId = useId();
-  const contentRef = useRef<HTMLDivElement>(null);
   const markdownContent = useMemo(() => {
-    const raw = stripLeadingTitle(release.content || release.summary, release.title);
+    // Feed surfaces show an excerpt only; the full verbatim body lives on the
+    // self-canonical /release/{id} page (#1606).
+    const raw = releaseExcerpt(release);
     const base = originFromUrl(release.url);
     return base ? rewriteRelativeLinks(raw, base) : raw;
   }, [release.content, release.summary, release.title, release.url]);
@@ -248,16 +229,6 @@ export function ReleaseListItem({
   // only when it isn't already in the version-fallback heading.
   const showMetaVersion = !!descriptive && !!versionLabel;
   const showMetaName = !!sourceByline && (!!descriptive || !versionLabel);
-
-  useEffect(() => {
-    const el = contentRef.current;
-    if (!el) return;
-    const observer = new ResizeObserver(() => {
-      setIsOverflowing(el.scrollHeight > COLLAPSED_MAX_HEIGHT);
-    });
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, []);
 
   const titleId = release.id ? `rel-${release.id}-title` : undefined;
   const headingClasses = "font-semibold text-[15px] text-stone-900 dark:text-stone-100 m-0";
@@ -563,102 +534,70 @@ export function ReleaseListItem({
                 {showMetaVersion && versionLabel}
               </div>
             )}
-            <div
-              className={`group relative${isOverflowing ? " cursor-pointer" : ""}`}
-              onClick={() => isOverflowing && setExpanded(!expanded)}
-              {...(isOverflowing
-                ? {
-                    role: "button",
-                    tabIndex: 0,
-                    "aria-expanded": expanded,
-                    "aria-label": expanded ? "Collapse release notes" : "Expand release notes",
-                    onKeyDown: (e: React.KeyboardEvent<HTMLDivElement>) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
-                        setExpanded(!expanded);
-                      }
-                    },
-                  }
-                : {})}
-            >
-              {expanded ? (
-                <div className={markdownClasses}>
-                  <ReactMarkdown
-                    remarkPlugins={remarkPlugins}
-                    rehypePlugins={[rehypeShikiPlugin]}
-                    components={markdownComponents}
-                  >
-                    {markdownContent}
-                  </ReactMarkdown>
-                  <MediaGallery
-                    media={release.media}
-                    content={markdownContent}
-                    meta={lightboxMeta}
-                    keyPrefix={rowId}
-                  />
-                </div>
-              ) : (
-                <>
-                  <div className="flex gap-3">
+            <div className="relative">
+              <div className="flex gap-3">
+                <div className="flex-1 min-w-0">
+                  {markdownContent.trim() ? (
                     <div
-                      ref={contentRef}
-                      className="relative max-h-[4.5em] overflow-hidden flex-1 min-w-0"
+                      className={`${markdownClasses} text-stone-500 dark:text-stone-400 [&_strong]:text-stone-500 dark:[&_strong]:text-stone-400`}
                     >
-                      <div
-                        className={`${markdownClasses} text-stone-500 dark:text-stone-400 [&_strong]:text-stone-500 dark:[&_strong]:text-stone-400`}
+                      <ReactMarkdown
+                        remarkPlugins={remarkPlugins}
+                        rehypePlugins={[rehypeShikiPlugin]}
+                        components={collapsedMarkdownComponents}
                       >
-                        <ReactMarkdown
-                          remarkPlugins={remarkPlugins}
-                          rehypePlugins={[rehypeShikiPlugin]}
-                          components={collapsedMarkdownComponents}
-                        >
-                          {markdownContent}
-                        </ReactMarkdown>
-                      </div>
-                      {isOverflowing && (
-                        <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-6 bg-gradient-to-t from-stone-50 dark:from-stone-950 to-transparent" />
-                      )}
+                        {markdownContent}
+                      </ReactMarkdown>
                     </div>
-                    {thumbnail && (
-                      <button
-                        ref={thumbRef}
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openThumb();
-                        }}
-                        className="shrink-0 cursor-zoom-in"
-                        aria-label="Preview image"
-                      >
-                        {shouldRenderAsVideo({
-                          type: thumbnail.type,
-                          src: thumbnail.r2Url ?? thumbnail.url,
-                          enabled: MEDIA_VIDEO_ON,
-                        }) ? (
-                          <GifVideo
-                            src={thumbnail.r2Url ?? thumbnail.url}
-                            alt={thumbnail.alt || ""}
-                            className="rounded-md object-cover w-[120px] h-[72px] border border-stone-200 dark:border-stone-800"
-                          />
-                        ) : (
-                          <FallbackImage
-                            src={releaseThumbUrl(thumbnail.r2Url ?? thumbnail.url, 240)}
-                            alt={thumbnail.alt || ""}
-                            width={120}
-                            height={72}
-                            className="rounded-md object-cover w-[120px] h-[72px] border border-stone-200 dark:border-stone-800"
-                            unoptimized={IMG_TRANSFORM_ON || undefined}
-                          />
-                        )}
-                      </button>
+                  ) : null}
+                </div>
+                {thumbnail && (
+                  <button
+                    ref={thumbRef}
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openThumb();
+                    }}
+                    className="shrink-0 cursor-zoom-in"
+                    aria-label="Preview image"
+                  >
+                    {shouldRenderAsVideo({
+                      type: thumbnail.type,
+                      src: thumbnail.r2Url ?? thumbnail.url,
+                      enabled: MEDIA_VIDEO_ON,
+                    }) ? (
+                      <GifVideo
+                        src={thumbnail.r2Url ?? thumbnail.url}
+                        alt={thumbnail.alt || ""}
+                        className="rounded-md object-cover w-[120px] h-[72px] border border-stone-200 dark:border-stone-800"
+                      />
+                    ) : (
+                      <FallbackImage
+                        src={releaseThumbUrl(thumbnail.r2Url ?? thumbnail.url, 240)}
+                        alt={thumbnail.alt || ""}
+                        width={120}
+                        height={72}
+                        className="rounded-md object-cover w-[120px] h-[72px] border border-stone-200 dark:border-stone-800"
+                        unoptimized={IMG_TRANSFORM_ON || undefined}
+                      />
                     )}
-                  </div>
-                  {isOverflowing && (
-                    <div className="text-xs text-stone-500 dark:text-stone-400 mt-1 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
-                      Show more
-                    </div>
-                  )}
-                </>
+                  </button>
+                )}
+              </div>
+              <MediaGallery
+                media={release.media}
+                content={markdownContent}
+                meta={lightboxMeta}
+                keyPrefix={rowId}
+              />
+              {release.id && markdownContent.trim() && (
+                <Link
+                  href={`/release/${release.id}`}
+                  className="inline-block mt-2 text-[12px] text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-300"
+                >
+                  Read more →
+                </Link>
               )}
             </div>
           </>
