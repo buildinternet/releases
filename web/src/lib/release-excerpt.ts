@@ -39,7 +39,7 @@ export function releaseExcerpt(release: {
 
   const capped = body.slice(0, EXCERPT_MAX_CHARS);
   const paraBreak = capped.indexOf("\n\n");
-  if (paraBreak > 0) return capped.slice(0, paraBreak).trim();
+  if (paraBreak !== -1) return capped.slice(0, paraBreak).trim();
   const lastSpace = capped.lastIndexOf(" ");
   return (lastSpace > 0 ? capped.slice(0, lastSpace) : capped).trimEnd() + "…";
 }

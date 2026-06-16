@@ -39,6 +39,12 @@ describe("releaseExcerpt", () => {
     expect(releaseExcerpt({ content: body, summary: null, title: "v1" })).toBe("First paragraph.");
   });
 
+  it("handles a body with no spaces without crashing", () => {
+    const body = "x".repeat(400);
+    const out = releaseExcerpt({ content: body, summary: null, title: "v1" });
+    expect(out).toBe("x".repeat(EXCERPT_MAX_CHARS) + "…");
+  });
+
   it("returns empty string for empty content + empty summary", () => {
     expect(releaseExcerpt({ content: "", summary: "", title: "v1" })).toBe("");
     expect(releaseExcerpt({ content: null, summary: null, title: null })).toBe("");
