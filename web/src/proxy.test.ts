@@ -19,6 +19,21 @@ describe("proxy /auth.md guard", () => {
   });
 });
 
+describe("proxy /schemas guard", () => {
+  it("passes /schemas/*.json through to the static file without a format rewrite", () => {
+    const res = run("/schemas/releases.json");
+    // Without the guard, the .json suffix matcher rewrites to
+    // /api/format/schemas/releases and 404s. NextResponse.next() lets the
+    // static public/schemas/releases.json serve.
+    expect(res.headers.get("x-middleware-rewrite")).toBeNull();
+  });
+
+  it("still rewrites other .json suffix paths to the format route", () => {
+    const res = run("/vercel.json");
+    expect(res.headers.get("x-middleware-rewrite")).toContain("/api/format/vercel");
+  });
+});
+
 describe("proxy legacy ?tab= redirects", () => {
   function locationOf(path: string) {
     const res = run(path);

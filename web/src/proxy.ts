@@ -57,6 +57,14 @@ export function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // `/schemas/*.json` are static JSON Schema files served from `public/schemas/`
+  // (e.g. the releases.json schema that owner-declared configs point `$schema`
+  // at). Without this guard the `.json` suffix matcher below rewrites them to
+  // `/api/format/schemas/<name>` and 404s, so the static file never serves.
+  if (pathname.startsWith("/schemas/")) {
+    return NextResponse.next();
+  }
+
   // Explicit suffix routes — skip Accept negotiation.
   if (pathname === "/docs.md") {
     return rewriteTo(request, "/api/docs/index");
