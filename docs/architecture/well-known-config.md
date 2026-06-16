@@ -88,7 +88,14 @@ self-limiting:
 Both knobs are numeric env vars (intentionally not Flagship), with a floor of 1
 and a fallback to the default on an invalid value.
 
+## Public docs
+
+The owner-facing version of this lives at `/docs/listing` ("Get Listed",
+`web/src/content/docs/listing.md`), linked from the `/submit` page. Keep that
+page in sync when the honored fields or reconciliation rules change; this file
+stays the engineering reference.
+
 ## Out of scope (Tier 2 / future)
 
 Self-serve source declaration (`changelogs[]`), org-identity from a repo file,
-social/tag removal sync, a CLI verb, and a public web docs page.
+social/tag removal sync, and a CLI verb.

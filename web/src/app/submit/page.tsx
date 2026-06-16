@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { Header } from "@/components/header";
 import { SubmitSourceForm } from "./submit-source-form";
 
@@ -25,6 +26,26 @@ export default function SubmitPage() {
             Recommend a changelog, release notes page, feed, or GitHub releases URL for the
             registry.
           </p>
+
+          <div className="mt-6 border-t border-stone-200 pt-6 dark:border-stone-800">
+            <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-stone-400 dark:text-stone-500">
+              Own your listing
+            </p>
+            <p className="mt-3 leading-6">
+              Control your name, description, category, avatar, and social links — and group repos
+              into one product — by publishing a{" "}
+              <code className="rounded bg-stone-100 px-1 py-0.5 font-mono text-[0.85em] text-stone-700 dark:bg-stone-800 dark:text-stone-200">
+                releases.json
+              </code>
+              .{" "}
+              <Link
+                href="/docs/listing"
+                className="font-medium text-blue-600 underline-offset-2 hover:underline dark:text-blue-400"
+              >
+                How to get listed
+              </Link>
+            </p>
+          </div>
         </aside>
 
         <section className="border border-stone-200 bg-stone-50 p-5 dark:border-stone-800 dark:bg-stone-950 sm:p-6">
