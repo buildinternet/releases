@@ -74,6 +74,10 @@ export default async function UpdatesDatePage({ params }: { params: Promise<{ da
         <h1 className="mt-3 text-[26px] font-bold tracking-tight text-stone-900 dark:text-stone-100">
           {release.title}
         </h1>
+        {/* First-party self-changelog (org "releases-sh"): this page is the
+            self-canonical home for releases.sh's own daily update, so it renders
+            the full body intentionally. Aggregated third-party feed surfaces
+            excerpt instead — see #1606 / releaseExcerpt. */}
         <div className="mt-5 text-[15px] leading-relaxed text-stone-700 dark:text-stone-300">
           <ReactMarkdown
             remarkPlugins={remarkPlugins}
