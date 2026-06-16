@@ -2,13 +2,13 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Header } from "@/components/header";
 import { StatusDashboard } from "./dashboard";
-import { statusDashboard } from "@/flags";
+import { isAdminViewer } from "@/lib/server-session";
 import { apiBaseUrl } from "@/lib/env";
 
 export const metadata: Metadata = { title: "Status" };
 
-export default function StatusPage() {
-  if (!statusDashboard) notFound();
+export default async function StatusPage() {
+  if (!(await isAdminViewer())) notFound();
 
   // apiUrl is only used client-side for the WebSocket connection to /v1/status/ws,
   // which has no auth. Admin HTTP calls go through /api/proxy/... so the bearer

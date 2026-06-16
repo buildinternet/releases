@@ -1,19 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
-import { statusDashboard } from "@/flags";
 import { webApiHeaders } from "@/lib/api";
 import { apiBaseUrl, serverApiKey } from "@/lib/env";
+import { isAdminViewer } from "@/lib/server-session";
 
 const API_URL = apiBaseUrl() ?? "http://localhost:3456";
 const API_SECRET = serverApiKey();
 
 export const dynamic = "force-dynamic";
 
-// Server-side proxy for the dev-gated status dashboard and org fetch-log views.
+// Server-side proxy for the admin status dashboard and org fetch-log views.
 // Injects the admin Bearer token here so the key never lands in an RSC payload,
-// prop, or client bundle. Returns 404 when the dashboard flag is off so the
-// route can't be discovered or abused in production.
+// prop, or client bundle. Returns 404 for non-admin callers so the route — which
+// forwards with the root key — can't be discovered or abused in production.
 async function handle(req: NextRequest, ctx: { params: Promise<{ path: string[] }> }) {
-  if (!statusDashboard) {
+  if (!(await isAdminViewer())) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
 
