@@ -591,7 +591,7 @@ export function ReleaseListItem({
                 meta={lightboxMeta}
                 keyPrefix={rowId}
               />
-              {release.id && (
+              {release.id && markdownContent.trim() && (
                 <Link
                   href={`/release/${release.id}`}
                   className="inline-block mt-2 text-[12px] text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-300"
