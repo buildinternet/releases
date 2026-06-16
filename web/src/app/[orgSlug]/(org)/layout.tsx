@@ -42,8 +42,6 @@ export default async function OrgLayout({
   }
 
   const collections = await getOrgCollections(orgSlug);
-  const hasPlaybook = process.env.NODE_ENV === "development";
-  const hasFetchLog = process.env.NODE_ENV === "development";
   const devAdmin = isLocalAdminEnabled();
 
   const sidebarSections = [
@@ -107,7 +105,7 @@ export default async function OrgLayout({
         <EntityNotice notice={org.notice} />
         <div className="flex flex-col md:flex-row gap-10 mt-6 pb-6">
           <div className="flex-1 min-w-0">
-            <OrgTabs orgSlug={orgSlug} hasPlaybook={hasPlaybook} hasFetchLog={hasFetchLog} />
+            <OrgTabs orgSlug={orgSlug} devAdmin={devAdmin} />
             {children}
           </div>
           <Sidebar

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useIsAdmin } from "@/components/admin-only";
 import { tabButtonClass } from "@/lib/styles";
 
 function CodeBrackets() {
@@ -35,16 +36,18 @@ function resolveActiveTab(pathname: string, orgSlug: string): OrgTab {
 
 export function OrgTabs({
   orgSlug,
-  hasPlaybook,
-  hasFetchLog,
+  devAdmin = false,
 }: {
   orgSlug: string;
-  hasPlaybook?: boolean;
-  hasFetchLog?: boolean;
+  /** Server-evaluated local-dev admin override, forwarded to {@link useIsAdmin}. */
+  devAdmin?: boolean;
 }) {
   const pathname = usePathname() ?? "";
   const activeTab = resolveActiveTab(pathname, orgSlug);
   const base = `/${orgSlug}`;
+  // Admin-only surfaces. Gated client-side (like AdminOnly) so the org layout
+  // stays statically cacheable; the routes themselves enforce admin server-side.
+  const showAdminTabs = useIsAdmin(devAdmin);
 
   return (
     <div className="flex gap-5 border-b border-stone-200 dark:border-stone-800 mt-5">
@@ -65,28 +68,23 @@ export function OrgTabs({
       >
         Sources
       </Link>
-      {(hasFetchLog || hasPlaybook) && (
+      {showAdminTabs && (
         <div className="flex gap-5 ml-auto">
-          {hasFetchLog && (
-            <Link
-              href={`${base}/fetch-log`}
-              className={tabButtonClass(activeTab === "fetch-log")}
-              scroll={false}
-            >
-              <CodeBrackets />
-              Fetch Log
-            </Link>
-          )}
-          {hasPlaybook && (
-            <Link
-              href={`${base}/playbook`}
-              className={tabButtonClass(activeTab === "playbook")}
-              scroll={false}
-            >
-              {!hasFetchLog && <CodeBrackets />}
-              Playbook
-            </Link>
-          )}
+          <Link
+            href={`${base}/fetch-log`}
+            className={tabButtonClass(activeTab === "fetch-log")}
+            scroll={false}
+          >
+            <CodeBrackets />
+            Fetch Log
+          </Link>
+          <Link
+            href={`${base}/playbook`}
+            className={tabButtonClass(activeTab === "playbook")}
+            scroll={false}
+          >
+            Playbook
+          </Link>
         </div>
       )}
     </div>
