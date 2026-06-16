@@ -35,7 +35,8 @@ import {
   API_KEY_LIMIT_MESSAGE,
   countActiveUserKeys,
 } from "./api-key-limit.js";
-import { createDb } from "../db.js";
+import { createDb, type AnyDb } from "../db.js";
+import { and, eq, isNull } from "drizzle-orm";
 import {
   user,
   session,
@@ -177,6 +178,102 @@ export function syncDisplayEmailOnUpdate(
   if (typeof data.email !== "string" || data.email === "") return undefined;
   if (data.displayEmail != null) return undefined;
   return { data: { ...data, displayEmail: data.email } };
+}
+
+/**
+ * Recover the original-cased email claim from a Google ID token's payload.
+ *
+ * Google One Tap (the `oneTap` plugin) verifies its own ID token at
+ * `/one-tap/callback` and hands the canonical email to the link/create path — it
+ * never routes through a provider's `mapProfileToUser`, so unlike the standard
+ * OAuth flow, nothing captures the verbatim `displayEmail` for a One-Tap user. We
+ * re-read it from the SAME token to drive the backfill. This decode is NOT a
+ * verification: the after-hook only runs it for an already-verified token (the
+ * callback returns a user solely when the plugin's `jwtVerify` passed), so we just
+ * need the `email` claim back, not to re-establish trust.
+ *
+ * Decodes the middle (payload) segment as base64url. Pure + exported for unit
+ * testing; returns `undefined` for anything malformed or emailless.
+ */
+export function emailFromGoogleIdToken(idToken: unknown): string | undefined {
+  if (typeof idToken !== "string") return undefined;
+  const segment = idToken.split(".")[1];
+  if (!segment) return undefined;
+  try {
+    let b64 = segment.replace(/-/g, "+").replace(/_/g, "/");
+    b64 += "=".repeat((4 - (b64.length % 4)) % 4);
+    const payload = JSON.parse(atob(b64)) as { email?: unknown };
+    return typeof payload.email === "string" && payload.email ? payload.email : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Decide the `displayEmail` to backfill onto an EXISTING user row at sign-in, or
+ * `undefined` for a no-op. Pure + exported for unit testing (mirrors
+ * {@link syncDisplayEmailOnUpdate}).
+ *
+ * Needed for the Google One Tap path even though `mapDisplayEmail` already maps it
+ * on the standard flow: One Tap bypasses `mapProfileToUser` entirely (it verifies
+ * its own ID token), so neither the create nor the re-login path ever sets
+ * `displayEmail` for a One-Tap user. We fill it ourselves from the token's
+ * original-cased email — but ONLY when the row's value is still empty, so a value
+ * set by `mapDisplayEmail` (a standard-flow create) or by a self-serve
+ * change-email (`syncDisplayEmailOnUpdate`) is never clobbered.
+ */
+export function displayEmailBackfill(
+  current: { displayEmail?: string | null } | undefined,
+  originalEmail: string,
+): string | undefined {
+  if (!current) return undefined; // no matching row (a new user takes the create path)
+  if (current.displayEmail != null && current.displayEmail !== "") return undefined; // already set
+  if (!originalEmail) return undefined;
+  return originalEmail;
+}
+
+let warnedDisplayEmailBackfill = false;
+
+/**
+ * Best-effort: backfill an existing user's `display_email` from the original-cased
+ * OAuth profile email at sign-in, when it's still empty. Used by the Google One
+ * Tap after-hook (see {@link createAuth}), whose flow never reaches
+ * `mapProfileToUser`. A failure must never disturb sign-in, so everything is
+ * swallowed (warn once via logEvent).
+ *
+ * @param normalizedEmail the deduped canonical email — matches the stored `email` key
+ * @param originalEmail   the verbatim provider email, with casing/dots preserved
+ */
+async function backfillDisplayEmailOnSignIn(
+  db: AnyDb,
+  normalizedEmail: string,
+  originalEmail: string,
+): Promise<void> {
+  try {
+    const [row] = await db
+      .select({ id: user.id, displayEmail: user.displayEmail })
+      .from(user)
+      .where(eq(user.email, normalizedEmail))
+      .limit(1);
+    const next = displayEmailBackfill(row, originalEmail);
+    if (!row || next === undefined) return;
+    // Guard the write with `display_email IS NULL` too, so a concurrent sign-in
+    // (or a change-email that lands first) can't be clobbered between read and write.
+    await db
+      .update(user)
+      .set({ displayEmail: next })
+      .where(and(eq(user.id, row.id), isNull(user.displayEmail)));
+  } catch (err) {
+    if (!warnedDisplayEmailBackfill) {
+      warnedDisplayEmailBackfill = true;
+      logEvent("warn", {
+        component: "auth",
+        event: "display-email-backfill-failed",
+        message: "displayEmail backfill on One Tap sign-in failed",
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
 }
 
 /**
@@ -1182,6 +1279,26 @@ export async function createAuth(
             error_description: "requested scopes exceed your entitlement",
           });
         }
+      }),
+      // Response `after` hook: backfill `display_email` for Google One Tap
+      // sign-ins. One Tap verifies its own ID token at `/one-tap/callback` and
+      // never routes through a provider's `mapProfileToUser`, so the standard-flow
+      // capture (`mapDisplayEmail`) never fires for a One-Tap user — neither on
+      // create nor on re-login — and they'd keep seeing the dot-stripped canonical
+      // email. We run {@link backfillDisplayEmailOnSignIn} here instead, gated on a
+      // SUCCESSFUL callback: `ctx.context.returned` carries a `user` only when the
+      // plugin's `jwtVerify` passed (an invalid token surfaces an APIError with no
+      // `user`), so we never act on an unverified token. The returned user's
+      // `email` is the canonical lookup key; the original-cased value comes from
+      // re-reading the (already-verified) token's `email` claim.
+      after: createAuthMiddleware(async (ctx) => {
+        if (ctx.path !== "/one-tap/callback") return;
+        const returned = ctx.context.returned as { user?: { email?: unknown } } | undefined;
+        const email = returned?.user?.email;
+        if (typeof email !== "string" || !email) return;
+        const originalEmail = emailFromGoogleIdToken((ctx.body as { idToken?: unknown })?.idToken);
+        if (!originalEmail) return;
+        await backfillDisplayEmailOnSignIn(db, email, originalEmail);
       }),
     },
     // Rate limiting backed by D1 so counters survive across Worker isolates — the

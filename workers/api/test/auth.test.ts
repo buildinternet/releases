@@ -17,6 +17,8 @@ import {
   buildStripePlugin,
   mapDisplayEmail,
   syncDisplayEmailOnUpdate,
+  emailFromGoogleIdToken,
+  displayEmailBackfill,
   resolveLastLoginMethodOverride,
   authTrustedOrigins,
   authCorsMiddleware,
@@ -110,6 +112,70 @@ describe("syncDisplayEmailOnUpdate", () => {
   it("is a no-op when the update does not touch the email", () => {
     expect(syncDisplayEmailOnUpdate({ name: "Zach" })).toBeUndefined();
     expect(syncDisplayEmailOnUpdate({ email: "" })).toBeUndefined();
+  });
+});
+
+// Build a Google-style ID token (`header.payload.signature`) whose payload is base64url.
+const b64url = (obj: unknown) =>
+  Buffer.from(JSON.stringify(obj))
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+const fakeIdToken = (payload: Record<string, unknown>): string =>
+  `${b64url({ alg: "RS256" })}.${b64url(payload)}.sig`;
+
+describe("emailFromGoogleIdToken (recovers the original-cased One Tap email)", () => {
+  it("reads the original-cased email claim from a token payload", () => {
+    // One Tap discards the verbatim email, so we re-read it from the same
+    // (already-verified) token to drive the display_email backfill.
+    expect(emailFromGoogleIdToken(fakeIdToken({ email: "Dunn.Zach@gmail.com" }))).toBe(
+      "Dunn.Zach@gmail.com",
+    );
+  });
+
+  it("handles payloads with extra (incl. non-ASCII) claims", () => {
+    expect(
+      emailFromGoogleIdToken(fakeIdToken({ name: "José Núñez", email: "Jose.Nunez@gmail.com" })),
+    ).toBe("Jose.Nunez@gmail.com");
+  });
+
+  it("returns undefined for a non-string, structurally-malformed, or emailless token", () => {
+    expect(emailFromGoogleIdToken(undefined)).toBeUndefined();
+    expect(emailFromGoogleIdToken(42)).toBeUndefined();
+    expect(emailFromGoogleIdToken("not-a-jwt")).toBeUndefined();
+    expect(emailFromGoogleIdToken("header.%%%notbase64%%%.sig")).toBeUndefined();
+    expect(emailFromGoogleIdToken(fakeIdToken({ sub: "123" }))).toBeUndefined();
+    expect(emailFromGoogleIdToken(fakeIdToken({ email: "" }))).toBeUndefined();
+  });
+});
+
+describe("displayEmailBackfill (fills a One-Tap user's empty displayEmail)", () => {
+  it("returns the original-cased email when the row's displayEmail is empty", () => {
+    // A One-Tap user's row never got displayEmail (the flow bypasses
+    // mapProfileToUser), so it's NULL/"" and the app falls back to the dot-stripped
+    // canonical — backfill recovers the nicely-cased form.
+    expect(displayEmailBackfill({ displayEmail: null }, "Dunn.Zach@gmail.com")).toBe(
+      "Dunn.Zach@gmail.com",
+    );
+    expect(displayEmailBackfill({ displayEmail: "" }, "Dunn.Zach@gmail.com")).toBe(
+      "Dunn.Zach@gmail.com",
+    );
+  });
+
+  it("never clobbers an already-set displayEmail", () => {
+    // A value set by mapDisplayEmail (standard-flow create) or a change-email must survive.
+    expect(
+      displayEmailBackfill({ displayEmail: "Dunn.zach@gmail.com" }, "DUNN.ZACH@gmail.com"),
+    ).toBeUndefined();
+  });
+
+  it("is a no-op when there's no matching row (a new user takes the create path)", () => {
+    expect(displayEmailBackfill(undefined, "Dunn.Zach@gmail.com")).toBeUndefined();
+  });
+
+  it("is a no-op when the provider gave no email", () => {
+    expect(displayEmailBackfill({ displayEmail: null }, "")).toBeUndefined();
   });
 });
 
