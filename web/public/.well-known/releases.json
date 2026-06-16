@@ -1,0 +1,9 @@
+{
+  "$schema": "https://releases.sh/schemas/releases.json",
+  "name": "Releases",
+  "description": "The changelog & release-notes registry for developers and AI agents.",
+  "category": "developer-tools",
+  "avatar": "https://media.releases.sh/orgs/releases-sh.png",
+  "tags": ["changelog", "release-notes", "ai-agents"],
+  "social": { "github": "buildinternet" }
+}
