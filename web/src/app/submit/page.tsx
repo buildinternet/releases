@@ -7,7 +7,7 @@ export const metadata: Metadata = {
   title: "Submit a Source",
   description: "Recommend a release notes URL for the releases.sh changelog registry.",
   alternates: { canonical: "/submit" },
-  openGraph: { url: "/submit" },
+  openGraph: { type: "website", url: "/submit" },
 };
 
 export default function SubmitPage() {

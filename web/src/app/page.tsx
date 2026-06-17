@@ -26,7 +26,7 @@ type TickerItem = HomepageTickerQuery["latestReleases"]["items"][number];
 
 export const metadata: Metadata = {
   alternates: { canonical: "/" },
-  openGraph: { url: "/" },
+  openGraph: { type: "website", url: "/" },
 };
 
 /**

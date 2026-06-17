@@ -1,13 +1,11 @@
 import { countTokens } from "@buildinternet/releases-core/tokens";
 import { MarkdownDoc } from "@/components/markdown-doc";
 import { TerminalCompare } from "@/components/terminal-compare";
-import { loadDoc } from "@/lib/docs";
+import { docPageMetadata } from "@/lib/doc-metadata";
 
 const SLUG = "examples";
 
-export function generateMetadata() {
-  return { title: loadDoc(SLUG).frontmatter.title };
-}
+export const generateMetadata = () => docPageMetadata(SLUG);
 
 function paneTokens(command: string, output: string): number {
   return countTokens(command ? `$ ${command}\n${output}` : output);

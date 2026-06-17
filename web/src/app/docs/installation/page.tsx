@@ -1,13 +1,11 @@
 import { InstallTabs } from "@/components/install-tabs";
 import { MarkdownDoc } from "@/components/markdown-doc";
 import { McpInstallButtons } from "@/components/mcp-install-buttons";
-import { loadDoc } from "@/lib/docs";
+import { docPageMetadata } from "@/lib/doc-metadata";
 
 const SLUG = "installation";
 
-export function generateMetadata() {
-  return { title: loadDoc(SLUG).frontmatter.title };
-}
+export const generateMetadata = () => docPageMetadata(SLUG);
 
 export default function InstallationPage() {
   return (

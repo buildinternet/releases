@@ -1,12 +1,10 @@
 import { MarkdownDoc } from "@/components/markdown-doc";
 import { SkillsInstall } from "@/components/skills-install";
-import { loadDoc } from "@/lib/docs";
+import { docPageMetadata } from "@/lib/doc-metadata";
 
 const SLUG = "cli/browsing";
 
-export function generateMetadata() {
-  return { title: loadDoc(SLUG).frontmatter.title };
-}
+export const generateMetadata = () => docPageMetadata(SLUG);
 
 export default function BrowsingPage() {
   return (

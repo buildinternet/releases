@@ -1,13 +1,11 @@
 import { MarkdownDoc } from "@/components/markdown-doc";
 import { McpInstallButtons } from "@/components/mcp-install-buttons";
 import { SkillsInstall } from "@/components/skills-install";
-import { loadDoc } from "@/lib/docs";
+import { docPageMetadata } from "@/lib/doc-metadata";
 
 const SLUG = "api/mcp";
 
-export function generateMetadata() {
-  return { title: loadDoc(SLUG).frontmatter.title };
-}
+export const generateMetadata = () => docPageMetadata(SLUG);
 
 export default function McpPage() {
   return (

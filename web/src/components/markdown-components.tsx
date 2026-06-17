@@ -149,6 +149,17 @@ export const detailMarkdownComponents = createMarkdownComponents({
   demoteHeadings: 1,
 });
 
+/** Docs / static-page components (larger embeds, headings un-demoted).
+ *  Unlike the release detail page, a docs/legal page has NO separately-rendered
+ *  page title — the markdown body's leading `# Title` IS the page's single <h1>.
+ *  Demoting here would strip the only h1 from the page (Ahrefs "H1 missing",
+ *  June 2026). Each doc body carries exactly one top-level `#`. */
+export const docMarkdownComponents = createMarkdownComponents({
+  imgClass: "my-3",
+  videoClass: "my-4 max-w-2xl",
+  demoteHeadings: 0,
+});
+
 /**
  * Collapsed variant that hides images and video embeds.
  * Used for truncated/preview views.
