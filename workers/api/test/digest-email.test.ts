@@ -59,7 +59,7 @@ describe("buildDigestEmail", () => {
     expect(html).toContain(">Acme</a>");
   });
 
-  it("collapses GitHub version tags into a per-product rollup", () => {
+  it("collapses GitHub version tags into a per-product rollup with notes", () => {
     const ghSource = {
       slug: "sdk",
       name: "acme/sdk",
@@ -71,20 +71,95 @@ describe("buildDigestEmail", () => {
       recipientName: "T",
       cadence: "daily",
       releases: [
-        rel({ id: "t1", title: "v4.2.1", version: "4.2.1", summary: null, source: ghSource }),
-        rel({ id: "t2", title: "v4.2.0", version: "4.2.0", summary: null, source: ghSource }),
+        rel({
+          id: "t1",
+          title: "v4.2.1",
+          version: "4.2.1",
+          titleShort: "Fixed a socket leak",
+          summary: null,
+          source: ghSource,
+        }),
+        rel({
+          id: "t2",
+          title: "v4.2.0",
+          version: "4.2.0",
+          titleShort: "Added a retry flag",
+          summary: null,
+          source: ghSource,
+        }),
       ],
       baseUrl: "https://releases.sh",
       manageUrl: "https://releases.sh/following",
       unsubscribeUrl: "https://api.releases.sh/v1/digest/unsubscribe/reld_x",
     });
-    // Product header once, both versions as links, no per-version hero paragraph.
-    expect(text).toContain("Widget (2)");
-    expect(text).toContain("4.2.1 — https://releases.sh/release/t1");
-    expect(text).toContain("4.2.0 — https://releases.sh/release/t2");
+    // Product header with count, each version carrying its one-line note + link.
+    expect(text).toContain("Widget · 2 updates");
+    expect(text).toContain("4.2.1 — Fixed a socket leak");
+    expect(text).toContain("4.2.0 — Added a retry flag");
+    expect(text).toContain("https://releases.sh/release/t1");
     expect(html).toContain(">4.2.1</a>");
-    expect(html).toContain(">4.2.0</a>");
-    expect(html).toContain("https://releases.sh/release/t2");
+    expect(html).toContain("Fixed a socket leak");
+    expect(html).toContain("· 2 updates");
+    // No "+N more" when everything fits.
+    expect(text).not.toContain("more:");
+  });
+
+  it("ranks substantive tags first and folds the rest into +N more", () => {
+    const ghSource = {
+      slug: "workers-sdk",
+      name: "cloudflare/workers-sdk",
+      type: "github" as const,
+      orgSlug: "cloudflare",
+      orgName: "Cloudflare",
+    };
+    // Newest-first: a dependency-bump (no titleShort, boilerplate body) leads, then
+    // four substantive tags. The rollup should skip the bump, show the newest 3
+    // substantive ones, and fold the remaining 2 (1 substantive + the bump) away.
+    const dep = (id: string, v: string) =>
+      rel({
+        id,
+        version: v,
+        title: v,
+        titleShort: null,
+        summary: "### Patch Changes\n\n- Updated dependencies",
+        source: ghSource,
+        product: undefined,
+      });
+    const real = (id: string, v: string, short: string) =>
+      rel({
+        id,
+        version: v,
+        title: v,
+        titleShort: short,
+        summary: null,
+        source: ghSource,
+        product: undefined,
+      });
+    const { text, html } = buildDigestEmail({
+      recipientName: "T",
+      cadence: "daily",
+      releases: [
+        dep("d1", "@cloudflare/cli-shared@0.1.8"),
+        real("r1", "wrangler@4.101.0", "Autoconfig graduates from experimental"),
+        real("r2", "@cloudflare/workers-auth@0.3.0", "--temporary flag for preview accounts"),
+        real("r3", "miniflare@4.20260616.0", "cf.image transforms now work locally"),
+        real("r4", "@cloudflare/vite-plugin@1.41.0", "Experimental cfBuildOutput option"),
+      ],
+      baseUrl: "https://releases.sh",
+      manageUrl: "https://releases.sh/following",
+      unsubscribeUrl: "https://api.releases.sh/v1/digest/unsubscribe/reld_x",
+    });
+    expect(text).toContain("· 5 updates");
+    // Substantive tags surface (in newest-first order), the dependency bump does not.
+    expect(text).toContain("Autoconfig graduates from experimental");
+    expect(text).toContain("--temporary flag for preview accounts");
+    expect(text).toContain("cf.image transforms now work locally");
+    expect(text).not.toContain("Updated dependencies");
+    expect(text).not.toContain("Experimental cfBuildOutput option"); // 4th substantive, hidden
+    // Overflow (5 total - 3 shown) links to the source page.
+    expect(text).toContain("+ 2 more: https://releases.sh/cloudflare/workers-sdk");
+    expect(html).toContain("+ 2 more →");
+    expect(html).toContain("https://releases.sh/cloudflare/workers-sdk");
   });
 
   it("falls back to the source name when the source has no org", () => {
