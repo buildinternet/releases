@@ -3,6 +3,15 @@
 The product changelog for releases.sh, published to its own registry. Drafted daily from merged
 PRs and reviewed via PR. See docs/changelog-style.md for the voice and curation rules.
 
+## June 16, 2026
+
+**Added**
+- "Get Listed" docs page at `releases.sh/docs/listing` — explains how changelog owners declare their source via `releases.json` or `.well-known/releases.json`, with examples, the honored fields, and fill-if-empty / curator-protected rules. The JSON schema for editor autocompletion is served at `releases.sh/schemas/releases.json`.
+
+**Fixed**
+- Social preview cards now appear on org sub-pages (releases, sources), product and source changelogs, highlights, source detail pages, and standalone pages (catalog, categories, submit) that were previously missing `og:image`.
+- Docs and legal pages now have correct heading structure — the page title renders as `<h1>` instead of `<h2>`; `og:url` and `og:type` are also filled in across these pages.
+
 ## June 15, 2026
 
 **Added**
