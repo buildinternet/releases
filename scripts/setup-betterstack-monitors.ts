@@ -20,9 +20,10 @@
 // with its own source token); worker logs already go to Axiom.
 //
 // Requires: BETTERSTACK_API_KEY = a Better Stack *Uptime* API token (Uptime →
-// Settings → API tokens). The repo .env already carries it; from a worktree run
-//   set -a; . /path/to/repo/.env; set +a
-// first so the var is in the environment.
+// Settings → API tokens). The repo .env already carries it; from a worktree,
+// load it in a SUBSHELL scoped to this command so the exported vars never leak
+// into your interactive shell (and from there into any `claude` you launch):
+//   ( set -a; . /path/to/repo/.env; set +a; bun scripts/setup-betterstack-monitors.ts )
 //
 // Run:        bun scripts/setup-betterstack-monitors.ts
 // Preview:    bun scripts/setup-betterstack-monitors.ts --dry-run
@@ -34,7 +35,8 @@ const DRY_RUN = process.argv.includes("--dry-run");
 if (!TOKEN) {
   console.error(
     "Missing BETTERSTACK_API_KEY (a Better Stack Uptime API token).\n" +
-      "From a worktree: `set -a; . /path/to/repo/.env; set +a` then re-run.",
+      "From a worktree, scope the env load to a subshell so it can't leak into\n" +
+      "your shell: `( set -a; . /path/to/repo/.env; set +a; bun scripts/setup-betterstack-monitors.ts )`",
   );
   process.exit(1);
 }
