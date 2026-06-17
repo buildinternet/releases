@@ -7,10 +7,10 @@ import { adminDocs } from "@/flags";
 import { rehypeShikiPlugin } from "@/lib/shiki";
 import { CodeBlock } from "@/components/code-block";
 import { CopyPageButton } from "@/components/copy-page-button";
-import { detailMarkdownComponents } from "@/components/markdown-components";
+import { docMarkdownComponents } from "@/components/markdown-components";
 
 const markdownComponents = {
-  ...detailMarkdownComponents,
+  ...docMarkdownComponents,
   pre: CodeBlock,
 };
 

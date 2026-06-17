@@ -15,6 +15,7 @@ export const metadata: Metadata = {
   description: DESCRIPTION,
   alternates: { canonical: "/categories" },
   openGraph: {
+    type: "website",
     title: `${TITLE} — releases.sh`,
     description: DESCRIPTION,
     url: "/categories",

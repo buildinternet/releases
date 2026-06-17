@@ -1,26 +1,9 @@
-import type { Metadata } from "next";
 import { MarkdownDoc } from "@/components/markdown-doc";
-import { loadDoc } from "@/lib/docs";
+import { docPageMetadata } from "@/lib/doc-metadata";
 
 const SLUG = "listing";
 
-export function generateMetadata(): Metadata {
-  const { frontmatter } = loadDoc(SLUG);
-  return {
-    title: frontmatter.title,
-    description: frontmatter.description,
-    openGraph: {
-      title: frontmatter.title,
-      description: frontmatter.description,
-      url: "/docs/listing",
-    },
-    twitter: {
-      title: frontmatter.title,
-      description: frontmatter.description,
-    },
-    alternates: { canonical: "/docs/listing" },
-  };
-}
+export const generateMetadata = () => docPageMetadata(SLUG);
 
 export default function ListingPage() {
   return <MarkdownDoc slug={SLUG} />;

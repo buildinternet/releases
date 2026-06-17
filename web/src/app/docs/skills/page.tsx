@@ -1,11 +1,9 @@
 import { MarkdownDoc } from "@/components/markdown-doc";
-import { loadDoc } from "@/lib/docs";
+import { docPageMetadata } from "@/lib/doc-metadata";
 
 const SLUG = "skills";
 
-export function generateMetadata() {
-  return { title: loadDoc(SLUG).frontmatter.title };
-}
+export const generateMetadata = () => docPageMetadata(SLUG);
 
 export default function SkillsPage() {
   return <MarkdownDoc slug={SLUG} />;

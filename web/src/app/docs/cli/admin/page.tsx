@@ -1,13 +1,11 @@
 import { notFound } from "next/navigation";
 import { MarkdownDoc } from "@/components/markdown-doc";
-import { loadDoc } from "@/lib/docs";
+import { docPageMetadata } from "@/lib/doc-metadata";
 import { adminDocs } from "@/flags";
 
 const SLUG = "cli/admin";
 
-export function generateMetadata() {
-  return { title: loadDoc(SLUG).frontmatter.title };
-}
+export const generateMetadata = () => docPageMetadata(SLUG);
 
 export default function AdminPage() {
   if (!adminDocs) notFound();

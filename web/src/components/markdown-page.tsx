@@ -6,7 +6,27 @@ import { loadPage } from "@/lib/docs";
 
 export function staticPageMetadata(slug: string): Metadata {
   const { frontmatter } = loadPage(slug);
-  return { title: frontmatter.title, description: frontmatter.description };
+  const { title, description } = frontmatter;
+  // A static page lives at its own top-level path (`/privacy`, `/terms`, …).
+  // Emit a complete openGraph block — a page that sets `openGraph` replaces the
+  // root layout's wholesale, so `type`/`url` must be set here, and the canonical
+  // keeps og:url honest (Ahrefs flagged both missing across these pages, June 2026).
+  const url = `/${slug}`;
+  return {
+    title,
+    description,
+    openGraph: {
+      type: "website",
+      url,
+      title,
+      ...(description ? { description } : {}),
+    },
+    twitter: {
+      title,
+      ...(description ? { description } : {}),
+    },
+    alternates: { canonical: url },
+  };
 }
 
 export function StaticMarkdownPage({
