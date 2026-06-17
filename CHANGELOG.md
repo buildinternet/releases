@@ -3,6 +3,18 @@
 The product changelog for releases.sh, published to its own registry. Drafted daily from merged
 PRs and reviewed via PR. See docs/changelog-style.md for the voice and curation rules.
 
+## June 15, 2026
+
+**Added**
+- Signed-in admin users can now access the full admin surface in production — inline edit menus on orgs, sources, products, and releases; the Status dashboard; and Fetch Log and Playbook tabs on org pages. Previously only available in local development.
+
+**Changed**
+- The /live feed now shows rich release cards: org avatar and name, source and product identity, descriptive AI title with version tag, two-line summary, and inline media or video preview.
+- Feed and collection surfaces now serve AI-generated excerpts instead of the full release body; the complete text stays on the canonical release detail page.
+
+**Fixed**
+- Google Sign-In and One Tap now correctly store the original-cased display email address rather than the dot-stripped lowercase form.
+
 ## June 14, 2026
 
 **Added**
