@@ -38,6 +38,11 @@ export const KNOWLEDGE_PAGE_CITATIONS_CHUNK_SIZE = 11;
 // coverage_id, reason, decided_by, decided_at. 20 rows * 5 = 100 bindings.
 export const RELEASE_COVERAGE_INSERT_CHUNK_SIZE = 20;
 
+// `org_tags` / `product_tags` INSERT binds 3 placeholders per row
+// (org_id|product_id, tag_id, created_at). 33 rows * 3 = 99 bindings; cap at
+// 30 for headroom.
+export const ENTITY_TAG_INSERT_CHUNK_SIZE = 30;
+
 // `source_changelog_chunks` INSERT binds 11 placeholders per row: the nine
 // listed columns (source_changelog_file_id, source_id, offset, length,
 // tokens, content_hash, heading, vector_id, embedded_at — vectorId and
