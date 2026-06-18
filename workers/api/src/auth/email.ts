@@ -31,6 +31,7 @@
  */
 import { logEvent } from "@releases/lib/log-event";
 import { appendHtmlFooter, appendTextFooter, wrapHtmlEmail } from "../lib/email-layout.js";
+import { escapeHtml } from "../lib/html-escape.js";
 
 /** The Cloudflare Email Sending binding (object-form `send`). */
 export interface AuthEmailBinding {
@@ -255,6 +256,7 @@ export function changeEmailTemplate(opts: { url: string; newEmail: string; webOr
   html: string;
 } {
   const safeUrl = escapeHrefUrl(opts.url);
+  const safeNewEmail = escapeHtml(opts.newEmail);
   const webOrigin = opts.webOrigin ?? DEFAULT_WEB_ORIGIN;
   const footer = {
     reason:
@@ -271,7 +273,7 @@ export function changeEmailTemplate(opts: { url: string; newEmail: string; webOr
     "This link expires in 1 hour. If you didn't request this, you can ignore this email — your address won't change.",
   ].join("\n");
   const bodyHtml = [
-    `<p>We received a request to change your Releases email address to ${opts.newEmail}.</p>`,
+    `<p>We received a request to change your Releases email address to ${safeNewEmail}.</p>`,
     `<p><a href="${safeUrl}">Confirm new email</a></p>`,
     "<p>This link expires in 1 hour. If you didn't request this, you can ignore this email — your address won't change.</p>",
   ].join("");

@@ -25,6 +25,7 @@
  */
 import { drizzle } from "drizzle-orm/d1";
 import { and, eq, isNotNull, isNull, sql } from "drizzle-orm";
+import type { SourceType } from "@buildinternet/releases-core/source-enums";
 import { organizations, releases, sources } from "@buildinternet/releases-core/schema";
 import { logEvent } from "@releases/lib/log-event";
 import { parsePositiveInt } from "./feed-enrich.js";
@@ -65,7 +66,7 @@ export type StaleSourceEntry = {
   slug: string;
   orgSlug: string | null;
   orgName: string | null;
-  sourceType: string;
+  sourceType: SourceType;
   medianGapDays: number;
   windowDays: number;
   daysSinceNewest: number;
@@ -182,7 +183,7 @@ export async function scanStaleSources(
       slug: r.slug,
       orgSlug: r.orgSlug,
       orgName: r.orgName,
-      sourceType: r.type,
+      sourceType: r.type as SourceType,
       medianGapDays,
       windowDays: roundedWindow,
       daysSinceNewest: daysSince,
@@ -196,7 +197,7 @@ export async function scanStaleSources(
       sourceId: r.id,
       slug: r.slug,
       orgId: r.orgId,
-      sourceType: r.type,
+      sourceType: r.type as SourceType,
       medianGapDays,
       windowDays: roundedWindow,
       daysSinceNewest: daysSince,

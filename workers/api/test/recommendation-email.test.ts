@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import {
   formatRecommendationAckEmail,
   formatRecommendationEmail,
+  withinRecommendationAckBudget,
   withinRecommendationNotifyBudget,
 } from "../src/lib/recommendation-email.js";
 import type { Recommendation } from "@buildinternet/releases-core/schema";
@@ -48,14 +49,25 @@ describe("formatRecommendationEmail", () => {
 });
 
 describe("formatRecommendationAckEmail", () => {
-  it("thanks the submitter and explains why they received the email", () => {
+  it("thanks the submitter without echoing submitted url or note", () => {
     const { subject, text, html } = formatRecommendationAckEmail(base, "https://releases.sh");
     expect(subject).toContain("Thanks");
-    expect(text).toContain(base.url);
-    expect(text).toContain(base.note!);
+    expect(text).not.toContain(base.url);
+    expect(text).not.toContain(base.note!);
+    expect(text).toContain(`Reference: ${base.id}`);
     expect(text).toContain("releases.sh/submit");
     expect(text).toContain("You received this because you submitted");
-    expect(html).toContain(base.url);
+    expect(html).not.toContain(base.url);
+    expect(html).toContain(base.id);
+  });
+});
+
+describe("withinRecommendationAckBudget", () => {
+  it("uses a separate counter from operator notify", async () => {
+    const db = createTestDb();
+    expect(await withinRecommendationAckBudget(db as unknown as D1Database, 1)).toBe(true);
+    expect(await withinRecommendationAckBudget(db as unknown as D1Database, 1)).toBe(false);
+    expect(await withinRecommendationNotifyBudget(db as unknown as D1Database, 1)).toBe(true);
   });
 });
 

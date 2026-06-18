@@ -22,13 +22,17 @@ async function loadSamples(): Promise<SamplesResponse["samples"]> {
   const base = apiBaseUrl();
   const key = serverApiKey();
   if (!base || !key) return [];
-  const res = await fetch(`${base}/v1/admin/emails/samples`, {
-    headers: webApiHeaders({ Authorization: `Bearer ${key}` }),
-    cache: "no-store",
-  });
-  if (!res.ok) return [];
-  const body = (await res.json()) as SamplesResponse;
-  return body.samples ?? [];
+  try {
+    const res = await fetch(`${base}/v1/admin/emails/samples`, {
+      headers: webApiHeaders({ Authorization: `Bearer ${key}` }),
+      cache: "no-store",
+    });
+    if (!res.ok) return [];
+    const body = (await res.json()) as SamplesResponse;
+    return body.samples ?? [];
+  } catch {
+    return [];
+  }
 }
 
 export default async function AdminEmailsPage() {

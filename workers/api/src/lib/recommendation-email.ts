@@ -10,6 +10,7 @@ import { escapeHtml } from "./html-escape.js";
 import { sendEmail, type EmailEnv } from "./email.js";
 
 const DEFAULT_NOTIFY_MAX_PER_HOUR = 20;
+const DEFAULT_ACK_MAX_PER_HOUR = 20;
 const HOUR_MS = 3_600_000;
 
 type AtomicCounterStore = Pick<D1Database, "prepare">;
@@ -19,13 +20,14 @@ export type RecommendationNotifyEnv = EmailEnv & {
   RECOMMENDATION_NOTIFY_MAX_PER_HOUR?: string;
 };
 
-export async function withinRecommendationNotifyBudget(
+async function withinHourlyNotificationBudget(
   counter: AtomicCounterStore | undefined,
+  keyPrefix: string,
   max: number,
 ): Promise<boolean> {
   if (!counter) return true;
   const bucket = Math.floor(Date.now() / HOUR_MS);
-  const key = `recommendation:notify:${bucket}`;
+  const key = `${keyPrefix}:${bucket}`;
   const expiresAt = (bucket + 2) * HOUR_MS;
   await counter
     .prepare("DELETE FROM notification_counters WHERE expires_at < ?")
@@ -43,6 +45,20 @@ export async function withinRecommendationNotifyBudget(
     .bind(key, expiresAt)
     .first<{ count: number }>();
   return Number(row?.count ?? max + 1) <= max;
+}
+
+export async function withinRecommendationNotifyBudget(
+  counter: AtomicCounterStore | undefined,
+  max: number,
+): Promise<boolean> {
+  return withinHourlyNotificationBudget(counter, "recommendation:notify", max);
+}
+
+export async function withinRecommendationAckBudget(
+  counter: AtomicCounterStore | undefined,
+  max: number,
+): Promise<boolean> {
+  return withinHourlyNotificationBudget(counter, "recommendation:ack", max);
 }
 
 function truncate(s: string, max: number): string {
@@ -77,6 +93,8 @@ export function formatRecommendationEmail(row: Recommendation): {
 }
 
 export type RecommendationAckEnv = AuthEmailEnv & {
+  DB?: AtomicCounterStore;
+  RECOMMENDATION_ACK_MAX_PER_HOUR?: string;
   WEB_BASE_URL?: string;
 };
 
@@ -95,21 +113,12 @@ export function formatRecommendationAckEmail(
   const bodyText = [
     "Thanks for suggesting a changelog source for Releases.",
     "",
-    "We received:",
-    row.url,
-    row.note ? `\nYour note: ${row.note}` : "",
-    "",
     "Our team reviews submissions and adds sources that fit the registry. We may reach out if we need more detail.",
     "",
     `Reference: ${row.id}`,
-  ]
-    .filter((line) => line !== "")
-    .join("\n");
+  ].join("\n");
   const bodyHtml = [
     "<p>Thanks for suggesting a changelog source for Releases.</p>",
-    "<p>We received:</p>",
-    `<p><a href="${escapeHtml(row.url)}">${escapeHtml(row.url)}</a></p>`,
-    row.note ? `<p>Your note: ${escapeHtml(row.note)}</p>` : "",
     "<p>Our team reviews submissions and adds sources that fit the registry. We may reach out if we need more detail.</p>",
     `<p style="color:#64748b;font-size:13px;">Reference: ${escapeHtml(row.id)}</p>`,
   ].join("");
@@ -136,6 +145,17 @@ export async function sendRecommendationAck(
 ): Promise<void> {
   if (!row.contactEmail) return;
   try {
+    const max = parseInt(env.RECOMMENDATION_ACK_MAX_PER_HOUR ?? "", 10) || DEFAULT_ACK_MAX_PER_HOUR;
+    if (!(await withinRecommendationAckBudget(env.DB, max))) {
+      logEvent("warn", {
+        component: "recommendations",
+        event: "ack-rate-capped",
+        id: row.id,
+        maxPerHour: max,
+      });
+      return;
+    }
+
     const rendered = formatRecommendationAckEmail(row, webOrigin(env));
     const result = await sendAuthEmail(env, {
       to: row.contactEmail,
