@@ -139,7 +139,7 @@ export function PasskeysPanel() {
     return (
       <p className="text-sm leading-6 text-stone-600 dark:text-stone-300">
         Please{" "}
-        <Link href="/login?redirect=/account" className="underline">
+        <Link href="/login?redirect=/account/security" className="underline">
           sign in
         </Link>{" "}
         to manage your passkeys.
@@ -148,20 +148,7 @@ export function PasskeysPanel() {
   }
 
   return (
-    <div className="space-y-8">
-      <header>
-        <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-stone-400 dark:text-stone-500">
-          Account
-        </p>
-        <h1 className="mt-2 text-2xl font-semibold tracking-tight text-stone-900 dark:text-stone-100">
-          Passkeys
-        </h1>
-        <p className="mt-3 max-w-prose text-sm leading-6 text-stone-500 dark:text-stone-400">
-          Sign in without a password using your device&rsquo;s biometrics, PIN, or a security key.
-          Passkeys are phishing-resistant and never leave your device.
-        </p>
-      </header>
-
+    <div className="space-y-4">
       {error && (
         <p role="alert" className="text-sm text-red-600 dark:text-red-400">
           {error}

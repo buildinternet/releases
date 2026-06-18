@@ -120,7 +120,7 @@ export function ApiKeysPanel() {
     return (
       <p className="text-sm leading-6 text-stone-600 dark:text-stone-300">
         Please{" "}
-        <Link href="/login?redirect=/account" className="underline">
+        <Link href="/login?redirect=/account/api-keys" className="underline">
           sign in
         </Link>{" "}
         to manage your API keys.
@@ -129,22 +129,7 @@ export function ApiKeysPanel() {
   }
 
   return (
-    <div className="space-y-8">
-      <header>
-        <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-stone-400 dark:text-stone-500">
-          Account
-        </p>
-        <h1 className="mt-2 text-2xl font-semibold tracking-tight text-stone-900 dark:text-stone-100">
-          API keys
-        </h1>
-        <p className="mt-3 max-w-prose text-sm leading-6 text-stone-500 dark:text-stone-400">
-          Personal{" "}
-          <code className="font-mono text-[0.85em] text-stone-600 dark:text-stone-300">relu_</code>{" "}
-          keys for the Releases API and MCP server. A key is shown once at creation — store it
-          somewhere safe.
-        </p>
-      </header>
-
+    <div className="space-y-4">
       {error && (
         <p role="alert" className="text-sm text-red-600 dark:text-red-400">
           {error}
