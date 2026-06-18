@@ -25,6 +25,7 @@ import {
 type TickerItem = HomepageTickerQuery["latestReleases"]["items"][number];
 
 export const metadata: Metadata = {
+  title: "The latest product releases, indexed for agents",
   alternates: { canonical: "/" },
   openGraph: { type: "website", url: "/" },
 };

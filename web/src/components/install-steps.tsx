@@ -3,8 +3,6 @@
 import { useState } from "react";
 import { CommandSyntax } from "@/components/command-syntax";
 import { CopyIcon } from "@/components/copy-icon";
-import { OpenInAgentMenu } from "@/components/open-in-agent-menu";
-import { resolveTarget, type AgentTarget } from "@/lib/agent-launch";
 import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
 
 const cliOptions = [
@@ -62,25 +60,6 @@ function CodeBlock({
   );
 }
 
-function CodeWithLauncher({
-  command,
-  target,
-  variant,
-}: {
-  command: string;
-  target: AgentTarget;
-  variant?: "boxed" | "inline";
-}) {
-  return (
-    <div className="flex items-start gap-2">
-      <div className="min-w-0 flex-1">
-        <CodeBlock command={command} variant={variant} />
-      </div>
-      <OpenInAgentMenu target={target} className="shrink-0" />
-    </div>
-  );
-}
-
 function CliMiniTabs({ cli, setCli }: { cli: CliId; setCli: (id: CliId) => void }) {
   return (
     <div className="flex gap-1 text-[12px]">
@@ -129,7 +108,7 @@ export function InstallStepsInline() {
       </div>
       <div className="mt-3 space-y-2">
         {top === "cli" && <CliMiniTabs cli={cli} setCli={setCli} />}
-        <CodeWithLauncher command={cmd} target={resolveTarget(top)} variant="inline" />
+        <CodeBlock command={cmd} variant="inline" />
         <p className="text-[12px] leading-snug text-stone-500 dark:text-stone-400">
           {HELP[top].text} <DocsLink href={HELP[top].href} />
         </p>
@@ -178,7 +157,7 @@ export function InstallStepsSidebar() {
       <section className="space-y-2">
         <StepHeading>Install the CLI</StepHeading>
         <CliMiniTabs cli={cli} setCli={setCli} />
-        <CodeWithLauncher command={cliCmd} target="cli" />
+        <CodeBlock command={cliCmd} />
         <StepHelp href={HELP.cli.href}>{HELP.cli.text}</StepHelp>
       </section>
 
@@ -186,7 +165,7 @@ export function InstallStepsSidebar() {
 
       <section className="space-y-2">
         <StepHeading>Or connect via MCP</StepHeading>
-        <CodeWithLauncher command={MCP_URL} target="mcp" />
+        <CodeBlock command={MCP_URL} />
         <StepHelp href={HELP.mcp.href}>{HELP.mcp.text}</StepHelp>
       </section>
 
