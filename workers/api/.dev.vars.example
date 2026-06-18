@@ -1,0 +1,25 @@
+# Local secrets for `wrangler dev` on workers/api (loaded by `bun run dev:api`).
+# Copy to `workers/api/.dev.vars` and fill in. NEVER commit the real file.
+# See AGENTS.md → "Local development" / "Auth" for the full rationale.
+
+# Better Auth (local sign-in / sessions)
+ENVIRONMENT=development
+DEV_MODE=true
+BETTER_AUTH_URL=https://api.releases.localhost
+BETTER_AUTH_TRUSTED_ORIGINS=https://releases.localhost
+# Local signing secret. NOT BETTER_AUTH_SECRET (that's a Secrets Store binding
+# wrangler dev can't resolve). Any stable string keeps sessions across restarts.
+BETTER_AUTH_SECRET_DEV=replace-with-any-stable-string
+BETTER_AUTH_API_KEY=
+
+# Google OAuth (optional — only needed to test Google sign-in locally)
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+
+# Stripe (optional — customer-on-signup stays inert unless BOTH this and
+# STRIPE_SECRET_KEY resolve)
+STRIPE_WEBHOOK_SECRET=
+
+# Optional: skip D1-backed auth rate limiting during local sign-in testing
+# (defaults OFF so deployed prod stays protected).
+# AUTH_RATE_LIMIT_DISABLED=true

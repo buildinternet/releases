@@ -33,6 +33,7 @@ import {
   type ReleaseCoverageSibling,
 } from "@buildinternet/releases-api-types";
 import { validateJson } from "../lib/validate.js";
+import { IN_ARRAY_CHUNK_SIZE, RELEASE_COVERAGE_INSERT_CHUNK_SIZE } from "../lib/d1-limits.js";
 
 export const releaseRoutes = new Hono<Env>();
 
@@ -466,11 +467,16 @@ releaseRoutes.post(
     }
 
     const ids = [canonicalId, ...coverageIds];
-    const found = await db
-      .select({ id: releases.id })
-      .from(releases)
-      .where(inArray(releases.id, ids));
-    const foundSet = new Set(found.map((r) => r.id));
+    const foundSet = new Set<string>();
+    for (let i = 0; i < ids.length; i += IN_ARRAY_CHUNK_SIZE) {
+      const idChunk = ids.slice(i, i + IN_ARRAY_CHUNK_SIZE);
+      // oxlint-disable-next-line no-await-in-loop -- D1 chunked IN lookup (100 bind param limit)
+      const found = await db
+        .select({ id: releases.id })
+        .from(releases)
+        .where(inArray(releases.id, idChunk));
+      for (const r of found) foundSet.add(r.id);
+    }
     const missing = ids.filter((x) => !foundSet.has(x));
     if (missing.length > 0) {
       return c.json(
@@ -489,13 +495,17 @@ releaseRoutes.post(
       decidedBy,
       decidedAt: now,
     }));
-    await db
-      .insert(releaseCoverage)
-      .values(rows)
-      .onConflictDoUpdate({
-        target: releaseCoverage.coverageId,
-        set: { canonicalId, reason, decidedBy, decidedAt: now },
-      });
+    for (let i = 0; i < rows.length; i += RELEASE_COVERAGE_INSERT_CHUNK_SIZE) {
+      const chunk = rows.slice(i, i + RELEASE_COVERAGE_INSERT_CHUNK_SIZE);
+      // oxlint-disable-next-line no-await-in-loop -- D1 chunked insert (100 bind param limit)
+      await db
+        .insert(releaseCoverage)
+        .values(chunk)
+        .onConflictDoUpdate({
+          target: releaseCoverage.coverageId,
+          set: { canonicalId, reason, decidedBy, decidedAt: now },
+        });
+    }
 
     return c.json({ canonicalId, coverageIds, linked: coverageIds.length }, 201);
   },

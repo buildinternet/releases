@@ -6,13 +6,17 @@ import {
   releases,
   knowledgePages,
   sourceChangelogChunks,
+  orgTags,
 } from "@buildinternet/releases-core/schema";
+import { releaseCoverage } from "../../src/db/schema-coverage.js";
 import { RELEASE_URL_UPSERT } from "@releases/core-internal/release-upsert";
 import {
   D1_MAX_BINDINGS,
   RELEASES_BATCH_CHUNK_SIZE,
   RELEASES_ID_IN_CHUNK_SIZE,
   CHANGELOG_CHUNK_INSERT_CHUNK_SIZE,
+  RELEASE_COVERAGE_INSERT_CHUNK_SIZE,
+  ENTITY_TAG_INSERT_CHUNK_SIZE,
 } from "../../workers/api/src/lib/d1-limits.js";
 
 // D1 rejects any prepared statement that binds more than D1_MAX_BINDINGS
@@ -129,6 +133,36 @@ describe("knowledge_pages playbook id-IN bind budget", () => {
       .from(knowledgePages)
       .where(and(eq(knowledgePages.scope, "playbook"), inArray(knowledgePages.orgId, ids)))
       .toSQL();
+    expect(q.params.length).toBeLessThanOrEqual(D1_MAX_BINDINGS);
+  });
+});
+
+describe("release_coverage insert bind budget", () => {
+  // releaseCoverage INSERT binds 5 placeholders per row: canonical_id,
+  // coverage_id, reason, decided_by, decided_at. 20 rows * 5 = 100 bindings.
+  it(`chunk of RELEASE_COVERAGE_INSERT_CHUNK_SIZE stays under D1's ${D1_MAX_BINDINGS}-bind cap`, () => {
+    const rows = Array.from({ length: RELEASE_COVERAGE_INSERT_CHUNK_SIZE }, (_, i) => ({
+      canonicalId: "rel_canonical",
+      coverageId: `rel_${i}`,
+      reason: "test",
+      decidedBy: "human:cli",
+    }));
+    const q = db.insert(releaseCoverage).values(rows).toSQL();
+    expect(q.params.length).toBeLessThanOrEqual(D1_MAX_BINDINGS);
+  });
+});
+
+describe("org_tags / product_tags insert bind budget", () => {
+  // orgTags INSERT binds 3 placeholders per row: org_id, tag_id, created_at.
+  // 30 rows * 3 = 90 bindings, comfortably under the cap.
+  it(`chunk of ENTITY_TAG_INSERT_CHUNK_SIZE stays under D1's ${D1_MAX_BINDINGS}-bind cap`, () => {
+    const createdAt = new Date().toISOString();
+    const rows = Array.from({ length: ENTITY_TAG_INSERT_CHUNK_SIZE }, (_, i) => ({
+      orgId: "org_x",
+      tagId: `tag_${i}`,
+      createdAt,
+    }));
+    const q = db.insert(orgTags).values(rows).toSQL();
     expect(q.params.length).toBeLessThanOrEqual(D1_MAX_BINDINGS);
   });
 });

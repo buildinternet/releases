@@ -436,8 +436,9 @@ app.onError((err, c) => {
     }
     return res;
   }
-  const message = err instanceof Error ? err.message : String(err);
-  return c.json({ error: "internal_error", message }, 500);
+  const detail = err instanceof Error ? err.message : String(err);
+  logEvent("error", { component: "api", event: "unhandled_error", error: detail });
+  return c.json({ error: "internal_error", message: "An unexpected error occurred." }, 500);
 });
 
 // Better Auth CORS — credentialed, first-party origins only. MUST come before

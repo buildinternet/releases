@@ -72,7 +72,7 @@ import {
   replaceAliases,
   findProductForOrgSlug,
 } from "../utils.js";
-import { IN_ARRAY_CHUNK_SIZE } from "../lib/d1-limits.js";
+import { IN_ARRAY_CHUNK_SIZE, ENTITY_TAG_INSERT_CHUNK_SIZE } from "../lib/d1-limits.js";
 import { wantsMarkdown, markdownResponse } from "../middleware/content-negotiation.js";
 import { isValidBearerAuth } from "../middleware/auth.js";
 import { orgToMarkdown, orgReleaseFeedToMarkdown } from "@releases/rendering/formatters.js";
@@ -563,10 +563,16 @@ orgRoutes.post(
       if (body.tags && body.tags.length > 0) {
         const tagRows = await getOrCreateTagsD1(db, body.tags);
         const tagCreatedAt = new Date().toISOString();
-        await db
-          .insert(orgTags)
-          .values(tagRows.map((t) => ({ orgId: org.id, tagId: t.id, createdAt: tagCreatedAt })))
-          .onConflictDoNothing();
+        const orgTagRowsToInsert = tagRows.map((t) => ({
+          orgId: org.id,
+          tagId: t.id,
+          createdAt: tagCreatedAt,
+        }));
+        for (let i = 0; i < orgTagRowsToInsert.length; i += ENTITY_TAG_INSERT_CHUNK_SIZE) {
+          const chunk = orgTagRowsToInsert.slice(i, i + ENTITY_TAG_INSERT_CHUNK_SIZE);
+          // oxlint-disable-next-line no-await-in-loop -- D1 chunked insert (100 bind param limit)
+          await db.insert(orgTags).values(chunk).onConflictDoNothing();
+        }
       }
 
       c.executionCtx.waitUntil(embedOrgSideEffect(c.env, db, org.id));
@@ -806,10 +812,16 @@ orgRoutes.patch(
       if (body.tags.length > 0) {
         const tagRows = await getOrCreateTagsD1(db, body.tags);
         const now = new Date().toISOString();
-        await db
-          .insert(orgTags)
-          .values(tagRows.map((t) => ({ orgId: org.id, tagId: t.id, createdAt: now })))
-          .onConflictDoNothing();
+        const orgTagRowsToInsert = tagRows.map((t) => ({
+          orgId: org.id,
+          tagId: t.id,
+          createdAt: now,
+        }));
+        for (let i = 0; i < orgTagRowsToInsert.length; i += ENTITY_TAG_INSERT_CHUNK_SIZE) {
+          const chunk = orgTagRowsToInsert.slice(i, i + ENTITY_TAG_INSERT_CHUNK_SIZE);
+          // oxlint-disable-next-line no-await-in-loop -- D1 chunked insert (100 bind param limit)
+          await db.insert(orgTags).values(chunk).onConflictDoNothing();
+        }
       }
     }
 
@@ -1336,10 +1348,16 @@ orgRoutes.put(
     if (tagNames.length > 0) {
       const tagRows = await getOrCreateTagsD1(db, tagNames);
       const now = new Date().toISOString();
-      await db
-        .insert(orgTags)
-        .values(tagRows.map((t) => ({ orgId: org.id, tagId: t.id, createdAt: now })))
-        .onConflictDoNothing();
+      const orgTagRowsToInsert = tagRows.map((t) => ({
+        orgId: org.id,
+        tagId: t.id,
+        createdAt: now,
+      }));
+      for (let i = 0; i < orgTagRowsToInsert.length; i += ENTITY_TAG_INSERT_CHUNK_SIZE) {
+        const chunk = orgTagRowsToInsert.slice(i, i + ENTITY_TAG_INSERT_CHUNK_SIZE);
+        // oxlint-disable-next-line no-await-in-loop -- D1 chunked insert (100 bind param limit)
+        await db.insert(orgTags).values(chunk).onConflictDoNothing();
+      }
     }
     return c.json({ ok: true });
   },

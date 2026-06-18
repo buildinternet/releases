@@ -58,7 +58,7 @@ import { buildEmbedConfig } from "@releases/search/embed-config.js";
 import { logEvent } from "@releases/lib/log-event";
 import { dbErrorLogFields } from "@releases/lib/db-errors";
 import { buildListResponse, parseListPagination } from "../lib/pagination.js";
-import { IN_ARRAY_CHUNK_SIZE } from "../lib/d1-limits.js";
+import { IN_ARRAY_CHUNK_SIZE, ENTITY_TAG_INSERT_CHUNK_SIZE } from "../lib/d1-limits.js";
 import { getProductActivityData, getProductHeatmapData } from "../queries/orgs.js";
 import { listCollectionsWhere } from "../queries/collections.js";
 
@@ -662,10 +662,16 @@ productRoutes.post(
       if (body.tags && body.tags.length > 0) {
         const tagRows = await getOrCreateTagsD1(db, body.tags);
         const now = new Date().toISOString();
-        await db
-          .insert(productTags)
-          .values(tagRows.map((t) => ({ productId: created.id, tagId: t.id, createdAt: now })))
-          .onConflictDoNothing();
+        const productTagRowsToInsert = tagRows.map((t) => ({
+          productId: created.id,
+          tagId: t.id,
+          createdAt: now,
+        }));
+        for (let i = 0; i < productTagRowsToInsert.length; i += ENTITY_TAG_INSERT_CHUNK_SIZE) {
+          const chunk = productTagRowsToInsert.slice(i, i + ENTITY_TAG_INSERT_CHUNK_SIZE);
+          // oxlint-disable-next-line no-await-in-loop -- D1 chunked insert (100 bind param limit)
+          await db.insert(productTags).values(chunk).onConflictDoNothing();
+        }
       }
 
       c.executionCtx.waitUntil(embedProductSideEffect(c.env, db, created.id));
@@ -749,10 +755,16 @@ const patchProductHandler = async (c: import("hono").Context<Env>) => {
     if (body.tags.length > 0) {
       const tagRows = await getOrCreateTagsD1(db, body.tags);
       const now = new Date().toISOString();
-      await db
-        .insert(productTags)
-        .values(tagRows.map((t) => ({ productId: product.id, tagId: t.id, createdAt: now })))
-        .onConflictDoNothing();
+      const productTagRowsToInsert = tagRows.map((t) => ({
+        productId: product.id,
+        tagId: t.id,
+        createdAt: now,
+      }));
+      for (let i = 0; i < productTagRowsToInsert.length; i += ENTITY_TAG_INSERT_CHUNK_SIZE) {
+        const chunk = productTagRowsToInsert.slice(i, i + ENTITY_TAG_INSERT_CHUNK_SIZE);
+        // oxlint-disable-next-line no-await-in-loop -- D1 chunked insert (100 bind param limit)
+        await db.insert(productTags).values(chunk).onConflictDoNothing();
+      }
     }
   }
 
@@ -892,10 +904,16 @@ productRoutes.put(
     if (tagNames.length > 0) {
       const tagRows = await getOrCreateTagsD1(db, tagNames);
       const now = new Date().toISOString();
-      await db
-        .insert(productTags)
-        .values(tagRows.map((t) => ({ productId: product.id, tagId: t.id, createdAt: now })))
-        .onConflictDoNothing();
+      const productTagRowsToInsert = tagRows.map((t) => ({
+        productId: product.id,
+        tagId: t.id,
+        createdAt: now,
+      }));
+      for (let i = 0; i < productTagRowsToInsert.length; i += ENTITY_TAG_INSERT_CHUNK_SIZE) {
+        const chunk = productTagRowsToInsert.slice(i, i + ENTITY_TAG_INSERT_CHUNK_SIZE);
+        // oxlint-disable-next-line no-await-in-loop -- D1 chunked insert (100 bind param limit)
+        await db.insert(productTags).values(chunk).onConflictDoNothing();
+      }
     }
     return c.json({ ok: true });
   },
