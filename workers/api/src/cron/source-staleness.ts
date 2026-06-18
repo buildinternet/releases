@@ -20,11 +20,13 @@
  *
  * Firecrawl-owned sources are excluded — {@link scanStaleFirecrawlSources}
  * already watches those on a monitor-cadence basis. Emits warn-level events on
- * the `source-staleness` component (alerting is via Workers Logs / Axiom).
+ * the `source-staleness` component; the daily {@link sendStalenessDigest}
+ * cron rolls first-party + Firecrawl flags into an operator email.
  */
 import { drizzle } from "drizzle-orm/d1";
 import { and, eq, isNotNull, isNull, sql } from "drizzle-orm";
-import { releases, sources } from "@buildinternet/releases-core/schema";
+import type { SourceType } from "@buildinternet/releases-core/source-enums";
+import { organizations, releases, sources } from "@buildinternet/releases-core/schema";
 import { logEvent } from "@releases/lib/log-event";
 import { parsePositiveInt } from "./feed-enrich.js";
 
@@ -58,16 +60,36 @@ const DEFAULT_MULTIPLIER = 3;
 const DEFAULT_POLL_RECENCY_DAYS = 3;
 const DAY_MS = 86_400_000;
 
+/** One first-party source flagged as overdue during {@link scanStaleSources}. */
+export type StaleSourceEntry = {
+  sourceId: string;
+  slug: string;
+  orgSlug: string | null;
+  orgName: string | null;
+  sourceType: SourceType;
+  medianGapDays: number;
+  windowDays: number;
+  daysSinceNewest: number;
+  newestRelease: string | null;
+  lastSeenAt: string;
+};
+
+export type SourceStalenessScanResult = {
+  scanned: number;
+  stale: number;
+  entries: StaleSourceEntry[];
+};
+
 /**
  * Scan established-cadence, actively-monitored, non-Firecrawl sources and warn
  * on any whose newest release is older than its overdue window. Returns counts
- * for observability/testing.
+ * and the flagged rows for digest email / observability.
  */
 export async function scanStaleSources(
   env: SourceStalenessEnv,
   now: Date = new Date(),
-): Promise<{ scanned: number; stale: number }> {
-  if (env.CRON_ENABLED === "false") return { scanned: 0, stale: 0 };
+): Promise<SourceStalenessScanResult> {
+  if (env.CRON_ENABLED === "false") return { scanned: 0, stale: 0, entries: [] };
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- drizzle override pattern; same as the firecrawl scan
   const db: any = env._drizzleOverride ?? drizzle(env.DB);
@@ -89,6 +111,8 @@ export async function scanStaleSources(
     id: string;
     slug: string;
     orgId: string | null;
+    orgSlug: string | null;
+    orgName: string | null;
     type: string;
     medianGapDays: number | null;
     fetchPriority: string | null;
@@ -101,6 +125,8 @@ export async function scanStaleSources(
       id: sources.id,
       slug: sources.slug,
       orgId: sources.orgId,
+      orgSlug: organizations.slug,
+      orgName: organizations.name,
       type: sources.type,
       medianGapDays: sources.medianGapDays,
       fetchPriority: sources.fetchPriority,
@@ -112,6 +138,7 @@ export async function scanStaleSources(
       >`MAX(CASE WHEN ${releases.suppressed} = 0 THEN COALESCE(${releases.publishedAt}, ${releases.fetchedAt}) END)`,
     })
     .from(sources)
+    .leftJoin(organizations, eq(sources.orgId, organizations.id))
     .leftJoin(releases, eq(releases.sourceId, sources.id))
     .where(
       and(
@@ -125,6 +152,7 @@ export async function scanStaleSources(
     .groupBy(sources.id);
 
   let stale = 0;
+  const entries: StaleSourceEntry[] = [];
   for (const r of rows) {
     if (r.fetchPriority === "paused") continue;
     // medianGapDays is guaranteed non-null by the SQL WHERE above.
@@ -149,20 +177,36 @@ export async function scanStaleSources(
 
     stale++;
     const daysSince = Math.round((now.getTime() - new Date(reference).getTime()) / DAY_MS);
+    const roundedWindow = Math.round(windowDays);
+    const entry: StaleSourceEntry = {
+      sourceId: r.id,
+      slug: r.slug,
+      orgSlug: r.orgSlug,
+      orgName: r.orgName,
+      sourceType: r.type as SourceType,
+      medianGapDays,
+      windowDays: roundedWindow,
+      daysSinceNewest: daysSince,
+      newestRelease: r.newestRelease,
+      lastSeenAt: lastSeen,
+    };
+    entries.push(entry);
     logEvent("warn", {
       component: "source-staleness",
       event: "stale-source",
       sourceId: r.id,
       slug: r.slug,
       orgId: r.orgId,
-      sourceType: r.type,
+      sourceType: r.type as SourceType,
       medianGapDays,
-      windowDays: Math.round(windowDays),
+      windowDays: roundedWindow,
       daysSinceNewest: daysSince,
       newestRelease: r.newestRelease,
       lastSeenAt: lastSeen,
     });
   }
+
+  entries.sort((a, b) => b.daysSinceNewest - a.daysSinceNewest);
 
   logEvent(stale > 0 ? "warn" : "info", {
     component: "source-staleness",
@@ -170,5 +214,5 @@ export async function scanStaleSources(
     scanned: rows.length,
     stale,
   });
-  return { scanned: rows.length, stale };
+  return { scanned: rows.length, stale, entries };
 }

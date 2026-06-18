@@ -14,6 +14,11 @@ const TOOLS = [
   },
   { href: "/admin/status", title: "Status", desc: "Live fetch-log + system status dashboard." },
   { href: "/admin/api-tokens", title: "API tokens", desc: "Mint and revoke scoped API tokens." },
+  {
+    href: "/admin/emails",
+    title: "Test emails",
+    desc: "Send a sample of every outbound email template to your inbox.",
+  },
 ];
 
 export default async function AdminHubPage() {

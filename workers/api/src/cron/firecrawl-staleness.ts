@@ -18,8 +18,8 @@
  * at all, so the only `getMonitor` calls are for sources already past the floor.
  */
 import { drizzle } from "drizzle-orm/d1";
-import { sql } from "drizzle-orm";
-import { sources } from "@buildinternet/releases-core/schema";
+import { eq, sql } from "drizzle-orm";
+import { organizations, sources } from "@buildinternet/releases-core/schema";
 import { logEvent } from "@releases/lib/log-event";
 import { getSecret } from "@releases/lib/secrets";
 import { createFirecrawlClient, type FirecrawlClient } from "@releases/adapters/firecrawl.js";
@@ -126,15 +126,32 @@ export async function thresholdHours(
   }
 }
 
+/** One Firecrawl-monitored source flagged as overdue during the scan. */
+export type FirecrawlStaleEntry = {
+  sourceId: string;
+  slug: string;
+  orgSlug: string | null;
+  orgName: string | null;
+  lastFetchedAt: string | null;
+  staleHours: number;
+  thresholdBasis: "floor" | "schedule";
+};
+
+export type FirecrawlStalenessScanResult = {
+  scanned: number;
+  stale: number;
+  entries: FirecrawlStaleEntry[];
+};
+
 /**
  * Scan firecrawl-enabled sources and warn on any whose last run is older than
- * its staleness window. Returns counts for observability/testing.
+ * its staleness window. Returns counts and flagged rows for digest email.
  */
 export async function scanStaleFirecrawlSources(
   env: FirecrawlStalenessEnv,
   now: Date = new Date(),
-): Promise<{ scanned: number; stale: number }> {
-  if (env.CRON_ENABLED === "false") return { scanned: 0, stale: 0 };
+): Promise<FirecrawlStalenessScanResult> {
+  if (env.CRON_ENABLED === "false") return { scanned: 0, stale: 0, entries: [] };
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- drizzle override pattern; same as the workflows
   const db: any = env._drizzleOverride ?? drizzle(env.DB);
@@ -146,6 +163,8 @@ export async function scanStaleFirecrawlSources(
     id: string;
     slug: string;
     orgId: string | null;
+    orgSlug: string | null;
+    orgName: string | null;
     lastFetchedAt: string | null;
     createdAt: string | null;
     monitorId: string | null;
@@ -154,11 +173,14 @@ export async function scanStaleFirecrawlSources(
       id: sources.id,
       slug: sources.slug,
       orgId: sources.orgId,
+      orgSlug: organizations.slug,
+      orgName: organizations.name,
       lastFetchedAt: sources.lastFetchedAt,
       createdAt: sources.createdAt,
       monitorId: sql<string | null>`json_extract(${sources.metadata}, '$.firecrawl.monitorId')`,
     })
     .from(sources)
+    .leftJoin(organizations, eq(sources.orgId, organizations.id))
     // json_extract returns the integer 1 for JSON `true`, NULL when absent.
     .where(sql`json_extract(${sources.metadata}, '$.firecrawl.enabled') = 1`);
 
@@ -181,6 +203,7 @@ export async function scanStaleFirecrawlSources(
   }
 
   let stale = 0;
+  const entries: FirecrawlStaleEntry[] = [];
   for (const r of rows) {
     // A never-run source (lastFetchedAt null) uses createdAt as the clock, so a
     // freshly-enabled source isn't flagged until it's had a full window to fire.
@@ -199,6 +222,16 @@ export async function scanStaleFirecrawlSources(
     if (last >= cutoff) continue;
 
     stale++;
+    const entry: FirecrawlStaleEntry = {
+      sourceId: r.id,
+      slug: r.slug,
+      orgSlug: r.orgSlug,
+      orgName: r.orgName,
+      lastFetchedAt: r.lastFetchedAt,
+      staleHours: hours,
+      thresholdBasis: basis,
+    };
+    entries.push(entry);
     logEvent("warn", {
       component: "firecrawl-staleness",
       event: "stale-source",
@@ -217,5 +250,5 @@ export async function scanStaleFirecrawlSources(
     scanned: rows.length,
     stale,
   });
-  return { scanned: rows.length, stale };
+  return { scanned: rows.length, stale, entries };
 }

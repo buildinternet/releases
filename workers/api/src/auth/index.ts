@@ -602,6 +602,11 @@ export function derivePasskeyRp(env: { WEB_BASE_URL?: string }): {
   }
 }
 
+/** Web origin for links in user-facing auth email templates. */
+function webOriginForEmail(env: { WEB_BASE_URL?: string }): string {
+  return derivePasskeyRp(env).origin;
+}
+
 /**
  * Scoped, credentialed CORS for `/api/auth/*` AND the session-authed self-serve
  * surface `/v1/api-keys` (see index.ts). The worker's global `cors()` is
@@ -960,7 +965,10 @@ export async function createAuth(
       expiresIn: 60 * 15,
       storeToken: "hashed",
       sendMagicLink: async ({ email, url }) => {
-        const msg: AuthEmailMessage = { to: email, ...magicLinkTemplate({ url }) };
+        const msg: AuthEmailMessage = {
+          to: email,
+          ...magicLinkTemplate({ url, webOrigin: webOriginForEmail(env) }),
+        };
         scheduleSend(() => sendEmail(msg));
       },
     }),
@@ -1192,7 +1200,10 @@ export async function createAuth(
       // Resetting a password kills the user's other sessions.
       revokeSessionsOnPasswordReset: true,
       sendResetPassword: async ({ user: u, url }) => {
-        const msg: AuthEmailMessage = { to: u.email, ...resetPasswordTemplate({ url }) };
+        const msg: AuthEmailMessage = {
+          to: u.email,
+          ...resetPasswordTemplate({ url, webOrigin: webOriginForEmail(env) }),
+        };
         scheduleSend(() => sendEmail(msg));
       },
       // Audit: a completed password reset (the user id only; no token material).
@@ -1205,7 +1216,10 @@ export async function createAuth(
       sendOnSignIn: true,
       autoSignInAfterVerification: true,
       sendVerificationEmail: async ({ user: u, url }) => {
-        const msg: AuthEmailMessage = { to: u.email, ...verifyEmailTemplate({ url }) };
+        const msg: AuthEmailMessage = {
+          to: u.email,
+          ...verifyEmailTemplate({ url, webOrigin: webOriginForEmail(env) }),
+        };
         scheduleSend(() => sendEmail(msg));
       },
       // Audit: a successful email verification (the auto-sign-in that follows logs
@@ -1237,7 +1251,10 @@ export async function createAuth(
       changeEmail: {
         enabled: true,
         sendChangeEmailConfirmation: async ({ user: u, newEmail, url }) => {
-          const msg: AuthEmailMessage = { to: u.email, ...changeEmailTemplate({ url, newEmail }) };
+          const msg: AuthEmailMessage = {
+            to: u.email,
+            ...changeEmailTemplate({ url, newEmail, webOrigin: webOriginForEmail(env) }),
+          };
           scheduleSend(() => sendEmail(msg));
         },
       },

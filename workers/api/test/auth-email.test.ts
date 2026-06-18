@@ -17,6 +17,8 @@ describe("auth email templates", () => {
     expect(t.text).toContain("token=abc123");
     expect(t.html).toContain("token=abc123");
     expect(t.html).toContain(`href="${url}"`);
+    expect(t.text).toContain("You received this because someone signed up");
+    expect(t.text).toContain("Account settings: https://releases.sh/account");
   });
 
   it("resetPasswordTemplate embeds the url in text + html and sets a subject", () => {
@@ -37,6 +39,14 @@ describe("auth email templates", () => {
     expect(t.html).toContain("token=chg123");
     expect(t.html).toContain("new@example.com");
     expect(t.html).toContain(`href="${url}"`);
+  });
+
+  it("changeEmailTemplate escapes HTML in newEmail", () => {
+    const malicious = "evil<script>alert(1)</script>@x.com";
+    const t = changeEmailTemplate({ url: "https://x/", newEmail: malicious });
+    expect(t.html).not.toContain("<script>");
+    expect(t.html).toContain("&lt;script&gt;");
+    expect(t.text).toContain(malicious);
   });
 });
 
