@@ -189,3 +189,11 @@ Signed-in users can follow orgs and products; an org follow implicitly covers al
 **`FollowButton`** (`web/src/components/follow-button.tsx`) reads from `FollowsProvider` context, calls `POST /v1/me/follows` or `DELETE /v1/me/follows/:targetType/:targetId` on click, and applies an optimistic local toggle with a rollback on error. It appears on org and product detail pages for signed-in users.
 
 **`/following` page** (`web/src/app/following/page.tsx`) is the personalized feed: a newest-first release list (reusing the `ReleaseLatestItem` component) drawn from `GET /v1/me/feed`, with a same-page sidebar listing all current follows and offering unfollow actions. The feed is cursor-paginated and empty-stated with a prompt to follow orgs or products when the user has no follows yet.
+
+## Admin hub
+
+`/admin` (`web/src/app/admin/page.tsx`) is the operator tool index, gated server-side via `isAdminViewer()` (`web/src/lib/server-session.ts`) — non-admins get `notFound()`. Reachable from the account dropdown when the viewer is an admin.
+
+**Test emails** (`/admin/emails`) lists every outbound template from `GET /v1/admin/emails/samples` and sends fabricated `[test]` previews through `POST /v1/admin/emails/test` (proxied via `/api/proxy/admin/emails/test`). Samples use static fixture data — auth templates go through `AUTH_EMAIL`, operator alerts through `SEND_EMAIL`. This is the fast path for checking footers, links, and deliverability after template edits.
+
+**Live digest test** is separate: `POST /v1/admin/digest/test` (root-key or admin JWT) sends a real follow digest for one user with live watermark/lookback rules. Use it when validating digest content against actual follows; use `/admin/emails` when previewing the render with fixture releases.
