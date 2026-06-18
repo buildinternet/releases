@@ -21,6 +21,8 @@ Changelog indexer and registry for AI agents and developers. The user-facing CLI
 
 ## Local development
 
+Worker runtime secrets for `bun run dev:api` live in `workers/api/.dev.vars` (git-ignored). Copy `workers/api/.dev.vars.example` to get started — it enumerates every key with placeholder values and a short comment per key.
+
 The four `dev:*` scripts (`dev:web`, `dev:api`, `dev:mcp`, `dev:discovery`) run each service through [portless](https://github.com/vercel-labs/portless) so they're reachable on stable HTTPS subdomains instead of port numbers — `https://releases.localhost` for the web frontend, `https://{api,mcp,discovery}.releases.localhost` for the workers. First run trusts a local CA and starts a daemon on port 443; subsequent runs reuse it. Apps mapping lives in `portless.json` for direct `portless` invocations from a workspace dir; the actual dev scripts pass `--name` explicitly so `portless run` picks up the override even outside a workspace.
 
 - **Worktrees:** linked git worktrees are detected automatically and the branch name is prepended (`feat-x.releases.localhost`, `feat-x.api.releases.localhost`, …) so multiple checkouts coexist without collision. No config needed — this is built into `portless run`.
