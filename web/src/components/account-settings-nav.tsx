@@ -14,6 +14,7 @@ const BASE_ITEMS: NavItem[] = [
   { label: "Email", href: "/account/email" },
   { label: "Security", href: "/account/security" },
   { label: "Notifications", href: "/account/notifications" },
+  { label: "Following", href: "/following" },
 ];
 
 function navItems(): NavItem[] {
