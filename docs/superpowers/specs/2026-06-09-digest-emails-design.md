@@ -11,7 +11,9 @@
 > are the only gates. References to the flag in the sections below are historical.
 > A root-key `POST /v1/admin/digest/test` on-demand test-send was also added for
 > development (bypasses the schedule + verified-email filter; never advances the
-> watermark unless asked).
+> watermark unless asked). Post-#1661: `/admin/emails` adds fabricated `[test]`
+> previews for every outbound template (including digest fixtures); live digest
+> testing stays on `POST /v1/admin/digest/test`.
 
 ## Summary
 
