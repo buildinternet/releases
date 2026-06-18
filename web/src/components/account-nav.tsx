@@ -19,6 +19,10 @@ import { computeIsAdmin } from "@/components/admin-only";
  */
 const AUTH_ENABLED = AUTH_CONFIGURED;
 
+/** Bordered CTA — matches secondary auth buttons (passkey, magic link, account menu). */
+const SIGN_IN_LINK_CLASS =
+  "inline-flex items-center justify-center border border-stone-300 bg-white px-3 text-sm font-medium text-stone-800 transition hover:border-stone-400 hover:bg-stone-50 dark:border-stone-600 dark:bg-stone-900 dark:text-stone-100 dark:hover:border-stone-500 dark:hover:bg-stone-800";
+
 type Variant = "desktop" | "mobile";
 
 export function AccountNav({
@@ -115,7 +119,7 @@ function AccountNavInner({ variant, devAdmin }: { variant: Variant; devAdmin: bo
   if (variant === "mobile") {
     if (!user) {
       return (
-        <Link href="/login" className="py-2 hover:text-stone-900 dark:hover:text-stone-100">
+        <Link href="/login" className={`${SIGN_IN_LINK_CLASS} mt-2 h-10 w-full`}>
           Sign in
         </Link>
       );
@@ -165,7 +169,7 @@ function AccountNavInner({ variant, devAdmin }: { variant: Variant; devAdmin: bo
 
   if (!user) {
     return (
-      <Link href="/login" className="hover:text-stone-700 dark:hover:text-stone-300">
+      <Link href="/login" className={`${SIGN_IN_LINK_CLASS} h-8 shrink-0`}>
         Sign in
       </Link>
     );

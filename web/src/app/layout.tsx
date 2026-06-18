@@ -23,7 +23,7 @@ const jetbrainsMono = JetBrains_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: "releases.sh — An agent-friendly API for product changelogs",
+    default: "releases.sh - Product releases and changelogs, indexed for agents",
     template: "%s — releases.sh",
   },
   description:
