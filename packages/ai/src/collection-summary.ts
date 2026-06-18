@@ -14,11 +14,27 @@ export const MAX_OUTPUT_TOKENS = 512;
 /** Per-day release cap fed to the model, to bound tokens on busy days. */
 export const MAX_RELEASES = 60;
 
+/**
+ * Per-release changelog-body excerpt cap (chars). GitHub-tagged SDK releases
+ * carry their substance in the body, not the title/summary, so the body is what
+ * lets the model name a concrete change instead of listing version numbers.
+ */
+export const PER_RELEASE_BODY_CHARS = 600;
+
+/**
+ * Total body-excerpt budget (chars) across the day, so a busy day of 60
+ * releases can't balloon the prompt. Once spent, further releases still appear
+ * as a title/summary line — just without a body excerpt.
+ */
+export const TOTAL_BODY_CHARS = 24_000;
+
 export interface CollectionDayRelease {
   org: string;
   product: string | null;
   title: string;
   summary: string | null;
+  /** Changelog/release-notes body (markdown). Truncated when rendered. */
+  body: string | null;
 }
 
 export interface CollectionDayInput {
@@ -44,7 +60,7 @@ export interface CollectionSummaryResult extends CollectionSummaryFields {
   usage: CollectionSummaryUsage;
 }
 
-export const SYSTEM_PROMPT = `You write a brief daily rollup for a curated collection of software products, shown as a date header in a developer-facing changelog feed. You are given the collection name, a date, and the releases that shipped across the collection's members that day. Write release notes, not a changelog: lead with what changed for users, and treat version numbers as supporting detail — never as the subject.
+export const SYSTEM_PROMPT = `You write a brief daily rollup for a curated collection of software products, shown as a date header in a developer-facing changelog feed. You are given the collection name, a date, and the releases that shipped across the collection's members that day. Each release is a header line (org / product: title — summary) optionally followed by an indented excerpt of its changelog notes — for version-only SDK releases, that excerpt is where the real change lives, so read it rather than echoing the version. Write release notes, not a changelog: lead with what changed for users, and treat version numbers as supporting detail — never as the subject.
 
 <output_structure>
 Output exactly one <title>...</title> tag, then one <summary>...</summary> tag, then one <takeaways>...</takeaways> tag, in that order. Inside <takeaways>, output zero or more <item>...</item> tags, one per bullet. Output nothing before, between, or after these tags.
@@ -86,13 +102,35 @@ Products do not get equal space — weight by user impact. The biggest user-faci
 - On a quiet day, do not repeat across layers: if a single release carries the day, let the title and summary state it and leave takeaways empty rather than restating it a third time.
 </takeaways_format>`;
 
+/** Collapse runs of blank lines and trim, so an excerpt isn't mostly whitespace. */
+function normalizeBody(body: string): string {
+  return body
+    .replace(/\r\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 /** Render the user-message block from a day's releases. */
 export function buildCollectionDayBlock(input: CollectionDayInput): string {
   const sliced = input.releases.slice(0, MAX_RELEASES);
+  let bodyBudget = TOTAL_BODY_CHARS;
   const lines = sliced.map((r) => {
     const label = r.product && r.product !== r.org ? `${r.org} / ${r.product}` : r.org;
     const tail = r.summary ? ` — ${r.summary}` : "";
-    return `- ${label}: ${r.title}${tail}`;
+    const head = `- ${label}: ${r.title}${tail}`;
+    // Include a body excerpt while there's budget — this is what carries the
+    // real changes for version-only SDK releases. Indent so the model can tell
+    // the notes apart from the next release's header line.
+    const normalized = r.body ? normalizeBody(r.body) : "";
+    if (!normalized || bodyBudget <= 0) return head;
+    const cap = Math.min(PER_RELEASE_BODY_CHARS, bodyBudget);
+    const excerpt = normalized.length > cap ? `${normalized.slice(0, cap)}…` : normalized;
+    bodyBudget -= excerpt.length;
+    const indented = excerpt
+      .split("\n")
+      .map((l) => `    ${l}`)
+      .join("\n");
+    return `${head}\n${indented}`;
   });
   return [
     `Collection: ${input.collectionName}`,

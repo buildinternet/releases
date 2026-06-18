@@ -68,6 +68,7 @@ export async function getCollectionDayReleases(
       title: releasesVisible.title,
       titleGenerated: releasesVisible.titleGenerated,
       summary: releasesVisible.summary,
+      content: releasesVisible.content,
       publishedAt: releasesVisible.publishedAt,
     })
     .from(releasesVisible)
@@ -88,6 +89,7 @@ export async function getCollectionDayReleases(
     product: r.productName ?? r.sourceName ?? null,
     title: r.titleGenerated ?? r.title,
     summary: r.summary ?? null,
+    body: r.content ?? null,
   }));
 }
 
