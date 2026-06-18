@@ -175,6 +175,59 @@ export function pickWindowVersionRange(buckets: readonly WeeklyBucket[]): {
   };
 }
 
+/** Sum weekly bucket counts across arrays (chart rollups). */
+export function mergeBucketCounts(bucketArrays: WeeklyBucket[][]): WeeklyBucket[] {
+  const map = new Map<number, number>();
+  for (const arr of bucketArrays) {
+    for (const b of arr) {
+      const ts = b.weekStart.getTime();
+      map.set(ts, (map.get(ts) ?? 0) + b.count);
+    }
+  }
+  return Array.from(map.entries())
+    .toSorted(([a], [b]) => a - b)
+    .map(([ts, count]) => ({ weekStart: new Date(ts), count }));
+}
+
+/** Merge brushed weekly buckets, preserving per-week version fields for range picks. */
+export function mergeWeeklyBuckets(bucketArrays: WeeklyBucket[][]): WeeklyBucket[] {
+  const map = new Map<number, WeeklyBucket>();
+  for (const arr of bucketArrays) {
+    for (const b of arr) {
+      const ts = b.weekStart.getTime();
+      const existing = map.get(ts);
+      if (!existing) {
+        map.set(ts, { ...b, weekStart: b.weekStart });
+        continue;
+      }
+      existing.count += b.count;
+      if (b.earliestVersion) {
+        const nextSort = computeVersionSort(b.earliestVersion);
+        const curSort = existing.earliestVersion
+          ? computeVersionSort(existing.earliestVersion)
+          : null;
+        if (
+          !existing.earliestVersion ||
+          (nextSort != null && (curSort == null || nextSort < curSort))
+        ) {
+          existing.earliestVersion = b.earliestVersion;
+        }
+      }
+      if (b.latestVersion) {
+        const nextSort = computeVersionSort(b.latestVersion);
+        const curSort = existing.latestVersion ? computeVersionSort(existing.latestVersion) : null;
+        if (
+          !existing.latestVersion ||
+          (nextSort != null && (curSort == null || nextSort > curSort))
+        ) {
+          existing.latestVersion = b.latestVersion;
+        }
+      }
+    }
+  }
+  return Array.from(map.values()).toSorted((a, b) => a.weekStart.getTime() - b.weekStart.getTime());
+}
+
 export function bucketByWeek(dates: Date[], rangeStart: Date, rangeEnd: Date): WeeklyBucket[] {
   const weekMs = WEEK_MS;
   const totalMs = rangeEnd.getTime() - rangeStart.getTime();
