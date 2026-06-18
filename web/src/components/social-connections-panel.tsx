@@ -65,8 +65,8 @@ export function SocialConnectionsPanel() {
       // or failed link from stranding the user off-site.
       const res = await linkSocial({
         provider,
-        callbackURL: `${window.location.origin}/account`,
-        errorCallbackURL: `${window.location.origin}/account`,
+        callbackURL: `${window.location.origin}/account/connections`,
+        errorCallbackURL: `${window.location.origin}/account/connections`,
       });
       if (res?.error) {
         setError(res.error.message ?? `Could not connect ${PROVIDER_META[provider].label}.`);
@@ -109,7 +109,7 @@ export function SocialConnectionsPanel() {
     return (
       <p className="text-sm leading-6 text-stone-600 dark:text-stone-300">
         Please{" "}
-        <Link href="/login?redirect=/account" className="underline">
+        <Link href="/login?redirect=/account/connections" className="underline">
           sign in
         </Link>{" "}
         to manage your connections.
@@ -118,20 +118,7 @@ export function SocialConnectionsPanel() {
   }
 
   return (
-    <div className="space-y-8">
-      <header>
-        <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-stone-400 dark:text-stone-500">
-          Account
-        </p>
-        <h1 className="mt-2 text-2xl font-semibold tracking-tight text-stone-900 dark:text-stone-100">
-          Connections
-        </h1>
-        <p className="mt-3 max-w-prose text-sm leading-6 text-stone-500 dark:text-stone-400">
-          Link a social account to sign in with one click. You can connect more than one — but you
-          can&rsquo;t remove your last remaining way to sign in.
-        </p>
-      </header>
-
+    <div className="space-y-4">
       {error && (
         <p role="alert" className="text-sm text-red-600 dark:text-red-400">
           {error}

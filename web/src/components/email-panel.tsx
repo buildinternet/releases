@@ -38,7 +38,7 @@ export function EmailPanel() {
       // once that link is clicked. callbackURL returns them here afterward.
       const res = await changeEmail({
         newEmail: next,
-        callbackURL: `${window.location.origin}/account`,
+        callbackURL: `${window.location.origin}/account/email`,
       });
       if (res?.error) {
         setError(res.error.message ?? "Could not change your email. Please try again.");
@@ -61,7 +61,7 @@ export function EmailPanel() {
     return (
       <p className="text-sm leading-6 text-stone-600 dark:text-stone-300">
         Please{" "}
-        <Link href="/login?redirect=/account" className="underline">
+        <Link href="/login?redirect=/account/email" className="underline">
           sign in
         </Link>{" "}
         to manage your email.
@@ -70,21 +70,7 @@ export function EmailPanel() {
   }
 
   return (
-    <div className="space-y-8">
-      <header>
-        <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-stone-400 dark:text-stone-500">
-          Account
-        </p>
-        <h1 className="mt-2 text-2xl font-semibold tracking-tight text-stone-900 dark:text-stone-100">
-          Email
-        </h1>
-        <p className="mt-3 max-w-prose text-sm leading-6 text-stone-500 dark:text-stone-400">
-          Your email address is how you sign in and where account notifications go. Changing it
-          sends a confirmation link to your current address — the change takes effect only after you
-          click it.
-        </p>
-      </header>
-
+    <div className="space-y-4">
       {error && (
         <p role="alert" className="text-sm text-red-600 dark:text-red-400">
           {error}
