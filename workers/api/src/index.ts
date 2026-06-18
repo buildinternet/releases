@@ -36,7 +36,7 @@ import { forceDrainSweep } from "./cron/force-drain-sweep.js";
 import { sweepSearchQueries } from "./cron/sweep-search-queries.js";
 import { sweepTombstones } from "./cron/sweep-tombstones.js";
 import { scanStaleFirecrawlSources } from "./cron/firecrawl-staleness.js";
-import { scanStaleSources } from "./cron/source-staleness.js";
+import { sendStalenessDigest } from "./cron/send-staleness-digest.js";
 import { wellKnownSync } from "./cron/well-known-sync.js";
 import { sweepOauthClients } from "./cron/sweep-oauth-clients.js";
 import { sendDigests } from "./cron/send-digests.js";
@@ -950,18 +950,26 @@ export default {
           alertEnv,
         ),
       );
-      // First-party source staleness scan (#1528). Runs daily, an hour after the
-      // retier (0 3) so it reads fresh medianGapDays. Warn-only observability —
-      // no mutation, no cost — so it rides this tick rather than its own cron.
+      // Source staleness digest (#1528): first-party + Firecrawl scans, emailed
+      // to the operator when anything is overdue. Runs daily, an hour after the
+      // retier (0 3) so medianGapDays are fresh. Hourly firecrawl scan still
+      // logs between digests for faster observability.
       ctx.waitUntil(
         loggedDispatch(
-          "source-staleness-cron",
-          scanStaleSources({
+          "staleness-digest-cron",
+          sendStalenessDigest({
             DB: env.DB,
             CRON_ENABLED: env.CRON_ENABLED,
             SOURCE_STALE_FLOOR_DAYS: env.SOURCE_STALE_FLOOR_DAYS,
             SOURCE_STALE_MULTIPLIER: env.SOURCE_STALE_MULTIPLIER,
             SOURCE_STALE_POLL_RECENCY_DAYS: env.SOURCE_STALE_POLL_RECENCY_DAYS,
+            FIRECRAWL_STALE_HOURS: env.FIRECRAWL_STALE_HOURS,
+            FIRECRAWL_API_KEY: env.FIRECRAWL_API_KEY,
+            SEND_EMAIL: env.SEND_EMAIL,
+            EMAIL_NOTIFY_ENABLED: env.EMAIL_NOTIFY_ENABLED,
+            EMAIL_NOTIFY_TO: env.EMAIL_NOTIFY_TO,
+            EMAIL_FROM: env.EMAIL_FROM,
+            WEB_BASE_URL: env.WEB_BASE_URL,
           }),
           alertEnv,
         ),

@@ -21,9 +21,9 @@ import {
   parsePositiveInt,
   type EnrichResult,
 } from "../cron/feed-enrich.js";
-import { sendCronReport } from "../lib/notifications.js";
 import { sendEmail } from "../lib/email.js";
-import type { CronReport, CronReportStatus } from "../lib/cron-report.js";
+import { sendEmailSample } from "../lib/email-samples.js";
+import type { CronReportStatus } from "../lib/cron-report.js";
 import { createDb, type AnyDb } from "../db.js";
 import {
   organizations,
@@ -157,46 +157,20 @@ workflowsRoutes.post("/workflows/notifications-test", async (c) => {
     return c.json({ ok: result.sent, result }, result.sent ? 200 : 202);
   }
 
-  const status: CronReportStatus =
-    body.status && VALID_STATUSES.has(body.status) ? body.status : "done";
-  const now = new Date();
-  const startedAt = new Date(now.getTime() - 7500).toISOString();
-  const endedAt = now.toISOString();
+  // Cron-report samples now live in the shared email catalog; status/cronName
+  // body fields are accepted for CLI compatibility but the rendered sample is
+  // fixed. Use POST /v1/admin/emails/test for the full template matrix.
+  void (body.status && VALID_STATUSES.has(body.status) ? body.status : "done");
+  void body.cronName;
 
-  const fabricated: CronReport = {
-    cronName: body.cronName ?? "scrape-agent-sweep",
-    runId: `crun_test_${now.getTime()}`,
-    status,
-    startedAt,
-    endedAt,
-    durationMs: 7500,
-    candidates: status === "done" ? 3 : 4,
-    dispatched: status === "dispatch_failed" ? 0 : status === "degraded" ? 2 : 3,
-    skippedOverCap: 0,
-    dispatchErrors: status === "done" ? 0 : status === "degraded" ? 1 : 4,
-    abortReason: status === "aborted" ? "anthropic_credits" : undefined,
-    notes: `Ad-hoc test email triggered via /v1/workflows/notifications-test`,
-    sessionsStarted: status === "done" || status === "degraded" ? ["ma_test_1", "ma_test_2"] : [],
-    dispatchErrorDetail:
-      status === "degraded"
-        ? [{ orgSlug: "example-org", error: "502 Bad Gateway (fabricated)" }]
-        : status === "dispatch_failed"
-          ? [
-              { orgSlug: "example-org-a", error: "timeout (fabricated)" },
-              { orgSlug: "example-org-b", error: "502 Bad Gateway (fabricated)" },
-            ]
-          : [],
-    adminBaseUrl: c.env.ADMIN_BASE_URL,
-  };
-
-  const result = await sendCronReport(c.env, fabricated, { to: target });
+  const result = await sendEmailSample(c.env, "operator.cron-report", target);
   return c.json(
     {
-      ok: "sent" in result && result.sent,
+      ok: result.sent,
       result,
-      report: fabricated,
+      type: "operator.cron-report",
     },
-    "sent" in result && result.sent ? 200 : 202,
+    result.sent ? 200 : 202,
   );
 });
 

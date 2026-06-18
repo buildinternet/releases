@@ -161,6 +161,6 @@ describe("scanStaleSources", () => {
     seedSource({ id: "s", medianGapDays: 7 });
     seedRelease("s", 60 * DAY);
     const res = await scanStaleSources({ ...baseEnv(), CRON_ENABLED: "false" });
-    expect(res).toEqual({ scanned: 0, stale: 0 });
+    expect(res).toEqual({ scanned: 0, stale: 0, entries: [] });
   });
 });

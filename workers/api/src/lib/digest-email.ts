@@ -1,6 +1,7 @@
 import type { ReleaseLatestItem } from "@buildinternet/releases-api-types";
 import { logEvent } from "@releases/lib/log-event";
 import { escapeHtml } from "./html-escape.js";
+import { appendHtmlFooter, appendTextFooter } from "./email-layout.js";
 import type { AuthEmailBinding } from "../auth/email.js";
 
 export interface DigestEmailEnv {
@@ -194,10 +195,14 @@ export function buildDigestEmail(content: DigestEmailContent): {
     }
     textLines.push("");
   }
-  textLines.push("—");
-  textLines.push(`Manage your digest: ${manageUrl}`);
-  textLines.push(`Unsubscribe: ${unsubscribeUrl}`);
-  const text = textLines.join("\n");
+  const digestFooter = {
+    reason: `You received this ${cadence} digest because you follow releases on Releases and opted in to email updates.`,
+    links: [
+      { label: "Manage digest preferences", href: manageUrl },
+      { label: "Unsubscribe", href: unsubscribeUrl },
+    ],
+  };
+  const text = appendTextFooter(textLines.join("\n"), digestFooter);
 
   const htmlParts: string[] = [
     `<h1 style="font:600 18px system-ui,sans-serif">${escapeHtml(subject)}</h1>`,
@@ -250,13 +255,7 @@ export function buildDigestEmail(content: DigestEmailContent): {
       );
     }
   }
-  htmlParts.push(
-    `<hr style="margin-top:24px;border:none;border-top:1px solid #eee">` +
-      `<p style="font:12px system-ui,sans-serif;color:#888">` +
-      `<a href="${escapeHtml(manageUrl)}" style="color:#888">Manage your digest</a> · ` +
-      `<a href="${escapeHtml(unsubscribeUrl)}" style="color:#888">Unsubscribe</a></p>`,
-  );
-  const html = htmlParts.join("");
+  const html = appendHtmlFooter(htmlParts.join(""), digestFooter);
 
   return { subject, text, html };
 }

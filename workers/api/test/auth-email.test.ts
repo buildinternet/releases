@@ -17,6 +17,8 @@ describe("auth email templates", () => {
     expect(t.text).toContain("token=abc123");
     expect(t.html).toContain("token=abc123");
     expect(t.html).toContain(`href="${url}"`);
+    expect(t.text).toContain("You received this because someone signed up");
+    expect(t.text).toContain("Account settings: https://releases.sh/account");
   });
 
   it("resetPasswordTemplate embeds the url in text + html and sets a subject", () => {

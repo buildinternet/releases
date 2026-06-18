@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import {
+  formatRecommendationAckEmail,
   formatRecommendationEmail,
   withinRecommendationNotifyBudget,
 } from "../src/lib/recommendation-email.js";
@@ -38,6 +39,23 @@ describe("formatRecommendationEmail", () => {
     });
     expect(text).toContain("Additional info: (none)");
     expect(text).toContain("Email to notify: (none)");
+  });
+
+  it("includes an operator footer explaining the notification", () => {
+    const { text } = formatRecommendationEmail(base);
+    expect(text).toContain("Internal notification from Releases");
+  });
+});
+
+describe("formatRecommendationAckEmail", () => {
+  it("thanks the submitter and explains why they received the email", () => {
+    const { subject, text, html } = formatRecommendationAckEmail(base, "https://releases.sh");
+    expect(subject).toContain("Thanks");
+    expect(text).toContain(base.url);
+    expect(text).toContain(base.note!);
+    expect(text).toContain("releases.sh/submit");
+    expect(text).toContain("You received this because you submitted");
+    expect(html).toContain(base.url);
   });
 });
 

@@ -1,10 +1,12 @@
 /**
- * Pure formatter + thin sender for recommendation-arrival emails.
- * Like feedback notifications, this is best-effort and must never fail the
- * recommendation path.
+ * Operator notification + submitter acknowledgment for recommendation
+ * submissions. Both paths are best-effort and must never fail the POST.
  */
 import { logEvent } from "@releases/lib/log-event";
 import type { Recommendation } from "@buildinternet/releases-core/schema";
+import { sendAuthEmail, type AuthEmailEnv } from "../auth/email.js";
+import { appendHtmlFooter, appendTextFooter, wrapHtmlEmail } from "./email-layout.js";
+import { escapeHtml } from "./html-escape.js";
 import { sendEmail, type EmailEnv } from "./email.js";
 
 const DEFAULT_NOTIFY_MAX_PER_HOUR = 20;
@@ -48,12 +50,15 @@ function truncate(s: string, max: number): string {
   return oneLine.length > max ? `${oneLine.slice(0, max - 1)}…` : oneLine;
 }
 
+const OPERATOR_FOOTER_REASON =
+  "Internal notification from Releases — a visitor submitted a changelog URL for review.";
+
 export function formatRecommendationEmail(row: Recommendation): {
   subject: string;
   text: string;
 } {
   const subject = `[recommendation] ${row.type}: ${truncate(row.url, 72)}`;
-  const text = [
+  const body = [
     "A recommendation was submitted from the web app.",
     "",
     `Type: ${row.type}`,
@@ -67,7 +72,90 @@ export function formatRecommendationEmail(row: Recommendation): {
     `User agent: ${row.userAgent ?? "(unknown)"}`,
     `Received: ${new Date(row.createdAt).toISOString()}`,
   ].join("\n");
+  const text = appendTextFooter(body, { reason: OPERATOR_FOOTER_REASON });
   return { subject, text };
+}
+
+export type RecommendationAckEnv = AuthEmailEnv & {
+  WEB_BASE_URL?: string;
+};
+
+/** Thank-you email sent to the submitter when they provide a contact address. */
+export function formatRecommendationAckEmail(
+  row: Recommendation,
+  webOrigin: string,
+): { subject: string; text: string; html: string } {
+  const submitUrl = `${webOrigin}/submit`;
+  const footer = {
+    reason:
+      "You received this because you submitted a changelog URL at releases.sh/submit and provided this email address.",
+    links: [{ label: "Submit another source", href: submitUrl }],
+  };
+  const subject = "Thanks — we received your Releases submission";
+  const bodyText = [
+    "Thanks for suggesting a changelog source for Releases.",
+    "",
+    "We received:",
+    row.url,
+    row.note ? `\nYour note: ${row.note}` : "",
+    "",
+    "Our team reviews submissions and adds sources that fit the registry. We may reach out if we need more detail.",
+    "",
+    `Reference: ${row.id}`,
+  ]
+    .filter((line) => line !== "")
+    .join("\n");
+  const bodyHtml = [
+    "<p>Thanks for suggesting a changelog source for Releases.</p>",
+    "<p>We received:</p>",
+    `<p><a href="${escapeHtml(row.url)}">${escapeHtml(row.url)}</a></p>`,
+    row.note ? `<p>Your note: ${escapeHtml(row.note)}</p>` : "",
+    "<p>Our team reviews submissions and adds sources that fit the registry. We may reach out if we need more detail.</p>",
+    `<p style="color:#64748b;font-size:13px;">Reference: ${escapeHtml(row.id)}</p>`,
+  ].join("");
+  return {
+    subject,
+    text: appendTextFooter(bodyText, footer),
+    html: wrapHtmlEmail(appendHtmlFooter(bodyHtml, footer)),
+  };
+}
+
+function webOrigin(env: RecommendationAckEnv): string {
+  const raw = env.WEB_BASE_URL ?? "https://releases.sh";
+  try {
+    return new URL(raw).origin;
+  } catch {
+    return "https://releases.sh";
+  }
+}
+
+/** Send a submitter acknowledgment when they left a contact email. Never throws. */
+export async function sendRecommendationAck(
+  env: RecommendationAckEnv,
+  row: Recommendation,
+): Promise<void> {
+  if (!row.contactEmail) return;
+  try {
+    const rendered = formatRecommendationAckEmail(row, webOrigin(env));
+    const result = await sendAuthEmail(env, {
+      to: row.contactEmail,
+      subject: rendered.subject,
+      text: rendered.text,
+      html: rendered.html,
+    });
+    if (!result.sent) {
+      logEvent("info", {
+        component: "recommendations",
+        event: "ack-skipped",
+        reason: result.reason,
+        id: row.id,
+      });
+    } else {
+      logEvent("info", { component: "recommendations", event: "ack-sent", id: row.id });
+    }
+  } catch (err) {
+    logEvent("warn", { component: "recommendations", event: "ack-error", id: row.id, err });
+  }
 }
 
 export async function notifyRecommendation(

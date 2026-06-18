@@ -30,6 +30,7 @@
  * without the live credential.
  */
 import { logEvent } from "@releases/lib/log-event";
+import { appendHtmlFooter, appendTextFooter, wrapHtmlEmail } from "../lib/email-layout.js";
 
 /** The Cloudflare Email Sending binding (object-form `send`). */
 export interface AuthEmailBinding {
@@ -165,15 +166,27 @@ function escapeHrefUrl(url: string): string {
   return url.replace(/"/g, "%22");
 }
 
+const DEFAULT_WEB_ORIGIN = "https://releases.sh";
+
+function accountFooter(webOrigin: string) {
+  const accountUrl = `${webOrigin}/account`;
+  return {
+    reason:
+      "You received this because someone signed up for a Releases account with this email address.",
+    links: [{ label: "Account settings", href: accountUrl }],
+  };
+}
+
 /** Verification email shown on sign-up / re-sent on an unverified sign-in. */
-export function verifyEmailTemplate(opts: { url: string }): {
+export function verifyEmailTemplate(opts: { url: string; webOrigin?: string }): {
   subject: string;
   text: string;
   html: string;
 } {
   const safeUrl = escapeHrefUrl(opts.url);
+  const footer = accountFooter(opts.webOrigin ?? DEFAULT_WEB_ORIGIN);
   const subject = "Verify your email for Releases";
-  const text = [
+  const bodyText = [
     "Welcome to Releases.",
     "",
     "Confirm your email address to finish setting up your account:",
@@ -181,24 +194,33 @@ export function verifyEmailTemplate(opts: { url: string }): {
     "",
     "This link expires in 1 hour. If you didn't create an account, you can ignore this email.",
   ].join("\n");
-  const html = [
+  const bodyHtml = [
     "<p>Welcome to Releases.</p>",
     "<p>Confirm your email address to finish setting up your account:</p>",
     `<p><a href="${safeUrl}">Verify email</a></p>`,
     "<p>This link expires in 1 hour. If you didn't create an account, you can ignore this email.</p>",
   ].join("");
-  return { subject, text, html };
+  return {
+    subject,
+    text: appendTextFooter(bodyText, footer),
+    html: wrapHtmlEmail(appendHtmlFooter(bodyHtml, footer)),
+  };
 }
 
 /** Password-reset email triggered by the forgot-password flow. */
-export function resetPasswordTemplate(opts: { url: string }): {
+export function resetPasswordTemplate(opts: { url: string; webOrigin?: string }): {
   subject: string;
   text: string;
   html: string;
 } {
   const safeUrl = escapeHrefUrl(opts.url);
+  const webOrigin = opts.webOrigin ?? DEFAULT_WEB_ORIGIN;
+  const footer = {
+    reason: "You received this because a password reset was requested for your Releases account.",
+    links: [{ label: "Account settings", href: `${webOrigin}/account` }],
+  };
   const subject = "Reset your Releases password";
-  const text = [
+  const bodyText = [
     "We received a request to reset your Releases password.",
     "",
     "Reset it here:",
@@ -206,12 +228,16 @@ export function resetPasswordTemplate(opts: { url: string }): {
     "",
     "This link expires in 1 hour. If you didn't request this, you can ignore this email — your password won't change.",
   ].join("\n");
-  const html = [
+  const bodyHtml = [
     "<p>We received a request to reset your Releases password.</p>",
     `<p><a href="${safeUrl}">Reset password</a></p>`,
     "<p>This link expires in 1 hour. If you didn't request this, you can ignore this email — your password won't change.</p>",
   ].join("");
-  return { subject, text, html };
+  return {
+    subject,
+    text: appendTextFooter(bodyText, footer),
+    html: wrapHtmlEmail(appendHtmlFooter(bodyHtml, footer)),
+  };
 }
 
 /**
@@ -223,14 +249,20 @@ export function resetPasswordTemplate(opts: { url: string }): {
  * The new address is named in the copy so the recipient can spot an unexpected
  * request and ignore it.
  */
-export function changeEmailTemplate(opts: { url: string; newEmail: string }): {
+export function changeEmailTemplate(opts: { url: string; newEmail: string; webOrigin?: string }): {
   subject: string;
   text: string;
   html: string;
 } {
   const safeUrl = escapeHrefUrl(opts.url);
+  const webOrigin = opts.webOrigin ?? DEFAULT_WEB_ORIGIN;
+  const footer = {
+    reason:
+      "You received this because a change to your Releases account email was requested from your signed-in session.",
+    links: [{ label: "Account settings", href: `${webOrigin}/account` }],
+  };
   const subject = "Confirm your new Releases email address";
-  const text = [
+  const bodyText = [
     `We received a request to change your Releases email address to ${opts.newEmail}.`,
     "",
     "Confirm the change here:",
@@ -238,12 +270,16 @@ export function changeEmailTemplate(opts: { url: string; newEmail: string }): {
     "",
     "This link expires in 1 hour. If you didn't request this, you can ignore this email — your address won't change.",
   ].join("\n");
-  const html = [
+  const bodyHtml = [
     `<p>We received a request to change your Releases email address to ${opts.newEmail}.</p>`,
     `<p><a href="${safeUrl}">Confirm new email</a></p>`,
     "<p>This link expires in 1 hour. If you didn't request this, you can ignore this email — your address won't change.</p>",
   ].join("");
-  return { subject, text, html };
+  return {
+    subject,
+    text: appendTextFooter(bodyText, footer),
+    html: wrapHtmlEmail(appendHtmlFooter(bodyHtml, footer)),
+  };
 }
 
 /**
@@ -252,14 +288,18 @@ export function changeEmailTemplate(opts: { url: string; newEmail: string }): {
  * plugin in index.ts). Shorter expiry copy than verify/reset: a login link lives 15
  * minutes (`expiresIn: 60 * 15`).
  */
-export function magicLinkTemplate(opts: { url: string }): {
+export function magicLinkTemplate(opts: { url: string; webOrigin?: string }): {
   subject: string;
   text: string;
   html: string;
 } {
   const safeUrl = escapeHrefUrl(opts.url);
+  const footer = {
+    reason: "You received this because someone requested a passwordless sign-in link for Releases.",
+    links: [{ label: "Sign in", href: opts.webOrigin ?? DEFAULT_WEB_ORIGIN }],
+  };
   const subject = "Your Releases sign-in link";
-  const text = [
+  const bodyText = [
     "Sign in to Releases.",
     "",
     "Click the link below to sign in — no password needed:",
@@ -267,11 +307,15 @@ export function magicLinkTemplate(opts: { url: string }): {
     "",
     "This link expires in 15 minutes and can be used once. If you didn't request it, you can ignore this email.",
   ].join("\n");
-  const html = [
+  const bodyHtml = [
     "<p>Sign in to Releases.</p>",
     "<p>Click the link below to sign in — no password needed:</p>",
     `<p><a href="${safeUrl}">Sign in to Releases</a></p>`,
     "<p>This link expires in 15 minutes and can be used once. If you didn't request it, you can ignore this email.</p>",
   ].join("");
-  return { subject, text, html };
+  return {
+    subject,
+    text: appendTextFooter(bodyText, footer),
+    html: wrapHtmlEmail(appendHtmlFooter(bodyHtml, footer)),
+  };
 }

@@ -12,7 +12,7 @@ import {
 import { newRecommendationId } from "@buildinternet/releases-core/id";
 import { createDb } from "../db.js";
 import { sanitizeString, sanitizeText, stripControl } from "../lib/sanitize.js";
-import { notifyRecommendation } from "../lib/recommendation-email.js";
+import { notifyRecommendation, sendRecommendationAck } from "../lib/recommendation-email.js";
 import type { Env } from "../index.js";
 import { FLAGS, flag } from "@releases/lib/flags";
 
@@ -174,6 +174,9 @@ recommendationRoutes.post("/recommendations", async (c) => {
   await db.insert(recommendations).values(row);
 
   c.executionCtx.waitUntil(notifyRecommendation(c.env, row));
+  if (contactEmail) {
+    c.executionCtx.waitUntil(sendRecommendationAck(c.env, row));
+  }
 
   return c.json({ ok: true, id: row.id }, 202);
 });

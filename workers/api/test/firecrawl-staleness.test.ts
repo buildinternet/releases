@@ -107,7 +107,7 @@ describe("scanStaleFirecrawlSources", () => {
 
     // Disabled cron → no-op without touching the DB.
     const off = await scanStaleFirecrawlSources({ ...baseEnv(), CRON_ENABLED: "false" });
-    expect(off).toEqual({ scanned: 0, stale: 0 });
+    expect(off).toEqual({ scanned: 0, stale: 0, entries: [] });
   });
 
   it("raises the threshold to 2x the monitor's live cadence for slow schedules", async () => {
@@ -186,7 +186,9 @@ describe("scanStaleFirecrawlSources", () => {
     };
 
     const res = await scanStaleFirecrawlSources({ ...baseEnv(), FIRECRAWL_API_KEY });
-    expect(res).toEqual({ scanned: 1, stale: 1 });
+    expect(res.stale).toBe(1);
+    expect(res.scanned).toBe(1);
+    expect(res.entries).toHaveLength(1);
   });
 });
 

@@ -3,6 +3,7 @@
  * `notifyFeedback` is fire-and-forget (never throws) so a mail failure can't
  * fail the submit — callers invoke it via `c.executionCtx.waitUntil(...)`.
  */
+import { appendTextFooter } from "./email-layout.js";
 import { sendEmail, type EmailEnv } from "./email.js";
 import { logEvent } from "@releases/lib/log-event";
 import type { Feedback } from "@buildinternet/releases-core/schema";
@@ -45,7 +46,7 @@ function truncate(s: string, max: number): string {
 
 export function formatFeedbackEmail(row: Feedback): { subject: string; text: string } {
   const subject = `[feedback] ${row.type}: ${truncate(row.message, 60)}`;
-  const text = [
+  const body = [
     row.message,
     "",
     "—",
@@ -58,6 +59,9 @@ export function formatFeedbackEmail(row: Feedback): { subject: string; text: str
     `Anon: ${row.anonId ?? "(omitted)"}`,
     `Received: ${new Date(row.createdAt).toISOString()}`,
   ].join("\n");
+  const text = appendTextFooter(body, {
+    reason: "Internal notification from Releases — feedback submitted via the CLI.",
+  });
   return { subject, text };
 }
 
