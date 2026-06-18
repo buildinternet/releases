@@ -16,12 +16,14 @@ const INPUT: CollectionDayInput = {
       product: "Claude Code",
       title: "Sub-agents land in Claude Code",
       summary: "Spawn parallel sub-agents.",
+      body: "Sub-agents can now run in parallel with isolated context windows.",
     },
     {
       org: "Cursor",
       product: null,
       title: "Background agents GA",
       summary: "Background agents are generally available.",
+      body: null,
     },
   ],
 };
@@ -39,10 +41,31 @@ describe("buildCollectionDayBlock", () => {
     const block = buildCollectionDayBlock({
       collectionName: "Payments",
       date: "2026-06-11",
-      releases: [{ org: "Stripe", product: "Stripe", title: "Tax API v2", summary: null }],
+      releases: [
+        { org: "Stripe", product: "Stripe", title: "Tax API v2", summary: null, body: null },
+      ],
     });
     expect(block).toContain("- Stripe: Tax API v2");
     expect(block).not.toContain("Stripe / Stripe");
+  });
+
+  test("includes an indented body excerpt when a release carries notes", () => {
+    const block = buildCollectionDayBlock({
+      collectionName: "SDKs",
+      date: "2026-06-11",
+      releases: [
+        {
+          org: "Browserbase",
+          product: "Stagehand",
+          title: "v2.5.9",
+          summary: null,
+          body: "### Patch Changes\n- Fix flaky act() retries on slow pages",
+        },
+      ],
+    });
+    expect(block).toContain("- Browserbase / Stagehand: v2.5.9");
+    expect(block).toContain("    ### Patch Changes");
+    expect(block).toContain("    - Fix flaky act() retries on slow pages");
   });
 });
 

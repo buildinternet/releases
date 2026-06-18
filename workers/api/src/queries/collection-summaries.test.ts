@@ -152,6 +152,7 @@ describe("getCollectionDayReleases", () => {
     const rows = await getCollectionDayReleases(db, { orgIds: ["org_w"], productIds: [] }, window);
     expect(rows.map((r) => r.title)).toEqual(["In window"]);
     expect(rows[0].org).toBe("Org org_w");
+    expect(rows[0].body).toBe("body");
   });
 
   test("resolves product members through sources.productId", async () => {
