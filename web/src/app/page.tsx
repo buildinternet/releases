@@ -25,9 +25,6 @@ import {
 type TickerItem = HomepageTickerQuery["latestReleases"]["items"][number];
 
 export const metadata: Metadata = {
-  title: {
-    absolute: "releases.sh - Product releases and changelogs, indexed for agents",
-  },
   alternates: { canonical: "/" },
   openGraph: { type: "website", url: "/" },
 };
