@@ -1,7 +1,8 @@
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import type { ReleaseLatestItem } from "@buildinternet/releases-api-types";
 import { COVERAGE_COUNT_EXPR } from "@releases/core-internal/release-coverage-sql";
 import type { AnyDb } from "../db.js";
+import { userFollows } from "../db/schema-follows.js";
 import { parseReleaseMedia } from "../utils.js";
 
 export type LatestReleaseRow = {
@@ -189,28 +190,36 @@ export interface FollowedReleasesParams {
 
 /**
  * Releases from everything a user follows, newest first. "Follow an org =
- * everything" is encoded by the two EXISTS sub-queries: a row matches if the
- * user follows its source's org OR its source's product. References
- * `user_follows` directly in SQL, so the bound-parameter count is constant
- * regardless of how many entities the user follows. Visibility filters mirror
- * `getLatestReleasesAcross`.
+ * everything" is encoded by matching `s.org_id` against org follows or
+ * `s.product_id` against product follows. The follow list is resolved once per
+ * subquery (materialized IN-list) instead of correlated EXISTS per release row.
+ * Visibility filters mirror `getLatestReleasesAcross`.
+ *
+ * The SELECT omits feed-unused columns (coverage count, github handle, content
+ * metrics) so the following surface avoids per-row correlated subqueries.
  */
 export async function getFollowedReleases(
   db: AnyDb,
   userId: string,
   params: FollowedReleasesParams,
 ): Promise<LatestReleaseRow[]> {
+  const hasFollows = await db
+    .select({ id: userFollows.id })
+    .from(userFollows)
+    .where(eq(userFollows.userId, userId))
+    .limit(1)
+    .get();
+  if (!hasFollows) return [];
+
   return db.all<LatestReleaseRow>(sql`
     SELECT r.id, r.version, r.title, r.summary, r.title_generated, r.title_short, r.type,
            r.published_at, r.url, r.media,
-           r.content_chars, r.content_tokens,
+           NULL AS content_chars, NULL AS content_tokens,
            s.slug AS source_slug, s.name AS source_name, s.type AS source_type,
            o.slug AS org_slug, o.name AS org_name, o.avatar_url AS org_avatar_url,
-           (SELECT handle FROM org_accounts
-              WHERE org_id = o.id AND platform = 'github'
-              ORDER BY created_at, id LIMIT 1) AS org_github_handle,
+           NULL AS org_github_handle,
            p.slug AS product_slug, p.name AS product_name,
-           ${sql.raw(COVERAGE_COUNT_EXPR)} AS coverage_count
+           0 AS coverage_count
     FROM releases_visible r
     INNER JOIN sources_active s ON s.id = r.source_id
     LEFT JOIN organizations o ON o.id = s.org_id
@@ -223,12 +232,10 @@ export async function getFollowedReleases(
       ${params.publishedAfter ? sql`AND r.published_at > ${params.publishedAfter}` : sql``}
       ${params.publishedBefore ? sql`AND r.published_at <= ${params.publishedBefore}` : sql``}
       AND (
-        EXISTS (SELECT 1 FROM user_follows uf
-                WHERE uf.user_id = ${userId} AND uf.target_type = 'org'
-                  AND uf.target_id = s.org_id)
-        OR EXISTS (SELECT 1 FROM user_follows uf
-                   WHERE uf.user_id = ${userId} AND uf.target_type = 'product'
-                     AND uf.target_id = s.product_id)
+        s.org_id IN (SELECT uf.target_id FROM user_follows uf
+                     WHERE uf.user_id = ${userId} AND uf.target_type = 'org')
+        OR s.product_id IN (SELECT uf.target_id FROM user_follows uf
+                           WHERE uf.user_id = ${userId} AND uf.target_type = 'product')
       )
     ORDER BY
       CASE WHEN r.published_at IS NOT NULL THEN 0 ELSE 1 END,

@@ -16,6 +16,9 @@ import type {
 } from "@buildinternet/releases-api-types";
 import { apiBase, errorMessage } from "./user-api";
 
+/** Must match GET /v1/me/feed default page size (workers/api feed-cache). */
+export const FEED_PAGE_SIZE = 30;
+
 export async function listFollows(): Promise<Follow[]> {
   const res = await fetch(`${apiBase()}/v1/me/follows`, { credentials: "include" });
   if (!res.ok) throw new Error(await errorMessage(res, `Failed to load follows (${res.status})`));
@@ -40,7 +43,7 @@ export async function unfollow(targetType: FollowTarget, targetId: string): Prom
   if (!res.ok) throw new Error(await errorMessage(res, `Failed to unfollow (${res.status})`));
 }
 
-export async function getFeed(page = 1, limit = 30): Promise<PersonalizedFeedResponse> {
+export async function getFeed(page = 1, limit = FEED_PAGE_SIZE): Promise<PersonalizedFeedResponse> {
   const res = await fetch(`${apiBase()}/v1/me/feed?page=${page}&limit=${limit}`, {
     credentials: "include",
   });
