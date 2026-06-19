@@ -886,6 +886,76 @@ export interface FeedTokenResponse {
  */
 export type PersonalizedFeedResponse = ListResponse<ReleaseLatestItem>;
 
+// ── User webhooks ──
+
+/** High-level delivery posture derived from summary columns (no AE query). */
+export type WebhookDeliveryHealth =
+  | "never_delivered"
+  | "healthy"
+  | "degraded"
+  | "failing"
+  | "paused"
+  | "auto_paused";
+
+/** A user-owned webhook subscription row (no signing secret). */
+export interface UserWebhookSubscription {
+  id: string;
+  userId: string;
+  orgId: string;
+  url: string;
+  sourceId: string | null;
+  enabled: boolean;
+  description: string | null;
+  secretVersion: number;
+  createdAt: string;
+  lastSuccessAt: string | null;
+  lastErrorAt: string | null;
+  lastErrorMsg: string | null;
+  consecutiveFailures: number;
+  disabledReason: string | null;
+  failureStreakStartedAt: string | null;
+}
+
+/** Delivery health fields returned on user webhook read paths. */
+export interface UserWebhookDeliveryHealth {
+  deliveryHealth: WebhookDeliveryHealth;
+  deliveryHealthSummary: string;
+}
+
+/** List item returned by GET /v1/me/webhooks — includes org/source display fields. */
+export interface UserWebhookListItem
+  extends Omit<UserWebhookSubscription, "userId">, UserWebhookDeliveryHealth {
+  orgSlug: string;
+  orgName: string;
+  sourceSlug: string | null;
+  sourceName: string | null;
+}
+
+/** GET /v1/me/webhooks response. */
+export interface UserWebhookListResponse {
+  subscriptions: UserWebhookListItem[];
+}
+
+/** POST /v1/me/webhooks response — signing key shown once at creation. */
+export interface CreateUserWebhookResponse
+  extends UserWebhookSubscription, UserWebhookDeliveryHealth {
+  orgSlug: string;
+  orgName: string;
+  signingKey: string;
+}
+
+/** POST /v1/me/webhooks/:id/rotate-secret response. */
+export interface RotateUserWebhookSecretResponse {
+  secretVersion: number;
+  signingKey: string;
+}
+
+/** POST /v1/me/webhooks/:id/test response. */
+export interface TestUserWebhookResponse {
+  enqueued: true;
+  eventId: string;
+}
+
 // ── Digest emails ──
 
 /** How often a user wants a digest email. `off` = no emails. */

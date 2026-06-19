@@ -88,18 +88,25 @@ export async function updateWebhookSubscriptionSummary(
   if (update.kind === "success") {
     await db
       .update(webhookSubscriptions)
-      .set({ lastSuccessAt: update.at, consecutiveFailures: 0 })
+      .set({
+        lastSuccessAt: update.at,
+        consecutiveFailures: 0,
+        failureStreakStartedAt: null,
+      })
       .where(eq(webhookSubscriptions.id, id));
   } else {
     // Read-modify-write: not atomic. Concurrent retries may double-increment.
     const cur = await getWebhookSubscriptionById(db, id);
     if (!cur) return;
+    const nextFailures = cur.consecutiveFailures + 1;
     await db
       .update(webhookSubscriptions)
       .set({
         lastErrorAt: update.at,
         lastErrorMsg: update.message,
-        consecutiveFailures: cur.consecutiveFailures + 1,
+        consecutiveFailures: nextFailures,
+        failureStreakStartedAt:
+          cur.consecutiveFailures === 0 ? update.at : cur.failureStreakStartedAt,
       })
       .where(eq(webhookSubscriptions.id, id));
   }

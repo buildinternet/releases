@@ -1019,6 +1019,8 @@ export const webhookSubscriptions = sqliteTable(
   "webhook_subscriptions",
   {
     id: text("id").primaryKey().$defaultFn(newWebhookSubscriptionId),
+    /** Set for self-serve `/v1/me/webhooks` rows; null for admin-provisioned subs. */
+    userId: text("user_id"),
     orgId: text("org_id")
       .notNull()
       .references(() => organizations.id, { onDelete: "cascade" }),
@@ -1033,12 +1035,15 @@ export const webhookSubscriptions = sqliteTable(
     lastSuccessAt: text("last_success_at"),
     lastErrorAt: text("last_error_at"),
     lastErrorMsg: text("last_error_msg"),
+    /** ISO timestamp when the current consecutive-failure streak began; cleared on success. */
+    failureStreakStartedAt: text("failure_streak_started_at"),
     consecutiveFailures: integer("consecutive_failures").notNull().default(0),
     disabledReason: text("disabled_reason"),
   },
   (table) => [
     index("idx_webhook_subs_org_enabled").on(table.orgId, table.enabled),
     index("idx_webhook_subs_org_source").on(table.orgId, table.sourceId),
+    index("idx_webhook_subs_user").on(table.userId),
   ],
 );
 

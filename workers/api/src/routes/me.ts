@@ -23,6 +23,7 @@ import { getDigestPrefs, setDigestCadence } from "../queries/digest-prefs.js";
 import { DIGEST_CADENCES, type DigestCadence } from "../db/schema-digest-prefs.js";
 import { parseJsonBody } from "../lib/json-body.js";
 import type { FeedToken } from "@buildinternet/releases-api-types";
+import { meWebhookHandlers } from "./me-webhooks.js";
 
 function isFollowTargetType(v: unknown): v is FollowTargetType {
   return typeof v === "string" && (FOLLOW_TARGET_TYPES as readonly string[]).includes(v);
@@ -178,3 +179,4 @@ meHandlers.put("/me/digest", async (c) => {
 export const meRoutes = new Hono<Env>();
 meRoutes.use("/me/*", requireFollowsPrincipal);
 meRoutes.route("/", meHandlers);
+meRoutes.route("/", meWebhookHandlers);

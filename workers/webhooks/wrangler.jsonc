@@ -26,6 +26,7 @@
     "EMAIL_NOTIFY_ENABLED": "true",
     "EMAIL_NOTIFY_TO": "zach@releases.sh",
     "EMAIL_FROM": "notifications@releases.sh",
+    "WEB_BASE_URL": "https://releases.sh",
   },
   "d1_databases": [
     {
