@@ -11,15 +11,10 @@ describe("feed-cache", () => {
   });
 
   it("caches only the default first page", () => {
-    expect(isCacheableFeedRequest({ page: 1, pageSize: FEED_CACHE_PAGE_SIZE, offset: 0 })).toBe(
-      true,
-    );
-    expect(isCacheableFeedRequest({ page: 2, pageSize: FEED_CACHE_PAGE_SIZE, offset: 30 })).toBe(
+    expect(isCacheableFeedRequest(null, FEED_CACHE_PAGE_SIZE)).toBe(true);
+    expect(isCacheableFeedRequest("2026-01-01T00:00:00Z|2026-01-01T00:00:00Z|rel_1", 30)).toBe(
       false,
     );
-    expect(isCacheableFeedRequest({ page: 1, pageSize: 50, offset: 0 })).toBe(false);
-    expect(isCacheableFeedRequest({ page: 1, pageSize: FEED_CACHE_PAGE_SIZE, offset: 30 })).toBe(
-      false,
-    );
+    expect(isCacheableFeedRequest(null, 50)).toBe(false);
   });
 });

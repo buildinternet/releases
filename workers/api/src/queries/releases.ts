@@ -1,5 +1,6 @@
 import { eq, sql } from "drizzle-orm";
 import type { ReleaseLatestItem } from "@buildinternet/releases-api-types";
+import { feedCursorSql } from "@releases/core-internal/feed-cursor";
 import { COVERAGE_COUNT_EXPR } from "@releases/core-internal/release-coverage-sql";
 import type { AnyDb } from "../db.js";
 import { userFollows } from "../db/schema-follows.js";
@@ -13,6 +14,8 @@ export type LatestReleaseRow = {
   title_generated: string | null;
   title_short: string | null;
   published_at: string | null;
+  /** Selected for feed cursor encoding; not exposed on the wire. */
+  fetched_at?: string;
   url: string | null;
   media: string | null;
   source_slug: string;
@@ -181,7 +184,8 @@ export function mapLatestRowToReleaseItem(
 
 export interface FollowedReleasesParams {
   limit: number;
-  offset: number;
+  /** Opaque cursor from a previous page's `pagination.nextCursor`. */
+  cursor?: string | null;
   /** Inclusive-exclusive lower bound: only releases with published_at > this ISO string. */
   publishedAfter?: string | null;
   /** Upper bound: only releases with published_at <= this ISO string. */
@@ -213,7 +217,7 @@ export async function getFollowedReleases(
 
   return db.all<LatestReleaseRow>(sql`
     SELECT r.id, r.version, r.title, r.summary, r.title_generated, r.title_short, r.type,
-           r.published_at, r.url, r.media,
+           r.published_at, r.fetched_at, r.url, r.media,
            NULL AS content_chars, NULL AS content_tokens,
            s.slug AS source_slug, s.name AS source_name, s.type AS source_type,
            o.slug AS org_slug, o.name AS org_name, o.avatar_url AS org_avatar_url,
@@ -237,11 +241,12 @@ export async function getFollowedReleases(
         OR s.product_id IN (SELECT uf.target_id FROM user_follows uf
                            WHERE uf.user_id = ${userId} AND uf.target_type = 'product')
       )
+      ${feedCursorSql(params.cursor ?? null)}
     ORDER BY
       CASE WHEN r.published_at IS NOT NULL THEN 0 ELSE 1 END,
       r.published_at DESC,
       r.fetched_at DESC,
       r.id DESC
-    LIMIT ${params.limit} OFFSET ${params.offset}
+    LIMIT ${params.limit}
   `);
 }

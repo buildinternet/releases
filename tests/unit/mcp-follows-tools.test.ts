@@ -156,7 +156,7 @@ describe("MCP follows tools — forwarding", () => {
     await close();
   });
 
-  it("get_personalized_feed forwards pagination and renders items", async () => {
+  it("get_personalized_feed forwards cursor pagination and renders items", async () => {
     const calls: Captured[] = [];
     const env = stubEnv({
       API: stubApi(calls, () => ({
@@ -171,19 +171,24 @@ describe("MCP follows tools — forwarding", () => {
               source: { name: "Acme Blog" },
             },
           ],
-          pagination: { hasMore: false },
+          pagination: { nextCursor: "2026-06-01T00:00:00Z|2026-06-01T00:00:00Z|rel_1", limit: 10 },
         },
       })),
     });
     const { client, close } = await withClient(env, "relu_abc.secret");
+    const cursor = "2026-01-01T00:00:00Z|2026-01-01T00:00:00Z|rel_prd";
     const res = await client.callTool({
       name: "get_personalized_feed",
-      arguments: { page: 2, limit: 10 },
+      arguments: { cursor, limit: 10 },
     });
     const text = firstText(res);
     expect(text).toContain("Dark mode");
-    expect(calls[0]!.url).toContain("page=2");
+    expect(calls[0]!.url).toContain(`cursor=${encodeURIComponent(cursor)}`);
     expect(calls[0]!.url).toContain("limit=10");
+    const meta = (res as { _meta?: { pagination?: { kind?: string; nextCursor?: string } } })._meta
+      ?.pagination;
+    expect(meta?.kind).toBe("cursor");
+    expect(meta?.nextCursor).toBe("2026-06-01T00:00:00Z|2026-06-01T00:00:00Z|rel_1");
     await close();
   });
 });

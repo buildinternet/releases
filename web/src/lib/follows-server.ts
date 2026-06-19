@@ -13,7 +13,7 @@ export async function fetchFollowingFeed(): Promise<PersonalizedFeedResponse | n
   if (!cookie) return null;
 
   try {
-    const res = await fetch(`${base}/v1/me/feed?page=1&limit=${FEED_PAGE_SIZE}`, {
+    const res = await fetch(`${base}/v1/me/feed?limit=${FEED_PAGE_SIZE}`, {
       headers: webApiHeaders({ Cookie: cookie }),
       cache: "no-store",
       signal: AbortSignal.timeout(10_000),

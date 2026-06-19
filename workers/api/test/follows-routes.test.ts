@@ -140,12 +140,22 @@ describe("/v1/me follows routes", () => {
     expect(((await list.json()) as { follows: unknown[] }).follows).toHaveLength(0);
   });
 
-  it("GET /me/feed returns the list envelope", async () => {
+  it("GET /me/feed returns the cursor envelope", async () => {
     const { a, env } = app();
     const res = await a.request("/me/feed", {}, env);
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { items: unknown[]; pagination: { page: number } };
+    const body = (await res.json()) as {
+      items: unknown[];
+      pagination: { nextCursor: string | null; limit: number };
+    };
     expect(Array.isArray(body.items)).toBe(true);
-    expect(body.pagination.page).toBe(1);
+    expect(body.pagination.limit).toBe(30);
+    expect(body.pagination).toHaveProperty("nextCursor");
+  });
+
+  it("GET /me/feed rejects deprecated ?page=", async () => {
+    const { a, env } = app();
+    const res = await a.request("/me/feed?page=1", {}, env);
+    expect(res.status).toBe(400);
   });
 });

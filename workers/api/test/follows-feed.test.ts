@@ -4,6 +4,7 @@ import { organizations, products, sources, releases } from "@buildinternet/relea
 import { user } from "../src/db/schema-auth.js";
 import { addFollow } from "../src/queries/follows.js";
 import { getFollowedReleases } from "../src/queries/releases.js";
+import { buildFeedCursor } from "@releases/core-internal/feed-cursor";
 
 let h: TestDatabase;
 
@@ -63,7 +64,7 @@ afterEach(() => h.cleanup());
 describe("getFollowedReleases", () => {
   it("following an org includes its products' releases (org follow = everything)", async () => {
     await addFollow(h.db, "u1", "org", "org_a");
-    const rows = await getFollowedReleases(h.db, "u1", { limit: 50, offset: 0 });
+    const rows = await getFollowedReleases(h.db, "u1", { limit: 50 });
     const ids = rows.map((r) => r.id).toSorted();
     expect(ids).toEqual(["rel_org", "rel_prd"]);
     expect(ids).not.toContain("rel_b");
@@ -71,21 +72,57 @@ describe("getFollowedReleases", () => {
 
   it("following only a product narrows to that product", async () => {
     await addFollow(h.db, "u1", "product", "prd_p");
-    const rows = await getFollowedReleases(h.db, "u1", { limit: 50, offset: 0 });
+    const rows = await getFollowedReleases(h.db, "u1", { limit: 50 });
     expect(rows.map((r) => r.id)).toEqual(["rel_prd"]);
   });
 
   it("returns empty for a user with no follows", async () => {
-    const rows = await getFollowedReleases(h.db, "u1", { limit: 50, offset: 0 });
+    const rows = await getFollowedReleases(h.db, "u1", { limit: 50 });
     expect(rows).toEqual([]);
   });
 
-  it("orders newest-first and respects limit/offset", async () => {
+  it("orders newest-first and paginates via cursor", async () => {
     await addFollow(h.db, "u1", "org", "org_a");
-    const page1 = await getFollowedReleases(h.db, "u1", { limit: 1, offset: 0 });
+    const page1 = await getFollowedReleases(h.db, "u1", { limit: 1 });
     expect(page1.map((r) => r.id)).toEqual(["rel_prd"]);
-    const page2 = await getFollowedReleases(h.db, "u1", { limit: 1, offset: 1 });
+
+    const anchor = page1[0]!;
+    const cursor = buildFeedCursor({
+      published_at: anchor.published_at,
+      fetched_at: anchor.fetched_at ?? anchor.published_at ?? "",
+      id: anchor.id,
+    });
+    const page2 = await getFollowedReleases(h.db, "u1", { limit: 1, cursor });
     expect(page2.map((r) => r.id)).toEqual(["rel_org"]);
+  });
+
+  it("does not duplicate the cursor anchor when a release lands between pages", async () => {
+    await addFollow(h.db, "u1", "org", "org_a");
+    const page1 = await getFollowedReleases(h.db, "u1", { limit: 1 });
+    expect(page1.map((r) => r.id)).toEqual(["rel_prd"]);
+
+    // Lands between rel_prd (2026-01-02) and rel_org (2026-01-01) — older than
+    // the page-1 anchor, so page 2 must pick it up without re-emitting rel_prd.
+    await h.db.insert(releases).values({
+      id: "rel_between",
+      sourceId: "src_org",
+      title: "Between",
+      content: "x",
+      type: "feature",
+      publishedAt: "2026-01-01T12:00:00Z",
+      fetchedAt: "2026-01-01T12:00:00Z",
+    });
+
+    const anchor = page1[0]!;
+    const cursor = buildFeedCursor({
+      published_at: anchor.published_at,
+      fetched_at: anchor.fetched_at ?? anchor.published_at ?? "",
+      id: anchor.id,
+    });
+    const page2 = await getFollowedReleases(h.db, "u1", { limit: 10, cursor });
+    const ids = page2.map((r) => r.id);
+    expect(ids).not.toContain("rel_prd");
+    expect(ids).toEqual(["rel_between", "rel_org"]);
   });
 
   it("filters by the published-date watermark window", async () => {
@@ -122,7 +159,6 @@ describe("getFollowedReleases", () => {
 
     const rows = await getFollowedReleases(h.db, "u1", {
       limit: 50,
-      offset: 0,
       publishedAfter: "2026-06-01T00:00:00.000Z",
       publishedBefore: "2026-06-09T13:00:00.000Z",
     });

@@ -880,11 +880,21 @@ export interface FeedTokenResponse {
   token: FeedToken | null;
 }
 
+/** Cursor pagination shape for GET /v1/me/feed. */
+export interface PersonalizedFeedPagination {
+  nextCursor: string | null;
+  limit: number;
+}
+
 /**
  * GET /v1/me/feed response — the personalized release feed. Reuses the same item
- * shape as /v1/releases/latest (ReleaseLatestItem) inside the standard list envelope.
+ * shape as /v1/releases/latest (ReleaseLatestItem); cursor-paginated like other
+ * feed-shaped surfaces.
  */
-export type PersonalizedFeedResponse = ListResponse<ReleaseLatestItem>;
+export interface PersonalizedFeedResponse {
+  items: ReleaseLatestItem[];
+  pagination: PersonalizedFeedPagination;
+}
 
 // ── User webhooks ──
 

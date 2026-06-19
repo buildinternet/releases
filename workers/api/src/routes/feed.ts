@@ -23,7 +23,6 @@ feedRoutes.get("/feed/:token", async (c) => {
 
   const rows = await getFollowedReleases(db, resolved.userId, {
     limit: ATOM_DEFAULT_MAX_ENTRIES,
-    offset: 0,
   });
   const mediaOrigin = c.env.MEDIA_ORIGIN ?? "";
   const releases = rows.map((r) => mapLatestRowToReleaseItem(r, mediaOrigin));
