@@ -3,6 +3,25 @@
 The product changelog for releases.sh, published to its own registry. Drafted daily from merged
 PRs and reviewed via PR. See docs/changelog-style.md for the voice and curation rules.
 
+## June 18, 2026
+
+**Added**
+- Account settings rebuilt with a two-column layout and individually-addressable pages — profile, email, security, connections, notifications, and API keys each get their own URL; a sidebar link shortcuts to your Following feed.
+- Source suggestions that include a contact email now receive an acknowledgment.
+- Bulk release management API — `DELETE /v1/releases/batch` and `POST /v1/releases/batch-suppress` delete or toggle suppression for a list of releases in one call.
+
+**Changed**
+- Org overview pages now show enriched product chips — cadence badge, sparkline, windowed release count, weekly average, and latest version synced to the timeline brush — replacing the per-source card lists.
+- Follow and admin controls repositioned into the title row on org and product pages; follow button is larger and pill-shaped; page layouts widened.
+
+**Fixed**
+- Collection daily summaries now incorporate actual changelog text — SDK version-tag releases (e.g. `wrangler@4.101.0`) now produce a meaningful description instead of echoing the version string.
+
+## June 17, 2026
+
+**Fixed**
+- Digest emails now include real release notes in SDK version-tag rollups — the most substantive tags render as `version — one-liner` with a "+N more" overflow link; pure dependency-bump entries are ranked out.
+
 ## June 16, 2026
 
 **Added**
@@ -11,6 +30,7 @@ PRs and reviewed via PR. See docs/changelog-style.md for the voice and curation 
 **Fixed**
 - Social preview cards now appear on org sub-pages (releases, sources), product and source changelogs, highlights, source detail pages, and standalone pages (catalog, categories, submit) that were previously missing `og:image`.
 - Docs and legal pages now have correct heading structure — the page title renders as `<h1>` instead of `<h2>`; `og:url` and `og:type` are also filled in across these pages.
+- The JSON Schema URL at `releases.sh/schemas/releases.json` now resolves — a routing rule was incorrectly intercepting `.json` paths under `/schemas/` and returning 404.
 
 ## June 15, 2026
 
