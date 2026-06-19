@@ -416,6 +416,10 @@ describe("authCorsMiddleware origin allow-list", () => {
     expect(await preflightMethods("PUT")).toContain("PUT");
   });
 
+  it("allows PATCH so /v1/me/webhooks updates clear the preflight", async () => {
+    expect(await preflightMethods("PATCH")).toContain("PATCH");
+  });
+
   it("allows the Sentinel fingerprint headers so auth requests clear the preflight", async () => {
     const allowed = await preflightAllowedHeaders("x-visitor-id, x-request-id, x-pow-solution");
     expect(allowed).toContain("x-visitor-id");
