@@ -4,7 +4,15 @@ Receive `release.created` events as HTTPS POSTs to your endpoint, signed with HM
 
 ## Quickstart
 
-Subscribe (the Rally team handles this for v1 named customers):
+**Self-serve** (your account — no admin key):
+
+- **Web:** [Account → Notifications](https://releases.sh/account/notifications) — Webhooks card (follows-scoped or org-scoped).
+- **CLI:** after `releases login`, `releases webhook add --scope follows --url https://your.app/hook` or `releases webhook add --org acme --url …`.
+- **API:** `POST /v1/me/webhooks` — see [Self-serve subscriptions](#self-serve-subscriptions).
+
+The signing key is shown **once** at create (and again after `rotate-secret`). Store it — you can't retrieve it later.
+
+**Admin-provisioned** (operator root key, org-scoped under `/v1/webhooks`):
 
 ```bash
 releases admin webhook add \
@@ -12,8 +20,6 @@ releases admin webhook add \
   --url https://your.app/releases \
   --description "production hook"
 ```
-
-The CLI prints a signing key once. Save it — you can't retrieve it later. Use `releases admin webhook rotate-secret <id>` to regenerate.
 
 ## Delivery format
 
@@ -118,7 +124,7 @@ Cloudflare Queues guarantees at-least-once delivery, so the same event may arriv
 
 ## Self-serve subscriptions
 
-Signed-in users manage webhooks at `/v1/me/webhooks` (session, `relu_` user key, or OAuth JWT). See the API for create/list/patch/delete, `rotate-secret`, `test`, and delivery history.
+Signed-in users manage webhooks at `/v1/me/webhooks` (session, `relu_` user key, or OAuth JWT), via the [account notifications UI](https://releases.sh/account/notifications), the [`releases webhook` CLI](https://github.com/buildinternet/releases-cli), or direct API calls. Surfaces: create/list/patch/delete, `rotate-secret`, `test`, and delivery history.
 
 ### Org-scoped (default)
 
@@ -146,9 +152,9 @@ Use a publicly reachable HTTPS endpoint on the public internet.
 ## Retry behavior
 
 - `2xx` → ack, no retry.
-- `4xx` → no retry. Subscriber bug; fix and use `releases admin webhook test <id>` to verify.
+- `4xx` → no retry. Subscriber bug; fix and send a test (`releases webhook test <id>` or `POST …/test`).
 - `5xx`, network error, timeout → retried up to 6 times with exponential backoff (~2 hours total).
-- After 6 retries → message moves to the dead-letter queue. The subscription's `consecutive_failures` counter increments. After 50 consecutive failures the subscription is auto-disabled; re-enable with `releases admin webhook edit <id> --enable`.
+- After 6 retries → message moves to the dead-letter queue. The subscription's `consecutive_failures` counter increments. After 50 consecutive failures the subscription is auto-disabled; re-enable from the account UI, `releases webhook edit <id> --enable`, or `PATCH /v1/me/webhooks/:id`.
 
 ## Replay
 

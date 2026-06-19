@@ -59,11 +59,19 @@ curl -X POST https://api.releases.sh/v1/me/webhooks \
 | `POST`   | `/v1/me/webhooks/:id/test`          | Enqueue a synthetic test delivery                      |
 | `GET`    | `/v1/me/webhooks/:id/deliveries`    | Recent delivery attempts (requires operator AE config) |
 
+### Account UI
+
+Signed-in users can manage webhooks without raw API calls: **Account → Notifications** on [releases.sh](https://releases.sh/account/notifications). The Webhooks card supports list/create (follows or org), test delivery, pause/resume, rotate signing key, and delete. The signing key is shown once at create and rotate.
+
 ### URL safety and test limits
 
 Webhook URLs must be public **HTTPS** endpoints. Private IPs, internal hostnames, and metadata addresses are rejected at registration.
 
 `POST …/test` is rate-limited to **5/min per subscription** and **20/min per account** to prevent abuse.
+
+### CLI
+
+After `releases login`, use `releases webhook list|add|show|edit|remove|test|rotate-secret|deliveries`. See the [releases-cli skill](https://github.com/buildinternet/releases-cli/tree/main/skills/releases-cli) for examples. `releases webhook verify` checks a captured payload locally (no auth).
 
 ## Admin-provisioned webhooks
 
