@@ -100,6 +100,23 @@ const nextConfig: NextConfig = {
         destination: "https://api.releases.sh/.well-known/oauth-authorization-server",
         permanent: true,
       },
+      // Retired source: the Cloudflare org's old unified changelog firehose
+      // (`cloudflare-what-s-new`, the global developers.cloudflare.com feed) was
+      // deleted when the org moved to Cloudflare's per-area feeds — its ~439
+      // product-less releases duplicated the new area-product feeds. The page
+      // had real content/index value, so forward it to the org overview rather
+      // than 404. One-off until a general source-retirement redirect lands (#1691).
+      {
+        source: "/cloudflare/cloudflare-what-s-new",
+        destination: "/cloudflare",
+        permanent: true,
+      },
+      // Its sub-tab routes (`/highlights`, `/changelog`) were sitemapped too.
+      {
+        source: "/cloudflare/cloudflare-what-s-new/:path*",
+        destination: "/cloudflare",
+        permanent: true,
+      },
     ];
   },
   async rewrites() {
