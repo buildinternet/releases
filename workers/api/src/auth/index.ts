@@ -1,4 +1,5 @@
-import { betterAuth } from "better-auth";
+import { AsyncLocalStorage } from "node:async_hooks";
+import { betterAuth } from "better-auth/minimal";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import {
   oneTap,
@@ -793,28 +794,70 @@ function apiKeyGovernancePlugin(deps: {
   };
 }
 
+type WaitUntilFn = (promise: Promise<unknown>) => void;
+
+// Memoized instance must not close over one request's executionCtx. Per-request
+// waitUntil is scoped via AsyncLocalStorage on /api/auth/* only.
+// https://better-auth.com/docs/guides/optimizing-for-performance#background-tasks
+const waitUntilAls = new AsyncLocalStorage<WaitUntilFn>();
+
+/** Run `fn` with a request-scoped waitUntil (auth handler routes only). */
+export function runAuthWithWaitUntil<T>(waitUntil: WaitUntilFn | undefined, fn: () => T): T {
+  if (!waitUntil) return fn();
+  return waitUntilAls.run(waitUntil, fn);
+}
+
+function runInBackground(promise: Promise<unknown>): void {
+  const waitUntil = waitUntilAls.getStore();
+  if (waitUntil) waitUntil(promise);
+}
+
+function secretBindingCacheKey(binding: SecretLike | undefined): string {
+  if (binding == null) return "";
+  return typeof binding === "string" ? binding : "store";
+}
+
+async function authCacheKey(env: Bindings): Promise<string> {
+  const userApiKeysOn = await flag(env.FLAGS, env.USER_API_KEYS_ENABLED, FLAGS.userApiKeysEnabled);
+  return JSON.stringify({
+    ENVIRONMENT: env.ENVIRONMENT ?? "",
+    AUTH_RATE_LIMIT_DISABLED: env.AUTH_RATE_LIMIT_DISABLED ?? "",
+    USER_API_KEYS_ENABLED: userApiKeysOn,
+    BETTER_AUTH_URL: env.BETTER_AUTH_URL ?? "",
+    WEB_BASE_URL: env.WEB_BASE_URL ?? "",
+    BETTER_AUTH_COOKIE_DOMAIN: env.BETTER_AUTH_COOKIE_DOMAIN ?? "",
+    BETTER_AUTH_TRUSTED_ORIGINS: env.BETTER_AUTH_TRUSTED_ORIGINS ?? "",
+    BETTER_AUTH_IDENTIFY_URL: env.BETTER_AUTH_IDENTIFY_URL ?? "",
+    OAUTH_RESOURCE_AUDIENCES: env.OAUTH_RESOURCE_AUDIENCES ?? "",
+    BETTER_AUTH_SECRET_DEV: env.BETTER_AUTH_SECRET_DEV ?? "",
+    BETTER_AUTH_SECRET: secretBindingCacheKey(env.BETTER_AUTH_SECRET),
+    BETTER_AUTH_API_KEY: secretBindingCacheKey(env.BETTER_AUTH_API_KEY),
+    GOOGLE_CLIENT_ID: secretBindingCacheKey(env.GOOGLE_CLIENT_ID),
+    GOOGLE_CLIENT_SECRET: secretBindingCacheKey(env.GOOGLE_CLIENT_SECRET),
+    GITHUB_CLIENT_ID: secretBindingCacheKey(env.GITHUB_CLIENT_ID),
+    GITHUB_CLIENT_SECRET: secretBindingCacheKey(env.GITHUB_CLIENT_SECRET),
+    STRIPE_SECRET_KEY: secretBindingCacheKey(env.STRIPE_SECRET_KEY),
+    STRIPE_WEBHOOK_SECRET: secretBindingCacheKey(env.STRIPE_WEBHOOK_SECRET),
+  });
+}
+
+const authInstanceCache = new Map<string, ReturnType<typeof buildAuthInstance>>();
+
+/** Clear the per-isolate auth cache (tests only). */
+export function resetAuthCacheForTests(): void {
+  authInstanceCache.clear();
+}
+
+function hasCustomAuthDeps(deps: CreateAuthDeps): boolean {
+  return deps.db != null || deps.sendEmail != null || deps.audit != null;
+}
+
 /**
- * Build a per-request Better Auth instance bound to this worker's environment —
- * mirrors `createDb(env.DB)`. Cheap to construct; the Workers model gives us env
- * bindings per request, so the instance is created per request rather than once.
- *
- * Email/password is always on (the dependency-free path). Google + GitHub are
- * registered only when their secrets resolve (see `buildSocialProviders`).
+ * Build the Better Auth instance for this worker's environment. Email/password is
+ * always on (the dependency-free path). Google + GitHub are registered only when
+ * their secrets resolve (see `buildSocialProviders`).
  */
-export async function createAuth(
-  env: Bindings,
-  /**
-   * `waitUntil` from the request's execution context. When provided, Better Auth's
-   * background work (account-enumeration dummy ops, etc.) AND our fire-and-forget
-   * verification/reset email sends are registered with it so they complete after the
-   * response instead of being dropped when the Worker isolate is torn down. Omitted
-   * in non-request contexts (e.g. tests) → background tasks fall back to Better Auth's
-   * default and `scheduleSend` runs the send inline.
-   */
-  waitUntil?: (promise: Promise<unknown>) => void,
-  /** Test-only injection — a capturing email sender and/or an in-memory DB. Production passes neither. */
-  deps: CreateAuthDeps = {},
-) {
+async function buildAuthInstance(env: Bindings, deps: CreateAuthDeps = {}) {
   const secret = (await resolveSigningSecret(env)) ?? undefined;
   if (!secret) {
     // Deployed envs supply this via the Secrets Store binding (validated at
@@ -855,8 +898,7 @@ export async function createAuth(
   // synchronously. `Promise.resolve` only normalizes a `void`-returning test sender;
   // a real send promise passes through unwrapped so `waitUntil` tracks it.
   const scheduleSend = (run: () => void | Promise<unknown>): void => {
-    const result = run();
-    if (waitUntil) waitUntil(Promise.resolve(result));
+    runInBackground(Promise.resolve(run()));
   };
 
   // Better Auth Infrastructure ("dash") — the hosted admin/analytics dashboard at
@@ -1173,6 +1215,14 @@ export async function createAuth(
     // parseable when BETTER_AUTH_URL is unset; prod/staging always set it.
     baseURL: env.BETTER_AUTH_URL ?? DEFAULT_AUTH_ORIGIN,
     trustedOrigins: authTrustedOrigins(env),
+    // Short-lived signed cookie cache — avoids a D1 read on every getSession within
+    // a visit. https://better-auth.com/docs/guides/optimizing-for-performance
+    session: {
+      cookieCache: {
+        enabled: true,
+        maxAge: 5 * 60,
+      },
+    },
     database: drizzleAdapter(db, {
       provider: "sqlite",
       // Schema key `rateLimit` must match Better Auth's default rate-limit model name.
@@ -1340,13 +1390,7 @@ export async function createAuth(
       storage: "database",
     },
     advanced: {
-      // Hand Better Auth's background work (account-enumeration dummy ops, etc.) to
-      // the request's waitUntil so it completes after the response on Workers instead
-      // of being dropped when the isolate is torn down. Omitted when there's no
-      // execution context (tests) → Better Auth's default floating behavior.
-      ...(waitUntil
-        ? { backgroundTasks: { handler: (promise: Promise<unknown>) => waitUntil(promise) } }
-        : {}),
+      backgroundTasks: { handler: runInBackground },
       // True client IP behind Cloudflare. `cf-connecting-ip` is the single
       // authoritative client IP CF sets on every request; `x-forwarded-for` is the
       // fallback (and what local `wrangler dev` / non-CF paths populate). Drives
@@ -1367,5 +1411,24 @@ export async function createAuth(
   });
 }
 
+/**
+ * Memoized per worker isolate when no test deps are injected; wrap /api/auth/*
+ * handler calls in {@link runAuthWithWaitUntil} so background work gets the
+ * request's executionCtx.waitUntil.
+ */
+export async function createAuth(
+  env: Bindings,
+  /** @deprecated Ignored — use {@link runAuthWithWaitUntil} on /api/auth/* instead. */
+  _waitUntil?: WaitUntilFn,
+  deps: CreateAuthDeps = {},
+) {
+  if (hasCustomAuthDeps(deps)) return buildAuthInstance(env, deps);
+  const key = await authCacheKey(env);
+  if (!authInstanceCache.has(key)) {
+    authInstanceCache.set(key, buildAuthInstance(env, {}));
+  }
+  return authInstanceCache.get(key)!;
+}
+
 /** The resolved Better Auth instance type (used as a Hono context test seam). */
-export type BetterAuthInstance = Awaited<ReturnType<typeof createAuth>>;
+export type BetterAuthInstance = Awaited<ReturnType<typeof buildAuthInstance>>;

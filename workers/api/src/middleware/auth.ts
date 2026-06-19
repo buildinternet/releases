@@ -63,7 +63,7 @@ export function execWaitUntil(c: Context<Env>): ((p: Promise<unknown>) => void) 
  * `c.get("db") ?? createDb(...)` lazy-init + test-injection pattern.
  */
 export async function getOrCreateAuth(c: Context<Env>) {
-  return c.get("betterAuth") ?? (await createAuth(c.env, execWaitUntil(c)));
+  return c.get("betterAuth") ?? (await createAuth(c.env));
 }
 
 type ResolvedAuth =
