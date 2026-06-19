@@ -273,9 +273,9 @@ function LightboxOverlay({
       className="lightbox-backdrop fixed inset-0 z-50 flex flex-col bg-black/85 backdrop-blur-sm cursor-zoom-out"
     >
       {/* Detail bar — held to the same centered content column the app uses
-          (max-w-4xl px-6) so the title/byline line up with the feed. */}
+          (max-w-5xl px-6) so the title/byline line up with the feed. */}
       <div onClick={(e) => e.stopPropagation()} className="shrink-0 cursor-default pt-4 pb-3">
-        <div className="mx-auto flex w-full max-w-4xl items-start justify-between gap-4 px-6">
+        <div className="mx-auto flex w-full max-w-5xl items-start justify-between gap-4 px-6">
           <div className="min-w-0">
             <h2 className="m-0 truncate text-[15px] font-semibold leading-snug text-white">
               {title}
@@ -343,7 +343,7 @@ function LightboxOverlay({
             src={src}
             alt={alt}
             onClick={(e) => e.stopPropagation()}
-            className="lightbox-card h-auto max-h-full w-auto max-w-4xl cursor-default rounded-md object-contain shadow-2xl ring-1 ring-white/10"
+            className="lightbox-card h-auto max-h-full w-auto max-w-5xl cursor-default rounded-md object-contain shadow-2xl ring-1 ring-white/10"
           />
         ) : imageFailed ? (
           <div
@@ -359,7 +359,7 @@ function LightboxOverlay({
             alt={alt}
             onClick={(e) => e.stopPropagation()}
             onError={() => setErroredSrc(src)}
-            className="lightbox-card h-auto max-h-full w-auto max-w-4xl cursor-default rounded-md object-contain shadow-2xl ring-1 ring-white/10"
+            className="lightbox-card h-auto max-h-full w-auto max-w-5xl cursor-default rounded-md object-contain shadow-2xl ring-1 ring-white/10"
           />
         )}
       </div>

@@ -402,7 +402,7 @@ export default async function HomePage() {
           <InstallStepsSidebar />
           <FeaturedCollections collections={featuredCollections} />
         </aside>
-        <div className="xl:order-1 max-w-4xl xl:max-w-none w-full mx-auto">
+        <div className="xl:order-1 max-w-5xl xl:max-w-none w-full mx-auto">
           <FeaturedCollectionsCollapsible collections={featuredCollections} />
           {orgsForTable.length > 0 && (
             <>

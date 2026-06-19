@@ -18,7 +18,7 @@ export default function FollowingPage() {
   return (
     <div className="min-h-screen">
       <Header />
-      <div className="mx-auto w-full max-w-4xl px-6">
+      <div className="mx-auto w-full max-w-5xl px-6">
         <FollowingClient />
       </div>
     </div>

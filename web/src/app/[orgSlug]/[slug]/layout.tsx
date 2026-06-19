@@ -111,7 +111,7 @@ export default async function OrgSlugLayout({
   return (
     <div className="min-h-screen">
       <Header />
-      <div className="max-w-4xl mx-auto px-6">
+      <div className="max-w-5xl mx-auto px-6">
         <div className="pt-5 text-[13px] text-stone-400 dark:text-stone-500">
           <Link href={orgHref} className="hover:text-stone-600 dark:hover:text-stone-300">
             {orgName}

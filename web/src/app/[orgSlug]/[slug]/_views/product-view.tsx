@@ -158,7 +158,7 @@ export async function ProductView({
     <div className="min-h-screen">
       <JsonLd data={jsonLd} />
       <Header />
-      <div className="max-w-4xl mx-auto px-6">
+      <div className="max-w-5xl mx-auto px-6">
         <div className="pt-5 text-[13px] text-stone-400 dark:text-stone-500">
           <Link href="/" className="hover:text-stone-600 dark:hover:text-stone-300">
             Home
@@ -171,20 +171,36 @@ export async function ProductView({
           <span className="text-stone-600 dark:text-stone-300 font-medium">{product.name}</span>
         </div>
 
-        <h1 className="text-[28px] font-bold tracking-tight text-stone-900 dark:text-stone-100 mt-4">
-          {product.name}
-        </h1>
-        {product.description && (
-          <p className="text-sm text-stone-500 dark:text-stone-400 mt-1">{product.description}</p>
-        )}
-        <div className="mt-3">
-          <FollowButton
-            targetType="product"
-            targetId={product.id}
-            label={product.name}
-            parentOrgId={orgId}
-            parentOrgName={orgName}
-          />
+        <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3 mt-4">
+          <div className="min-w-0">
+            <h1 className="text-[28px] font-bold tracking-tight text-stone-900 dark:text-stone-100">
+              {product.name}
+            </h1>
+            {product.description && (
+              <p className="text-sm text-stone-500 dark:text-stone-400 mt-1">
+                {product.description}
+              </p>
+            )}
+          </div>
+          <div className="ml-auto flex shrink-0 items-center gap-2 pt-1">
+            <FollowButton
+              targetType="product"
+              targetId={product.id}
+              label={product.name}
+              parentOrgId={orgId}
+              parentOrgName={orgName}
+            />
+            <AdminOnly devAdmin={devAdmin}>
+              <ProductAdminMenu
+                orgSlug={orgSlug}
+                productSlug={productSlug}
+                name={product.name}
+                notice={product.notice}
+                variant="subtle"
+                align="right"
+              />
+            </AdminOnly>
+          </div>
         </div>
         {appEntries.length > 0 && (
           <div className="flex items-center gap-2 mt-3">
@@ -204,16 +220,6 @@ export async function ProductView({
           </div>
         )}
         <CliCommand identifier={product.slug} />
-        <AdminOnly devAdmin={devAdmin}>
-          <div className="mt-2">
-            <ProductAdminMenu
-              orgSlug={orgSlug}
-              productSlug={productSlug}
-              name={product.name}
-              notice={product.notice}
-            />
-          </div>
-        </AdminOnly>
         <EntityNotice notice={product.notice} />
         <div className="flex flex-col md:flex-row gap-10 mt-6 pb-6">
           <div className="flex-1 min-w-0">

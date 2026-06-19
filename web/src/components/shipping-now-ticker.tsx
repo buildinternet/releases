@@ -263,7 +263,7 @@ export function ShippingNowTicker({ releases }: { releases: TickerRelease[] }) {
       aria-label="Recent releases across the platform"
       className="max-w-[1240px] mx-auto px-6 mb-10"
     >
-      <div className="max-w-4xl mx-auto">
+      <div className="max-w-5xl mx-auto">
         <div className="flex items-center gap-2 mb-3">
           <span className="animate-pulse text-amber-500 dark:text-amber-400">
             <ActivityIcon />
