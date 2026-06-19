@@ -459,10 +459,6 @@ describe("GET /v1/me/webhooks/:id/deliveries", () => {
       orgId: "org_a",
       url: PUBLIC_HOOK_URL,
       secretVersion: 1,
-      enabled: true,
-      consecutiveFailures: 0,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
     });
 
     const origFetch = globalThis.fetch;
