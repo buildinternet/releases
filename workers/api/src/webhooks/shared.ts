@@ -7,18 +7,9 @@ import type { WebhookSubscriptionUpdates } from "./queries.js";
 /** AE SQL doesn't support bound parameters; validates id before string interpolation. */
 export const SUBSCRIPTION_ID_RE = /^whk_[a-zA-Z0-9_]+$/;
 
-export function validateWebhookUrl(url: string): string | null {
-  let parsed: URL;
-  try {
-    parsed = new URL(url);
-  } catch {
-    return "url is invalid";
-  }
-  if (parsed.protocol !== "https:") {
-    return "url must use HTTPS";
-  }
-  return null;
-}
+import { validateWebhookUrl } from "./url-safety.js";
+
+export { validateWebhookUrl };
 
 /** Returns the master HMAC key, or a 503 Response when the binding is missing. */
 export async function requireMasterKey(c: Context<Env>): Promise<string | Response> {

@@ -71,6 +71,9 @@
     // Per-IP rate limiter for /v1/feedback (binding FEEDBACK_RATE_LIMITER). On
     // by default; set to "false" to bypass. See routes/feedback.ts.
     "FEEDBACK_RATE_LIMIT_ENABLED": "true",
+    // Per-sub (5/min) + per-user (20/min) caps on POST /v1/me/webhooks/:id/test.
+    // On by default; set to "false" to bypass. See webhooks/test-rate-limit.ts.
+    "WEBHOOK_TEST_RATE_LIMIT_ENABLED": "true",
     // Max feedback notification emails per rolling hour (inbox-bomb cap).
     "FEEDBACK_NOTIFY_MAX_PER_HOUR": "20",
     "ADMIN_BASE_URL": "https://api.releases.sh",
@@ -411,6 +414,19 @@
         "namespace_id": "1003",
         "simple": { "limit": 5, "period": 60 },
       },
+      // Self-serve webhook synthetic test sends (routes/me-webhooks.ts).
+      {
+        "name": "WEBHOOK_TEST_SUB_RATE_LIMITER",
+        "type": "ratelimit",
+        "namespace_id": "1004",
+        "simple": { "limit": 5, "period": 60 },
+      },
+      {
+        "name": "WEBHOOK_TEST_USER_RATE_LIMITER",
+        "type": "ratelimit",
+        "namespace_id": "1005",
+        "simple": { "limit": 20, "period": 60 },
+      },
     ],
   },
   // Secrets are managed in Cloudflare's Secrets Store (dashboard → Workers → Secrets Store).
@@ -599,6 +615,7 @@
         // Staging has no FEEDBACK_RATE_LIMITER binding (no `unsafe` block); the
         // handler no-ops the limiter there. Vars kept for parity.
         "FEEDBACK_RATE_LIMIT_ENABLED": "true",
+        "WEBHOOK_TEST_RATE_LIMIT_ENABLED": "true",
         "FEEDBACK_NOTIFY_MAX_PER_HOUR": "20",
         "ADMIN_BASE_URL": "https://api-staging.releases.sh",
         "INVALIDATION_ENABLED": "false",

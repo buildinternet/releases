@@ -116,6 +116,25 @@ func verify(secret, timestamp, body, sig string) bool {
 
 Cloudflare Queues guarantees at-least-once delivery, so the same event may arrive more than once (typically after a transient failure on your side). Use `X-Releases-Event-Id` as the dedup key and persist it in durable storage — e.g. a `processed_event_ids` table with a unique index, checked before you act on the event. An in-memory set or TTL cache is not sufficient: a process restart between delivery and ack will cause replays to be reprocessed.
 
+## Self-serve subscriptions
+
+Signed-in users manage webhooks at `/v1/me/webhooks` (session, `relu_` user key, or OAuth JWT). Each subscription is org-scoped with an optional source filter; see the API for create/list/patch/delete, `rotate-secret`, `test`, and delivery history.
+
+### URL requirements
+
+Webhook URLs must use **HTTPS** and must not target private or internal networks. Registration rejects:
+
+- `localhost`, `.localhost`, `.local`, and `.internal` hostnames
+- Private, link-local, and reserved IP ranges (RFC1918, `127.0.0.0/8`, `169.254.0.0/16`, CGNAT, …)
+- Cloud metadata endpoints (e.g. `169.254.169.254`)
+- Domain names that resolve (at registration time) to any private/reserved address
+
+Use a publicly reachable HTTPS endpoint on the public internet.
+
+### Test endpoint limits
+
+`POST /v1/me/webhooks/:id/test` enqueues a real signed delivery. To prevent abuse, self-serve test sends are capped at **5 per minute per subscription** and **20 per minute per account**. Over-limit requests return `429` with `Retry-After: 60`.
+
 ## Retry behavior
 
 - `2xx` → ack, no retry.

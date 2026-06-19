@@ -16,8 +16,12 @@ import {
   requireMasterKey,
   signingKeyFor,
   SUBSCRIPTION_ID_RE,
-  validateWebhookUrl,
 } from "../webhooks/shared.js";
+import { assertPublicWebhookTarget } from "../webhooks/url-safety.js";
+import {
+  checkWebhookTestRateLimit,
+  webhookTestRateLimitResponse,
+} from "../webhooks/test-rate-limit.js";
 import type { WebhookSubscription } from "@buildinternet/releases-core/schema";
 import {
   countUserWebhookSubscriptions,
@@ -73,7 +77,7 @@ meWebhookHandlers.post("/me/webhooks", async (c) => {
   if (typeof url !== "string" || !url) {
     return c.json({ error: "bad_request", message: "url is required" }, 400);
   }
-  const urlError = validateWebhookUrl(url);
+  const urlError = await assertPublicWebhookTarget(url);
   if (urlError) return c.json({ error: "bad_request", message: urlError }, 400);
 
   const orgId = typeof body.orgId === "string" ? body.orgId : undefined;
@@ -151,6 +155,11 @@ meWebhookHandlers.patch("/me/webhooks/:id", async (c) => {
     return c.json({ error: "bad_request", message: "invalid JSON body" }, 400);
   }
 
+  if (body.url !== undefined) {
+    const urlError = await assertPublicWebhookTarget(body.url);
+    if (urlError) return c.json({ error: "bad_request", message: urlError }, 400);
+  }
+
   const patch = buildWebhookPatchUpdates(body);
   if ("error" in patch) {
     return c.json({ error: "bad_request", message: patch.error }, 400);
@@ -214,6 +223,21 @@ meWebhookHandlers.post("/me/webhooks/:id/test", async (c) => {
   const db = getDb(c);
   const sub = await getUserWebhookSubscription(db, session.user.id, id);
   if (!sub) return c.json({ error: "not_found" }, 404);
+
+  const testLimitersEnabled = c.env.WEBHOOK_TEST_RATE_LIMIT_ENABLED !== "false";
+  const rateResult = await checkWebhookTestRateLimit(
+    {
+      sub: testLimitersEnabled ? c.env.WEBHOOK_TEST_SUB_RATE_LIMITER : undefined,
+      user: testLimitersEnabled ? c.env.WEBHOOK_TEST_USER_RATE_LIMITER : undefined,
+    },
+    session.user.id,
+    id,
+  );
+  if (rateResult !== "ok") {
+    const limited = webhookTestRateLimitResponse(rateResult);
+    c.header("Retry-After", String(limited.retryAfter));
+    return c.json(limited.body, limited.status);
+  }
 
   const synthetic: DeliveryMessage = {
     subscriptionId: sub.id,
