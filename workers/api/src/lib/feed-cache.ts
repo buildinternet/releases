@@ -1,15 +1,14 @@
 /**
- * KV key helpers for GET /v1/me/feed (page 1, default page size only).
+ * KV key helpers for GET /v1/me/feed (first page, default limit only).
  * Reuses LATEST_CACHE + `withLatestCache` from latest-cache.ts.
  */
 
 import type { LatestCacheBinding } from "./latest-cache.js";
-import type { ListPaginationParams } from "./pagination.js";
 
 /** Personalized feeds should feel fresh; shorter than the global latest cache. */
 export const FEED_CACHE_TTL_SECONDS = 90;
 
-/** Must match `defaultPageSize` on GET /v1/me/feed and the web feed client. */
+/** Must match the default `?limit=` on GET /v1/me/feed and the web feed client. */
 export const FEED_CACHE_PAGE_SIZE = 30;
 
 const KEY_PREFIX = "feed:v1";
@@ -18,10 +17,9 @@ export function buildFeedCacheKey(userId: string): string {
   return `${KEY_PREFIX}:${userId}`;
 }
 
-export function isCacheableFeedRequest(pagination: ListPaginationParams): boolean {
-  return (
-    pagination.page === 1 && pagination.pageSize === FEED_CACHE_PAGE_SIZE && pagination.offset === 0
-  );
+/** Cache only the default first slice — no cursor, default limit. */
+export function isCacheableFeedRequest(cursor: string | null, limit: number): boolean {
+  return !cursor && limit === FEED_CACHE_PAGE_SIZE;
 }
 
 export async function invalidateUserFeedCache(

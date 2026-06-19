@@ -74,8 +74,10 @@ export function FollowingClient({
   const followsReady = follows?.ready ?? false;
 
   const [feedItems, setFeedItems] = useState<ReleaseLatestItem[]>(() => initialFeed?.items ?? []);
-  const [page, setPage] = useState(1);
-  const [hasMore, setHasMore] = useState(() => initialFeed?.pagination.hasMore ?? false);
+  const [cursor, setCursor] = useState<string | null>(
+    () => initialFeed?.pagination.nextCursor ?? null,
+  );
+  const hasMore = cursor != null;
   const [loading, setLoading] = useState(() => initialFeed === undefined);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -86,12 +88,11 @@ export function FollowingClient({
     let cancelled = false;
     setLoading(true);
     setError(null);
-    getFeed(1, FEED_PAGE_SIZE)
+    getFeed()
       .then((feedResp) => {
         if (cancelled) return;
         setFeedItems(feedResp.items);
-        setPage(1);
-        setHasMore(feedResp.pagination.hasMore);
+        setCursor(feedResp.pagination.nextCursor);
       })
       .catch((err: unknown) => {
         if (cancelled) return;
@@ -106,21 +107,19 @@ export function FollowingClient({
   }, [session?.user?.id, initialFeed]);
 
   const loadMore = useCallback(async () => {
-    if (loadingMore || !hasMore) return;
+    if (loadingMore || !cursor) return;
     setLoadingMore(true);
     setError(null);
-    const next = page + 1;
     try {
-      const resp = await getFeed(next, FEED_PAGE_SIZE);
+      const resp = await getFeed(cursor);
       setFeedItems((prev) => [...prev, ...resp.items]);
-      setPage(next);
-      setHasMore(resp.pagination.hasMore);
+      setCursor(resp.pagination.nextCursor);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Failed to load more.");
     } finally {
       setLoadingMore(false);
     }
-  }, [loadingMore, hasMore, page]);
+  }, [loadingMore, cursor]);
 
   // IntersectionObserver auto-load + a keyboard-reachable trailing button,
   // shared with the collection/category timelines.

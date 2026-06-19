@@ -1,7 +1,7 @@
 import { Hono, type Context } from "hono";
 import { createDb } from "../db.js";
 import { requireFollowsPrincipal } from "../middleware/auth.js";
-import { parseListPagination, buildListResponse } from "../lib/pagination.js";
+import { parseLimitParam } from "../utils.js";
 import {
   addFollow,
   removeFollow,
@@ -9,7 +9,11 @@ import {
   resolveFollowTarget,
   hasFollow,
 } from "../queries/follows.js";
-import { getFollowedReleases, mapLatestRowToReleaseItem } from "../queries/releases.js";
+import {
+  feedCursorFromLatestRow,
+  getFollowedReleases,
+  mapLatestRowToReleaseItem,
+} from "../queries/releases.js";
 import { FOLLOW_TARGET_TYPES, type FollowTargetType } from "../db/schema-follows.js";
 import type { Env } from "../index.js";
 import {
@@ -119,24 +123,35 @@ meHandlers.delete("/me/follows/:targetType/:targetId", async (c) => {
 meHandlers.get("/me/feed", async (c) => {
   const session = c.get("session");
   if (!session) return c.json({ error: "unauthorized", message: "Sign in required" }, 401);
+
+  const params = new URL(c.req.url).searchParams;
+  if (params.has("page")) {
+    return c.json({ error: "bad_request", message: "Use ?cursor= instead of ?page=" }, 400);
+  }
+
+  const cursor = params.get("cursor");
+  const limit = parseLimitParam(params.get("limit") ?? undefined, FEED_CACHE_PAGE_SIZE, 100);
   const db = createDb(c.env.DB);
-  const pagination = parseListPagination(new URL(c.req.url).searchParams, {
-    defaultPageSize: FEED_CACHE_PAGE_SIZE,
-    maxPageSize: 100,
-  });
   const mediaOrigin = c.env.MEDIA_ORIGIN ?? "";
+
   const compute = async () => {
     const rows = await getFollowedReleases(db, session.user.id, {
-      limit: pagination.pageSize,
-      offset: pagination.offset,
+      limit: limit + 1,
+      cursor,
     });
-    const items = rows.map((r) => mapLatestRowToReleaseItem(r, mediaOrigin));
-    return buildListResponse(items, pagination);
+    const hasMore = rows.length > limit;
+    const pageRows = hasMore ? rows.slice(0, limit) : rows;
+    const items = pageRows.map((r) => mapLatestRowToReleaseItem(r, mediaOrigin));
+    const nextCursor =
+      hasMore && pageRows.length > 0
+        ? feedCursorFromLatestRow(pageRows[pageRows.length - 1]!)
+        : null;
+    return { items, pagination: { nextCursor, limit } };
   };
 
   c.header("Cache-Control", "private, no-store");
 
-  if (!isCacheableFeedRequest(pagination)) {
+  if (!isCacheableFeedRequest(cursor, limit)) {
     c.header("X-Cache", "BYPASS");
     return c.json(await compute());
   }

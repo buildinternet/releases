@@ -3,6 +3,7 @@ import { z } from "zod";
 import { getSecret } from "@releases/lib/secrets";
 import { getEntityType } from "@buildinternet/releases-core/id";
 import { logEvent } from "@releases/lib/log-event";
+import { buildCursorMeta } from "./lib/pagination.js";
 import type { Env } from "./mcp-agent.js";
 
 /**
@@ -228,10 +229,13 @@ export function registerFollowsTools(
       description: [
         "Your personalized release feed — recent releases from the organizations and products you follow, newest first. Requires a signed-in user. Same item shape as `get_latest_releases`, scoped to your follows.",
         "",
-        "Paginated: `page` (1-based) and `limit` (1–100, default 30).",
+        "Cursor-paginated: pass `cursor` from a prior response's `_meta.pagination.nextCursor` and optional `limit` (1–100, default 30).",
       ].join("\n"),
       inputSchema: {
-        page: z.number().int().min(1).optional().describe("1-based page number. Defaults to 1."),
+        cursor: z
+          .string()
+          .optional()
+          .describe("Opaque cursor from a previous page's `_meta.pagination.nextCursor`."),
         limit: z
           .number()
           .int()
@@ -241,11 +245,11 @@ export function registerFollowsTools(
           .describe("Entries per page (1–100). Defaults to 30."),
       },
     },
-    async ({ page, limit }) => {
+    async ({ cursor, limit }) => {
       if (!userToken) return userRequired();
       try {
         const qs = new URLSearchParams();
-        if (page) qs.set("page", String(page));
+        if (cursor) qs.set("cursor", cursor);
         if (limit) qs.set("limit", String(limit));
         const suffix = qs.toString() ? `?${qs}` : "";
         const { status, json } = await callMe(env, userToken, `/v1/me/feed${suffix}`, {
@@ -254,16 +258,34 @@ export function registerFollowsTools(
         if (status === 0) return text("The feed is unavailable in this environment.", true);
         if (status === 401) return userRequired();
         if (status !== 200) return text(`Failed to load your feed (HTTP ${status}).`, true);
-        const items = (json as { items?: FeedItem[] }).items ?? [];
-        if (items.length === 0)
-          return text("No recent releases from the organizations and products you follow.");
-        const lines = items.map((it) => {
-          const title = it.titleShort ?? it.titleGenerated ?? it.title;
-          const by = it.product?.name ?? it.source.name;
-          const when = it.publishedAt ? ` · ${it.publishedAt.slice(0, 10)}` : "";
-          return `- ${title} — ${by}${when} (${it.id})`;
+        const body = json as {
+          items?: FeedItem[];
+          pagination?: { nextCursor: string | null; limit: number };
+        };
+        const items = body.items ?? [];
+        const nextCursor = body.pagination?.nextCursor ?? null;
+        const pageLimit = body.pagination?.limit ?? limit ?? 30;
+        const cursorMeta = buildCursorMeta({
+          returned: items.length,
+          limit: pageLimit,
+          hasMore: nextCursor !== null,
+          nextCursor,
         });
-        return text(`Your feed (${items.length}):\n${lines.join("\n")}`);
+        const message =
+          items.length === 0
+            ? "No recent releases from the organizations and products you follow."
+            : `Your feed (${items.length}):\n${items
+                .map((it) => {
+                  const title = it.titleShort ?? it.titleGenerated ?? it.title;
+                  const by = it.product?.name ?? it.source.name;
+                  const when = it.publishedAt ? ` · ${it.publishedAt.slice(0, 10)}` : "";
+                  return `- ${title} — ${by}${when} (${it.id})`;
+                })
+                .join("\n")}`;
+        return {
+          content: [{ type: "text" as const, text: message }],
+          _meta: { pagination: cursorMeta },
+        };
       } catch (err) {
         logEvent("error", { component: "mcp-follows", event: "feed-failed", err });
         return text("Failed to load your feed (internal error).", true);

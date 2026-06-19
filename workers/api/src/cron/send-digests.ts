@@ -76,7 +76,6 @@ export async function gatherAndSendDigest(
 ): Promise<{ sent: boolean; count: number; reason?: "no_releases" | "no_binding" | "error" }> {
   const rows = await getFollowedReleases(db, recip.userId, {
     limit: opts.maxReleases,
-    offset: 0,
     publishedAfter: opts.after,
     publishedBefore: opts.before,
   });

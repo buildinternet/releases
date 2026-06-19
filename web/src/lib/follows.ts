@@ -43,8 +43,13 @@ export async function unfollow(targetType: FollowTarget, targetId: string): Prom
   if (!res.ok) throw new Error(await errorMessage(res, `Failed to unfollow (${res.status})`));
 }
 
-export async function getFeed(page = 1, limit = FEED_PAGE_SIZE): Promise<PersonalizedFeedResponse> {
-  const res = await fetch(`${apiBase()}/v1/me/feed?page=${page}&limit=${limit}`, {
+export async function getFeed(
+  cursor?: string | null,
+  limit = FEED_PAGE_SIZE,
+): Promise<PersonalizedFeedResponse> {
+  const qs = new URLSearchParams({ limit: String(limit) });
+  if (cursor) qs.set("cursor", cursor);
+  const res = await fetch(`${apiBase()}/v1/me/feed?${qs}`, {
     credentials: "include",
   });
   if (!res.ok) throw new Error(await errorMessage(res, `Failed to load feed (${res.status})`));
