@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Header } from "@/components/header";
 import { AUTH_CONFIGURED } from "@/lib/auth-ui";
+import { fetchFollowingFeed } from "@/lib/follows-server";
 import { FollowingClient } from "./following-client";
 
 export const metadata: Metadata = {
@@ -11,15 +12,18 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-export default function FollowingPage() {
+export default async function FollowingPage() {
   if (!AUTH_CONFIGURED) {
     notFound();
   }
+
+  const initialFeed = (await fetchFollowingFeed()) ?? undefined;
+
   return (
     <div className="min-h-screen">
       <Header />
       <div className="mx-auto w-full max-w-5xl px-6">
-        <FollowingClient />
+        <FollowingClient initialFeed={initialFeed} />
       </div>
     </div>
   );

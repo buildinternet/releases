@@ -7,15 +7,17 @@ import { useFollows } from "@/components/follows-provider";
 import { OrgAvatar } from "@/components/org-avatar";
 import { InfiniteScrollTrigger } from "@/components/infinite-scroll-trigger";
 import { useInfiniteScroll } from "@/hooks/use-infinite-scroll";
-import { getFeed } from "@/lib/follows";
+import { FEED_PAGE_SIZE, getFeed } from "@/lib/follows";
 import { formatRelativeDate, pluralReleases } from "@/lib/formatters";
 import { normalizeVersionLabel } from "@/lib/release-title";
 import { isTag, rollupTags, type TagListItem } from "@/components/collection-timeline-rollup";
 import { DigestCard } from "./digest-card";
 import { FeedTokenCard } from "./feed-token-card";
-import type { Follow, ReleaseLatestItem } from "@buildinternet/releases-api-types";
-
-const FEED_PAGE_SIZE = 30;
+import type {
+  Follow,
+  PersonalizedFeedResponse,
+  ReleaseLatestItem,
+} from "@buildinternet/releases-api-types";
 
 // Avatar/name resolved from the follows list for a release's owning org.
 interface OrgChip {
@@ -60,27 +62,27 @@ function groupByDay(items: ReleaseLatestItem[]): DayBucket[] {
   return out;
 }
 
-export function FollowingClient() {
+export function FollowingClient({
+  initialFeed,
+}: {
+  /** Server-prefetched first feed page — skips the client round trip when set. */
+  initialFeed?: PersonalizedFeedResponse;
+} = {}) {
   const { data: session, isPending } = useSession();
   const follows = useFollows();
-  // The enriched follow list is owned by FollowsProvider (already fetched once
-  // for the follow buttons), so the sidebar reads it from there instead of
-  // re-fetching GET /v1/me/follows. The provider also owns optimistic add/remove
-  // and the post-toggle refetch, so this page never mutates the list directly.
   const followsList = follows?.follows ?? [];
   const followsReady = follows?.ready ?? false;
 
-  const [feedItems, setFeedItems] = useState<ReleaseLatestItem[]>([]);
+  const [feedItems, setFeedItems] = useState<ReleaseLatestItem[]>(() => initialFeed?.items ?? []);
   const [page, setPage] = useState(1);
-  const [hasMore, setHasMore] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [hasMore, setHasMore] = useState(() => initialFeed?.pagination.hasMore ?? false);
+  const [loading, setLoading] = useState(() => initialFeed === undefined);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Initial load: the first feed page. The follow list comes from the provider
-  // (above), so it's no longer fetched here.
+  // Initial load: the first feed page unless the server already prefetched it.
   useEffect(() => {
-    if (!session?.user) return;
+    if (!session?.user || initialFeed !== undefined) return;
     let cancelled = false;
     setLoading(true);
     setError(null);
@@ -101,7 +103,7 @@ export function FollowingClient() {
     return () => {
       cancelled = true;
     };
-  }, [session?.user?.id]);
+  }, [session?.user?.id, initialFeed]);
 
   const loadMore = useCallback(async () => {
     if (loadingMore || !hasMore) return;
@@ -240,10 +242,14 @@ export function FollowingClient() {
           )}
         </section>
 
-        {/* Right: feed card + manage follows */}
+        {/* Right: defer non-critical sidebar cards until the feed finishes loading */}
         <aside className="space-y-6">
-          <DigestCard />
-          <FeedTokenCard />
+          {!loading && (
+            <>
+              <DigestCard />
+              <FeedTokenCard />
+            </>
+          )}
 
           <div>
             <h2 className="mb-4 text-[11px] font-semibold uppercase tracking-[0.18em] text-stone-400 dark:text-stone-500">

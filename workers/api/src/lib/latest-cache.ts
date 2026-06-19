@@ -108,6 +108,7 @@ export async function withLatestCache<T>(
   key: string,
   waitUntil: ((p: Promise<unknown>) => void) | undefined,
   compute: () => Promise<T>,
+  ttlSeconds: number = LATEST_CACHE_TTL_SECONDS,
 ): Promise<{ data: T; hit: boolean }> {
   if (!kv) {
     return { data: await compute(), hit: false };
@@ -119,11 +120,9 @@ export async function withLatestCache<T>(
   }
 
   const data = await compute();
-  const write = kv
-    .put(key, JSON.stringify(data), { expirationTtl: LATEST_CACHE_TTL_SECONDS })
-    .catch(() => {
-      // Fail open — next request misses again.
-    });
+  const write = kv.put(key, JSON.stringify(data), { expirationTtl: ttlSeconds }).catch(() => {
+    // Fail open — next request misses again.
+  });
   if (waitUntil) waitUntil(write);
   else await write;
   return { data, hit: false };

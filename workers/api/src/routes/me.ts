@@ -23,7 +23,30 @@ import { getDigestPrefs, setDigestCadence } from "../queries/digest-prefs.js";
 import { DIGEST_CADENCES, type DigestCadence } from "../db/schema-digest-prefs.js";
 import { parseJsonBody } from "../lib/json-body.js";
 import type { FeedToken } from "@buildinternet/releases-api-types";
+import {
+  buildFeedCacheKey,
+  FEED_CACHE_PAGE_SIZE,
+  FEED_CACHE_TTL_SECONDS,
+  invalidateUserFeedCache,
+  isCacheableFeedRequest,
+} from "../lib/feed-cache.js";
+import { withLatestCache } from "../lib/latest-cache.js";
 import { meWebhookHandlers } from "./me-webhooks.js";
+
+function optionalWaitUntil(c: Context<Env>): ((p: Promise<unknown>) => void) | undefined {
+  try {
+    return c.executionCtx.waitUntil.bind(c.executionCtx);
+  } catch {
+    return undefined;
+  }
+}
+
+async function invalidateFeedCache(c: Context<Env>, userId: string): Promise<void> {
+  const task = invalidateUserFeedCache(c.env.LATEST_CACHE, userId);
+  const waitUntil = optionalWaitUntil(c);
+  if (waitUntil) waitUntil(task);
+  else await task;
+}
 
 function isFollowTargetType(v: unknown): v is FollowTargetType {
   return typeof v === "string" && (FOLLOW_TARGET_TYPES as readonly string[]).includes(v);
@@ -75,6 +98,7 @@ meHandlers.post("/me/follows", async (c) => {
   if (!entity) return c.json({ error: "not_found", message: "Target not found" }, 404);
 
   await addFollow(db, session.user.id, body.targetType, body.targetId);
+  await invalidateFeedCache(c, session.user.id);
   return c.json({ success: true, following: true }, 201);
 });
 
@@ -88,6 +112,7 @@ meHandlers.delete("/me/follows/:targetType/:targetId", async (c) => {
   }
   const db = createDb(c.env.DB);
   await removeFollow(db, session.user.id, targetType, targetId);
+  await invalidateFeedCache(c, session.user.id);
   return c.json({ success: true, following: false }, 200);
 });
 
@@ -96,16 +121,35 @@ meHandlers.get("/me/feed", async (c) => {
   if (!session) return c.json({ error: "unauthorized", message: "Sign in required" }, 401);
   const db = createDb(c.env.DB);
   const pagination = parseListPagination(new URL(c.req.url).searchParams, {
-    defaultPageSize: 30,
+    defaultPageSize: FEED_CACHE_PAGE_SIZE,
     maxPageSize: 100,
   });
-  const rows = await getFollowedReleases(db, session.user.id, {
-    limit: pagination.pageSize,
-    offset: pagination.offset,
-  });
   const mediaOrigin = c.env.MEDIA_ORIGIN ?? "";
-  const items = rows.map((r) => mapLatestRowToReleaseItem(r, mediaOrigin));
-  return c.json(buildListResponse(items, pagination));
+  const compute = async () => {
+    const rows = await getFollowedReleases(db, session.user.id, {
+      limit: pagination.pageSize,
+      offset: pagination.offset,
+    });
+    const items = rows.map((r) => mapLatestRowToReleaseItem(r, mediaOrigin));
+    return buildListResponse(items, pagination);
+  };
+
+  c.header("Cache-Control", "private, no-store");
+
+  if (!isCacheableFeedRequest(pagination)) {
+    c.header("X-Cache", "BYPASS");
+    return c.json(await compute());
+  }
+
+  const { data, hit } = await withLatestCache(
+    c.env.LATEST_CACHE,
+    buildFeedCacheKey(session.user.id),
+    optionalWaitUntil(c),
+    compute,
+    FEED_CACHE_TTL_SECONDS,
+  );
+  c.header("X-Cache", hit ? "HIT" : "MISS");
+  return c.json(data);
 });
 
 /**
