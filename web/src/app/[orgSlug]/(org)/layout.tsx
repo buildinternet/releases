@@ -65,48 +65,50 @@ export default async function OrgLayout({
           <span className="mx-1.5">/</span>
           <span className="text-stone-600 dark:text-stone-300 font-medium">{org.name}</span>
         </div>
-        <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3 mt-4">
-          {org.avatarUrl || org.accounts.some((a) => a.platform === "github") ? (
-            <div className="flex min-w-0 items-center gap-3">
-              <OrgAvatar
-                avatarUrl={org.avatarUrl}
-                githubHandle={org.accounts.find((a) => a.platform === "github")?.handle ?? null}
-                name={org.name}
-                size={40}
-              />
-              <h1 className="text-[28px] font-bold tracking-tight text-stone-900 dark:text-stone-100">
-                {org.name}
-              </h1>
-            </div>
-          ) : (
-            <h1 className="min-w-0 text-[28px] font-bold tracking-tight text-stone-900 dark:text-stone-100">
-              {org.name}
-            </h1>
-          )}
-          <div className="ml-auto flex shrink-0 items-center gap-2 pt-1">
-            {org.id && <FollowButton targetType="org" targetId={org.id} label={org.name} />}
-            <AdminOnly devAdmin={devAdmin}>
-              <OrgAdminMenu
-                orgSlug={org.slug}
-                name={org.name}
-                isHidden={org.isHidden ?? false}
-                autoGenerateContent={org.autoGenerateContent ?? false}
-                featured={org.featured ?? false}
-                discovery={org.discovery}
-                fetchPaused={org.fetchPaused}
-                notice={org.notice}
-                variant="subtle"
-                align="right"
-              />
-            </AdminOnly>
-          </div>
-        </div>
-        <CliCommand identifier={org.slug} />
-        <EntityNotice notice={org.notice} />
-        <div className="flex flex-col md:flex-row gap-10 mt-6 pb-6">
+        <div className="flex flex-col md:flex-row gap-10 mt-4 pb-6">
           <div className="flex-1 min-w-0">
-            <OrgTabs orgSlug={orgSlug} devAdmin={devAdmin} />
-            {children}
+            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
+              {org.avatarUrl || org.accounts.some((a) => a.platform === "github") ? (
+                <div className="flex min-w-0 items-center gap-3">
+                  <OrgAvatar
+                    avatarUrl={org.avatarUrl}
+                    githubHandle={org.accounts.find((a) => a.platform === "github")?.handle ?? null}
+                    name={org.name}
+                    size={40}
+                  />
+                  <h1 className="text-[28px] font-bold tracking-tight text-stone-900 dark:text-stone-100">
+                    {org.name}
+                  </h1>
+                </div>
+              ) : (
+                <h1 className="min-w-0 text-[28px] font-bold tracking-tight text-stone-900 dark:text-stone-100">
+                  {org.name}
+                </h1>
+              )}
+              <div className="flex shrink-0 items-center gap-2.5">
+                {org.id && <FollowButton targetType="org" targetId={org.id} label={org.name} />}
+                <AdminOnly devAdmin={devAdmin}>
+                  <OrgAdminMenu
+                    orgSlug={org.slug}
+                    name={org.name}
+                    isHidden={org.isHidden ?? false}
+                    autoGenerateContent={org.autoGenerateContent ?? false}
+                    featured={org.featured ?? false}
+                    discovery={org.discovery}
+                    fetchPaused={org.fetchPaused}
+                    notice={org.notice}
+                    variant="subtle"
+                    align="right"
+                  />
+                </AdminOnly>
+              </div>
+            </div>
+            <CliCommand identifier={org.slug} />
+            <EntityNotice notice={org.notice} />
+            <div className="mt-6">
+              <OrgTabs orgSlug={orgSlug} devAdmin={devAdmin} />
+              {children}
+            </div>
           </div>
           <Sidebar
             sections={sidebarSections}

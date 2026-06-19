@@ -171,58 +171,58 @@ export async function ProductView({
           <span className="text-stone-600 dark:text-stone-300 font-medium">{product.name}</span>
         </div>
 
-        <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3 mt-4">
-          <div className="min-w-0">
-            <h1 className="text-[28px] font-bold tracking-tight text-stone-900 dark:text-stone-100">
-              {product.name}
-            </h1>
-            {product.description && (
-              <p className="text-sm text-stone-500 dark:text-stone-400 mt-1">
-                {product.description}
-              </p>
-            )}
-          </div>
-          <div className="ml-auto flex shrink-0 items-center gap-2 pt-1">
-            <FollowButton
-              targetType="product"
-              targetId={product.id}
-              label={product.name}
-              parentOrgId={orgId}
-              parentOrgName={orgName}
-            />
-            <AdminOnly devAdmin={devAdmin}>
-              <ProductAdminMenu
-                orgSlug={orgSlug}
-                productSlug={productSlug}
-                name={product.name}
-                notice={product.notice}
-                variant="subtle"
-                align="right"
-              />
-            </AdminOnly>
-          </div>
-        </div>
-        {appEntries.length > 0 && (
-          <div className="flex items-center gap-2 mt-3">
-            <span className="text-xs text-stone-400 dark:text-stone-500">Available on</span>
-            {appEntries.map((e) => (
-              <Link
-                key={e.slug}
-                href={sourceIdPath(e.id)}
-                className="flex items-center gap-1.5 bg-stone-100 dark:bg-stone-800 hover:bg-stone-200 dark:hover:bg-stone-700 rounded-md px-2 py-1 transition-colors"
-              >
-                <AppIcon iconUrl={e.app.iconUrl} name={e.name} size={16} />
-                <span className="text-xs font-medium text-stone-600 dark:text-stone-300">
-                  {e.app.label}
-                </span>
-              </Link>
-            ))}
-          </div>
-        )}
-        <CliCommand identifier={product.slug} />
-        <EntityNotice notice={product.notice} />
-        <div className="flex flex-col md:flex-row gap-10 mt-6 pb-6">
+        <div className="flex flex-col md:flex-row gap-10 mt-4">
           <div className="flex-1 min-w-0">
+            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
+              <div className="min-w-0">
+                <h1 className="text-[28px] font-bold tracking-tight text-stone-900 dark:text-stone-100">
+                  {product.name}
+                </h1>
+                {product.description && (
+                  <p className="text-sm text-stone-500 dark:text-stone-400 mt-1">
+                    {product.description}
+                  </p>
+                )}
+              </div>
+              <div className="flex shrink-0 items-center gap-2.5">
+                <FollowButton
+                  targetType="product"
+                  targetId={product.id}
+                  label={product.name}
+                  parentOrgId={orgId}
+                  parentOrgName={orgName}
+                />
+                <AdminOnly devAdmin={devAdmin}>
+                  <ProductAdminMenu
+                    orgSlug={orgSlug}
+                    productSlug={productSlug}
+                    name={product.name}
+                    notice={product.notice}
+                    variant="subtle"
+                    align="right"
+                  />
+                </AdminOnly>
+              </div>
+            </div>
+            {appEntries.length > 0 && (
+              <div className="flex items-center gap-2 mt-3">
+                <span className="text-xs text-stone-400 dark:text-stone-500">Available on</span>
+                {appEntries.map((e) => (
+                  <Link
+                    key={e.slug}
+                    href={sourceIdPath(e.id)}
+                    className="flex items-center gap-1.5 bg-stone-100 dark:bg-stone-800 hover:bg-stone-200 dark:hover:bg-stone-700 rounded-md px-2 py-1 transition-colors"
+                  >
+                    <AppIcon iconUrl={e.app.iconUrl} name={e.name} size={16} />
+                    <span className="text-xs font-medium text-stone-600 dark:text-stone-300">
+                      {e.app.label}
+                    </span>
+                  </Link>
+                ))}
+              </div>
+            )}
+            <CliCommand identifier={product.slug} />
+            <EntityNotice notice={product.notice} />
             {activity && (
               <ReleaseTimeline
                 activity={activity}

@@ -49,7 +49,7 @@ export function FollowButton({
     const text = parentOrgName ? `Following ${parentOrgName}` : "Following organization";
     return (
       <span
-        className="inline-flex cursor-default items-center rounded-md border border-stone-200 px-3 py-1 text-sm text-stone-400 dark:border-stone-700 dark:text-stone-500"
+        className="inline-flex min-h-9 cursor-default items-center rounded-full border border-stone-200 px-4 text-sm font-semibold text-stone-400 dark:border-stone-700 dark:text-stone-500"
         title={
           parentOrgName
             ? `You follow ${parentOrgName}, which already includes all its products.`
@@ -82,8 +82,8 @@ export function FollowButton({
       }}
       className={
         following
-          ? "rounded-md border border-stone-300 dark:border-stone-700 px-3 py-1 text-sm text-stone-600 transition-colors hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-60 dark:text-stone-300 dark:hover:bg-stone-800"
-          : "rounded-md bg-stone-900 dark:bg-stone-100 px-3 py-1 text-sm text-white transition-colors hover:bg-stone-800 disabled:cursor-not-allowed disabled:opacity-60 dark:text-stone-900 dark:hover:bg-stone-200"
+          ? "inline-flex min-h-9 min-w-[88px] items-center justify-center rounded-full border border-stone-300 px-4 text-sm font-bold text-stone-600 transition-colors hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-stone-600 dark:text-stone-200 dark:hover:bg-stone-800"
+          : "inline-flex min-h-9 min-w-[88px] items-center justify-center rounded-full bg-stone-900 px-4 text-sm font-bold text-white transition-colors hover:bg-stone-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-stone-100 dark:text-stone-900 dark:hover:bg-stone-200"
       }
       aria-pressed={following}
       {...(label ? { "aria-label": following ? `Following ${label}` : `Follow ${label}` } : {})}

@@ -95,7 +95,7 @@ export function OrgAdminMenu({
   const statusSuffix = isHidden ? "Hidden" : autoGenerateContent ? "AI" : null;
   const triggerClass =
     variant === "subtle"
-      ? "inline-flex items-center gap-1 rounded-md px-2 py-1 text-[12px] text-stone-400 transition-colors hover:bg-stone-100 hover:text-stone-600 dark:text-stone-500 dark:hover:bg-stone-800/60 dark:hover:text-stone-300"
+      ? "inline-flex min-h-9 items-center gap-1 rounded-full px-3 text-[13px] font-medium text-stone-500 transition-colors hover:bg-stone-100 hover:text-stone-700 dark:text-stone-400 dark:hover:bg-stone-800/60 dark:hover:text-stone-200"
       : "text-[11px] px-2 py-0.5 rounded font-medium uppercase tracking-wider border border-stone-300 dark:border-stone-700 bg-stone-50 hover:bg-stone-100 dark:bg-stone-900 dark:hover:bg-stone-800 text-stone-700 dark:text-stone-200";
 
   return (
