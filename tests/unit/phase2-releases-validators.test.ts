@@ -5,6 +5,8 @@
  *   - DELETE /v1/releases/:id/coverage    (releases.ts; no body schema)
  *   - PATCH  /v1/releases/:id             (sources.ts)
  *   - POST   /v1/releases/:id/suppress    (sources.ts)
+ *   - DELETE /v1/releases/batch            (sources.ts)
+ *   - POST   /v1/releases/batch-suppress   (sources.ts)
  */
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { createTestDb, type TestDatabase } from "../db-helper.js";
@@ -223,5 +225,32 @@ describe("POST /v1/releases/:id/suppress (validateJson)", () => {
   test("404 when release doesn't exist", async () => {
     const res = await callSrc("/releases/rel_ghost/suppress", "POST", {});
     expect(res.status).toBe(404);
+  });
+});
+
+describe("DELETE /v1/releases/batch (validateJson)", () => {
+  test("400 when releaseIds is empty", async () => {
+    const res = await callSrc("/releases/batch", "DELETE", { releaseIds: [] });
+    expect(res.status).toBe(400);
+  });
+
+  test("400 when releaseIds is missing", async () => {
+    const res = await callSrc("/releases/batch", "DELETE", {});
+    expect(res.status).toBe(400);
+  });
+});
+
+describe("POST /v1/releases/batch-suppress (validateJson)", () => {
+  test("400 when suppressed is missing", async () => {
+    const res = await callSrc("/releases/batch-suppress", "POST", { releaseIds: ["rel_a"] });
+    expect(res.status).toBe(400);
+  });
+
+  test("400 when releaseIds is empty", async () => {
+    const res = await callSrc("/releases/batch-suppress", "POST", {
+      releaseIds: [],
+      suppressed: true,
+    });
+    expect(res.status).toBe(400);
   });
 });

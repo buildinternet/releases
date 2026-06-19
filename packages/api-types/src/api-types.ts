@@ -138,9 +138,13 @@ import type {
   UpdateReleaseBodySchema,
   ReleasePatchResponseSchema,
   ReleaseDeleteResponseSchema,
+  ReleaseBatchDeleteBodySchema,
+  ReleaseBatchDeleteResponseSchema,
   ReleaseSuppressResponseSchema,
   ReleaseUnsuppressResponseSchema,
   ReleaseSuppressBodySchema,
+  ReleaseBatchSuppressBodySchema,
+  ReleaseBatchSuppressResponseSchema,
   ReleaseStreamMessageSchema,
 } from "./schemas/releases.js";
 import type {
@@ -403,9 +407,13 @@ export {
   UpdateReleaseBodySchema,
   ReleasePatchResponseSchema,
   ReleaseDeleteResponseSchema,
+  ReleaseBatchDeleteBodySchema,
+  ReleaseBatchDeleteResponseSchema,
   ReleaseSuppressResponseSchema,
   ReleaseUnsuppressResponseSchema,
   ReleaseSuppressBodySchema,
+  ReleaseBatchSuppressBodySchema,
+  ReleaseBatchSuppressResponseSchema,
   ReleaseStreamMessageSchema,
 } from "./schemas/releases.js";
 export {
@@ -807,9 +815,13 @@ export type ReleaseDetailResponse = z.infer<typeof ReleaseDetailResponseSchema>;
 export type UpdateReleaseBody = z.infer<typeof UpdateReleaseBodySchema>;
 export type ReleasePatchResponse = z.infer<typeof ReleasePatchResponseSchema>;
 export type ReleaseDeleteResponse = z.infer<typeof ReleaseDeleteResponseSchema>;
+export type ReleaseBatchDeleteBody = z.infer<typeof ReleaseBatchDeleteBodySchema>;
+export type ReleaseBatchDeleteResponse = z.infer<typeof ReleaseBatchDeleteResponseSchema>;
 export type ReleaseSuppressResponse = z.infer<typeof ReleaseSuppressResponseSchema>;
 export type ReleaseUnsuppressResponse = z.infer<typeof ReleaseUnsuppressResponseSchema>;
 export type ReleaseSuppressBody = z.infer<typeof ReleaseSuppressBodySchema>;
+export type ReleaseBatchSuppressBody = z.infer<typeof ReleaseBatchSuppressBodySchema>;
+export type ReleaseBatchSuppressResponse = z.infer<typeof ReleaseBatchSuppressResponseSchema>;
 export type ReleaseStreamMessage = z.infer<typeof ReleaseStreamMessageSchema>;
 
 export type ReleaseSummaryItem = z.infer<typeof ReleaseSummaryItemSchema>;

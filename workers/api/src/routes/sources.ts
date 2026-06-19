@@ -58,8 +58,12 @@ import {
   ReleaseDetailResponseSchema,
   ReleasePatchResponseSchema,
   ReleaseDeleteResponseSchema,
+  ReleaseBatchDeleteBodySchema,
+  ReleaseBatchDeleteResponseSchema,
   ReleaseSuppressBodySchema,
   ReleaseSuppressResponseSchema,
+  ReleaseBatchSuppressBodySchema,
+  ReleaseBatchSuppressResponseSchema,
   ReleaseUnsuppressResponseSchema,
   UpdateReleaseBodySchema,
   SourceActivityResponseSchema,
@@ -3229,6 +3233,106 @@ sourceRoutes.post("/sources/:slug/releases", postReleaseRoute, async (c) => {
     );
   }
 });
+
+// ── Release batch CRUD ──
+
+async function sumReleaseIdChunks(
+  ids: string[],
+  run: (chunk: string[]) => Promise<number>,
+): Promise<number> {
+  let total = 0;
+  for (let i = 0; i < ids.length; i += RELEASES_ID_IN_CHUNK_SIZE) {
+    const chunk = ids.slice(i, i + RELEASES_ID_IN_CHUNK_SIZE);
+    // oxlint-disable-next-line no-await-in-loop -- D1 bind-param chunked statement
+    total += await run(chunk);
+  }
+  return total;
+}
+
+sourceRoutes.delete(
+  "/releases/batch",
+  describeRoute({
+    hide: hideInProduction,
+    tags: ["Releases"],
+    summary: "Delete releases in bulk",
+    description:
+      "Hard-deletes the listed release rows in chunked, idempotent statements. Unknown ids are skipped — the response counts only rows actually removed. Prefer `POST /v1/releases/batch-suppress` to hide releases without losing the row.\n\nAuth inherited from `publicReadAuthMiddleware`'s non-SAFE_METHODS branch — Bearer token required.",
+    security: [{ bearerAuth: [] }],
+    responses: {
+      200: {
+        description: "Batch delete result",
+        content: { "application/json": { schema: resolver(ReleaseBatchDeleteResponseSchema) } },
+      },
+      400: {
+        description: "Malformed JSON body or empty `releaseIds`",
+        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      },
+    },
+  }),
+  validateJson(ReleaseBatchDeleteBodySchema),
+  async (c) => {
+    const db = createDb(c.env.DB);
+    const { releaseIds } = c.req.valid("json");
+    const ids = [...new Set(releaseIds)];
+
+    const deleted = await sumReleaseIdChunks(ids, async (chunk) => {
+      const rows = await db
+        .delete(releases)
+        .where(inArray(releases.id, chunk))
+        .returning({ id: releases.id });
+      return rows.length;
+    });
+
+    return c.json({ deleted });
+  },
+);
+
+sourceRoutes.post(
+  "/releases/batch-suppress",
+  describeRoute({
+    hide: hideInProduction,
+    tags: ["Releases"],
+    summary: "Suppress or unsuppress releases in bulk",
+    description:
+      "Sets `suppressed` on each listed release in chunked, idempotent statements. When `suppressed` is true the optional `reason` is stored in `suppressed_reason`; when false the reason is cleared. Unknown ids are skipped — the response counts only rows actually updated.\n\nAuth inherited from `publicReadAuthMiddleware`'s non-SAFE_METHODS branch — Bearer token required.",
+    security: [{ bearerAuth: [] }],
+    responses: {
+      200: {
+        description: "Batch suppress result",
+        content: { "application/json": { schema: resolver(ReleaseBatchSuppressResponseSchema) } },
+      },
+      400: {
+        description: "Malformed JSON body or empty `releaseIds`",
+        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      },
+    },
+  }),
+  validateJson(ReleaseBatchSuppressBodySchema),
+  async (c) => {
+    const db = createDb(c.env.DB);
+    const body = c.req.valid("json");
+    const ids = [...new Set(body.releaseIds)];
+    const updates = body.suppressed
+      ? { suppressed: true, suppressedReason: body.reason ?? null }
+      : { suppressed: false, suppressedReason: null };
+
+    const updated = await sumReleaseIdChunks(ids, async (chunk) => {
+      const rows = await db
+        .update(releases)
+        .set(updates)
+        .where(inArray(releases.id, chunk))
+        .returning({ id: releases.id });
+      return rows.length;
+    });
+    if (updated > 0) {
+      c.executionCtx.waitUntil(
+        invalidateLatestCache(c.env, { nReleases: updated, cause: "batch-suppress" }),
+      );
+    }
+
+    return c.json({ updated });
+  },
+);
 
 // ── Release CRUD ──
 
