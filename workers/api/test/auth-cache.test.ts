@@ -30,4 +30,11 @@ describe("createAuth memoization", () => {
     const second = await createAuth(testEnv, undefined, { sendEmail: () => {} });
     expect(second).not.toBe(first);
   });
+
+  it("builds separate instances when the DB binding object changes", async () => {
+    const base = testEnv as Record<string, unknown>;
+    const first = await createAuth({ ...base, DB: {} } as never);
+    const second = await createAuth({ ...base, DB: {} } as never);
+    expect(second).not.toBe(first);
+  });
 });

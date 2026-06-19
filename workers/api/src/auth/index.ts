@@ -817,9 +817,24 @@ function secretBindingCacheKey(binding: SecretLike | undefined): string {
   return typeof binding === "string" ? binding : "store";
 }
 
+const dbObjectIds = new WeakMap<object, number>();
+let nextDbObjectId = 0;
+
+/** Stable per binding object — prod D1 is one object per isolate; tests get a fresh drizzle per createTestDb(). */
+function dbBindingCacheKey(db: unknown): string {
+  if (db == null || typeof db !== "object") return "";
+  let id = dbObjectIds.get(db);
+  if (id === undefined) {
+    id = ++nextDbObjectId;
+    dbObjectIds.set(db, id);
+  }
+  return String(id);
+}
+
 async function authCacheKey(env: Bindings): Promise<string> {
   const userApiKeysOn = await flag(env.FLAGS, env.USER_API_KEYS_ENABLED, FLAGS.userApiKeysEnabled);
   return JSON.stringify({
+    DB: dbBindingCacheKey(env.DB),
     ENVIRONMENT: env.ENVIRONMENT ?? "",
     AUTH_RATE_LIMIT_DISABLED: env.AUTH_RATE_LIMIT_DISABLED ?? "",
     USER_API_KEYS_ENABLED: userApiKeysOn,
