@@ -165,10 +165,7 @@ export type Env = {
     WEBHOOK_HMAC_MASTER?: SecretBinding;
     WEB_BOT_AUTH_PRIVATE_KEY?: SecretBinding;
     WEB_BOT_AUTH_ENABLED?: string;
-    // Cloudflare credentials for querying Analytics Engine (webhook deliveries endpoint).
-    // Absent → GET /v1/webhooks/:id/deliveries returns 501.
-    CF_API_TOKEN?: SecretBinding;
-    CF_ACCOUNT_ID?: string;
+    // Webhook delivery history queries Analytics Engine via CLOUDFLARE_* (see shared.ts).
     // Per-IP rate limiter for unauthenticated public reads (see middleware/rate-limit.ts).
     RATE_LIMIT_ENABLED?: string;
     PUBLIC_RATE_LIMITER?: { limit(options: { key: string }): Promise<{ success: boolean }> };

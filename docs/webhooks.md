@@ -6,7 +6,7 @@ Receive `release.created` events as HTTPS POSTs to your endpoint, signed with HM
 
 **Self-serve** (your account — no admin key):
 
-- **Web:** [Account → Notifications](https://releases.sh/account/notifications) — Webhooks card (follows-scoped or org-scoped).
+- **Web:** [Account → Notifications](https://releases.sh/account/notifications) — Webhooks card (follows-scoped or org-scoped, delivery activity per subscription).
 - **CLI:** after `releases login`, `releases webhook add --scope follows --url https://your.app/hook` or `releases webhook add --org acme --url …`.
 - **API:** `POST /v1/me/webhooks` — see [Self-serve subscriptions](#self-serve-subscriptions).
 

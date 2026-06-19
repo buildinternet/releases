@@ -10,6 +10,7 @@ const {
   deleteWebhook,
   rotateWebhookSecret,
   testWebhook,
+  listWebhookDeliveries,
 } = await import("./webhooks.js");
 
 type Call = { url: string; init?: RequestInit };
@@ -81,5 +82,18 @@ describe("webhooks client", () => {
     const out = await testWebhook("whk_6");
     expect(out.eventId).toBe("evt_1");
     expect(calls[0]!.url).toContain("/test");
+  });
+
+  it("lists deliveries and maps 501 to null", async () => {
+    mockFetch({ error: "deliveries_unavailable" }, false, 501);
+    expect(await listWebhookDeliveries("whk_7")).toBeNull();
+    expect(calls[0]!.url).toContain("/deliveries");
+  });
+
+  it("lists deliveries from AE payload", async () => {
+    mockFetch({ data: [{ event_id: "evt_1", outcome: "success" }] });
+    const rows = await listWebhookDeliveries("whk_8", { limit: 10 });
+    expect(rows?.[0]?.event_id).toBe("evt_1");
+    expect(calls[0]!.url).toContain("limit=10");
   });
 });

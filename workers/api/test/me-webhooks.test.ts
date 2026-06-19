@@ -448,3 +448,73 @@ describe("/v1/me/webhooks", () => {
     expect(((await list.json()) as { subscriptions: unknown[] }).subscriptions).toHaveLength(0);
   });
 });
+
+describe("GET /v1/me/webhooks/:id/deliveries", () => {
+  it("returns 501 when Cloudflare Analytics creds are absent", async () => {
+    const { a, env } = app();
+    const create = await a.request(
+      "/me/webhooks",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orgSlug: "acme", url: PUBLIC_HOOK_URL }),
+      },
+      env,
+    );
+    const { id } = (await create.json()) as { id: string };
+
+    const res = await a.request(`/me/webhooks/${id}/deliveries`, {}, env);
+    expect(res.status).toBe(501);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toBe("deliveries_unavailable");
+  });
+
+  it("returns delivery rows when Analytics Engine responds", async () => {
+    const { a, env } = app();
+    const create = await a.request(
+      "/me/webhooks",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orgSlug: "acme", url: PUBLIC_HOOK_URL }),
+      },
+      env,
+    );
+    const { id } = (await create.json()) as { id: string };
+
+    const origFetch = globalThis.fetch;
+    globalThis.fetch = (async () =>
+      new Response(
+        JSON.stringify({
+          data: [
+            {
+              timestamp: "2026-06-19 12:00:00",
+              event_id: "evt_test",
+              outcome: "success",
+              http_status: 200,
+              latency_ms: 42,
+              attempt: 1,
+            },
+          ],
+        }),
+        { status: 200 },
+      )) as unknown as typeof fetch;
+
+    try {
+      const res = await a.request(
+        `/me/webhooks/${id}/deliveries`,
+        {},
+        {
+          ...env,
+          CLOUDFLARE_API_TOKEN: { get: async () => "token" },
+          CLOUDFLARE_ACCOUNT_ID: { get: async () => "acct" },
+        },
+      );
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { data: Array<{ event_id: string }> };
+      expect(body.data[0]?.event_id).toBe("evt_test");
+    } finally {
+      globalThis.fetch = origFetch;
+    }
+  });
+});

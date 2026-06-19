@@ -14,14 +14,13 @@ import {
 } from "../webhooks/queries.js";
 import { newEventId } from "../events/types.js";
 import type { DeliveryMessage } from "../webhooks/types.js";
-import { getSecret } from "@releases/lib/secrets";
+
 import type { Env } from "../index.js";
 import {
   buildWebhookPatchUpdates,
-  fetchWebhookDeliveries,
+  queryWebhookDeliveries,
   requireMasterKey,
   signingKeyFor,
-  SUBSCRIPTION_ID_RE,
 } from "../webhooks/shared.js";
 import { assertPublicWebhookTarget } from "../webhooks/url-safety.js";
 
@@ -193,31 +192,10 @@ webhooksRoutes.post("/webhooks/:id/test", async (c) => {
 });
 
 webhooksRoutes.get("/webhooks/:id/deliveries", async (c) => {
-  const cfApiToken = (await getSecret(c.env.CF_API_TOKEN)) ?? undefined;
-  const cfAccountId: string | undefined = c.env.CF_ACCOUNT_ID;
-
-  if (!cfApiToken || !cfAccountId) {
-    return c.json(
-      { error: "deliveries_unavailable", message: "set CF_API_TOKEN + CF_ACCOUNT_ID to enable" },
-      501,
-    );
-  }
-
   const id = c.req.param("id");
-  if (!SUBSCRIPTION_ID_RE.test(id)) {
-    return c.json({ error: "bad_request", message: "invalid subscription id format" }, 400);
-  }
-
-  const limitParam = parseInt(c.req.query("limit") ?? "20", 10);
-  const res = await fetchWebhookDeliveries(cfApiToken, cfAccountId, id, {
-    failedOnly: c.req.query("failed") === "true",
-    limit: isNaN(limitParam) ? 20 : limitParam,
+  const result = await queryWebhookDeliveries(c.env, id, {
+    failed: c.req.query("failed"),
+    limit: c.req.query("limit"),
   });
-
-  if (!res.ok) {
-    return c.json({ error: "ae_query_failed", message: `AE query returned ${res.status}` }, 502);
-  }
-
-  const data = await res.json();
-  return c.json(data);
+  return c.json(result.body, result.status as 200 | 400 | 501 | 502);
 });

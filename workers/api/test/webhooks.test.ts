@@ -606,7 +606,7 @@ describe("POST /v1/webhooks/:id/test", () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe("GET /v1/webhooks/:id/deliveries", () => {
-  it("returns 501 when CF_API_TOKEN is absent", async () => {
+  it("returns 501 when CLOUDFLARE_API_TOKEN is absent", async () => {
     const fetch = makeApp();
     const res = await fetch(new Request("https://x.test/v1/webhooks/whk_test0001/deliveries"));
     expect(res.status).toBe(501);
@@ -615,13 +615,13 @@ describe("GET /v1/webhooks/:id/deliveries", () => {
   });
 
   it("returns 400 when id is malformed (does not match whk_ pattern)", async () => {
-    // Build an app with CF_API_TOKEN and CF_ACCOUNT_ID set
+    // Build an app with CLOUDFLARE_* creds set (AE query still needs a mocked fetch).
     const fakeEnv: Record<string, unknown> = {
       DB: {},
       WEBHOOK_HMAC_MASTER: { get: async () => TEST_MASTER_KEY },
       WEBHOOK_DELIVERY_QUEUE: { send: async () => {} },
-      CF_API_TOKEN: { get: async () => "fake-token" },
-      CF_ACCOUNT_ID: "fake-account",
+      CLOUDFLARE_API_TOKEN: { get: async () => "fake-token" },
+      CLOUDFLARE_ACCOUNT_ID: { get: async () => "fake-account" },
     };
     const { Hono: H } = await import("hono");
     const app = new H();
