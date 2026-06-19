@@ -2,7 +2,12 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { Hono } from "hono";
 import { createTestDb, type TestDatabase } from "../../../tests/db-helper.js";
 import { eq } from "drizzle-orm";
-import { organizations, sources, webhookSubscriptions } from "@buildinternet/releases-core/schema";
+import {
+  organizations,
+  products,
+  sources,
+  webhookSubscriptions,
+} from "@buildinternet/releases-core/schema";
 import { user } from "../src/db/schema-auth.js";
 
 import { meWebhookHandlers } from "../src/routes/me-webhooks.js";
@@ -85,6 +90,34 @@ describe("/v1/me/webhooks", () => {
     expect(body.orgId).toBe("org_a");
     expect(body.orgSlug).toBe("acme");
     expect(body.signingKey).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it("POST with productSlug and releaseType stores filters", async () => {
+    await h.db.insert(products).values({
+      id: "prd_app",
+      name: "App",
+      slug: "app",
+      orgId: "org_a",
+    });
+    const { a, env } = app();
+    const res = await a.request(
+      "/me/webhooks",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          orgSlug: "acme",
+          productSlug: "app",
+          releaseType: "feature",
+          url: PUBLIC_HOOK_URL,
+        }),
+      },
+      env,
+    );
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as { productId: string; releaseType: string };
+    expect(body.productId).toBe("prd_app");
+    expect(body.releaseType).toBe("feature");
   });
 
   it("POST with sourceSlug scopes to that source", async () => {

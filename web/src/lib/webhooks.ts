@@ -10,6 +10,7 @@ import type {
   TestUserWebhookResponse,
   UserWebhookListItem,
   UserWebhookListResponse,
+  UserWebhookReleaseTypeFilter,
   UserWebhookScope,
 } from "@buildinternet/releases-api-types";
 import { apiBase, errorMessage } from "./user-api";
@@ -32,6 +33,9 @@ export async function createWebhook(input: {
   url: string;
   scope?: UserWebhookScope;
   orgSlug?: string;
+  productSlug?: string;
+  sourceSlug?: string;
+  releaseType?: UserWebhookReleaseTypeFilter;
   description?: string;
 }): Promise<CreateUserWebhookResponse> {
   const res = await fetch(`${apiBase()}/v1/me/webhooks`, {

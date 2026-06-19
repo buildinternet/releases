@@ -1430,6 +1430,7 @@ export async function ingestRawReleases(
       content: releases.content,
       contentChars: releases.contentChars,
       contentTokens: releases.contentTokens,
+      type: releases.type,
       suppressed: releases.suppressed,
     });
     inserted += result.length;

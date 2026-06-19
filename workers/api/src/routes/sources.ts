@@ -1002,6 +1002,7 @@ const postReleasesBatchHandler = async (c: import("hono").Context<Env>) => {
           content: releases.content,
           contentChars: releases.contentChars,
           contentTokens: releases.contentTokens,
+          type: releases.type,
         });
       inserted += rows.length;
       for (const r of rows) {

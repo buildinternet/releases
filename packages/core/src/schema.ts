@@ -1030,6 +1030,10 @@ export const webhookSubscriptions = sqliteTable(
     orgId: text("org_id").references(() => organizations.id, { onDelete: "cascade" }),
     url: text("url").notNull(),
     sourceId: text("source_id").references(() => sources.id, { onDelete: "cascade" }),
+    /** Org-scoped filter: deliver only releases whose source belongs to this product. */
+    productId: text("product_id").references(() => products.id, { onDelete: "cascade" }),
+    /** Optional filter: deliver only releases of this taxonomy type. */
+    releaseType: text("release_type", { enum: RELEASE_TYPES }),
     enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
     description: text("description"),
     secretVersion: integer("secret_version").notNull().default(1),
@@ -1047,6 +1051,7 @@ export const webhookSubscriptions = sqliteTable(
   (table) => [
     index("idx_webhook_subs_org_enabled").on(table.orgId, table.enabled),
     index("idx_webhook_subs_org_source").on(table.orgId, table.sourceId),
+    index("idx_webhook_subs_org_product").on(table.orgId, table.productId),
     index("idx_webhook_subs_user").on(table.userId),
     index("idx_webhook_subs_scope_enabled").on(table.scope, table.enabled),
   ],

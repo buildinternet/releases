@@ -128,7 +128,7 @@ Signed-in users manage webhooks at `/v1/me/webhooks` (session, `relu_` user key,
 
 ### Org-scoped (default)
 
-`POST /v1/me/webhooks` with `orgId` or `orgSlug` and an optional `sourceId` / `sourceSlug` filter. Up to **10** org-scoped subscriptions per account.
+`POST /v1/me/webhooks` with `orgId` or `orgSlug` and optional filters: `sourceId` / `sourceSlug`, `productId` / `productSlug`, and `releaseType` (`feature` | `rollup`). Non-null filters are ANDed. Up to **10** org-scoped subscriptions per account. Follows-scoped subs accept `releaseType` only (org/product/source filters stay on the follow graph).
 
 ### Follows-scoped
 

@@ -1,7 +1,8 @@
 import type { ReleaseEvent } from "../events/types.js";
 import type { WebhookSubscription } from "@buildinternet/releases-core/schema";
 import { expand } from "./expand.js";
-import { expandFollows, type EventOwnerWithProduct } from "./expand-follows.js";
+import { expandFollows } from "./expand-follows.js";
+import type { WebhookEventOwner } from "./subscription-match.js";
 import type { UserFollowTargets } from "./follows-match.js";
 import type { DeliveryMessage } from "./types.js";
 import { logEvent } from "@releases/lib/log-event";
@@ -9,7 +10,7 @@ import { logEvent } from "@releases/lib/log-event";
 export interface ExpandAndEnqueueArgs {
   events: ReleaseEvent[];
   /** Maps release.id to its owning org/source/product. */
-  eventOwners: Map<string, EventOwnerWithProduct>;
+  eventOwners: Map<string, WebhookEventOwner>;
   loadOrgSubscriptions: (orgIds: string[]) => Promise<WebhookSubscription[]>;
   loadFollowsSubscriptions?: () => Promise<WebhookSubscription[]>;
   loadFollowTargetsForUsers?: (userIds: string[]) => Promise<Map<string, UserFollowTargets>>;
@@ -40,11 +41,7 @@ export async function expandAndEnqueue(args: ExpandAndEnqueueArgs): Promise<void
       const orgSubs = await args.loadOrgSubscriptions(orgIds);
       if (orgSubs.length > 0) {
         messages.push(
-          ...expand(args.events, orgSubs, (e) => {
-            const owner = args.eventOwners.get(e.release.id);
-            if (!owner) return { orgId: "", sourceId: "" };
-            return { orgId: owner.orgId, sourceId: owner.sourceId };
-          }),
+          ...expand(args.events, orgSubs, (e) => args.eventOwners.get(e.release.id) ?? null),
         );
       }
     }

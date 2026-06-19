@@ -34,6 +34,8 @@ function followsSub(userId: string): WebhookSubscription {
     orgId: null,
     url: "https://1.1.1.1/hook",
     sourceId: null,
+    productId: null,
+    releaseType: null,
     enabled: true,
     description: null,
     secretVersion: 1,
@@ -50,7 +52,12 @@ function followsSub(userId: string): WebhookSubscription {
 describe("expandFollows", () => {
   it("delivers when the owner's org is followed", () => {
     const events = [evt("rel_1")];
-    const owners = new Map([["rel_1", { orgId: "org_a", sourceId: "src_a", productId: "prd_x" }]]);
+    const owners = new Map([
+      [
+        "rel_1",
+        { orgId: "org_a", sourceId: "src_a", productId: "prd_x", releaseType: "feature" as const },
+      ],
+    ]);
     const follows = new Map([
       ["u1", { orgIds: new Set(["org_a"]), productIds: new Set<string>() }],
     ]);
@@ -66,7 +73,12 @@ describe("expandFollows", () => {
 
   it("skips when follows do not match", () => {
     const events = [evt("rel_1")];
-    const owners = new Map([["rel_1", { orgId: "org_a", sourceId: "src_a", productId: "prd_x" }]]);
+    const owners = new Map([
+      [
+        "rel_1",
+        { orgId: "org_a", sourceId: "src_a", productId: "prd_x", releaseType: "feature" as const },
+      ],
+    ]);
     const follows = new Map([["u1", { orgIds: new Set<string>(), productIds: new Set<string>() }]]);
     const out = expandFollows(
       events,
