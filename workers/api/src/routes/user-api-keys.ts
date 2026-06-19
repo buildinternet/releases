@@ -18,7 +18,7 @@ import {
 } from "../auth/api-key-limit.js";
 import { makeAuthAudit } from "../auth/audit.js";
 import { type ApiScope } from "@buildinternet/releases-core/api-token";
-import { requireSession, execWaitUntil } from "../middleware/auth.js";
+import { requireSession } from "../middleware/auth.js";
 import type { Env } from "../index.js";
 
 /** Parse a JSON body, or null if it isn't valid JSON. */
@@ -101,7 +101,7 @@ userApiKeyHandlers.post("/api-keys", async (c) => {
     return c.json({ error: "api_key_limit", message: API_KEY_LIMIT_MESSAGE }, 409);
   }
 
-  const auth = await createAuth(c.env, execWaitUntil(c));
+  const auth = await createAuth(c.env);
   // apiKey() is flag-gated, so betterAuth's inferred api type omits createApiKey;
   // assert its shape with a precise (non-any) structural cast.
   const api = auth.api as typeof auth.api & {

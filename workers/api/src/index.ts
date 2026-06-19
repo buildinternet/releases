@@ -8,7 +8,12 @@ import {
 } from "./middleware/auth.js";
 import type { AuthContext, AuthSessionContext } from "./middleware/auth.js";
 import type { JWTVerifyGetKey } from "@releases/lib/oauth-jwt";
-import { createAuth, authCorsMiddleware, type BetterAuthInstance } from "./auth/index.js";
+import {
+  createAuth,
+  authCorsMiddleware,
+  runAuthWithWaitUntil,
+  type BetterAuthInstance,
+} from "./auth/index.js";
 import {
   oauthSelfServiceGuard,
   OAUTH_SELF_SERVICE_WRITE_PATHS,
@@ -535,22 +540,22 @@ for (const p of OAUTH_SELF_SERVICE_WRITE_PATHS) {
 
 // ── Better Auth ──
 // Human user sessions (email/password now; Google/GitHub when their secrets are
-// supplied). Served at /api/auth/* on this worker (api.releases.sh). The auth
-// instance is built per-request from env bindings — see src/auth/index.ts.
+// supplied). Served at /api/auth/* on this worker (api.releases.sh). createAuth is
+// memoized per isolate; the handler wraps in runAuthWithWaitUntil for background
+// work. See src/auth/index.ts.
 // Runs after the "*" middleware above, so the staging gate + noindex apply.
 app.on(["POST", "GET"], "/api/auth/*", async (c) => {
-  // Pass the execution context's waitUntil so Better Auth's background work — and
-  // our fire-and-forget verification/reset email sends — survive past the response
-  // on Workers. `c.executionCtx` throws when absent (e.g. tests), so guard it;
-  // createAuth treats an undefined waitUntil as "run inline / use the default".
+  // Scope executionCtx.waitUntil via AsyncLocalStorage for this handler only.
+  // `c.executionCtx` throws when absent (e.g. tests) — background work then
+  // falls back to Better Auth's default floating behavior.
   let waitUntil: ((promise: Promise<unknown>) => void) | undefined;
   try {
     waitUntil = c.executionCtx.waitUntil.bind(c.executionCtx);
   } catch {
     waitUntil = undefined;
   }
-  const auth = await createAuth(c.env, waitUntil);
-  const res = await auth.handler(c.req.raw);
+  const auth = await createAuth(c.env);
+  const res = await runAuthWithWaitUntil(waitUntil, () => auth.handler(c.req.raw));
 
   // Audit failed credential sign-ins. This is the ONLY place a rate-limit (429)
   // rejection is observable — it short-circuits in Better Auth's router before any
