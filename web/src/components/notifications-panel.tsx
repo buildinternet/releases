@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useSession } from "@/lib/auth-client";
 import { DigestCard } from "@/app/following/digest-card";
 import { FeedTokenCard } from "@/app/following/feed-token-card";
+import { WebhooksPanel } from "@/components/webhooks-panel";
 
 export function NotificationsPanel() {
   const { data: sessionData, isPending } = useSession();
@@ -29,6 +30,7 @@ export function NotificationsPanel() {
     <div className="space-y-4">
       <DigestCard />
       <FeedTokenCard />
+      <WebhooksPanel />
     </div>
   );
 }
