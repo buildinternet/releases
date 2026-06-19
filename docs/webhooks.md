@@ -149,6 +149,24 @@ Use a publicly reachable HTTPS endpoint on the public internet.
 
 `POST /v1/me/webhooks/:id/test` enqueues a real signed delivery. To prevent abuse, self-serve test sends are capped at **5 per minute per subscription** and **20 per minute per account**. Over-limit requests return `429` with `Retry-After: 60`.
 
+### Delivery activity
+
+Each delivery attempt is logged to Analytics Engine. Use it to debug a failing endpoint after a test or a real `release.created`.
+
+**Surfaces:**
+
+- **Web:** Account → Notifications → Webhooks → **Activity** on a subscription (last 15 attempts).
+- **CLI:** `releases webhook deliveries <id>` (or the last-10 block in `releases webhook show <id>`). Admin: `releases admin webhook deliveries <id>`.
+- **API:** `GET /v1/me/webhooks/:id/deliveries` (self-serve) or `GET /v1/webhooks/:id/deliveries` (admin). Query params: `limit` (1–100, default 20), `failed=true` to omit successes.
+
+Each row includes timestamp, event id, outcome (`success` | `retry` | `perm_fail` | `dlq` | `auto_disabled` | `skipped`), HTTP status, latency, attempt number, and a truncated error message on failure.
+
+**Aggregate health vs. history:** subscription rows and list/detail responses also carry `deliveryHealth`, `lastSuccessAt`, and `consecutiveFailures` — a one-line summary for dashboards. The activity log is per-attempt detail; use it when health says "failing" but you need the status code or error body.
+
+**Indexing lag:** Analytics Engine is eventually consistent. After `POST …/test`, wait **~20–30 seconds** before expecting rows in Activity, `deliveries`, or the `show` last-10 table. Toggle Activity off/on in the account UI to reload. An empty table right after a successful enqueue is normal — retry once.
+
+**Retention:** queryable history is retained for **~90 days** in Analytics Engine. Longer retention would need a separate export path ([#1508](https://github.com/buildinternet/releases/issues/1508)).
+
 ## Retry behavior
 
 - `2xx` → ack, no retry.
