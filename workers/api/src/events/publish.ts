@@ -1,7 +1,11 @@
 import { getReleaseHub } from "../utils.js";
 import { buildReleaseEventPayloads, type InsertedReleaseRow } from "./build-event.js";
 import { expandAndEnqueue } from "../webhooks/expand-and-enqueue.js";
-import { matchWebhookSubscriptions } from "../webhooks/queries.js";
+import {
+  loadFollowTargetsForUsers,
+  matchFollowsScopedWebhookSubscriptions,
+  matchWebhookSubscriptions,
+} from "../webhooks/queries.js";
 import { createDb } from "../db.js";
 import { newLocalEventId } from "@buildinternet/releases-core/id";
 import type { ReleaseEvent } from "./types.js";
@@ -96,10 +100,18 @@ export interface PublishEnv {
  */
 export async function publishReleaseEvents(env: PublishEnv, ctx: PublishContext): Promise<void> {
   if (ctx.inserted.length === 0) return;
-  const eventOwners = new Map<string, { orgId: string; sourceId: string }>();
+  const eventOwners = new Map<
+    string,
+    { orgId: string; sourceId: string; productId: string | null }
+  >();
   if (ctx.src.orgId) {
+    const productId = ctx.src.productId ?? null;
     for (const row of ctx.inserted) {
-      eventOwners.set(row.id, { orgId: ctx.src.orgId, sourceId: ctx.src.sourceId });
+      eventOwners.set(row.id, {
+        orgId: ctx.src.orgId,
+        sourceId: ctx.src.sourceId,
+        productId,
+      });
     }
   }
 
@@ -160,7 +172,10 @@ export async function publishReleaseEvents(env: PublishEnv, ctx: PublishContext)
       ? expandAndEnqueue({
           events,
           eventOwners,
-          loadSubscriptions: (orgIds) => matchWebhookSubscriptions(createDb(env.DB!), orgIds),
+          loadOrgSubscriptions: (orgIds) => matchWebhookSubscriptions(createDb(env.DB!), orgIds),
+          loadFollowsSubscriptions: () => matchFollowsScopedWebhookSubscriptions(createDb(env.DB!)),
+          loadFollowTargetsForUsers: (userIds) =>
+            loadFollowTargetsForUsers(createDb(env.DB!), userIds),
           queue: env.WEBHOOK_DELIVERY_QUEUE,
         })
       : Promise.resolve();

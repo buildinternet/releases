@@ -45,6 +45,7 @@ and are refused (401); a presented-but-unresolvable Bearer credential gets a 401
 - `POST /v1/me/follows { targetType, targetId }` — add a follow (idempotent; `targetType` is `"org"` or `"product"`).
 - `DELETE /v1/me/follows/:targetType/:targetId` — remove a follow (idempotent).
 - `GET /v1/me/feed` — paginated release feed across all followed entities; an org follow implicitly includes all of that org's products (org follow = its products too). Page/offset-paginated (`?page=&limit=`, the standard `ListResponse` envelope), newest-first.
+- `/v1/me/webhooks` — self-serve outbound webhook subscriptions (`GET/POST`, per-id `GET/PATCH/DELETE`, `rotate-secret`, `test`, `deliveries`). Default `scope: "org"` (requires `orgId`/`orgSlug`, optional source filter, max 10). `scope: "follows"` delivers releases matching the caller's `user_follows` graph (max 1, separate from the org cap). Same principal gate as follows. Subscriber contract: [docs/webhooks.md](../webhooks.md).
 
 ## Entity resolution: IDs over slugs
 

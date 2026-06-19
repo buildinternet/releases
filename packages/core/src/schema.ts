@@ -1015,15 +1015,19 @@ export const sourceChangelogChunks = sqliteTable(
 export type SourceChangelogChunk = typeof sourceChangelogChunks.$inferSelect;
 export type NewSourceChangelogChunk = typeof sourceChangelogChunks.$inferInsert;
 
+export const WEBHOOK_SCOPES = ["org", "follows"] as const;
+export type WebhookScope = (typeof WEBHOOK_SCOPES)[number];
+
 export const webhookSubscriptions = sqliteTable(
   "webhook_subscriptions",
   {
     id: text("id").primaryKey().$defaultFn(newWebhookSubscriptionId),
     /** Set for self-serve `/v1/me/webhooks` rows; null for admin-provisioned subs. */
     userId: text("user_id"),
-    orgId: text("org_id")
-      .notNull()
-      .references(() => organizations.id, { onDelete: "cascade" }),
+    /** `org` = single-org filter; `follows` = deliver releases matching user_follows. */
+    scope: text("scope", { enum: WEBHOOK_SCOPES }).notNull().default("org"),
+    /** Null when `scope = follows`. */
+    orgId: text("org_id").references(() => organizations.id, { onDelete: "cascade" }),
     url: text("url").notNull(),
     sourceId: text("source_id").references(() => sources.id, { onDelete: "cascade" }),
     enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
@@ -1044,6 +1048,7 @@ export const webhookSubscriptions = sqliteTable(
     index("idx_webhook_subs_org_enabled").on(table.orgId, table.enabled),
     index("idx_webhook_subs_org_source").on(table.orgId, table.sourceId),
     index("idx_webhook_subs_user").on(table.userId),
+    index("idx_webhook_subs_scope_enabled").on(table.scope, table.enabled),
   ],
 );
 

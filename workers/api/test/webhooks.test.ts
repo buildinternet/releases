@@ -3,7 +3,8 @@ import { mockModule } from "../../../tests/mock-module.js";
 
 type FakeSub = {
   id: string;
-  orgId: string;
+  scope?: "org" | "follows";
+  orgId: string | null;
   url: string;
   sourceId: string | null;
   description: string | null;
@@ -84,7 +85,12 @@ await mockModule(
       return sub.secretVersion;
     },
     matchWebhookSubscriptions: async (_db: unknown, orgIds: string[]) =>
-      orgIds.length === 0 ? [] : store.filter((s) => s.enabled && orgIds.includes(s.orgId)),
+      orgIds.length === 0
+        ? []
+        : store.filter((s) => s.enabled && s.orgId && orgIds.includes(s.orgId)),
+    matchFollowsScopedWebhookSubscriptions: async () =>
+      store.filter((s) => s.enabled && (s as { scope?: string }).scope === "follows"),
+    loadFollowTargetsForUsers: async () => new Map(),
   }),
   import.meta.url,
 );

@@ -30,6 +30,8 @@ function evt(
 function sub(o: Partial<WebhookSubscription>): WebhookSubscription {
   return {
     id: "whk_x",
+    scope: "org",
+    userId: null,
     orgId: "org_a",
     url: "https://hook.example/u",
     sourceId: null,
@@ -40,6 +42,7 @@ function sub(o: Partial<WebhookSubscription>): WebhookSubscription {
     lastSuccessAt: null,
     lastErrorAt: null,
     lastErrorMsg: null,
+    failureStreakStartedAt: null,
     consecutiveFailures: 0,
     disabledReason: null,
     ...o,

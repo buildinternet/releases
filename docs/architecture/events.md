@@ -89,8 +89,10 @@ Per-subscription HTTPS POST consumer. The publisher in
 `workers/api/src/events/publish.ts` calls `expandAndEnqueue` alongside
 `ReleaseHub.publish`; the consumer Worker drains `webhook-delivery`,
 signs payloads, retries on transient failures, and DLQs on retry
-exhaustion. See [docs/webhooks.md](../webhooks.md) for the public
-subscriber contract.
+exhaustion. Fan-out matches org-scoped subscriptions by `(orgId, sourceId)`
+and follows-scoped self-serve subscriptions by the owner's live
+`user_follows` graph (same predicate as `/v1/me/feed`). See
+[docs/webhooks.md](../webhooks.md) for the public subscriber contract.
 
 ### KV cache invalidation (`invalidateLatestCache`)
 

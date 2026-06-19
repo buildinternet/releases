@@ -8,6 +8,7 @@ import {
 import type { D1Db } from "../db.js";
 
 export const MAX_USER_WEBHOOK_SUBSCRIPTIONS = 10;
+export const MAX_USER_FOLLOWS_WEBHOOK_SUBSCRIPTIONS = 1;
 
 const orgFields = {
   id: organizations.id,
@@ -59,13 +60,28 @@ export async function resolveWebhookSource(
   return { id: row.id, slug: row.slug, name: row.name };
 }
 
-export async function countUserWebhookSubscriptions(db: D1Db, userId: string): Promise<number> {
+export async function countUserOrgWebhookSubscriptions(db: D1Db, userId: string): Promise<number> {
   const row = await db
     .select({ n: sql<number>`count(*)` })
     .from(webhookSubscriptions)
-    .where(eq(webhookSubscriptions.userId, userId))
+    .where(and(eq(webhookSubscriptions.userId, userId), eq(webhookSubscriptions.scope, "org")))
     .get();
   return Number(row?.n ?? 0);
+}
+
+export async function getUserFollowsWebhookSubscription(
+  db: D1Db,
+  userId: string,
+): Promise<WebhookSubscription | null> {
+  return (
+    (await db
+      .select()
+      .from(webhookSubscriptions)
+      .where(
+        and(eq(webhookSubscriptions.userId, userId), eq(webhookSubscriptions.scope, "follows")),
+      )
+      .get()) ?? null
+  );
 }
 
 export async function getUserWebhookSubscription(
@@ -84,14 +100,15 @@ export async function getUserWebhookSubscription(
 
 export interface UserWebhookListItem {
   id: string;
+  scope: "org" | "follows";
   url: string;
   enabled: boolean;
   description: string | null;
   secretVersion: number;
   createdAt: string;
-  orgId: string;
-  orgSlug: string;
-  orgName: string;
+  orgId: string | null;
+  orgSlug: string | null;
+  orgName: string | null;
   sourceId: string | null;
   sourceSlug: string | null;
   sourceName: string | null;
@@ -130,21 +147,22 @@ export async function listUserWebhookSubscriptionsEnriched(
       sourceName: sources.name,
     })
     .from(webhookSubscriptions)
-    .innerJoin(organizations, eq(organizations.id, webhookSubscriptions.orgId))
+    .leftJoin(organizations, eq(organizations.id, webhookSubscriptions.orgId))
     .leftJoin(sources, eq(sources.id, webhookSubscriptions.sourceId))
     .where(and(...predicates));
 
   return rows.map(({ subscription: s, orgSlug, orgName, sourceSlug, sourceName }) => {
     const item = {
       id: s.id,
+      scope: s.scope,
       url: s.url,
       enabled: s.enabled,
       description: s.description,
       secretVersion: s.secretVersion,
       createdAt: s.createdAt,
       orgId: s.orgId,
-      orgSlug,
-      orgName,
+      orgSlug: orgSlug ?? null,
+      orgName: orgName ?? null,
       sourceId: s.sourceId,
       sourceSlug: sourceSlug ?? null,
       sourceName: sourceName ?? null,

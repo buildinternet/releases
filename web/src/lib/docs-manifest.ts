@@ -37,6 +37,7 @@ const ENTRIES: readonly Seed[] = [
   { slug: "cli/browsing", section: "CLI", label: "Browsing & Search" },
 
   { slug: "api/rest", section: "API", label: "REST API" },
+  { slug: "api/webhooks", section: "API", label: "Webhooks" },
   { slug: "api/mcp", section: "API", label: "MCP Server" },
 
   { slug: "privacy", section: "About", label: "Privacy & Telemetry" },

@@ -1,14 +1,18 @@
 import type { ReleaseEvent } from "../events/types.js";
 import type { WebhookSubscription } from "@buildinternet/releases-core/schema";
 import { expand } from "./expand.js";
+import { expandFollows, type EventOwnerWithProduct } from "./expand-follows.js";
+import type { UserFollowTargets } from "./follows-match.js";
 import type { DeliveryMessage } from "./types.js";
 import { logEvent } from "@releases/lib/log-event";
 
 export interface ExpandAndEnqueueArgs {
   events: ReleaseEvent[];
-  /** Maps release.id to its (orgId, sourceId). Built by the caller from the inserted rows. */
-  eventOwners: Map<string, { orgId: string; sourceId: string }>;
-  loadSubscriptions: (orgIds: string[]) => Promise<WebhookSubscription[]>;
+  /** Maps release.id to its owning org/source/product. */
+  eventOwners: Map<string, EventOwnerWithProduct>;
+  loadOrgSubscriptions: (orgIds: string[]) => Promise<WebhookSubscription[]>;
+  loadFollowsSubscriptions?: () => Promise<WebhookSubscription[]>;
+  loadFollowTargetsForUsers?: (userIds: string[]) => Promise<Map<string, UserFollowTargets>>;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   queue: { sendBatch: (messages: { body: DeliveryMessage }[]) => Promise<any> };
 }
@@ -29,14 +33,43 @@ export async function expandAndEnqueue(args: ExpandAndEnqueueArgs): Promise<void
           .filter((x): x is string => !!x),
       ),
     ];
-    if (orgIds.length === 0) return;
-    const subs = await args.loadSubscriptions(orgIds);
-    if (subs.length === 0) return;
-    const messages = expand(args.events, subs, (e) => {
-      const owner = args.eventOwners.get(e.release.id);
-      if (!owner) return { orgId: "", sourceId: "" };
-      return owner;
-    });
+
+    const messages: DeliveryMessage[] = [];
+
+    if (orgIds.length > 0) {
+      const orgSubs = await args.loadOrgSubscriptions(orgIds);
+      if (orgSubs.length > 0) {
+        messages.push(
+          ...expand(args.events, orgSubs, (e) => {
+            const owner = args.eventOwners.get(e.release.id);
+            if (!owner) return { orgId: "", sourceId: "" };
+            return { orgId: owner.orgId, sourceId: owner.sourceId };
+          }),
+        );
+      }
+    }
+
+    if (args.loadFollowsSubscriptions && args.loadFollowTargetsForUsers) {
+      const followsSubs = await args.loadFollowsSubscriptions();
+      if (followsSubs.length > 0) {
+        const userIds = [
+          ...new Set(followsSubs.map((s) => s.userId).filter((x): x is string => !!x)),
+        ];
+        const followsByUser = await args.loadFollowTargetsForUsers(userIds);
+        messages.push(
+          ...expandFollows(
+            args.events,
+            followsSubs,
+            (e) => {
+              const owner = args.eventOwners.get(e.release.id);
+              return owner ?? null;
+            },
+            followsByUser,
+          ),
+        );
+      }
+    }
+
     if (messages.length === 0) return;
     for (let i = 0; i < messages.length; i += QUEUE_BATCH_LIMIT) {
       const chunk = messages.slice(i, i + QUEUE_BATCH_LIMIT);

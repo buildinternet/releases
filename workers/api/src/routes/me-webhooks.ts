@@ -24,9 +24,11 @@ import {
 } from "../webhooks/test-rate-limit.js";
 import type { WebhookSubscription } from "@buildinternet/releases-core/schema";
 import {
-  countUserWebhookSubscriptions,
+  countUserOrgWebhookSubscriptions,
+  getUserFollowsWebhookSubscription,
   getUserWebhookSubscription,
   listUserWebhookSubscriptionsEnriched,
+  MAX_USER_FOLLOWS_WEBHOOK_SUBSCRIPTIONS,
   MAX_USER_WEBHOOK_SUBSCRIPTIONS,
   resolveWebhookOrg,
   resolveWebhookSource,
@@ -80,13 +82,64 @@ meWebhookHandlers.post("/me/webhooks", async (c) => {
   const urlError = await assertPublicWebhookTarget(url);
   if (urlError) return c.json({ error: "bad_request", message: urlError }, 400);
 
+  const scope = body.scope === "follows" ? "follows" : "org";
+  const db = getDb(c);
+  const description = typeof body.description === "string" ? body.description : null;
+
+  if (scope === "follows") {
+    const orgId = typeof body.orgId === "string" ? body.orgId : undefined;
+    const orgSlug = typeof body.orgSlug === "string" ? body.orgSlug : undefined;
+    const sourceId = typeof body.sourceId === "string" ? body.sourceId : undefined;
+    const sourceSlug = typeof body.sourceSlug === "string" ? body.sourceSlug : undefined;
+    if (orgId || orgSlug || sourceId || sourceSlug) {
+      return c.json(
+        {
+          error: "bad_request",
+          message:
+            "follows-scoped webhooks must not include orgId, orgSlug, sourceId, or sourceSlug",
+        },
+        400,
+      );
+    }
+
+    const existing = await getUserFollowsWebhookSubscription(db, session.user.id);
+    if (existing) {
+      return c.json(
+        {
+          error: "limit_exceeded",
+          message: `Maximum ${MAX_USER_FOLLOWS_WEBHOOK_SUBSCRIPTIONS} follows-scoped webhook per account`,
+        },
+        429,
+      );
+    }
+
+    const sub = await insertWebhookSubscription(db, {
+      scope: "follows",
+      orgId: null,
+      url,
+      sourceId: null,
+      description,
+      userId: session.user.id,
+    });
+
+    const signingKey = await signingKeyFor(masterKey, sub.id, sub.secretVersion);
+    return c.json(
+      {
+        ...jsonSubscription(sub),
+        orgSlug: null,
+        orgName: null,
+        signingKey,
+      },
+      201,
+    );
+  }
+
   const orgId = typeof body.orgId === "string" ? body.orgId : undefined;
   const orgSlug = typeof body.orgSlug === "string" ? body.orgSlug : undefined;
   if (!orgId && !orgSlug) {
     return c.json({ error: "bad_request", message: "orgId or orgSlug is required" }, 400);
   }
 
-  const db = getDb(c);
   const org = await resolveWebhookOrg(db, { orgId, orgSlug });
   if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
 
@@ -101,19 +154,19 @@ meWebhookHandlers.post("/me/webhooks", async (c) => {
     resolvedSourceId = source.id;
   }
 
-  const count = await countUserWebhookSubscriptions(db, session.user.id);
+  const count = await countUserOrgWebhookSubscriptions(db, session.user.id);
   if (count >= MAX_USER_WEBHOOK_SUBSCRIPTIONS) {
     return c.json(
       {
         error: "limit_exceeded",
-        message: `Maximum ${MAX_USER_WEBHOOK_SUBSCRIPTIONS} webhook subscriptions per account`,
+        message: `Maximum ${MAX_USER_WEBHOOK_SUBSCRIPTIONS} org-scoped webhook subscriptions per account`,
       },
       429,
     );
   }
 
-  const description = typeof body.description === "string" ? body.description : null;
   const sub = await insertWebhookSubscription(db, {
+    scope: "org",
     orgId: org.id,
     url,
     sourceId: resolvedSourceId,
