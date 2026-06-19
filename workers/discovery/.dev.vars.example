@@ -4,7 +4,6 @@
 
 # API worker auth (service-binding + direct fetch paths)
 RELEASES_API_KEY=
-RELEASED_API_KEY=
 
 # Managed-agent sessions + extraction
 ANTHROPIC_API_KEY=

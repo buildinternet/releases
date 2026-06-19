@@ -6,7 +6,5 @@
 VOYAGE_API_KEY=
 
 # Root API credential — forwarded to the API worker for write/admin routes
-# (lookup fallback, scope verification). Either prefix works; RELEASES_API_KEY
-# is preferred.
+# (lookup fallback, scope verification).
 RELEASES_API_KEY=
-RELEASED_API_KEY=
