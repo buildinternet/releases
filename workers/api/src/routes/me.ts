@@ -1,7 +1,7 @@
 import { Hono, type Context } from "hono";
 import { createDb } from "../db.js";
 import { requireFollowsPrincipal } from "../middleware/auth.js";
-import { buildFeedCursor, parseLimitParam } from "../utils.js";
+import { parseLimitParam } from "../utils.js";
 import {
   addFollow,
   removeFollow,
@@ -9,7 +9,11 @@ import {
   resolveFollowTarget,
   hasFollow,
 } from "../queries/follows.js";
-import { getFollowedReleases, mapLatestRowToReleaseItem } from "../queries/releases.js";
+import {
+  feedCursorFromLatestRow,
+  getFollowedReleases,
+  mapLatestRowToReleaseItem,
+} from "../queries/releases.js";
 import { FOLLOW_TARGET_TYPES, type FollowTargetType } from "../db/schema-follows.js";
 import type { Env } from "../index.js";
 import {
@@ -138,15 +142,10 @@ meHandlers.get("/me/feed", async (c) => {
     const hasMore = rows.length > limit;
     const pageRows = hasMore ? rows.slice(0, limit) : rows;
     const items = pageRows.map((r) => mapLatestRowToReleaseItem(r, mediaOrigin));
-    let nextCursor: string | null = null;
-    if (hasMore && pageRows.length > 0) {
-      const last = pageRows[pageRows.length - 1]!;
-      nextCursor = buildFeedCursor({
-        published_at: last.published_at,
-        fetched_at: last.fetched_at ?? last.published_at ?? "",
-        id: last.id,
-      });
-    }
+    const nextCursor =
+      hasMore && pageRows.length > 0
+        ? feedCursorFromLatestRow(pageRows[pageRows.length - 1]!)
+        : null;
     return { items, pagination: { nextCursor, limit } };
   };
 

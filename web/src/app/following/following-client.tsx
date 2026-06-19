@@ -77,7 +77,7 @@ export function FollowingClient({
   const [cursor, setCursor] = useState<string | null>(
     () => initialFeed?.pagination.nextCursor ?? null,
   );
-  const [hasMore, setHasMore] = useState(() => initialFeed?.pagination.nextCursor != null);
+  const hasMore = cursor != null;
   const [loading, setLoading] = useState(() => initialFeed === undefined);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -88,12 +88,11 @@ export function FollowingClient({
     let cancelled = false;
     setLoading(true);
     setError(null);
-    getFeed(null, FEED_PAGE_SIZE)
+    getFeed()
       .then((feedResp) => {
         if (cancelled) return;
         setFeedItems(feedResp.items);
         setCursor(feedResp.pagination.nextCursor);
-        setHasMore(feedResp.pagination.nextCursor !== null);
       })
       .catch((err: unknown) => {
         if (cancelled) return;
@@ -108,20 +107,19 @@ export function FollowingClient({
   }, [session?.user?.id, initialFeed]);
 
   const loadMore = useCallback(async () => {
-    if (loadingMore || !hasMore || !cursor) return;
+    if (loadingMore || !cursor) return;
     setLoadingMore(true);
     setError(null);
     try {
-      const resp = await getFeed(cursor, FEED_PAGE_SIZE);
+      const resp = await getFeed(cursor);
       setFeedItems((prev) => [...prev, ...resp.items]);
       setCursor(resp.pagination.nextCursor);
-      setHasMore(resp.pagination.nextCursor !== null);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Failed to load more.");
     } finally {
       setLoadingMore(false);
     }
-  }, [loadingMore, hasMore, cursor]);
+  }, [loadingMore, cursor]);
 
   // IntersectionObserver auto-load + a keyboard-reachable trailing button,
   // shared with the collection/category timelines.

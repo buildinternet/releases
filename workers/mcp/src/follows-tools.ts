@@ -265,33 +265,25 @@ export function registerFollowsTools(
         const items = body.items ?? [];
         const nextCursor = body.pagination?.nextCursor ?? null;
         const pageLimit = body.pagination?.limit ?? limit ?? 30;
-        const hasMore = nextCursor !== null;
         const cursorMeta = buildCursorMeta({
           returned: items.length,
           limit: pageLimit,
-          hasMore,
+          hasMore: nextCursor !== null,
           nextCursor,
         });
-        if (items.length === 0)
-          return {
-            content: [
-              {
-                type: "text" as const,
-                text: "No recent releases from the organizations and products you follow.",
-              },
-            ],
-            _meta: { pagination: cursorMeta },
-          };
-        const lines = items.map((it) => {
-          const title = it.titleShort ?? it.titleGenerated ?? it.title;
-          const by = it.product?.name ?? it.source.name;
-          const when = it.publishedAt ? ` · ${it.publishedAt.slice(0, 10)}` : "";
-          return `- ${title} — ${by}${when} (${it.id})`;
-        });
+        const message =
+          items.length === 0
+            ? "No recent releases from the organizations and products you follow."
+            : `Your feed (${items.length}):\n${items
+                .map((it) => {
+                  const title = it.titleShort ?? it.titleGenerated ?? it.title;
+                  const by = it.product?.name ?? it.source.name;
+                  const when = it.publishedAt ? ` · ${it.publishedAt.slice(0, 10)}` : "";
+                  return `- ${title} — ${by}${when} (${it.id})`;
+                })
+                .join("\n")}`;
         return {
-          content: [
-            { type: "text" as const, text: `Your feed (${items.length}):\n${lines.join("\n")}` },
-          ],
+          content: [{ type: "text" as const, text: message }],
           _meta: { pagination: cursorMeta },
         };
       } catch (err) {

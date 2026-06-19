@@ -880,11 +880,8 @@ export interface FeedTokenResponse {
   token: FeedToken | null;
 }
 
-/** Cursor pagination shape for GET /v1/me/feed. */
-export interface PersonalizedFeedPagination {
-  nextCursor: string | null;
-  limit: number;
-}
+/** Cursor pagination shape for GET /v1/me/feed (same as other release feeds). */
+export type PersonalizedFeedPagination = OrgFeedPagination;
 
 /**
  * GET /v1/me/feed response — the personalized release feed. Reuses the same item

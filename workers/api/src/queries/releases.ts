@@ -1,6 +1,6 @@
 import { eq, sql } from "drizzle-orm";
 import type { ReleaseLatestItem } from "@buildinternet/releases-api-types";
-import { feedCursorSql } from "@releases/core-internal/feed-cursor";
+import { buildFeedCursor, feedCursorSql } from "@releases/core-internal/feed-cursor";
 import { COVERAGE_COUNT_EXPR } from "@releases/core-internal/release-coverage-sql";
 import type { AnyDb } from "../db.js";
 import { userFollows } from "../db/schema-follows.js";
@@ -180,6 +180,15 @@ export function mapLatestRowToReleaseItem(
     contentChars: r.content_chars,
     contentTokens: r.content_tokens,
   } as ReleaseLatestItem;
+}
+
+/** Encode a followed-feed row into the shared `publishedAt|fetchedAt|id` cursor. */
+export function feedCursorFromLatestRow(row: LatestReleaseRow): string {
+  return buildFeedCursor({
+    published_at: row.published_at,
+    fetched_at: row.fetched_at ?? row.published_at ?? "",
+    id: row.id,
+  });
 }
 
 export interface FollowedReleasesParams {

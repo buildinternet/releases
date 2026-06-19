@@ -3,8 +3,7 @@ import { createTestDb, type TestDatabase } from "../../../tests/db-helper.js";
 import { organizations, products, sources, releases } from "@buildinternet/releases-core/schema";
 import { user } from "../src/db/schema-auth.js";
 import { addFollow } from "../src/queries/follows.js";
-import { getFollowedReleases } from "../src/queries/releases.js";
-import { buildFeedCursor } from "@releases/core-internal/feed-cursor";
+import { feedCursorFromLatestRow, getFollowedReleases } from "../src/queries/releases.js";
 
 let h: TestDatabase;
 
@@ -86,13 +85,10 @@ describe("getFollowedReleases", () => {
     const page1 = await getFollowedReleases(h.db, "u1", { limit: 1 });
     expect(page1.map((r) => r.id)).toEqual(["rel_prd"]);
 
-    const anchor = page1[0]!;
-    const cursor = buildFeedCursor({
-      published_at: anchor.published_at,
-      fetched_at: anchor.fetched_at ?? anchor.published_at ?? "",
-      id: anchor.id,
+    const page2 = await getFollowedReleases(h.db, "u1", {
+      limit: 1,
+      cursor: feedCursorFromLatestRow(page1[0]!),
     });
-    const page2 = await getFollowedReleases(h.db, "u1", { limit: 1, cursor });
     expect(page2.map((r) => r.id)).toEqual(["rel_org"]);
   });
 
@@ -113,13 +109,10 @@ describe("getFollowedReleases", () => {
       fetchedAt: "2026-01-01T12:00:00Z",
     });
 
-    const anchor = page1[0]!;
-    const cursor = buildFeedCursor({
-      published_at: anchor.published_at,
-      fetched_at: anchor.fetched_at ?? anchor.published_at ?? "",
-      id: anchor.id,
+    const page2 = await getFollowedReleases(h.db, "u1", {
+      limit: 10,
+      cursor: feedCursorFromLatestRow(page1[0]!),
     });
-    const page2 = await getFollowedReleases(h.db, "u1", { limit: 10, cursor });
     const ids = page2.map((r) => r.id);
     expect(ids).not.toContain("rel_prd");
     expect(ids).toEqual(["rel_between", "rel_org"]);
