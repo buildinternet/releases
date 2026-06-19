@@ -7,10 +7,12 @@ import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
 import {
   createWebhook,
   deleteWebhook,
+  listWebhookDeliveries,
   listWebhooks,
   rotateWebhookSecret,
   testWebhook,
   updateWebhook,
+  type WebhookDeliveryRow,
 } from "@/lib/webhooks";
 
 const MAX_ORG_WEBHOOKS = 10;
@@ -37,6 +39,101 @@ function scopeDetail(sub: UserWebhookListItem): string {
   if (sub.sourceSlug) parts.push(sub.sourceSlug);
   if (sub.releaseType) parts.push(sub.releaseType);
   return parts.filter(Boolean).join(" / ");
+}
+
+function outcomeTone(outcome: string | undefined): string {
+  switch (outcome) {
+    case "success":
+      return "text-green-700 dark:text-green-400";
+    case "retry":
+      return "text-amber-700 dark:text-amber-400";
+    case "perm_fail":
+    case "dlq":
+    case "auto_disabled":
+      return "text-red-600 dark:text-red-400";
+    default:
+      return "text-stone-500 dark:text-stone-400";
+  }
+}
+
+function WebhookDeliveriesLog({ subscriptionId }: { subscriptionId: string }) {
+  const [rows, setRows] = useState<WebhookDeliveryRow[] | null | undefined>(undefined);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      setRows(undefined);
+      setError(null);
+      try {
+        const data = await listWebhookDeliveries(subscriptionId, { limit: 15 });
+        if (!cancelled) setRows(data);
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load activity.");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [subscriptionId]);
+
+  if (rows === undefined) {
+    return <p className="text-[11px] text-stone-400 dark:text-stone-500">Loading activity…</p>;
+  }
+
+  if (error) {
+    return <p className="text-[11px] text-red-600 dark:text-red-400">{error}</p>;
+  }
+
+  if (rows === null) {
+    return (
+      <p className="text-[11px] text-stone-400 dark:text-stone-500">
+        Delivery history is temporarily unavailable.
+      </p>
+    );
+  }
+
+  if (rows.length === 0) {
+    return (
+      <p className="text-[11px] text-stone-400 dark:text-stone-500">
+        No delivery attempts yet. Send a test to verify your endpoint.
+      </p>
+    );
+  }
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full min-w-[32rem] text-left text-[11px] text-stone-600 dark:text-stone-300">
+        <thead className="text-stone-400 dark:text-stone-500">
+          <tr>
+            <th className="py-1 pr-3 font-medium">Time</th>
+            <th className="py-1 pr-3 font-medium">Outcome</th>
+            <th className="py-1 pr-3 font-medium">HTTP</th>
+            <th className="py-1 pr-3 font-medium">Latency</th>
+            <th className="py-1 pr-3 font-medium">Event</th>
+            <th className="py-1 font-medium">Error</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, i) => (
+            <tr
+              key={`${row.timestamp ?? i}-${row.event_id ?? i}`}
+              className="border-t border-stone-100 dark:border-stone-800"
+            >
+              <td className="py-1 pr-3 whitespace-nowrap">{row.timestamp ?? "—"}</td>
+              <td className={`py-1 pr-3 ${outcomeTone(row.outcome)}`}>{row.outcome ?? "—"}</td>
+              <td className="py-1 pr-3">{row.http_status ?? "—"}</td>
+              <td className="py-1 pr-3">{row.latency_ms != null ? `${row.latency_ms}ms` : "—"}</td>
+              <td className="py-1 pr-3 font-mono text-[10px]">{row.event_id ?? "—"}</td>
+              <td className="py-1 max-w-[12rem] truncate" title={row.error_message ?? undefined}>
+                {row.error_message?.trim() || "—"}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
 }
 
 function healthTone(health: UserWebhookListItem["deliveryHealth"]): string {
@@ -72,6 +169,7 @@ export function WebhooksPanel() {
   const [creating, setCreating] = useState(false);
 
   const [revealedKey, setRevealedKey] = useState<string | null>(null);
+  const [activityId, setActivityId] = useState<string | null>(null);
   const { copied, copy } = useCopyToClipboard();
 
   const orgCount = subs.filter((s) => s.scope === "org").length;
@@ -274,12 +372,28 @@ export function WebhooksPanel() {
                   <button
                     type="button"
                     disabled={busy}
+                    onClick={() => setActivityId((cur) => (cur === sub.id ? null : sub.id))}
+                    className={buttonClass}
+                  >
+                    {activityId === sub.id ? "Hide activity" : "Activity"}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busy}
                     onClick={() => void onDelete(sub.id)}
                     className="text-red-500 hover:text-red-700 hover:underline underline-offset-2 disabled:opacity-50 dark:text-red-400 dark:hover:text-red-300"
                   >
                     Delete
                   </button>
                 </div>
+                {activityId === sub.id && (
+                  <div className="rounded border border-stone-100 bg-stone-50/80 p-2 dark:border-stone-800 dark:bg-stone-950/50">
+                    <p className="mb-2 text-[11px] font-medium text-stone-500 dark:text-stone-400">
+                      Recent deliveries
+                    </p>
+                    <WebhookDeliveriesLog subscriptionId={sub.id} />
+                  </div>
+                )}
               </li>
             );
           })}

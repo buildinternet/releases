@@ -49,19 +49,19 @@ curl -X POST https://api.releases.sh/v1/me/webhooks \
 
 ### Management endpoints
 
-| Method   | Path                                | Purpose                                                |
-| -------- | ----------------------------------- | ------------------------------------------------------ |
-| `GET`    | `/v1/me/webhooks`                   | List your subscriptions (includes delivery health)     |
-| `GET`    | `/v1/me/webhooks/:id`               | Detail                                                 |
-| `PATCH`  | `/v1/me/webhooks/:id`               | Update URL, description, `enabled`, or filter fields   |
-| `DELETE` | `/v1/me/webhooks/:id`               | Remove                                                 |
-| `POST`   | `/v1/me/webhooks/:id/rotate-secret` | Rotate HMAC signing key                                |
-| `POST`   | `/v1/me/webhooks/:id/test`          | Enqueue a synthetic test delivery                      |
-| `GET`    | `/v1/me/webhooks/:id/deliveries`    | Recent delivery attempts (requires operator AE config) |
+| Method   | Path                                | Purpose                                                    |
+| -------- | ----------------------------------- | ---------------------------------------------------------- |
+| `GET`    | `/v1/me/webhooks`                   | List your subscriptions (includes delivery health)         |
+| `GET`    | `/v1/me/webhooks/:id`               | Detail                                                     |
+| `PATCH`  | `/v1/me/webhooks/:id`               | Update URL, description, `enabled`, or filter fields       |
+| `DELETE` | `/v1/me/webhooks/:id`               | Remove                                                     |
+| `POST`   | `/v1/me/webhooks/:id/rotate-secret` | Rotate HMAC signing key                                    |
+| `POST`   | `/v1/me/webhooks/:id/test`          | Enqueue a synthetic test delivery                          |
+| `GET`    | `/v1/me/webhooks/:id/deliveries`    | Recent delivery attempts (Analytics Engine, last ~90 days) |
 
 ### Account UI
 
-Signed-in users can manage webhooks without raw API calls: **Account → Notifications** on [releases.sh](https://releases.sh/account/notifications). The Webhooks card supports list/create (follows or org), test delivery, pause/resume, rotate signing key, and delete. The signing key is shown once at create and rotate.
+Signed-in users can manage webhooks without raw API calls: **Account → Notifications** on [releases.sh](https://releases.sh/account/notifications). The Webhooks card supports list/create (follows or org), test delivery, pause/resume, rotate signing key, per-subscription delivery activity, and delete. The signing key is shown once at create and rotate.
 
 ### URL safety and test limits
 

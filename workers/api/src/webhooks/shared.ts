@@ -5,7 +5,8 @@ import type { Env } from "../index.js";
 import type { WebhookSubscriptionUpdates } from "./queries.js";
 
 /** AE SQL doesn't support bound parameters; validates id before string interpolation. */
-export const SUBSCRIPTION_ID_RE = /^whk_[a-zA-Z0-9_]+$/;
+/** Matches `newWebhookSubscriptionId()` — `whk_` + nanoid(16) (`A-Za-z0-9_-`). */
+export const SUBSCRIPTION_ID_RE = /^whk_[A-Za-z0-9_-]+$/;
 
 import { validateWebhookUrl } from "./url-safety.js";
 
@@ -60,6 +61,60 @@ export function buildWebhookPatchUpdates(
     return { error: "no recognized fields to update" };
   }
   return updates;
+}
+
+type CloudflareAeEnv = Pick<Env["Bindings"], "CLOUDFLARE_API_TOKEN" | "CLOUDFLARE_ACCOUNT_ID">;
+
+/** Secrets Store creds for the Analytics Engine SQL API (shared with Browser Rendering). */
+export async function resolveCloudflareAeCredentials(
+  env: CloudflareAeEnv,
+): Promise<{ apiToken: string; accountId: string } | null> {
+  const [apiToken, accountId] = await Promise.all([
+    getSecret(env.CLOUDFLARE_API_TOKEN).catch(() => null),
+    getSecret(env.CLOUDFLARE_ACCOUNT_ID).catch(() => null),
+  ]);
+  if (!apiToken || !accountId) return null;
+  return { apiToken, accountId };
+}
+
+/** Shared handler body for GET …/webhooks/:id/deliveries (admin + self-serve). */
+export async function queryWebhookDeliveries(
+  env: CloudflareAeEnv,
+  subscriptionId: string,
+  query: { failed?: string; limit?: string },
+): Promise<{ status: number; body: unknown }> {
+  const creds = await resolveCloudflareAeCredentials(env);
+  if (!creds) {
+    return {
+      status: 501,
+      body: {
+        error: "deliveries_unavailable",
+        message: "Cloudflare Analytics credentials are not configured",
+      },
+    };
+  }
+
+  if (!SUBSCRIPTION_ID_RE.test(subscriptionId)) {
+    return {
+      status: 400,
+      body: { error: "bad_request", message: "invalid subscription id format" },
+    };
+  }
+
+  const limitParam = parseInt(query.limit ?? "20", 10);
+  const res = await fetchWebhookDeliveries(creds.apiToken, creds.accountId, subscriptionId, {
+    failedOnly: query.failed === "true",
+    limit: isNaN(limitParam) ? 20 : limitParam,
+  });
+
+  if (!res.ok) {
+    return {
+      status: 502,
+      body: { error: "ae_query_failed", message: `AE query returned ${res.status}` },
+    };
+  }
+
+  return { status: 200, body: await res.json() };
 }
 
 /** Query Analytics Engine for recent delivery attempts (admin + self-serve). */
