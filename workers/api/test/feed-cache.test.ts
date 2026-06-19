@@ -18,5 +18,8 @@ describe("feed-cache", () => {
       false,
     );
     expect(isCacheableFeedRequest({ page: 1, pageSize: 50, offset: 0 })).toBe(false);
+    expect(isCacheableFeedRequest({ page: 1, pageSize: FEED_CACHE_PAGE_SIZE, offset: 30 })).toBe(
+      false,
+    );
   });
 });

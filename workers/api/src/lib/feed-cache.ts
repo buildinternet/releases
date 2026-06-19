@@ -19,7 +19,9 @@ export function buildFeedCacheKey(userId: string): string {
 }
 
 export function isCacheableFeedRequest(pagination: ListPaginationParams): boolean {
-  return pagination.page === 1 && pagination.pageSize === FEED_CACHE_PAGE_SIZE;
+  return (
+    pagination.page === 1 && pagination.pageSize === FEED_CACHE_PAGE_SIZE && pagination.offset === 0
+  );
 }
 
 export async function invalidateUserFeedCache(
