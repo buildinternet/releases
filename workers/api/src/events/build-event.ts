@@ -1,4 +1,5 @@
 import type { MediaItem } from "@buildinternet/releases-api-types";
+import type { ReleaseType } from "@buildinternet/releases-core/schema";
 import type { ReleaseEventPayload } from "./types.js";
 
 /** Minimal inserted-row shape the batch handler + cron fetchOne already build. */
@@ -12,6 +13,7 @@ export interface InsertedReleaseRow {
   /** Cached body size — see {@link ReleaseEventPayload}. Null when unset. */
   contentChars?: number | null;
   contentTokens?: number | null;
+  type?: ReleaseType;
 }
 
 export interface BuildEventsInput {

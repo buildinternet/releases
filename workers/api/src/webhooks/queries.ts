@@ -14,6 +14,9 @@ export type WebhookSubscriptionUpdates = Partial<{
   disabledReason: string | null;
   consecutiveFailures: number;
   failureStreakStartedAt: string | null;
+  sourceId: string | null;
+  productId: string | null;
+  releaseType: "feature" | "rollup" | null;
 }>;
 
 /**
@@ -81,6 +84,8 @@ export async function insertWebhookSubscription(
     orgId: string | null;
     url: string;
     sourceId: string | null;
+    productId?: string | null;
+    releaseType?: "feature" | "rollup" | null;
     description: string | null;
     userId?: string | null;
   },
@@ -93,6 +98,8 @@ export async function insertWebhookSubscription(
       orgId: input.orgId,
       url: input.url,
       sourceId: scope === "follows" ? null : input.sourceId,
+      productId: scope === "follows" ? null : (input.productId ?? null),
+      releaseType: input.releaseType ?? null,
       description: input.description,
       userId: input.userId ?? null,
     })

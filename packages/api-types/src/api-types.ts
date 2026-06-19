@@ -900,6 +900,9 @@ export type WebhookDeliveryHealth =
 /** Self-serve webhook filter scope. */
 export type UserWebhookScope = "org" | "follows";
 
+/** Optional per-event filter on release taxonomy type. */
+export type UserWebhookReleaseTypeFilter = "feature" | "rollup";
+
 /** A user-owned webhook subscription row (no signing secret). */
 export interface UserWebhookSubscription {
   id: string;
@@ -908,6 +911,8 @@ export interface UserWebhookSubscription {
   orgId: string | null;
   url: string;
   sourceId: string | null;
+  productId: string | null;
+  releaseType: UserWebhookReleaseTypeFilter | null;
   enabled: boolean;
   description: string | null;
   secretVersion: number;
@@ -933,6 +938,8 @@ export interface UserWebhookListItem
   orgName: string | null;
   sourceSlug: string | null;
   sourceName: string | null;
+  productSlug: string | null;
+  productName: string | null;
 }
 
 /** GET /v1/me/webhooks response. */

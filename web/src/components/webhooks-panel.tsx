@@ -29,9 +29,13 @@ function subscriptionLabel(sub: UserWebhookListItem): string {
 }
 
 function scopeDetail(sub: UserWebhookListItem): string {
-  if (sub.scope === "follows") return "Follows · real-time";
+  if (sub.scope === "follows") {
+    return sub.releaseType ? `Follows · ${sub.releaseType} only` : "Follows · real-time";
+  }
   const parts = [sub.orgSlug ?? sub.orgName ?? "org"];
+  if (sub.productSlug) parts.push(sub.productSlug);
   if (sub.sourceSlug) parts.push(sub.sourceSlug);
+  if (sub.releaseType) parts.push(sub.releaseType);
   return parts.filter(Boolean).join(" / ");
 }
 
@@ -61,6 +65,9 @@ export function WebhooksPanel() {
   const [scope, setScope] = useState<UserWebhookScope>("follows");
   const [url, setUrl] = useState("");
   const [orgSlug, setOrgSlug] = useState("");
+  const [productSlug, setProductSlug] = useState("");
+  const [sourceSlug, setSourceSlug] = useState("");
+  const [releaseType, setReleaseType] = useState<"" | "feature" | "rollup">("");
   const [description, setDescription] = useState("");
   const [creating, setCreating] = useState(false);
 
@@ -101,12 +108,22 @@ export function WebhooksPanel() {
       const created = await createWebhook({
         url: url.trim(),
         scope,
-        ...(scope === "org" ? { orgSlug: orgSlug.trim() } : {}),
+        ...(scope === "org"
+          ? {
+              orgSlug: orgSlug.trim(),
+              ...(productSlug.trim() ? { productSlug: productSlug.trim() } : {}),
+              ...(sourceSlug.trim() ? { sourceSlug: sourceSlug.trim() } : {}),
+            }
+          : {}),
+        ...(releaseType ? { releaseType } : {}),
         ...(description.trim() ? { description: description.trim() } : {}),
       });
       setRevealedKey(created.signingKey);
       setUrl("");
       setOrgSlug("");
+      setProductSlug("");
+      setSourceSlug("");
+      setReleaseType("");
       setDescription("");
       setSuccess("Webhook created. Copy the signing key before dismissing.");
       await refresh();
@@ -311,23 +328,77 @@ export function WebhooksPanel() {
         </div>
 
         {scope === "org" && (
-          <div>
-            <label htmlFor="webhook-org" className="text-[12px] text-stone-600 dark:text-stone-300">
-              Org slug
-            </label>
-            <input
-              id="webhook-org"
-              value={orgSlug}
-              onChange={(e) => setOrgSlug(e.target.value)}
-              placeholder="vercel"
-              className={inputClass}
-              required
-            />
-            <p className="mt-1 text-[11px] text-stone-400">
-              {orgCount}/{MAX_ORG_WEBHOOKS} org webhooks used
-            </p>
-          </div>
+          <>
+            <div>
+              <label
+                htmlFor="webhook-org"
+                className="text-[12px] text-stone-600 dark:text-stone-300"
+              >
+                Org slug
+              </label>
+              <input
+                id="webhook-org"
+                value={orgSlug}
+                onChange={(e) => setOrgSlug(e.target.value)}
+                placeholder="vercel"
+                className={inputClass}
+                required
+              />
+              <p className="mt-1 text-[11px] text-stone-400">
+                {orgCount}/{MAX_ORG_WEBHOOKS} org webhooks used
+              </p>
+            </div>
+            <div>
+              <label
+                htmlFor="webhook-product"
+                className="text-[12px] text-stone-600 dark:text-stone-300"
+              >
+                Product slug (optional)
+              </label>
+              <input
+                id="webhook-product"
+                value={productSlug}
+                onChange={(e) => setProductSlug(e.target.value)}
+                placeholder="next-js"
+                className={inputClass}
+              />
+            </div>
+            <div>
+              <label
+                htmlFor="webhook-source"
+                className="text-[12px] text-stone-600 dark:text-stone-300"
+              >
+                Source slug (optional)
+              </label>
+              <input
+                id="webhook-source"
+                value={sourceSlug}
+                onChange={(e) => setSourceSlug(e.target.value)}
+                placeholder="changelog"
+                className={inputClass}
+              />
+            </div>
+          </>
         )}
+
+        <div>
+          <label
+            htmlFor="webhook-release-type"
+            className="text-[12px] text-stone-600 dark:text-stone-300"
+          >
+            Release type (optional)
+          </label>
+          <select
+            id="webhook-release-type"
+            value={releaseType}
+            onChange={(e) => setReleaseType(e.target.value as "" | "feature" | "rollup")}
+            className={inputClass}
+          >
+            <option value="">Any</option>
+            <option value="feature">Feature</option>
+            <option value="rollup">Rollup</option>
+          </select>
+        </div>
 
         {scope === "follows" && hasFollows && (
           <p className="text-[11px] text-stone-400">You already have a follows webhook.</p>

@@ -2,6 +2,7 @@ import { describe, it, expect } from "bun:test";
 import { expand } from "./expand.js";
 import type { ReleaseEvent } from "../events/types.js";
 import type { WebhookSubscription } from "@buildinternet/releases-core/schema";
+import type { WebhookEventOwner } from "./subscription-match.js";
 
 function evt(
   overrides: Partial<ReleaseEvent["release"]> & { orgId: string; sourceId: string },
@@ -23,7 +24,7 @@ function evt(
       titleShort: null,
       media: [],
       ...overrides,
-    } as any,
+    } as ReleaseEvent["release"],
   };
 }
 
@@ -35,6 +36,8 @@ function sub(o: Partial<WebhookSubscription>): WebhookSubscription {
     orgId: "org_a",
     url: "https://hook.example/u",
     sourceId: null,
+    productId: null,
+    releaseType: null,
     enabled: true,
     description: null,
     secretVersion: 1,
@@ -49,8 +52,19 @@ function sub(o: Partial<WebhookSubscription>): WebhookSubscription {
   } as WebhookSubscription;
 }
 
-function eventOwner(e: ReleaseEvent): { orgId: string; sourceId: string } {
-  return { orgId: (e.release as any).orgId, sourceId: (e.release as any).sourceId };
+function eventOwner(e: ReleaseEvent): WebhookEventOwner {
+  const release = e.release as ReleaseEvent["release"] & {
+    orgId: string;
+    sourceId: string;
+    productId?: string | null;
+    releaseType?: "feature" | "rollup";
+  };
+  return {
+    orgId: release.orgId,
+    sourceId: release.sourceId,
+    productId: release.productId ?? null,
+    releaseType: release.releaseType ?? "feature",
+  };
 }
 
 describe("expand", () => {
@@ -80,7 +94,30 @@ describe("expand", () => {
     const subs = [sub({ id: "whk_1", orgId: "org_a", sourceId: "src_a" })];
     const out = expand(events, subs, eventOwner);
     expect(out.length).toBe(1);
-    expect((out[0].event.release as any).id).toBe("rel_1");
+    expect(out[0].event.release.id).toBe("rel_1");
+  });
+
+  it("respects productId and releaseType scoping", () => {
+    const events = [
+      evt({
+        id: "rel_1",
+        orgId: "org_a",
+        sourceId: "src_a",
+        productId: "prd_x",
+        releaseType: "feature",
+      } as never),
+      evt({
+        id: "rel_2",
+        orgId: "org_a",
+        sourceId: "src_a",
+        productId: "prd_x",
+        releaseType: "rollup",
+      } as never),
+    ];
+    const subs = [sub({ id: "whk_1", orgId: "org_a", productId: "prd_x", releaseType: "feature" })];
+    const out = expand(events, subs, eventOwner);
+    expect(out.length).toBe(1);
+    expect(out[0].event.release.id).toBe("rel_1");
   });
 
   it("captures url and secretVersion from the subscription at fan-out time", () => {

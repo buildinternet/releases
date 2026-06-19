@@ -31,9 +31,12 @@ import {
   MAX_USER_FOLLOWS_WEBHOOK_SUBSCRIPTIONS,
   MAX_USER_WEBHOOK_SUBSCRIPTIONS,
   resolveWebhookOrg,
+  resolveWebhookProduct,
   resolveWebhookSource,
+  sourceProductFilterMismatch,
   userWebhookDeliveryHealth,
 } from "../webhooks/user-queries.js";
+import { parseReleaseTypeFilter } from "../webhooks/subscription-match.js";
 import { newEventId } from "../events/types.js";
 import type { DeliveryMessage } from "../webhooks/types.js";
 import { getSecret } from "@releases/lib/secrets";
@@ -91,13 +94,23 @@ meWebhookHandlers.post("/me/webhooks", async (c) => {
     const orgSlug = typeof body.orgSlug === "string" ? body.orgSlug : undefined;
     const sourceId = typeof body.sourceId === "string" ? body.sourceId : undefined;
     const sourceSlug = typeof body.sourceSlug === "string" ? body.sourceSlug : undefined;
-    if (orgId || orgSlug || sourceId || sourceSlug) {
+    const productId = typeof body.productId === "string" ? body.productId : undefined;
+    const productSlug = typeof body.productSlug === "string" ? body.productSlug : undefined;
+    if (orgId || orgSlug || sourceId || sourceSlug || productId || productSlug) {
       return c.json(
         {
           error: "bad_request",
           message:
-            "follows-scoped webhooks must not include orgId, orgSlug, sourceId, or sourceSlug",
+            "follows-scoped webhooks must not include orgId, orgSlug, sourceId, sourceSlug, productId, or productSlug",
         },
+        400,
+      );
+    }
+
+    const releaseTypeFilter = parseReleaseTypeFilter(body.releaseType);
+    if (releaseTypeFilter === "invalid") {
+      return c.json(
+        { error: "bad_request", message: "releaseType must be feature or rollup" },
         400,
       );
     }
@@ -118,6 +131,7 @@ meWebhookHandlers.post("/me/webhooks", async (c) => {
       orgId: null,
       url,
       sourceId: null,
+      releaseType: releaseTypeFilter,
       description,
       userId: session.user.id,
     });
@@ -145,13 +159,44 @@ meWebhookHandlers.post("/me/webhooks", async (c) => {
 
   const sourceId = typeof body.sourceId === "string" ? body.sourceId : undefined;
   const sourceSlug = typeof body.sourceSlug === "string" ? body.sourceSlug : undefined;
+  const productId = typeof body.productId === "string" ? body.productId : undefined;
+  const productSlug = typeof body.productSlug === "string" ? body.productSlug : undefined;
+  const releaseTypeFilter = parseReleaseTypeFilter(body.releaseType);
+  if (releaseTypeFilter === "invalid") {
+    return c.json({ error: "bad_request", message: "releaseType must be feature or rollup" }, 400);
+  }
+
   let resolvedSourceId: string | null = null;
+  let resolvedSourceProductId: string | null = null;
   if (sourceId || sourceSlug) {
     const source = await resolveWebhookSource(db, org.id, { sourceId, sourceSlug });
     if (!source) {
       return c.json({ error: "not_found", message: "Source not found for this organization" }, 404);
     }
     resolvedSourceId = source.id;
+    resolvedSourceProductId = source.productId;
+  }
+
+  let resolvedProductId: string | null = null;
+  if (productId || productSlug) {
+    const product = await resolveWebhookProduct(db, org.id, { productId, productSlug });
+    if (!product) {
+      return c.json(
+        { error: "not_found", message: "Product not found for this organization" },
+        404,
+      );
+    }
+    resolvedProductId = product.id;
+  }
+
+  if (sourceProductFilterMismatch(resolvedSourceProductId, resolvedProductId)) {
+    return c.json(
+      {
+        error: "bad_request",
+        message: "source does not belong to the specified product filter",
+      },
+      400,
+    );
   }
 
   const count = await countUserOrgWebhookSubscriptions(db, session.user.id);
@@ -170,6 +215,8 @@ meWebhookHandlers.post("/me/webhooks", async (c) => {
     orgId: org.id,
     url,
     sourceId: resolvedSourceId,
+    productId: resolvedProductId,
+    releaseType: releaseTypeFilter,
     description,
     userId: session.user.id,
   });
@@ -196,32 +243,128 @@ meWebhookHandlers.patch("/me/webhooks/:id", async (c) => {
   const session = c.get("session");
   if (!session) return c.json({ error: "unauthorized", message: "Sign in required" }, 401);
 
-  let body: Partial<{
-    url: string;
-    description: string | null;
-    enabled: boolean;
-    disabledReason: string | null;
-  }>;
+  let body: Record<string, unknown>;
   try {
-    body = (await c.req.json()) as typeof body;
+    body = (await c.req.json()) as Record<string, unknown>;
   } catch {
     return c.json({ error: "bad_request", message: "invalid JSON body" }, 400);
   }
 
-  if (body.url !== undefined) {
+  if (typeof body.url === "string") {
     const urlError = await assertPublicWebhookTarget(body.url);
     if (urlError) return c.json({ error: "bad_request", message: urlError }, 400);
   }
 
-  const patch = buildWebhookPatchUpdates(body);
-  if ("error" in patch) {
-    return c.json({ error: "bad_request", message: patch.error }, 400);
+  const basePatch = buildWebhookPatchUpdates(
+    body as Partial<{
+      url: string;
+      description: string | null;
+      enabled: boolean;
+      disabledReason: string | null;
+    }>,
+  );
+  const patch =
+    "error" in basePatch
+      ? ({} as import("../webhooks/queries.js").WebhookSubscriptionUpdates)
+      : basePatch;
+  if ("error" in basePatch && basePatch.error !== "no recognized fields to update") {
+    return c.json({ error: "bad_request", message: basePatch.error }, 400);
   }
 
   const id = c.req.param("id");
   const db = getDb(c);
   const owned = await getUserWebhookSubscription(db, session.user.id, id);
   if (!owned) return c.json({ error: "not_found" }, 404);
+
+  if (body.releaseType !== undefined) {
+    const releaseTypeFilter = parseReleaseTypeFilter(body.releaseType);
+    if (releaseTypeFilter === "invalid") {
+      return c.json(
+        { error: "bad_request", message: "releaseType must be feature or rollup" },
+        400,
+      );
+    }
+    patch.releaseType = releaseTypeFilter;
+  }
+
+  if (owned.scope === "org") {
+    let nextSourceId = owned.sourceId;
+    let nextSourceProductId: string | null = null;
+    if (body.sourceId !== undefined || body.sourceSlug !== undefined) {
+      if (body.sourceId === null && body.sourceSlug === undefined) {
+        nextSourceId = null;
+      } else {
+        const sourceId = typeof body.sourceId === "string" ? body.sourceId : undefined;
+        const sourceSlug = typeof body.sourceSlug === "string" ? body.sourceSlug : undefined;
+        if (!owned.orgId)
+          return c.json({ error: "bad_request", message: "invalid subscription" }, 400);
+        const source = await resolveWebhookSource(db, owned.orgId, { sourceId, sourceSlug });
+        if (!source) {
+          return c.json(
+            { error: "not_found", message: "Source not found for this organization" },
+            404,
+          );
+        }
+        nextSourceId = source.id;
+        nextSourceProductId = source.productId;
+      }
+    } else if (nextSourceId && owned.orgId) {
+      const source = await resolveWebhookSource(db, owned.orgId, { sourceId: nextSourceId });
+      nextSourceProductId = source?.productId ?? null;
+    }
+
+    let nextProductId = owned.productId;
+    if (body.productId !== undefined || body.productSlug !== undefined) {
+      if (body.productId === null && body.productSlug === undefined) {
+        nextProductId = null;
+      } else if (!owned.orgId) {
+        return c.json({ error: "bad_request", message: "invalid subscription" }, 400);
+      } else {
+        const productId = typeof body.productId === "string" ? body.productId : undefined;
+        const productSlug = typeof body.productSlug === "string" ? body.productSlug : undefined;
+        const product = await resolveWebhookProduct(db, owned.orgId, { productId, productSlug });
+        if (!product) {
+          return c.json(
+            { error: "not_found", message: "Product not found for this organization" },
+            404,
+          );
+        }
+        nextProductId = product.id;
+      }
+    }
+
+    if (sourceProductFilterMismatch(nextSourceProductId, nextProductId)) {
+      return c.json(
+        {
+          error: "bad_request",
+          message: "source does not belong to the specified product filter",
+        },
+        400,
+      );
+    }
+
+    if (body.sourceId !== undefined || body.sourceSlug !== undefined) patch.sourceId = nextSourceId;
+    if (body.productId !== undefined || body.productSlug !== undefined)
+      patch.productId = nextProductId;
+  } else if (
+    body.sourceId !== undefined ||
+    body.sourceSlug !== undefined ||
+    body.productId !== undefined ||
+    body.productSlug !== undefined
+  ) {
+    return c.json(
+      {
+        error: "bad_request",
+        message:
+          "follows-scoped webhooks cannot set sourceId, sourceSlug, productId, or productSlug",
+      },
+      400,
+    );
+  }
+
+  if (Object.keys(patch).length === 0) {
+    return c.json({ error: "bad_request", message: "no recognized fields to update" }, 400);
+  }
 
   const fresh = await updateWebhookSubscription(db, id, patch);
   if (!fresh) return c.json({ error: "not_found" }, 404);

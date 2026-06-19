@@ -102,7 +102,7 @@ export async function publishReleaseEvents(env: PublishEnv, ctx: PublishContext)
   if (ctx.inserted.length === 0) return;
   const eventOwners = new Map<
     string,
-    { orgId: string; sourceId: string; productId: string | null }
+    { orgId: string; sourceId: string; productId: string | null; releaseType: "feature" | "rollup" }
   >();
   if (ctx.src.orgId) {
     const productId = ctx.src.productId ?? null;
@@ -111,6 +111,7 @@ export async function publishReleaseEvents(env: PublishEnv, ctx: PublishContext)
         orgId: ctx.src.orgId,
         sourceId: ctx.src.sourceId,
         productId,
+        releaseType: row.type ?? "feature",
       });
     }
   }

@@ -1,5 +1,10 @@
 import { and, eq, sql } from "drizzle-orm";
-import { organizations, sources, webhookSubscriptions } from "@buildinternet/releases-core/schema";
+import {
+  organizations,
+  products,
+  sources,
+  webhookSubscriptions,
+} from "@buildinternet/releases-core/schema";
 import type { WebhookSubscription } from "@buildinternet/releases-core/schema";
 import {
   computeWebhookDeliveryHealth,
@@ -39,12 +44,13 @@ export async function resolveWebhookSource(
   db: D1Db,
   orgId: string,
   input: { sourceId?: string; sourceSlug?: string },
-): Promise<{ id: string; slug: string; name: string } | null> {
+): Promise<{ id: string; slug: string; name: string; productId: string | null } | null> {
   const fields = {
     id: sources.id,
     slug: sources.slug,
     name: sources.name,
     orgId: sources.orgId,
+    productId: sources.productId,
     deletedAt: sources.deletedAt,
   };
   const row = input.sourceId
@@ -57,7 +63,40 @@ export async function resolveWebhookSource(
           .get()
       : null;
   if (!row || row.deletedAt || row.orgId !== orgId) return null;
+  return { id: row.id, slug: row.slug, name: row.name, productId: row.productId };
+}
+
+export async function resolveWebhookProduct(
+  db: D1Db,
+  orgId: string,
+  input: { productId?: string; productSlug?: string },
+): Promise<{ id: string; slug: string; name: string } | null> {
+  const fields = {
+    id: products.id,
+    slug: products.slug,
+    name: products.name,
+    orgId: products.orgId,
+    deletedAt: products.deletedAt,
+  };
+  const row = input.productId
+    ? await db.select(fields).from(products).where(eq(products.id, input.productId)).get()
+    : input.productSlug
+      ? await db
+          .select(fields)
+          .from(products)
+          .where(and(eq(products.orgId, orgId), eq(products.slug, input.productSlug)))
+          .get()
+      : null;
+  if (!row || row.deletedAt || row.orgId !== orgId) return null;
   return { id: row.id, slug: row.slug, name: row.name };
+}
+
+export function sourceProductFilterMismatch(
+  sourceProductId: string | null,
+  filterProductId: string | null,
+): boolean {
+  if (filterProductId == null || sourceProductId == null) return false;
+  return sourceProductId !== filterProductId;
 }
 
 export async function countUserOrgWebhookSubscriptions(db: D1Db, userId: string): Promise<number> {
@@ -112,6 +151,10 @@ export interface UserWebhookListItem {
   sourceId: string | null;
   sourceSlug: string | null;
   sourceName: string | null;
+  productId: string | null;
+  productSlug: string | null;
+  productName: string | null;
+  releaseType: "feature" | "rollup" | null;
   lastSuccessAt: string | null;
   lastErrorAt: string | null;
   lastErrorMsg: string | null;
@@ -145,34 +188,43 @@ export async function listUserWebhookSubscriptionsEnriched(
       orgName: organizations.name,
       sourceSlug: sources.slug,
       sourceName: sources.name,
+      productSlug: products.slug,
+      productName: products.name,
     })
     .from(webhookSubscriptions)
     .leftJoin(organizations, eq(organizations.id, webhookSubscriptions.orgId))
     .leftJoin(sources, eq(sources.id, webhookSubscriptions.sourceId))
+    .leftJoin(products, eq(products.id, webhookSubscriptions.productId))
     .where(and(...predicates));
 
-  return rows.map(({ subscription: s, orgSlug, orgName, sourceSlug, sourceName }) => {
-    const item = {
-      id: s.id,
-      scope: s.scope,
-      url: s.url,
-      enabled: s.enabled,
-      description: s.description,
-      secretVersion: s.secretVersion,
-      createdAt: s.createdAt,
-      orgId: s.orgId,
-      orgSlug: orgSlug ?? null,
-      orgName: orgName ?? null,
-      sourceId: s.sourceId,
-      sourceSlug: sourceSlug ?? null,
-      sourceName: sourceName ?? null,
-      lastSuccessAt: s.lastSuccessAt,
-      lastErrorAt: s.lastErrorAt,
-      lastErrorMsg: s.lastErrorMsg,
-      consecutiveFailures: s.consecutiveFailures,
-      disabledReason: s.disabledReason,
-      failureStreakStartedAt: s.failureStreakStartedAt,
-    };
-    return { ...item, ...userWebhookDeliveryHealth(s) };
-  });
+  return rows.map(
+    ({ subscription: s, orgSlug, orgName, sourceSlug, sourceName, productSlug, productName }) => {
+      const item = {
+        id: s.id,
+        scope: s.scope,
+        url: s.url,
+        enabled: s.enabled,
+        description: s.description,
+        secretVersion: s.secretVersion,
+        createdAt: s.createdAt,
+        orgId: s.orgId,
+        orgSlug: orgSlug ?? null,
+        orgName: orgName ?? null,
+        sourceId: s.sourceId,
+        sourceSlug: sourceSlug ?? null,
+        sourceName: sourceName ?? null,
+        productId: s.productId,
+        productSlug: productSlug ?? null,
+        productName: productName ?? null,
+        releaseType: s.releaseType,
+        lastSuccessAt: s.lastSuccessAt,
+        lastErrorAt: s.lastErrorAt,
+        lastErrorMsg: s.lastErrorMsg,
+        consecutiveFailures: s.consecutiveFailures,
+        disabledReason: s.disabledReason,
+        failureStreakStartedAt: s.failureStreakStartedAt,
+      };
+      return { ...item, ...userWebhookDeliveryHealth(s) };
+    },
+  );
 }

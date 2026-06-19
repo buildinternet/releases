@@ -1,14 +1,10 @@
 import type { ReleaseEvent } from "../events/types.js";
 import type { WebhookSubscription } from "@buildinternet/releases-core/schema";
 import type { UserFollowTargets } from "./follows-match.js";
-import { releaseMatchesFollows } from "./follows-match.js";
 import type { DeliveryMessage } from "./types.js";
+import { followsSubscriptionMatchesEvent, type WebhookEventOwner } from "./subscription-match.js";
 
-export interface EventOwnerWithProduct {
-  orgId: string;
-  sourceId: string;
-  productId: string | null;
-}
+export type EventOwnerWithProduct = WebhookEventOwner;
 
 /**
  * Fan-out for `scope = follows` subscriptions: one message per (event × sub)
@@ -17,7 +13,7 @@ export interface EventOwnerWithProduct {
 export function expandFollows(
   events: ReleaseEvent[],
   subscriptions: WebhookSubscription[],
-  eventOwner: (e: ReleaseEvent) => EventOwnerWithProduct | null,
+  eventOwner: (e: ReleaseEvent) => WebhookEventOwner | null,
   followsByUserId: Map<string, UserFollowTargets>,
 ): DeliveryMessage[] {
   const out: DeliveryMessage[] = [];
@@ -25,9 +21,8 @@ export function expandFollows(
     const owner = eventOwner(event);
     if (!owner) continue;
     for (const sub of subscriptions) {
-      if (sub.scope !== "follows" || !sub.userId) continue;
-      const follows = followsByUserId.get(sub.userId);
-      if (!follows || !releaseMatchesFollows(owner, follows)) continue;
+      const follows = sub.userId ? followsByUserId.get(sub.userId) : undefined;
+      if (!follows || !followsSubscriptionMatchesEvent(sub, owner, follows)) continue;
       out.push({
         subscriptionId: sub.id,
         url: sub.url,

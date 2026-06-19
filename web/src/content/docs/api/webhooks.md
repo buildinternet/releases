@@ -18,7 +18,7 @@ Authenticated with a Better Auth session, a `relu_` user API key, or an OAuth JW
 
 ### Org-scoped (default)
 
-Create a subscription for one organization, optionally narrowed to a single source:
+Create a subscription for one organization, optionally narrowed with ANDed filters (`sourceSlug`, `productSlug`, `releaseType`):
 
 ```bash
 curl -X POST https://api.releases.sh/v1/me/webhooks \
@@ -45,7 +45,7 @@ curl -X POST https://api.releases.sh/v1/me/webhooks \
   -d '{"scope":"follows","url":"https://hooks.example.com/my-follows"}'
 ```
 
-**One** follows-scoped subscription per account (separate from the 10 org-scoped cap). Follow/unfollow changes take effect on the next event — no manual webhook edits.
+**One** follows-scoped subscription per account (separate from the 10 org-scoped cap). Optional `releaseType` (`feature` | `rollup`) narrows follows delivery. Follow/unfollow changes take effect on the next event — no manual webhook edits.
 
 ### Management endpoints
 
@@ -53,7 +53,7 @@ curl -X POST https://api.releases.sh/v1/me/webhooks \
 | -------- | ----------------------------------- | ------------------------------------------------------ |
 | `GET`    | `/v1/me/webhooks`                   | List your subscriptions (includes delivery health)     |
 | `GET`    | `/v1/me/webhooks/:id`               | Detail                                                 |
-| `PATCH`  | `/v1/me/webhooks/:id`               | Update URL, description, or `enabled`                  |
+| `PATCH`  | `/v1/me/webhooks/:id`               | Update URL, description, `enabled`, or filter fields   |
 | `DELETE` | `/v1/me/webhooks/:id`               | Remove                                                 |
 | `POST`   | `/v1/me/webhooks/:id/rotate-secret` | Rotate HMAC signing key                                |
 | `POST`   | `/v1/me/webhooks/:id/test`          | Enqueue a synthetic test delivery                      |

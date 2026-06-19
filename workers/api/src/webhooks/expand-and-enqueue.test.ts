@@ -26,7 +26,12 @@ describe("expandAndEnqueue", () => {
           release: { id: "rel_1" } as any,
         },
       ],
-      eventOwners: new Map([["rel_1", { orgId: "org_a", sourceId: "src_a", productId: null }]]),
+      eventOwners: new Map([
+        [
+          "rel_1",
+          { orgId: "org_a", sourceId: "src_a", productId: null, releaseType: "feature" as const },
+        ],
+      ]),
       loadOrgSubscriptions: async () => [],
       queue: { sendBatch } as any,
     });
@@ -47,7 +52,12 @@ describe("expandAndEnqueue", () => {
         release: { id: "rel_1" } as any,
       },
     ];
-    const owners = new Map([["rel_1", { orgId: "org_a", sourceId: "src_a", productId: null }]]);
+    const owners = new Map([
+      [
+        "rel_1",
+        { orgId: "org_a", sourceId: "src_a", productId: null, releaseType: "feature" as const },
+      ],
+    ]);
     const subs = [
       {
         id: "whk_1",
@@ -91,7 +101,7 @@ describe("expandAndEnqueue", () => {
     const owners = new Map(
       events.map((e) => [
         (e.release as any).id,
-        { orgId: "org_a", sourceId: "src_a", productId: null },
+        { orgId: "org_a", sourceId: "src_a", productId: null, releaseType: "feature" as const },
       ]),
     );
     const subs = [
@@ -127,7 +137,12 @@ describe("expandAndEnqueue", () => {
         release: { id: "rel_1" } as any,
       },
     ];
-    const owners = new Map([["rel_1", { orgId: "org_a", sourceId: "src_a", productId: "prd_x" }]]);
+    const owners = new Map([
+      [
+        "rel_1",
+        { orgId: "org_a", sourceId: "src_a", productId: "prd_x", releaseType: "feature" as const },
+      ],
+    ]);
     await expandAndEnqueue({
       events,
       eventOwners: owners,
@@ -165,7 +180,12 @@ describe("expandAndEnqueue", () => {
         release: { id: "rel_1" } as any,
       },
     ];
-    const owners = new Map([["rel_1", { orgId: "org_a", sourceId: "src_a", productId: null }]]);
+    const owners = new Map([
+      [
+        "rel_1",
+        { orgId: "org_a", sourceId: "src_a", productId: null, releaseType: "feature" as const },
+      ],
+    ]);
     const subs = [
       {
         id: "whk_1",
