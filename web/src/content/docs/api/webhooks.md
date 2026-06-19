@@ -49,19 +49,50 @@ curl -X POST https://api.releases.sh/v1/me/webhooks \
 
 ### Management endpoints
 
-| Method   | Path                                | Purpose                                                    |
-| -------- | ----------------------------------- | ---------------------------------------------------------- |
-| `GET`    | `/v1/me/webhooks`                   | List your subscriptions (includes delivery health)         |
-| `GET`    | `/v1/me/webhooks/:id`               | Detail                                                     |
-| `PATCH`  | `/v1/me/webhooks/:id`               | Update URL, description, `enabled`, or filter fields       |
-| `DELETE` | `/v1/me/webhooks/:id`               | Remove                                                     |
-| `POST`   | `/v1/me/webhooks/:id/rotate-secret` | Rotate HMAC signing key                                    |
-| `POST`   | `/v1/me/webhooks/:id/test`          | Enqueue a synthetic test delivery                          |
-| `GET`    | `/v1/me/webhooks/:id/deliveries`    | Recent delivery attempts (Analytics Engine, last ~90 days) |
+| Method   | Path                                | Purpose                                                                |
+| -------- | ----------------------------------- | ---------------------------------------------------------------------- |
+| `GET`    | `/v1/me/webhooks`                   | List your subscriptions (includes delivery health)                     |
+| `GET`    | `/v1/me/webhooks/:id`               | Detail                                                                 |
+| `PATCH`  | `/v1/me/webhooks/:id`               | Update URL, description, `enabled`, or filter fields                   |
+| `DELETE` | `/v1/me/webhooks/:id`               | Remove                                                                 |
+| `POST`   | `/v1/me/webhooks/:id/rotate-secret` | Rotate HMAC signing key                                                |
+| `POST`   | `/v1/me/webhooks/:id/test`          | Enqueue a synthetic test delivery                                      |
+| `GET`    | `/v1/me/webhooks/:id/deliveries`    | Recent delivery attempts (see [Delivery activity](#delivery-activity)) |
 
 ### Account UI
 
-Signed-in users can manage webhooks without raw API calls: **Account → Notifications** on [releases.sh](https://releases.sh/account/notifications). The Webhooks card supports list/create (follows or org), test delivery, pause/resume, rotate signing key, per-subscription delivery activity, and delete. The signing key is shown once at create and rotate.
+Signed-in users can manage webhooks without raw API calls: **Account → Notifications** on [releases.sh](https://releases.sh/account/notifications). The Webhooks card supports list/create (follows or org), optional filters (`productSlug`, `sourceSlug`, `releaseType`), test delivery, pause/resume, rotate signing key, and delete. The signing key is shown once at create and rotate.
+
+Each subscription shows **aggregate delivery health** (healthy / degraded / failing / paused). Expand **Activity** to see the last 15 per-attempt rows (time, outcome, HTTP status, latency, event id, error snippet).
+
+### Delivery activity
+
+Every delivery attempt is recorded in Analytics Engine (~**90 days** of queryable history). Use it to see why a test or real event failed without tailing your own logs.
+
+```bash
+# After releases login
+releases webhook test <id>
+sleep 25   # AE indexing lag — see below
+releases webhook deliveries <id> --limit 10
+```
+
+`GET /v1/me/webhooks/:id/deliveries` returns the same data. Optional query params: `limit` (1–100), `failed=true` (failures and retries only).
+
+Each row includes:
+
+| Field           | Meaning                                                               |
+| --------------- | --------------------------------------------------------------------- |
+| `timestamp`     | When the attempt was made                                             |
+| `event_id`      | `X-Releases-Event-Id` / release event id                              |
+| `outcome`       | `success`, `retry`, `perm_fail`, `dlq`, `auto_disabled`, or `skipped` |
+| `http_status`   | Subscriber response code (0 on network error)                         |
+| `latency_ms`    | Round-trip time                                                       |
+| `attempt`       | Retry attempt number (1 = first try)                                  |
+| `error_message` | Truncated response body or error text on failure                      |
+
+**Indexing lag:** rows typically appear **20–30 seconds** after `POST …/test` or a real delivery. `releases webhook show` may say "No delivery attempts recorded" if you check immediately — run `deliveries` again or reopen Activity in the account UI.
+
+List/detail endpoints still expose `deliveryHealth` and `consecutiveFailures` for at-a-glance status; the activity log is the per-event drill-down.
 
 ### URL safety and test limits
 
@@ -71,7 +102,7 @@ Webhook URLs must be public **HTTPS** endpoints. Private IPs, internal hostnames
 
 ### CLI
 
-After `releases login`, use `releases webhook list|add|show|edit|remove|test|rotate-secret|deliveries`. See the [releases-cli skill](https://github.com/buildinternet/releases-cli/tree/main/skills/releases-cli) for examples. `releases webhook verify` checks a captured payload locally (no auth).
+After `releases login`, use `releases webhook list|add|show|edit|remove|test|rotate-secret|deliveries`. Filter flags on `add` / `edit`: `--product`, `--source`, `--type` (`feature` | `rollup`), and `--clear-*` on edit. See the [releases-cli skill](https://github.com/buildinternet/releases-cli/tree/main/skills/releases-cli) for examples. `releases webhook verify` checks a captured payload locally (no auth).
 
 ## Admin-provisioned webhooks
 
