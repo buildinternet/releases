@@ -1,11 +1,11 @@
-// Tests for the parseWorkflowBody helper behavior in workflow routes.
+// Tests for the parseJsonBody helper behavior in workflow routes.
 //
 // Covers three boundary cases for POST /v1/workflows/backfill-media (a dryRun-
 // bearing route) to assert the core regression this change fixes:
 //
 //   1. Valid JSON body → behaves as before (route's own validation fires)
 //   2. No body → treated as `{}` (NOT a JSON 400; route's own bad_request fires)
-//   3. Malformed JSON body → 400 with error:"bad_request" from parseWorkflowBody
+//   3. Malformed JSON body → 400 with error:"bad_request" from parseJsonBody
 //
 // Case 3 is the primary regression guard: before this change, malformed JSON
 // silently defaulted to `{}`, meaning `dryRun` would be `false` and a real
@@ -30,7 +30,7 @@ function mkApp(db: ReturnType<typeof mkDb>, extra: Record<string, unknown> = {})
   const fakeEnv = { DB: db, ...extra };
   const app = new Hono();
   // Mirror the global error handler from workers/api/src/index.ts so that
-  // HTTPException(400) thrown by parseWorkflowBody renders as { error, message }.
+  // HTTPException(400) thrown by parseJsonBody renders as { error, message }.
   app.onError((err, c) => {
     if (err instanceof HTTPException) {
       const status = err.status;
@@ -52,7 +52,7 @@ function mkApp(db: ReturnType<typeof mkDb>, extra: Record<string, unknown> = {})
 // gate to exercise the JSON-body parse path.
 const fakeBucket = { put: async () => {} };
 
-describe("parseWorkflowBody — JSON body boundary", () => {
+describe("parseJsonBody — workflow JSON body boundary", () => {
   it("valid JSON body: route proceeds past JSON parse and hits its own validation", async () => {
     const fetch = mkApp(mkDb(), { MEDIA: fakeBucket });
     // Sending `{}` (valid JSON) with no sourceId/all: route returns its own bad_request
@@ -83,7 +83,7 @@ describe("parseWorkflowBody — JSON body boundary", () => {
     expect(res.status).toBe(400);
     const body = (await res.json()) as { error: string; message: string };
     expect(body.error).toBe("bad_request");
-    // The message comes from the route's own validation, not from parseWorkflowBody
+    // The message comes from the route's own validation, not from parseJsonBody
     expect(body.message).not.toBe("invalid JSON body");
   });
 

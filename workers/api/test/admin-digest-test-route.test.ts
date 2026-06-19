@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { Hono } from "hono";
+import { HTTPException } from "hono/http-exception";
 import { createTestDb, type TestDatabase } from "../../../tests/db-helper.js";
 import { user } from "../src/db/schema-auth.js";
 import { organizations, sources, releases } from "@buildinternet/releases-core/schema";
@@ -13,6 +14,16 @@ let sent: Array<{ to: string; subject: string }>;
 function app() {
   sent = [];
   const a = new Hono();
+  a.onError((err, c) => {
+    if (err instanceof HTTPException) {
+      const status = err.status;
+      return c.json(
+        { error: status === 400 ? "bad_request" : "http_error", message: err.message },
+        status,
+      );
+    }
+    return c.json({ error: "internal_error", message: String(err) }, 500);
+  });
   a.route("/", adminDigestRoutes);
   const env = {
     DB: h.db,
@@ -126,5 +137,22 @@ describe("POST /v1/admin/digest/test", () => {
     const after = await getDigestPrefs(h.db, "u1");
     expect(after!.cadence).toBe("weekly");
     expect(after!.manageToken).toBe(before.manageToken);
+  });
+
+  it("400s on malformed JSON with invalid JSON body", async () => {
+    const { a, env } = app();
+    const res = await a.request(
+      `${BASE}/admin/digest/test`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: "{not json",
+      },
+      env,
+    );
+    expect(res.status).toBe(400);
+    const json = (await res.json()) as { error: string; message: string };
+    expect(json.error).toBe("bad_request");
+    expect(json.message).toBe("invalid JSON body");
   });
 });

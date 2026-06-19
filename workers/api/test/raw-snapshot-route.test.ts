@@ -1,8 +1,20 @@
 import { describe, it, expect, beforeEach } from "bun:test";
 import { eq } from "drizzle-orm";
+import { HTTPException } from "hono/http-exception";
 import { organizations, sources, sourceRawSnapshots } from "@buildinternet/releases-core/schema";
 import { createTestDb, createTestApp, type TestDb } from "./setup";
 import { sourceRoutes } from "../src/routes/sources";
+
+const httpExceptionOnError = (err: unknown, c: any) => {
+  if (err instanceof HTTPException) {
+    const status = err.status;
+    return c.json(
+      { error: status === 400 ? "bad_request" : "http_error", message: err.message },
+      status,
+    );
+  }
+  return c.json({ error: "internal_error", message: String(err) }, 500);
+};
 
 function fakeR2() {
   const store = new Map<string, string>();
@@ -43,7 +55,10 @@ describe("POST /orgs/:org/sources/:src/raw-snapshot (#1283)", () => {
     db = createTestDb();
     await seed(db);
     R2 = fakeR2();
-    fetchApi = createTestApp(db, sourceRoutes, { env: { RAW_SNAPSHOTS: R2 } });
+    fetchApi = createTestApp(db, sourceRoutes, {
+      env: { RAW_SNAPSHOTS: R2 },
+      onError: httpExceptionOnError,
+    });
   });
 
   const post = (body: unknown, path = PATH) =>
@@ -93,6 +108,20 @@ describe("POST /orgs/:org/sources/:src/raw-snapshot (#1283)", () => {
   it("400 on empty or missing body", async () => {
     expect((await post({})).status).toBe(400);
     expect((await post({ body: "   " })).status).toBe(400);
+  });
+
+  it("400 on malformed JSON with invalid JSON body", async () => {
+    const res = await fetchApi(
+      new Request(`https://api${PATH}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{not json",
+      }),
+    );
+    expect(res.status).toBe(400);
+    const json = (await res.json()) as { error: string; message: string };
+    expect(json.error).toBe("bad_request");
+    expect(json.message).toBe("invalid JSON body");
   });
 
   it("400 on an unsupported format", async () => {

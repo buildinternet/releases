@@ -12,6 +12,7 @@ import { logEvent } from "@releases/lib/log-event";
 import { createDb } from "../db.js";
 import { resolveSourceFromContext } from "../utils.js";
 import { validateJson } from "../lib/validate.js";
+import { parseJsonBody } from "../lib/json-body.js";
 import { hideInProduction } from "../openapi.js";
 import { syncFirecrawlMonitor } from "../lib/firecrawl-sync.js";
 import type { Env } from "../index.js";
@@ -203,7 +204,7 @@ firecrawlRoutes.post("/integrations/firecrawl/webhook", async (c) => {
     return c.json({ error: "unauthorized" }, 401);
   }
 
-  const body = (await c.req.json().catch(() => ({}))) as FirecrawlPageEvent;
+  const body = await parseJsonBody<FirecrawlPageEvent>(c);
   const sourceId = body.metadata?.sourceId;
   if (!sourceId) return c.json({ ok: true, skipped: "no_source_id" });
 

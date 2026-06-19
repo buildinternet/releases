@@ -13,6 +13,7 @@
  * the same test can be re-run repeatedly.
  */
 import { Hono } from "hono";
+import { parseJsonBody } from "../lib/json-body.js";
 import { logEvent } from "@releases/lib/log-event";
 import { createDb } from "../db.js";
 import { resolveDigestTestRecipient, advanceDigestWatermark } from "../queries/digest-prefs.js";
@@ -33,7 +34,7 @@ interface TestBody {
 }
 
 adminDigestRoutes.post("/admin/digest/test", async (c) => {
-  const body = await c.req.json<TestBody>().catch(() => ({}) as TestBody);
+  const body = await parseJsonBody<TestBody>(c);
 
   const userId = typeof body.userId === "string" && body.userId ? body.userId : undefined;
   const email = typeof body.email === "string" && body.email ? body.email : undefined;
