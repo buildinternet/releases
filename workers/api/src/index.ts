@@ -180,6 +180,14 @@ export type Env = {
     // because publicRateLimitMiddleware only covers safe methods.
     FEEDBACK_RATE_LIMIT_ENABLED?: string;
     FEEDBACK_RATE_LIMITER?: { limit(options: { key: string }): Promise<{ success: boolean }> };
+    // Per-sub / per-user caps on POST /v1/me/webhooks/:id/test (see test-rate-limit.ts).
+    WEBHOOK_TEST_RATE_LIMIT_ENABLED?: string;
+    WEBHOOK_TEST_SUB_RATE_LIMITER?: {
+      limit(options: { key: string }): Promise<{ success: boolean }>;
+    };
+    WEBHOOK_TEST_USER_RATE_LIMITER?: {
+      limit(options: { key: string }): Promise<{ success: boolean }>;
+    };
     // Max feedback notification emails per rolling hour (default 20). Caps the
     // inbox-bomb amplification of the open endpoint; overflow rows are still
     // stored. See lib/feedback-email.ts.

@@ -129,7 +129,7 @@ describe("POST /v1/webhooks", () => {
       new Request("https://x.test/v1/webhooks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orgId: "org_test", url: "https://example.com/hook" }),
+        body: JSON.stringify({ orgId: "org_test", url: "https://1.1.1.1/hook" }),
       }),
     );
     expect(res.status).toBe(201);
@@ -145,6 +145,18 @@ describe("POST /v1/webhooks", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ orgId: "org_test", url: "http://insecure/u" }),
+      }),
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it("returns 400 for a private IP target", async () => {
+    const fetch = makeApp();
+    const res = await fetch(
+      new Request("https://x.test/v1/webhooks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orgId: "org_test", url: "https://10.0.0.1/hook" }),
       }),
     );
     expect(res.status).toBe(400);
@@ -168,7 +180,7 @@ describe("POST /v1/webhooks", () => {
       new Request("https://x.test/v1/webhooks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: "https://example.com/hook" }),
+        body: JSON.stringify({ url: "https://1.1.1.1/hook" }),
       }),
     );
     expect(res.status).toBe(400);
@@ -194,7 +206,7 @@ describe("GET /v1/webhooks", () => {
       new Request("https://x.test/v1/webhooks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orgId: "org_test", url: "https://example.com/hook" }),
+        body: JSON.stringify({ orgId: "org_test", url: "https://1.1.1.1/hook" }),
       }),
     );
     const res = await fetch(new Request("https://x.test/v1/webhooks?org=org_test"));
@@ -218,7 +230,7 @@ describe("GET /v1/webhooks/:id", () => {
       new Request("https://x.test/v1/webhooks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orgId: "org_test", url: "https://example.com/hook" }),
+        body: JSON.stringify({ orgId: "org_test", url: "https://1.1.1.1/hook" }),
       }),
     );
     const res = await fetch(new Request("https://x.test/v1/webhooks/whk_nonexistent"));
@@ -231,7 +243,7 @@ describe("GET /v1/webhooks/:id", () => {
       new Request("https://x.test/v1/webhooks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orgId: "org_test", url: "https://example.com/hook" }),
+        body: JSON.stringify({ orgId: "org_test", url: "https://1.1.1.1/hook" }),
       }),
     );
     const id = store[0].id;
@@ -265,7 +277,7 @@ describe("PATCH /v1/webhooks/:id", () => {
       new Request("https://x.test/v1/webhooks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orgId: "org_test", url: "https://example.com/hook" }),
+        body: JSON.stringify({ orgId: "org_test", url: "https://1.1.1.1/hook" }),
       }),
     );
     const id = store[0].id;
@@ -285,7 +297,7 @@ describe("PATCH /v1/webhooks/:id", () => {
       new Request("https://x.test/v1/webhooks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orgId: "org_test", url: "https://example.com/hook" }),
+        body: JSON.stringify({ orgId: "org_test", url: "https://1.1.1.1/hook" }),
       }),
     );
     const id = store[0].id;
@@ -305,7 +317,7 @@ describe("PATCH /v1/webhooks/:id", () => {
       new Request("https://x.test/v1/webhooks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orgId: "org_test", url: "https://example.com/hook" }),
+        body: JSON.stringify({ orgId: "org_test", url: "https://1.1.1.1/hook" }),
       }),
     );
     const id = store[0].id;
@@ -325,7 +337,7 @@ describe("PATCH /v1/webhooks/:id", () => {
       new Request("https://x.test/v1/webhooks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orgId: "org_test", url: "https://example.com/hook" }),
+        body: JSON.stringify({ orgId: "org_test", url: "https://1.1.1.1/hook" }),
       }),
     );
     const id = store[0].id;
@@ -354,7 +366,7 @@ describe("PATCH /v1/webhooks/:id", () => {
       new Request("https://x.test/v1/webhooks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orgId: "org_test", url: "https://example.com/hook" }),
+        body: JSON.stringify({ orgId: "org_test", url: "https://1.1.1.1/hook" }),
       }),
     );
     const id = store[0].id;
@@ -378,7 +390,7 @@ describe("PATCH /v1/webhooks/:id", () => {
       new Request("https://x.test/v1/webhooks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orgId: "org_test", url: "https://example.com/hook" }),
+        body: JSON.stringify({ orgId: "org_test", url: "https://1.1.1.1/hook" }),
       }),
     );
     const id = store[0].id;
@@ -408,7 +420,7 @@ describe("DELETE /v1/webhooks/:id", () => {
       new Request("https://x.test/v1/webhooks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orgId: "org_test", url: "https://example.com/hook" }),
+        body: JSON.stringify({ orgId: "org_test", url: "https://1.1.1.1/hook" }),
       }),
     );
     const id = store[0].id;
@@ -426,7 +438,7 @@ describe("DELETE /v1/webhooks/:id", () => {
       new Request("https://x.test/v1/webhooks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orgId: "org_test", url: "https://example.com/hook" }),
+        body: JSON.stringify({ orgId: "org_test", url: "https://1.1.1.1/hook" }),
       }),
     );
     const id = store[0].id;
@@ -471,7 +483,7 @@ describe("POST /v1/webhooks/:id/rotate-secret", () => {
       new Request("https://x.test/v1/webhooks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orgId: "org_test", url: "https://example.com/hook" }),
+        body: JSON.stringify({ orgId: "org_test", url: "https://1.1.1.1/hook" }),
       }),
     );
     const id = store[0].id;
@@ -495,7 +507,7 @@ describe("POST /v1/webhooks/:id/rotate-secret", () => {
       new Request("https://x.test/v1/webhooks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orgId: "org_test", url: "https://example.com/hook" }),
+        body: JSON.stringify({ orgId: "org_test", url: "https://1.1.1.1/hook" }),
       }),
     );
     const original = (await createRes.json()) as { id: string; signingKey: string };
@@ -532,7 +544,7 @@ describe("POST /v1/webhooks/:id/test", () => {
       new Request("https://x.test/v1/webhooks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orgId: "org_test", url: "https://example.com/hook" }),
+        body: JSON.stringify({ orgId: "org_test", url: "https://1.1.1.1/hook" }),
       }),
     );
     const id = store[0].id;
@@ -557,7 +569,7 @@ describe("POST /v1/webhooks/:id/test", () => {
       attempt: number;
     };
     expect(msg.subscriptionId).toBe(id);
-    expect(msg.url).toBe("https://example.com/hook");
+    expect(msg.url).toBe("https://1.1.1.1/hook");
     expect(msg.event.type).toBe("release.created");
     expect(msg.attempt).toBe(1);
   });
@@ -568,7 +580,7 @@ describe("POST /v1/webhooks/:id/test", () => {
       new Request("https://x.test/v1/webhooks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orgId: "org_test", url: "https://example.com/hook" }),
+        body: JSON.stringify({ orgId: "org_test", url: "https://1.1.1.1/hook" }),
       }),
     );
     // POST creates the sub regardless of queue binding; only the /test endpoint needs the queue.

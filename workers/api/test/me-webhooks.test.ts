@@ -7,6 +7,7 @@ import { user } from "../src/db/schema-auth.js";
 import { meWebhookHandlers } from "../src/routes/me-webhooks.js";
 
 const TEST_MASTER_KEY = "a".repeat(64);
+const PUBLIC_HOOK_URL = "https://1.1.1.1/hook";
 const queueMessages: unknown[] = [];
 
 let h: TestDatabase;
@@ -64,7 +65,7 @@ describe("/v1/me/webhooks", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           orgSlug: "acme",
-          url: "https://example.com/hook",
+          url: PUBLIC_HOOK_URL,
           description: "my hook",
         }),
       },
@@ -95,7 +96,7 @@ describe("/v1/me/webhooks", () => {
         body: JSON.stringify({
           orgSlug: "acme",
           sourceSlug: "changelog",
-          url: "https://example.com/hook",
+          url: PUBLIC_HOOK_URL,
         }),
       },
       env,
@@ -112,7 +113,7 @@ describe("/v1/me/webhooks", () => {
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orgSlug: "nope", url: "https://example.com/hook" }),
+        body: JSON.stringify({ orgSlug: "nope", url: PUBLIC_HOOK_URL }),
       },
       env,
     );
@@ -133,6 +134,20 @@ describe("/v1/me/webhooks", () => {
     expect(res.status).toBe(400);
   });
 
+  it("POST private IP url → 400", async () => {
+    const { a, env } = app();
+    const res = await a.request(
+      "/me/webhooks",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orgSlug: "acme", url: "https://127.0.0.1/hook" }),
+      },
+      env,
+    );
+    expect(res.status).toBe(400);
+  });
+
   it("GET lists only the caller's subscriptions with enriched fields", async () => {
     const { a, env } = app();
     await a.request(
@@ -140,7 +155,7 @@ describe("/v1/me/webhooks", () => {
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orgSlug: "acme", url: "https://example.com/hook" }),
+        body: JSON.stringify({ orgSlug: "acme", url: PUBLIC_HOOK_URL }),
       },
       env,
     );
@@ -160,7 +175,7 @@ describe("/v1/me/webhooks", () => {
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orgSlug: "acme", url: "https://example.com/hook" }),
+        body: JSON.stringify({ orgSlug: "acme", url: PUBLIC_HOOK_URL }),
       },
       env,
     );
@@ -188,7 +203,7 @@ describe("/v1/me/webhooks", () => {
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orgSlug: "acme", url: "https://example.com/hook" }),
+        body: JSON.stringify({ orgSlug: "acme", url: PUBLIC_HOOK_URL }),
       },
       env,
     );
@@ -229,7 +244,7 @@ describe("/v1/me/webhooks", () => {
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orgSlug: "acme", url: "https://example.com/hook" }),
+        body: JSON.stringify({ orgSlug: "acme", url: PUBLIC_HOOK_URL }),
       },
       env,
     );
@@ -240,6 +255,31 @@ describe("/v1/me/webhooks", () => {
     expect(queueMessages).toHaveLength(1);
   });
 
+  it("POST test returns 429 when the per-subscription limiter rejects", async () => {
+    const { a, env } = app();
+    const create = await a.request(
+      "/me/webhooks",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orgSlug: "acme", url: PUBLIC_HOOK_URL }),
+      },
+      env,
+    );
+    const { id } = (await create.json()) as { id: string };
+
+    const limitedEnv = {
+      ...env,
+      WEBHOOK_TEST_SUB_RATE_LIMITER: { limit: async () => ({ success: false }) },
+      WEBHOOK_TEST_USER_RATE_LIMITER: { limit: async () => ({ success: true }) },
+    };
+
+    const test = await a.request(`/me/webhooks/${id}/test`, { method: "POST" }, limitedEnv);
+    expect(test.status).toBe(429);
+    expect(((await test.json()) as { error: string }).error).toBe("rate_limited");
+    expect(queueMessages).toHaveLength(0);
+  });
+
   it("GET detail includes delivery health from summary columns", async () => {
     const { a, env } = app();
     const create = await a.request(
@@ -247,7 +287,7 @@ describe("/v1/me/webhooks", () => {
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orgSlug: "acme", url: "https://example.com/hook" }),
+        body: JSON.stringify({ orgSlug: "acme", url: PUBLIC_HOOK_URL }),
       },
       env,
     );
@@ -269,7 +309,7 @@ describe("/v1/me/webhooks", () => {
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orgSlug: "acme", url: "https://example.com/hook" }),
+        body: JSON.stringify({ orgSlug: "acme", url: PUBLIC_HOOK_URL }),
       },
       env,
     );
@@ -300,7 +340,7 @@ describe("/v1/me/webhooks", () => {
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orgSlug: "acme", url: "https://example.com/hook" }),
+        body: JSON.stringify({ orgSlug: "acme", url: PUBLIC_HOOK_URL }),
       },
       env,
     );

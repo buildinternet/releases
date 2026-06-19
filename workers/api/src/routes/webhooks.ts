@@ -22,8 +22,8 @@ import {
   requireMasterKey,
   signingKeyFor,
   SUBSCRIPTION_ID_RE,
-  validateWebhookUrl,
 } from "../webhooks/shared.js";
+import { assertPublicWebhookTarget } from "../webhooks/url-safety.js";
 
 export const webhooksRoutes = new Hono<Env>();
 
@@ -53,7 +53,7 @@ webhooksRoutes.post("/webhooks", async (c) => {
   if (!url || typeof url !== "string") {
     return c.json({ error: "bad_request", message: "url is required" }, 400);
   }
-  const urlError = validateWebhookUrl(url);
+  const urlError = await assertPublicWebhookTarget(url);
   if (urlError) {
     return c.json({ error: "bad_request", message: urlError }, 400);
   }
@@ -106,6 +106,13 @@ webhooksRoutes.patch("/webhooks/:id", async (c) => {
     body = (await c.req.json()) as typeof body;
   } catch {
     return c.json({ error: "bad_request", message: "invalid JSON body" }, 400);
+  }
+
+  if (body.url !== undefined) {
+    const urlError = await assertPublicWebhookTarget(body.url);
+    if (urlError) {
+      return c.json({ error: "bad_request", message: urlError }, 400);
+    }
   }
 
   const patch = buildWebhookPatchUpdates(body);
