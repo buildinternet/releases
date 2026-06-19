@@ -192,6 +192,8 @@ Signed-in users can follow orgs and products; an org follow implicitly covers al
 
 **Follows-scoped webhooks** (`POST /v1/me/webhooks { scope: "follows" }`) are the real-time outbound sibling to the feed and digest email — one HTTPS endpoint per account, delivery filtered by the same follow graph. See [docs/webhooks.md](../webhooks.md) and the web docs at `/docs/api/webhooks`.
 
+**Account webhooks UI** (`web/src/components/webhooks-panel.tsx` on `/account/notifications`, #1679) lists self-serve subscriptions with delivery health, supports create (follows or org scope), test/pause/resume, rotate signing key, and delete. Uses the browser client in `web/src/lib/webhooks.ts` (`credentials: "include"` against the API worker). Signing keys are shown once on create/rotate, matching the API contract.
+
 ## Admin hub
 
 `/admin` (`web/src/app/admin/page.tsx`) is the operator tool index, gated server-side via `isAdminViewer()` (`web/src/lib/server-session.ts`) — non-admins get `notFound()`. Reachable from the account dropdown when the viewer is an admin.
