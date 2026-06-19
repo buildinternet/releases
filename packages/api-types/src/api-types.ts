@@ -897,11 +897,15 @@ export type WebhookDeliveryHealth =
   | "paused"
   | "auto_paused";
 
+/** Self-serve webhook filter scope. */
+export type UserWebhookScope = "org" | "follows";
+
 /** A user-owned webhook subscription row (no signing secret). */
 export interface UserWebhookSubscription {
   id: string;
   userId: string;
-  orgId: string;
+  scope: UserWebhookScope;
+  orgId: string | null;
   url: string;
   sourceId: string | null;
   enabled: boolean;
@@ -925,8 +929,8 @@ export interface UserWebhookDeliveryHealth {
 /** List item returned by GET /v1/me/webhooks — includes org/source display fields. */
 export interface UserWebhookListItem
   extends Omit<UserWebhookSubscription, "userId">, UserWebhookDeliveryHealth {
-  orgSlug: string;
-  orgName: string;
+  orgSlug: string | null;
+  orgName: string | null;
   sourceSlug: string | null;
   sourceName: string | null;
 }
@@ -939,8 +943,8 @@ export interface UserWebhookListResponse {
 /** POST /v1/me/webhooks response — signing key shown once at creation. */
 export interface CreateUserWebhookResponse
   extends UserWebhookSubscription, UserWebhookDeliveryHealth {
-  orgSlug: string;
-  orgName: string;
+  orgSlug: string | null;
+  orgName: string | null;
   signingKey: string;
 }
 

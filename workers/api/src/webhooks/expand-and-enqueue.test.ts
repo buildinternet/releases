@@ -8,7 +8,7 @@ describe("expandAndEnqueue", () => {
     await expandAndEnqueue({
       events: [],
       eventOwners: new Map(),
-      loadSubscriptions: async () => [],
+      loadOrgSubscriptions: async () => [],
       queue: { sendBatch } as any,
     });
     expect(sendBatch).not.toHaveBeenCalled();
@@ -26,8 +26,8 @@ describe("expandAndEnqueue", () => {
           release: { id: "rel_1" } as any,
         },
       ],
-      eventOwners: new Map([["rel_1", { orgId: "org_a", sourceId: "src_a" }]]),
-      loadSubscriptions: async () => [],
+      eventOwners: new Map([["rel_1", { orgId: "org_a", sourceId: "src_a", productId: null }]]),
+      loadOrgSubscriptions: async () => [],
       queue: { sendBatch } as any,
     });
     expect(sendBatch).not.toHaveBeenCalled();
@@ -47,7 +47,7 @@ describe("expandAndEnqueue", () => {
         release: { id: "rel_1" } as any,
       },
     ];
-    const owners = new Map([["rel_1", { orgId: "org_a", sourceId: "src_a" }]]);
+    const owners = new Map([["rel_1", { orgId: "org_a", sourceId: "src_a", productId: null }]]);
     const subs = [
       {
         id: "whk_1",
@@ -69,7 +69,7 @@ describe("expandAndEnqueue", () => {
     await expandAndEnqueue({
       events,
       eventOwners: owners,
-      loadSubscriptions: async () => subs,
+      loadOrgSubscriptions: async () => subs,
       queue: { sendBatch } as any,
     });
     expect(sent.length).toBe(1);
@@ -89,7 +89,10 @@ describe("expandAndEnqueue", () => {
       release: { id: `rel_${i}` } as any,
     }));
     const owners = new Map(
-      events.map((e) => [(e.release as any).id, { orgId: "org_a", sourceId: "src_a" }]),
+      events.map((e) => [
+        (e.release as any).id,
+        { orgId: "org_a", sourceId: "src_a", productId: null },
+      ]),
     );
     const subs = [
       {
@@ -104,10 +107,49 @@ describe("expandAndEnqueue", () => {
     await expandAndEnqueue({
       events,
       eventOwners: owners,
-      loadSubscriptions: async () => subs,
+      loadOrgSubscriptions: async () => subs,
       queue: { sendBatch } as any,
     });
     expect(calls).toEqual([100, 100, 50]);
+  });
+
+  it("fans out follows-scoped subscriptions via loadFollowsSubscriptions", async () => {
+    const sent: DeliveryMessage[] = [];
+    const sendBatch = mock(async (msgs: { body: DeliveryMessage }[]) => {
+      for (const m of msgs) sent.push(m.body);
+    });
+    const events = [
+      {
+        id: "evt_1",
+        seq: 1,
+        ts: 1,
+        type: "release.created" as const,
+        release: { id: "rel_1" } as any,
+      },
+    ];
+    const owners = new Map([["rel_1", { orgId: "org_a", sourceId: "src_a", productId: "prd_x" }]]);
+    await expandAndEnqueue({
+      events,
+      eventOwners: owners,
+      loadOrgSubscriptions: async () => [],
+      loadFollowsSubscriptions: async () => [
+        {
+          id: "whk_follows",
+          userId: "u1",
+          scope: "follows",
+          orgId: null,
+          sourceId: null,
+          url: "https://h",
+          secretVersion: 1,
+          enabled: true,
+        } as any,
+      ],
+      loadFollowTargetsForUsers: async () =>
+        new Map([["u1", { orgIds: new Set<string>(), productIds: new Set(["prd_x"]) }]]),
+      queue: { sendBatch } as any,
+    });
+    expect(sent.length).toBe(1);
+    expect(sent[0].subscriptionId).toBe("whk_follows");
   });
 
   it("swallows queue errors with a warn — never throws", async () => {
@@ -123,7 +165,7 @@ describe("expandAndEnqueue", () => {
         release: { id: "rel_1" } as any,
       },
     ];
-    const owners = new Map([["rel_1", { orgId: "org_a", sourceId: "src_a" }]]);
+    const owners = new Map([["rel_1", { orgId: "org_a", sourceId: "src_a", productId: null }]]);
     const subs = [
       {
         id: "whk_1",
@@ -137,7 +179,7 @@ describe("expandAndEnqueue", () => {
     await expandAndEnqueue({
       events,
       eventOwners: owners,
-      loadSubscriptions: async () => subs,
+      loadOrgSubscriptions: async () => subs,
       queue: { sendBatch } as any,
     });
   });

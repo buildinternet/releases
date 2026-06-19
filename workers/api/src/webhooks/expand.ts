@@ -16,7 +16,8 @@ export function expand(
   for (const event of events) {
     const owner = eventOwner(event);
     for (const sub of subscriptions) {
-      if (sub.orgId !== owner.orgId) continue;
+      if (sub.scope === "follows") continue;
+      if (!sub.orgId || sub.orgId !== owner.orgId) continue;
       if (sub.sourceId !== null && sub.sourceId !== owner.sourceId) continue;
       out.push({
         subscriptionId: sub.id,

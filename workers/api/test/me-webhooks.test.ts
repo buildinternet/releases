@@ -4,6 +4,7 @@ import { createTestDb, type TestDatabase } from "../../../tests/db-helper.js";
 import { eq } from "drizzle-orm";
 import { organizations, sources, webhookSubscriptions } from "@buildinternet/releases-core/schema";
 import { user } from "../src/db/schema-auth.js";
+
 import { meWebhookHandlers } from "../src/routes/me-webhooks.js";
 
 const TEST_MASTER_KEY = "a".repeat(64);
@@ -132,6 +133,67 @@ describe("/v1/me/webhooks", () => {
       env,
     );
     expect(res.status).toBe(400);
+  });
+
+  it("POST scope follows creates a follows-scoped subscription", async () => {
+    const { a, env } = app();
+    const res = await a.request(
+      "/me/webhooks",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scope: "follows", url: PUBLIC_HOOK_URL }),
+      },
+      env,
+    );
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as {
+      scope: string;
+      orgId: string | null;
+      orgSlug: string | null;
+    };
+    expect(body.scope).toBe("follows");
+    expect(body.orgId).toBeNull();
+    expect(body.orgSlug).toBeNull();
+  });
+
+  it("POST scope follows rejects org/source fields", async () => {
+    const { a, env } = app();
+    const res = await a.request(
+      "/me/webhooks",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scope: "follows", orgSlug: "acme", url: PUBLIC_HOOK_URL }),
+      },
+      env,
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it("POST scope follows is capped at one per account", async () => {
+    const { a, env } = app();
+    const first = await a.request(
+      "/me/webhooks",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scope: "follows", url: PUBLIC_HOOK_URL }),
+      },
+      env,
+    );
+    expect(first.status).toBe(201);
+
+    const second = await a.request(
+      "/me/webhooks",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scope: "follows", url: "https://8.8.8.8/hook" }),
+      },
+      env,
+    );
+    expect(second.status).toBe(429);
   });
 
   it("POST private IP url → 400", async () => {

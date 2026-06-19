@@ -19,7 +19,7 @@ export async function notifyAutoDisabledSubscription(
 ): Promise<void> {
   let org: { name: string; slug: string } | null = null;
   try {
-    org = await getOrgLabelById(db, sub.orgId);
+    if (sub.orgId) org = await getOrgLabelById(db, sub.orgId);
   } catch (err) {
     logEvent("warn", {
       component: "webhook-auto-disable",

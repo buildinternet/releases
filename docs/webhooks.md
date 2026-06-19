@@ -118,7 +118,15 @@ Cloudflare Queues guarantees at-least-once delivery, so the same event may arriv
 
 ## Self-serve subscriptions
 
-Signed-in users manage webhooks at `/v1/me/webhooks` (session, `relu_` user key, or OAuth JWT). Each subscription is org-scoped with an optional source filter; see the API for create/list/patch/delete, `rotate-secret`, `test`, and delivery history.
+Signed-in users manage webhooks at `/v1/me/webhooks` (session, `relu_` user key, or OAuth JWT). See the API for create/list/patch/delete, `rotate-secret`, `test`, and delivery history.
+
+### Org-scoped (default)
+
+`POST /v1/me/webhooks` with `orgId` or `orgSlug` and an optional `sourceId` / `sourceSlug` filter. Up to **10** org-scoped subscriptions per account.
+
+### Follows-scoped
+
+`POST /v1/me/webhooks { "scope": "follows", "url": "…" }` delivers `release.created` events for releases matching the caller's current `user_follows` graph — same semantics as `GET /v1/me/feed` (org follow covers all sources under that org; product follow matches releases from sources tied to that product). **One** follows-scoped subscription per account; it does not count against the 10 org-scoped cap. Follow/unfollow changes apply on the next publish (no snapshot). Scope cannot be converted via `PATCH` — delete and recreate.
 
 ### URL requirements
 

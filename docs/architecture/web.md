@@ -190,6 +190,8 @@ Signed-in users can follow orgs and products; an org follow implicitly covers al
 
 **`/following` page** (`web/src/app/following/page.tsx`) is the personalized feed: a newest-first release list (reusing the `ReleaseLatestItem` component) drawn from `GET /v1/me/feed`, with a same-page sidebar listing all current follows and offering unfollow actions. The feed is cursor-paginated and empty-stated with a prompt to follow orgs or products when the user has no follows yet.
 
+**Follows-scoped webhooks** (`POST /v1/me/webhooks { scope: "follows" }`) are the real-time outbound sibling to the feed and digest email — one HTTPS endpoint per account, delivery filtered by the same follow graph. See [docs/webhooks.md](../webhooks.md) and the web docs at `/docs/api/webhooks`.
+
 ## Admin hub
 
 `/admin` (`web/src/app/admin/page.tsx`) is the operator tool index, gated server-side via `isAdminViewer()` (`web/src/lib/server-session.ts`) — non-admins get `notFound()`. Reachable from the account dropdown when the viewer is an admin.

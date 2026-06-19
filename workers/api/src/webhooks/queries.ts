@@ -3,6 +3,8 @@ import {
   webhookSubscriptions,
   type WebhookSubscription,
 } from "@buildinternet/releases-core/schema";
+import { userFollows } from "../db/schema-follows.js";
+import { foldUserFollowRows, type UserFollowTargets } from "./follows-match.js";
 import type { D1Db } from "../db.js";
 
 export type WebhookSubscriptionUpdates = Partial<{
@@ -31,8 +33,40 @@ export async function matchWebhookSubscriptions(
     .select()
     .from(webhookSubscriptions)
     .where(
-      and(eq(webhookSubscriptions.enabled, true), inArray(webhookSubscriptions.orgId, orgIds)),
+      and(
+        eq(webhookSubscriptions.enabled, true),
+        eq(webhookSubscriptions.scope, "org"),
+        inArray(webhookSubscriptions.orgId, orgIds),
+      ),
     );
+}
+
+/** Enabled follows-scoped self-serve subscriptions (org_id is null). */
+export async function matchFollowsScopedWebhookSubscriptions(
+  db: D1Db,
+): Promise<WebhookSubscription[]> {
+  return db
+    .select()
+    .from(webhookSubscriptions)
+    .where(and(eq(webhookSubscriptions.enabled, true), eq(webhookSubscriptions.scope, "follows")));
+}
+
+/** Batch-load follow targets for webhook fan-out. */
+export async function loadFollowTargetsForUsers(
+  db: D1Db,
+  userIds: string[],
+): Promise<Map<string, UserFollowTargets>> {
+  if (userIds.length === 0) return new Map();
+  const unique = [...new Set(userIds)];
+  const rows = await db
+    .select({
+      userId: userFollows.userId,
+      targetType: userFollows.targetType,
+      targetId: userFollows.targetId,
+    })
+    .from(userFollows)
+    .where(inArray(userFollows.userId, unique));
+  return foldUserFollowRows(rows);
 }
 
 /**
@@ -43,19 +77,22 @@ export async function matchWebhookSubscriptions(
 export async function insertWebhookSubscription(
   db: D1Db,
   input: {
-    orgId: string;
+    scope?: "org" | "follows";
+    orgId: string | null;
     url: string;
     sourceId: string | null;
     description: string | null;
     userId?: string | null;
   },
 ): Promise<WebhookSubscription> {
+  const scope = input.scope ?? "org";
   const [row] = await db
     .insert(webhookSubscriptions)
     .values({
+      scope,
       orgId: input.orgId,
       url: input.url,
-      sourceId: input.sourceId,
+      sourceId: scope === "follows" ? null : input.sourceId,
       description: input.description,
       userId: input.userId ?? null,
     })
