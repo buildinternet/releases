@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { OrgDetail } from "@/lib/api";
 import { productPath } from "@/lib/links";
-import { type WeeklyBucket, fmtVersion, getProductColor } from "@/lib/cadence";
+import { type WeeklyBucket, fmtVersion, getProductColor, isSemverShaped } from "@/lib/cadence";
 import { CadenceBadge, InlineSparkline } from "@/components/cadence-chrome";
 
 export interface ProductCadenceData {
@@ -44,8 +44,14 @@ export function ProductGrid({
           const cadence = cadenceBySlug?.get(p.slug);
           const color = cadence ? getProductColor(cadence.colorIndex) : undefined;
           const hasActivity = cadence != null && cadence.releaseCount > 0;
+          // Only surface a version when it's actually semver/calver-shaped.
+          // Codename "versions" (e.g. "Opus 4.7") span parallel model lines and
+          // can't be meaningfully ranked as a single product's "latest", so we
+          // omit them and keep the still-meaningful cadence + avg/week.
           const latestLabel =
-            hasActivity && cadence.latestVersion ? fmtVersion(cadence.latestVersion) : null;
+            hasActivity && cadence.latestVersion && isSemverShaped(cadence.latestVersion)
+              ? fmtVersion(cadence.latestVersion)
+              : null;
           const avgLabel = hasActivity
             ? `${cadence.capped ? `${Math.round(cadence.avgReleasesPerWeek)}+` : Math.round(cadence.avgReleasesPerWeek)}/week avg`
             : null;
