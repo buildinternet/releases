@@ -70,37 +70,43 @@ async function sendEmail(env: EmailEnv, input: SendEmailInput): Promise<SendEmai
   return { sent: true };
 }
 
-// ── Alert helper ───────────────────────────────────────────────────────────
+async function sendTransactional(
+  component: "webhook-alert" | "webhook-user-notify",
+  env: EmailEnv,
+  subject: string,
+  body: string,
+  to?: string,
+): Promise<boolean> {
+  try {
+    const result = await sendEmail(env, { to, subject, text: body });
+    if (!result.sent) {
+      logEvent("info", { component, event: "skipped", reason: result.reason, subject });
+      return false;
+    }
+    logEvent("info", { component, event: "sent", subject });
+    return true;
+  } catch (err) {
+    logEvent("warn", { component, event: "send-error", err });
+    return false;
+  }
+}
 
-/**
- * Send a `[alert]`-prefixed email. Fire-and-forget; never throws.
- * Returns true if the email was sent, false if skipped.
- */
+/** Owner-facing transactional email (no `[alert]` prefix). */
+export async function sendWebhookUserNotice(
+  env: EmailEnv,
+  to: string,
+  subject: string,
+  body: string,
+): Promise<boolean> {
+  return sendTransactional("webhook-user-notify", env, subject, body, to);
+}
+
+/** Operator `[alert]` email to EMAIL_NOTIFY_TO. */
 export async function sendWebhookAlert(
   env: EmailEnv,
   subject: string,
   body: string,
 ): Promise<boolean> {
   const normalizedSubject = subject.startsWith("[alert]") ? subject : `[alert] ${subject}`;
-  try {
-    const result = await sendEmail(env, { subject: normalizedSubject, text: body });
-    if (!result.sent) {
-      logEvent("info", {
-        component: "webhook-alert",
-        event: "skipped",
-        reason: result.reason,
-        subject: normalizedSubject,
-      });
-      return false;
-    }
-    logEvent("info", { component: "webhook-alert", event: "sent", subject: normalizedSubject });
-    return true;
-  } catch (err) {
-    logEvent("warn", {
-      component: "webhook-alert",
-      event: "send-error",
-      err,
-    });
-    return false;
-  }
+  return sendTransactional("webhook-alert", env, normalizedSubject, body);
 }

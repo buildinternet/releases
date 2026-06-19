@@ -1,9 +1,8 @@
 /**
- * Webhook subscription routes: CRUD, rotate-secret, test, deliveries.
+ * Admin webhook subscription routes: CRUD, rotate-secret, test, deliveries.
  * Mounted at /v1/webhooks/*; gated by authMiddleware via the "webhooks" allowlist entry.
  */
 import { Hono } from "hono";
-import { deriveSigningKey } from "@releases/core-internal/webhook-sign";
 import { createDb } from "../db.js";
 import {
   insertWebhookSubscription,
@@ -17,39 +16,19 @@ import { newEventId } from "../events/types.js";
 import type { DeliveryMessage } from "../webhooks/types.js";
 import { getSecret } from "@releases/lib/secrets";
 import type { Env } from "../index.js";
-
-/** AE SQL doesn't support bound parameters; this validates id before string interpolation. */
-const SUBSCRIPTION_ID_RE = /^whk_[a-zA-Z0-9_]+$/;
-
-function validateUrl(url: string): string | null {
-  let parsed: URL;
-  try {
-    parsed = new URL(url);
-  } catch {
-    return "url is invalid";
-  }
-  if (parsed.protocol !== "https:") {
-    return "url must use HTTPS";
-  }
-  return null;
-}
+import {
+  buildWebhookPatchUpdates,
+  fetchWebhookDeliveries,
+  requireMasterKey,
+  signingKeyFor,
+  SUBSCRIPTION_ID_RE,
+  validateWebhookUrl,
+} from "../webhooks/shared.js";
 
 export const webhooksRoutes = new Hono<Env>();
 
 function getDb(c: any): any {
   return c.get("db") ?? createDb(c.env.DB);
-}
-
-/** Returns the master HMAC key, or a 503 Response when the binding is missing. */
-async function requireMasterKey(c: any): Promise<string | Response> {
-  const masterKey = (await getSecret(c.env.WEBHOOK_HMAC_MASTER)) ?? undefined;
-  if (!masterKey) {
-    return c.json(
-      { error: "webhook_unavailable", message: "WEBHOOK_HMAC_MASTER not configured" },
-      503,
-    );
-  }
-  return masterKey;
 }
 
 webhooksRoutes.post("/webhooks", async (c) => {
@@ -74,7 +53,7 @@ webhooksRoutes.post("/webhooks", async (c) => {
   if (!url || typeof url !== "string") {
     return c.json({ error: "bad_request", message: "url is required" }, 400);
   }
-  const urlError = validateUrl(url);
+  const urlError = validateWebhookUrl(url);
   if (urlError) {
     return c.json({ error: "bad_request", message: urlError }, 400);
   }
@@ -87,9 +66,7 @@ webhooksRoutes.post("/webhooks", async (c) => {
     description: typeof description === "string" ? description : null,
   });
 
-  // Signing key is derived deterministically from master + sub.id + secretVersion.
-  // Returned here ONLY — re-derivation requires `rotate-secret`.
-  const signingKey = await deriveSigningKey(masterKey, sub.id, sub.secretVersion);
+  const signingKey = await signingKeyFor(masterKey, sub.id, sub.secretVersion);
 
   return c.json({ ...sub, signingKey }, 201);
 });
@@ -131,32 +108,13 @@ webhooksRoutes.patch("/webhooks/:id", async (c) => {
     return c.json({ error: "bad_request", message: "invalid JSON body" }, 400);
   }
 
-  if (body.url !== undefined) {
-    const urlError = validateUrl(body.url);
-    if (urlError) {
-      return c.json({ error: "bad_request", message: urlError }, 400);
-    }
-  }
-
-  const updates: Parameters<typeof updateWebhookSubscription>[2] = {};
-  if (body.url !== undefined) updates.url = body.url;
-  if (body.description !== undefined) updates.description = body.description;
-  if (body.enabled !== undefined) {
-    updates.enabled = body.enabled;
-    if (body.enabled) {
-      updates.consecutiveFailures = 0;
-      updates.disabledReason = null;
-    } else {
-      updates.disabledReason = body.disabledReason ?? "manually disabled";
-    }
-  }
-
-  if (Object.keys(updates).length === 0) {
-    return c.json({ error: "bad_request", message: "no recognized fields to update" }, 400);
+  const patch = buildWebhookPatchUpdates(body);
+  if ("error" in patch) {
+    return c.json({ error: "bad_request", message: patch.error }, 400);
   }
 
   const id = c.req.param("id");
-  const fresh = await updateWebhookSubscription(getDb(c), id, updates);
+  const fresh = await updateWebhookSubscription(getDb(c), id, patch);
   if (!fresh) return c.json({ error: "not_found" }, 404);
   return c.json(fresh);
 });
@@ -176,7 +134,7 @@ webhooksRoutes.post("/webhooks/:id/rotate-secret", async (c) => {
   const newVersion = await bumpWebhookSecretVersion(getDb(c), id);
   if (newVersion === null) return c.json({ error: "not_found" }, 404);
 
-  const signingKey = await deriveSigningKey(masterKey, id, newVersion);
+  const signingKey = await signingKeyFor(masterKey, id, newVersion);
   return c.json({ secretVersion: newVersion, signingKey });
 });
 
@@ -243,28 +201,11 @@ webhooksRoutes.get("/webhooks/:id/deliveries", async (c) => {
     return c.json({ error: "bad_request", message: "invalid subscription id format" }, 400);
   }
 
-  const failedOnly = c.req.query("failed") === "true";
   const limitParam = parseInt(c.req.query("limit") ?? "20", 10);
-  const limit = isNaN(limitParam) || limitParam < 1 ? 20 : Math.min(100, limitParam);
-
-  const failedFilter = failedOnly
-    ? ` AND blob4 IN ('retry','perm_fail','dlq','auto_disabled')`
-    : "";
-  const sql =
-    `SELECT timestamp, blob1 AS event_id, blob2 AS error_message, blob3 AS error_code, ` +
-    `blob4 AS outcome, double1 AS http_status, double2 AS latency_ms, double3 AS attempt ` +
-    `FROM webhook_deliveries ` +
-    `WHERE index1 = '${id}'${failedFilter} ` +
-    `ORDER BY timestamp DESC LIMIT ${limit}`;
-
-  const res = await fetch(
-    `https://api.cloudflare.com/client/v4/accounts/${cfAccountId}/analytics_engine/sql`,
-    {
-      method: "POST",
-      headers: { Authorization: `Bearer ${cfApiToken}` },
-      body: sql,
-    },
-  );
+  const res = await fetchWebhookDeliveries(cfApiToken, cfAccountId, id, {
+    failedOnly: c.req.query("failed") === "true",
+    limit: isNaN(limitParam) ? 20 : limitParam,
+  });
 
   if (!res.ok) {
     return c.json({ error: "ae_query_failed", message: `AE query returned ${res.status}` }, 502);

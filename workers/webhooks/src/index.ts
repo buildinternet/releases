@@ -2,22 +2,21 @@ import { createDb } from "./db.js";
 import {
   getWebhookSubscriptionById,
   getWebhookSubscriptionLabels,
-  getOrgLabelById,
   updateWebhookSubscriptionSummary,
   setWebhookSubscriptionEnabled,
 } from "./queries.js";
-import {
-  formatDlqAlert,
-  formatAutoDisableAlert,
-  type DlqEntry,
-  type SubscriptionLabel,
-} from "./alert-format.js";
+import { formatDlqAlert, type DlqEntry, type SubscriptionLabel } from "./alert-format.js";
+import { notifyAutoDisabledSubscription } from "./auto-disable-notify.js";
 import { deliver } from "./deliver.js";
 import { writeDeliveryAttempt, type DeliveryAttempt, type Outcome } from "./ae.js";
 import type { DeliveryMessage } from "../../api/src/webhooks/types.js";
 import { sendWebhookAlert, type EmailEnv } from "./email.js";
 import { logEvent } from "@releases/lib/log-event";
 import { getSecret } from "@releases/lib/secrets";
+import {
+  autoDisableReason,
+  shouldAutoDisableWebhook,
+} from "@releases/core-internal/webhook-resilience";
 
 export const DLQ_QUEUE = "webhook-dlq";
 
@@ -34,6 +33,8 @@ export interface Env {
   EMAIL_NOTIFY_ENABLED?: string;
   EMAIL_NOTIFY_TO?: string;
   EMAIL_FROM?: string;
+  /** Web origin for user-facing links in auto-pause emails. */
+  WEB_BASE_URL?: string;
 }
 
 /** Build a synthetic AE attempt for branches with no live HTTP result (skipped/dlq/auto_disabled). */
@@ -213,48 +214,30 @@ export default {
         });
         // oxlint-disable-next-line no-await-in-loop -- webhook delivery; re-fetch subscription to check auto-disable threshold
         const fresh = await getWebhookSubscriptionById(db, body.subscriptionId);
-        if (fresh && fresh.enabled && fresh.consecutiveFailures >= threshold) {
+        if (fresh && shouldAutoDisableWebhook(fresh, threshold)) {
+          const reason = autoDisableReason(fresh);
           // oxlint-disable-next-line no-await-in-loop -- webhook delivery; auto-disable subscription after threshold failures
           const flipped = await setWebhookSubscriptionEnabled(
             db,
             body.subscriptionId,
             false,
-            `auto-disabled after ${fresh.consecutiveFailures} consecutive failures`,
+            reason,
           );
           writeDeliveryAttempt(
             env.WEBHOOK_DELIVERIES_AE,
             syntheticAttempt(body, msg.attempts, "auto_disabled"),
           );
-          // Alert #2: notify once per auto-disable event. Gated on the actual
-          // enabled→disabled transition so concurrent batch messages past the
-          // threshold don't each fire an email.
+          // Notify once per auto-disable event. Gated on the actual enabled→disabled
+          // transition so concurrent batch messages past the threshold don't spam.
           if (flipped) {
-            // Resolve the owning org so the alert names the company instead of
-            // a bare org id; fail open to no org label on lookup error.
             ctx.waitUntil(
-              (async () => {
-                let org: { name: string; slug: string } | null = null;
-                try {
-                  org = await getOrgLabelById(db, fresh.orgId);
-                } catch (err) {
-                  logEvent("warn", {
-                    component: "webhook-auto-disable",
-                    event: "resolve-org-failed",
-                    subscriptionId: fresh.id,
-                    err,
-                  });
-                }
-                const alert = formatAutoDisableAlert({
-                  subId: fresh.id,
-                  url: fresh.url,
-                  description: fresh.description,
-                  orgName: org?.name ?? null,
-                  orgSlug: org?.slug ?? null,
-                  consecutiveFailures: fresh.consecutiveFailures,
-                  lastError: result.errorMessage ?? null,
-                });
-                await sendWebhookAlert(alertEnv, alert.subject, alert.body);
-              })().catch(() => undefined),
+              notifyAutoDisabledSubscription(
+                db,
+                { ...alertEnv, WEB_BASE_URL: env.WEB_BASE_URL },
+                fresh,
+                reason,
+                result.errorMessage ?? null,
+              ).catch(() => undefined),
             );
           }
         }

@@ -11,6 +11,7 @@ export type WebhookSubscriptionUpdates = Partial<{
   enabled: boolean;
   disabledReason: string | null;
   consecutiveFailures: number;
+  failureStreakStartedAt: string | null;
 }>;
 
 /**
@@ -41,9 +42,24 @@ export async function matchWebhookSubscriptions(
  */
 export async function insertWebhookSubscription(
   db: D1Db,
-  input: { orgId: string; url: string; sourceId: string | null; description: string | null },
+  input: {
+    orgId: string;
+    url: string;
+    sourceId: string | null;
+    description: string | null;
+    userId?: string | null;
+  },
 ): Promise<WebhookSubscription> {
-  const [row] = await db.insert(webhookSubscriptions).values(input).returning();
+  const [row] = await db
+    .insert(webhookSubscriptions)
+    .values({
+      orgId: input.orgId,
+      url: input.url,
+      sourceId: input.sourceId,
+      description: input.description,
+      userId: input.userId ?? null,
+    })
+    .returning();
   return row;
 }
 
