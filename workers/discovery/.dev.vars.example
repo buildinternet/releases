@@ -1,0 +1,23 @@
+# Local secrets for `wrangler dev` on workers/discovery (loaded by `bun run dev:discovery`).
+# Copy to `workers/discovery/.dev.vars` and fill in. NEVER commit the real file.
+# Non-secret agent IDs and URLs live in workers/discovery/wrangler.jsonc vars.
+
+# API worker auth (service-binding + direct fetch paths)
+RELEASES_API_KEY=
+RELEASED_API_KEY=
+
+# Managed-agent sessions + extraction
+ANTHROPIC_API_KEY=
+
+# Browser Rendering / scrape fetch (Cloudflare API)
+CLOUDFLARE_ACCOUNT_ID=
+CLOUDFLARE_API_TOKEN=
+
+# AI Gateway (optional — only when ANTHROPIC_BASE_URL routes through gateway)
+AI_GATEWAY_TOKEN=
+
+# OpenRouter extraction lane (optional — gated by openrouter-enabled flag + EXTRACT_MODEL)
+OPENROUTER_API_KEY=
+
+# Web Bot Auth signing (optional — only when WEB_BOT_AUTH_ENABLED=true)
+WEB_BOT_AUTH_PRIVATE_KEY=

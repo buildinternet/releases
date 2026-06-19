@@ -1,0 +1,12 @@
+# Local secrets for `wrangler dev` on workers/mcp (loaded by `bun run dev:mcp`).
+# Copy to `workers/mcp/.dev.vars` and fill in. NEVER commit the real file.
+# See CONTRIBUTING.md → "Environment variables" for Voyage / Vectorize setup.
+
+# Semantic search embeddings (Voyage). Search tools degrade to lexical when missing.
+VOYAGE_API_KEY=
+
+# Root API credential — forwarded to the API worker for write/admin routes
+# (lookup fallback, scope verification). Either prefix works; RELEASES_API_KEY
+# is preferred.
+RELEASES_API_KEY=
+RELEASED_API_KEY=
