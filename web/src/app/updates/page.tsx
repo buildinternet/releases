@@ -56,7 +56,7 @@ export default async function UpdatesPage() {
   return (
     <div className="min-h-screen">
       <Header />
-      <div className="max-w-4xl mx-auto px-6">
+      <div className="max-w-5xl mx-auto px-6">
         <JsonLd data={jsonLd} />
         <header className="pt-8 pb-4 border-b border-stone-200 dark:border-stone-800">
           <h1 className="text-[28px] font-bold tracking-tight text-stone-900 dark:text-stone-100">

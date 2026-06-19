@@ -21,6 +21,8 @@ export function OrgAdminMenu({
   discovery,
   fetchPaused,
   notice,
+  variant = "badge",
+  align = "left",
 }: {
   orgSlug: string;
   name: string;
@@ -30,6 +32,10 @@ export function OrgAdminMenu({
   discovery?: string;
   fetchPaused?: boolean;
   notice?: Notice | null;
+  /** `subtle` — muted text trigger for inline header actions. */
+  variant?: "badge" | "subtle";
+  /** Dropdown horizontal anchor. */
+  align?: "left" | "right";
 }) {
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -86,7 +92,11 @@ export function OrgAdminMenu({
   const canRename = trimmed.length > 0 && trimmed !== name.trim();
 
   const onDemand = discovery === "on_demand";
-  const buttonLabel = isHidden ? "Admin · Hidden" : autoGenerateContent ? "Admin · AI" : "Admin";
+  const statusSuffix = isHidden ? "Hidden" : autoGenerateContent ? "AI" : null;
+  const triggerClass =
+    variant === "subtle"
+      ? "inline-flex items-center gap-1 rounded-md px-2 py-1 text-[12px] text-stone-400 transition-colors hover:bg-stone-100 hover:text-stone-600 dark:text-stone-500 dark:hover:bg-stone-800/60 dark:hover:text-stone-300"
+      : "text-[11px] px-2 py-0.5 rounded font-medium uppercase tracking-wider border border-stone-300 dark:border-stone-700 bg-stone-50 hover:bg-stone-100 dark:bg-stone-900 dark:hover:bg-stone-800 text-stone-700 dark:text-stone-200";
 
   return (
     <div ref={containerRef} className="relative inline-flex items-center">
@@ -95,15 +105,26 @@ export function OrgAdminMenu({
         onClick={() => (open ? close() : setOpen(true))}
         aria-haspopup="menu"
         aria-expanded={open}
-        className="text-[11px] px-2 py-0.5 rounded font-medium uppercase tracking-wider border border-stone-300 dark:border-stone-700 bg-stone-50 hover:bg-stone-100 dark:bg-stone-900 dark:hover:bg-stone-800 text-stone-700 dark:text-stone-200"
+        className={triggerClass}
         title="Local-dev admin actions"
       >
-        {buttonLabel}
+        Admin
+        {statusSuffix && (
+          <span
+            className={
+              variant === "subtle"
+                ? "text-stone-300 dark:text-stone-600"
+                : "font-normal normal-case tracking-normal"
+            }
+          >
+            · {statusSuffix}
+          </span>
+        )}
       </button>
       {open && (
         <div
           role="menu"
-          className="absolute left-0 top-full mt-1 z-20 w-80 rounded-md border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-950 shadow-lg text-[13px] overflow-hidden"
+          className={`absolute top-full mt-1 z-20 w-80 rounded-md border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-950 shadow-lg text-[13px] overflow-hidden ${align === "right" ? "right-0" : "left-0"}`}
         >
           <div className="p-3 space-y-3">
             <div className="space-y-2">

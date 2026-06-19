@@ -128,7 +128,7 @@ export default async function SourceByIdLayout({
   return (
     <div className="min-h-screen">
       <Header />
-      <div className="max-w-4xl mx-auto px-6">
+      <div className="max-w-5xl mx-auto px-6">
         <div className="pt-5 text-[13px] text-stone-400 dark:text-stone-500">
           {source.org ? (
             <Link
