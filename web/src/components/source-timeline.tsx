@@ -2,7 +2,14 @@
 
 import { useState, useMemo, useCallback } from "react";
 import { type SourceActivity } from "@/lib/api";
-import { DAY_MS, WEEK_MS, parseBuckets, fmtVersion, pickWindowVersionRange } from "@/lib/cadence";
+import {
+  DAY_MS,
+  WEEK_MS,
+  parseBuckets,
+  fmtVersion,
+  isSemverShaped,
+  pickWindowVersionRange,
+} from "@/lib/cadence";
 import { RangeNavigator } from "@/components/range-navigator";
 import { ReleaseHeatmap, type HeatmapData } from "@/components/release-heatmap";
 import { ViewModeToggle, type ViewMode } from "@/components/view-mode-toggle";
@@ -84,8 +91,12 @@ export function SourceTimeline({ activity, heatmap, trackingSince }: SourceTimel
     const avgPerWeek = totalReleases / weeks;
     const avgPerMonth = avgPerWeek * (30 / 7);
 
-    const { earliest: windowEarliestVersion, latest: windowLatestVersion } =
-      pickWindowVersionRange(brushedBuckets);
+    const { earliest: rawEarliest, latest: rawLatest } = pickWindowVersionRange(brushedBuckets);
+    // Codename "versions" (e.g. "Opus 4.7") span parallel model lines and read
+    // as misleading version diffs, so only surface a range when both ends are
+    // actually semver/calver-shaped.
+    const windowEarliestVersion = rawEarliest && isSemverShaped(rawEarliest) ? rawEarliest : null;
+    const windowLatestVersion = rawLatest && isSemverShaped(rawLatest) ? rawLatest : null;
 
     let versionRange: {
       from: string;
