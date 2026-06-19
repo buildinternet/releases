@@ -47,7 +47,7 @@ bun run dev:mcp              # MCP worker locally
 
 Point the web frontend at the local API worker by setting `RELEASES_API_URL=http://localhost:8787` in `web/.env.local`.
 
-`wrangler dev` does not pull from Cloudflare's Secrets Store, so any endpoint that reads `ANTHROPIC_API_KEY`, `GITHUB_TOKEN`, `VOYAGE_API_KEY`, `RELEASES_API_KEY`, or `WEBHOOK_HMAC_MASTER` will fail locally unless you create `workers/api/.dev.vars` with the values you need. The file is gitignored.
+`wrangler dev` does not pull from Cloudflare's Secrets Store, so endpoints that read bound secrets will fail locally unless you create the worker's `.dev.vars` with the values you need. Each worker ships a checked-in `.dev.vars.example` template (`workers/{api,mcp,discovery,webhooks}/`); copy to `.dev.vars` and fill in. The real files are gitignored.
 
 ## Type-checking
 

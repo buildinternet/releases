@@ -1,0 +1,6 @@
+# Local secrets for `wrangler dev` on workers/webhooks.
+# Copy to `workers/webhooks/.dev.vars` and fill in. NEVER commit the real file.
+# No `dev:webhooks` script — use `wrangler dev --config workers/webhooks/wrangler.jsonc`.
+
+# HMAC signing key for outbound webhook delivery payloads
+WEBHOOK_HMAC_MASTER=
