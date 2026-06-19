@@ -450,6 +450,41 @@ describe("/v1/me/webhooks", () => {
 });
 
 describe("GET /v1/me/webhooks/:id/deliveries", () => {
+  it("accepts nanoid ids that contain hyphens", async () => {
+    const { a, env } = app();
+    const hyphenId = "whk_Ab-c123XYZ01234";
+    await h.db.insert(webhookSubscriptions).values({
+      id: hyphenId,
+      userId: "u1",
+      orgId: "org_a",
+      url: PUBLIC_HOOK_URL,
+      secretVersion: 1,
+      enabled: true,
+      consecutiveFailures: 0,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+
+    const origFetch = globalThis.fetch;
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify({ data: [] }), { status: 200 })) as unknown as typeof fetch;
+
+    try {
+      const res = await a.request(
+        `/me/webhooks/${hyphenId}/deliveries`,
+        {},
+        {
+          ...env,
+          CLOUDFLARE_API_TOKEN: { get: async () => "token" },
+          CLOUDFLARE_ACCOUNT_ID: { get: async () => "acct" },
+        },
+      );
+      expect(res.status).toBe(200);
+    } finally {
+      globalThis.fetch = origFetch;
+    }
+  });
+
   it("returns 501 when Cloudflare Analytics creds are absent", async () => {
     const { a, env } = app();
     const create = await a.request(
@@ -481,6 +516,7 @@ describe("GET /v1/me/webhooks/:id/deliveries", () => {
       env,
     );
     const { id } = (await create.json()) as { id: string };
+    expect(id).toMatch(/^whk_[A-Za-z0-9_-]+$/);
 
     const origFetch = globalThis.fetch;
     globalThis.fetch = (async () =>

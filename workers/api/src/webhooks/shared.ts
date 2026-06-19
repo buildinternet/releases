@@ -5,7 +5,8 @@ import type { Env } from "../index.js";
 import type { WebhookSubscriptionUpdates } from "./queries.js";
 
 /** AE SQL doesn't support bound parameters; validates id before string interpolation. */
-export const SUBSCRIPTION_ID_RE = /^whk_[a-zA-Z0-9_]+$/;
+/** Matches `newWebhookSubscriptionId()` — `whk_` + nanoid(16) (`A-Za-z0-9_-`). */
+export const SUBSCRIPTION_ID_RE = /^whk_[A-Za-z0-9_-]+$/;
 
 import { validateWebhookUrl } from "./url-safety.js";
 
