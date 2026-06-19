@@ -84,6 +84,20 @@ describe("releases id-IN bind budget", () => {
       .toSQL();
     expect(q.params.length).toBeLessThanOrEqual(D1_MAX_BINDINGS);
   });
+
+  it("DELETE ... WHERE id IN (chunk) stays under the cap", () => {
+    const q = db.delete(releases).where(inArray(releases.id, ids)).toSQL();
+    expect(q.params.length).toBeLessThanOrEqual(D1_MAX_BINDINGS);
+  });
+
+  it("UPDATE ... SET suppressed + suppressed_reason WHERE id IN (chunk) stays under the cap", () => {
+    const q = db
+      .update(releases)
+      .set({ suppressed: true, suppressedReason: "spam" })
+      .where(inArray(releases.id, ids))
+      .toSQL();
+    expect(q.params.length).toBeLessThanOrEqual(D1_MAX_BINDINGS);
+  });
 });
 
 const mockChunk = (i: number) => ({

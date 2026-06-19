@@ -311,6 +311,32 @@ export const ReleaseDeleteResponseSchema = z.object({
   deleted: z.literal(true),
 });
 
+/** Body accepted by `DELETE /v1/releases/batch`. */
+export const ReleaseBatchDeleteBodySchema = z.object({
+  releaseIds: z.array(z.string()).min(1),
+});
+
+/** Response returned by `DELETE /v1/releases/batch`. */
+export const ReleaseBatchDeleteResponseSchema = z.object({
+  deleted: z.number().int().min(0),
+});
+
+/**
+ * Body accepted by `POST /v1/releases/batch-suppress`. When `suppressed` is
+ * true the optional `reason` is stored in `suppressed_reason`; when false the
+ * reason is cleared.
+ */
+export const ReleaseBatchSuppressBodySchema = z.object({
+  releaseIds: z.array(z.string()).min(1),
+  suppressed: z.boolean(),
+  reason: z.string().optional(),
+});
+
+/** Response returned by `POST /v1/releases/batch-suppress`. */
+export const ReleaseBatchSuppressResponseSchema = z.object({
+  updated: z.number().int().min(0),
+});
+
 /** Response returned by `POST /v1/releases/:id/suppress`. */
 export const ReleaseSuppressResponseSchema = z.object({
   suppressed: z.literal(true),
