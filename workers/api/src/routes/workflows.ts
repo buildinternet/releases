@@ -98,23 +98,7 @@ import {
 import { loadRawSnapshot } from "../lib/raw-snapshot.js";
 import { generateCollectionSummariesForDay } from "../cron/collection-summaries.js";
 import { resolveCollectionSummaryModel } from "../lib/text-model.js";
-import { HTTPException } from "hono/http-exception";
-import type { Context } from "hono";
-
-/**
- * Parse a JSON request body, tolerating a legitimately-absent body (returns
- * `{}`) but rejecting a body that was sent and failed to parse (400) — so a
- * malformed payload can never silently default a `dryRun` route to a real run.
- */
-async function parseWorkflowBody<T>(c: Context): Promise<T> {
-  const raw = await c.req.text();
-  if (raw.trim() === "") return {} as T;
-  try {
-    return JSON.parse(raw) as T;
-  } catch {
-    throw new HTTPException(400, { message: "invalid JSON body" });
-  }
-}
+import { parseJsonBody } from "../lib/json-body.js";
 
 export const workflowsRoutes = new Hono<Env>();
 
@@ -139,7 +123,7 @@ const VALID_STATUSES = new Set<CronReportStatus>([
 ]);
 
 workflowsRoutes.post("/workflows/notifications-test", async (c) => {
-  const body = await parseWorkflowBody<TestBody>(c);
+  const body = await parseJsonBody<TestBody>(c);
 
   const target = c.env.EMAIL_NOTIFY_TO;
   if (!target) {
@@ -211,7 +195,7 @@ interface EmbedReleasesBody {
 
 workflowsRoutes.post("/workflows/embed-releases", async (c) => {
   const db = createDb(c.env.DB);
-  const body = await parseWorkflowBody<EmbedReleasesBody>(c);
+  const body = await parseJsonBody<EmbedReleasesBody>(c);
   const limit = clampLimit(body.limit);
   const since = body.since;
   const dryRun = body.dryRun === true;
@@ -325,7 +309,7 @@ interface EmbedEntitiesBody {
 
 workflowsRoutes.post("/workflows/embed-entities", async (c) => {
   const db = createDb(c.env.DB);
-  const body = await parseWorkflowBody<EmbedEntitiesBody>(c);
+  const body = await parseJsonBody<EmbedEntitiesBody>(c);
   const limit = clampLimit(body.limit);
   const dryRun = body.dryRun === true;
   const kindFilter: EntityKind | undefined = body.kind;
@@ -590,7 +574,7 @@ interface EmbedChangelogsBody {
 
 workflowsRoutes.post("/workflows/embed-changelogs", async (c) => {
   const db = createDb(c.env.DB);
-  const body = await parseWorkflowBody<EmbedChangelogsBody>(c);
+  const body = await parseJsonBody<EmbedChangelogsBody>(c);
   const limit = clampLimit(body.limit);
   const dryRun = body.dryRun === true;
 
@@ -791,7 +775,7 @@ function coerceInt(value: unknown, fallback: number): number {
 
 workflowsRoutes.post("/workflows/cluster-changesets", async (c) => {
   const db = createDb(c.env.DB);
-  const body = await parseWorkflowBody<ClusterChangesetsBody>(c);
+  const body = await parseJsonBody<ClusterChangesetsBody>(c);
 
   if (!body.sourceId && !body.orgId) {
     return c.json(
@@ -951,7 +935,7 @@ interface BatchSummarizeBody {
 }
 
 workflowsRoutes.post("/workflows/batch-summarize", async (c) => {
-  const body = await parseWorkflowBody<BatchSummarizeBody>(c);
+  const body = await parseJsonBody<BatchSummarizeBody>(c);
 
   if (!c.env.BATCH_SUMMARIZE_WORKFLOW) {
     return c.json(
@@ -1050,7 +1034,7 @@ interface BatchOverviewBody {
 }
 
 workflowsRoutes.post("/workflows/batch-overview", async (c) => {
-  const body = await parseWorkflowBody<BatchOverviewBody>(c);
+  const body = await parseJsonBody<BatchOverviewBody>(c);
 
   if (!c.env.BATCH_OVERVIEW_WORKFLOW) {
     return c.json(
@@ -1285,7 +1269,7 @@ interface EnrichFeedContentBody {
 
 workflowsRoutes.post("/workflows/enrich-feed-content", async (c) => {
   const db = createDb(c.env.DB);
-  const body = await parseWorkflowBody<EnrichFeedContentBody>(c);
+  const body = await parseJsonBody<EnrichFeedContentBody>(c);
 
   const ident = body.sourceId?.trim() || body.sourceSlug?.trim();
   if (!ident) {
@@ -1505,7 +1489,7 @@ export function buildGenerateContentDeps(
 
 workflowsRoutes.post("/workflows/generate-content", async (c) => {
   const db = createDb(c.env.DB);
-  const body = await parseWorkflowBody<GenerateContentBody>(c);
+  const body = await parseJsonBody<GenerateContentBody>(c);
 
   const ident = body.sourceId?.trim() || body.sourceSlug?.trim();
   if (!ident) {
@@ -1576,7 +1560,7 @@ interface BatchEnrichBody {
 
 workflowsRoutes.post("/workflows/batch-enrich", async (c) => {
   const db = createDb(c.env.DB);
-  const body = await parseWorkflowBody<BatchEnrichBody>(c);
+  const body = await parseJsonBody<BatchEnrichBody>(c);
 
   const sourceIds = Array.isArray(body.sourceIds)
     ? body.sourceIds.map((s) => String(s).trim()).filter(Boolean)
@@ -1711,7 +1695,7 @@ interface BackfillMediaBody {
 
 workflowsRoutes.post("/workflows/backfill-media", async (c) => {
   const db = createDb(c.env.DB);
-  const body = await parseWorkflowBody<BackfillMediaBody>(c);
+  const body = await parseJsonBody<BackfillMediaBody>(c);
 
   const bucket = c.env.MEDIA;
   if (!bucket) {
@@ -1780,7 +1764,7 @@ interface BackfillGifBody {
 
 workflowsRoutes.post("/workflows/backfill-gif-mp4", async (c) => {
   const db = createDb(c.env.DB);
-  const body = await parseWorkflowBody<BackfillGifBody>(c);
+  const body = await parseJsonBody<BackfillGifBody>(c);
 
   const bucket = c.env.MEDIA;
   const mediaTransform = c.env.MEDIA_TRANSFORM;
@@ -1868,7 +1852,7 @@ interface BackfillVideoBody {
 
 workflowsRoutes.post("/workflows/backfill-video", async (c) => {
   const db = createDb(c.env.DB);
-  const body = await parseWorkflowBody<BackfillVideoBody>(c);
+  const body = await parseJsonBody<BackfillVideoBody>(c);
 
   const bucket = c.env.MEDIA;
   if (!bucket) {
@@ -2085,7 +2069,7 @@ async function executeWindowedBackfill(
 
 workflowsRoutes.post("/workflows/backfill-source", async (c) => {
   const db = createDb(c.env.DB);
-  const body = await parseWorkflowBody<BackfillSourceBody>(c);
+  const body = await parseJsonBody<BackfillSourceBody>(c);
 
   const ident = body.sourceId?.trim() || body.sourceSlug?.trim();
   if (!ident) {
@@ -2281,7 +2265,7 @@ interface ReextractSourceBody {
 
 workflowsRoutes.post("/workflows/reextract-source", async (c) => {
   const db = createDb(c.env.DB);
-  const body = await parseWorkflowBody<ReextractSourceBody>(c);
+  const body = await parseJsonBody<ReextractSourceBody>(c);
 
   const ident = body.sourceId?.trim();
   if (!ident) {
@@ -2418,7 +2402,7 @@ interface CollectionSummariesBody {
 }
 
 workflowsRoutes.post("/workflows/collection-summaries", async (c) => {
-  const body = await parseWorkflowBody<CollectionSummariesBody>(c);
+  const body = await parseJsonBody<CollectionSummariesBody>(c);
 
   const rawDate = body.date?.trim();
   if (rawDate && !isDateKey(rawDate)) {

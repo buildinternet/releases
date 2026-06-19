@@ -21,6 +21,7 @@ import {
 } from "../queries/feed-tokens.js";
 import { getDigestPrefs, setDigestCadence } from "../queries/digest-prefs.js";
 import { DIGEST_CADENCES, type DigestCadence } from "../db/schema-digest-prefs.js";
+import { parseJsonBody } from "../lib/json-body.js";
 import type { FeedToken } from "@buildinternet/releases-api-types";
 
 function isFollowTargetType(v: unknown): v is FollowTargetType {
@@ -163,7 +164,7 @@ meHandlers.get("/me/digest", async (c) => {
 meHandlers.put("/me/digest", async (c) => {
   const session = c.get("session");
   if (!session) return c.json({ error: "unauthorized", message: "Sign in required" }, 401);
-  const body = await c.req.json<{ cadence?: unknown }>().catch(() => ({}) as { cadence?: unknown });
+  const body = await parseJsonBody<{ cadence?: unknown }>(c);
   const cadence = body.cadence;
   if (typeof cadence !== "string" || !(DIGEST_CADENCES as readonly string[]).includes(cadence)) {
     return c.json({ error: "bad_request", message: "cadence must be off|daily|weekly" }, 400);

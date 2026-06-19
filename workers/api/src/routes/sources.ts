@@ -106,6 +106,7 @@ import { sourceToMarkdown, releaseToMarkdown } from "@releases/rendering/formatt
 import { filterJunkMedia } from "@releases/rendering/media-filter.js";
 import { processMediaForR2, selectExistingReleaseUrls } from "../lib/media-ingest.js";
 import { saveRawSnapshot, type RawFormat } from "../lib/raw-snapshot.js";
+import { parseJsonBody } from "../lib/json-body.js";
 import { fetchOne, renderCheckOne, embedReleasesForSource } from "../cron/poll-fetch.js";
 import {
   getSourceMeta,
@@ -1244,9 +1245,7 @@ const postRawSnapshotHandler = async (c: import("hono").Context<Env>) => {
     );
   }
 
-  const parsed = await c.req
-    .json<{ body?: unknown; format?: unknown }>()
-    .catch(() => ({}) as { body?: unknown; format?: unknown });
+  const parsed = await parseJsonBody<{ body?: unknown; format?: unknown }>(c);
 
   const rawBody = typeof parsed.body === "string" ? parsed.body : "";
   if (rawBody.trim().length === 0) {
