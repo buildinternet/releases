@@ -29,7 +29,8 @@ export function formatUserAutoPauseEmail(input: {
   accountUrl: string;
 }): { subject: string; text: string } {
   const label =
-    input.description?.trim() || (input.orgName ? `${input.orgName} webhook` : "your webhook");
+    input.description?.trim() ||
+    (input.orgName ? `${input.orgName} webhook` : "your follows webhook");
   const orgLine =
     input.orgName && input.orgSlug ? `Organization: ${input.orgName} (${input.orgSlug})\n` : "";
   const greeting = input.recipientName ? `Hi ${input.recipientName},\n\n` : "";
