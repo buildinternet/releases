@@ -62,6 +62,11 @@ export const FLAGS = {
     env: "BATCH_OVERVIEW_ENABLED",
     default: false,
   },
+  overviewRegenEnabled: {
+    key: "overview-regen-enabled",
+    env: "OVERVIEW_REGEN_ENABLED",
+    default: false,
+  },
   recommendationsDisabled: {
     key: "recommendations-disabled",
     env: "RECOMMENDATIONS_DISABLED",

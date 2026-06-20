@@ -153,6 +153,9 @@
     // and the operator's Monday top-off runs.
     "BATCH_OVERVIEW_ENABLED": "false",
     "BATCH_OVERVIEW_MAX_COST_USD": "5",
+    // OpenRouter-backed per-org overview regen. Admin POST trigger only for now;
+    // cron path self-gates on this var (default off).
+    "OVERVIEW_REGEN_ENABLED": "false",
     // Batch feed-content enrichment backfill (#1296). Admin POST trigger only
     // (POST /v1/workflows/batch-enrich) runs unconditionally; BATCH_ENRICH_ENABLED
     // is reserved for a future cron path. The pre-fetch cost estimate (bounded by
@@ -358,6 +361,14 @@
       "name": "batch-enrich",
       "binding": "BATCH_ENRICH_WORKFLOW",
       "class_name": "BatchEnrichWorkflow",
+    },
+    {
+      // OpenRouter-backed per-org overview regeneration. Cron path self-gates
+      // via OVERVIEW_REGEN_ENABLED (default off); admin POST runs unconditionally
+      // (POST /v1/workflows/overview-regen).
+      "name": "overview-regen",
+      "binding": "OVERVIEW_REGEN_WORKFLOW",
+      "class_name": "OverviewRegenWorkflow",
     },
   ],
   "routes": [{ "pattern": "api.releases.sh", "custom_domain": true }],
@@ -652,6 +663,9 @@
         // wiring validation only (CRON_ENABLED=false on staging).
         "BATCH_OVERVIEW_ENABLED": "false",
         "BATCH_OVERVIEW_MAX_COST_USD": "5",
+        // Overview regen workflow — same staging posture: admin POST usable for
+        // wiring validation; cron path is irrelevant (CRON_ENABLED=false).
+        "OVERVIEW_REGEN_ENABLED": "false",
         // Mirrors prod default; not read in staging (CRON_ENABLED=false means no
         // cron fires, so PollAndFetchWorkflow instances are never dispatched).
         "FANOUT_JITTER_WINDOW_MS": "300000",
@@ -779,6 +793,11 @@
           "name": "batch-enrich-staging",
           "binding": "BATCH_ENRICH_WORKFLOW",
           "class_name": "BatchEnrichWorkflow",
+        },
+        {
+          "name": "overview-regen-staging",
+          "binding": "OVERVIEW_REGEN_WORKFLOW",
+          "class_name": "OverviewRegenWorkflow",
         },
       ],
       // Empty cron list. Without this override, Wrangler inherits the
