@@ -86,10 +86,15 @@ export const FLAGS = {
   },
   cacheDisabled: { key: "cache-disabled", env: "CACHE_DISABLED", default: false },
   indexingDisabled: { key: "indexing-disabled", env: "INDEXING_DISABLED", default: false },
+  // Default ON — the large-body (>50K-token) extraction tool-loop is rolled out
+  // and Enabled in both Flagship apps. Per the outage-safety rule above, the
+  // default matches the deployed reality so a Flagship outage keeps it on (a
+  // no-op) instead of silently dropping every >50K body back to one-shot. Flip
+  // OFF in Flagship to kill-switch the tool-loop fleet-wide.
   extractToolLoopEnabled: {
     key: "extract-toolloop-enabled",
     env: "EXTRACT_TOOLLOOP_ENABLED",
-    default: false,
+    default: true,
   },
   backfillWorkflow: {
     key: "backfill-workflow-enabled",
