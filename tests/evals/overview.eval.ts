@@ -8,34 +8,32 @@
  * Each fixture is a single JSON file under fixtures/overviews/ carrying the
  * OverviewRequestInput the production batch-overview workflow would build, plus
  * optional per-fixture grading knobs. The eval exercises the exact production
- * path: buildOverviewRequest → messages.create → extractOverviewBody →
- * clampCitationsToBody, then grades the body and the emitted citations.
+ * path: generateOverview (the real shipped function), then grades the body and
+ * the emitted citations. Set OVERVIEW_EVAL_MODEL + OPENROUTER_API_KEY to bench
+ * an OpenRouter candidate against the same fixtures.
  */
 import { readFileSync } from "fs";
 import Anthropic from "@anthropic-ai/sdk";
 import {
-  buildOverviewRequest,
+  generateOverview,
+  releaseSource,
   MODEL,
   type OverviewRequestInput,
 } from "@releases/ai-internal/overview-content";
-import {
-  extractOverviewBody,
-  clampCitationsToBody,
-} from "@releases/ai-internal/overview-citations";
 import { buildGraderPrompt } from "@releases/ai-internal/grader-prompt";
 import type { TextModel } from "@releases/ai-internal/text-model";
 import { gradeOverviewStructural, gradeCitations } from "./graders";
 import { loadOverviewFixtures, overviewRubricPath } from "./overview-fixtures";
 import type { FieldResult } from "./helpers";
-import { extractJudgeJson, resolveJudgeModel, runJudge } from "./judge-model";
+import { extractJudgeJson, resolveJudgeModel, resolveEvalModel, runJudge } from "./judge-model";
 import { saveRun } from "./results";
 
 // Re-exported for any unit test that imports it from this module.
 export { extractJudgeJson };
 
-/** The citation source set the API can legitimately resolve to (matches buildReleaseBlock). */
+/** The citation source set the API can legitimately resolve to — same keys `generateOverview` resolves citations against. */
 function validSources(input: OverviewRequestInput): string[] {
-  return input.selected.map((r) => r.url ?? `release://${r.id}`);
+  return input.selected.map(releaseSource);
 }
 
 async function judge(
@@ -60,6 +58,22 @@ async function main() {
 
   const fixtures = loadOverviewFixtures();
   const client = new Anthropic({ apiKey });
+
+  // Model under test: OpenRouter candidate when OVERVIEW_EVAL_MODEL is set,
+  // else the Anthropic Haiku production baseline (MODEL). resolveEvalModel
+  // always has a fallback because `client` is passed.
+  const resolved = resolveEvalModel({
+    anthropicModel: MODEL,
+    generationName: "org-overview-eval",
+    orModelEnvVar: "OVERVIEW_EVAL_MODEL",
+    client,
+  });
+  if (!resolved) {
+    console.error("No generation model available — skipping overview eval.");
+    process.exit(0);
+  }
+  console.error(`generation model: ${resolved.label}`);
+
   const rubric = useJudge ? readFileSync(overviewRubricPath(), "utf8") : "";
   // Judge defaults to a cheap OpenRouter model (Gemini Flash); JUDGE_MODEL
   // overrides it (e.g. claude-sonnet-4-6 for Anthropic). See ./judge-model.ts.
@@ -79,11 +93,8 @@ async function main() {
     let passed: boolean;
     let body: string | undefined;
     try {
-      const request = buildOverviewRequest(f.input);
-      const message = await client.messages.create(request);
-      const extraction = extractOverviewBody(message);
-      body = extraction.body;
-      const citations = clampCitationsToBody(extraction.body, extraction.citations);
+      const { body: genBody, citations } = await generateOverview(resolved.model, f.input);
+      body = genBody;
 
       const structural = gradeOverviewStructural(body, {
         orgName: f.input.org.name,
@@ -132,7 +143,7 @@ async function main() {
 
   const file = saveRun({
     eval: "overview",
-    model: MODEL,
+    model: resolved.label,
     pass: allPassed,
     summary: {
       total: runCases.length,

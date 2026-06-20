@@ -219,3 +219,18 @@ export function resolveCollectionSummaryModel(env: TextModelEnv): Promise<TextMo
     provider: SUMMARIZE_PROVIDER,
   });
 }
+
+/**
+ * Org-overview generation lane. Reuses the SUMMARIZE_MODEL OpenRouter lane (same
+ * task family — no per-feature model var) with a distinct generationName so its
+ * usage/cost is attributable, and the same Haiku fail-open as the summary lanes.
+ */
+export function resolveOverviewModel(env: TextModelEnv): Promise<TextModel | null> {
+  return resolveTextModel(env, {
+    orModel: env.SUMMARIZE_MODEL,
+    anthropicModel: ANTHROPIC_SUMMARIZE_MODEL,
+    generationName: "org-overview",
+    reasoning: SUMMARIZE_REASONING,
+    provider: SUMMARIZE_PROVIDER,
+  });
+}

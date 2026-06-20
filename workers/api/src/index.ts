@@ -60,6 +60,7 @@ export { PollFetchSummaryWorkflow } from "./workflows/poll-fetch-summary.js";
 export { OnboardSourceWorkflow } from "./workflows/onboard-source.js";
 export { BatchSummarizeWorkflow } from "./workflows/batch-summarize.js";
 export { BatchOverviewWorkflow } from "./workflows/batch-overview.js";
+export { OverviewRegenWorkflow } from "./workflows/overview-regen.js";
 export { FirecrawlIngestWorkflow } from "./workflows/firecrawl-ingest.js";
 export { BackfillSourceWorkflow } from "./workflows/backfill-source.js";
 export { BatchEnrichWorkflow } from "./workflows/batch-enrich.js";
@@ -129,6 +130,10 @@ export type Env = {
     BATCH_OVERVIEW_ENABLED?: string;
     BATCH_OVERVIEW_MAX_COST_USD?: string;
     BATCH_OVERVIEW_WORKFLOW?: Workflow;
+    // OpenRouter-backed per-org overview regen (OverviewRegenWorkflow). Cron path
+    // self-gates via OVERVIEW_REGEN_ENABLED; admin POST runs unconditionally.
+    OVERVIEW_REGEN_ENABLED?: string;
+    OVERVIEW_REGEN_WORKFLOW?: Workflow;
     // Batch feed-content enrichment backfill (#1296). Admin POST trigger only;
     // BATCH_ENRICH_ENABLED is reserved for a future cron path. Drains the
     // render-heavy / JS-shell summary-only sources the sync route can't finish.
@@ -1015,6 +1020,28 @@ export default {
               trigger: "cron",
               sinceDays: 1,
             },
+          }),
+          alertEnv,
+        ),
+      );
+      return;
+    }
+    if (event.cron === "0 8 * * 1") {
+      if (env.CRON_ENABLED === "false") return;
+      if (!(await flag(env.FLAGS, env.OVERVIEW_REGEN_ENABLED, FLAGS.overviewRegenEnabled))) {
+        logEvent("info", { component: "overview-regen-cron", event: "disabled" });
+        return;
+      }
+      if (!env.OVERVIEW_REGEN_WORKFLOW) {
+        logEvent("warn", { component: "overview-regen-cron", event: "workflow-binding-missing" });
+        return;
+      }
+      ctx.waitUntil(
+        loggedDispatch(
+          "overview-regen-cron",
+          env.OVERVIEW_REGEN_WORKFLOW.create({
+            id: `overview-regen-${event.scheduledTime}`,
+            params: { scheduledTime: event.scheduledTime, trigger: "cron" },
           }),
           alertEnv,
         ),

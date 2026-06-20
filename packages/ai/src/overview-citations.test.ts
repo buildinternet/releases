@@ -19,12 +19,13 @@
  *     - negative start clamped to 0
  */
 
-import { describe, it, expect } from "bun:test";
+import { describe, it, expect, test } from "bun:test";
 import type Anthropic from "@anthropic-ai/sdk";
 import {
   extractOverviewBody,
   clampCitationsToBody,
   decodeHtmlEntities,
+  parsePostHocOverview,
   type OverviewCitation,
 } from "./overview-citations.js";
 
@@ -284,6 +285,53 @@ describe("decodeHtmlEntities", () => {
   it("leaves unrelated text unchanged", () => {
     expect(decodeHtmlEntities("hello world")).toBe("hello world");
   });
+});
+
+// ── parsePostHocOverview ─────────────────────────────────────────────────────
+
+const SRC = "https://acme.dev/releases/v2";
+const input = {
+  validSources: new Set([SRC]),
+  titleBySource: new Map<string, string | null>([[SRC, "v2.0"]]),
+};
+
+test("parsePostHocOverview resolves a valid citation and strips the JSON block", () => {
+  const raw =
+    "Shipped a new streaming API and faster cold starts.\n\n" +
+    '```json\n[{"url":"https://acme.dev/releases/v2","quote":"streaming API"}]\n```';
+  const { body, citations } = parsePostHocOverview(raw, input);
+  expect(body).toBe("Shipped a new streaming API and faster cold starts.");
+  expect(citations).toHaveLength(1);
+  expect(citations[0]).toMatchObject({
+    sourceUrl: SRC,
+    title: "v2.0",
+    citedText: "streaming API",
+  });
+  expect(body.slice(citations[0].startIndex, citations[0].endIndex)).toBe("streaming API");
+});
+
+test("parsePostHocOverview returns no citations when the JSON block is absent", () => {
+  const { body, citations } = parsePostHocOverview("Just a body, no citations.", input);
+  expect(body).toBe("Just a body, no citations.");
+  expect(citations).toEqual([]);
+});
+
+test("parsePostHocOverview drops unknown URLs, missing quotes, and unparseable JSON", () => {
+  const badUrl = parsePostHocOverview(
+    'Body text here.\n```json\n[{"url":"https://other.com","quote":"Body"}]\n```',
+    input,
+  );
+  expect(badUrl.citations).toEqual([]);
+
+  const missingQuote = parsePostHocOverview(
+    `Body text here.\n\`\`\`json\n[{"url":"${SRC}","quote":"not in body"}]\n\`\`\``,
+    input,
+  );
+  expect(missingQuote.citations).toEqual([]);
+
+  const broken = parsePostHocOverview("Body text here.\n```json\n[not json]\n```", input);
+  expect(broken.body).toBe("Body text here.");
+  expect(broken.citations).toEqual([]);
 });
 
 // ── clampCitationsToBody ────────────────────────────────────────────────────

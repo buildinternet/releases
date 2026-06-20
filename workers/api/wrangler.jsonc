@@ -153,6 +153,9 @@
     // and the operator's Monday top-off runs.
     "BATCH_OVERVIEW_ENABLED": "false",
     "BATCH_OVERVIEW_MAX_COST_USD": "5",
+    // OpenRouter-backed per-org overview regen. Admin POST trigger only for now;
+    // cron path self-gates on this var (default off).
+    "OVERVIEW_REGEN_ENABLED": "false",
     // Batch feed-content enrichment backfill (#1296). Admin POST trigger only
     // (POST /v1/workflows/batch-enrich) runs unconditionally; BATCH_ENRICH_ENABLED
     // is reserved for a future cron path. The pre-fetch cost estimate (bounded by
@@ -359,6 +362,14 @@
       "binding": "BATCH_ENRICH_WORKFLOW",
       "class_name": "BatchEnrichWorkflow",
     },
+    {
+      // OpenRouter-backed per-org overview regeneration. Cron path self-gates
+      // via OVERVIEW_REGEN_ENABLED (default off); admin POST runs unconditionally
+      // (POST /v1/workflows/overview-regen).
+      "name": "overview-regen",
+      "binding": "OVERVIEW_REGEN_WORKFLOW",
+      "class_name": "OverviewRegenWorkflow",
+    },
   ],
   "routes": [{ "pattern": "api.releases.sh", "custom_domain": true }],
   "triggers": {
@@ -372,6 +383,7 @@
     // Daily at 06:00 UTC: well-known config sync sweep.
     // Daily at 06:15 UTC: generate collection daily summaries.
     // Daily at 07:00 UTC: reap stale dynamic-registration OAuth clients (observe-only until oauth-client-reaper-enabled).
+    // Mondays at 08:00 UTC: weekly org overview regeneration (self-gates via overviewRegenEnabled).
     // Daily at 13:00 UTC: send daily digests to subscribed users (#1518).
     // Mondays at 13:00 UTC: send weekly digests to subscribed users (#1518).
     "crons": [
@@ -385,6 +397,7 @@
       "0 6 * * *",
       "15 6 * * *",
       "0 7 * * *",
+      "0 8 * * 1", // 08:00 UTC Mondays: weekly overview regeneration (OpenRouter)
       "0 13 * * *",
       "0 13 * * 1",
     ],
@@ -652,6 +665,9 @@
         // wiring validation only (CRON_ENABLED=false on staging).
         "BATCH_OVERVIEW_ENABLED": "false",
         "BATCH_OVERVIEW_MAX_COST_USD": "5",
+        // Overview regen workflow — same staging posture: admin POST usable for
+        // wiring validation; cron path is irrelevant (CRON_ENABLED=false).
+        "OVERVIEW_REGEN_ENABLED": "false",
         // Mirrors prod default; not read in staging (CRON_ENABLED=false means no
         // cron fires, so PollAndFetchWorkflow instances are never dispatched).
         "FANOUT_JITTER_WINDOW_MS": "300000",
@@ -779,6 +795,11 @@
           "name": "batch-enrich-staging",
           "binding": "BATCH_ENRICH_WORKFLOW",
           "class_name": "BatchEnrichWorkflow",
+        },
+        {
+          "name": "overview-regen-staging",
+          "binding": "OVERVIEW_REGEN_WORKFLOW",
+          "class_name": "OverviewRegenWorkflow",
         },
       ],
       // Empty cron list. Without this override, Wrangler inherits the
