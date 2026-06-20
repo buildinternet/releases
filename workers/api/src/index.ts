@@ -1026,6 +1026,28 @@ export default {
       );
       return;
     }
+    if (event.cron === "0 8 * * 1") {
+      if (env.CRON_ENABLED === "false") return;
+      if (!(await flag(env.FLAGS, env.OVERVIEW_REGEN_ENABLED, FLAGS.overviewRegenEnabled))) {
+        logEvent("info", { component: "overview-regen-cron", event: "disabled" });
+        return;
+      }
+      if (!env.OVERVIEW_REGEN_WORKFLOW) {
+        logEvent("warn", { component: "overview-regen-cron", event: "workflow-binding-missing" });
+        return;
+      }
+      ctx.waitUntil(
+        loggedDispatch(
+          "overview-regen-cron",
+          env.OVERVIEW_REGEN_WORKFLOW.create({
+            id: `overview-regen-${event.scheduledTime}`,
+            params: { scheduledTime: event.scheduledTime, trigger: "cron" },
+          }),
+          alertEnv,
+        ),
+      );
+      return;
+    }
     if (event.cron === "0 3 * * *") {
       ctx.waitUntil(
         loggedDispatch(

@@ -383,6 +383,7 @@
     // Daily at 06:00 UTC: well-known config sync sweep.
     // Daily at 06:15 UTC: generate collection daily summaries.
     // Daily at 07:00 UTC: reap stale dynamic-registration OAuth clients (observe-only until oauth-client-reaper-enabled).
+    // Mondays at 08:00 UTC: weekly org overview regeneration (self-gates via overviewRegenEnabled).
     // Daily at 13:00 UTC: send daily digests to subscribed users (#1518).
     // Mondays at 13:00 UTC: send weekly digests to subscribed users (#1518).
     "crons": [
@@ -396,6 +397,7 @@
       "0 6 * * *",
       "15 6 * * *",
       "0 7 * * *",
+      "0 8 * * 1",      // 08:00 UTC Mondays: weekly overview regeneration (OpenRouter)
       "0 13 * * *",
       "0 13 * * 1",
     ],
