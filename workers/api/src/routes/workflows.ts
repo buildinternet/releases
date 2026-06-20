@@ -1140,6 +1140,111 @@ workflowsRoutes.get("/workflows/batch-overview/status/:instanceId", async (c) =>
   }
 });
 
+// ── POST /workflows/overview-regen ───────────────────────────────────────────
+//
+// Admin manual trigger for the OverviewRegenWorkflow. Runs unconditionally
+// (no flag gate) so operators can smoke-test staging where the flag is off;
+// the workflow itself gates the cron path.
+//
+// Body: { orgs?, dryRun?, maxOrgs? }  (all optional)
+// Returns: { instanceId, statusUrl }
+
+interface OverviewRegenBody {
+  orgs?: string[];
+  dryRun?: boolean;
+  maxOrgs?: number;
+}
+
+workflowsRoutes.post("/workflows/overview-regen", async (c) => {
+  const body = await parseJsonBody<OverviewRegenBody>(c);
+
+  if (!c.env.OVERVIEW_REGEN_WORKFLOW) {
+    return c.json(
+      { error: "service_unavailable", message: "OVERVIEW_REGEN_WORKFLOW binding not configured" },
+      503,
+    );
+  }
+
+  let validOrgs: string[] | undefined;
+  if (body.orgs !== undefined) {
+    if (!Array.isArray(body.orgs)) {
+      return c.json({ error: "bad_request", message: "`orgs` must be an array of strings" }, 400);
+    }
+    validOrgs = body.orgs
+      .filter((s): s is string => typeof s === "string")
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+    if (validOrgs.length === 0) {
+      return c.json(
+        { error: "bad_request", message: "`orgs` must contain at least one non-empty string" },
+        400,
+      );
+    }
+  }
+
+  const scheduledTime = Date.now();
+  const params = {
+    scheduledTime,
+    trigger: "admin" as const,
+    orgs: validOrgs,
+    dryRun: body.dryRun === true,
+    maxOrgs: typeof body.maxOrgs === "number" && body.maxOrgs > 0 ? body.maxOrgs : undefined,
+  };
+
+  const instance = await c.env.OVERVIEW_REGEN_WORKFLOW.create({
+    id: `overview-regen-admin-${scheduledTime}`,
+    params,
+  });
+  const instanceId: string = (instance as unknown as { id: string }).id;
+
+  logEvent("info", {
+    component: "overview-regen",
+    event: "admin-trigger",
+    instanceId,
+    orgs: params.orgs,
+    dryRun: params.dryRun,
+    maxOrgs: params.maxOrgs,
+  });
+
+  return c.json({
+    instanceId,
+    statusUrl: `${c.env.ADMIN_BASE_URL ?? ""}/v1/workflows/overview-regen/status/${instanceId}`,
+  });
+});
+
+// ── GET /workflows/overview-regen/status/:instanceId ─────────────────────────
+//
+// Thin pass-through to Cloudflare's `WorkflowInstance.status()` mirroring the
+// batch-overview status endpoint exactly.
+
+workflowsRoutes.get("/workflows/overview-regen/status/:instanceId", async (c) => {
+  const binding = c.env.OVERVIEW_REGEN_WORKFLOW;
+  if (!binding) {
+    return c.json(
+      { error: "service_unavailable", message: "OVERVIEW_REGEN_WORKFLOW binding not configured" },
+      503,
+    );
+  }
+  const instanceId = c.req.param("instanceId");
+  try {
+    const instance = await binding.get(instanceId);
+    const status = await instance.status();
+    return c.json({ instanceId, ...status });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (WORKFLOW_NOT_FOUND_RE.test(message)) {
+      return c.json({ error: "instance_not_found", message }, 404);
+    }
+    logEvent("error", {
+      component: "workflows-overview-regen-status",
+      event: "lookup-failed",
+      instanceId,
+      err: err instanceof Error ? err : String(err),
+    });
+    return c.json({ error: "internal_error", message }, 500);
+  }
+});
+
 workflowsRoutes.post("/workflows/discover", async (c) => {
   const body = await c.req.text();
   const res = await proxyToDiscovery(c, "/onboard", body);
