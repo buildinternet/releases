@@ -9,17 +9,27 @@ adminOnly: false
 Programmatic access to the Releases index over HTTP. The notes below cover conventions that apply across endpoints; the per-endpoint reference is generated from the OpenAPI spec.
 
 - **Interactive reference:** [`api.releases.sh/v1/docs`](https://api.releases.sh/v1/docs) — full Scalar reference with request/response shapes, examples, and client snippets.
-- **OpenAPI 3.1 spec:** [`api.releases.sh/v1/openapi.json`](https://api.releases.sh/v1/openapi.json) — source of truth, generated from the worker's route annotations.
+- **OpenAPI 3.1 spec:** [`api.releases.sh/v1/openapi.json`](https://api.releases.sh/v1/openapi.json) — source of truth for request and response shapes.
 - **Base URL:** `https://api.releases.sh/v1`
 - **Webhooks:** [Webhooks](/docs/api/webhooks) — self-serve outbound `release.created` delivery (org-scoped or follows-filtered).
 
 ## Authentication
 
-Read endpoints are public. Write endpoints require a Bearer token:
+Most read endpoints are public — no credentials required.
+
+**Operator and write endpoints** require a Bearer token with sufficient scope:
 
 ```bash
 curl -H "Authorization: Bearer YOUR_KEY" https://api.releases.sh/v1/...
 ```
+
+**Account endpoints** (`/v1/me/*` — follows, feed, webhooks, API keys) require a signed-in user. Any of these work:
+
+- **Browser session** — sign in on [releases.sh](https://releases.sh) and call the API with credentials included (cookie on same-site requests, or a session token from device login in the CLI).
+- **User API key** — minted via `releases login` or **Account → API Keys**. Pass as `Authorization: Bearer <key>`.
+- **Sign in with Releases** — an OAuth access token from an app you've authorized. Pass as `Authorization: Bearer <token>`.
+
+User credentials authenticate your account, not operator/admin access. Machine and operator tokens use a separate scope ladder.
 
 ## Pagination
 

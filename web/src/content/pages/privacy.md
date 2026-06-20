@@ -57,7 +57,7 @@ We use a small number of service providers to host and operate releases.sh. Thes
 
 - **Cloudflare** — hosts the API and supporting infrastructure, stores the database, and sends account-related email.
 - **Vercel** — hosts the web frontend.
-- **Better Auth** — the authentication system we run. Account data lives in our own database; Better Auth's hosted administration dashboard, which we use to manage accounts and monitor sessions, can read that account and session data.
+- **Better Auth Infrastructure** — hosted administration tooling for account management. Your account data is stored in our database; this service can access account and session metadata for operational support.
 - **Anthropic** — provides the AI models our indexing pipeline uses to parse and summarize public changelogs. These models receive only the public content we are indexing, never your account data, queries, or other personal data.
 
 If you sign in with a third-party provider (where offered), that provider also processes your sign-in according to its own privacy policy.

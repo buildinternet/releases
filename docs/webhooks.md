@@ -120,11 +120,11 @@ func verify(secret, timestamp, body, sig string) bool {
 
 ## Idempotency
 
-Cloudflare Queues guarantees at-least-once delivery, so the same event may arrive more than once (typically after a transient failure on your side). Use `X-Releases-Event-Id` as the dedup key and persist it in durable storage — e.g. a `processed_event_ids` table with a unique index, checked before you act on the event. An in-memory set or TTL cache is not sufficient: a process restart between delivery and ack will cause replays to be reprocessed.
+Delivery is at-least-once, so the same event may arrive more than once (typically after a transient failure on your side). Use `X-Releases-Event-Id` as the dedup key and persist it in durable storage — e.g. a `processed_event_ids` table with a unique index, checked before you act on the event. An in-memory set or TTL cache is not sufficient: a process restart between delivery and ack will cause replays to be reprocessed.
 
 ## Self-serve subscriptions
 
-Signed-in users manage webhooks at `/v1/me/webhooks` (session, `relu_` user key, or OAuth JWT), via the [account notifications UI](https://releases.sh/account/notifications), the [`releases webhook` CLI](https://github.com/buildinternet/releases-cli), or direct API calls. Surfaces: create/list/patch/delete, `rotate-secret`, `test`, and delivery history.
+Signed-in users manage webhooks at `/v1/me/webhooks` (browser session, user API key, or Sign in with Releases OAuth token), via the [account notifications UI](https://releases.sh/account/notifications), the [`releases webhook` CLI](https://github.com/buildinternet/releases-cli), or direct API calls. Surfaces: create/list/patch/delete, `rotate-secret`, `test`, and delivery history.
 
 ### Org-scoped (default)
 
@@ -151,7 +151,7 @@ Use a publicly reachable HTTPS endpoint on the public internet.
 
 ### Delivery activity
 
-Each delivery attempt is logged to Analytics Engine. Use it to debug a failing endpoint after a test or a real `release.created`.
+Each delivery attempt is logged. Use it to debug a failing endpoint after a test or a real `release.created`.
 
 **Surfaces:**
 
@@ -163,9 +163,9 @@ Each row includes timestamp, event id, outcome (`success` | `retry` | `perm_fail
 
 **Aggregate health vs. history:** subscription rows and list/detail responses also carry `deliveryHealth`, `lastSuccessAt`, and `consecutiveFailures` — a one-line summary for dashboards. The activity log is per-attempt detail; use it when health says "failing" but you need the status code or error body.
 
-**Indexing lag:** Analytics Engine is eventually consistent. After `POST …/test`, wait **~20–30 seconds** before expecting rows in Activity, `deliveries`, or the `show` last-10 table. Toggle Activity off/on in the account UI to reload. An empty table right after a successful enqueue is normal — retry once.
+**Indexing lag:** the delivery log is eventually consistent. After `POST …/test`, wait **~20–30 seconds** before expecting rows in Activity, `deliveries`, or the `show` last-10 table. Toggle Activity off/on in the account UI to reload. An empty table right after a successful enqueue is normal — retry once.
 
-**Retention:** queryable history is retained for **~90 days** in Analytics Engine. Longer retention would need a separate export path ([#1508](https://github.com/buildinternet/releases/issues/1508)).
+**Retention:** queryable history is retained for **~90 days**. Longer retention would need a separate export path ([#1508](https://github.com/buildinternet/releases/issues/1508)).
 
 ## Retry behavior
 
