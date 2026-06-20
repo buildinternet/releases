@@ -3,6 +3,19 @@
 The product changelog for releases.sh, published to its own registry. Drafted daily from merged
 PRs and reviewed via PR. See docs/changelog-style.md for the voice and curation rules.
 
+## June 19, 2026
+
+**Added**
+- Self-serve webhook management — create, list, update, and delete subscriptions from Account → Notifications with org-scoped or follows-scoped targeting, per-event product and release-type filters, delivery activity history, and auto-pause on repeated failures with an owner email alert when a subscription is paused.
+
+**Changed**
+- Feed rows with multiple image attachments now display a compact bottom gallery of chips; single-attachment rows keep the existing side-rail preview.
+- Following feed now renders immediately on page load — the first page is server-prefetched and cached (~90 s TTL) so the timeline appears without a client-side loading flash.
+- Personalized feed API (`GET /v1/me/feed`) switched to cursor pagination; the `?page=` parameter is rejected with 400.
+
+**Fixed**
+- Product and source bylines no longer display version labels for codename-versioned releases — only numeric semver/calver strings appear; model codenames (e.g. "Opus 4.7") are omitted.
+
 ## June 18, 2026
 
 **Added**
@@ -16,6 +29,7 @@ PRs and reviewed via PR. See docs/changelog-style.md for the voice and curation 
 
 **Fixed**
 - Collection daily summaries now incorporate actual changelog text — SDK version-tag releases (e.g. `wrangler@4.101.0`) now produce a meaningful description instead of echoing the version string.
+- "Get Started" install steps on the homepage no longer show agent-launcher dropdown menus; copy-to-clipboard remains.
 
 ## June 17, 2026
 
