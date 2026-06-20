@@ -66,7 +66,7 @@ releases admin source changelog apollo-client --tokens 10000 --json
 releases admin source changelog apollo-client --limit 5000 --json
 ```
 
-The cached CHANGELOG copy refreshes automatically via a worker cron on a 24-hour TTL; no manual refresh command is needed.
+The cached CHANGELOG copy refreshes automatically on a 24-hour cycle; no manual refresh command is needed.
 
 The slicer snaps boundaries to `##` headings so sections are never cut mid-entry. `--tokens` and `--limit` both operate under the same rules; `--tokens` wins when both are passed. Chain successive calls by feeding `nextOffset` back as `--offset`. Recommended token brackets: 2000 / 5000 / 10000 / 20000.
 

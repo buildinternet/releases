@@ -14,7 +14,7 @@ Outbound HTTPS notifications when new releases are indexed. Each delivery is a s
 
 ## Self-serve (`/v1/me/webhooks`)
 
-Authenticated with a Better Auth session, a `relu_` user API key, or an OAuth JWT from "Sign in with Releases" — the same principal gate as [follows and your personalized feed](/docs/api/rest#authentication).
+Requires a signed-in account — browser session cookie, user API key (from `releases login` or Account → API Keys), or an OAuth access token from Sign in with Releases. Same authentication as [follows and your personalized feed](/docs/api/rest#authentication).
 
 ### Org-scoped (default)
 
@@ -67,12 +67,12 @@ Each subscription shows **aggregate delivery health** (healthy / degraded / fail
 
 ### Delivery activity
 
-Every delivery attempt is recorded in Analytics Engine (~**90 days** of queryable history). Use it to see why a test or real event failed without tailing your own logs.
+Every delivery attempt is recorded in a delivery log retained for ~**90 days**. Use it to see why a test or real event failed without tailing your own logs.
 
 ```bash
 # After releases login
 releases webhook test <id>
-sleep 25   # AE indexing lag — see below
+sleep 25   # delivery-log indexing lag — see below
 releases webhook deliveries <id> --limit 10
 ```
 
@@ -90,7 +90,7 @@ Each row includes:
 | `attempt`       | Retry attempt number (1 = first try)                                  |
 | `error_message` | Truncated response body or error text on failure                      |
 
-**Indexing lag:** rows typically appear **20–30 seconds** after `POST …/test` or a real delivery. `releases webhook show` may say "No delivery attempts recorded" if you check immediately — run `deliveries` again or reopen Activity in the account UI.
+**Indexing lag:** rows typically appear **20–30 seconds** after `POST …/test` or a real delivery. `releases webhook show` may say "No delivery attempts recorded" if you check immediately — wait a moment, then run `deliveries` again or reopen Activity in the account UI.
 
 List/detail endpoints still expose `deliveryHealth` and `consecutiveFailures` for at-a-glance status; the activity log is the per-event drill-down.
 
