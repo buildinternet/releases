@@ -72,6 +72,19 @@ When you only have a coordinate or a domain:
 | `GET /v1/lookups/product-by-slug?slug=…`                          | The canonical org-scoped home for a bare product slug.                                      |
 | `POST /v1/lookups { provider: "github", coordinate: "org/repo" }` | Materializes a hidden source row from a GitHub coordinate on first call.                    |
 
+## Upgrade intelligence (Beta)
+
+> **Beta — subject to change.** The shape and parameters of this endpoint may evolve.
+
+`GET /v1/whats-changed?package=…&from=…&to=…&ecosystem=npm|pypi|github` returns the changelog entries between two versions of a package — the releases in the range `(from, to]` (`from` exclusive, `to` inclusive), each with its summary, breaking-change verdict (`none` / `minor` / `major` / `unknown`), and any migration notes. One call instead of reading many changelog pages to plan an upgrade.
+
+- `package` — a tracked source slug or a GitHub `owner/repo` coordinate (pass `ecosystem=github` for a bare coordinate).
+- Reads already-indexed releases only — no live fetch.
+- An untracked package returns `{ "status": "unknown" }` with **HTTP 200** (a valid answer, not a 404). npm/PyPI names that aren't yet mapped to a tracked source resolve to `unknown`.
+- Wide ranges are truncated to a token budget (newest entries kept), flagged by `truncated`.
+
+Also available as the `whats_changed` [MCP tool](/docs/api/mcp).
+
 ## Discoverability
 
 - The API is advertised by RFC 9727 at [`/.well-known/api-catalog`](/.well-known/api-catalog).
