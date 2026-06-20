@@ -19,6 +19,7 @@ import type { VideoRowInfo } from "@/lib/video-source";
 import { EXTERNAL_UGC_REL } from "@/lib/sanitize";
 import { deriveFeedTitle } from "@/lib/release-title";
 import { releaseExcerpt } from "@/lib/release-excerpt";
+import { feedAttachments } from "@/lib/feed-media";
 import { markdownComponents, collapsedMarkdownComponents } from "./markdown-components";
 import { rewriteRelativeLinks, originFromUrl } from "@releases/rendering/rewrite-links";
 import { formatDate } from "@/lib/formatters";
@@ -44,18 +45,6 @@ const SIDE_IMAGE_CLASS =
 
 function mediaSrc(item: FeedMediaItem) {
   return item.r2Url ?? item.url;
-}
-
-function isInlineMedia(item: FeedMediaItem, content: string) {
-  return content.includes(item.url) || !!(item.r2Url && content.includes(item.r2Url));
-}
-
-/** Structured `media[]` images/gifs not already rendered inline in the excerpt. */
-function feedAttachments(media: ReleaseItem["media"] | undefined, content: string) {
-  return (
-    media?.filter((m) => (m.type === "image" || m.type === "gif") && !isInlineMedia(m, content)) ??
-    []
-  );
 }
 
 /** Clickable feed thumbnail — side-rail preview (single attachment) or chip (gallery). */
