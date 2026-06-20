@@ -17,8 +17,8 @@ issue. Read the linked issue first, then the plan.
 | Plan | Title                                          | Issue | Priority | Effort | Depends on | Status              |
 | ---- | ---------------------------------------------- | ----- | -------- | ------ | ---------- | ------------------- |
 | 001  | Structured breaking-change + migration field   | #1696 | P1       | M      | —          | DONE (#1703 merged) |
-| 002  | Upgrade intelligence Phase 1 — `whats_changed` | #1697 | P1       | M      | 001 (soft) | TODO                |
-| 003  | Agent/API consumption instrumentation          | #1700 | P1       | S–M    | —          | DONE (PR #1704)     |
+| 002  | Upgrade intelligence Phase 1 — `whats_changed` | #1697 | P1       | M      | 001 (soft) | DONE (PR pending)   |
+| 003  | Agent/API consumption instrumentation          | #1700 | P1       | S–M    | —          | DONE (#1704 merged) |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (reason) | REJECTED (reason)
 
@@ -65,6 +65,32 @@ process-global `mock.module` leak). **Watch:** since the verdict shares the tune
 summarize prompt, run `eval:summary` + `eval:breaking` before merge to confirm
 the added tags didn't regress title/summary quality (the option-2 fallback is in
 git history if they do).
+
+## 002 — as built (branch `advisor/002-whats-changed`)
+
+`GET /v1/whats-changed?package=&from=&to=&ecosystem=` + the MCP `whats_changed`
+tool — the agent-native wedge. Pure core helper `resolveUpgradeRange`
+(`@buildinternet/releases-core/upgrade-range`) returns the `(from, to]` subset
+(from-exclusive, to-inclusive) via the lexicographic `versionSort` key, with a
+publishedAt fallback for non-numeric bounds. The route reads already-ingested
+releases (no live fetch), populates `breaking`/`migrationNotes` from the
+merged-001 column, and token-budgets wide ranges (newest entries kept) against
+the largest `CHANGELOG_TOKEN_BRACKETS` value.
+
+**Read-only resolution (no confused-deputy):** exact catalog source-slug match,
+then a non-materializing GitHub `owner/repo` coordinate match (mirrors
+`GET /v1/lookups/source-by-coordinate`). An unresolvable package → `status:
+"unknown"` at **HTTP 200** (a valid answer), never a write. The MCP tool proxies
+the route over the `API` service binding (single source of resolution/budget
+logic). Wire types `WhatsChangedResponse`/`WhatsChangedEntry` added to
+api-types; route documented in OpenAPI (coverage gate passes).
+
+**STOP condition status:** `version-sort`/`changelog-slice` signatures
+unchanged from `8f811cb5` (verified). The #1345 caveat (bare npm/PyPI names not
+mapped to a source resolve to `unknown`) is **documented, not hacked** — GitHub
+coordinate + exact-slug resolution covers the GitHub-tracked bulk of the
+catalog; revisit resolution coverage when #1345 lands a name→source map.
+**Phase 2** (`upgrade_plan` over a manifest) fans this out per dependency.
 
 ## 003 — as built (branch `advisor/003-consumption-instrumentation`)
 

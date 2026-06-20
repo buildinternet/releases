@@ -33,6 +33,7 @@
     "./cli-contracts": "./src/cli-contracts.ts",
     "./cursor": "./src/cursor.ts",
     "./version-sort": "./src/version-sort.ts",
+    "./upgrade-range": "./src/upgrade-range.ts",
     "./composition": "./src/composition.ts",
     "./breaking": "./src/breaking.ts",
     "./web-bot-auth": "./src/web-bot-auth.ts",

@@ -717,6 +717,9 @@ v1.use("/sitemap", cacheControl(600, { staleWhileRevalidate: 600, isPublic: true
 v1.use("/lookups/by-domain", cacheControl(60, { staleWhileRevalidate: 30, isPublic: true }));
 v1.use("/lookups/source-by-slug", cacheControl(60, { staleWhileRevalidate: 30, isPublic: true }));
 v1.use("/lookups/product-by-slug", cacheControl(60, { staleWhileRevalidate: 30, isPublic: true }));
+// whats-changed reads already-ingested releases — cacheable like the other
+// public read primitives; the (package, from, to) range is deterministic.
+v1.use("/whats-changed", cacheControl(60, { staleWhileRevalidate: 30, isPublic: true }));
 v1.use("/categories", cacheControl(300, { staleWhileRevalidate: 60, isPublic: true }));
 v1.use("/categories/:slug", cacheControl(300, { staleWhileRevalidate: 60, isPublic: true }));
 v1.use(
