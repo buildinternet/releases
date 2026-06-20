@@ -64,6 +64,7 @@ describe("MCP tool annotations", () => {
       "lookup_domain",
       "search",
       "unfollow",
+      "whats_changed",
     ]);
   });
 

@@ -738,6 +738,44 @@ export type ReleaseType = z.infer<typeof ReleaseTypeSchema>;
 export type ReleaseItem = z.infer<typeof ReleaseItemSchema>;
 export type ReleaseComposition = z.infer<typeof ReleaseCompositionSchema>;
 
+/**
+ * One entry in a {@link WhatsChangedResponse} — a release in the requested
+ * upgrade range; a slim, release-derived projection. `breaking`/`migrationNotes`
+ * come from #1696 (`"unknown"` until classified or for non-dev-facing kinds).
+ */
+export interface WhatsChangedEntry {
+  version: string | null;
+  publishedAt: string | null;
+  /** AI-generated title when present, else the raw release title. */
+  title: string | null;
+  summary: string | null;
+  breaking: BreakingLevel;
+  migrationNotes: string | null;
+  url: string | null;
+}
+
+/**
+ * Response of `GET /v1/whats-changed` (#1697, upgrade intelligence Phase 1) —
+ * the changelog entries in the half-open version range `(from, to]` for a
+ * package (`from` exclusive, `to` inclusive). `status: "unknown"` (still
+ * HTTP 200 — a valid answer, not an error) when the package can't be resolved
+ * read-only from the catalog (e.g. an npm/PyPI name absent until #1345).
+ * `entries` are ordered oldest→newest; a range wider than the token budget is
+ * truncated (newest entries kept), flagged by `truncated` + `truncatedAtTokens`.
+ */
+export interface WhatsChangedResponse {
+  status: "resolved" | "unknown";
+  package: string;
+  ecosystem: "npm" | "pypi" | "github" | null;
+  from: string;
+  to: string;
+  source: { sourceId: string; sourceSlug: string; orgSlug: string } | null;
+  entries: WhatsChangedEntry[];
+  count: number;
+  truncated: boolean;
+  truncatedAtTokens?: number;
+}
+
 export interface ReleaseDetail {
   id: string;
   sourceId: string;

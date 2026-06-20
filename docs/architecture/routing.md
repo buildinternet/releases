@@ -104,6 +104,12 @@ The org-scoped `GET /v1/orgs/:slug/products` (#1225) is the canonical products-o
 
 Catalog wire shapes live in `@buildinternet/releases-api-types`; the catalog payload will grow a `kind` discriminator when #693 Phase 3 adds rollups (the right time to export the union type).
 
+## Upgrade intelligence — `whats-changed` (#1697, beta)
+
+> **Beta — subject to change.**
+
+`GET /v1/whats-changed?package=&from=&to=&ecosystem=npm|pypi|github` (`workers/api/src/routes/whats-changed.ts`) returns the changelog entries in the half-open version range `(from, to]` for a package — summaries + breaking verdicts (#1696) + migration notes, composed by the pure `resolveUpgradeRange` (`@buildinternet/releases-core/upgrade-range`) over **already-ingested** releases (no live fetch; no per-request AI — the summaries/verdicts are read from columns generated at ingest). Resolution is **read-only**: exact source-slug match, then a non-materializing GitHub `owner/repo` coordinate match (mirrors `/v1/lookups/source-by-coordinate`, never the materializing `POST /v1/lookups`) — a read tool must not write, so an unresolvable package returns `status: "unknown"` at **HTTP 200** (a valid answer, not a 404). Bare npm/PyPI names resolve to `unknown` until #1345 lands a name→source map. Wide ranges are token-budgeted against `CHANGELOG_TOKEN_BRACKETS` (newest kept, `truncated` flagged). The MCP `whats_changed` tool proxies this route over the `API` binding (single source of truth). Phase 2 (`upgrade_plan` over a manifest) fans this out per dependency.
+
 ## Pagination shape
 
 Pick the shape from the data, not the surface:
