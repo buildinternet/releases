@@ -84,6 +84,61 @@ export async function isMeteredMcpMethod(request: Request): Promise<boolean> {
   }
 }
 
+/** Coarse principal label for consumption telemetry (#1700). PII-clean — a
+ *  TYPE, never an id/email/token. Must match the API worker's labels
+ *  (`apiConsumptionPrincipal` in workers/api/src/middleware/auth.ts) so the
+ *  Axiom query can union both surfaces. */
+export type ConsumptionPrincipal =
+  | "anonymous"
+  | "machine_token" // relk_
+  | "user_key" // relu_
+  | "oauth" // OAuth JWT
+  | "root";
+
+/** Derive the consumption principal label from a resolved MCP identity. */
+export function consumptionPrincipal(identity: McpIdentity): ConsumptionPrincipal {
+  if (identity.kind === "root") return "root";
+  if (identity.kind === "anonymous") return "anonymous";
+  if (isUserApiKeyShaped(identity.tokenId)) return "user_key";
+  if (identity.tokenId.startsWith(OAUTH_JWT_TOKEN_PREFIX)) return "oauth";
+  return "machine_token";
+}
+
+/**
+ * Peek the JSON-RPC body once for consumption telemetry (#1700): is this a
+ * billable call, and what tool/method is it? Clones the request so the original
+ * stream stays intact for `createMcpHandler`. `tool` is the tool name for
+ * `tools/call`, else the method; `"batch"` for an array body; `null` on parse
+ * failure. Reuses `isBillableMethod` so protocol overhead is never counted.
+ */
+export async function peekMcpCall(
+  request: Request,
+): Promise<{ metered: boolean; tool: string | null }> {
+  if (request.method !== "POST") return { metered: false, tool: null };
+  try {
+    const body = (await request.clone().json()) as unknown;
+    if (Array.isArray(body)) {
+      return {
+        metered: body.some((m) => isBillableMethod((m as { method?: unknown })?.method)),
+        tool: "batch",
+      };
+    }
+    const method = (body as { method?: unknown })?.method;
+    return { metered: isBillableMethod(method), tool: mcpOperationLabel(body) };
+  } catch {
+    return { metered: true, tool: null }; // parse failure → meter (safe)
+  }
+}
+
+function mcpOperationLabel(body: unknown): string | null {
+  const b = body as { method?: unknown; params?: { name?: unknown } };
+  if (typeof b?.method !== "string") return null;
+  if (b.method === "tools/call") {
+    return typeof b.params?.name === "string" ? b.params.name : "tools/call";
+  }
+  return b.method;
+}
+
 /**
  * Resolved caller identity, attached to the MCP server per request. Mirrors the
  * API worker's AuthContext, plus the raw `token` so the lookup fallback can
