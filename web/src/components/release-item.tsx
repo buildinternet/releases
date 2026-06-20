@@ -34,22 +34,47 @@ type RowMeta = Pick<
   "title" | "dateLabel" | "byline" | "avatarUrl" | "detailHref" | "sourceUrl"
 >;
 
-/** One gallery thumbnail, registered with the page lightbox so it joins the
- *  left/right paging set alongside the row's primary thumbnail. */
-function GalleryThumb({
+type FeedMediaItem = NonNullable<ReleaseItem["media"]>[number];
+
+const CHIP_THUMB_PX = 56;
+const CHIP_BUTTON_CLASS =
+  "h-14 w-14 shrink-0 overflow-hidden rounded-md border border-stone-200 bg-stone-50 transition-colors hover:border-stone-300 dark:border-stone-700 dark:bg-stone-900 dark:hover:border-stone-600 cursor-zoom-in";
+const SIDE_IMAGE_CLASS =
+  "rounded-md object-cover w-[120px] h-[72px] border border-stone-200 dark:border-stone-800";
+
+function mediaSrc(item: FeedMediaItem) {
+  return item.r2Url ?? item.url;
+}
+
+function isInlineMedia(item: FeedMediaItem, content: string) {
+  return content.includes(item.url) || !!(item.r2Url && content.includes(item.r2Url));
+}
+
+/** Structured `media[]` images/gifs not already rendered inline in the excerpt. */
+function feedAttachments(media: ReleaseItem["media"] | undefined, content: string) {
+  return (
+    media?.filter((m) => (m.type === "image" || m.type === "gif") && !isInlineMedia(m, content)) ??
+    []
+  );
+}
+
+/** Clickable feed thumbnail — side-rail preview (single attachment) or chip (gallery). */
+function FeedMediaThumb({
   id,
-  src,
-  alt,
-  type,
+  item,
   meta,
+  variant,
 }: {
   id: string;
-  src: string;
-  alt: string;
-  type?: string;
+  item: FeedMediaItem;
   meta: RowMeta;
+  variant: "side" | "chip";
 }) {
+  const src = mediaSrc(item);
+  const alt = item.alt || "";
   const { ref, open } = useLightboxImage<HTMLButtonElement>({ id, src, alt, ...meta });
+  const isChip = variant === "chip";
+
   return (
     <button
       ref={ref}
@@ -58,60 +83,26 @@ function GalleryThumb({
         e.stopPropagation();
         open();
       }}
-      className="cursor-zoom-in"
-      aria-label="Preview image"
+      className={isChip ? CHIP_BUTTON_CLASS : "shrink-0 cursor-zoom-in"}
+      aria-label={alt ? `Preview image: ${alt}` : "Preview image"}
     >
-      {shouldRenderAsVideo({ type, src, enabled: MEDIA_VIDEO_ON }) ? (
-        <GifVideo src={src} alt={alt} className="rounded-md object-contain max-h-48 w-auto" />
+      {shouldRenderAsVideo({ type: item.type, src, enabled: MEDIA_VIDEO_ON }) ? (
+        <GifVideo
+          src={src}
+          alt={alt}
+          className={isChip ? "h-full w-full object-cover" : SIDE_IMAGE_CLASS}
+        />
       ) : (
         <FallbackImage
-          src={releaseThumbUrl(src, 800)}
+          src={releaseThumbUrl(src, isChip ? CHIP_THUMB_PX * 2 : 240)}
           alt={alt}
-          width={400}
-          height={192}
-          className="rounded-md object-contain max-h-48 w-auto"
+          width={isChip ? CHIP_THUMB_PX : 120}
+          height={isChip ? CHIP_THUMB_PX : 72}
+          className={isChip ? "h-full w-full object-cover" : SIDE_IMAGE_CLASS}
           unoptimized={IMG_TRANSFORM_ON || undefined}
         />
       )}
     </button>
-  );
-}
-
-function MediaGallery({
-  media,
-  content,
-  meta,
-  keyPrefix,
-}: {
-  media: ReleaseItem["media"];
-  content: string;
-  meta: RowMeta;
-  keyPrefix: string;
-}) {
-  if (!media || media.length === 0) return null;
-
-  // Filter out items already rendered inline via markdown content.
-  // Content URLs may be rewritten from original to R2 paths, so check both.
-  const extra = media.filter(
-    (m) => !content.includes(m.url) && !(m.r2Url && content.includes(m.r2Url)),
-  );
-  if (extra.length === 0) return null;
-
-  return (
-    <div className="flex flex-wrap gap-2 mt-2">
-      {extra.map((item, i) =>
-        item.type === "image" || item.type === "gif" ? (
-          <GalleryThumb
-            key={i}
-            id={`${keyPrefix}:g${i}`}
-            src={item.r2Url ?? item.url}
-            alt={item.alt || ""}
-            type={item.type}
-            meta={meta}
-          />
-        ) : null,
-      )}
-    </div>
   );
 }
 
@@ -153,6 +144,11 @@ export function ReleaseListItem({
     [release.media],
   );
 
+  const attachments = useMemo(
+    () => feedAttachments(release.media, markdownContent),
+    [release.media, markdownContent],
+  );
+
   // Video rows: the thumbnail + play badge link out to the source video (the
   // play affordance should play, not toggle the row). Defined once so the
   // linked and (url-less) plain variants don't duplicate the image markup.
@@ -192,17 +188,8 @@ export function ReleaseListItem({
     sourceUrl: release.url ?? null,
   };
 
-  // The row's primary thumbnail (default rows only — app-store/video rows use
-  // their thumbnail as a play/link affordance, not a lightbox image). Register
-  // it with the page lightbox so left/right paging walks between releases.
-  const lightboxThumbSrc =
-    !appStore && !video && thumbnail ? (thumbnail.r2Url ?? thumbnail.url) : "";
-  const { ref: thumbRef, open: openThumb } = useLightboxImage<HTMLButtonElement>({
-    id: `${rowId}:thumb`,
-    src: lightboxThumbSrc,
-    alt: thumbnail?.alt || "",
-    ...lightboxMeta,
-  });
+  // One non-inline attachment keeps the side-rail preview; two+ use a bottom chip row.
+  const sideThumb = !appStore && !video && attachments.length === 1 ? attachments[0] : null;
 
   // Bold heading: the descriptive title when we have one; otherwise the version,
   // led by the product name (with the version dimmed after it, matching the App
@@ -535,8 +522,8 @@ export function ReleaseListItem({
               </div>
             )}
             <div className="relative">
-              <div className="flex gap-3">
-                <div className="flex-1 min-w-0">
+              <div className={sideThumb ? "flex gap-3" : undefined}>
+                <div className={sideThumb ? "flex-1 min-w-0" : undefined}>
                   {markdownContent.trim() ? (
                     <div
                       className={`${markdownClasses} text-stone-500 dark:text-stone-400 [&_strong]:text-stone-500 dark:[&_strong]:text-stone-400`}
@@ -551,46 +538,32 @@ export function ReleaseListItem({
                     </div>
                   ) : null}
                 </div>
-                {thumbnail && (
-                  <button
-                    ref={thumbRef}
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      openThumb();
-                    }}
-                    className="shrink-0 cursor-zoom-in"
-                    aria-label="Preview image"
-                  >
-                    {shouldRenderAsVideo({
-                      type: thumbnail.type,
-                      src: thumbnail.r2Url ?? thumbnail.url,
-                      enabled: MEDIA_VIDEO_ON,
-                    }) ? (
-                      <GifVideo
-                        src={thumbnail.r2Url ?? thumbnail.url}
-                        alt={thumbnail.alt || ""}
-                        className="rounded-md object-cover w-[120px] h-[72px] border border-stone-200 dark:border-stone-800"
-                      />
-                    ) : (
-                      <FallbackImage
-                        src={releaseThumbUrl(thumbnail.r2Url ?? thumbnail.url, 240)}
-                        alt={thumbnail.alt || ""}
-                        width={120}
-                        height={72}
-                        className="rounded-md object-cover w-[120px] h-[72px] border border-stone-200 dark:border-stone-800"
-                        unoptimized={IMG_TRANSFORM_ON || undefined}
-                      />
-                    )}
-                  </button>
+                {sideThumb && (
+                  <FeedMediaThumb
+                    id={`${rowId}:thumb`}
+                    item={sideThumb}
+                    meta={lightboxMeta}
+                    variant="side"
+                  />
                 )}
               </div>
-              <MediaGallery
-                media={release.media}
-                content={markdownContent}
-                meta={lightboxMeta}
-                keyPrefix={rowId}
-              />
+              {attachments.length > 1 && (
+                <div
+                  role="group"
+                  aria-label="Attachments"
+                  className="mt-2.5 flex flex-wrap gap-1.5"
+                >
+                  {attachments.map((item, i) => (
+                    <FeedMediaThumb
+                      key={i}
+                      id={`${rowId}:g${i}`}
+                      item={item}
+                      meta={lightboxMeta}
+                      variant="chip"
+                    />
+                  ))}
+                </div>
+              )}
               {release.id && markdownContent.trim() && (
                 <Link
                   href={`/release/${release.id}`}
