@@ -370,6 +370,45 @@ describe("fetchOverviewCandidates", () => {
     expect(out.length).toBe(0);
   });
 
+  it("minNewReleases:0 makes a stale overview with >=1 new release eligible (the cron's staleness gate)", async () => {
+    tdb.db.insert(organizations).values(makeOrg()).run();
+    tdb.db.insert(sources).values(makeSource()).run();
+    // Overview 60 days old, only 1 new release — rejected by the default 20.
+    tdb.db
+      .insert(knowledgePages)
+      .values(makeOverview({ updatedAt: isoDaysAgo(60) }))
+      .run();
+    tdb.db
+      .insert(releases)
+      .values(makeRelease({ publishedAt: isoDaysAgo(30) }))
+      .run();
+
+    // Default threshold (20) rejects it.
+    expect((await fetchOverviewCandidates(asDb(tdb.db))).length).toBe(0);
+
+    // minNewReleases:0 (the OverviewRegenWorkflow setting) accepts it: stale + >=1 new release.
+    const out = await fetchOverviewCandidates(asDb(tdb.db), { minNewReleases: 0 });
+    expect(out.length).toBe(1);
+    expect(out[0]!.orgSlug).toBe("eligibility-org");
+  });
+
+  it("minNewReleases:0 still rejects a stale overview with ZERO new releases", async () => {
+    tdb.db.insert(organizations).values(makeOrg()).run();
+    tdb.db.insert(sources).values(makeSource()).run();
+    // Overview 60 days old; the only release predates it — recentReleaseCount=0.
+    tdb.db
+      .insert(knowledgePages)
+      .values(makeOverview({ updatedAt: isoDaysAgo(60) }))
+      .run();
+    tdb.db
+      .insert(releases)
+      .values(makeRelease({ publishedAt: isoDaysAgo(90) }))
+      .run();
+
+    // `recentReleaseCount > 0` is still required, so nothing-changed orgs aren't regenerated.
+    expect((await fetchOverviewCandidates(asDb(tdb.db), { minNewReleases: 0 })).length).toBe(0);
+  });
+
   it("explicit orgSlugs still restricts to listed orgs (IN-clause preserved)", async () => {
     tdb.db
       .insert(organizations)
