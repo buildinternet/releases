@@ -13,6 +13,7 @@ export type {
 // Re-export above doesn't create local bindings; import for use in interfaces below.
 import type { SourceType, SourceFetchPriority } from "@buildinternet/releases-core/source-enums";
 import type { ApiScope } from "@buildinternet/releases-core/api-token";
+import type { BreakingLevel } from "@buildinternet/releases-core/breaking";
 import type {
   MediaItemSchema,
   PaginationSchema,
@@ -754,6 +755,16 @@ export interface ReleaseDetail {
   titleGenerated?: string | null;
   /** AI-generated smart-brevity headline (#852, renamed in #860). Same fallback as `titleGenerated`. */
   titleShort?: string | null;
+  /**
+   * Machine-readable breaking-change level (#1696). `.optional()` for mid-deploy
+   * / pinned-worker tolerance; absent or `"unknown"` means not classified (the
+   * fail-open default). Populated live at ingest for developer-facing source
+   * kinds; history is `"unknown"` pending a backfill. Route population + the web
+   * chip are #1696 follow-ups.
+   */
+  breaking?: BreakingLevel;
+  /** Explicit upgrade/migration steps lifted from the body (#1696); null when the body gives none. */
+  migrationNotes?: string | null;
   url: string | null;
   media: MediaItem[];
   publishedAt: string | null;

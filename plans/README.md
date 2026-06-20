@@ -14,13 +14,57 @@ issue. Read the linked issue first, then the plan.
 
 ## Execution order & status
 
-| Plan | Title                                          | Issue | Priority | Effort | Depends on | Status            |
-| ---- | ---------------------------------------------- | ----- | -------- | ------ | ---------- | ----------------- |
-| 001  | Structured breaking-change + migration field   | #1696 | P1       | M      | —          | TODO              |
-| 002  | Upgrade intelligence Phase 1 — `whats_changed` | #1697 | P1       | M      | 001 (soft) | TODO              |
-| 003  | Agent/API consumption instrumentation          | #1700 | P1       | S–M    | —          | DONE (PR pending) |
+| Plan | Title                                          | Issue | Priority | Effort | Depends on | Status              |
+| ---- | ---------------------------------------------- | ----- | -------- | ------ | ---------- | ------------------- |
+| 001  | Structured breaking-change + migration field   | #1696 | P1       | M      | —          | DONE (#1703 merged) |
+| 002  | Upgrade intelligence Phase 1 — `whats_changed` | #1697 | P1       | M      | 001 (soft) | TODO                |
+| 003  | Agent/API consumption instrumentation          | #1700 | P1       | S–M    | —          | DONE (PR #1704)     |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (reason) | REJECTED (reason)
+
+## 001 — as built (branch `advisor/001-breaking-change-field`)
+
+Two deviations from the plan, both tightening scope per operator steer:
+
+- **Qualifying-kinds gate (which releases get classified).** The live ingest
+  pass classifies only developer-facing source kinds — `sdk`, `tool`,
+  `platform`, `integration` (`BREAKING_CLASSIFY_KINDS` /
+  `qualifiesForBreakingClassification` in `@buildinternet/releases-core/kinds`).
+  `mobile` (consumer apps), `docs`, `desktop`, and kind-less rows stay
+  `breaking: "unknown"` and spend no classifier call. Widen the set there if the
+  editorial scope changes.
+- **No backfill; live path only.** Classification is wired into
+  `generateContentForReleases` (the poll-fetch live path) only — NOT the batch
+  backfill (`batch-summarize.ts` / `scripts/generate-release-content.ts`).
+  History stays `unknown` until a separate, cost-estimated batch run populates
+  it. The ~40K-row backfill remains the STOP-condition deferral.
+
+Shape: **folded into the existing `summarizeRelease` call (#1696, option 1)** —
+NOT a separate model request (operator steer: don't make a second AI call). The
+summarize `SYSTEM_PROMPT` already scans the body for breaking changes to write
+the title/summary (its `priority_order` ranks them #1), so the call now also
+emits `<breaking>` + `<migration>` tags and `parseReleaseContent` returns
+`breaking`/`migrationNotes`. The verdict also **weighs the SemVer signal** (a
+major-version bump / `BREAKING CHANGE` / `!` → lean `major`; a patch → lean
+`none`; pre-1.0 judged from the body; explicit body content overrides) — the
+clearest indicator for GitHub/npm packages. Fail-open: `"unknown"` default, the
+parser maps any unrecognized verdict to `unknown`, and the empty-body
+short-circuit returns `unknown` with no model call.
+
+The kind gate is applied at the **persist** site in `generateContentForReleases`
+(the model classifies every release, but only developer-facing kinds store a
+non-`unknown` value). MAX_OUTPUT_TOKENS bumped 280→420 for the verdict + a ≤3-
+sentence migration note. Eval is `bun run eval:breaking` (runs fixtures through
+`summarizeRelease`, deterministic accuracy + precision guard; rubric at
+`src/shared/rubrics/breaking.md`). Wire field is
+`ReleaseDetail.breaking?`/`migrationNotes?` (additive optional). **Follow-ups
+(out of 001):** route/query population, the web "breaking" chip, the webhook
+`breaking` filter, and an ingest-write integration test (no `generateContent`
+harness exists today; model resolution isn't injectable without the
+process-global `mock.module` leak). **Watch:** since the verdict shares the tuned
+summarize prompt, run `eval:summary` + `eval:breaking` before merge to confirm
+the added tags didn't regress title/summary quality (the option-2 fallback is in
+git history if they do).
 
 ## 003 — as built (branch `advisor/003-consumption-instrumentation`)
 
@@ -35,7 +79,7 @@ web traffic, counted elsewhere). `principal` is a TYPE, `operation` a
 low-cardinality tool name / route family — never ids/tokens/IPs. North-star
 named: **programmatic queries answered per week**; APL + field-path caveat in
 [consumption-telemetry.md](../docs/architecture/consumption-telemetry.md). Tests
-are the emit-gating + PII guards (`workers/mcp/src/consumption.test.ts`,
+are the emit-gating + PII guards (`workers/mcp/test/consumption.test.ts`,
 `workers/api/test/consumption-telemetry.test.ts`). **Deferred:** distinct active
 consumers (needs a hashed `consumerRef`; volume north-star needs none); the
 saved Axiom dashboard tile (no data until deploy).
