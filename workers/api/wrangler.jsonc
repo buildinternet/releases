@@ -397,7 +397,7 @@
       "0 6 * * *",
       "15 6 * * *",
       "0 7 * * *",
-      "0 8 * * 1",      // 08:00 UTC Mondays: weekly overview regeneration (OpenRouter)
+      "0 8 * * 1", // 08:00 UTC Mondays: weekly overview regeneration (OpenRouter)
       "0 13 * * *",
       "0 13 * * 1",
     ],
