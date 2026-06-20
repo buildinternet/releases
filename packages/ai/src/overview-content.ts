@@ -242,11 +242,101 @@ export function buildOverviewUserText(input: OverviewRequestInput): string {
   return lines.join("\n");
 }
 
+/** First sentence (up to the first .!? followed by whitespace/end), else the first line. */
+function extractOpener(body: string): string {
+  const trimmed = (typeof body === "string" ? body : "").trim();
+  const sentence = trimmed.match(/^[\s\S]*?[.!?](?=\s|$)/);
+  return (sentence ? sentence[0] : trimmed.split("\n")[0] || "").trim();
+}
+
+function openerWordCount(body: string): number {
+  return extractOpener(body).replace(/[*`_]/g, "").split(/\s+/).filter(Boolean).length;
+}
+
+/**
+ * Buzzwords/filler the overview voice forbids. Ported from the local
+ * `.claude/workflows/update-overviews.ts` lint so the scheduled path holds the
+ * same bar as the agent-driven one. (The eval grader keeps a parallel list in
+ * tests/evals; converging the two is tracked as a follow-up.)
+ */
+const OVERVIEW_LINT_BANNED = [
+  "biggest",
+  "doubling down",
+  "leap forward",
+  "in the best sense",
+  "powerful",
+  "seamless",
+  "comprehensive",
+  "world-class",
+  "best-in-class",
+  "transformative",
+  "next-generation",
+  "cutting-edge",
+] as const;
+
+/**
+ * Lint an overview body against the format/voice rules the prompt asks for — the
+ * same checks the local agent workflow applies. Returns violation tags (empty =
+ * clean); `generateOverview` uses it to drive a single corrective regeneration.
+ * Note: a *leading* markdown heading is stripped by `parsePostHocOverview` before
+ * this runs, so `markdown-heading` here catches non-leading (mid-body) headings.
+ */
+export function lintOverviewBody(body: string, orgName: string): string[] {
+  const text = typeof body === "string" ? body : "";
+  const violations: string[] = [];
+  if (/^#{1,6}\s/m.test(text)) violations.push("markdown-heading");
+
+  const opener = extractOpener(text);
+  if (opener.replace(/[*`_]/g, "").split(/\s+/).filter(Boolean).length > 25) {
+    violations.push("opener-too-long");
+  }
+
+  const name = (typeof orgName === "string" ? orgName : "").trim();
+  if (name) {
+    const rest = opener.replace(/^\**\s*/, "");
+    if (rest.toLowerCase().startsWith(name.toLowerCase())) {
+      const remainder = rest.slice(name.length);
+      if (/^['’]s\b/.test(remainder) || /^\s+[a-z]/.test(remainder)) {
+        violations.push("org-as-subject-opener");
+      }
+    }
+  }
+
+  for (const m of text.matchAll(/\*\*\s*([^*]+?)\s*\*\*/g)) {
+    if (/^(v?\d+(\.\d+)+|CVE-\d)/i.test(m[1].trim())) {
+      violations.push("version-lead-tease");
+      break;
+    }
+  }
+
+  for (const p of OVERVIEW_LINT_BANNED) {
+    const re = new RegExp("\\b" + p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b", "i");
+    if (re.test(text)) violations.push("banned-phrase:" + p);
+  }
+  return violations;
+}
+
+/** Corrective instruction appended to the user message on a re-generation pass. */
+function correctiveOverviewSuffix(violations: string[], body: string): string {
+  const hints = violations.map((v) =>
+    v === "opener-too-long"
+      ? `opener-too-long (your opening sentence was ${openerWordCount(body)} words — rewrite it to 25 words or fewer)`
+      : v,
+  );
+  return (
+    `Your previous draft violated these rules: ${hints.join("; ")}. ` +
+    `Rewrite the knowledge page fixing every one, keeping the same factual content ` +
+    `and the same trailing JSON citation block format.`
+  );
+}
+
 /**
  * Generate an org overview via the provider-agnostic TextModel seam (OpenRouter
  * with Anthropic fail-open). Returns the markdown body plus post-hoc-resolved
- * citations. Shared by `OverviewRegenWorkflow` and the eval harness so the eval
- * exercises the production path.
+ * citations. Lints the draft and, on any violation, runs ONE corrective
+ * re-generation (kept only if it is no worse on the lint) — mirroring the local
+ * agent workflow. Shared by `OverviewRegenWorkflow` and the eval harness so the
+ * eval exercises the production path.
  */
 export async function generateOverview(
   model: TextModel,
@@ -256,11 +346,26 @@ export async function generateOverview(
   const titleBySource = new Map(
     input.selected.map((r) => [releaseSource(r), r.title || r.version || null] as const),
   );
-  const res = await model.complete({
-    system: SYSTEM_PROMPT,
-    user: buildOverviewUserText(input),
-    maxTokens: OVERVIEW_OUTPUT_MAX_TOKENS,
-    cacheSystem: true,
-  });
-  return parsePostHocOverview(res.text, { validSources, titleBySource });
+  const user = buildOverviewUserText(input);
+  const req = { system: SYSTEM_PROMPT, maxTokens: OVERVIEW_OUTPUT_MAX_TOKENS, cacheSystem: true };
+
+  const first = await model.complete({ ...req, user });
+  let result = parsePostHocOverview(first.text, { validSources, titleBySource });
+
+  const violations = lintOverviewBody(result.body, input.org.name);
+  if (violations.length > 0) {
+    const retry = await model.complete({
+      ...req,
+      user: `${user}\n\n${correctiveOverviewSuffix(violations, result.body)}`,
+    });
+    const corrected = parsePostHocOverview(retry.text, { validSources, titleBySource });
+    // Keep the rewrite only if it is non-empty and no worse on the lint.
+    if (
+      corrected.body.trim().length > 0 &&
+      lintOverviewBody(corrected.body, input.org.name).length <= violations.length
+    ) {
+      result = corrected;
+    }
+  }
+  return result;
 }
