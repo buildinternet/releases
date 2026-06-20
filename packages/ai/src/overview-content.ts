@@ -9,6 +9,8 @@
  */
 
 import type Anthropic from "@anthropic-ai/sdk";
+import type { TextModel } from "./text-model";
+import { parsePostHocOverview, type PostHocExtraction } from "./overview-citations";
 
 /** Default model — Haiku is fine per the skill ("not a heavy reasoning task"). */
 export const MODEL = "claude-haiku-4-5";
@@ -186,4 +188,79 @@ export function buildOverviewRequest(input: OverviewRequestInput): {
       },
     ],
   };
+}
+
+// ── OpenRouter (TextModel) path ───────────────────────────────────────────────
+
+/** Output token budget for the OpenRouter path: body (~800) + a small citation list. */
+export const OVERVIEW_OUTPUT_MAX_TOKENS = 1400;
+
+/** Citation source for a release in the prompt (mirrors buildReleaseBlock + the eval's validSources). */
+function releaseSource(r: OverviewRequestInput["selected"][number]): string {
+  return r.url ?? `release://${r.id}`;
+}
+
+/**
+ * Render the overview inputs as a single plain-text user message for the
+ * chat-completions (OpenRouter) path — the non-Anthropic analog of
+ * `buildUserMessageContent`. Each release is labeled with its citation source so
+ * the model can reference it in the trailing JSON citation list.
+ */
+export function buildOverviewUserText(input: OverviewRequestInput): string {
+  const lines: string[] = [];
+  const descPart = input.org.description ? ` (${input.org.description})` : "";
+  const action = input.existingContent ? "Update" : "Create an initial";
+  lines.push(
+    `${action} the knowledge page for ${input.org.name}${descPart}. Total releases tracked: ${input.totalAvailable}.`,
+  );
+  if (input.sources.length > 1) {
+    lines.push(`Tracked sources: ${input.sources.map((s) => s.name).join(", ")}.`);
+  }
+  if (input.existingContent) {
+    lines.push(`\n<existing-page>\n${input.existingContent}\n</existing-page>`);
+  }
+  lines.push(`\nSource releases (cite claims to these exact source URLs):`);
+  for (const r of input.selected) {
+    const meta: string[] = [];
+    if (r.version) meta.push(`version ${r.version}`);
+    if (r.publishedAt) meta.push(`date ${r.publishedAt}`);
+    const metaPart = meta.length ? ` — ${meta.join(", ")}` : "";
+    const bodyText =
+      r.content.length > RELEASE_CONTENT_CHARS
+        ? r.content.slice(0, RELEASE_CONTENT_CHARS)
+        : r.content;
+    lines.push(
+      `\n[source: ${releaseSource(r)}] ${r.title || r.version || "Release"}${metaPart}\n${bodyText}`,
+    );
+  }
+  lines.push(
+    `\nAfter the knowledge page body, output a fenced \`\`\`json code block containing a JSON array ` +
+      `of citations: [{ "url": "<one of the source URLs above>", "quote": "<a short verbatim phrase ` +
+      `copied from your body that the release supports>" }]. Each quote MUST appear verbatim in your ` +
+      `body. Omit the block entirely if you have no citations. Do not mention citations in the body.`,
+  );
+  return lines.join("\n");
+}
+
+/**
+ * Generate an org overview via the provider-agnostic TextModel seam (OpenRouter
+ * with Anthropic fail-open). Returns the markdown body plus post-hoc-resolved
+ * citations. Shared by `OverviewRegenWorkflow` and the eval harness so the eval
+ * exercises the production path.
+ */
+export async function generateOverview(
+  model: TextModel,
+  input: OverviewRequestInput,
+): Promise<PostHocExtraction> {
+  const res = await model.complete({
+    system: SYSTEM_PROMPT,
+    user: buildOverviewUserText(input),
+    maxTokens: OVERVIEW_OUTPUT_MAX_TOKENS,
+    cacheSystem: true,
+  });
+  const validSources = new Set(input.selected.map(releaseSource));
+  const titleBySource = new Map(
+    input.selected.map((r) => [releaseSource(r), r.title || r.version || null] as const),
+  );
+  return parsePostHocOverview(res.text, { validSources, titleBySource });
 }
