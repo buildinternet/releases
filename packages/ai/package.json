@@ -9,7 +9,6 @@
     "./grader-prompt": "./src/grader-prompt.ts",
     "./article-extract": "./src/article-extract.ts",
     "./marketing-classifier": "./src/marketing-classifier.ts",
-    "./breaking-classifier": "./src/breaking-classifier.ts",
     "./openrouter-client": "./src/openrouter-client.ts",
     "./playbook": "./src/playbook.ts",
     "./providers": "./src/providers.ts",

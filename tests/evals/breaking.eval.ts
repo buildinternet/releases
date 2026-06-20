@@ -1,24 +1,22 @@
 /**
- * Breaking-change classifier regression eval. LOCAL, AD-HOC ONLY — calls the
- * real Anthropic API (or an OpenRouter candidate). Run:
- *   bun run eval:breaking-classifier
+ * Breaking-change verdict regression eval. LOCAL, AD-HOC ONLY — calls the real
+ * Anthropic API (or an OpenRouter candidate). Run:
+ *   bun run eval:breaking
  *
- * Never part of `bun test`. Each run costs roughly one Haiku call per fixture.
- * Results are persisted to ~/.releases/evals/results/breaking-classifier-*.json.
+ * Never part of `bun test`. The breaking verdict is produced by the SAME
+ * `summarizeRelease` call as title/summary (#1696, no extra request), so this
+ * runs each fixture through `summarizeRelease` and grades `result.breaking`.
+ * Each run costs roughly one Haiku call per fixture. Results persist to
+ * ~/.releases/evals/results/breaking-*.json.
  *
- * The classifier emits a closed enum, so the grade is deterministic: exact
- * verdict accuracy plus a PRECISION guard (a `none`/`unknown` truth answered
- * `minor`/`major` is a false alarm — the costliest error per the rubric). No
- * LLM judge needed for the verdict; the rubric (src/shared/rubrics/breaking.md)
- * is the curation spec for the fixtures' ground-truth labels.
+ * The verdict is a closed enum, so the grade is deterministic: exact accuracy
+ * plus a PRECISION guard (a `none`/`unknown` truth answered `minor`/`major` is a
+ * false alarm — the costliest error per src/shared/rubrics/breaking.md).
  */
 import Anthropic from "@anthropic-ai/sdk";
-import {
-  classifyBreaking,
-  MODEL as BREAKING_MODEL,
-} from "@releases/ai-internal/breaking-classifier";
+import { summarizeRelease, MODEL as SUMMARIZE_MODEL } from "@releases/ai-internal/release-content";
 import type { TextModel } from "@releases/ai-internal/text-model";
-import { BREAKING_FIXTURES, type BreakingFixture } from "./breaking-classifier-fixtures";
+import { BREAKING_FIXTURES, type BreakingFixture } from "./breaking-fixtures";
 import type { FieldResult } from "./helpers";
 import { resolveEvalModel } from "./judge-model";
 import { saveRun } from "./results";
@@ -33,10 +31,9 @@ function gradeFixture(
 ): { passed: boolean; falseAlarm: boolean; fields: FieldResult[] } {
   const fields: FieldResult[] = [];
 
-  const match = verdict === fixture.expected;
   fields.push({
     field: "verdict matches expected",
-    passed: match,
+    passed: verdict === fixture.expected,
     expected: fixture.expected,
     actual: verdict,
   });
@@ -66,21 +63,21 @@ function gradeFixture(
 async function main() {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
-    console.error("ANTHROPIC_API_KEY not set — skipping breaking-classifier eval (no spend).");
+    console.error("ANTHROPIC_API_KEY not set — skipping breaking eval (no spend).");
     process.exit(0);
   }
 
   const client = new Anthropic({ apiKey });
   const model: TextModel = resolveEvalModel({
-    anthropicModel: BREAKING_MODEL,
-    generationName: "breaking-classifier-eval",
+    anthropicModel: SUMMARIZE_MODEL,
+    generationName: "breaking-eval",
     orModelEnvVar: "EVAL_OPENROUTER_MODEL",
     client,
   })!.model;
   console.error(`model under test: ${model.id}`);
 
   console.error(`\n${"=".repeat(60)}`);
-  console.error(`Breaking-change classifier eval: ${BREAKING_FIXTURES.length} fixtures`);
+  console.error(`Breaking-change verdict eval: ${BREAKING_FIXTURES.length} fixtures`);
   console.error("=".repeat(60));
 
   const runCases: Array<{ name: string; passed: boolean; fields: FieldResult[] }> = [];
@@ -91,7 +88,7 @@ async function main() {
     let fields: FieldResult[];
     let passed: boolean;
     try {
-      const result = await classifyBreaking(model, fixture.input);
+      const result = await summarizeRelease(model, fixture.input);
       const graded = gradeFixture(fixture, result.breaking, result.migrationNotes);
       fields = graded.fields;
       passed = graded.passed;
@@ -100,7 +97,7 @@ async function main() {
     } catch (err) {
       fields = [
         {
-          field: "classifyBreaking throws",
+          field: "summarizeRelease throws",
           passed: false,
           expected: "no throw",
           actual: String(err),
@@ -125,7 +122,7 @@ async function main() {
   console.error(`\naccuracy: ${correct}/${total}   false alarms: ${falseAlarms}`);
 
   const file = saveRun({
-    eval: "breaking-classifier",
+    eval: "breaking",
     model: model.id,
     pass: allPassed,
     summary: { total, correct, falseAlarms },

@@ -13,6 +13,7 @@
  */
 
 import type { ReleaseComposition } from "@buildinternet/releases-core/composition";
+import { isBreakingLevel, type BreakingLevel } from "@buildinternet/releases-core/breaking";
 import type { TextModel } from "./text-model";
 
 export type { ReleaseComposition };
@@ -26,8 +27,9 @@ export const MAX_BODY_CHARS = 8000;
 
 /** Cap on the model's response. Sized for ~80-char title + ~70-char short + 1-2 sentence summary
  *  in tagged XML, with headroom for the trailing <composition> count tag (~25-30 tokens for
- *  two-digit counts). 280 = 220 (pre-composition cap) + ~60 buffer. */
-export const MAX_OUTPUT_TOKENS = 280;
+ *  two-digit counts), plus the <breaking> verdict word + a ≤3-sentence <migration> note (#1696,
+ *  ~120 tokens). 420 = 280 (pre-breaking cap) + ~140 buffer. */
+export const MAX_OUTPUT_TOKENS = 420;
 
 // In-prompt sentinel emitted by the model when the body is boilerplate-only.
 // The empty-body short-circuit (isEmptyContent) is a separate path — those
@@ -84,9 +86,11 @@ export function isEmptyContent(raw: string): boolean {
 export const SYSTEM_PROMPT = `You write a title, a short title, and a summary for a release-notes entry, used in a developer-facing changelog index.
 
 <output_structure>
-Output exactly one <empty>...</empty> tag, then one <title>...</title> tag, then one <title_short>...</title_short> tag, then one <summary>...</summary> tag, then one <composition>...</composition> tag, in that order. Output nothing before, between, or after these tags.
+Output exactly one <empty>...</empty> tag, then one <title>...</title> tag, then one <title_short>...</title_short> tag, then one <summary>...</summary> tag, then one <composition>...</composition> tag, then one <breaking>...</breaking> tag, then one <migration>...</migration> tag, in that order. Output nothing before, between, or after these tags.
 
 The <empty> tag is a boolean — exactly the literal string \`true\` or \`false\`, with no other text inside the tag. It is true when the body has no real release-note content (see <fallback> below) and false otherwise. When empty is true, downstream discards the summary and short title entirely — still produce a formulaic title from the product and version (e.g. "Next.js v15.4.2 dependency update"), but the summary and title_short content is ignored.
+
+The <breaking> and <migration> tags classify upgrade risk — see <breaking_change> below. You are already scanning the body for breaking changes to write the title and summary (priority #1); the <breaking> tag just records that verdict.
 </output_structure>
 
 <title_format>
@@ -194,6 +198,28 @@ Rules:
 Output format: \`<composition><bugs>N</bugs><features>N</features><enhancements>N</enhancements></composition>\` with N as a non-negative integer. Do not include explanations or other text inside the tag.
 </composition_format>
 
+<breaking_change>
+After the composition, output a <breaking> verdict — the upgrade risk for a consumer who depends on this thing — and a <migration> tag. This is for an engineer (or an agent) asking "can I take this upgrade safely, and if not, what do I change?"
+
+<breaking> is exactly one of:
+- **major** — taking the upgrade WILL break a consumer who changes nothing: removals of public API/CLI/config, renamed or changed signatures, changed return shapes, dropped runtime/platform/dependency support ("drops Node 18", "requires Postgres 14+"), required config or data migrations, and DEFAULT-BEHAVIOR REVERSALS that change output for existing users.
+- **minor** — a break affecting only an edge case or narrow surface, OR a deprecation that still works this release (announced/shimmed/warns) but is scheduled for removal. Most consumers upgrade with no change.
+- **none** — no breaking changes: additive features, bug fixes, performance, docs that don't alter an existing contract. The common case.
+- **unknown** — you genuinely cannot tell: the body is too vague / marketing-only / empty AND the version gives no usable SemVer signal (see below).
+
+Precision over recall: a false major/minor is worse than a false unknown — it makes a reader distrust the signal. When torn, pick the LOWER-risk level you can defend; when the body gives no usable signal at all, output unknown.
+
+Use the SemVer signal — for GitHub/npm packages it is often the clearest indicator:
+- A major-version release is the maintainer's deliberate breaking signal: a version that bumps the major (a ≥1.0 package landing on \`X.0.0\` — e.g. \`2.0.0\`, \`3.0.0\`), an explicit \`BREAKING CHANGE:\` note, or a \`!\` conventional-commit marker (\`feat!:\`). Lean major even when the prose is thin.
+- A patch release (\`x.y.Z\` with Z>0, e.g. \`15.4.2\`) signals no breaking changes under SemVer — lean none unless the body explicitly states a break.
+- Pre-1.0 (\`0.y.z\`) does NOT guarantee stability — a 0.x minor bump can break, so judge from the body.
+- The body still wins when explicit: a PATCH that reverses a default behavior or removes something is still major (maintainers don't always follow SemVer). And a large version number with purely additive notes is NOT automatically major — don't cry wolf on a routine feature/minor release.
+
+<migration>: if — and ONLY if — the body explicitly describes how to upgrade (a Migration/Upgrading/Breaking-changes section, before→after code, "replace X with Y", "set flag Z"), distill those steps into 1–3 plain sentences using the body's own instructions. Otherwise (a break with no stated steps, or no break) output the literal \`none\`. Never invent steps.
+
+Examples: a release removing \`completions.create\` and dropping Node 18 → \`<breaking>major</breaking>\` with migration steps; a package landing on \`3.0.0\` with only terse notes → \`<breaking>major</breaking>\` (the major-version bump is the maintainer's signal); a \`1.4.2\` patch with only bug fixes → \`<breaking>none</breaking><migration>none</migration>\`; a release deprecating a prop that still works → \`<breaking>minor</breaking><migration>none</migration>\`; a release of only feature additions + bug fixes → \`<breaking>none</breaking><migration>none</migration>\`; a marketing-only "we shipped improvements" body with no version → \`<breaking>unknown</breaking><migration>none</migration>\`.
+</breaking_change>
+
 <fallback>
 Set <empty>true</empty> only when the body is empty, a single dependency-bump line, or pure pipeline boilerplate with no other content. When empty is true, write the fallback summary "${EMPTY_BODY_FALLBACK}" and use "Dependency update" or "Internal release" for title_short — downstream will discard both fields, so their exact text only matters as a sanity signal. The title field is kept regardless, so always produce a formulaic title from product + version (e.g. "Next.js v15.4.2 dependency update").
 
@@ -218,6 +244,8 @@ Body:
 <title_short>Admin org usage gets quantity field; realtime translate launches</title_short>
 <summary>Admin organization usage responses now include a quantity field, and realtime translation is available. Fixed an imagegen size enum regression.</summary>
 <composition><bugs>1</bugs><features>2</features><enhancements>0</enhancements></composition>
+<breaking>none</breaking>
+<migration>none</migration>
 </good_output>
 <bad_output reason="title_short used 'Adds X and Y' instead of leading with the noun and outcome">
 <empty>false</empty>
@@ -225,6 +253,8 @@ Body:
 <title_short>Adds quantity field and launches realtime translate</title_short>
 <summary>Admin organization usage responses now include a quantity field, and realtime translation is available. Fixed an imagegen size enum regression.</summary>
 <composition><bugs>1</bugs><features>2</features><enhancements>0</enhancements></composition>
+<breaking>none</breaking>
+<migration>none</migration>
 </bad_output>
 </example>
 
@@ -239,6 +269,8 @@ Body: 35 bullets where #1-#3 are cosmetic ("/color picks random colors", model p
 <title_short>Worktree no longer drops unpushed commits</title_short>
 <summary>Fixed a worktree bug that was dropping unpushed commits and a crash loop when piping over 10 MB stdin to claude -p. Plus dozens of smaller fixes across MCP, vim mode, and terminal rendering.</summary>
 <composition><bugs>20</bugs><features>0</features><enhancements>3</enhancements></composition>
+<breaking>none</breaking>
+<migration>none</migration>
 </good_output>
 <bad_output reason="title_short led with 'Fixes' verb and described mechanism instead of outcome">
 <empty>false</empty>
@@ -246,6 +278,8 @@ Body: 35 bullets where #1-#3 are cosmetic ("/color picks random colors", model p
 <title_short>Fixes worktree bug dropping unpushed commits</title_short>
 <summary>Fixed a worktree bug that was dropping unpushed commits and a crash loop when piping over 10 MB stdin to claude -p. Plus dozens of smaller fixes across MCP, vim mode, and terminal rendering.</summary>
 <composition><bugs>20</bugs><features>0</features><enhancements>3</enhancements></composition>
+<breaking>none</breaking>
+<migration>none</migration>
 </bad_output>
 </example>
 
@@ -260,6 +294,8 @@ Body: 25 bullets. The first 4 are feature additions: "Added --plugin-url flag to
 <title_short>Gateway model discovery now opt-in; OAuth refresh hardened</title_short>
 <summary>Gateway /v1/models discovery for the /model picker is now opt-in via CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY=1, reverting the automatic behavior introduced in 2.1.126. Fixed an OAuth refresh race after wake-from-sleep that could log out all running sessions, and a 1-hour prompt cache TTL being silently downgraded to 5 minutes.</summary>
 <composition><bugs>15</bugs><features>4</features><enhancements>2</enhancements></composition>
+<breaking>major</breaking>
+<migration>Set CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY=1 to restore the automatic gateway /v1/models discovery this release made opt-in.</migration>
 </good_output>
 <bad_output reason="led with #4 correctness fixes and missed the #1 default-behavior reversal buried at bullet #5; the gateway discovery change breaks users on 2.1.126-128">
 <empty>false</empty>
@@ -267,6 +303,8 @@ Body: 25 bullets. The first 4 are feature additions: "Added --plugin-url flag to
 <title_short>Prompt cache TTL no longer downgrades; OAuth refresh hardened</title_short>
 <summary>Fixed a 1-hour prompt cache TTL being silently downgraded to 5 minutes, and an OAuth refresh race after wake-from-sleep. Added --plugin-url flag to fetch plugins from URLs.</summary>
 <composition><bugs>15</bugs><features>4</features><enhancements>2</enhancements></composition>
+<breaking>major</breaking>
+<migration>Set CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY=1 to restore the automatic gateway /v1/models discovery this release made opt-in.</migration>
 </bad_output>
 </example>
 
@@ -281,6 +319,8 @@ Body: Updated dependencies.</input>
 <title_short>Dependency update</title_short>
 <summary>${EMPTY_BODY_FALLBACK}</summary>
 <composition><bugs>0</bugs><features>0</features><enhancements>0</enhancements></composition>
+<breaking>none</breaking>
+<migration>none</migration>
 </good_output>
 </example>
 
@@ -294,6 +334,8 @@ Body: Shows how to build live speech translation with the Realtime API.</input>
 <title_short>Live speech translation guide for Realtime API</title_short>
 <summary>New guide covers building live speech translation with the Realtime API.</summary>
 <composition><bugs>0</bugs><features>0</features><enhancements>0</enhancements></composition>
+<breaking>none</breaking>
+<migration>none</migration>
 </good_output>
 <bad_output reason="title_short forced smart-brevity transformation onto guide content; smart brevity does not apply to documentation/announcement releases">
 <empty>false</empty>
@@ -301,6 +343,8 @@ Body: Shows how to build live speech translation with the Realtime API.</input>
 <title_short>Realtime API: live speech translation guide ships</title_short>
 <summary>New guide covers building live speech translation with the Realtime API.</summary>
 <composition><bugs>0</bugs><features>0</features><enhancements>0</enhancements></composition>
+<breaking>none</breaking>
+<migration>none</migration>
 </bad_output>
 </example>
 
@@ -322,6 +366,8 @@ This week's release brings exciting quality-of-life improvements across the app:
 <title_short>Cmd+K palette crash fixed; sub-issues inherit parent project</title_short>
 <summary>Sub-issues now inherit the parent's project automatically, and a Cmd+K palette crash for users with more than 500 favorites is fixed.</summary>
 <composition><bugs>1</bugs><features>1</features><enhancements>2</enhancements></composition>
+<breaking>none</breaking>
+<migration>none</migration>
 </good_output>
 <bad_output reason="title and title_short kept marketing language and missed the real fixes buried below">
 <empty>false</empty>
@@ -329,6 +375,8 @@ This week's release brings exciting quality-of-life improvements across the app:
 <title_short>Powerful new keyboard shortcuts and bug fixes</title_short>
 <summary>Exciting quality-of-life improvements include powerful new keyboard shortcuts and various bug fixes (PR #4821).</summary>
 <composition><bugs>1</bugs><features>1</features><enhancements>2</enhancements></composition>
+<breaking>none</breaking>
+<migration>none</migration>
 </bad_output>
 </example>
 
@@ -344,6 +392,8 @@ Body: A new \`loss_type="chunked_nll"\` option for SFT drastically reduces peak 
 <title_short>Chunked cross-entropy unlocks longer SFT sequences</title_short>
 <summary>A new loss_type="chunked_nll" option for SFT computes cross-entropy over tokens in checkpointed chunks instead of materializing the full logits tensor, unlocking sequence lengths that previously caused out-of-memory errors. Also added OpenReward Standard environment adapter, length-normalized DPO sigmoid loss, and training chat templates for Cohere, Cohere2, Gemma 3, Qwen3, and Qwen2.5.</summary>
 <composition><bugs>0</bugs><features>4</features><enhancements>0</enhancements></composition>
+<breaking>none</breaking>
+<migration>none</migration>
 </good_output>
 <bad_output reason="title_short led with the mechanism (chunked cross-entropy loss is the *how*) framed as an added option; for capacity/performance releases, the user-facing outcome (longer sequences now fit) is the headline">
 <empty>false</empty>
@@ -351,6 +401,8 @@ Body: A new \`loss_type="chunked_nll"\` option for SFT drastically reduces peak 
 <title_short>Chunked NLL loss option added to SFT</title_short>
 <summary>A new loss_type="chunked_nll" option for SFT reduces peak activation memory. Also added OpenReward Standard environment adapter, length-normalized DPO sigmoid loss, and training chat templates.</summary>
 <composition><bugs>0</bugs><features>4</features><enhancements>0</enhancements></composition>
+<breaking>none</breaking>
+<migration>none</migration>
 </bad_output>
 </example>
 </examples>`;
@@ -381,6 +433,15 @@ export interface SummarizeReleaseResult {
   titleShort: string | null;
   summary: string | null;
   composition: ReleaseComposition | null;
+  /**
+   * Breaking-change verdict (#1696), produced by the same call. Always present
+   * (`"unknown"` on empty body, parse miss, or genuine uncertainty — fail-open).
+   * The caller decides whether to PERSIST it (gated to developer-facing source
+   * kinds); the model classifies regardless of kind.
+   */
+  breaking: BreakingLevel;
+  /** Explicit upgrade/migration steps lifted from the body (#1696); null when none. */
+  migrationNotes: string | null;
   usage: ReleaseContentUsage;
   /** True when isEmptyContent short-circuited and no model call was made. */
   skipped: boolean;
@@ -505,11 +566,15 @@ export function parseReleaseContent(
   const discard =
     emptyTag === "true" || isFallbackSummary || (emptyTag === null && isFallbackShort);
 
+  const { breaking, migrationNotes } = parseBreaking(raw);
+
   return {
     title: extractTagged(raw, "title") || null,
     titleShort: discard ? null : titleShort,
     summary: discard ? null : summary,
     composition: parseComposition(raw),
+    breaking,
+    migrationNotes,
   };
 }
 
@@ -518,6 +583,31 @@ function readEmptyTag(raw: string): "true" | "false" | null {
   if (v === "true") return "true";
   if (v === "false") return "false";
   return null;
+}
+
+/** Migration-note sentinels the model emits when there are no explicit upgrade steps. */
+const NO_MIGRATION = new Set(["", "none", "n/a", "na", "null"]);
+
+/**
+ * Pull the `<breaking>` verdict + `<migration>` note out of a model response
+ * (#1696). Fail-open: an absent or unrecognized `<breaking>` value maps to
+ * `"unknown"` (the safe verdict, never an exception — `unknown` is itself a
+ * valid level). `migrationNotes` is null unless the model returned real upgrade
+ * steps. Exported so the batch path parses identically. Note that this leaves
+ * the PERSIST decision (gating to developer-facing source kinds) to the caller —
+ * here we only surface what the model said.
+ */
+export function parseBreaking(raw: string): {
+  breaking: BreakingLevel;
+  migrationNotes: string | null;
+} {
+  const verdict = extractTagged(raw, "breaking").toLowerCase();
+  const breaking: BreakingLevel = isBreakingLevel(verdict) ? verdict : "unknown";
+  if (breaking === "none" || breaking === "unknown") {
+    return { breaking, migrationNotes: null };
+  }
+  const note = extractTagged(raw, "migration").trim();
+  return { breaking, migrationNotes: NO_MIGRATION.has(note.toLowerCase()) ? null : note };
 }
 
 /**
@@ -542,6 +632,9 @@ export async function summarizeRelease(
       titleShort: null,
       summary: null,
       composition: null,
+      // No model call → no breaking verdict. Stays "unknown" (fail-open).
+      breaking: "unknown",
+      migrationNotes: null,
       usage: { input: 0, output: 0, cacheCreate: 0, cacheRead: 0 },
       skipped: true,
     };

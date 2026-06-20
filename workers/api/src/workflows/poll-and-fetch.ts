@@ -28,7 +28,6 @@ import { buildFetchOneEnv } from "./_fetch-env.js";
 import { logEvent } from "@releases/lib/log-event";
 import { dbErrorLogFields } from "@releases/lib/db-errors";
 import { summarizeRelease } from "@releases/ai-internal/release-content";
-import { classifyBreaking } from "@releases/ai-internal/breaking-classifier";
 import { splitModelId } from "@releases/ai-internal/text-model";
 import {
   qualifiesForBreakingClassification,
@@ -47,7 +46,7 @@ import {
 import { getSourceMeta, isGitHubFetched } from "@releases/adapters/feed.js";
 import { invalidateLatestCache, type InvalidationEnv } from "../lib/latest-cache.js";
 import { type AnthropicEnv } from "../lib/anthropic.js";
-import { resolveSummarizeModel, resolveBreakingClassifierModel } from "../lib/text-model.js";
+import { resolveSummarizeModel } from "../lib/text-model.js";
 import { IN_ARRAY_CHUNK_SIZE } from "../lib/d1-limits.js";
 import { logUsage } from "../lib/usage-log.js";
 import { makeBotFetch } from "../lib/web-bot-auth-fetch.js";
@@ -292,11 +291,6 @@ export async function generateContentForReleases(
   const model = await resolveSummarizeModel(env);
   if (!model) return 0;
 
-  // Breaking-change classifier (#1696) rides the same lane; null = fail-open
-  // (no usable provider) → classification is skipped and `breaking` stays
-  // "unknown". Resolved once for the whole fire, like `model`.
-  const breakingModel = await resolveBreakingClassifierModel(env);
-
   const startedAt = Date.now();
 
   let skippedEmpty = 0;
@@ -384,37 +378,15 @@ export async function generateContentForReleases(
         continue;
       }
 
-      // Breaking-change classification (#1696): only for developer-facing
-      // source kinds (sdk/tool/platform/integration) — consumer apps / docs /
-      // kind-less rows stay "unknown" and spend no classifier call. Fail-open:
-      // an empty content short-circuits inside classifyBreaking, and a transport
-      // error here is caught and logged without disturbing the summary write.
-      let breaking: BreakingLevel = "unknown";
-      let migrationNotes: string | null = null;
+      // Breaking-change verdict (#1696) rides the SAME summarize call — no extra
+      // request. Persist it only for developer-facing source kinds
+      // (sdk/tool/platform/integration); consumer apps / docs / kind-less rows
+      // keep the "unknown" default even though the model classified them.
       const rawKind = row.sourceKind ?? row.productKind ?? null;
       const resolvedKind = rawKind && isValidKind(rawKind) ? rawKind : null;
-      if (breakingModel && qualifiesForBreakingClassification(resolvedKind)) {
-        try {
-          // eslint-disable-next-line no-await-in-loop -- sequential per-row keeps cost bounded; same lane as summarize
-          const verdict = await classifyBreaking(breakingModel, {
-            sourceName: row.sourceName,
-            productName: row.productName,
-            title: row.title,
-            version: row.version,
-            content: row.content,
-          });
-          breaking = verdict.breaking;
-          migrationNotes = verdict.migrationNotes;
-        } catch (err) {
-          logEvent("warn", {
-            component: "auto-generate-content",
-            event: "breaking-classify-failed",
-            releaseId: row.id,
-            orgSlug: row.orgSlug,
-            err,
-          });
-        }
-      }
+      const qualifies = qualifiesForBreakingClassification(resolvedKind);
+      const breaking: BreakingLevel = qualifies ? result.breaking : "unknown";
+      const migrationNotes = qualifies ? result.migrationNotes : null;
 
       updates.push({
         id: row.id,

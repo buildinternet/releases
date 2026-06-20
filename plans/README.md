@@ -39,16 +39,32 @@ Two deviations from the plan, both tightening scope per operator steer:
   History stays `unknown` until a separate, cost-estimated batch run populates
   it. The ~40K-row backfill remains the STOP-condition deferral.
 
-Shape: a sibling `breaking-classifier.ts` (#1696, option 2) on the shared
-SUMMARIZE_MODEL lane (`generationName: "classify-breaking"`, no new `*_MODEL`
-var); fail-open everywhere (`unknown` default + parse fail-open + caller
-try/catch). Eval is `bun run eval:breaking-classifier` (deterministic accuracy +
-precision guard; rubric at `src/shared/rubrics/breaking.md`). Wire field is
+Shape: **folded into the existing `summarizeRelease` call (#1696, option 1)** —
+NOT a separate model request (operator steer: don't make a second AI call). The
+summarize `SYSTEM_PROMPT` already scans the body for breaking changes to write
+the title/summary (its `priority_order` ranks them #1), so the call now also
+emits `<breaking>` + `<migration>` tags and `parseReleaseContent` returns
+`breaking`/`migrationNotes`. The verdict also **weighs the SemVer signal** (a
+major-version bump / `BREAKING CHANGE` / `!` → lean `major`; a patch → lean
+`none`; pre-1.0 judged from the body; explicit body content overrides) — the
+clearest indicator for GitHub/npm packages. Fail-open: `"unknown"` default, the
+parser maps any unrecognized verdict to `unknown`, and the empty-body
+short-circuit returns `unknown` with no model call.
+
+The kind gate is applied at the **persist** site in `generateContentForReleases`
+(the model classifies every release, but only developer-facing kinds store a
+non-`unknown` value). MAX_OUTPUT_TOKENS bumped 280→420 for the verdict + a ≤3-
+sentence migration note. Eval is `bun run eval:breaking` (runs fixtures through
+`summarizeRelease`, deterministic accuracy + precision guard; rubric at
+`src/shared/rubrics/breaking.md`). Wire field is
 `ReleaseDetail.breaking?`/`migrationNotes?` (additive optional). **Follow-ups
 (out of 001):** route/query population, the web "breaking" chip, the webhook
 `breaking` filter, and an ingest-write integration test (no `generateContent`
 harness exists today; model resolution isn't injectable without the
-process-global `mock.module` leak).
+process-global `mock.module` leak). **Watch:** since the verdict shares the tuned
+summarize prompt, run `eval:summary` + `eval:breaking` before merge to confirm
+the added tags didn't regress title/summary quality (the option-2 fallback is in
+git history if they do).
 
 ## Dependency notes
 
