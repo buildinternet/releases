@@ -122,6 +122,77 @@ export function extractOverviewBody(message: Anthropic.Message): OverviewExtract
   return { body, citations, strippedHeading: true };
 }
 
+export interface PostHocExtraction {
+  body: string;
+  citations: OverviewCitation[];
+}
+
+export interface PostHocResolveInput {
+  /** Valid citation sources: each release's `url ?? `release://<id>``. */
+  validSources: Set<string>;
+  /** Display title per source, for the citation `title` field. */
+  titleBySource: Map<string, string | null>;
+}
+
+/** Match a trailing fenced ```json [ ... ] ``` block (the citation list). */
+const CITATION_BLOCK_RE = /\n*```(?:json)?\s*(\[[\s\S]*?\])\s*```\s*$/i;
+
+/** True when [start,end) contains an odd number of `**` markers (would split a bold span). */
+function crossesBoldBoundary(body: string, start: number, end: number): boolean {
+  const span = body.slice(start, end);
+  return ((span.match(/\*\*/g) ?? []).length & 1) === 1;
+}
+
+/**
+ * Parse an OpenRouter overview generation: split the markdown body from a
+ * trailing fenced JSON citation list, then resolve each { url, quote } into a
+ * body-offset citation. Citations whose url isn't a provided source, whose quote
+ * isn't found verbatim in the body, or whose span crosses a markdown `**`
+ * boundary are dropped. Missing/invalid JSON yields zero citations (degrade,
+ * never throw) — citation fidelity is advisory for this path.
+ */
+export function parsePostHocOverview(
+  rawText: string,
+  input: PostHocResolveInput,
+): PostHocExtraction {
+  const match = rawText.match(CITATION_BLOCK_RE);
+  const rawBody = match ? rawText.slice(0, match.index) : rawText;
+  const body = stripLeadingHeading(decodeHtmlEntities(rawBody).trim());
+
+  if (!match) return { body, citations: [] };
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(match[1]);
+  } catch {
+    return { body, citations: [] };
+  }
+  if (!Array.isArray(parsed)) return { body, citations: [] };
+
+  const citations: OverviewCitation[] = [];
+  for (const item of parsed) {
+    if (!item || typeof item !== "object") continue;
+    const url = (item as { url?: unknown }).url;
+    const quote = (item as { quote?: unknown }).quote;
+    if (typeof url !== "string" || typeof quote !== "string") continue;
+    if (!input.validSources.has(url)) continue;
+    const needle = decodeHtmlEntities(quote).trim();
+    if (needle.length === 0) continue;
+    const startIndex = body.indexOf(needle);
+    if (startIndex === -1) continue;
+    const endIndex = startIndex + needle.length;
+    if (crossesBoldBoundary(body, startIndex, endIndex)) continue;
+    citations.push({
+      startIndex,
+      endIndex,
+      sourceUrl: url,
+      title: input.titleBySource.get(url) ?? null,
+      citedText: needle,
+    });
+  }
+  return { body, citations: clampCitationsToBody(body, citations) };
+}
+
 /**
  * Drop citations whose offsets fall outside `body`. Defensive guard before
  * upsert — the API rejects `bad_citations` with 400, so trimming here lets
