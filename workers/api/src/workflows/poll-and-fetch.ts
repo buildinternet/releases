@@ -28,7 +28,13 @@ import { buildFetchOneEnv } from "./_fetch-env.js";
 import { logEvent } from "@releases/lib/log-event";
 import { dbErrorLogFields } from "@releases/lib/db-errors";
 import { summarizeRelease } from "@releases/ai-internal/release-content";
+import { classifyBreaking } from "@releases/ai-internal/breaking-classifier";
 import { splitModelId } from "@releases/ai-internal/text-model";
+import {
+  qualifiesForBreakingClassification,
+  isValidKind,
+} from "@buildinternet/releases-core/kinds";
+import type { BreakingLevel } from "@buildinternet/releases-core/breaking";
 import {
   fetchOne,
   pollOne,
@@ -41,7 +47,7 @@ import {
 import { getSourceMeta, isGitHubFetched } from "@releases/adapters/feed.js";
 import { invalidateLatestCache, type InvalidationEnv } from "../lib/latest-cache.js";
 import { type AnthropicEnv } from "../lib/anthropic.js";
-import { resolveSummarizeModel } from "../lib/text-model.js";
+import { resolveSummarizeModel, resolveBreakingClassifierModel } from "../lib/text-model.js";
 import { IN_ARRAY_CHUNK_SIZE } from "../lib/d1-limits.js";
 import { logUsage } from "../lib/usage-log.js";
 import { makeBotFetch } from "../lib/web-bot-auth-fetch.js";
@@ -227,6 +233,10 @@ export async function generateContentForReleases(
     orgSlug: string;
     sourceName: string;
     productName: string | null;
+    // Raw `kind` text from source + parent product (free-text column), used to
+    // gate breaking-change classification to developer-facing kinds (#1696).
+    sourceKind: string | null;
+    productKind: string | null;
   };
   const rows: ContentRow[] = [];
   for (let i = 0; i < insertedIds.length; i += IN_ARRAY_CHUNK_SIZE) {
@@ -246,6 +256,8 @@ export async function generateContentForReleases(
         orgSlug: organizations.slug,
         sourceName: sources.name,
         productName: products.name,
+        sourceKind: sources.kind,
+        productKind: products.kind,
       })
       .from(releases)
       .innerJoin(sources, eq(sources.id, releases.sourceId))
@@ -280,6 +292,11 @@ export async function generateContentForReleases(
   const model = await resolveSummarizeModel(env);
   if (!model) return 0;
 
+  // Breaking-change classifier (#1696) rides the same lane; null = fail-open
+  // (no usable provider) → classification is skipped and `breaking` stays
+  // "unknown". Resolved once for the whole fire, like `model`.
+  const breakingModel = await resolveBreakingClassifierModel(env);
+
   const startedAt = Date.now();
 
   let skippedEmpty = 0;
@@ -303,6 +320,8 @@ export async function generateContentForReleases(
     titleShort: string | null;
     summary: string | null;
     composition: ReleaseComposition | null;
+    breaking: BreakingLevel;
+    migrationNotes: string | null;
   }[] = [];
 
   for (const row of rows) {
@@ -364,12 +383,47 @@ export async function generateContentForReleases(
         skippedEmpty++;
         continue;
       }
+
+      // Breaking-change classification (#1696): only for developer-facing
+      // source kinds (sdk/tool/platform/integration) — consumer apps / docs /
+      // kind-less rows stay "unknown" and spend no classifier call. Fail-open:
+      // an empty content short-circuits inside classifyBreaking, and a transport
+      // error here is caught and logged without disturbing the summary write.
+      let breaking: BreakingLevel = "unknown";
+      let migrationNotes: string | null = null;
+      const rawKind = row.sourceKind ?? row.productKind ?? null;
+      const resolvedKind = rawKind && isValidKind(rawKind) ? rawKind : null;
+      if (breakingModel && qualifiesForBreakingClassification(resolvedKind)) {
+        try {
+          // eslint-disable-next-line no-await-in-loop -- sequential per-row keeps cost bounded; same lane as summarize
+          const verdict = await classifyBreaking(breakingModel, {
+            sourceName: row.sourceName,
+            productName: row.productName,
+            title: row.title,
+            version: row.version,
+            content: row.content,
+          });
+          breaking = verdict.breaking;
+          migrationNotes = verdict.migrationNotes;
+        } catch (err) {
+          logEvent("warn", {
+            component: "auto-generate-content",
+            event: "breaking-classify-failed",
+            releaseId: row.id,
+            orgSlug: row.orgSlug,
+            err,
+          });
+        }
+      }
+
       updates.push({
         id: row.id,
         titleGenerated: result.title,
         titleShort: result.titleShort,
         summary: result.summary,
         composition: result.composition,
+        breaking,
+        migrationNotes,
       });
     } catch (err) {
       failed++;
@@ -384,7 +438,11 @@ export async function generateContentForReleases(
   }
 
   let generated = 0;
-  const UPDATE_CHUNK_SIZE = 20; // floor(100 / 5 binds per UPDATE)
+  // Worst-case binds per UPDATE: titleGenerated, titleShort, summary, metadata,
+  // breaking, migration_notes, id = 7 → chunk at floor(100 / 7) = 14 to stay
+  // under D1's 100-bind per-statement cap. breaking/migration_notes are only SET
+  // for classified rows; non-classified rows keep their "unknown" default.
+  const UPDATE_CHUNK_SIZE = 14;
   for (let i = 0; i < updates.length; i += UPDATE_CHUNK_SIZE) {
     const chunk = updates.slice(i, i + UPDATE_CHUNK_SIZE);
     const statements = chunk.map((u) => {
@@ -396,6 +454,9 @@ export async function generateContentForReleases(
           titleShort: u.titleShort,
           summary: u.summary,
           ...(metadataSet ? { metadata: metadataSet } : {}),
+          ...(u.breaking !== "unknown"
+            ? { breaking: u.breaking, migrationNotes: u.migrationNotes }
+            : {}),
         })
         .where(and(eq(releases.id, u.id), sql`${releases.titleGenerated} IS NULL`));
     });

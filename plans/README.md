@@ -14,13 +14,41 @@ issue. Read the linked issue first, then the plan.
 
 ## Execution order & status
 
-| Plan | Title                                          | Issue | Priority | Effort | Depends on | Status |
-| ---- | ---------------------------------------------- | ----- | -------- | ------ | ---------- | ------ |
-| 001  | Structured breaking-change + migration field   | #1696 | P1       | M      | —          | TODO   |
-| 002  | Upgrade intelligence Phase 1 — `whats_changed` | #1697 | P1       | M      | 001 (soft) | TODO   |
-| 003  | Agent/API consumption instrumentation          | #1700 | P1       | S–M    | —          | TODO   |
+| Plan | Title                                          | Issue | Priority | Effort | Depends on | Status            |
+| ---- | ---------------------------------------------- | ----- | -------- | ------ | ---------- | ----------------- |
+| 001  | Structured breaking-change + migration field   | #1696 | P1       | M      | —          | DONE (PR pending) |
+| 002  | Upgrade intelligence Phase 1 — `whats_changed` | #1697 | P1       | M      | 001 (soft) | TODO              |
+| 003  | Agent/API consumption instrumentation          | #1700 | P1       | S–M    | —          | TODO              |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (reason) | REJECTED (reason)
+
+## 001 — as built (branch `advisor/001-breaking-change-field`)
+
+Two deviations from the plan, both tightening scope per operator steer:
+
+- **Qualifying-kinds gate (which releases get classified).** The live ingest
+  pass classifies only developer-facing source kinds — `sdk`, `tool`,
+  `platform`, `integration` (`BREAKING_CLASSIFY_KINDS` /
+  `qualifiesForBreakingClassification` in `@buildinternet/releases-core/kinds`).
+  `mobile` (consumer apps), `docs`, `desktop`, and kind-less rows stay
+  `breaking: "unknown"` and spend no classifier call. Widen the set there if the
+  editorial scope changes.
+- **No backfill; live path only.** Classification is wired into
+  `generateContentForReleases` (the poll-fetch live path) only — NOT the batch
+  backfill (`batch-summarize.ts` / `scripts/generate-release-content.ts`).
+  History stays `unknown` until a separate, cost-estimated batch run populates
+  it. The ~40K-row backfill remains the STOP-condition deferral.
+
+Shape: a sibling `breaking-classifier.ts` (#1696, option 2) on the shared
+SUMMARIZE_MODEL lane (`generationName: "classify-breaking"`, no new `*_MODEL`
+var); fail-open everywhere (`unknown` default + parse fail-open + caller
+try/catch). Eval is `bun run eval:breaking-classifier` (deterministic accuracy +
+precision guard; rubric at `src/shared/rubrics/breaking.md`). Wire field is
+`ReleaseDetail.breaking?`/`migrationNotes?` (additive optional). **Follow-ups
+(out of 001):** route/query population, the web "breaking" chip, the webhook
+`breaking` filter, and an ingest-write integration test (no `generateContent`
+harness exists today; model resolution isn't injectable without the
+process-global `mock.module` leak).
 
 ## Dependency notes
 

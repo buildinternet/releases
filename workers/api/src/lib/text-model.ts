@@ -219,3 +219,18 @@ export function resolveCollectionSummaryModel(env: TextModelEnv): Promise<TextMo
     provider: SUMMARIZE_PROVIDER,
   });
 }
+
+// Breaking-change classification (#1696) is another cheap per-release pass on
+// the same content, so it rides the shared SUMMARIZE_MODEL lane var + Haiku
+// fallback rather than defining its own model var (project rule: reuse the lane,
+// distinct generationName). Verdict-shaped output, so reasoning is disabled like
+// the other summarize lanes.
+export function resolveBreakingClassifierModel(env: TextModelEnv): Promise<TextModel | null> {
+  return resolveTextModel(env, {
+    orModel: env.SUMMARIZE_MODEL,
+    anthropicModel: ANTHROPIC_SUMMARIZE_MODEL,
+    generationName: "classify-breaking",
+    reasoning: SUMMARIZE_REASONING,
+    provider: SUMMARIZE_PROVIDER,
+  });
+}

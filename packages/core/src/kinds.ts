@@ -26,6 +26,33 @@ export function parseKindParam(raw: string | undefined): Kind | undefined | null
   return null;
 }
 
+/**
+ * Source kinds whose releases carry developer-facing upgrade semantics — "can I
+ * take this safely, and what do I migrate?" — and therefore qualify for
+ * breaking-change classification at ingest (#1696). Libraries/SDKs (`sdk`),
+ * dev tools/CLIs (`tool`), service/API platforms (`platform`), and plugins/
+ * integrations (`integration`) all expose a contract a consumer's code depends
+ * on, so a release can break that contract.
+ *
+ * Deliberately EXCLUDED: `mobile` (consumer App Store apps — users don't migrate
+ * code), `docs` (documentation sites), `desktop` (mixed consumer/dev surface;
+ * conservative omission, revisit if dev-tool desktop apps want it), and
+ * kind-less rows (no opinion). Excluded rows stay `breaking: "unknown"` and
+ * never spend a classifier call — precision-first, fail-open. This is the
+ * "which releases qualify" policy gate; widen the set here if the editorial
+ * scope changes.
+ */
+export const BREAKING_CLASSIFY_KINDS = ["sdk", "tool", "platform", "integration"] as const;
+
+/**
+ * True when a resolved kind (see {@link resolveSourceKind}) is one whose
+ * releases should be run through breaking-change classification. `null` (no
+ * resolved kind) returns false — fail-open to `unknown`.
+ */
+export function qualifiesForBreakingClassification(kind: Kind | null): boolean {
+  return kind !== null && (BREAKING_CLASSIFY_KINDS as readonly string[]).includes(kind);
+}
+
 type WithMaybeKind = { kind?: Kind | null | undefined };
 
 /**
