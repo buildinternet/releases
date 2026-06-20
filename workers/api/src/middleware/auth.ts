@@ -400,6 +400,33 @@ export const tokensAuthMiddleware: MiddlewareHandler<Env> = (c, next) => {
 };
 
 /**
+ * Coarse principal label for consumption telemetry (#1700). PII-clean — a TYPE,
+ * never a token value. Mirrors the MCP worker's `consumptionPrincipal`
+ * (workers/mcp/src/auth.ts) so the Axiom query unions both surfaces. No
+ * `anonymous` case: recordAuth only runs for authenticated principals.
+ */
+export function apiConsumptionPrincipal(
+  auth: Extract<ResolvedAuth, { kind: "root" | "token" }>,
+): "machine_token" | "user_key" | "oauth" | "root" {
+  if (auth.kind === "root") return "root";
+  if (isUserApiKeyShaped(auth.tokenId)) return "user_key";
+  if (auth.tokenId.startsWith(OAUTH_JWT_TOKEN_PREFIX)) return "oauth";
+  return "machine_token";
+}
+
+/**
+ * Low-cardinality route family from a `/v1`-prefixed path (the segment after
+ * `v1`, e.g. `/v1/orgs/vercel/releases` → `orgs`). Keeps the consumption
+ * `operation` dimension bounded and free of ids — never the raw path.
+ */
+export function apiRouteFamily(path: string): string {
+  const segs = path.split("/").filter(Boolean);
+  const i = segs.indexOf("v1");
+  const family = i >= 0 ? segs[i + 1] : segs[0];
+  return family ?? "root";
+}
+
+/**
  * Attach the resolved identity to the request context and, for DB tokens,
  * record usage (throttled, fire-and-forget). In tests there's no executionCtx,
  * so fall back to an un-awaited promise.
@@ -409,6 +436,24 @@ function recordAuth(
   auth: Extract<ResolvedAuth, { kind: "root" | "token" }>,
 ): void {
   c.set("auth", auth);
+
+  // Consumption telemetry (#1700): one PII-clean event per AUTHENTICATED API
+  // request — the agent-native demand gauge. Anonymous public reads bypass
+  // recordAuth (they're web traffic, counted elsewhere). Principal TYPE + a
+  // coarse route family only — never a token value, email, or path with ids.
+  // logEvent is a sync structured-console write, so there's no awaited write on
+  // the request path. Event shape mirrors the MCP worker's emit so the Axiom
+  // query unions both surfaces. (Internal MCP→API introspection on
+  // `GET /v1/tokens/me` shows up here as operation `GET tokens`; filter it out
+  // for pure external-consumer counts.)
+  logEvent("info", {
+    component: "consumption",
+    event: "consumption",
+    surface: "api",
+    principal: apiConsumptionPrincipal(auth),
+    operation: `${c.req.method} ${apiRouteFamily(c.req.path)}`,
+  });
+
   if (auth.kind !== "token") return;
   const tokenId = auth.tokenId;
   // User API keys (relu_) are metered by Better Auth's apikey table, and OAuth

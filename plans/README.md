@@ -14,11 +14,11 @@ issue. Read the linked issue first, then the plan.
 
 ## Execution order & status
 
-| Plan | Title                                          | Issue | Priority | Effort | Depends on | Status            |
-| ---- | ---------------------------------------------- | ----- | -------- | ------ | ---------- | ----------------- |
-| 001  | Structured breaking-change + migration field   | #1696 | P1       | M      | —          | DONE (PR pending) |
-| 002  | Upgrade intelligence Phase 1 — `whats_changed` | #1697 | P1       | M      | 001 (soft) | TODO              |
-| 003  | Agent/API consumption instrumentation          | #1700 | P1       | S–M    | —          | TODO              |
+| Plan | Title                                          | Issue | Priority | Effort | Depends on | Status              |
+| ---- | ---------------------------------------------- | ----- | -------- | ------ | ---------- | ------------------- |
+| 001  | Structured breaking-change + migration field   | #1696 | P1       | M      | —          | DONE (#1703 merged) |
+| 002  | Upgrade intelligence Phase 1 — `whats_changed` | #1697 | P1       | M      | 001 (soft) | TODO                |
+| 003  | Agent/API consumption instrumentation          | #1700 | P1       | S–M    | —          | DONE (PR #1704)     |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (reason) | REJECTED (reason)
 
@@ -65,6 +65,24 @@ process-global `mock.module` leak). **Watch:** since the verdict shares the tune
 summarize prompt, run `eval:summary` + `eval:breaking` before merge to confirm
 the added tags didn't regress title/summary quality (the option-2 fallback is in
 git history if they do).
+
+## 003 — as built (branch `advisor/003-consumption-instrumentation`)
+
+Sink = **Option A (`logEvent` → Axiom)** — additive, no schema/table, no
+migration. One PII-clean `{component:"consumption", event:"consumption",
+surface, principal, operation}` event per metered request, emitted inline via
+`logEvent` (a sync structured-console write — fire-and-forget, no awaited write
+on the read path). **MCP** (`index.ts`) emits per billable tool call (anonymous
+included — an anonymous MCP `tools/call` is agent consumption); **API**
+(`recordAuth`) emits per authenticated request only (anonymous public reads are
+web traffic, counted elsewhere). `principal` is a TYPE, `operation` a
+low-cardinality tool name / route family — never ids/tokens/IPs. North-star
+named: **programmatic queries answered per week**; APL + field-path caveat in
+[consumption-telemetry.md](../docs/architecture/consumption-telemetry.md). Tests
+are the emit-gating + PII guards (`workers/mcp/test/consumption.test.ts`,
+`workers/api/test/consumption-telemetry.test.ts`). **Deferred:** distinct active
+consumers (needs a hashed `consumerRef`; volume north-star needs none); the
+saved Axiom dashboard tile (no data until deploy).
 
 ## Dependency notes
 
