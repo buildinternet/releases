@@ -195,8 +195,8 @@ export function buildOverviewRequest(input: OverviewRequestInput): {
 /** Output token budget for the OpenRouter path: body (~800) + a small citation list. */
 export const OVERVIEW_OUTPUT_MAX_TOKENS = 1400;
 
-/** Citation source for a release in the prompt (mirrors buildReleaseBlock + the eval's validSources). */
-function releaseSource(r: OverviewRequestInput["selected"][number]): string {
+/** Citation source for a release in the prompt (mirrors buildReleaseBlock). Exported so the eval grades against the same source keys generation used. */
+export function releaseSource(r: OverviewRequestInput["selected"][number]): string {
   return r.url ?? `release://${r.id}`;
 }
 
@@ -252,15 +252,15 @@ export async function generateOverview(
   model: TextModel,
   input: OverviewRequestInput,
 ): Promise<PostHocExtraction> {
+  const validSources = new Set(input.selected.map(releaseSource));
+  const titleBySource = new Map(
+    input.selected.map((r) => [releaseSource(r), r.title || r.version || null] as const),
+  );
   const res = await model.complete({
     system: SYSTEM_PROMPT,
     user: buildOverviewUserText(input),
     maxTokens: OVERVIEW_OUTPUT_MAX_TOKENS,
     cacheSystem: true,
   });
-  const validSources = new Set(input.selected.map(releaseSource));
-  const titleBySource = new Map(
-    input.selected.map((r) => [releaseSource(r), r.title || r.version || null] as const),
-  );
   return parsePostHocOverview(res.text, { validSources, titleBySource });
 }

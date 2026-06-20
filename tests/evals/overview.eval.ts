@@ -16,6 +16,7 @@ import { readFileSync } from "fs";
 import Anthropic from "@anthropic-ai/sdk";
 import {
   generateOverview,
+  releaseSource,
   MODEL,
   type OverviewRequestInput,
 } from "@releases/ai-internal/overview-content";
@@ -30,9 +31,9 @@ import { saveRun } from "./results";
 // Re-exported for any unit test that imports it from this module.
 export { extractJudgeJson };
 
-/** The citation source set the API can legitimately resolve to (matches buildReleaseBlock). */
+/** The citation source set the API can legitimately resolve to — same keys `generateOverview` resolves citations against. */
 function validSources(input: OverviewRequestInput): string[] {
-  return input.selected.map((r) => r.url ?? `release://${r.id}`);
+  return input.selected.map(releaseSource);
 }
 
 async function judge(

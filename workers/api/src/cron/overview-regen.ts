@@ -29,7 +29,7 @@ export interface RegenChunkResult {
 }
 
 /** Map the hydrated per-org inputs to the generation request shape (selection already applied upstream). */
-export function toOverviewRequestInput(inputs: OverviewInputsForOrg): OverviewRequestInput {
+function toOverviewRequestInput(inputs: OverviewInputsForOrg): OverviewRequestInput {
   return {
     org: { name: inputs.org.name, description: inputs.org.description },
     sources: inputs.sources.map((s) => ({ name: s.name })),

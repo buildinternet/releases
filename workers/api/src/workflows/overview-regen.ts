@@ -11,9 +11,9 @@
  * Admin POST trigger (`POST /v1/workflows/overview-regen`) runs unconditionally.
  *
  * Model resolution: `resolveOverviewModel` returns an OpenRouter TextModel when
- * OPENROUTER_API_KEY + OVERVIEW_MODEL are configured; falls back to a direct
- * Anthropic call when only ANTHROPIC_API_KEY is set; null when neither is
- * available → NonRetryableError (no point retrying a config problem).
+ * OPENROUTER_API_KEY + SUMMARIZE_MODEL are configured (shared summary lane, tagged
+ * `org-overview`); falls back to a direct Anthropic Haiku call otherwise; null when
+ * neither is available → NonRetryableError (no point retrying a config problem).
  */
 
 import { WorkflowEntrypoint } from "cloudflare:workers";
