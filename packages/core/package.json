@@ -34,6 +34,7 @@
     "./cursor": "./src/cursor.ts",
     "./version-sort": "./src/version-sort.ts",
     "./composition": "./src/composition.ts",
+    "./breaking": "./src/breaking.ts",
     "./web-bot-auth": "./src/web-bot-auth.ts",
     "./notice": "./src/notice.ts",
     "./site-notice": "./src/site-notice.ts",

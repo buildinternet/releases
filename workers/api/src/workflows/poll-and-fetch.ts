@@ -30,6 +30,11 @@ import { dbErrorLogFields } from "@releases/lib/db-errors";
 import { summarizeRelease } from "@releases/ai-internal/release-content";
 import { splitModelId } from "@releases/ai-internal/text-model";
 import {
+  qualifiesForBreakingClassification,
+  isValidKind,
+} from "@buildinternet/releases-core/kinds";
+import type { BreakingLevel } from "@buildinternet/releases-core/breaking";
+import {
   fetchOne,
   pollOne,
   embedReleasesForSource,
@@ -227,6 +232,10 @@ export async function generateContentForReleases(
     orgSlug: string;
     sourceName: string;
     productName: string | null;
+    // Raw `kind` text from source + parent product (free-text column), used to
+    // gate breaking-change classification to developer-facing kinds (#1696).
+    sourceKind: string | null;
+    productKind: string | null;
   };
   const rows: ContentRow[] = [];
   for (let i = 0; i < insertedIds.length; i += IN_ARRAY_CHUNK_SIZE) {
@@ -246,6 +255,8 @@ export async function generateContentForReleases(
         orgSlug: organizations.slug,
         sourceName: sources.name,
         productName: products.name,
+        sourceKind: sources.kind,
+        productKind: products.kind,
       })
       .from(releases)
       .innerJoin(sources, eq(sources.id, releases.sourceId))
@@ -303,6 +314,8 @@ export async function generateContentForReleases(
     titleShort: string | null;
     summary: string | null;
     composition: ReleaseComposition | null;
+    breaking: BreakingLevel;
+    migrationNotes: string | null;
   }[] = [];
 
   for (const row of rows) {
@@ -364,12 +377,25 @@ export async function generateContentForReleases(
         skippedEmpty++;
         continue;
       }
+
+      // Breaking-change verdict (#1696) rides the SAME summarize call — no extra
+      // request. Persist it only for developer-facing source kinds
+      // (sdk/tool/platform/integration); consumer apps / docs / kind-less rows
+      // keep the "unknown" default even though the model classified them.
+      const rawKind = row.sourceKind ?? row.productKind ?? null;
+      const resolvedKind = rawKind && isValidKind(rawKind) ? rawKind : null;
+      const qualifies = qualifiesForBreakingClassification(resolvedKind);
+      const breaking: BreakingLevel = qualifies ? result.breaking : "unknown";
+      const migrationNotes = qualifies ? result.migrationNotes : null;
+
       updates.push({
         id: row.id,
         titleGenerated: result.title,
         titleShort: result.titleShort,
         summary: result.summary,
         composition: result.composition,
+        breaking,
+        migrationNotes,
       });
     } catch (err) {
       failed++;
@@ -384,7 +410,11 @@ export async function generateContentForReleases(
   }
 
   let generated = 0;
-  const UPDATE_CHUNK_SIZE = 20; // floor(100 / 5 binds per UPDATE)
+  // Worst-case binds per UPDATE: titleGenerated, titleShort, summary, metadata,
+  // breaking, migration_notes, id = 7 → chunk at floor(100 / 7) = 14 to stay
+  // under D1's 100-bind per-statement cap. breaking/migration_notes are only SET
+  // for classified rows; non-classified rows keep their "unknown" default.
+  const UPDATE_CHUNK_SIZE = 14;
   for (let i = 0; i < updates.length; i += UPDATE_CHUNK_SIZE) {
     const chunk = updates.slice(i, i + UPDATE_CHUNK_SIZE);
     const statements = chunk.map((u) => {
@@ -396,6 +426,9 @@ export async function generateContentForReleases(
           titleShort: u.titleShort,
           summary: u.summary,
           ...(metadataSet ? { metadata: metadataSet } : {}),
+          ...(u.breaking !== "unknown"
+            ? { breaking: u.breaking, migrationNotes: u.migrationNotes }
+            : {}),
         })
         .where(and(eq(releases.id, u.id), sql`${releases.titleGenerated} IS NULL`));
     });

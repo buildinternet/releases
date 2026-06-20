@@ -47,6 +47,7 @@
     "format:check": "prettier --check .",
     "test": "bun test packages/ && bun test tests/ web/ workers/discovery workers/mcp workers/webhooks && bun test workers/api",
     "eval:article-extract": "bun tests/evals/article-extract.eval.ts",
+    "eval:breaking": "bun tests/evals/breaking.eval.ts",
     "eval:collection-summary": "bun tests/evals/collection-summary.eval.ts",
     "eval:evaluation": "bun test ./tests/evals/evaluation.eval.ts --timeout 30000",
     "eval:marketing": "bun tests/evals/marketing-classifier.eval.ts",

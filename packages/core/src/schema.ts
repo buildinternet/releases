@@ -38,9 +38,15 @@ import {
   newRawSnapshotId,
 } from "./id.js";
 import { PRINCIPAL_TYPES } from "./api-token.js";
+import { BREAKING_LEVELS, type BreakingLevel } from "./breaking.js";
 
 export const RELEASE_TYPES = ["feature", "rollup"] as const;
 export type ReleaseType = (typeof RELEASE_TYPES)[number];
+
+// Breaking-change classification enum lives in its own pure module (#1696) so
+// the AI classifier and wire types can read it without importing this
+// drizzle-laden schema. Re-exported here for callers that already pull schema.
+export { BREAKING_LEVELS, type BreakingLevel };
 
 export const organizations = sqliteTable(
   "organizations",
@@ -446,6 +452,13 @@ export const releases = sqliteTable(
     summary: text("summary"),
     titleGenerated: text("title_generated"),
     titleShort: text("title_short"),
+    // Breaking-change classification + extracted upgrade steps (#1696).
+    // `breaking` defaults "unknown" (fail-open); `migration_notes` is null
+    // unless the body explicitly describes upgrade/migration steps. Populated
+    // live at ingest only for developer-facing source kinds; history stays
+    // "unknown" (no backfill).
+    breaking: text("breaking", { enum: BREAKING_LEVELS }).notNull().default("unknown"),
+    migrationNotes: text("migration_notes"),
     url: text("url"),
     contentHash: text("content_hash"),
     // Cached size of `content` (in raw chars and cl100k_base tokens) so feed
