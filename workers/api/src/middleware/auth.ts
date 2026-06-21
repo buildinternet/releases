@@ -1,6 +1,11 @@
 import type { Context, MiddlewareHandler } from "hono";
 import { FLAGS, flag, type FlagDef } from "@releases/lib/flags";
 import { getSecret, getSecretWithFallback } from "@releases/lib/secrets";
+import {
+  buildConsumptionPayload,
+  type ConsumptionIdentity,
+  OAUTH_JWT_TOKEN_PREFIX,
+} from "@releases/lib/consumption-ref";
 import { logEvent } from "@releases/lib/log-event";
 import {
   type ApiScope,
@@ -9,6 +14,7 @@ import {
   ROOT_SCOPE,
   scopeSatisfies,
   USER_API_KEY_PREFIX,
+  type PrincipalType,
 } from "@buildinternet/releases-core/api-token";
 import {
   isJwtShaped,
@@ -29,17 +35,15 @@ export const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 /** Custom header carrying the trusted-proxy shared secret. */
 export const PROXY_KEY_HEADER = "X-Releases-Proxy-Key";
 
-/**
- * `tokenId` prefix for an OAuth-JWT principal (#1483). These identities have no
- * `api_tokens` row, so the machine-lane `last_used_at` UPDATE is skipped for
- * them — same treatment as the `relu_` user-key lane.
- */
-export const OAUTH_JWT_TOKEN_PREFIX = "oauth_";
-
 /** Resolved identity attached to the Hono context for downstream handlers. */
 export type AuthContext =
   | { kind: "root"; scopes: string[] }
-  | { kind: "token"; tokenId: string; scopes: string[] };
+  | {
+      kind: "token";
+      tokenId: string;
+      scopes: string[];
+      machinePrincipalType?: PrincipalType;
+    };
 
 /** Minimal session shape attached to the Hono context by `requireSession`. */
 export type AuthSessionContext = { user: { id: string; email: string; name: string } };
@@ -68,7 +72,12 @@ export async function getOrCreateAuth(c: Context<Env>) {
 
 type ResolvedAuth =
   | { kind: "root"; scopes: string[] }
-  | { kind: "token"; tokenId: string; scopes: string[] }
+  | {
+      kind: "token";
+      tokenId: string;
+      scopes: string[];
+      machinePrincipalType?: PrincipalType;
+    }
   | { kind: "rate_limited" }
   // skip=true means "local dev, no secret configured" — preserve open access.
   | { kind: "none"; skip: boolean };
@@ -271,7 +280,13 @@ async function resolveAuthUncached(
     if (await flag(c.env.FLAGS, c.env.API_TOKENS_DISABLED, FLAGS.apiTokensDisabled))
       return { kind: "none", skip: false };
     const result = await verifyApiToken(createDb(c.env.DB), presented);
-    if (result.ok) return { kind: "token", tokenId: result.tokenId, scopes: result.scopes };
+    if (result.ok)
+      return {
+        kind: "token",
+        tokenId: result.tokenId,
+        scopes: result.scopes,
+        machinePrincipalType: result.principalType,
+      };
     return { kind: "none", skip: false };
   }
 
@@ -400,21 +415,6 @@ export const tokensAuthMiddleware: MiddlewareHandler<Env> = (c, next) => {
 };
 
 /**
- * Coarse principal label for consumption telemetry (#1700). PII-clean — a TYPE,
- * never a token value. Mirrors the MCP worker's `consumptionPrincipal`
- * (workers/mcp/src/auth.ts) so the Axiom query unions both surfaces. No
- * `anonymous` case: recordAuth only runs for authenticated principals.
- */
-export function apiConsumptionPrincipal(
-  auth: Extract<ResolvedAuth, { kind: "root" | "token" }>,
-): "machine_token" | "user_key" | "oauth" | "root" {
-  if (auth.kind === "root") return "root";
-  if (isUserApiKeyShaped(auth.tokenId)) return "user_key";
-  if (auth.tokenId.startsWith(OAUTH_JWT_TOKEN_PREFIX)) return "oauth";
-  return "machine_token";
-}
-
-/**
  * Low-cardinality route family from a `/v1`-prefixed path (the segment after
  * `v1`, e.g. `/v1/orgs/vercel/releases` → `orgs`). Keeps the consumption
  * `operation` dimension bounded and free of ids — never the raw path.
@@ -424,6 +424,29 @@ export function apiRouteFamily(path: string): string {
   const i = segs.indexOf("v1");
   const family = i >= 0 ? segs[i + 1] : segs[0];
   return family ?? "root";
+}
+
+function apiConsumptionIdentity(
+  auth: Extract<ResolvedAuth, { kind: "root" | "token" }>,
+): ConsumptionIdentity {
+  if (auth.kind === "root") return { kind: "root" };
+  return {
+    kind: "token",
+    tokenId: auth.tokenId,
+    machinePrincipalType: auth.machinePrincipalType,
+  };
+}
+
+async function emitApiConsumption(
+  c: Context<Env>,
+  auth: Extract<ResolvedAuth, { kind: "root" | "token" }>,
+): Promise<void> {
+  const payload = await buildConsumptionPayload({
+    surface: "api",
+    identity: apiConsumptionIdentity(auth),
+    operation: `${c.req.method} ${apiRouteFamily(c.req.path)}`,
+  });
+  logEvent("info", payload);
 }
 
 /**
@@ -437,22 +460,17 @@ function recordAuth(
 ): void {
   c.set("auth", auth);
 
-  // Consumption telemetry (#1700): one PII-clean event per AUTHENTICATED API
-  // request — the agent-native demand gauge. Anonymous public reads bypass
-  // recordAuth (they're web traffic, counted elsewhere). Principal TYPE + a
-  // coarse route family only — never a token value, email, or path with ids.
-  // logEvent is a sync structured-console write, so there's no awaited write on
-  // the request path. Event shape mirrors the MCP worker's emit so the Axiom
-  // query unions both surfaces. (Internal MCP→API introspection on
-  // `GET /v1/tokens/me` shows up here as operation `GET tokens`; filter it out
-  // for pure external-consumer counts.)
-  logEvent("info", {
-    component: "consumption",
-    event: "consumption",
-    surface: "api",
-    principal: apiConsumptionPrincipal(auth),
-    operation: `${c.req.method} ${apiRouteFamily(c.req.path)}`,
-  });
+  // Consumption telemetry (#1700/#1719): one PII-clean event per AUTHENTICATED API
+  // request. `consumerRef` is a hashed stable principal id (#1719); principal is
+  // the coarse TYPE. Hashing is async (Web Crypto) — fire-and-forget, same as
+  // touchLastUsed. Internal MCP→API introspection on `GET /v1/tokens/me` shows
+  // up as operation `GET tokens`; filter it out for pure external-consumer counts.
+  const emit = emitApiConsumption(c, auth);
+  try {
+    c.executionCtx.waitUntil(emit);
+  } catch {
+    void emit;
+  }
 
   if (auth.kind !== "token") return;
   const tokenId = auth.tokenId;

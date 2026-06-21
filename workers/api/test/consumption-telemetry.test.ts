@@ -1,35 +1,34 @@
 import { describe, expect, test } from "bun:test";
-import { apiConsumptionPrincipal, apiRouteFamily } from "../src/middleware/auth";
+import { apiRouteFamily } from "../src/middleware/auth";
+import {
+  buildConsumptionPayload,
+  consumptionPrincipal,
+  OAUTH_JWT_TOKEN_PREFIX,
+} from "@releases/lib/consumption-ref";
 import { USER_API_KEY_PREFIX } from "@buildinternet/releases-core/api-token";
 
-// #1700 — the API consumption emit derives a PII-clean event from these two
-// pure helpers (principal TYPE + coarse route family). These tests are the PII
-// guard: the emitted fields are a fixed type label and a bounded route bucket,
-// never a token value, user id, or id-bearing path.
+// #1700 — the API consumption emit derives a PII-clean event from these helpers.
+// These tests are the PII guard: emitted fields are fixed type labels and bounded
+// route buckets, never a token value, user id, or id-bearing path.
 
-describe("apiConsumptionPrincipal", () => {
+describe("consumptionPrincipal (shared)", () => {
   test("maps each authenticated principal to a coarse type", () => {
-    expect(apiConsumptionPrincipal({ kind: "root", scopes: ["admin"] })).toBe("root");
+    expect(consumptionPrincipal({ kind: "root" })).toBe("root");
+    expect(consumptionPrincipal({ kind: "token", tokenId: "relk_lookup_secret" })).toBe(
+      "machine_token",
+    );
+    expect(consumptionPrincipal({ kind: "token", tokenId: `${USER_API_KEY_PREFIX}abc` })).toBe(
+      "user_key",
+    );
     expect(
-      apiConsumptionPrincipal({ kind: "token", tokenId: "relk_lookup_secret", scopes: ["read"] }),
-    ).toBe("machine_token");
-    expect(
-      apiConsumptionPrincipal({
-        kind: "token",
-        tokenId: `${USER_API_KEY_PREFIX}abc`,
-        scopes: ["read"],
-      }),
-    ).toBe("user_key");
-    expect(
-      apiConsumptionPrincipal({ kind: "token", tokenId: "oauth_subject-123", scopes: ["read"] }),
+      consumptionPrincipal({ kind: "token", tokenId: `${OAUTH_JWT_TOKEN_PREFIX}subject-123` }),
     ).toBe("oauth");
   });
 
   test("the label never carries the token id itself (PII guard)", () => {
-    const label = apiConsumptionPrincipal({
+    const label = consumptionPrincipal({
       kind: "token",
       tokenId: "relk_supersecretlookup_topsecret",
-      scopes: ["read"],
     });
     expect(label).toBe("machine_token");
     expect(label).not.toContain("supersecret");
@@ -55,5 +54,19 @@ describe("apiRouteFamily (PII guard)", () => {
   test("degrades to the first segment / 'root' without a v1 prefix", () => {
     expect(apiRouteFamily("/health")).toBe("health");
     expect(apiRouteFamily("/")).toBe("root");
+  });
+});
+
+describe("buildConsumptionPayload (API surface)", () => {
+  test("hashes consumerRef without echoing secrets", async () => {
+    const payload = await buildConsumptionPayload({
+      surface: "api",
+      identity: { kind: "token", tokenId: "relk_lookup_secret", machinePrincipalType: "agent" },
+      operation: "GET orgs",
+    });
+    expect(payload.consumerRef).toMatch(/^[0-9a-f]{64}$/);
+    expect(payload.consumerRef).not.toContain("secret");
+    expect(payload.audience).toBe("external");
+    expect(payload.principalOwner).toBe("agent");
   });
 });

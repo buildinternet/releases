@@ -1,19 +1,13 @@
 import { createMcpHandler } from "agents/mcp";
 import { isHtmlRequest, renderLandingPage } from "./landing.js";
 import { createServer, type Env } from "./mcp-agent.js";
-import {
-  resolveMcpAuth,
-  machineTokenIdForUsage,
-  peekMcpCall,
-  consumptionPrincipal,
-} from "./auth.js";
+import { resolveMcpAuth, machineTokenIdForUsage, peekMcpCall, emitMcpConsumption } from "./auth.js";
 import {
   isProtectedResourceMetadataPath,
   protectedResourceMetadataResponse,
 } from "./well-known.js";
 import { touchLastUsed } from "@releases/core-internal/api-token-store";
 import { FLAGS, flag } from "@releases/lib/flags";
-import { logEvent } from "@releases/lib/log-event";
 import { createDb } from "./db.js";
 
 async function handle(
@@ -60,21 +54,13 @@ async function handle(
     ctx.waitUntil(touchLastUsed(createDb(env.DB), usageTokenId).catch(() => undefined));
   }
 
-  // Consumption telemetry (#1700): one PII-clean event per billable tool call,
-  // the demand gauge for the agent-native channel. Peeked here — before
-  // createMcpHandler below consumes the body — and emitted via logEvent, a sync
-  // structured-console write (no D1/network), so there's no awaited write on the
-  // path. Protocol overhead (initialize/list/ping/notifications) is excluded by
-  // the billable-method peek. Principal TYPE + tool name only — no ids/PII.
+  // Consumption telemetry (#1700/#1719): one PII-clean event per billable tool
+  // call. `consumerRef` is hashed async via waitUntil — no D1/network on the
+  // hot path. Protocol overhead (initialize/list/ping/notifications) excluded.
   const consumption = await peekMcpCall(request);
   if (consumption.metered) {
-    logEvent("info", {
-      component: "consumption",
-      event: "consumption",
-      surface: "mcp",
-      principal: consumptionPrincipal(identity),
-      operation: consumption.tool ?? "unknown",
-    });
+    const emit = emitMcpConsumption(identity, consumption.tool ?? "unknown");
+    ctx.waitUntil(emit);
   }
 
   if (url.pathname === "/" && request.method === "GET") {

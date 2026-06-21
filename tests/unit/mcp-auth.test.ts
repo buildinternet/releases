@@ -75,6 +75,7 @@ describe("resolveMcpAuth — identity (prod, no staging gate)", () => {
         tokenId: "tok_w",
         token,
         userToken: null, // relk_ is a machine principal — no owning user
+        machinePrincipalType: "internal",
       });
   });
 

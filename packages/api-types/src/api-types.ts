@@ -1717,6 +1717,12 @@ export interface TokenIdentity {
   scopes: string[];
   principalType: "internal" | "agent" | "user";
   principalId?: string | null;
+  /**
+   * Stable internal principal id for consumption telemetry (#1719). Same value the
+   * auth middleware attaches (`relk_` row id, `relu_${keyId}`, …) — never the raw
+   * secret. Returned on self-introspection so MCP can distinguish `relu_` keys.
+   */
+  tokenId?: string | null;
   expiresAt?: string | null;
   lastUsedAt?: string | null;
 }

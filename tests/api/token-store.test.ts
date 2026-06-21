@@ -57,7 +57,12 @@ describe("verifyApiToken", () => {
       scopes: JSON.stringify(["read", "write"]),
     });
     const res = await verifyApiToken(h.db, token);
-    expect(res).toEqual({ ok: true, tokenId: "tok_ok", scopes: ["read", "write"] });
+    expect(res).toEqual({
+      ok: true,
+      tokenId: "tok_ok",
+      scopes: ["read", "write"],
+      principalType: "internal",
+    });
   });
 
   it("rejects a wrong/unknown token", async () => {

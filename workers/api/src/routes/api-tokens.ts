@@ -169,6 +169,7 @@ apiTokenRoutes.get("/tokens/me", async (c) => {
       scopes: auth.scopes,
       principalType: "user",
       principalId: row?.referenceId ?? null,
+      tokenId: auth.tokenId,
       expiresAt: row?.expiresAt ? row.expiresAt.toISOString() : null,
       lastUsedAt: row?.lastRequest ? row.lastRequest.toISOString() : null,
     } satisfies TokenIdentity);
@@ -184,6 +185,7 @@ apiTokenRoutes.get("/tokens/me", async (c) => {
     scopes: parseStoredScopes(row.scopes),
     principalType: row.principalType,
     principalId: row.principalId,
+    tokenId: auth.tokenId,
     expiresAt: row.expiresAt,
     lastUsedAt: row.lastUsedAt,
   } satisfies TokenIdentity);
