@@ -6,7 +6,7 @@ import { generateApiToken, hashSecret } from "@buildinternet/releases-core/api-t
 
 type AuthIdentity =
   | { kind: "root"; scopes: string[] }
-  | { kind: "token"; tokenId: string; scopes: string[] }
+  | { kind: "token"; tokenId: string; scopes: string[]; machinePrincipalType?: string }
   | null;
 
 const { resolveAuthIdentity } =
@@ -59,7 +59,12 @@ describe("resolveAuthIdentity", () => {
     h = createTestDb();
     const { token, tokenId } = await seedToken(h.db, ["read", "write"]);
     const { id } = await probe(h.db)(token);
-    expect(id).toEqual({ kind: "token", tokenId, scopes: ["read", "write"] });
+    expect(id).toEqual({
+      kind: "token",
+      tokenId,
+      scopes: ["read", "write"],
+      machinePrincipalType: "internal",
+    });
   });
 
   it("returns null for an anonymous request", async () => {
