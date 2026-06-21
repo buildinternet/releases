@@ -8,14 +8,14 @@
     "deploy": "wrangler deploy"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.100.1",
+    "@anthropic-ai/sdk": "^0.105.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
-    "agents": "^0.15.0",
-    "zod": "^4.1.8"
+    "agents": "^0.16.2",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20260603.1",
-    "wrangler": "^4.97.0",
+    "@cloudflare/workers-types": "^4.20260621.1",
+    "wrangler": "^4.103.0",
     "typescript": "^6.0.3"
   }
 }
