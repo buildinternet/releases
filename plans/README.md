@@ -107,8 +107,9 @@ named: **programmatic queries answered per week**; APL + field-path caveat in
 [consumption-telemetry.md](../docs/architecture/consumption-telemetry.md). Tests
 are the emit-gating + PII guards (`workers/mcp/test/consumption.test.ts`,
 `workers/api/test/consumption-telemetry.test.ts`). **Deferred:** distinct active
-consumers (needs a hashed `consumerRef`; volume north-star needs none); the
-saved Axiom dashboard tile (no data until deploy).
+consumers (needs a hashed `consumerRef`; volume north-star needs none).
+**Dashboard live:** [Agent demand (#1700)](https://app.axiom.co/releasessh-fbxi/dashboards/og0XbnPgbk7em1bNyd) — runbook
+[consumption-demand-dashboard.md](../docs/runbooks/consumption-demand-dashboard.md).
 
 ## Dependency notes
 

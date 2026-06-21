@@ -59,32 +59,34 @@ volume of catalog questions agents/automation answered through us. Watch it move
 when #1697 (`whats_changed`), #1698 (PR bot), and #1699 (private sources) ship;
 that movement is the signal the agent-native pivot is working.
 
-APL (confirm the field nesting against a live event first — worker JSON logs
-land under `body.*` in this dataset, so fields are addressed as
-`['body.component']` etc.):
+`body` is a JSON **string** in `releases-cloudflare-logs` (same pattern as auth
+audit events in [auth-audit-monitors.md](../runbooks/auth-audit-monitors.md)):
+pre-filter on the raw string, then `parse_json(body)` for grouping.
 
 ```kusto
 // North-star: programmatic queries answered, last 7 days
 ['releases-cloudflare-logs']
 | where _time > ago(7d)
-| where ['body.component'] == "consumption"
-| summarize queries = count() by bin(_time, 1d), ['body.surface']
+| where body contains '"component":"consumption"'
+| extend p = parse_json(body)
+| where tostring(p['operation']) != 'GET tokens'
+| summarize queries = count() by bin(_time, 1d), surface = tostring(p['surface'])
 ```
 
 ```kusto
 // Segmentation: by principal type + operation (drop introspection)
 ['releases-cloudflare-logs']
 | where _time > ago(7d)
-| where ['body.component'] == "consumption"
-| where ['body.operation'] != "GET tokens"
-| summarize count() by ['body.surface'], ['body.principal'], ['body.operation']
+| where body contains '"component":"consumption"'
+| extend p = parse_json(body)
+| where tostring(p['operation']) != 'GET tokens'
+| summarize count() by surface = tostring(p['surface']), principal = tostring(p['principal']), operation = tostring(p['operation'])
 | top 50 by count_
 ```
 
-> **Dashboard:** create a saved Axiom query / dashboard tile for the north-star
-> once events are flowing in prod (the dataset has no `consumption` events until
-> this deploys). The field path above is the one thing to verify against a real
-> event before saving the tile.
+**Dashboard:** [Agent demand (#1700)](https://app.axiom.co/releasessh-fbxi/dashboards/og0XbnPgbk7em1bNyd)
+(uid `514b94db-c399-444c-b7b8-c40c9b02909c`). Runbook:
+[consumption-demand-dashboard.md](../runbooks/consumption-demand-dashboard.md).
 
 ## Deliberately out of scope
 
