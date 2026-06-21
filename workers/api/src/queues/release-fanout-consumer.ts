@@ -61,5 +61,6 @@ export async function processReleaseFanoutMessage(
     loadFollowsSubscriptions: () => matchFollowsScopedWebhookSubscriptions(db),
     loadFollowTargetsForUsers: (userIds) => loadFollowTargetsForUsers(db, userIds),
     queue: env.WEBHOOK_DELIVERY_QUEUE,
+    throwOnError: true,
   });
 }

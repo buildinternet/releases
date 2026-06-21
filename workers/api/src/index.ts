@@ -952,6 +952,7 @@ export default {
             {
               DB: env.DB,
               AUTH_EMAIL: env.AUTH_EMAIL,
+              DIGEST_DELIVERY_QUEUE: env.DIGEST_DELIVERY_QUEUE,
               DIGEST_EMAIL_FROM: env.DIGEST_EMAIL_FROM,
               WEB_BASE_URL: env.WEB_BASE_URL,
               MEDIA_ORIGIN: env.MEDIA_ORIGIN,

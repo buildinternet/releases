@@ -52,5 +52,4 @@ export async function handleQueueBatch(
     queue: batch.queue,
     count: batch.messages.length,
   });
-  for (const msg of batch.messages) msg.ack();
 }

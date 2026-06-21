@@ -35,6 +35,24 @@ export interface EnqueueReleaseFanoutArgs {
   events: ReleaseEvent[];
   eventOwners: Map<string, WebhookEventOwner>;
   queue: { send: (message: ReleaseFanoutMessage) => Promise<unknown> };
+  /** When queue send fails, inline fan-out via webhook-delivery if bindings present. */
+  fallbackEnv?: FanoutWebhookEnv;
+}
+
+async function inlineWebhookFanout(
+  env: FanoutWebhookEnv,
+  events: ReleaseEvent[],
+  eventOwners: Map<string, WebhookEventOwner>,
+): Promise<void> {
+  if (!env.WEBHOOK_DELIVERY_QUEUE || !env.DB) return;
+  await expandAndEnqueue({
+    events,
+    eventOwners,
+    loadOrgSubscriptions: (orgIds) => matchWebhookSubscriptions(createDb(env.DB!), orgIds),
+    loadFollowsSubscriptions: () => matchFollowsScopedWebhookSubscriptions(createDb(env.DB!)),
+    loadFollowTargetsForUsers: (userIds) => loadFollowTargetsForUsers(createDb(env.DB!), userIds),
+    queue: env.WEBHOOK_DELIVERY_QUEUE,
+  });
 }
 
 /**
@@ -50,6 +68,9 @@ export async function enqueueReleaseFanout(args: EnqueueReleaseFanoutArgs): Prom
       event: "enqueue-failed",
       err: err instanceof Error ? err : String(err),
     });
+    if (args.fallbackEnv) {
+      await inlineWebhookFanout(args.fallbackEnv, args.events, args.eventOwners);
+    }
   }
 }
 
@@ -71,20 +92,16 @@ export async function fanoutWebhooks(
   if (events.length === 0) return;
 
   if (releaseEventsQueue) {
-    await enqueueReleaseFanout({ events, eventOwners, queue: releaseEventsQueue });
+    await enqueueReleaseFanout({
+      events,
+      eventOwners,
+      queue: releaseEventsQueue,
+      fallbackEnv: env,
+    });
     return;
   }
 
-  if (!env.WEBHOOK_DELIVERY_QUEUE || !env.DB) return;
-
-  await expandAndEnqueue({
-    events,
-    eventOwners,
-    loadOrgSubscriptions: (orgIds) => matchWebhookSubscriptions(createDb(env.DB!), orgIds),
-    loadFollowsSubscriptions: () => matchFollowsScopedWebhookSubscriptions(createDb(env.DB!)),
-    loadFollowTargetsForUsers: (userIds) => loadFollowTargetsForUsers(createDb(env.DB!), userIds),
-    queue: env.WEBHOOK_DELIVERY_QUEUE,
-  });
+  await inlineWebhookFanout(env, events, eventOwners);
 }
 
 /** Chunked sendBatch for digest cron enqueue. */

@@ -16,6 +16,8 @@ export interface ExpandAndEnqueueArgs {
   loadFollowTargetsForUsers?: (userIds: string[]) => Promise<Map<string, UserFollowTargets>>;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   queue: { sendBatch: (messages: { body: DeliveryMessage }[]) => Promise<any> };
+  /** When true, rethrow after logging so queue consumers can retry. */
+  throwOnError?: boolean;
 }
 
 const QUEUE_BATCH_LIMIT = 100;
@@ -79,5 +81,6 @@ export async function expandAndEnqueue(args: ExpandAndEnqueueArgs): Promise<void
       event: "expand-and-enqueue-failed",
       err: err instanceof Error ? err : String(err),
     });
+    if (args.throwOnError) throw err;
   }
 }

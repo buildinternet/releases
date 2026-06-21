@@ -167,6 +167,46 @@ describe("expandAndEnqueue", () => {
     expect(sent[0].subscriptionId).toBe("whk_follows");
   });
 
+  it("rethrows when throwOnError is set", async () => {
+    const sendBatch = mock(async (_: any[]) => {
+      throw new Error("queue down");
+    });
+    const events = [
+      {
+        id: "evt_1",
+        seq: 1,
+        ts: 1,
+        type: "release.created" as const,
+        release: { id: "rel_1" } as any,
+      },
+    ];
+    const owners = new Map([
+      [
+        "rel_1",
+        { orgId: "org_a", sourceId: "src_a", productId: null, releaseType: "feature" as const },
+      ],
+    ]);
+    const subs = [
+      {
+        id: "whk_1",
+        orgId: "org_a",
+        sourceId: null,
+        url: "https://h",
+        secretVersion: 1,
+        enabled: true,
+      } as any,
+    ];
+    await expect(
+      expandAndEnqueue({
+        events,
+        eventOwners: owners,
+        loadOrgSubscriptions: async () => subs,
+        queue: { sendBatch } as any,
+        throwOnError: true,
+      }),
+    ).rejects.toThrow("queue down");
+  });
+
   it("swallows queue errors with a warn — never throws", async () => {
     const sendBatch = mock(async (_: any[]) => {
       throw new Error("queue down");
