@@ -267,7 +267,25 @@
   // env.MEDIA_TRANSFORM = transformer). Public-beta binding; unbilled now.
   "media": { "binding": "MEDIA_TRANSFORM" },
   "queues": {
-    "producers": [{ "binding": "WEBHOOK_DELIVERY_QUEUE", "queue": "webhook-delivery" }],
+    "producers": [
+      { "binding": "WEBHOOK_DELIVERY_QUEUE", "queue": "webhook-delivery" },
+      { "binding": "DIGEST_DELIVERY_QUEUE", "queue": "digest-delivery" },
+      { "binding": "RELEASE_EVENTS_QUEUE", "queue": "release-events" },
+    ],
+    "consumers": [
+      {
+        "queue": "digest-delivery",
+        "max_batch_size": 10,
+        "max_batch_timeout": 5,
+        "max_retries": 5,
+      },
+      {
+        "queue": "release-events",
+        "max_batch_size": 5,
+        "max_batch_timeout": 5,
+        "max_retries": 5,
+      },
+    ],
   },
   // Two Email bindings. SEND_EMAIL = Email Routing (internal ops notifications,
   // reaches only account-verified destinations). AUTH_EMAIL = Email Sending
@@ -723,7 +741,25 @@
       // Media Transformations binding — see top-level note (#1368).
       "media": { "binding": "MEDIA_TRANSFORM" },
       "queues": {
-        "producers": [{ "binding": "WEBHOOK_DELIVERY_QUEUE", "queue": "webhook-delivery" }],
+        "producers": [
+          { "binding": "WEBHOOK_DELIVERY_QUEUE", "queue": "webhook-delivery" },
+          { "binding": "DIGEST_DELIVERY_QUEUE", "queue": "digest-delivery" },
+          { "binding": "RELEASE_EVENTS_QUEUE", "queue": "release-events" },
+        ],
+        "consumers": [
+          {
+            "queue": "digest-delivery",
+            "max_batch_size": 10,
+            "max_batch_timeout": 5,
+            "max_retries": 5,
+          },
+          {
+            "queue": "release-events",
+            "max_batch_size": 5,
+            "max_batch_timeout": 5,
+            "max_retries": 5,
+          },
+        ],
       },
       "send_email": [
         { "name": "SEND_EMAIL" },

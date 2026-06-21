@@ -9,9 +9,12 @@ import { getFollowedReleases, mapLatestRowToReleaseItem } from "../queries/relea
 import { sendDigestEmail, type DigestEmailEnv } from "../lib/digest-email.js";
 import { parsePositiveInt } from "./feed-enrich.js";
 import type { AuthEmailBinding } from "../auth/email.js";
+import { sendDigestBatch } from "../queues/enqueue-release-fanout.js";
+import type { DigestDeliveryMessage } from "../queues/types.js";
 
 export interface SendDigestsEnv {
   DB: D1Database;
+  DIGEST_DELIVERY_QUEUE?: Queue<DigestDeliveryMessage>;
   AUTH_EMAIL?: AuthEmailBinding;
   DIGEST_EMAIL_FROM?: string;
   WEB_BASE_URL?: string;
@@ -95,27 +98,19 @@ export async function gatherAndSendDigest(
 }
 
 /**
- * Gather → render → send digests for one cadence. For each verified, subscribed
- * user: select releases published in `(last_digest_at, runStart]` from everything
- * they follow; if none, skip (watermark unchanged); else send and advance the
- * watermark to `runStart`. Per-recipient failures are logged and never abort the
- * loop. Gated only by CRON_ENABLED — there is no feature flag; the per-user
- * opt-in (cadence defaults to off) is what keeps mail from going out broadly.
+ * Inline gather → send loop (fallback when digest-delivery queue is unbound).
  */
-export async function sendDigests(env: SendDigestsEnv, args: SendDigestsArgs): Promise<void> {
+export async function sendDigestsInline(env: SendDigestsEnv, args: SendDigestsArgs): Promise<void> {
   const { cadence, runStart } = args;
-
-  if (env.CRON_ENABLED === "false") {
-    logEvent("info", { component: "digest", event: "cron-disabled", cadence });
-    return;
-  }
-
   const db = env._drizzleOverride ?? createDb(env.DB);
-  const maxPerRun = parsePositiveInt(env.DIGEST_MAX_PER_RUN, DEFAULT_MAX_PER_RUN);
   const config = digestDeliveryConfig(env);
   const before = runStart.toISOString();
 
-  const recipients = await listDigestRecipients(db, cadence, maxPerRun);
+  const recipients = await listDigestRecipients(
+    db,
+    cadence,
+    parsePositiveInt(env.DIGEST_MAX_PER_RUN, DEFAULT_MAX_PER_RUN),
+  );
   let sentCount = 0;
   let emptyCount = 0;
   let failCount = 0;
@@ -141,10 +136,63 @@ export async function sendDigests(env: SendDigestsEnv, args: SendDigestsArgs): P
     component: "digest",
     event: "run-done",
     cadence,
+    mode: "inline",
     considered: recipients.length,
     sent: sentCount,
     emptySkipped: emptyCount,
     failed: failCount,
+    capped: recipients.length >= parsePositiveInt(env.DIGEST_MAX_PER_RUN, DEFAULT_MAX_PER_RUN),
+  });
+}
+
+/**
+ * Gather → render → send digests for one cadence. When `DIGEST_DELIVERY_QUEUE`
+ * is bound, enqueues one message per recipient for the queue consumer; otherwise
+ * falls back to the inline loop (local dev / tests). Gated only by
+ * CRON_ENABLED — per-user opt-in (cadence defaults to off) is the volume gate.
+ */
+export async function sendDigests(env: SendDigestsEnv, args: SendDigestsArgs): Promise<void> {
+  const { cadence, runStart } = args;
+
+  if (env.CRON_ENABLED === "false") {
+    logEvent("info", { component: "digest", event: "cron-disabled", cadence });
+    return;
+  }
+
+  if (!env.DIGEST_DELIVERY_QUEUE) {
+    await sendDigestsInline(env, args);
+    return;
+  }
+
+  const db = env._drizzleOverride ?? createDb(env.DB);
+  const maxPerRun = parsePositiveInt(env.DIGEST_MAX_PER_RUN, DEFAULT_MAX_PER_RUN);
+  const recipients = await listDigestRecipients(db, cadence, maxPerRun);
+  const messages: DigestDeliveryMessage[] = recipients.map((recip) => ({
+    userId: recip.userId,
+    cadence,
+    runStart: runStart.toISOString(),
+    after: recip.lastDigestAt ? recip.lastDigestAt.toISOString() : null,
+  }));
+
+  try {
+    await sendDigestBatch(env.DIGEST_DELIVERY_QUEUE, messages);
+  } catch (err) {
+    logEvent("warn", {
+      component: "digest",
+      event: "enqueue-failed",
+      cadence,
+      err: err instanceof Error ? err : String(err),
+    });
+    await sendDigestsInline(env, args);
+    return;
+  }
+
+  logEvent("info", {
+    component: "digest",
+    event: "run-done",
+    cadence,
+    mode: "queued",
+    enqueued: messages.length,
     capped: recipients.length >= maxPerRun,
   });
 }

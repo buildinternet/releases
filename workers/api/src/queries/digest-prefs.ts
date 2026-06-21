@@ -182,6 +182,36 @@ export async function resolveDigestTestRecipient(
   };
 }
 
+/**
+ * Load one verified digest recipient for queue delivery. Returns null when the
+ * user is unverified, cadence no longer matches, or prefs are missing.
+ */
+export async function getDigestRecipientByUserId(
+  db: AnyDb,
+  userId: string,
+  cadence: Exclude<DigestCadence, "off">,
+): Promise<DigestRecipient | null> {
+  const row = await db
+    .select({
+      userId: userDigestPrefs.userId,
+      email: user.email,
+      name: user.name,
+      lastDigestAt: userDigestPrefs.lastDigestAt,
+      manageToken: userDigestPrefs.manageToken,
+    })
+    .from(userDigestPrefs)
+    .innerJoin(user, eq(user.id, userDigestPrefs.userId))
+    .where(
+      and(
+        eq(userDigestPrefs.userId, userId),
+        eq(userDigestPrefs.cadence, cadence),
+        eq(user.emailVerified, true),
+      ),
+    )
+    .get();
+  return row ?? null;
+}
+
 /** Advance a user's watermark to the cron run start after a successful send. */
 export async function advanceDigestWatermark(
   db: AnyDb,
