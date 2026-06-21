@@ -24,6 +24,8 @@ Panels:
 2. **Daily by surface** — MCP vs API trend
 3. **By principal type** — anonymous / machine_token / user_key / oauth / root
 4. **Top operations** — tool names and API route families
+5. **Distinct consumers** — `dcount(consumerRef)` over the window (#1719)
+6. **Weekly distinct consumers** — retention trend by `startofweek(_time)` (#1719)
 
 ## Field extraction (APL)
 
@@ -40,6 +42,13 @@ Drop internal MCP→API introspection from external-consumer views:
 
 ```kusto
 | where operation != 'GET tokens'
+```
+
+Distinct consumers (#1719) — requires `consumerRef` on events (post-#1719 deploy):
+
+```kusto
+| where isnotempty(tostring(p['consumerRef']))
+| summarize consumers = dcount(tostring(p['consumerRef']))
 ```
 
 ## Ad-hoc CLI checks
@@ -75,8 +84,8 @@ volume is `principal: root` on admin/status routes (internal ops); MCP anonymous
 traffic (`list_organizations`, `get_latest_releases`) is the early external
 signal. Revisit thresholds once #1697/#1698/#1699 ship.
 
-## Deferred
+## `consumerRef` (#1719)
 
-**Distinct active consumers / week** needs a hashed `consumerRef`; `relu_`
-collapses to one bucket at the MCP boundary. Track volume first; file a
-follow-up when the north-star justifies per-consumer resolution.
+Hashed per-principal bucket on every consumption event. `relu_` MCP keys read
+`tokenId` from `GET /v1/tokens/me` introspection (`relu_${keyId}`). Events
+before the #1719 deploy lack `consumerRef` — retention panels filter them out.

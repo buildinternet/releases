@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { apiConsumptionPrincipal, apiRouteFamily } from "../src/middleware/auth";
+import {
+  apiConsumptionPrincipal,
+  apiConsumptionRefIdentity,
+  apiRouteFamily,
+} from "../src/middleware/auth";
+import { consumptionConsumerRef } from "@releases/lib/consumption-ref";
 import { USER_API_KEY_PREFIX } from "@buildinternet/releases-core/api-token";
 
 // #1700 — the API consumption emit derives a PII-clean event from these two
@@ -55,5 +60,22 @@ describe("apiRouteFamily (PII guard)", () => {
   test("degrades to the first segment / 'root' without a v1 prefix", () => {
     expect(apiRouteFamily("/health")).toBe("health");
     expect(apiRouteFamily("/")).toBe("root");
+  });
+});
+
+describe("apiConsumptionRefIdentity + consumerRef (#1719)", () => {
+  test("maps principals to stable ref inputs without echoing secrets", async () => {
+    expect(apiConsumptionRefIdentity({ kind: "root", scopes: ["admin"] })).toEqual({
+      kind: "root",
+    });
+    const ref = await consumptionConsumerRef(
+      apiConsumptionRefIdentity({
+        kind: "token",
+        tokenId: "relk_lookup_secret",
+        scopes: ["read"],
+      }),
+    );
+    expect(ref).toMatch(/^[0-9a-f]{64}$/);
+    expect(ref).not.toContain("secret");
   });
 });

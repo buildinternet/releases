@@ -7,6 +7,7 @@ import {
 } from "@buildinternet/releases-core/api-token";
 import { verifyApiToken } from "@releases/core-internal/api-token-store";
 import { FLAGS, flag } from "@releases/lib/flags";
+import { consumptionConsumerRef, type ConsumptionRefIdentity } from "@releases/lib/consumption-ref";
 import { logEvent } from "@releases/lib/log-event";
 import {
   isJwtShaped,
@@ -102,6 +103,25 @@ export function consumptionPrincipal(identity: McpIdentity): ConsumptionPrincipa
   if (isUserApiKeyShaped(identity.tokenId)) return "user_key";
   if (identity.tokenId.startsWith(OAUTH_JWT_TOKEN_PREFIX)) return "oauth";
   return "machine_token";
+}
+
+export function mcpConsumptionRefIdentity(identity: McpIdentity): ConsumptionRefIdentity {
+  if (identity.kind === "root") return { kind: "root" };
+  if (identity.kind === "anonymous") return { kind: "anonymous" };
+  return { kind: "token", tokenId: identity.tokenId };
+}
+
+/** Emit one consumption event with a hashed `consumerRef` (#1719). */
+export async function emitMcpConsumption(identity: McpIdentity, operation: string): Promise<void> {
+  const consumerRef = await consumptionConsumerRef(mcpConsumptionRefIdentity(identity));
+  logEvent("info", {
+    component: "consumption",
+    event: "consumption",
+    surface: "mcp",
+    principal: consumptionPrincipal(identity),
+    consumerRef,
+    operation,
+  });
 }
 
 /**
@@ -251,17 +271,24 @@ async function resolveUserKey(
     );
     if (res.status === 429) return { rateLimited: true };
     if (!res.ok) return ANONYMOUS; // 401 invalid/unknown/revoked → public read
-    const body = (await res.json()) as { scopes?: unknown };
+    const body = (await res.json()) as { scopes?: unknown; tokenId?: unknown };
     const scopes = Array.isArray(body.scopes)
       ? body.scopes.filter((s): s is string => typeof s === "string")
       : [];
     if (scopes.length === 0) return ANONYMOUS; // defensive: empty scope never authenticates
+    // Stable per-key id from introspection (`relu_${keyId}`) for consumption
+    // telemetry (#1719). Fall back to the bare prefix only when an older API omits
+    // the field — all keys collapse to one bucket in that case.
+    const tokenId =
+      typeof body.tokenId === "string" && body.tokenId.length > 0
+        ? body.tokenId
+        : USER_API_KEY_PREFIX;
     // `userToken: presented` — the raw relu_ key, so the follows tools can act as
     // this user against /v1/me/* (the only place the user credential is needed).
     return {
       kind: "token",
       scopes,
-      tokenId: USER_API_KEY_PREFIX,
+      tokenId,
       token: null,
       userToken: presented,
     };

@@ -25,10 +25,16 @@ them):
   "event": "consumption",
   "surface": "mcp" | "api",
   "principal": "anonymous" | "machine_token" | "user_key" | "oauth" | "root",
+  "consumerRef": "root" | "anonymous" | "<sha256-hex>",
   "operation": "<tool name | METHOD route-family>"
 }
 ```
 
+- `consumerRef` (#1719) is a **non-reversible** per-principal bucket: fixed
+  `root` / `anonymous`, else `SHA-256("consumption:" + stableTokenId)` where
+  `stableTokenId` is the internal id already on the auth boundary (`relk_` row
+  id, `relu_${keyId}`, `oauth_${sub}`) — never the raw secret. Implemented in
+  `@releases/lib/consumption-ref`.
 - `principal` is a **type only** — never a token value, user id, email, or IP.
   `machine_token` = `relk_`, `user_key` = `relu_`, `oauth` = OAuth-JWT, `root` =
   static key. Mirrors the same label set in `workers/mcp/src/auth.ts`
@@ -88,14 +94,32 @@ pre-filter on the raw string, then `parse_json(body)` for grouping.
 (uid `514b94db-c399-444c-b7b8-c40c9b02909c`). Runbook:
 [consumption-demand-dashboard.md](../runbooks/consumption-demand-dashboard.md).
 
-## Deliberately out of scope
+## Retention: distinct active consumers / week (#1719)
 
-- **Distinct active consumers / week.** Counting _unique_ consumers needs a
-  stable per-principal id. The PII-safe path is a non-reversible hash of the
-  token id (a `consumerRef`), but it only distinguishes cleanly for `relk_` /
-  OAuth principals — `relu_` collapses to one bucket at the MCP boundary
-  (`resolveUserKey` sets a constant `tokenId`). Deferred until the volume metric
-  shows the channel is worth that resolution; the hashed-ref sketch is the
-  follow-up. (Volume — the chosen north-star — needs no per-consumer id and is
-  trivially PII-clean.)
+```kusto
+// Distinct consumers in the dashboard time window
+['releases-cloudflare-logs']
+| where body contains '"component":"consumption"'
+| extend p = parse_json(body)
+| where tostring(p['operation']) != 'GET tokens'
+| where isnotempty(tostring(p['consumerRef']))
+| summarize consumers = dcount(tostring(p['consumerRef']))
+```
+
+```kusto
+// Weekly distinct consumers (retention trend)
+['releases-cloudflare-logs']
+| where body contains '"component":"consumption"'
+| extend p = parse_json(body)
+| where tostring(p['operation']) != 'GET tokens'
+| where isnotempty(tostring(p['consumerRef']))
+| summarize consumers = dcount(tostring(p['consumerRef'])) by week = startofweek(_time)
+```
+
+`relu_` on MCP: `GET /v1/tokens/me` now returns `tokenId` (`relu_${keyId}`) so
+MCP distinguishes user keys. Without that field (older API), keys collapse to
+the bare `relu_` prefix bucket.
+
+## Out of scope
+
 - **The CLI `telemetry_events` contract** is untouched (command names only).

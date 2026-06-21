@@ -1,6 +1,7 @@
 import type { Context, MiddlewareHandler } from "hono";
 import { FLAGS, flag, type FlagDef } from "@releases/lib/flags";
 import { getSecret, getSecretWithFallback } from "@releases/lib/secrets";
+import { consumptionConsumerRef, type ConsumptionRefIdentity } from "@releases/lib/consumption-ref";
 import { logEvent } from "@releases/lib/log-event";
 import {
   type ApiScope,
@@ -426,6 +427,28 @@ export function apiRouteFamily(path: string): string {
   return family ?? "root";
 }
 
+export function apiConsumptionRefIdentity(
+  auth: Extract<ResolvedAuth, { kind: "root" | "token" }>,
+): ConsumptionRefIdentity {
+  if (auth.kind === "root") return { kind: "root" };
+  return { kind: "token", tokenId: auth.tokenId };
+}
+
+async function emitApiConsumption(
+  c: Context<Env>,
+  auth: Extract<ResolvedAuth, { kind: "root" | "token" }>,
+): Promise<void> {
+  const consumerRef = await consumptionConsumerRef(apiConsumptionRefIdentity(auth));
+  logEvent("info", {
+    component: "consumption",
+    event: "consumption",
+    surface: "api",
+    principal: apiConsumptionPrincipal(auth),
+    consumerRef,
+    operation: `${c.req.method} ${apiRouteFamily(c.req.path)}`,
+  });
+}
+
 /**
  * Attach the resolved identity to the request context and, for DB tokens,
  * record usage (throttled, fire-and-forget). In tests there's no executionCtx,
@@ -437,22 +460,17 @@ function recordAuth(
 ): void {
   c.set("auth", auth);
 
-  // Consumption telemetry (#1700): one PII-clean event per AUTHENTICATED API
-  // request — the agent-native demand gauge. Anonymous public reads bypass
-  // recordAuth (they're web traffic, counted elsewhere). Principal TYPE + a
-  // coarse route family only — never a token value, email, or path with ids.
-  // logEvent is a sync structured-console write, so there's no awaited write on
-  // the request path. Event shape mirrors the MCP worker's emit so the Axiom
-  // query unions both surfaces. (Internal MCP→API introspection on
-  // `GET /v1/tokens/me` shows up here as operation `GET tokens`; filter it out
-  // for pure external-consumer counts.)
-  logEvent("info", {
-    component: "consumption",
-    event: "consumption",
-    surface: "api",
-    principal: apiConsumptionPrincipal(auth),
-    operation: `${c.req.method} ${apiRouteFamily(c.req.path)}`,
-  });
+  // Consumption telemetry (#1700/#1719): one PII-clean event per AUTHENTICATED API
+  // request. `consumerRef` is a hashed stable principal id (#1719); principal is
+  // the coarse TYPE. Hashing is async (Web Crypto) — fire-and-forget, same as
+  // touchLastUsed. Internal MCP→API introspection on `GET /v1/tokens/me` shows
+  // up as operation `GET tokens`; filter it out for pure external-consumer counts.
+  const emit = emitApiConsumption(c, auth);
+  try {
+    c.executionCtx.waitUntil(emit);
+  } catch {
+    void emit;
+  }
 
   if (auth.kind !== "token") return;
   const tokenId = auth.tokenId;

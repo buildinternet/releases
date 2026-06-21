@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { peekMcpCall, consumptionPrincipal, type McpIdentity } from "../src/auth";
+import {
+  peekMcpCall,
+  consumptionPrincipal,
+  mcpConsumptionRefIdentity,
+  type McpIdentity,
+} from "../src/auth";
+import { consumptionConsumerRef } from "@releases/lib/consumption-ref";
 import { USER_API_KEY_PREFIX } from "@buildinternet/releases-core/api-token";
 
 // #1700 — the MCP consumption emit fires once per BILLABLE tool call, gated by
@@ -83,5 +89,29 @@ describe("consumptionPrincipal (PII guard — type only)", () => {
     expect(consumptionPrincipal(tok("relk_lookup_secret"))).toBe("machine_token");
     expect(consumptionPrincipal(tok(USER_API_KEY_PREFIX))).toBe("user_key");
     expect(consumptionPrincipal(tok("oauth_subject-123"))).toBe("oauth");
+  });
+});
+
+describe("mcpConsumptionRefIdentity + consumerRef (#1719)", () => {
+  test("relu_ keys use distinct tokenIds when introspection returns them", async () => {
+    const a = await consumptionConsumerRef(
+      mcpConsumptionRefIdentity({
+        kind: "token",
+        scopes: ["read"],
+        tokenId: `${USER_API_KEY_PREFIX}key-a`,
+        token: null,
+        userToken: null,
+      }),
+    );
+    const b = await consumptionConsumerRef(
+      mcpConsumptionRefIdentity({
+        kind: "token",
+        scopes: ["read"],
+        tokenId: `${USER_API_KEY_PREFIX}key-b`,
+        token: null,
+        userToken: null,
+      }),
+    );
+    expect(a).not.toBe(b);
   });
 });
