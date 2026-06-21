@@ -1,12 +1,7 @@
 import { getReleaseHub } from "../utils.js";
 import { buildReleaseEventPayloads, type InsertedReleaseRow } from "./build-event.js";
-import { expandAndEnqueue } from "../webhooks/expand-and-enqueue.js";
-import {
-  loadFollowTargetsForUsers,
-  matchFollowsScopedWebhookSubscriptions,
-  matchWebhookSubscriptions,
-} from "../webhooks/queries.js";
-import { createDb } from "../db.js";
+import { fanoutWebhooks } from "../queues/enqueue-release-fanout.js";
+import type { ReleaseFanoutMessage } from "../queues/types.js";
 import { newLocalEventId } from "@buildinternet/releases-core/id";
 import type { ReleaseEvent } from "./types.js";
 import { logEvent } from "@releases/lib/log-event";
@@ -87,6 +82,7 @@ async function resolveSourceContext(
 export interface PublishEnv {
   RELEASE_HUB: DurableObjectNamespace;
   WEBHOOK_DELIVERY_QUEUE?: Queue<unknown>;
+  RELEASE_EVENTS_QUEUE?: Queue<ReleaseFanoutMessage>;
   DB?: D1Database;
 }
 
@@ -169,16 +165,8 @@ export async function publishReleaseEvents(env: PublishEnv, ctx: PublishContext)
   })();
 
   const webhookFanout =
-    env.WEBHOOK_DELIVERY_QUEUE && env.DB
-      ? expandAndEnqueue({
-          events,
-          eventOwners,
-          loadOrgSubscriptions: (orgIds) => matchWebhookSubscriptions(createDb(env.DB!), orgIds),
-          loadFollowsSubscriptions: () => matchFollowsScopedWebhookSubscriptions(createDb(env.DB!)),
-          loadFollowTargetsForUsers: (userIds) =>
-            loadFollowTargetsForUsers(createDb(env.DB!), userIds),
-          queue: env.WEBHOOK_DELIVERY_QUEUE,
-        })
+    env.DB && (env.RELEASE_EVENTS_QUEUE || env.WEBHOOK_DELIVERY_QUEUE)
+      ? fanoutWebhooks(env, events, eventOwners, env.RELEASE_EVENTS_QUEUE)
       : Promise.resolve();
 
   await Promise.all([hubPublish, webhookFanout]);

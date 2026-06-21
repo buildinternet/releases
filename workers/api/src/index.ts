@@ -45,6 +45,7 @@ import { sendStalenessDigest } from "./cron/send-staleness-digest.js";
 import { wellKnownSync } from "./cron/well-known-sync.js";
 import { sweepOauthClients } from "./cron/sweep-oauth-clients.js";
 import { sendDigests } from "./cron/send-digests.js";
+import { handleQueueBatch } from "./queues/handler.js";
 import { runCollectionSummaries } from "./cron/collection-summaries.js";
 import { sendAlert, type AlertEnv } from "./lib/send-alert.js";
 import { logEvent } from "@releases/lib/log-event";
@@ -81,6 +82,10 @@ export type Env = {
     STATUS_HUB: DurableObjectNamespace;
     RELEASE_HUB: DurableObjectNamespace;
     WEBHOOK_DELIVERY_QUEUE: Queue<unknown>;
+    /** Per-recipient follow digest send (cron enqueues; API worker consumes). */
+    DIGEST_DELIVERY_QUEUE?: Queue<import("./queues/types.js").DigestDeliveryMessage>;
+    /** Release.created fan-out before webhook-delivery (publish enqueues). */
+    RELEASE_EVENTS_QUEUE?: Queue<import("./queues/types.js").ReleaseFanoutMessage>;
     MEDIA: R2Bucket;
     MEDIA_ORIGIN?: string;
     /** Scrape title-dedup kill switch (#1410); default off (i.e. dedup ON). */
@@ -827,6 +832,15 @@ app.notFound((c) =>
 
 export default {
   fetch: app.fetch,
+  async queue(
+    batch: MessageBatch<
+      | import("./queues/types.js").DigestDeliveryMessage
+      | import("./queues/types.js").ReleaseFanoutMessage
+    >,
+    env: Env["Bindings"],
+  ): Promise<void> {
+    await handleQueueBatch(batch, env);
+  },
   async scheduled(event: ScheduledEvent, env: Env["Bindings"], ctx: ExecutionContext) {
     // Daily retier job runs at 03:00 UTC; scrape-no-feed agent sweep at 01:00 UTC;
     // force-drain for stranded sources at 04:00 UTC; search-queries retention
