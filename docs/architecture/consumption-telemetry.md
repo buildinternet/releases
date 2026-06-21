@@ -26,6 +26,8 @@ them):
   "surface": "mcp" | "api",
   "principal": "anonymous" | "machine_token" | "user_key" | "oauth" | "root",
   "consumerRef": "root" | "anonymous" | "<sha256-hex>",
+  "audience": "internal" | "external",
+  "principalOwner": "internal" | "agent" | "user", // omitted for anonymous
   "operation": "<tool name | METHOD route-family>"
 }
 ```
@@ -35,11 +37,17 @@ them):
   `stableTokenId` is the internal id already on the auth boundary (`relk_` row
   id, `relu_${keyId}`, `oauth_${sub}`) — never the raw secret. Implemented in
   `@releases/lib/consumption-ref`.
+- `audience` separates **internal ops** (`root`, `relk_` with
+  `principalType: internal`) from **external demand** (anonymous, `relu_`,
+  OAuth, `relk_` agent/user). Use `audience == "external"` on dashboards instead
+  of hand-rolling `principal != 'root'`.
+- `principalOwner` is the finer owner bucket: `internal` for root / internal
+  `relk_`, `agent` / `user` for external machine tokens, `user` for `relu_` and
+  OAuth. Omitted for anonymous.
 - `principal` is a **type only** — never a token value, user id, email, or IP.
   `machine_token` = `relk_`, `user_key` = `relu_`, `oauth` = OAuth-JWT, `root` =
-  static key. Mirrors the same label set in `workers/mcp/src/auth.ts`
-  (`consumptionPrincipal`) and `workers/api/src/middleware/auth.ts`
-  (`apiConsumptionPrincipal`).
+  static key. Built by `consumptionPrincipal()` in `@releases/lib/consumption-ref`
+  (shared by API and MCP emit paths via `buildConsumptionPayload()`).
 - `operation` is low-cardinality: the **tool name** for MCP `tools/call` (else
   the JSON-RPC method), or `"<METHOD> <route-family>"` for the API where
   route-family is the path segment after `/v1` (`/v1/orgs/vercel/releases` →
@@ -97,11 +105,12 @@ pre-filter on the raw string, then `parse_json(body)` for grouping.
 ## Retention: distinct active consumers / week (#1719)
 
 ```kusto
-// Distinct consumers in the dashboard time window
+// External-only distinct consumers (post-#1719 audience field)
 ['releases-cloudflare-logs']
 | where body contains '"component":"consumption"'
 | extend p = parse_json(body)
 | where tostring(p['operation']) != 'GET tokens'
+| where tostring(p['audience']) == 'external'
 | where isnotempty(tostring(p['consumerRef']))
 | summarize consumers = dcount(tostring(p['consumerRef']))
 ```

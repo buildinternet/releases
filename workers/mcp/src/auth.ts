@@ -4,10 +4,15 @@ import {
   isUserApiKeyShaped,
   ROOT_SCOPE,
   USER_API_KEY_PREFIX,
+  type PrincipalType,
 } from "@buildinternet/releases-core/api-token";
 import { verifyApiToken } from "@releases/core-internal/api-token-store";
 import { FLAGS, flag } from "@releases/lib/flags";
-import { consumptionConsumerRef, type ConsumptionRefIdentity } from "@releases/lib/consumption-ref";
+import {
+  buildConsumptionPayload,
+  type ConsumptionIdentity,
+  OAUTH_JWT_TOKEN_PREFIX,
+} from "@releases/lib/consumption-ref";
 import { logEvent } from "@releases/lib/log-event";
 import {
   isJwtShaped,
@@ -25,9 +30,6 @@ import type { Env } from "./mcp-agent.js";
 
 /** Custom header carrying the staging shared secret. Mirrors workers/api. */
 const STAGING_KEY_HEADER = "X-Releases-Staging-Key";
-
-/** `tokenId` prefix for an OAuth-JWT principal (#1483). No api_tokens row exists. */
-const OAUTH_JWT_TOKEN_PREFIX = "oauth_";
 
 /**
  * Resource-server config for verifying "Sign in with Releases" OAuth JWTs
@@ -85,43 +87,24 @@ export async function isMeteredMcpMethod(request: Request): Promise<boolean> {
   }
 }
 
-/** Coarse principal label for consumption telemetry (#1700). PII-clean — a
- *  TYPE, never an id/email/token. Must match the API worker's labels
- *  (`apiConsumptionPrincipal` in workers/api/src/middleware/auth.ts) so the
- *  Axiom query can union both surfaces. */
-export type ConsumptionPrincipal =
-  | "anonymous"
-  | "machine_token" // relk_
-  | "user_key" // relu_
-  | "oauth" // OAuth JWT
-  | "root";
-
-/** Derive the consumption principal label from a resolved MCP identity. */
-export function consumptionPrincipal(identity: McpIdentity): ConsumptionPrincipal {
-  if (identity.kind === "root") return "root";
-  if (identity.kind === "anonymous") return "anonymous";
-  if (isUserApiKeyShaped(identity.tokenId)) return "user_key";
-  if (identity.tokenId.startsWith(OAUTH_JWT_TOKEN_PREFIX)) return "oauth";
-  return "machine_token";
-}
-
-export function mcpConsumptionRefIdentity(identity: McpIdentity): ConsumptionRefIdentity {
+function mcpConsumptionIdentity(identity: McpIdentity): ConsumptionIdentity {
   if (identity.kind === "root") return { kind: "root" };
   if (identity.kind === "anonymous") return { kind: "anonymous" };
-  return { kind: "token", tokenId: identity.tokenId };
+  return {
+    kind: "token",
+    tokenId: identity.tokenId,
+    machinePrincipalType: identity.machinePrincipalType,
+  };
 }
 
-/** Emit one consumption event with a hashed `consumerRef` (#1719). */
+/** Emit one consumption event (#1700/#1719). */
 export async function emitMcpConsumption(identity: McpIdentity, operation: string): Promise<void> {
-  const consumerRef = await consumptionConsumerRef(mcpConsumptionRefIdentity(identity));
-  logEvent("info", {
-    component: "consumption",
-    event: "consumption",
+  const payload = await buildConsumptionPayload({
     surface: "mcp",
-    principal: consumptionPrincipal(identity),
-    consumerRef,
+    identity: mcpConsumptionIdentity(identity),
     operation,
   });
+  logEvent("info", payload);
 }
 
 /**
@@ -171,15 +154,8 @@ export type McpIdentity =
       scopes: string[];
       tokenId: string;
       token: string | null;
-      /**
-       * The raw Bearer credential when this identity is a USER principal (a
-       * `relu_` user key or an OAuth JWT) — forwarded by the per-user follows
-       * tools to `/v1/me/*` so they act as the user. Null for machine principals
-       * (`relk_`), which have no owning user. Distinct from `token` (the
-       * on-demand-lookup credential, deliberately null for user lanes so that
-       * fallback runs as root, not as the metered user key).
-       */
       userToken: string | null;
+      machinePrincipalType?: PrincipalType;
     }
   | { kind: "anonymous"; scopes: string[]; tokenId: null; token: null; userToken: null };
 
@@ -335,6 +311,7 @@ async function resolveIdentity(
         tokenId: res.tokenId,
         token: presented,
         userToken: null,
+        machinePrincipalType: res.principalType,
       };
     // An invalid/unknown token is ignored rather than rejected, so public reads
     // stay open; the staging gate below still applies.

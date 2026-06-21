@@ -13,12 +13,15 @@ import {
   hashSecret,
   parseApiToken,
   parseStoredScopes,
+  type PrincipalType,
 } from "@buildinternet/releases-core/api-token";
 
 /** Loose drizzle handle — D1 in workers, bun:sqlite in tests. */
 type AnyDb = DrizzleD1Database<any>;
 
-export type TokenVerifyResult = { ok: true; tokenId: string; scopes: string[] } | { ok: false };
+export type TokenVerifyResult =
+  | { ok: true; tokenId: string; scopes: string[]; principalType: PrincipalType }
+  | { ok: false };
 
 /** How long after a successful auth before we rewrite last_used_at again. */
 const LAST_USED_THROTTLE_MS = 60_000;
@@ -65,7 +68,7 @@ export async function verifyApiToken(
   // a powerless-but-authenticated identity (which would still bypass rate limits).
   const scopes = parseStoredScopes(row.scopes);
   if (scopes.length === 0) return { ok: false };
-  return { ok: true, tokenId: row.id, scopes };
+  return { ok: true, tokenId: row.id, scopes, principalType: row.principalType };
 }
 
 /**

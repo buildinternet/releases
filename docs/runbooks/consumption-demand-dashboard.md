@@ -26,6 +26,8 @@ Panels:
 4. **Top operations** — tool names and API route families
 5. **Distinct consumers** — `dcount(consumerRef)` over the window (#1719)
 6. **Weekly distinct consumers** — retention trend by `startofweek(_time)` (#1719)
+7. **External queries answered** — north-star filtered to `audience == "external"`
+8. **External distinct consumers** — retention on external demand only
 
 ## Field extraction (APL)
 
@@ -42,6 +44,12 @@ Drop internal MCP→API introspection from external-consumer views:
 
 ```kusto
 | where operation != 'GET tokens'
+```
+
+External demand only — prefer `audience` (post-#1719 deploy) over `principal != 'root'`:
+
+```kusto
+| where tostring(p['audience']) == 'external'
 ```
 
 Distinct consumers (#1719) — requires `consumerRef` on events (post-#1719 deploy):

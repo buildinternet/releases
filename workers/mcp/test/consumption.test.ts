@@ -1,11 +1,10 @@
 import { describe, expect, test } from "bun:test";
+import { peekMcpCall } from "../src/auth";
 import {
-  peekMcpCall,
+  buildConsumptionPayload,
   consumptionPrincipal,
-  mcpConsumptionRefIdentity,
-  type McpIdentity,
-} from "../src/auth";
-import { consumptionConsumerRef } from "@releases/lib/consumption-ref";
+  OAUTH_JWT_TOKEN_PREFIX,
+} from "@releases/lib/consumption-ref";
 import { USER_API_KEY_PREFIX } from "@buildinternet/releases-core/api-token";
 
 // #1700 — the MCP consumption emit fires once per BILLABLE tool call, gated by
@@ -59,59 +58,33 @@ describe("peekMcpCall", () => {
 });
 
 describe("consumptionPrincipal (PII guard — type only)", () => {
-  const tok = (tokenId: string): McpIdentity => ({
-    kind: "token",
-    scopes: ["read"],
-    tokenId,
-    token: null,
-    userToken: null,
-  });
-
   test("maps every identity to a coarse type, never an id", () => {
+    expect(consumptionPrincipal({ kind: "anonymous" })).toBe("anonymous");
+    expect(consumptionPrincipal({ kind: "root" })).toBe("root");
+    expect(consumptionPrincipal({ kind: "token", tokenId: "relk_lookup_secret" })).toBe(
+      "machine_token",
+    );
+    expect(consumptionPrincipal({ kind: "token", tokenId: USER_API_KEY_PREFIX })).toBe("user_key");
     expect(
-      consumptionPrincipal({
-        kind: "anonymous",
-        scopes: ["read"],
-        tokenId: null,
-        token: null,
-        userToken: null,
-      }),
-    ).toBe("anonymous");
-    expect(
-      consumptionPrincipal({
-        kind: "root",
-        scopes: ["admin"],
-        tokenId: null,
-        token: null,
-        userToken: null,
-      }),
-    ).toBe("root");
-    expect(consumptionPrincipal(tok("relk_lookup_secret"))).toBe("machine_token");
-    expect(consumptionPrincipal(tok(USER_API_KEY_PREFIX))).toBe("user_key");
-    expect(consumptionPrincipal(tok("oauth_subject-123"))).toBe("oauth");
+      consumptionPrincipal({ kind: "token", tokenId: `${OAUTH_JWT_TOKEN_PREFIX}subject-123` }),
+    ).toBe("oauth");
   });
 });
 
-describe("mcpConsumptionRefIdentity + consumerRef (#1719)", () => {
-  test("relu_ keys use distinct tokenIds when introspection returns them", async () => {
-    const a = await consumptionConsumerRef(
-      mcpConsumptionRefIdentity({
-        kind: "token",
-        scopes: ["read"],
-        tokenId: `${USER_API_KEY_PREFIX}key-a`,
-        token: null,
-        userToken: null,
-      }),
-    );
-    const b = await consumptionConsumerRef(
-      mcpConsumptionRefIdentity({
-        kind: "token",
-        scopes: ["read"],
-        tokenId: `${USER_API_KEY_PREFIX}key-b`,
-        token: null,
-        userToken: null,
-      }),
-    );
-    expect(a).not.toBe(b);
+describe("buildConsumptionPayload (MCP surface)", () => {
+  test("relu_ keys use distinct consumerRefs when tokenIds differ", async () => {
+    const a = await buildConsumptionPayload({
+      surface: "mcp",
+      identity: { kind: "token", tokenId: `${USER_API_KEY_PREFIX}key-a` },
+      operation: "search",
+    });
+    const b = await buildConsumptionPayload({
+      surface: "mcp",
+      identity: { kind: "token", tokenId: `${USER_API_KEY_PREFIX}key-b` },
+      operation: "search",
+    });
+    expect(a.consumerRef).not.toBe(b.consumerRef);
+    expect(a.audience).toBe("external");
+    expect(a.principalOwner).toBe("user");
   });
 });
