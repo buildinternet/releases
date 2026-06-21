@@ -94,6 +94,8 @@ signal. Revisit thresholds once #1697/#1698/#1699 ship.
 
 ## `consumerRef` (#1719)
 
-Hashed per-principal bucket on every consumption event. `relu_` MCP keys read
-`tokenId` from `GET /v1/tokens/me` introspection (`relu_${keyId}`). Events
-before the #1719 deploy lack `consumerRef` — retention panels filter them out.
+Per-principal bucket on every consumption event: `root` and `anonymous` are fixed
+labels (not hashed); token principals get `SHA-256("consumption:" + stableTokenId)`.
+`relu_` MCP keys read `tokenId` from `GET /v1/tokens/me` introspection
+(`relu_${keyId}`). Events before the #1719 deploy lack `consumerRef` — retention
+panels filter them out.

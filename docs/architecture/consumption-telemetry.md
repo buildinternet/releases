@@ -102,10 +102,20 @@ pre-filter on the raw string, then `parse_json(body)` for grouping.
 (uid `514b94db-c399-444c-b7b8-c40c9b02909c`). Runbook:
 [consumption-demand-dashboard.md](../runbooks/consumption-demand-dashboard.md).
 
-## Retention: distinct active consumers / week (#1719)
+## Retention: distinct active consumers (#1719)
 
 ```kusto
-// External-only distinct consumers (post-#1719 audience field)
+// Distinct consumers over the dashboard time window (not per-week)
+['releases-cloudflare-logs']
+| where body contains '"component":"consumption"'
+| extend p = parse_json(body)
+| where tostring(p['operation']) != 'GET tokens'
+| where isnotempty(tostring(p['consumerRef']))
+| summarize consumers = dcount(tostring(p['consumerRef']))
+```
+
+```kusto
+// External-only distinct consumers over the window (post-#1719 audience field)
 ['releases-cloudflare-logs']
 | where body contains '"component":"consumption"'
 | extend p = parse_json(body)
@@ -116,7 +126,7 @@ pre-filter on the raw string, then `parse_json(body)` for grouping.
 ```
 
 ```kusto
-// Weekly distinct consumers (retention trend)
+// Distinct active consumers / week (retention trend)
 ['releases-cloudflare-logs']
 | where body contains '"component":"consumption"'
 | extend p = parse_json(body)
