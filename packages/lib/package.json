@@ -25,6 +25,6 @@
   "dependencies": {
     "@anthropic-ai/sdk": "catalog:",
     "@buildinternet/releases-core": "workspace:*",
-    "jose": "^6.2.2"
+    "jose": "^6.2.3"
   }
 }

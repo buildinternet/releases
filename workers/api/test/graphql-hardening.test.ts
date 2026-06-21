@@ -55,6 +55,9 @@ function makeYoga() {
     plugins: hardeningPlugins<Ctx>(),
     graphiql: false,
     landingPage: false,
+    // Yoga 5.21.2+ masks validation errors in responses; disable here so we can
+    // assert the armor plugins' rejection reasons (prod still masks by default).
+    maskedErrors: false,
   });
 }
 
