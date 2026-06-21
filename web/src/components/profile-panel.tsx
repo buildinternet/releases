@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useSession } from "@/lib/auth-client";
 import { displayEmailOf } from "@/lib/auth-ui";
+import { DemographicsPanel } from "@/components/demographics-panel";
 
 function initialOf(name: string | undefined, email: string): string {
   const source = (name ?? "").trim() || email;
@@ -93,6 +94,8 @@ export function ProfilePanel() {
           Change email
         </Link>
       </div>
+
+      <DemographicsPanel />
     </div>
   );
 }

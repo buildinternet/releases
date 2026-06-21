@@ -25,6 +25,12 @@ import {
 } from "../queries/feed-tokens.js";
 import { getDigestPrefs, setDigestCadence } from "../queries/digest-prefs.js";
 import { DIGEST_CADENCES, type DigestCadence } from "../db/schema-digest-prefs.js";
+import {
+  getDemographics,
+  setDemographics,
+  validateDemographicsInput,
+} from "../queries/demographics.js";
+import type { UserDemographics } from "@buildinternet/releases-api-types";
 import { parseJsonBody } from "../lib/json-body.js";
 import type { FeedToken } from "@buildinternet/releases-api-types";
 import {
@@ -232,6 +238,25 @@ meHandlers.put("/me/digest", async (c) => {
   const db = createDb(c.env.DB);
   const row = await setDigestCadence(db, session.user.id, cadence as DigestCadence);
   return c.json({ cadence: row.cadence });
+});
+
+meHandlers.get("/me/demographics", async (c) => {
+  const session = c.get("session");
+  if (!session) return c.json({ error: "unauthorized", message: "Sign in required" }, 401);
+  const db = createDb(c.env.DB);
+  return c.json(await getDemographics(db, session.user.id));
+});
+
+meHandlers.put("/me/demographics", async (c) => {
+  const session = c.get("session");
+  if (!session) return c.json({ error: "unauthorized", message: "Sign in required" }, 401);
+  const body = await parseJsonBody<UserDemographics>(c);
+  const err = validateDemographicsInput(body);
+  if (err) {
+    return c.json({ error: "bad_request", message: `${err.field}: ${err.message}` }, 400);
+  }
+  const db = createDb(c.env.DB);
+  return c.json(await setDemographics(db, session.user.id, body));
 });
 
 /** Production composition: session-or-Bearer principal gate, then the handlers. */

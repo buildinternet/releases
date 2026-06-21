@@ -1038,6 +1038,44 @@ export interface DigestPrefsRequest {
   cadence: DigestCadence;
 }
 
+// ── User demographics (opt-in aggregate insights) ──
+
+export const GENDER_OPTIONS = [
+  "woman",
+  "man",
+  "non_binary",
+  "prefer_not_to_say",
+  "custom",
+] as const;
+export type GenderOption = (typeof GENDER_OPTIONS)[number];
+
+export const SEXUAL_ORIENTATION_OPTIONS = [
+  "straight",
+  "gay",
+  "lesbian",
+  "bisexual",
+  "pansexual",
+  "asexual",
+  "queer",
+  "prefer_not_to_say",
+  "custom",
+] as const;
+export type SexualOrientationOption = (typeof SEXUAL_ORIENTATION_OPTIONS)[number];
+
+/** GET/PUT /v1/me/demographics wire shape. All fields optional until the user opts in. */
+export interface UserDemographics {
+  optedIn: boolean;
+  birthYear: number | null;
+  /** ISO `YYYY-MM-DD` when the user shares a full date; null for year-only. */
+  birthDate: string | null;
+  gender: GenderOption | null;
+  genderCustom: string | null;
+  sexualOrientation: SexualOrientationOption | null;
+  sexualOrientationCustom: string | null;
+  /** ISO 3166-1 alpha-2 country code, or null. */
+  countryCode: string | null;
+}
+
 // ── Search ──
 
 export type SearchOrgHit = z.infer<typeof SearchOrgHitSchema>;
