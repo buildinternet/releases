@@ -24,6 +24,88 @@ export interface CollectionSummariesEnv extends TextModelEnv {
   _modelOverride?: TextModel;
 }
 
+export interface CollectionSummaryTarget {
+  id: string;
+  name: string;
+}
+
+export type CollectionSummaryOutcome = "generated" | "skipped" | "failed";
+
+/** Enabled collections eligible for a summary run (optional single-collection scope). */
+export async function listCollectionSummaryTargets(
+  db: AnyDb,
+  opts?: { collectionId?: string },
+): Promise<CollectionSummaryTarget[]> {
+  return db
+    .select({ id: collections.id, name: collections.name })
+    .from(collections)
+    .where(
+      and(
+        eq(collections.dailySummaryEnabled, true),
+        opts?.collectionId ? eq(collections.id, opts.collectionId) : undefined,
+      ),
+    );
+}
+
+/** ET day keys to summarize: catch-up window ending at the day before `todayEt`. */
+export function collectionSummaryCatchupDates(todayEt: string, catchupDays: number): string[] {
+  const days = Math.max(1, catchupDays);
+  const dates: string[] = [];
+  for (let i = 1; i <= days; i++) {
+    dates.push(addDaysToDateKey(todayEt, -i));
+  }
+  return dates;
+}
+
+/**
+ * Summarize one collection for one ET day. Per-collection failures are contained
+ * here so workflow steps can retry independently.
+ */
+export async function summarizeCollectionForDay(
+  db: AnyDb,
+  model: TextModel,
+  col: CollectionSummaryTarget,
+  date: string,
+  opts?: { force?: boolean },
+): Promise<CollectionSummaryOutcome> {
+  try {
+    if (!opts?.force) {
+      const existing = await listCollectionDailySummaries(db, col.id, date, date);
+      if (existing.length > 0) return "skipped";
+    }
+
+    const members = await getCollectionMembers(db, col.id);
+    const dayReleases = await getCollectionDayReleases(db, members, etDayBoundsUtc(date));
+    if (dayReleases.length === 0) return "skipped";
+
+    const result = await summarizeCollectionDay(model, {
+      collectionName: col.name,
+      date,
+      releases: dayReleases,
+    });
+
+    await upsertCollectionDailySummary(db, {
+      collectionId: col.id,
+      summaryDate: date,
+      title: result.title,
+      summary: result.summary,
+      takeaways: result.takeaways,
+      releaseCount: dayReleases.length,
+      modelId: model.id,
+    });
+    return "generated";
+  } catch (err) {
+    logEvent("error", {
+      component: "collection-summaries",
+      event: "generate-failed",
+      collectionId: col.id,
+      date,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return "failed";
+  }
+}
+
 /**
  * Generate summaries for one ET day across every enabled collection. Exported
  * for tests. Pass `opts.collectionId` to scope the run to a single collection
@@ -37,65 +119,16 @@ export async function generateCollectionSummariesForDay(
   date: string,
   opts?: { collectionId?: string; force?: boolean },
 ): Promise<{ generated: number; skipped: number; failed: number }> {
-  const cols = await db
-    .select({ id: collections.id, name: collections.name })
-    .from(collections)
-    // `and()` drops `undefined`, so with no collectionId this is the full sweep.
-    .where(
-      and(
-        eq(collections.dailySummaryEnabled, true),
-        opts?.collectionId ? eq(collections.id, opts.collectionId) : undefined,
-      ),
-    );
-
-  const window = etDayBoundsUtc(date);
+  const cols = await listCollectionSummaryTargets(db, { collectionId: opts?.collectionId });
   let generated = 0;
   let skipped = 0;
   let failed = 0;
 
   for (const col of cols) {
-    try {
-      if (!opts?.force) {
-        const existing = await listCollectionDailySummaries(db, col.id, date, date);
-        if (existing.length > 0) {
-          skipped++;
-          continue;
-        }
-      }
-
-      const members = await getCollectionMembers(db, col.id);
-      const dayReleases = await getCollectionDayReleases(db, members, window);
-      if (dayReleases.length === 0) {
-        skipped++;
-        continue;
-      }
-
-      const result = await summarizeCollectionDay(model, {
-        collectionName: col.name,
-        date,
-        releases: dayReleases,
-      });
-
-      await upsertCollectionDailySummary(db, {
-        collectionId: col.id,
-        summaryDate: date,
-        title: result.title,
-        summary: result.summary,
-        takeaways: result.takeaways,
-        releaseCount: dayReleases.length,
-        modelId: model.id,
-      });
-      generated++;
-    } catch (err) {
-      failed++;
-      logEvent("error", {
-        component: "collection-summaries",
-        event: "generate-failed",
-        collectionId: col.id,
-        date,
-        error: err instanceof Error ? err.message : String(err),
-      });
-    }
+    const outcome = await summarizeCollectionForDay(db, model, col, date, { force: opts?.force });
+    if (outcome === "generated") generated++;
+    else if (outcome === "skipped") skipped++;
+    else failed++;
   }
 
   return { generated, skipped, failed };
@@ -126,8 +159,7 @@ export async function runCollectionSummaries(
   const catchup = Math.max(1, Number(env.COLLECTION_SUMMARY_CATCHUP_DAYS ?? "2") || 2);
 
   let totals = { generated: 0, skipped: 0, failed: 0 };
-  for (let i = 1; i <= catchup; i++) {
-    const date = addDaysToDateKey(todayEt, -i);
+  for (const date of collectionSummaryCatchupDates(todayEt, catchup)) {
     const r = await generateCollectionSummariesForDay(db, model, date);
     totals = {
       generated: totals.generated + r.generated,
@@ -139,6 +171,7 @@ export async function runCollectionSummaries(
   logEvent("info", {
     component: "collection-summaries",
     event: "run-done",
+    mode: "inline",
     ...totals,
   });
 }

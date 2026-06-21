@@ -8,6 +8,7 @@ import {
   sources,
 } from "@buildinternet/releases-core/schema";
 import {
+  collectionSummaryCatchupDates,
   generateCollectionSummariesForDay,
   runCollectionSummaries,
   type CollectionSummariesEnv,
@@ -176,6 +177,12 @@ describe("generateCollectionSummariesForDay", () => {
     expect(rows).toHaveLength(1);
     expect(rows[0].title).toBe("Day"); // replaced
     expect(rows[0].releaseCount).toBe(1);
+  });
+});
+
+describe("collectionSummaryCatchupDates", () => {
+  test("returns the N days before todayEt", () => {
+    expect(collectionSummaryCatchupDates("2026-06-15", 2)).toEqual(["2026-06-14", "2026-06-13"]);
   });
 });
 
