@@ -3,6 +3,11 @@
 The product changelog for releases.sh, published to its own registry. Drafted daily from merged
 PRs and reviewed via PR. See docs/changelog-style.md for the voice and curation rules.
 
+## June 20, 2026
+
+**Added**
+- `whats_changed` MCP tool and `GET /v1/whats-changed` API endpoint — given a package name and `from`/`to` versions, returns the changelog entries in that range with per-release breaking-change verdicts (`none` / `minor` / `major`) and migration notes; SDK, tool, and platform releases now receive automated breaking-change classification at ingest so results are immediately available.
+
 ## June 19, 2026
 
 **Added**
