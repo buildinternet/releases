@@ -388,6 +388,19 @@
       "binding": "OVERVIEW_REGEN_WORKFLOW",
       "class_name": "OverviewRegenWorkflow",
     },
+    {
+      // Collection daily summaries. Cron at 06:15 UTC; admin POST
+      // (POST /v1/workflows/collection-summaries).
+      "name": "collection-summaries",
+      "binding": "COLLECTION_SUMMARIES_WORKFLOW",
+      "class_name": "CollectionSummariesWorkflow",
+    },
+    {
+      // Durable media / video / gif backfill loops (POST /v1/workflows/backfill-*).
+      "name": "media-backfill",
+      "binding": "MEDIA_BACKFILL_WORKFLOW",
+      "class_name": "MediaBackfillWorkflow",
+    },
   ],
   "routes": [{ "pattern": "api.releases.sh", "custom_domain": true }],
   "triggers": {
@@ -836,6 +849,16 @@
           "name": "overview-regen-staging",
           "binding": "OVERVIEW_REGEN_WORKFLOW",
           "class_name": "OverviewRegenWorkflow",
+        },
+        {
+          "name": "collection-summaries-staging",
+          "binding": "COLLECTION_SUMMARIES_WORKFLOW",
+          "class_name": "CollectionSummariesWorkflow",
+        },
+        {
+          "name": "media-backfill-staging",
+          "binding": "MEDIA_BACKFILL_WORKFLOW",
+          "class_name": "MediaBackfillWorkflow",
         },
       ],
       // Empty cron list. Without this override, Wrangler inherits the

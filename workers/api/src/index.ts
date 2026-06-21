@@ -65,6 +65,8 @@ export { OverviewRegenWorkflow } from "./workflows/overview-regen.js";
 export { FirecrawlIngestWorkflow } from "./workflows/firecrawl-ingest.js";
 export { BackfillSourceWorkflow } from "./workflows/backfill-source.js";
 export { BatchEnrichWorkflow } from "./workflows/batch-enrich.js";
+export { CollectionSummariesWorkflow } from "./workflows/collection-summaries.js";
+export { MediaBackfillWorkflow } from "./workflows/media-backfill.js";
 
 /** Cloudflare Secrets Store binding — call .get() to retrieve the secret value. */
 type SecretBinding = { get(): Promise<string> };
@@ -145,6 +147,10 @@ export type Env = {
     BATCH_ENRICH_ENABLED?: string;
     BATCH_ENRICH_MAX_COST_USD?: string;
     BATCH_ENRICH_WORKFLOW?: Workflow;
+    /** Nightly collection daily summaries (cron + admin POST). */
+    COLLECTION_SUMMARIES_WORKFLOW?: Workflow;
+    /** Durable media / video / gif backfill loops (admin POST). */
+    MEDIA_BACKFILL_WORKFLOW?: Workflow;
     // Feature flag: when "true", the 04:00 UTC cron force-drains stranded
     // scrape/agent sources (unreliable quirk or stale beyond
     // FORCE_DRAIN_STALE_HOURS) into the scrape-agent-sweep inbox. Default
@@ -899,29 +905,44 @@ export default {
       return;
     }
     if (event.cron === "15 6 * * *") {
-      ctx.waitUntil(
-        loggedDispatch(
-          "collection-summaries-cron",
-          runCollectionSummaries(
-            {
-              DB: env.DB,
-              CRON_ENABLED: env.CRON_ENABLED,
-              COLLECTION_SUMMARY_CATCHUP_DAYS: env.COLLECTION_SUMMARY_CATCHUP_DAYS,
-              SUMMARIZE_MODEL: env.SUMMARIZE_MODEL,
-              ENVIRONMENT: env.ENVIRONMENT,
-              FLAGS: env.FLAGS,
-              OPENROUTER_ENABLED: env.OPENROUTER_ENABLED,
-              OPENROUTER_API_KEY: env.OPENROUTER_API_KEY,
-              OPENROUTER_BASE_URL: env.OPENROUTER_BASE_URL,
-              ANTHROPIC_API_KEY: env.ANTHROPIC_API_KEY,
-              ANTHROPIC_BASE_URL: env.ANTHROPIC_BASE_URL,
-              AI_GATEWAY_TOKEN: env.AI_GATEWAY_TOKEN,
-            },
-            new Date(event.scheduledTime),
+      if (env.CRON_ENABLED === "false") return;
+      const collectionSummariesEnv = {
+        DB: env.DB,
+        CRON_ENABLED: env.CRON_ENABLED,
+        COLLECTION_SUMMARY_CATCHUP_DAYS: env.COLLECTION_SUMMARY_CATCHUP_DAYS,
+        SUMMARIZE_MODEL: env.SUMMARIZE_MODEL,
+        ENVIRONMENT: env.ENVIRONMENT,
+        FLAGS: env.FLAGS,
+        OPENROUTER_ENABLED: env.OPENROUTER_ENABLED,
+        OPENROUTER_API_KEY: env.OPENROUTER_API_KEY,
+        OPENROUTER_BASE_URL: env.OPENROUTER_BASE_URL,
+        ANTHROPIC_API_KEY: env.ANTHROPIC_API_KEY,
+        ANTHROPIC_BASE_URL: env.ANTHROPIC_BASE_URL,
+        AI_GATEWAY_TOKEN: env.AI_GATEWAY_TOKEN,
+      };
+      if (env.COLLECTION_SUMMARIES_WORKFLOW) {
+        ctx.waitUntil(
+          loggedDispatch(
+            "collection-summaries-cron",
+            env.COLLECTION_SUMMARIES_WORKFLOW.create({
+              id: `collection-summaries-${event.scheduledTime}`,
+              params: {
+                scheduledTime: event.scheduledTime,
+                trigger: "cron" as const,
+              },
+            }),
+            alertEnv,
           ),
-          alertEnv,
-        ),
-      );
+        );
+      } else {
+        ctx.waitUntil(
+          loggedDispatch(
+            "collection-summaries-cron",
+            runCollectionSummaries(collectionSummariesEnv, new Date(event.scheduledTime)),
+            alertEnv,
+          ),
+        );
+      }
       return;
     }
     if (event.cron === "0 7 * * *") {

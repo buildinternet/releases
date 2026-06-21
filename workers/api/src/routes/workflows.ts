@@ -99,8 +99,93 @@ import { loadRawSnapshot } from "../lib/raw-snapshot.js";
 import { generateCollectionSummariesForDay } from "../cron/collection-summaries.js";
 import { resolveCollectionSummaryModel } from "../lib/text-model.js";
 import { parseJsonBody } from "../lib/json-body.js";
+import { workflowInstanceStatus, workflowInstanceTerminate } from "../lib/workflow-instance.js";
+import type { MediaBackfillKind } from "../workflows/media-backfill.js";
+import type { Context } from "hono";
 
 export const workflowsRoutes = new Hono<Env>();
+
+async function replyWorkflowStatus(
+  c: Context<Env>,
+  binding: Workflow | undefined,
+  unavailableMessage: string,
+  component: string,
+) {
+  const instanceId = c.req.param("instanceId") ?? "";
+  const result = await workflowInstanceStatus(binding, instanceId);
+  if (!result.ok) {
+    if (result.code === "unavailable") {
+      return c.json({ error: "service_unavailable", message: unavailableMessage }, 503);
+    }
+    if (result.code === "not_found") {
+      return c.json({ error: "instance_not_found", message: result.message }, 404);
+    }
+    logEvent("error", {
+      component,
+      event: "lookup-failed",
+      instanceId,
+      err: result.message,
+    });
+    return c.json({ error: "internal_error", message: result.message }, 500);
+  }
+  return c.json({ instanceId, ...result.status });
+}
+
+async function replyWorkflowTerminate(
+  c: Context<Env>,
+  binding: Workflow | undefined,
+  unavailableMessage: string,
+  component: string,
+) {
+  const instanceId = c.req.param("instanceId") ?? "";
+  const result = await workflowInstanceTerminate(binding, instanceId);
+  if (!result.ok) {
+    if (result.code === "unavailable") {
+      return c.json({ error: "service_unavailable", message: unavailableMessage }, 503);
+    }
+    if (result.code === "not_found") {
+      return c.json({ error: "instance_not_found", message: result.message }, 404);
+    }
+    logEvent("error", {
+      component,
+      event: "terminate-failed",
+      instanceId,
+      err: result.message,
+    });
+    return c.json({ error: "internal_error", message: result.message }, 500);
+  }
+  return c.json({ instanceId, terminated: true });
+}
+
+async function dispatchMediaBackfillWorkflow(
+  c: Context<Env>,
+  kind: MediaBackfillKind,
+  component: string,
+  logFields: Record<string, unknown>,
+  params: {
+    sourceId?: string;
+    releaseId?: string;
+    all?: boolean;
+    batchLimit?: number;
+    dryRun?: boolean;
+    maxBatches?: number;
+  },
+) {
+  const binding = c.env.MEDIA_BACKFILL_WORKFLOW;
+  if (!binding) return null;
+  const scheduledTime = Date.now();
+  const instance = await binding.create({
+    id: `media-backfill-${kind}-admin-${scheduledTime}`,
+    params: { kind, ...params },
+  });
+  const instanceId: string = (instance as unknown as { id: string }).id;
+  const body = {
+    instanceId,
+    statusUrl: `${c.env.ADMIN_BASE_URL ?? ""}/v1/workflows/media-backfill/status/${instanceId}`,
+  };
+  logEvent("info", { component, event: "workflow-trigger", instanceId, ...logFields });
+  return body;
+}
 
 type TestBody = {
   /** Fabricated status for the sample cron report. */
@@ -1833,6 +1918,22 @@ workflowsRoutes.post("/workflows/backfill-media", async (c) => {
     : MEDIA_BACKFILL_DEFAULT_LIMIT;
   const dryRun = body.dryRun !== false; // default to a dry run for safety
 
+  if (!dryRun) {
+    const dispatch = await dispatchMediaBackfillWorkflow(
+      c,
+      "media",
+      "backfill-media",
+      { sourceId: ident ?? null, all: body.all === true },
+      {
+        sourceId: ident || undefined,
+        all: body.all === true,
+        batchLimit: limit,
+        dryRun: false,
+      },
+    );
+    if (dispatch) return c.json(dispatch);
+  }
+
   const report = await runMediaBackfill(db, bucket, {
     sourceId: ident || undefined,
     limit,
@@ -1908,6 +2009,22 @@ workflowsRoutes.post("/workflows/backfill-gif-mp4", async (c) => {
     ? Math.min(Math.max(Math.floor(rawLimit), 1), GIF_BACKFILL_MAX_LIMIT)
     : GIF_BACKFILL_DEFAULT_LIMIT;
   const dryRun = body.dryRun !== false; // default to a dry run for safety
+
+  if (!dryRun) {
+    const dispatch = await dispatchMediaBackfillWorkflow(
+      c,
+      "gif",
+      "backfill-gif-mp4",
+      { sourceId: ident ?? null, all: body.all === true },
+      {
+        sourceId: ident || undefined,
+        all: body.all === true,
+        batchLimit: limit,
+        dryRun: false,
+      },
+    );
+    if (dispatch) return c.json(dispatch);
+  }
 
   const report = await runGifTranscodeBackfill(db, bucket, mediaTransform, {
     sourceId: ident || undefined,
@@ -1997,6 +2114,27 @@ workflowsRoutes.post("/workflows/backfill-video", async (c) => {
     ? Math.min(Math.max(Math.floor(rawLimit), 1), VIDEO_BACKFILL_MAX_LIMIT)
     : VIDEO_BACKFILL_DEFAULT_LIMIT;
   const dryRun = body.dryRun !== false; // default to a dry run for safety
+
+  if (!dryRun) {
+    const dispatch = await dispatchMediaBackfillWorkflow(
+      c,
+      "video",
+      "backfill-video",
+      {
+        releaseId: releaseId ?? null,
+        sourceId: sourceId ?? null,
+        all: body.all === true,
+      },
+      {
+        releaseId: releaseId || undefined,
+        sourceId: sourceId || undefined,
+        all: body.all === true,
+        batchLimit: limit,
+        dryRun: false,
+      },
+    );
+    if (dispatch) return c.json(dispatch);
+  }
 
   const report = await runVideoBackfill(db, bucket, {
     releaseId: releaseId || undefined,
@@ -2486,14 +2624,10 @@ workflowsRoutes.post("/workflows/reextract-source", async (c) => {
 
 // ── POST /workflows/collection-summaries ─────────────────────────────────────
 //
-// On-demand trigger for the nightly collection daily-summary generation.
-// Admin-gated (workflows namespace). Mirrors the cron but accepts an explicit
-// `date` (ET day key), a `collectionId` scope, and a `dryRun` flag.
-//
-// Runs SYNCHRONOUSLY in the request. With no `collectionId` it sweeps every
-// enabled collection in one request — fine for today's small curated set; there
-// is no Cloudflare Workflow binding for this op. Pass `collectionId` to scope
-// the run to a single collection.
+// On-demand trigger for collection daily-summary generation. When
+// `COLLECTION_SUMMARIES_WORKFLOW` is bound, dispatches a durable instance
+// (async). Falls back to a synchronous single-day sweep for local dev / tests.
+// `dryRun` always returns immediately with the resolved scope.
 
 interface CollectionSummariesBody {
   /** Limit the run to a single collection (typed `col_…` id). */
@@ -2523,6 +2657,33 @@ workflowsRoutes.post("/workflows/collection-summaries", async (c) => {
     return c.json({ date, dryRun: true, collectionId, force });
   }
 
+  if (c.env.COLLECTION_SUMMARIES_WORKFLOW) {
+    const scheduledTime = Date.now();
+    const instance = await c.env.COLLECTION_SUMMARIES_WORKFLOW.create({
+      id: `collection-summaries-admin-${scheduledTime}`,
+      params: {
+        scheduledTime,
+        trigger: "admin" as const,
+        dates: [date],
+        collectionId,
+        force,
+      },
+    });
+    const instanceId: string = (instance as unknown as { id: string }).id;
+    logEvent("info", {
+      component: "collection-summaries",
+      event: "workflow-trigger",
+      instanceId,
+      date,
+      collectionId: collectionId ?? null,
+      force,
+    });
+    return c.json({
+      instanceId,
+      statusUrl: `${c.env.ADMIN_BASE_URL ?? ""}/v1/workflows/collection-summaries/status/${instanceId}`,
+    });
+  }
+
   const model = await resolveCollectionSummaryModel(c.env);
   if (!model) {
     return c.json(
@@ -2539,3 +2700,39 @@ workflowsRoutes.post("/workflows/collection-summaries", async (c) => {
   const result = await generateCollectionSummariesForDay(db, model, date, { collectionId, force });
   return c.json({ date, ...result });
 });
+
+workflowsRoutes.get("/workflows/collection-summaries/status/:instanceId", async (c) =>
+  replyWorkflowStatus(
+    c,
+    c.env.COLLECTION_SUMMARIES_WORKFLOW,
+    "COLLECTION_SUMMARIES_WORKFLOW binding not configured",
+    "workflows-collection-summaries-status",
+  ),
+);
+
+workflowsRoutes.post("/workflows/collection-summaries/terminate/:instanceId", async (c) =>
+  replyWorkflowTerminate(
+    c,
+    c.env.COLLECTION_SUMMARIES_WORKFLOW,
+    "COLLECTION_SUMMARIES_WORKFLOW binding not configured",
+    "workflows-collection-summaries-terminate",
+  ),
+);
+
+workflowsRoutes.get("/workflows/media-backfill/status/:instanceId", async (c) =>
+  replyWorkflowStatus(
+    c,
+    c.env.MEDIA_BACKFILL_WORKFLOW,
+    "MEDIA_BACKFILL_WORKFLOW binding not configured",
+    "workflows-media-backfill-status",
+  ),
+);
+
+workflowsRoutes.post("/workflows/media-backfill/terminate/:instanceId", async (c) =>
+  replyWorkflowTerminate(
+    c,
+    c.env.MEDIA_BACKFILL_WORKFLOW,
+    "MEDIA_BACKFILL_WORKFLOW binding not configured",
+    "workflows-media-backfill-terminate",
+  ),
+);
