@@ -12,7 +12,7 @@ export function CopyPageButton({ markdown, slug }: { markdown: string; slug: str
       <button
         type="button"
         onClick={() => copy(markdown)}
-        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 hover:bg-stone-50 dark:hover:bg-stone-800 rounded-l-md transition-colors"
+        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 hover:bg-stone-50 dark:hover:bg-stone-800 rounded-l-md transition-[color,background-color,transform] active:scale-[0.96]"
       >
         <CopyIcon copied={copied} size={14} />
         {copied ? "Copied" : "Copy page"}

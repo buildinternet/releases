@@ -44,7 +44,7 @@ export function OrgAvatar({ avatarUrl, githubHandle, name, size = 24 }: OrgAvata
       alt={name}
       width={size}
       height={size}
-      className="rounded-full shrink-0"
+      className="rounded-full outline outline-1 -outline-offset-1 outline-black/10 dark:outline-white/10 shrink-0"
       unoptimized={!isOptimizableImage(src)}
     />
   );

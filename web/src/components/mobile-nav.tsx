@@ -36,7 +36,7 @@ export function MobileNav({ devAdmin = false }: { devAdmin?: boolean }) {
         aria-expanded={open}
         aria-controls={PANEL_ID}
         onClick={() => setOpen((v) => !v)}
-        className="relative z-50 flex h-9 w-9 items-center justify-center rounded text-stone-600 hover:bg-stone-100 hover:text-stone-900 dark:text-stone-400 dark:hover:bg-stone-800 dark:hover:text-stone-100"
+        className="relative z-50 flex h-9 w-9 items-center justify-center rounded text-stone-600 transition-[color,background-color,transform] active:scale-[0.96] hover:bg-stone-100 hover:text-stone-900 dark:text-stone-400 dark:hover:bg-stone-800 dark:hover:text-stone-100"
       >
         <svg
           viewBox="0 0 24 24"

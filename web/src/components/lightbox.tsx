@@ -168,7 +168,7 @@ function NavButton({ side, onClick }: { side: "left" | "right"; onClick: () => v
         e.stopPropagation();
         onClick();
       }}
-      className={`absolute top-1/2 z-10 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/10 text-white/80 ring-1 ring-inset ring-white/15 backdrop-blur-sm transition-colors hover:bg-white/20 hover:text-white ${
+      className={`absolute top-1/2 z-10 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/10 text-white/80 ring-1 ring-inset ring-white/15 backdrop-blur-sm transition-[color,background-color,transform] active:scale-[0.96] hover:bg-white/20 hover:text-white ${
         side === "left" ? "left-2 sm:left-4" : "right-2 sm:right-4"
       }`}
     >
@@ -325,7 +325,7 @@ function LightboxOverlay({
               type="button"
               aria-label="Close"
               onClick={onClose}
-              className="flex h-9 w-9 items-center justify-center rounded-full text-2xl leading-none text-white/70 hover:bg-white/10 hover:text-white"
+              className="flex h-9 w-9 items-center justify-center rounded-full text-2xl leading-none text-white/70 transition-[color,background-color,transform] active:scale-[0.96] hover:bg-white/10 hover:text-white"
             >
               ×
             </button>

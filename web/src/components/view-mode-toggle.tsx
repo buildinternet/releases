@@ -13,13 +13,13 @@ export function ViewModeToggle({ viewMode, onViewModeChange }: ViewModeTogglePro
   return (
     <div className="inline-flex bg-stone-100 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-md p-0.5 mb-4">
       <button
-        className={`px-3 py-1 text-xs font-medium rounded transition-all ${viewMode === "heatmap" ? activeCls : inactiveCls}`}
+        className={`px-3 py-1 text-xs font-medium rounded transition-[color,background-color,box-shadow] ${viewMode === "heatmap" ? activeCls : inactiveCls}`}
         onClick={() => onViewModeChange("heatmap")}
       >
         Activity
       </button>
       <button
-        className={`px-3 py-1 text-xs font-medium rounded transition-all ${viewMode === "chart" ? activeCls : inactiveCls}`}
+        className={`px-3 py-1 text-xs font-medium rounded transition-[color,background-color,box-shadow] ${viewMode === "chart" ? activeCls : inactiveCls}`}
         onClick={() => onViewModeChange("chart")}
       >
         Timeline

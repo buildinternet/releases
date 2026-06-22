@@ -45,7 +45,7 @@ export function HighlightsView({ rolling, monthly }: HighlightsViewProps) {
             <span className="text-[11px] uppercase tracking-wide text-stone-400 dark:text-stone-500 font-medium">
               Recent Highlights
             </span>
-            <span className="text-[11px] text-stone-300 dark:text-stone-600">
+            <span className="text-[11px] text-stone-300 dark:text-stone-600 tabular-nums">
               {rolling.releaseCount} releases · last {rolling.windowDays ?? 90} days
             </span>
           </div>
@@ -89,7 +89,7 @@ export function HighlightsView({ rolling, monthly }: HighlightsViewProps) {
               <span className="text-[11px] uppercase tracking-wide text-stone-400 dark:text-stone-500 font-medium">
                 {m.year && m.month ? formatMonth(m.year, m.month) : "Monthly Summary"}
               </span>
-              <span className="text-[11px] text-stone-300 dark:text-stone-600">
+              <span className="text-[11px] text-stone-300 dark:text-stone-600 tabular-nums">
                 {m.releaseCount} releases
               </span>
             </div>

@@ -535,10 +535,10 @@ function DayHeader({
               Daily summary
             </span>
           </div>
-          <h2 className="mt-1.5 text-[15px] font-semibold tracking-tight text-stone-900 dark:text-stone-100 leading-snug">
+          <h2 className="mt-1.5 text-[15px] font-semibold tracking-tight text-stone-900 dark:text-stone-100 leading-snug text-balance">
             {summary.title}
           </h2>
-          <p className="mt-1 text-[13px] text-stone-600 dark:text-stone-400 leading-relaxed">
+          <p className="mt-1 text-[13px] text-stone-600 dark:text-stone-400 leading-relaxed text-pretty">
             {summary.summary}
           </p>
           {summary.takeaways.length > 0 && (
@@ -861,7 +861,7 @@ function PostVersionRow({ release }: { release: CollectionReleaseItem }) {
               alt={thumbnail.alt || headline}
               width={200}
               height={130}
-              className="rounded-md object-cover w-full h-auto max-h-40 border border-stone-200 dark:border-stone-800"
+              className="rounded-md object-cover w-full h-auto max-h-40 outline outline-1 -outline-offset-1 outline-black/10 dark:outline-white/10"
             />
           </div>
         )}
@@ -975,7 +975,7 @@ function CommitLogRow({ release }: { release: CollectionReleaseItem }) {
             alt={thumbnail.alt || versionLabel}
             width={56}
             height={32}
-            className="rounded object-cover w-14 h-8 border border-stone-200 dark:border-stone-800"
+            className="rounded-md object-cover w-14 h-8 outline outline-1 -outline-offset-1 outline-black/10 dark:outline-white/10"
           />
         )}
         {release.prerelease && (

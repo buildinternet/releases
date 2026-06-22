@@ -96,7 +96,7 @@ function AgentDropdown({ target, className }: { target: AgentTarget; className?:
         aria-expanded={open}
         aria-label="Open in agent"
         title="Open in agent"
-        className="inline-flex items-center gap-1.5 rounded-md border border-stone-200 bg-white px-2.5 py-2 text-[13px] font-medium text-stone-700 shadow-sm transition-colors hover:border-stone-300 hover:bg-stone-50 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-200 dark:hover:border-stone-600 dark:hover:bg-stone-800"
+        className="inline-flex items-center gap-1.5 rounded-md border border-stone-200 bg-white px-2.5 py-2 text-[13px] font-medium text-stone-700 shadow-sm transition-[color,background-color,border-color,transform] active:scale-[0.96] hover:border-stone-300 hover:bg-stone-50 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-200 dark:hover:border-stone-600 dark:hover:bg-stone-800"
       >
         <span className="text-stone-600 dark:text-stone-300">
           <RememberedIcon />
