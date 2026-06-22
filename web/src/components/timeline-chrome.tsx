@@ -23,7 +23,8 @@ export function Stat({ label, value, title }: { label: string; value: ReactNode;
   );
 }
 
-const pillBase = "px-2.5 py-1 text-[11px] font-medium rounded transition-all";
+const pillBase =
+  "px-2.5 py-1 text-[11px] font-medium rounded transition-[color,background-color,box-shadow]";
 const pillActive = "bg-white dark:bg-stone-700 text-stone-900 dark:text-stone-100 shadow-sm";
 const pillInactive =
   "text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-300";

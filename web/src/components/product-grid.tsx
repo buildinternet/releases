@@ -73,7 +73,7 @@ export function ProductGrid({
                 {hasActivity && color && cadence.weeklyBuckets.length > 0 && (
                   <div className="flex items-center gap-3 shrink-0">
                     <InlineSparkline buckets={cadence.weeklyBuckets} color={color} />
-                    <span className="text-sm font-bold font-mono" style={{ color }}>
+                    <span className="text-sm font-bold font-mono tabular-nums" style={{ color }}>
                       {cadence.releaseCount}
                       {cadence.capped && "+"}
                     </span>

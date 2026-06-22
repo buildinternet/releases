@@ -29,7 +29,7 @@ export function InfiniteScrollTrigger({
         type="button"
         onClick={onClick}
         disabled={loading}
-        className="px-5 py-2 text-[13px] font-medium text-stone-500 dark:text-stone-400 bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-md hover:border-stone-300 dark:hover:border-stone-600 transition-colors disabled:opacity-50"
+        className="px-5 py-2 text-[13px] font-medium text-stone-500 dark:text-stone-400 bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-md hover:border-stone-300 dark:hover:border-stone-600 transition-[color,border-color,transform] active:scale-[0.96] disabled:opacity-50"
       >
         {error ? "Retry" : loading ? "Loading..." : "Load more"}
       </button>

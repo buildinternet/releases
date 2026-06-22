@@ -44,7 +44,7 @@ export function SortHeader<F extends string>({
     <button
       type="button"
       onClick={handleClick}
-      className={`flex items-center gap-1.5 p-0 uppercase tracking-wider transition-colors hover:text-stone-700 dark:hover:text-stone-200 ${
+      className={`flex items-center gap-1.5 p-0 uppercase tracking-wider transition-[color,transform] active:scale-[0.96] hover:text-stone-700 dark:hover:text-stone-200 ${
         active ? "text-stone-700 dark:text-stone-200" : "text-stone-400 dark:text-stone-500"
       } ${alignRight ? "justify-end" : ""} ${className ?? ""}`}
     >

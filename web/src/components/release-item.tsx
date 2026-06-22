@@ -41,7 +41,7 @@ const CHIP_THUMB_PX = 56;
 const CHIP_BUTTON_CLASS =
   "h-14 w-14 shrink-0 overflow-hidden rounded-md border border-stone-200 bg-stone-50 transition-colors hover:border-stone-300 dark:border-stone-700 dark:bg-stone-900 dark:hover:border-stone-600 cursor-zoom-in";
 const SIDE_IMAGE_CLASS =
-  "rounded-md object-cover w-[120px] h-[72px] border border-stone-200 dark:border-stone-800";
+  "rounded-md object-cover w-[120px] h-[72px] outline outline-1 -outline-offset-1 outline-black/10 dark:outline-white/10";
 
 function mediaSrc(item: FeedMediaItem) {
   return item.r2Url ?? item.url;
@@ -149,7 +149,7 @@ export function ReleaseListItem({
           alt={thumbnail.alt || ""}
           width={160}
           height={90}
-          className="rounded-md object-cover w-[160px] h-[90px] border border-stone-200 dark:border-stone-800"
+          className="rounded-md object-cover w-[160px] h-[90px] outline outline-1 -outline-offset-1 outline-black/10 dark:outline-white/10"
           unoptimized={IMG_TRANSFORM_ON || undefined}
         />
         <PlayBadge size="sm" />
@@ -256,7 +256,7 @@ export function ReleaseListItem({
                   alt=""
                   width={36}
                   height={36}
-                  className="rounded-[9px] border border-stone-200 dark:border-stone-800 shrink-0"
+                  className="rounded-[9px] outline outline-1 -outline-offset-1 outline-black/10 dark:outline-white/10 shrink-0"
                 />
               ) : (
                 <div className="w-9 h-9 rounded-[9px] bg-stone-200 dark:bg-stone-700 flex items-center justify-center text-stone-500 dark:text-stone-300 font-semibold shrink-0">

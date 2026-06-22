@@ -30,7 +30,7 @@ export function AppIcon({ iconUrl, name, size = 24 }: AppIconProps) {
       alt={`${name} app icon`}
       width={size}
       height={size}
-      className="rounded-md shrink-0"
+      className="rounded-md outline outline-1 -outline-offset-1 outline-black/10 dark:outline-white/10 shrink-0"
       unoptimized={!isOptimizableImage(iconUrl)}
     />
   );

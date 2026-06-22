@@ -47,7 +47,7 @@ export function createMarkdownComponents(opts: MarkdownComponentOptions = {}): R
     img: (props: any) => {
       const src = props.src as string | undefined;
       if (!isSafeImgSrc(src)) return null;
-      const className = `rounded-md max-w-full h-auto ${imgClass}`;
+      const className = `rounded-md outline outline-1 -outline-offset-1 outline-black/10 dark:outline-white/10 max-w-full h-auto ${imgClass}`;
       // Heavy animated GIFs render as a Media Transformations MP4 <video> (same
       // decision the gallery/lightbox use), keyed off the `.gif` pathname so
       // both `/_media/`-hydrated R2 URLs and third-party sources are covered.

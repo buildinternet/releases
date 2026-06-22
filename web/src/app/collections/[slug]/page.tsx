@@ -102,11 +102,11 @@ export default async function CollectionPage({ params }: { params: Promise<{ slu
           <span className="text-stone-600 dark:text-stone-300 font-medium">{detail.name}</span>
         </div>
 
-        <h1 className="text-[34px] font-bold tracking-tight text-stone-900 dark:text-stone-100 mt-4">
+        <h1 className="text-[34px] font-bold tracking-tight text-stone-900 dark:text-stone-100 mt-4 text-balance">
           {detail.name}
         </h1>
         {detail.description && (
-          <p className="text-[15px] text-stone-500 dark:text-stone-400 mt-1">
+          <p className="text-[15px] text-stone-500 dark:text-stone-400 mt-1 text-pretty">
             {detail.description}
           </p>
         )}

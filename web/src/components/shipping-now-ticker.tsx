@@ -112,7 +112,7 @@ function Card({ slide }: { slide: Slide }) {
     <Link
       href={`/release/${release.id}`}
       data-ticker-card
-      className="snap-start flex-none basis-[88%] sm:basis-[calc(33.333%-0.5rem)] lg:basis-[calc(25%-0.5625rem)] flex flex-col gap-2 p-4 rounded-lg border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 hover:border-stone-300 dark:hover:border-stone-700 hover:shadow-sm transition-all shadow-[0_1px_2px_rgba(0,0,0,0.02)]"
+      className="snap-start flex-none basis-[88%] sm:basis-[calc(33.333%-0.5rem)] lg:basis-[calc(25%-0.5625rem)] flex flex-col gap-2 p-4 rounded-lg border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 hover:border-stone-300 dark:hover:border-stone-700 hover:shadow-sm transition-[border-color,box-shadow] shadow-[0_1px_2px_rgba(0,0,0,0.02)]"
     >
       <div className="flex items-center gap-2 min-w-0">
         {/* App Store releases lead with the app icon (more recognizable than
@@ -278,7 +278,7 @@ export function ShippingNowTicker({ releases }: { releases: TickerRelease[] }) {
                 onClick={() => scrollByCard(-1)}
                 disabled={!canPrev}
                 aria-label="Scroll to previous releases"
-                className="flex h-7 w-7 items-center justify-center rounded-md border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 text-stone-500 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-100 hover:border-stone-300 dark:hover:border-stone-700 disabled:opacity-30 disabled:pointer-events-none transition-colors"
+                className="flex h-8 w-8 items-center justify-center rounded-md border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 text-stone-500 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-100 hover:border-stone-300 dark:hover:border-stone-700 disabled:opacity-30 disabled:pointer-events-none transition-[color,border-color,transform] active:scale-[0.96]"
               >
                 <ChevronIcon direction="left" />
               </button>
@@ -287,7 +287,7 @@ export function ShippingNowTicker({ releases }: { releases: TickerRelease[] }) {
                 onClick={() => scrollByCard(1)}
                 disabled={!canNext}
                 aria-label="Scroll to next releases"
-                className="flex h-7 w-7 items-center justify-center rounded-md border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 text-stone-500 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-100 hover:border-stone-300 dark:hover:border-stone-700 disabled:opacity-30 disabled:pointer-events-none transition-colors"
+                className="flex h-8 w-8 items-center justify-center rounded-md border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 text-stone-500 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-100 hover:border-stone-300 dark:hover:border-stone-700 disabled:opacity-30 disabled:pointer-events-none transition-[color,border-color,transform] active:scale-[0.96]"
               >
                 <ChevronIcon direction="right" />
               </button>

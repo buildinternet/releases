@@ -82,8 +82,8 @@ export function FollowButton({
       }}
       className={
         following
-          ? "inline-flex min-h-9 min-w-[88px] items-center justify-center rounded-full border border-stone-300 px-4 text-sm font-bold text-stone-600 transition-colors hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-stone-600 dark:text-stone-200 dark:hover:bg-stone-800"
-          : "inline-flex min-h-9 min-w-[88px] items-center justify-center rounded-full bg-stone-900 px-4 text-sm font-bold text-white transition-colors hover:bg-stone-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-stone-100 dark:text-stone-900 dark:hover:bg-stone-200"
+          ? "inline-flex min-h-9 min-w-[88px] items-center justify-center rounded-full border border-stone-300 px-4 text-sm font-bold text-stone-600 transition-[color,background-color,border-color,transform] active:scale-[0.96] hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-stone-600 dark:text-stone-200 dark:hover:bg-stone-800"
+          : "inline-flex min-h-9 min-w-[88px] items-center justify-center rounded-full bg-stone-900 px-4 text-sm font-bold text-white transition-[color,background-color,transform] active:scale-[0.96] hover:bg-stone-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-stone-100 dark:text-stone-900 dark:hover:bg-stone-200"
       }
       aria-pressed={following}
       {...(label ? { "aria-label": following ? `Following ${label}` : `Follow ${label}` } : {})}

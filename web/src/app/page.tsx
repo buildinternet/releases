@@ -339,20 +339,22 @@ export default async function HomePage() {
         <div className="relative z-10">
           <Header />
           <div className="pt-12 pb-8 text-center px-6">
-            <h1 className="text-[28px] font-bold tracking-tight text-stone-900 dark:text-stone-100 mb-2">
+            <h1 className="text-[28px] font-bold tracking-tight text-stone-900 dark:text-stone-100 mb-2 text-balance">
               The latest product releases, indexed for agents
             </h1>
-            <p className="text-[15px] text-stone-500 dark:text-stone-400 mb-6">
+            <p className="text-[15px] text-stone-500 dark:text-stone-400 mb-6 text-pretty">
               Releases is a registry of release notes from across the web, queryable from your
               terminal, code, or MCP client.
             </p>
             <div className="flex justify-center gap-8 text-[13px] text-stone-400 dark:text-stone-500">
               <span>
-                <strong className="text-stone-600 dark:text-stone-300">{stats?.orgs ?? 0}</strong>{" "}
+                <strong className="text-stone-600 dark:text-stone-300 tabular-nums">
+                  {stats?.orgs ?? 0}
+                </strong>{" "}
                 orgs
               </span>
               <span>
-                <strong className="text-stone-600 dark:text-stone-300">
+                <strong className="text-stone-600 dark:text-stone-300 tabular-nums">
                   {stats?.sources ?? 0}
                 </strong>{" "}
                 sources
@@ -360,7 +362,7 @@ export default async function HomePage() {
               <span>
                 {/* Compact (35.6k) rather than the precise count — the hero
                     stat is a scale signal, not a ledger. */}
-                <strong className="text-stone-600 dark:text-stone-300">
+                <strong className="text-stone-600 dark:text-stone-300 tabular-nums">
                   {formatStars(stats?.releases ?? 0)}
                 </strong>{" "}
                 releases
