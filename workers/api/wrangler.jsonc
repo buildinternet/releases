@@ -49,6 +49,10 @@
     "RATE_LIMIT_ENABLED": "false",
     // Kill-switch for the per-token TOKEN_RATE_LIMITER binding. Tune the cap there.
     "TOKEN_RATE_LIMIT_ENABLED": "true",
+    // Kill-switch for the edge per-IP AUTH_RATE_LIMITER in front of POST
+    // /api/auth/* (#1728). On by default; set to "false" to bypass. Tune the cap
+    // on the binding below. See the /api/auth/* handler in src/index.ts.
+    "AUTH_EDGE_RATE_LIMIT_ENABLED": "true",
     // Email notifications (see src/lib/email.ts + src/lib/notifications.ts).
     // Recipient must be verified in Cloudflare Email Routing; sender domain
     // (releases.sh) must have Email Routing enabled.
@@ -251,6 +255,16 @@
       "binding": "CREDENTIAL_CACHE",
       "id": "bae0fa6a594448d483176fe90a9a0479",
       "preview_id": "ac4b692c975a4d9382a847e968243107",
+    },
+    // Backs Better Auth's brute-force rate-limit counters (per-key IP+path) so
+    // those upserts land on KV instead of the shared D1 (#1728). createAuth wires
+    // it via rateLimit.customStorage when bound; absent → storage:"database".
+    // Counters only ever live ~120s (AUTH_RATE_LIMIT_KV_TTL_SECONDS). See
+    // src/auth/rate-limit-kv.ts.
+    {
+      "binding": "AUTH_RATE_LIMIT_KV",
+      "id": "1d1c229b6a71483ab9517bf316e4a7b4",
+      "preview_id": "e972050279ba425eb6a9cbd78ad7539e",
     },
   ],
   "services": [
@@ -490,6 +504,18 @@
         "type": "ratelimit",
         "namespace_id": "1006",
         "simple": { "limit": 300, "period": 60 },
+      },
+      // Per-IP edge gate in FRONT of POST /api/auth/* (#1728). Sheds brute-force /
+      // credential-stuffing floods before Better Auth's per-key limiter runs, so
+      // the flood never write-amplifies into the shared D1. Enforced in the
+      // /api/auth/* handler (src/index.ts), gated by AUTH_EDGE_RATE_LIMIT_ENABLED
+      // (default on). 30/60s/IP is generous vs the built-in 3-per-10s sign-in
+      // ceiling (~18/min) so legit users (incl. shared-NAT offices) clear it.
+      {
+        "name": "AUTH_RATE_LIMITER",
+        "type": "ratelimit",
+        "namespace_id": "1007",
+        "simple": { "limit": 30, "period": 60 },
       },
     ],
   },
