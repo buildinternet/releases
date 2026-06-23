@@ -19,6 +19,7 @@
     "./ma-rate-limit": "./src/ma-rate-limit.ts",
     "./oauth-jwt": "./src/oauth-jwt.ts",
     "./prompt-escape": "./src/prompt-escape.ts",
+    "./rate-limit-tiers": "./src/rate-limit-tiers.ts",
     "./secrets": "./src/secrets.ts",
     "./source-edit": "./src/source-edit.ts"
   },
