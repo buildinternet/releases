@@ -23,6 +23,10 @@
   "vars": {
     "USER_API_KEYS_ENABLED": "false",
     "MEDIA_ORIGIN": "https://media.releases.sh",
+    // Rate limiting: account + anonymous ride RATE_LIMIT_ENABLED; machine rides TOKEN_RATE_LIMIT_ENABLED.
+    // Default: account/anon OFF (same as API worker until production ramp); machine ON.
+    "RATE_LIMIT_ENABLED": "false",
+    "TOKEN_RATE_LIMIT_ENABLED": "true",
     // "Sign in with Releases" OAuth resource-server verification (#1483). The AS
     // issuer (Better Auth base URL incl. the /api/auth basePath — matches the
     // discovery `issuer` + token `iss`; the JWKS host is derived origin-relative)
@@ -50,12 +54,30 @@
     { "binding": "ENTITIES_INDEX", "index_name": "entities-v1" },
     { "binding": "CHANGELOG_CHUNKS_INDEX", "index_name": "changelog-chunks-v1" },
   ],
+  // Cloudflare native rate-limit bindings (three rungs: anonymous / account / machine).
+  // Namespace ids 2001/2006/2002 keep MCP buckets separate from the API worker's 100x ids.
+  // These are operator-confirmed placeholders — replace with real namespace ids before deploy.
+  "unsafe": {
+    "bindings": [
+      { "name": "PUBLIC_RATE_LIMITER", "type": "ratelimit", "namespace_id": "2001", "simple": { "limit": 120, "period": 60 } },
+      { "name": "USER_RATE_LIMITER", "type": "ratelimit", "namespace_id": "2006", "simple": { "limit": 300, "period": 60 } },
+      { "name": "TOKEN_RATE_LIMITER", "type": "ratelimit", "namespace_id": "2002", "simple": { "limit": 600, "period": 60 } },
+    ],
+  },
   // Shared with the API worker — identical key shape so hits from either warm the other.
   "kv_namespaces": [
     {
       "binding": "EMBED_CACHE",
       "id": "93b87ae5e253445cabbaaa7a71264915",
       "preview_id": "7737ccafd37a43fc9d2365c9a2d7ebca",
+    },
+    // Bound for parity with the API worker. Unused in MCP — identity is pre-resolved
+    // by resolveMcpAuth so no credential cache KV lookup is needed.
+    // Replace placeholder ids with real KV namespace ids before deploy.
+    {
+      "binding": "CREDENTIAL_CACHE",
+      "id": "REPLACE_WITH_CREDENTIAL_CACHE_KV_ID",
+      "preview_id": "REPLACE_WITH_CREDENTIAL_CACHE_PREVIEW_ID",
     },
   ],
   "services": [{ "binding": "API", "service": "releases-api" }],
