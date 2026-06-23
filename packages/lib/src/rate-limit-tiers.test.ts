@@ -1,5 +1,6 @@
 import { describe, it, expect } from "bun:test";
 import { resolveTierEnforcement, TIER_QUOTAS, type RateLimiter } from "./rate-limit-tiers";
+import { resolveAccountFromCache, type CredentialCache } from "./rate-limit-tiers";
 
 const fakeLimiter = (): RateLimiter => ({
   async limit() {
@@ -47,5 +48,60 @@ describe("resolveTierEnforcement", () => {
     const out = resolveTierEnforcement({ tier: "account", bucketKey: "u" }, {});
     expect(out?.limiter).toBeUndefined();
     expect(out?.quota).toBe(300);
+  });
+});
+
+function fakeCache(): CredentialCache & { store: Map<string, string>; gets: number } {
+  const store = new Map<string, string>();
+  return {
+    store,
+    gets: 0,
+    async get(key) {
+      this.gets += 1;
+      return store.get(key) ?? null;
+    },
+    async put(key, value) {
+      store.set(key, value);
+    },
+  };
+}
+
+describe("resolveAccountFromCache", () => {
+  it("verifies on a cache miss, then serves the cached result without re-verifying", async () => {
+    const cache = fakeCache();
+    let verifies = 0;
+    const validate = async () => {
+      verifies += 1;
+      return { valid: true, userId: "user_1" };
+    };
+    const first = await resolveAccountFromCache({ credential: "relu_abc", cache, validate });
+    const second = await resolveAccountFromCache({ credential: "relu_abc", cache, validate });
+    expect(first).toEqual({ valid: true, userId: "user_1" });
+    expect(second).toEqual({ valid: true, userId: "user_1" });
+    expect(verifies).toBe(1); // second call hit the cache
+  });
+
+  it("caches a negative result (junk credential) so it is not re-verified", async () => {
+    const cache = fakeCache();
+    let verifies = 0;
+    const validate = async () => {
+      verifies += 1;
+      return { valid: false };
+    };
+    await resolveAccountFromCache({ credential: "relu_junk", cache, validate });
+    const again = await resolveAccountFromCache({ credential: "relu_junk", cache, validate });
+    expect(again.valid).toBe(false);
+    expect(verifies).toBe(1);
+  });
+
+  it("verifies every call when no cache is provided", async () => {
+    let verifies = 0;
+    const validate = async () => {
+      verifies += 1;
+      return { valid: true, userId: "u" };
+    };
+    await resolveAccountFromCache({ credential: "relu_x", cache: undefined, validate });
+    await resolveAccountFromCache({ credential: "relu_x", cache: undefined, validate });
+    expect(verifies).toBe(2);
   });
 });

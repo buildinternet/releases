@@ -67,3 +67,54 @@ export function resolveTierEnforcement(
     quota: TIER_QUOTAS[tier],
   };
 }
+
+import { hashSecret } from "@buildinternet/releases-core/api-token";
+
+/** Structural subset of a Cloudflare KVNamespace used for validation caching. */
+export interface CredentialCache {
+  get(key: string): Promise<string | null>;
+  put(key: string, value: string, options?: { expirationTtl?: number }): Promise<void>;
+}
+
+export interface AccountValidation {
+  valid: boolean;
+  userId?: string;
+}
+
+/** Short TTL: bounds the rate-tier revocation lag (auth itself is always live). */
+export const CREDENTIAL_CACHE_TTL_SECONDS = 60;
+
+/** Serialized cache value: `1|<userId>` for valid, `0` for invalid. */
+function encode(v: AccountValidation): string {
+  return v.valid ? `1|${v.userId ?? ""}` : "0";
+}
+function decode(raw: string): AccountValidation {
+  if (raw === "0") return { valid: false };
+  const userId = raw.startsWith("1|") ? raw.slice(2) : "";
+  return { valid: true, userId: userId || undefined };
+}
+
+/**
+ * Resolve whether `credential` belongs to a real account, caching the result in
+ * KV keyed on a hash of the credential (never the raw credential). On a miss,
+ * `validate()` runs once and the result (positive OR negative) is cached for
+ * `ttlSeconds`. With no cache, `validate()` runs every call. This bounds the
+ * verify/meter cost to at most once per credential per TTL window and blocks the
+ * bypass where a junk credential would otherwise mint a fresh account bucket.
+ */
+export async function resolveAccountFromCache(opts: {
+  credential: string;
+  cache: CredentialCache | undefined;
+  validate: () => Promise<AccountValidation>;
+  ttlSeconds?: number;
+}): Promise<AccountValidation> {
+  const { credential, cache, validate } = opts;
+  const ttl = opts.ttlSeconds ?? CREDENTIAL_CACHE_TTL_SECONDS;
+  if (!cache) return validate();
+  const cacheKey = `ratelimit:cred:${await hashSecret(credential)}`;
+  const cached = await cache.get(cacheKey);
+  if (cached !== null) return decode(cached);
+  const result = await validate();
+  await cache.put(cacheKey, encode(result), { expirationTtl: ttl });
+  return result;
+}
