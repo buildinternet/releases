@@ -2,17 +2,19 @@ import type { Context, MiddlewareHandler } from "hono";
 import type { Env } from "../index.js";
 import { FLAGS, flag } from "@releases/lib/flags";
 import { logEvent } from "@releases/lib/log-event";
-import { OAUTH_JWT_TOKEN_PREFIX } from "@releases/lib/consumption-ref";
 import { isUserApiKeyShaped } from "@buildinternet/releases-core/api-token";
 import {
   resolveTierEnforcement,
   resolveAccountFromCache,
   rateLimitConsumerRef,
   rateLimitDecisionPayload,
+  classifyTokenId,
+  policyHeader,
+  RATE_LIMITED_ERROR,
+  selectTierLimiters,
   RATE_LIMIT_WINDOW_SECONDS,
   type RateLimitPrincipal,
   type RateLimitTier,
-  type TierLimiters,
 } from "@releases/lib/rate-limit-tiers";
 import {
   SAFE_METHODS,
@@ -21,11 +23,6 @@ import {
   validateAccountCredential,
   apiRouteFamily,
 } from "./auth.js";
-
-/** Advertise the IETF RateLimit-Policy structured field for a tier. */
-function policyHeader(name: string, quota: number): string {
-  return `"${name}";q=${quota};w=${RATE_LIMIT_WINDOW_SECONDS}`;
-}
 
 /** Anonymous-allowed events are sampled to bound public-read log volume. */
 const ANON_SAMPLE_RATE = 0.05;
@@ -65,20 +62,22 @@ function bearer(c: Context<Env>): string {
  * else → anonymous (keyed on IP). The `relu_` path verifies behind the KV cache
  * so a junk string can't mint an account bucket (it caches invalid → IP rung).
  */
-async function classifyPrincipal(c: Context<Env>): Promise<RateLimitPrincipal> {
+async function classifyPrincipal(
+  c: Context<Env>,
+  accountActive: boolean,
+): Promise<RateLimitPrincipal> {
   if (await isTrustedProxy(c)) return { tier: "exempt" };
   const identity = await resolveAuthIdentity(c);
   if (identity?.kind === "root") return { tier: "exempt" };
   if (identity?.kind === "token") {
     const id = identity.tokenId;
-    if (id.startsWith(OAUTH_JWT_TOKEN_PREFIX)) return { tier: "account", bucketKey: id };
-    if (isUserApiKeyShaped(id)) return { tier: "account", bucketKey: id };
-    return { tier: "machine", bucketKey: id };
+    return { tier: classifyTokenId(id), bucketKey: id };
   }
   // Identity unresolved. A relu_ key is read as anonymous by resolveAuthIdentity
   // (meter-skip), so verify it here for tiering, behind the KV cache.
+  // Skip the KV read when the account rung is inactive (eff#5).
   const presented = bearer(c);
-  if (presented && isUserApiKeyShaped(presented)) {
+  if (accountActive && presented && isUserApiKeyShaped(presented)) {
     const account = await resolveAccountFromCache({
       credential: presented,
       cache: c.env.CREDENTIAL_CACHE,
@@ -104,14 +103,14 @@ export const publicRateLimitMiddleware: MiddlewareHandler<Env> = async (c, next)
     c.env.RATE_LIMIT_ENABLED,
     FLAGS.rateLimitEnabled,
   );
-  const limiters: TierLimiters = {
-    anonymous: rateLimitEnabled ? c.env.PUBLIC_RATE_LIMITER : undefined,
-    account: rateLimitEnabled ? c.env.USER_RATE_LIMITER : undefined,
-    machine: c.env.TOKEN_RATE_LIMIT_ENABLED === "true" ? c.env.TOKEN_RATE_LIMITER : undefined,
-  };
+  const limiters = selectTierLimiters(rateLimitEnabled, c.env.TOKEN_RATE_LIMIT_ENABLED === "true", {
+    anonymous: c.env.PUBLIC_RATE_LIMITER,
+    account: c.env.USER_RATE_LIMITER,
+    machine: c.env.TOKEN_RATE_LIMITER,
+  });
   if (!limiters.anonymous && !limiters.account && !limiters.machine) return next();
 
-  const principal = await classifyPrincipal(c);
+  const principal = await classifyPrincipal(c, !!limiters.account);
   const plan = resolveTierEnforcement(principal, limiters);
   if (!plan) return next(); // exempt
   if (!plan.limiter) return next(); // this rung disabled → allow
@@ -128,8 +127,5 @@ export const publicRateLimitMiddleware: MiddlewareHandler<Env> = async (c, next)
   if (success) return next();
   c.header("RateLimit", `"${plan.policyName}";r=0;t=${RATE_LIMIT_WINDOW_SECONDS}`);
   c.header("Retry-After", String(RATE_LIMIT_WINDOW_SECONDS));
-  return c.json(
-    { error: "rate_limited", message: "Too many requests. Please retry shortly." },
-    429,
-  );
+  return c.json(RATE_LIMITED_ERROR, 429);
 };

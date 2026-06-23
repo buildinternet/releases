@@ -4,7 +4,8 @@
  * passed in as the structural `RateLimiter` type (mirrors the binding shape).
  */
 
-import { hashSecret } from "@buildinternet/releases-core/api-token";
+import { hashSecret, isUserApiKeyShaped } from "@buildinternet/releases-core/api-token";
+import { OAUTH_JWT_TOKEN_PREFIX } from "@releases/lib/consumption-ref";
 
 /** CF constraint: a ratelimit binding period is 10 or 60. We use 60 everywhere. */
 export const RATE_LIMIT_WINDOW_SECONDS = 60;
@@ -155,4 +156,42 @@ export function rateLimitDecisionPayload(
   d: RateLimitDecision,
 ): { component: "rate-limit"; event: "decision" } & RateLimitDecision {
   return { component: "rate-limit", event: "decision", ...d };
+}
+
+/**
+ * Classify a token id into `"account"` (OAuth-JWT or user API key) or `"machine"`
+ * (relk_ or any other opaque token). Shared by both API and MCP workers so the
+ * tier mapping is authoritative in one place.
+ */
+export function classifyTokenId(tokenId: string): "account" | "machine" {
+  if (tokenId.startsWith(OAUTH_JWT_TOKEN_PREFIX) || isUserApiKeyShaped(tokenId)) return "account";
+  return "machine";
+}
+
+/** Build the IETF RateLimit-Policy structured field value for a tier. */
+export function policyHeader(policyName: string, quota: number): string {
+  return `"${policyName}";q=${quota};w=${RATE_LIMIT_WINDOW_SECONDS}`;
+}
+
+/** Standard 429 body for rate-limited responses. */
+export const RATE_LIMITED_ERROR = {
+  error: "rate_limited",
+  message: "Too many requests. Please retry shortly.",
+} as const;
+
+/**
+ * Assemble the active `TierLimiters` from the worker's bindings and kill-switch
+ * flags. `rateLimitEnabled` gates the anonymous + account rungs; `machineEnabled`
+ * gates the machine rung independently.
+ */
+export function selectTierLimiters(
+  rateLimitEnabled: boolean,
+  machineEnabled: boolean,
+  bindings: { anonymous?: RateLimiter; account?: RateLimiter; machine?: RateLimiter },
+): TierLimiters {
+  return {
+    anonymous: rateLimitEnabled ? bindings.anonymous : undefined,
+    account: rateLimitEnabled ? bindings.account : undefined,
+    machine: machineEnabled ? bindings.machine : undefined,
+  };
 }

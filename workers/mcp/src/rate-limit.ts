@@ -1,14 +1,15 @@
 import { logEvent } from "@releases/lib/log-event";
 import { flag, FLAGS } from "@releases/lib/flags";
-import { OAUTH_JWT_TOKEN_PREFIX } from "@releases/lib/consumption-ref";
-import { isUserApiKeyShaped } from "@buildinternet/releases-core/api-token";
 import {
   resolveTierEnforcement,
   rateLimitConsumerRef,
   rateLimitDecisionPayload,
+  classifyTokenId,
+  policyHeader,
+  RATE_LIMITED_ERROR,
+  selectTierLimiters,
   RATE_LIMIT_WINDOW_SECONDS,
   type RateLimitPrincipal,
-  type TierLimiters,
 } from "@releases/lib/rate-limit-tiers";
 import type { McpIdentity } from "./auth.js";
 import type { Env } from "./mcp-agent.js";
@@ -29,13 +30,7 @@ export function mcpPrincipal(identity: McpIdentity, ip: string): RateLimitPrinci
   if (identity.kind === "root") return { tier: "exempt" };
   if (identity.kind === "token") {
     const id = identity.tokenId;
-    // OAuth JWT: tokenId is `oauth_<sub>` — one bucket per authenticated user subject.
-    if (id.startsWith(OAUTH_JWT_TOKEN_PREFIX)) return { tier: "account", bucketKey: id };
-    // relu_ user key: userToken or tokenId carries the `relu_` prefix.
-    if (isUserApiKeyShaped(identity.userToken ?? "") || isUserApiKeyShaped(id))
-      return { tier: "account", bucketKey: id };
-    // relk_ machine token (or any other token).
-    return { tier: "machine", bucketKey: id };
+    return { tier: classifyTokenId(id), bucketKey: id };
   }
   // anonymous
   return { tier: "anonymous", bucketKey: ip };
@@ -58,11 +53,11 @@ export async function enforceMcpRateLimit(
   ctx: ExecutionContext,
 ): Promise<Response | null> {
   const rateLimitEnabled = await flag(env.FLAGS, env.RATE_LIMIT_ENABLED, FLAGS.rateLimitEnabled);
-  const limiters: TierLimiters = {
-    anonymous: rateLimitEnabled ? env.PUBLIC_RATE_LIMITER : undefined,
-    account: rateLimitEnabled ? env.USER_RATE_LIMITER : undefined,
-    machine: env.TOKEN_RATE_LIMIT_ENABLED === "true" ? env.TOKEN_RATE_LIMITER : undefined,
-  };
+  const limiters = selectTierLimiters(rateLimitEnabled, env.TOKEN_RATE_LIMIT_ENABLED === "true", {
+    anonymous: env.PUBLIC_RATE_LIMITER,
+    account: env.USER_RATE_LIMITER,
+    machine: env.TOKEN_RATE_LIMITER,
+  });
   if (!limiters.anonymous && !limiters.account && !limiters.machine) return null;
 
   const ip = request.headers.get("cf-connecting-ip") ?? "unknown";
@@ -89,15 +84,12 @@ export async function enforceMcpRateLimit(
   }
 
   if (success) return null;
-  return new Response(
-    JSON.stringify({ error: "rate_limited", message: "Too many requests. Please retry shortly." }),
-    {
-      status: 429,
-      headers: {
-        "content-type": "application/json",
-        "Retry-After": String(RATE_LIMIT_WINDOW_SECONDS),
-        "RateLimit-Policy": `"${plan.policyName}";q=${plan.quota};w=${RATE_LIMIT_WINDOW_SECONDS}`,
-      },
+  return new Response(JSON.stringify(RATE_LIMITED_ERROR), {
+    status: 429,
+    headers: {
+      "content-type": "application/json",
+      "Retry-After": String(RATE_LIMIT_WINDOW_SECONDS),
+      "RateLimit-Policy": policyHeader(plan.policyName, plan.quota),
     },
-  );
+  });
 }
