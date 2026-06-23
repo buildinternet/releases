@@ -28,6 +28,7 @@ import { FLAGS, flag } from "@releases/lib/flags";
 import { audienceVariants } from "@releases/lib/oauth-jwt";
 import { USER_API_KEY_PREFIX, DEVICE_AUTH_CLIENT_ID } from "@buildinternet/releases-core/api-token";
 import { oauthAccessTokenClaims, consentScopeViolation, jwtSessionPayload } from "./entitlement.js";
+import { kvRateLimitStorage } from "./rate-limit-kv.js";
 import { scopeToPermissions } from "./api-key-scope.js";
 import { CLIENT_SECRET_PREFIX } from "./oauth-clients.js";
 import {
@@ -1400,9 +1401,18 @@ async function buildAuthInstance(env: Bindings, deps: CreateAuthDeps = {}) {
     // skip rate limiting (and its `rate_limit` table dependency) during sign-in
     // testing. Local dev otherwise mirrors prod once the table exists
     // (`bun run db:reset:local`).
+    //
+    // STORAGE (#1728): when the `AUTH_RATE_LIMIT_KV` namespace is bound (prod),
+    // route the per-key counters to KV via `customStorage` so brute-force /
+    // credential-stuffing floods don't write-amplify into the shared D1.
+    // Absent (local dev / staging) → fall back to `storage: "database"`. See
+    // ./rate-limit-kv.ts for the consistency tradeoff (best-effort per-key
+    // counting backed by the strict edge limiter in front of /api/auth/*).
     rateLimit: {
       enabled: env.ENVIRONMENT === "production" && env.AUTH_RATE_LIMIT_DISABLED !== "true",
-      storage: "database",
+      ...(env.AUTH_RATE_LIMIT_KV
+        ? { customStorage: kvRateLimitStorage(env.AUTH_RATE_LIMIT_KV) }
+        : { storage: "database" as const }),
     },
     advanced: {
       backgroundTasks: { handler: runInBackground },

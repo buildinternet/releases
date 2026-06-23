@@ -12,9 +12,16 @@ import { createTestDb, type TestDatabase } from "../db-helper.js";
 import { apiTokens } from "@buildinternet/releases-core/schema";
 import { generateApiToken, hashSecret } from "@buildinternet/releases-core/api-token";
 
-const { publicRateLimitMiddleware } =
+type EdgeLimiter = { limit(o: { key: string }): Promise<{ success: boolean }> };
+const { publicRateLimitMiddleware, selectAuthEdgeLimiter, edgeRateLimitIpKey } =
   (await import("../../workers/api/src/middleware/rate-limit.js")) as unknown as {
     publicRateLimitMiddleware: MiddlewareHandler;
+    selectAuthEdgeLimiter: (
+      method: string,
+      enabledVar: string | undefined,
+      limiter: EdgeLimiter | undefined,
+    ) => EdgeLimiter | undefined;
+    edgeRateLimitIpKey: (ip: string) => string;
   };
 
 type LimitResult = { success: boolean };
@@ -692,5 +699,61 @@ describe("consumption decision event", () => {
     const decision = logs.find((l) => l.component === "rate-limit" && l.event === "decision");
     expect(decision).toBeDefined();
     expect(decision.rateLimited).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Edge auth limiter selection (#1728) — gating in front of /api/auth/*
+// ---------------------------------------------------------------------------
+
+describe("selectAuthEdgeLimiter", () => {
+  const limiter: EdgeLimiter = { limit: async () => ({ success: true }) };
+
+  it("returns the limiter for a POST when enabled (default-on) and bound", () => {
+    expect(selectAuthEdgeLimiter("POST", undefined, limiter)).toBe(limiter);
+    expect(selectAuthEdgeLimiter("POST", "true", limiter)).toBe(limiter);
+  });
+
+  it("exempts GET session reads", () => {
+    expect(selectAuthEdgeLimiter("GET", "true", limiter)).toBeUndefined();
+  });
+
+  it("honors the explicit 'false' kill switch", () => {
+    expect(selectAuthEdgeLimiter("POST", "false", limiter)).toBeUndefined();
+  });
+
+  it("is a no-op when the binding is unbound (e.g. staging)", () => {
+    expect(selectAuthEdgeLimiter("POST", "true", undefined)).toBeUndefined();
+  });
+});
+
+describe("edgeRateLimitIpKey", () => {
+  it("passes IPv4 and the unknown sentinel through unchanged", () => {
+    expect(edgeRateLimitIpKey("1.2.3.4")).toBe("1.2.3.4");
+    expect(edgeRateLimitIpKey("unknown")).toBe("unknown");
+  });
+
+  it("collapses IPv6 to its /64 prefix", () => {
+    expect(edgeRateLimitIpKey("2001:db8::1")).toBe("2001:db8:0:0::/64");
+    expect(edgeRateLimitIpKey("2001:db8:0:0:0:0:0:abcd")).toBe("2001:db8:0:0::/64");
+  });
+
+  it("gives the same /64 key for the compressed and expanded forms", () => {
+    expect(edgeRateLimitIpKey("2001:db8:1:2::ff")).toBe(
+      edgeRateLimitIpKey("2001:db8:1:2:0:0:0:ff"),
+    );
+  });
+
+  it("buckets two addresses in the same /64 together but a different /64 apart", () => {
+    const a = edgeRateLimitIpKey("2001:db8:aaaa:bbbb::1");
+    const b = edgeRateLimitIpKey("2001:db8:aaaa:bbbb::2");
+    const c = edgeRateLimitIpKey("2001:db8:aaaa:cccc::1");
+    expect(a).toBe(b);
+    expect(a).not.toBe(c);
+  });
+
+  it("strips a zone id and handles loopback", () => {
+    expect(edgeRateLimitIpKey("fe80::1%eth0")).toBe("fe80:0:0:0::/64");
+    expect(edgeRateLimitIpKey("::1")).toBe("0:0:0:0::/64");
   });
 });

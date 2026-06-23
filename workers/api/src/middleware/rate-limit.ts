@@ -51,6 +51,55 @@ async function emitDecision(
   logEvent("info", { ...payload });
 }
 
+/** Native limiter shape (per-IP edge limiter; subset of the binding). */
+type EdgeLimiter = { limit(options: { key: string }): Promise<{ success: boolean }> };
+
+/**
+ * Bucket an IP for the edge limiter. IPv4 (and the "unknown" sentinel) key as-is;
+ * IPv6 collapses to its `/64` prefix so an attacker can't rotate through the
+ * 2^64 addresses of a single `/64` to mint unlimited per-IP buckets. Mirrors
+ * Better Auth's own default (`advanced.ipAddress.ipv6Subnet = 64`), which already
+ * protects the per-key second layer — this brings the edge first layer to parity.
+ * A malformed address falls back to the raw value (more granular ⇒ never blocks a
+ * legitimate caller; worst case is no coarsening, never over-blocking).
+ */
+export function edgeRateLimitIpKey(ip: string): string {
+  if (!ip.includes(":")) return ip; // IPv4 or sentinel
+  const addr = ip.split("%")[0]; // drop any zone id
+  let groups: string[];
+  if (addr.includes("::")) {
+    const [head, tail = ""] = addr.split("::");
+    const headGroups = head ? head.split(":") : [];
+    const tailGroups = tail ? tail.split(":") : [];
+    const fill = Math.max(0, 8 - headGroups.length - tailGroups.length);
+    groups = [...headGroups, ...Array(fill).fill("0"), ...tailGroups];
+  } else {
+    groups = addr.split(":");
+  }
+  if (groups.length < 4) return ip; // malformed → raw (granular, safe)
+  return `${groups
+    .slice(0, 4)
+    .map((g) => g || "0")
+    .join(":")}::/64`;
+}
+
+/**
+ * Select the edge per-IP limiter for an /api/auth/* request (#1728). Runs ONLY
+ * for mutating POSTs (GET session reads are exempt — they neither brute-force
+ * nor write-amplify into D1, and are often polled behind shared NAT). Default-on
+ * kill switch: only the literal "false" opts out. Returns `undefined` (→ no-op)
+ * when the method is exempt, the switch is off, or the binding is unbound.
+ */
+export function selectAuthEdgeLimiter(
+  method: string,
+  enabledVar: string | undefined,
+  limiter: EdgeLimiter | undefined,
+): EdgeLimiter | undefined {
+  if (method !== "POST") return undefined;
+  if (enabledVar === "false") return undefined;
+  return limiter;
+}
+
 function bearer(c: Context<Env>): string {
   const h = c.req.header("Authorization") ?? "";
   return h.startsWith("Bearer ") ? h.slice(7) : "";

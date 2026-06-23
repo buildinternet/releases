@@ -21,7 +21,11 @@ import {
 import { forwardWellKnown, buildApiProtectedResourceMetadata } from "./oauth-discovery.js";
 import type { AuthEmailBinding } from "./auth/email.js";
 import { classifySignInFailure, redactIp, makeAuthAudit } from "./auth/audit.js";
-import { publicRateLimitMiddleware } from "./middleware/rate-limit.js";
+import {
+  publicRateLimitMiddleware,
+  selectAuthEdgeLimiter,
+  edgeRateLimitIpKey,
+} from "./middleware/rate-limit.js";
 import { dbHealthCheck } from "./middleware/db-health.js";
 import { cacheControl } from "./middleware/cache.js";
 import { varyOnAccept } from "./middleware/content-negotiation.js";
@@ -199,6 +203,18 @@ export type Env = {
     // KV cache of credential-validation results for the account rate-limit tier
     // (hash(credential) → {valid,userId}, ~60s TTL). Absent → verify every read.
     CREDENTIAL_CACHE?: KVNamespace;
+    // Edge per-IP rate limiter sitting IN FRONT of /api/auth/* (POST only), so a
+    // brute-force / credential-stuffing flood is shed at the edge before Better
+    // Auth's own limiter runs — keeping that flood off the shared D1. Native
+    // Cloudflare `ratelimit` binding (no D1/KV write). Kill switch defaults ON
+    // (only "false" opts out); absent binding (e.g. staging) → no-op. See #1728.
+    AUTH_EDGE_RATE_LIMIT_ENABLED?: string;
+    AUTH_RATE_LIMITER?: { limit(options: { key: string }): Promise<{ success: boolean }> };
+    // KV backing for Better Auth's brute-force rate-limit counters. When bound,
+    // createAuth wires `rateLimit.customStorage` to this namespace so the per-key
+    // counter upserts land on KV instead of the shared D1 (#1728). Absent → the
+    // limiter falls back to `storage: "database"` (local dev / staging).
+    AUTH_RATE_LIMIT_KV?: KVNamespace;
     // Per-IP limiter for the open POST /v1/feedback (see routes/feedback.ts).
     // Kill switch defaults ON (only "false" opts out); enforced in-handler
     // because publicRateLimitMiddleware only covers safe methods.
@@ -567,6 +583,41 @@ for (const p of OAUTH_SELF_SERVICE_WRITE_PATHS) {
 // work. See src/auth/index.ts.
 // Runs after the "*" middleware above, so the staging gate + noindex apply.
 app.on(["POST", "GET"], "/api/auth/*", async (c) => {
+  // Edge brute-force shedding (#1728). A credential-stuffing flood hits the
+  // mutating auth endpoints (POST sign-in/sign-up/…), and Better Auth's own
+  // limiter is D1-backed — so without a front gate every flood request incurs a
+  // D1 read+write, write-amplifying into the shared database. Reject abusive
+  // per-IP volume HERE, on Cloudflare's native limiter (no D1/KV write), before
+  // we even construct the auth instance. GET (session reads like /get-session,
+  // polled by the browser and often shared behind NAT) is intentionally exempt —
+  // the brute-force risk and the D1-write amplification both live on the POSTs.
+  // Gated by binding presence (absent in staging → no-op) + a default-ON kill
+  // switch. Better Auth's per-key limiter still runs as the precise second layer.
+  const authEdgeLimiter = selectAuthEdgeLimiter(
+    c.req.method,
+    c.env.AUTH_EDGE_RATE_LIMIT_ENABLED,
+    c.env.AUTH_RATE_LIMITER,
+  );
+  if (authEdgeLimiter) {
+    const ip = c.req.header("cf-connecting-ip") ?? c.req.header("x-forwarded-for") ?? "unknown";
+    // Key by /64 for IPv6 so a single subnet can't rotate addresses past the cap.
+    const { success } = await authEdgeLimiter.limit({ key: edgeRateLimitIpKey(ip) });
+    if (!success) {
+      logEvent("warn", {
+        component: "api",
+        event: "auth_edge_rate_limited",
+        path: new URL(c.req.url).pathname,
+        ip: redactIp(ip),
+      });
+      // Mirror Better Auth's 429 shape: it sets `X-Retry-After` (which the web
+      // auth-client reads) — emit that plus the standard `Retry-After`.
+      return c.json({ message: "Too many requests. Please try again later." }, 429, {
+        "Retry-After": "60",
+        "X-Retry-After": "60",
+      });
+    }
+  }
+
   // Scope executionCtx.waitUntil via AsyncLocalStorage for this handler only.
   // `c.executionCtx` throws when absent (e.g. tests) — background work then
   // falls back to Better Auth's default floating behavior.

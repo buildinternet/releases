@@ -212,6 +212,14 @@ a per-client `since` would fork the cache key and defeat the point.
 
 Flip either var to `"true"` in `workers/api/wrangler.jsonc` and redeploy to activate.
 
+### Auth-endpoint brute-force limiter (`/api/auth/*`)
+
+Separate from the read-surface tiers above: Better Auth's own brute-force limiter protects the sign-in/up/credential endpoints. Originally `storage: "database"`, which made every tracked attempt a D1 read+write — a distributed credential-stuffing flood could write-amplify into the shared D1 and degrade unrelated traffic (#1728). It's now two layers, neither of which writes to D1 under flood:
+
+- **Edge (per-IP, first gate):** a CF-native `AUTH_RATE_LIMITER` binding fronts **POST** `/api/auth/*` in the `src/index.ts` handler (`selectAuthEdgeLimiter`), rejecting abusive per-IP volume with a 429 before the auth instance is even built — no DB/KV write. GET session reads (`/get-session`, often polled behind shared NAT) are exempt. Kill switch `AUTH_EDGE_RATE_LIMIT_ENABLED` (default-on; only `"false"` opts out); absent binding (staging) → no-op.
+- **Per-key (second layer, off D1):** when the dedicated `AUTH_RATE_LIMIT_KV` namespace is bound, `createAuth` wires `rateLimit.customStorage` (`auth/rate-limit-kv.ts`) so the per-key (IP+path) counters upsert to KV instead of D1; counters auto-expire (`AUTH_RATE_LIMIT_KV_TTL_SECONDS`). `customStorage` (not `secondaryStorage`) keeps sessions/verification on D1 — only the counters move. This path is the non-atomic check-then-increment (KV has no atomic `consume`), so per-key counting is best-effort under KV's eventual consistency; the strict edge limiter is the precise first gate. Absent binding → falls back to `storage: "database"` (local dev / staging). Fail-closed: `enabled` stays on in prod regardless of storage.
+- **Residual (distributed botnets across many IPs):** the edge cap bounds per-IP D1/KV pressure but not aggregate volume from thousands of distinct IPs; an account-level Cloudflare WAF rate-limiting rule on the auth paths is the independent control for that (out of band, not in the worker).
+
 ## Schema + deployment
 
 The API Worker lives at `workers/api/` and shares the Drizzle schema from `@buildinternet/releases-core/schema` (`packages/core/src/schema.ts`). D1 migrations are in `workers/api/migrations/`. Deploy with `cd workers/api && wrangler deploy`.
