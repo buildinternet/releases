@@ -124,3 +124,34 @@ describe("resolveAccountFromCache", () => {
     expect(result).toEqual({ valid: true, userId: "user_good" });
   });
 });
+
+import { rateLimitConsumerRef, rateLimitDecisionPayload } from "./rate-limit-tiers";
+
+describe("consumption signal", () => {
+  it("hashes the bucket key into a stable, non-raw consumerRef", async () => {
+    const a = await rateLimitConsumerRef("1.2.3.4");
+    const b = await rateLimitConsumerRef("1.2.3.4");
+    expect(a).toBe(b); // stable
+    expect(a).not.toContain("1.2.3.4"); // never the raw value
+    expect(a).toMatch(/^[0-9a-f]{64}$/); // SHA-256 hex
+  });
+
+  it("builds a tagged decision payload", () => {
+    const payload = rateLimitDecisionPayload({
+      surface: "api",
+      tier: "account",
+      rateLimited: false,
+      consumerRef: "deadbeef",
+      operation: "GET orgs",
+    });
+    expect(payload).toEqual({
+      component: "rate-limit",
+      event: "decision",
+      surface: "api",
+      tier: "account",
+      rateLimited: false,
+      consumerRef: "deadbeef",
+      operation: "GET orgs",
+    });
+  });
+});

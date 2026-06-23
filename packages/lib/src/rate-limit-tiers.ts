@@ -125,3 +125,27 @@ export async function resolveAccountFromCache(opts: {
   await cache.put(cacheKey, encode(result), { expirationTtl: ttl });
   return result;
 }
+
+/**
+ * Non-reversible per-bucket id for the consumption stream. Hashes the bucket key
+ * (userId / tokenId / IP) so admins can group consumption per principal+tier in
+ * Axiom without any raw token, email, or IP landing in logs.
+ */
+export async function rateLimitConsumerRef(bucketKey: string): Promise<string> {
+  return hashSecret(`ratelimit:ref:${bucketKey}`);
+}
+
+export interface RateLimitDecision {
+  surface: "api" | "mcp";
+  tier: RateLimitTier;
+  rateLimited: boolean;
+  consumerRef: string;
+  operation: string;
+}
+
+/** Build the structured decision event for `logEvent` (component `rate-limit`). */
+export function rateLimitDecisionPayload(
+  d: RateLimitDecision,
+): { component: "rate-limit"; event: "decision" } & RateLimitDecision {
+  return { component: "rate-limit", event: "decision", ...d };
+}
