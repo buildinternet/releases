@@ -79,6 +79,7 @@ describe("resolveAccountFromCache", () => {
     expect(first).toEqual({ valid: true, userId: "user_1" });
     expect(second).toEqual({ valid: true, userId: "user_1" });
     expect(verifies).toBe(1); // second call hit the cache
+    expect(cache.gets).toBe(2); // both calls checked the cache
   });
 
   it("caches a negative result (junk credential) so it is not re-verified", async () => {
@@ -103,5 +104,23 @@ describe("resolveAccountFromCache", () => {
     await resolveAccountFromCache({ credential: "relu_x", cache: undefined, validate });
     await resolveAccountFromCache({ credential: "relu_x", cache: undefined, validate });
     expect(verifies).toBe(2);
+  });
+
+  it("re-validates and overwrites a corrupt/unknown cached value (fail-closed)", async () => {
+    const cache = fakeCache();
+    let verifies = 0;
+    const validate = async () => {
+      verifies += 1;
+      return { valid: true, userId: "user_good" };
+    };
+    // Prime the cache so we know the hashed key, then corrupt the stored value.
+    await resolveAccountFromCache({ credential: "relu_corrupt", cache, validate });
+    expect(verifies).toBe(1);
+    // Overwrite with a garbage string that matches neither "0" nor "1|…".
+    for (const [k] of cache.store) cache.store.set(k, "GARBAGE");
+    // Second call must re-run validate() and return the fresh result.
+    const result = await resolveAccountFromCache({ credential: "relu_corrupt", cache, validate });
+    expect(verifies).toBe(2);
+    expect(result).toEqual({ valid: true, userId: "user_good" });
   });
 });

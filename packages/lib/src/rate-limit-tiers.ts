@@ -4,6 +4,8 @@
  * passed in as the structural `RateLimiter` type (mirrors the binding shape).
  */
 
+import { hashSecret } from "@buildinternet/releases-core/api-token";
+
 /** CF constraint: a ratelimit binding period is 10 or 60. We use 60 everywhere. */
 export const RATE_LIMIT_WINDOW_SECONDS = 60;
 
@@ -68,8 +70,6 @@ export function resolveTierEnforcement(
   };
 }
 
-import { hashSecret } from "@buildinternet/releases-core/api-token";
-
 /** Structural subset of a Cloudflare KVNamespace used for validation caching. */
 export interface CredentialCache {
   get(key: string): Promise<string | null>;
@@ -88,10 +88,13 @@ export const CREDENTIAL_CACHE_TTL_SECONDS = 60;
 function encode(v: AccountValidation): string {
   return v.valid ? `1|${v.userId ?? ""}` : "0";
 }
-function decode(raw: string): AccountValidation {
+function decode(raw: string): AccountValidation | null {
   if (raw === "0") return { valid: false };
-  const userId = raw.startsWith("1|") ? raw.slice(2) : "";
-  return { valid: true, userId: userId || undefined };
+  if (raw.startsWith("1|")) {
+    const userId = raw.slice(2) || undefined;
+    return { valid: true, userId };
+  }
+  return null; // unknown/corrupt format → treat as a miss, re-validate (fail-closed)
 }
 
 /**
@@ -113,7 +116,11 @@ export async function resolveAccountFromCache(opts: {
   if (!cache) return validate();
   const cacheKey = `ratelimit:cred:${await hashSecret(credential)}`;
   const cached = await cache.get(cacheKey);
-  if (cached !== null) return decode(cached);
+  if (cached !== null) {
+    const decoded = decode(cached);
+    if (decoded !== null) return decoded;
+    // unknown format → fall through to re-validate and overwrite the bad entry
+  }
   const result = await validate();
   await cache.put(cacheKey, encode(result), { expirationTtl: ttl });
   return result;
