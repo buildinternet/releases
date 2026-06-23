@@ -46,6 +46,8 @@ describe("GET /tokens/me enrichment for relu_ keys", () => {
     expect(body.name).toBe("My CI Key");
     expect(body.principalType).toBe("user");
     expect(body.principalId).toBe("user_9");
+    // Dedicated owner userId for per-account rate-limit bucketing on MCP (#1729).
+    expect(body.userId).toBe("user_9");
     expect(body.scopes).toEqual(["read"]);
   });
 
@@ -60,5 +62,6 @@ describe("GET /tokens/me enrichment for relu_ keys", () => {
     const body = (await res.json()) as Record<string, unknown>;
     expect(body.name).toBe("user-api-key");
     expect(body.principalId).toBeNull();
+    expect(body.userId).toBeNull();
   });
 });

@@ -155,6 +155,13 @@ export type McpIdentity =
       tokenId: string;
       token: string | null;
       userToken: string | null;
+      /**
+       * Owning user id for an account-tier principal — the relu_ key's owner
+       * (from `/v1/tokens/me`) or the OAuth-JWT `<sub>`. Lets the rate limiter
+       * bucket all of an account's credentials together (#1729). Null for machine
+       * (relk_) tokens, which bucket per-token at the machine rung.
+       */
+      userId: string | null;
       machinePrincipalType?: PrincipalType;
     }
   | { kind: "anonymous"; scopes: string[]; tokenId: null; token: null; userToken: null };
@@ -247,7 +254,7 @@ async function resolveUserKey(
     );
     if (res.status === 429) return { rateLimited: true };
     if (!res.ok) return ANONYMOUS; // 401 invalid/unknown/revoked → public read
-    const body = (await res.json()) as { scopes?: unknown; tokenId?: unknown };
+    const body = (await res.json()) as { scopes?: unknown; tokenId?: unknown; userId?: unknown };
     const scopes = Array.isArray(body.scopes)
       ? body.scopes.filter((s): s is string => typeof s === "string")
       : [];
@@ -259,6 +266,10 @@ async function resolveUserKey(
       typeof body.tokenId === "string" && body.tokenId.length > 0
         ? body.tokenId
         : USER_API_KEY_PREFIX;
+    // Owning user id (#1729) so the account-tier rate limiter buckets all of this
+    // user's relu_ keys together rather than per-key. Null when an older API omits
+    // the field — the limiter then falls back to per-key bucketing (prior behavior).
+    const userId = typeof body.userId === "string" && body.userId.length > 0 ? body.userId : null;
     // `userToken: presented` — the raw relu_ key, so the follows tools can act as
     // this user against /v1/me/* (the only place the user credential is needed).
     return {
@@ -267,6 +278,7 @@ async function resolveUserKey(
       tokenId,
       token: null,
       userToken: presented,
+      userId,
     };
   } catch (err) {
     logEvent("warn", {
@@ -304,13 +316,14 @@ async function resolveIdentity(
     if (await flag(env.FLAGS, env.API_TOKENS_DISABLED, FLAGS.apiTokensDisabled)) return ANONYMOUS;
     const res = await verifyApiToken(createDb(env.DB), presented);
     if (res.ok)
-      // relk_ is a machine principal (no owning user) — userToken null.
+      // relk_ is a machine principal (no owning user) — userToken + userId null.
       return {
         kind: "token",
         scopes: res.scopes,
         tokenId: res.tokenId,
         token: presented,
         userToken: null,
+        userId: null,
         machinePrincipalType: res.principalType,
       };
     // An invalid/unknown token is ignored rather than rejected, so public reads
@@ -337,6 +350,9 @@ async function resolveIdentity(
         // `userToken: presented` — the raw JWT, forwarded by the follows tools to
         // /v1/me/* (which verifies it locally; no second meter, unlike relu_).
         userToken: presented,
+        // The JWT `<sub>` is the userId; the account-tier limiter buckets on it
+        // (same value `accountBucketKey` derives by stripping the oauth_ prefix). (#1729)
+        userId: verified.subject ?? null,
       };
     }
     return { invalidToken: true };

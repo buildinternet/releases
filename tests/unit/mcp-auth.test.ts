@@ -75,6 +75,7 @@ describe("resolveMcpAuth — identity (prod, no staging gate)", () => {
         tokenId: "tok_w",
         token,
         userToken: null, // relk_ is a machine principal — no owning user
+        userId: null,
         machinePrincipalType: "internal",
       });
   });
@@ -206,7 +207,10 @@ describe("isMeteredMcpMethod", () => {
 type MeCall = { url: string; auth: string | null; stagingKey: string | null };
 
 /** Stub the API service binding's /v1/tokens/me response. */
-function stubMeApi(calls: MeCall[], response: { status: number; scopes?: string[] }): Env["API"] {
+function stubMeApi(
+  calls: MeCall[],
+  response: { status: number; scopes?: string[]; userId?: string; tokenId?: string },
+): Env["API"] {
   return {
     fetch: async (input: RequestInfo | URL) => {
       const r = input instanceof Request ? input : new Request(input as RequestInfo | URL);
@@ -227,6 +231,9 @@ function stubMeApi(calls: MeCall[], response: { status: number; scopes?: string[
           name: "user-api-key",
           scopes: response.scopes ?? [],
           principalType: "user",
+          // Optional — older APIs omit these; resolveUserKey falls back accordingly.
+          ...(response.tokenId !== undefined ? { tokenId: response.tokenId } : {}),
+          ...(response.userId !== undefined ? { userId: response.userId } : {}),
         }),
         { status: 200, headers: { "content-type": "application/json" } },
       );
@@ -250,7 +257,12 @@ describe("resolveMcpAuth — relu_ user keys", () => {
 
   it("billable tool call ⇒ verifies via /v1/tokens/me, meters once, token identity (token=null)", async () => {
     const calls: MeCall[] = [];
-    const api = stubMeApi(calls, { status: 200, scopes: ["read", "write"] });
+    const api = stubMeApi(calls, {
+      status: 200,
+      scopes: ["read", "write"],
+      tokenId: "relu_ak_1",
+      userId: "user_9",
+    });
     const r = await resolveMcpAuth(
       rpcReq("tools/call", { Authorization: `Bearer ${RELU}` }),
       enabled(api),
@@ -260,13 +272,26 @@ describe("resolveMcpAuth — relu_ user keys", () => {
       expect(r.identity).toEqual({
         kind: "token",
         scopes: ["read", "write"],
-        tokenId: "relu_",
+        tokenId: "relu_ak_1",
         token: null,
         userToken: RELU, // raw relu_ forwarded so follows tools can act as the user
+        userId: "user_9", // owner userId from /tokens/me → per-account bucketing (#1729)
       });
     expect(calls.length).toBe(1);
     expect(calls[0].url).toContain("/v1/tokens/me");
     expect(calls[0].auth).toBe(`Bearer ${RELU}`);
+  });
+
+  it("omitted userId from /me ⇒ identity.userId null (older API → per-key fallback) (#1729)", async () => {
+    const calls: MeCall[] = [];
+    const api = stubMeApi(calls, { status: 200, scopes: ["read"], tokenId: "relu_ak_1" });
+    const r = await resolveMcpAuth(
+      rpcReq("tools/call", { Authorization: `Bearer ${RELU}` }),
+      enabled(api),
+    );
+    expect(r.ok).toBe(true);
+    if (r.ok)
+      expect(r.identity).toMatchObject({ kind: "token", tokenId: "relu_ak_1", userId: null });
   });
 
   it("non-billable method (tools/list) ⇒ anonymous, NOT metered (no /me call)", async () => {
@@ -400,6 +425,7 @@ describe("machineTokenIdForUsage", () => {
         tokenId: "tok_x",
         token: "relk_x",
         userToken: null,
+        userId: null,
       }),
     ).toBe("tok_x");
   });
@@ -412,6 +438,7 @@ describe("machineTokenIdForUsage", () => {
         tokenId: "relu_",
         token: null,
         userToken: "relu_x",
+        userId: "user_9",
       }),
     ).toBeNull();
   });

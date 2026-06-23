@@ -131,6 +131,7 @@ apiTokenRoutes.get("/tokens/me", async (c) => {
       scopes: [ROOT_SCOPE],
       principalType: "internal",
       principalId: null,
+      userId: null,
       expiresAt: null,
       lastUsedAt: null,
     } satisfies TokenIdentity);
@@ -142,6 +143,7 @@ apiTokenRoutes.get("/tokens/me", async (c) => {
       scopes: auth.scopes,
       principalType: "internal",
       principalId: null,
+      userId: null,
       expiresAt: null,
       lastUsedAt: null,
     } satisfies TokenIdentity);
@@ -169,6 +171,10 @@ apiTokenRoutes.get("/tokens/me", async (c) => {
       scopes: auth.scopes,
       principalType: "user",
       principalId: row?.referenceId ?? null,
+      // The owning user id (#1729) — same value as principalId for a relu_ key,
+      // surfaced under the dedicated `userId` field so MCP can bucket per-account
+      // without overloading the type-polymorphic principalId.
+      userId: row?.referenceId ?? null,
       tokenId: auth.tokenId,
       expiresAt: row?.expiresAt ? row.expiresAt.toISOString() : null,
       lastUsedAt: row?.lastRequest ? row.lastRequest.toISOString() : null,
@@ -185,6 +191,9 @@ apiTokenRoutes.get("/tokens/me", async (c) => {
     scopes: parseStoredScopes(row.scopes),
     principalType: row.principalType,
     principalId: row.principalId,
+    // Machine (`relk_`) tokens have no owning user — the rate-limit account tier
+    // never applies to them (they bucket on tokenId at the machine rung). (#1729)
+    userId: null,
     tokenId: auth.tokenId,
     expiresAt: row.expiresAt,
     lastUsedAt: row.lastUsedAt,

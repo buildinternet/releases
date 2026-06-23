@@ -1723,6 +1723,15 @@ export interface TokenIdentity {
    * secret. Returned on self-introspection so MCP can distinguish `relu_` keys.
    */
   tokenId?: string | null;
+  /**
+   * Owning user id for a user-scoped principal (`relu_` key) — the Better Auth
+   * `apikey.referenceId`. Lets a consumer bucket all of an account's credentials
+   * together. Null for the static root key and machine (`relk_`) tokens, which
+   * have no owning user. Distinct from `principalId`, which carries an
+   * agent/internal id for machine tokens. Used by the MCP worker to bucket
+   * `relu_` keys per-account on the rate-limit account tier (#1729).
+   */
+  userId?: string | null;
   expiresAt?: string | null;
   lastUsedAt?: string | null;
 }
