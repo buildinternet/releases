@@ -241,11 +241,6 @@
       "id": "178c70f9abd940478d5b5a053bf123bb",
       "preview_id": "832712867aff4c91bc11bb3cecd7da9e",
     },
-    {
-      "binding": "CREDENTIAL_CACHE",
-      "id": "REPLACE_WITH_CREDENTIAL_CACHE_KV_ID",
-      "preview_id": "REPLACE_WITH_CREDENTIAL_CACHE_PREVIEW_ID",
-    },
   ],
   "services": [
     {

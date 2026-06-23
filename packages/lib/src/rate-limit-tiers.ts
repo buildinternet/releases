@@ -9,13 +9,20 @@ import { hashSecret } from "@buildinternet/releases-core/api-token";
 /** CF constraint: a ratelimit binding period is 10 or 60. We use 60 everywhere. */
 export const RATE_LIMIT_WINDOW_SECONDS = 60;
 
+export type RateLimitTier = "anonymous" | "account" | "machine";
+
 /** Quotas mirror `simple.limit` for each binding in the workers' wrangler.jsonc. */
-export const TIER_QUOTAS = { anonymous: 120, account: 300, machine: 600 } as const;
+export const TIER_QUOTAS = { anonymous: 120, account: 300, machine: 600 } as const satisfies Record<
+  RateLimitTier,
+  number
+>;
 
 /** IETF RateLimit-Policy names advertised to clients per tier. */
-export const TIER_POLICY = { anonymous: "public", account: "account", machine: "token" } as const;
-
-export type RateLimitTier = "anonymous" | "account" | "machine";
+export const TIER_POLICY = {
+  anonymous: "public",
+  account: "account",
+  machine: "token",
+} as const satisfies Record<RateLimitTier, string>;
 
 /** Structural shape of a Cloudflare `ratelimit` unsafe binding. */
 export interface RateLimiter {

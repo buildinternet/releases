@@ -57,10 +57,10 @@ export async function enforceMcpRateLimit(
   identity: McpIdentity,
   ctx: ExecutionContext,
 ): Promise<Response | null> {
-  const ipEnabled = await flag(env.FLAGS, env.RATE_LIMIT_ENABLED, FLAGS.rateLimitEnabled);
+  const rateLimitEnabled = await flag(env.FLAGS, env.RATE_LIMIT_ENABLED, FLAGS.rateLimitEnabled);
   const limiters: TierLimiters = {
-    anonymous: ipEnabled ? env.PUBLIC_RATE_LIMITER : undefined,
-    account: ipEnabled ? env.USER_RATE_LIMITER : undefined,
+    anonymous: rateLimitEnabled ? env.PUBLIC_RATE_LIMITER : undefined,
+    account: rateLimitEnabled ? env.USER_RATE_LIMITER : undefined,
     machine: env.TOKEN_RATE_LIMIT_ENABLED === "true" ? env.TOKEN_RATE_LIMITER : undefined,
   };
   if (!limiters.anonymous && !limiters.account && !limiters.machine) return null;

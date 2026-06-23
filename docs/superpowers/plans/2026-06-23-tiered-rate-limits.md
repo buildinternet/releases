@@ -1384,7 +1384,7 @@ git commit -m "docs: tiered rate-limit ladder + consumption stream"
 
 ## Deploy-time follow-ups (NOT code tasks — operator)
 
-- Provision the real Cloudflare resources and replace placeholders: the `USER_RATE_LIMITER` namespace ids and the `CREDENTIAL_CACHE` KV namespace ids/preview ids in both `workers/api/wrangler.jsonc` and `workers/mcp/wrangler.jsonc`.
+- Provision a real `CREDENTIAL_CACHE` KV namespace and ADD the binding (with real `id` + `preview_id`) to both `workers/api/wrangler.jsonc` and `workers/mcp/wrangler.jsonc`. The binding was removed from this branch to keep the deploy safe (placeholder ids fail `wrangler deploy`); the `CREDENTIAL_CACHE?: KVNamespace` Env type and graceful-degradation code are already in place — no code change needed when you add it back.
 - Rollout: the account + anonymous rungs are gated by `rate-limit-enabled`/`RATE_LIMIT_ENABLED` (default OFF). To begin enforcing, flip the flag in BOTH Flagship apps (`releases-platform{,-staging}`). The machine rung is already on.
 - The `relu_` account tier is dark until `user-api-keys-enabled` rolls out; OAuth-JWT users get the 300 tier immediately once `rate-limit-enabled` is on.
 

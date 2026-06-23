@@ -86,14 +86,6 @@
       "id": "93b87ae5e253445cabbaaa7a71264915",
       "preview_id": "7737ccafd37a43fc9d2365c9a2d7ebca",
     },
-    // Bound for parity with the API worker. Unused in MCP — identity is pre-resolved
-    // by resolveMcpAuth so no credential cache KV lookup is needed.
-    // Replace placeholder ids with real KV namespace ids before deploy.
-    {
-      "binding": "CREDENTIAL_CACHE",
-      "id": "REPLACE_WITH_CREDENTIAL_CACHE_KV_ID",
-      "preview_id": "REPLACE_WITH_CREDENTIAL_CACHE_PREVIEW_ID",
-    },
   ],
   "services": [{ "binding": "API", "service": "releases-api" }],
   "routes": [{ "pattern": "mcp.releases.sh", "custom_domain": true }],

@@ -99,10 +99,14 @@ async function classifyPrincipal(c: Context<Env>): Promise<RateLimitPrincipal> {
 export const publicRateLimitMiddleware: MiddlewareHandler<Env> = async (c, next) => {
   if (!SAFE_METHODS.has(c.req.method)) return next();
 
-  const ipEnabled = await flag(c.env.FLAGS, c.env.RATE_LIMIT_ENABLED, FLAGS.rateLimitEnabled);
+  const rateLimitEnabled = await flag(
+    c.env.FLAGS,
+    c.env.RATE_LIMIT_ENABLED,
+    FLAGS.rateLimitEnabled,
+  );
   const limiters: TierLimiters = {
-    anonymous: ipEnabled ? c.env.PUBLIC_RATE_LIMITER : undefined,
-    account: ipEnabled ? c.env.USER_RATE_LIMITER : undefined,
+    anonymous: rateLimitEnabled ? c.env.PUBLIC_RATE_LIMITER : undefined,
+    account: rateLimitEnabled ? c.env.USER_RATE_LIMITER : undefined,
     machine: c.env.TOKEN_RATE_LIMIT_ENABLED === "true" ? c.env.TOKEN_RATE_LIMITER : undefined,
   };
   if (!limiters.anonymous && !limiters.account && !limiters.machine) return next();
