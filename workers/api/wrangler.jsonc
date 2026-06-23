@@ -241,6 +241,17 @@
       "id": "178c70f9abd940478d5b5a053bf123bb",
       "preview_id": "832712867aff4c91bc11bb3cecd7da9e",
     },
+    // Caches credential-validation results for the account rate-limit tier
+    // (hash(credential) → {valid,userId}, ~60s TTL; never counters). Optional in
+    // code — an absent binding degrades to per-request verify. Bound only on the
+    // API worker (the sole consumer); the MCP worker resolves identity before
+    // enforcement and does not bind it. What's shared across workers is the
+    // @releases/lib/rate-limit-tiers helper, NOT this binding. See middleware/rate-limit.ts.
+    {
+      "binding": "CREDENTIAL_CACHE",
+      "id": "bae0fa6a594448d483176fe90a9a0479",
+      "preview_id": "ac4b692c975a4d9382a847e968243107",
+    },
   ],
   "services": [
     {
@@ -470,6 +481,15 @@
         "type": "ratelimit",
         "namespace_id": "1005",
         "simple": { "limit": 20, "period": 60 },
+      },
+      // Per-account cap for authenticated free accounts (relu_ user keys + OAuth
+      // JWT users), keyed by userId. Rides RATE_LIMIT_ENABLED (same gate as the
+      // per-IP public limiter). Sits between anonymous (120) and machine (600).
+      {
+        "name": "USER_RATE_LIMITER",
+        "type": "ratelimit",
+        "namespace_id": "1006",
+        "simple": { "limit": 300, "period": 60 },
       },
     ],
   },

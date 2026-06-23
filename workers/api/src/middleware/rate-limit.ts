@@ -2,105 +2,136 @@ import type { Context, MiddlewareHandler } from "hono";
 import type { Env } from "../index.js";
 import { FLAGS, flag } from "@releases/lib/flags";
 import { logEvent } from "@releases/lib/log-event";
-import { SAFE_METHODS, isTrustedProxy, resolveAuthIdentity } from "./auth.js";
+import { isUserApiKeyShaped } from "@buildinternet/releases-core/api-token";
+import {
+  resolveTierEnforcement,
+  resolveAccountFromCache,
+  rateLimitConsumerRef,
+  rateLimitDecisionPayload,
+  classifyTokenId,
+  accountBucketKey,
+  policyHeader,
+  RATE_LIMITED_ERROR,
+  selectTierLimiters,
+  RATE_LIMIT_WINDOW_SECONDS,
+  type RateLimitPrincipal,
+  type RateLimitTier,
+} from "@releases/lib/rate-limit-tiers";
+import {
+  SAFE_METHODS,
+  isTrustedProxy,
+  resolveAuthIdentity,
+  validateAccountCredential,
+  apiRouteFamily,
+} from "./auth.js";
 
-// Window shared by both limiter bindings (CF constraint: period is 10 or 60).
-const RATE_LIMIT_WINDOW_SECONDS = 60;
-
-// Mirror `simple.limit` for each `ratelimit` binding in workers/api/wrangler.jsonc.
-// Surfaced via the RateLimit-Policy header so AI agents and other well-behaved
-// consumers can self-pace before hitting a 429.
-const IP_RATE_LIMIT_QUOTA = 120;
-const TOKEN_RATE_LIMIT_QUOTA = 600;
-
-const IP_POLICY_NAME = "public";
-const TOKEN_POLICY_NAME = "token";
-
-/** IETF draft-ietf-httpapi-ratelimit-headers structured-field policy advertisement. */
-function policyHeader(name: string, quota: number): string {
-  return `"${name}";q=${quota};w=${RATE_LIMIT_WINDOW_SECONDS}`;
+/** Anonymous-allowed events are sampled to bound public-read log volume. */
+const ANON_SAMPLE_RATE = 0.05;
+function sampled(rate: number): boolean {
+  const buf = new Uint8Array(1);
+  crypto.getRandomValues(buf);
+  return buf[0] / 256 < rate;
 }
 
-type Limiter = { limit(options: { key: string }): Promise<{ success: boolean }> };
-
-/**
- * Consult `limiter` for `key`, advertise the policy, and return a 429 Response
- * when over quota (else `null` to continue). The Cloudflare ratelimit binding
- * returns only `{success}`, so we can't emit a precise RateLimit-Remaining —
- * clients pace off the advertised policy header.
- */
-async function enforce(
+/** Emit the consumption decision event (always for account/machine + throttles). */
+async function emitDecision(
   c: Context<Env>,
-  limiter: Limiter,
-  key: string,
-  policyName: string,
-  quota: number,
-): Promise<Response | null> {
-  const { success } = await limiter.limit({ key });
-  c.header("RateLimit-Policy", policyHeader(policyName, quota));
-  if (success) return null;
-  c.header("RateLimit", `"${policyName}";r=0;t=${RATE_LIMIT_WINDOW_SECONDS}`);
-  c.header("Retry-After", String(RATE_LIMIT_WINDOW_SECONDS));
-  return c.json(
-    { error: "rate_limited", message: "Too many requests. Please retry shortly." },
-    429,
-  );
+  tier: RateLimitTier,
+  bucketKey: string,
+  rateLimited: boolean,
+): Promise<void> {
+  if (tier === "anonymous" && !rateLimited && !sampled(ANON_SAMPLE_RATE)) return;
+  const payload = rateLimitDecisionPayload({
+    surface: "api",
+    tier,
+    rateLimited,
+    consumerRef: await rateLimitConsumerRef(bucketKey),
+    operation: `${c.req.method} ${apiRouteFamily(c.req.path)}`,
+  });
+  logEvent("info", { ...payload });
+}
+
+function bearer(c: Context<Env>): string {
+  const h = c.req.header("Authorization") ?? "";
+  return h.startsWith("Bearer ") ? h.slice(7) : "";
 }
 
 /**
- * Rate limiting for reads. Anonymous (or invalid-credential) callers are limited
- * per-IP; `relk_` tokens are limited per-token, keyed by tokenId. The static root
- * key (CLI/MCP/scripts) and the trusted web-frontend proxy are exempt. Each
- * limiter is independently gated by its own kill switch + binding, so either can
- * run without the other; with both off this is a no-op (today's behavior).
+ * Classify the caller into a rate-limit tier. Root + trusted proxy are exempt.
+ * `relk_` machine tokens → machine rung (keyed on tokenId). OAuth-JWT users
+ * (`oauth_…`) and valid `relu_` keys → account rung (keyed on userId). Everything
+ * else → anonymous (keyed on IP). The `relu_` path verifies behind the KV cache
+ * so a junk string can't mint an account bucket (it caches invalid → IP rung).
+ */
+async function classifyPrincipal(
+  c: Context<Env>,
+  accountActive: boolean,
+): Promise<RateLimitPrincipal> {
+  if (await isTrustedProxy(c)) return { tier: "exempt" };
+  const identity = await resolveAuthIdentity(c);
+  if (identity?.kind === "root") return { tier: "exempt" };
+  if (identity?.kind === "token") {
+    const id = identity.tokenId;
+    const tier = classifyTokenId(id);
+    // Account tier → bucket on the userId (strip the oauth_ prefix) so a user's
+    // OAuth and API-key traffic share one per-account budget. A relu_ key never
+    // reaches this branch (resolveAuthIdentity reads it as anonymous), so an
+    // account tier here is always OAuth.
+    return { tier, bucketKey: tier === "account" ? accountBucketKey(id) : id };
+  }
+  // Identity unresolved. A relu_ key is read as anonymous by resolveAuthIdentity
+  // (meter-skip), so verify it here for tiering, behind the KV cache.
+  // Skip the KV read when the account rung is inactive (eff#5).
+  const presented = bearer(c);
+  if (accountActive && presented && isUserApiKeyShaped(presented)) {
+    const account = await resolveAccountFromCache({
+      credential: presented,
+      cache: c.env.CREDENTIAL_CACHE,
+      validate: () => validateAccountCredential(c, presented),
+    });
+    if (account.valid && account.userId) return { tier: "account", bucketKey: account.userId };
+  }
+  const ip = c.req.header("cf-connecting-ip") ?? "unknown";
+  return { tier: "anonymous", bucketKey: ip };
+}
+
+/**
+ * Rate limiting for reads. Three rungs on Cloudflare's native limiter: anonymous
+ * (per-IP, 120), account (per-userId, 300), machine (per-token, 600). Root + the
+ * trusted web proxy are exempt. Each rung is independently gated by its binding +
+ * kill switch; with all off this is a no-op.
  */
 export const publicRateLimitMiddleware: MiddlewareHandler<Env> = async (c, next) => {
   if (!SAFE_METHODS.has(c.req.method)) return next();
 
-  // Resolve the active binding for each limiter (undefined when its kill switch
-  // is off or the binding is absent). Nothing to enforce when both are off (the
-  // default) — bail before resolving identity so a token-authenticated read
-  // doesn't pay a DB lookup.
-  // TOKEN_RATE_LIMIT_ENABLED is intentionally a plain env var — not a Tier-1
-  // Flagship flag, so it stays a raw check (no registry entry / binding path).
-  const tokenLimiter =
-    c.env.TOKEN_RATE_LIMIT_ENABLED === "true" ? c.env.TOKEN_RATE_LIMITER : undefined;
-  const ipLimiter = (await flag(c.env.FLAGS, c.env.RATE_LIMIT_ENABLED, FLAGS.rateLimitEnabled))
-    ? c.env.PUBLIC_RATE_LIMITER
-    : undefined;
-  if (!tokenLimiter && !ipLimiter) return next();
+  const rateLimitEnabled = await flag(
+    c.env.FLAGS,
+    c.env.RATE_LIMIT_ENABLED,
+    FLAGS.rateLimitEnabled,
+  );
+  const limiters = selectTierLimiters(rateLimitEnabled, c.env.TOKEN_RATE_LIMIT_ENABLED === "true", {
+    anonymous: c.env.PUBLIC_RATE_LIMITER,
+    account: c.env.USER_RATE_LIMITER,
+    machine: c.env.TOKEN_RATE_LIMITER,
+  });
+  if (!limiters.anonymous && !limiters.account && !limiters.machine) return next();
 
-  const identity = await resolveAuthIdentity(c);
-  if (identity?.kind === "root") return next(); // break-glass key: never throttled
-  if (await isTrustedProxy(c)) return next(); // web SSR: never throttled
+  const principal = await classifyPrincipal(c, !!limiters.account);
+  const plan = resolveTierEnforcement(principal, limiters);
+  if (!plan) return next(); // exempt
+  if (!plan.limiter) return next(); // this rung disabled → allow
 
-  if (identity?.kind === "token") {
-    if (!tokenLimiter) return next(); // token limiter off; IP limiter doesn't apply to tokens
-    const rejected = await enforce(
-      c,
-      tokenLimiter,
-      identity.tokenId,
-      TOKEN_POLICY_NAME,
-      TOKEN_RATE_LIMIT_QUOTA,
-    );
-    if (rejected) {
-      logEvent("warn", {
-        component: "rate-limit",
-        event: "token-throttled",
-        tokenId: identity.tokenId,
-      });
-      return rejected;
-    }
-    return next();
+  const { success } = await plan.limiter.limit({ key: plan.key });
+  c.header("RateLimit-Policy", policyHeader(plan.policyName, plan.quota));
+  const emit = emitDecision(c, plan.tier, plan.key, !success);
+  try {
+    c.executionCtx.waitUntil(emit);
+  } catch {
+    // no executionCtx in tests — await inline to keep assertions deterministic
+    await emit;
   }
-
-  // Anonymous or invalid credential → per-IP limiter.
-  if (!ipLimiter) return next();
-  const ip = c.req.header("cf-connecting-ip") ?? "unknown";
-  const rejected = await enforce(c, ipLimiter, ip, IP_POLICY_NAME, IP_RATE_LIMIT_QUOTA);
-  if (rejected) {
-    logEvent("warn", { component: "rate-limit", event: "ip-throttled", ip });
-    return rejected;
-  }
-  return next();
+  if (success) return next();
+  c.header("RateLimit", `"${plan.policyName}";r=0;t=${RATE_LIMIT_WINDOW_SECONDS}`);
+  c.header("Retry-After", String(RATE_LIMIT_WINDOW_SECONDS));
+  return c.json(RATE_LIMITED_ERROR, 429);
 };

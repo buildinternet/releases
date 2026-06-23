@@ -193,6 +193,12 @@ export type Env = {
     // Per-token rate limiter for relk_ tokens, keyed by tokenId (see middleware/rate-limit.ts).
     TOKEN_RATE_LIMIT_ENABLED?: string;
     TOKEN_RATE_LIMITER?: { limit(options: { key: string }): Promise<{ success: boolean }> };
+    // Per-account rate limiter for authenticated free accounts (relu_ + OAuth
+    // JWT users), keyed by userId. Rides RATE_LIMIT_ENABLED (see middleware/rate-limit.ts).
+    USER_RATE_LIMITER?: { limit(options: { key: string }): Promise<{ success: boolean }> };
+    // KV cache of credential-validation results for the account rate-limit tier
+    // (hash(credential) → {valid,userId}, ~60s TTL). Absent → verify every read.
+    CREDENTIAL_CACHE?: KVNamespace;
     // Per-IP limiter for the open POST /v1/feedback (see routes/feedback.ts).
     // Kill switch defaults ON (only "false" opts out); enforced in-handler
     // because publicRateLimitMiddleware only covers safe methods.

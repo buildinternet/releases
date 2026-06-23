@@ -2,6 +2,7 @@ import { createMcpHandler } from "agents/mcp";
 import { isHtmlRequest, renderLandingPage } from "./landing.js";
 import { createServer, type Env } from "./mcp-agent.js";
 import { resolveMcpAuth, machineTokenIdForUsage, peekMcpCall, emitMcpConsumption } from "./auth.js";
+import { enforceMcpRateLimit } from "./rate-limit.js";
 import {
   isProtectedResourceMetadataPath,
   protectedResourceMetadataResponse,
@@ -46,6 +47,12 @@ async function handle(
   // Staging: the gate has now passed, so serve the (otherwise public) metadata.
   if (wantsMetadata) return protectedResourceMetadataResponse(env);
   const { identity } = auth;
+
+  // Three-rung rate limiting: anonymous / account / machine. Returns 429 when
+  // over quota; null when allowed or all rungs are disabled.
+  const limited = await enforceMcpRateLimit(request, env, identity, ctx);
+  if (limited) return limited;
+
   // Record token usage (throttled, fire-and-forget) so the admin surface can
   // audit last-used across both the API and MCP workers. relu_ user keys are
   // metered by Better Auth's apikey table, not api_tokens — skip them here.

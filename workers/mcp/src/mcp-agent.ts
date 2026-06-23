@@ -33,6 +33,7 @@ import { parseCoordinate } from "@buildinternet/releases-core/lookup-coordinate"
 import type { LookupResultPayload } from "@buildinternet/releases-api-types";
 import { getSecret, getSecretWithFallback } from "@releases/lib/secrets";
 import { type FlagshipBinding } from "@releases/lib/flags";
+import type { RateLimiter } from "@releases/lib/rate-limit-tiers";
 
 /**
  * Render the lookup payload as a markdown rail appended to the tool's text
@@ -132,6 +133,14 @@ export interface Env {
   OAUTH_JWT_AUDIENCE?: string;
   /** Cloudflare Flagship binding; resolves flags live when present. */
   FLAGS?: FlagshipBinding;
+  // ── Rate-limit bindings (three-rung: anonymous / account / machine) ──────
+  // Mirrors the API worker. Bound via the wrangler.jsonc `unsafe` block.
+  // account + anonymous ride RATE_LIMIT_ENABLED; machine rides TOKEN_RATE_LIMIT_ENABLED.
+  PUBLIC_RATE_LIMITER?: RateLimiter;
+  USER_RATE_LIMITER?: RateLimiter;
+  TOKEN_RATE_LIMITER?: RateLimiter;
+  RATE_LIMIT_ENABLED?: string;
+  TOKEN_RATE_LIMIT_ENABLED?: string;
 }
 
 /**
