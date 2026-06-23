@@ -141,9 +141,6 @@ export interface Env {
   TOKEN_RATE_LIMITER?: RateLimiter;
   RATE_LIMIT_ENABLED?: string;
   TOKEN_RATE_LIMIT_ENABLED?: string;
-  // CREDENTIAL_CACHE: bound for parity with the API worker; unused in MCP
-  // because identity is fully resolved by resolveMcpAuth before enforcement runs.
-  CREDENTIAL_CACHE?: KVNamespace;
 }
 
 /**

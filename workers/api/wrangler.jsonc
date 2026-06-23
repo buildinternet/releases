@@ -241,6 +241,15 @@
       "id": "178c70f9abd940478d5b5a053bf123bb",
       "preview_id": "832712867aff4c91bc11bb3cecd7da9e",
     },
+    // Caches credential-validation results for the account rate-limit tier
+    // (hash(credential) → {valid,userId}, ~60s TTL; never counters). Optional in
+    // code — an absent binding degrades to per-request verify. Shared with the
+    // MCP worker. See middleware/rate-limit.ts + @releases/lib/rate-limit-tiers.
+    {
+      "binding": "CREDENTIAL_CACHE",
+      "id": "bae0fa6a594448d483176fe90a9a0479",
+      "preview_id": "ac4b692c975a4d9382a847e968243107",
+    },
   ],
   "services": [
     {
