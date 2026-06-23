@@ -1,7 +1,7 @@
 # Tiered API + MCP Rate Limits — Design
 
 **Date:** 2026-06-23
-**Status:** Design approved, pending spec review
+**Status:** Design approved (incl. admin-observability requirement); proceeding to implementation plan
 **Scope:** Single implementation plan
 
 ## Problem
@@ -143,7 +143,48 @@ middleware wires it to that worker's bindings and emits the response headers.
 - **Headers:** extend the `RateLimit-Policy` advertisement to include the
   `"account"` policy (`"account";q=300;w=60`) so well-behaved agents self-pace.
 - **Logging:** add an `account-throttled` `logEvent` mirroring the existing
-  `token-throttled` / `ip-throttled` events, keyed on `userId`.
+  `token-throttled` / `ip-throttled` events. See **Admin observability** for the
+  consumption stream the same emit feeds.
+
+## Admin observability (consumption queryable later)
+
+We don't expose limits in the UI, but admins must be able to query rate-limit
+consumption "when the time comes." The CF rate-limit binding returns only
+`{ success }` — it stores **no readable counts** — so the consumption signal has
+to be emitted by us. Design for that now; build no admin route yet.
+
+**Emit a structured decision signal on every limited request**, not just on
+rejection, so consumption (used volume) is reconstructable per principal, not
+only the ceiling-hit moments:
+
+- Reuse the existing per-authenticated-request consumption event
+  (`emitApiConsumption` → `logEvent`, already PII-clean via the hashed
+  `consumerRef` from #1719). **Add two fields:** `tier`
+  (`anonymous|account|machine`) and `rateLimited` (boolean outcome). No new
+  event, no extra log volume on the authenticated path — the event already
+  fires once per request.
+- For the **anonymous** rung (no consumption event today), emit a lightweight
+  `rate-limit` decision event carrying `tier:"anonymous"`, `rateLimited`, route
+  family, and a **hashed** IP bucket id (consumerRef-style hash — never the raw
+  IP in the consumption stream), **sampled** (e.g. 1-in-N + always-on for
+  rejections) to bound public-read log volume.
+- The `*-throttled` warn events stay as the operational abuse-investigation
+  signal (these may retain the raw IP — short-retention operational logs, not
+  the PII-clean consumption stream).
+
+**Query surface:** Axiom is the admin query surface for worker logs today (the
+`releases-cloudflare-logs` dataset, JSON in `body`). An admin can already slice
+consumption by `consumerRef`, `tier`, and `rateLimited` there. A thin
+`GET /v1/admin/rate-limit/consumption` route can be layered later — wrapping an
+Axiom query, or a periodic rollup — **without any hot-path or schema change**,
+because the per-principal, per-tier signal is already in the log stream. That
+deferred route is explicitly out of scope here; the requirement satisfied now is
+that the data exists and is keyed to support it.
+
+The bucket key (`userId` for account, `tokenId` for machine, hashed IP for
+anonymous) is the join key for all consumption queries — it matches the
+rate-limit bucket exactly, so "how much of their quota is principal X using" maps
+directly to a count of their events in the window.
 
 ## Dependencies and rollout notes
 
@@ -166,6 +207,9 @@ middleware wires it to that worker's bindings and emits the response headers.
 - Moving any counter to KV. Counters stay on CF native Rate Limiting bindings.
 - The Better Auth `/api/auth/*` brute-force limiter (stays on D1).
 - Per-account paid/higher tiers beyond the single 300 account rung.
+- The admin consumption **query route** (`GET /v1/admin/rate-limit/consumption`)
+  and any rollup job — deferred. We only guarantee the underlying signal exists
+  and is keyed to support it (see Admin observability).
 
 ## Testing
 
@@ -180,6 +224,10 @@ middleware wires it to that worker's bindings and emits the response headers.
   no live binding needed.
 - Header assertions: `RateLimit-Policy` advertises `account`; 429 response
   carries `Retry-After`.
+- **Consumption signal:** the consumption event carries `tier` + `rateLimited`
+  for each principal class; the anonymous decision event hashes the IP (no raw
+  IP in the consumption stream) and respects sampling (rejections always
+  emitted).
 
 ## Files touched (anticipated)
 
@@ -193,4 +241,7 @@ middleware wires it to that worker's bindings and emits the response headers.
   KV.
 - `workers/mcp/` — apply the shared limiter middleware; add the same bindings.
 - `workers/mcp/wrangler.jsonc` — `USER_RATE_LIMITER` + `CREDENTIAL_CACHE`.
+- `workers/api/src/middleware/auth.ts` (consumption emit) — add `tier` +
+  `rateLimited` to the consumption payload; the limiter passes the resolved tier
+  - outcome through. The anonymous decision event is emitted from the limiter.
 - Tests alongside the above.
