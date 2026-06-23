@@ -3,6 +3,16 @@
 The product changelog for releases.sh, published to its own registry. Drafted daily from merged
 PRs and reviewed via PR. See docs/changelog-style.md for the voice and curation rules.
 
+## June 22, 2026
+
+**Changed**
+- Web frontend polish sweep — stat counts in the homepage hero use tabular digits to prevent layout shift; headings and summaries use balanced line-breaking; image borders are now neutral instead of tinted; interactive controls across the site (follow, load-more, copy, theme toggle, lightbox) respond with a subtle scale-on-press; copy and theme-switch icons cross-fade instead of hard-swapping.
+
+## June 21, 2026
+
+**Changed**
+- Digest email delivery and webhook release fan-out are now queue-backed — each recipient gets an independent retry budget so a transient failure no longer silently drops messages.
+
 ## June 20, 2026
 
 **Added**
