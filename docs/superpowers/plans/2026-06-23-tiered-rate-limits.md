@@ -1106,7 +1106,9 @@ git commit -m "feat(api): emit per-principal rate-limit consumption decision eve
 - Modify: `workers/mcp/src/index.ts` (call enforcement in `handle()`)
 - Modify: `workers/mcp/wrangler.jsonc` (bindings)
 
-**Note (why MCP has no credential cache):** `handle()` already calls `resolveMcpAuth()` and obtains a fully-resolved `McpIdentity` _before_ enforcement. There is no "verified-too-late" gap, so MCP maps the resolved identity straight to a tier with no KV verify. `CREDENTIAL_CACHE` is bound for parity only and unused here. MCP buckets the account rung on the resolved `tokenId` (`oauth_<sub>` for JWT users, `relu_<keyId>` for user keys) — stable per principal; per-key rather than strictly per-account for `relu_`, which is acceptable for MCP and noted in the spec.
+**Note (why MCP has no credential cache):** `handle()` already calls `resolveMcpAuth()` and obtains a fully-resolved `McpIdentity` _before_ enforcement. There is no "verified-too-late" gap, so MCP maps the resolved identity straight to a tier with no KV verify, and the `CREDENTIAL_CACHE` binding is not bound on the MCP worker.
+
+**Account bucketing contract:** the account rung buckets on the **userId** (per the spec — the account, not the credential, is the unit). OAuth principals bucket on the `<sub>` (the `oauth_` prefix is stripped by `accountBucketKey`), and the API `relu_` path buckets on the resolved `userId`, so a user's OAuth and API-key traffic share one 300/min budget. **Exception:** MCP `relu_` keys bucket per-key (`relu_<keyId>`), because MCP's `GET /v1/tokens/me` introspection returns the key id, not the owner userId — there is no userId to bucket on without exposing it from that endpoint. Consequence: a user with multiple `relu_` keys could get 300/min _per key_ via MCP. Acceptable for now (both `rate-limit-enabled` and `user-api-keys-enabled` are off by default, and MCP is a narrower surface); the proper fix — having `/v1/tokens/me` return the userId and threading it through `resolveMcpAuth` — is a tracked follow-up.
 
 **Interfaces:**
 
@@ -1387,7 +1389,3 @@ git commit -m "docs: tiered rate-limit ladder + consumption stream"
 - ~~Provision the `CREDENTIAL_CACHE` KV namespace~~ **DONE on this branch.** A dedicated namespace was provisioned in the Build Internet account (prod `bae0fa6a594448d483176fe90a9a0479`, preview `ac4b692c975a4d9382a847e968243107`) and the binding wired into `workers/api/wrangler.jsonc` only — the API worker is the sole consumer. The MCP worker resolves identity before enforcement, so it has no credential-cache need and intentionally does NOT bind it.
 - Rollout: the account + anonymous rungs are gated by `rate-limit-enabled`/`RATE_LIMIT_ENABLED` (default OFF). To begin enforcing, flip the flag in BOTH Flagship apps (`releases-platform{,-staging}`). The machine rung is already on.
 - The `relu_` account tier is dark until `user-api-keys-enabled` rolls out; OAuth-JWT users get the 300 tier immediately once `rate-limit-enabled` is on.
-
-```
-
-```

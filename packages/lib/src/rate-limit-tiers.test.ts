@@ -155,3 +155,53 @@ describe("consumption signal", () => {
     });
   });
 });
+
+import { accountBucketKey } from "./rate-limit-tiers";
+
+describe("accountBucketKey", () => {
+  it("strips the oauth_ prefix so an OAuth token buckets on the bare userId", () => {
+    expect(accountBucketKey("oauth_user_9")).toBe("user_9");
+  });
+
+  it("returns a bare userId unchanged (the API relu_ path passes one directly)", () => {
+    expect(accountBucketKey("user_77")).toBe("user_77");
+  });
+
+  it("leaves a relu_ key id unchanged (no owner userId available to strip to)", () => {
+    expect(accountBucketKey("relu_key_3")).toBe("relu_key_3");
+  });
+});
+
+describe("resolveAccountFromCache — cache is best-effort", () => {
+  it("treats a throwing cache.get as a miss and validates directly", async () => {
+    const throwingGet: CredentialCache = {
+      async get() {
+        throw new Error("KV down");
+      },
+      async put() {},
+    };
+    const result = await resolveAccountFromCache({
+      credential: "relu_x",
+      cache: throwingGet,
+      validate: async () => ({ valid: true, userId: "user_1" }),
+    });
+    expect(result).toEqual({ valid: true, userId: "user_1" });
+  });
+
+  it("returns the validated result even when cache.put throws", async () => {
+    const throwingPut: CredentialCache = {
+      async get() {
+        return null;
+      },
+      async put() {
+        throw new Error("KV write failed");
+      },
+    };
+    const result = await resolveAccountFromCache({
+      credential: "relu_y",
+      cache: throwingPut,
+      validate: async () => ({ valid: false }),
+    });
+    expect(result).toEqual({ valid: false });
+  });
+});

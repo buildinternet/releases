@@ -123,14 +123,25 @@ export async function resolveAccountFromCache(opts: {
   const ttl = opts.ttlSeconds ?? CREDENTIAL_CACHE_TTL_SECONDS;
   if (!cache) return validate();
   const cacheKey = `ratelimit:cred:${await hashSecret(credential)}`;
-  const cached = await cache.get(cacheKey);
+  // The cache is best-effort: a transient KV error must never break the limiter,
+  // so a failed get is treated as a miss and a failed put is swallowed.
+  let cached: string | null = null;
+  try {
+    cached = await cache.get(cacheKey);
+  } catch {
+    cached = null;
+  }
   if (cached !== null) {
     const decoded = decode(cached);
     if (decoded !== null) return decoded;
     // unknown format → fall through to re-validate and overwrite the bad entry
   }
   const result = await validate();
-  await cache.put(cacheKey, encode(result), { expirationTtl: ttl });
+  try {
+    await cache.put(cacheKey, encode(result), { expirationTtl: ttl });
+  } catch {
+    // KV write failed — return the validated result uncached.
+  }
   return result;
 }
 
@@ -166,6 +177,25 @@ export function rateLimitDecisionPayload(
 export function classifyTokenId(tokenId: string): "account" | "machine" {
   if (tokenId.startsWith(OAUTH_JWT_TOKEN_PREFIX) || isUserApiKeyShaped(tokenId)) return "account";
   return "machine";
+}
+
+/**
+ * Bucket key for the account tier. The unit is the ACCOUNT, not the credential.
+ * An OAuth-JWT tokenId is `oauth_<sub>` where `<sub>` is the userId, so stripping
+ * the prefix collapses a user's OAuth and (API) user-key traffic into one
+ * 300/min bucket. A bare userId (the API relu_ path passes one directly) returns
+ * unchanged.
+ *
+ * Exception: the MCP worker's relu_ path has only the key id (`relu_<keyId>`) —
+ * its `/v1/tokens/me` introspection returns the key id, not the owner userId —
+ * so MCP relu_ keys bucket per-key, not per-account. Unifying that needs the
+ * introspection to expose userId (tracked follow-up). API relu_ is unaffected
+ * (it buckets on the resolved userId).
+ */
+export function accountBucketKey(tokenId: string): string {
+  return tokenId.startsWith(OAUTH_JWT_TOKEN_PREFIX)
+    ? tokenId.slice(OAUTH_JWT_TOKEN_PREFIX.length)
+    : tokenId;
 }
 
 /** Build the IETF RateLimit-Policy structured field value for a tier. */

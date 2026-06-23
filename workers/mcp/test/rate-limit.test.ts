@@ -15,7 +15,7 @@ describe("mcpPrincipal", () => {
     expect(mcpPrincipal(anon, "1.1.1.1")).toEqual({ tier: "anonymous", bucketKey: "1.1.1.1" });
   });
 
-  it("maps an OAuth-JWT user token to the account tier", () => {
+  it("maps an OAuth-JWT user token to the account tier, keyed on the userId (prefix stripped)", () => {
     const id: McpIdentity = {
       kind: "token",
       scopes: ["read"],
@@ -23,10 +23,10 @@ describe("mcpPrincipal", () => {
       token: null,
       userToken: "jwt",
     };
-    expect(mcpPrincipal(id, "1.1.1.1")).toEqual({ tier: "account", bucketKey: "oauth_user_9" });
+    expect(mcpPrincipal(id, "1.1.1.1")).toEqual({ tier: "account", bucketKey: "user_9" });
   });
 
-  it("maps a relu_ user key to the account tier", () => {
+  it("maps a relu_ user key to the account tier, bucketed per-key (MCP has no owner userId)", () => {
     const id: McpIdentity = {
       kind: "token",
       scopes: ["read"],
@@ -34,6 +34,8 @@ describe("mcpPrincipal", () => {
       token: null,
       userToken: "relu_x",
     };
+    // MCP's /tokens/me introspection returns the key id, not the owner userId, so
+    // relu_ keys bucket per-key here (documented exception; see accountBucketKey).
     expect(mcpPrincipal(id, "1.1.1.1")).toEqual({ tier: "account", bucketKey: "relu_key_3" });
   });
 

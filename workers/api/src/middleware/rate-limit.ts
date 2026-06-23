@@ -9,6 +9,7 @@ import {
   rateLimitConsumerRef,
   rateLimitDecisionPayload,
   classifyTokenId,
+  accountBucketKey,
   policyHeader,
   RATE_LIMITED_ERROR,
   selectTierLimiters,
@@ -71,7 +72,12 @@ async function classifyPrincipal(
   if (identity?.kind === "root") return { tier: "exempt" };
   if (identity?.kind === "token") {
     const id = identity.tokenId;
-    return { tier: classifyTokenId(id), bucketKey: id };
+    const tier = classifyTokenId(id);
+    // Account tier → bucket on the userId (strip the oauth_ prefix) so a user's
+    // OAuth and API-key traffic share one per-account budget. A relu_ key never
+    // reaches this branch (resolveAuthIdentity reads it as anonymous), so an
+    // account tier here is always OAuth.
+    return { tier, bucketKey: tier === "account" ? accountBucketKey(id) : id };
   }
   // Identity unresolved. A relu_ key is read as anonymous by resolveAuthIdentity
   // (meter-skip), so verify it here for tiering, behind the KV cache.

@@ -5,6 +5,7 @@ import {
   rateLimitConsumerRef,
   rateLimitDecisionPayload,
   classifyTokenId,
+  accountBucketKey,
   policyHeader,
   RATE_LIMITED_ERROR,
   selectTierLimiters,
@@ -19,10 +20,12 @@ import type { Env } from "./mcp-agent.js";
  *
  * Tier mapping:
  *   root          → exempt (static root key bypasses all limits)
- *   token (oauth_) → account (bucketed on tokenId = `oauth_<sub>`, one bucket per JWT subject)
- *   token (relu_)  → account (bucketed on tokenId = `relu_<keyId>`, one bucket per user key —
- *                             acceptable per-key granularity; no credential cache needed because
- *                             identity is pre-resolved by resolveMcpAuth)
+ *   token (oauth_) → account (bucketed on the userId = `<sub>`, prefix stripped, so a
+ *                             user's OAuth + API-key traffic share one per-account budget)
+ *   token (relu_)  → account (bucketed on tokenId = `relu_<keyId>`, one bucket PER KEY —
+ *                             MCP's /tokens/me introspection returns the key id, not the owner
+ *                             userId, so per-account bucketing isn't available here; see
+ *                             accountBucketKey in @releases/lib/rate-limit-tiers)
  *   token (relk_)  → machine (bucketed on tokenId)
  *   anonymous     → anonymous (bucketed on the caller IP)
  */
@@ -30,7 +33,8 @@ export function mcpPrincipal(identity: McpIdentity, ip: string): RateLimitPrinci
   if (identity.kind === "root") return { tier: "exempt" };
   if (identity.kind === "token") {
     const id = identity.tokenId;
-    return { tier: classifyTokenId(id), bucketKey: id };
+    const tier = classifyTokenId(id);
+    return { tier, bucketKey: tier === "account" ? accountBucketKey(id) : id };
   }
   // anonymous
   return { tier: "anonymous", bucketKey: ip };

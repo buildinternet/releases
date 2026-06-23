@@ -542,7 +542,8 @@ describe("account tier", () => {
   it("buckets an OAuth-JWT user at the account limiter keyed on the user id", async () => {
     // resolveAuthIdentity → verifyPresentedJwt uses the injected oauthJwtKeyResolver.
     // BETTER_AUTH_URL must be set so oauthJwtConfig() returns a non-null config.
-    // The JWT subject "user_9" → tokenId "oauth_user_9" → account bucket.
+    // The JWT subject "user_9" → tokenId "oauth_user_9" → account bucket keyed on
+    // the userId "user_9" (oauth_ prefix stripped) so it shares the per-account budget.
     const token = await signedJwt("user_9");
     const account = mockLimiter([true]);
     const app = createApp();
@@ -557,7 +558,7 @@ describe("account tier", () => {
       },
     );
     expect(res.status).toBe(200);
-    expect(account.calls).toEqual(["oauth_user_9"]);
+    expect(account.calls).toEqual(["user_9"]);
   });
 
   it("buckets a valid relu_ key at the account limiter keyed on userId (via cache)", async () => {
