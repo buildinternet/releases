@@ -753,25 +753,18 @@
       ],
       // Media Transformations binding — see top-level note (#1368).
       "media": { "binding": "MEDIA_TRANSFORM" },
+      // Producers only in staging — NO consumers. A Cloudflare queue allows a
+      // single consumer worker, and prod's `releases-api` already owns the
+      // consumer slot on these shared (un-suffixed) queues; declaring the same
+      // consumers here makes staging deploys fail (#1717 regression). Staging is
+      // a read-surface with no crons producing digests/release-events, so there
+      // is nothing for it to consume anyway. Producers stay so enqueue bindings
+      // resolve (they pre-date #1717 for webhook-delivery).
       "queues": {
         "producers": [
           { "binding": "WEBHOOK_DELIVERY_QUEUE", "queue": "webhook-delivery" },
           { "binding": "DIGEST_DELIVERY_QUEUE", "queue": "digest-delivery" },
           { "binding": "RELEASE_EVENTS_QUEUE", "queue": "release-events" },
-        ],
-        "consumers": [
-          {
-            "queue": "digest-delivery",
-            "max_batch_size": 10,
-            "max_batch_timeout": 5,
-            "max_retries": 5,
-          },
-          {
-            "queue": "release-events",
-            "max_batch_size": 5,
-            "max_batch_timeout": 5,
-            "max_retries": 5,
-          },
         ],
       },
       "send_email": [
