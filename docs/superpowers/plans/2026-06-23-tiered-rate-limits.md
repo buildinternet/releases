@@ -1108,7 +1108,7 @@ git commit -m "feat(api): emit per-principal rate-limit consumption decision eve
 
 **Note (why MCP has no credential cache):** `handle()` already calls `resolveMcpAuth()` and obtains a fully-resolved `McpIdentity` _before_ enforcement. There is no "verified-too-late" gap, so MCP maps the resolved identity straight to a tier with no KV verify, and the `CREDENTIAL_CACHE` binding is not bound on the MCP worker.
 
-**Account bucketing contract:** the account rung buckets on the **userId** (per the spec — the account, not the credential, is the unit). OAuth principals bucket on the `<sub>` (the `oauth_` prefix is stripped by `accountBucketKey`), and the API `relu_` path buckets on the resolved `userId`, so a user's OAuth and API-key traffic share one 300/min budget. **Exception:** MCP `relu_` keys bucket per-key (`relu_<keyId>`), because MCP's `GET /v1/tokens/me` introspection returns the key id, not the owner userId — there is no userId to bucket on without exposing it from that endpoint. Consequence: a user with multiple `relu_` keys could get 300/min _per key_ via MCP. Acceptable for now (both `rate-limit-enabled` and `user-api-keys-enabled` are off by default, and MCP is a narrower surface); the proper fix — having `/v1/tokens/me` return the userId and threading it through `resolveMcpAuth` — is a tracked follow-up.
+**Account bucketing contract:** the account rung buckets on the **userId** (per the spec — the account, not the credential, is the unit). OAuth principals bucket on the `<sub>` (the `oauth_` prefix is stripped by `accountBucketKey`), and the API `relu_` path buckets on the resolved `userId`, so a user's OAuth and API-key traffic share one 300/min budget. **MCP `relu_` keys now bucket per-account too (#1729):** `GET /v1/tokens/me` exposes the owning `userId` (a new optional wire field, sourced from `apikey.referenceId`), and `resolveUserKey` threads it onto `McpIdentity.userId` so `mcpPrincipal` keys the account rung on the userId rather than the key id. When an older API omits `userId`, `mcpPrincipal` falls back to `accountBucketKey(tokenId)` — i.e. per-key bucketing, the pre-#1729 behavior — so the change is backward-safe.
 
 **Interfaces:**
 
@@ -1147,15 +1147,16 @@ describe("mcpPrincipal", () => {
     expect(mcpPrincipal(id, "1.1.1.1")).toEqual({ tier: "account", bucketKey: "oauth_user_9" });
   });
 
-  it("maps a relu_ user key to the account tier", () => {
+  it("maps a relu_ user key to the account tier, bucketed on the owning userId (#1729)", () => {
     const id = {
       kind: "token",
       scopes: ["read"],
       tokenId: "relu_key_3",
       token: null,
       userToken: "relu_x",
+      userId: "user_42",
     } as const;
-    expect(mcpPrincipal(id, "1.1.1.1")).toEqual({ tier: "account", bucketKey: "relu_key_3" });
+    expect(mcpPrincipal(id, "1.1.1.1")).toEqual({ tier: "account", bucketKey: "user_42" });
   });
 
   it("maps a relk_ machine token to the machine tier", () => {

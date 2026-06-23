@@ -186,11 +186,12 @@ export function classifyTokenId(tokenId: string): "account" | "machine" {
  * 300/min bucket. A bare userId (the API relu_ path passes one directly) returns
  * unchanged.
  *
- * Exception: the MCP worker's relu_ path has only the key id (`relu_<keyId>`) —
- * its `/v1/tokens/me` introspection returns the key id, not the owner userId —
- * so MCP relu_ keys bucket per-key, not per-account. Unifying that needs the
- * introspection to expose userId (tracked follow-up). API relu_ is unaffected
- * (it buckets on the resolved userId).
+ * Both workers now bucket relu_ keys on the owning userId: the API path resolves
+ * it inline, and the MCP path threads it from `/v1/tokens/me` (which exposes
+ * `userId`; #1729). Callers should prefer that userId directly and reserve this
+ * helper for tokenIds that already embed the account (the `oauth_` prefix). It
+ * stays the safe fallback when no userId is available — e.g. an older API omits
+ * the field — collapsing to per-key bucketing for a relu_ tokenId in that case.
  */
 export function accountBucketKey(tokenId: string): string {
   return tokenId.startsWith(OAUTH_JWT_TOKEN_PREFIX)

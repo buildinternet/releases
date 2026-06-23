@@ -20,21 +20,25 @@ import type { Env } from "./mcp-agent.js";
  *
  * Tier mapping:
  *   root          → exempt (static root key bypasses all limits)
- *   token (oauth_) → account (bucketed on the userId = `<sub>`, prefix stripped, so a
- *                             user's OAuth + API-key traffic share one per-account budget)
- *   token (relu_)  → account (bucketed on tokenId = `relu_<keyId>`, one bucket PER KEY —
- *                             MCP's /tokens/me introspection returns the key id, not the owner
- *                             userId, so per-account bucketing isn't available here; see
- *                             accountBucketKey in @releases/lib/rate-limit-tiers)
+ *   token (oauth_) → account (bucketed on the userId = `<sub>`, so a user's OAuth +
+ *                             API-key traffic share one per-account budget)
+ *   token (relu_)  → account (bucketed on the owning userId from `/v1/tokens/me`, so all
+ *                             of a user's relu_ keys share one per-account budget; #1729)
  *   token (relk_)  → machine (bucketed on tokenId)
  *   anonymous     → anonymous (bucketed on the caller IP)
+ *
+ * Account-tier bucketing keys on `identity.userId` when introspection supplied it
+ * (relu_ owner / OAuth `<sub>`), falling back to `accountBucketKey(tokenId)` only
+ * when an older API omits userId — that fallback reverts a relu_ key to per-key
+ * bucketing (the pre-#1729 behavior).
  */
 export function mcpPrincipal(identity: McpIdentity, ip: string): RateLimitPrincipal {
   if (identity.kind === "root") return { tier: "exempt" };
   if (identity.kind === "token") {
     const id = identity.tokenId;
     const tier = classifyTokenId(id);
-    return { tier, bucketKey: tier === "account" ? accountBucketKey(id) : id };
+    if (tier !== "account") return { tier, bucketKey: id };
+    return { tier, bucketKey: identity.userId ?? accountBucketKey(id) };
   }
   // anonymous
   return { tier: "anonymous", bucketKey: ip };
