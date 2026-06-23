@@ -355,3 +355,92 @@ describe("publicRateLimitMiddleware — per-token limiting", () => {
     expect(tokenLimiter.calls).toEqual([]);
   });
 });
+
+// ---------------------------------------------------------------------------
+// validateAccountCredential — flag-gated relu_ tier validation
+// ---------------------------------------------------------------------------
+
+const { validateAccountCredential } =
+  (await import("../../workers/api/src/middleware/auth.js")) as unknown as {
+    validateAccountCredential: (
+      c: any,
+      presented: string,
+    ) => Promise<{ valid: boolean; userId?: string }>;
+  };
+
+const fakeBetterAuth = (result: {
+  valid: boolean;
+  userId?: string | null;
+  permissions?: Record<string, string[]> | null;
+}) => ({
+  api: {
+    verifyApiKey: async () => ({
+      valid: result.valid,
+      key: result.valid
+        ? {
+            id: "key_1",
+            userId: result.userId ?? null,
+            permissions: result.permissions ?? { api: ["read"] },
+          }
+        : null,
+    }),
+  },
+});
+
+/**
+ * Build a minimal Hono app for validateAccountCredential tests.
+ * The seam middleware MUST be registered before the /probe route handler so
+ * Hono executes it first and c.get("betterAuth") is populated when the handler
+ * calls getOrCreateAuth(). Accepts the seam as an argument so registration order
+ * is deterministic (middleware → route, never route → middleware).
+ */
+function authApp(seamMiddleware: (c: any, next: any) => Promise<void>) {
+  const app = new Hono<any>();
+  app.use("*", seamMiddleware);
+  app.get("/probe", async (c) => {
+    const presented = (c.req.header("authorization") ?? "").replace("Bearer ", "");
+    return c.json(await validateAccountCredential(c as any, presented));
+  });
+  return app;
+}
+
+describe("validateAccountCredential", () => {
+  it("resolves a valid relu_ key to {valid:true,userId} when the flag is on", async () => {
+    const app = authApp(async (c, next) => {
+      c.set("betterAuth", fakeBetterAuth({ valid: true, userId: "user_42" }));
+      await next();
+    });
+    const res = await app.request(
+      "/probe",
+      { headers: { authorization: "Bearer relu_abc" } },
+      { USER_API_KEYS_ENABLED: "true", API_TOKENS_DISABLED: "false" },
+    );
+    expect(await res.json()).toEqual({ valid: true, userId: "user_42" });
+  });
+
+  it("resolves to {valid:false} when the user-keys flag is off (relu_ dark)", async () => {
+    const app = authApp(async (c, next) => {
+      c.set("betterAuth", fakeBetterAuth({ valid: true, userId: "user_42" }));
+      await next();
+    });
+    const res = await app.request(
+      "/probe",
+      { headers: { authorization: "Bearer relu_abc" } },
+      { USER_API_KEYS_ENABLED: "false", API_TOKENS_DISABLED: "false" },
+    );
+    expect(await res.json()).toEqual({ valid: false });
+  });
+
+  it("resolves a junk relu_-shaped string to {valid:false}", async () => {
+    const app = authApp(async (c, next) => {
+      c.set("betterAuth", fakeBetterAuth({ valid: false }));
+      await next();
+    });
+    const res = await app.request(
+      "/probe",
+      { headers: { authorization: "Bearer relu_junk" } },
+      { USER_API_KEYS_ENABLED: "true", API_TOKENS_DISABLED: "false" },
+    );
+    expect(await res.json()).toEqual({ valid: false });
+  });
+});

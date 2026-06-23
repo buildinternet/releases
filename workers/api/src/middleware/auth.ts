@@ -218,6 +218,29 @@ async function verifyUserKey(
   }
 }
 
+/**
+ * Validate a presented `relu_` user key for the RATE-LIMIT account tier only —
+ * never for authorization. Returns `{ valid, userId }`. Flag-gated exactly like
+ * the metered lane (`API_TOKENS_DISABLED` kill switch + `USER_API_KEYS_ENABLED`
+ * rollout): when either gate is closed the key is treated as not-an-account
+ * (`{ valid: false }`), so it falls to the anonymous IP rung — matching today's
+ * behavior. The limiter calls this behind a ~60s KV cache, so the underlying
+ * `verifyUserKey` (which meters) runs at most once per key per window.
+ */
+export async function validateAccountCredential(
+  c: Context<Env>,
+  presented: string,
+): Promise<{ valid: boolean; userId?: string }> {
+  if (!isUserApiKeyShaped(presented)) return { valid: false };
+  if (await flag(c.env.FLAGS, c.env.API_TOKENS_DISABLED, FLAGS.apiTokensDisabled))
+    return { valid: false };
+  if (!(await flag(c.env.FLAGS, c.env.USER_API_KEYS_ENABLED, FLAGS.userApiKeysEnabled)))
+    return { valid: false };
+  const v = await verifyUserKey(c, presented);
+  if (v.ok && v.userId) return { valid: true, userId: v.userId };
+  return { valid: false };
+}
+
 const RESOLVE_MEMO_METERED = new WeakMap<Request, Promise<ResolvedAuth>>();
 const RESOLVE_MEMO_UNMETERED = new WeakMap<Request, Promise<ResolvedAuth>>();
 
