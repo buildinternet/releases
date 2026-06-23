@@ -7,8 +7,11 @@ import { isUserApiKeyShaped } from "@buildinternet/releases-core/api-token";
 import {
   resolveTierEnforcement,
   resolveAccountFromCache,
+  rateLimitConsumerRef,
+  rateLimitDecisionPayload,
   RATE_LIMIT_WINDOW_SECONDS,
   type RateLimitPrincipal,
+  type RateLimitTier,
   type TierLimiters,
 } from "@releases/lib/rate-limit-tiers";
 import {
@@ -16,6 +19,7 @@ import {
   isTrustedProxy,
   resolveAuthIdentity,
   validateAccountCredential,
+  apiRouteFamily,
 } from "./auth.js";
 
 /** Advertise the IETF RateLimit-Policy structured field for a tier. */
@@ -23,30 +27,30 @@ function policyHeader(name: string, quota: number): string {
   return `"${name}";q=${quota};w=${RATE_LIMIT_WINDOW_SECONDS}`;
 }
 
-type Limiter = { limit(options: { key: string }): Promise<{ success: boolean }> };
+/** Anonymous-allowed events are sampled to bound public-read log volume. */
+const ANON_SAMPLE_RATE = 0.05;
+function sampled(rate: number): boolean {
+  const buf = new Uint8Array(1);
+  crypto.getRandomValues(buf);
+  return buf[0] / 256 < rate;
+}
 
-/**
- * Consult `limiter` for `key`, advertise the policy, and return a 429 Response
- * when over quota (else `null` to continue). The Cloudflare ratelimit binding
- * returns only `{success}`, so we can't emit a precise RateLimit-Remaining —
- * clients pace off the advertised policy header.
- */
-async function enforce(
+/** Emit the consumption decision event (always for account/machine + throttles). */
+async function emitDecision(
   c: Context<Env>,
-  limiter: Limiter,
-  key: string,
-  policyName: string,
-  quota: number,
-): Promise<Response | null> {
-  const { success } = await limiter.limit({ key });
-  c.header("RateLimit-Policy", policyHeader(policyName, quota));
-  if (success) return null;
-  c.header("RateLimit", `"${policyName}";r=0;t=${RATE_LIMIT_WINDOW_SECONDS}`);
-  c.header("Retry-After", String(RATE_LIMIT_WINDOW_SECONDS));
-  return c.json(
-    { error: "rate_limited", message: "Too many requests. Please retry shortly." },
-    429,
-  );
+  tier: RateLimitTier,
+  bucketKey: string,
+  rateLimited: boolean,
+): Promise<void> {
+  if (tier === "anonymous" && !rateLimited && !sampled(ANON_SAMPLE_RATE)) return;
+  const payload = rateLimitDecisionPayload({
+    surface: "api",
+    tier,
+    rateLimited,
+    consumerRef: await rateLimitConsumerRef(bucketKey),
+    operation: `${c.req.method} ${apiRouteFamily(c.req.path)}`,
+  });
+  logEvent("info", { ...payload });
 }
 
 function bearer(c: Context<Env>): string {
@@ -108,15 +112,20 @@ export const publicRateLimitMiddleware: MiddlewareHandler<Env> = async (c, next)
   if (!plan) return next(); // exempt
   if (!plan.limiter) return next(); // this rung disabled → allow
 
-  const rejected = await enforce(c, plan.limiter, plan.key, plan.policyName, plan.quota);
-  // Decision-event emission is added in Task 6.
-  if (rejected) {
-    logEvent("warn", {
-      component: "rate-limit",
-      event: `${plan.tier}-throttled`,
-      bucketKey: plan.tier === "anonymous" ? plan.key : undefined,
-    });
-    return rejected;
+  const { success } = await plan.limiter.limit({ key: plan.key });
+  c.header("RateLimit-Policy", policyHeader(plan.policyName, plan.quota));
+  const emit = emitDecision(c, plan.tier, plan.key, !success);
+  try {
+    c.executionCtx.waitUntil(emit);
+  } catch {
+    void emit; // no executionCtx in tests — await below keeps the assertion deterministic
+    await emit;
   }
-  return next();
+  if (success) return next();
+  c.header("RateLimit", `"${plan.policyName}";r=0;t=${RATE_LIMIT_WINDOW_SECONDS}`);
+  c.header("Retry-After", String(RATE_LIMIT_WINDOW_SECONDS));
+  return c.json(
+    { error: "rate_limited", message: "Too many requests. Please retry shortly." },
+    429,
+  );
 };

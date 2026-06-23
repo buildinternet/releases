@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach, beforeAll } from "bun:test";
+import { describe, it, expect, afterEach, beforeAll, spyOn } from "bun:test";
 import { Hono, type MiddlewareHandler } from "hono";
 import {
   generateKeyPair,
@@ -625,5 +625,64 @@ describe("account tier", () => {
     expect(res.status).toBe(200);
     expect(account.calls).toEqual([]);
     expect(tokenLimiter.calls).toEqual([tokenId]);
+  });
+});
+
+describe("consumption decision event", () => {
+  it("emits a decision event for an allowed account request with tier + hashed consumerRef", async () => {
+    const logs: any[] = [];
+    const spy = spyOn(console, "log").mockImplementation((line: string) => {
+      try {
+        logs.push(JSON.parse(line));
+      } catch {
+        /* non-JSON line */
+      }
+    });
+    const account = mockLimiter([true]);
+    const app = createApp();
+    await app.request(
+      "/test",
+      { headers: { authorization: "Bearer relu_live", "cf-connecting-ip": "9.9.9.9" } },
+      {
+        RATE_LIMIT_ENABLED: "true",
+        USER_API_KEYS_ENABLED: "true",
+        USER_RATE_LIMITER: account,
+        betterAuth: fakeBetterAuth({ valid: true, userId: "user_77" }),
+      },
+    );
+    spy.mockRestore();
+    const decision = logs.find((l) => l.component === "rate-limit" && l.event === "decision");
+    expect(decision).toBeDefined();
+    expect(decision.tier).toBe("account");
+    expect(decision.rateLimited).toBe(false);
+    expect(decision.surface).toBe("api");
+    expect(decision.consumerRef).toMatch(/^[0-9a-f]{64}$/);
+    expect(JSON.stringify(decision)).not.toContain("user_77"); // hashed, not raw
+  });
+
+  it("always emits a decision event when a request is throttled", async () => {
+    const logs: any[] = [];
+    const spy = spyOn(console, "log").mockImplementation((line: string) => {
+      try {
+        logs.push(JSON.parse(line));
+      } catch {
+        /* */
+      }
+    });
+    const account = mockLimiter([false]); // over quota
+    const app = createApp();
+    await app.request(
+      "/test",
+      { headers: { authorization: "Bearer relu_live", "cf-connecting-ip": "9.9.9.9" } },
+      {
+        RATE_LIMIT_ENABLED: "true",
+        USER_API_KEYS_ENABLED: "true",
+        USER_RATE_LIMITER: account,
+        betterAuth: fakeBetterAuth({ valid: true, userId: "user_77" }),
+      },
+    );
+    spy.mockRestore();
+    const decision = logs.find((l) => l.component === "rate-limit" && l.event === "decision");
+    expect(decision?.rateLimited).toBe(true);
   });
 });
