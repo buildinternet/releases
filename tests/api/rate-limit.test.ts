@@ -640,17 +640,20 @@ describe("consumption decision event", () => {
     });
     const account = mockLimiter([true]);
     const app = createApp();
-    await app.request(
-      "/test",
-      { headers: { authorization: "Bearer relu_live", "cf-connecting-ip": "9.9.9.9" } },
-      {
-        RATE_LIMIT_ENABLED: "true",
-        USER_API_KEYS_ENABLED: "true",
-        USER_RATE_LIMITER: account,
-        betterAuth: fakeBetterAuth({ valid: true, userId: "user_77" }),
-      },
-    );
-    spy.mockRestore();
+    try {
+      await app.request(
+        "/test",
+        { headers: { authorization: "Bearer relu_live", "cf-connecting-ip": "9.9.9.9" } },
+        {
+          RATE_LIMIT_ENABLED: "true",
+          USER_API_KEYS_ENABLED: "true",
+          USER_RATE_LIMITER: account,
+          betterAuth: fakeBetterAuth({ valid: true, userId: "user_77" }),
+        },
+      );
+    } finally {
+      spy.mockRestore();
+    }
     const decision = logs.find((l) => l.component === "rate-limit" && l.event === "decision");
     expect(decision).toBeDefined();
     expect(decision.tier).toBe("account");
@@ -666,23 +669,27 @@ describe("consumption decision event", () => {
       try {
         logs.push(JSON.parse(line));
       } catch {
-        /* */
+        /* non-JSON line */
       }
     });
     const account = mockLimiter([false]); // over quota
     const app = createApp();
-    await app.request(
-      "/test",
-      { headers: { authorization: "Bearer relu_live", "cf-connecting-ip": "9.9.9.9" } },
-      {
-        RATE_LIMIT_ENABLED: "true",
-        USER_API_KEYS_ENABLED: "true",
-        USER_RATE_LIMITER: account,
-        betterAuth: fakeBetterAuth({ valid: true, userId: "user_77" }),
-      },
-    );
-    spy.mockRestore();
+    try {
+      await app.request(
+        "/test",
+        { headers: { authorization: "Bearer relu_live", "cf-connecting-ip": "9.9.9.9" } },
+        {
+          RATE_LIMIT_ENABLED: "true",
+          USER_API_KEYS_ENABLED: "true",
+          USER_RATE_LIMITER: account,
+          betterAuth: fakeBetterAuth({ valid: true, userId: "user_77" }),
+        },
+      );
+    } finally {
+      spy.mockRestore();
+    }
     const decision = logs.find((l) => l.component === "rate-limit" && l.event === "decision");
-    expect(decision?.rateLimited).toBe(true);
+    expect(decision).toBeDefined();
+    expect(decision.rateLimited).toBe(true);
   });
 });

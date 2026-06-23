@@ -118,7 +118,7 @@ export const publicRateLimitMiddleware: MiddlewareHandler<Env> = async (c, next)
   try {
     c.executionCtx.waitUntil(emit);
   } catch {
-    void emit; // no executionCtx in tests — await below keeps the assertion deterministic
+    // no executionCtx in tests — await inline to keep assertions deterministic
     await emit;
   }
   if (success) return next();
