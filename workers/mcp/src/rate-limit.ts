@@ -72,16 +72,15 @@ export async function enforceMcpRateLimit(
   const { success } = await plan.limiter.limit({ key: plan.key });
 
   const emit = (async () => {
-    logEvent(
-      "info",
-      rateLimitDecisionPayload({
+    logEvent("info", {
+      ...rateLimitDecisionPayload({
         surface: "mcp",
         tier: plan.tier,
         rateLimited: !success,
         consumerRef: await rateLimitConsumerRef(plan.key),
         operation: "mcp",
       }),
-    );
+    });
   })();
   try {
     ctx.waitUntil(emit);
