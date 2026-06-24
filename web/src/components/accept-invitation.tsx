@@ -65,7 +65,12 @@ export function AcceptInvitation({ invitationId }: { invitationId: string }) {
         return;
       }
       const orgId = invitation.organizationId;
-      await organization.setActive({ organizationId: orgId });
+      try {
+        await organization.setActive({ organizationId: orgId });
+      } catch {
+        // best-effort: only affects the active-workspace badge; the detail
+        // page loads by id regardless.
+      }
       router.push(`/account/workspaces/${orgId}`);
     } catch {
       setActionError("Could not accept the invitation.");
