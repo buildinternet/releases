@@ -180,23 +180,31 @@ describe("displayEmailBackfill (fills a One-Tap user's empty displayEmail)", () 
 });
 
 describe("buildStripePlugin gating", () => {
+  const db = createTestDb();
+
   it("returns null when neither secret is present", () => {
-    expect(buildStripePlugin({})).toBeNull();
+    expect(buildStripePlugin({}, db)).toBeNull();
   });
 
   it("requires BOTH the secret key and the webhook secret", () => {
-    expect(buildStripePlugin({ secretKey: "sk_test_x" })).toBeNull();
-    expect(buildStripePlugin({ webhookSecret: "whsec_x" })).toBeNull();
+    expect(buildStripePlugin({ secretKey: "sk_test_x" }, db)).toBeNull();
+    expect(buildStripePlugin({ webhookSecret: "whsec_x" }, db)).toBeNull();
   });
 
   it("treats empty strings as absent", () => {
-    expect(buildStripePlugin({ secretKey: "sk_test_x", webhookSecret: "" })).toBeNull();
-    expect(buildStripePlugin({ secretKey: "", webhookSecret: "whsec_x" })).toBeNull();
+    expect(buildStripePlugin({ secretKey: "sk_test_x", webhookSecret: "" }, db)).toBeNull();
+    expect(buildStripePlugin({ secretKey: "", webhookSecret: "whsec_x" }, db)).toBeNull();
   });
 
-  it("mounts the stripe plugin when both secrets resolve", () => {
-    const plugin = buildStripePlugin({ secretKey: "sk_test_x", webhookSecret: "whsec_x" });
+  it("mounts the stripe plugin with the inert subscription seam when both secrets resolve", () => {
+    const plugin = buildStripePlugin({ secretKey: "sk_test_x", webhookSecret: "whsec_x" }, db) as {
+      id?: string;
+      endpoints?: Record<string, unknown>;
+    } | null;
     expect(plugin?.id).toBe("stripe");
+    // subscription.enabled wires the subscription endpoints (inert with plans: []),
+    // keyed to the workspace via authorizeReference (owner/admin gate).
+    expect(plugin?.endpoints).toHaveProperty("upgradeSubscription");
   });
 });
 
