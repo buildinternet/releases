@@ -20,8 +20,11 @@ personal workspace; they can create more.
   `workers/api/src/db/schema-auth.ts`: `authOrganization` → `organization`, `authMember` →
   `member`, `authInvitation` → `invitation`, plus the `@better-auth/stripe` `subscription`
   table. New columns: `session.active_organization_id`, `user.last_active_organization_id`.
-- A minimal account UI at `/account/workspaces` (list / create / switch active). No
-  members/invitations management UI yet.
+- Account UI: `/account/workspaces` (list / create / switch active); each row links to
+  `/account/workspaces/[id]` to manage that workspace's **members** (roster, role
+  toggle member⇄admin, remove, leave) and **invitations** (invite by email, cancel,
+  resend). The `/accept-invitation/[id]` page handles the emailed invite link
+  (sign-in prompt, email-mismatch, invalid, and accept/decline).
 
 ## Personal-workspace provisioning (lazy)
 
@@ -71,7 +74,8 @@ with no further plumbing.
 
 ## Out of scope (follow-ups)
 
-- Members & invitations management UI; an org switcher in the nav.
+- A workspace switcher in the global nav (deferred until something in the product reads
+  the active workspace).
 - A public `/v1/workspaces` REST surface, CLI commands, or MCP tools (the web UI drives
   Better Auth's own `/api/auth/organization/*` endpoints directly).
 - Teams sub-feature; custom access-control roles.
