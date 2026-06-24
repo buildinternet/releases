@@ -13,6 +13,14 @@ const inputClass =
 
 export type WorkspaceInvitationRow = { id: string; email: string; role: string; status: string };
 
+/**
+ * The roles invitable through this UI. A workspace `role` arrives as a bare string (from
+ * the invitation row or the form), so narrow it to a supported value before handing it to
+ * `inviteMember` rather than force-casting — anything unrecognized falls back to `member`.
+ */
+type InviteRole = "member" | "admin";
+const toInviteRole = (role: string): InviteRole => (role === "admin" ? "admin" : "member");
+
 export function WorkspaceInvitations({
   organizationId,
   invitations,
@@ -35,7 +43,7 @@ export function WorkspaceInvitations({
       try {
         const res = await organization.inviteMember({
           email: target.email,
-          role: target.role as "member" | "admin",
+          role: toInviteRole(target.role),
           organizationId,
           ...(target.resend ? { resend: true } : {}),
         });
