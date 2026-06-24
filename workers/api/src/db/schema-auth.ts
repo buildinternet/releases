@@ -21,7 +21,8 @@ import { sqliteTable, text, integer, index } from "drizzle-orm/sqlite-core";
  * 20260604030000 the api-key store, 20260605000000 the device-code store,
  * 20260607010000 the admin-plugin role/ban columns, 20260609010000 the Stripe
  * customer id, 20260613000000 the passkey store, 20260615000000 the display-email
- * column).
+ * column, 20260624010000 the organization/member/invitation + subscription tables and
+ * the active/last-active organization columns).
  * The schema↔migration pairing gate in ci.yml watches this file.
  */
 
@@ -75,6 +76,13 @@ export const user = sqliteTable("user", {
   // yet, so the plugin's `subscription` table is intentionally absent. Paired
   // migration: 20260609010000_add_stripe_customer_id.sql.
   stripeCustomerId: text("stripe_customer_id"),
+  // Better Auth organization plugin ("Workspaces" — user tenancy, NOT the registry
+  // `organizations` table). The id of the workspace the user last had active;
+  // consulted by ensureActiveWorkspace (auth/workspace.ts) so the active selection is
+  // sticky across sessions for multi-workspace users (single-workspace users always
+  // resolve to their one membership). NOT a Better Auth built-in field — server-set
+  // only. Nullable. Paired migration: 20260624010000_add_workspaces_organization.sql.
+  lastActiveOrganizationId: text("last_active_organization_id"),
 });
 
 export const session = sqliteTable(
@@ -92,6 +100,11 @@ export const session = sqliteTable(
     updatedAt: timestampCol("updated_at"),
     // Better Auth `admin` plugin — set when this session is an admin impersonating a user.
     impersonatedBy: text("impersonated_by"),
+    // Better Auth organization plugin ("Workspaces"). The user's active workspace for
+    // this session; seeded by the session.create.before provisioning hook and updated
+    // by the plugin's setActive endpoint. Nullable. Paired migration:
+    // 20260624010000_add_workspaces_organization.sql.
+    activeOrganizationId: text("active_organization_id"),
   },
   (t) => [index("idx_session_user_id").on(t.userId)],
 );
@@ -368,6 +381,100 @@ export const passkey = sqliteTable(
   ],
 );
 
+/**
+ * Better Auth organization plugin (`better-auth/plugins`) — user-tenancy
+ * "Workspaces". DELIBERATELY DISTINCT from the registry `organizations` table
+ * (@buildinternet/releases-core) = indexed vendors; the SQL names differ
+ * (`organization` singular vs `organizations` plural, so D1 sees two tables). The BA
+ * model keys are `organization`/`member`/`invitation`, so the drizzle-adapter schema
+ * map (auth/index.ts) must use THOSE keys — hence the `auth*`-prefixed TS vars here
+ * (which also dodge the `type Organization` clash with the core schema). Built-in
+ * owner/admin/member roles; no teams. Field set mirrors the plugin's schema
+ * (organization.mjs): organization has NO updatedAt. `member.role` is the org role —
+ * NOT `user.role` (the OAuth scope ceiling in auth/entitlement.ts). Paired migration:
+ * 20260624010000_add_workspaces_organization.sql.
+ */
+export const authOrganization = sqliteTable("organization", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  slug: text("slug").notNull().unique(),
+  logo: text("logo"),
+  metadata: text("metadata"),
+  createdAt: timestampCol("created_at"),
+});
+
+export const authMember = sqliteTable(
+  "member",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => authOrganization.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    role: text("role").notNull().default("member"),
+    createdAt: timestampCol("created_at"),
+  },
+  (t) => [
+    index("idx_member_organization_id").on(t.organizationId),
+    index("idx_member_user_id").on(t.userId),
+  ],
+);
+
+export const authInvitation = sqliteTable(
+  "invitation",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => authOrganization.id, { onDelete: "cascade" }),
+    email: text("email").notNull(),
+    role: text("role"),
+    status: text("status").notNull().default("pending"),
+    expiresAt: integer("expires_at", { mode: "timestamp" }).notNull(),
+    createdAt: timestampCol("created_at"),
+    inviterId: text("inviter_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+  },
+  (t) => [index("idx_invitation_organization_id").on(t.organizationId)],
+);
+
+/**
+ * `@better-auth/stripe` subscription store. Field set mirrors the plugin's schema
+ * (its `subscriptions` model). `referenceId` = the workspace (organization) id, gated
+ * by `authorizeReference` (auth/workspace.ts `isOrgOwnerOrAdmin`). With `plans: []`
+ * (auth/index.ts `buildStripePlugin`) no row is ever written yet — this is the inert
+ * org-billing seam; the table exists so adding real plans later needs no migration.
+ * Property keys are the plugin's camelCase field names (the adapter resolves by key);
+ * SQL columns stay snake_case. Paired migration:
+ * 20260624010000_add_workspaces_organization.sql.
+ */
+export const subscription = sqliteTable(
+  "subscription",
+  {
+    id: text("id").primaryKey(),
+    plan: text("plan").notNull(),
+    referenceId: text("reference_id").notNull(),
+    stripeCustomerId: text("stripe_customer_id"),
+    stripeSubscriptionId: text("stripe_subscription_id"),
+    status: text("status").notNull().default("incomplete"),
+    periodStart: integer("period_start", { mode: "timestamp" }),
+    periodEnd: integer("period_end", { mode: "timestamp" }),
+    trialStart: integer("trial_start", { mode: "timestamp" }),
+    trialEnd: integer("trial_end", { mode: "timestamp" }),
+    cancelAtPeriodEnd: integer("cancel_at_period_end", { mode: "boolean" }),
+    cancelAt: integer("cancel_at", { mode: "timestamp" }),
+    canceledAt: integer("canceled_at", { mode: "timestamp" }),
+    endedAt: integer("ended_at", { mode: "timestamp" }),
+    seats: integer("seats"),
+    billingInterval: text("billing_interval"),
+    stripeScheduleId: text("stripe_schedule_id"),
+  },
+  (t) => [index("idx_subscription_reference_id").on(t.referenceId)],
+);
+
 export type AuthUser = typeof user.$inferSelect;
 export type AuthSession = typeof session.$inferSelect;
 export type AuthAccount = typeof account.$inferSelect;
@@ -381,3 +488,8 @@ export type AuthOAuthRefreshToken = typeof oauthRefreshToken.$inferSelect;
 export type AuthOAuthConsent = typeof oauthConsent.$inferSelect;
 export type AuthJwks = typeof jwks.$inferSelect;
 export type AuthPasskey = typeof passkey.$inferSelect;
+export type AuthOrganization = typeof authOrganization.$inferSelect;
+export type NewAuthOrganization = typeof authOrganization.$inferInsert;
+export type AuthMember = typeof authMember.$inferSelect;
+export type AuthInvitation = typeof authInvitation.$inferSelect;
+export type Subscription = typeof subscription.$inferSelect;
