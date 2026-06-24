@@ -100,14 +100,14 @@ export function WorkspacesPanel() {
             const isActive = active?.id === ws.id;
             return (
               <li key={ws.id} className="flex items-center justify-between gap-4 px-4 py-3">
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium text-stone-900 dark:text-stone-100">
+                <Link href={`/account/workspaces/${ws.id}`} className="group min-w-0">
+                  <p className="truncate text-sm font-medium text-stone-900 group-hover:underline dark:text-stone-100">
                     {ws.name}
                   </p>
                   <p className="mt-0.5 font-mono text-xs text-stone-500 dark:text-stone-400">
                     {isActive ? "active" : ws.slug}
                   </p>
-                </div>
+                </Link>
                 {isActive ? (
                   <span className="shrink-0 text-sm text-stone-500 dark:text-stone-400">
                     Active
