@@ -3,6 +3,7 @@ import { getSecret } from "@releases/lib/secrets";
 import type { Context } from "hono";
 import type { Env } from "../index.js";
 import type { WebhookSubscriptionUpdates } from "./queries.js";
+import { WEBHOOK_FORMATS, type WebhookFormat } from "@buildinternet/releases-core/schema";
 
 /** AE SQL doesn't support bound parameters; validates id before string interpolation. */
 /** Matches `newWebhookSubscriptionId()` — `whk_` + nanoid(16) (`A-Za-z0-9_-`). */
@@ -38,7 +39,7 @@ export function buildWebhookPatchUpdates(
     description: string | null;
     enabled: boolean;
     disabledReason: string | null;
-    format: "json" | "slack";
+    format?: WebhookFormat;
   }>,
 ): WebhookSubscriptionUpdates | { error: string } {
   const updates: WebhookSubscriptionUpdates = {};
@@ -48,7 +49,7 @@ export function buildWebhookPatchUpdates(
     updates.url = body.url;
   }
   if (body.format !== undefined) {
-    if (body.format !== "json" && body.format !== "slack") {
+    if (!WEBHOOK_FORMATS.includes(body.format)) {
       return { error: "format must be 'json' or 'slack'" };
     }
     // When switching to slack with a URL in the same patch, enforce the Slack host.

@@ -2,6 +2,7 @@ import { eq, and, inArray } from "drizzle-orm";
 import {
   webhookSubscriptions,
   type WebhookSubscription,
+  type WebhookFormat,
 } from "@buildinternet/releases-core/schema";
 import { userFollows } from "../db/schema-follows.js";
 import { foldUserFollowRows, type UserFollowTargets } from "./follows-match.js";
@@ -17,7 +18,7 @@ export type WebhookSubscriptionUpdates = Partial<{
   sourceId: string | null;
   productId: string | null;
   releaseType: "feature" | "rollup" | null;
-  format: "json" | "slack";
+  format: WebhookFormat;
 }>;
 
 /**
@@ -87,7 +88,7 @@ export async function insertWebhookSubscription(
     sourceId: string | null;
     productId?: string | null;
     releaseType?: "feature" | "rollup" | null;
-    format?: "json" | "slack";
+    format?: WebhookFormat;
     description: string | null;
     userId?: string | null;
   },

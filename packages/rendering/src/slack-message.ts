@@ -25,9 +25,11 @@ export interface SlackWebhookBody {
 const DEFAULT_BASE_URL = "https://releases.sh";
 const SUMMARY_MAX = 300;
 
+const SLACK_ESCAPE: Record<string, string> = { "&": "&amp;", "<": "&lt;", ">": "&gt;" };
+
 /** Slack mrkdwn requires escaping these three characters. */
 function escapeSlack(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return s.replace(/[&<>]/g, (c) => SLACK_ESCAPE[c]!);
 }
 
 /** Truncate to `max`, preferring a word boundary past 60% of the limit, with an ellipsis. */

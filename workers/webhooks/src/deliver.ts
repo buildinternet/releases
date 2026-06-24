@@ -30,43 +30,40 @@ export async function deliver(
   const fetchImpl = opts.fetchImpl ?? fetch;
   const now = opts.now ?? (() => Math.floor(Date.now() / 1000));
 
-  let request: Request;
+  let body: string;
+  let headers: Record<string, string>;
   if (message.format === "slack") {
     // Slack incoming webhooks take a Block Kit body and ignore/forbid our
     // signature headers — the URL is the secret, so we send unsigned.
-    const body = JSON.stringify(formatSlackMessage(message.event.release));
-    request = new Request(message.url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "User-Agent": `releases-webhooks/${WEBHOOK_VERSION}`,
-      },
-      body,
-      signal: AbortSignal.timeout(opts.timeoutMs),
-    });
+    body = JSON.stringify(formatSlackMessage(message.event.release));
+    headers = {
+      "Content-Type": "application/json",
+      "User-Agent": `releases-webhooks/${WEBHOOK_VERSION}`,
+    };
   } else {
     const ts = now();
-    const body = JSON.stringify(message.event);
+    body = JSON.stringify(message.event);
     const signingKey = await deriveSigningKey(
       opts.masterKey,
       message.subscriptionId,
       message.secretVersion,
     );
     const signature = await signPayload(signingKey, ts, body);
-    request = new Request(message.url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Releases-Version": WEBHOOK_VERSION,
-        "X-Releases-Event-Id": message.event.id,
-        "X-Releases-Timestamp": String(ts),
-        "X-Releases-Signature": signature,
-        "User-Agent": `releases-webhooks/${WEBHOOK_VERSION}`,
-      },
-      body,
-      signal: AbortSignal.timeout(opts.timeoutMs),
-    });
+    headers = {
+      "Content-Type": "application/json",
+      "X-Releases-Version": WEBHOOK_VERSION,
+      "X-Releases-Event-Id": message.event.id,
+      "X-Releases-Timestamp": String(ts),
+      "X-Releases-Signature": signature,
+      "User-Agent": `releases-webhooks/${WEBHOOK_VERSION}`,
+    };
   }
+  const request = new Request(message.url, {
+    method: "POST",
+    headers,
+    body,
+    signal: AbortSignal.timeout(opts.timeoutMs),
+  });
 
   const start = Date.now();
   try {

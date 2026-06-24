@@ -21,7 +21,7 @@ import {
   checkWebhookTestRateLimit,
   webhookTestRateLimitResponse,
 } from "../webhooks/test-rate-limit.js";
-import type { WebhookSubscription } from "@buildinternet/releases-core/schema";
+import type { WebhookSubscription, WebhookFormat } from "@buildinternet/releases-core/schema";
 import {
   countUserOrgWebhookSubscriptions,
   getUserFollowsWebhookSubscription,
@@ -275,7 +275,7 @@ meWebhookHandlers.patch("/me/webhooks/:id", async (c) => {
       description: string | null;
       enabled: boolean;
       disabledReason: string | null;
-      format: "json" | "slack";
+      format: WebhookFormat;
     }>,
   );
   const patch =
@@ -291,7 +291,7 @@ meWebhookHandlers.patch("/me/webhooks/:id", async (c) => {
   const owned = await getUserWebhookSubscription(db, session.user.id, id);
   if (!owned) return c.json({ error: "not_found" }, 404);
 
-  if (body.format === "slack") {
+  if (body.format === "slack" || owned.format === "slack") {
     const effectiveUrl = typeof body.url === "string" ? body.url : owned.url;
     const slackError = validateSlackWebhookUrl(effectiveUrl);
     if (slackError) return c.json({ error: "bad_request", message: slackError }, 400);

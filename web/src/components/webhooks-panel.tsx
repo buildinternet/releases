@@ -369,7 +369,11 @@ export function WebhooksPanel() {
                   >
                     {sub.enabled ? "Pause" : "Resume"}
                   </button>
-                  {sub.format !== "slack" && (
+                  {sub.format === "slack" ? (
+                    <span className="rounded bg-stone-100 px-1.5 py-0.5 text-[11px] text-stone-600 dark:bg-stone-800 dark:text-stone-300">
+                      Slack
+                    </span>
+                  ) : (
                     <button
                       type="button"
                       disabled={busy}
@@ -378,11 +382,6 @@ export function WebhooksPanel() {
                     >
                       Rotate key
                     </button>
-                  )}
-                  {sub.format === "slack" && (
-                    <span className="rounded bg-stone-100 px-1.5 py-0.5 text-[11px] text-stone-600 dark:bg-stone-800 dark:text-stone-300">
-                      Slack
-                    </span>
                   )}
                   <button
                     type="button"
