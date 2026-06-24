@@ -67,9 +67,9 @@ import {
   resetPasswordTemplate,
   magicLinkTemplate,
   changeEmailTemplate,
+  invitationEmailTemplate,
   type AuthEmailMessage,
 } from "./email.js";
-import { escapeHtml } from "../lib/html-escape.js";
 import {
   makeAuthAudit,
   auditDatabaseHooks,
@@ -1193,12 +1193,13 @@ async function buildAuthInstance(env: Bindings, deps: CreateAuthDeps = {}) {
       membershipLimit: 100,
       sendInvitationEmail: async (data) => {
         const url = `${env.WEB_BASE_URL ?? "https://releases.sh"}/accept-invitation/${data.id}`;
-        const orgName = data.organization.name;
         const msg: AuthEmailMessage = {
           to: data.email,
-          subject: `You're invited to join ${orgName} on Releases`,
-          text: `You've been invited to join the ${orgName} workspace on Releases.\n\nAccept the invitation: ${url}`,
-          html: `<p>You've been invited to join the <strong>${escapeHtml(orgName)}</strong> workspace on Releases.</p><p><a href="${escapeHtml(url)}">Accept the invitation</a></p>`,
+          ...invitationEmailTemplate({
+            url,
+            orgName: data.organization.name,
+            webOrigin: webOriginForEmail(env),
+          }),
         };
         scheduleSend(() => sendEmail(msg));
       },
@@ -1411,23 +1412,25 @@ async function buildAuthInstance(env: Bindings, deps: CreateAuthDeps = {}) {
             before: async (data: Record<string, unknown>) => syncDisplayEmailOnUpdate(data),
           },
         },
+        // Composed at the leaf level (explicit references, not `...auditHooks.session`)
+        // so a change to audit.ts's session hooks surfaces as a TYPE ERROR here rather
+        // than silently dropping an audit hook the spread would have carried.
         session: {
-          // Preserve the audit session hooks (sign-in-success / session-revoked).
-          ...auditHooks.session,
           create: {
-            // Keep the audit `after` (sign-in-success); add the workspace-provisioning
-            // `before` that seeds the session's active workspace. ensureActiveWorkspace
-            // creates a personal workspace on first sign-in (backfilling existing
-            // users) and never throws, so a hiccup can't block sign-in.
-            ...auditHooks.session.create,
+            // Audit sign-in-success.
+            after: auditHooks.session.create.after,
+            // Workspace provisioning: seed the session's active workspace.
+            // ensureActiveWorkspace creates a personal workspace on first sign-in
+            // (backfilling existing users) and never throws, so a hiccup can't block
+            // sign-in.
             before: async (s: { userId: string; activeOrganizationId?: string | null }) => {
               const orgId = await ensureActiveWorkspace(db, s.userId);
               return orgId ? { data: { ...s, activeOrganizationId: orgId } } : undefined;
             },
           },
+          // Persist the user's last active workspace so the selection is sticky across
+          // sessions (multi-workspace users). Best-effort; never blocks.
           update: {
-            // Persist the user's last active workspace so the selection is sticky
-            // across sessions (multi-workspace users). Best-effort; never blocks.
             after: async (s: { userId?: string; activeOrganizationId?: string | null }) => {
               const activeOrgId = s.activeOrganizationId;
               if (s.userId && activeOrgId) {
@@ -1439,6 +1442,8 @@ async function buildAuthInstance(env: Bindings, deps: CreateAuthDeps = {}) {
               }
             },
           },
+          // Audit sign-out / session-revoked.
+          delete: auditHooks.session.delete,
         },
       };
     })(),

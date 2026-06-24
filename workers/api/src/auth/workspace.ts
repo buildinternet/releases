@@ -85,7 +85,7 @@ export async function ensureActiveWorkspace(db: AnyDb, userId: string): Promise<
         .limit(1);
       const lastActive = userRows[0]?.lastActive ?? null;
       if (lastActive && memberships.some((m) => m.organizationId === lastActive)) return lastActive;
-      const oldest = [...memberships].sort(
+      const oldest = memberships.toSorted(
         (a, b) => (a.createdAt?.getTime() ?? 0) - (b.createdAt?.getTime() ?? 0),
       )[0];
       return oldest?.organizationId ?? null;

@@ -8,23 +8,12 @@ import {
   useListOrganizations,
   useActiveOrganization,
 } from "@/lib/auth-client";
+import { toSlug } from "@buildinternet/releases-core/slug";
 
 const buttonClass =
   "inline-flex h-9 items-center justify-center gap-2 border border-stone-300 bg-white px-3 text-sm font-medium text-stone-800 transition hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-stone-700 dark:bg-stone-950 dark:text-stone-100 dark:hover:bg-stone-900";
 
 type WorkspaceRow = { id: string; name: string; slug: string };
-
-/** Lowercase, hyphenate, strip non-url-safe chars — a simple slug for the create call. */
-function slugify(input: string): string {
-  return (
-    input
-      .toLowerCase()
-      .trim()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "")
-      .slice(0, 48) || "workspace"
-  );
-}
 
 export function WorkspacesPanel() {
   const { data: sessionData, isPending } = useSession();
@@ -43,7 +32,10 @@ export function WorkspacesPanel() {
     setBusy(true);
     setError(null);
     try {
-      const res = await organization.create({ name: trimmed, slug: slugify(trimmed) });
+      const res = await organization.create({
+        name: trimmed,
+        slug: toSlug(trimmed).slice(0, 48) || "workspace",
+      });
       if (res?.error) {
         setError(res.error.message ?? "Could not create workspace.");
         return;

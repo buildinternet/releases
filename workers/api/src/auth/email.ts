@@ -290,6 +290,39 @@ export function changeEmailTemplate(opts: { url: string; newEmail: string; webOr
  * plugin in index.ts). Shorter expiry copy than verify/reset: a login link lives 15
  * minutes (`expiresIn: 60 * 15`).
  */
+export function invitationEmailTemplate(opts: {
+  url: string;
+  orgName: string;
+  webOrigin?: string;
+}): {
+  subject: string;
+  text: string;
+  html: string;
+} {
+  const safeUrl = escapeHrefUrl(opts.url);
+  const safeOrg = escapeHtml(opts.orgName);
+  const footer = {
+    reason: "You received this because someone invited you to a workspace on Releases.",
+    links: [{ label: "Releases", href: opts.webOrigin ?? DEFAULT_WEB_ORIGIN }],
+  };
+  const subject = `You're invited to join ${opts.orgName} on Releases`;
+  const bodyText = [
+    `You've been invited to join the ${opts.orgName} workspace on Releases.`,
+    "",
+    "Accept the invitation:",
+    opts.url,
+  ].join("\n");
+  const bodyHtml = [
+    `<p>You've been invited to join the <strong>${safeOrg}</strong> workspace on Releases.</p>`,
+    `<p><a href="${safeUrl}">Accept the invitation</a></p>`,
+  ].join("");
+  return {
+    subject,
+    text: appendTextFooter(bodyText, footer),
+    html: wrapHtmlEmail(appendHtmlFooter(bodyHtml, footer)),
+  };
+}
+
 export function magicLinkTemplate(opts: { url: string; webOrigin?: string }): {
   subject: string;
   text: string;
