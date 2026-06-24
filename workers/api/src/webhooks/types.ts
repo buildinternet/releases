@@ -1,4 +1,5 @@
 import type { ReleaseEvent } from "../events/types.js";
+import type { WebhookFormat } from "@buildinternet/releases-core/schema";
 
 /**
  * One queue message represents one delivery attempt for one subscription.
@@ -11,6 +12,8 @@ export interface DeliveryMessage {
   url: string;
   /** Subscription's secret_version at fan-out time; consumer uses this in HMAC derivation. */
   secretVersion: number;
+  /** Delivery format captured at fan-out time. Absent on pre-upgrade queued messages → treated as "json". */
+  format?: WebhookFormat;
   event: ReleaseEvent;
   /** 1-indexed; queue retry handler is responsible for incrementing this. Used for AE attempt_number. */
   attempt: number;

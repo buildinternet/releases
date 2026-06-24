@@ -107,6 +107,51 @@ describe("deliver", () => {
     expect(r.errorCode).toBe("timeout");
   });
 
+  it("sends a Slack body and no signature headers when format is slack", async () => {
+    let captured: Request | null = null;
+    const fetch = async (req: Request) => {
+      captured = req;
+      return new Response("ok", { status: 200 });
+    };
+    const slackMsg: DeliveryMessage = {
+      ...msg(),
+      format: "slack",
+      url: "https://hooks.slack.com/services/T/B/X",
+      event: {
+        id: "evt_1",
+        seq: 1,
+        ts: 1,
+        type: "release.created",
+        release: {
+          id: "rel_1",
+          title: "Thing",
+          version: "1.0",
+          publishedAt: null,
+          sourceName: "Src",
+          sourceSlug: "src",
+          summary: "did stuff",
+          titleGenerated: null,
+          titleShort: null,
+          media: [],
+        } as any,
+      },
+    };
+    const r = await deliver(slackMsg, {
+      masterKey: "deadbeef".repeat(8),
+      timeoutMs: 1000,
+      fetchImpl: fetch as any,
+      now: () => 1,
+    });
+    expect(r.outcome).toBe("success");
+    const req = captured!;
+    expect(req.headers.get("X-Releases-Signature")).toBeNull();
+    expect(req.headers.get("X-Releases-Timestamp")).toBeNull();
+    expect(req.headers.get("Content-Type")).toBe("application/json");
+    const parsed = (await req.json()) as any;
+    expect(parsed.blocks[0].type).toBe("section");
+    expect(parsed.blocks[0].text.text).toContain("|Thing 1.0>");
+  });
+
   it("sends the expected headers", async () => {
     let captured: Request | null = null;
     const fetch = async (req: Request) => {

@@ -16,6 +16,7 @@
       "@releases/core-internal/*": ["../../packages/core-internal/src/*"],
       "@releases/adapters/*": ["../../packages/adapters/src/*"],
       "@releases/lib/*": ["../../packages/lib/src/*"],
+      "@releases/rendering/*": ["../../packages/rendering/src/*"],
       "@releases/*": ["../../src/*"]
     }
   },

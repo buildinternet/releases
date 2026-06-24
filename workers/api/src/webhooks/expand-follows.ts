@@ -27,6 +27,7 @@ export function expandFollows(
         subscriptionId: sub.id,
         url: sub.url,
         secretVersion: sub.secretVersion,
+        format: sub.format,
         event,
         attempt: 1,
       });
