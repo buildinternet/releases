@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it, test } from "bun:test";
 import {
   assertPublicWebhookTarget,
   blockedWebhookHostname,
@@ -48,6 +48,23 @@ describe("isPrivateIpv4", () => {
   it("classifies RFC1918 ranges", () => {
     expect(isPrivateIpv4([10, 0, 0, 1])).toBe(true);
     expect(isPrivateIpv4([8, 8, 8, 8])).toBe(false);
+  });
+});
+
+import { validateSlackWebhookUrl } from "./url-safety.js";
+
+describe("validateSlackWebhookUrl", () => {
+  test("accepts a hooks.slack.com URL", () => {
+    expect(validateSlackWebhookUrl("https://hooks.slack.com/services/T/B/X")).toBeNull();
+  });
+  test("accepts a GovSlack hooks host", () => {
+    expect(validateSlackWebhookUrl("https://hooks.slack-gov.com/services/T/B/X")).toBeNull();
+  });
+  test("rejects a non-Slack host", () => {
+    expect(validateSlackWebhookUrl("https://example.com/hook")).toMatch(/hooks\.slack\.com/);
+  });
+  test("rejects a lookalike host", () => {
+    expect(validateSlackWebhookUrl("https://hooks.slack.com.evil.com/x")).not.toBeNull();
   });
 });
 

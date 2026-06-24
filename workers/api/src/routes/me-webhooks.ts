@@ -16,7 +16,7 @@ import {
   requireMasterKey,
   signingKeyFor,
 } from "../webhooks/shared.js";
-import { assertPublicWebhookTarget } from "../webhooks/url-safety.js";
+import { assertPublicWebhookTarget, validateSlackWebhookUrl } from "../webhooks/url-safety.js";
 import {
   checkWebhookTestRateLimit,
   webhookTestRateLimitResponse,
@@ -84,6 +84,12 @@ meWebhookHandlers.post("/me/webhooks", async (c) => {
   const urlError = await assertPublicWebhookTarget(url);
   if (urlError) return c.json({ error: "bad_request", message: urlError }, 400);
 
+  const format = body.format === "slack" ? "slack" : "json";
+  if (format === "slack") {
+    const slackError = validateSlackWebhookUrl(url);
+    if (slackError) return c.json({ error: "bad_request", message: slackError }, 400);
+  }
+
   const scope = body.scope === "follows" ? "follows" : "org";
   const db = getDb(c);
   const description = typeof body.description === "string" ? body.description : null;
@@ -131,17 +137,19 @@ meWebhookHandlers.post("/me/webhooks", async (c) => {
       url,
       sourceId: null,
       releaseType: releaseTypeFilter,
+      format,
       description,
       userId: session.user.id,
     });
 
-    const signingKey = await signingKeyFor(masterKey, sub.id, sub.secretVersion);
+    const signingKey =
+      format === "slack" ? undefined : await signingKeyFor(masterKey, sub.id, sub.secretVersion);
     return c.json(
       {
         ...jsonSubscription(sub),
         orgSlug: null,
         orgName: null,
-        signingKey,
+        ...(signingKey ? { signingKey } : {}),
       },
       201,
     );
@@ -216,13 +224,20 @@ meWebhookHandlers.post("/me/webhooks", async (c) => {
     sourceId: resolvedSourceId,
     productId: resolvedProductId,
     releaseType: releaseTypeFilter,
+    format,
     description,
     userId: session.user.id,
   });
 
-  const signingKey = await signingKeyFor(masterKey, sub.id, sub.secretVersion);
+  const signingKey =
+    format === "slack" ? undefined : await signingKeyFor(masterKey, sub.id, sub.secretVersion);
   return c.json(
-    { ...jsonSubscription(sub), orgSlug: org.slug, orgName: org.name, signingKey },
+    {
+      ...jsonSubscription(sub),
+      orgSlug: org.slug,
+      orgName: org.name,
+      ...(signingKey ? { signingKey } : {}),
+    },
     201,
   );
 });
@@ -260,6 +275,7 @@ meWebhookHandlers.patch("/me/webhooks/:id", async (c) => {
       description: string | null;
       enabled: boolean;
       disabledReason: string | null;
+      format: "json" | "slack";
     }>,
   );
   const patch =
@@ -438,6 +454,7 @@ meWebhookHandlers.post("/me/webhooks/:id/test", async (c) => {
     subscriptionId: sub.id,
     url: sub.url,
     secretVersion: sub.secretVersion,
+    format: sub.format,
     event: {
       id: newEventId(),
       seq: 0,

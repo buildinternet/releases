@@ -17,6 +17,7 @@ export type WebhookSubscriptionUpdates = Partial<{
   sourceId: string | null;
   productId: string | null;
   releaseType: "feature" | "rollup" | null;
+  format: "json" | "slack";
 }>;
 
 /**
@@ -86,6 +87,7 @@ export async function insertWebhookSubscription(
     sourceId: string | null;
     productId?: string | null;
     releaseType?: "feature" | "rollup" | null;
+    format?: "json" | "slack";
     description: string | null;
     userId?: string | null;
   },
@@ -100,6 +102,7 @@ export async function insertWebhookSubscription(
       sourceId: scope === "follows" ? null : input.sourceId,
       productId: scope === "follows" ? null : (input.productId ?? null),
       releaseType: input.releaseType ?? null,
+      format: input.format ?? "json",
       description: input.description,
       userId: input.userId ?? null,
     })
