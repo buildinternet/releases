@@ -291,6 +291,12 @@ meWebhookHandlers.patch("/me/webhooks/:id", async (c) => {
   const owned = await getUserWebhookSubscription(db, session.user.id, id);
   if (!owned) return c.json({ error: "not_found" }, 404);
 
+  if (body.format === "slack") {
+    const effectiveUrl = typeof body.url === "string" ? body.url : owned.url;
+    const slackError = validateSlackWebhookUrl(effectiveUrl);
+    if (slackError) return c.json({ error: "bad_request", message: slackError }, 400);
+  }
+
   if (body.releaseType !== undefined) {
     const releaseTypeFilter = parseReleaseTypeFilter(body.releaseType);
     if (releaseTypeFilter === "invalid") {
