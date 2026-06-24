@@ -9,6 +9,7 @@ import {
   jwt,
   admin,
   lastLoginMethod,
+  organization,
 } from "better-auth/plugins";
 import { adminAc, userAc } from "better-auth/plugins/admin/access";
 import { oauthProvider } from "@better-auth/oauth-provider";
@@ -28,6 +29,7 @@ import { FLAGS, flag } from "@releases/lib/flags";
 import { audienceVariants } from "@releases/lib/oauth-jwt";
 import { USER_API_KEY_PREFIX, DEVICE_AUTH_CLIENT_ID } from "@buildinternet/releases-core/api-token";
 import { oauthAccessTokenClaims, consentScopeViolation, jwtSessionPayload } from "./entitlement.js";
+import { ensureActiveWorkspace } from "./workspace.js";
 import { kvRateLimitStorage } from "./rate-limit-kv.js";
 import { scopeToPermissions } from "./api-key-scope.js";
 import { CLIENT_SECRET_PREFIX } from "./oauth-clients.js";
@@ -53,6 +55,10 @@ import {
   oauthConsent,
   jwks,
   passkey,
+  authOrganization,
+  authMember,
+  authInvitation,
+  subscription,
 } from "../db/schema-auth.js";
 import type { Env } from "../index.js";
 import {
@@ -63,6 +69,7 @@ import {
   changeEmailTemplate,
   type AuthEmailMessage,
 } from "./email.js";
+import { escapeHtml } from "../lib/html-escape.js";
 import {
   makeAuthAudit,
   auditDatabaseHooks,
@@ -1145,6 +1152,30 @@ async function buildAuthInstance(env: Bindings, deps: CreateAuthDeps = {}) {
       adminRoles: ["admin"],
       defaultRole: "user",
     }),
+    // Organization plugin — user-tenancy "Workspaces" (DISTINCT from the registry
+    // `organizations` = indexed vendors). Always-on, no flag: additive and inert for
+    // anyone who never creates a second workspace — everyone gets a personal one,
+    // provisioned lazily by the session.create.before hook below (which backfills
+    // existing users on next sign-in, so no migration backfill is needed). Built-in
+    // owner/admin/member roles (the org `member.role`, NOT `user.role` / the OAuth
+    // scope ceiling); no teams. The organization/member/invitation tables are wired
+    // into the drizzleAdapter schema map below. `sendInvitationEmail` is a thin wrapper
+    // over the existing auth-email seam so the (UI-less but reachable) invitation
+    // endpoint isn't silently broken; the accept link targets the WEB origin.
+    organization({
+      membershipLimit: 100,
+      sendInvitationEmail: async (data) => {
+        const url = `${env.WEB_BASE_URL ?? "https://releases.sh"}/accept-invitation/${data.id}`;
+        const orgName = data.organization.name;
+        const msg: AuthEmailMessage = {
+          to: data.email,
+          subject: `You're invited to join ${orgName} on Releases`,
+          text: `You've been invited to join the ${orgName} workspace on Releases.\n\nAccept the invitation: ${url}`,
+          html: `<p>You've been invited to join the <strong>${escapeHtml(orgName)}</strong> workspace on Releases.</p><p><a href="${escapeHtml(url)}">Accept the invitation</a></p>`,
+        };
+        scheduleSend(() => sendEmail(msg));
+      },
+    }),
     ...(userApiKeysOn
       ? [
           apiKey({
@@ -1256,6 +1287,14 @@ async function buildAuthInstance(env: Bindings, deps: CreateAuthDeps = {}) {
         oauthConsent,
         jwks,
         passkey,
+        // Organization plugin ("Workspaces") + the @better-auth/stripe subscription
+        // store. Keys MUST be Better Auth's model names; the `auth*`-prefixed Drizzle
+        // tables map onto them. SQL names are `organization`/`member`/`invitation` —
+        // singular, no collision with the registry `organizations` (plural).
+        organization: authOrganization,
+        member: authMember,
+        invitation: authInvitation,
+        subscription,
       },
     }),
     emailAndPassword: {
@@ -1343,6 +1382,35 @@ async function buildAuthInstance(env: Bindings, deps: CreateAuthDeps = {}) {
           ...auditHooks.user,
           update: {
             before: async (data: Record<string, unknown>) => syncDisplayEmailOnUpdate(data),
+          },
+        },
+        session: {
+          // Preserve the audit session hooks (sign-in-success / session-revoked).
+          ...auditHooks.session,
+          create: {
+            // Keep the audit `after` (sign-in-success); add the workspace-provisioning
+            // `before` that seeds the session's active workspace. ensureActiveWorkspace
+            // creates a personal workspace on first sign-in (backfilling existing
+            // users) and never throws, so a hiccup can't block sign-in.
+            ...auditHooks.session.create,
+            before: async (s: { userId: string; activeOrganizationId?: string | null }) => {
+              const orgId = await ensureActiveWorkspace(db, s.userId);
+              return orgId ? { data: { ...s, activeOrganizationId: orgId } } : undefined;
+            },
+          },
+          update: {
+            // Persist the user's last active workspace so the selection is sticky
+            // across sessions (multi-workspace users). Best-effort; never blocks.
+            after: async (s: { userId?: string; activeOrganizationId?: string | null }) => {
+              const activeOrgId = s.activeOrganizationId;
+              if (s.userId && activeOrgId) {
+                await db
+                  .update(user)
+                  .set({ lastActiveOrganizationId: activeOrgId })
+                  .where(eq(user.id, s.userId))
+                  .catch(() => {});
+              }
+            },
           },
         },
       };
