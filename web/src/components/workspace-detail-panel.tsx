@@ -22,6 +22,8 @@ export function WorkspaceDetailPanel({ organizationId }: { organizationId: strin
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const sessionUserId = session?.user?.id;
+
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -43,18 +45,18 @@ export function WorkspaceDetailPanel({ organizationId }: { organizationId: strin
 
   useEffect(() => {
     if (isPending) return;
-    if (!session?.user) {
+    if (!sessionUserId) {
       setLoading(false);
       return;
     }
     void load();
-  }, [isPending, session, load]);
+  }, [isPending, sessionUserId, load]);
 
   if (isPending || loading) {
     return <p className="text-sm text-stone-500 dark:text-stone-400">Loading…</p>;
   }
 
-  if (!session?.user) {
+  if (!sessionUserId) {
     return (
       <p className="text-sm leading-6 text-stone-600 dark:text-stone-300">
         Please{" "}
@@ -82,7 +84,7 @@ export function WorkspaceDetailPanel({ organizationId }: { organizationId: strin
     );
   }
 
-  const viewerUserId = session.user.id;
+  const viewerUserId = sessionUserId;
   const viewerRole = org.members.find((m) => m.userId === viewerUserId)?.role ?? null;
   const pendingInvitations = org.invitations.filter((i) => i.status === "pending");
 

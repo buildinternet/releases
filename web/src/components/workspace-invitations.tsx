@@ -86,6 +86,7 @@ export function WorkspaceInvitations({
       <div className="flex items-center gap-2">
         <input
           type="email"
+          aria-label="Email address to invite"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           placeholder="teammate@example.com"
@@ -122,6 +123,7 @@ export function WorkspaceInvitations({
               <div className="flex shrink-0 items-center gap-2">
                 <button
                   type="button"
+                  aria-label={`Resend invitation to ${i.email}`}
                   disabled={busy}
                   className={buttonClass}
                   onClick={() => void invite({ email: i.email, role: i.role, resend: true })}
@@ -130,6 +132,7 @@ export function WorkspaceInvitations({
                 </button>
                 <button
                   type="button"
+                  aria-label={`Cancel invitation to ${i.email}`}
                   disabled={busy}
                   className={buttonClass}
                   onClick={() => void cancel(i.id)}
@@ -140,6 +143,9 @@ export function WorkspaceInvitations({
             </li>
           ))}
         </ul>
+      )}
+      {invitations.length === 0 && (
+        <p className="text-sm text-stone-500 dark:text-stone-400">No pending invitations.</p>
       )}
     </div>
   );

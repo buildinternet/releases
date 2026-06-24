@@ -38,6 +38,7 @@ export function WorkspaceMembers({
       rowId: string,
       fn: () => Promise<{ error?: { message?: string } | null }>,
       after: () => void | Promise<void>,
+      errorMessage = "Could not update this member.",
     ) => {
       if (busyId) return;
       setBusyId(rowId);
@@ -45,12 +46,12 @@ export function WorkspaceMembers({
       try {
         const res = await fn();
         if (res.error) {
-          setError(res.error.message ?? "Could not update this member.");
+          setError(res.error.message ?? errorMessage);
           return;
         }
         await after();
       } catch {
-        setError("Could not update this member.");
+        setError(errorMessage);
       } finally {
         setBusyId(null);
       }
@@ -85,6 +86,7 @@ export function WorkspaceMembers({
                 {isSelf && m.role !== "owner" && (
                   <button
                     type="button"
+                    aria-label="Leave this workspace"
                     disabled={busyId !== null}
                     className={buttonClass}
                     onClick={() =>
@@ -92,6 +94,7 @@ export function WorkspaceMembers({
                         m.id,
                         () => organization.leave({ organizationId }),
                         () => router.push("/account/workspaces"),
+                        "Could not leave this workspace.",
                       )
                     }
                   >
@@ -101,6 +104,7 @@ export function WorkspaceMembers({
                 {actionable && toggle && (
                   <button
                     type="button"
+                    aria-label={`${toggle === "admin" ? "Make admin" : "Make member"}: ${m.user.name?.trim() || m.user.email}`}
                     disabled={busyId !== null}
                     className={buttonClass}
                     onClick={() =>
@@ -122,6 +126,7 @@ export function WorkspaceMembers({
                 {actionable && (
                   <button
                     type="button"
+                    aria-label={`Remove ${m.user.name?.trim() || m.user.email}`}
                     disabled={busyId !== null}
                     className={buttonClass}
                     onClick={() =>
