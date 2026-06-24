@@ -13,6 +13,7 @@ const BASE_ITEMS: NavItem[] = [
   { label: "Profile", href: "/account/profile" },
   { label: "Email", href: "/account/email" },
   { label: "Security", href: "/account/security" },
+  { label: "Workspaces", href: "/account/workspaces" },
   { label: "Notifications", href: "/account/notifications" },
   { label: "Following", href: "/following" },
 ];
