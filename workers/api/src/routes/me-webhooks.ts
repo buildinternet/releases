@@ -16,12 +16,12 @@ import {
   requireMasterKey,
   signingKeyFor,
 } from "../webhooks/shared.js";
-import { assertPublicWebhookTarget } from "../webhooks/url-safety.js";
+import { assertPublicWebhookTarget, validateSlackWebhookUrl } from "../webhooks/url-safety.js";
 import {
   checkWebhookTestRateLimit,
   webhookTestRateLimitResponse,
 } from "../webhooks/test-rate-limit.js";
-import type { WebhookSubscription } from "@buildinternet/releases-core/schema";
+import type { WebhookSubscription, WebhookFormat } from "@buildinternet/releases-core/schema";
 import {
   countUserOrgWebhookSubscriptions,
   getUserFollowsWebhookSubscription,
@@ -84,6 +84,12 @@ meWebhookHandlers.post("/me/webhooks", async (c) => {
   const urlError = await assertPublicWebhookTarget(url);
   if (urlError) return c.json({ error: "bad_request", message: urlError }, 400);
 
+  const format = body.format === "slack" ? "slack" : "json";
+  if (format === "slack") {
+    const slackError = validateSlackWebhookUrl(url);
+    if (slackError) return c.json({ error: "bad_request", message: slackError }, 400);
+  }
+
   const scope = body.scope === "follows" ? "follows" : "org";
   const db = getDb(c);
   const description = typeof body.description === "string" ? body.description : null;
@@ -131,17 +137,19 @@ meWebhookHandlers.post("/me/webhooks", async (c) => {
       url,
       sourceId: null,
       releaseType: releaseTypeFilter,
+      format,
       description,
       userId: session.user.id,
     });
 
-    const signingKey = await signingKeyFor(masterKey, sub.id, sub.secretVersion);
+    const signingKey =
+      format === "slack" ? undefined : await signingKeyFor(masterKey, sub.id, sub.secretVersion);
     return c.json(
       {
         ...jsonSubscription(sub),
         orgSlug: null,
         orgName: null,
-        signingKey,
+        ...(signingKey ? { signingKey } : {}),
       },
       201,
     );
@@ -216,13 +224,20 @@ meWebhookHandlers.post("/me/webhooks", async (c) => {
     sourceId: resolvedSourceId,
     productId: resolvedProductId,
     releaseType: releaseTypeFilter,
+    format,
     description,
     userId: session.user.id,
   });
 
-  const signingKey = await signingKeyFor(masterKey, sub.id, sub.secretVersion);
+  const signingKey =
+    format === "slack" ? undefined : await signingKeyFor(masterKey, sub.id, sub.secretVersion);
   return c.json(
-    { ...jsonSubscription(sub), orgSlug: org.slug, orgName: org.name, signingKey },
+    {
+      ...jsonSubscription(sub),
+      orgSlug: org.slug,
+      orgName: org.name,
+      ...(signingKey ? { signingKey } : {}),
+    },
     201,
   );
 });
@@ -260,6 +275,7 @@ meWebhookHandlers.patch("/me/webhooks/:id", async (c) => {
       description: string | null;
       enabled: boolean;
       disabledReason: string | null;
+      format: WebhookFormat;
     }>,
   );
   const patch =
@@ -274,6 +290,12 @@ meWebhookHandlers.patch("/me/webhooks/:id", async (c) => {
   const db = getDb(c);
   const owned = await getUserWebhookSubscription(db, session.user.id, id);
   if (!owned) return c.json({ error: "not_found" }, 404);
+
+  if (body.format === "slack" || owned.format === "slack") {
+    const effectiveUrl = typeof body.url === "string" ? body.url : owned.url;
+    const slackError = validateSlackWebhookUrl(effectiveUrl);
+    if (slackError) return c.json({ error: "bad_request", message: slackError }, 400);
+  }
 
   if (body.releaseType !== undefined) {
     const releaseTypeFilter = parseReleaseTypeFilter(body.releaseType);
@@ -438,6 +460,7 @@ meWebhookHandlers.post("/me/webhooks/:id/test", async (c) => {
     subscriptionId: sub.id,
     url: sub.url,
     secretVersion: sub.secretVersion,
+    format: sub.format,
     event: {
       id: newEventId(),
       seq: 0,

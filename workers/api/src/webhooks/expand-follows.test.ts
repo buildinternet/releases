@@ -38,6 +38,7 @@ function followsSub(userId: string): WebhookSubscription {
     releaseType: null,
     enabled: true,
     description: null,
+    format: "json",
     secretVersion: 1,
     createdAt: "2026-06-19T00:00:00Z",
     lastSuccessAt: null,

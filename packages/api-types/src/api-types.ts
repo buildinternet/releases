@@ -959,6 +959,9 @@ export type UserWebhookScope = "org" | "follows";
 /** Optional per-event filter on release taxonomy type. */
 export type UserWebhookReleaseTypeFilter = "feature" | "rollup";
 
+/** Webhook delivery output format. */
+export type UserWebhookFormat = "json" | "slack";
+
 /** A user-owned webhook subscription row (no signing secret). */
 export interface UserWebhookSubscription {
   id: string;
@@ -969,6 +972,7 @@ export interface UserWebhookSubscription {
   sourceId: string | null;
   productId: string | null;
   releaseType: UserWebhookReleaseTypeFilter | null;
+  format: UserWebhookFormat;
   enabled: boolean;
   description: string | null;
   secretVersion: number;
@@ -1003,12 +1007,12 @@ export interface UserWebhookListResponse {
   subscriptions: UserWebhookListItem[];
 }
 
-/** POST /v1/me/webhooks response — signing key shown once at creation. */
+/** POST /v1/me/webhooks response — signing key shown once at creation (omitted for slack format). */
 export interface CreateUserWebhookResponse
   extends UserWebhookSubscription, UserWebhookDeliveryHealth {
   orgSlug: string | null;
   orgName: string | null;
-  signingKey: string;
+  signingKey?: string;
 }
 
 /** POST /v1/me/webhooks/:id/rotate-secret response. */

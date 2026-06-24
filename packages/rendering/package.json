@@ -12,7 +12,8 @@
     "./media-url": "./src/media-url.ts",
     "./media-filter": "./src/media-filter.ts",
     "./video-embed": "./src/video-embed.ts",
-    "./rewrite-links": "./src/rewrite-links.ts"
+    "./rewrite-links": "./src/rewrite-links.ts",
+    "./slack-message": "./src/slack-message.ts"
   },
   "dependencies": {
     "@buildinternet/releases-api-types": "workspace:*",

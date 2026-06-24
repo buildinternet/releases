@@ -129,6 +129,23 @@ export async function resolveHostAddresses(
   return [...ips];
 }
 
+/** Slack incoming-webhook hosts: standard + Enterprise Grid share hooks.slack.com; GovSlack uses hooks.slack-gov.com. */
+const SLACK_WEBHOOK_HOSTS = new Set(["hooks.slack.com", "hooks.slack-gov.com"]);
+
+/** Host allowlist for `format = slack` subscriptions. Returns an error message or null. */
+export function validateSlackWebhookUrl(url: string): string | null {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return "url is invalid";
+  }
+  if (!SLACK_WEBHOOK_HOSTS.has(parsed.hostname.toLowerCase())) {
+    return "Slack webhooks must point at a hooks.slack.com incoming webhook URL";
+  }
+  return null;
+}
+
 /**
  * Full webhook URL validation for create/patch: HTTPS, blocked hostnames,
  * literal private IPs, and DNS resolution for domain names (reject if any

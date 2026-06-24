@@ -1031,6 +1031,10 @@ export type NewSourceChangelogChunk = typeof sourceChangelogChunks.$inferInsert;
 export const WEBHOOK_SCOPES = ["org", "follows"] as const;
 export type WebhookScope = (typeof WEBHOOK_SCOPES)[number];
 
+/** Output format for a webhook delivery. `json` = signed raw event; `slack` = Slack Block Kit. */
+export const WEBHOOK_FORMATS = ["json", "slack"] as const;
+export type WebhookFormat = (typeof WEBHOOK_FORMATS)[number];
+
 export const webhookSubscriptions = sqliteTable(
   "webhook_subscriptions",
   {
@@ -1049,6 +1053,8 @@ export const webhookSubscriptions = sqliteTable(
     releaseType: text("release_type", { enum: RELEASE_TYPES }),
     enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
     description: text("description"),
+    /** Delivery output format. `json` = signed raw event (default); `slack` = Slack Block Kit, unsigned. */
+    format: text("format", { enum: WEBHOOK_FORMATS }).notNull().default("json"),
     secretVersion: integer("secret_version").notNull().default(1),
     createdAt: text("created_at")
       .notNull()

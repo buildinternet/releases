@@ -1,4 +1,5 @@
 import { deriveSigningKey, signPayload } from "@releases/core-internal/webhook-sign";
+import { formatSlackMessage } from "@releases/rendering/slack-message";
 import type { DeliveryMessage } from "../../api/src/webhooks/types.js";
 import type { ErrorCode, Outcome } from "./ae.js";
 
@@ -28,25 +29,38 @@ export async function deliver(
 ): Promise<DeliveryResult> {
   const fetchImpl = opts.fetchImpl ?? fetch;
   const now = opts.now ?? (() => Math.floor(Date.now() / 1000));
-  const ts = now();
-  const body = JSON.stringify(message.event);
-  const signingKey = await deriveSigningKey(
-    opts.masterKey,
-    message.subscriptionId,
-    message.secretVersion,
-  );
-  const signature = await signPayload(signingKey, ts, body);
 
-  const request = new Request(message.url, {
-    method: "POST",
-    headers: {
+  let body: string;
+  let headers: Record<string, string>;
+  if (message.format === "slack") {
+    // Slack incoming webhooks take a Block Kit body and ignore/forbid our
+    // signature headers — the URL is the secret, so we send unsigned.
+    body = JSON.stringify(formatSlackMessage(message.event.release));
+    headers = {
+      "Content-Type": "application/json",
+      "User-Agent": `releases-webhooks/${WEBHOOK_VERSION}`,
+    };
+  } else {
+    const ts = now();
+    body = JSON.stringify(message.event);
+    const signingKey = await deriveSigningKey(
+      opts.masterKey,
+      message.subscriptionId,
+      message.secretVersion,
+    );
+    const signature = await signPayload(signingKey, ts, body);
+    headers = {
       "Content-Type": "application/json",
       "X-Releases-Version": WEBHOOK_VERSION,
       "X-Releases-Event-Id": message.event.id,
       "X-Releases-Timestamp": String(ts),
       "X-Releases-Signature": signature,
       "User-Agent": `releases-webhooks/${WEBHOOK_VERSION}`,
-    },
+    };
+  }
+  const request = new Request(message.url, {
+    method: "POST",
+    headers,
     body,
     signal: AbortSignal.timeout(opts.timeoutMs),
   });

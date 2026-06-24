@@ -3,12 +3,13 @@ import { getSecret } from "@releases/lib/secrets";
 import type { Context } from "hono";
 import type { Env } from "../index.js";
 import type { WebhookSubscriptionUpdates } from "./queries.js";
+import { WEBHOOK_FORMATS, type WebhookFormat } from "@buildinternet/releases-core/schema";
 
 /** AE SQL doesn't support bound parameters; validates id before string interpolation. */
 /** Matches `newWebhookSubscriptionId()` — `whk_` + nanoid(16) (`A-Za-z0-9_-`). */
 export const SUBSCRIPTION_ID_RE = /^whk_[A-Za-z0-9_-]+$/;
 
-import { validateWebhookUrl } from "./url-safety.js";
+import { validateWebhookUrl, validateSlackWebhookUrl } from "./url-safety.js";
 
 export { validateWebhookUrl };
 
@@ -38,6 +39,7 @@ export function buildWebhookPatchUpdates(
     description: string | null;
     enabled: boolean;
     disabledReason: string | null;
+    format?: WebhookFormat;
   }>,
 ): WebhookSubscriptionUpdates | { error: string } {
   const updates: WebhookSubscriptionUpdates = {};
@@ -45,6 +47,17 @@ export function buildWebhookPatchUpdates(
     const urlError = validateWebhookUrl(body.url);
     if (urlError) return { error: urlError };
     updates.url = body.url;
+  }
+  if (body.format !== undefined) {
+    if (!WEBHOOK_FORMATS.includes(body.format)) {
+      return { error: "format must be 'json' or 'slack'" };
+    }
+    // When switching to slack with a URL in the same patch, enforce the Slack host.
+    if (body.format === "slack" && body.url !== undefined) {
+      const slackError = validateSlackWebhookUrl(body.url);
+      if (slackError) return { error: slackError };
+    }
+    updates.format = body.format;
   }
   if (body.description !== undefined) updates.description = body.description;
   if (body.enabled !== undefined) {

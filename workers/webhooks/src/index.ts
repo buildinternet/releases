@@ -9,6 +9,7 @@ import { formatDlqAlert, type DlqEntry, type SubscriptionLabel } from "./alert-f
 import { notifyAutoDisabledSubscription } from "./auto-disable-notify.js";
 import { deliver } from "./deliver.js";
 import { writeDeliveryAttempt, type DeliveryAttempt, type Outcome } from "./ae.js";
+import { slackWebhookAppId } from "./slack-app-id.js";
 import type { DeliveryMessage } from "../../api/src/webhooks/types.js";
 import { sendWebhookAlert, type EmailEnv } from "./email.js";
 import { logEvent } from "@releases/lib/log-event";
@@ -37,6 +38,12 @@ export interface Env {
   WEB_BASE_URL?: string;
 }
 
+/** Telemetry dimensions derived from the message: webhook type + (for slack) the non-secret app id. */
+function deliveryDims(body: DeliveryMessage): { format: string; slackApp: string } {
+  const format = body.format ?? "json";
+  return { format, slackApp: format === "slack" ? slackWebhookAppId(body.url) : "" };
+}
+
 /** Build a synthetic AE attempt for branches with no live HTTP result (skipped/dlq/auto_disabled). */
 function syntheticAttempt(
   body: DeliveryMessage,
@@ -53,6 +60,7 @@ function syntheticAttempt(
     attempt: attempts,
     errorMessage,
     errorCode: null,
+    ...deliveryDims(body),
   };
 }
 
@@ -198,6 +206,7 @@ export default {
         attempt: msg.attempts,
         errorMessage: result.errorMessage,
         errorCode: result.errorCode,
+        ...deliveryDims(body),
       });
 
       const at = new Date().toISOString();

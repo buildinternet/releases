@@ -107,3 +107,19 @@ After `releases login`, use `releases webhook list|add|show|edit|remove|test|rot
 ## Admin-provisioned webhooks
 
 Operators with admin API access can manage org-scoped subscriptions via `POST /v1/webhooks` (admin route family). See the admin CLI docs for `releases admin webhook …` commands.
+
+## Slack delivery
+
+Set `format: "slack"` (or `--format slack` on the CLI) and point the subscription
+at a [Slack incoming webhook](https://docs.slack.dev/messaging/sending-messages-using-incoming-webhooks/)
+URL (`https://hooks.slack.com/services/...`). Each release is posted as a compact
+Slack message — a linked title, a short summary, and a context line with the
+organization's avatar and date.
+
+Slack webhooks are **unsigned**: the URL itself is the secret, so no signing key is
+issued and no `X-Releases-*` signature headers are sent. There is nothing to
+verify on the Slack side. Use the **Test** button (or `releases webhook test <id>`)
+to post a sample card.
+
+The host must be `hooks.slack.com` (standard and Enterprise Grid) or
+`hooks.slack-gov.com` (GovSlack); other hosts are rejected at creation.
