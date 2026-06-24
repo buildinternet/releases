@@ -12,6 +12,7 @@ import {
   rotateWebhookSecret,
   testWebhook,
   updateWebhook,
+  type UserWebhookFormat,
   type WebhookDeliveryRow,
 } from "@/lib/webhooks";
 
@@ -165,6 +166,7 @@ export function WebhooksPanel() {
   const [productSlug, setProductSlug] = useState("");
   const [sourceSlug, setSourceSlug] = useState("");
   const [releaseType, setReleaseType] = useState<"" | "feature" | "rollup">("");
+  const [format, setFormat] = useState<UserWebhookFormat>("json");
   const [description, setDescription] = useState("");
   const [creating, setCreating] = useState(false);
 
@@ -206,6 +208,7 @@ export function WebhooksPanel() {
       const created = await createWebhook({
         url: url.trim(),
         scope,
+        format,
         ...(scope === "org"
           ? {
               orgSlug: orgSlug.trim(),
@@ -216,14 +219,19 @@ export function WebhooksPanel() {
         ...(releaseType ? { releaseType } : {}),
         ...(description.trim() ? { description: description.trim() } : {}),
       });
-      setRevealedKey(created.signingKey);
+      if (created.signingKey) {
+        setRevealedKey(created.signingKey);
+        setSuccess("Webhook created. Copy the signing key before dismissing.");
+      } else {
+        setSuccess("Slack webhook created.");
+      }
       setUrl("");
       setOrgSlug("");
       setProductSlug("");
       setSourceSlug("");
       setReleaseType("");
+      setFormat("json");
       setDescription("");
-      setSuccess("Webhook created. Copy the signing key before dismissing.");
       await refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to create webhook.");
@@ -361,14 +369,21 @@ export function WebhooksPanel() {
                   >
                     {sub.enabled ? "Pause" : "Resume"}
                   </button>
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => void onRotate(sub.id)}
-                    className={buttonClass}
-                  >
-                    Rotate key
-                  </button>
+                  {sub.format !== "slack" && (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void onRotate(sub.id)}
+                      className={buttonClass}
+                    >
+                      Rotate key
+                    </button>
+                  )}
+                  {sub.format === "slack" && (
+                    <span className="rounded bg-stone-100 px-1.5 py-0.5 text-[11px] text-stone-600 dark:bg-stone-800 dark:text-stone-300">
+                      Slack
+                    </span>
+                  )}
                   <button
                     type="button"
                     disabled={busy}
@@ -512,6 +527,30 @@ export function WebhooksPanel() {
             <option value="feature">Feature</option>
             <option value="rollup">Rollup</option>
           </select>
+        </div>
+
+        <div>
+          <label
+            htmlFor="webhook-format"
+            className="text-[12px] text-stone-600 dark:text-stone-300"
+          >
+            Format
+          </label>
+          <select
+            id="webhook-format"
+            value={format}
+            onChange={(e) => setFormat(e.target.value as UserWebhookFormat)}
+            className={inputClass}
+          >
+            <option value="json">JSON (signed payload)</option>
+            <option value="slack">Slack message</option>
+          </select>
+          {format === "slack" && (
+            <p className="mt-1 text-[11px] text-stone-400 dark:text-stone-500">
+              Posts a formatted message to a Slack incoming webhook URL (hooks.slack.com). No
+              signature is sent.
+            </p>
+          )}
         </div>
 
         {scope === "follows" && hasFollows && (

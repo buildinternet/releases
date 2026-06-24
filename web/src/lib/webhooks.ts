@@ -8,6 +8,7 @@ import type {
   CreateUserWebhookResponse,
   RotateUserWebhookSecretResponse,
   TestUserWebhookResponse,
+  UserWebhookFormat,
   UserWebhookListItem,
   UserWebhookListResponse,
   UserWebhookReleaseTypeFilter,
@@ -19,6 +20,7 @@ export type {
   CreateUserWebhookResponse,
   RotateUserWebhookSecretResponse,
   TestUserWebhookResponse,
+  UserWebhookFormat,
   UserWebhookListItem,
   UserWebhookScope,
 };
@@ -36,6 +38,7 @@ export async function createWebhook(input: {
   productSlug?: string;
   sourceSlug?: string;
   releaseType?: UserWebhookReleaseTypeFilter;
+  format?: UserWebhookFormat;
   description?: string;
 }): Promise<CreateUserWebhookResponse> {
   const res = await fetch(`${apiBase()}/v1/me/webhooks`, {
