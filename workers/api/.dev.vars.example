@@ -20,6 +20,12 @@ GOOGLE_CLIENT_SECRET=
 # STRIPE_SECRET_KEY resolve)
 STRIPE_WEBHOOK_SECRET=
 
+# GitHub App webhook (optional — only needed to exercise the inbound receiver
+# POST /v1/integrations/github/webhook locally). Prod resolves this from the
+# Secrets Store, which wrangler dev can't read, so set it here for local testing.
+# Must match the App's webhook secret; the receiver fails closed (401) when unset.
+RELEASES_GITHUB_WEBHOOK_SECRET=
+
 # Optional: skip D1-backed auth rate limiting during local sign-in testing
 # (defaults OFF so deployed prod stays protected).
 # AUTH_RATE_LIMIT_DISABLED=true

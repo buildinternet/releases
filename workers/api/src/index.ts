@@ -314,6 +314,10 @@ export type Env = {
     FIRECRAWL_API_KEY?: SecretBinding;
     FIRECRAWL_WEBHOOK_SECRET?: SecretBinding;
     FIRECRAWL_INGEST_WORKFLOW?: Workflow; // bound in wrangler in Phase 2
+    // GitHub App webhook signing secret — verifies inbound `X-Hub-Signature-256`
+    // on POST /v1/integrations/github/webhook (#1698). Bound from the Secrets
+    // Store; an unresolved binding fails the receiver closed (401).
+    RELEASES_GITHUB_WEBHOOK_SECRET?: SecretBinding;
     // Durable backfill workflow (#1281). Routes POST /v1/workflows/backfill-source
     // to a resumable BackfillSourceWorkflow instance when BACKFILL_WORKFLOW_ENABLED=true.
     BACKFILL_SOURCE_WORKFLOW?: Workflow;

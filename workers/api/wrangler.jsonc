@@ -662,6 +662,14 @@
       "store_id": "a887a71cab084105b79706df23380723",
       "secret_name": "FIRECRAWL_WEBHOOK_SECRET",
     },
+    // GitHub App webhook signing secret — verifies inbound `X-Hub-Signature-256`
+    // on POST /v1/integrations/github/webhook (#1698). Prod only; the staging
+    // block doesn't inherit these (no inbound webhooks in staging).
+    {
+      "binding": "RELEASES_GITHUB_WEBHOOK_SECRET",
+      "store_id": "a887a71cab084105b79706df23380723",
+      "secret_name": "RELEASES_GITHUB_WEBHOOK_SECRET",
+    },
   ],
   // ── Staging environment ──────────────────────────────────────────────
   // Deployed as `releases-api-staging` at api-staging.releases.sh. Points
