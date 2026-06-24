@@ -9,6 +9,7 @@ import {
   jwt,
   admin,
   lastLoginMethod,
+  organization,
 } from "better-auth/plugins";
 import { adminAc, userAc } from "better-auth/plugins/admin/access";
 import { oauthProvider } from "@better-auth/oauth-provider";
@@ -28,6 +29,7 @@ import { FLAGS, flag } from "@releases/lib/flags";
 import { audienceVariants } from "@releases/lib/oauth-jwt";
 import { USER_API_KEY_PREFIX, DEVICE_AUTH_CLIENT_ID } from "@buildinternet/releases-core/api-token";
 import { oauthAccessTokenClaims, consentScopeViolation, jwtSessionPayload } from "./entitlement.js";
+import { ensureActiveWorkspace, isOrgOwnerOrAdmin } from "./workspace.js";
 import { kvRateLimitStorage } from "./rate-limit-kv.js";
 import { scopeToPermissions } from "./api-key-scope.js";
 import { CLIENT_SECRET_PREFIX } from "./oauth-clients.js";
@@ -53,6 +55,10 @@ import {
   oauthConsent,
   jwks,
   passkey,
+  authOrganization,
+  authMember,
+  authInvitation,
+  subscription,
 } from "../db/schema-auth.js";
 import type { Env } from "../index.js";
 import {
@@ -61,6 +67,7 @@ import {
   resetPasswordTemplate,
   magicLinkTemplate,
   changeEmailTemplate,
+  invitationEmailTemplate,
   type AuthEmailMessage,
 } from "./email.js";
 import {
@@ -327,9 +334,12 @@ export function buildSocialProviders(creds: {
  * the `stripeCustomerId` column. Dropping the two secrets into the environment
  * activates it with zero code change — the "billing-ready" seam.
  *
- * Customer management ONLY for now: `subscription` is left disabled (the plugin's
- * default), so no `subscription` table is touched. This is the billing foundation
- * — getting every user registered as a Stripe Customer — not billing itself.
+ * Customer-on-sign-up stays per-USER. The subscription feature is wired but INERT:
+ * `subscription.enabled` with `plans: []` means the `subscription` table + endpoints
+ * exist but nothing is purchasable, so no row is ever written (zero user impact).
+ * Subscriptions are keyed to the WORKSPACE (`referenceId` = organization id) and
+ * gated by `authorizeReference` (owner/admin only). Adding real plans later activates
+ * org billing with no further plumbing — the "billing-ready" seam.
  *
  * Worker-compat: the Stripe Node SDK's default HTTP transport isn't available on
  * Cloudflare Workers, so the client is constructed with the Fetch HTTP client.
@@ -342,10 +352,13 @@ export function buildSocialProviders(creds: {
  * instance; the `Stripe` constructor performs no network I/O, so this stays
  * cheap and unit-testable (the gating is asserted via the resolved plugin id).
  */
-export function buildStripePlugin(creds: {
-  secretKey?: string | null;
-  webhookSecret?: string | null;
-}): BetterAuthPlugin | null {
+export function buildStripePlugin(
+  creds: {
+    secretKey?: string | null;
+    webhookSecret?: string | null;
+  },
+  db: AnyDb,
+): BetterAuthPlugin | null {
   if (!creds.secretKey || !creds.webhookSecret) return null;
   const stripeClient = new Stripe(creds.secretKey, {
     httpClient: Stripe.createFetchHttpClient(),
@@ -354,6 +367,24 @@ export function buildStripePlugin(creds: {
     stripeClient,
     stripeWebhookSecret: creds.webhookSecret,
     createCustomerOnSignUp: true,
+    // Org-billing seam — INERT. `plans: []` means nothing is purchasable yet, so no
+    // `subscription` row is ever written (zero user impact); the table, endpoints, and
+    // authorization gate all exist so adding real plans later needs no further
+    // plumbing. `referenceId` is the workspace (organization) id, and
+    // `authorizeReference` restricts subscription management to that workspace's
+    // owner/admin (org `member.role`, NOT `user.role`). The Stripe Customer stays
+    // per-user (createCustomerOnSignUp) — only the subscription is org-scoped.
+    subscription: {
+      enabled: true,
+      plans: [],
+      authorizeReference: async ({
+        user: u,
+        referenceId,
+      }: {
+        user: { id: string };
+        referenceId: string;
+      }) => isOrgOwnerOrAdmin(db, u.id, referenceId),
+    },
   }) as BetterAuthPlugin;
 }
 
@@ -961,10 +992,13 @@ async function buildAuthInstance(env: Bindings, deps: CreateAuthDeps = {}) {
   // dash()/sentinel()/social. Inert (null → omitted) until the secrets are
   // provisioned; once present, a Stripe Customer is created on every sign-up and
   // linked via user.stripeCustomerId. See `buildStripePlugin`.
-  const stripeInstance = buildStripePlugin({
-    secretKey: await resolveSecret(env.STRIPE_SECRET_KEY),
-    webhookSecret: await resolveSecret(env.STRIPE_WEBHOOK_SECRET),
-  });
+  const stripeInstance = buildStripePlugin(
+    {
+      secretKey: await resolveSecret(env.STRIPE_SECRET_KEY),
+      webhookSecret: await resolveSecret(env.STRIPE_WEBHOOK_SECRET),
+    },
+    db,
+  );
 
   // Google One Tap (`/api/auth/one-tap/*`): the popup renders on the web origin
   // with the PUBLIC client id and posts the Google ID token here for verification.
@@ -1145,6 +1179,31 @@ async function buildAuthInstance(env: Bindings, deps: CreateAuthDeps = {}) {
       adminRoles: ["admin"],
       defaultRole: "user",
     }),
+    // Organization plugin — user-tenancy "Workspaces" (DISTINCT from the registry
+    // `organizations` = indexed vendors). Always-on, no flag: additive and inert for
+    // anyone who never creates a second workspace — everyone gets a personal one,
+    // provisioned lazily by the session.create.before hook below (which backfills
+    // existing users on next sign-in, so no migration backfill is needed). Built-in
+    // owner/admin/member roles (the org `member.role`, NOT `user.role` / the OAuth
+    // scope ceiling); no teams. The organization/member/invitation tables are wired
+    // into the drizzleAdapter schema map below. `sendInvitationEmail` is a thin wrapper
+    // over the existing auth-email seam so the (UI-less but reachable) invitation
+    // endpoint isn't silently broken; the accept link targets the WEB origin.
+    organization({
+      membershipLimit: 100,
+      sendInvitationEmail: async (data) => {
+        const url = `${env.WEB_BASE_URL ?? "https://releases.sh"}/accept-invitation/${data.id}`;
+        const msg: AuthEmailMessage = {
+          to: data.email,
+          ...invitationEmailTemplate({
+            url,
+            orgName: data.organization.name,
+            webOrigin: webOriginForEmail(env),
+          }),
+        };
+        scheduleSend(() => sendEmail(msg));
+      },
+    }),
     ...(userApiKeysOn
       ? [
           apiKey({
@@ -1256,6 +1315,14 @@ async function buildAuthInstance(env: Bindings, deps: CreateAuthDeps = {}) {
         oauthConsent,
         jwks,
         passkey,
+        // Organization plugin ("Workspaces") + the @better-auth/stripe subscription
+        // store. Keys MUST be Better Auth's model names; the `auth*`-prefixed Drizzle
+        // tables map onto them. SQL names are `organization`/`member`/`invitation` —
+        // singular, no collision with the registry `organizations` (plural).
+        organization: authOrganization,
+        member: authMember,
+        invitation: authInvitation,
+        subscription,
       },
     }),
     emailAndPassword: {
@@ -1344,6 +1411,39 @@ async function buildAuthInstance(env: Bindings, deps: CreateAuthDeps = {}) {
           update: {
             before: async (data: Record<string, unknown>) => syncDisplayEmailOnUpdate(data),
           },
+        },
+        // Composed at the leaf level (explicit references, not `...auditHooks.session`)
+        // so a change to audit.ts's session hooks surfaces as a TYPE ERROR here rather
+        // than silently dropping an audit hook the spread would have carried.
+        session: {
+          create: {
+            // Audit sign-in-success.
+            after: auditHooks.session.create.after,
+            // Workspace provisioning: seed the session's active workspace.
+            // ensureActiveWorkspace creates a personal workspace on first sign-in
+            // (backfilling existing users) and never throws, so a hiccup can't block
+            // sign-in.
+            before: async (s: { userId: string; activeOrganizationId?: string | null }) => {
+              const orgId = await ensureActiveWorkspace(db, s.userId);
+              return orgId ? { data: { ...s, activeOrganizationId: orgId } } : undefined;
+            },
+          },
+          // Persist the user's last active workspace so the selection is sticky across
+          // sessions (multi-workspace users). Best-effort; never blocks.
+          update: {
+            after: async (s: { userId?: string; activeOrganizationId?: string | null }) => {
+              const activeOrgId = s.activeOrganizationId;
+              if (s.userId && activeOrgId) {
+                await db
+                  .update(user)
+                  .set({ lastActiveOrganizationId: activeOrgId })
+                  .where(eq(user.id, s.userId))
+                  .catch(() => {});
+              }
+            },
+          },
+          // Audit sign-out / session-revoked.
+          delete: auditHooks.session.delete,
         },
       };
     })(),

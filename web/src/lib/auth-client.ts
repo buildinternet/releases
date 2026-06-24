@@ -5,6 +5,7 @@ import {
   magicLinkClient,
   deviceAuthorizationClient,
   lastLoginMethodClient,
+  organizationClient,
 } from "better-auth/client/plugins";
 import { dashClient, sentinelClient } from "@better-auth/infra/client";
 
@@ -130,6 +131,12 @@ export const authClient = createAuthClient({
     // passkey button + conditional-UI autofill). Takes no options; the relying-party
     // config lives server-side. Inert until a caller invokes it.
     passkeyClient(),
+    // Organization plugin (client half) — user-tenancy "Workspaces". Registers
+    // `organization.*` actions (create / setActive / list / …) plus the
+    // useListOrganizations() / useActiveOrganization() hooks, used by the
+    // /account/workspaces panel. Core plugin on the same better-auth version, so it
+    // needs no `asClientPlugin` type-shim. Takes no options; inert until invoked.
+    organizationClient(),
   ],
 });
 
@@ -153,4 +160,9 @@ export const {
   listAccounts,
   linkSocial,
   unlinkAccount,
+  // Organization ("Workspaces") plugin — the action namespace + reactive hooks used
+  // by the /account/workspaces panel.
+  organization,
+  useListOrganizations,
+  useActiveOrganization,
 } = authClient;
