@@ -310,6 +310,7 @@ export function renderEmailSample(env: EmailSampleEnv, id: EmailSampleId): Rende
         baseUrl: web,
         manageUrl: `${web}/following`,
         unsubscribeUrl: `${api}/v1/digest/unsubscribe/reld_sample`,
+        referenceDate: new Date().toISOString(),
       });
     }
     case "recommendation.ack":

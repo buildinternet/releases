@@ -93,6 +93,8 @@ export async function gatherAndSendDigest(
     baseUrl: opts.baseUrl,
     manageUrl: `${opts.baseUrl}/following`,
     unsubscribeUrl: unsubscribeUrlFor(opts.apiOrigin, recip.manageToken),
+    // End of the covered window (the run start) — dates the subject/title.
+    referenceDate: opts.before,
   });
   return { sent: res.sent, count: rows.length, reason: res.sent ? undefined : res.reason };
 }

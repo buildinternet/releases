@@ -162,6 +162,47 @@ describe("buildDigestEmail", () => {
     expect(html).toContain("https://releases.sh/cloudflare/workers-sdk");
   });
 
+  it("dates the daily subject with the run date (ET)", () => {
+    const { subject, html } = buildDigestEmail({
+      recipientName: "T",
+      cadence: "daily",
+      releases: [rel({})],
+      baseUrl: "https://releases.sh",
+      manageUrl: "https://releases.sh/following",
+      unsubscribeUrl: "https://api.releases.sh/v1/digest/unsubscribe/reld_x",
+      // 13:00 UTC on Jun 24 is still Jun 24 in ET.
+      referenceDate: "2026-06-24T13:00:00.000Z",
+    });
+    expect(subject).toBe("Your daily Releases digest — Jun 24, 2026 · 1 update");
+    // The HTML title mirrors the dated subject.
+    expect(html).toContain("Jun 24, 2026");
+  });
+
+  it("labels the weekly subject with the start of the covered window", () => {
+    const { subject } = buildDigestEmail({
+      recipientName: "T",
+      cadence: "weekly",
+      releases: [rel({}), rel({ id: "rel_2" })],
+      baseUrl: "https://releases.sh",
+      manageUrl: "https://releases.sh/following",
+      unsubscribeUrl: "https://api.releases.sh/v1/digest/unsubscribe/reld_x",
+      referenceDate: "2026-06-24T13:00:00.000Z",
+    });
+    expect(subject).toBe("Your weekly Releases digest — week of Jun 17, 2026 · 2 updates");
+  });
+
+  it("omits the date when no referenceDate is supplied (backward compatible)", () => {
+    const { subject } = buildDigestEmail({
+      recipientName: "T",
+      cadence: "daily",
+      releases: [rel({})],
+      baseUrl: "https://releases.sh",
+      manageUrl: "https://releases.sh/following",
+      unsubscribeUrl: "https://api.releases.sh/v1/digest/unsubscribe/reld_x",
+    });
+    expect(subject).toBe("Your daily Releases digest — 1 update");
+  });
+
   it("falls back to the source name when the source has no org", () => {
     const { text } = buildDigestEmail({
       recipientName: null,

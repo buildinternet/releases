@@ -20,6 +20,13 @@ export interface DigestEmailContent {
   manageUrl: string;
   /** One-click unsubscribe URL (the reld_ token lane). */
   unsubscribeUrl: string;
+  /**
+   * The run-start instant the digest covers up to (ISO-8601) — drives the dated
+   * qualifier in the subject/title. Daily labels with this date; weekly labels
+   * "week of" the start of the 7-day window ending here. Omitted ⇒ no date shown
+   * (backward compatible).
+   */
+  referenceDate?: string;
 }
 
 export type DigestEmailInput = DigestEmailContent & { to: string };
@@ -29,6 +36,33 @@ const FROM_NAME = "Releases";
 
 function bestTitle(r: ReleaseLatestItem): string {
   return r.titleShort || r.titleGenerated || r.title || r.version || "Update";
+}
+
+// Subject/title dates render in Eastern time to match the project's ET day
+// convention (etDayKey) — a digest "for Jun 24" reads as the US-Eastern day,
+// not a UTC boundary that flips hours earlier.
+const DIGEST_DATE_FMT = new Intl.DateTimeFormat("en-US", {
+  timeZone: "America/New_York",
+  month: "short",
+  day: "numeric",
+  year: "numeric",
+});
+
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * The dated qualifier for the subject/title: the run date for a daily digest
+ * (`Jun 24, 2026`), or "week of" the start of the covered 7-day window for a
+ * weekly one (`week of Jun 17, 2026`). The weekly window is anchored to the run
+ * date minus 7 days so the label tracks the cadence regardless of the recipient's
+ * last-digest watermark.
+ */
+function digestDateLabel(cadence: "daily" | "weekly", referenceDate: string): string {
+  const end = new Date(referenceDate);
+  if (cadence === "weekly") {
+    return `week of ${DIGEST_DATE_FMT.format(new Date(end.getTime() - WEEK_MS))}`;
+  }
+  return DIGEST_DATE_FMT.format(end);
 }
 
 function releaseUrl(baseUrl: string, r: ReleaseLatestItem): string {
@@ -163,9 +197,11 @@ export function buildDigestEmail(content: DigestEmailContent): {
   text: string;
   html: string;
 } {
-  const { releases, baseUrl, manageUrl, unsubscribeUrl, cadence } = content;
+  const { releases, baseUrl, manageUrl, unsubscribeUrl, cadence, referenceDate } = content;
   const n = releases.length;
-  const subject = `Your ${cadence} Releases digest — ${n} update${n === 1 ? "" : "s"}`;
+  const updates = `${n} update${n === 1 ? "" : "s"}`;
+  const dated = referenceDate ? `${digestDateLabel(cadence, referenceDate)} · ` : "";
+  const subject = `Your ${cadence} Releases digest — ${dated}${updates}`;
   const groups = groupByOrg(releases);
 
   const textLines: string[] = [subject, ""];
