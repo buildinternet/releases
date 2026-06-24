@@ -42,7 +42,6 @@ const ENTRIES: readonly Seed[] = [
 
   { slug: "privacy", section: "About", label: "Privacy & Telemetry" },
 
-  { slug: "cli/analysis", section: "Admin CLI", label: "Summaries & Comparisons" },
   { slug: "cli/fetching", section: "Admin CLI", label: "Fetching Releases" },
   { slug: "cli/admin", section: "Admin CLI", label: "Source Management" },
 ];

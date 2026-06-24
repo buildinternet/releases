@@ -25,6 +25,18 @@ releases admin source create "Claude Code" --url https://docs.anthropic.com/en/c
   --feed-url https://docs.anthropic.com/en/changelog/rss.xml
 ```
 
+### Raw JSON payloads with `--input`
+
+Instead of reverse-mapping a request onto a dozen bespoke flags, an agent can send the input shape directly with `--input`. The value is a literal JSON object, `@<path>` to read a file, or `-` to read stdin:
+
+```bash
+releases admin source create --input '{"name":"Astro","url":"https://astro.build/blog","type":"scrape"}'
+releases admin source create --input @astro.json
+echo '{"name":"Astro","url":"https://astro.build/blog"}' | releases admin source create --input -
+```
+
+The body maps to the CLI's input shape, so the usual dedup, metadata-packing, and validation still run — it is **not** forwarded raw to the API. `--input` requires non-empty string `name` and `url` fields, is mutually exclusive with `--batch`, and rejects a JSON array (use `--batch` for many). Execution modifiers stay on the CLI flags: `--strict` and `--dry-run` override anything the body tries to set. The same flag works on `releases admin source update <id> --input '{…}'`, where body fields are merged over the existing source.
+
 ## Update sources
 
 The `update` command accepts a source ID (`src_...`) or slug. IDs are preferred — slugs can change, IDs are immutable.
@@ -45,6 +57,24 @@ Slug renames require `--confirm-slug-change` because they break existing web lin
 ```bash
 releases admin source delete my-blog
 ```
+
+## Preview any mutation with `--dry-run`
+
+Mutating commands accept `--dry-run`: they resolve the target and report what _would_ happen without writing. It's available across the write surface — source `create`/`update`/`delete`, `org`/`product` create/update/delete, `release` update/delete/suppress, `policy ignore`, `follow`/`unfollow`, `keys create`, `webhook` add/edit/remove, `source import`, and `discovery onboard apply`.
+
+```bash
+releases admin source create "Astro" --url https://astro.build/blog --dry-run --json
+releases admin source delete my-blog --dry-run --json
+releases admin source import manifest.json --dry-run
+```
+
+Under `--json`, a preview carries the planned action plus a `dryRun: true` marker, so a caller can tell a dry-run payload apart from a real one without inspecting which flag was passed:
+
+```jsonc
+{ "status": "would-add", "slug": "astro", "dryRun": true }
+```
+
+Without `--json`, the same plan prints as a `[dry-run] Would …` line on stderr, leaving stdout clean. No mutating request is sent.
 
 ## Read or refresh a CHANGELOG file
 
@@ -86,6 +116,7 @@ Group sources under organizations for aggregate queries:
 releases admin org create "Vercel"
 releases admin org link vercel --platform github --handle vercel
 releases admin org list
+releases admin org list --json --page-all   # Stream every org as NDJSON
 releases admin org get vercel
 ```
 
@@ -96,6 +127,7 @@ Group sources under products within an organization:
 ```bash
 releases admin product create "Next.js" --org vercel --url https://nextjs.org
 releases admin product list vercel
+releases admin product list --json --page-all   # Stream every product as NDJSON (for audits)
 releases admin product update nextjs --description "React framework for production"
 releases admin product delete nextjs
 ```
