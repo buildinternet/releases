@@ -1,0 +1,104 @@
+@import "tailwindcss";
+
+/* Scan the package's own sources so every utility used by a component or class
+   constant is emitted into the compiled stylesheet. Paths are relative to this
+   file (src/). */
+@source "./classes.ts";
+@source "./components/**/*.{ts,tsx}";
+
+/* The app resolves dark variants off a `.dark` class on the root, not the media
+   query — mirror that so `dark:` utilities compile against the same selector. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-mono:
+    var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    "Liberation Mono", "Courier New", monospace;
+}
+
+/* ── Self-hosted JetBrains Mono ──
+   The only custom face in the system; powers the mono eyebrow labels and code.
+   The web app loads it via next/font; here we ship the woff2 directly so cards
+   render in the real typeface. Files are copied into dist/fonts/ at build time. */
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("./fonts/jetbrains-mono-latin-400-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("./fonts/jetbrains-mono-latin-500-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("./fonts/jetbrains-mono-latin-600-normal.woff2") format("woff2");
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   Design tokens — ported from the web app's globals.css. CSS custom properties
+   (not @theme tokens) so a `.dark` override cascades cleanly into the
+   `bg-[var(--accent)]` arbitrary-value utilities the components use.
+   ───────────────────────────────────────────────────────────────────────── */
+:root {
+  --font-jetbrains-mono: "JetBrains Mono";
+
+  /* Brand accent — the blue on the logo's bottom bar. Active nav, primary
+     buttons, links, toggles. `accent-soft` is a low-alpha wash for active
+     backgrounds; denser in dark mode so it stays visible on the near-black page. */
+  --accent: oklch(0.6 0.18 252);
+  --accent-soft: color-mix(in srgb, var(--accent) 9%, transparent);
+  --on-accent: #fff;
+
+  /* Product palette for multi-product charts. */
+  --color-product-0: oklch(0.637 0.153 254.4); /* blue-400 */
+  --color-product-1: oklch(0.723 0.191 149.6); /* green-400 */
+  --color-product-2: oklch(0.769 0.168 70.08); /* amber-500 */
+  --color-product-3: oklch(0.704 0.191 22.18); /* red-400 */
+  --color-product-4: oklch(0.714 0.168 293.5); /* purple-400 */
+  --color-product-5: oklch(0.718 0.176 349.8); /* pink-400 */
+  --color-product-6: oklch(0.789 0.109 197.5); /* cyan-400 */
+  --color-product-7: oklch(0.75 0.16 55); /* orange-400 */
+}
+
+.dark {
+  --accent-soft: color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+/* ── Org page redesign palette (#1752) ──
+   A self-contained stone-family token set scoped to `.org-surface`. The
+   redesigned org page reads from these semantic tokens — `var(--surface)`,
+   `var(--fg-2)`, `var(--line)`, … — instead of ad-hoc stone utilities. */
+.org-surface {
+  --page: #fafaf9;
+  --surface: #ffffff;
+  --surface-2: #f4f3f1;
+  --fg: #1c1917;
+  --fg-2: #57534e;
+  --fg-3: #a8a29e;
+  --line: #ededeb;
+  --line-2: #e0ddd9;
+  --field: #ffffff;
+  --good: oklch(0.58 0.15 150);
+  --fix: oklch(0.66 0.14 55);
+}
+.dark .org-surface {
+  --page: #0c0a09;
+  --surface: #1a1714;
+  --surface-2: #252220;
+  --fg: #fafaf9;
+  --fg-2: #a8a29e;
+  --fg-3: #78716c;
+  --line: #2a2623;
+  --line-2: #3b3631;
+  --field: #161310;
+  --good: oklch(0.68 0.15 150);
+  --fix: oklch(0.74 0.13 60);
+}

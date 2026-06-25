@@ -80,3 +80,12 @@ npm/.npmrc
 
 # Impeccable copy-edit tooling caches — session-local, never committed.
 .impeccable/
+
+# design-sync (claude.ai/design) — staged converter scripts, generated bundle, and
+# machine state are regenerated per run. The durable inputs under .design-sync/
+# (config.json, conventions.md, previews/, NOTES.md) ARE committed.
+.ds-sync/
+ds-bundle/
+.design-sync/.cache/
+.design-sync/learnings/
+.design-sync/node_modules

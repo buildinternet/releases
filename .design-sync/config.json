@@ -1,0 +1,41 @@
+{
+  "pkg": "@releases/design-system",
+  "globalName": "ReleasesDS",
+  "projectId": "545d1002-e8b9-4e51-b3df-bf4fdf3b4129",
+  "shape": "package",
+  "buildCmd": "node packages/design-system/build.mjs",
+  "cssEntry": "dist/styles.css",
+  "readmeHeader": ".design-sync/conventions.md",
+  "componentSrcMap": {
+    "ThemeProvider": null,
+    "BrandColors": "src/components/Foundations.tsx",
+    "ProductPalette": "src/components/Foundations.tsx",
+    "SurfaceTokens": "src/components/Foundations.tsx",
+    "Typography": "src/components/Foundations.tsx",
+    "Radius": "src/components/Foundations.tsx",
+    "PreviewBanner": "src/components/Banners.tsx",
+    "SuccessBanner": "src/components/Banners.tsx",
+    "ErrorText": "src/components/Banners.tsx",
+    "ListCard": "src/components/List.tsx",
+    "ListRow": "src/components/List.tsx",
+    "PanelGrid": "src/components/SettingsSection.tsx"
+  },
+  "provider": {
+    "component": "ThemeProvider"
+  },
+  "overrides": {
+    "Card": { "cardMode": "column" },
+    "ErrorText": { "cardMode": "column" },
+    "Input": { "cardMode": "column" },
+    "Label": { "cardMode": "column" },
+    "ListCard": { "cardMode": "column" },
+    "ListRow": { "cardMode": "column" },
+    "PanelGrid": { "cardMode": "column", "viewport": "1100x760" },
+    "PreviewBanner": { "cardMode": "column" },
+    "SuccessBanner": { "cardMode": "column" },
+    "Textarea": { "cardMode": "column" },
+    "ThemeToggle": { "cardMode": "column" },
+    "Toggle": { "cardMode": "column" },
+    "Aside": { "viewport": "1100x760" }
+  }
+}
