@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useSession, organization } from "@/lib/auth-client";
 import { useWorkspaces, workspaceInitial } from "@/components/account/use-workspaces";
 import { PanelGrid } from "@/components/account/settings-section";
@@ -13,8 +13,48 @@ import {
   inputClass,
   primaryButtonClass,
   secondaryButtonClass,
-  smallButtonClass,
 } from "@/components/account/ui";
+import { AvatarUploadButton } from "@/components/avatar-upload-button";
+import {
+  fetchWorkspaceProfile,
+  patchWorkspaceProfile,
+  uploadWorkspaceAvatar,
+} from "@/lib/account-profile-api";
+import type { WorkspaceProfileResponse } from "@buildinternet/releases-api-types";
+
+type ProfileForm = {
+  websiteUrl: string;
+  changelogUrl: string;
+  githubHandle: string;
+};
+
+const EMPTY_PROFILE: ProfileForm = { websiteUrl: "", changelogUrl: "", githubHandle: "" };
+
+function profileForm(res: WorkspaceProfileResponse): ProfileForm {
+  return {
+    websiteUrl: res.profile.websiteUrl ?? "",
+    changelogUrl: res.profile.changelogUrl ?? "",
+    githubHandle: res.profile.githubHandle ?? "",
+  };
+}
+
+function WorkspaceAvatar({ name, logo }: { name: string; logo: string | null | undefined }) {
+  const [broken, setBroken] = useState(false);
+  useEffect(() => setBroken(false), [logo]);
+  if (logo && !broken) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={logo}
+        alt=""
+        decoding="async"
+        onError={() => setBroken(true)}
+        className="h-full w-full object-cover"
+      />
+    );
+  }
+  return <span aria-hidden="true">{workspaceInitial(name)}</span>;
+}
 
 export function GeneralPanel() {
   const { data: sessionData, isPending } = useSession();
@@ -23,13 +63,35 @@ export function GeneralPanel() {
   const current = active ?? workspaces[0] ?? null;
 
   const [name, setName] = useState("");
+  const [logo, setLogo] = useState<string | null>(null);
+  const [profile, setProfile] = useState<ProfileForm>(EMPTY_PROFILE);
+  const [savedProfile, setSavedProfile] = useState<ProfileForm>(EMPTY_PROFILE);
+  const [profileLoading, setProfileLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
+  const loadProfile = useCallback(async (organizationId: string) => {
+    setProfileLoading(true);
+    try {
+      const res = await fetchWorkspaceProfile(organizationId);
+      const fields = profileForm(res);
+      setLogo(res.logo);
+      setProfile(fields);
+      setSavedProfile(fields);
+    } catch {
+      setLogo(null);
+      setProfile(EMPTY_PROFILE);
+      setSavedProfile(EMPTY_PROFILE);
+    } finally {
+      setProfileLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     setName(current?.name ?? "");
-  }, [current?.name]);
+    if (current?.id) void loadProfile(current.id);
+  }, [current?.id, current?.name, loadProfile]);
 
   if (isPending) return <p className="text-sm text-stone-500 dark:text-stone-400">Loading…</p>;
 
@@ -55,7 +117,12 @@ export function GeneralPanel() {
     );
   }
 
-  const dirty = name.trim() !== current.name;
+  const nameDirty = name.trim() !== current.name;
+  const profileDirty =
+    profile.websiteUrl.trim() !== savedProfile.websiteUrl ||
+    profile.changelogUrl.trim() !== savedProfile.changelogUrl ||
+    profile.githubHandle.trim() !== savedProfile.githubHandle;
+  const dirty = nameDirty || profileDirty;
 
   async function onSave(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -64,20 +131,35 @@ export function GeneralPanel() {
     setError(null);
     setSaved(false);
     try {
-      const res = await organization.update({
-        organizationId: current.id,
-        data: {
-          name: name.trim() || current.name,
-        },
-      });
-      if (res?.error) {
-        setError(res.error.message ?? "Could not save the workspace.");
-        return;
+      if (nameDirty) {
+        const res = await organization.update({
+          organizationId: current.id,
+          data: {
+            name: name.trim() || current.name,
+          },
+        });
+        if (res?.error) {
+          setError(res.error.message ?? "Could not save the workspace.");
+          return;
+        }
+        await refetch?.();
       }
+
+      if (profileDirty) {
+        const profileRes = await patchWorkspaceProfile(current.id, {
+          websiteUrl: profile.websiteUrl.trim() || null,
+          changelogUrl: profile.changelogUrl.trim() || null,
+          githubHandle: profile.githubHandle.trim() || null,
+        });
+        const fields = profileForm(profileRes);
+        setLogo(profileRes.logo);
+        setProfile(fields);
+        setSavedProfile(fields);
+      }
+
       setSaved(true);
-      await refetch?.();
-    } catch {
-      setError("Could not save the workspace.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save the workspace.");
     } finally {
       setSaving(false);
     }
@@ -104,17 +186,16 @@ export function GeneralPanel() {
             Workspace avatar
           </div>
           <div className="flex items-center gap-[18px]">
-            <span className="flex h-[60px] w-[60px] shrink-0 items-center justify-center rounded-[14px] bg-[var(--accent)] text-2xl font-semibold text-[var(--on-accent)]">
-              {workspaceInitial(current.name)}
+            <span className="flex h-[60px] w-[60px] shrink-0 items-center justify-center overflow-hidden rounded-[14px] bg-[var(--accent)] text-2xl font-semibold text-[var(--on-accent)]">
+              <WorkspaceAvatar name={current.name} logo={logo} />
             </span>
-            <button
-              type="button"
-              disabled
-              title="Workspace avatar upload is coming soon"
-              className={smallButtonClass}
-            >
-              Upload
-            </button>
+            <AvatarUploadButton
+              disabled={profileLoading}
+              onUpload={async (file) => {
+                const res = await uploadWorkspaceAvatar(current.id, file);
+                setLogo(res.avatarUrl);
+              }}
+            />
           </div>
         </section>
 
@@ -135,6 +216,65 @@ export function GeneralPanel() {
             />
           </section>
         </div>
+
+        <section className="grid grid-cols-1 gap-x-9 gap-y-9 sm:grid-cols-2">
+          <div>
+            <label htmlFor="ws-website" className={fieldLabelClass}>
+              Company website
+            </label>
+            <input
+              id="ws-website"
+              type="url"
+              value={profile.websiteUrl}
+              placeholder="https://example.com"
+              disabled={profileLoading}
+              onChange={(e) => {
+                setProfile((p) => ({ ...p, websiteUrl: e.target.value }));
+                setSaved(false);
+                setError(null);
+              }}
+              className={inputClass}
+            />
+          </div>
+          <div>
+            <label htmlFor="ws-changelog" className={fieldLabelClass}>
+              Changelog URL
+            </label>
+            <input
+              id="ws-changelog"
+              type="url"
+              value={profile.changelogUrl}
+              placeholder="https://example.com/changelog"
+              disabled={profileLoading}
+              onChange={(e) => {
+                setProfile((p) => ({ ...p, changelogUrl: e.target.value }));
+                setSaved(false);
+                setError(null);
+              }}
+              className={inputClass}
+            />
+          </div>
+          <div className="sm:col-span-2">
+            <label htmlFor="ws-github" className={fieldLabelClass}>
+              GitHub
+            </label>
+            <input
+              id="ws-github"
+              value={profile.githubHandle}
+              placeholder="acme or https://github.com/acme"
+              disabled={profileLoading}
+              onChange={(e) => {
+                setProfile((p) => ({ ...p, githubHandle: e.target.value }));
+                setSaved(false);
+                setError(null);
+              }}
+              className={inputClass}
+            />
+            <p className="mt-1.5 text-[12px] text-stone-500 dark:text-stone-400">
+              Handle or profile URL — used for links and avatar fallback.
+            </p>
+          </div>
+        </section>
 
         <section>
           <div className="text-sm font-semibold text-stone-900 dark:text-stone-100">
@@ -168,7 +308,11 @@ export function GeneralPanel() {
         </section>
 
         <section className="flex items-center gap-2.5">
-          <button type="submit" disabled={saving || !dirty} className={primaryButtonClass}>
+          <button
+            type="submit"
+            disabled={saving || !dirty || profileLoading}
+            className={primaryButtonClass}
+          >
             {saving ? "Saving…" : "Save changes"}
           </button>
           {dirty && (
@@ -178,6 +322,7 @@ export function GeneralPanel() {
                 setName(current.name);
                 setError(null);
                 setSaved(false);
+                void loadProfile(current.id);
               }}
               className={secondaryButtonClass}
             >

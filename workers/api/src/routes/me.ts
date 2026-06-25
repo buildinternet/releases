@@ -36,6 +36,7 @@ import {
 } from "../lib/feed-cache.js";
 import { withLatestCache } from "../lib/latest-cache.js";
 import { meWebhookHandlers } from "./me-webhooks.js";
+import { accountProfileHandlers } from "./account-profile.js";
 
 function optionalWaitUntil(c: Context<Env>): ((p: Promise<unknown>) => void) | undefined {
   try {
@@ -239,3 +240,4 @@ export const meRoutes = new Hono<Env>();
 meRoutes.use("/me/*", requireFollowsPrincipal);
 meRoutes.route("/", meHandlers);
 meRoutes.route("/", meWebhookHandlers);
+meRoutes.route("/", accountProfileHandlers);

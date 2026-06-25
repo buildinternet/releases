@@ -1,5 +1,10 @@
 import { test, expect } from "bun:test";
-import { ingestOrgAvatar, isPrivateOrLocalHost } from "../src/lib/avatar-ingest";
+import {
+  ingestAvatarFromBuffer,
+  ingestOrgAvatar,
+  isHostedAvatarUrl,
+  isPrivateOrLocalHost,
+} from "../src/lib/avatar-ingest";
 
 // Minimal PNG: the IHDR header is all the sniffer reads; pad to `bytes` total so
 // the byte-size gate sees a realistic size.
@@ -368,4 +373,26 @@ test("does not echo the upstream status in the error message", async () => {
     expect(res.status).toBe(502);
     expect(res.message).not.toContain("403");
   }
+});
+
+test("ingestAvatarFromBuffer mirrors to a custom key stem", async () => {
+  const R2 = fakeR2();
+  const res = await ingestAvatarFromBuffer({
+    buf: pngBytes(256, 256).buffer as ArrayBuffer,
+    contentType: "image/png",
+    keyStem: "users/user-1",
+    bucket: bucketOf(R2),
+    mediaOrigin: "https://media.test",
+  });
+  expect(res.ok && res.key).toBe("users/user-1.png");
+  expect(res.ok && res.avatarUrl).toBe("https://media.test/users/user-1.png");
+});
+
+test("isHostedAvatarUrl matches mirrored avatars by prefix", () => {
+  expect(
+    isHostedAvatarUrl("https://media.test/users/u1.png", "https://media.test/", "users/"),
+  ).toBe(true);
+  expect(
+    isHostedAvatarUrl("https://lh3.googleusercontent.com/x", "https://media.test", "users/"),
+  ).toBe(false);
 });

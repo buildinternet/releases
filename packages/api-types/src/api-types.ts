@@ -61,6 +61,12 @@ import type {
   DeleteOrgAccountResponseSchema,
 } from "./schemas/orgs.js";
 import type {
+  UploadAvatarResponseSchema,
+  WorkspaceProfileFieldsSchema,
+  PatchWorkspaceProfileBodySchema,
+  WorkspaceProfileResponseSchema,
+} from "./schemas/account-profile.js";
+import type {
   SourceListItemSchema,
   SourceWithOrgSchema,
   SourceListResponseSchema,
@@ -297,6 +303,12 @@ export {
   OrgRecentReleasesResponseSchema,
   DeleteOrgAccountResponseSchema,
 } from "./schemas/orgs.js";
+export {
+  UploadAvatarResponseSchema,
+  WorkspaceProfileFieldsSchema,
+  PatchWorkspaceProfileBodySchema,
+  WorkspaceProfileResponseSchema,
+} from "./schemas/account-profile.js";
 export {
   ReleasesJsonConfigSchema,
   ReleasesJsonProductSchema,
@@ -574,6 +586,10 @@ export type CreateOrgBody = z.infer<typeof CreateOrgBodySchema>;
 export type UpdateOrgBody = z.infer<typeof UpdateOrgBodySchema>;
 export type SetOrgAvatarBody = z.infer<typeof SetOrgAvatarBodySchema>;
 export type SetOrgAvatarResponse = z.infer<typeof SetOrgAvatarResponseSchema>;
+export type UploadAvatarResponse = z.infer<typeof UploadAvatarResponseSchema>;
+export type WorkspaceProfileFields = z.infer<typeof WorkspaceProfileFieldsSchema>;
+export type PatchWorkspaceProfileBody = z.infer<typeof PatchWorkspaceProfileBodySchema>;
+export type WorkspaceProfileResponse = z.infer<typeof WorkspaceProfileResponseSchema>;
 export type OrgDetail = z.infer<typeof OrgDetailSchema>;
 
 export type OrgCatalogItem = z.infer<typeof OrgCatalogItemSchema>;
