@@ -59,6 +59,19 @@ Expect `401 application/json` (no session cookie), **not** `403 text/html`.
 
 After deploy, retry avatar upload on `/account/general` — should return JSON (`401`/`403`/`200`), never HTML.
 
+## Apply via script (recommended)
+
+With `CLOUDFLARE_API_TOKEN` (Zone WAF Edit) in the environment:
+
+```bash
+bun scripts/apply-trusted-proxy-waf-skip.ts
+bun scripts/apply-trusted-proxy-waf-skip.ts --dry-run
+```
+
+Or dispatch the **Apply trusted-proxy WAF skip** GitHub Actions workflow
+(`.github/workflows/apply-trusted-proxy-waf.yml`) — it uses the repo’s
+`CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID` secrets.
+
 ## API equivalent
 
 See [Configure a rule with the Skip action](https://developers.cloudflare.com/waf/custom-rules/skip/)
