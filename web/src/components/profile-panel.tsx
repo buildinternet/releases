@@ -16,7 +16,6 @@ import {
   secondaryButtonClass,
   smallButtonClass,
 } from "@/components/account/ui";
-import { ExternalLinkIcon } from "@/components/account/icons";
 
 function ProfileAvatar({
   user,
@@ -98,18 +97,11 @@ export function ProfilePanel() {
   return (
     <PanelGrid
       aside={
-        <Aside label="Public profile">
+        <Aside label="Profile">
           <p className="text-[13px] leading-relaxed text-stone-600 dark:text-stone-300">
-            Your name and avatar appear on your public following page, visible to anyone with the
-            link.
+            Your name and avatar are how you appear in Releases — in workspaces you belong to and on
+            your own feed.
           </p>
-          <Link
-            href="/following"
-            className="mt-3 inline-flex items-center gap-1.5 text-[13px] font-medium text-[var(--accent)]"
-          >
-            View following page
-            <ExternalLinkIcon className="h-3.5 w-3.5" />
-          </Link>
         </Aside>
       }
     >
@@ -155,23 +147,6 @@ export function ProfilePanel() {
               className={inputClass}
               placeholder="Your name"
             />
-          </section>
-
-          <section>
-            <label htmlFor="username" className={fieldLabelClass}>
-              Username <span className="font-normal text-stone-400">(coming soon)</span>
-            </label>
-            <div className="flex h-10 items-center overflow-hidden rounded-[9px] border border-stone-200 bg-stone-50 dark:border-stone-700 dark:bg-stone-900/60">
-              <span className="pl-3 font-mono text-sm text-stone-400 dark:text-stone-500">
-                releases.sh/@
-              </span>
-              <input
-                id="username"
-                disabled
-                placeholder="username"
-                className="h-full min-w-0 flex-1 border-none bg-transparent px-0 font-mono text-sm text-stone-500 outline-none dark:text-stone-400"
-              />
-            </div>
           </section>
         </div>
 

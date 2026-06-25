@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useSession, organization } from "@/lib/auth-client";
-import { toSlug } from "@buildinternet/releases-core/slug";
 import { useWorkspaces, workspaceInitial } from "@/components/account/use-workspaces";
 import { PanelGrid } from "@/components/account/settings-section";
 import {
@@ -24,15 +23,13 @@ export function GeneralPanel() {
   const current = active ?? workspaces[0] ?? null;
 
   const [name, setName] = useState("");
-  const [slug, setSlug] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
     setName(current?.name ?? "");
-    setSlug(current?.slug ?? "");
-  }, [current?.name, current?.slug]);
+  }, [current?.name]);
 
   if (isPending) return <p className="text-sm text-stone-500 dark:text-stone-400">Loading…</p>;
 
@@ -58,8 +55,7 @@ export function GeneralPanel() {
     );
   }
 
-  const nextSlug = toSlug(slug).slice(0, 48);
-  const dirty = name.trim() !== current.name || (nextSlug && nextSlug !== current.slug);
+  const dirty = name.trim() !== current.name;
 
   async function onSave(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -72,7 +68,6 @@ export function GeneralPanel() {
         organizationId: current.id,
         data: {
           name: name.trim() || current.name,
-          ...(nextSlug && nextSlug !== current.slug ? { slug: nextSlug } : {}),
         },
       });
       if (res?.error) {
@@ -96,9 +91,6 @@ export function GeneralPanel() {
             These settings apply to{" "}
             <strong className="font-semibold text-stone-900 dark:text-stone-100">everyone</strong>{" "}
             in {current.name} — not just you.
-          </p>
-          <p className="mt-2.5 text-[13px] leading-relaxed text-stone-600 dark:text-stone-300">
-            Changing the URL updates every shared link.
           </p>
         </Aside>
       }
@@ -142,27 +134,6 @@ export function GeneralPanel() {
               className={inputClass}
             />
           </section>
-
-          <section>
-            <label htmlFor="ws-slug" className={fieldLabelClass}>
-              Workspace URL
-            </label>
-            <div className="flex h-10 items-center overflow-hidden rounded-[9px] border border-stone-200 bg-white focus-within:border-[var(--accent)] dark:border-stone-700 dark:bg-stone-950">
-              <span className="pl-3 font-mono text-sm text-stone-400 dark:text-stone-500">
-                releases.sh/
-              </span>
-              <input
-                id="ws-slug"
-                value={slug}
-                onChange={(e) => {
-                  setSlug(e.target.value);
-                  setSaved(false);
-                  setError(null);
-                }}
-                className="h-full min-w-0 flex-1 border-none bg-transparent px-0 font-mono text-sm text-stone-900 outline-none dark:text-stone-100"
-              />
-            </div>
-          </section>
         </div>
 
         <section>
@@ -205,7 +176,6 @@ export function GeneralPanel() {
               type="button"
               onClick={() => {
                 setName(current.name);
-                setSlug(current.slug);
                 setError(null);
                 setSaved(false);
               }}
