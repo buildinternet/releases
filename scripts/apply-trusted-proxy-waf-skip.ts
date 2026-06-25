@@ -26,7 +26,13 @@ function requireEnv(name: string): string {
   return v;
 }
 
-async function cf<T>(token: string, path: string, init: RequestInit = {}): Promise<T> {
+type CfBody = { success?: boolean; errors?: Array<{ code?: number; message?: string }> };
+
+async function cfRaw(
+  token: string,
+  path: string,
+  init: RequestInit = {},
+): Promise<{ status: number; body: CfBody & Record<string, unknown> }> {
   const res = await fetch(`https://api.cloudflare.com/client/v4${path}`, {
     ...init,
     headers: {
@@ -35,13 +41,14 @@ async function cf<T>(token: string, path: string, init: RequestInit = {}): Promi
       ...(init.headers ?? {}),
     },
   });
-  const body = (await res.json()) as T & { success?: boolean; errors?: unknown };
-  if (!res.ok || body.success === false) {
-    console.error(`Cloudflare API ${init.method ?? "GET"} ${path} failed (${res.status})`);
-    console.error(JSON.stringify(body, null, 2));
-    process.exit(1);
-  }
-  return body;
+  const body = (await res.json()) as CfBody & Record<string, unknown>;
+  return { status: res.status, body };
+}
+
+function fail(method: string, path: string, status: number, body: CfBody) {
+  console.error(`Cloudflare API ${method} ${path} failed (${status})`);
+  console.error(JSON.stringify(body, null, 2));
+  process.exit(1);
 }
 
 type Ruleset = {
@@ -57,25 +64,59 @@ type Ruleset = {
   }>;
 };
 
+const skipRule = () => ({
+  description: RULE_DESCRIPTION,
+  expression: RULE_EXPRESSION,
+  action: "skip",
+  enabled: true,
+  action_parameters: {
+    phases: ["http_request_sbfm"],
+    products: ["bic", "securityLevel"],
+  },
+});
+
 async function main() {
   const token = requireEnv("CLOUDFLARE_API_TOKEN");
 
-  const zones = await cf<{ result: Array<{ id: string; name: string }> }>(
-    token,
-    `/zones?name=${encodeURIComponent(ZONE_NAME)}`,
-  );
-  const zone = zones.result[0];
+  const zonesRes = await cfRaw(token, `/zones?name=${encodeURIComponent(ZONE_NAME)}`);
+  if (!zonesRes.body.success) fail("GET", "/zones", zonesRes.status, zonesRes.body);
+  const zone = (zonesRes.body.result as Array<{ id: string; name: string }>)[0];
   if (!zone) {
     console.error(`Zone not found: ${ZONE_NAME}`);
     process.exit(1);
   }
   console.log(`zone: ${zone.name} (${zone.id})`);
 
-  const entry = await cf<{ result: Ruleset }>(
-    token,
-    `/zones/${zone.id}/rulesets/phases/http_request_firewall_custom/entrypoint`,
-  );
-  const ruleset = entry.result;
+  const entryPath = `/zones/${zone.id}/rulesets/phases/http_request_firewall_custom/entrypoint`;
+  const entryRes = await cfRaw(token, entryPath);
+
+  if (entryRes.status === 404) {
+    const createPayload = {
+      name: "zone custom rules",
+      kind: "zone",
+      phase: "http_request_firewall_custom",
+      description: "Custom WAF rules for releases.sh",
+      rules: [skipRule()],
+    };
+    if (dryRun) {
+      console.log("dry-run — would create entrypoint ruleset:");
+      console.log(JSON.stringify(createPayload, null, 2));
+      return;
+    }
+    const created = await cfRaw(token, `/zones/${zone.id}/rulesets`, {
+      method: "POST",
+      body: JSON.stringify(createPayload),
+    });
+    if (!created.body.success)
+      fail("POST", `/zones/${zone.id}/rulesets`, created.status, created.body);
+    const ruleset = created.body.result as Ruleset;
+    console.log(`Created entrypoint ruleset ${ruleset.id} with trusted-proxy skip rule`);
+    return;
+  }
+
+  if (!entryRes.body.success) fail("GET", entryPath, entryRes.status, entryRes.body);
+
+  const ruleset = entryRes.body.result as Ruleset;
   console.log(`custom ruleset: ${ruleset.id} (${ruleset.rules?.length ?? 0} rules)`);
 
   const existing = ruleset.rules?.find((r) => r.description === RULE_DESCRIPTION);
@@ -93,17 +134,7 @@ async function main() {
     process.exit(1);
   }
 
-  const payload = {
-    description: RULE_DESCRIPTION,
-    expression: RULE_EXPRESSION,
-    action: "skip",
-    enabled: true,
-    position: { index: 1 },
-    action_parameters: {
-      phases: ["http_request_sbfm"],
-      products: ["bic", "securityLevel"],
-    },
-  };
+  const payload = { ...skipRule(), position: { index: 1 } };
 
   if (dryRun) {
     console.log("dry-run — would create rule:");
@@ -111,12 +142,15 @@ async function main() {
     return;
   }
 
-  const created = await cf<{ result: { id: string } }>(
-    token,
-    `/zones/${zone.id}/rulesets/${ruleset.id}/rules`,
-    { method: "POST", body: JSON.stringify(payload) },
-  );
-  console.log(`Created WAF skip rule ${created.result.id}`);
+  const created = await cfRaw(token, `/zones/${zone.id}/rulesets/${ruleset.id}/rules`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  if (!created.body.success) {
+    fail("POST", `/zones/${zone.id}/rulesets/${ruleset.id}/rules`, created.status, created.body);
+  }
+  const rule = created.body.result as { id: string };
+  console.log(`Created WAF skip rule ${rule.id}`);
 }
 
 main().catch((err) => {
