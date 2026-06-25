@@ -167,7 +167,7 @@ function FeedTokenSection() {
     }
   }
 
-  if (loading) return null;
+  if (loading) return <p className="text-sm text-stone-500 dark:text-stone-400">Loading…</p>;
 
   return (
     <section>

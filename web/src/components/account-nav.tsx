@@ -15,7 +15,7 @@ import {
   CheckIcon,
   PlusIcon,
 } from "@/components/account/icons";
-import { eyebrowClass } from "@/components/account/ui";
+import { ErrorText, eyebrowClass } from "@/components/account/ui";
 
 /**
  * Session-aware header control. Renders a "Sign in" link when signed out and a
@@ -93,10 +93,21 @@ const menuIconClass = "h-4 w-4 shrink-0 text-stone-400 dark:text-stone-500";
 
 /** Inline workspace list + create, shown expanded inside the account dropdown. */
 function MenuWorkspaces({ onDone }: { onDone: () => void }) {
-  const { workspaces, active, busy, switchTo, create } = useWorkspaces();
+  const { workspaces, active, busy, error, switchTo, create } = useWorkspaces();
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
   const current = active ?? workspaces[0] ?? null;
+
+  // Close the menu only after a successful switch, so a failure stays visible.
+  const onSwitch = (id: string, isActive: boolean) => {
+    if (isActive) {
+      onDone();
+      return;
+    }
+    void switchTo(id).then((ok) => {
+      if (ok) onDone();
+    });
+  };
 
   if (workspaces.length === 0 && !creating) {
     return (
@@ -118,10 +129,7 @@ function MenuWorkspaces({ onDone }: { onDone: () => void }) {
             role="menuitemradio"
             aria-checked={isActive}
             disabled={busy}
-            onClick={() => {
-              if (!isActive) void switchTo(ws.id);
-              onDone();
-            }}
+            onClick={() => onSwitch(ws.id, isActive)}
             className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left transition hover:bg-stone-100 disabled:opacity-60 dark:hover:bg-stone-900"
           >
             <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-stone-200 bg-stone-100 text-[11px] font-semibold text-stone-700 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-200">
@@ -134,6 +142,11 @@ function MenuWorkspaces({ onDone }: { onDone: () => void }) {
           </button>
         );
       })}
+      {error && (
+        <div className="px-2.5 py-1.5">
+          <ErrorText>{error}</ErrorText>
+        </div>
+      )}
       {creating ? (
         <form
           className="flex items-center gap-1.5 p-1"
