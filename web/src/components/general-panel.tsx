@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useSession, organization } from "@/lib/auth-client";
-import { useWorkspaces, workspaceInitial } from "@/components/account/use-workspaces";
+import { useWorkspaces } from "@/components/account/use-workspaces";
+import { WorkspaceAvatar } from "@/components/account/workspace-avatar";
 import { PanelGrid } from "@/components/account/settings-section";
 import {
   Aside,
@@ -36,24 +37,6 @@ function profileForm(res: WorkspaceProfileResponse): ProfileForm {
     changelogUrl: res.profile.changelogUrl ?? "",
     githubHandle: res.profile.githubHandle ?? "",
   };
-}
-
-function WorkspaceAvatar({ name, logo }: { name: string; logo: string | null | undefined }) {
-  const [broken, setBroken] = useState(false);
-  useEffect(() => setBroken(false), [logo]);
-  if (logo && !broken) {
-    return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
-        src={logo}
-        alt=""
-        decoding="async"
-        onError={() => setBroken(true)}
-        className="h-full w-full object-cover"
-      />
-    );
-  }
-  return <span aria-hidden="true">{workspaceInitial(name)}</span>;
 }
 
 export function GeneralPanel() {
@@ -194,6 +177,7 @@ export function GeneralPanel() {
               onUpload={async (file) => {
                 const res = await uploadWorkspaceAvatar(current.id, file);
                 setLogo(res.avatarUrl);
+                await refetch?.();
               }}
             />
           </div>

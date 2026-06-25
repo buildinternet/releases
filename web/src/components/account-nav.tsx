@@ -6,7 +6,8 @@ import { useEffect, useState } from "react";
 import { signOut, useSession } from "@/lib/auth-client";
 import { AUTH_CONFIGURED, displayEmailOf } from "@/lib/auth-ui";
 import { computeIsAdmin } from "@/components/admin-only";
-import { useWorkspaces, workspaceInitial } from "@/components/account/use-workspaces";
+import { useWorkspaces } from "@/components/account/use-workspaces";
+import { WorkspaceAvatar } from "@/components/account/workspace-avatar";
 import {
   ProfileIcon,
   HeartIcon,
@@ -132,8 +133,8 @@ function MenuWorkspaces({ onDone }: { onDone: () => void }) {
             onClick={() => onSwitch(ws.id, isActive)}
             className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left transition hover:bg-stone-100 disabled:opacity-60 dark:hover:bg-stone-900"
           >
-            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-stone-200 bg-stone-100 text-[11px] font-semibold text-stone-700 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-200">
-              {workspaceInitial(ws.name)}
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center overflow-hidden rounded-md border border-stone-200 bg-stone-100 text-[11px] font-semibold text-stone-700 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-200">
+              <WorkspaceAvatar name={ws.name} logo={ws.logo} />
             </span>
             <span className="min-w-0 flex-1 truncate text-[13.5px] text-stone-900 dark:text-stone-100">
               {ws.name}

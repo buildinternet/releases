@@ -5,7 +5,8 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { visibleNavGroups } from "@/lib/account-nav";
 import { ErrorText, eyebrowClass } from "@/components/account/ui";
-import { useWorkspaces, workspaceInitial } from "@/components/account/use-workspaces";
+import { useWorkspaces } from "@/components/account/use-workspaces";
+import { WorkspaceAvatar } from "@/components/account/workspace-avatar";
 import {
   ChevronSelectorIcon,
   ChevronDownIcon,
@@ -58,8 +59,8 @@ function WorkspaceSelector() {
         aria-expanded={open}
         className="flex w-full items-center gap-2.5 rounded-[10px] border border-stone-200 bg-white p-2.5 text-left transition hover:border-stone-300 dark:border-stone-800 dark:bg-stone-900 dark:hover:border-stone-700"
       >
-        <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-lg bg-[var(--accent)] text-[13px] font-semibold text-[var(--on-accent)]">
-          {workspaceInitial(current?.name)}
+        <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center overflow-hidden rounded-lg bg-[var(--accent)] text-[13px] font-semibold text-[var(--on-accent)]">
+          <WorkspaceAvatar name={current?.name ?? "Workspace"} logo={current?.logo} />
         </span>
         <span className="min-w-0 flex-1">
           <span className="block truncate text-[13.5px] font-semibold text-stone-900 dark:text-stone-100">
@@ -91,8 +92,8 @@ function WorkspaceSelector() {
                   onClick={() => onSwitch(ws.id, isActive)}
                   className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left transition hover:bg-stone-100 disabled:opacity-60 dark:hover:bg-stone-900"
                 >
-                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-stone-200 bg-stone-100 text-[11px] font-semibold text-stone-700 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-200">
-                    {workspaceInitial(ws.name)}
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center overflow-hidden rounded-md border border-stone-200 bg-stone-100 text-[11px] font-semibold text-stone-700 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-200">
+                    <WorkspaceAvatar name={ws.name} logo={ws.logo} />
                   </span>
                   <span className="min-w-0 flex-1 truncate text-[13.5px] text-stone-900 dark:text-stone-100">
                     {ws.name}
