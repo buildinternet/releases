@@ -14,9 +14,10 @@ import {
   textareaClass,
   primaryButtonClass,
   secondaryButtonClass,
-  smallButtonClass,
 } from "@/components/account/ui";
 import { ExternalLinkIcon } from "@/components/account/icons";
+import { AvatarUploadButton } from "@/components/avatar-upload-button";
+import { uploadUserAvatar } from "@/lib/account-profile-api";
 
 function ProfileAvatar({
   user,
@@ -122,20 +123,19 @@ export function ProfilePanel() {
             Profile photo
           </div>
           <p className="mt-1 mb-4 text-[13px] text-stone-500 dark:text-stone-400">
-            Synced from your sign-in provider. Custom uploads are coming soon.
+            Upload a square image (PNG, JPEG, GIF, or WebP, at least 128×128). Provider avatars
+            still apply until you upload your own.
           </p>
           <div className="flex items-center gap-[18px]">
             <span className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[var(--accent)] text-2xl font-semibold text-[var(--on-accent)]">
               <ProfileAvatar user={user} />
             </span>
-            <button
-              type="button"
-              disabled
-              title="Avatar upload is coming soon"
-              className={smallButtonClass}
-            >
-              Upload
-            </button>
+            <AvatarUploadButton
+              onUpload={async (file) => {
+                await uploadUserAvatar(file);
+                await refetch?.();
+              }}
+            />
           </div>
         </section>
 

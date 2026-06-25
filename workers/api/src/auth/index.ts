@@ -30,6 +30,7 @@ import { audienceVariants } from "@releases/lib/oauth-jwt";
 import { USER_API_KEY_PREFIX, DEVICE_AUTH_CLIENT_ID } from "@buildinternet/releases-core/api-token";
 import { oauthAccessTokenClaims, consentScopeViolation, jwtSessionPayload } from "./entitlement.js";
 import { ensureActiveWorkspace, isOrgOwnerOrAdmin } from "./workspace.js";
+import { preserveCustomAvatarOnUpdate } from "../lib/avatar-ingest.js";
 import { kvRateLimitStorage } from "./rate-limit-kv.js";
 import { scopeToPermissions } from "./api-key-scope.js";
 import { CLIENT_SECRET_PREFIX } from "./oauth-clients.js";
@@ -139,8 +140,9 @@ type SocialProvider = {
   /**
    * Re-import the provider's profile (`name`, `image`) onto the user on EVERY
    * sign-in, not just the first. Better Auth defaults this off; we opt Google in
-   * so the avatar we surface stays current. Safe today — there's no profile-edit
-   * UI whose values this could clobber. See `buildSocialProviders`.
+   * so the avatar we surface stays current. Custom uploads mirrored to R2 are
+   * preserved by `preserveCustomAvatarOnUpdate` in the `user.update.before` hook.
+   * See `buildSocialProviders`.
    */
   overrideUserInfoOnSignIn?: boolean;
   /**
@@ -181,6 +183,39 @@ export function mapDisplayEmail(profile: { email?: string | null }): { displayEm
  * modify-shape) only when it changes something, else `undefined` (a no-op passthrough).
  * Pure + exported for unit testing.
  */
+async function applyUserUpdateGuards(
+  db: AnyDb,
+  data: Record<string, unknown>,
+  context: unknown,
+  mediaOrigin: string,
+): Promise<{ data: Record<string, unknown> } | undefined> {
+  let merged = data;
+  let changed = false;
+
+  const emailPatch = syncDisplayEmailOnUpdate(data);
+  if (emailPatch) {
+    merged = emailPatch.data;
+    changed = true;
+  }
+
+  const userId = (context as { context?: { session?: { user?: { id?: string } } } } | null)?.context
+    ?.session?.user?.id;
+  if (userId && "image" in merged) {
+    const [row] = await db
+      .select({ image: user.image })
+      .from(user)
+      .where(eq(user.id, userId))
+      .limit(1);
+    const preserved = preserveCustomAvatarOnUpdate(merged, row?.image, mediaOrigin);
+    if (preserved) {
+      merged = preserved.data;
+      changed = true;
+    }
+  }
+
+  return changed ? { data: merged } : undefined;
+}
+
 export function syncDisplayEmailOnUpdate(
   data: Record<string, unknown>,
 ): { data: Record<string, unknown> } | undefined {
@@ -1409,7 +1444,13 @@ async function buildAuthInstance(env: Bindings, deps: CreateAuthDeps = {}) {
         user: {
           ...auditHooks.user,
           update: {
-            before: async (data: Record<string, unknown>) => syncDisplayEmailOnUpdate(data),
+            before: async (data: Record<string, unknown>, context) =>
+              applyUserUpdateGuards(
+                db,
+                data,
+                context,
+                env.MEDIA_ORIGIN ?? "https://media.releases.sh",
+              ),
           },
         },
         // Composed at the leaf level (explicit references, not `...auditHooks.session`)

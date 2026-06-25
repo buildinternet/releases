@@ -50,6 +50,45 @@ export interface AvatarIngestOptions {
   fetchImpl?: (input: string, init?: RequestInit) => Promise<Response>;
 }
 
+export interface AvatarBufferIngestOptions {
+  /** Raw image bytes (already bounded by the caller when read from multipart). */
+  buf: ArrayBuffer;
+  /** Declared raster content type — drives the R2 key extension. */
+  contentType: string;
+  /**
+   * R2 key stem without extension, e.g. `users/{userId}` or `workspaces/{orgId}`.
+   * The stored key is `{keyStem}.{ext}`.
+   */
+  keyStem: string;
+  bucket: R2Bucket;
+  mediaOrigin: string;
+  /** Log component tag — defaults to `avatar`. */
+  component?: string;
+}
+
+/** True when `url` is a mirrored avatar we host under `mediaOrigin/{prefix}`. */
+export function isHostedAvatarUrl(
+  url: string | null | undefined,
+  mediaOrigin: string,
+  prefix: "users/" | "workspaces/" | "orgs/",
+): boolean {
+  if (!url) return false;
+  const origin = mediaOrigin.replace(/\/+$/, "");
+  return url.startsWith(`${origin}/${prefix}`);
+}
+
+/** Strip provider `image` updates when the user already has a hosted avatar. */
+export function preserveCustomAvatarOnUpdate(
+  data: Record<string, unknown>,
+  currentImage: string | null | undefined,
+  mediaOrigin: string,
+): { data: Record<string, unknown> } | undefined {
+  if (!("image" in data)) return undefined;
+  if (!isHostedAvatarUrl(currentImage, mediaOrigin, "users/")) return undefined;
+  const { image: _drop, ...rest } = data;
+  return { data: rest };
+}
+
 function reject(status: AvatarRejectStatus, error: string, message: string): AvatarIngestResult {
   return { ok: false, status, error, message };
 }
@@ -149,6 +188,117 @@ async function fetchImageSafely(
   return { blocked: false, res: null }; // too many redirects
 }
 
+type AvatarRasterValidated = { ext: string; dims: { width: number; height: number } };
+
+function validateAvatarRaster(
+  buf: ArrayBuffer,
+  contentType: string,
+): AvatarIngestResult | AvatarRasterValidated {
+  const ext = CONTENT_TYPE_EXT[contentType];
+  if (!ext) {
+    return reject(
+      415,
+      "unsupported_type",
+      `Unsupported image type "${contentType || "unknown"}" — png, jpeg, gif, or webp only`,
+    );
+  }
+  if (buf.byteLength < AVATAR_MIN_BYTES) {
+    return reject(
+      422,
+      "too_small",
+      `Image is only ${buf.byteLength} bytes — likely not a real icon`,
+    );
+  }
+  if (buf.byteLength > AVATAR_MAX_BYTES) {
+    return reject(413, "too_large", `Image exceeds the ${AVATAR_MAX_BYTES}-byte cap`);
+  }
+
+  const dims = sniffImageDimensions(new Uint8Array(buf));
+  if (!dims) {
+    return reject(422, "unreadable", "Could not read image dimensions (png, jpeg, gif, or webp)");
+  }
+  if (dims.width < AVATAR_MIN_DIMENSION || dims.height < AVATAR_MIN_DIMENSION) {
+    return reject(
+      422,
+      "too_small_dimensions",
+      `Image is ${dims.width}×${dims.height}; avatars must be at least ${AVATAR_MIN_DIMENSION}px on each side`,
+    );
+  }
+  const squareness = Math.min(dims.width, dims.height) / Math.max(dims.width, dims.height);
+  if (squareness < AVATAR_MIN_SQUARENESS) {
+    return reject(
+      422,
+      "not_square",
+      `Image is ${dims.width}×${dims.height}; avatars must be roughly square (shorter side ≥ ${Math.round(AVATAR_MIN_SQUARENESS * 100)}% of the longer)`,
+    );
+  }
+  return { ext, dims };
+}
+
+async function storeAvatarToR2(opts: {
+  buf: ArrayBuffer;
+  contentType: string;
+  key: string;
+  bucket: R2Bucket;
+  mediaOrigin: string;
+  component: string;
+  logContext: Record<string, unknown>;
+  dims: { width: number; height: number };
+}): Promise<AvatarIngestResult> {
+  try {
+    await opts.bucket.put(opts.key, opts.buf, { httpMetadata: { contentType: opts.contentType } });
+  } catch (err) {
+    logEvent("warn", {
+      component: opts.component,
+      event: "r2-put-failed",
+      key: opts.key,
+      err,
+      ...opts.logContext,
+    });
+    return reject(502, "store_failed", "Could not store the image");
+  }
+
+  const avatarUrl = `${opts.mediaOrigin.replace(/\/+$/, "")}/${opts.key}`;
+  logEvent("info", {
+    component: opts.component,
+    event: "stored",
+    key: opts.key,
+    width: opts.dims.width,
+    height: opts.dims.height,
+    bytes: opts.buf.byteLength,
+    ...opts.logContext,
+  });
+  return {
+    ok: true,
+    avatarUrl,
+    key: opts.key,
+    width: opts.dims.width,
+    height: opts.dims.height,
+    bytes: opts.buf.byteLength,
+  };
+}
+
+/** Validate a bounded raster buffer and mirror it to R2 at `{keyStem}.{ext}`. */
+export async function ingestAvatarFromBuffer(
+  opts: AvatarBufferIngestOptions,
+): Promise<AvatarIngestResult> {
+  const contentType = opts.contentType.split(";")[0]!.trim().toLowerCase();
+  const validated = validateAvatarRaster(opts.buf, contentType);
+  if ("ok" in validated) return validated;
+
+  const key = `${opts.keyStem}.${validated.ext}`;
+  return storeAvatarToR2({
+    buf: opts.buf,
+    contentType,
+    key,
+    bucket: opts.bucket,
+    mediaOrigin: opts.mediaOrigin,
+    component: opts.component ?? "avatar",
+    logContext: { keyStem: opts.keyStem },
+    dims: validated.dims,
+  });
+}
+
 export async function ingestOrgAvatar(opts: AvatarIngestOptions): Promise<AvatarIngestResult> {
   const fetchImpl = opts.fetchImpl ?? fetch;
 
@@ -175,79 +325,19 @@ export async function ingestOrgAvatar(opts: AvatarIngestOptions): Promise<Avatar
   }
 
   const contentType = (res.headers.get("content-type") ?? "").split(";")[0]!.trim().toLowerCase();
-  const ext = CONTENT_TYPE_EXT[contentType];
-  if (!ext) {
-    return reject(
-      415,
-      "unsupported_type",
-      `Unsupported image type "${contentType || "unknown"}" — png, jpeg, gif, or webp only`,
-    );
-  }
-
   const buf = await readBodyBounded(res, AVATAR_MAX_BYTES);
   if (buf === null) {
     return reject(413, "too_large", `Image exceeds the ${AVATAR_MAX_BYTES}-byte cap`);
   }
-  if (buf.byteLength < AVATAR_MIN_BYTES) {
-    return reject(
-      422,
-      "too_small",
-      `Image is only ${buf.byteLength} bytes — likely not a real icon`,
-    );
-  }
 
-  const dims = sniffImageDimensions(new Uint8Array(buf));
-  if (!dims) {
-    return reject(422, "unreadable", "Could not read image dimensions (png, jpeg, gif, or webp)");
-  }
-  if (dims.width < AVATAR_MIN_DIMENSION || dims.height < AVATAR_MIN_DIMENSION) {
-    return reject(
-      422,
-      "too_small_dimensions",
-      `Image is ${dims.width}×${dims.height}; avatars must be at least ${AVATAR_MIN_DIMENSION}px on each side`,
-    );
-  }
-  const squareness = Math.min(dims.width, dims.height) / Math.max(dims.width, dims.height);
-  if (squareness < AVATAR_MIN_SQUARENESS) {
-    return reject(
-      422,
-      "not_square",
-      `Image is ${dims.width}×${dims.height}; avatars must be roughly square (shorter side ≥ ${Math.round(AVATAR_MIN_SQUARENESS * 100)}% of the longer)`,
-    );
-  }
-
-  const key = `orgs/${opts.slug}.${ext}`;
-  try {
-    await opts.bucket.put(key, buf, { httpMetadata: { contentType } });
-  } catch (err) {
-    logEvent("warn", {
-      component: "org-avatar",
-      event: "r2-put-failed",
-      slug: opts.slug,
-      key,
-      err,
-    });
-    return reject(502, "store_failed", "Could not store the image");
-  }
-
-  const avatarUrl = `${opts.mediaOrigin.replace(/\/+$/, "")}/${key}`;
-  logEvent("info", {
+  return ingestAvatarFromBuffer({
+    buf,
+    contentType,
+    keyStem: `orgs/${opts.slug}`,
+    bucket: opts.bucket,
+    mediaOrigin: opts.mediaOrigin,
     component: "org-avatar",
-    event: "stored",
-    slug: opts.slug,
-    key,
-    width: dims.width,
-    height: dims.height,
-    bytes: buf.byteLength,
   });
-  return {
-    ok: true,
-    avatarUrl,
-    key,
-    width: dims.width,
-    height: dims.height,
-    bytes: buf.byteLength,
-  };
 }
 
 /**
