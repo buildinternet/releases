@@ -25,12 +25,12 @@ describe("deriveAcceptState", () => {
   test("loading when signed in but fetch still in flight", () => {
     expect(deriveAcceptState({ ...base, sessionEmail: "a@b.com" }).kind).toBe("loading");
   });
-  test("ready carries org details when invitation loads", () => {
+  test("ready carries workspace details when invitation loads", () => {
     const s = deriveAcceptState({ ...base, sessionEmail: "invitee@example.com", invitation: data });
     expect(s).toEqual({
       kind: "ready",
-      organizationId: "org_1",
-      organizationName: "Acme",
+      workspaceId: "org_1",
+      workspaceName: "Acme",
       invitationId: "inv_1",
       inviterEmail: "owner@example.com",
     });

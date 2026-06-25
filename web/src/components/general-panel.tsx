@@ -54,10 +54,10 @@ export function GeneralPanel() {
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
-  const loadProfile = useCallback(async (organizationId: string) => {
+  const loadProfile = useCallback(async (workspaceId: string) => {
     setProfileLoading(true);
     try {
-      const res = await fetchWorkspaceProfile(organizationId);
+      const res = await fetchWorkspaceProfile(workspaceId);
       const fields = profileForm(res);
       setLogo(res.logo);
       setProfile(fields);

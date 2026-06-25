@@ -16,7 +16,7 @@ type FullOrg = {
   invitations: WorkspaceInvitationRow[];
 };
 
-export function WorkspaceDetailPanel({ organizationId }: { organizationId: string }) {
+export function WorkspaceDetailPanel({ workspaceId }: { workspaceId: string }) {
   const { data: session, isPending } = useSession();
   const [org, setOrg] = useState<FullOrg | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -28,7 +28,9 @@ export function WorkspaceDetailPanel({ organizationId }: { organizationId: strin
     setLoading(true);
     setError(null);
     try {
-      const res = await organization.getFullOrganization({ query: { organizationId } });
+      const res = await organization.getFullOrganization({
+        query: { organizationId: workspaceId },
+      });
       if (res.error) {
         setError(res.error.message ?? "Could not load this workspace.");
         setOrg(null);
@@ -41,7 +43,7 @@ export function WorkspaceDetailPanel({ organizationId }: { organizationId: strin
     } finally {
       setLoading(false);
     }
-  }, [organizationId]);
+  }, [workspaceId]);
 
   useEffect(() => {
     if (isPending) return;
@@ -60,7 +62,7 @@ export function WorkspaceDetailPanel({ organizationId }: { organizationId: strin
     return (
       <p className="text-sm leading-6 text-stone-600 dark:text-stone-300">
         Please{" "}
-        <Link href={`/login?redirect=/account/workspaces/${organizationId}`} className="underline">
+        <Link href={`/login?redirect=/account/workspaces/${workspaceId}`} className="underline">
           sign in
         </Link>{" "}
         to manage this workspace.
@@ -108,7 +110,7 @@ export function WorkspaceDetailPanel({ organizationId }: { organizationId: strin
       <section className="space-y-3">
         <h2 className="text-sm font-semibold text-stone-900 dark:text-stone-100">Members</h2>
         <WorkspaceMembers
-          organizationId={org.id}
+          workspaceId={org.id}
           members={org.members}
           viewerRole={viewerRole}
           viewerUserId={viewerUserId}
@@ -120,7 +122,7 @@ export function WorkspaceDetailPanel({ organizationId }: { organizationId: strin
         <section className="space-y-3">
           <h2 className="text-sm font-semibold text-stone-900 dark:text-stone-100">Invitations</h2>
           <WorkspaceInvitations
-            organizationId={org.id}
+            workspaceId={org.id}
             invitations={pendingInvitations}
             onChanged={load}
           />

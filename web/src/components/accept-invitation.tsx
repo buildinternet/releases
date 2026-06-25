@@ -64,14 +64,14 @@ export function AcceptInvitation({ invitationId }: { invitationId: string }) {
         setActionError(res.error.message ?? "Could not accept the invitation.");
         return;
       }
-      const orgId = invitation.organizationId;
+      const workspaceId = invitation.organizationId;
       try {
-        await organization.setActive({ organizationId: orgId });
+        await organization.setActive({ organizationId: workspaceId });
       } catch {
         // best-effort: only affects the active-workspace badge; the detail
         // page loads by id regardless.
       }
-      router.push(`/account/workspaces/${orgId}`);
+      router.push(`/account/workspaces/${workspaceId}`);
     } catch {
       setActionError("Could not accept the invitation.");
     } finally {
@@ -161,11 +161,11 @@ export function AcceptInvitation({ invitationId }: { invitationId: string }) {
       );
     case "ready":
       return (
-        <Shell title={`Join ${state.organizationName}`}>
+        <Shell title={`Join ${state.workspaceName}`}>
           <p className="text-sm leading-6 text-stone-600 dark:text-stone-300">
             {state.inviterEmail} invited you to join the{" "}
             <span className="font-medium text-stone-900 dark:text-stone-100">
-              {state.organizationName}
+              {state.workspaceName}
             </span>{" "}
             workspace.
           </p>

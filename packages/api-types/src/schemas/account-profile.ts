@@ -14,7 +14,7 @@ export const WorkspaceProfileFieldsSchema = z.object({
   githubHandle: z.string().nullable(),
 });
 
-/** Body for `PATCH /v1/me/workspaces/:organizationId/profile`. */
+/** Body for `PATCH /v1/workspaces/:workspaceId/profile`. */
 export const PatchWorkspaceProfileBodySchema = z.object({
   websiteUrl: z.string().nullable().optional(),
   changelogUrl: z.string().nullable().optional(),
@@ -22,7 +22,7 @@ export const PatchWorkspaceProfileBodySchema = z.object({
 });
 
 export const WorkspaceProfileResponseSchema = z.object({
-  organizationId: z.string(),
+  workspaceId: z.string(),
   logo: z.string().nullable(),
   profile: WorkspaceProfileFieldsSchema,
 });

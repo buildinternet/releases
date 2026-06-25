@@ -58,7 +58,7 @@ export function MembersPanel() {
       }
     >
       {current ? (
-        <WorkspaceDetailPanel organizationId={current.id} />
+        <WorkspaceDetailPanel workspaceId={current.id} />
       ) : (
         <p className="rounded-xl border border-dashed border-stone-300 px-4 py-6 text-center text-sm text-stone-500 dark:border-stone-700 dark:text-stone-400">
           You don't have a workspace yet. Create one from the switcher in the sidebar.

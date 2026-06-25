@@ -4,9 +4,9 @@ import { cors } from "hono/cors";
 import { authCorsMiddleware } from "../../workers/api/src/auth/index.js";
 
 // Mirrors the index.ts CORS wiring: authCorsMiddleware owns credentialed CORS on
-// /api/auth/*, /v1/api-keys/*, and /v1/me/*; the wildcard public cors() runs on
-// every OTHER path. Without the carve-out the wildcard cors overwrites the
-// credentialed Access-Control-Allow-Origin on the actual response — which a
+// /api/auth/*, /v1/api-keys/*, /v1/me/*, and /v1/workspaces/*; the wildcard public
+// cors() runs on every OTHER path. Without the carve-out the wildcard cors overwrites
+// the credentialed Access-Control-Allow-Origin on the actual response — which a
 // browser rejects for `credentials: "include"` requests (shows as "Failed to fetch").
 function makeApp() {
   const app = new Hono();
@@ -14,18 +14,22 @@ function makeApp() {
   app.use("/v1/api-keys", authCorsMiddleware());
   app.use("/v1/api-keys/*", authCorsMiddleware());
   app.use("/v1/me/*", authCorsMiddleware());
+  app.use("/v1/workspaces", authCorsMiddleware());
+  app.use("/v1/workspaces/*", authCorsMiddleware());
   const publicReadCors = cors();
   app.use("*", (c, next) =>
     c.req.path.startsWith("/api/auth/") ||
     c.req.path === "/v1/api-keys" ||
     c.req.path.startsWith("/v1/api-keys/") ||
-    c.req.path.startsWith("/v1/me/")
+    c.req.path.startsWith("/v1/me/") ||
+    c.req.path === "/v1/workspaces" ||
+    c.req.path.startsWith("/v1/workspaces/")
       ? next()
       : publicReadCors(c, next),
   );
   app.get("/v1/api-keys", (c) => c.json({ apiKeys: [] }));
   app.post("/v1/me/avatar", (c) => c.json({ avatarUrl: "https://media.test/u.png" }));
-  app.post("/v1/me/workspaces/:organizationId/avatar", (c) =>
+  app.post("/v1/workspaces/:workspaceId/avatar", (c) =>
     c.json({ avatarUrl: "https://media.test/w.png" }),
   );
   app.get("/v1/orgs", (c) => c.json({ ok: true }));
@@ -43,9 +47,9 @@ describe("session-authed credentialed CORS", () => {
     expect(res.headers.get("access-control-allow-credentials")).toBe("true");
   });
 
-  it("reflects the origin on nested /v1/me/workspaces/:id/avatar POSTs", async () => {
+  it("reflects the origin on /v1/workspaces/:id/avatar POSTs", async () => {
     const res = await makeApp().request(
-      "/v1/me/workspaces/org_abc/avatar",
+      "/v1/workspaces/org_abc/avatar",
       {
         method: "POST",
         headers: { Origin: "https://releases.sh" },
@@ -58,7 +62,7 @@ describe("session-authed credentialed CORS", () => {
 
   it("allows multipart avatar upload preflights (content-type header)", async () => {
     const res = await makeApp().request(
-      "/v1/me/workspaces/org_abc/avatar",
+      "/v1/workspaces/org_abc/avatar",
       {
         method: "OPTIONS",
         headers: {
@@ -102,7 +106,7 @@ describe("session-authed credentialed CORS", () => {
 
   it("wildcard CORS on a mistaken double-/v1 path breaks credentialed uploads", async () => {
     const res = await makeApp().request(
-      "/v1/v1/me/workspaces/org_abc/avatar",
+      "/v1/v1/workspaces/org_abc/avatar",
       {
         method: "POST",
         headers: { Origin: "https://releases.sh" },

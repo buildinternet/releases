@@ -502,6 +502,8 @@ app.use("/api/auth/*", authCorsMiddleware());
 app.use("/v1/api-keys", authCorsMiddleware());
 app.use("/v1/api-keys/*", authCorsMiddleware());
 app.use("/v1/me/*", authCorsMiddleware());
+app.use("/v1/workspaces", authCorsMiddleware());
+app.use("/v1/workspaces/*", authCorsMiddleware());
 
 // Public read CORS — wildcard is fine; these endpoints don't accept credentials.
 // SKIP `/api/auth/*`: those routes are owned by `authCorsMiddleware` above, which
@@ -516,7 +518,9 @@ app.use("*", (c, next) =>
   c.req.path.startsWith("/api/auth/") ||
   c.req.path === "/v1/api-keys" ||
   c.req.path.startsWith("/v1/api-keys/") ||
-  c.req.path.startsWith("/v1/me/")
+  c.req.path.startsWith("/v1/me/") ||
+  c.req.path === "/v1/workspaces" ||
+  c.req.path.startsWith("/v1/workspaces/")
     ? next()
     : publicReadCors(c, next),
 );

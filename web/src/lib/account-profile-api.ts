@@ -32,16 +32,16 @@ export function uploadUserAvatar(file: File): Promise<UploadAvatarResponse> {
 }
 
 export function uploadWorkspaceAvatar(
-  organizationId: string,
+  workspaceId: string,
   file: File,
 ): Promise<UploadAvatarResponse> {
-  return postAvatar(`/api/account/me/workspaces/${organizationId}/avatar`, file);
+  return postAvatar(`/api/workspaces/${workspaceId}/avatar`, file);
 }
 
 export async function fetchWorkspaceProfile(
-  organizationId: string,
+  workspaceId: string,
 ): Promise<WorkspaceProfileResponse> {
-  const res = await fetch(`${apiBase()}/v1/me/workspaces/${organizationId}/profile`, {
+  const res = await fetch(`${apiBase()}/v1/workspaces/${workspaceId}/profile`, {
     credentials: "include",
   });
   if (!res.ok) throw new Error(await errorMessage(res, `Request failed (${res.status})`));
@@ -49,10 +49,10 @@ export async function fetchWorkspaceProfile(
 }
 
 export async function patchWorkspaceProfile(
-  organizationId: string,
+  workspaceId: string,
   body: PatchWorkspaceProfileBody,
 ): Promise<WorkspaceProfileResponse> {
-  const res = await fetch(`${apiBase()}/v1/me/workspaces/${organizationId}/profile`, {
+  const res = await fetch(`${apiBase()}/v1/workspaces/${workspaceId}/profile`, {
     method: "PATCH",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
