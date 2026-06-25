@@ -70,8 +70,8 @@ const skipRule = () => ({
   action: "skip",
   enabled: true,
   action_parameters: {
-    phases: ["http_request_sbfm"],
-    products: ["bic", "securityLevel"],
+    phases: ["http_ratelimit", "http_request_sbfm", "http_request_firewall_managed"],
+    products: ["uaBlock", "bic", "hot", "securityLevel"],
   },
 });
 

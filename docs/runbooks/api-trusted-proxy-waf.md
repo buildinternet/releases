@@ -26,12 +26,14 @@ It does **not** bypass edge bot checks unless you add the WAF skip rule below.
 
 Cloudflare dashboard → **Security** → **WAF** → **Custom rules** → **Create rule**
 
-| Field        | Value                                                                               |
-| ------------ | ----------------------------------------------------------------------------------- |
-| Rule name    | `Skip bot checks for releases-web trusted proxy`                                    |
-| Expression   | See below                                                                           |
-| Action       | **Skip**                                                                            |
-| Skip options | **All Super Bot Fight Mode rules**, **Browser Integrity Check**, **Security Level** |
+| Field        | Value                                                                                                                                                                                                     |
+| ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Rule name    | `Skip bot checks for releases-web trusted proxy`                                                                                                                                                          |
+| Expression   | See below                                                                                                                                                                                                 |
+| Action       | **Skip**                                                                                                                                                                                                  |
+| Skip options | **All rate limiting rules**, **All managed rules**, **All Super Bot Fight Mode rules**, **User Agent Blocking**, **Browser Integrity Check**, **Hotlink Protection**, **Security Level** (see note below) |
+
+The minimal trio (SBFM + BIC + Security Level) is not always enough on `releases.sh`. In production, trusted-proxy avatar uploads only worked after also skipping rate limiting, managed rules, user-agent blocking, and hotlink protection. Leave **All remaining custom rules** and **Zone Lockdown** unchecked unless you have a reason to bypass them.
 
 Expression (requires both trusted-proxy headers the web sends on every server-to-server call):
 
@@ -77,4 +79,5 @@ Or dispatch the **Apply trusted-proxy WAF skip** GitHub Actions workflow
 
 See [Configure a rule with the Skip action](https://developers.cloudflare.com/waf/custom-rules/skip/)
 and [Available skip options](https://developers.cloudflare.com/waf/custom-rules/skip/options/)
-(`phases: ["http_request_sbfm"]`, `products: ["bic", "securityLevel"]`).
+(`phases: ["http_ratelimit", "http_request_sbfm", "http_request_firewall_managed"]`,
+`products: ["uaBlock", "bic", "hot", "securityLevel"]`).
