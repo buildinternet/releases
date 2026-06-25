@@ -2,13 +2,21 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { useSession } from "@/lib/auth-client";
+import { useSession, updateUser } from "@/lib/auth-client";
 import { displayEmailOf } from "@/lib/auth-ui";
-
-function initialOf(name: string | undefined, email: string): string {
-  const source = (name ?? "").trim() || email;
-  return source.slice(0, 1).toUpperCase();
-}
+import { PanelGrid } from "@/components/account/settings-section";
+import {
+  Aside,
+  ErrorText,
+  SuccessBanner,
+  fieldLabelClass,
+  inputClass,
+  textareaClass,
+  primaryButtonClass,
+  secondaryButtonClass,
+  smallButtonClass,
+} from "@/components/account/ui";
+import { ExternalLinkIcon } from "@/components/account/icons";
 
 function ProfileAvatar({
   user,
@@ -16,9 +24,7 @@ function ProfileAvatar({
   user: { name?: string | null; email: string; image?: string | null };
 }) {
   const [broken, setBroken] = useState(false);
-  useEffect(() => {
-    setBroken(false);
-  }, [user.image]);
+  useEffect(() => setBroken(false), [user.image]);
   if (user.image && !broken) {
     return (
       // eslint-disable-next-line @next/next/no-img-element
@@ -32,12 +38,23 @@ function ProfileAvatar({
       />
     );
   }
-  return <span aria-hidden="true">{initialOf(user.name ?? undefined, user.email)}</span>;
+  const source = (user.name ?? "").trim() || user.email;
+  return <span aria-hidden="true">{source.slice(0, 1).toUpperCase()}</span>;
 }
 
 export function ProfilePanel() {
-  const { data: sessionData, isPending } = useSession();
+  const { data: sessionData, isPending, refetch } = useSession();
   const user = sessionData?.user;
+
+  const [name, setName] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+
+  // Seed the editable field once the session resolves / changes.
+  useEffect(() => {
+    setName(user?.name ?? "");
+  }, [user?.name]);
 
   if (isPending) {
     return <p className="text-sm text-stone-500 dark:text-stone-400">Loading…</p>;
@@ -55,44 +72,154 @@ export function ProfilePanel() {
     );
   }
 
-  return (
-    <div className="space-y-4">
-      <div className="border border-stone-200 p-5 dark:border-stone-800">
-        <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-stone-400 dark:text-stone-500">
-          Profile
-        </p>
-        <div className="mt-4 flex items-center gap-4">
-          <span className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full border border-stone-300 bg-stone-100 text-base font-semibold text-stone-700 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-200">
-            <ProfileAvatar user={user} />
-          </span>
-          <div className="min-w-0">
-            {user.name && (
-              <p className="truncate text-sm font-medium text-stone-900 dark:text-stone-100">
-                {user.name}
-              </p>
-            )}
-            <p className="truncate text-sm text-stone-600 dark:text-stone-300">
-              {displayEmailOf(user)}
-            </p>
-          </div>
-        </div>
-      </div>
+  const dirty = name.trim() !== (user.name ?? "").trim();
 
-      <div className="border border-stone-200 p-5 dark:border-stone-800">
-        <h2 className="text-sm font-semibold text-stone-900 dark:text-stone-100">Email</h2>
-        <p className="mt-1 text-sm text-stone-500 dark:text-stone-400">
-          Your sign-in address and where account notifications are delivered.
-        </p>
-        <p className="mt-3 text-sm font-medium text-stone-900 dark:text-stone-100">
-          {displayEmailOf(user)}
-        </p>
-        <Link
-          href="/account/email"
-          className="mt-3 inline-block text-sm text-stone-500 underline hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100"
-        >
-          Change email
-        </Link>
-      </div>
-    </div>
+  async function onSave(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (saving || !dirty) return;
+    setSaving(true);
+    setError(null);
+    setSaved(false);
+    try {
+      const res = await updateUser({ name: name.trim() });
+      if (res?.error) {
+        setError(res.error.message ?? "Could not save your profile.");
+        return;
+      }
+      setSaved(true);
+      await refetch?.();
+    } catch {
+      setError("Could not save your profile.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <PanelGrid
+      aside={
+        <Aside label="Public profile">
+          <p className="text-[13px] leading-relaxed text-stone-600 dark:text-stone-300">
+            Your name and avatar appear on your public following page, visible to anyone with the
+            link.
+          </p>
+          <Link
+            href="/following"
+            className="mt-3 inline-flex items-center gap-1.5 text-[13px] font-medium text-[var(--accent)]"
+          >
+            View following page
+            <ExternalLinkIcon className="h-3.5 w-3.5" />
+          </Link>
+        </Aside>
+      }
+    >
+      <form onSubmit={onSave} className="flex flex-col gap-9">
+        {error && <ErrorText>{error}</ErrorText>}
+        {saved && <SuccessBanner>Profile saved.</SuccessBanner>}
+
+        <section>
+          <div className="text-sm font-semibold text-stone-900 dark:text-stone-100">
+            Profile photo
+          </div>
+          <p className="mt-1 mb-4 text-[13px] text-stone-500 dark:text-stone-400">
+            Synced from your sign-in provider. Custom uploads are coming soon.
+          </p>
+          <div className="flex items-center gap-[18px]">
+            <span className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[var(--accent)] text-2xl font-semibold text-[var(--on-accent)]">
+              <ProfileAvatar user={user} />
+            </span>
+            <button
+              type="button"
+              disabled
+              title="Avatar upload is coming soon"
+              className={smallButtonClass}
+            >
+              Upload
+            </button>
+          </div>
+        </section>
+
+        <div className="grid grid-cols-1 gap-x-9 gap-y-9 sm:grid-cols-2">
+          <section>
+            <label htmlFor="display-name" className={fieldLabelClass}>
+              Display name
+            </label>
+            <input
+              id="display-name"
+              value={name}
+              onChange={(e) => {
+                setName(e.target.value);
+                setSaved(false);
+                setError(null);
+              }}
+              className={inputClass}
+              placeholder="Your name"
+            />
+          </section>
+
+          <section>
+            <label htmlFor="username" className={fieldLabelClass}>
+              Username <span className="font-normal text-stone-400">(coming soon)</span>
+            </label>
+            <div className="flex h-10 items-center overflow-hidden rounded-[9px] border border-stone-200 bg-stone-50 dark:border-stone-700 dark:bg-stone-900/60">
+              <span className="pl-3 font-mono text-sm text-stone-400 dark:text-stone-500">
+                releases.sh/@
+              </span>
+              <input
+                id="username"
+                disabled
+                placeholder="username"
+                className="h-full min-w-0 flex-1 border-none bg-transparent px-0 font-mono text-sm text-stone-500 outline-none dark:text-stone-400"
+              />
+            </div>
+          </section>
+        </div>
+
+        <section>
+          <label htmlFor="bio" className={fieldLabelClass}>
+            Bio <span className="font-normal text-stone-400">(coming soon)</span>
+          </label>
+          <textarea
+            id="bio"
+            rows={3}
+            disabled
+            placeholder="Tell people what you track."
+            className={textareaClass}
+          />
+        </section>
+
+        <section className="flex items-center gap-2.5">
+          <button type="submit" disabled={saving || !dirty} className={primaryButtonClass}>
+            {saving ? "Saving…" : "Save changes"}
+          </button>
+          {dirty && (
+            <button
+              type="button"
+              onClick={() => {
+                setName(user.name ?? "");
+                setError(null);
+                setSaved(false);
+              }}
+              className={secondaryButtonClass}
+            >
+              Cancel
+            </button>
+          )}
+        </section>
+
+        <section>
+          <div className="text-sm font-semibold text-stone-900 dark:text-stone-100">Email</div>
+          <p className="mt-1 text-[13px] text-stone-500 dark:text-stone-400">
+            {displayEmailOf(user)}
+          </p>
+          <Link
+            href="/account/security"
+            className="mt-2 inline-block text-[13px] text-[var(--accent)]"
+          >
+            Manage in Security
+          </Link>
+        </section>
+      </form>
+    </PanelGrid>
   );
 }

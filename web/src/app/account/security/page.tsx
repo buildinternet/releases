@@ -1,21 +1,21 @@
 import type { Metadata } from "next";
-import { AccountSection } from "@/components/account-section";
-import { PasskeysPanel } from "@/components/passkeys-panel";
+import { SettingsSection } from "@/components/account/settings-section";
+import { SecurityPanel } from "@/components/security-panel";
+import { navItem } from "@/lib/account-nav";
+
+const item = navItem("security");
 
 export const metadata: Metadata = {
-  title: "Security",
-  description: "Manage passkeys for your releases.sh account.",
-  alternates: { canonical: "/account/security" },
+  title: item.label,
+  description: item.description,
+  alternates: { canonical: item.href },
   robots: { index: false, follow: false },
 };
 
 export default function AccountSecurityPage() {
   return (
-    <AccountSection
-      title="Security"
-      description="Sign in without a password using your device's biometrics, PIN, or a security key. Passkeys are phishing-resistant and never leave your device."
-    >
-      <PasskeysPanel />
-    </AccountSection>
+    <SettingsSection group={item.group} title={item.label} description={item.description}>
+      <SecurityPanel />
+    </SettingsSection>
   );
 }
