@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { api, ApiSetupError } from "@/lib/api";
 import { tryFetch } from "@/lib/ssr-fetch";
-import { SourceTable } from "@/components/source-table";
+import { OrgSourcesByProduct } from "@/components/org/org-sources-by-product";
 import { JsonLd } from "@/components/json-ld";
 import { getOrg } from "../../_lib/org-data";
 import { enableOnDemandIsr } from "@/lib/static-params";
@@ -86,10 +86,11 @@ export default async function OrgSourcesPage({ params }: { params: Promise<{ org
   return (
     <>
       <JsonLd data={jsonLd} />
-      <SourceTable
+      <OrgSourcesByProduct
         sources={org.sources}
         products={org.products}
         orgSlug={orgSlug}
+        orgName={org.name}
         sourceSparklines={sourceSparklines}
       />
     </>

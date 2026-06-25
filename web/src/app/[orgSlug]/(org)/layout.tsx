@@ -1,21 +1,31 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { categoryDisplayName } from "@buildinternet/releases-core/categories";
 import { ApiSetupError } from "@/lib/api";
 import { Header } from "@/components/header";
 import { SetupMessage } from "@/components/setup-message";
-import { Sidebar } from "@/components/sidebar";
 import { OrgAvatar } from "@/components/org-avatar";
 import { OrgTabs } from "@/components/org-tabs";
-import { CliCommand } from "@/components/cli-command";
-import { taxonomySidebarSections, collectionsSidebarSection } from "@/components/taxonomy-chips";
 import { OrgAdminMenu } from "@/components/org-admin-menu";
 import { AdminOnly } from "@/components/admin-only";
 import { EntityNotice } from "@/components/entity-notice";
 import { FollowButton } from "@/components/follow-button";
+import { OrgInstallCommand } from "@/components/org/org-install-command";
+import { AgentCopyButton } from "@/components/org/agent-copy-button";
+import { OrgContextRail } from "@/components/org/org-context-rail";
 import { isLocalAdminEnabled } from "@/lib/local-admin-flag";
-import { domainHref } from "@/lib/source-display";
+import { formatMonthYear } from "@/lib/formatters";
 import { getOrg, getOrgCollections } from "../_lib/org-data";
+
+/** Most recent release timestamp across all sources (drives the Releases "new" dot). */
+function latestReleaseAt(sources: { latestDate?: string | null }[]): string | null {
+  let latest: string | null = null;
+  for (const s of sources) {
+    if (s.latestDate && (latest === null || s.latestDate > latest)) latest = s.latestDate;
+  }
+  return latest;
+}
 
 export default async function OrgLayout({
   children,
@@ -44,79 +54,108 @@ export default async function OrgLayout({
   const collections = await getOrgCollections(orgSlug);
   const devAdmin = isLocalAdminEnabled();
 
-  const sidebarSections = [
-    {
-      items: org.domain
-        ? [{ label: "Domain", value: org.domain, externalLink: domainHref(org.domain) }]
-        : [],
-    },
-    ...taxonomySidebarSections({ category: org.category, tags: org.tags }),
-    ...collectionsSidebarSection(collections),
-  ];
+  const githubHandle = org.accounts.find((a) => a.platform === "github")?.handle ?? null;
+  const hasAvatar = Boolean(org.avatarUrl || githubHandle);
+  const trackingSince = formatMonthYear(org.trackingSince);
+  const metaParts = [
+    org.domain ? <span className="font-mono">{org.domain}</span> : null,
+    org.category ? <span>{categoryDisplayName(org.category)}</span> : null,
+    trackingSince ? <span>Tracking since {trackingSince}</span> : null,
+  ].filter(Boolean) as ReactNode[];
 
   return (
-    <div className="min-h-screen">
+    <div className="org-surface min-h-screen bg-[var(--page)] text-[var(--fg)]">
       <Header />
-      <div className="max-w-5xl mx-auto px-6">
-        <div className="pt-5 text-[13px] text-stone-400 dark:text-stone-500">
-          <Link href="/" className="hover:text-stone-600 dark:hover:text-stone-300">
+      <div className="mx-auto max-w-[1300px] px-6">
+        {/* Breadcrumb */}
+        <div className="flex items-center gap-1.5 pt-5 text-[13px] text-[var(--fg-3)]">
+          <Link href="/" className="transition-colors hover:text-[var(--fg-2)]">
             Home
           </Link>
-          <span className="mx-1.5">/</span>
-          <span className="text-stone-600 dark:text-stone-300 font-medium">{org.name}</span>
+          <span className="text-[var(--line-2)]">/</span>
+          <span className="text-[var(--fg-2)]">{org.name}</span>
         </div>
-        <div className="flex flex-col md:flex-row gap-10 mt-4 pb-6">
-          <div className="flex-1 min-w-0">
-            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
-              {org.avatarUrl || org.accounts.some((a) => a.platform === "github") ? (
-                <div className="flex min-w-0 items-center gap-3">
-                  <OrgAvatar
-                    avatarUrl={org.avatarUrl}
-                    githubHandle={org.accounts.find((a) => a.platform === "github")?.handle ?? null}
-                    name={org.name}
-                    size={40}
-                  />
-                  <h1 className="text-[28px] font-bold tracking-tight text-stone-900 dark:text-stone-100">
-                    {org.name}
-                  </h1>
-                </div>
-              ) : (
-                <h1 className="min-w-0 text-[28px] font-bold tracking-tight text-stone-900 dark:text-stone-100">
-                  {org.name}
-                </h1>
-              )}
-              <div className="flex shrink-0 items-center gap-2.5">
-                {org.id && <FollowButton targetType="org" targetId={org.id} label={org.name} />}
-                <AdminOnly devAdmin={devAdmin}>
-                  <OrgAdminMenu
-                    orgSlug={org.slug}
-                    name={org.name}
-                    isHidden={org.isHidden ?? false}
-                    autoGenerateContent={org.autoGenerateContent ?? false}
-                    featured={org.featured ?? false}
-                    discovery={org.discovery}
-                    fetchPaused={org.fetchPaused}
-                    notice={org.notice}
-                    variant="subtle"
-                    align="right"
-                  />
-                </AdminOnly>
+
+        {/* Org header */}
+        <div className="flex items-start gap-[18px] pb-5 pt-5">
+          {hasAvatar && (
+            <span className="flex h-[54px] w-[54px] shrink-0 items-center justify-center rounded-[14px] border border-[var(--line)] bg-[var(--surface-2)]">
+              <OrgAvatar
+                avatarUrl={org.avatarUrl}
+                githubHandle={githubHandle}
+                name={org.name}
+                size={40}
+              />
+            </span>
+          )}
+          <div className="min-w-0 flex-1 pt-px">
+            <h1 className="text-[27px] font-semibold leading-tight tracking-tight text-[var(--fg)]">
+              {org.name}
+            </h1>
+            {metaParts.length > 0 && (
+              <div className="mt-2 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[13px] text-[var(--fg-3)]">
+                {metaParts.map((part, i) => (
+                  <span key={i} className="flex items-center gap-x-2.5">
+                    {i > 0 && (
+                      <span
+                        className="h-[3px] w-[3px] rounded-full bg-[var(--line-2)]"
+                        aria-hidden
+                      />
+                    )}
+                    {part}
+                  </span>
+                ))}
               </div>
-            </div>
-            <CliCommand identifier={org.slug} />
-            <EntityNotice notice={org.notice} />
-            <div className="mt-6">
-              <OrgTabs orgSlug={orgSlug} devAdmin={devAdmin} />
-              {children}
-            </div>
+            )}
           </div>
-          <Sidebar
-            sections={sidebarSections}
+          <div className="flex shrink-0 items-center gap-2.5">
+            {org.id && <FollowButton targetType="org" targetId={org.id} label={org.name} />}
+            <AdminOnly devAdmin={devAdmin}>
+              <OrgAdminMenu
+                orgSlug={org.slug}
+                name={org.name}
+                isHidden={org.isHidden ?? false}
+                autoGenerateContent={org.autoGenerateContent ?? false}
+                featured={org.featured ?? false}
+                discovery={org.discovery}
+                fetchPaused={org.fetchPaused}
+                notice={org.notice}
+                variant="subtle"
+                align="right"
+              />
+            </AdminOnly>
+          </div>
+        </div>
+
+        {/* Action row: install command + agent copy */}
+        <div className="mb-6 flex flex-wrap items-center gap-3">
+          <OrgInstallCommand identifier={org.slug} />
+          <AgentCopyButton
+            orgName={org.name}
+            orgSlug={org.slug}
+            productNames={org.products.map((p) => p.name)}
+          />
+        </div>
+
+        <EntityNotice notice={org.notice} />
+
+        {/* Tabs + (main | rail) */}
+        <OrgTabs
+          orgSlug={orgSlug}
+          devAdmin={devAdmin}
+          latestReleaseAt={latestReleaseAt(org.sources)}
+        />
+        <div className="flex flex-col items-start gap-10 pb-24 pt-7 md:flex-row">
+          <main className="min-w-0 flex-1">{children}</main>
+          <OrgContextRail
+            domain={org.domain}
+            category={org.category}
+            tags={org.tags}
+            collections={collections}
             accounts={org.accounts}
-            formatPath={`/${orgSlug}`}
-            lastCheckedAt={org.lastPolledAt ?? org.lastFetchedAt}
-            lastFetchedAt={org.lastFetchedAt}
             trackingSince={org.trackingSince}
+            lastCheckedAt={org.lastPolledAt ?? org.lastFetchedAt}
+            formatPath={`/${orgSlug}`}
           />
         </div>
       </div>
