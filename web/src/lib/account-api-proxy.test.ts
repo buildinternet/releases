@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { isAccountOrganizationId } from "./account-organization-id.js";
+import { isWorkspaceId } from "./workspace-id.js";
 import { isCloudflareChallengeBody } from "./cloudflare-challenge.js";
 
 describe("isCloudflareChallengeBody", () => {
@@ -16,14 +16,14 @@ describe("isCloudflareChallengeBody", () => {
   });
 });
 
-describe("isAccountOrganizationId", () => {
-  it("accepts Better Auth organization ids", () => {
-    expect(isAccountOrganizationId("ArGPQ08eSQCdVcsnKbNwvq7FdIcJCYzL")).toBe(true);
+describe("isWorkspaceId", () => {
+  it("accepts Better Auth workspace ids", () => {
+    expect(isWorkspaceId("ArGPQ08eSQCdVcsnKbNwvq7FdIcJCYzL")).toBe(true);
   });
 
   it("rejects empty and pathological ids", () => {
-    expect(isAccountOrganizationId("")).toBe(false);
-    expect(isAccountOrganizationId("../escape")).toBe(false);
-    expect(isAccountOrganizationId("a".repeat(100))).toBe(false);
+    expect(isWorkspaceId("")).toBe(false);
+    expect(isWorkspaceId("../escape")).toBe(false);
+    expect(isWorkspaceId("a".repeat(100))).toBe(false);
   });
 });

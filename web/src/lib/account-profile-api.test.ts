@@ -44,7 +44,7 @@ describe("account-profile-api avatar uploads", () => {
     const { uploadWorkspaceAvatar } = await import("./account-profile-api.js");
     const file = new File([new Uint8Array(128)], "a.png", { type: "image/png" });
     await uploadWorkspaceAvatar("org_abc12345", file);
-    expect(calls[0]!.url).toBe("/api/account/me/workspaces/org_abc12345/avatar");
+    expect(calls[0]!.url).toBe("/api/workspaces/org_abc12345/avatar");
   });
 
   it("rejects files over the proxy upload cap before fetch", async () => {

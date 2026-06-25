@@ -24,13 +24,13 @@ export type WorkspaceMemberRow = {
 };
 
 export function WorkspaceMembers({
-  organizationId,
+  workspaceId,
   members,
   viewerRole,
   viewerUserId,
   onChanged,
 }: {
-  organizationId: string;
+  workspaceId: string;
   members: WorkspaceMemberRow[];
   viewerRole: string | null;
   viewerUserId: string;
@@ -103,7 +103,7 @@ export function WorkspaceMembers({
                           setConfirmKey(null);
                           void run(
                             m.id,
-                            () => organization.leave({ organizationId }),
+                            () => organization.leave({ organizationId: workspaceId }),
                             () => router.push("/account/workspaces"),
                             "Could not leave this workspace.",
                           );
@@ -143,7 +143,7 @@ export function WorkspaceMembers({
                           organization.updateMemberRole({
                             memberId: m.id,
                             role: toggle,
-                            organizationId,
+                            organizationId: workspaceId,
                           }),
                         onChanged,
                       )
@@ -165,7 +165,10 @@ export function WorkspaceMembers({
                           void run(
                             m.id,
                             () =>
-                              organization.removeMember({ memberIdOrEmail: m.id, organizationId }),
+                              organization.removeMember({
+                                memberIdOrEmail: m.id,
+                                organizationId: workspaceId,
+                              }),
                             onChanged,
                           );
                         }}

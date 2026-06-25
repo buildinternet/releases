@@ -26,11 +26,11 @@ type InviteRole = "member" | "admin";
 const toInviteRole = (role: string): InviteRole => (role === "admin" ? "admin" : "member");
 
 export function WorkspaceInvitations({
-  organizationId,
+  workspaceId,
   invitations,
   onChanged,
 }: {
-  organizationId: string;
+  workspaceId: string;
   invitations: WorkspaceInvitationRow[];
   onChanged: () => void | Promise<void>;
 }) {
@@ -48,7 +48,7 @@ export function WorkspaceInvitations({
         const res = await organization.inviteMember({
           email: target.email,
           role: toInviteRole(target.role),
-          organizationId,
+          organizationId: workspaceId,
           ...(target.resend ? { resend: true } : {}),
         });
         if (res.error) {
@@ -63,7 +63,7 @@ export function WorkspaceInvitations({
         setBusy(false);
       }
     },
-    [busy, organizationId, onChanged],
+    [busy, workspaceId, onChanged],
   );
 
   const cancel = useCallback(

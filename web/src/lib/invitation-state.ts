@@ -31,8 +31,8 @@ export type AcceptState =
   | { kind: "signed-out" }
   | {
       kind: "ready";
-      organizationId: string;
-      organizationName: string;
+      workspaceId: string;
+      workspaceName: string;
       invitationId: string;
       inviterEmail: string;
     }
@@ -54,8 +54,8 @@ export function deriveAcceptState(input: {
   if (invitation) {
     return {
       kind: "ready",
-      organizationId: invitation.organizationId,
-      organizationName: invitation.organizationName,
+      workspaceId: invitation.organizationId,
+      workspaceName: invitation.organizationName,
       invitationId,
       inviterEmail: invitation.inviterEmail,
     };

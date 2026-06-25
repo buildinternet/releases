@@ -16,7 +16,7 @@ export default async function WorkspaceDetailPage({ params }: { params: Promise<
       title="Workspace"
       description="Manage members and invitations."
     >
-      <WorkspaceDetailPanel organizationId={id} />
+      <WorkspaceDetailPanel workspaceId={id} />
     </SettingsSection>
   );
 }

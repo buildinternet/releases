@@ -27,11 +27,11 @@ export function useWorkspaces() {
       ? (workspaces.find((w) => w.id === activeRaw.id) ?? activeRaw)
       : activeRaw;
 
-  const switchTo = useCallback(async (organizationId: string) => {
+  const switchTo = useCallback(async (workspaceId: string) => {
     setBusy(true);
     setError(null);
     try {
-      const res = await organization.setActive({ organizationId });
+      const res = await organization.setActive({ organizationId: workspaceId });
       if (res?.error) {
         setError(res.error.message ?? "Could not switch workspace.");
         return false;
