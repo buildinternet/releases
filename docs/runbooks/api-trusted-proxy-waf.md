@@ -19,7 +19,8 @@ It does **not** bypass edge bot checks unless you add the WAF skip rule below.
 ## Prerequisites
 
 1. `RELEASES_PROXY_KEY` is set in the **Vercel** project (same value as the API worker secret).
-2. You have zone-level WAF edit access on the `api.releases.sh` zone.
+2. You have zone-level WAF edit access on the `releases.sh` zone (`api.releases.sh` is on this zone).
+3. For the script / GitHub Action: `CLOUDFLARE_API_TOKEN` must include **Zone → Firewall Services → Edit** (and **Zone → Zone → Read**). The repo secret used for worker deploys may be Workers-only — if the workflow returns `403 Authentication error` on `POST .../rulesets`, rotate the secret or apply via the dashboard below.
 
 ## Create the skip rule
 
