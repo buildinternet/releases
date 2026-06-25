@@ -3,13 +3,17 @@
 
 import { useCallback, useState } from "react";
 import { organization } from "@/lib/auth-client";
+import {
+  ErrorText,
+  inputClass,
+  smallButtonClass,
+  primaryButtonClass,
+  listCardClass,
+  listRowClass,
+} from "@/components/account/ui";
 
-const buttonClass =
-  "inline-flex h-8 items-center justify-center gap-2 border border-stone-300 bg-white px-2.5 text-xs font-medium text-stone-800 transition hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-stone-700 dark:bg-stone-950 dark:text-stone-100 dark:hover:bg-stone-900";
-const primaryButtonClass =
-  "inline-flex h-9 items-center justify-center gap-2 border border-stone-900 bg-stone-900 px-3 text-sm font-medium text-white transition hover:bg-stone-800 disabled:cursor-not-allowed disabled:opacity-60 dark:border-stone-100 dark:bg-stone-100 dark:text-stone-900 dark:hover:bg-stone-200";
-const inputClass =
-  "h-9 flex-1 border border-stone-300 bg-white px-3 text-sm text-stone-900 dark:border-stone-700 dark:bg-stone-950 dark:text-stone-100";
+const selectClass =
+  "h-10 rounded-[9px] border border-stone-200 bg-white px-2 text-sm text-stone-900 outline-none transition focus:border-[var(--accent)] dark:border-stone-700 dark:bg-stone-950 dark:text-stone-100";
 
 export type WorkspaceInvitationRow = { id: string; email: string; role: string; status: string };
 
@@ -85,11 +89,7 @@ export function WorkspaceInvitations({
 
   return (
     <div className="space-y-3">
-      {error && (
-        <p role="alert" className="text-sm text-red-600 dark:text-red-400">
-          {error}
-        </p>
-      )}
+      {error && <ErrorText>{error}</ErrorText>}
 
       <div className="flex items-center gap-2">
         <input
@@ -98,12 +98,13 @@ export function WorkspaceInvitations({
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           placeholder="teammate@example.com"
-          className={inputClass}
+          className={`${inputClass} flex-1`}
         />
         <select
+          aria-label="Invite role"
           value={role}
           onChange={(e) => setRole(e.target.value === "admin" ? "admin" : "member")}
-          className="h-9 border border-stone-300 bg-white px-2 text-sm text-stone-900 dark:border-stone-700 dark:bg-stone-950 dark:text-stone-100"
+          className={selectClass}
         >
           <option value="member">Member</option>
           <option value="admin">Admin</option>
@@ -119,10 +120,10 @@ export function WorkspaceInvitations({
       </div>
 
       {invitations.length > 0 && (
-        <ul className="divide-y divide-stone-200 border border-stone-200 dark:divide-stone-800 dark:border-stone-800">
+        <ul className={listCardClass}>
           {invitations.map((i) => (
-            <li key={i.id} className="flex items-center justify-between gap-4 px-4 py-3">
-              <div className="min-w-0">
+            <li key={i.id} className={listRowClass}>
+              <div className="min-w-0 flex-1">
                 <p className="truncate text-sm text-stone-900 dark:text-stone-100">{i.email}</p>
                 <p className="mt-0.5 text-xs text-stone-500 dark:text-stone-400">
                   {i.role} · pending
@@ -133,7 +134,7 @@ export function WorkspaceInvitations({
                   type="button"
                   aria-label={`Resend invitation to ${i.email}`}
                   disabled={busy}
-                  className={buttonClass}
+                  className={smallButtonClass}
                   onClick={() => void invite({ email: i.email, role: i.role, resend: true })}
                 >
                   Resend
@@ -142,7 +143,7 @@ export function WorkspaceInvitations({
                   type="button"
                   aria-label={`Cancel invitation to ${i.email}`}
                   disabled={busy}
-                  className={buttonClass}
+                  className={smallButtonClass}
                   onClick={() => void cancel(i.id)}
                 >
                   Cancel

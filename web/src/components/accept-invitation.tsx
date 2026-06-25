@@ -9,11 +9,11 @@ import {
   type GetInvitationData,
   type InvitationFetchError,
 } from "@/lib/invitation-state";
-
-const buttonClass =
-  "inline-flex h-9 items-center justify-center gap-2 border border-stone-300 bg-white px-3 text-sm font-medium text-stone-800 transition hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-stone-700 dark:bg-stone-950 dark:text-stone-100 dark:hover:bg-stone-900";
-const primaryButtonClass =
-  "inline-flex h-9 items-center justify-center gap-2 border border-stone-900 bg-stone-900 px-4 text-sm font-medium text-white transition hover:bg-stone-800 disabled:cursor-not-allowed disabled:opacity-60 dark:border-stone-100 dark:bg-stone-100 dark:text-stone-900 dark:hover:bg-stone-200";
+import {
+  ErrorText,
+  secondaryButtonClass as buttonClass,
+  primaryButtonClass,
+} from "@/components/account/ui";
 
 export function AcceptInvitation({ invitationId }: { invitationId: string }) {
   const { data: session, isPending } = useSession();
@@ -169,11 +169,7 @@ export function AcceptInvitation({ invitationId }: { invitationId: string }) {
             </span>{" "}
             workspace.
           </p>
-          {actionError && (
-            <p role="alert" className="text-sm text-red-600 dark:text-red-400">
-              {actionError}
-            </p>
-          )}
+          {actionError && <ErrorText>{actionError}</ErrorText>}
           <div className="flex items-center gap-2">
             <button
               type="button"
