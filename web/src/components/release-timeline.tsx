@@ -15,6 +15,7 @@ import {
   DAY_MS,
   parseBuckets,
   fmtInterval,
+  fmtCadence,
   pickWindowVersionRange,
   mergeBucketCounts,
   mergeWeeklyBuckets,
@@ -26,7 +27,6 @@ import { ViewModeToggle, type ViewMode } from "@/components/view-mode-toggle";
 import {
   RangePills,
   Stat,
-  fmtCadence,
   highlightDaysForPreset,
   type RangePreset,
 } from "@/components/timeline-chrome";

@@ -5,9 +5,9 @@ import {
   mergeBucketCounts,
   getCadenceInfo,
   fmtInterval,
+  fmtCadence,
   type WeeklyBucket,
 } from "@/lib/cadence";
-import { fmtCadence } from "@/components/timeline-chrome";
 import { Sparkline } from "@/components/sparkline";
 import { ReleaseHeatmap } from "@/components/release-heatmap";
 import { orgEyebrowClass } from "./ui";

@@ -58,6 +58,11 @@ export function fmtInterval(days: number): string {
   return `${Math.round(days)}d`;
 }
 
+/** Format a release cadence as a per-month rate, falling back to per-week when sparse. */
+export function fmtCadence(avgPerWeek: number, avgPerMonth: number): string {
+  return avgPerMonth >= 1 ? `${Math.round(avgPerMonth)}/mo` : `${Math.round(avgPerWeek)}/wk`;
+}
+
 /** Format a version string — prepend "v" only for semver-ish versions (starting with a digit). */
 export function fmtVersion(v: string): string {
   return /^\d/.test(v) ? `v${v}` : v;

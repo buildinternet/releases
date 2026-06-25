@@ -7,6 +7,7 @@ import {
   WEEK_MS,
   parseBuckets,
   fmtVersion,
+  fmtCadence,
   isSemverShaped,
   pickWindowVersionRange,
 } from "@/lib/cadence";
@@ -17,7 +18,6 @@ import { VersionRangeDiff } from "@/components/version-range-diff";
 import {
   RangePills,
   Stat,
-  fmtCadence,
   highlightDaysForPreset,
   type RangePreset,
 } from "@/components/timeline-chrome";

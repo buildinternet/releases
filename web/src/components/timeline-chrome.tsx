@@ -4,10 +4,6 @@ import type { ReactNode } from "react";
 
 export type RangePreset = "all" | "90d" | "30d";
 
-export function fmtCadence(avgPerWeek: number, avgPerMonth: number): string {
-  return avgPerMonth >= 1 ? `${Math.round(avgPerMonth)}/mo` : `${Math.round(avgPerWeek)}/wk`;
-}
-
 export function highlightDaysForPreset(preset: RangePreset): number | null {
   return preset === "30d" ? 30 : preset === "90d" ? 90 : null;
 }
