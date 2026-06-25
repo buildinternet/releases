@@ -11,7 +11,7 @@ import { useCallback, useState } from "react";
 import { organization, useListOrganizations, useActiveOrganization } from "@/lib/auth-client";
 import { toSlug } from "@buildinternet/releases-core/slug";
 
-export type Workspace = { id: string; name: string; slug: string };
+export type Workspace = { id: string; name: string; slug: string; logo?: string | null };
 
 export function useWorkspaces() {
   const { data, refetch } = useListOrganizations();
@@ -20,6 +20,12 @@ export function useWorkspaces() {
   const [error, setError] = useState<string | null>(null);
 
   const workspaces = (data ?? []) as Workspace[];
+  const activeRaw = (active as Workspace | null) ?? null;
+  // List refetch carries logo updates (avatar upload); active hook can lag behind.
+  const activeResolved =
+    activeRaw && workspaces.length > 0
+      ? (workspaces.find((w) => w.id === activeRaw.id) ?? activeRaw)
+      : activeRaw;
 
   const switchTo = useCallback(async (organizationId: string) => {
     setBusy(true);
@@ -68,7 +74,7 @@ export function useWorkspaces() {
 
   return {
     workspaces,
-    active: (active as Workspace | null) ?? null,
+    active: activeResolved,
     busy,
     error,
     setError,
