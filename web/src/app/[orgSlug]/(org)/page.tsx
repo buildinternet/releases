@@ -3,8 +3,9 @@ import { notFound } from "next/navigation";
 import { daysAgoIso } from "@buildinternet/releases-core/dates";
 import { api, ApiSetupError, type OrgHeatmap } from "@/lib/api";
 import { tryFetch } from "@/lib/ssr-fetch";
-import { ReleaseTimeline } from "@/components/release-timeline";
 import { OverviewView } from "@/components/overview-view";
+import { LatestReleasesTeaser } from "@/components/org/latest-releases-teaser";
+import { OrgActivityPanel } from "@/components/org/org-activity-panel";
 import { JsonLd } from "@/components/json-ld";
 
 import { buildReleaseItemListJsonLd, currentPeriod, lastModifiedAt } from "@/lib/schema-org";
@@ -135,20 +136,23 @@ export default async function OrgOverviewPage({
   return (
     <>
       <JsonLd data={jsonLd} />
+      {org.overview && <OverviewView page={org.overview} variant="org" />}
+      {releaseItems.length > 0 && (
+        <LatestReleasesTeaser orgSlug={orgSlug} releases={releaseItems} />
+      )}
       {activity && (
-        <ReleaseTimeline
+        <OrgActivityPanel
           activity={activity}
           heatmap={heatmap}
-          orgSlug={orgSlug}
-          sources={org.sources}
           products={org.products}
+          sources={org.sources}
+          totalReleases={org.releaseCount}
+          avgPerWeek={org.avgReleasesPerWeek}
           trackingSince={org.trackingSince}
-          overview={org.overview}
         />
       )}
-      {!activity && org.overview && <OverviewView page={org.overview} />}
       {!activity && !org.overview && activityResult.error && (
-        <p className="text-sm text-stone-400 dark:text-stone-500 py-4">
+        <p className="py-4 text-sm text-[var(--fg-3)]">
           Couldn&apos;t load release activity. Try refreshing.
         </p>
       )}

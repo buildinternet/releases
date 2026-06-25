@@ -14,7 +14,33 @@ import { markdownComponents } from "./markdown-components";
 
 interface OverviewViewProps {
   page: OverviewPageItem;
+  /**
+   * `"org"` renders the card with the org-page redesign tokens (accent eyebrow,
+   * `--surface-2` card) — only safe inside `.org-surface`, where the tokens are
+   * defined. `"default"` (product pages, timeline fallback) keeps the stone
+   * styling. The markdown/citation pipeline is identical across both.
+   */
+  variant?: "default" | "org";
 }
+
+const CHROME = {
+  default: {
+    outer: "mt-5",
+    card: "rounded-lg border border-stone-200 bg-stone-50 p-5 dark:border-stone-800 dark:bg-stone-900/50",
+    eyebrow: "text-[11px] font-medium uppercase tracking-wide text-stone-400 dark:text-stone-500",
+    meta: "text-[11px] text-stone-300 dark:text-stone-600",
+    fade: "from-stone-50 dark:from-stone-900/50",
+    disclaimer: "border-stone-200 text-stone-400 dark:border-stone-800 dark:text-stone-500",
+  },
+  org: {
+    outer: "mb-6",
+    card: "rounded-[14px] border border-[var(--line)] bg-[var(--surface-2)] p-[22px]",
+    eyebrow: "font-mono text-[11px] uppercase tracking-[0.16em] text-[var(--accent)]",
+    meta: "font-mono text-[11.5px] text-[var(--fg-3)]",
+    fade: "from-[var(--surface-2)]",
+    disclaimer: "border-[var(--line)] text-[var(--fg-3)]",
+  },
+} as const;
 
 const proseClasses =
   "prose prose-sm prose-stone dark:prose-invert max-w-none text-[13.5px] leading-relaxed [&_p]:my-2 [&_code]:text-[13px] [&_code]:bg-stone-100 dark:[&_code]:bg-stone-800 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code::before]:content-none [&_code::after]:content-none [&_a]:text-stone-600 dark:[&_a]:text-stone-400 [&_a]:no-underline text-stone-700 dark:text-stone-300 [&_sup_a]:text-stone-500 dark:[&_sup_a]:text-stone-400 [&_sup_a]:no-underline [&_sup_a]:font-medium [&_sup_a:hover]:text-stone-800 dark:[&_sup_a:hover]:text-stone-200";
@@ -126,7 +152,8 @@ function SourceChips({ items }: { items: RenderedCitation[] }) {
   );
 }
 
-export function OverviewView({ page }: OverviewViewProps) {
+export function OverviewView({ page, variant = "default" }: OverviewViewProps) {
+  const chrome = CHROME[variant];
   const contentRef = useRef<HTMLDivElement>(null);
   const contentId = useId();
   const [overflows, setOverflows] = useState(false);
@@ -180,13 +207,11 @@ export function OverviewView({ page }: OverviewViewProps) {
   const clamped = overflows && !expanded;
 
   return (
-    <div className="mt-5">
-      <div className="bg-stone-50 dark:bg-stone-900/50 border border-stone-200 dark:border-stone-800 rounded-lg p-5">
+    <div className={chrome.outer}>
+      <div className={chrome.card}>
         <div className="flex items-center justify-between mb-3">
-          <span className="text-[11px] uppercase tracking-wide text-stone-400 dark:text-stone-500 font-medium">
-            Recently Shipped
-          </span>
-          <span className="text-[11px] text-stone-300 dark:text-stone-600">
+          <span className={chrome.eyebrow}>Recently Shipped</span>
+          <span className={chrome.meta}>
             {page.releaseCount} releases · updated {updatedDate}
           </span>
         </div>
@@ -208,7 +233,7 @@ export function OverviewView({ page }: OverviewViewProps) {
           {clamped && (
             <div
               aria-hidden
-              className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-stone-50 dark:from-stone-900/50 to-transparent"
+              className={`pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t to-transparent ${chrome.fade}`}
             />
           )}
         </div>
@@ -224,7 +249,7 @@ export function OverviewView({ page }: OverviewViewProps) {
           </button>
         )}
         {!clamped && (
-          <div className="mt-4 pt-3 border-t border-stone-200 dark:border-stone-800 text-[11px] text-stone-400 dark:text-stone-500">
+          <div className={`mt-4 border-t pt-3 text-[11px] ${chrome.disclaimer}`}>
             {AI_SUMMARY_DISCLAIMER}
           </div>
         )}

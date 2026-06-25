@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect, useMemo, useRef } from "react";
+import { type ReactNode, useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { ReleaseListItem } from "./release-item";
 import type { OrgReleaseItem } from "@/lib/api";
 import type { SourceType } from "@buildinternet/releases-core/source-enums";
@@ -38,6 +38,8 @@ interface OrgReleaseListProps {
    * org/monorepo rollups terse.
    */
   showRollupSummary?: boolean;
+  /** Optional chips rendered between the filter row and the timeline (org "By product" links). */
+  productLinks?: ReactNode;
 }
 
 // Source types collapse into two filter groups for the user-facing tabs.
@@ -61,6 +63,7 @@ export function OrgReleaseList({
   product,
   orgAvatarUrl,
   showRollupSummary,
+  productLinks,
 }: OrgReleaseListProps) {
   const [filterGroup, setFilterGroup] = useState<FilterGroup>("all");
   const [includePrereleases, setIncludePrereleases] = useState(false);
@@ -256,6 +259,8 @@ export function OrgReleaseList({
           )}
         </div>
       )}
+
+      {productLinks}
 
       {fetchError && releases.length > 0 && (
         <div className="text-center py-2 mb-2 text-amber-700 dark:text-amber-400 text-[12px] bg-amber-50 dark:bg-amber-950/30 rounded">

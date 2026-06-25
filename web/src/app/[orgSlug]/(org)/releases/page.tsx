@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { api, ApiSetupError, ApiNotFoundError, type OrgReleasesFeedResponse } from "@/lib/api";
 import { OrgReleaseList } from "@/components/org-release-list";
+import { OrgReleaseProductLinks } from "@/components/org/org-release-product-links";
 import { orgAvatarSrc } from "@/components/org-avatar";
 import { JsonLd } from "@/components/json-ld";
 import { buildReleaseItemListJsonLd, currentPeriod, lastModifiedAt } from "@/lib/schema-org";
@@ -113,6 +114,7 @@ export default async function OrgReleasesPage({
         multipleSourcesExist={org.sources.length > 1}
         availableSourceTypes={Array.from(new Set(org.sources.map((s) => s.type)))}
         orgAvatarUrl={orgAvatarUrl}
+        productLinks={<OrgReleaseProductLinks orgSlug={orgSlug} products={org.products} />}
       />
     </>
   );
