@@ -9,7 +9,7 @@ A NEW workspace package (`packages/design-system/`, `@releases/design-system`, g
 ## How the components were built (and the main drift risk)
 
 - The class-string constants in `src/classes.ts` are a **verbatim copy** of `web/src/components/account/ui.tsx`'s exported class strings (`primaryButtonClass`, `inputClass`, `cardClass`, `eyebrowClass`, …). The `src/styles.css` tokens are copied from `web/src/app/globals.css` (the `:root` brand block + the `.org-surface` palette).
-- **Drift risk:** these are COPIES, not imports. If `account/ui.tsx` class strings or `globals.css` tokens change in the app, re-sync `src/classes.ts` / `src/styles.css` by hand. Nothing enforces parity automatically.
+- **Drift risk:** these are COPIES, not imports. If `account/ui.tsx` class strings or `globals.css` tokens change in the app, re-sync `src/classes.ts` / `src/styles.css` by hand. A parity guard now catches drift at PR time — `tests/unit/design-system-parity.test.ts` (#1765) re-parses both sides and fails when a shared class constant or token diverges. It becomes obsolete once Phase 2 (#1764) replaces the copies with imports.
 - Settings/feedback/theme/data components are faithful ports of real app components (`account/ui.tsx`, `account/settings-section.tsx`, `theme-provider.tsx`, `theme-toggle.tsx`, `sparkline.tsx`). The `Foundations` group (BrandColors/ProductPalette/SurfaceTokens/Typography/Radius) are token _reference_ cards authored for this package (no app counterpart).
 
 ## Build
