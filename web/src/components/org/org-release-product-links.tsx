@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { OrgDetail } from "@/lib/api";
 import { productPath } from "@/lib/links";
-import { ExternalLinkIcon } from "@/components/account/icons";
+import { ChevronRightIcon } from "./icons";
 
 /**
  * Releases-tab "By product" entry points: an active "All releases" chip plus a
@@ -34,7 +34,7 @@ export function OrgReleaseProductLinks({
           className="inline-flex h-[30px] items-center gap-1.5 rounded-lg border border-[var(--line)] bg-[var(--surface)] px-[11px] text-[12.5px] text-[var(--fg-2)] transition-colors hover:border-[var(--line-2)] hover:text-[var(--fg)]"
         >
           {p.name}
-          <ExternalLinkIcon className="h-[13px] w-[13px] text-[var(--fg-3)]" />
+          <ChevronRightIcon className="h-[13px] w-[13px] text-[var(--fg-3)]" />
         </Link>
       ))}
     </div>

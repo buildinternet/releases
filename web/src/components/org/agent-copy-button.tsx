@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
 import { CheckIcon, ChevronDownIcon } from "@/components/account/icons";
 import { SparkleIcon, LinkIcon, MarkdownIcon } from "./icons";
@@ -27,11 +27,26 @@ export function AgentCopyButton({
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const { copied, copy } = useCopyToClipboard(1600);
+  const triggerRef = useRef<HTMLButtonElement>(null);
 
   const flashCopy = (text: string) => {
     copy(text);
     setMenuOpen(false);
   };
+
+  // Dismiss the dropdown on Escape and return focus to its trigger — mirrors the
+  // keyboard behavior of OrgAdminMenu. Click-outside is handled by the backdrop.
+  useEffect(() => {
+    if (!menuOpen) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        setMenuOpen(false);
+        triggerRef.current?.focus();
+      }
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [menuOpen]);
 
   const pageUrl = () => {
     const origin =
@@ -82,6 +97,7 @@ export function AgentCopyButton({
           {copied ? "Copied!" : "Copy for agent"}
         </button>
         <button
+          ref={triggerRef}
           type="button"
           onClick={() => setMenuOpen((o) => !o)}
           aria-label="More copy options"
