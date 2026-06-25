@@ -10,7 +10,10 @@
 export function apiBase(): string {
   const url = process.env.NEXT_PUBLIC_BETTER_AUTH_URL;
   if (!url) throw new Error("NEXT_PUBLIC_BETTER_AUTH_URL is not set");
-  return url.replace(/\/$/, "");
+  // Callers append `/v1/...` themselves. A mistaken env value like
+  // `https://api.releases.sh/v1` would otherwise double the prefix and hit the
+  // public wildcard CORS layer — browsers block credentialed `*` responses.
+  return url.replace(/\/+$/, "").replace(/\/v1$/, "");
 }
 
 /**
