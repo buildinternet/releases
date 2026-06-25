@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
+import { notFound } from "next/navigation";
 import { SettingsSection } from "@/components/account/settings-section";
-import { NotificationsPanel } from "@/components/notifications-panel";
-import { navItem } from "@/lib/account-nav";
+import { IntegrationsPanel } from "@/components/integrations-panel";
+import { navItem, SHOW_WIP_PANELS } from "@/lib/account-nav";
 
-const item = navItem("notifications");
+const item = navItem("integrations");
 
 export const metadata: Metadata = {
   title: item.label,
@@ -12,10 +13,11 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-export default function AccountNotificationsPage() {
+export default function AccountIntegrationsPage() {
+  if (!SHOW_WIP_PANELS) notFound();
   return (
     <SettingsSection group={item.group} title={item.label} description={item.description}>
-      <NotificationsPanel />
+      <IntegrationsPanel />
     </SettingsSection>
   );
 }

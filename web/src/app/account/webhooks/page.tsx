@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 import { SettingsSection } from "@/components/account/settings-section";
-import { NotificationsPanel } from "@/components/notifications-panel";
+import { WebhooksApiPanel } from "@/components/webhooks-api-panel";
 import { navItem } from "@/lib/account-nav";
 
-const item = navItem("notifications");
+const item = navItem("webhooks");
 
 export const metadata: Metadata = {
   title: item.label,
@@ -12,10 +12,10 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-export default function AccountNotificationsPage() {
+export default function AccountWebhooksPage() {
   return (
     <SettingsSection group={item.group} title={item.label} description={item.description}>
-      <NotificationsPanel />
+      <WebhooksApiPanel />
     </SettingsSection>
   );
 }

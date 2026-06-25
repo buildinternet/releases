@@ -75,6 +75,12 @@ const nextConfig: NextConfig = {
       { source: "/mcp", destination: "/docs/api/mcp", statusCode: 302 },
       { source: "/status", destination: "/admin/status", permanent: true },
       { source: "/status/:path*", destination: "/admin/status/:path*", permanent: true },
+      // Account settings reorg: panels merged in the settings redesign. These old
+      // routes no longer carry distinct meaning, so 308 to their new homes.
+      { source: "/account/email", destination: "/account/security", permanent: true },
+      { source: "/account/connections", destination: "/account/security", permanent: true },
+      { source: "/account/api-keys", destination: "/account/webhooks", permanent: true },
+      { source: "/account/workspaces", destination: "/account/general", permanent: true },
       // Authorization-server discovery lives on the AS itself (api.releases.sh),
       // where the issuer is `https://api.releases.sh/api/auth`. Agents and scanners
       // that probe the brand root (`releases.sh`) for these paths would otherwise

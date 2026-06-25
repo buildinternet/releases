@@ -13,9 +13,9 @@ import {
 
 const labelClass = "block text-sm font-medium text-stone-700 dark:text-stone-200";
 const inputClass =
-  "mt-1 w-full border border-stone-300 bg-white px-3 py-2 text-sm text-stone-900 outline-none focus:border-stone-500 dark:border-stone-700 dark:bg-stone-950 dark:text-stone-100";
+  "mt-1 w-full rounded-[9px] border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900 outline-none transition focus:border-[var(--accent)] dark:border-stone-700 dark:bg-stone-950 dark:text-stone-100";
 const buttonClass =
-  "inline-flex h-10 items-center justify-center border border-stone-300 bg-white px-4 text-sm font-medium text-stone-800 transition hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-stone-700 dark:bg-stone-950 dark:text-stone-100 dark:hover:bg-stone-900";
+  "inline-flex h-10 items-center justify-center rounded-[9px] border border-stone-200 bg-white px-4 text-sm font-medium text-stone-800 transition hover:border-stone-300 disabled:cursor-not-allowed disabled:opacity-60 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-100 dark:hover:border-stone-600";
 
 function formatDate(iso: string | null): string {
   if (!iso) return "—";
@@ -137,11 +137,11 @@ export function ApiKeysPanel() {
       )}
 
       {revealed && (
-        <div className="border border-green-600/30 bg-green-50 p-4 dark:border-green-500/30 dark:bg-green-950/40">
+        <div className="rounded-xl border border-green-600/30 bg-green-50 p-4 dark:border-green-500/30 dark:bg-green-950/40">
           <p className="text-sm font-medium text-green-800 dark:text-green-300">
             Key created. Copy it now — it won't be shown again.
           </p>
-          <code className="mt-3 block overflow-x-auto whitespace-nowrap border border-green-600/30 bg-white px-3 py-2 font-mono text-xs text-stone-900 dark:bg-stone-950 dark:text-stone-100">
+          <code className="mt-3 block overflow-x-auto whitespace-nowrap rounded-lg border border-green-600/30 bg-white px-3 py-2 font-mono text-xs text-stone-900 dark:bg-stone-950 dark:text-stone-100">
             {revealed.key}
           </code>
           <div className="mt-3 flex gap-2">
@@ -157,7 +157,7 @@ export function ApiKeysPanel() {
 
       <form
         onSubmit={onCreate}
-        className="space-y-4 border border-stone-200 p-5 dark:border-stone-800"
+        className="space-y-4 rounded-xl border border-stone-200 p-5 dark:border-stone-800"
       >
         <div>
           <label htmlFor="key-name" className={labelClass}>
@@ -187,7 +187,7 @@ export function ApiKeysPanel() {
         ) : keys.length === 0 ? (
           <p className="mt-3 text-sm text-stone-500 dark:text-stone-400">No keys yet.</p>
         ) : (
-          <ul className="mt-3 divide-y divide-stone-200 border border-stone-200 dark:divide-stone-800 dark:border-stone-800">
+          <ul className="mt-3 divide-y divide-stone-200 overflow-hidden rounded-xl border border-stone-200 dark:divide-stone-800 dark:border-stone-800">
             {keys.map((k) => (
               <li key={k.id} className="flex items-center justify-between gap-4 px-4 py-3">
                 <div className="min-w-0">
@@ -205,7 +205,7 @@ export function ApiKeysPanel() {
                     <button
                       type="button"
                       onClick={() => onRevoke(k.id)}
-                      className="inline-flex h-9 items-center justify-center border border-red-300 bg-white px-3 text-sm font-medium text-red-700 transition hover:bg-red-50 dark:border-red-500/40 dark:bg-stone-950 dark:text-red-400 dark:hover:bg-red-950/30"
+                      className="inline-flex h-9 items-center justify-center rounded-lg border border-red-300 bg-white px-3 text-sm font-medium text-red-700 transition hover:bg-red-50 dark:border-red-500/40 dark:bg-stone-950 dark:text-red-400 dark:hover:bg-red-950/30"
                     >
                       Confirm revoke
                     </button>

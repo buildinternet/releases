@@ -160,6 +160,12 @@ export const {
   listAccounts,
   linkSocial,
   unlinkAccount,
+  // More core actions used by the redesigned Security + Profile panels:
+  // `updateUser` persists profile fields (display name); `listSessions` /
+  // `revokeSession` power the active-devices list.
+  updateUser,
+  listSessions,
+  revokeSession,
   // Organization ("Workspaces") plugin — the action namespace + reactive hooks used
   // by the /account/workspaces panel.
   organization,

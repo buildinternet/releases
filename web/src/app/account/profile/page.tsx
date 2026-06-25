@@ -1,21 +1,21 @@
 import type { Metadata } from "next";
-import { AccountSection } from "@/components/account-section";
+import { SettingsSection } from "@/components/account/settings-section";
 import { ProfilePanel } from "@/components/profile-panel";
+import { navItem } from "@/lib/account-nav";
+
+const item = navItem("profile");
 
 export const metadata: Metadata = {
-  title: "Profile",
-  description: "View your releases.sh account profile.",
-  alternates: { canonical: "/account/profile" },
+  title: item.label,
+  description: item.description,
+  alternates: { canonical: item.href },
   robots: { index: false, follow: false },
 };
 
 export default function AccountProfilePage() {
   return (
-    <AccountSection
-      title="Profile"
-      description="Your account identity on releases.sh. Name and avatar come from your sign-in provider."
-    >
+    <SettingsSection group={item.group} title={item.label} description={item.description}>
       <ProfilePanel />
-    </AccountSection>
+    </SettingsSection>
   );
 }
