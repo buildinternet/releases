@@ -9,13 +9,13 @@
 //   No special option needed — zod 4 already silently omits refine predicates.
 // - NoticeSchema has two .refine() calls (coordinate XOR href, valid coordinate
 //   pattern); same treatment — silently dropped, runtime still enforces them.
-// - Output is formatted with the repo's prettier config before writing so that
+// - Output is formatted with the repo's oxfmt config before writing so that
 //   re-running gen produces an identical file even after the pre-commit
-//   prettier hook has run (idempotency guarantee for the CI diff check).
+//   oxfmt hook has run (idempotency guarantee for the CI diff check).
+import { spawnSync } from "node:child_process";
 import { writeFileSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { z } from "zod";
-import prettier from "prettier";
 import { ReleasesJsonConfigSchema } from "../packages/api-types/src/schemas/well-known.js";
 
 const OUT = join(import.meta.dir, "..", "web", "public", "schemas", "releases.json");
@@ -38,9 +38,13 @@ const schema = {
 };
 
 const raw = JSON.stringify(schema, null, 2) + "\n";
-const prettierConfig = await prettier.resolveConfig(import.meta.dir);
-const formatted = await prettier.format(raw, { parser: "json", ...prettierConfig });
 
 mkdirSync(dirname(OUT), { recursive: true });
-writeFileSync(OUT, formatted);
+writeFileSync(OUT, raw);
+
+const format = spawnSync("bunx", ["oxfmt", "--write", OUT], { stdio: "inherit" });
+if (format.status !== 0) {
+  process.exit(format.status ?? 1);
+}
+
 console.log(`wrote ${OUT}`);

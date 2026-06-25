@@ -43,8 +43,8 @@
     "db:pull": "./scripts/db-pull.sh",
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
-    "format": "prettier --write .",
-    "format:check": "prettier --check .",
+    "format": "oxfmt",
+    "format:check": "oxfmt --check",
     "clean:worktrees": "./scripts/clean-worktrees.sh",
     "test": "bun test packages/ && bun test tests/ web/ workers/discovery workers/mcp workers/webhooks && bun test workers/api",
     "eval:article-extract": "bun tests/evals/article-extract.eval.ts",
@@ -62,10 +62,10 @@
   "lint-staged": {
     "*.{js,jsx,ts,tsx,mjs,cjs}": [
       "oxlint",
-      "prettier --write"
+      "oxfmt --write"
     ],
-    "*.{json,md,yml,yaml,css}": [
-      "prettier --write"
+    "*.{json,jsonc,md,yml,yaml,css}": [
+      "oxfmt --write"
     ]
   },
   "workspaces": [
@@ -114,11 +114,12 @@
     "husky": "^9.1.7",
     "jose": "^6.2.3",
     "lint-staged": "^17.0.8",
+    "oxfmt": "^0.56.0",
     "oxlint": "^1.70.0",
     "portless": "^0.13.1",
-    "prettier": "^3.8.4",
     "typescript": "^6.0.3",
     "wrangler": "^4.103.0",
     "yaml": "^2.9.0"
-  }
+  },
+  "packageManager": "pnpm@9.15.9+sha512.68046141893c66fad01c079231128e9afb89ef87e2691d69e4d40eee228988295fd4682181bae55b58418c3a253bde65a505ec7c5f9403ece5cc3cd37dcf2531"
 }

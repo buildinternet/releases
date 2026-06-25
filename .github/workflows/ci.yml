@@ -80,7 +80,7 @@ jobs:
       - name: Oxlint
         run: bun run lint
 
-      - name: Prettier
+      - name: Oxfmt
         run: bun run format:check
 
   test:
@@ -189,15 +189,15 @@ jobs:
       - name: Verify GraphQL operation codegen is up to date
         if: needs.changes.outputs.codegen_inputs == 'true'
         # graphql-codegen emits single-quoted, unformatted output; the
-        # committed copy is prettier-normalised by lint-staged on commit.
+        # committed copy is oxfmt-normalised by lint-staged on commit.
         # Mirror that here before diffing or every PR would fail.
         working-directory: web
         run: |
           bun run codegen
-          bunx prettier --write src/lib/graphql/__generated__/
+          bunx oxfmt --write src/lib/graphql/__generated__/
           if ! git diff --exit-code src/lib/graphql/__generated__/; then
             echo "ERROR: web/src/lib/graphql/__generated__/ is stale." >&2
-            echo "Regenerate with: cd web && bun run codegen && bunx prettier --write src/lib/graphql/__generated__/" >&2
+            echo "Regenerate with: cd web && bun run codegen && bunx oxfmt --write src/lib/graphql/__generated__/" >&2
             exit 1
           fi
 
