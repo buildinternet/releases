@@ -11,6 +11,7 @@ import { applyCitationMarkers, definitionLabel } from "@/lib/overview-citations"
 import { EXTERNAL_UGC_REL } from "@/lib/sanitize";
 import { AI_SUMMARY_DISCLAIMER } from "@/lib/copy";
 import { markdownComponents } from "./markdown-components";
+import { orgEyebrowClass } from "./org/ui";
 
 interface OverviewViewProps {
   page: OverviewPageItem;
@@ -35,7 +36,7 @@ const CHROME = {
   org: {
     outer: "mb-6",
     card: "rounded-[14px] border border-[var(--line)] bg-[var(--surface-2)] p-[22px]",
-    eyebrow: "font-mono text-[11px] uppercase tracking-[0.16em] text-[var(--accent)]",
+    eyebrow: orgEyebrowClass,
     meta: "font-mono text-[11.5px] text-[var(--fg-3)]",
     fade: "from-[var(--surface-2)]",
     disclaimer: "border-[var(--line)] text-[var(--fg-3)]",

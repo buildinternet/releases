@@ -3,8 +3,10 @@ import { categoryDisplayName } from "@buildinternet/releases-core/categories";
 import { toSlug } from "@buildinternet/releases-core/slug";
 import type { CollectionListItem } from "@buildinternet/releases-api-types";
 import { accountUrl, AccountIcon, formatAccountHandle } from "@/components/account-link";
+import { ExternalLinkIcon } from "@/components/account/icons";
 import { domainHref } from "@/lib/source-display";
-import { formatRelativeDate } from "@/lib/formatters";
+import { formatRelativeDate, formatMonthYear } from "@/lib/formatters";
+import { GlobeIcon } from "./icons";
 
 /**
  * Right-hand context rail for the org page (the design's About / Accounts /
@@ -36,6 +38,8 @@ export function OrgContextRail({
   if (category)
     chips.push({ label: categoryDisplayName(category), href: `/categories/${category}` });
   for (const t of tags ?? []) chips.push({ label: t, href: `/tags/${toSlug(t)}` });
+
+  const trackingLabel = formatMonthYear(trackingSince);
 
   return (
     <aside className="flex w-full shrink-0 flex-col gap-5 md:w-[268px] lg:sticky lg:top-20">
@@ -71,7 +75,7 @@ export function OrgContextRail({
             <span className="org-status-dot h-[7px] w-[7px] shrink-0 rounded-full bg-[var(--good)]" />
             <span>
               Checked {formatRelativeDate(lastCheckedAt)}
-              {trackingSince ? ` · since ${monthYear(trackingSince)}` : ""}
+              {trackingLabel ? ` · since ${trackingLabel}` : ""}
             </span>
           </div>
         )}
@@ -101,7 +105,7 @@ export function OrgContextRail({
                   <span className="min-w-0 flex-1 truncate font-mono text-[12.5px]">
                     {formatAccountHandle(acc.platform, acc.handle)}
                   </span>
-                  <ArrowOutIcon className="h-[13px] w-[13px] shrink-0 text-[var(--fg-3)]" />
+                  <ExternalLinkIcon className="h-[13px] w-[13px] shrink-0 text-[var(--fg-3)]" />
                 </a>
               );
             })}
@@ -159,36 +163,5 @@ function RailEyebrow({
     >
       {children}
     </div>
-  );
-}
-
-/** "Sep 2024" — short month + year, UTC, matching the design's tracking line. */
-function monthYear(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleDateString("en-US", { month: "short", year: "numeric", timeZone: "UTC" });
-}
-
-const stroke = {
-  fill: "none",
-  stroke: "currentColor",
-  strokeLinecap: "round" as const,
-  strokeLinejoin: "round" as const,
-};
-
-function GlobeIcon({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" strokeWidth={1.5} {...stroke} className={className}>
-      <circle cx="12" cy="12" r="9" />
-      <path d="M3 12h18M12 3c2.5 2.5 2.5 15 0 18M12 3c-2.5 2.5-2.5 15 0 18" />
-    </svg>
-  );
-}
-
-function ArrowOutIcon({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" strokeWidth={1.6} {...stroke} className={className}>
-      <path d="M7 17L17 7M9 7h8v8" />
-    </svg>
   );
 }

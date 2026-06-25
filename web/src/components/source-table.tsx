@@ -80,11 +80,11 @@ function getSourceState(source: SourceListItem): { label: string; title: string 
   return null;
 }
 
-function isInactive(source: SourceListItem): boolean {
+export function isInactive(source: SourceListItem): boolean {
   return Boolean(source.isHidden) || source.fetchPriority === "paused" || source.releaseCount === 0;
 }
 
-function sortByImportance(a: SourceListItem, b: SourceListItem): number {
+export function sortByImportance(a: SourceListItem, b: SourceListItem): number {
   if (a.isPrimary && !b.isPrimary) return -1;
   if (!a.isPrimary && b.isPrimary) return 1;
   return b.releaseCount - a.releaseCount;

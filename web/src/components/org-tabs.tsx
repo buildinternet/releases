@@ -74,6 +74,22 @@ export function OrgTabs({
 
   useEffect(() => {
     if (!latestReleaseAt) return;
+    // On the Releases tab, everything is now seen: record the baseline (only if
+    // it changed) and clear the dot.
+    if (activeTab === "releases") {
+      try {
+        if (localStorage.getItem(seenKey) !== latestReleaseAt) {
+          localStorage.setItem(seenKey, latestReleaseAt);
+        }
+      } catch {
+        /* storage unavailable — nothing to persist */
+      }
+      setShowDot(false);
+      return;
+    }
+    // Other tabs: light the dot when a release postdates the last-seen baseline.
+    // First visit just records the baseline (no dot), so it never fires for
+    // someone who has never opened this org before.
     let seen: string | null = null;
     try {
       seen = localStorage.getItem(seenKey);
@@ -89,17 +105,7 @@ export function OrgTabs({
       return;
     }
     setShowDot(latestReleaseAt > seen);
-  }, [latestReleaseAt, seenKey]);
-
-  useEffect(() => {
-    if (activeTab !== "releases" || !latestReleaseAt) return;
-    try {
-      localStorage.setItem(seenKey, latestReleaseAt);
-    } catch {
-      /* ignore */
-    }
-    setShowDot(false);
-  }, [activeTab, latestReleaseAt, seenKey]);
+  }, [latestReleaseAt, seenKey, activeTab]);
 
   return (
     <div className="flex items-center gap-6 border-b border-[var(--line)]">

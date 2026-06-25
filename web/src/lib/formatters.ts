@@ -38,6 +38,17 @@ export function formatDate(iso: string | null): string {
   });
 }
 
+/**
+ * Format an ISO date as short month + year (e.g. "Sep 2024"), UTC. Returns null
+ * for missing/unparseable input so callers can omit the line entirely.
+ */
+export function formatMonthYear(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleDateString("en-US", { month: "short", year: "numeric", timeZone: "UTC" });
+}
+
 /** Format an ISO date as a relative time string (e.g., "2d ago", "3mo ago") */
 export function formatRelativeDate(iso: string | null): string {
   if (!iso) return "—";

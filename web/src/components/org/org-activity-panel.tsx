@@ -10,6 +10,7 @@ import {
 import { fmtCadence } from "@/components/timeline-chrome";
 import { Sparkline } from "@/components/sparkline";
 import { ReleaseHeatmap } from "@/components/release-heatmap";
+import { orgEyebrowClass } from "./ui";
 
 /** Trailing weeks of per-product weekly counts shown in the row sparkline. */
 const SPARK_WEEKS = 26;
@@ -54,20 +55,27 @@ export function OrgActivityPanel({
   const sourceToProduct = new Map<string, string>();
   for (const s of sources) if (s.productSlug) sourceToProduct.set(s.slug, s.productSlug);
 
+  // Single O(sources) pass: parse each source's buckets and bucket the source
+  // under its product, so the per-product row build below is O(1) lookups.
   const bucketsBySource = new Map<string, WeeklyBucket[]>();
   const avgBySource = new Map<string, number>();
+  const productToSources = new Map<string, string[]>();
   for (const src of activity.sources) {
     bucketsBySource.set(src.slug, parseBuckets(src.weeklyBuckets));
     avgBySource.set(src.slug, src.avgReleasesPerWeek);
+    const productSlug = sourceToProduct.get(src.slug);
+    if (productSlug) {
+      const list = productToSources.get(productSlug) ?? [];
+      list.push(src.slug);
+      productToSources.set(productSlug, list);
+    }
   }
 
   const rows: ProductRow[] = products.map((p) => {
-    const memberSlugs = activity.sources
-      .map((s) => s.slug)
-      .filter((slug) => sourceToProduct.get(slug) === p.slug);
+    const memberSlugs = productToSources.get(p.slug) ?? [];
+    // `mergeBucketCounts` already returns buckets in ascending week order.
     const merged = mergeBucketCounts(memberSlugs.map((slug) => bucketsBySource.get(slug) ?? []));
-    const ordered = [...merged].sort((a, b) => a.weekStart.getTime() - b.weekStart.getTime());
-    const spark = ordered.slice(-SPARK_WEEKS).map((b) => b.count);
+    const spark = merged.slice(-SPARK_WEEKS).map((b) => b.count);
     const productAvg = memberSlugs.reduce((sum, slug) => sum + (avgBySource.get(slug) ?? 0), 0);
     return {
       slug: p.slug,
@@ -88,9 +96,7 @@ export function OrgActivityPanel({
       {rows.length > 0 && (
         <>
           <div className="mb-3 flex items-baseline justify-between">
-            <h2 className="font-mono text-[11px] uppercase tracking-[0.16em] text-[var(--accent)]">
-              Products
-            </h2>
+            <h2 className={orgEyebrowClass}>Products</h2>
             <span className="text-[12px] text-[var(--fg-3)]">{rows.length} tracked</span>
           </div>
           <div className="mb-6 overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--surface)]">
@@ -124,9 +130,7 @@ export function OrgActivityPanel({
 
       {/* Activity */}
       <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="font-mono text-[11px] uppercase tracking-[0.16em] text-[var(--accent)]">
-          Activity
-        </h2>
+        <h2 className={orgEyebrowClass}>Activity</h2>
         <div className="flex gap-5 font-mono text-[12px] text-[var(--fg-3)]">
           <span>
             <span className="font-medium text-[var(--fg)]">{totalReleases}</span> releases

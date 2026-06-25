@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { OrgDetail } from "@/lib/api";
 import { productPath } from "@/lib/links";
+import { ExternalLinkIcon } from "@/components/account/icons";
 
 /**
  * Releases-tab "By product" entry points: an active "All releases" chip plus a
@@ -33,17 +34,7 @@ export function OrgReleaseProductLinks({
           className="inline-flex h-[30px] items-center gap-1.5 rounded-lg border border-[var(--line)] bg-[var(--surface)] px-[11px] text-[12.5px] text-[var(--fg-2)] transition-colors hover:border-[var(--line-2)] hover:text-[var(--fg)]"
         >
           {p.name}
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={1.7}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="h-[13px] w-[13px] text-[var(--fg-3)]"
-          >
-            <path d="M7 17L17 7M9 7h8v8" />
-          </svg>
+          <ExternalLinkIcon className="h-[13px] w-[13px] text-[var(--fg-3)]" />
         </Link>
       ))}
     </div>

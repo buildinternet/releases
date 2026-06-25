@@ -15,6 +15,7 @@ import { OrgInstallCommand } from "@/components/org/org-install-command";
 import { AgentCopyButton } from "@/components/org/agent-copy-button";
 import { OrgContextRail } from "@/components/org/org-context-rail";
 import { isLocalAdminEnabled } from "@/lib/local-admin-flag";
+import { formatMonthYear } from "@/lib/formatters";
 import { getOrg, getOrgCollections } from "../_lib/org-data";
 
 /** Most recent release timestamp across all sources (drives the Releases "new" dot). */
@@ -24,14 +25,6 @@ function latestReleaseAt(sources: { latestDate?: string | null }[]): string | nu
     if (s.latestDate && (latest === null || s.latestDate > latest)) latest = s.latestDate;
   }
   return latest;
-}
-
-/** "Sep 2024" — short month + year, UTC. */
-function monthYear(iso: string | null | undefined): string | null {
-  if (!iso) return null;
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return null;
-  return d.toLocaleDateString("en-US", { month: "short", year: "numeric", timeZone: "UTC" });
 }
 
 export default async function OrgLayout({
@@ -63,7 +56,7 @@ export default async function OrgLayout({
 
   const githubHandle = org.accounts.find((a) => a.platform === "github")?.handle ?? null;
   const hasAvatar = Boolean(org.avatarUrl || githubHandle);
-  const trackingSince = monthYear(org.trackingSince);
+  const trackingSince = formatMonthYear(org.trackingSince);
   const metaParts = [
     org.domain ? <span className="font-mono">{org.domain}</span> : null,
     org.category ? <span>{categoryDisplayName(org.category)}</span> : null,

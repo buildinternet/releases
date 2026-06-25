@@ -1,6 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
+import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
+import { CheckIcon, ChevronDownIcon } from "@/components/account/icons";
+import { SparkleIcon, LinkIcon, MarkdownIcon } from "./icons";
 
 /**
  * Page-level "Copy for agent" control on the org page: a split button whose
@@ -23,16 +26,11 @@ export function AgentCopyButton({
   productNames: string[];
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
-  const [copied, setCopied] = useState(false);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const { copied, copy } = useCopyToClipboard(1600);
 
-  useEffect(() => () => void (timerRef.current && clearTimeout(timerRef.current)), []);
-
-  const flash = () => {
+  const flashCopy = (text: string) => {
+    copy(text);
     setMenuOpen(false);
-    setCopied(true);
-    if (timerRef.current) clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(() => setCopied(false), 1600);
   };
 
   const pageUrl = () => {
@@ -43,40 +41,28 @@ export function AgentCopyButton({
     return `${origin}/${orgSlug}`;
   };
 
-  const write = (text: string) => {
-    try {
-      void navigator.clipboard?.writeText(text);
-    } catch {
-      // Clipboard can reject without a user gesture / in insecure contexts.
-    }
-  };
-
   const productClause =
     productNames.length > 0 ? ` It aggregates releases across ${formatList(productNames)}.` : "";
 
-  const copyPrompt = () => {
-    write(
+  const copyPrompt = () =>
+    flashCopy(
       `Read the release tracker for ${orgName} on releases.sh: ${pageUrl()}\n\n` +
         `It aggregates ${orgName}'s releases from across the web into one timeline.${productClause} ` +
         `Review what shipped recently and flag anything relevant to my work, with links.`,
     );
-    flash();
-  };
 
-  const copyLink = () => {
-    write(pageUrl());
-    flash();
-  };
+  const copyLink = () => flashCopy(pageUrl());
 
   const copyMarkdown = async () => {
     const url = `${pageUrl()}.md`;
+    let body = url;
     try {
       const res = await fetch(`/${orgSlug}.md`);
-      write(res.ok ? await res.text() : url);
+      if (res.ok) body = await res.text();
     } catch {
-      write(url);
+      // Network/abort — fall back to copying the .md URL.
     }
-    flash();
+    flashCopy(body);
   };
 
   return (
@@ -103,7 +89,7 @@ export function AgentCopyButton({
           aria-expanded={menuOpen}
           className="flex w-9 items-center justify-center border-l border-[var(--line)] text-[var(--fg-3)] transition-colors hover:bg-[var(--surface-2)] hover:text-[var(--fg)]"
         >
-          <ChevronIcon
+          <ChevronDownIcon
             className={`h-3.5 w-3.5 transition-transform ${menuOpen ? "rotate-180" : ""}`}
           />
         </button>
@@ -192,55 +178,4 @@ function formatList(items: string[]): string {
   if (items.length === 1) return items[0];
   if (items.length === 2) return `${items[0]} and ${items[1]}`;
   return `${items.slice(0, -1).join(", ")}, and ${items[items.length - 1]}`;
-}
-
-const stroke = {
-  fill: "none",
-  stroke: "currentColor",
-  strokeLinecap: "round" as const,
-  strokeLinejoin: "round" as const,
-};
-
-function SparkleIcon({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" strokeWidth={1.5} {...stroke} className={className}>
-      <path d="M12 3.5l1.5 4.2L18 9l-4.5 1.3L12 14.5l-1.5-4.2L6 9l4.5-1.3z" />
-      <path d="M18.6 14.2l.6 1.7 1.7.6-1.7.6-.6 1.7-.6-1.7-1.7-.6 1.7-.6z" />
-    </svg>
-  );
-}
-
-function CheckIcon({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" strokeWidth={2.2} {...stroke} className={className}>
-      <path d="M5 12.5l4.5 4.5L19 7" />
-    </svg>
-  );
-}
-
-function ChevronIcon({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" strokeWidth={1.7} {...stroke} className={className}>
-      <path d="M6 9l6 6 6-6" />
-    </svg>
-  );
-}
-
-function LinkIcon({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" strokeWidth={1.6} {...stroke} className={className}>
-      <path d="M10 13a4 4 0 0 0 5.7.3l2.5-2.5a4 4 0 0 0-5.7-5.7l-1.3 1.3" />
-      <path d="M14 11a4 4 0 0 0-5.7-.3l-2.5 2.5a4 4 0 0 0 5.7 5.7l1.3-1.3" />
-    </svg>
-  );
-}
-
-function MarkdownIcon({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" strokeWidth={1.5} {...stroke} className={className}>
-      <rect x="3" y="6" width="18" height="12" rx="2" />
-      <path d="M6.5 14.5V9.5l2.5 3 2.5-3v5" />
-      <path d="M15.5 9.5v5M14 13l1.5 1.7 1.5-1.7" />
-    </svg>
-  );
 }

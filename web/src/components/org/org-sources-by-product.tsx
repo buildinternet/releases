@@ -3,7 +3,12 @@ import type { SourceListItem, OrgDetail } from "@/lib/api";
 import { sourceOrProductPath } from "@/lib/links";
 import { formatRelativeDate } from "@/lib/formatters";
 import { Sparkline } from "@/components/sparkline";
-import { StateBadge, getHiddenStateBadge } from "@/components/source-table";
+import {
+  StateBadge,
+  getHiddenStateBadge,
+  isInactive,
+  sortByImportance,
+} from "@/components/source-table";
 
 const TYPE_LABELS: Record<string, string> = {
   github: "GitHub",
@@ -29,16 +34,6 @@ function sourceState(source: SourceListItem): { label: string; title: string } |
     return { label: "Paused", title: "Fetching is paused for this source" };
   }
   return null;
-}
-
-function isInactive(source: SourceListItem): boolean {
-  return Boolean(source.isHidden) || source.fetchPriority === "paused" || source.releaseCount === 0;
-}
-
-function sortByImportance(a: SourceListItem, b: SourceListItem): number {
-  if (a.isPrimary && !b.isPrimary) return -1;
-  if (!a.isPrimary && b.isPrimary) return 1;
-  return b.releaseCount - a.releaseCount;
 }
 
 interface SourceGroup {
