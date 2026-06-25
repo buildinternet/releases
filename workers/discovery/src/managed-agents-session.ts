@@ -806,7 +806,7 @@ ${idList}
                       },
                       onToolCall: (toolName) => {
                         toolCallCount++;
-                        this.ctx.storage.put("progress", {
+                        void this.ctx.storage.put("progress", {
                           step: "discovery",
                           currentAction: toolName,
                         });

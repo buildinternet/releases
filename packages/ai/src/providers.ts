@@ -441,7 +441,7 @@ async function fetchHttpSignals(url: string): Promise<HttpSignals | null> {
       if (done) break;
       html += decoder.decode(value, { stream: true });
       if (html.includes("</head>") || html.length > 32_000) {
-        reader.cancel();
+        void reader.cancel();
         break;
       }
     }

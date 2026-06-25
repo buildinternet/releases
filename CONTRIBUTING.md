@@ -49,14 +49,16 @@ Point the web frontend at the local API worker by setting `RELEASES_API_URL=http
 
 `wrangler dev` does not pull from Cloudflare's Secrets Store, so endpoints that read bound secrets will fail locally unless you create the worker's `.dev.vars` with the values you need. Each worker ships a checked-in `.dev.vars.example` template (`workers/{api,mcp,discovery,webhooks}/`); copy to `.dev.vars` and fill in. The real files are gitignored.
 
-## Type-checking
+## Checks
 
 ```bash
-npx tsc --noEmit                     # type-check (root — src/ survivors)
-cd workers/api && npx tsc --noEmit   # type-check the API worker
-cd web && npx tsc --noEmit           # type-check the frontend
+bun run check                        # oxlint (lint + type-check) + oxfmt check — same gate as CI
+bun run lint                         # oxlint only
+bun run format:check                 # oxfmt only
 bun run db:generate                  # scaffold a migration preview under .drizzle-out/ (then hand-author the real file under workers/api/migrations/)
 ```
+
+`bun run typecheck` is an alias for `bun run lint`. For targeted debugging, per-package `tsc` still works (`cd workers/mcp && npx tsc --noEmit`, `cd web && npx tsc --noEmit`, …).
 
 ## Testing
 
