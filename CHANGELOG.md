@@ -3,6 +3,20 @@
 The product changelog for releases.sh, published to its own registry. Drafted daily from merged
 PRs and reviewed via PR. See docs/changelog-style.md for the voice and curation rules.
 
+## June 24, 2026
+
+**Added**
+- Slack delivery format for webhooks — set `format: "slack"` on a subscription and point it at an incoming-webhook URL to receive releases as Slack Block Kit cards; the default HMAC-signed JSON delivery path is unchanged.
+- Workspaces now support member and invitation management — invite teammates by email, toggle member/admin roles, remove or leave a workspace, and accept or decline invitations from the emailed link.
+
+**Changed**
+- Digest email subjects now include the covered date — daily digests show "Jun 24, 2026" and weekly digests show "week of Jun 17, 2026" alongside the update count, making threads easier to find in your inbox.
+
+## June 23, 2026
+
+**Changed**
+- CLI reference docs at releases.sh now document `--page-all` streaming output, `--fields` field projection, `--input` JSON payloads, and `--dry-run` for write commands; the stale "Summaries & Comparisons" page documenting removed commands has been removed.
+
 ## June 22, 2026
 
 **Changed**

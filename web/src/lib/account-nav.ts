@@ -105,7 +105,7 @@ export const ACCOUNT_NAV: AccountNavGroup[] = [
         group: "Workspace",
         description: "Invite teammates to this workspace and manage their roles.",
         Icon: MembersIcon,
-        ready: false,
+        ready: true,
       },
       {
         key: "billing",

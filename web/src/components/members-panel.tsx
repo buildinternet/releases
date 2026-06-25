@@ -1,50 +1,17 @@
+"use client";
+
+import Link from "next/link";
+import { useSession } from "@/lib/auth-client";
+import { useWorkspaces } from "@/components/account/use-workspaces";
 import { PanelGrid } from "@/components/account/settings-section";
-import {
-  Aside,
-  PreviewBanner,
-  listCardClass,
-  listRowClass,
-  inputClass,
-  primaryButtonClass,
-} from "@/components/account/ui";
-import { ChevronDownIcon, MailIcon } from "@/components/account/icons";
+import { Aside } from "@/components/account/ui";
+import { WorkspaceDetailPanel } from "@/components/workspace-detail-panel";
 
 /**
- * Workspace "Members" — preview/static. The org plugin can model members/roles,
- * but no UI is wired yet, so this is a faithful mockup withheld from the nav.
+ * Workspace "Members" — the active workspace's members + invitations, backed by
+ * the real org plugin via {@link WorkspaceDetailPanel} (shipped in #1741). The
+ * sidebar selector / account dropdown choose which workspace is active.
  */
-const MEMBERS = [
-  {
-    name: "Maya Chen",
-    email: "maya@rally.space",
-    role: "Owner",
-    initial: "M",
-    color: "oklch(0.60 0.18 252)",
-    you: true,
-  },
-  {
-    name: "Jordan Lee",
-    email: "jordan@rally.space",
-    role: "Admin",
-    initial: "J",
-    color: "oklch(0.58 0.17 150)",
-  },
-  {
-    name: "Priya Patel",
-    email: "priya@rally.space",
-    role: "Member",
-    initial: "P",
-    color: "oklch(0.60 0.18 30)",
-  },
-  {
-    name: "Sam Rivera",
-    email: "sam@rally.space",
-    role: "Member",
-    initial: "S",
-    color: "oklch(0.58 0.16 300)",
-  },
-];
-
 const ROLES = [
   { name: "Owner", desc: "Full control, including billing and deletion." },
   { name: "Admin", desc: "Manage members, sources, and settings." },
@@ -52,6 +19,25 @@ const ROLES = [
 ];
 
 export function MembersPanel() {
+  const { data, isPending } = useSession();
+  const user = data?.user;
+  const { active, workspaces } = useWorkspaces();
+  const current = active ?? workspaces[0] ?? null;
+
+  if (isPending) return <p className="text-sm text-stone-500 dark:text-stone-400">Loading…</p>;
+
+  if (!user) {
+    return (
+      <p className="text-sm leading-6 text-stone-600 dark:text-stone-300">
+        Please{" "}
+        <Link href="/login?redirect=/account/members" className="underline">
+          sign in
+        </Link>{" "}
+        to manage members.
+      </p>
+    );
+  }
+
   return (
     <PanelGrid
       aside={
@@ -71,59 +57,13 @@ export function MembersPanel() {
         </Aside>
       }
     >
-      <div className="flex flex-col gap-9">
-        <PreviewBanner
-          title="Member management is in preview"
-          icon={<MailIcon className="h-4 w-4" />}
-        >
-          Inviting teammates and assigning roles is coming soon.
-        </PreviewBanner>
-
-        <section>
-          <div className="mb-3 text-sm font-semibold text-stone-900 dark:text-stone-100">
-            Invite members
-          </div>
-          <div className="flex gap-2.5">
-            <input disabled placeholder="name@company.com" className={`${inputClass} flex-1`} />
-            <button
-              type="button"
-              disabled
-              className={`${primaryButtonClass} shrink-0 cursor-not-allowed opacity-60`}
-            >
-              Send invite
-            </button>
-          </div>
-        </section>
-
-        <section>
-          <div className="mb-3 text-sm font-semibold text-stone-900 dark:text-stone-100">
-            Members · {MEMBERS.length}
-          </div>
-          <div className={listCardClass}>
-            {MEMBERS.map((m) => (
-              <div key={m.email} className={listRowClass}>
-                <span
-                  className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-full text-[13px] font-semibold text-white"
-                  style={{ background: m.color }}
-                >
-                  {m.initial}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <div className="text-[13.5px] font-medium text-stone-900 dark:text-stone-100">
-                    {m.name}
-                    {m.you && <span className="font-normal text-stone-400"> · you</span>}
-                  </div>
-                  <div className="text-[12.5px] text-stone-400 dark:text-stone-500">{m.email}</div>
-                </div>
-                <span className="flex h-[30px] shrink-0 items-center gap-1.5 rounded-lg border border-stone-200 bg-white px-3 text-[12.5px] text-stone-600 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-300">
-                  {m.role}
-                  <ChevronDownIcon className="h-3 w-3" />
-                </span>
-              </div>
-            ))}
-          </div>
-        </section>
-      </div>
+      {current ? (
+        <WorkspaceDetailPanel organizationId={current.id} />
+      ) : (
+        <p className="rounded-xl border border-dashed border-stone-300 px-4 py-6 text-center text-sm text-stone-500 dark:border-stone-700 dark:text-stone-400">
+          You don't have a workspace yet. Create one from the switcher in the sidebar.
+        </p>
+      )}
     </PanelGrid>
   );
 }
