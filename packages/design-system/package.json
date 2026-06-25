@@ -1,0 +1,40 @@
+{
+  "name": "@releases/design-system",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Releases design system — the token + component vocabulary behind the web app, packaged for reuse and for claude.ai/design sync.",
+  "type": "module",
+  "license": "ISC",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.es.js"
+    },
+    "./styles.css": "./dist/styles.css"
+  },
+  "module": "./dist/index.es.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "src",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "peerDependencies": {
+    "react": ">=18",
+    "react-dom": ">=18"
+  },
+  "devDependencies": {
+    "@fontsource/jetbrains-mono": "^5.1.0",
+    "@tailwindcss/cli": "^4.3.1",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "esbuild": "^0.24.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "tailwindcss": "^4.3.1",
+    "typescript": "^5.7.0"
+  }
+}

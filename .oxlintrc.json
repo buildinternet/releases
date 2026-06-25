@@ -120,6 +120,7 @@
     "packages/**/test/**",
     "packages/**/*.test.ts",
     "tests/evals/**",
-    "web/src/lib/graphql/__generated__/**"
+    "web/src/lib/graphql/__generated__/**",
+    ".design-sync/**"
   ]
 }
