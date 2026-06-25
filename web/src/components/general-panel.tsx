@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useSession, organization } from "@/lib/auth-client";
-import { toSlug } from "@buildinternet/releases-core/slug";
 import { useWorkspaces, workspaceInitial } from "@/components/account/use-workspaces";
 import { PanelGrid } from "@/components/account/settings-section";
 import {
@@ -64,12 +63,10 @@ export function GeneralPanel() {
   const current = active ?? workspaces[0] ?? null;
 
   const [name, setName] = useState("");
-  const [slug, setSlug] = useState("");
   const [logo, setLogo] = useState<string | null>(null);
   const [profile, setProfile] = useState<ProfileForm>(EMPTY_PROFILE);
   const [savedProfile, setSavedProfile] = useState<ProfileForm>(EMPTY_PROFILE);
   const [profileLoading, setProfileLoading] = useState(false);
-
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -93,9 +90,8 @@ export function GeneralPanel() {
 
   useEffect(() => {
     setName(current?.name ?? "");
-    setSlug(current?.slug ?? "");
     if (current?.id) void loadProfile(current.id);
-  }, [current?.id, current?.name, current?.slug, loadProfile]);
+  }, [current?.id, current?.name, loadProfile]);
 
   if (isPending) return <p className="text-sm text-stone-500 dark:text-stone-400">Loading…</p>;
 
@@ -121,13 +117,12 @@ export function GeneralPanel() {
     );
   }
 
-  const nextSlug = toSlug(slug).slice(0, 48);
+  const nameDirty = name.trim() !== current.name;
   const profileDirty =
     profile.websiteUrl.trim() !== savedProfile.websiteUrl ||
     profile.changelogUrl.trim() !== savedProfile.changelogUrl ||
     profile.githubHandle.trim() !== savedProfile.githubHandle;
-  const identityDirty = name.trim() !== current.name || (nextSlug && nextSlug !== current.slug);
-  const dirty = identityDirty || profileDirty;
+  const dirty = nameDirty || profileDirty;
 
   async function onSave(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -136,12 +131,11 @@ export function GeneralPanel() {
     setError(null);
     setSaved(false);
     try {
-      if (identityDirty) {
+      if (nameDirty) {
         const res = await organization.update({
           organizationId: current.id,
           data: {
             name: name.trim() || current.name,
-            ...(nextSlug && nextSlug !== current.slug ? { slug: nextSlug } : {}),
           },
         });
         if (res?.error) {
@@ -179,9 +173,6 @@ export function GeneralPanel() {
             These settings apply to{" "}
             <strong className="font-semibold text-stone-900 dark:text-stone-100">everyone</strong>{" "}
             in {current.name} — not just you.
-          </p>
-          <p className="mt-2.5 text-[13px] leading-relaxed text-stone-600 dark:text-stone-300">
-            Changing the URL updates every shared link.
           </p>
         </Aside>
       }
@@ -223,27 +214,6 @@ export function GeneralPanel() {
               }}
               className={inputClass}
             />
-          </section>
-
-          <section>
-            <label htmlFor="ws-slug" className={fieldLabelClass}>
-              Workspace URL
-            </label>
-            <div className="flex h-10 items-center overflow-hidden rounded-[9px] border border-stone-200 bg-white focus-within:border-[var(--accent)] dark:border-stone-700 dark:bg-stone-950">
-              <span className="pl-3 font-mono text-sm text-stone-400 dark:text-stone-500">
-                releases.sh/
-              </span>
-              <input
-                id="ws-slug"
-                value={slug}
-                onChange={(e) => {
-                  setSlug(e.target.value);
-                  setSaved(false);
-                  setError(null);
-                }}
-                className="h-full min-w-0 flex-1 border-none bg-transparent px-0 font-mono text-sm text-stone-900 outline-none dark:text-stone-100"
-              />
-            </div>
           </section>
         </div>
 
@@ -350,7 +320,6 @@ export function GeneralPanel() {
               type="button"
               onClick={() => {
                 setName(current.name);
-                setSlug(current.slug);
                 setError(null);
                 setSaved(false);
                 void loadProfile(current.id);

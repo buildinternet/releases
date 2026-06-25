@@ -66,7 +66,7 @@ function WorkspaceSelector() {
             {current?.name ?? "Personal"}
           </span>
           <span className="block truncate text-[11.5px] text-stone-400 dark:text-stone-500">
-            {current ? `releases.sh/${current.slug}` : "No workspace"}
+            {current ? "Workspace" : "No workspace"}
           </span>
         </span>
         <ChevronSelectorIcon className="h-[15px] w-[15px] shrink-0 text-stone-400 dark:text-stone-500" />
