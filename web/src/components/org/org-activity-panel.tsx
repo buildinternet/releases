@@ -10,7 +10,7 @@ import {
 } from "@/lib/cadence";
 import { Sparkline } from "@/components/sparkline";
 import { ReleaseHeatmap } from "@/components/release-heatmap";
-import { orgEyebrowClass } from "./ui";
+import { orgEyebrowClass } from "@releases/design-system";
 
 /** Trailing weeks of per-product weekly counts shown in the row sparkline. */
 const SPARK_WEEKS = 26;

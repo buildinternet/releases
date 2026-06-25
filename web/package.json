@@ -14,6 +14,7 @@
     "@better-auth/passkey": "^1.6.20",
     "@buildinternet/releases-api-types": "workspace:*",
     "@buildinternet/releases-core": "workspace:*",
+    "@releases/design-system": "workspace:*",
     "@releases/lib": "workspace:*",
     "@releases/rendering": "workspace:*",
     "@shikijs/langs": "^4.2.0",

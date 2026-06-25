@@ -6,10 +6,9 @@ Repo-specific gotchas for future `/design-sync` runs of this package. Read befor
 
 A NEW workspace package (`packages/design-system/`, `@releases/design-system`, global `window.ReleasesDS`) that **productizes** the web app's design vocabulary into real React components for claude.ai/design. It is **Phase 1** of a phased plan — the web app (`web/`) does **not** consume it yet; migrating `web/src` to import from it is a separate, later step. The Claude Design project is **"Releases"** (`projectId` in config.json).
 
-## How the components were built (and the main drift risk)
+## How the components were built
 
-- The class-string constants in `src/classes.ts` are a **verbatim copy** of `web/src/components/account/ui.tsx`'s exported class strings (`primaryButtonClass`, `inputClass`, `cardClass`, `eyebrowClass`, …). The `src/styles.css` tokens are copied from `web/src/app/globals.css` (the `:root` brand block + the `.org-surface` palette).
-- **Drift risk:** these are COPIES, not imports. If `account/ui.tsx` class strings or `globals.css` tokens change in the app, re-sync `src/classes.ts` / `src/styles.css` by hand. A parity guard now catches drift at PR time — `tests/unit/design-system-parity.test.ts` (#1765) re-parses both sides and fails when a shared class constant or token diverges. It becomes obsolete once Phase 2 (#1764) replaces the copies with imports.
+- `src/classes.ts` (class-string constants) and `src/tokens.css` (brand `:root` + `.org-surface` palette) ARE the design vocabulary. As of Phase 2 (#1764) the web app imports them from `@releases/design-system` rather than keeping its own copies: `web/src/components/account/ui.tsx` was deleted and `web/src/app/globals.css` now `@import`s the package's `tokens.css`. So they are the single source of truth, shared by the standalone card renderer and the web app — there is no copy left to drift, and the interim #1765 parity guard has been retired.
 - Settings/feedback/theme/data components are faithful ports of real app components (`account/ui.tsx`, `account/settings-section.tsx`, `theme-provider.tsx`, `theme-toggle.tsx`, `sparkline.tsx`). The `Foundations` group (BrandColors/ProductPalette/SurfaceTokens/Typography/Radius) are token _reference_ cards authored for this package (no app counterpart).
 
 ## Build

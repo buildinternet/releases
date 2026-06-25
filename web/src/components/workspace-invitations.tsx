@@ -10,7 +10,7 @@ import {
   primaryButtonClass,
   listCardClass,
   listRowClass,
-} from "@/components/account/ui";
+} from "@releases/design-system";
 
 const selectClass =
   "h-10 rounded-[9px] border border-stone-200 bg-white px-2 text-sm text-stone-900 outline-none transition focus:border-[var(--accent)] dark:border-stone-700 dark:bg-stone-950 dark:text-stone-100";

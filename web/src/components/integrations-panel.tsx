@@ -1,5 +1,4 @@
-import { PanelGrid } from "@/components/account/settings-section";
-import { PreviewBanner, cardClass, smallButtonClass } from "@/components/account/ui";
+import { PanelGrid, PreviewBanner, cardClass, smallButtonClass } from "@releases/design-system";
 import { PromoRail } from "@/components/account/promo-rail";
 import { CheckIcon, IntegrationsIcon } from "@/components/account/icons";
 

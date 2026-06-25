@@ -13,7 +13,7 @@ import {
   ErrorText,
   secondaryButtonClass as buttonClass,
   primaryButtonClass,
-} from "@/components/account/ui";
+} from "@releases/design-system";
 
 export function AcceptInvitation({ invitationId }: { invitationId: string }) {
   const { data: session, isPending } = useSession();

@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { smallButtonClass } from "@/components/account/ui";
+import { smallButtonClass } from "@releases/design-system";
 
 const ACCEPT = "image/png,image/jpeg,image/gif,image/webp";
 

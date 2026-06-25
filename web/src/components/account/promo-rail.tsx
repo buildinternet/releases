@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { eyebrowClass } from "./ui";
+import { eyebrowClass } from "@releases/design-system";
 import { McpIcon, TerminalIcon, ExternalLinkIcon } from "./icons";
 
 /**

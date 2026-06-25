@@ -11,7 +11,7 @@ import {
   confirmRemoveButtonClass,
   listCardClass,
   listRowClass,
-} from "@/components/account/ui";
+} from "@releases/design-system";
 
 const cancelLinkClass =
   "px-1 text-[13px] text-stone-400 transition hover:text-stone-900 dark:text-stone-500 dark:hover:text-stone-100";

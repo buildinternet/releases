@@ -1,12 +1,12 @@
-import { PanelGrid } from "@/components/account/settings-section";
 import {
+  PanelGrid,
   PreviewBanner,
   cardClass,
   listCardClass,
   listRowClass,
   smallButtonClass,
   smallPrimaryButtonClass,
-} from "@/components/account/ui";
+} from "@releases/design-system";
 import { CardIcon, BillingIcon } from "@/components/account/icons";
 
 /**

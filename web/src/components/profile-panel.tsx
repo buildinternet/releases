@@ -4,8 +4,8 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useSession, updateUser } from "@/lib/auth-client";
 import { displayEmailOf } from "@/lib/auth-ui";
-import { PanelGrid } from "@/components/account/settings-section";
 import {
+  PanelGrid,
   Aside,
   ErrorText,
   SuccessBanner,
@@ -14,7 +14,7 @@ import {
   textareaClass,
   primaryButtonClass,
   secondaryButtonClass,
-} from "@/components/account/ui";
+} from "@releases/design-system";
 import { AvatarUploadButton } from "@/components/avatar-upload-button";
 import { uploadUserAvatar } from "@/lib/account-profile-api";
 
