@@ -13,10 +13,11 @@ Changelog indexer and registry for AI agents and developers. The user-facing CLI
 
 ## Commands
 
-- Type-check: `npx tsc --noEmit` (root + each worker)
-- Tests: `bun test`
-- Lint: `bun run lint` (oxlint)
+- Lint + format + type-check: `bun run check` (oxlint with `typeCheck` via `oxlint-tsgolint`, then `oxfmt --check`)
+- Lint only: `bun run lint` (`bun run typecheck` is an alias)
 - Format: `bun run format:check`
+- Tests: `bun test` (not part of `check`)
+- Targeted `tsc`: `workers/mcp` still uses `npx tsc --noEmit` in CI (carved-out workspace; excluded from root oxlint). `web` and `tests/` have their own tsconfigs for local runs.
 - **Evals (`tests/evals/`) are manual and on-demand only.** They call AI APIs, cost money, and take minutes. `bun run eval:evaluation` is the only in-repo suite (URL evaluation, ~30s). Parsing + discovery evals live in the OSS CLI repo.
 
 ## Local development

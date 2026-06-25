@@ -137,7 +137,9 @@ export class StatusHub extends DurableObject {
     }
     lines.push(line);
     if (!this.stdoutFlushTimer) {
-      this.stdoutFlushTimer = setTimeout(() => this.flushStdout(), STDOUT_FLUSH_INTERVAL_MS);
+      this.stdoutFlushTimer = setTimeout(() => {
+        void this.flushStdout();
+      }, STDOUT_FLUSH_INTERVAL_MS);
     }
   }
 

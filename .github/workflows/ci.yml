@@ -77,6 +77,8 @@ jobs:
 
       - run: bun install --frozen-lockfile
 
+      # oxlint lints + type-checks the workspace from the root .oxlintrc.json
+      # (typescript-go via oxlint-tsgolint; curated semantic rules + typeCheck).
       - name: Oxlint
         run: bun run lint
 
@@ -84,7 +86,7 @@ jobs:
         run: bun run format:check
 
   test:
-    name: Test & Type-check
+    name: Test
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
@@ -119,23 +121,12 @@ jobs:
         working-directory: workers/webhooks
         run: bun install --frozen-lockfile
 
-      # Root tsconfig only includes ./src — each worker has its own
-      # tsconfig.json and isn't in the root's compile scope, so per-worker
-      # tsc steps catch worker-only type errors (e.g. binding/secret
-      # mismatches in workers/api) that the root check misses. See #947.
-      - name: Type-check (root)
-        run: npx tsc --noEmit
-      - name: Type-check (workers/api)
-        working-directory: workers/api
-        run: npx tsc --noEmit
-      - name: Type-check (workers/discovery)
-        working-directory: workers/discovery
-        run: npx tsc --noEmit
+      # workers/mcp is excluded from the root oxlint type-check (carved-out
+      # workspace with its own bun.lock + Agents SDK tool Zod shapes that
+      # typescript-go doesn't model yet). Keep a targeted tsc gate here; UI
+      # sub-build has mcp:ui:typecheck separately.
       - name: Type-check (workers/mcp)
         working-directory: workers/mcp
-        run: npx tsc --noEmit
-      - name: Type-check (workers/webhooks)
-        working-directory: workers/webhooks
         run: npx tsc --noEmit
 
       - name: Check migration filenames

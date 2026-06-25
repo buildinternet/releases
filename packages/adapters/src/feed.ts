@@ -157,7 +157,7 @@ async function discoverFromHead(
       if (done) break;
       html += decoder.decode(value, { stream: true });
       if (html.includes("</head>") || html.length > HEAD_DISCOVERY_BYTE_CAP) {
-        reader.cancel();
+        void reader.cancel();
         break;
       }
     }
