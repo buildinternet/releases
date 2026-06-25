@@ -50,8 +50,7 @@ export const ACCOUNT_NAV: AccountNavGroup[] = [
         label: "Profile",
         href: "/account/profile",
         group: "Personal",
-        description:
-          "Your name, avatar, and how you appear across releases.sh and your public following page.",
+        description: "Your name, avatar, and how you appear in Releases.",
         Icon: ProfileIcon,
         ready: true,
       },
@@ -94,7 +93,7 @@ export const ACCOUNT_NAV: AccountNavGroup[] = [
         label: "General",
         href: "/account/general",
         group: "Workspace",
-        description: "Name, URL, and defaults for this workspace. Visible to every member.",
+        description: "Name and defaults for this workspace. Visible to every member.",
         Icon: GeneralIcon,
         ready: true,
       },
