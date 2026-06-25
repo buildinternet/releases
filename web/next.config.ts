@@ -36,6 +36,7 @@ const nextConfig: NextConfig = {
   transpilePackages: [
     "@buildinternet/releases-core",
     "@buildinternet/releases-api-types",
+    "@releases/design-system",
     "@releases/lib",
     "@releases/rendering",
   ],
@@ -51,6 +52,7 @@ const nextConfig: NextConfig = {
     root: path.resolve(__dirname, ".."),
     resolveAlias: {
       "@buildinternet/releases-api-types": "../packages/api-types/src/api-types.ts",
+      "@releases/design-system": "../packages/design-system/src/index.ts",
       "@releases/lib/*": "../packages/lib/src/*",
       "@releases/rendering/*": "../packages/rendering/src/*",
     },
@@ -62,6 +64,7 @@ const nextConfig: NextConfig = {
         __dirname,
         "../packages/api-types/src/api-types.ts",
       ),
+      "@releases/design-system": path.resolve(__dirname, "../packages/design-system/src/index.ts"),
       "@releases/lib": path.resolve(__dirname, "../packages/lib/src"),
       "@releases/rendering": path.resolve(__dirname, "../packages/rendering/src"),
     };

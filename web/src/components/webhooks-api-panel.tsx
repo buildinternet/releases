@@ -5,7 +5,7 @@ import { useSession } from "@/lib/auth-client";
 import { USER_API_KEYS_ENABLED } from "@/lib/auth-ui";
 import { ApiKeysPanel } from "@/components/api-keys-panel";
 import { WebhooksPanel } from "@/components/webhooks-panel";
-import { PanelGrid } from "@/components/account/settings-section";
+import { PanelGrid } from "@releases/design-system";
 import { PromoRail } from "@/components/account/promo-rail";
 
 /**

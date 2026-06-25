@@ -3,8 +3,7 @@
 import Link from "next/link";
 import { useSession } from "@/lib/auth-client";
 import { useWorkspaces } from "@/components/account/use-workspaces";
-import { PanelGrid } from "@/components/account/settings-section";
-import { Aside } from "@/components/account/ui";
+import { PanelGrid, Aside } from "@releases/design-system";
 import { WorkspaceDetailPanel } from "@/components/workspace-detail-panel";
 
 /**

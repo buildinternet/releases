@@ -5,8 +5,8 @@ import { useCallback, useEffect, useState } from "react";
 import { useSession, organization } from "@/lib/auth-client";
 import { useWorkspaces } from "@/components/account/use-workspaces";
 import { WorkspaceAvatar } from "@/components/account/workspace-avatar";
-import { PanelGrid } from "@/components/account/settings-section";
 import {
+  PanelGrid,
   Aside,
   ErrorText,
   SuccessBanner,
@@ -14,7 +14,7 @@ import {
   inputClass,
   primaryButtonClass,
   secondaryButtonClass,
-} from "@/components/account/ui";
+} from "@releases/design-system";
 import { AvatarUploadButton } from "@/components/avatar-upload-button";
 import {
   fetchWorkspaceProfile,

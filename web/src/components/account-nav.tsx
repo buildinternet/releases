@@ -16,7 +16,7 @@ import {
   CheckIcon,
   PlusIcon,
 } from "@/components/account/icons";
-import { ErrorText, eyebrowClass } from "@/components/account/ui";
+import { ErrorText, eyebrowClass } from "@releases/design-system";
 
 /**
  * Session-aware header control. Renders a "Sign in" link when signed out and a

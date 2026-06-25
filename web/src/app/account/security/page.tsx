@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { SettingsSection } from "@/components/account/settings-section";
+import { SettingsSection } from "@releases/design-system";
 import { SecurityPanel } from "@/components/security-panel";
 import { navItem } from "@/lib/account-nav";
 

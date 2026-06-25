@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { OrgReleaseItem } from "@/lib/api";
 import { formatDate } from "@/lib/formatters";
-import { orgEyebrowClass } from "./ui";
+import { orgEyebrowClass } from "@releases/design-system";
 import { ArrowRightIcon, ChevronRightIcon } from "./icons";
 
 /**

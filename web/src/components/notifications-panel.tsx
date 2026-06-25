@@ -12,8 +12,8 @@ import {
   revokeFeedToken,
 } from "@/lib/follows";
 import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
-import { PanelGrid } from "@/components/account/settings-section";
 import {
+  PanelGrid,
   Toggle,
   ErrorText,
   listCardClass,
@@ -21,7 +21,7 @@ import {
   secondaryButtonClass,
   smallButtonClass,
   dangerLinkClass,
-} from "@/components/account/ui";
+} from "@releases/design-system";
 
 function EmailSection() {
   const [cadence, setCadence] = useState<DigestCadence>("off");

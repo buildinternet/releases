@@ -1,5 +1,4 @@
-import { PanelGrid } from "@/components/account/settings-section";
-import { cardClass, smallButtonClass } from "@/components/account/ui";
+import { PanelGrid, cardClass, smallButtonClass } from "@releases/design-system";
 
 /**
  * Workspace "Danger zone" — static/withheld from the nav. Ownership transfer and

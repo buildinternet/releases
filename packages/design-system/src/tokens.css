@@ -1,0 +1,75 @@
+/**
+ * @releases/design-system — brand token declarations.
+ *
+ * Plain CSS custom properties (not @theme tokens) so `.dark` overrides cascade
+ * cleanly into the arbitrary-value utilities the components use
+ * (`bg-[var(--accent)]`, `bg-[var(--accent-soft)]`, …).
+ *
+ * Consumed in two places:
+ *   - packages/design-system/src/styles.css  — standalone card renderer + claude.ai/design
+ *   - web/src/app/globals.css                — the web app (via @import "@releases/design-system/tokens.css")
+ *
+ * NOTE: `--font-jetbrains-mono` is intentionally NOT here — it is set by the
+ * `@font-face` block in styles.css (for the standalone renderer which self-hosts
+ * the font) and by next/font in the web app. Each host owns its own font binding.
+ */
+
+:root {
+  /* Brand accent — the blue on the logo's bottom bar. Used by the account
+     settings surface (active nav, primary buttons, links, toggles). `accent-soft`
+     is a low-alpha wash for active backgrounds; it's denser in dark mode so it
+     stays visible on the near-black page. */
+  --accent: oklch(0.6 0.18 252);
+  --accent-soft: color-mix(in srgb, var(--accent) 9%, transparent);
+  --on-accent: #fff;
+
+  /* Product palette for multi-product charts */
+  --color-product-0: oklch(0.637 0.153 254.4); /* blue-400 */
+  --color-product-1: oklch(0.723 0.191 149.6); /* green-400 */
+  --color-product-2: oklch(0.769 0.168 70.08); /* amber-500 */
+  --color-product-3: oklch(0.704 0.191 22.18); /* red-400 */
+  --color-product-4: oklch(0.714 0.168 293.5); /* purple-400 */
+  --color-product-5: oklch(0.718 0.176 349.8); /* pink-400 */
+  --color-product-6: oklch(0.789 0.109 197.5); /* cyan-400 */
+  --color-product-7: oklch(0.75 0.16 55); /* orange-400 */
+}
+
+/* Accent wash is denser in dark mode so it stays visible on the near-black page. */
+.dark {
+  --accent-soft: color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   Org page redesign palette (#1752)
+   A self-contained stone-family token set scoped to `.org-surface` (applied at
+   the org layout root). The redesigned org page reads from these semantic
+   tokens — `var(--surface)`, `var(--fg-2)`, `var(--line)`, … — instead of ad-hoc
+   stone utilities. Values match the site's stone palette on purpose
+   (`--page` == the body's stone-50 / stone-950) so the page sits flush with the
+   global chrome. */
+.org-surface {
+  --page: #fafaf9;
+  --surface: #ffffff;
+  --surface-2: #f4f3f1;
+  --fg: #1c1917;
+  --fg-2: #57534e;
+  --fg-3: #a8a29e;
+  --line: #ededeb;
+  --line-2: #e0ddd9;
+  --field: #ffffff;
+  --good: oklch(0.58 0.15 150);
+  --fix: oklch(0.66 0.14 55);
+}
+.dark .org-surface {
+  --page: #0c0a09;
+  --surface: #1a1714;
+  --surface-2: #252220;
+  --fg: #fafaf9;
+  --fg-2: #a8a29e;
+  --fg-3: #78716c;
+  --line: #2a2623;
+  --line-2: #3b3631;
+  --field: #161310;
+  --good: oklch(0.68 0.15 150);
+  --fix: oklch(0.74 0.13 60);
+}

@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { SettingsSection } from "@/components/account/settings-section";
+import { SettingsSection } from "@releases/design-system";
 import { WorkspaceDetailPanel } from "@/components/workspace-detail-panel";
 
 export const metadata: Metadata = {

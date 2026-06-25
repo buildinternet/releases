@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { SettingsSection } from "@/components/account/settings-section";
+import { SettingsSection } from "@releases/design-system";
 import { DangerPanel } from "@/components/danger-panel";
 import { navItem, SHOW_WIP_PANELS } from "@/lib/account-nav";
 

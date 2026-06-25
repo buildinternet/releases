@@ -15,8 +15,8 @@ import {
 } from "@/lib/auth-client";
 import { displayEmailOf } from "@/lib/auth-ui";
 import { SOCIAL_PROVIDERS, PROVIDER_META, type SocialProvider } from "@/lib/social-providers";
-import { PanelGrid } from "@/components/account/settings-section";
 import {
+  PanelGrid,
   Aside,
   ErrorText,
   SuccessBanner,
@@ -27,7 +27,7 @@ import {
   secondaryButtonClass,
   smallButtonClass,
   dangerLinkClass,
-} from "@/components/account/ui";
+} from "@releases/design-system";
 import { KeyIcon, DeviceIcon } from "@/components/account/icons";
 
 /* ── shared row chrome ───────────────────────────────────────────────── */

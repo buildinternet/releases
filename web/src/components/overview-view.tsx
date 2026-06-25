@@ -11,7 +11,7 @@ import { applyCitationMarkers, definitionLabel } from "@/lib/overview-citations"
 import { EXTERNAL_UGC_REL } from "@/lib/sanitize";
 import { AI_SUMMARY_DISCLAIMER } from "@/lib/copy";
 import { markdownComponents } from "./markdown-components";
-import { orgEyebrowClass } from "./org/ui";
+import { orgEyebrowClass } from "@releases/design-system";
 
 interface OverviewViewProps {
   page: OverviewPageItem;

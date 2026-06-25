@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { visibleNavGroups } from "@/lib/account-nav";
-import { ErrorText, eyebrowClass } from "@/components/account/ui";
+import { ErrorText, eyebrowClass } from "@releases/design-system";
 import { useWorkspaces } from "@/components/account/use-workspaces";
 import { WorkspaceAvatar } from "@/components/account/workspace-avatar";
 import {
