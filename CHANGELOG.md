@@ -3,6 +3,20 @@
 The product changelog for releases.sh, published to its own registry. Drafted daily from merged
 PRs and reviewed via PR. See docs/changelog-style.md for the voice and curation rules.
 
+## June 25, 2026
+
+**Added**
+- User and workspace avatar uploads — upload a photo from Account → Profile (user avatar) or Account → General (workspace avatar); avatars appear in the account menu, settings sidebar, and workspace switcher. Workspace General also adds editable company website, changelog URL, and GitHub handle fields.
+
+**Changed**
+- Account settings rebuilt with a new design — a two-pane layout with a grouped sidebar, workspace selector, and individually-addressable pages for Profile, Security, Notifications, General, and Webhooks & API; the header account dropdown gains a workspace switcher with switch and create actions.
+- Org pages redesigned — wider layout with a new header, "Copy for agent" split-button (agent prompt / page link / Markdown), product tiles with sparklines and cadence indicators in the Overview, "By product" chips in Releases, sources grouped by product with type badges in Sources, an About / Export context rail, and a dot indicator that lights when releases ship after your last visit.
+- OAuth and device authorization flow redesigned — consent, device-code entry, and device-approval screens now share a centered card layout with a connection visual, collapsible permission groups, and full dark-mode support.
+
+**Fixed**
+- Org page mobile layout restored — headers, tabs, release rows, and install commands wrap correctly on narrow screens after the redesign introduced overflow.
+- Account settings copy corrected — MCP install command, Homebrew tap URL, and workspace profile descriptions now match the real commands and routes.
+
 ## June 24, 2026
 
 **Added**
