@@ -218,9 +218,9 @@ export function ReleaseListItem({
           inline into the content (see below) and the rail collapses to a thin
           timeline gutter so the narrow viewport isn't spent on a date column. */}
       <div className="w-[16px] shrink-0 relative flex flex-col items-end pr-0 pt-5 gap-1 sm:w-[100px] sm:pr-5">
-        {!hideDate && (
+        {!hideDate && release.publishedAt && (
           <time
-            dateTime={release.publishedAt ?? undefined}
+            dateTime={release.publishedAt}
             className="hidden text-[12px] text-stone-400 dark:text-stone-500 whitespace-nowrap tabular-nums sm:block"
           >
             {formatDate(release.publishedAt)}

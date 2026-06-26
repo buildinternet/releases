@@ -371,9 +371,9 @@ function ReleaseRollupRow({
         {/* Left rail: date + timeline dot (mirrors ReleaseListItem). Below `sm`
             the date moves inline and the rail collapses to a thin gutter. */}
         <div className="w-[16px] shrink-0 relative flex flex-col items-end pr-0 pt-5 gap-1 sm:w-[100px] sm:pr-5">
-          {!hideDate && (
+          {!hideDate && newest.publishedAt && (
             <time
-              dateTime={newest.publishedAt ?? undefined}
+              dateTime={newest.publishedAt}
               className="hidden text-[12px] text-stone-400 dark:text-stone-500 whitespace-nowrap tabular-nums sm:block"
             >
               {formatDate(newest.publishedAt)}
