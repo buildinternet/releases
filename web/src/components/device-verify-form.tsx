@@ -3,12 +3,18 @@
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { authClient, useSession } from "@/lib/auth-client";
+import {
+  AuthCard,
+  AuthError,
+  CardTitle,
+  Code,
+  ConnVisual,
+  Divider,
+  primaryButtonClass,
+} from "@/components/auth-flow";
 
-const labelClass = "block text-sm font-medium text-stone-700 dark:text-stone-200";
 const inputClass =
-  "mt-1 w-full border border-stone-300 bg-white px-3 py-2 font-mono text-base uppercase tracking-[0.3em] text-stone-900 outline-none focus:border-stone-500 dark:border-stone-700 dark:bg-stone-950 dark:text-stone-100";
-const buttonClass =
-  "inline-flex h-10 items-center justify-center border border-stone-300 bg-white px-4 text-sm font-medium text-stone-800 transition hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-stone-700 dark:bg-stone-950 dark:text-stone-100 dark:hover:bg-stone-900";
+  "mt-2 w-full rounded-[11px] border border-stone-200 bg-stone-50 px-3 py-3 text-center font-mono text-[18px] uppercase tracking-[0.26em] text-stone-900 outline-none transition focus:border-[var(--accent)] dark:border-stone-700 dark:bg-stone-950/60 dark:text-stone-100";
 
 /** Normalize a typed/pasted user code: drop dashes + spaces, uppercase. */
 function normalizeUserCode(raw: string): string {
@@ -70,9 +76,23 @@ export function DeviceVerifyForm() {
   }
 
   return (
-    <form onSubmit={onSubmit} className="space-y-5">
-      <div>
-        <label htmlFor="user-code" className={labelClass}>
+    <form onSubmit={onSubmit} className="w-full max-w-[460px]">
+      <AuthCard
+        footer={
+          <button type="submit" disabled={submitting} className={primaryButtonClass}>
+            {submitting ? "Checking…" : "Continue"}
+          </button>
+        }
+      >
+        <ConnVisual node="key" terminal />
+        <CardTitle>Connect the Releases CLI</CardTitle>
+
+        <Divider />
+
+        <label
+          htmlFor="user-code"
+          className="block text-[13px] font-medium text-stone-700 dark:text-stone-200"
+        >
           Device code
         </label>
         <input
@@ -87,30 +107,18 @@ export function DeviceVerifyForm() {
           className={inputClass}
           required
         />
-        <p className="mt-2 text-sm leading-6 text-stone-500 dark:text-stone-400">
-          Enter the code shown in your terminal after running{" "}
-          <code className="font-mono text-[0.85em] text-stone-600 dark:text-stone-300">
-            releases login
-          </code>
-          .
+        <p className="mt-2 text-[12.5px] leading-[1.5] text-stone-500 dark:text-stone-400">
+          Enter the code shown in your terminal after running <Code>releases login</Code>.
         </p>
-      </div>
 
-      {error && (
-        <p role="alert" className="text-sm text-red-600 dark:text-red-400">
-          {error}
-        </p>
-      )}
+        {error ? <AuthError>{error}</AuthError> : null}
 
-      {!user && (
-        <p className="text-sm leading-6 text-stone-500 dark:text-stone-400">
-          You'll be asked to sign in first, then returned here to approve the device.
-        </p>
-      )}
-
-      <button type="submit" disabled={submitting} className={buttonClass}>
-        {submitting ? "Checking…" : "Continue"}
-      </button>
+        {!user ? (
+          <p className="mt-3 text-[12.5px] leading-[1.5] text-stone-400 dark:text-stone-500">
+            You&apos;ll be asked to sign in first, then returned here to approve the device.
+          </p>
+        ) : null}
+      </AuthCard>
     </form>
   );
 }
