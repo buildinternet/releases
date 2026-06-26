@@ -4,13 +4,21 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { authClient, useSession } from "@/lib/auth-client";
-import { displayScopes, SCOPE_LABELS } from "@/lib/entitlement";
+import { displayScopes } from "@/lib/entitlement";
+import {
+  AuthCard,
+  AuthError,
+  CardTitle,
+  Code,
+  ConnVisual,
+  Divider,
+  IdentityRow,
+  outlineButtonClass,
+  primaryButtonClass,
+  RevokeNote,
+  ScopeGroups,
+} from "@/components/auth-flow";
 import type { OAuthClient } from "@better-auth/oauth-provider";
-
-const buttonClass =
-  "inline-flex h-10 items-center justify-center border px-4 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-60";
-const approveClass = `${buttonClass} border-green-600/40 bg-green-50 text-green-800 hover:bg-green-100 dark:border-green-500/40 dark:bg-green-950/40 dark:text-green-300 dark:hover:bg-green-950/60`;
-const denyClass = `${buttonClass} border-stone-300 bg-white text-stone-800 hover:bg-stone-50 dark:border-stone-700 dark:bg-stone-950 dark:text-stone-100 dark:hover:bg-stone-900`;
 
 // IMPORTANT: call the oauth-provider endpoints by their LITERAL paths via
 // `authClient.$fetch`, NOT as named methods. The client half of the plugin
@@ -112,9 +120,11 @@ export function OauthConsentForm() {
 
   if (!clientId) {
     return (
-      <p className="text-sm text-red-700 dark:text-red-400">
-        No pending authorization request. Start again from the application you were using.
-      </p>
+      <AuthCard>
+        <p className="py-2 text-center text-sm leading-6 text-stone-600 dark:text-stone-300">
+          No pending authorization request. Start again from the application you were using.
+        </p>
+      </AuthCard>
     );
   }
 
@@ -124,13 +134,18 @@ export function OauthConsentForm() {
   if (!user) {
     const ret = `/oauth/consent?${params.toString()}`;
     return (
-      <p className="text-sm leading-6 text-stone-600 dark:text-stone-300">
-        Please{" "}
-        <Link href={`/login?redirect=${encodeURIComponent(ret)}`} className="underline">
-          sign in
-        </Link>{" "}
-        to continue.
-      </p>
+      <AuthCard>
+        <p className="py-2 text-center text-sm leading-6 text-stone-600 dark:text-stone-300">
+          Please{" "}
+          <Link
+            href={`/login?redirect=${encodeURIComponent(ret)}`}
+            className="font-medium text-[var(--accent)] underline underline-offset-2"
+          >
+            sign in
+          </Link>{" "}
+          to continue.
+        </p>
+      </AuthCard>
     );
   }
 
@@ -144,81 +159,72 @@ export function OauthConsentForm() {
     client?.logo_uri && /^(https?:\/\/|data:image\/)/i.test(client.logo_uri)
       ? client.logo_uri
       : null;
+  let clientHost: string | null = null;
+  if (safeClientUri) {
+    try {
+      clientHost = new URL(safeClientUri).host;
+    } catch {
+      clientHost = null;
+    }
+  }
+
+  const noScopes = grantable.length === 0;
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        {safeLogoUri ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={safeLogoUri} alt="" className="h-10 w-10 rounded" />
-        ) : null}
-        <div>
-          <p className="text-base font-semibold text-stone-900 dark:text-stone-100">{appName}</p>
-          {safeClientUri ? (
-            <a
-              href={safeClientUri}
-              className="text-xs text-stone-500 underline dark:text-stone-400"
-              target="_blank"
-              rel="noreferrer"
-            >
-              {safeClientUri}
-            </a>
-          ) : null}
-        </div>
-      </div>
+    <AuthCard
+      footer={
+        <>
+          <button
+            type="button"
+            disabled={busy !== null}
+            onClick={() => act("deny")}
+            className={outlineButtonClass}
+          >
+            {busy === "deny" ? "Denying…" : "Deny"}
+          </button>
+          <button
+            type="button"
+            disabled={busy !== null || noScopes}
+            onClick={() => act("approve")}
+            className={primaryButtonClass}
+          >
+            {busy === "approve" ? "Approving…" : "Allow access"}
+          </button>
+        </>
+      }
+    >
+      <ConnVisual node="lock" letter={appName} logo={safeLogoUri} />
+      <CardTitle>
+        <span className="font-semibold">{appName}</span> wants to access your Releases account
+      </CardTitle>
+      {clientHost ? (
+        <IdentityRow verified>
+          <a
+            href={safeClientUri ?? undefined}
+            target="_blank"
+            rel="noreferrer"
+            className="hover:underline"
+          >
+            {clientHost}
+          </a>
+        </IdentityRow>
+      ) : null}
 
-      <p className="text-sm text-stone-600 dark:text-stone-300">
-        <span className="font-medium text-stone-900 dark:text-stone-100">{appName}</span> is
-        requesting access to your Releases account:
-      </p>
+      <Divider />
 
-      <ul className="space-y-2">
-        {grantable.map((scope) => {
-          const label = SCOPE_LABELS[scope] ?? { title: scope, desc: "" };
-          return (
-            <li
-              key={scope}
-              className="border border-stone-200 bg-white px-3 py-2 text-sm dark:border-stone-800 dark:bg-stone-950"
-            >
-              <p className="font-medium text-stone-900 dark:text-stone-100">{label.title}</p>
-              {label.desc ? (
-                <p className="text-xs text-stone-500 dark:text-stone-400">{label.desc}</p>
-              ) : null}
-            </li>
-          );
-        })}
-      </ul>
-
-      {grantable.length === 0 ? (
-        <p className="text-sm text-stone-500 dark:text-stone-400">
+      {noScopes ? (
+        <p className="text-center text-sm text-stone-500 dark:text-stone-400">
           No grantable scopes were requested, or none match your account permissions.
         </p>
-      ) : null}
+      ) : (
+        <ScopeGroups appName={appName} scopes={grantable} />
+      )}
 
-      {error ? (
-        <p role="alert" className="text-sm text-red-600 dark:text-red-400">
-          {error}
-        </p>
-      ) : null}
+      {error ? <AuthError>{error}</AuthError> : null}
 
-      <div className="flex gap-3">
-        <button
-          type="button"
-          disabled={busy !== null || grantable.length === 0}
-          onClick={() => act("approve")}
-          className={approveClass}
-        >
-          {busy === "approve" ? "Approving…" : "Allow access"}
-        </button>
-        <button
-          type="button"
-          disabled={busy !== null}
-          onClick={() => act("deny")}
-          className={denyClass}
-        >
-          {busy === "deny" ? "Denying…" : "Deny"}
-        </button>
-      </div>
-    </div>
+      <RevokeNote>
+        You can revoke this access anytime from <Code>/account</Code>.
+      </RevokeNote>
+    </AuthCard>
   );
 }
