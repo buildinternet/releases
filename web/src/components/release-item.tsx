@@ -96,7 +96,7 @@ function FeedMediaThumb({
 }
 
 const markdownClasses =
-  "prose prose-sm prose-stone dark:prose-invert max-w-none text-[13px] leading-relaxed [&_h1]:text-sm [&_h1]:font-semibold [&_h1]:mt-2 [&_h1]:mb-1 [&_h2]:text-sm [&_h2]:font-semibold [&_h2]:mt-2 [&_h2]:mb-1 [&_h3]:text-[13px] [&_h3]:font-semibold [&_h3]:mt-1.5 [&_h3]:mb-0.5 [&_ul]:my-1 [&_ul]:pl-4 [&_li]:my-0 [&_p]:my-1 [&_a]:text-stone-600 dark:[&_a]:text-stone-400 [&_a]:no-underline [&_code]:text-[13px] [&_code]:bg-stone-100 dark:[&_code]:bg-stone-800 [&_code]:px-1 [&_code]:rounded [&_code::before]:content-none [&_code::after]:content-none";
+  "prose prose-sm prose-stone dark:prose-invert max-w-none break-words text-[13px] leading-relaxed [&_h1]:text-sm [&_h1]:font-semibold [&_h1]:mt-2 [&_h1]:mb-1 [&_h2]:text-sm [&_h2]:font-semibold [&_h2]:mt-2 [&_h2]:mb-1 [&_h3]:text-[13px] [&_h3]:font-semibold [&_h3]:mt-1.5 [&_h3]:mb-0.5 [&_ul]:my-1 [&_ul]:pl-4 [&_li]:my-0 [&_p]:my-1 [&_a]:text-stone-600 dark:[&_a]:text-stone-400 [&_a]:no-underline [&_code]:text-[13px] [&_code]:bg-stone-100 dark:[&_code]:bg-stone-800 [&_code]:px-1 [&_code]:rounded [&_code::before]:content-none [&_code::after]:content-none";
 
 export function ReleaseListItem({
   release,
@@ -214,12 +214,14 @@ export function ReleaseListItem({
       className="group/item flex gap-0 relative"
       {...(titleId ? { "aria-labelledby": titleId } : {})}
     >
-      {/* Left rail: date + source byline + timeline */}
-      <div className="w-[100px] shrink-0 relative flex flex-col items-end pr-5 pt-5 gap-1">
+      {/* Left rail: date + source byline + timeline. Below `sm` the date moves
+          inline into the content (see below) and the rail collapses to a thin
+          timeline gutter so the narrow viewport isn't spent on a date column. */}
+      <div className="w-[16px] shrink-0 relative flex flex-col items-end pr-0 pt-5 gap-1 sm:w-[100px] sm:pr-5">
         {!hideDate && (
           <time
             dateTime={release.publishedAt ?? undefined}
-            className="text-[12px] text-stone-400 dark:text-stone-500 whitespace-nowrap tabular-nums"
+            className="hidden text-[12px] text-stone-400 dark:text-stone-500 whitespace-nowrap tabular-nums sm:block"
           >
             {formatDate(release.publishedAt)}
           </time>
@@ -228,9 +230,17 @@ export function ReleaseListItem({
         <div className="absolute right-0 top-[22px] w-[7px] h-[7px] rounded-full bg-stone-300 dark:bg-stone-600 translate-x-[3px] z-10" />
       </div>
       {/* Timeline line */}
-      <div className="absolute left-[100px] top-0 bottom-0 w-px bg-stone-200 dark:bg-stone-800" />
+      <div className="absolute left-[16px] top-0 bottom-0 w-px bg-stone-200 dark:bg-stone-800 sm:left-[100px]" />
       {/* Content */}
       <div className="flex-1 min-w-0 border-b border-stone-200 dark:border-stone-800 last:border-b-0 py-4 pl-5">
+        {!hideDate && release.publishedAt && (
+          <time
+            dateTime={release.publishedAt}
+            className="mb-1 block text-[12px] text-stone-400 dark:text-stone-500 tabular-nums sm:hidden"
+          >
+            {formatDate(release.publishedAt)}
+          </time>
+        )}
         {appStore && (
           <div
             className="group relative cursor-pointer"

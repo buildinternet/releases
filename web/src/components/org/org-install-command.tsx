@@ -15,7 +15,7 @@ export function OrgInstallCommand({ identifier }: { identifier: string }) {
   const command = `npx @buildinternet/releases get ${identifier}`;
 
   return (
-    <div className="flex h-[42px] min-w-[280px] max-w-[440px] flex-1 items-center gap-2.5 rounded-[10px] border border-[var(--line)] bg-[var(--surface-2)] pl-3.5 pr-1.5">
+    <div className="flex h-[42px] w-full min-w-0 max-w-[440px] items-center gap-2.5 rounded-[10px] border border-[var(--line)] bg-[var(--surface-2)] pl-3.5 pr-1.5 sm:w-auto sm:min-w-[280px] sm:flex-1">
       <span className="select-none font-mono text-[13px] text-[var(--good)]">$</span>
       <code className="min-w-0 flex-1 truncate font-mono text-[12.5px] text-[var(--fg-2)]">
         <CommandSyntax command={command} />

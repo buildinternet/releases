@@ -105,7 +105,7 @@ export function OrgActivityPanel({
                 key={r.slug}
                 className="flex items-center gap-3.5 border-t border-[var(--line)] px-4 py-3 first:border-t-0"
               >
-                <span className="min-w-[120px] text-[14px] font-semibold text-[var(--fg)]">
+                <span className="min-w-0 truncate text-[14px] font-semibold text-[var(--fg)] sm:min-w-[120px]">
                   {r.name}
                 </span>
                 <span className="flex-1 truncate font-mono text-[11.5px] text-[var(--fg-3)]">
@@ -117,7 +117,7 @@ export function OrgActivityPanel({
                   width={72}
                   height={22}
                   color="var(--accent)"
-                  className="shrink-0 text-[var(--fg-3)]"
+                  className="hidden shrink-0 text-[var(--fg-3)] sm:block"
                 />
                 <span className="w-[42px] text-right font-mono text-[15px] font-semibold text-[var(--fg)]">
                   {r.count}

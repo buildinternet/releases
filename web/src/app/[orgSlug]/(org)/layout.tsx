@@ -76,8 +76,9 @@ export default async function OrgLayout({
           <span className="text-[var(--fg-2)]">{org.name}</span>
         </div>
 
-        {/* Org header */}
-        <div className="flex items-start gap-[18px] pb-5 pt-5">
+        {/* Org header. Wraps on narrow screens so the Follow/Admin actions drop
+            below the name+meta instead of overlapping a squeezed title. */}
+        <div className="flex flex-wrap items-start gap-x-[18px] gap-y-3 pb-5 pt-5">
           {hasAvatar && (
             <span className="flex h-[54px] w-[54px] shrink-0 items-center justify-center rounded-[14px] border border-[var(--line)] bg-[var(--surface-2)]">
               <OrgAvatar
@@ -88,7 +89,7 @@ export default async function OrgLayout({
               />
             </span>
           )}
-          <div className="min-w-0 flex-1 pt-px">
+          <div className="min-w-0 grow basis-[180px] pt-px">
             <h1 className="text-[27px] font-semibold leading-tight tracking-tight text-[var(--fg)]">
               {org.name}
             </h1>
@@ -127,8 +128,9 @@ export default async function OrgLayout({
           </div>
         </div>
 
-        {/* Action row: install command + agent copy */}
-        <div className="mb-6 flex flex-wrap items-center gap-3">
+        {/* Action row: install command + agent copy. Stacks on narrow screens so
+            the install command gets full width (otherwise it truncates to "npx …"). */}
+        <div className="mb-6 flex flex-col items-start gap-3 sm:flex-row sm:flex-wrap sm:items-center">
           <OrgInstallCommand identifier={org.slug} />
           <AgentCopyButton
             orgName={org.name}
@@ -145,7 +147,7 @@ export default async function OrgLayout({
           devAdmin={devAdmin}
           latestReleaseAt={latestReleaseAt(org.sources)}
         />
-        <div className="flex flex-col items-start gap-10 pb-24 pt-7 md:flex-row">
+        <div className="flex flex-col gap-10 pb-24 pt-7 md:flex-row md:items-start">
           <main className="min-w-0 flex-1">{children}</main>
           <OrgContextRail
             domain={org.domain}
