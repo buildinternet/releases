@@ -368,12 +368,13 @@ function ReleaseRollupRow({
   return (
     <>
       <article className="group/item flex gap-0 relative">
-        {/* Left rail: date + timeline dot (mirrors ReleaseListItem) */}
-        <div className="w-[100px] shrink-0 relative flex flex-col items-end pr-5 pt-5 gap-1">
-          {!hideDate && (
+        {/* Left rail: date + timeline dot (mirrors ReleaseListItem). Below `sm`
+            the date moves inline and the rail collapses to a thin gutter. */}
+        <div className="w-[16px] shrink-0 relative flex flex-col items-end pr-0 pt-5 gap-1 sm:w-[100px] sm:pr-5">
+          {!hideDate && newest.publishedAt && (
             <time
-              dateTime={newest.publishedAt ?? undefined}
-              className="text-[12px] text-stone-400 dark:text-stone-500 whitespace-nowrap tabular-nums"
+              dateTime={newest.publishedAt}
+              className="hidden text-[12px] text-stone-400 dark:text-stone-500 whitespace-nowrap tabular-nums sm:block"
             >
               {formatDate(newest.publishedAt)}
             </time>
@@ -381,9 +382,17 @@ function ReleaseRollupRow({
           <div className="absolute right-0 top-[22px] w-[7px] h-[7px] rounded-full bg-stone-300 dark:bg-stone-600 translate-x-[3px] z-10" />
         </div>
         {/* Timeline line */}
-        <div className="absolute left-[100px] top-0 bottom-0 w-px bg-stone-200 dark:bg-stone-800" />
+        <div className="absolute left-[16px] top-0 bottom-0 w-px bg-stone-200 dark:bg-stone-800 sm:left-[100px]" />
         {/* Content: summary header */}
         <div className="flex-1 min-w-0 border-b border-stone-200 dark:border-stone-800 last:border-b-0 py-4 pl-5">
+          {!hideDate && newest.publishedAt && (
+            <time
+              dateTime={newest.publishedAt}
+              className="mb-1 block text-[12px] text-stone-400 dark:text-stone-500 tabular-nums sm:hidden"
+            >
+              {formatDate(newest.publishedAt)}
+            </time>
+          )}
           <button
             type="button"
             onClick={() => setOpen((v) => !v)}

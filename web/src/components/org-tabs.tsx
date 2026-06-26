@@ -35,7 +35,7 @@ function resolveActiveTab(pathname: string, orgSlug: string): OrgTab {
 }
 
 function orgTabClass(active: boolean): string {
-  return `-mb-px border-b-2 py-3 text-[14px] transition-colors ${
+  return `-mb-px shrink-0 border-b-2 py-3 text-[14px] transition-colors ${
     active
       ? "border-[var(--accent)] font-semibold text-[var(--fg)]"
       : "border-transparent font-medium text-[var(--fg-2)] hover:text-[var(--fg)]"
@@ -43,7 +43,7 @@ function orgTabClass(active: boolean): string {
 }
 
 const railLinkClass =
-  "inline-flex items-center gap-1.5 py-3 text-[13px] text-[var(--fg-3)] transition-colors hover:text-[var(--fg-2)]";
+  "inline-flex shrink-0 items-center gap-1.5 py-3 text-[13px] text-[var(--fg-3)] transition-colors hover:text-[var(--fg-2)]";
 
 export function OrgTabs({
   orgSlug,
@@ -108,7 +108,7 @@ export function OrgTabs({
   }, [latestReleaseAt, seenKey, activeTab]);
 
   return (
-    <div className="flex items-center gap-6 border-b border-[var(--line)]">
+    <div className="flex items-center gap-6 overflow-x-auto border-b border-[var(--line)] [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
       <Link href={base} className={orgTabClass(activeTab === "overview")} scroll={false}>
         Overview
       </Link>
@@ -133,7 +133,7 @@ export function OrgTabs({
         Sources
       </Link>
       {showAdminTabs && (
-        <div className="ml-auto flex items-center gap-5">
+        <div className="flex shrink-0 items-center gap-5 sm:ml-auto">
           <Link href={`${base}/fetch-log`} className={railLinkClass} scroll={false}>
             <CodeBrackets />
             Fetch Log

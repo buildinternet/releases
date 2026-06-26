@@ -77,13 +77,13 @@ export function HighlightsView({ rolling, monthly }: HighlightsViewProps) {
       {/* Monthly summaries */}
       {sortedMonthly.map((m) => (
         <div key={`${m.year}-${m.month}`} className="flex gap-0 relative">
-          <div className="w-[100px] shrink-0 relative flex flex-col items-end pr-5 pt-4">
-            <span className="text-[12px] text-stone-400 dark:text-stone-500 whitespace-nowrap tabular-nums">
+          <div className="w-[16px] shrink-0 relative flex flex-col items-end pr-0 pt-4 sm:w-[100px] sm:pr-5">
+            <span className="hidden text-[12px] text-stone-400 dark:text-stone-500 whitespace-nowrap tabular-nums sm:block">
               {m.year && m.month ? formatMonth(m.year, m.month) : ""}
             </span>
             <div className="absolute right-0 top-[20px] w-[7px] h-[7px] rounded-full bg-stone-300 dark:bg-stone-600 translate-x-[3px] z-10" />
           </div>
-          <div className="absolute left-[100px] top-0 bottom-0 w-px bg-stone-200 dark:bg-stone-800" />
+          <div className="absolute left-[16px] top-0 bottom-0 w-px bg-stone-200 dark:bg-stone-800 sm:left-[100px]" />
           <div className="flex-1 min-w-0 border-t border-stone-200 dark:border-stone-800 py-4 pl-5">
             <div className="flex items-center justify-between mb-2">
               <span className="text-[11px] uppercase tracking-wide text-stone-400 dark:text-stone-500 font-medium">
