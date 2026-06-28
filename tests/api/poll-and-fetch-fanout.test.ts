@@ -160,8 +160,9 @@ describe("fanOutPollAndFetch SourceActor cohort partition", () => {
       await import("../../workers/api/src/lib/source-actor-cohort");
     const { flag, FLAGS } = await import("@releases/lib/flags");
 
+    // Mirror production's options (fanOutPollAndFetch passes changeDetectEnabled).
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const dueAll = await queryDueSources(db as any, new Date());
+    const dueAll = await queryDueSources(db as any, new Date(), { changeDetectEnabled: true });
     const enabled = await flag(undefined, opts.enabledVar, FLAGS.sourceActorEnabled);
     const pct = parseCohortPct(opts.cohortPctVar);
     const ensured: string[] = [];

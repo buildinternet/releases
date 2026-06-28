@@ -181,7 +181,35 @@ describe("SourceActor.alarm", () => {
     expect(alarm).toBeGreaterThan(Date.now() + 19 * HOUR);
   });
 
-  it("paused source does not fetch or reschedule", async () => {
+  it("fetches a never-polled source immediately on its first alarm", async () => {
+    const db = mkDb();
+    // lastPolledAt defaults to null (never polled) — the cron seeds it as due, so
+    // the actor must fetch now, not push out a full tier interval.
+    seedSource(db, "src_new");
+    const h = mkActor(db);
+    h.store.set("sourceId", "src_new");
+
+    await h.actor.alarm();
+
+    expect(h.created).toHaveLength(1);
+  });
+
+  it("never-polled but backed off waits for nextFetchAfter", async () => {
+    const db = mkDb();
+    seedSource(db, "src_new_backoff", {
+      lastPolledAt: null,
+      nextFetchAfter: new Date(Date.now() + 12 * HOUR).toISOString(),
+    });
+    const h = mkActor(db);
+    h.store.set("sourceId", "src_new_backoff");
+
+    await h.actor.alarm();
+
+    expect(h.created).toHaveLength(0);
+    expect(h.alarmAt()!).toBeGreaterThan(Date.now() + 11 * HOUR);
+  });
+
+  it("paused source does not fetch or reschedule, and clears the D1 mirror", async () => {
     const db = mkDb();
     seedSource(db, "src_paused", {
       fetchPriority: "paused",
@@ -194,6 +222,9 @@ describe("SourceActor.alarm", () => {
 
     expect(h.created).toHaveLength(0);
     expect(h.alarmAt()).toBeNull();
+    const mirror = await metaSourceActor(db, "src_paused");
+    expect(mirror?.managed).toBe(false);
+    expect(mirror?.nextAlarmAt).toBeNull();
   });
 
   it("in-flight guard: a second immediate alarm does not double-fire", async () => {
@@ -244,6 +275,8 @@ describe("SourceActor.alarm", () => {
     expect(h.created).toHaveLength(0);
     expect(h.alarmAt()).toBeNull();
     expect(await h.actor.getState()).toBeNull();
+    const mirror = await metaSourceActor(db, "src_unmanage");
+    expect(mirror?.managed).toBe(false);
   });
 
   it("stops when the source row is gone", async () => {

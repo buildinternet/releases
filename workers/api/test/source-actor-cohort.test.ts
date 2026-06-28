@@ -39,10 +39,11 @@ describe("isSourceActorManaged", () => {
   });
 
   it("widens monotonically with pct (a managed source stays managed as pct rises)", () => {
-    // Find a source managed at 10%, assert it's still managed at 50% and 90%.
-    const id = ["a", "b", "c", "d", "e", "f", "g", "h"]
-      .map((s) => `src_${s}`)
-      .find((s) => isSourceActorManaged(s, true, 10, true));
+    // Find a source managed at 10% via a bounded search (independent of any
+    // specific FNV outputs), then assert it stays managed at 50% and 90%.
+    const id = Array.from({ length: 1000 }, (_, i) => `src_${i}`).find((s) =>
+      isSourceActorManaged(s, true, 10, true),
+    );
     expect(id).toBeDefined();
     expect(isSourceActorManaged(id!, true, 50, true)).toBe(true);
     expect(isSourceActorManaged(id!, true, 90, true)).toBe(true);

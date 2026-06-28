@@ -158,25 +158,35 @@ export class SourceActor extends DurableObject<SourceActorEnv> {
     // cron re-seeds via ensureScheduled once the org unpauses and the source is
     // due again.
     if (await this.orgFetchPaused(row)) {
-      await this.persistState(row, null, false);
-      await this.ctx.storage.deleteAlarm();
+      await this.noReschedule(row);
       return;
     }
 
     // Paused / firecrawl (webhook-driven): no local cadence ⇒ no reschedule.
     if (state.nextDueAt == null) {
-      await this.persistState(row, null, false);
-      await this.ctx.storage.deleteAlarm();
+      await this.noReschedule(row);
       return;
     }
 
-    const nextDueMs = Date.parse(state.nextDueAt);
     const prev = await this.getState();
+
+    // Effective next-due. `computeFetchState` bases a null `last_polled_at` on
+    // `now` (so it'd push a never-polled source out a full tier interval), but
+    // the cron's due predicate treats null `last_polled_at` as DUE NOW. Honor
+    // that here so a freshly-seeded source fetches on its first alarm — while
+    // still respecting a future `next_fetch_after` backoff if one is set.
+    const neverPolled = row.lastPolledAt == null;
+    const backoffMs = row.nextFetchAfter ? Date.parse(row.nextFetchAfter) : NaN;
+    const effectiveDueMs = neverPolled
+      ? Number.isFinite(backoffMs)
+        ? backoffMs
+        : now
+      : Date.parse(state.nextDueAt);
 
     // Not yet due — honors tier cadence + smart-fetch backoff, and makes the
     // alarm idempotent (a double-fire re-reads D1, which the workflow advanced).
-    if (Number.isFinite(nextDueMs) && nextDueMs > now + DUE_SLACK_MS) {
-      await this.scheduleAt(row, nextDueMs, false, prev?.lastFiredAt ?? null);
+    if (Number.isFinite(effectiveDueMs) && effectiveDueMs > now + DUE_SLACK_MS) {
+      await this.scheduleAt(row, effectiveDueMs, false, prev?.lastFiredAt ?? null);
       return;
     }
 
@@ -287,17 +297,32 @@ export class SourceActor extends DurableObject<SourceActorEnv> {
   }
 
   /**
+   * No-reschedule path (org-paused / source-paused / firecrawl): clear the alarm
+   * and persisted timer, and update the D1 mirror to `managed:false` so the dev
+   * fetch-plan panel doesn't keep showing a stale `nextAlarmAt`.
+   */
+  private async noReschedule(row: Source): Promise<void> {
+    await this.persistState(row, null, false);
+    await this.ctx.storage.deleteAlarm();
+    await this.mirrorToD1(row.id, null, false);
+  }
+
+  /**
    * Write-through a tiny observability mirror into `metadata.sourceActor` so the
-   * dev fetch-plan panel can show that a source is actor-managed and its exact
+   * dev fetch-plan panel can show whether a source is actor-managed and its exact
    * next alarm. Best-effort: never block or fail scheduling. No new D1 column /
    * migration (the panel's due/backoff math already reads existing columns the
    * ingest path keeps fresh).
    */
-  private async mirrorToD1(sourceId: string, nextAlarmMs: number): Promise<void> {
+  private async mirrorToD1(
+    sourceId: string,
+    nextAlarmMs: number | null,
+    managed = true,
+  ): Promise<void> {
     const blob = JSON.stringify({
-      nextAlarmAt: new Date(nextAlarmMs).toISOString(),
+      nextAlarmAt: nextAlarmMs == null ? null : new Date(nextAlarmMs).toISOString(),
       lastAlarmAt: new Date().toISOString(),
-      managed: true,
+      managed,
     });
     try {
       await this.db().run(
@@ -317,6 +342,9 @@ export class SourceActor extends DurableObject<SourceActorEnv> {
   private async stop(sourceId: string, reason: string): Promise<void> {
     await this.ctx.storage.deleteAlarm();
     await this.ctx.storage.delete([STATE_KEY]);
+    // Clear the dev-panel mirror so a handed-back / deleted source no longer
+    // shows as actor-managed (no-op UPDATE when the row is already gone).
+    await this.mirrorToD1(sourceId, null, false);
     logEvent("info", { component: "source-actor", event: "stopped", sourceId, reason });
   }
 }

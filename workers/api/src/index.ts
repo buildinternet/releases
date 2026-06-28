@@ -1356,6 +1356,7 @@ async function fanOutPollAndFetch(env: Env["Bindings"], scheduledTime: number): 
 
   let dispatched = 0;
   let dispatchErrors = 0;
+  let ensureErrors = 0;
   let candidates = 0;
   let preflightError: Error | null = null;
   const dispatchErrorDetail: Array<{ orgSlug: string; error: string }> = [];
@@ -1404,6 +1405,11 @@ async function fanOutPollAndFetch(env: Env["Bindings"], scheduledTime: number): 
               .SOURCE_ACTOR!.getByName(s.id)
               .ensureScheduled(s.id)
               .catch((err: unknown) => {
+                ensureErrors += 1;
+                dispatchErrorDetail.push({
+                  orgSlug: s.orgId ?? "unknown",
+                  error: `ensure ${s.id}: ${err instanceof Error ? err.message : String(err)}`,
+                });
                 logEvent("warn", {
                   component: "poll-fetch-cron",
                   event: "source-actor-ensure-failed",
@@ -1477,11 +1483,15 @@ async function fanOutPollAndFetch(env: Env["Bindings"], scheduledTime: number): 
     throw err;
   } finally {
     if (runId) {
+      // `ensureErrors` (actor-seed failures) also degrade the run so a persistent
+      // seeding problem is visible on /status?tab=cron instead of finalizing
+      // `done` — even when every due source was actor-managed (dispatched === 0).
+      const totalErrors = dispatchErrors + ensureErrors;
       const status = preflightError
         ? ("dispatch_failed" as const)
         : dispatchErrors > 0 && dispatched === 0
           ? ("dispatch_failed" as const)
-          : dispatchErrors > 0
+          : totalErrors > 0
             ? ("degraded" as const)
             : ("done" as const);
       if (preflightError) {
@@ -1490,16 +1500,21 @@ async function fanOutPollAndFetch(env: Env["Bindings"], scheduledTime: number): 
           error: preflightError.message,
         });
       }
+      const notes = preflightError
+        ? `preflight failed: ${preflightError.message}`
+        : ensureErrors > 0
+          ? `${ensureErrors} source-actor ensure failure(s)`
+          : null;
       await finalizeRunRow(db, runId, {
         endedAt: new Date().toISOString(),
         status,
         candidates,
         dispatched,
         skippedOverCap: 0,
-        dispatchErrors,
+        dispatchErrors: totalErrors,
         sessionsStarted: [],
         dispatchErrorDetail,
-        notes: preflightError ? `preflight failed: ${preflightError.message}` : null,
+        notes,
       }).catch((err) => {
         logEvent("warn", {
           component: "poll-fetch-cron",
