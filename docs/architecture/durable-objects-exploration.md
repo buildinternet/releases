@@ -82,24 +82,30 @@ One DO per source. Owns the fetch lifecycle.
   backoff. Replaces the `nextFetchAfter` D1 column as the _driver_ (D1 may still mirror it
   for the dev fetch-plan panel; see Observability).
 - `tier` — `normal` (4h) / `low` (24h) / `paused`, mirrored from D1 on PATCH.
+- `lastFetchedAt` — ISO time of the last successful fetch. **Persisted** (not just mirrored
+  to D1), because the rehydration path reconstructs `nextAlarmAt` from it after eviction;
+  see [Eviction / durability](#eviction--durability). Keeping it in DO state is what makes
+  recovery derive from the same source of truth the live path uses.
 - `inFlight` — the single-threaded mutex is implicit (the object processes one alarm at a
   time), so the KV `ma:active:src:*` lock, the dedup window, and `skipDelegation` all go
   away.
 
 ### Behavior
 
-```
+```text
 alarm():
   if paused: return                      # no reschedule
   acquire-implicit-mutex (free: single-threaded)
   result = fetchAndIngest(sourceId)      # writes release rows to D1 (unchanged)
   if result.newReleases:
-     await ProductActor(productId).notifyIngested(result.releaseIds)
+     markReconcilePending(D1, productId, result.releaseIds)  # durable handoff (same tx as rows)
+     try:   await ProductActor(productId).notifyIngested(result.releaseIds)   # fast path
+     catch: leave marker for the parent to drain    # RPC loss ⇒ delayed, not lost
      update backoff = reset
   else:
      update backoff = next step (1h→2h→…→72h)
   setAlarm(now + tierInterval ± perObjectSkew)   # jitter is emergent, not computed
-  writeThroughSchedulerMirror(D1)        # optional, for observability
+  writeThroughSchedulerMirror(D1)        # lastFetchedAt + nextAlarmAt, for observability
 ```
 
 The jitter smear disappears: each source was last fetched at a different wall-clock time,
@@ -129,33 +135,61 @@ One DO per product. Owns cross-source reconciliation.
 
 ### State (DO SQLite — a bounded working cache, NOT the master copy)
 
-- A **rolling 30–90 day window** of recent releases across all the product's sources:
-  `(release_id, source_id, title, url, published_at, content_fingerprint, canonical_id)`.
-  Trimmed by an alarm, exactly like `ReleaseHub`'s 1000-event ring buffer.
+- A **rolling window** of recent releases across all the product's sources:
+  `(release_id, source_id, title, url, published_at, content_fingerprint, canonical_id)`,
+  bounded by **two** caps and trimmed to whichever is tighter:
+  - a **time horizon** (30–90 days — see [open questions](#open-questions-to-settle-before-building)), and
+  - a **hard row cap** (e.g. 500 rows). A time bound alone is _not_ inherently bounded — a
+    high-velocity product (or a backfill burst) can accumulate far more rows than a single DO
+    should hold or scan, breaking the "small indexed table" assumption. The row cap keeps the
+    window's storage and clustering cost flat regardless of velocity.
+
+  Trimming evicts **oldest-first**, exactly like `ReleaseHub`'s 1000-event ring buffer.
+  Eviction is lossless for correctness: trimmed rows still live in D1, so a coverage match
+  against a release older than the window simply degrades to the agent path (a `whats_changed`
+  /grouping session) rather than being missed — the window is a hot cache, not the index.
+
 - `pendingReconcile` — a debounce flag.
 
 ### Behavior
 
-```
-notifyIngested(releaseIds):              # awaited RPC from a child
+```text
+notifyIngested(releaseIds):              # fast-path RPC from a child (best-effort)
   add rows to window (from D1 / payload)
-  if not pendingReconcile:
-     pendingReconcile = true
-     setAlarm(now + 30s)                 # debounce: collapse a burst into one pass
+  scheduleReconcile()
 
 alarm():                                  # reconcile pass (single-threaded, storage-gated)
+  pending = drainReconcileMarkers(D1, productId)   # durable backlog: every child's pending ids
+  add (pending ∪ fast-path) rows to window         # markers are the source of truth, RPC just hurries it
   clusters = clusterWindow()             # local SQL + title/url near-dup + embed distance
   for each new cluster:
      write canonical + coverage links → D1 (onConflictDoNothing — never clobber manual)
      if ambiguous: escalate to grouping-releases agent session (don't guess editorially)
+  clearReconcileMarkers(D1, drained)     # only after the writes commit ⇒ at-least-once
   pendingReconcile = false
-  trimWindow(); maybe setAlarm(trim-horizon)
+  trimWindow(byTimeHorizon AND rowCap)   # oldest-first; see State for the dual cap
+  maybe setAlarm(next trim / backlog-not-empty)
+
+scheduleReconcile():                      # debounce helper
+  if not pendingReconcile:
+     pendingReconcile = true
+     setAlarm(now + 30s)                 # collapse a burst into one pass
 ```
 
 The debounce matters: a burst of sibling sources reporting in collapses into one
 reconciliation pass instead of N. Reconciliation runs in the alarm (storage-gated,
 single-threaded), never inside a child's `fetch()` path — so the source loop stays fast and
 two sources can't double-decide the same launch.
+
+**Durable handoff (no lost reconciliation).** The child→parent `notifyIngested` RPC is a
+_latency optimization, not the delivery guarantee_. If it threw or the parent crashed mid-pass,
+a naive design would silently never reconcile that release set. So the child writes a
+**pending-reconcile marker** to D1 in the same write as the release rows (step 1 below), and
+the parent's alarm **drains the marker table** rather than trusting the RPC payload — clearing
+markers only _after_ the coverage writes commit. That makes the handoff at-least-once: a
+dropped RPC degrades to a slightly delayed reconcile (picked up on the next alarm, which a
+safety-net periodic tick guarantees fires) instead of a lost one. The marker is a tiny outbox
+for the _signal_; the release records themselves still write straight through (see below).
 
 ### Division of labour with the agent
 
@@ -192,18 +226,21 @@ it unchanged.
 
 ### Write path
 
-```
+```text
 SourceActor.alarm
-   ├─► writes release rows ─────────────────────► D1   (the centralized record, unchanged)
-   └─► await ProductActor.notifyIngested(ids)
-          └─► reconciles over its window (DO SQLite = bounded cache)
-          └─► writes coverage links + canonical flag + curated fields ─► D1
+   ├─► writes release rows  + pending-reconcile marker ─► D1   (one write; record unchanged)
+   └─► notifyIngested(ids)  ····(best-effort hurry-up)···►  ProductActor
+          └─► alarm drains the marker table (not the RPC payload) over its window (DO SQLite cache)
+          └─► writes coverage links + canonical flag + curated fields ─► D1, then clears markers
 ```
 
 Two writers, both landing in D1: the source writes the _raw record_, the product writes the
 _decisions about it_ (the same `INSERT … onConflictDoNothing` into `release_coverage` that
-`clusterAndPersistCascades` does today). **No separate sync step, no outbox, no second
-database** — the actors use the same D1 binding ingest uses now.
+`clusterAndPersistCascades` does today). **No separate sync step, no second database** — the
+actors use the same D1 binding ingest uses now. The _one_ durable addition is the tiny
+pending-reconcile marker: it's an outbox for the reconcile **signal**, not for the data, so
+the release records still write straight through and a dropped RPC can't lose a coverage
+decision (see [Durable handoff](#productactor--the-parent) above).
 
 ### What lives where
 
@@ -211,8 +248,9 @@ database** — the actors use the same D1 binding ingest uses now.
 | --------------------------------------------------- | ----------------------------------------------------- |
 | fetch timer / next-alarm / backoff counter          | canonical release rows                                |
 | in-flight fetch lock (the single-thread mutex)      | coverage links + canonical / curated fields           |
-| `ProductActor`'s rolling 30–90 day reconcile window | products, orgs, sources — everything read paths query |
-| `pendingReconcile` debounce flag                    | search / embedding indexes                            |
+| `ProductActor`'s reconcile window (time + row cap)  | products, orgs, sources — everything read paths query |
+| `pendingReconcile` debounce flag                    | pending-reconcile markers (durable handoff backlog)   |
+| `lastFetchedAt` (persisted; mirrored for the panel) | search / embedding indexes                            |
 
 The framing: **the DO owns the _decision_; D1 owns the _record_.** The DO is where "are
 these the same launch?" gets computed (it needs single-threaded cross-source coordination);
