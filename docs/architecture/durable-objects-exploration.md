@@ -206,11 +206,55 @@ skill; the actor's job for hard cases is to _escalate_, not to guess.
   the fallback parent** (`getByName(orgId)`) for orphan sources — same actor class, two
   grains, not two implementations.
 - **Cross-product coverage.** Rare launches span two products; product-scoped reconciliation
-  has a blind spot the org grain would catch. Accept it, or route those to the agent path.
+  has a blind spot. Resolution: the `ProductActor` _escalates_ the ambiguous cluster **up to
+  the org grain** (see [Org grain](#org-grain--when-it-earns-a-do)), which holds a thin
+  org-wide fingerprint index to adjudicate — rather than widening every product's window to
+  org scope.
 - **Re-parenting is mutable.** A source can be PATCHed to a different product. DOs don't
   migrate membership automatically — the edit must notify both old and new parent actors.
 - **Don't let it become a global DO in disguise.** It holds only the bounded working set;
   D1 stays the store.
+
+### Org grain — when it earns a DO
+
+The org sits above the product, so it's tempting to ask whether reconciliation should just
+live there, or whether a third `OrgActor` tier belongs in the hierarchy. The honest answer is
+**narrow**: the org is an atom of _aggregation/identity_, not of hot-path _coordination_, so
+it's less DO-shaped than source or product. Most org-level concerns — overview regen
+(`OVERVIEW_STALE_DAYS = 30`, a **weekly** cron), `.well-known` identity, avatar, `fetchPaused`
+— are low-frequency batch work a cron already handles. By the same "be judicious — every actor
+is permanent coordination surface" discipline this repo applies to feature flags, don't add an
+`OrgActor` class to host them.
+
+**Org as the reconciliation atom (replacing `ProductActor`) is the wrong trade**, even though
+the `grouping-releases` skill already thinks in "an org's recent releases":
+
+- _Hotter object, worse with the row cap._ A large org's window dwarfs a product's, so the
+  size-cap/compaction pressure worsens and one object single-threads grouping for the whole org.
+- _Worse precision._ Most coverage is **intra-product** (marketing post + changelog + app note
+  for the same product). Clustering org-wide compares unrelated products → more candidate pairs,
+  more false-positive groupings.
+- _Loses the clean parent-child story_ (product = coordination unit; org = aggregation above it).
+
+Where an org grain **does** earn a DO — added late, and as the **same actor class keyed by
+`orgId`**, not a new class:
+
+1. **Cross-product coverage escalation.** The adjudication target for the honest-edge above:
+   a `ProductActor` escalates a maybe-cross-product cluster up to the org-keyed instance, which
+   keeps a thin org-wide fingerprint index. Common intra-product grouping stays at the product
+   grain; only the rare cross-product case touches the org.
+2. **Per-org concurrency / fairness semaphore.** The one genuinely _hot-path, serialization-
+   shaped_ org concern, and the strongest new argument. The scrape-agent sweep caps managed-agent
+   sessions **globally** (`SCRAPE_AGENT_MAX_SESSIONS`), so a big org can starve small ones. An
+   org-keyed DO is a clean per-org budget ("max N concurrent MA sessions for this org") — a
+   semaphore, exactly what a single-threaded DO is good at.
+3. **(Optional, later) event-driven overview regen + config cascade.** Children notify the org
+   "I ingested N new releases"; the org debounces and regenerates the overview only when it
+   actually changed, retiring the weekly sweep. Real but modest — pursue only if you want the
+   cron gone. This is sequencing step 3 below.
+
+**Net:** keep `ProductActor` as the reconciliation atom; reach for the org grain only when you
+hit cross-product escalation or per-org fairness — not as an eager third tier.
 
 ## The consistency model: DOs own decisions, D1 owns records
 
