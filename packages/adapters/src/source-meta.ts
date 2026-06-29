@@ -328,6 +328,22 @@ export interface SourceMetadata {
     provider: "zendesk";
     releaseType?: "feature" | "rollup";
   };
+
+  /**
+   * Write-through observability mirror written by the SourceActor DO on each
+   * alarm tick. Absent on sources not managed by the actor, or after the actor
+   * has handed the source back to the cron (`managed: false`). Used by the dev
+   * fetch-plan panel to show actor-managed sources and their exact next alarm.
+   * Never used for routing or scheduling — purely observational.
+   */
+  sourceActor?: {
+    /** ISO timestamp of the actor's next scheduled alarm; null while idle. */
+    nextAlarmAt: string | null;
+    /** ISO timestamp of the most recent alarm execution. */
+    lastAlarmAt: string;
+    /** True while the actor is driving this source; false when handed back. */
+    managed: boolean;
+  };
 }
 
 /** Parse the JSON metadata blob from a source row. */

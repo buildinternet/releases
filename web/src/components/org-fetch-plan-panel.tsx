@@ -6,7 +6,7 @@ import {
   syncFirecrawlAction,
   type ActionResult,
 } from "@/app/actions/source-admin";
-import { useFetchPlan, type FetchPlanRow } from "./use-fetch-plan";
+import { useFetchPlan, type FetchPlanRow, type SourceActorMirror } from "./use-fetch-plan";
 import { relativeTime } from "./fetch-log-shared";
 
 // Single source of truth for the priority dropdown: drives both the option list
@@ -18,6 +18,20 @@ const TIERS = [
   { value: "paused", label: "paused" },
 ] as const;
 type Priority = (typeof TIERS)[number]["value"];
+
+function ActorBadge({ actor }: { actor: SourceActorMirror }) {
+  const title = actor.nextAlarmAt
+    ? `Actor-managed — next alarm ${new Date(actor.nextAlarmAt).toLocaleString()}`
+    : `Actor-managed — no alarm scheduled`;
+  return (
+    <span
+      className="ml-1.5 text-[10px] font-sans uppercase tracking-wide text-sky-500"
+      title={title}
+    >
+      actor
+    </span>
+  );
+}
 
 function StarvedBadge({ staleHours }: { staleHours: number | null }) {
   const label =
@@ -40,6 +54,20 @@ function NextDueCell({ row, now }: { row: FetchPlanRow; now: number }) {
   if (row.plan.cadence === "firecrawl-webhook")
     return <span className="text-stone-400">webhook</span>;
   if (row.plan.paused) return <span className="text-stone-400">—</span>;
+
+  // When the SourceActor DO is driving this source, show its alarm time
+  // directly — it's more accurate than the cron-math projection.
+  if (row.sourceActor?.managed && row.sourceActor.nextAlarmAt) {
+    return (
+      <span className="text-stone-500">
+        {relativeTime(row.sourceActor.nextAlarmAt, now)}
+        <span className="ml-1.5 text-[10px] font-sans uppercase tracking-wide text-sky-500">
+          actor
+        </span>
+      </span>
+    );
+  }
+
   return (
     <span className="text-stone-500">
       {relativeTime(row.state.nextDueAt, now)}
@@ -111,6 +139,7 @@ function PlanRowItem({
         >
           Flow
         </button>
+        {row.sourceActor?.managed && <ActorBadge actor={row.sourceActor} />}
         {row.sweep.starved && <StarvedBadge staleHours={row.sweep.staleHours} />}
         {err && <div className="text-[10px] font-sans text-red-500 mt-0.5">{err}</div>}
       </div>
