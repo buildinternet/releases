@@ -101,6 +101,12 @@ import {
   parsePositiveInt,
   type EnrichOutcome,
 } from "./feed-enrich.js";
+import { isSourceActorManaged, parseCohortPct } from "../lib/source-actor-cohort.js";
+
+/** Narrow RPC slice of SourceActor used by the #1780 delegation seam. */
+interface SourceActorDelegateRpc {
+  delegateScrape(sourceId: string): Promise<{ proceed: boolean }>;
+}
 
 // ── Tier intervals (hours) ──
 // `TIER_INTERVALS` is sourced from @releases/adapters/fetch-plan (imported above)
@@ -696,6 +702,20 @@ export interface FetchOneEnv extends IndexNowEnv, TextModelEnv {
   // on, an ingested `image/gif` is stored as a small MP4 instead of the raw GIF.
   MEDIA_TRANSFORM?: MediaTransformBinding;
   MEDIA_GIF_TRANSCODE_ENABLED?: string;
+  /**
+   * SourceActor DO binding for the MA-delegation routing seam (#1780). When
+   * present AND the source is in the actor-managed cohort, `fetchOne` routes
+   * through the actor's `delegateScrape` stub before calling
+   * `delegateScrapeToDiscovery`. Absent → seam is a complete no-op.
+   *
+   * Unparameterized because the full `SourceActor` class is in
+   * `workers/api/src/source-actor.ts` and importing it here would be circular
+   * (source-actor.ts does not import from poll-fetch). `fetchOne` casts via
+   * `SourceActorDelegateRpc` (the narrow RPC slice it needs).
+   */
+  SOURCE_ACTOR?: DurableObjectNamespace;
+  SOURCE_ACTOR_ENABLED?: string;
+  SOURCE_ACTOR_COHORT_PCT?: string;
 }
 
 /**
@@ -1830,6 +1850,40 @@ export async function fetchOne(
           meta.feedContentDepth === "summary-only" ? "summary-only" : "all-items-empty-content",
         feedItemCount: rawReleases.length,
       });
+
+      // #1780 scaffold: route actor-managed sources through the SourceActor DO.
+      // Phase 1: the stub always returns { proceed: true } → fall through to the
+      // existing delegateScrapeToDiscovery path. Net behavior is unchanged; no
+      // KV lock is removed; no skipDelegation guard is touched.
+      if (env.SOURCE_ACTOR) {
+        const cohortPct = parseCohortPct(env.SOURCE_ACTOR_COHORT_PCT);
+        const enabled = await flag(env.FLAGS, env.SOURCE_ACTOR_ENABLED, FLAGS.sourceActorEnabled);
+        if (isSourceActorManaged(source.id, enabled, cohortPct, true)) {
+          try {
+            const stub = env.SOURCE_ACTOR.getByName(source.id) as unknown as SourceActorDelegateRpc;
+            const signal = await stub.delegateScrape(source.id);
+            if (!signal.proceed) {
+              // Phase 2+: actor serialized the call; session is already running.
+              return {
+                releasesFound: 0,
+                releasesInserted: 0,
+                durationMs: 0,
+                status: "no_change" as const,
+              };
+            }
+            // Phase 1: proceed === true → fall through to delegateScrapeToDiscovery.
+          } catch {
+            // Fail open: actor unavailable or error → use existing path.
+            logEvent("warn", {
+              component: "cron-poll-fetch",
+              event: "source-actor-delegate-scrape-failed",
+              sourceId: source.id,
+              sourceSlug: source.slug,
+            });
+          }
+        }
+      }
+
       return await delegateScrapeToDiscovery(db, source, env);
     }
 

@@ -122,6 +122,29 @@ export class SourceActor extends DurableObject<SourceActorEnv> {
     return (await this.ctx.storage.get<SourceActorState>(STATE_KEY)) ?? null;
   }
 
+  /**
+   * Phase 1 stub for the MA-delegation routing seam (#1780).
+   *
+   * When `fetchOne` is about to call `delegateScrapeToDiscovery` for an
+   * actor-managed source it first calls this method. The DO's single-event-loop
+   * guarantee is the future serialization primitive — Phase 2 will implement the
+   * real logic here (acquire, call `startManagedFetchSession`, return
+   * `{ proceed: false }` so the caller skips the duplicate delegation).
+   *
+   * Phase 1: always returns `{ proceed: true }` so the caller falls through to
+   * the existing `delegateScrapeToDiscovery` path. Net behavior is unchanged;
+   * no KV lock is removed; no `skipDelegation` guard is touched.
+   */
+  async delegateScrape(sourceId: string): Promise<{ proceed: boolean }> {
+    logEvent("info", {
+      component: "source-actor",
+      event: "delegate-scrape-stub",
+      sourceId,
+    });
+    // Phase 2: call startManagedFetchSession here and return { proceed: false }.
+    return { proceed: true };
+  }
+
   async alarm(): Promise<void> {
     const sourceId = await this.ctx.storage.get<string>(SOURCE_ID_KEY);
     if (!sourceId) {
