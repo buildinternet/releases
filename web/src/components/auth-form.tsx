@@ -13,6 +13,14 @@ import {
 import { safeRedirect } from "@/lib/auth-redirect";
 import { authOriginSupport } from "@/lib/auth-ui";
 import { SOCIAL_PROVIDERS, PROVIDER_META } from "@/lib/social-providers";
+import {
+  AuthCard,
+  AuthError,
+  AuthHeading,
+  Code,
+  outlineButtonClass,
+  primaryButtonClass,
+} from "@/components/auth-flow";
 
 type Mode = "login" | "signup";
 
@@ -57,7 +65,7 @@ const DEV_EMAIL_NOTICE = process.env.NODE_ENV === "development";
 function DevEmailNotice({ compact = false }: { compact?: boolean }) {
   if (!DEV_EMAIL_NOTICE) return null;
   return (
-    <div className="border border-amber-300 bg-amber-50 px-3 py-2.5 text-[13px] leading-5 text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200">
+    <div className="rounded-[12px] border border-amber-300 bg-amber-50 px-3.5 py-2.5 text-[13px] leading-5 text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200">
       <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em]">
         Dev mode
       </span>{" "}
@@ -79,7 +87,7 @@ function DevEmailNotice({ compact = false }: { compact?: boolean }) {
 function UnsupportedOriginNotice({ href }: { href: string }) {
   return (
     <div
-      className="border border-amber-300 bg-amber-50 px-3 py-2.5 text-[13px] leading-5 text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200"
+      className="rounded-[12px] border border-amber-300 bg-amber-50 px-3.5 py-2.5 text-[13px] leading-5 text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200"
       role="alert"
     >
       <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em]">
@@ -105,9 +113,8 @@ function prettyError(error: { message?: string } | null, mode: Mode): string {
 }
 
 const inputClass =
-  "mt-2 w-full border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-950 px-3 py-2.5 text-sm text-stone-900 dark:text-stone-100 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20";
-const labelClass =
-  "block text-[11px] font-medium uppercase tracking-[0.18em] text-stone-500 dark:text-stone-400";
+  "mt-2 w-full rounded-[11px] border border-stone-200 bg-white px-3.5 py-2.5 text-[14px] text-stone-900 outline-none transition placeholder:text-stone-400 focus:border-[var(--accent)] dark:border-stone-700 dark:bg-stone-950/60 dark:text-stone-100 dark:placeholder:text-stone-500";
+const labelClass = "block text-[12.5px] font-medium text-stone-700 dark:text-stone-200";
 
 /**
  * Small pill marking the method the returning user last signed in with. Uses
@@ -407,16 +414,11 @@ export function AuthForm({ mode, redirectTo = "/" }: { mode: Mode; redirectTo?: 
     const resendLabel = isMagic ? "Resend sign-in link" : "Resend verification email";
     const resendBusy = isMagic ? magicSending : pending;
     return (
-      <div className="space-y-5">
-        <div>
-          <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-stone-400 dark:text-stone-500">
-            Check your email
-          </p>
-          <h2 className="mt-3 text-lg font-semibold tracking-tight text-stone-900 dark:text-stone-100">
-            {heading}
-          </h2>
-          <p className="mt-3 text-sm leading-6 text-stone-500 dark:text-stone-400">
-            {pendingEmail ? (
+      <AuthCard>
+        <AuthHeading
+          title={heading}
+          subtitle={
+            pendingEmail ? (
               <>
                 We sent a {linkNoun} to{" "}
                 <span className="font-medium text-stone-700 dark:text-stone-200">
@@ -426,204 +428,211 @@ export function AuthForm({ mode, redirectTo = "/" }: { mode: Mode; redirectTo?: 
               </>
             ) : (
               `We sent you a ${linkNoun}. ${action}`
-            )}
-          </p>
+            )
+          }
+        />
+        <div className="space-y-4">
+          {unsupportedHref && <UnsupportedOriginNotice href={unsupportedHref} />}
+          <DevEmailNotice />
+          {error && <AuthError>{error}</AuthError>}
+          <button
+            type="button"
+            onClick={resend}
+            disabled={busy}
+            className={`${outlineButtonClass} w-full`}
+          >
+            {resendBusy ? "Sending..." : resendLabel}
+          </button>
         </div>
-        {unsupportedHref && <UnsupportedOriginNotice href={unsupportedHref} />}
-        <DevEmailNotice />
-        {error && (
-          <p className="text-sm text-red-600 dark:text-red-400" role="alert">
-            {error}
-          </p>
-        )}
-        <button
-          type="button"
-          onClick={resend}
-          disabled={busy}
-          className="inline-flex h-10 items-center justify-center border border-stone-300 bg-white px-4 text-sm font-medium text-stone-800 transition hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-stone-700 dark:bg-stone-950 dark:text-stone-100 dark:hover:bg-stone-900"
-        >
-          {resendBusy ? "Sending..." : resendLabel}
-        </button>
-      </div>
+      </AuthCard>
     );
   }
 
   return (
-    <div className="space-y-6">
-      {unsupportedHref && <UnsupportedOriginNotice href={unsupportedHref} />}
-      {SOCIAL_PROVIDERS.length > 0 && (
-        <>
-          <div className="grid gap-3">
-            {SOCIAL_PROVIDERS.map((provider) => {
-              const meta = PROVIDER_META[provider];
-              return (
-                <button
-                  key={provider}
-                  type="button"
-                  onClick={() => onSocial(provider)}
-                  disabled={busy}
-                  className="relative inline-flex h-10 items-center justify-center gap-2.5 border border-stone-300 bg-white px-4 text-sm font-medium text-stone-800 transition hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-stone-700 dark:bg-stone-950 dark:text-stone-100 dark:hover:bg-stone-900"
-                >
-                  {meta.icon}
-                  {social === provider ? "Redirecting..." : `Continue with ${meta.label}`}
-                  {lastMethod === provider && <LastUsedBadge />}
-                </button>
-              );
-            })}
-          </div>
-          <div className="flex items-center gap-3" aria-hidden="true">
-            <span className="h-px flex-1 bg-stone-200 dark:bg-stone-800" />
-            <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-stone-400 dark:text-stone-500">
-              or
-            </span>
-            <span className="h-px flex-1 bg-stone-200 dark:bg-stone-800" />
-          </div>
-        </>
-      )}
+    <AuthCard>
+      <AuthHeading
+        title={mode === "signup" ? "Create your account" : "Sign in to Releases"}
+        subtitle={
+          mode === "signup" ? (
+            <>
+              Follow the products and orgs you care about — separate from the <Code>relk_</Code>{" "}
+              tokens used by the CLI and MCP.
+            </>
+          ) : (
+            <>
+              Separate from the <Code>relk_</Code> API tokens used by the CLI and MCP.
+            </>
+          )
+        }
+      />
+      <div className="space-y-5">
+        {unsupportedHref && <UnsupportedOriginNotice href={unsupportedHref} />}
+        {SOCIAL_PROVIDERS.length > 0 && (
+          <>
+            <div className="grid gap-3">
+              {SOCIAL_PROVIDERS.map((provider) => {
+                const meta = PROVIDER_META[provider];
+                return (
+                  <button
+                    key={provider}
+                    type="button"
+                    onClick={() => onSocial(provider)}
+                    disabled={busy}
+                    className={`${outlineButtonClass} relative w-full`}
+                  >
+                    {meta.icon}
+                    {social === provider ? "Redirecting..." : `Continue with ${meta.label}`}
+                    {lastMethod === provider && <LastUsedBadge />}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="flex items-center gap-3" aria-hidden="true">
+              <span className="h-px flex-1 bg-stone-200 dark:bg-stone-800" />
+              <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-stone-400 dark:text-stone-500">
+                or
+              </span>
+              <span className="h-px flex-1 bg-stone-200 dark:bg-stone-800" />
+            </div>
+          </>
+        )}
 
-      <form onSubmit={onSubmit} className="space-y-5" noValidate={false}>
-        {mode === "signup" && (
+        <form onSubmit={onSubmit} className="space-y-5" noValidate={false}>
+          {mode === "signup" && (
+            <div>
+              <label htmlFor="name" className={labelClass}>
+                Name <span className="text-[var(--accent)]">*</span>
+              </label>
+              <input
+                id="name"
+                name="name"
+                type="text"
+                required
+                autoComplete="name"
+                placeholder="Ada Lovelace"
+                className={inputClass}
+              />
+            </div>
+          )}
+
           <div>
-            <label htmlFor="name" className={labelClass}>
-              Name <span className="text-blue-500">*</span>
+            <label htmlFor="email" className={labelClass}>
+              Email <span className="text-[var(--accent)]">*</span>
             </label>
             <input
-              id="name"
-              name="name"
-              type="text"
+              id="email"
+              name="email"
+              type="email"
               required
-              autoComplete="name"
-              placeholder="Ada Lovelace"
+              // `webauthn` (last token) opts the email field into passkey conditional
+              // UI on the login surface — see the autofill effect above. Login-only so
+              // the signup field stays a plain email input.
+              autoComplete={mode === "login" ? "email webauthn" : "email"}
+              placeholder="you@example.com"
               className={inputClass}
             />
           </div>
-        )}
 
-        <div>
-          <label htmlFor="email" className={labelClass}>
-            Email <span className="text-blue-500">*</span>
-          </label>
-          <input
-            id="email"
-            name="email"
-            type="email"
-            required
-            // `webauthn` (last token) opts the email field into passkey conditional
-            // UI on the login surface — see the autofill effect above. Login-only so
-            // the signup field stays a plain email input.
-            autoComplete={mode === "login" ? "email webauthn" : "email"}
-            placeholder="you@example.com"
-            className={inputClass}
-          />
-        </div>
+          <div>
+            <label htmlFor="password" className={labelClass}>
+              Password <span className="text-[var(--accent)]">*</span>
+            </label>
+            <div className="relative">
+              <input
+                id="password"
+                name="password"
+                type={showPassword ? "text" : "password"}
+                required
+                minLength={8}
+                autoComplete={mode === "signup" ? "new-password" : "current-password"}
+                placeholder={mode === "signup" ? "At least 8 characters" : "Your password"}
+                className={`${inputClass} pr-16`}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((v) => !v)}
+                className="absolute inset-y-0 right-0 flex items-center px-3 text-[11px] font-medium uppercase tracking-wider text-stone-400 transition hover:text-stone-600 dark:hover:text-stone-300"
+                aria-label={showPassword ? "Hide password" : "Show password"}
+              >
+                {showPassword ? "Hide" : "Show"}
+              </button>
+            </div>
+          </div>
 
-        <div>
-          <label htmlFor="password" className={labelClass}>
-            Password <span className="text-blue-500">*</span>
-          </label>
-          <div className="relative">
-            <input
-              id="password"
-              name="password"
-              type={showPassword ? "text" : "password"}
-              required
-              minLength={8}
-              autoComplete={mode === "signup" ? "new-password" : "current-password"}
-              placeholder={mode === "signup" ? "At least 8 characters" : "Your password"}
-              className={`${inputClass} pr-16`}
-            />
+          {/* -mt-2 tucks this under the password field, offsetting the form's space-y-5 gap */}
+          {mode === "login" && (
+            <p className="-mt-2 text-right text-sm">
+              <Link
+                href="/forgot-password"
+                className="font-medium text-[var(--accent)] underline-offset-2 hover:underline"
+              >
+                Forgot password?
+              </Link>
+            </p>
+          )}
+
+          {error && <AuthError>{error}</AuthError>}
+
+          <button type="submit" disabled={busy} className={`${primaryButtonClass} relative w-full`}>
+            {pending ? pendingLabel : submitLabel}
+            {lastMethod === "email" && <LastUsedBadge />}
+          </button>
+
+          {/* Passkey sign-in (login only). `type="button"` so it doesn't trip the
+              password field's required/minLength validation. Always shown — the
+              passkey plugin is always registered server-side; the modal prompt simply
+              reports "no passkey" if the user has none. */}
+          {mode === "login" && (
             <button
               type="button"
-              onClick={() => setShowPassword((v) => !v)}
-              className="absolute inset-y-0 right-0 flex items-center px-3 text-[11px] font-medium uppercase tracking-wider text-stone-400 transition hover:text-stone-600 dark:hover:text-stone-300"
-              aria-label={showPassword ? "Hide password" : "Show password"}
+              onClick={onPasskey}
+              disabled={busy}
+              className={`${outlineButtonClass} relative w-full`}
             >
-              {showPassword ? "Hide" : "Show"}
+              {passkeyPending ? "Waiting for your device…" : "Sign in with a passkey"}
+              {lastMethod === "passkey" && <LastUsedBadge />}
             </button>
-          </div>
-        </div>
+          )}
 
-        {/* -mt-2 tucks this under the password field, offsetting the form's space-y-5 gap */}
-        {mode === "login" && (
-          <p className="-mt-2 text-right text-sm">
-            <Link
-              href="/forgot-password"
-              className="font-medium text-blue-600 hover:text-blue-500 dark:text-blue-400"
+          {/* Passwordless alternative. `type="button"` so it reads the email from the
+              form without tripping the password field's required/minLength validation. */}
+          {MAGIC_LINK_ENABLED && (
+            <button
+              type="button"
+              onClick={onMagicLink}
+              disabled={busy}
+              className={`${outlineButtonClass} relative w-full`}
             >
-              Forgot password?
-            </Link>
-          </p>
-        )}
+              {magicSending ? "Sending link..." : "Email me a sign-in link"}
+              {lastMethod === "magic-link" && <LastUsedBadge />}
+            </button>
+          )}
+        </form>
 
-        {error && (
-          <p className="text-sm text-red-600 dark:text-red-400" role="alert">
-            {error}
-          </p>
-        )}
-
-        <button
-          type="submit"
-          disabled={busy}
-          className="relative inline-flex h-10 w-full items-center justify-center bg-stone-950 px-4 text-sm font-semibold text-white transition hover:bg-stone-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-stone-100 dark:text-stone-950 dark:hover:bg-white"
-        >
-          {pending ? pendingLabel : submitLabel}
-          {lastMethod === "email" && <LastUsedBadge />}
-        </button>
-
-        {/* Passkey sign-in (login only). `type="button"` so it doesn't trip the
-            password field's required/minLength validation. Always shown — the
-            passkey plugin is always registered server-side; the modal prompt simply
-            reports "no passkey" if the user has none. */}
-        {mode === "login" && (
-          <button
-            type="button"
-            onClick={onPasskey}
-            disabled={busy}
-            className="relative inline-flex h-10 w-full items-center justify-center border border-stone-300 bg-white px-4 text-sm font-medium text-stone-800 transition hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-stone-700 dark:bg-stone-950 dark:text-stone-100 dark:hover:bg-stone-900"
-          >
-            {passkeyPending ? "Waiting for your device…" : "Sign in with a passkey"}
-            {lastMethod === "passkey" && <LastUsedBadge />}
-          </button>
-        )}
-
-        {/* Passwordless alternative. `type="button"` so it reads the email from the
-            form without tripping the password field's required/minLength validation. */}
-        {MAGIC_LINK_ENABLED && (
-          <button
-            type="button"
-            onClick={onMagicLink}
-            disabled={busy}
-            className="relative inline-flex h-10 w-full items-center justify-center border border-stone-300 bg-white px-4 text-sm font-medium text-stone-800 transition hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-stone-700 dark:bg-stone-950 dark:text-stone-100 dark:hover:bg-stone-900"
-          >
-            {magicSending ? "Sending link..." : "Email me a sign-in link"}
-            {lastMethod === "magic-link" && <LastUsedBadge />}
-          </button>
-        )}
-      </form>
-
-      <p className="text-sm text-stone-500 dark:text-stone-400">
-        {mode === "signup" ? (
-          <>
-            Already have an account?{" "}
-            <Link
-              href={target === "/" ? "/login" : `/login?redirect=${encodeURIComponent(target)}`}
-              className="font-medium text-blue-600 hover:text-blue-500 dark:text-blue-400"
-            >
-              Sign in
-            </Link>
-          </>
-        ) : (
-          <>
-            New to releases.sh?{" "}
-            <Link
-              href={target === "/" ? "/signup" : `/signup?redirect=${encodeURIComponent(target)}`}
-              className="font-medium text-blue-600 hover:text-blue-500 dark:text-blue-400"
-            >
-              Create an account
-            </Link>
-          </>
-        )}
-      </p>
-    </div>
+        <p className="text-center text-[13px] text-stone-500 dark:text-stone-400">
+          {mode === "signup" ? (
+            <>
+              Already have an account?{" "}
+              <Link
+                href={target === "/" ? "/login" : `/login?redirect=${encodeURIComponent(target)}`}
+                className="font-medium text-[var(--accent)] underline-offset-2 hover:underline"
+              >
+                Sign in
+              </Link>
+            </>
+          ) : (
+            <>
+              New to releases.sh?{" "}
+              <Link
+                href={target === "/" ? "/signup" : `/signup?redirect=${encodeURIComponent(target)}`}
+                className="font-medium text-[var(--accent)] underline-offset-2 hover:underline"
+              >
+                Create an account
+              </Link>
+            </>
+          )}
+        </p>
+      </div>
+    </AuthCard>
   );
 }

@@ -232,6 +232,26 @@ export function CardTitle({ children }: { children: ReactNode }) {
   );
 }
 
+/**
+ * Brand mark + balanced title + optional subtitle, centered at the top of a card.
+ * The login surface has no app→releases connection visual (nothing is connecting),
+ * so it leads with the logo and `CardTitle` instead of `ConnVisual`. Shared by the
+ * sign-in / sign-up / password-reset cards so they all open the same way.
+ */
+export function AuthHeading({ title, subtitle }: { title: ReactNode; subtitle?: ReactNode }) {
+  return (
+    <div className="mb-[22px] flex flex-col items-center">
+      <ReleasesLogo size={40} className="mb-[14px]" />
+      <CardTitle>{title}</CardTitle>
+      {subtitle ? (
+        <p className="text-pretty mt-[9px] text-center text-[13px] leading-[1.5] text-stone-500 dark:text-stone-400">
+          {subtitle}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 /** Identity row under the title — verified domain or account email. */
 export function IdentityRow({ verified, children }: { verified?: boolean; children: ReactNode }) {
   return (

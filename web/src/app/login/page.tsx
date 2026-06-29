@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Header } from "@/components/header";
 import { AuthForm } from "@/components/auth-form";
+import { AuthCenter } from "@/components/auth-flow";
 import { safeRedirect } from "@/lib/auth-redirect";
 import { AUTH_CONFIGURED } from "@/lib/auth-ui";
 
@@ -25,35 +26,17 @@ export default async function LoginPage({
   return (
     <div className="min-h-screen">
       <Header />
-      <div className="mx-auto grid w-full max-w-5xl gap-10 px-6 py-12 lg:grid-cols-[280px_minmax(0,1fr)]">
-        <aside className="text-sm text-stone-500 dark:text-stone-400">
-          <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-stone-400 dark:text-stone-500">
-            Account
+      <AuthCenter>
+        {passwordReset && (
+          <p
+            role="status"
+            className="mb-5 w-full max-w-[460px] rounded-[12px] border border-green-200 bg-green-50 px-4 py-3 text-[13px] leading-[1.5] text-green-800 dark:border-green-500/30 dark:bg-green-950/30 dark:text-green-300"
+          >
+            Your password has been updated. Sign in with your new password.
           </p>
-          <h1 className="mt-3 text-2xl font-semibold tracking-tight text-stone-900 dark:text-stone-100">
-            Sign in
-          </h1>
-          <p className="mt-4 leading-6">
-            Sign in to your releases.sh account. Accounts are separate from the{" "}
-            <code className="font-mono text-[0.85em] text-stone-600 dark:text-stone-300">
-              relk_
-            </code>{" "}
-            API tokens used by the CLI and MCP.
-          </p>
-        </aside>
-
-        <section className="border border-stone-200 bg-stone-50 p-5 dark:border-stone-800 dark:bg-stone-950 sm:p-6">
-          {passwordReset && (
-            <p
-              role="status"
-              className="mb-5 border border-green-600/30 bg-green-50 px-4 py-3 text-sm leading-6 text-green-800 dark:border-green-500/30 dark:bg-green-950/40 dark:text-green-300"
-            >
-              Your password has been updated. Sign in with your new password.
-            </p>
-          )}
-          <AuthForm mode="login" redirectTo={redirectTo} />
-        </section>
-      </div>
+        )}
+        <AuthForm mode="login" redirectTo={redirectTo} />
+      </AuthCenter>
     </div>
   );
 }
