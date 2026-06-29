@@ -1,4 +1,27 @@
 # yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+early_access: true
+
+reviews:
+  auto_review:
+    enabled: false
+    auto_incremental_review: false
+    auto_pause_after_reviewed_commits: 1
+    ignore_title_keywords:
+      - "changelog:"
+      - versioning
+      - docs(
+    labels:
+      - coderabbit:review
+      - review
+      - "!wip"
+  tools:
+    fbinfer:
+      enabled: false
+    presidio:
+      enabled: false
+  finishing_touches:
+    unit_tests:
+      enabled: false
 knowledge_base:
   linked_repositories:
     - repository: buildinternet/releases-cli
