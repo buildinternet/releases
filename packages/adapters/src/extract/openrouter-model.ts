@@ -21,9 +21,9 @@ import type { LanguageModel } from "ai";
  * prefix reuse and needs no plumbing through the deps layer (the model is built
  * once per worker invocation with no source id in scope). Sticky routing is
  * best-effort affinity, not a hard pin — `allow_fallbacks` still lets load spill
- * to other endpoints — so this steers cache hits without bottlenecking. Callers
- * may override per-fetch (e.g. to keep Broadcast traces separable once Broadcast
- * is enabled); today Broadcast is inert so the constant has no tracing cost.
+ * to other endpoints — so this steers cache hits without bottlenecking. The
+ * constant also collapses extraction into one Broadcast trace group, but
+ * Broadcast is inert today so that costs nothing.
  */
 export const EXTRACT_SESSION_ID = "extract";
 
@@ -31,8 +31,6 @@ export interface OpenRouterExtractModelOpts {
   apiKey: string;
   model: string;
   baseURL?: string;
-  /** Override the sticky-routing session id. Defaults to `EXTRACT_SESSION_ID`. */
-  sessionId?: string;
 }
 
 /**
@@ -43,14 +41,13 @@ export interface OpenRouterExtractModelOpts {
  * so the shared prefix cache is reused — see `EXTRACT_SESSION_ID`.
  */
 export function buildOpenRouterExtractModel(opts: OpenRouterExtractModelOpts): LanguageModel {
-  const sessionId = opts.sessionId ?? EXTRACT_SESSION_ID;
   const provider = createOpenRouter({
     apiKey: opts.apiKey,
     ...(opts.baseURL ? { baseURL: opts.baseURL } : {}),
     // Belt-and-suspenders: OpenRouter accepts the sticky-routing session id via
     // either the `x-session-id` header or a top-level `session_id` body field.
-    headers: { "x-session-id": sessionId },
-    extraBody: { session_id: sessionId },
+    headers: { "x-session-id": EXTRACT_SESSION_ID },
+    extraBody: { session_id: EXTRACT_SESSION_ID },
   });
   // `reasoning.enabled: false` turns off chain-of-thought; the provider's
   // settings type models `reasoning` as a discriminated union that also expects

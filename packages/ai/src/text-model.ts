@@ -135,7 +135,7 @@ export function splitModelId(id: string): { provider: string; model: string } {
  * Normalizing here lets a dashboard compute `sum(cacheRead)/sum(promptTokens)`
  * per lane and compare Anthropic vs. OpenRouter on the same axis.
  */
-export function cacheMetrics(
+function cacheMetrics(
   provider: string,
   usage: TextModelUsage,
 ): { promptTokens: number; cacheHitRate: number } {
