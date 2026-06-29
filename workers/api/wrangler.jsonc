@@ -143,13 +143,16 @@
     // SourceActor rollout cohort (#1776), 0–100. The `source-actor-enabled`
     // Flagship flag is the master switch; this pct selects which sources migrate
     // (fnv1a(sourceId) % 100 < pct). "0" = none migrated even with the flag on.
-    // Rollout (#1776/#1778): ramping to 50% after a clean 25% rung (managed:15 /
-    // cronDriven:37 partition disjoint, all 15 fired, 0 errors; 21 sources managed
-    // incl. 6 scrape/agent). Additive — fnv1a%100<50 ⊃ <25, so the proven cohort
-    // stays managed. Ramp 50 → 100 as each cohort proves clean; clean 100% unblocks
-    // #1780. 50% is the first rung where a managed scrape/agent source should fire
-    // the #1783 delegate-scrape-stub seam (expect proceed:true, 0 delegate-failed).
-    "SOURCE_ACTOR_COHORT_PCT": "50",
+    // Rollout (#1776/#1778): FULL 100% after 50% held clean across two cron cycles
+    // (16:00 managed:10/cronDriven:12, 17:00 managed:12/cronDriven:11 — partitions
+    // disjoint, all fired with 0 dup-fires, 0 errors). Every active source's fetch
+    // timer now runs on its SourceActor. The `source-actor-enabled` Flagship flag
+    // stays the master kill switch — flip off (or lower this) and every alarm hands
+    // its source back to the cron on the next fire, no logic redeploy. A clean 100%
+    // is the precondition for #1780 (retire the KV-lock/dedup/skipDelegation bolt-
+    // ons); the #1783 delegate seam fires on the DAILY 01:00 scrape-agent sweep, not
+    // this hourly poll path, so it validates on its own track.
+    "SOURCE_ACTOR_COHORT_PCT": "100",
     // Batch summarization workflow (issue #971). Enabled — daily 04:30 UTC cron
     // walks the past 24h of releases across orgs with auto_generate_content=true
     // (~26 orgs as of enable). Admin POST trigger
