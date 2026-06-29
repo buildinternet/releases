@@ -129,8 +129,45 @@ describe("withUsageLogging", () => {
       output: 3,
       cacheCreate: 1,
       cacheRead: 4,
+      // OpenRouter `prompt_tokens` already includes cached tokens → promptTokens = input.
+      promptTokens: 10,
+      cacheHitRate: 0.4,
       costUsd: 0.0002,
     });
+  });
+
+  it("normalizes Anthropic promptTokens to include cache reads/writes for a comparable hit rate", async () => {
+    let rec: UsageRecord | undefined;
+    // Anthropic `input_tokens` EXCLUDES cache → promptTokens = 10 + 30 read + 60 write = 100.
+    const inner = fakeModel("anthropic:claude-haiku-4-5", {
+      input: 10,
+      output: 5,
+      cacheCreate: 60,
+      cacheRead: 30,
+    });
+    const wrapped = withUsageLogging(inner, {
+      lane: "summarize-release",
+      sink: (r) => {
+        rec = r;
+      },
+    });
+    await wrapped.complete({ system: "s", user: "u", maxTokens: 1 });
+    expect(rec?.promptTokens).toBe(100);
+    expect(rec?.cacheHitRate).toBeCloseTo(0.3, 5);
+  });
+
+  it("reports a zero hit rate (no divide-by-zero) when there are no prompt tokens", async () => {
+    let rec: UsageRecord | undefined;
+    const inner = fakeModel("openrouter:m", { ...ZERO });
+    const wrapped = withUsageLogging(inner, {
+      lane: "x",
+      sink: (r) => {
+        rec = r;
+      },
+    });
+    await wrapped.complete({ system: "s", user: "u", maxTokens: 1 });
+    expect(rec?.promptTokens).toBe(0);
+    expect(rec?.cacheHitRate).toBe(0);
   });
 
   it("derives cost via deriveCost when the provider reports none", async () => {

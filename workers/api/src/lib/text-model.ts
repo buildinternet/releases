@@ -143,6 +143,13 @@ async function resolveTextModel(
           ...(opts.provider ? { provider: opts.provider } : {}),
           referer: "https://releases.sh",
           title: APP_TITLE,
+          // Stable per-lane sticky-routing key: every call in a lane shares the
+          // same static system prompt, so pinning the lane to one OpenRouter
+          // upstream lets that prefix be read from the provider's cache instead
+          // of re-billed. The generationName is the lane's natural stable id; it
+          // doubles as the Broadcast grouping id (inert until Broadcast is on),
+          // which intentionally collapses a lane's traffic into one trace group.
+          sessionId: opts.generationName,
           trace: {
             generationName: opts.generationName,
             ...(env.ENVIRONMENT ? { environment: env.ENVIRONMENT } : {}),

@@ -101,6 +101,15 @@ export interface UsageRecord {
   output: number;
   cacheCreate: number;
   cacheRead: number;
+  /**
+   * Total prompt tokens for this call, NORMALIZED so a cache-hit rate is
+   * comparable across providers (see `cacheMetrics`). Raw `input` is NOT
+   * comparable: Anthropic's `input_tokens` excludes the cached portion while
+   * OpenRouter's `prompt_tokens` includes it.
+   */
+  promptTokens: number;
+  /** `cacheRead / promptTokens`, clamped to [0,1] (0 when promptTokens is 0). */
+  cacheHitRate: number;
   /** USD cost: provider-reported for OpenRouter, derived for Anthropic, undefined if unknown. */
   costUsd?: number;
 }
@@ -113,6 +122,28 @@ export function splitModelId(id: string): { provider: string; model: string } {
   return i === -1
     ? { provider: "unknown", model: id }
     : { provider: id.slice(0, i), model: id.slice(i + 1) };
+}
+
+/**
+ * Derive a provider-comparable prompt-token total and cache-hit rate from raw
+ * usage. The two providers report the prompt differently:
+ *   - Anthropic: `input` (`input_tokens`) EXCLUDES cache reads/writes, which are
+ *     reported separately → total prompt = input + cacheRead + cacheCreate.
+ *   - OpenRouter (OpenAI shape): `input` (`prompt_tokens`) already INCLUDES the
+ *     cached portion (`cached_tokens`), and no cache-write count is surfaced
+ *     (`cacheCreate` is 0) → total prompt = input.
+ * Normalizing here lets a dashboard compute `sum(cacheRead)/sum(promptTokens)`
+ * per lane and compare Anthropic vs. OpenRouter on the same axis.
+ */
+function cacheMetrics(
+  provider: string,
+  usage: TextModelUsage,
+): { promptTokens: number; cacheHitRate: number } {
+  const promptTokens =
+    provider === "openrouter" ? usage.input : usage.input + usage.cacheRead + usage.cacheCreate;
+  const cacheHitRate =
+    promptTokens > 0 ? Math.min(1, Math.max(0, usage.cacheRead / promptTokens)) : 0;
+  return { promptTokens, cacheHitRate };
 }
 
 /**
@@ -138,6 +169,7 @@ export function withUsageLogging(
       const result = await inner.complete(req);
       try {
         const costUsd = result.usage.costUsd ?? opts.deriveCost?.(provider, model, result.usage);
+        const { promptTokens, cacheHitRate } = cacheMetrics(provider, result.usage);
         opts.sink({
           provider,
           model,
@@ -147,6 +179,8 @@ export function withUsageLogging(
           output: result.usage.output,
           cacheCreate: result.usage.cacheCreate,
           cacheRead: result.usage.cacheRead,
+          promptTokens,
+          cacheHitRate,
           costUsd,
         });
       } catch {
