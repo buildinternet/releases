@@ -5,6 +5,17 @@ const DEFAULT_HEIGHT = 24;
 const PADDING_Y = 3;
 const DOT_RADIUS = 2.5;
 
+/** Sparkline — inline SVG smooth line chart for tabular data. */
+export interface SparklineProps {
+  data: number[];
+  /** Unique id used to scope the SVG gradient (`spark-${id}`). */
+  id: string;
+  width?: number;
+  height?: number;
+  color?: string;
+  className?: string;
+}
+
 /** Sparkline — inline SVG smooth line chart for tabular data. @category Data */
 export function Sparkline({
   data,
@@ -13,14 +24,7 @@ export function Sparkline({
   height = DEFAULT_HEIGHT,
   color = "currentColor",
   className,
-}: {
-  data: number[];
-  id: string;
-  width?: number;
-  height?: number;
-  color?: string;
-  className?: string;
-}) {
+}: SparklineProps) {
   const gradientId = `spark-${id}`;
 
   if (data.every((v) => v === 0)) {

@@ -14,7 +14,7 @@ A NEW workspace package (`packages/design-system/`, `@releases/design-system`, g
 ## Build
 
 - `cfg.buildCmd = node packages/design-system/build.mjs` — a self-contained build: esbuild → `dist/index.es.js` (React external), Tailwind v4 CLI → `dist/styles.css`, `tsc` → `.d.ts`, and copies JetBrains Mono woff2 (from `@fontsource/jetbrains-mono`) → `dist/fonts/`. **Re-run it before the converter** whenever `src/` changes.
-- Build deps live in an **isolated** `packages/design-system/node_modules`, installed with `npm install --no-workspaces --no-package-lock` (run from the package dir) — deliberately NOT a root `bun install`, to avoid churning the repo lockfile during a sync. There is **no lockfile** for these build deps; a future install could drift esbuild/tailwind/typescript versions. Add one if reproducibility bites.
+- Build deps live in an **isolated** `packages/design-system/node_modules`, installed with `npm ci --no-workspaces` (run from the package dir) — deliberately NOT a root `bun install`, to avoid churning the repo lockfile during a sync. The versions are pinned by the committed `packages/design-system/package-lock.json` (#1769); `npm ci` installs strictly from it and does **not** rewrite it, so esbuild/tailwind/typescript can't drift between machines/runs. To bump a build dep, edit `package.json` then regenerate the lock **outside the bun workspace** (`cp package.json <tmp> && cd <tmp> && npm install --package-lock-only`, copy the lock back) — running `npm install` inside the workspace dir re-resolves against the parent bun store and pollutes the lock with `../../node_modules/.bun` paths.
 - Converter invocation (from repo root):
   `node .ds-sync/package-build.mjs --config .design-sync/config.json --node-modules packages/design-system/node_modules --entry ./packages/design-system/dist/index.es.js --out ./ds-bundle`
 
@@ -41,6 +41,6 @@ None outstanding. After the column-mode + viewport overrides, validate exits cle
 ## Re-sync risks (what can silently go stale)
 
 - **classes.ts / styles.css vs the app** — the biggest one. They're hand-copied from `account/ui.tsx` + `globals.css`; an app change there silently desyncs the design system. Re-check on any account-UI/token change.
-- **No build lockfile** — `npm install --no-package-lock` means esbuild/tailwind/tsc versions can drift between machines/runs. Output is deterministic given the same versions; pin a lockfile if a rebuild ever differs.
+- **Build lockfile** — pinned via the committed `packages/design-system/package-lock.json` (#1769); install with `npm ci --no-workspaces`. Regenerate it outside the workspace (see the Build section) when bumping a build dep, never with a plain in-dir `npm install`.
 - **chromium pin** — tied to the local Playwright cache (build 1228 / playwright 1.61.1). A fresh machine needs a matching install.
 - **Phase 2 (app adoption) not done** — if/when `web/src` migrates to import `@releases/design-system`, the copy-vs-import drift risk above goes away; until then, keep them in sync manually.

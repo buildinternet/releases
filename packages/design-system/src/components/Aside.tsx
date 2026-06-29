@@ -7,9 +7,15 @@ import { Eyebrow } from "./Eyebrow";
  * viewports; sticky at `top-20` on large screens so it scrolls with the page.
  *
  * `label` is rendered as a mono eyebrow heading above the rail content.
- * @category Layout
  */
-export function Aside({ label, children }: { label: string; children: ReactNode }) {
+export interface AsideProps {
+  /** Mono eyebrow heading rendered above the rail content. */
+  label: string;
+  children: ReactNode;
+}
+
+/** Aside — context rail shown beside a panel on wide screens. @category Layout */
+export function Aside({ label, children }: AsideProps) {
   return (
     <aside className="hidden self-start rounded-xl bg-stone-100 p-[18px] lg:sticky lg:top-20 lg:block dark:bg-stone-800/50">
       <Eyebrow className="mb-2.5 text-stone-400 dark:text-stone-500">{label}</Eyebrow>

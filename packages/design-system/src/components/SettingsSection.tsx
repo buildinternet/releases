@@ -6,14 +6,8 @@ import { Eyebrow } from "./Eyebrow";
  * panel header: mono accent eyebrow (`group`) → title → optional description.
  * Server-safe (no directive); route `page.tsx` wrappers which are Server
  * Components can render this directly.
- * @category Layout
  */
-export function SettingsSection({
-  group,
-  title,
-  description,
-  children,
-}: {
+export interface SettingsSectionProps {
   /** Short mono eyebrow label identifying the settings group (e.g. "Account"). */
   group: string;
   /** Panel heading rendered as an `<h1>`. */
@@ -21,7 +15,10 @@ export function SettingsSection({
   /** Optional sentence below the heading; capped at 60ch. */
   description?: ReactNode;
   children: ReactNode;
-}) {
+}
+
+/** SettingsSection — per-panel header chrome for the settings surface. @category Layout */
+export function SettingsSection({ group, title, description, children }: SettingsSectionProps) {
   return (
     <div>
       <header className="mb-9">
@@ -48,9 +45,15 @@ export function SettingsSection({
  * With an `aside`, renders a two-column grid (content + 264px rail) capped at
  * 1000px. Without one, a single column capped at 720px — matching the source
  * design's `--panel-max` per layout.
- * @category Layout
  */
-export function PanelGrid({ children, aside }: { children: ReactNode; aside?: ReactNode }) {
+export interface PanelGridProps {
+  children: ReactNode;
+  /** Optional context rail rendered as the second column on wide screens. */
+  aside?: ReactNode;
+}
+
+/** PanelGrid — panel body layout, one or two columns depending on `aside`. @category Layout */
+export function PanelGrid({ children, aside }: PanelGridProps) {
   if (!aside) {
     return <div className="max-w-[720px]">{children}</div>;
   }

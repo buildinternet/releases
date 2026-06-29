@@ -40,10 +40,13 @@ export type { ListCardProps, ListRowProps } from "./components/List";
 export { Eyebrow } from "./components/Eyebrow";
 export type { EyebrowProps } from "./components/Eyebrow";
 export { Aside } from "./components/Aside";
+export type { AsideProps } from "./components/Aside";
 export { SettingsSection, PanelGrid } from "./components/SettingsSection";
+export type { PanelGridProps, SettingsSectionProps } from "./components/SettingsSection";
 
 // Feedback.
 export { PreviewBanner, SuccessBanner, ErrorText } from "./components/Banners";
+export type { ErrorTextProps, PreviewBannerProps, SuccessBannerProps } from "./components/Banners";
 
 // Theme.
 export { ThemeProvider, useTheme } from "./components/ThemeProvider";
@@ -51,3 +54,4 @@ export { ThemeToggle } from "./components/ThemeToggle";
 
 // Data viz.
 export { Sparkline } from "./components/Sparkline";
+export type { SparklineProps } from "./components/Sparkline";
