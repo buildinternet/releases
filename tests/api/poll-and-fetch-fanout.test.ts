@@ -131,3 +131,83 @@ describe("fanOutPollAndFetch chunking", () => {
     expect(new Set(allIds).size).toBe(allIds.length);
   });
 });
+
+/**
+ * SourceActor cohort partition (#1776). Mirrors the split `fanOutPollAndFetch`
+ * applies to the due list: actor-managed sources go to `ensureScheduled` (NOT
+ * the workflow fan-out — no double-driving), everyone else still fans out. We
+ * exercise the REAL `isSourceActorManaged` predicate so the test fails if the
+ * gating logic drifts; the surrounding loop replicates the prod shape for the
+ * same reason the chunking replica above does (can't resolve `drizzle(env.DB)`).
+ */
+describe("fanOutPollAndFetch SourceActor cohort partition", () => {
+  let db: ReturnType<typeof drizzle>;
+  let sqlite: Database;
+
+  beforeEach(() => {
+    sqlite = new Database(":memory:");
+    applyMigrations(sqlite);
+    db = drizzle(sqlite);
+  });
+
+  async function partitionReplica(opts: {
+    enabledVar: string | undefined;
+    cohortPctVar: string | undefined;
+    hasBinding: boolean;
+  }) {
+    const { queryDueSources } = await import("../../workers/api/src/cron/poll-fetch");
+    const { isSourceActorManaged, parseCohortPct } =
+      await import("../../workers/api/src/lib/source-actor-cohort");
+    const { flag, FLAGS } = await import("@releases/lib/flags");
+
+    // Mirror production's options (fanOutPollAndFetch passes changeDetectEnabled).
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const dueAll = await queryDueSources(db as any, new Date(), { changeDetectEnabled: true });
+    const enabled = await flag(undefined, opts.enabledVar, FLAGS.sourceActorEnabled);
+    const pct = parseCohortPct(opts.cohortPctVar);
+    const ensured: string[] = [];
+    const fannedOut: string[] = [];
+    for (const s of dueAll) {
+      if (isSourceActorManaged(s.id, enabled, pct, opts.hasBinding)) ensured.push(s.id);
+      else fannedOut.push(s.id);
+    }
+    return { ensured, fannedOut, total: dueAll.length };
+  }
+
+  it("routes all due sources to ensureScheduled at 100% cohort with the flag on", async () => {
+    await seedSources(db, 30);
+    const r = await partitionReplica({ enabledVar: "true", cohortPctVar: "100", hasBinding: true });
+    expect(r.ensured).toHaveLength(30);
+    expect(r.fannedOut).toHaveLength(0);
+  });
+
+  it("keeps every source on the cron fan-out when the flag is off", async () => {
+    await seedSources(db, 30);
+    const r = await partitionReplica({
+      enabledVar: "false",
+      cohortPctVar: "100",
+      hasBinding: true,
+    });
+    expect(r.ensured).toHaveLength(0);
+    expect(r.fannedOut).toHaveLength(30);
+  });
+
+  it("keeps every source on the cron fan-out when the binding is absent", async () => {
+    await seedSources(db, 30);
+    const r = await partitionReplica({
+      enabledVar: "true",
+      cohortPctVar: "100",
+      hasBinding: false,
+    });
+    expect(r.ensured).toHaveLength(0);
+    expect(r.fannedOut).toHaveLength(30);
+  });
+
+  it("splits the due list at a partial cohort (managed + fan-out are disjoint, sum to total)", async () => {
+    await seedSources(db, 60);
+    const r = await partitionReplica({ enabledVar: "true", cohortPctVar: "50", hasBinding: true });
+    expect(r.ensured.length + r.fannedOut.length).toBe(r.total);
+    expect(r.ensured.length).toBeGreaterThan(0);
+    expect(r.fannedOut.length).toBeGreaterThan(0);
+  });
+});

@@ -56,9 +56,11 @@ import { logEvent } from "@releases/lib/log-event";
 import { dbErrorLogFields } from "@releases/lib/db-errors";
 import { getSecret, getSecretWithFallback } from "@releases/lib/secrets";
 import { FLAGS, flag, type FlagshipBinding } from "@releases/lib/flags";
+import { isSourceActorManaged, parseCohortPct } from "./lib/source-actor-cohort.js";
 
 export { StatusHub } from "./status-hub.js";
 export { ReleaseHub } from "./release-hub.js";
+export { SourceActor } from "./source-actor.js";
 export { ScrapeAgentSweepWorkflow } from "./workflows/scrape-agent-sweep.js";
 export { PollAndFetchWorkflow } from "./workflows/poll-and-fetch.js";
 export { PollFetchSummaryWorkflow } from "./workflows/poll-fetch-summary.js";
@@ -87,6 +89,16 @@ export type Env = {
     RELEASES_PROXY_KEY?: SecretBinding;
     STATUS_HUB: DurableObjectNamespace;
     RELEASE_HUB: DurableObjectNamespace;
+    // Per-source fetch-scheduling actor (#1776). When bound + the
+    // `source-actor-enabled` flag is on, a source in the rollout cohort
+    // (SOURCE_ACTOR_COHORT_PCT) self-schedules its fetches via its own DO alarm
+    // instead of the hourly poll cron. Absent ⇒ every source stays on the cron.
+    SOURCE_ACTOR?: DurableObjectNamespace<import("./source-actor.js").SourceActor>;
+    // Master switch + cohort ramp for SOURCE_ACTOR. The flag is also read via
+    // Flagship (`source-actor-enabled`); the pct (0–100, default "0") is a plain
+    // numeric tunable (intentionally NOT a Flagship flag).
+    SOURCE_ACTOR_ENABLED?: string;
+    SOURCE_ACTOR_COHORT_PCT?: string;
     WEBHOOK_DELIVERY_QUEUE: Queue<unknown>;
     /** Per-recipient follow digest send (cron enqueues; API worker consumes). */
     DIGEST_DELIVERY_QUEUE?: Queue<import("./queues/types.js").DigestDeliveryMessage>;
@@ -1319,6 +1331,10 @@ function loggedDispatch(tag: string, p: Promise<unknown>, alertEnv?: AlertEnv): 
  */
 const CREATE_BATCH_MAX = 100;
 
+// Bounded concurrency for seeding SourceActor alarms from the cron heartbeat —
+// polite on the DO control plane; the per-source work runs in its own object.
+const SOURCE_ACTOR_ENSURE_CONCURRENCY = 20;
+
 async function fanOutPollAndFetch(env: Env["Bindings"], scheduledTime: number): Promise<void> {
   const db = drizzle(env.DB);
   const startedAt = new Date().toISOString();
@@ -1340,17 +1356,78 @@ async function fanOutPollAndFetch(env: Env["Bindings"], scheduledTime: number): 
 
   let dispatched = 0;
   let dispatchErrors = 0;
+  let ensureErrors = 0;
   let candidates = 0;
   let preflightError: Error | null = null;
   const dispatchErrorDetail: Array<{ orgSlug: string; error: string }> = [];
 
   try {
-    const due = await queryDueSources(db, new Date(), { changeDetectEnabled: true });
-    candidates = due.length;
-    if (due.length === 0) {
+    const dueAll = await queryDueSources(db, new Date(), { changeDetectEnabled: true });
+    candidates = dueAll.length;
+    if (dueAll.length === 0) {
       logEvent("info", { component: "poll-fetch-cron", event: "no-due-sources" });
       return;
     }
+
+    // SourceActor cohort (#1776): a managed source self-schedules via its DO
+    // alarm, so it must NOT also be fanned out as a workflow here (no
+    // double-driving). Partition the due list with the shared predicate — the
+    // actor's own alarm re-checks the same gate, so flipping the flag off hands a
+    // source cleanly back to the cron. Binding absent ⇒ predicate false ⇒
+    // everything stays cron-driven (the existing fallback).
+    const actorEnabled = await flag(env.FLAGS, env.SOURCE_ACTOR_ENABLED, FLAGS.sourceActorEnabled);
+    const cohortPct = parseCohortPct(env.SOURCE_ACTOR_COHORT_PCT);
+    const hasActorBinding = env.SOURCE_ACTOR != null;
+    const actorManaged = dueAll.filter((s) =>
+      isSourceActorManaged(s.id, actorEnabled, cohortPct, hasActorBinding),
+    );
+    const due = dueAll.filter(
+      (s) => !isSourceActorManaged(s.id, actorEnabled, cohortPct, hasActorBinding),
+    );
+
+    if (actorManaged.length > 0) {
+      logEvent("info", {
+        component: "poll-fetch-cron",
+        event: "source-actor-ensure",
+        managed: actorManaged.length,
+        cronDriven: due.length,
+        cohortPct,
+      });
+      // Idempotent bootstrap/heartbeat: seed each managed source's actor if it has
+      // no pending alarm. Bounded concurrency to stay polite on the DO control
+      // plane; failures are per-source and non-fatal (the next hourly cron retries).
+      for (let i = 0; i < actorManaged.length; i += SOURCE_ACTOR_ENSURE_CONCURRENCY) {
+        const batch = actorManaged.slice(i, i + SOURCE_ACTOR_ENSURE_CONCURRENCY);
+        // oxlint-disable-next-line no-await-in-loop -- bounded waves; each wave runs in parallel
+        await Promise.all(
+          batch.map((s) =>
+            env
+              .SOURCE_ACTOR!.getByName(s.id)
+              .ensureScheduled(s.id)
+              .catch((err: unknown) => {
+                ensureErrors += 1;
+                dispatchErrorDetail.push({
+                  orgSlug: s.orgId ?? "unknown",
+                  error: `ensure ${s.id}: ${err instanceof Error ? err.message : String(err)}`,
+                });
+                logEvent("warn", {
+                  component: "poll-fetch-cron",
+                  event: "source-actor-ensure-failed",
+                  sourceId: s.id,
+                  err: err instanceof Error ? err.message : String(err),
+                });
+              }),
+          ),
+        );
+      }
+    }
+
+    if (due.length === 0) {
+      // All due sources are actor-managed — nothing left to fan out. The summary
+      // workflow below is keyed to the cron fan-out, so skip it too.
+      return;
+    }
+
     logEvent("info", { component: "poll-fetch-cron", event: "fanout", instanceCount: due.length });
     const params = due.map((source) => ({
       // Instance IDs must be unique; pairing the scheduled time with the source
@@ -1406,11 +1483,15 @@ async function fanOutPollAndFetch(env: Env["Bindings"], scheduledTime: number): 
     throw err;
   } finally {
     if (runId) {
+      // `ensureErrors` (actor-seed failures) also degrade the run so a persistent
+      // seeding problem is visible on /status?tab=cron instead of finalizing
+      // `done` — even when every due source was actor-managed (dispatched === 0).
+      const totalErrors = dispatchErrors + ensureErrors;
       const status = preflightError
         ? ("dispatch_failed" as const)
         : dispatchErrors > 0 && dispatched === 0
           ? ("dispatch_failed" as const)
-          : dispatchErrors > 0
+          : totalErrors > 0
             ? ("degraded" as const)
             : ("done" as const);
       if (preflightError) {
@@ -1419,16 +1500,21 @@ async function fanOutPollAndFetch(env: Env["Bindings"], scheduledTime: number): 
           error: preflightError.message,
         });
       }
+      const notes = preflightError
+        ? `preflight failed: ${preflightError.message}`
+        : ensureErrors > 0
+          ? `${ensureErrors} source-actor ensure failure(s)`
+          : null;
       await finalizeRunRow(db, runId, {
         endedAt: new Date().toISOString(),
         status,
         candidates,
         dispatched,
         skippedOverCap: 0,
-        dispatchErrors,
+        dispatchErrors: totalErrors,
         sessionsStarted: [],
         dispatchErrorDetail,
-        notes: preflightError ? `preflight failed: ${preflightError.message}` : null,
+        notes,
       }).catch((err) => {
         logEvent("warn", {
           component: "poll-fetch-cron",

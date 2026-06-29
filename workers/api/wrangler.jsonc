@@ -140,6 +140,10 @@
     // Set to "0" to disable; see FANOUT_JITTER_WINDOW_MAX_MS for the upper clamp.
     // See workers/api/src/workflows/poll-and-fetch.ts.
     "FANOUT_JITTER_WINDOW_MS": "300000",
+    // SourceActor rollout cohort (#1776), 0–100. The `source-actor-enabled`
+    // Flagship flag is the master switch; this pct selects which sources migrate
+    // (fnv1a(sourceId) % 100 < pct). "0" = none migrated even with the flag on.
+    "SOURCE_ACTOR_COHORT_PCT": "0",
     // Batch summarization workflow (issue #971). Enabled — daily 04:30 UTC cron
     // walks the past 24h of releases across orgs with auto_generate_content=true
     // (~26 orgs as of enable). Admin POST trigger
@@ -329,11 +333,13 @@
     "bindings": [
       { "class_name": "StatusHub", "name": "STATUS_HUB" },
       { "class_name": "ReleaseHub", "name": "RELEASE_HUB" },
+      { "class_name": "SourceActor", "name": "SOURCE_ACTOR" },
     ],
   },
   "migrations": [
     { "new_classes": ["StatusHub"], "tag": "v1" },
     { "new_classes": ["ReleaseHub"], "tag": "v2" },
+    { "new_classes": ["SourceActor"], "tag": "v3" },
   ],
   // Cloudflare Workflows — durable, retriable multi-step pipelines. See
   // workers/api/src/workflows/ and issue #482. Prod-only; staging doesn't
@@ -756,6 +762,9 @@
         // Mirrors prod default; not read in staging (CRON_ENABLED=false means no
         // cron fires, so PollAndFetchWorkflow instances are never dispatched).
         "FANOUT_JITTER_WINDOW_MS": "300000",
+        // SourceActor cohort (#1776). Staging runs no crons, so the cron
+        // heartbeat that seeds actors never fires here; kept at "0" for parity.
+        "SOURCE_ACTOR_COHORT_PCT": "0",
         // IndexNow always attempts now, but the helper short-circuits on
         // INDEXING_DISABLED=true (set in staging), so staging never pings.
         // See workers/api/src/lib/indexnow.ts.
@@ -832,11 +841,13 @@
         "bindings": [
           { "class_name": "StatusHub", "name": "STATUS_HUB" },
           { "class_name": "ReleaseHub", "name": "RELEASE_HUB" },
+          { "class_name": "SourceActor", "name": "SOURCE_ACTOR" },
         ],
       },
       "migrations": [
         { "new_classes": ["StatusHub"], "tag": "v1" },
         { "new_classes": ["ReleaseHub"], "tag": "v2" },
+        { "new_classes": ["SourceActor"], "tag": "v3" },
       ],
       // Workflow binding for on-demand validation only — no cron trigger
       // fires it. Kick a manual instance via:

@@ -145,6 +145,17 @@ export const FLAGS = {
     env: "OAUTH_CLIENT_REAPER_ENABLED",
     default: false,
   },
+  // Rollout master switch for the per-source SourceActor Durable Object (#1776).
+  // default:false → every source stays on the hourly poll cron. Flip ON in BOTH
+  // Flagship apps AND set SOURCE_ACTOR_COHORT_PCT (a wrangler var, not a flag) to
+  // migrate a cohort: a source self-schedules via its DO alarm iff this flag is on
+  // AND it falls in the cohort percentage. Flipping OFF instantly hands every
+  // source back to the cron (the actor's alarm re-checks this gate). Kill switch.
+  sourceActorEnabled: {
+    key: "source-actor-enabled",
+    env: "SOURCE_ACTOR_ENABLED",
+    default: false,
+  },
 } as const satisfies Record<string, FlagDef>;
 
 /** Layered fallback: var value if set, else the hardcoded default. */

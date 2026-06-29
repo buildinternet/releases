@@ -170,6 +170,7 @@ import { getActiveSessionRaw } from "../lib/active-fetch-session.js";
 import { materializeVideoSource } from "../lib/video-materialize.js";
 import { normalizeMediaBind } from "../lib/media-bind.js";
 import { FLAGS, flag } from "@releases/lib/flags";
+import { isSourceActorManaged, parseCohortPct } from "../lib/source-actor-cohort.js";
 import { dedupeByExistingTitle } from "@buildinternet/releases-core/title-dedup";
 import { selectExistingReleaseKeys } from "../lib/title-dedup.js";
 
@@ -2970,6 +2971,37 @@ const patchSourceHandler = async (c: import("hono").Context<Env>) => {
 
   const [updated] = await db.update(sources).set(updates).where(eq(sources.id, src.id)).returning();
   if (src.orgId) c.executionCtx.waitUntil(regeneratePlaybook(db, src.orgId));
+
+  // Re-parenting / tier-change hook (#1776 stub): a PATCH that changes this
+  // source's parent (org/product) or fetch tier notifies its SourceActor so a
+  // pause / tier change is honored promptly instead of on the next natural
+  // alarm. The full old+new-parent ProductActor notify protocol is deferred
+  // (#1777) — for now the actor just re-evaluates its own schedule. Fire-and-
+  // forget, gated on the actor cohort; no-op when the binding is absent.
+  if (
+    c.env.SOURCE_ACTOR &&
+    (body.orgId !== undefined || body.productId !== undefined || body.fetchPriority !== undefined)
+  ) {
+    c.executionCtx.waitUntil(
+      (async () => {
+        const enabled = await flag(
+          c.env.FLAGS,
+          c.env.SOURCE_ACTOR_ENABLED,
+          FLAGS.sourceActorEnabled,
+        );
+        const cohortPct = parseCohortPct(c.env.SOURCE_ACTOR_COHORT_PCT);
+        if (!isSourceActorManaged(src.id, enabled, cohortPct, true)) return;
+        await c.env.SOURCE_ACTOR!.getByName(src.id).onSourceChanged(src.id);
+      })().catch((err: unknown) => {
+        logEvent("warn", {
+          component: "source-actor",
+          event: "reparent-notify-failed",
+          sourceId: src.id,
+          err: err instanceof Error ? err.message : String(err),
+        });
+      }),
+    );
+  }
   // Only re-embed if semantically-relevant fields changed. Metadata churn
   // (lastPolledAt, consecutiveErrors, etc.) would otherwise trigger a
   // needless embedding API call on every poll.
