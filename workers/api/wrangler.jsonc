@@ -143,9 +143,11 @@
     // SourceActor rollout cohort (#1776), 0–100. The `source-actor-enabled`
     // Flagship flag is the master switch; this pct selects which sources migrate
     // (fnv1a(sourceId) % 100 < pct). "0" = none migrated even with the flag on.
-    // Rollout (#1776/#1778): canary at 5% (~17 of ~343 active sources). Ramp
-    // 5 → 25 → 50 → 100 as each cohort proves clean in prod; unblocks #1780.
-    "SOURCE_ACTOR_COHORT_PCT": "5",
+    // Rollout (#1776/#1778): ramping to 25% (~86 of ~343 active sources) after a
+    // clean 5% canary (2 cron cycles, 0 errors, no double-driving). Additive —
+    // fnv1a%100<25 ⊃ <5, so the proven 5% cohort stays managed. Ramp 25 → 50 →
+    // 100 as each cohort proves clean in prod; clean 100% unblocks #1780.
+    "SOURCE_ACTOR_COHORT_PCT": "25",
     // Batch summarization workflow (issue #971). Enabled — daily 04:30 UTC cron
     // walks the past 24h of releases across orgs with auto_generate_content=true
     // (~26 orgs as of enable). Admin POST trigger
