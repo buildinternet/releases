@@ -2,9 +2,10 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-// Wire shape mirrors packages/adapters/src/fetch-plan.ts. Kept local because
-// /status/* is a dev-only endpoint, not part of the published api-types contract
-// (same hand-synced pattern as fetch-log-shared.tsx). Update both together.
+// Wire shape mirrors packages/adapters/src/fetch-plan.ts and source-meta.ts.
+// Kept local because /status/* is a dev-only endpoint, not part of the
+// published api-types contract (same hand-synced pattern as
+// fetch-log-shared.tsx). Update both together.
 export type FetchStrategy =
   | "github"
   | "feed"
@@ -40,6 +41,13 @@ export interface SweepHealth {
   starved: boolean;
 }
 
+/** Mirrors SourceMetadata.sourceActor — written by the SourceActor DO. */
+export interface SourceActorMirror {
+  nextAlarmAt: string | null;
+  lastAlarmAt: string;
+  managed: boolean;
+}
+
 export interface FetchPlanRow {
   id: string;
   slug: string;
@@ -50,6 +58,8 @@ export interface FetchPlanRow {
   plan: FetchPlan;
   state: FetchState;
   sweep: SweepHealth;
+  /** SourceActor DO observability mirror; null when not actor-managed. */
+  sourceActor: SourceActorMirror | null;
 }
 
 interface State {

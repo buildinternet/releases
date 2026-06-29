@@ -18,6 +18,7 @@ import {
   computeFetchState,
   computeSweepHealth,
 } from "@releases/adapters/fetch-plan";
+import { getSourceMeta } from "@releases/adapters/source-meta";
 import { describeWorkflowStages } from "@releases/adapters/workflow-stages";
 
 export const statusRoutes = new Hono<Env>();
@@ -165,6 +166,7 @@ statusRoutes.get("/status/fetch-plan", async (c) => {
   const now = new Date();
   const result = rows.map((s) => {
     const plan = describeFetchPlan(s);
+    const meta = getSourceMeta(s);
     return {
       id: s.id,
       slug: s.slug,
@@ -174,6 +176,7 @@ statusRoutes.get("/status/fetch-plan", async (c) => {
       plan,
       state: computeFetchState(s, plan, now),
       sweep: computeSweepHealth(s, plan, now),
+      sourceActor: meta.sourceActor ?? null,
     };
   });
   return c.json({ sources: result });
