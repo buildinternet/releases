@@ -2,6 +2,7 @@ import { logEvent } from "@releases/lib/log-event";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { createDb } from "./db.js";
+import { makeReadCache } from "./lib/read-cache.js";
 import { hydrateMediaUrls } from "@releases/rendering/media-url.js";
 import {
   search,
@@ -89,7 +90,12 @@ export interface Env {
   EMBEDDING_PROVIDER?: string;
   VOYAGE_API_KEY?: SecretBinding;
   OPENAI_API_KEY?: SecretBinding;
-  /** Optional KV namespace caching single-query embeddings. */
+  /**
+   * Optional KV namespace with a dual role: the single-query embedding cache
+   * AND the backing store for the MCP read-tool read-through cache (see
+   * `lib/read-cache.ts`), which co-tenants here under a `mcpread:` key prefix.
+   * Splittable later by pointing `makeReadCache` at a dedicated binding.
+   */
   EMBED_CACHE?: KVNamespace;
   /** Staging-only: disables indexing (X-Robots-Tag + deny-all /robots.txt). */
   INDEXING_DISABLED?: string;
@@ -275,6 +281,13 @@ export async function createServer(env: Env, ctx?: ExecutionContext, opts?: Crea
       return result;
     };
   }
+
+  // Read-through KV cache for the hot, token-independent read tools (#1800
+  // finding 3). Wraps the OUTERMOST handler (after withMedia) so the cached
+  // value is the final rendered result. Only applied to tools whose output is
+  // identical for every caller — never the follows/personalized tools. No-op
+  // when EMBED_CACHE is unbound.
+  const cached = makeReadCache(env.EMBED_CACHE, ctx);
 
   /**
    * Wrap a search tool handler so the query text, timing, and per-section
@@ -588,7 +601,10 @@ export async function createServer(env: Env, ctx?: ExecutionContext, opts?: Crea
           ),
       },
     },
-    withMedia(async (params) => getLatestReleases(db, params)),
+    cached(
+      "get_latest_releases",
+      withMedia(async (params) => getLatestReleases(db, params)),
+    ),
   );
 
   server.registerTool(
@@ -615,7 +631,7 @@ export async function createServer(env: Env, ctx?: ExecutionContext, opts?: Crea
           ),
       }),
     },
-    async (params) => listCatalog(db, params),
+    cached("list_catalog", async (params) => listCatalog(db, params)),
   );
 
   server.registerTool(
@@ -662,7 +678,10 @@ export async function createServer(env: Env, ctx?: ExecutionContext, opts?: Crea
           ),
       },
     },
-    withMedia(async (params) => getCatalogEntry(db, params)),
+    cached(
+      "get_catalog_entry",
+      withMedia(async (params) => getCatalogEntry(db, params)),
+    ),
   );
 
   server.registerTool(
@@ -691,7 +710,7 @@ export async function createServer(env: Env, ctx?: ExecutionContext, opts?: Crea
           ),
       }),
     },
-    async (params) => listOrganizations(db, params),
+    cached("list_organizations", async (params) => listOrganizations(db, params)),
   );
 
   server.registerTool(
@@ -714,7 +733,10 @@ export async function createServer(env: Env, ctx?: ExecutionContext, opts?: Crea
           ),
       },
     },
-    withMedia(async (params) => getOrganization(db, params)),
+    cached(
+      "get_organization",
+      withMedia(async (params) => getOrganization(db, params)),
+    ),
   );
 
   server.registerTool(
@@ -734,7 +756,7 @@ export async function createServer(env: Env, ctx?: ExecutionContext, opts?: Crea
           ),
       },
     },
-    async (params) => lookupDomain(db, params),
+    cached("lookup_domain", async (params) => lookupDomain(db, params)),
   );
 
   server.registerTool(
@@ -748,7 +770,7 @@ export async function createServer(env: Env, ctx?: ExecutionContext, opts?: Crea
       ].join("\n"),
       inputSchema: withPagination({}),
     },
-    async (params) => listCollections(db, params),
+    cached("list_collections", async (params) => listCollections(db, params)),
   );
 
   server.registerTool(
@@ -761,7 +783,10 @@ export async function createServer(env: Env, ctx?: ExecutionContext, opts?: Crea
         slug: z.string().describe("Collection slug (e.g. 'frontier-ai-labs')."),
       },
     },
-    withMedia(async (params) => getCollection(db, params)),
+    cached(
+      "get_collection",
+      withMedia(async (params) => getCollection(db, params)),
+    ),
   );
 
   server.registerTool(
@@ -798,7 +823,10 @@ export async function createServer(env: Env, ctx?: ExecutionContext, opts?: Crea
           ),
       },
     },
-    withMedia(async (params) => getCollectionReleases(db, params)),
+    cached(
+      "get_collection_releases",
+      withMedia(async (params) => getCollectionReleases(db, params)),
+    ),
   );
 
   server.registerTool(
