@@ -32,7 +32,17 @@ siteNoticeRoutes.get(
     if (!notice || (!notice.active && !(await isValidBearerAuth(c)))) {
       return c.json({ notice: null });
     }
-    c.header("Cache-Control", "public, max-age=60, stale-while-revalidate=300");
+    // Only the public, active notice is shared-cacheable. An inactive (draft)
+    // notice only reaches here for an admin Bearer caller — never tag that
+    // response `public`, or a shared/edge cache could serve an admin's draft to
+    // anonymous users for up to its max-age (#1800). The header stays in-handler
+    // rather than on the shared cacheControl middleware because the middleware
+    // can't see the admin/draft distinction.
+    if (notice.active) {
+      c.header("Cache-Control", "public, max-age=60, stale-while-revalidate=300");
+    } else {
+      c.header("Cache-Control", "private, no-store");
+    }
     return c.json({ notice });
   },
 );

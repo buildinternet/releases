@@ -756,6 +756,18 @@ v1.use(
 );
 v1.use("/orgs/:slug/accounts", cacheControl(120, { staleWhileRevalidate: 60, isPublic: true }));
 v1.use("/orgs/:slug/collections", cacheControl(120, { staleWhileRevalidate: 60, isPublic: true }));
+// Non-personalized org-scoped reads that were missing a Cache-Control while
+// their single-entity/org-scoped siblings had one (#1800 Tier 2).
+v1.use(
+  "/orgs/:slug/recent-releases",
+  cacheControl(60, { staleWhileRevalidate: 30, isPublic: true }),
+);
+v1.use("/orgs/:slug/tags", cacheControl(300, { staleWhileRevalidate: 60, isPublic: true }));
+v1.use("/orgs/:slug/sparklines", cacheControl(120, { staleWhileRevalidate: 60, isPublic: true }));
+v1.use("/orgs/:slug/products", cacheControl(60, { staleWhileRevalidate: 30, isPublic: true }));
+// AI-generated org overview — identical for every visitor until the next
+// regen, the only headline-content read that was uncached (#1800 finding 1).
+v1.use("/orgs/:slug/overview", cacheControl(60, { staleWhileRevalidate: 30, isPublic: true }));
 // Catalog + org-scoped source/product GETs (#690): same cache profile as the
 // bare resource routes since they hit the same handlers.
 v1.use("/orgs/:slug/catalog", cacheControl(60, { staleWhileRevalidate: 30, isPublic: true }));
@@ -781,6 +793,19 @@ v1.use(
 );
 v1.use("/sources/:slug/activity", cacheControl(120, { staleWhileRevalidate: 60, isPublic: true }));
 v1.use("/sources/:slug/heatmap", cacheControl(120, { staleWhileRevalidate: 60, isPublic: true }));
+// Per-source feeds/changelog — public, JSON-only (no markdown negotiation, so
+// no varyOnAccept); their org-scoped twins are already cached via the
+// /orgs/:orgSlug/sources/:sourceSlug/* wildcard (#1800 Tier 2).
+v1.use("/sources/:slug/releases", cacheControl(60, { staleWhileRevalidate: 30, isPublic: true }));
+v1.use("/sources/:slug/changelog", cacheControl(60, { staleWhileRevalidate: 30, isPublic: true }));
+v1.use(
+  "/sources/:slug/recent-releases",
+  cacheControl(60, { staleWhileRevalidate: 30, isPublic: true }),
+);
+v1.use(
+  "/sources/:slug/known-releases",
+  cacheControl(60, { staleWhileRevalidate: 30, isPublic: true }),
+);
 v1.use("/search", cacheControl(30, { staleWhileRevalidate: 30, isPublic: true }), varyOnAccept());
 v1.use("/related/*", cacheControl(300, { staleWhileRevalidate: 60, isPublic: true }));
 // Single-release detail: same 60s/SWR-30 profile as the other single-entity
@@ -799,8 +824,28 @@ v1.use("/products", cacheControl(60, { staleWhileRevalidate: 30, isPublic: true 
 v1.use("/products/:slug", cacheControl(60, { staleWhileRevalidate: 30, isPublic: true }));
 v1.use("/products/:slug/activity", cacheControl(120, { staleWhileRevalidate: 60, isPublic: true }));
 v1.use("/products/:slug/heatmap", cacheControl(120, { staleWhileRevalidate: 60, isPublic: true }));
+// Non-personalized product-scoped reads missing a Cache-Control (#1800 Tier 2).
+v1.use(
+  "/products/:slug/collections",
+  cacheControl(120, { staleWhileRevalidate: 60, isPublic: true }),
+);
+v1.use(
+  "/products/:identifier/tags",
+  cacheControl(300, { staleWhileRevalidate: 60, isPublic: true }),
+);
+// AI-generated product overview — same shared-content profile as its sibling
+// /orgs/:slug/overview (#1800 finding 1).
+v1.use("/products/:slug/overview", cacheControl(60, { staleWhileRevalidate: 30, isPublic: true }));
 v1.use(
   "/orgs/:orgSlug/products/:productSlug/activity",
+  cacheControl(120, { staleWhileRevalidate: 60, isPublic: true }),
+);
+// Match the bare /products/:slug/heatmap 120s profile — without this explicit
+// entry the org-scoped twin falls through to the 60s /* wildcard below, so the
+// same data had two lifetimes by URL shape (#1800 TTL drift). Must precede the
+// wildcard: cacheControl no-ops once a Cache-Control header is already set.
+v1.use(
+  "/orgs/:orgSlug/products/:productSlug/heatmap",
   cacheControl(120, { staleWhileRevalidate: 60, isPublic: true }),
 );
 v1.use(
@@ -814,6 +859,12 @@ v1.use("/sitemap", cacheControl(600, { staleWhileRevalidate: 600, isPublic: true
 v1.use("/lookups/by-domain", cacheControl(60, { staleWhileRevalidate: 30, isPublic: true }));
 v1.use("/lookups/source-by-slug", cacheControl(60, { staleWhileRevalidate: 30, isPublic: true }));
 v1.use("/lookups/product-by-slug", cacheControl(60, { staleWhileRevalidate: 30, isPublic: true }));
+// Pure resolution primitive over indexed columns, same class as the three
+// lookup siblings above — was the only one uncached (#1800 Tier 2).
+v1.use(
+  "/lookups/source-by-coordinate",
+  cacheControl(60, { staleWhileRevalidate: 30, isPublic: true }),
+);
 // whats-changed reads already-ingested releases — cacheable like the other
 // public read primitives; the (package, from, to) range is deterministic.
 v1.use("/whats-changed", cacheControl(60, { staleWhileRevalidate: 30, isPublic: true }));
@@ -827,6 +878,12 @@ v1.use(
 v1.use("/tags/:slug", cacheControl(300, { staleWhileRevalidate: 60, isPublic: true }));
 v1.use("/collections", cacheControl(300, { staleWhileRevalidate: 60, isPublic: true }));
 v1.use("/collections/:slug", cacheControl(300, { staleWhileRevalidate: 60, isPublic: true }));
+// Written once/day by the collection-summaries cron — static for ~24h and
+// fully shared, yet was uncached (#1800 finding 2).
+v1.use(
+  "/collections/:slug/daily-summaries",
+  cacheControl(300, { staleWhileRevalidate: 60, isPublic: true }),
+);
 v1.use(
   "/collections/:slug/releases",
   cacheControl(60, { staleWhileRevalidate: 30, isPublic: true }),
