@@ -216,7 +216,7 @@ describe("fetchOverviewCandidates", () => {
   it("excludes orgs with a fresh existing overview", async () => {
     tdb.db.insert(organizations).values(makeOrg()).run();
     tdb.db.insert(sources).values(makeSource()).run();
-    // Overview updated 1 day ago — well within the 14-day default threshold.
+    // Overview updated 1 day ago — well within the 7-day default threshold.
     tdb.db
       .insert(knowledgePages)
       .values(makeOverview({ updatedAt: isoDaysAgo(1) }))
@@ -232,6 +232,25 @@ describe("fetchOverviewCandidates", () => {
 
     const out = await fetchOverviewCandidates(asDb(tdb.db));
     expect(out.length).toBe(0);
+  });
+
+  it("default age threshold is weekly: an 8-day-old overview with new activity is eligible", async () => {
+    tdb.db.insert(organizations).values(makeOrg()).run();
+    tdb.db.insert(sources).values(makeSource()).run();
+    // 8 days old — past the 7-day default, but would have been fresh under the old 14-day gate.
+    tdb.db
+      .insert(knowledgePages)
+      .values(makeOverview({ updatedAt: isoDaysAgo(8) }))
+      .run();
+    // One new release since the overview — enough for the cron's minNewReleases:0 gate.
+    tdb.db
+      .insert(releases)
+      .values(makeRelease({ publishedAt: isoDaysAgo(1) }))
+      .run();
+
+    const out = await fetchOverviewCandidates(asDb(tdb.db), { minNewReleases: 0 });
+    expect(out.length).toBe(1);
+    expect(out[0]!.orgSlug).toBe("eligibility-org");
   });
 
   it("excludes orgs whose overview is old but recentReleaseCount is too low", async () => {
@@ -303,7 +322,7 @@ describe("fetchOverviewCandidates", () => {
   it("explicit orgSlugs bypasses age threshold — fresh overview (1 day old) is still returned", async () => {
     tdb.db.insert(organizations).values(makeOrg()).run();
     tdb.db.insert(sources).values(makeSource()).run();
-    // Overview updated 1 day ago — well within the default 14-day age threshold.
+    // Overview updated 1 day ago — well within the default 7-day age threshold.
     tdb.db
       .insert(knowledgePages)
       .values(makeOverview({ updatedAt: isoDaysAgo(1) }))
@@ -329,7 +348,7 @@ describe("fetchOverviewCandidates", () => {
   it("explicit orgSlugs bypasses minNewReleases — 1 new release is sufficient", async () => {
     tdb.db.insert(organizations).values(makeOrg()).run();
     tdb.db.insert(sources).values(makeSource()).run();
-    // Overview is 60 days old (well past the 14-day age threshold) but only
+    // Overview is 60 days old (well past the 7-day age threshold) but only
     // 1 new release — below default minNewReleases=20.
     tdb.db
       .insert(knowledgePages)

@@ -432,10 +432,11 @@ if (input.maxOrgs != null && !(Number.isInteger(input.maxOrgs) && input.maxOrgs 
   return { status: "error", error: "invalid maxOrgs" };
 }
 const MAX_ORGS = input.maxOrgs == null ? 25 : input.maxOrgs;
-// Default 14 = the server's "behind" eligibility threshold (DEFAULT_MIN_OVERVIEW_AGE_DAYS)
-// that `--stale-days` controls — not OVERVIEW_STALE_DAYS (30), the display-only staleness mark.
+// Default 7 = the server's "behind" eligibility threshold (DEFAULT_MIN_OVERVIEW_AGE_DAYS),
+// the weekly cadence that `--stale-days` controls — not OVERVIEW_STALE_DAYS (30), the
+// display-only staleness mark.
 const STALE_DAYS =
-  input.staleDays != null ? Math.max(0, Math.floor(Number(input.staleDays) || 0)) : 14;
+  input.staleDays != null ? Math.max(0, Math.floor(Number(input.staleDays) || 0)) : 7;
 const MISSING = input.missing !== false; // default true
 const HAS_ACTIVITY = input.hasActivity !== false; // default true
 const OVERVIEW_FROM = input.overviewUpdatedFrom ?? null;
