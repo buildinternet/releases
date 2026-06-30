@@ -2,6 +2,7 @@ import { logEvent } from "@releases/lib/log-event";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { createDb } from "./db.js";
+import { makeReadCache } from "./lib/read-cache.js";
 import { hydrateMediaUrls } from "@releases/rendering/media-url.js";
 import {
   search,
@@ -275,6 +276,13 @@ export async function createServer(env: Env, ctx?: ExecutionContext, opts?: Crea
       return result;
     };
   }
+
+  // Read-through KV cache for the hot, token-independent read tools (#1800
+  // finding 3). Wraps the OUTERMOST handler (after withMedia) so the cached
+  // value is the final rendered result. Only applied to tools whose output is
+  // identical for every caller — never the follows/personalized tools. No-op
+  // when EMBED_CACHE is unbound.
+  const cached = makeReadCache(env.EMBED_CACHE, ctx);
 
   /**
    * Wrap a search tool handler so the query text, timing, and per-section
@@ -588,7 +596,10 @@ export async function createServer(env: Env, ctx?: ExecutionContext, opts?: Crea
           ),
       },
     },
-    withMedia(async (params) => getLatestReleases(db, params)),
+    cached(
+      "get_latest_releases",
+      withMedia(async (params) => getLatestReleases(db, params)),
+    ),
   );
 
   server.registerTool(
@@ -615,7 +626,7 @@ export async function createServer(env: Env, ctx?: ExecutionContext, opts?: Crea
           ),
       }),
     },
-    async (params) => listCatalog(db, params),
+    cached("list_catalog", async (params) => listCatalog(db, params)),
   );
 
   server.registerTool(
@@ -662,7 +673,10 @@ export async function createServer(env: Env, ctx?: ExecutionContext, opts?: Crea
           ),
       },
     },
-    withMedia(async (params) => getCatalogEntry(db, params)),
+    cached(
+      "get_catalog_entry",
+      withMedia(async (params) => getCatalogEntry(db, params)),
+    ),
   );
 
   server.registerTool(
@@ -691,7 +705,7 @@ export async function createServer(env: Env, ctx?: ExecutionContext, opts?: Crea
           ),
       }),
     },
-    async (params) => listOrganizations(db, params),
+    cached("list_organizations", async (params) => listOrganizations(db, params)),
   );
 
   server.registerTool(
@@ -714,7 +728,10 @@ export async function createServer(env: Env, ctx?: ExecutionContext, opts?: Crea
           ),
       },
     },
-    withMedia(async (params) => getOrganization(db, params)),
+    cached(
+      "get_organization",
+      withMedia(async (params) => getOrganization(db, params)),
+    ),
   );
 
   server.registerTool(
@@ -734,7 +751,7 @@ export async function createServer(env: Env, ctx?: ExecutionContext, opts?: Crea
           ),
       },
     },
-    async (params) => lookupDomain(db, params),
+    cached("lookup_domain", async (params) => lookupDomain(db, params)),
   );
 
   server.registerTool(
@@ -748,7 +765,7 @@ export async function createServer(env: Env, ctx?: ExecutionContext, opts?: Crea
       ].join("\n"),
       inputSchema: withPagination({}),
     },
-    async (params) => listCollections(db, params),
+    cached("list_collections", async (params) => listCollections(db, params)),
   );
 
   server.registerTool(
@@ -761,7 +778,10 @@ export async function createServer(env: Env, ctx?: ExecutionContext, opts?: Crea
         slug: z.string().describe("Collection slug (e.g. 'frontier-ai-labs')."),
       },
     },
-    withMedia(async (params) => getCollection(db, params)),
+    cached(
+      "get_collection",
+      withMedia(async (params) => getCollection(db, params)),
+    ),
   );
 
   server.registerTool(
@@ -798,7 +818,10 @@ export async function createServer(env: Env, ctx?: ExecutionContext, opts?: Crea
           ),
       },
     },
-    withMedia(async (params) => getCollectionReleases(db, params)),
+    cached(
+      "get_collection_releases",
+      withMedia(async (params) => getCollectionReleases(db, params)),
+    ),
   );
 
   server.registerTool(
