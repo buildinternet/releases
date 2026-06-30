@@ -28,6 +28,7 @@ import {
 } from "./middleware/rate-limit.js";
 import { dbHealthCheck } from "./middleware/db-health.js";
 import { cacheControl } from "./middleware/cache.js";
+import { edgeCache } from "./middleware/edge-cache.js";
 import { varyOnAccept } from "./middleware/content-negotiation.js";
 import { blockIndexing } from "./middleware/indexing.js";
 import { stagingAccessGate } from "./middleware/staging-access.js";
@@ -678,6 +679,14 @@ app.on(["POST", "GET"], "/api/auth/*", async (c) => {
 // ── v1 REST API ──
 
 const v1 = new Hono<Env>();
+
+// Shared edge cache (Cache API), registered FIRST so it is the outermost v1
+// middleware: it short-circuits on a cache hit before auth/rate-limit/DB run,
+// and on a miss stores the response after the per-route `cacheControl(...)`
+// header below has been applied. Anonymous GETs only; reuses CACHE_DISABLED as
+// its kill switch. Without this the Cache-Control headers are inert at the
+// edge for a Workers route (issue #1800). See middleware/edge-cache.ts.
+v1.use("*", edgeCache());
 
 // `publicReadRoutes` and `adminRoutes` are defined in route-namespaces.ts so
 // the CI coverage gate (scripts/check-openapi-coverage.ts) can import them
