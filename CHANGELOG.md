@@ -3,6 +3,11 @@
 The product changelog for releases.sh, published to its own registry. Drafted daily from merged
 PRs and reviewed via PR. See docs/changelog-style.md for the voice and curation rules.
 
+## June 29, 2026
+
+**Changed**
+- Sign-in, sign-up, forgot-password, and reset-password pages unified — all authentication screens now share the centered card layout introduced with the OAuth and device flows, with consistent typography, button styles, and dark-mode support.
+
 ## June 25, 2026
 
 **Added**
