@@ -442,9 +442,13 @@ collectionRoutes.get(
     const featuredParam = c.req.query("featured");
     const featuredOnly = featuredParam === "1" || featuredParam === "true";
     const featuredFilter = featuredOnly ? sql`WHERE c.is_featured = 1` : sql``;
-    // Same filter as a Drizzle predicate for the member queries below, so they
-    // don't fetch members for non-featured collections when `?featured=1`.
-    const featuredPredicate = featuredOnly ? eq(collections.isFeatured, true) : undefined;
+    // Per-collection preview cap. The list renders only the top PREVIEW_LIMIT
+    // (3) interleaved members, but the SQL fetches a small margin per collection
+    // (windowed via ROW_NUMBER) so the JS interleave — which re-sorts by
+    // localeCompare, a different collation than SQL's ORDER BY — can't drop a
+    // top-3 member at a tie boundary. Still bounded: a big collection no longer
+    // streams every member back just to preview three (#1800 finding 6).
+    const PREVIEW_FETCH = 12;
 
     const [countRows, orgMemberRows, productMemberRows] = await Promise.all([
       // Raw correlated subqueries (Drizzle's relational `${collections.id}`
@@ -473,42 +477,72 @@ collectionRoutes.get(
         ORDER BY c.name
       `),
 
-      db
-        .select({
-          collectionSlug: collections.slug,
-          position: collectionMembers.position,
-          slug: organizationsPublic.slug,
-          name: organizationsPublic.name,
-          domain: organizationsPublic.domain,
-          avatarUrl: organizationsPublic.avatarUrl,
-          description: organizationsPublic.description,
-          githubHandle: githubHandleSubquery(sql`${organizationsPublic.id}`),
-        })
-        .from(collectionMembers)
-        .innerJoin(collections, eq(collections.id, collectionMembers.collectionId))
-        .innerJoin(organizationsPublic, eq(organizationsPublic.id, collectionMembers.orgId))
-        .where(featuredPredicate)
-        .orderBy(collectionMembers.position, organizationsPublic.name),
+      // Top-PREVIEW_FETCH org members per collection, windowed so the scan
+      // returns a handful of rows per collection instead of every member
+      // (#1800 finding 6). Same (position, name) order the interleave expects.
+      db.all<{
+        collectionSlug: string;
+        position: number;
+        slug: string;
+        name: string;
+        domain: string | null;
+        avatarUrl: string | null;
+        description: string | null;
+        githubHandle: string | null;
+      }>(sql`
+        SELECT collectionSlug, position, slug, name, domain, avatarUrl, description, githubHandle
+        FROM (
+          SELECT c.slug AS collectionSlug, cm.position AS position,
+                 op.slug AS slug, op.name AS name, op.domain AS domain,
+                 op.avatar_url AS avatarUrl, op.description AS description,
+                 (SELECT handle FROM org_accounts
+                    WHERE org_id = op.id AND platform = 'github'
+                    ORDER BY created_at, id LIMIT 1) AS githubHandle,
+                 ROW_NUMBER() OVER (
+                   PARTITION BY cm.collection_id ORDER BY cm.position, op.name
+                 ) AS rn
+          FROM ${collectionMembers} cm
+          INNER JOIN ${collections} c ON c.id = cm.collection_id
+          INNER JOIN ${organizationsPublic} op ON op.id = cm.org_id
+          ${featuredFilter}
+        ) WHERE rn <= ${PREVIEW_FETCH}
+      `),
 
-      db
-        .select({
-          collectionSlug: collections.slug,
-          position: collectionMembers.position,
-          productSlug: productsActive.slug,
-          productName: productsActive.name,
-          productDescription: productsActive.description,
-          parentOrgSlug: organizationsPublic.slug,
-          parentOrgName: organizationsPublic.name,
-          parentOrgDomain: organizationsPublic.domain,
-          parentOrgAvatarUrl: organizationsPublic.avatarUrl,
-          parentOrgGithubHandle: githubHandleSubquery(sql`${organizationsPublic.id}`),
-        })
-        .from(collectionMembers)
-        .innerJoin(collections, eq(collections.id, collectionMembers.collectionId))
-        .innerJoin(productsActive, eq(productsActive.id, collectionMembers.productId))
-        .innerJoin(organizationsPublic, eq(organizationsPublic.id, productsActive.orgId))
-        .where(featuredPredicate)
-        .orderBy(collectionMembers.position, productsActive.name),
+      // Top-PREVIEW_FETCH product members per collection, same windowing.
+      db.all<{
+        collectionSlug: string;
+        position: number;
+        productSlug: string;
+        productName: string;
+        productDescription: string | null;
+        parentOrgSlug: string;
+        parentOrgName: string;
+        parentOrgDomain: string | null;
+        parentOrgAvatarUrl: string | null;
+        parentOrgGithubHandle: string | null;
+      }>(sql`
+        SELECT collectionSlug, position, productSlug, productName, productDescription,
+               parentOrgSlug, parentOrgName, parentOrgDomain, parentOrgAvatarUrl,
+               parentOrgGithubHandle
+        FROM (
+          SELECT c.slug AS collectionSlug, cm.position AS position,
+                 pa.slug AS productSlug, pa.name AS productName,
+                 pa.description AS productDescription,
+                 op.slug AS parentOrgSlug, op.name AS parentOrgName,
+                 op.domain AS parentOrgDomain, op.avatar_url AS parentOrgAvatarUrl,
+                 (SELECT handle FROM org_accounts
+                    WHERE org_id = op.id AND platform = 'github'
+                    ORDER BY created_at, id LIMIT 1) AS parentOrgGithubHandle,
+                 ROW_NUMBER() OVER (
+                   PARTITION BY cm.collection_id ORDER BY cm.position, pa.name
+                 ) AS rn
+          FROM ${collectionMembers} cm
+          INNER JOIN ${collections} c ON c.id = cm.collection_id
+          INNER JOIN ${productsActive} pa ON pa.id = cm.product_id
+          INNER JOIN ${organizationsPublic} op ON op.id = pa.org_id
+          ${featuredFilter}
+        ) WHERE rn <= ${PREVIEW_FETCH}
+      `),
     ]);
 
     const orgsBySlug = new Map<string, OrgMemberRow[]>();

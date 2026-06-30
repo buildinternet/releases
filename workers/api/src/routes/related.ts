@@ -528,11 +528,23 @@ relatedRoutes.get(
       visibleById.set(row.id, row);
     }
 
-    // Collect orgs in a single batched lookup.
+    // The org lookup and the per-source release-stats query both derive only
+    // from `rows` (org ids / visible ids) and are independent of each other, so
+    // run them concurrently rather than back-to-back (#1800 finding 8).
     const orgIds = [...new Set(rows.map((r) => r.orgId).filter((x): x is string => !!x))];
-    const orgRows =
+    const visibleIds = [...visibleById.keys()];
+    const recentCutoffIso = daysAgoIso(30);
+    type StatsRow = {
+      sourceId: string;
+      n: number;
+      latest: string | null;
+      latestTitle: string | null;
+      latestVersion: string | null;
+      recentCount: number;
+    };
+    const [orgRows, statsRows] = await Promise.all([
       orgIds.length > 0
-        ? await db
+        ? db
             .select({
               id: organizationsActive.id,
               slug: organizationsActive.slug,
@@ -541,34 +553,15 @@ relatedRoutes.get(
             })
             .from(organizationsActive)
             .where(inArray(organizationsActive.id, orgIds))
-        : [];
-    const orgById = new Map<string, { slug: string; name: string; avatarUrl: string | null }>();
-    for (const o of orgRows)
-      orgById.set(o.id, { slug: o.slug, name: o.name, avatarUrl: o.avatarUrl });
-
-    // Release stats per neighbor source — a single window-function query so we
-    // can return both the aggregates (release count, latest date, recent count)
-    // and the fields *of* the latest release (title, version) without a second
-    // roundtrip. ROW_NUMBER lets us pick exactly one row per source.
-    const visibleIds = [...visibleById.keys()];
-    const recentCutoffIso = daysAgoIso(30);
-    const statsRows: Array<{
-      sourceId: string;
-      n: number;
-      latest: string | null;
-      latestTitle: string | null;
-      latestVersion: string | null;
-      recentCount: number;
-    }> =
+        : Promise.resolve(
+            [] as Array<{ id: string; slug: string; name: string; avatarUrl: string | null }>,
+          ),
+      // Release stats per neighbor source — a single window-function query so we
+      // can return both the aggregates (release count, latest date, recent count)
+      // and the fields *of* the latest release (title, version) without a second
+      // roundtrip. ROW_NUMBER lets us pick exactly one row per source.
       visibleIds.length > 0
-        ? await db.all<{
-            sourceId: string;
-            n: number;
-            latest: string | null;
-            latestTitle: string | null;
-            latestVersion: string | null;
-            recentCount: number;
-          }>(sql`
+        ? db.all<StatsRow>(sql`
           SELECT sourceId, n, latest, latestTitle, latestVersion, recentCount
           FROM (
             SELECT r.source_id                                               AS sourceId,
@@ -590,8 +583,12 @@ relatedRoutes.get(
           ) AS ranked
           WHERE rn = 1
         `)
-        : [];
-    const statsById = new Map<string, (typeof statsRows)[number]>();
+        : Promise.resolve([] as StatsRow[]),
+    ]);
+    const orgById = new Map<string, { slug: string; name: string; avatarUrl: string | null }>();
+    for (const o of orgRows)
+      orgById.set(o.id, { slug: o.slug, name: o.name, avatarUrl: o.avatarUrl });
+    const statsById = new Map<string, StatsRow>();
     for (const row of statsRows) statsById.set(row.sourceId, row);
 
     // Rank by cosine × recency of the source's latest release (45-day

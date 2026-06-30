@@ -18,10 +18,11 @@
 import { Hono } from "hono";
 import { describeRoute, resolver } from "hono-openapi";
 import { z } from "zod";
-import { and, asc, eq, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, gt, isNotNull, isNull, lte, sql } from "drizzle-orm";
 import { releases, sourcesActive, organizationsActive } from "@buildinternet/releases-core/schema";
 import { releaseCoverage } from "@releases/db/schema-coverage.js";
 import { resolveUpgradeRange } from "@buildinternet/releases-core/upgrade-range";
+import { computeVersionSort } from "@buildinternet/releases-core/version-sort";
 import { parseCoordinate } from "@buildinternet/releases-core/lookup-coordinate";
 import { estimateTokens } from "@buildinternet/releases-core/tokens";
 import { CHANGELOG_TOKEN_BRACKETS } from "@buildinternet/releases-core/changelog-slice";
@@ -215,8 +216,32 @@ whatsChangedRoutes.get(
       });
     }
 
-    // Load the source's canonical (non-suppressed, non-coverage-side) releases.
-    const rows = await db
+    // Bound the version range in SQL when both ends parse to a versionSort key
+    // (the common numeric-version path) so we use idx_releases_source_version_sort
+    // instead of loading the source's entire history and filtering in JS — for
+    // prolific sources (Node, Kubernetes) that was thousands of rows to return a
+    // handful (#1800 finding 7). resolveUpgradeRange re-applies the identical
+    // (fromSort, toSort] predicate below, so this only narrows the rows scanned,
+    // never the result. The date-bounded fallback (a non-numeric bound like a
+    // codename) still needs the full set to anchor on the from/to releases.
+    const fromSort = computeVersionSort(from);
+    const toSort = computeVersionSort(to);
+    const versionBounded = fromSort !== null && toSort !== null;
+
+    const conditions = [
+      eq(releases.sourceId, source.sourceId),
+      eq(releases.suppressed, false),
+      isNull(releaseCoverage.coverageId),
+    ];
+    if (fromSort !== null && toSort !== null) {
+      conditions.push(
+        isNotNull(releases.versionSort),
+        gt(releases.versionSort, fromSort),
+        lte(releases.versionSort, toSort),
+      );
+    }
+
+    const rowsQuery = db
       .select({
         version: releases.version,
         versionSort: releases.versionSort,
@@ -230,13 +255,12 @@ whatsChangedRoutes.get(
       })
       .from(releases)
       .leftJoin(releaseCoverage, eq(releaseCoverage.coverageId, releases.id))
-      .where(
-        and(
-          eq(releases.sourceId, source.sourceId),
-          eq(releases.suppressed, false),
-          isNull(releaseCoverage.coverageId),
-        ),
-      );
+      .where(and(...conditions))
+      .$dynamic();
+    // The index provides ascending versionSort order on the bounded path.
+    const rows = versionBounded
+      ? await rowsQuery.orderBy(asc(releases.versionSort))
+      : await rowsQuery;
 
     const inRange = resolveUpgradeRange(rows, { from, to });
 

@@ -74,6 +74,48 @@ describe("GET /v1/whats-changed", () => {
     expect(body.entries.map((e) => e.version)).toEqual(["1.1.0", "1.2.0", "2.0.0"]); // from exclusive, to inclusive
   });
 
+  it("date-bounds non-numeric (codename) versions via the fallback path", async () => {
+    // from/to don't parse to a versionSort key, so the route can't bound in SQL
+    // and falls back to loading the full set + anchoring on the from/to releases
+    // by exact version, bounding the rest by publishedAt in (fromDate, toDate].
+    const db = mkDb();
+    await db
+      .insert(organizations)
+      .values([{ id: "org_zoo", slug: "zoo", name: "Zoo", category: "developer-tools" }]);
+    await db.insert(sources).values([
+      {
+        id: "src_zoo",
+        slug: "zoo-os",
+        name: "Zoo OS",
+        type: "github",
+        url: "https://github.com/zoo/os",
+        orgId: "org_zoo",
+      },
+    ]);
+    await db.insert(releases).values([
+      {
+        ...relRow("rel_jag", "jaguar", "2026-01-01T00:00:00Z"),
+        id: "rel_jag",
+        sourceId: "src_zoo",
+      },
+      {
+        ...relRow("rel_lion", "lion", "2026-02-01T00:00:00Z"),
+        id: "rel_lion",
+        sourceId: "src_zoo",
+      },
+      {
+        ...relRow("rel_puma", "puma", "2026-03-01T00:00:00Z"),
+        id: "rel_puma",
+        sourceId: "src_zoo",
+      },
+    ]);
+    const res = await call(mkApp(db), "package=zoo-os&from=jaguar&to=puma");
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as WhatsChangedResponse;
+    expect(body.status).toBe("resolved");
+    expect(body.entries.map((e) => e.version)).toEqual(["lion", "puma"]); // from exclusive, to inclusive
+  });
+
   it("flows the breaking verdict (#1696) through to the entries", async () => {
     const db = mkDb();
     await seed(db);
