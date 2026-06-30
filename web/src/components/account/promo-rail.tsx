@@ -1,15 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { eyebrowClass } from "@releases/design-system";
+import { CopyIcon } from "@/components/copy-icon";
+import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
 import { McpIcon, TerminalIcon, ExternalLinkIcon } from "./icons";
 
 /**
- * Context rail shown beside the Integrations and Webhooks & API panels — an
- * auto-advancing two-card carousel promoting the MCP server and the CLI (the
- * design's `promo` rail). Pauses nothing fancy; just rotates every 6s with dot
- * controls. Hidden below `lg` like the other asides.
+ * Context rail shown beside the Integrations and Webhooks & API panels — the
+ * design's right-hand "third rail". A two-card switcher promoting the MCP
+ * server and the CLI, each with a click-to-copy install command. Manual dot
+ * navigation (no auto-advance); hidden below `lg` like the other asides.
  */
 const CARDS = [
   {
@@ -38,11 +40,7 @@ const CARDS = [
 
 export function PromoRail() {
   const [index, setIndex] = useState(0);
-
-  useEffect(() => {
-    const t = setInterval(() => setIndex((i) => (i + 1) % CARDS.length), 6000);
-    return () => clearInterval(t);
-  }, []);
+  const { copied, copy } = useCopyToClipboard();
 
   const card = CARDS[index];
   const Icon = card.Icon;
@@ -68,9 +66,20 @@ export function PromoRail() {
         <p className="mt-1.5 mb-3 text-[13px] leading-relaxed text-stone-600 dark:text-stone-300">
           {card.body}
         </p>
-        <code className="mb-3 block overflow-hidden rounded-lg border border-stone-200 bg-white px-2.5 py-2 font-mono text-[12px] text-stone-900 dark:border-stone-700 dark:bg-stone-950 dark:text-stone-100">
-          <span className="block truncate">{card.code}</span>
-        </code>
+        <button
+          type="button"
+          onClick={() => copy(card.code)}
+          aria-label={copied ? "Copied" : "Copy command"}
+          title={card.code}
+          className="group mb-3 flex w-full items-center gap-2 rounded-lg border border-stone-200 bg-white px-2.5 py-2 text-left transition-colors hover:border-stone-300 dark:border-stone-700 dark:bg-stone-950 dark:hover:border-stone-600"
+        >
+          <code className="min-w-0 flex-1 truncate font-mono text-[12px] text-stone-900 dark:text-stone-100">
+            {card.code}
+          </code>
+          <span className="shrink-0 text-stone-400 group-hover:text-stone-600 dark:text-stone-500 dark:group-hover:text-stone-300">
+            <CopyIcon copied={copied} size={13} />
+          </span>
+        </button>
         <Link
           href={card.href}
           className="inline-flex items-center gap-1.5 text-[13px] font-medium text-[var(--accent)]"

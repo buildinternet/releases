@@ -260,37 +260,6 @@ export function GeneralPanel() {
           </div>
         </section>
 
-        <section>
-          <div className="text-sm font-semibold text-stone-900 dark:text-stone-100">
-            Default visibility <span className="font-normal text-stone-400">(coming soon)</span>
-          </div>
-          <p className="mt-1 mb-3.5 text-[13px] text-stone-500 dark:text-stone-400">
-            Applied to new collections created in this workspace.
-          </p>
-          <div className="flex flex-wrap gap-2.5">
-            <span className="flex items-center gap-2.5 rounded-[10px] border border-[var(--accent)] bg-[var(--accent-soft)] px-3.5 py-2.5">
-              <span className="h-4 w-4 shrink-0 rounded-full border-[5px] border-[var(--accent)] bg-white" />
-              <span>
-                <span className="block text-[13.5px] font-medium text-stone-900 dark:text-stone-100">
-                  Private
-                </span>
-                <span className="text-[12px] text-stone-400 dark:text-stone-500">Members only</span>
-              </span>
-            </span>
-            <span className="flex items-center gap-2.5 rounded-[10px] border border-stone-200 px-3.5 py-2.5 opacity-70 dark:border-stone-700">
-              <span className="h-4 w-4 shrink-0 rounded-full border-[1.5px] border-stone-300 dark:border-stone-600" />
-              <span>
-                <span className="block text-[13.5px] font-medium text-stone-900 dark:text-stone-100">
-                  Public
-                </span>
-                <span className="text-[12px] text-stone-400 dark:text-stone-500">
-                  Anyone with the link
-                </span>
-              </span>
-            </span>
-          </div>
-        </section>
-
         <section className="flex items-center gap-2.5">
           <button
             type="submit"

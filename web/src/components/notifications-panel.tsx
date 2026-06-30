@@ -105,20 +105,6 @@ function EmailSection() {
             onChange={(on) => void apply(on ? "weekly" : "off")}
           />
         </div>
-
-        <div className={listRowClass}>
-          <div className="flex-1">
-            <div className="text-[13.5px] font-medium text-stone-900 dark:text-stone-100">
-              Instant release alerts{" "}
-              <span className="font-normal text-stone-400">(coming soon)</span>
-            </div>
-            <div className="mt-0.5 text-[12.5px] text-stone-400 dark:text-stone-500">
-              Email the moment a followed source ships. For now, use webhooks for real-time
-              delivery.
-            </div>
-          </div>
-          <Toggle label="Instant release alerts" checked={false} disabled onChange={() => {}} />
-        </div>
       </div>
     </section>
   );
