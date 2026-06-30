@@ -11,7 +11,6 @@ import {
   SuccessBanner,
   fieldLabelClass,
   inputClass,
-  textareaClass,
   primaryButtonClass,
   secondaryButtonClass,
 } from "@releases/design-system";
@@ -149,19 +148,6 @@ export function ProfilePanel() {
             />
           </section>
         </div>
-
-        <section>
-          <label htmlFor="bio" className={fieldLabelClass}>
-            Bio <span className="font-normal text-stone-400">(coming soon)</span>
-          </label>
-          <textarea
-            id="bio"
-            rows={3}
-            disabled
-            placeholder="Tell people what you track."
-            className={textareaClass}
-          />
-        </section>
 
         <section className="flex items-center gap-2.5">
           <button type="submit" disabled={saving || !dirty} className={primaryButtonClass}>
