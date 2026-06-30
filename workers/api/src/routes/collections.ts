@@ -374,19 +374,38 @@ function productRowToWire(r: ProductMemberRow): CollectionMemberProduct & { kind
   };
 }
 
+/** Byte-wise (code-unit) compare — matches SQLite's default BINARY collation,
+ *  unlike `localeCompare`, so the JS merge order agrees with the windowed SQL
+ *  `ORDER BY position, name, slug`. See `interleaveMembers`. */
+function binCompare(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
 function interleaveMembers(
   orgs: OrgMemberRow[],
   productsRows: ProductMemberRow[],
 ): CollectionMember[] {
-  type Item = { position: number; sort: string; value: CollectionMember };
+  type Item = { position: number; sort: string; tie: string; value: CollectionMember };
   const items: Item[] = [];
   for (const r of orgs) {
-    items.push({ position: r.position, sort: r.name, value: orgRowToWire(r) });
+    items.push({ position: r.position, sort: r.name, tie: r.slug, value: orgRowToWire(r) });
   }
   for (const r of productsRows) {
-    items.push({ position: r.position, sort: r.productName, value: productRowToWire(r) });
+    items.push({
+      position: r.position,
+      sort: r.productName,
+      tie: r.productSlug,
+      value: productRowToWire(r),
+    });
   }
-  items.sort((a, b) => a.position - b.position || a.sort.localeCompare(b.sort));
+  // Order MUST match the SQL window order (position, name, slug) — same
+  // collation (BINARY, via binCompare) and the same stable slug tiebreak — so
+  // the windowed preview fetch (top-PREVIEW_FETCH per kind) provably contains
+  // the global top-PREVIEW_LIMIT after the merge. The slug tiebreak also makes
+  // same-(position,name) members deterministic (org names aren't unique).
+  items.sort(
+    (a, b) => a.position - b.position || binCompare(a.sort, b.sort) || binCompare(a.tie, b.tie),
+  );
   return items.map((i) => i.value);
 }
 
@@ -443,11 +462,12 @@ collectionRoutes.get(
     const featuredOnly = featuredParam === "1" || featuredParam === "true";
     const featuredFilter = featuredOnly ? sql`WHERE c.is_featured = 1` : sql``;
     // Per-collection preview cap. The list renders only the top PREVIEW_LIMIT
-    // (3) interleaved members, but the SQL fetches a small margin per collection
-    // (windowed via ROW_NUMBER) so the JS interleave — which re-sorts by
-    // localeCompare, a different collation than SQL's ORDER BY — can't drop a
-    // top-3 member at a tie boundary. Still bounded: a big collection no longer
-    // streams every member back just to preview three (#1800 finding 6).
+    // (3) interleaved members; the SQL fetches the top PREVIEW_FETCH per kind
+    // (windowed via ROW_NUMBER) instead of every member (#1800 finding 6). This
+    // is exact, not a heuristic margin: `interleaveMembers` orders by the SAME
+    // (position, name, slug) key with the SAME BINARY collation as the SQL
+    // window (see binCompare), so any global top-3 member is within the top-3
+    // of its own kind's window — PREVIEW_FETCH > 3 is just headroom.
     const PREVIEW_FETCH = 12;
 
     const [countRows, orgMemberRows, productMemberRows] = await Promise.all([
@@ -499,7 +519,7 @@ collectionRoutes.get(
                     WHERE org_id = op.id AND platform = 'github'
                     ORDER BY created_at, id LIMIT 1) AS githubHandle,
                  ROW_NUMBER() OVER (
-                   PARTITION BY cm.collection_id ORDER BY cm.position, op.name
+                   PARTITION BY cm.collection_id ORDER BY cm.position, op.name, op.slug
                  ) AS rn
           FROM ${collectionMembers} cm
           INNER JOIN ${collections} c ON c.id = cm.collection_id
@@ -534,7 +554,7 @@ collectionRoutes.get(
                     WHERE org_id = op.id AND platform = 'github'
                     ORDER BY created_at, id LIMIT 1) AS parentOrgGithubHandle,
                  ROW_NUMBER() OVER (
-                   PARTITION BY cm.collection_id ORDER BY cm.position, pa.name
+                   PARTITION BY cm.collection_id ORDER BY cm.position, pa.name, pa.slug
                  ) AS rn
           FROM ${collectionMembers} cm
           INNER JOIN ${collections} c ON c.id = cm.collection_id

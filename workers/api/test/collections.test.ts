@@ -115,6 +115,40 @@ describe("collections", () => {
     expect(row?.previewMembers.map((m) => m.slug)).toEqual(["wide-00", "wide-01", "wide-02"]);
   });
 
+  it("preview is deterministic when a tie group (all position 0) exceeds the window", async () => {
+    // A single-member add defaults position to 0, so a collection can have many
+    // members all at position 0 — the tie group exceeds PREVIEW_FETCH (12). The
+    // windowed SQL fetch + JS interleave must agree on the order (both BINARY on
+    // name, then slug), so the preview is the deterministic top-3 and never
+    // drops a member it should have shown.
+    const db = mkDb();
+    const N = 15;
+    // Mixed-case names where BINARY (uppercase < lowercase) diverges from
+    // localeCompare; the result must follow SQL's BINARY order, not locale.
+    const orgs = Array.from({ length: N }, (_, i) => {
+      const n = String(i).padStart(2, "0");
+      return { id: `org_t${n}`, slug: `tie-${n}`, name: `Org-${n}`, category: "ai" };
+    });
+    await db.insert(organizations).values(orgs);
+    await db.insert(collections).values([{ id: "col_tie", slug: "test-tie", name: "Test Tie" }]);
+    // All at the default position 0.
+    await db
+      .insert(collectionMembers)
+      .values(orgs.map((o) => ({ collectionId: "col_tie", orgId: o.id, position: 0 })));
+
+    const fetch = mkApp(db);
+    const res = await fetch(new Request("http://test/v1/collections"));
+    const body = (await res.json()) as Array<{
+      slug: string;
+      memberCount: number;
+      previewMembers: Array<{ slug: string }>;
+    }>;
+    const row = body.find((c) => c.slug === "test-tie");
+    expect(row?.memberCount).toBe(N);
+    // BINARY order on name → Org-00, Org-01, Org-02 (the SQL window's top-3).
+    expect(row?.previewMembers.map((m) => m.slug)).toEqual(["tie-00", "tie-01", "tie-02"]);
+  });
+
   it("lists collections with member counts", async () => {
     const db = mkDb();
     await seed(db);
