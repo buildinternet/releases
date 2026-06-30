@@ -123,7 +123,15 @@ export const orgAccounts = sqliteTable(
       .notNull()
       .$defaultFn(() => new Date().toISOString()),
   },
-  (table) => [uniqueIndex("idx_org_accounts_platform_handle").on(table.platform, table.handle)],
+  (table) => [
+    uniqueIndex("idx_org_accounts_platform_handle").on(table.platform, table.handle),
+    // Backs the correlated github-handle subquery (`WHERE org_id = ? AND
+    // platform = 'github'`) used across collections, the cross-org latest feed,
+    // and collection-feed. The unique (platform, handle) index can't service an
+    // org_id-leading lookup, so each call site was an unindexed scan per row
+    // (#1800 finding 4).
+    index("idx_org_accounts_org_platform").on(table.orgId, table.platform),
+  ],
 );
 
 export const products = sqliteTable(
