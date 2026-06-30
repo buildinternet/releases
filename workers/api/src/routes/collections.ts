@@ -374,19 +374,38 @@ function productRowToWire(r: ProductMemberRow): CollectionMemberProduct & { kind
   };
 }
 
+/** Byte-wise (code-unit) compare — matches SQLite's default BINARY collation,
+ *  unlike `localeCompare`, so the JS merge order agrees with the windowed SQL
+ *  `ORDER BY position, name, slug`. See `interleaveMembers`. */
+function binCompare(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
 function interleaveMembers(
   orgs: OrgMemberRow[],
   productsRows: ProductMemberRow[],
 ): CollectionMember[] {
-  type Item = { position: number; sort: string; value: CollectionMember };
+  type Item = { position: number; sort: string; tie: string; value: CollectionMember };
   const items: Item[] = [];
   for (const r of orgs) {
-    items.push({ position: r.position, sort: r.name, value: orgRowToWire(r) });
+    items.push({ position: r.position, sort: r.name, tie: r.slug, value: orgRowToWire(r) });
   }
   for (const r of productsRows) {
-    items.push({ position: r.position, sort: r.productName, value: productRowToWire(r) });
+    items.push({
+      position: r.position,
+      sort: r.productName,
+      tie: r.productSlug,
+      value: productRowToWire(r),
+    });
   }
-  items.sort((a, b) => a.position - b.position || a.sort.localeCompare(b.sort));
+  // Order MUST match the SQL window order (position, name, slug) — same
+  // collation (BINARY, via binCompare) and the same stable slug tiebreak — so
+  // the windowed preview fetch (top-PREVIEW_FETCH per kind) provably contains
+  // the global top-PREVIEW_LIMIT after the merge. The slug tiebreak also makes
+  // same-(position,name) members deterministic (org names aren't unique).
+  items.sort(
+    (a, b) => a.position - b.position || binCompare(a.sort, b.sort) || binCompare(a.tie, b.tie),
+  );
   return items.map((i) => i.value);
 }
 
@@ -442,9 +461,14 @@ collectionRoutes.get(
     const featuredParam = c.req.query("featured");
     const featuredOnly = featuredParam === "1" || featuredParam === "true";
     const featuredFilter = featuredOnly ? sql`WHERE c.is_featured = 1` : sql``;
-    // Same filter as a Drizzle predicate for the member queries below, so they
-    // don't fetch members for non-featured collections when `?featured=1`.
-    const featuredPredicate = featuredOnly ? eq(collections.isFeatured, true) : undefined;
+    // Per-collection preview cap. The list renders only the top PREVIEW_LIMIT
+    // (3) interleaved members; the SQL fetches the top PREVIEW_FETCH per kind
+    // (windowed via ROW_NUMBER) instead of every member (#1800 finding 6). This
+    // is exact, not a heuristic margin: `interleaveMembers` orders by the SAME
+    // (position, name, slug) key with the SAME BINARY collation as the SQL
+    // window (see binCompare), so any global top-3 member is within the top-3
+    // of its own kind's window — PREVIEW_FETCH > 3 is just headroom.
+    const PREVIEW_FETCH = 12;
 
     const [countRows, orgMemberRows, productMemberRows] = await Promise.all([
       // Raw correlated subqueries (Drizzle's relational `${collections.id}`
@@ -473,42 +497,72 @@ collectionRoutes.get(
         ORDER BY c.name
       `),
 
-      db
-        .select({
-          collectionSlug: collections.slug,
-          position: collectionMembers.position,
-          slug: organizationsPublic.slug,
-          name: organizationsPublic.name,
-          domain: organizationsPublic.domain,
-          avatarUrl: organizationsPublic.avatarUrl,
-          description: organizationsPublic.description,
-          githubHandle: githubHandleSubquery(sql`${organizationsPublic.id}`),
-        })
-        .from(collectionMembers)
-        .innerJoin(collections, eq(collections.id, collectionMembers.collectionId))
-        .innerJoin(organizationsPublic, eq(organizationsPublic.id, collectionMembers.orgId))
-        .where(featuredPredicate)
-        .orderBy(collectionMembers.position, organizationsPublic.name),
+      // Top-PREVIEW_FETCH org members per collection, windowed so the scan
+      // returns a handful of rows per collection instead of every member
+      // (#1800 finding 6). Same (position, name) order the interleave expects.
+      db.all<{
+        collectionSlug: string;
+        position: number;
+        slug: string;
+        name: string;
+        domain: string | null;
+        avatarUrl: string | null;
+        description: string | null;
+        githubHandle: string | null;
+      }>(sql`
+        SELECT collectionSlug, position, slug, name, domain, avatarUrl, description, githubHandle
+        FROM (
+          SELECT c.slug AS collectionSlug, cm.position AS position,
+                 op.slug AS slug, op.name AS name, op.domain AS domain,
+                 op.avatar_url AS avatarUrl, op.description AS description,
+                 (SELECT handle FROM org_accounts
+                    WHERE org_id = op.id AND platform = 'github'
+                    ORDER BY created_at, id LIMIT 1) AS githubHandle,
+                 ROW_NUMBER() OVER (
+                   PARTITION BY cm.collection_id ORDER BY cm.position, op.name, op.slug
+                 ) AS rn
+          FROM ${collectionMembers} cm
+          INNER JOIN ${collections} c ON c.id = cm.collection_id
+          INNER JOIN ${organizationsPublic} op ON op.id = cm.org_id
+          ${featuredFilter}
+        ) WHERE rn <= ${PREVIEW_FETCH}
+      `),
 
-      db
-        .select({
-          collectionSlug: collections.slug,
-          position: collectionMembers.position,
-          productSlug: productsActive.slug,
-          productName: productsActive.name,
-          productDescription: productsActive.description,
-          parentOrgSlug: organizationsPublic.slug,
-          parentOrgName: organizationsPublic.name,
-          parentOrgDomain: organizationsPublic.domain,
-          parentOrgAvatarUrl: organizationsPublic.avatarUrl,
-          parentOrgGithubHandle: githubHandleSubquery(sql`${organizationsPublic.id}`),
-        })
-        .from(collectionMembers)
-        .innerJoin(collections, eq(collections.id, collectionMembers.collectionId))
-        .innerJoin(productsActive, eq(productsActive.id, collectionMembers.productId))
-        .innerJoin(organizationsPublic, eq(organizationsPublic.id, productsActive.orgId))
-        .where(featuredPredicate)
-        .orderBy(collectionMembers.position, productsActive.name),
+      // Top-PREVIEW_FETCH product members per collection, same windowing.
+      db.all<{
+        collectionSlug: string;
+        position: number;
+        productSlug: string;
+        productName: string;
+        productDescription: string | null;
+        parentOrgSlug: string;
+        parentOrgName: string;
+        parentOrgDomain: string | null;
+        parentOrgAvatarUrl: string | null;
+        parentOrgGithubHandle: string | null;
+      }>(sql`
+        SELECT collectionSlug, position, productSlug, productName, productDescription,
+               parentOrgSlug, parentOrgName, parentOrgDomain, parentOrgAvatarUrl,
+               parentOrgGithubHandle
+        FROM (
+          SELECT c.slug AS collectionSlug, cm.position AS position,
+                 pa.slug AS productSlug, pa.name AS productName,
+                 pa.description AS productDescription,
+                 op.slug AS parentOrgSlug, op.name AS parentOrgName,
+                 op.domain AS parentOrgDomain, op.avatar_url AS parentOrgAvatarUrl,
+                 (SELECT handle FROM org_accounts
+                    WHERE org_id = op.id AND platform = 'github'
+                    ORDER BY created_at, id LIMIT 1) AS parentOrgGithubHandle,
+                 ROW_NUMBER() OVER (
+                   PARTITION BY cm.collection_id ORDER BY cm.position, pa.name, pa.slug
+                 ) AS rn
+          FROM ${collectionMembers} cm
+          INNER JOIN ${collections} c ON c.id = cm.collection_id
+          INNER JOIN ${productsActive} pa ON pa.id = cm.product_id
+          INNER JOIN ${organizationsPublic} op ON op.id = pa.org_id
+          ${featuredFilter}
+        ) WHERE rn <= ${PREVIEW_FETCH}
+      `),
     ]);
 
     const orgsBySlug = new Map<string, OrgMemberRow[]>();

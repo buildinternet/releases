@@ -82,42 +82,48 @@ statsRoutes.get(
 
     const staleCount = sourceCount.n - neverFetched.n - recentlyFetched.n;
 
-    // Per-source activity (top sources by recent release count, all visible sources).
-    const perSource = await db
-      .select({
-        sourceName: sourcesVisible.name,
-        sourceSlug: sourcesVisible.slug,
-        sourceType: sourcesVisible.type,
-        orgName: organizationsActive.name,
-        lastFetchedAt: sourcesVisible.lastFetchedAt,
-        totalReleases: sql<number>`COUNT(${releasesVisible.id})`,
-        recentReleases: sql<number>`COUNT(CASE WHEN ${releasesVisible.publishedAt} >= ${cutoff} THEN 1 END)`,
-      })
-      .from(sourcesVisible)
-      .leftJoin(releasesVisible, eq(releasesVisible.sourceId, sourcesVisible.id))
-      .leftJoin(organizationsActive, eq(sourcesVisible.orgId, organizationsActive.id))
-      .groupBy(sourcesVisible.id)
-      .orderBy(desc(sql`COUNT(CASE WHEN ${releasesVisible.publishedAt} >= ${cutoff} THEN 1 END)`));
+    // Per-source activity (top sources by recent release count) and recent fetch
+    // activity are independent of each other and of the counts above — run them
+    // concurrently rather than back-to-back (#1800 finding 8).
+    const [perSource, recentActivity] = await Promise.all([
+      db
+        .select({
+          sourceName: sourcesVisible.name,
+          sourceSlug: sourcesVisible.slug,
+          sourceType: sourcesVisible.type,
+          orgName: organizationsActive.name,
+          lastFetchedAt: sourcesVisible.lastFetchedAt,
+          totalReleases: sql<number>`COUNT(${releasesVisible.id})`,
+          recentReleases: sql<number>`COUNT(CASE WHEN ${releasesVisible.publishedAt} >= ${cutoff} THEN 1 END)`,
+        })
+        .from(sourcesVisible)
+        .leftJoin(releasesVisible, eq(releasesVisible.sourceId, sourcesVisible.id))
+        .leftJoin(organizationsActive, eq(sourcesVisible.orgId, organizationsActive.id))
+        .groupBy(sourcesVisible.id)
+        .orderBy(
+          desc(sql`COUNT(CASE WHEN ${releasesVisible.publishedAt} >= ${cutoff} THEN 1 END)`),
+        ),
 
-    // Recent fetch activity — join sources + orgs so we can return name/slug/org
-    const recentActivity = await db
-      .select({
-        sourceName: sourcesActive.name,
-        sourceSlug: sourcesActive.slug,
-        orgName: organizationsActive.name,
-        releasesFound: fetchLog.releasesFound,
-        releasesInserted: fetchLog.releasesInserted,
-        totalReleases: sql<number>`(SELECT COUNT(*) FROM releases_visible r WHERE r.source_id = ${sourcesActive.id})`,
-        status: fetchLog.status,
-        durationMs: fetchLog.durationMs,
-        error: fetchLog.error,
-        createdAt: fetchLog.createdAt,
-      })
-      .from(fetchLog)
-      .innerJoin(sourcesActive, eq(fetchLog.sourceId, sourcesActive.id))
-      .leftJoin(organizationsActive, eq(sourcesActive.orgId, organizationsActive.id))
-      .orderBy(desc(fetchLog.createdAt))
-      .limit(20);
+      // Recent fetch activity — join sources + orgs so we can return name/slug/org
+      db
+        .select({
+          sourceName: sourcesActive.name,
+          sourceSlug: sourcesActive.slug,
+          orgName: organizationsActive.name,
+          releasesFound: fetchLog.releasesFound,
+          releasesInserted: fetchLog.releasesInserted,
+          totalReleases: sql<number>`(SELECT COUNT(*) FROM releases_visible r WHERE r.source_id = ${sourcesActive.id})`,
+          status: fetchLog.status,
+          durationMs: fetchLog.durationMs,
+          error: fetchLog.error,
+          createdAt: fetchLog.createdAt,
+        })
+        .from(fetchLog)
+        .innerJoin(sourcesActive, eq(fetchLog.sourceId, sourcesActive.id))
+        .leftJoin(organizationsActive, eq(sourcesActive.orgId, organizationsActive.id))
+        .orderBy(desc(fetchLog.createdAt))
+        .limit(20),
+    ]);
 
     return c.json({
       // Legacy flat fields (back-compat)
