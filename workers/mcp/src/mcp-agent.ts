@@ -90,7 +90,12 @@ export interface Env {
   EMBEDDING_PROVIDER?: string;
   VOYAGE_API_KEY?: SecretBinding;
   OPENAI_API_KEY?: SecretBinding;
-  /** Optional KV namespace caching single-query embeddings. */
+  /**
+   * Optional KV namespace with a dual role: the single-query embedding cache
+   * AND the backing store for the MCP read-tool read-through cache (see
+   * `lib/read-cache.ts`), which co-tenants here under a `mcpread:` key prefix.
+   * Splittable later by pointing `makeReadCache` at a dedicated binding.
+   */
   EMBED_CACHE?: KVNamespace;
   /** Staging-only: disables indexing (X-Robots-Tag + deny-all /robots.txt). */
   INDEXING_DISABLED?: string;

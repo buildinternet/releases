@@ -12,12 +12,18 @@ function fail(text: string): ToolResult {
 class FakeKV {
   store = new Map<string, string>();
   puts = 0;
+  lastPutOptions?: { expirationTtl?: number };
+  /** When true, get/put reject — exercises the fail-open path. */
+  throwOnOp = false;
   async get(key: string, _type: "json"): Promise<unknown> {
+    if (this.throwOnOp) throw new Error("kv get failed");
     const v = this.store.get(key);
     return v === undefined ? null : JSON.parse(v);
   }
-  async put(key: string, value: string): Promise<void> {
+  async put(key: string, value: string, options?: { expirationTtl?: number }): Promise<void> {
+    if (this.throwOnOp) throw new Error("kv put failed");
     this.puts += 1;
+    this.lastPutOptions = options;
     this.store.set(key, value);
   }
 }
@@ -46,6 +52,9 @@ describe("makeReadCache", () => {
     expect((await handler({ count: 10 })).content[0].text).toBe("run 1");
     expect((await handler({ count: 10 })).content[0].text).toBe("run 1"); // HIT
     expect(calls).toBe(1);
+    // The write set the expiry to the module TTL (and ≥ KV's 60s minimum).
+    expect(kv.lastPutOptions?.expirationTtl).toBe(MCP_READ_CACHE_TTL_SECONDS);
+    expect(kv.lastPutOptions?.expirationTtl ?? 0).toBeGreaterThanOrEqual(60);
   });
 
   it("keys on params and tool name — different params miss independently", async () => {
@@ -89,8 +98,25 @@ describe("makeReadCache", () => {
     expect(kv.puts).toBe(0);
   });
 
-  it("exposes a short, conservative TTL (no publish-time invalidation)", () => {
+  it("fails open when a present KV binding throws (get/put errors don't propagate)", async () => {
+    const kv = new FakeKV();
+    kv.throwOnOp = true;
+    const cached = makeReadCache(kv);
+    let calls = 0;
+    const handler = cached("get_organization", async () => {
+      calls += 1;
+      return ok("live");
+    });
+    // get() throws → falls through to the handler; put() throws → swallowed.
+    expect((await handler({ identifier: "vercel" })).content[0].text).toBe("live");
+    expect((await handler({ identifier: "vercel" })).content[0].text).toBe("live");
+    expect(calls).toBe(2);
+  });
+
+  it("exposes a short, conservative TTL within KV's bounds (≥ 60s minimum)", () => {
+    // Cloudflare KV rejects expirationTtl below 60s, so the constant must never
+    // dip under that floor; the upper bound keeps staleness short (no purge).
+    expect(MCP_READ_CACHE_TTL_SECONDS).toBeGreaterThanOrEqual(60);
     expect(MCP_READ_CACHE_TTL_SECONDS).toBeLessThanOrEqual(120);
-    expect(MCP_READ_CACHE_TTL_SECONDS).toBeGreaterThan(0);
   });
 });
