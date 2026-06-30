@@ -59,7 +59,7 @@ type AnyDb = DrizzleD1Database<any>;
 export interface OverviewCandidateOptions {
   /** Min releases shipped since the last overview's `updated_at`. Default 20. */
   minNewReleases?: number;
-  /** Min age of the existing overview before it's considered eligible. Default 14 days. */
+  /** Min age of the existing overview before it's considered eligible. Default 7 days (weekly). */
   minOverviewAgeDays?: number;
   /** Hard cap on candidate count. Default 100. */
   maxCandidates?: number;
@@ -77,7 +77,13 @@ export interface OverviewCandidate {
 }
 
 const DEFAULT_MIN_NEW_RELEASES = 20;
-const DEFAULT_MIN_OVERVIEW_AGE_DAYS = 14;
+// Weekly cadence: an overview is "out of date" once it's a week old (and the org
+// has shipped since). The OverviewRegenWorkflow cron runs weekly, so a 7-day gate
+// refreshes each active org about once a week. Was 14 — that let an org refreshed
+// one week sit out the next run, so the effective cadence was ~2 weeks and the
+// high-traffic orgs visibly lagged. Quiet orgs still don't churn: the
+// `recentReleaseCount > 0` guard means an org with no new releases is never picked.
+const DEFAULT_MIN_OVERVIEW_AGE_DAYS = 7;
 const DEFAULT_MAX_CANDIDATES = 100;
 
 /** Per-statement IN-clause cap. D1 limits prepared statements to 100 binds. */

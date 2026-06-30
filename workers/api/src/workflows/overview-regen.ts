@@ -6,7 +6,7 @@
  * inner `regenerateOverviewChunk` is unit-tested independently (see
  * workers/api/src/cron/overview-regen.test.ts).
  *
- * Eligibility is staleness-gated (minNewReleases:0): an overview stale ≥14d with
+ * Eligibility is staleness-gated (minNewReleases:0): an overview stale ≥7d with
  * ≥1 new release, or a missing overview — matching the local update-overviews
  * skill, so the weekly sweep actually fires at normal release volumes.
  *
@@ -93,9 +93,9 @@ export class OverviewRegenWorkflow extends WorkflowEntrypoint<
         return fetchOverviewCandidates(db, {
           orgSlugs: orgs ?? null,
           // Staleness-gated, not volume-gated. minNewReleases:0 makes the
-          // eligibility "overview stale (≥ minOverviewAgeDays, default 14) AND
+          // eligibility "overview stale (≥ minOverviewAgeDays, default 7) AND
           // ≥1 new release, OR missing" — the same selection the local
-          // update-overviews skill uses (`--stale-days 14 --missing
+          // update-overviews skill uses (`--stale-days 7 --missing
           // --has-activity`). The default 20 would leave the weekly sweep
           // dormant at normal release volumes. (batch-overview keeps the 20.)
           minNewReleases: 0,
