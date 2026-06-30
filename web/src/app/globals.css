@@ -3,6 +3,16 @@
 @plugin "@tailwindcss/typography";
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* The @releases/design-system package is consumed as source (its `.` export
+   points at src/*.tsx via transpilePackages), but it resolves through a
+   node_modules symlink that Tailwind v4's automatic content detection skips.
+   Without this, utility classes that appear ONLY in the package source —
+   notably PanelGrid's `lg:grid-cols-[minmax(0,1fr)_264px]` and the panel
+   max-widths — are never generated, so the settings two-column "third rail"
+   collapses to a single column and the Aside/PromoRail drop below the content
+   as footer blocks. Scan the package source explicitly so its classes emit. */
+@source "../../../packages/design-system/src";
+
 @theme {
   --font-mono:
     var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
