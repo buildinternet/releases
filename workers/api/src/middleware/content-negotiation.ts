@@ -7,14 +7,18 @@ import type { Context, MiddlewareHandler } from "hono";
  * agents like Claude Code send `Accept: text/markdown` to signal they
  * can consume markdown directly rather than HTML/JSON.
  */
-export function wantsMarkdown(c: Context): boolean {
-  const accept = c.req.header("accept") ?? "";
+export function acceptPrefersMarkdown(accept: string | null | undefined): boolean {
+  const value = accept ?? "";
   // Simple check: if text/markdown appears before application/json
   // (or json is absent entirely), the client prefers markdown.
-  if (!accept.includes("text/markdown")) return false;
-  const mdPos = accept.indexOf("text/markdown");
-  const jsonPos = accept.indexOf("application/json");
+  if (!value.includes("text/markdown")) return false;
+  const mdPos = value.indexOf("text/markdown");
+  const jsonPos = value.indexOf("application/json");
   return jsonPos === -1 || mdPos < jsonPos;
+}
+
+export function wantsMarkdown(c: Context): boolean {
+  return acceptPrefersMarkdown(c.req.header("accept"));
 }
 
 /** Rough token estimate: ~4 chars per token (conservative). */
