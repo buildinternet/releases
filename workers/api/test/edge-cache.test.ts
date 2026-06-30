@@ -78,7 +78,7 @@ describe("edgeCache middleware", () => {
       { headers: { Authorization: "Bearer x" } },
       {},
     );
-    expect(authed.headers.get("X-Edge-Cache")).toBeNull();
+    expect(authed.headers.get("X-Edge-Cache")).toBe("BYPASS");
     expect((await authed.json()) as { n: number }).toEqual({ n: 2 }); // ran the handler, fresh
     expect(calls()).toBe(2);
   });
@@ -86,7 +86,7 @@ describe("edgeCache middleware", () => {
   it("bypasses requests carrying a Cookie header", async () => {
     const { app } = appWith();
     const res = await app.request("http://x/thing", { headers: { Cookie: "s=1" } }, {});
-    expect(res.headers.get("X-Edge-Cache")).toBeNull();
+    expect(res.headers.get("X-Edge-Cache")).toBe("BYPASS");
     expect(fake.store.size).toBe(0);
   });
 
@@ -100,7 +100,14 @@ describe("edgeCache middleware", () => {
   it("does not store when CACHE_DISABLED is set", async () => {
     const { app } = appWith();
     const res = await app.request("http://x/thing", {}, { CACHE_DISABLED: "true" });
-    expect(res.headers.get("X-Edge-Cache")).toBeNull();
+    expect(res.headers.get("X-Edge-Cache")).toBe("BYPASS");
+    expect(fake.store.size).toBe(0);
+  });
+
+  it("does not store a max-age=0 response (boundary)", async () => {
+    const { app } = appWith({ ttl: 0 });
+    const res = await app.request("http://x/thing", {}, {});
+    expect(res.headers.get("X-Edge-Cache")).toBe("BYPASS");
     expect(fake.store.size).toBe(0);
   });
 

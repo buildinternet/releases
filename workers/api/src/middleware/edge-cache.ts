@@ -68,12 +68,14 @@ export function edgeCache(): MiddlewareHandler<Env> {
     const reqHeaders = c.req.raw.headers;
     if (reqHeaders.has("authorization") || reqHeaders.has("cookie")) {
       await next();
+      c.res.headers.set("X-Edge-Cache", "BYPASS");
       return;
     }
 
     // Kill switch — same gate as the Cache-Control middleware.
     if (await flag(c.env.FLAGS, c.env.CACHE_DISABLED, FLAGS.cacheDisabled)) {
       await next();
+      c.res.headers.set("X-Edge-Cache", "BYPASS");
       return;
     }
 
@@ -111,14 +113,18 @@ export function edgeCache(): MiddlewareHandler<Env> {
 }
 
 /**
- * Stable cache key for a GET request: the URL plus a `md|json` format token so
- * content-negotiated routes don't collide. Query params already live in the
- * URL; `searchParams.sort()` makes the key order-independent.
+ * Stable cache key for a GET request: the request URL (all caller query params
+ * preserved, just order-normalized) plus a `md|json` content-negotiation
+ * discriminator. The discriminator rides a synthetic `/__edgecache/<fmt>` path
+ * prefix rather than a query param so it can never collide with — or overwrite
+ * — a param the caller actually sent. The synthetic URL is only ever a cache
+ * key; it is never routed.
  */
 function edgeCacheKey(req: Request): Request {
   const url = new URL(req.url);
-  url.searchParams.set("__fmt", acceptPrefersMarkdown(req.headers.get("accept")) ? "md" : "json");
   url.searchParams.sort();
+  const fmt = acceptPrefersMarkdown(req.headers.get("accept")) ? "md" : "json";
+  url.pathname = `/__edgecache/${fmt}${url.pathname}`;
   return new Request(url.toString(), { method: "GET" });
 }
 
@@ -126,7 +132,10 @@ function isStorable(res: Response): boolean {
   if (res.status !== 200) return false;
   if (res.headers.has("set-cookie")) return false;
 
-  const cc = res.headers.get("cache-control") ?? "";
+  const cc = (res.headers.get("cache-control") ?? "").toLowerCase();
+  // A `no-store` / `no-cache` / `private` always wins, even alongside `public`
+  // — never share-cache such a response.
+  if (/(?:^|[\s,])(?:no-store|no-cache|private)(?:[\s,;=]|$)/.test(cc)) return false;
   if (!/(?:^|[\s,])public(?:[\s,;]|$)/.test(cc)) return false;
   const maxAge = parseMaxAge(cc);
   if (maxAge === null || maxAge <= 0) return false;
