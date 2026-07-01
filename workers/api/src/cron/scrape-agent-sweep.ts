@@ -159,7 +159,7 @@ type CandidateQueryResult = {
  */
 export async function queryCandidates(
   db: any,
-  params: { cap: number },
+  params: { cap: number; orgId?: string },
 ): Promise<CandidateQueryResult> {
   const whereClause = and(
     inArray(sources.type, ["scrape", "agent"]),
@@ -173,6 +173,9 @@ export async function queryCandidates(
     or(eq(sources.isHidden, false), isNull(sources.isHidden)),
     // Exclude sources whose org has fetch_paused = true (#1057).
     or(eq(organizations.fetchPaused, false), isNull(organizations.fetchPaused)),
+    // Scope to a single org — used by the OrgActor drain (per-org DO), which
+    // reuses this same filter instead of hand-rolling a second copy.
+    params.orgId !== undefined ? eq(sources.orgId, params.orgId) : undefined,
   );
 
   const rows = await db
@@ -249,6 +252,8 @@ export type SweepEnv = EmailEnv & {
   ADMIN_BASE_URL?: string;
   /** TEST-ONLY: bypass drizzle(env.DB) and use the provided instance directly. */
   _drizzleOverride?: any;
+  /** When true, the OrgActor drain owns this work — skip the sweep (#1777). */
+  supersededByActor?: boolean;
 };
 
 function parseStaleHours(raw: string | undefined): number {
@@ -275,6 +280,10 @@ export async function scrapeAgentSweep(env: SweepEnv): Promise<void> {
   }
   if (env.SCRAPE_AGENT_CRON_ENABLED === "false") {
     logEvent("info", { component: "scrape-agent-cron", event: "scrape-agent-cron-disabled" });
+    return;
+  }
+  if (env.supersededByActor) {
+    logEvent("info", { component: "scrape-agent-cron", event: "superseded-by-org-drain-actor" });
     return;
   }
 

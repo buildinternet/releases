@@ -42,6 +42,8 @@ export type ForceDrainEnv = {
   FORCE_SWEEP_MAX_SESSIONS?: string;
   /** TEST-ONLY: bypass drizzle(env.DB) and use the provided instance directly. */
   _drizzleOverride?: any;
+  /** When true, the SourceActor poll path self-flags — skip the producer (#1777). */
+  supersededByActor?: boolean;
 };
 
 export type Candidate = {
@@ -138,6 +140,10 @@ export async function forceDrainSweep(env: ForceDrainEnv): Promise<void> {
   }
   if (env.FORCE_DRAIN_CRON_ENABLED !== "true") {
     logEvent("info", { component: "force-drain-cron", event: "force-drain-disabled" });
+    return;
+  }
+  if (env.supersededByActor) {
+    logEvent("info", { component: "force-drain-cron", event: "superseded-by-org-drain-actor" });
     return;
   }
 

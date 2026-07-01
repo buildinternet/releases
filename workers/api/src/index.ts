@@ -61,6 +61,7 @@ import { FLAGS, flag, type FlagshipBinding } from "@releases/lib/flags";
 export { StatusHub } from "./status-hub.js";
 export { ReleaseHub } from "./release-hub.js";
 export { SourceActor } from "./source-actor.js";
+export { OrgActor } from "./org-actor.js";
 export { ScrapeAgentSweepWorkflow } from "./workflows/scrape-agent-sweep.js";
 export { PollAndFetchWorkflow } from "./workflows/poll-and-fetch.js";
 export { OnboardSourceWorkflow } from "./workflows/onboard-source.js";
@@ -92,6 +93,12 @@ export type Env = {
     // self-schedules its fetches via its own DO alarm; the hourly poll cron is a
     // re-seed heartbeat that (re-)seeds due sources' alarms. Absent ⇒ no-op.
     SOURCE_ACTOR?: DurableObjectNamespace<import("./source-actor.js").SourceActor>;
+    // Per-org scrape/agent drain actor (#1777 cron-absorption slice). When bound,
+    // a flagged source's SourceActor arms this DO, which dispatches one /update
+    // session for the org. Absent ⇒ the scrape-agent + force-drain crons drive.
+    ORG_ACTOR?: DurableObjectNamespace<import("./org-actor.js").OrgActor>;
+    /** Kill-switch var fallback for org-drain-actor-enabled (Flagship is source of truth). */
+    ORG_DRAIN_ACTOR_ENABLED?: string;
     WEBHOOK_DELIVERY_QUEUE: Queue<unknown>;
     /** Per-recipient follow digest send (cron enqueues; API worker consumes). */
     DIGEST_DELIVERY_QUEUE?: Queue<import("./queues/types.js").DigestDeliveryMessage>;
@@ -1123,19 +1130,28 @@ export default {
       return;
     }
     if (event.cron === "0 4 * * *") {
-      ctx.waitUntil(
-        loggedDispatch(
-          "force-drain-cron",
-          forceDrainSweep({
-            DB: env.DB,
-            CRON_ENABLED: env.CRON_ENABLED,
-            FORCE_DRAIN_CRON_ENABLED: env.FORCE_DRAIN_CRON_ENABLED,
-            FORCE_DRAIN_STALE_HOURS: env.FORCE_DRAIN_STALE_HOURS,
-            FORCE_SWEEP_MAX_SESSIONS: env.FORCE_SWEEP_MAX_SESSIONS,
-          }),
-          alertEnv,
-        ),
+      const drainActorOn = await flag(
+        env.FLAGS,
+        env.ORG_DRAIN_ACTOR_ENABLED,
+        FLAGS.orgDrainActorEnabled,
       );
+      if (!drainActorOn) {
+        ctx.waitUntil(
+          loggedDispatch(
+            "force-drain-cron",
+            forceDrainSweep({
+              DB: env.DB,
+              CRON_ENABLED: env.CRON_ENABLED,
+              FORCE_DRAIN_CRON_ENABLED: env.FORCE_DRAIN_CRON_ENABLED,
+              FORCE_DRAIN_STALE_HOURS: env.FORCE_DRAIN_STALE_HOURS,
+              FORCE_SWEEP_MAX_SESSIONS: env.FORCE_SWEEP_MAX_SESSIONS,
+            }),
+            alertEnv,
+          ),
+        );
+      } else {
+        logEvent("info", { component: "force-drain-cron", event: "superseded-by-org-drain-actor" });
+      }
       // Source staleness digest (#1528): first-party + Firecrawl scans, emailed
       // to the operator when anything is overdue. Runs daily, an hour after the
       // retier (0 3) so medianGapDays are fresh. Hourly firecrawl scan still
@@ -1233,6 +1249,13 @@ export default {
       return;
     }
     if (event.cron === "0 1 * * *") {
+      if (await flag(env.FLAGS, env.ORG_DRAIN_ACTOR_ENABLED, FLAGS.orgDrainActorEnabled)) {
+        logEvent("info", {
+          component: "scrape-agent-cron",
+          event: "superseded-by-org-drain-actor",
+        });
+        return;
+      }
       if (!env.DISCOVERY_WORKER) {
         logEvent("warn", { component: "scrape-agent-cron", event: "discovery-worker-missing" });
         return;

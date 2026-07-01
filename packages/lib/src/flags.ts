@@ -145,6 +145,17 @@ export const FLAGS = {
     env: "OAUTH_CLIENT_REAPER_ENABLED",
     default: false,
   },
+  // Rollout gate + kill switch for the actor-native scrape/agent drain
+  // (OrgActor). default:false → OFF: the poll path does not self-flag, the
+  // SourceActor does not notify an OrgActor, and the force-drain (#518) +
+  // scrape-agent-sweep (#482) crons run as before. Flip ON in BOTH Flagship
+  // apps to move the drain onto the actor path (the crons then early-return).
+  // Roll back by flipping OFF — the crons resume next tick.
+  orgDrainActorEnabled: {
+    key: "org-drain-actor-enabled",
+    env: "ORG_DRAIN_ACTOR_ENABLED",
+    default: false,
+  },
 } as const satisfies Record<string, FlagDef>;
 
 /** Layered fallback: var value if set, else the hardcoded default. */

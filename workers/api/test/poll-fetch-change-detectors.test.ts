@@ -99,6 +99,7 @@ function seedOrgWithSource(
     sourceUrl: string;
     metadata?: Record<string, unknown>;
     playbookNotes?: string | null;
+    lastFetchedAt?: string | null;
   },
 ) {
   db.insert(organizations).values({ id: opts.orgId, name: opts.orgName, slug: opts.orgSlug }).run();
@@ -111,6 +112,7 @@ function seedOrgWithSource(
       type: opts.sourceType ?? "scrape",
       url: opts.sourceUrl,
       metadata: JSON.stringify(opts.metadata ?? {}),
+      lastFetchedAt: opts.lastFetchedAt ?? null,
     } as any)
     .run();
   if (opts.playbookNotes !== undefined) {
@@ -450,6 +452,265 @@ fetchQuirks:
     });
 
     expect(headCheckCalls[0].url).toBe("https://brex.com/api/changelog.json");
+  });
+});
+
+describe("pollOne drainSelfFlag (force-drain producer, #518)", () => {
+  it("flags an unreliable-detector source when drainSelfFlag is present", async () => {
+    const db = mkDb();
+    seedOrgWithSource(db, {
+      orgId: "org_dsf1",
+      orgSlug: "unrel-org",
+      orgName: "Unrel Org",
+      sourceId: "src_unrel",
+      sourceSlug: "claude",
+      sourceUrl: "https://claude.com/release-notes",
+      playbookNotes: UNRELIABLE_QUIRK_NOTES,
+      lastFetchedAt: new Date().toISOString(), // fresh — only the unreliable rule applies
+    });
+
+    const notesMap = await loadPlaybookNotesForSources(db as any, [
+      readSource(db, "src_unrel") as any,
+    ]);
+    const source = readSource(db, "src_unrel");
+
+    const result = await pollOne(db as any, source as any, new Date(), {
+      changeDetectEnabled: true,
+      playbookNotes: notesMap.get(source.orgId!) ?? null,
+      drainSelfFlag: { staleHours: 72 },
+    });
+
+    expect(result.changed).toBe(true);
+    const after = readSource(db, "src_unrel");
+    expect(after.changeDetectedAt).not.toBeNull();
+  });
+
+  it("does NOT flag an unreliable source when drainSelfFlag is absent (today's behavior)", async () => {
+    const db = mkDb();
+    seedOrgWithSource(db, {
+      orgId: "org_dsf2",
+      orgSlug: "unrel-org2",
+      orgName: "Unrel Org 2",
+      sourceId: "src_unrel2",
+      sourceSlug: "claude",
+      sourceUrl: "https://claude.com/release-notes",
+      playbookNotes: UNRELIABLE_QUIRK_NOTES,
+    });
+
+    const notesMap = await loadPlaybookNotesForSources(db as any, [
+      readSource(db, "src_unrel2") as any,
+    ]);
+    const source = readSource(db, "src_unrel2");
+
+    const result = await pollOne(db as any, source as any, new Date(), {
+      changeDetectEnabled: true,
+      playbookNotes: notesMap.get(source.orgId!) ?? null,
+    });
+
+    expect(result.changed).toBe(false);
+    const after = readSource(db, "src_unrel2");
+    expect(after.changeDetectedAt).toBeNull();
+  });
+
+  it("flags a stale source even with a working detector reporting unchanged", async () => {
+    const db = mkDb();
+    const old = new Date(Date.now() - 100 * 3600_000).toISOString(); // 100h ago > 72h
+    seedOrgWithSource(db, {
+      orgId: "org_dsf3",
+      orgSlug: "brex-api-stale",
+      orgName: "Brex API Stale",
+      sourceId: "src_stale",
+      sourceSlug: "brex-developer-api",
+      sourceUrl: "https://brex.com/docs",
+      metadata: { pageContentHash: "old-hash" },
+      playbookNotes: BODY_HASH_QUIRK_NOTES,
+      lastFetchedAt: old,
+    });
+
+    bodyHashImpl = async () => ({
+      status: "unchanged",
+      contentHash: "old-hash",
+      responseMs: 5,
+    });
+
+    const notesMap = await loadPlaybookNotesForSources(db as any, [
+      readSource(db, "src_stale") as any,
+    ]);
+    const source = readSource(db, "src_stale");
+
+    const result = await pollOne(db as any, source as any, new Date(), {
+      changeDetectEnabled: true,
+      playbookNotes: notesMap.get(source.orgId!) ?? null,
+      drainSelfFlag: { staleHours: 72 },
+    });
+
+    expect(result.changed).toBe(true);
+    const after = readSource(db, "src_stale");
+    expect(after.changeDetectedAt).not.toBeNull();
+  });
+
+  it("does NOT flag a fresh source with a working detector reporting unchanged", async () => {
+    const db = mkDb();
+    seedOrgWithSource(db, {
+      orgId: "org_dsf4",
+      orgSlug: "brex-api-fresh",
+      orgName: "Brex API Fresh",
+      sourceId: "src_fresh",
+      sourceSlug: "brex-developer-api",
+      sourceUrl: "https://brex.com/docs",
+      metadata: { pageContentHash: "old-hash" },
+      playbookNotes: BODY_HASH_QUIRK_NOTES,
+      lastFetchedAt: new Date().toISOString(),
+    });
+
+    bodyHashImpl = async () => ({
+      status: "unchanged",
+      contentHash: "old-hash",
+      responseMs: 5,
+    });
+
+    const notesMap = await loadPlaybookNotesForSources(db as any, [
+      readSource(db, "src_fresh") as any,
+    ]);
+    const source = readSource(db, "src_fresh");
+
+    const result = await pollOne(db as any, source as any, new Date(), {
+      changeDetectEnabled: true,
+      playbookNotes: notesMap.get(source.orgId!) ?? null,
+      drainSelfFlag: { staleHours: 72 },
+    });
+
+    expect(result.changed).toBe(false);
+    const after = readSource(db, "src_fresh");
+    expect(after.changeDetectedAt).toBeNull();
+  });
+
+  it("absent-quirk + stale: flags the source", async () => {
+    const db = mkDb();
+    const old = new Date(Date.now() - 100 * 3600_000).toISOString(); // 100h ago > 72h
+    seedOrgWithSource(db, {
+      orgId: "org_dsf5",
+      orgSlug: "orphan-stale",
+      orgName: "Orphan Stale",
+      sourceId: "src_orphan_stale",
+      sourceSlug: "orphan-stale",
+      sourceUrl: "https://orphan-stale.com/releases",
+      playbookNotes: null, // no frontmatter at all — loadFetchQuirks returns undefined
+      lastFetchedAt: old,
+    });
+
+    const notesMap = await loadPlaybookNotesForSources(db as any, [
+      readSource(db, "src_orphan_stale") as any,
+    ]);
+    const source = readSource(db, "src_orphan_stale");
+
+    const result = await pollOne(db as any, source as any, new Date(), {
+      changeDetectEnabled: true,
+      playbookNotes: notesMap.get(source.orgId!) ?? null,
+      drainSelfFlag: { staleHours: 72 },
+    });
+
+    expect(result.changed).toBe(true);
+    const after = readSource(db, "src_orphan_stale");
+    expect(after.changeDetectedAt).not.toBeNull();
+  });
+
+  it("absent-quirk + fresh: does NOT flag the source", async () => {
+    const db = mkDb();
+    seedOrgWithSource(db, {
+      orgId: "org_dsf6",
+      orgSlug: "orphan-fresh",
+      orgName: "Orphan Fresh",
+      sourceId: "src_orphan_fresh",
+      sourceSlug: "orphan-fresh",
+      sourceUrl: "https://orphan-fresh.com/releases",
+      playbookNotes: null,
+      lastFetchedAt: new Date().toISOString(),
+    });
+
+    const notesMap = await loadPlaybookNotesForSources(db as any, [
+      readSource(db, "src_orphan_fresh") as any,
+    ]);
+    const source = readSource(db, "src_orphan_fresh");
+
+    const result = await pollOne(db as any, source as any, new Date(), {
+      changeDetectEnabled: true,
+      playbookNotes: notesMap.get(source.orgId!) ?? null,
+      drainSelfFlag: { staleHours: 72 },
+    });
+
+    expect(result.changed).toBe(false);
+    const after = readSource(db, "src_orphan_fresh");
+    expect(after.changeDetectedAt).toBeNull();
+  });
+
+  it("detector error + stale: self-flags on the catch path", async () => {
+    const db = mkDb();
+    const old = new Date(Date.now() - 100 * 3600_000).toISOString(); // 100h ago > 72h
+    seedOrgWithSource(db, {
+      orgId: "org_dsf7",
+      orgSlug: "brex-api-err-stale",
+      orgName: "Brex API Err Stale",
+      sourceId: "src_err_stale",
+      sourceSlug: "brex-developer-api",
+      sourceUrl: "https://brex.com/docs",
+      metadata: { pageContentHash: "old-hash" },
+      playbookNotes: BODY_HASH_QUIRK_NOTES,
+      lastFetchedAt: old,
+    });
+
+    bodyHashImpl = async () => {
+      throw new Error("detector boom");
+    };
+
+    const notesMap = await loadPlaybookNotesForSources(db as any, [
+      readSource(db, "src_err_stale") as any,
+    ]);
+    const source = readSource(db, "src_err_stale");
+
+    const result = await pollOne(db as any, source as any, new Date(), {
+      changeDetectEnabled: true,
+      playbookNotes: notesMap.get(source.orgId!) ?? null,
+      drainSelfFlag: { staleHours: 72 },
+    });
+
+    expect(result.changed).toBe(true);
+    const after = readSource(db, "src_err_stale");
+    expect(after.changeDetectedAt).not.toBeNull();
+  });
+
+  it("detector error + fresh: does NOT self-flag on the catch path", async () => {
+    const db = mkDb();
+    seedOrgWithSource(db, {
+      orgId: "org_dsf8",
+      orgSlug: "brex-api-err-fresh",
+      orgName: "Brex API Err Fresh",
+      sourceId: "src_err_fresh",
+      sourceSlug: "brex-developer-api",
+      sourceUrl: "https://brex.com/docs",
+      metadata: { pageContentHash: "old-hash" },
+      playbookNotes: BODY_HASH_QUIRK_NOTES,
+      lastFetchedAt: new Date().toISOString(),
+    });
+
+    bodyHashImpl = async () => {
+      throw new Error("detector boom");
+    };
+
+    const notesMap = await loadPlaybookNotesForSources(db as any, [
+      readSource(db, "src_err_fresh") as any,
+    ]);
+    const source = readSource(db, "src_err_fresh");
+
+    const result = await pollOne(db as any, source as any, new Date(), {
+      changeDetectEnabled: true,
+      playbookNotes: notesMap.get(source.orgId!) ?? null,
+      drainSelfFlag: { staleHours: 72 },
+    });
+
+    expect(result.changed).toBe(false);
+    const after = readSource(db, "src_err_fresh");
+    expect(after.changeDetectedAt).toBeNull();
   });
 });
 

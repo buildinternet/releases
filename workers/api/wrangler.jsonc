@@ -330,12 +330,14 @@
       { "class_name": "StatusHub", "name": "STATUS_HUB" },
       { "class_name": "ReleaseHub", "name": "RELEASE_HUB" },
       { "class_name": "SourceActor", "name": "SOURCE_ACTOR" },
+      { "class_name": "OrgActor", "name": "ORG_ACTOR" },
     ],
   },
   "migrations": [
     { "new_classes": ["StatusHub"], "tag": "v1" },
     { "new_classes": ["ReleaseHub"], "tag": "v2" },
     { "new_classes": ["SourceActor"], "tag": "v3" },
+    { "new_classes": ["OrgActor"], "tag": "v4" },
   ],
   // Cloudflare Workflows — durable, retriable multi-step pipelines. See
   // workers/api/src/workflows/ and issue #482. Prod-only; staging doesn't
@@ -828,12 +830,14 @@
           { "class_name": "StatusHub", "name": "STATUS_HUB" },
           { "class_name": "ReleaseHub", "name": "RELEASE_HUB" },
           { "class_name": "SourceActor", "name": "SOURCE_ACTOR" },
+          { "class_name": "OrgActor", "name": "ORG_ACTOR" },
         ],
       },
       "migrations": [
         { "new_classes": ["StatusHub"], "tag": "v1" },
         { "new_classes": ["ReleaseHub"], "tag": "v2" },
         { "new_classes": ["SourceActor"], "tag": "v3" },
+        { "new_classes": ["OrgActor"], "tag": "v4" },
       ],
       // Workflow binding for on-demand validation only — no cron trigger
       // fires it. Kick a manual instance via:

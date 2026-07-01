@@ -29,6 +29,7 @@ import { organizations, sources } from "@buildinternet/releases-core/schema";
 import type { Source } from "@buildinternet/releases-core/schema";
 import { describeFetchPlan, computeFetchState } from "@releases/adapters/fetch-plan";
 import { logEvent } from "@releases/lib/log-event";
+import { flag, FLAGS, type FlagshipBinding } from "@releases/lib/flags";
 import { seedJitterMs } from "./lib/source-actor-seed.js";
 
 /**
@@ -98,6 +99,12 @@ export interface SourceActorState {
 export interface SourceActorEnv {
   DB: D1Database;
   POLL_AND_FETCH_WORKFLOW?: Workflow;
+  /** Per-org drain actor — armed when a scrape/agent source is flagged (#1777). */
+  ORG_ACTOR?: DurableObjectNamespace<import("./org-actor.js").OrgActor>;
+  /** Cloudflare Flagship binding (org-drain-actor-enabled). */
+  FLAGS?: FlagshipBinding;
+  /** Kill-switch var fallback for org-drain-actor-enabled. */
+  ORG_DRAIN_ACTOR_ENABLED?: string;
   /** Test seam: inject a drizzle handle so unit tests skip a real D1 binding. */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   _drizzleOverride?: any;
@@ -221,6 +228,8 @@ export class SourceActor extends DurableObject<SourceActorEnv> {
       return;
     }
 
+    await this.maybeNotifyOrgDrain(row);
+
     const now = Date.now();
     const plan = describeFetchPlan(row);
     const state = computeFetchState(row, plan, new Date(now));
@@ -283,6 +292,36 @@ export class SourceActor extends DurableObject<SourceActorEnv> {
   }
 
   // --- internals -----------------------------------------------------------
+
+  /**
+   * Arm this source's OrgActor when the source is a flagged scrape/agent source
+   * (retires the scrape-agent-sweep trigger). Best-effort — never blocks or fails
+   * the alarm. The recurring alarm re-notifies until the flag clears (the source
+   * drains), giving at-least-once delivery without a markers table.
+   */
+  private async maybeNotifyOrgDrain(row: Source): Promise<void> {
+    if (row.type !== "scrape" && row.type !== "agent") return;
+    if (!row.changeDetectedAt || !row.orgId) return;
+    const ns = this.env.ORG_ACTOR;
+    if (!ns) return;
+    const on = await flag(
+      this.env.FLAGS,
+      this.env.ORG_DRAIN_ACTOR_ENABLED,
+      FLAGS.orgDrainActorEnabled,
+    );
+    if (!on) return;
+    try {
+      await ns.getByName(row.orgId).ensureDrainScheduled(row.orgId);
+    } catch (err) {
+      logEvent("warn", {
+        component: "source-actor",
+        event: "org-drain-notify-failed",
+        sourceId: row.id,
+        orgId: row.orgId,
+        err: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
 
   private async loadSource(sourceId: string): Promise<Source | null> {
     const [row] = await this.db().select().from(sources).where(eq(sources.id, sourceId)).limit(1);

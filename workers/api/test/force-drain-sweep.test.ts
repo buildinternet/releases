@@ -357,4 +357,21 @@ describe("forceDrainSweep", () => {
     const rows = db.select().from(cronRuns).all();
     expect(rows).toHaveLength(0);
   });
+
+  it("early-returns without flagging when superseded by the OrgActor", async () => {
+    const db = mkDb();
+    seedOrg(db, "org_x");
+    seedSource(db, { id: "src_y", slug: "stale-y", orgId: "org_x", lastFetchedAt: STALE });
+
+    await forceDrainSweep({
+      DB: null as any,
+      CRON_ENABLED: "true",
+      FORCE_DRAIN_CRON_ENABLED: "true",
+      supersededByActor: true,
+      _drizzleOverride: db,
+    } as any);
+
+    const [row] = db.select().from(sources).where(eq(sources.id, "src_y")).all();
+    expect(row.changeDetectedAt).toBeNull(); // not flagged — the actor path owns this
+  });
 });
