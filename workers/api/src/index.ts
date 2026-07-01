@@ -61,6 +61,7 @@ import { FLAGS, flag, type FlagshipBinding } from "@releases/lib/flags";
 export { StatusHub } from "./status-hub.js";
 export { ReleaseHub } from "./release-hub.js";
 export { SourceActor } from "./source-actor.js";
+export { OrgActor } from "./org-actor.js";
 export { ScrapeAgentSweepWorkflow } from "./workflows/scrape-agent-sweep.js";
 export { PollAndFetchWorkflow } from "./workflows/poll-and-fetch.js";
 export { OnboardSourceWorkflow } from "./workflows/onboard-source.js";
@@ -92,6 +93,12 @@ export type Env = {
     // self-schedules its fetches via its own DO alarm; the hourly poll cron is a
     // re-seed heartbeat that (re-)seeds due sources' alarms. Absent ⇒ no-op.
     SOURCE_ACTOR?: DurableObjectNamespace<import("./source-actor.js").SourceActor>;
+    // Per-org scrape/agent drain actor (#1777 cron-absorption slice). When bound,
+    // a flagged source's SourceActor arms this DO, which dispatches one /update
+    // session for the org. Absent ⇒ the scrape-agent + force-drain crons drive.
+    ORG_ACTOR?: DurableObjectNamespace<import("./org-actor.js").OrgActor>;
+    /** Kill-switch var fallback for org-drain-actor-enabled (Flagship is source of truth). */
+    ORG_DRAIN_ACTOR_ENABLED?: string;
     WEBHOOK_DELIVERY_QUEUE: Queue<unknown>;
     /** Per-recipient follow digest send (cron enqueues; API worker consumes). */
     DIGEST_DELIVERY_QUEUE?: Queue<import("./queues/types.js").DigestDeliveryMessage>;
