@@ -1043,6 +1043,20 @@ export interface TestUserWebhookResponse {
   eventId: string;
 }
 
+/** One Analytics Engine delivery-attempt row from GET …/webhooks/:id/deliveries. */
+export interface WebhookDeliveryRow {
+  timestamp?: string;
+  event_id?: string;
+  error_message?: string | null;
+  error_code?: string | null;
+  outcome?: string;
+  /** Delivery format — "json" (signed raw event) or "slack" (Block Kit). Empty on pre-format rows. */
+  format?: UserWebhookFormat | "";
+  http_status?: number;
+  latency_ms?: number;
+  attempt?: number;
+}
+
 // ── Digest emails ──
 
 /** How often a user wants a digest email. `off` = no emails. */

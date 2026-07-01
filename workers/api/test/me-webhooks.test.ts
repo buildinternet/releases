@@ -14,6 +14,7 @@ import { meWebhookHandlers } from "../src/routes/me-webhooks.js";
 
 const TEST_MASTER_KEY = "a".repeat(64);
 const PUBLIC_HOOK_URL = "https://1.1.1.1/hook";
+const SLACK_HOOK_URL = "https://hooks.slack.com/services/T012AB/B034CD/Xy7zSecret";
 const queueMessages: unknown[] = [];
 
 let h: TestDatabase;
@@ -241,6 +242,110 @@ describe("/v1/me/webhooks", () => {
       env,
     );
     expect(res.status).toBe(400);
+  });
+
+  it("POST format slack with a non-Slack host → 400", async () => {
+    const { a, env } = app();
+    const res = await a.request(
+      "/me/webhooks",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orgSlug: "acme", url: PUBLIC_HOOK_URL, format: "slack" }),
+      },
+      env,
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it("POST format slack → 201 with format slack and no signingKey", async () => {
+    const { a, env } = app();
+    const res = await a.request(
+      "/me/webhooks",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orgSlug: "acme", url: SLACK_HOOK_URL, format: "slack" }),
+      },
+      env,
+    );
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as { format: string; signingKey?: string };
+    expect(body.format).toBe("slack");
+    expect(body.signingKey).toBeUndefined();
+  });
+
+  it("PATCH format slack re-validates the Slack host", async () => {
+    const { a, env } = app();
+    const create = await a.request(
+      "/me/webhooks",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orgSlug: "acme", url: PUBLIC_HOOK_URL }),
+      },
+      env,
+    );
+    const { id } = (await create.json()) as { id: string };
+
+    const bad = await a.request(
+      `/me/webhooks/${id}`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ format: "slack" }),
+      },
+      env,
+    );
+    expect(bad.status).toBe(400);
+
+    const ok = await a.request(
+      `/me/webhooks/${id}`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ format: "slack", url: SLACK_HOOK_URL }),
+      },
+      env,
+    );
+    expect(ok.status).toBe(200);
+    expect(((await ok.json()) as { format: string }).format).toBe("slack");
+  });
+
+  it("PATCH url on an existing slack subscription re-validates the host", async () => {
+    const { a, env } = app();
+    const create = await a.request(
+      "/me/webhooks",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orgSlug: "acme", url: SLACK_HOOK_URL, format: "slack" }),
+      },
+      env,
+    );
+    const { id } = (await create.json()) as { id: string };
+
+    const bad = await a.request(
+      `/me/webhooks/${id}`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: PUBLIC_HOOK_URL }),
+      },
+      env,
+    );
+    expect(bad.status).toBe(400);
+
+    const ok = await a.request(
+      `/me/webhooks/${id}`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: "https://hooks.slack-gov.com/services/T1/B2/secret" }),
+      },
+      env,
+    );
+    expect(ok.status).toBe(200);
   });
 
   it("GET lists only the caller's subscriptions with enriched fields", async () => {
@@ -523,6 +628,7 @@ describe("GET /v1/me/webhooks/:id/deliveries", () => {
               timestamp: "2026-06-19 12:00:00",
               event_id: "evt_test",
               outcome: "success",
+              format: "slack",
               http_status: 200,
               latency_ms: 42,
               attempt: 1,
@@ -543,8 +649,9 @@ describe("GET /v1/me/webhooks/:id/deliveries", () => {
         },
       );
       expect(res.status).toBe(200);
-      const body = (await res.json()) as { data: Array<{ event_id: string }> };
+      const body = (await res.json()) as { data: Array<{ event_id: string; format: string }> };
       expect(body.data[0]?.event_id).toBe("evt_test");
+      expect(body.data[0]?.format).toBe("slack");
     } finally {
       globalThis.fetch = origFetch;
     }

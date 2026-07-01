@@ -83,5 +83,6 @@ export function formatSlackMessage(
   });
   blocks.push({ type: "context", elements });
 
+  // `text` is intentionally unescaped — plain-text notification preview, not mrkdwn.
   return { text: `${contextName} — ${titleText}`, blocks };
 }
