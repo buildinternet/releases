@@ -46,6 +46,7 @@ interface ManifestQueryRow {
   name: string;
   org_created_at: string;
   discovery: "curated" | "agent" | "on_demand";
+  auto_generate_content: number;
   overview_updated_at: string | null;
   overview_generated_at: string | null;
   last_contributing_release_at: string | null;
@@ -84,6 +85,7 @@ adminOverviewsRoutes.get("/admin/overviews", async (c) => {
       o.name,
       o.created_at AS org_created_at,
       o.discovery,
+      o.auto_generate_content,
       kp.updated_at AS overview_updated_at,
       kp.generated_at AS overview_generated_at,
       kp.last_contributing_release_at AS last_contributing_release_at,
@@ -103,7 +105,7 @@ adminOverviewsRoutes.get("/admin/overviews", async (c) => {
       ON s.org_id = o.id
     LEFT JOIN releases_visible r
       ON r.source_id = s.id
-    GROUP BY o.id, o.slug, o.name, o.created_at, o.discovery,
+    GROUP BY o.id, o.slug, o.name, o.created_at, o.discovery, o.auto_generate_content,
              kp.updated_at, kp.generated_at, kp.last_contributing_release_at
     ORDER BY o.name, o.id
   `);
@@ -114,6 +116,7 @@ adminOverviewsRoutes.get("/admin/overviews", async (c) => {
   const all: OverviewManifestRow[] = [];
   for (const row of rows) {
     const hasOverview = row.overview_updated_at != null;
+    const autoGenerateContent = row.auto_generate_content === 1;
     const staleness = classifyOverviewStaleness(hasOverview, row.releases_since_overview);
 
     if (filterByStaleness) {
@@ -140,10 +143,15 @@ adminOverviewsRoutes.get("/admin/overviews", async (c) => {
       releasesSinceOverview: row.releases_since_overview,
       recentReleaseCount: row.recent_release_count,
       staleness,
+      autoGenerateContent,
     };
 
     if (planMode) {
-      if (staleness === "missing") out.action = "missing";
+      // An opted-out org is invisible to the batch-overview eligibility filter,
+      // so `missing`/`refresh` would be misleading here — the sweep would never
+      // pick it up (#1795). Flag it explicitly instead.
+      if (!autoGenerateContent) out.action = "opted_out";
+      else if (staleness === "missing") out.action = "missing";
       else if (staleness === "behind") out.action = "refresh";
       else out.action = "skip";
       // Hint a poll-fetch first when an org has active sources but the most

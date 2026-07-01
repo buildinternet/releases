@@ -518,6 +518,7 @@ orgRoutes.post(
       description?: string;
       category?: string;
       tags?: string[];
+      autoGenerateContent?: boolean;
     } = { ...c.req.valid("json") };
 
     // Resolve through the alias overlay so "e-commerce" → "commerce" before
@@ -555,6 +556,11 @@ orgRoutes.post(
           domain: body.domain ?? null,
           description: body.description ?? null,
           category: body.category ?? null,
+          // `POST /v1/orgs` only mints `curated` orgs (discovery defaults to
+          // `curated`), and onboarding into the registry should opt the org
+          // into overviews + summaries by default (#1795). Explicit `false`
+          // still persists a deliberate opt-out.
+          autoGenerateContent: body.autoGenerateContent ?? true,
           createdAt: now,
           updatedAt: now,
         })
@@ -787,6 +793,20 @@ orgRoutes.patch(
       updates.autoGenerateContent = body.autoGenerateContent;
     if (body.featured !== undefined) updates.featured = body.featured;
     if (body.discovery !== undefined) updates.discovery = body.discovery;
+
+    // Promoting an org INTO `curated` opts it into automatic AI content by
+    // default (#1795): an org can otherwise be promoted and indexed yet
+    // silently never receive an overview. Only fires on the transition (the
+    // org wasn't already curated) and only when the same request didn't set
+    // `autoGenerateContent` explicitly — so re-saving a curated org, or an
+    // explicit opt-out, is never clobbered.
+    if (
+      body.discovery === "curated" &&
+      org.discovery !== "curated" &&
+      body.autoGenerateContent === undefined
+    ) {
+      updates.autoGenerateContent = true;
+    }
     if (body.notice !== undefined)
       updates.metadata = setNoticeInMetadata(org.metadata, body.notice);
 

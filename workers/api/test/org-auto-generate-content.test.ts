@@ -102,3 +102,104 @@ describe("PATCH /v1/orgs/:slug — autoGenerateContent", () => {
     expect(afterBody.autoGenerateContent).toBe(false);
   });
 });
+
+describe("POST /v1/orgs — autoGenerateContent default (#1795)", () => {
+  it("defaults autoGenerateContent=true when omitted (curated onboarding)", async () => {
+    const db = mkDb();
+    const app = mkApp(db);
+
+    const res = await app(
+      new Request("https://x.test/v1/orgs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "Widgets Inc" }),
+      }),
+    );
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as { slug: string; autoGenerateContent?: boolean };
+    expect(body.autoGenerateContent).toBe(true);
+  });
+
+  it("honors an explicit autoGenerateContent=false opt-out at creation", async () => {
+    const db = mkDb();
+    const app = mkApp(db);
+
+    const res = await app(
+      new Request("https://x.test/v1/orgs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "Quiet Co", autoGenerateContent: false }),
+      }),
+    );
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as { autoGenerateContent?: boolean };
+    expect(body.autoGenerateContent).toBe(false);
+  });
+});
+
+async function seedAgent(db: ReturnType<typeof mkDb>) {
+  await db.insert(organizations).values([
+    {
+      id: "org_agent",
+      slug: "agentco",
+      name: "AgentCo",
+      discovery: "agent",
+      autoGenerateContent: false,
+    },
+  ]);
+}
+
+describe("PATCH /v1/orgs/:slug — promotion-to-curated default (#1795)", () => {
+  it("opts a promoted org into AI content by default", async () => {
+    const db = mkDb();
+    await seedAgent(db);
+    const app = mkApp(db);
+
+    const res = await app(
+      new Request("https://x.test/v1/orgs/agentco", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ discovery: "curated" }),
+      }),
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { discovery?: string; autoGenerateContent?: boolean };
+    expect(body.discovery).toBe("curated");
+    expect(body.autoGenerateContent).toBe(true);
+  });
+
+  it("respects an explicit autoGenerateContent=false in the promotion request", async () => {
+    const db = mkDb();
+    await seedAgent(db);
+    const app = mkApp(db);
+
+    const res = await app(
+      new Request("https://x.test/v1/orgs/agentco", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ discovery: "curated", autoGenerateContent: false }),
+      }),
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { autoGenerateContent?: boolean };
+    expect(body.autoGenerateContent).toBe(false);
+  });
+
+  it("does not re-flip an already-curated org's deliberate opt-out", async () => {
+    const db = mkDb();
+    await seed(db); // org_acme, discovery: curated, autoGenerateContent defaults false
+    const app = mkApp(db);
+
+    // Re-saving a curated org (discovery unchanged) must not silently enable it.
+    const res = await app(
+      new Request("https://x.test/v1/orgs/acme", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ discovery: "curated", description: "Touched" }),
+      }),
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { autoGenerateContent?: boolean };
+    expect(body.autoGenerateContent).toBe(false);
+  });
+});
