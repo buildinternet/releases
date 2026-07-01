@@ -26,56 +26,71 @@ function lockStub(env: Env, sourceId: string): SourceActorLockStub | null {
 }
 
 /**
- * Return the sources that already hold a live MA-session lease (empty when all
- * are free). Callers reject the whole delegation when this is non-empty, matching
- * the old KV all-or-nothing check.
+ * Warn once per isolate when the cross-script binding is missing. In prod/staging
+ * it is always bound, so an absent binding is a real misconfig worth surfacing —
+ * but only once, so a hot path can't flood the logs (the module-level flag resets
+ * per isolate, which is the natural rate limit here).
  */
-export async function checkSourceLocks(
-  env: Env,
-  sourceIds: readonly string[],
-): Promise<Array<{ id: string; sessionId: string }>> {
-  if (!env.SOURCE_ACTOR) return [];
-  const results = await Promise.all(
-    sourceIds.map(async (id) => {
-      try {
-        const held = await lockStub(env, id)!.checkScrapeLock(id);
-        return held ? { id, sessionId: held.sessionId } : null;
-      } catch (err) {
-        logEvent("error", {
-          component: "discovery",
-          event: "source-lock-check-failed",
-          sourceId: id,
-          err: err instanceof Error ? err.message : String(err),
-        });
-        return null; // fail-open: treat as unlocked
-      }
-    }),
-  );
-  return results.filter((x): x is { id: string; sessionId: string } => x !== null);
+let warnedMissingBinding = false;
+function warnMissingBinding(op: string): void {
+  if (warnedMissingBinding) return;
+  warnedMissingBinding = true;
+  logEvent("warn", {
+    component: "discovery",
+    event: "source-lock-binding-missing",
+    op,
+    detail: "SOURCE_ACTOR unbound — per-source MA dedup lock disabled (failing open)",
+  });
 }
 
-/** Acquire the lease for every id under `sessionId` (best-effort per source). */
-export async function acquireSourceLocks(
+/**
+ * Atomically claim the per-source lease for every id under `sessionId`. Returns
+ * the sources that were already locked (empty ⇒ all acquired, delegation may
+ * proceed). On a partial acquire — some free, some contended — the leases we did
+ * take are released before returning, so a rejected batch leaves nothing held.
+ *
+ * Callers must acquire BEFORE minting a session and reject when the result is
+ * non-empty, so a losing race never starts a duplicate session. Fail-open: a
+ * throwing or absent actor treats the source as free (acquired) — the lock is a
+ * dedup/cost guard, not a data-integrity gate (ingest dedups on
+ * `UNIQUE(source_id, url)`); one duplicate session (bounded by the daily spend
+ * cap) beats halting all ingestion on a transient DO error.
+ */
+export async function tryAcquireSourceLocks(
   env: Env,
   sourceIds: readonly string[],
   sessionId: string,
-): Promise<void> {
-  if (!env.SOURCE_ACTOR) return;
+): Promise<Array<{ id: string; sessionId: string }>> {
+  if (!env.SOURCE_ACTOR) {
+    warnMissingBinding("acquire");
+    return [];
+  }
+  const acquired: string[] = [];
+  const conflicts: Array<{ id: string; sessionId: string }> = [];
   await Promise.all(
     sourceIds.map(async (id) => {
       try {
-        await lockStub(env, id)!.acquireScrapeLock(id, sessionId);
+        const res = await lockStub(env, id)!.tryAcquireScrapeLock(id, sessionId);
+        if (res.acquired) acquired.push(id);
+        else conflicts.push({ id, sessionId: res.sessionId });
       } catch (err) {
-        logEvent("warn", {
+        logEvent("error", {
           component: "discovery",
           event: "source-lock-acquire-failed",
           sourceId: id,
           sessionId,
           err: err instanceof Error ? err.message : String(err),
         });
+        acquired.push(id); // fail-open: treat as acquired
       }
     }),
   );
+  if (conflicts.length > 0) {
+    // Roll back the leases we took so a rejected batch holds nothing.
+    await releaseSourceLocks(env, acquired, sessionId);
+    return conflicts;
+  }
+  return [];
 }
 
 /**
@@ -88,7 +103,10 @@ export async function releaseSourceLocks(
   sourceIds: readonly string[],
   sessionId: string,
 ): Promise<void> {
-  if (!env.SOURCE_ACTOR) return;
+  if (!env.SOURCE_ACTOR) {
+    warnMissingBinding("release");
+    return;
+  }
   await Promise.all(
     sourceIds.map(async (id) => {
       try {

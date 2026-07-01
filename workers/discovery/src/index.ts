@@ -9,7 +9,7 @@ import { discoveryIdentityHeaders } from "./identity.js";
 import { logEvent } from "@releases/lib/log-event.js";
 import { getSecret, getSecretWithFallback } from "@releases/lib/secrets";
 import { checkSpendCap } from "./spend-cap.js";
-import { checkSourceLocks, acquireSourceLocks } from "./source-lock.js";
+import { tryAcquireSourceLocks, releaseSourceLocks } from "./source-lock.js";
 import { WorkerEntrypoint } from "cloudflare:workers";
 import { FLAGS, flag } from "@releases/lib/flags";
 
@@ -237,6 +237,9 @@ async function startManagedSession(
     agentVersion?: number;
     environmentId: string;
   }) => Record<string, unknown>,
+  // #1814: callers that hold a per-source lease pass the sessionId they reserved
+  // it under (acquired before this mint) so the lease owner matches the session.
+  providedSessionId?: string,
 ): Promise<{ sessionId: string } | Response> {
   const anthropicKey = await getSecret(env.ANTHROPIC_API_KEY);
   if (!anthropicKey) {
@@ -247,7 +250,7 @@ async function startManagedSession(
   if (config instanceof Response) return config;
   const { agentId, agentVersion, environmentId } = config;
 
-  const sessionId = `ma-${crypto.randomUUID()}`;
+  const sessionId = providedSessionId ?? `ma-${crypto.randomUUID()}`;
   const maDoId = env.MANAGED_AGENTS_SESSION.idFromName(sessionId);
   const maStub = env.MANAGED_AGENTS_SESSION.get(maDoId);
 
@@ -381,10 +384,13 @@ export class DiscoveryEntrypoint extends WorkerEntrypoint<Env> {
       }
     }
 
-    // Per-source dedup lock (#1814): reject if any source already has an active
-    // MA session. Backed by the SourceActor DO (replaced the KV ma:active:src lock).
+    // Per-source dedup lock (#1814): atomically claim the lease for every source
+    // BEFORE minting, so a losing race never starts a duplicate session. Backed
+    // by the SourceActor DO (replaced the KV ma:active:src lock). The sessionId is
+    // minted here and threaded into the session so the lease owner matches.
+    const sessionId = `ma-${crypto.randomUUID()}`;
     {
-      const lockedSources = await checkSourceLocks(this.env, params.sourceIds);
+      const lockedSources = await tryAcquireSourceLocks(this.env, params.sourceIds, sessionId);
       if (lockedSources.length > 0) {
         const detail = lockedSources
           .map((s) => `Source ${s.id} has an active MA session (${s.sessionId})`)
@@ -411,8 +417,12 @@ export class DiscoveryEntrypoint extends WorkerEntrypoint<Env> {
         correlationId: params.correlationId,
         ...ctx,
       }),
+      sessionId,
     );
     if (result instanceof Response) {
+      // Mint failed — release the leases we took so the source isn't wedged
+      // until the 15-min lease expires.
+      await releaseSourceLocks(this.env, params.sourceIds, sessionId);
       let errBody: { error?: string } = {};
       try {
         errBody = (await result.clone().json()) as typeof errBody;
@@ -424,11 +434,6 @@ export class DiscoveryEntrypoint extends WorkerEntrypoint<Env> {
         error: errBody.error ?? `Discovery returned ${result.status}`,
       };
     }
-
-    // Acquire per-source locks immediately after the session ID is minted,
-    // before returning success. The 15-min lease ensures cleanup even if the
-    // session dies before its release RPC lands (#1814).
-    await acquireSourceLocks(this.env, params.sourceIds, result.sessionId);
 
     logEvent("info", {
       component: "discovery",
@@ -702,10 +707,13 @@ const httpHandler = {
         }
       }
 
-      // Per-source dedup lock (#1814): reject if any source already has an active
-      // MA session. Backed by the SourceActor DO (replaced the KV ma:active:src lock).
+      // Per-source dedup lock (#1814): atomically claim the lease for every
+      // source BEFORE minting so a losing race never starts a duplicate session.
+      // Backed by the SourceActor DO (replaced the KV ma:active:src lock). The
+      // sessionId is minted here and threaded in so the lease owner matches.
+      const sessionId = `ma-${crypto.randomUUID()}`;
       if (identifiers) {
-        const lockedSources = await checkSourceLocks(env, identifiers as string[]);
+        const lockedSources = await tryAcquireSourceLocks(env, identifiers as string[], sessionId);
         if (lockedSources.length > 0) {
           const detail = lockedSources
             .map((s) => `Source ${s.id} has an active MA session (${s.sessionId})`)
@@ -723,19 +731,25 @@ const httpHandler = {
         }
       }
 
-      const result = await startManagedSession(env, "Failed to start update session", (ctx) => ({
-        company: body.company,
-        mode: "update",
-        sourceIdentifiers: identifiers,
-        orgId: body.orgId,
-        correlationId: body.correlationId,
-        ...ctx,
-      }));
-      if (result instanceof Response) return result;
-
-      // Acquire per-source locks immediately after the session ID is minted (#1814).
-      if (identifiers) {
-        await acquireSourceLocks(env, identifiers as string[], result.sessionId);
+      const result = await startManagedSession(
+        env,
+        "Failed to start update session",
+        (ctx) => ({
+          company: body.company,
+          mode: "update",
+          sourceIdentifiers: identifiers,
+          orgId: body.orgId,
+          correlationId: body.correlationId,
+          ...ctx,
+        }),
+        sessionId,
+      );
+      if (result instanceof Response) {
+        // Mint failed — release the leases we took so the source isn't wedged.
+        if (identifiers) {
+          await releaseSourceLocks(env, identifiers as string[], sessionId);
+        }
+        return result;
       }
 
       return jsonResponse(

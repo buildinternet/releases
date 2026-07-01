@@ -62,8 +62,10 @@ export type SecretBinding = { get(): Promise<string> };
  * durable-object binding.
  */
 export interface SourceActorLockStub {
-  checkScrapeLock(sourceId: string): Promise<{ sessionId: string } | null>;
-  acquireScrapeLock(sourceId: string, sessionId: string): Promise<void>;
+  tryAcquireScrapeLock(
+    sourceId: string,
+    sessionId: string,
+  ): Promise<{ acquired: boolean; sessionId: string }>;
   releaseScrapeLock(sourceId: string, sessionId: string): Promise<void>;
 }
 

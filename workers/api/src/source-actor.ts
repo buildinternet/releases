@@ -150,41 +150,37 @@ export class SourceActor extends DurableObject<SourceActorEnv> {
   }
 
   /**
-   * MA-delegation lock — check (#1780 Box 1 / #1814).
+   * MA-delegation lock — atomic try-acquire (#1780 Box 1 / #1814).
    *
-   * Returns the current live lease owner, or `null` when the source is unheld.
-   * The discovery worker calls this before minting a managed-agent session and
-   * rejects the delegation if a lease is live — the DO-backed replacement for
-   * the KV `LATEST_CACHE.get("ma:active:src:{id}")` check. A lease past its
-   * `expiresAt` is lazily cleared and reported as absent, so a session that died
-   * before releasing can't wedge the source past the lease window.
-   *
-   * The DO's single-thread execution makes each call atomic, but check and
-   * acquire are separate calls (the expensive session mint happens between them),
-   * so a narrow check→acquire race remains — identical to the KV get-then-put it
-   * replaces, and tolerated the same way (the conditional release + lease bound
-   * the blast radius to at most one duplicate session per lease window).
+   * The real per-source mutex: because the DO runs single-threaded, this
+   * read-then-write is indivisible, so it does what the KV lock only approximated
+   * (its separate get-then-put left a TOCTOU window). Claims the lease for
+   * `sessionId` with a fresh 15-min deadline and returns `{ acquired: true }`
+   * ONLY when the source was free. When a live lease is already held it does NOT
+   * overwrite — it returns `{ acquired: false, sessionId: <current owner> }` so
+   * the discovery worker rejects the delegation *before* minting a duplicate
+   * session. A lease past its `expiresAt` is treated as free and reclaimed (the
+   * lazy-expiry backstop for a session that died before releasing).
    */
-  async checkScrapeLock(sourceId: string): Promise<{ sessionId: string } | null> {
-    const lock = await this.ctx.storage.get<ScrapeLock>(SCRAPE_LOCK_KEY);
-    if (!lock) return null;
-    if (lock.expiresAt <= Date.now()) {
-      await this.ctx.storage.delete([SCRAPE_LOCK_KEY]);
-      logEvent("info", { component: "source-actor", event: "scrape-lock-expired", sourceId });
-      return null;
+  async tryAcquireScrapeLock(
+    sourceId: string,
+    sessionId: string,
+  ): Promise<{ acquired: boolean; sessionId: string }> {
+    const now = Date.now();
+    const existing = await this.ctx.storage.get<ScrapeLock>(SCRAPE_LOCK_KEY);
+    if (existing && existing.expiresAt > now) {
+      logEvent("info", {
+        component: "source-actor",
+        event: "scrape-lock-contended",
+        sourceId,
+        sessionId,
+        owner: existing.sessionId,
+      });
+      return { acquired: false, sessionId: existing.sessionId };
     }
-    return { sessionId: lock.sessionId };
-  }
-
-  /**
-   * MA-delegation lock — acquire. Claims the lease for `sessionId` with a fresh
-   * 15-min deadline. Called by the discovery worker immediately after the session
-   * id is minted (replacing the KV `put(..., {expirationTtl: 15*60})`).
-   */
-  async acquireScrapeLock(sourceId: string, sessionId: string): Promise<void> {
     await this.ctx.storage.put<ScrapeLock>(SCRAPE_LOCK_KEY, {
       sessionId,
-      expiresAt: Date.now() + SCRAPE_LOCK_LEASE_MS,
+      expiresAt: now + SCRAPE_LOCK_LEASE_MS,
     });
     logEvent("info", {
       component: "source-actor",
@@ -192,6 +188,7 @@ export class SourceActor extends DurableObject<SourceActorEnv> {
       sourceId,
       sessionId,
     });
+    return { acquired: true, sessionId };
   }
 
   /**
