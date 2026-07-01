@@ -369,6 +369,12 @@ export async function pollOne(
     changeDetectEnabled?: boolean;
     playbookNotes?: string | null;
     signedFetch?: typeof fetch;
+    /**
+     * When present, scrape/agent sources self-flag `changeDetectedAt` for the
+     * OrgActor drain instead of waiting for the force-drain cron (#518). Absent
+     * ⇒ today's behavior (unreliable/absent detector is a no-op).
+     */
+    drainSelfFlag?: { staleHours: number };
   },
 ): Promise<PollResult> {
   const nowIso = now.toISOString();
@@ -411,6 +417,7 @@ export async function pollOne(
       now,
       opts.playbookNotes ?? null,
       opts.signedFetch,
+      opts.drainSelfFlag,
     );
   }
 
@@ -472,6 +479,16 @@ export async function pollOne(
 }
 
 /**
+ * Force-drain staleness test (#518 → producer). A source is stale when it has
+ * never fetched or its last successful fetch is older than `staleHours`.
+ */
+function isStale(lastFetchedAt: string | null, now: Date, staleHours: number): boolean {
+  if (!lastFetchedAt) return true;
+  const t = Date.parse(lastFetchedAt);
+  return !Number.isFinite(t) || t < now.getTime() - staleHours * 3600_000;
+}
+
+/**
  * Change-detector branch for scrape-no-feed and agent sources. Routes via
  * the playbook's `fetchQuirks[source.slug]` entry (#516 schema):
  *
@@ -497,6 +514,7 @@ async function pollScrapeOrAgentByQuirk(
   now: Date,
   playbookNotes: string | null,
   signedFetch?: typeof fetch,
+  drainSelfFlag?: { staleHours: number },
 ): Promise<PollResult> {
   const nowIso = now.toISOString();
   const start = Date.now();
@@ -528,19 +546,30 @@ async function pollScrapeOrAgentByQuirk(
     status: ChangeStatus,
   ): Promise<boolean> => {
     const changed = status === "changed" || status === "unknown";
+    const staleFlag =
+      drainSelfFlag != null && isStale(source.lastFetchedAt, now, drainSelfFlag.staleHours);
+    const flagged = changed || staleFlag;
     const updates: Record<string, unknown> = { lastPolledAt: nowIso };
     if (Object.keys(metaUpdates).length > 0) {
       updates.metadata = JSON.stringify({ ...meta, ...metaUpdates });
     }
-    if (changed) updates.changeDetectedAt = nowIso;
+    if (flagged) updates.changeDetectedAt = nowIso;
     await db.update(sources).set(updates).where(eq(sources.id, source.id));
-    return changed;
+    return flagged;
   };
 
   if (!quirk || quirk.changeDetector === "unreliable") {
-    await db.update(sources).set({ lastPolledAt: nowIso }).where(eq(sources.id, source.id));
-    logOutcome(quirk?.changeDetector ?? "none", "skipped");
-    return { source, changed: false };
+    // Force-drain producer (#518): flag when the detector can never self-signal
+    // (unreliable) or the source is stale. Absent quirk only flags on staleness.
+    const unreliable = quirk?.changeDetector === "unreliable";
+    const flagged =
+      drainSelfFlag != null &&
+      (unreliable || isStale(source.lastFetchedAt, now, drainSelfFlag.staleHours));
+    const updates: Record<string, unknown> = { lastPolledAt: nowIso };
+    if (flagged) updates.changeDetectedAt = nowIso;
+    await db.update(sources).set(updates).where(eq(sources.id, source.id));
+    logOutcome(quirk?.changeDetector ?? "none", flagged ? "changed" : "skipped");
+    return { source, changed: flagged };
   }
 
   const probeUrl = quirk.changeProbeUrl ?? source.url;
