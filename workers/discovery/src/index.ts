@@ -18,15 +18,6 @@ export { ManagedAgentsSession } from "./managed-agents-session.js";
 
 const MAX_UPDATE_SOURCES = 20;
 
-// Update-mode dedup window for the typed RPC + the /update HTTP route.
-// Mirrors the 10-min window /onboard uses but tighter, because update
-// sessions complete in ~2 min and a recently-completed session is signal
-// that this source was just processed — not an excuse to immediately
-// reprocess it. Set to 5 min: long enough to span the entire MA session
-// runtime, short enough not to block legitimate "I want to recheck after
-// fixing the source config" CLI workflows.
-const UPDATE_DEDUP_WINDOW_MINUTES = 5;
-
 /**
  * Check whether MA session creation is globally disabled.
  *
@@ -109,108 +100,6 @@ function errorResponse(
   extra?: { headers?: Record<string, string>; body?: Record<string, unknown> },
 ): Response {
   return jsonResponse({ error: message, ...extra?.body }, status, extra?.headers);
-}
-
-/**
- * Pre-flight dedup for update-mode sessions. Queries the StatusHub via the
- * API worker for any session (running or recently completed within the
- * window). Prefers `orgId` matching (stable identity) over `company`
- * (free-form label) when the caller provides it — falls back to a
- * case-insensitive company comparison only when orgId is unavailable, which
- * keeps legacy callers working. Returns `null` when clear, or a structured
- * block result when a duplicate is found.
- *
- * Mirrors the /onboard guard in the same file but for update-mode sessions.
- * Critical to call from BOTH /update HTTP route and `startManagedFetchSession`
- * RPC — the runaway on 2026-05-18 was triggered through the RPC path because
- * the original `startManagedFetchSession` comment ("fine for the internal
- * poll-fetch caller") explicitly skipped this check.
- *
- * Fail-open: if StatusHub is unreachable we log and let the call through,
- * matching the /onboard pattern. A transient lookup failure shouldn't
- * deadlock all updates.
- */
-async function checkUpdateSessionDedup(
-  env: Env,
-  company: string,
-  orgId?: string,
-): Promise<{
-  existingSessionId: string;
-  existingStatus: string;
-  ageDescriptor: string;
-  retryAfterSeconds: number;
-  retryAfterIso: string;
-} | null> {
-  try {
-    const guardPath = `/v1/sessions?type=update&recent_minutes=${UPDATE_DEDUP_WINDOW_MINUTES}`;
-    const apiKey = await getSecretWithFallback(env.RELEASES_API_KEY, env.RELEASED_API_KEY);
-    const stagingKey = (await getSecret(env.STAGING_ACCESS_KEY).catch(() => null)) ?? "";
-    const guardHeaders: Record<string, string> = {
-      ...discoveryIdentityHeaders(),
-      ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
-      ...(stagingKey ? { "X-Releases-Staging-Key": stagingKey } : {}),
-    };
-    const guardRes = env.API_WORKER
-      ? await env.API_WORKER.fetch(
-          new Request(`https://api${guardPath}`, { headers: guardHeaders }),
-        )
-      : await fetch(
-          `${(env.RELEASES_API_URL ?? env.RELEASED_API_URL).replace(/\/+$/, "")}${guardPath}`,
-          {
-            headers: guardHeaders,
-          },
-        );
-    if (!guardRes.ok) return null;
-    type SessionSummary = {
-      sessionId: string;
-      company: string;
-      orgId?: string;
-      status: "running" | "complete" | "error" | "cancelled";
-      lastUpdatedAt?: number;
-    };
-    const sessionsBody = (await guardRes.json()) as SessionSummary[] | { items: SessionSummary[] };
-    const sessions = Array.isArray(sessionsBody) ? sessionsBody : sessionsBody.items;
-    const companyLower = company.toLowerCase();
-    // Prefer orgId match (stable identity) when both sides have it. Fall
-    // back to company-name match when either side is missing orgId — pre-
-    // existing sessions may not carry orgId until they restart under the
-    // new SessionState shape.
-    const existing = sessions.find((s) =>
-      orgId && s.orgId ? s.orgId === orgId : s.company.toLowerCase() === companyLower,
-    );
-    if (!existing) return null;
-
-    const dedupWindowMs = UPDATE_DEDUP_WINDOW_MINUTES * 60_000;
-    const baseTime = existing.lastUpdatedAt ?? Date.now();
-    const unblockAt = baseTime + dedupWindowMs;
-    const retryAfterSeconds = Math.max(1, Math.ceil((unblockAt - Date.now()) / 1000));
-    const retryAfterIso = new Date(unblockAt).toISOString();
-    const minutesAgo =
-      existing.lastUpdatedAt !== undefined
-        ? Math.max(0, Math.round((Date.now() - existing.lastUpdatedAt) / 60_000))
-        : undefined;
-    const ageDescriptor =
-      existing.status === "running"
-        ? "still running"
-        : minutesAgo !== undefined
-          ? `${existing.status} ${minutesAgo}m ago`
-          : existing.status;
-    return {
-      existingSessionId: existing.sessionId,
-      existingStatus: existing.status,
-      ageDescriptor,
-      retryAfterSeconds,
-      retryAfterIso,
-    };
-  } catch {
-    logEvent("warn", {
-      component: "discovery",
-      event: "update-dedup-guard-skipped",
-      reason: "StatusHub unreachable",
-      company,
-    });
-    return null;
-  }
 }
 
 async function checkAuth(request: Request, env: Env): Promise<Response | null> {
@@ -312,9 +201,9 @@ export class DiscoveryEntrypoint extends WorkerEntrypoint<Env> {
    * MA platform; its completion writes `fetch_log` rows + source counters via
    * the existing managed-agent bookkeeping.
    *
-   * Skips the StatusHub dedup pre-check that `/update`'s HTTP handler runs —
-   * fine for the internal poll-fetch caller (worst case: a redundant session
-   * that the MA platform deduplicates).
+   * Concurrent sessions for the same source are serialized by the per-source
+   * SourceActor lease acquired below (#1814) — the atomic mutex that replaced
+   * the org-level StatusHub dedup window (#1816).
    */
   async startManagedFetchSession(
     params: StartManagedFetchSessionParams,
@@ -334,30 +223,6 @@ export class DiscoveryEntrypoint extends WorkerEntrypoint<Env> {
     const validationError = validateUpdateParams(params.company, params.sourceIds);
     if (validationError) {
       return { ok: false, error: validationError };
-    }
-
-    // Dedup against any running/recent update session for the same company.
-    // The original comment here said skipping was "fine for the internal
-    // poll-fetch caller" — the 2026-05-18 runaway proved otherwise: a
-    // missed-bookkeeping bug upstream meant the same source was being
-    // re-delegated every 2-3 seconds. Block at the gate so a future
-    // upstream bug can't burn through Anthropic credits while a human
-    // sleeps.
-    const blocked = await checkUpdateSessionDedup(this.env, params.company, params.orgId);
-    if (blocked) {
-      logEvent("info", {
-        component: "discovery",
-        event: "update-session-deduped",
-        entry: "startManagedFetchSession",
-        company: params.company,
-        orgId: params.orgId,
-        existingSessionId: blocked.existingSessionId,
-        existingStatus: blocked.existingStatus,
-      });
-      return {
-        ok: false,
-        error: `Update for "${params.company}" was ${blocked.ageDescriptor} (session ${blocked.existingSessionId.slice(0, 8)}). Retry after ${blocked.retryAfterIso}.`,
-      };
     }
 
     // Daily spend cap: reject if global or per-org spend already hit the
@@ -653,35 +518,6 @@ const httpHandler = {
       const validationError = validateUpdateParams(body.company, identifiers);
       if (validationError) {
         return errorResponse(validationError, 400);
-      }
-
-      // Dedup against running/recent update sessions for the same org (or
-      // company, when orgId is unavailable) — see comment on the matching
-      // call in `startManagedFetchSession` below.
-      const blocked = await checkUpdateSessionDedup(env, body.company, body.orgId);
-      if (blocked) {
-        logEvent("info", {
-          component: "discovery",
-          event: "update-session-deduped",
-          entry: "/update",
-          company: body.company,
-          existingSessionId: blocked.existingSessionId,
-          existingStatus: blocked.existingStatus,
-        });
-        return errorResponse(
-          `Update for "${body.company}" was ${blocked.ageDescriptor} (session ${blocked.existingSessionId.slice(0, 8)}) — within the ${UPDATE_DEDUP_WINDOW_MINUTES}m dedup window. Retry after ${blocked.retryAfterIso}.`,
-          409,
-          {
-            headers: { "Retry-After": String(blocked.retryAfterSeconds) },
-            body: {
-              retryAfter: blocked.retryAfterIso,
-              retryAfterSeconds: blocked.retryAfterSeconds,
-              dedupWindowMinutes: UPDATE_DEDUP_WINDOW_MINUTES,
-              existingSessionId: blocked.existingSessionId,
-              existingStatus: blocked.existingStatus,
-            },
-          },
-        );
       }
 
       // Daily spend cap: reject if global or per-org spend already hit the
