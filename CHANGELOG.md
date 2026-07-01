@@ -3,6 +3,19 @@
 The product changelog for releases.sh, published to its own registry. Drafted daily from merged
 PRs and reviewed via PR. See docs/changelog-style.md for the voice and curation rules.
 
+## June 30, 2026
+
+**Added**
+- Settings Webhooks & API panel now has a click-to-copy install command — tap the MCP or CLI card to copy its setup command, with manual card navigation between them.
+
+**Changed**
+- Disabled placeholder controls removed from active settings pages — Bio on Profile, Instant release alerts on Notifications, and Default visibility on General no longer appear in the live UI.
+- Org overviews now regenerate weekly for active orgs (was every two weeks) — orgs with recent release activity get fresher summaries more often.
+- API and MCP reads are now cached for anonymous traffic — most catalog, org, and collection endpoints serve from a worker-level cache on repeat requests; nine MCP read tools (latest releases, catalog, orgs, collections, and others) additionally cache results.
+
+**Fixed**
+- Settings right-hand rail now renders as a side column on wide screens — the panel was appearing as a footer block below the main content.
+
 ## June 29, 2026
 
 **Changed**
