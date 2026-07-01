@@ -15,6 +15,7 @@ import {
   type PrincipalType,
 } from "@buildinternet/releases-core/api-token";
 import { apikey } from "../db/schema-auth.js";
+import { OAUTH_JWT_TOKEN_PREFIX } from "@releases/lib/consumption-ref";
 import type { TokenIdentity } from "@buildinternet/releases-api-types";
 import { newApiTokenId } from "@buildinternet/releases-core/id";
 import { logEvent } from "@releases/lib/log-event";
@@ -178,6 +179,25 @@ apiTokenRoutes.get("/tokens/me", async (c) => {
       tokenId: auth.tokenId,
       expiresAt: row?.expiresAt ? row.expiresAt.toISOString() : null,
       lastUsedAt: row?.lastRequest ? row.lastRequest.toISOString() : null,
+    } satisfies TokenIdentity);
+  }
+  // "Sign in with Releases" OAuth JWT principals (#1483). The middleware maps a
+  // verified JWT to `{ kind: "token", tokenId: "oauth_<sub>", scopes }` with no
+  // DB row — the identity lives entirely in the (already-verified) auth context.
+  // Synthesize it here, mirroring the synthetic `root` branch: no api_tokens /
+  // apikey lookup, because none exists. `<sub>` is the owning user id. (#1733)
+  if (auth.kind === "token" && auth.tokenId.startsWith(OAUTH_JWT_TOKEN_PREFIX)) {
+    const sub = auth.tokenId.slice(OAUTH_JWT_TOKEN_PREFIX.length);
+    return c.json({
+      kind: "token",
+      name: "oauth-user",
+      scopes: auth.scopes,
+      principalType: "user",
+      principalId: sub,
+      userId: sub,
+      tokenId: auth.tokenId,
+      expiresAt: null,
+      lastUsedAt: null,
     } satisfies TokenIdentity);
   }
   const db = createDb(c.env.DB);
