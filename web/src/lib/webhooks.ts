@@ -13,6 +13,7 @@ import type {
   UserWebhookListResponse,
   UserWebhookReleaseTypeFilter,
   UserWebhookScope,
+  WebhookDeliveryRow,
 } from "@buildinternet/releases-api-types";
 import { apiBase, errorMessage } from "./user-api";
 
@@ -23,6 +24,7 @@ export type {
   UserWebhookFormat,
   UserWebhookListItem,
   UserWebhookScope,
+  WebhookDeliveryRow,
 };
 
 export async function listWebhooks(): Promise<UserWebhookListItem[]> {
@@ -90,18 +92,6 @@ export async function testWebhook(id: string): Promise<TestUserWebhookResponse> 
   });
   if (!res.ok) throw new Error(await errorMessage(res, `Failed to send test (${res.status})`));
   return (await res.json()) as TestUserWebhookResponse;
-}
-
-/** One Analytics Engine delivery-attempt row from `GET /v1/me/webhooks/:id/deliveries`. */
-export interface WebhookDeliveryRow {
-  timestamp?: string;
-  event_id?: string;
-  error_message?: string | null;
-  error_code?: string | null;
-  outcome?: string;
-  http_status?: number;
-  latency_ms?: number;
-  attempt?: number;
 }
 
 /** Returns `null` when delivery history is unavailable (501). */

@@ -146,6 +146,8 @@ describe("deliver", () => {
     const req = captured!;
     expect(req.headers.get("X-Releases-Signature")).toBeNull();
     expect(req.headers.get("X-Releases-Timestamp")).toBeNull();
+    expect(req.headers.get("X-Releases-Version")).toBeNull();
+    expect(req.headers.get("X-Releases-Event-Id")).toBeNull();
     expect(req.headers.get("Content-Type")).toBe("application/json");
     const parsed = (await req.json()) as any;
     expect(parsed.blocks[0].type).toBe("section");

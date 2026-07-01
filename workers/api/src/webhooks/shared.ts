@@ -143,7 +143,7 @@ export async function fetchWebhookDeliveries(
     : "";
   const sql =
     `SELECT timestamp, blob1 AS event_id, blob2 AS error_message, blob3 AS error_code, ` +
-    `blob4 AS outcome, double1 AS http_status, double2 AS latency_ms, double3 AS attempt ` +
+    `blob4 AS outcome, blob5 AS format, double1 AS http_status, double2 AS latency_ms, double3 AS attempt ` +
     `FROM webhook_deliveries ` +
     `WHERE index1 = '${subscriptionId}'${failedFilter} ` +
     `ORDER BY timestamp DESC LIMIT ${limit}`;

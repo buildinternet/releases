@@ -54,6 +54,15 @@ describe("formatSlackMessage", () => {
     expect(ctx.elements[0].text).toContain("Next.js Releases");
   });
 
+  test("omits the avatar element when avatarUrl and githubHandle are both null", () => {
+    const ctx = formatSlackMessage(
+      release({ org: { name: "Vercel", avatarUrl: null, githubHandle: null } }),
+    ).blocks[1] as any;
+    expect(ctx.elements).toHaveLength(1);
+    expect(ctx.elements[0].type).toBe("mrkdwn");
+    expect(ctx.elements[0].text).toContain("Vercel");
+  });
+
   test("title-only section when summary is null", () => {
     const section = formatSlackMessage(release({ summary: null })).blocks[0] as any;
     expect(section.text.text).toBe("*<https://releases.sh/release/rel_abc|Next.js 15.4.0>*");

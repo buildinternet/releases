@@ -108,6 +108,7 @@ function WebhookDeliveriesLog({ subscriptionId }: { subscriptionId: string }) {
         <thead className="text-stone-400 dark:text-stone-500">
           <tr>
             <th className="py-1 pr-3 font-medium">Time</th>
+            <th className="py-1 pr-3 font-medium">Format</th>
             <th className="py-1 pr-3 font-medium">Outcome</th>
             <th className="py-1 pr-3 font-medium">HTTP</th>
             <th className="py-1 pr-3 font-medium">Latency</th>
@@ -122,6 +123,7 @@ function WebhookDeliveriesLog({ subscriptionId }: { subscriptionId: string }) {
               className="border-t border-stone-100 dark:border-stone-800"
             >
               <td className="py-1 pr-3 whitespace-nowrap">{row.timestamp ?? "—"}</td>
+              <td className="py-1 pr-3">{row.format?.trim() || "—"}</td>
               <td className={`py-1 pr-3 ${outcomeTone(row.outcome)}`}>{row.outcome ?? "—"}</td>
               <td className="py-1 pr-3">{row.http_status ?? "—"}</td>
               <td className="py-1 pr-3">{row.latency_ms != null ? `${row.latency_ms}ms` : "—"}</td>
