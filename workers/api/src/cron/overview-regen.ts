@@ -41,6 +41,22 @@ export interface RegenChunkResult {
 const MAX_GEN_ATTEMPTS = 2; // initial try + one retry
 const GEN_RETRY_BACKOFF_MS = 2_000;
 
+/**
+ * Only transient provider failures are worth a fresh request. A retry helps when
+ * OpenRouter tripped a `TimeoutError`/abort or returned a 429/5xx (a re-issue may
+ * route to a faster/healthier provider). Deterministic failures — parse or
+ * lint-correction bugs, config errors — recur on retry, so those fail fast rather
+ * than burning a second billed call and masking the bug behind a warn.
+ */
+function isRetryableOverviewError(err: unknown): boolean {
+  if (err instanceof Error && err.name === "TimeoutError") return true;
+  const msg = (err instanceof Error ? err.message : String(err)).toLowerCase();
+  if (msg.includes("timeout") || msg.includes("aborted")) return true;
+  // `openRouterChat` throws `Error("OpenRouter <status>: …")` on a non-2xx; 429
+  // (rate limit) and 5xx (upstream) are transient, other 4xx are not.
+  return /openrouter (429|5\d\d)\b/.test(msg);
+}
+
 async function generateOverviewWithRetry(
   model: TextModel,
   input: OverviewRequestInput,
@@ -49,29 +65,28 @@ async function generateOverviewWithRetry(
 ): ReturnType<typeof generateOverview> {
   const maxAttempts = opts?.maxAttempts ?? MAX_GEN_ATTEMPTS;
   const backoffMs = opts?.retryBackoffMs ?? GEN_RETRY_BACKOFF_MS;
-  let lastErr: unknown;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
       // oxlint-disable-next-line no-await-in-loop -- sequential retry attempts
       return await generateOverview(model, input);
     } catch (err: unknown) {
-      lastErr = err;
-      if (attempt < maxAttempts) {
-        logEvent("warn", {
-          component: "overview-regen",
-          event: "org-retry",
-          orgSlug,
-          attempt,
-          err,
-        });
-        if (backoffMs > 0) {
-          // oxlint-disable-next-line no-await-in-loop -- deliberate inter-attempt backoff
-          await new Promise((resolve) => setTimeout(resolve, backoffMs));
-        }
+      // Rethrow immediately on the last attempt or a non-transient error.
+      if (attempt >= maxAttempts || !isRetryableOverviewError(err)) throw err;
+      logEvent("warn", {
+        component: "overview-regen",
+        event: "org-retry",
+        orgSlug,
+        attempt,
+        err,
+      });
+      if (backoffMs > 0) {
+        // oxlint-disable-next-line no-await-in-loop -- deliberate inter-attempt backoff
+        await new Promise((resolve) => setTimeout(resolve, backoffMs));
       }
     }
   }
-  throw lastErr;
+  // Unreachable when maxAttempts >= 1 (the loop returns or throws); guards maxAttempts=0.
+  throw new Error(`overview generation exhausted ${maxAttempts} attempts`);
 }
 
 /** Map the hydrated per-org inputs to the generation request shape (selection already applied upstream). */

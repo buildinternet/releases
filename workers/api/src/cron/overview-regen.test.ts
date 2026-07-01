@@ -156,7 +156,7 @@ test("an org with no selectable releases is skipped", async () => {
   expect(res).toEqual({ generated: 0, skipped: 1, failed: 0, failedSlugs: [] });
 });
 
-test("a model error isolates to failed and reports the slug, without throwing", async () => {
+test("a non-transient model error fails fast (no retry) and reports the slug", async () => {
   const { db } = createTestDb();
   const { orgId, orgSlug } = await seedOrgWithReleases(db, {
     releases: 1,
@@ -170,7 +170,7 @@ test("a model error isolates to failed and reports the slug, without throwing", 
     id: "openrouter:test",
     async complete() {
       calls++;
-      throw new Error("boom");
+      throw new Error("boom"); // deterministic (parse/lint/config), not transient
     },
   };
 
@@ -178,7 +178,33 @@ test("a model error isolates to failed and reports the slug, without throwing", 
     retryBackoffMs: 0,
   });
   expect(res).toEqual({ generated: 0, skipped: 0, failed: 1, failedSlugs: ["regen-org-04"] });
-  // Default is initial attempt + one retry: the failing model is called twice.
+  // Non-retryable → called exactly once, no wasted second billed call.
+  expect(calls).toBe(1);
+});
+
+test("a persistent transient error is retried, then counted as failed", async () => {
+  const { db } = createTestDb();
+  const { orgId, orgSlug } = await seedOrgWithReleases(db, {
+    releases: 1,
+    orgId: "org_regen_06",
+    orgSlug: "regen-org-06",
+  });
+  const candidates = [makeCandidate(orgId, orgSlug, 1)];
+
+  let calls = 0;
+  const timingOut: TextModel = {
+    id: "openrouter:test",
+    async complete() {
+      calls++;
+      throw new Error("The operation was aborted due to timeout");
+    },
+  };
+
+  const res = await regenerateOverviewChunk(db as any, timingOut, candidates, {
+    retryBackoffMs: 0,
+  });
+  expect(res).toEqual({ generated: 0, skipped: 0, failed: 1, failedSlugs: ["regen-org-06"] });
+  // Retryable → initial attempt + one retry before giving up.
   expect(calls).toBe(2);
 });
 

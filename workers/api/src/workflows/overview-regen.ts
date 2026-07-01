@@ -59,12 +59,15 @@ const RETRY_COLLECT: WorkflowStepConfig = {
   timeout: "2 minutes",
 };
 
-// A chunk of CHUNK_SIZE orgs runs sequentially; each org can now take up to two
-// 60s overview attempts plus backoff (the per-org retry, #1793), so the step
-// ceiling is widened to keep the pathological all-slow chunk inside one attempt.
+// A chunk of CHUNK_SIZE orgs runs sequentially; the step timeout must cover the
+// pathological single-attempt cost so a slow chunk finishes rather than tripping
+// the (billed) chunk-level retry. Per org, worst case: a first attempt that times
+// out (~60s, the org-overview lane ceiling) + backoff (~2s) + a retry that then
+// succeeds slowly, including generateOverview's corrective second pass (~60s+60s)
+// ≈ 182s. Across CHUNK_SIZE=5 that is ~15.2 min, so 20 min keeps clear headroom.
 const RETRY_REGEN: WorkflowStepConfig = {
   retries: { limit: 1, delay: "30 seconds", backoff: "exponential" },
-  timeout: "15 minutes",
+  timeout: "20 minutes",
 };
 
 // ── Workflow ──────────────────────────────────────────────────────────────────
