@@ -19,6 +19,7 @@
 import { DurableObject } from "cloudflare:workers";
 import { drizzle } from "drizzle-orm/d1";
 import { logEvent } from "@releases/lib/log-event";
+import { flag, FLAGS, type FlagshipBinding } from "@releases/lib/flags";
 import { seedJitterMs } from "./lib/source-actor-seed.js";
 import { queryCandidates } from "./cron/scrape-agent-sweep.js";
 
@@ -27,6 +28,13 @@ const ORG_ID_KEY = "orgId";
 /** Max sources per /update call — mirrors discovery's MAX_UPDATE_SOURCES. */
 export const ORG_DRAIN_CHUNK = 20;
 
+/**
+ * Bounded timeout on the `/update` dispatch so a slow/hung discovery worker
+ * can't stall the alarm handler. On timeout the fetch rejects, the catch logs
+ * `drain-error`, and the source stays flagged to re-drain on the next notify.
+ */
+const ORG_DRAIN_DISPATCH_TIMEOUT_MS = 30_000;
+
 export interface OrgActorEnv {
   DB: D1Database;
   DISCOVERY_WORKER?: {
@@ -34,6 +42,10 @@ export interface OrgActorEnv {
   };
   RELEASES_API_KEY?: { get(): Promise<string> };
   RELEASED_API_KEY?: { get(): Promise<string> };
+  /** Cloudflare Flagship binding — the org-drain kill switch is re-checked at dispatch. */
+  FLAGS?: FlagshipBinding;
+  /** Kill-switch var fallback for org-drain-actor-enabled. */
+  ORG_DRAIN_ACTOR_ENABLED?: string;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   _drizzleOverride?: any;
 }
@@ -58,6 +70,20 @@ export class OrgActor extends DurableObject<OrgActorEnv> {
     await this.ctx.storage.deleteAlarm();
     if (!orgId) {
       logEvent("warn", { component: "org-actor", event: "alarm-missing-org-id" });
+      return;
+    }
+
+    // Re-check the kill switch at execution time: an OrgActor armed while the
+    // flag was on must NOT dispatch a billable /update if the flag was flipped
+    // off before this alarm fired (the alarm is already cleared above, so a
+    // disabled actor simply goes dormant until the SourceActor re-arms it).
+    const enabled = await flag(
+      this.env.FLAGS,
+      this.env.ORG_DRAIN_ACTOR_ENABLED,
+      FLAGS.orgDrainActorEnabled,
+    );
+    if (!enabled) {
+      logEvent("info", { component: "org-actor", event: "drain-disabled", orgId });
       return;
     }
 
@@ -94,6 +120,9 @@ export class OrgActor extends DurableObject<OrgActorEnv> {
           orgId,
           correlationId: `org-actor:${orgId}`,
         }),
+        // Fail fast if discovery is slow/hung — AbortSignal.timeout self-clears,
+        // and a rejection lands in the catch below (source stays flagged).
+        signal: AbortSignal.timeout(ORG_DRAIN_DISPATCH_TIMEOUT_MS),
       });
       if (!res.ok) {
         const body = await res.text().catch(() => "");

@@ -38,7 +38,7 @@ function seedFlaggedScrape(
     .run();
 }
 
-function mkActor(db: Db, updateImpl?: (body: any) => Response) {
+function mkActor(db: Db, updateImpl?: (body: any) => Response, opts: { drainOn?: boolean } = {}) {
   let alarm: number | null = null;
   const store = new Map<string, unknown>();
   const storage = {
@@ -56,6 +56,10 @@ function mkActor(db: Db, updateImpl?: (body: any) => Response) {
   const env: OrgActorEnv = {
     DB: {} as D1Database,
     _drizzleOverride: db,
+    // Kill switch defaults ON in the harness so dispatch tests exercise the
+    // drain; a dedicated test flips it off. `flag()` reads this var (no FLAGS
+    // binding needed) via its var fallback.
+    ORG_DRAIN_ACTOR_ENABLED: opts.drainOn === false ? "false" : "true",
     RELEASES_API_KEY: { get: async () => "k" },
     DISCOVERY_WORKER: {
       fetch: async (_i: RequestInfo | URL, init?: RequestInit) => {
@@ -127,5 +131,16 @@ describe("OrgActor", () => {
     await h.actor.alarm(); // must not throw
     expect(h.dispatched.length).toBe(1);
     expect(h.alarmAt()).toBeNull();
+  });
+
+  it("does NOT dispatch when the kill switch is off at alarm time", async () => {
+    const db = mkDb();
+    seedFlaggedScrape(db, "src_a");
+    // Armed while (hypothetically) on, but the flag is off when the alarm fires.
+    const h = mkActor(db, undefined, { drainOn: false });
+    await h.actor.ensureDrainScheduled("org_x");
+    await h.actor.alarm();
+    expect(h.dispatched.length).toBe(0);
+    expect(h.alarmAt()).toBeNull(); // alarm still cleared → actor goes dormant
   });
 });

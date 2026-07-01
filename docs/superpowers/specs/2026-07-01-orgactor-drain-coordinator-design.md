@@ -133,6 +133,11 @@ it is a single-shot drain pass per arming, not a loop.
 
 1. Clear the alarm (re-arming is driven entirely by the next `SourceActor.ensureDrainScheduled`
    notify, not by anything `OrgActor` does itself).
+   1a. Re-check the `org-drain-actor-enabled` kill switch at execution time; if off, log and return
+   without dispatching. This closes the window where an actor armed while the flag was on would
+   otherwise dispatch a billable `/update` after the flag was flipped off — the flag is the only
+   app-level guard on the MA-spend path, so it is enforced at both arming (`SourceActor`) and
+   dispatch (`OrgActor`).
 2. Query _this org's_ candidates: same filter as `scrape-agent-sweep`'s `queryCandidates`, scoped
    to `orgId` — scrape/agent, not paused/hidden/firecrawl/feed, org not `fetch_paused`,
    `changeDetectedAt IS NOT NULL`, ordered `lastFetchedAt ASC`. (`queryCandidates` is extended with
