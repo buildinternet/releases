@@ -89,6 +89,14 @@ export const CreateOrgBodySchema = z.object({
   description: z.string().optional(),
   category: z.string().min(1).optional(),
   tags: z.array(z.string()).optional(),
+  /**
+   * Admin-only: opt the new org into automatic AI content (overviews +
+   * per-release summaries). Omitted → defaults to `true` server-side, since
+   * `POST /v1/orgs` only ever mints `curated` orgs and onboarding into the
+   * registry should mean it gets overviews. Pass `false` for a deliberate
+   * opt-out (#1795).
+   */
+  autoGenerateContent: z.boolean().optional(),
 });
 
 /**

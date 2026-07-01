@@ -1222,7 +1222,13 @@ export type UpdatePlaybookNotesResponse = z.infer<typeof UpdatePlaybookNotesResp
 // ── Overview Manifest (admin planning) ──
 
 export type OverviewStaleness = "missing" | "behind" | "fresh";
-export type OverviewPlanAction = "missing" | "refresh" | "skip";
+/**
+ * `opted_out` — the org has `autoGenerateContent=false`, so the batch-overview
+ * eligibility filter skips it regardless of staleness. Surfaced so an
+ * orchestrator planning a sweep doesn't queue a regen that will never run
+ * (#1795).
+ */
+export type OverviewPlanAction = "missing" | "refresh" | "skip" | "opted_out";
 
 /**
  * Per-org row returned by GET /v1/admin/overviews. Designed for orchestrators
@@ -1241,6 +1247,12 @@ export interface OverviewManifestRow {
   releasesSinceOverview: number;
   recentReleaseCount: number;
   staleness: OverviewStaleness;
+  /**
+   * Whether the org is opted into automatic AI content. When `false`, the
+   * batch-overview cron/manual regen skips it — the staleness signal alone is
+   * misleading without this (#1795). Older workers may omit it mid-deploy.
+   */
+  autoGenerateContent?: boolean;
   /** Only populated when ?format=plan. */
   action?: OverviewPlanAction;
   /** Only populated when ?format=plan. */

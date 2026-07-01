@@ -41,6 +41,12 @@ async function seedOrg(
     slug: string;
     name?: string;
     discovery?: "curated" | "agent" | "on_demand";
+    /**
+     * Opt-in gate for the batch-overview sweep. Defaults `true` to mirror the
+     * new curated-org default (#1795); set `false` to exercise the `opted_out`
+     * plan action.
+     */
+    autoGenerateContent?: boolean;
     /** ISO timestamps for releases attached to a single source on the org. */
     releaseDates?: string[];
     overviewUpdatedAt?: string;
@@ -54,6 +60,7 @@ async function seedOrg(
       slug: args.slug,
       name: args.name ?? args.slug,
       discovery: args.discovery ?? "curated",
+      autoGenerateContent: args.autoGenerateContent ?? true,
     })
     .returning();
 
@@ -235,6 +242,13 @@ describe("GET /v1/admin/overviews", () => {
       slug: "seven-day",
       releaseDates: [new Date(now - 7 * DAY_MS - 1000).toISOString()],
     });
+    // Opted out of auto-generation — the batch skips it regardless of the
+    // (here, `missing`) staleness, so plan mode must flag `opted_out` (#1795).
+    await seedOrg(db, {
+      slug: "opted-out",
+      autoGenerateContent: false,
+      releaseDates: [new Date(now - 1 * DAY_MS).toISOString()],
+    });
 
     const app = mkApp(db);
     const res = await app.request("/admin/overviews?format=plan");
@@ -244,6 +258,8 @@ describe("GET /v1/admin/overviews", () => {
     expect(bySlug["missing-active"].action).toBe("missing");
     expect(bySlug["behind-active"].action).toBe("refresh");
     expect(bySlug["fresh-active"].action).toBe("skip");
+    expect(bySlug["opted-out"].action).toBe("opted_out");
+    expect(bySlug["opted-out"].autoGenerateContent).toBe(false);
 
     expect(bySlug["missing-active"].needsFetch).toBe(false);
     expect(bySlug["lagging"].needsFetch).toBe(true);
