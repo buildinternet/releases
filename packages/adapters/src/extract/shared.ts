@@ -357,10 +357,12 @@ export function findContentStart(lines: string[]): number {
 // ── Body-size guardrail ──────────────────────────────────────────────
 
 /**
- * Token thresholds for body-size guardrails. Claude Sonnet's context window
- * is 200K input tokens and the default output budget here is 16K — so a body
- * approaching either edge needs the model to be more concise than usual or
- * it'll exhaust output mid-extraction.
+ * Token thresholds for body-size guardrails. These bound the OUTPUT budget, not
+ * the input context: the default output budget here is 16K, so a large body
+ * needs the model to be more concise than usual or it'll exhaust output
+ * mid-extraction — regardless of how much input context the model can hold
+ * (Sonnet 5 is 1M). The thresholds stay conservative for that output-budget
+ * reason.
  *
  * - LARGE: warn the AI to budget concisely (most-recent entries only)
  * - HUGE: also raise output budget toward the model cap
@@ -371,9 +373,10 @@ export const DEFAULT_MAX_OUTPUT_TOKENS = 16_384;
 export const HUGE_BODY_MAX_OUTPUT_TOKENS = 32_000;
 
 /**
- * Sampling temperature for every changelog-extraction model call (the oneshot
+ * Sampling temperature for changelog-extraction model calls, applied ONLY to
+ * models that still accept it (see {@link modelAcceptsTemperature}) — the oneshot
  * path in `extract-from-body` and both rounds of the large-body tool loop in
- * `extract-with-tools`).
+ * `extract-with-tools`.
  *
  * WHY 0: extraction is a parse, not a generation — the same page must always
  * yield the same entries. At the SDK default (1.0) a forced/structured
@@ -383,13 +386,34 @@ export const HUGE_BODY_MAX_OUTPUT_TOKENS = 32_000;
  * one-shot backfill has nothing to hide behind, which is how it surfaced. 0
  * removes the variance (0 misses across 5+5 validation runs).
  *
- * SHORT-LIVED: the Anthropic SDK marks `temperature` as deprecated — models
- * released after Opus 4.6 don't support it (they reject non-1.0 with a 400) and
- * are deterministic enough not to need it. The extract models we ship today
- * (Sonnet 4.6, Haiku 4.5) accept it. When extraction moves to a newer model,
- * delete this knob; the forward-compatible successor is a retry-on-empty guard.
+ * MODEL-GATED: models released after Opus 4.6 (Sonnet 5, Opus 4.7+, Fable 5)
+ * reject any non-default `temperature` with a 400 — and are deterministic enough
+ * not to need it. Haiku 4.5 (the one-shot model) and Sonnet 4.6 still accept it,
+ * so we keep the reproducibility guarantee there and omit the knob on the newer
+ * agent models rather than degrade the Haiku path. Callers gate on
+ * `modelAcceptsTemperature(model)` before sending it.
  */
 export const EXTRACTION_TEMPERATURE = 0;
+
+/**
+ * Whether a model still accepts the `temperature` sampling parameter. Models
+ * released after Opus 4.6 (Sonnet 5, Opus 4.7/4.8, Fable 5, Mythos) reject any
+ * non-default value with a 400, so extraction must omit `temperature` there and
+ * rely on the model's own determinism; Haiku 4.5 and earlier still honor it.
+ * Substring match so both the alias (`claude-sonnet-5`) and any dated snapshot
+ * are covered. Add a family here when a new temperature-rejecting model ships.
+ */
+const TEMPERATURE_UNSUPPORTED_FRAGMENTS = [
+  "sonnet-5",
+  "opus-4-7",
+  "opus-4-8",
+  "fable-5",
+  "mythos-",
+] as const;
+
+export function modelAcceptsTemperature(model: string): boolean {
+  return !TEMPERATURE_UNSUPPORTED_FRAGMENTS.some((frag) => model.includes(frag));
+}
 
 export function buildBodyGuardrail(approxTokens: number): string {
   const rounded = Math.round(approxTokens / 1000) * 1000;

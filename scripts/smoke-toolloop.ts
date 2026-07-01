@@ -51,7 +51,7 @@ const deps: ExtractDeps = {
     baseURL: process.env.ANTHROPIC_BASE_URL,
     gatewayToken: process.env.AI_GATEWAY_TOKEN,
   }),
-  agentModel: "claude-sonnet-4-6",
+  agentModel: "claude-sonnet-5",
   logger: {
     info: (m) => console.error(`[info] ${m}`),
     warn: (m) => console.error(`[warn] ${m}`),

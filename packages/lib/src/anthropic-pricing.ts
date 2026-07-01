@@ -21,6 +21,17 @@ export interface ModelPricing {
  * figure but keep token counts visible).
  */
 export const ANTHROPIC_PRICING: Record<string, ModelPricing> = {
+  // Standard list price ($3/$15). An introductory $2/$10 per-MTok promo runs
+  // through 2026-08-31, but these are list-price estimates (see file header), so
+  // the sticker price is the stable, non-expiring figure to key cost off of.
+  "claude-sonnet-5": {
+    inputUsdPerMillion: 3,
+    cacheWrite5mUsdPerMillion: 3.75,
+    cacheReadUsdPerMillion: 0.3,
+    outputUsdPerMillion: 15,
+  },
+  // Retained: still served, and historical managed-agent sessions estimate cost
+  // against the model they actually ran on.
   "claude-sonnet-4-6": {
     inputUsdPerMillion: 3,
     cacheWrite5mUsdPerMillion: 3.75,

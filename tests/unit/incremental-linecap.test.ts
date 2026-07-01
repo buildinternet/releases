@@ -116,7 +116,7 @@ function mockCreateClient(): { client: Pick<Anthropic, "messages">; calls: Captu
 function makeDeps(client: unknown): ExtractDeps {
   return {
     anthropicClient: client as never,
-    agentModel: "claude-sonnet-4-6",
+    agentModel: "claude-sonnet-5",
     logger: silentLogger,
     cloudflare: null,
     repo: {} as never,

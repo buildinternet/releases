@@ -221,7 +221,7 @@ export class ManagedAgentsSession extends DurableObject<Env> {
   > {
     // Inferred model is a fallback when sessions.retrieve doesn't surface the
     // model on the response. Coordinator and discovery both run Sonnet today.
-    const inferredModel = agentRole === "worker" ? "claude-haiku-4-5" : "claude-sonnet-4-6";
+    const inferredModel = agentRole === "worker" ? "claude-haiku-4-5" : "claude-sonnet-5";
     try {
       const finalSession = await (client.beta.sessions as any).retrieve(anthropicSessionId);
       const usage = finalSession.usage as Record<string, unknown> | undefined;

@@ -1,6 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import type Anthropic from "@anthropic-ai/sdk";
-import { applySlidingCacheBreakpoint, buildBodyGuardrail, mapEntries } from "./shared.js";
+import {
+  applySlidingCacheBreakpoint,
+  buildBodyGuardrail,
+  mapEntries,
+  modelAcceptsTemperature,
+} from "./shared.js";
 import type { ExtractedEntry } from "./types.js";
 
 const SRC = "https://docs.x.ai/developers/release-notes";
@@ -207,5 +212,34 @@ describe("applySlidingCacheBreakpoint", () => {
     // Prior breakpoint still stripped; none re-added (a string turn can't carry one).
     const prior = messages[0]!.content as Anthropic.TextBlockParam[];
     expect(prior[0]!.cache_control).toBeUndefined();
+  });
+});
+
+describe("modelAcceptsTemperature", () => {
+  test("returns false for models that reject a non-default temperature", () => {
+    // Sonnet 5, Opus 4.7/4.8, Fable 5, and Mythos 400 on any non-default
+    // sampling parameter — extraction must omit `temperature` for these.
+    for (const model of [
+      "claude-sonnet-5",
+      "claude-opus-4-7",
+      "claude-opus-4-8",
+      "claude-fable-5",
+      "claude-mythos-5",
+    ]) {
+      expect(modelAcceptsTemperature(model)).toBe(false);
+    }
+  });
+
+  test("returns true for models that still honor temperature", () => {
+    // Haiku 4.5 (the one-shot model) and Sonnet 4.6 still accept temperature 0,
+    // which suppresses the ~1-in-4 spurious-empty on forced tool extraction.
+    for (const model of [
+      "claude-haiku-4-5",
+      "claude-haiku-4-5-20251001",
+      "claude-sonnet-4-6",
+      "claude-opus-4-6",
+    ]) {
+      expect(modelAcceptsTemperature(model)).toBe(true);
+    }
   });
 });

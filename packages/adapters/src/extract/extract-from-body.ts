@@ -20,6 +20,7 @@ import {
   HUGE_BODY_MAX_OUTPUT_TOKENS,
   MAX_BODY_CHARS_TOOLLOOP,
   EXTRACTION_TEMPERATURE,
+  modelAcceptsTemperature,
   type ExtractionGuidance,
 } from "./shared.js";
 import { extractWithTools, LoopFallbackError } from "./extract-with-tools.js";
@@ -113,9 +114,13 @@ async function runOneShot(
   const stream = anthropicClient.messages.stream({
     model,
     max_tokens: isHuge ? HUGE_BODY_MAX_OUTPUT_TOKENS : DEFAULT_MAX_OUTPUT_TOKENS,
-    // Deterministic parse — see EXTRACTION_TEMPERATURE (why 0; why short-lived).
-    // oxlint-disable-next-line no-deprecated -- supported on current extract models; see note
-    temperature: EXTRACTION_TEMPERATURE,
+    // Deterministic parse on models that still accept it (Haiku one-shot,
+    // Sonnet 4.6); omitted on Sonnet 5 / Opus 4.7+ / Fable, which 400 on a
+    // non-default temperature. See EXTRACTION_TEMPERATURE / modelAcceptsTemperature.
+    ...(modelAcceptsTemperature(model)
+      ? // oxlint-disable-next-line no-deprecated -- gated to models that accept it; see note
+        { temperature: EXTRACTION_TEMPERATURE }
+      : {}),
     system: systemBlocks,
     tools: [tool],
     tool_choice: { type: "tool", name: "extract_releases" },

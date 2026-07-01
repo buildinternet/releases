@@ -11,10 +11,10 @@ const silentLogger: ExtractLogger = {
   debug: () => {},
 };
 
-function makeDeps(client: unknown): ExtractDeps {
+function makeDeps(client: unknown, agentModel = "claude-sonnet-5"): ExtractDeps {
   return {
     anthropicClient: client as never,
-    agentModel: "claude-sonnet-4-6",
+    agentModel,
     logger: silentLogger,
     cloudflare: null,
     repo: {} as never,
@@ -76,10 +76,11 @@ describe("extractWithTools — happy path", () => {
 });
 
 describe("extractWithTools — deterministic extraction", () => {
-  test("tool-loop rounds request temperature 0 so extraction is reproducible", async () => {
-    // Same determinism rationale as the oneshot path (see extract-from-body):
-    // at the SDK default (1.0) a forced/structured tool extraction can vary on
-    // identical input. The large-body tool loop must be deterministic too.
+  // The determinism knob (temperature 0) is model-gated: models released after
+  // Opus 4.6 (Sonnet 5, Opus 4.7+, Fable) reject a non-default temperature with a
+  // 400, so it's omitted there and kept on models that still accept it (Sonnet
+  // 4.6 / Haiku). See modelAcceptsTemperature in shared.ts.
+  function captureToolLoopParams(agentModel: string) {
     const captured: Anthropic.MessageCreateParams[] = [];
     const client: Pick<Anthropic, "messages"> = {
       messages: {
@@ -91,7 +92,7 @@ describe("extractWithTools — deterministic extraction", () => {
                 id: "msg_1",
                 type: "message",
                 role: "assistant",
-                model: "claude-sonnet-4-6",
+                model: agentModel,
                 content: [
                   {
                     type: "tool_use",
@@ -123,18 +124,27 @@ describe("extractWithTools — deterministic extraction", () => {
         }) as never,
       } as never,
     };
+    return { captured, client };
+  }
 
-    await extractWithTools(
-      {
-        body: JSON.stringify({ nodes: [{ title: "v1.0" }] }),
-        systemPrompt: "test",
-        userMessage: "Extract from:",
-        sourceUrl: "https://x.test",
-        fetchUrl: "https://x.test/feed.json",
-      },
-      makeDeps(client),
-    );
+  const loopOpts = {
+    body: JSON.stringify({ nodes: [{ title: "v1.0" }] }),
+    systemPrompt: "test",
+    userMessage: "Extract from:",
+    sourceUrl: "https://x.test",
+    fetchUrl: "https://x.test/feed.json",
+  };
 
+  test("tool-loop rounds omit temperature on Sonnet 5 (rejects non-default temperature)", async () => {
+    const { captured, client } = captureToolLoopParams("claude-sonnet-5");
+    await extractWithTools(loopOpts, makeDeps(client, "claude-sonnet-5"));
+    expect(captured.length).toBeGreaterThanOrEqual(1);
+    expect(captured.every((p) => p.temperature === undefined)).toBe(true);
+  });
+
+  test("tool-loop rounds request temperature 0 on models that still accept it", async () => {
+    const { captured, client } = captureToolLoopParams("claude-sonnet-4-6");
+    await extractWithTools(loopOpts, makeDeps(client, "claude-sonnet-4-6"));
     expect(captured.length).toBeGreaterThanOrEqual(1);
     expect(captured.every((p) => p.temperature === 0)).toBe(true);
   });
