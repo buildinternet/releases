@@ -26,6 +26,67 @@ export interface RegenChunkResult {
   generated: number;
   skipped: number;
   failed: number;
+  /** Slugs of orgs that failed all attempts — surfaced in the run-done summary. */
+  failedSlugs: string[];
+}
+
+/**
+ * Per-org generation retry. The OpenRouter overview lane occasionally trips a
+ * transient `TimeoutError` (issue #1793) that a fresh request clears — OpenRouter
+ * may route the retry to a faster provider. Retry only the LLM generation (not
+ * the D1 hydrate/upsert around it), and keep it distinct from the chunk-level
+ * `RETRY_REGEN` step retry, which re-runs the whole 5-org chunk and would re-bill
+ * orgs that already succeeded.
+ */
+const MAX_GEN_ATTEMPTS = 2; // initial try + one retry
+const GEN_RETRY_BACKOFF_MS = 2_000;
+
+/**
+ * Only transient provider failures are worth a fresh request. A retry helps when
+ * OpenRouter tripped a `TimeoutError`/abort or returned a 429/5xx (a re-issue may
+ * route to a faster/healthier provider). Deterministic failures — parse or
+ * lint-correction bugs, config errors — recur on retry, so those fail fast rather
+ * than burning a second billed call and masking the bug behind a warn.
+ */
+function isRetryableOverviewError(err: unknown): boolean {
+  if (err instanceof Error && err.name === "TimeoutError") return true;
+  const msg = (err instanceof Error ? err.message : String(err)).toLowerCase();
+  if (msg.includes("timeout") || msg.includes("aborted")) return true;
+  // `openRouterChat` throws `Error("OpenRouter <status>: …")` on a non-2xx; 429
+  // (rate limit) and 5xx (upstream) are transient, other 4xx are not.
+  return /openrouter (429|5\d\d)\b/.test(msg);
+}
+
+async function generateOverviewWithRetry(
+  model: TextModel,
+  input: OverviewRequestInput,
+  orgSlug: string,
+  opts?: { maxAttempts?: number; retryBackoffMs?: number },
+): ReturnType<typeof generateOverview> {
+  const maxAttempts = opts?.maxAttempts ?? MAX_GEN_ATTEMPTS;
+  const backoffMs = opts?.retryBackoffMs ?? GEN_RETRY_BACKOFF_MS;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      // oxlint-disable-next-line no-await-in-loop -- sequential retry attempts
+      return await generateOverview(model, input);
+    } catch (err: unknown) {
+      // Rethrow immediately on the last attempt or a non-transient error.
+      if (attempt >= maxAttempts || !isRetryableOverviewError(err)) throw err;
+      logEvent("warn", {
+        component: "overview-regen",
+        event: "org-retry",
+        orgSlug,
+        attempt,
+        err,
+      });
+      if (backoffMs > 0) {
+        // oxlint-disable-next-line no-await-in-loop -- deliberate inter-attempt backoff
+        await new Promise((resolve) => setTimeout(resolve, backoffMs));
+      }
+    }
+  }
+  // Unreachable when maxAttempts >= 1 (the loop returns or throws); guards maxAttempts=0.
+  throw new Error(`overview generation exhausted ${maxAttempts} attempts`);
 }
 
 /** Map the hydrated per-org inputs to the generation request shape (selection already applied upstream). */
@@ -55,11 +116,11 @@ export async function regenerateOverviewChunk(
   db: Parameters<typeof upsertOrgOverview>[0],
   model: TextModel,
   candidates: OverviewCandidate[],
-  opts?: { dryRun?: boolean },
+  opts?: { dryRun?: boolean; maxAttempts?: number; retryBackoffMs?: number },
 ): Promise<RegenChunkResult> {
   let generated = 0;
   let skipped = 0;
-  let failed = 0;
+  const failedSlugs: string[] = [];
 
   for (const c of candidates) {
     try {
@@ -70,7 +131,12 @@ export async function regenerateOverviewChunk(
         continue;
       }
       // oxlint-disable-next-line no-await-in-loop
-      const { body, citations } = await generateOverview(model, toOverviewRequestInput(inputs));
+      const { body, citations } = await generateOverviewWithRetry(
+        model,
+        toOverviewRequestInput(inputs),
+        c.orgSlug,
+        opts,
+      );
       if (body.trim().length === 0) {
         skipped++;
         continue;
@@ -89,7 +155,7 @@ export async function regenerateOverviewChunk(
       });
       generated++;
     } catch (err: unknown) {
-      failed++;
+      failedSlugs.push(c.orgSlug);
       logEvent("warn", {
         component: "overview-regen",
         event: "org-failed",
@@ -99,5 +165,5 @@ export async function regenerateOverviewChunk(
       });
     }
   }
-  return { generated, skipped, failed };
+  return { generated, skipped, failed: failedSlugs.length, failedSlugs };
 }

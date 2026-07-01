@@ -125,6 +125,12 @@ async function resolveTextModel(
     reasoning?: OpenRouterReasoning;
     /** OpenRouter provider-routing preferences for this lane (OpenRouter path only). */
     provider?: OpenRouterProviderPrefs;
+    /**
+     * Per-lane OpenRouter request timeout (ms). Omit to keep the transport
+     * default (30s). Bumped only for lanes whose generation is genuinely larger
+     * than a one-shot summary (e.g. org overviews read many release bodies).
+     */
+    timeoutMs?: number;
   },
 ): Promise<TextModel | null> {
   const useOpenRouter = await flag(env.FLAGS, env.OPENROUTER_ENABLED, FLAGS.openrouterEnabled);
@@ -141,6 +147,7 @@ async function resolveTextModel(
           ...(baseURL ? { baseURL } : {}),
           ...(opts.reasoning ? { reasoning: opts.reasoning } : {}),
           ...(opts.provider ? { provider: opts.provider } : {}),
+          ...(opts.timeoutMs ? { timeoutMs: opts.timeoutMs } : {}),
           referer: "https://releases.sh",
           title: APP_TITLE,
           // Stable per-lane sticky-routing key: every call in a lane shares the
@@ -231,7 +238,15 @@ export function resolveCollectionSummaryModel(env: TextModelEnv): Promise<TextMo
  * Org-overview generation lane. Reuses the SUMMARIZE_MODEL OpenRouter lane (same
  * task family — no per-feature model var) with a distinct generationName so its
  * usage/cost is attributable, and the same Haiku fail-open as the summary lanes.
+ *
+ * Unlike the one-shot summary lanes, an overview reads many release bodies and
+ * emits a longer completion, so the 30s transport default sits right on the edge
+ * of the normal latency band — transient OpenRouter latency tips it into a
+ * `TimeoutError` (issue #1793). Give it a wider ceiling; the per-org retry in the
+ * regen loop covers the rarer true stall.
  */
+const OVERVIEW_TIMEOUT_MS = 60_000;
+
 export function resolveOverviewModel(env: TextModelEnv): Promise<TextModel | null> {
   return resolveTextModel(env, {
     orModel: env.SUMMARIZE_MODEL,
@@ -239,5 +254,6 @@ export function resolveOverviewModel(env: TextModelEnv): Promise<TextModel | nul
     generationName: "org-overview",
     reasoning: SUMMARIZE_REASONING,
     provider: SUMMARIZE_PROVIDER,
+    timeoutMs: OVERVIEW_TIMEOUT_MS,
   });
 }

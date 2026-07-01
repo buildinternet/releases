@@ -110,7 +110,7 @@ test("regenerateOverviewChunk writes an overview and reports generated=1", async
   const candidates = [makeCandidate(orgId, orgSlug, 3)];
 
   const res = await regenerateOverviewChunk(db as any, fakeModel(OUTPUT), candidates);
-  expect(res).toEqual({ generated: 1, skipped: 0, failed: 0 });
+  expect(res).toEqual({ generated: 1, skipped: 0, failed: 0, failedSlugs: [] });
 
   // Read back: a knowledge_pages row now exists for this org.
   const rows = await db
@@ -153,10 +153,10 @@ test("an org with no selectable releases is skipped", async () => {
   const candidates = [makeCandidate(orgId, orgSlug, 0)];
 
   const res = await regenerateOverviewChunk(db as any, fakeModel(OUTPUT), candidates);
-  expect(res).toEqual({ generated: 0, skipped: 1, failed: 0 });
+  expect(res).toEqual({ generated: 0, skipped: 1, failed: 0, failedSlugs: [] });
 });
 
-test("a model error isolates to failed and does not throw", async () => {
+test("a non-transient model error fails fast (no retry) and reports the slug", async () => {
   const { db } = createTestDb();
   const { orgId, orgSlug } = await seedOrgWithReleases(db, {
     releases: 1,
@@ -165,13 +165,74 @@ test("a model error isolates to failed and does not throw", async () => {
   });
   const candidates = [makeCandidate(orgId, orgSlug, 1)];
 
+  let calls = 0;
   const throwing: TextModel = {
     id: "openrouter:test",
     async complete() {
-      throw new Error("boom");
+      calls++;
+      throw new Error("boom"); // deterministic (parse/lint/config), not transient
     },
   };
 
-  const res = await regenerateOverviewChunk(db as any, throwing, candidates);
-  expect(res).toEqual({ generated: 0, skipped: 0, failed: 1 });
+  const res = await regenerateOverviewChunk(db as any, throwing, candidates, {
+    retryBackoffMs: 0,
+  });
+  expect(res).toEqual({ generated: 0, skipped: 0, failed: 1, failedSlugs: ["regen-org-04"] });
+  // Non-retryable → called exactly once, no wasted second billed call.
+  expect(calls).toBe(1);
+});
+
+test("a persistent transient error is retried, then counted as failed", async () => {
+  const { db } = createTestDb();
+  const { orgId, orgSlug } = await seedOrgWithReleases(db, {
+    releases: 1,
+    orgId: "org_regen_06",
+    orgSlug: "regen-org-06",
+  });
+  const candidates = [makeCandidate(orgId, orgSlug, 1)];
+
+  let calls = 0;
+  const timingOut: TextModel = {
+    id: "openrouter:test",
+    async complete() {
+      calls++;
+      throw new Error("The operation was aborted due to timeout");
+    },
+  };
+
+  const res = await regenerateOverviewChunk(db as any, timingOut, candidates, {
+    retryBackoffMs: 0,
+  });
+  expect(res).toEqual({ generated: 0, skipped: 0, failed: 1, failedSlugs: ["regen-org-06"] });
+  // Retryable → initial attempt + one retry before giving up.
+  expect(calls).toBe(2);
+});
+
+test("a transient error is retried and the second attempt succeeds", async () => {
+  const { db } = createTestDb();
+  const { orgId, orgSlug } = await seedOrgWithReleases(db, {
+    releases: 2,
+    orgId: "org_regen_05",
+    orgSlug: "regen-org-05",
+  });
+  const candidates = [makeCandidate(orgId, orgSlug, 2)];
+
+  let calls = 0;
+  const flaky: TextModel = {
+    id: "openrouter:test",
+    async complete() {
+      calls++;
+      if (calls === 1) {
+        throw new Error("The operation was aborted due to timeout");
+      }
+      return { text: OUTPUT, usage: { input: 1, output: 1, cacheCreate: 0, cacheRead: 0 } };
+    },
+  };
+
+  const res = await regenerateOverviewChunk(db as any, flaky, candidates, { retryBackoffMs: 0 });
+  expect(res).toEqual({ generated: 1, skipped: 0, failed: 0, failedSlugs: [] });
+  // First generateOverview attempt threw; the recovery proves the retry fired.
+  // (generateOverview may itself re-call the model for a corrective pass, so the
+  // exact count is >= 2 rather than pinned.)
+  expect(calls).toBeGreaterThanOrEqual(2);
 });
