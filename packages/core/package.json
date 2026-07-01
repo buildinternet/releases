@@ -1,6 +1,6 @@
 {
   "name": "@buildinternet/releases-core",
-  "version": "0.23.0",
+  "version": "0.24.0",
   "description": "Pure helpers shared by the Releases registry — schema, categories, slicing, IDs, slugs, tokens.",
   "type": "module",
   "license": "MIT",
