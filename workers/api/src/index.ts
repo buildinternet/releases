@@ -1130,19 +1130,28 @@ export default {
       return;
     }
     if (event.cron === "0 4 * * *") {
-      ctx.waitUntil(
-        loggedDispatch(
-          "force-drain-cron",
-          forceDrainSweep({
-            DB: env.DB,
-            CRON_ENABLED: env.CRON_ENABLED,
-            FORCE_DRAIN_CRON_ENABLED: env.FORCE_DRAIN_CRON_ENABLED,
-            FORCE_DRAIN_STALE_HOURS: env.FORCE_DRAIN_STALE_HOURS,
-            FORCE_SWEEP_MAX_SESSIONS: env.FORCE_SWEEP_MAX_SESSIONS,
-          }),
-          alertEnv,
-        ),
+      const drainActorOn = await flag(
+        env.FLAGS,
+        env.ORG_DRAIN_ACTOR_ENABLED,
+        FLAGS.orgDrainActorEnabled,
       );
+      if (!drainActorOn) {
+        ctx.waitUntil(
+          loggedDispatch(
+            "force-drain-cron",
+            forceDrainSweep({
+              DB: env.DB,
+              CRON_ENABLED: env.CRON_ENABLED,
+              FORCE_DRAIN_CRON_ENABLED: env.FORCE_DRAIN_CRON_ENABLED,
+              FORCE_DRAIN_STALE_HOURS: env.FORCE_DRAIN_STALE_HOURS,
+              FORCE_SWEEP_MAX_SESSIONS: env.FORCE_SWEEP_MAX_SESSIONS,
+            }),
+            alertEnv,
+          ),
+        );
+      } else {
+        logEvent("info", { component: "force-drain-cron", event: "superseded-by-org-drain-actor" });
+      }
       // Source staleness digest (#1528): first-party + Firecrawl scans, emailed
       // to the operator when anything is overdue. Runs daily, an hour after the
       // retier (0 3) so medianGapDays are fresh. Hourly firecrawl scan still
@@ -1240,6 +1249,13 @@ export default {
       return;
     }
     if (event.cron === "0 1 * * *") {
+      if (await flag(env.FLAGS, env.ORG_DRAIN_ACTOR_ENABLED, FLAGS.orgDrainActorEnabled)) {
+        logEvent("info", {
+          component: "scrape-agent-cron",
+          event: "superseded-by-org-drain-actor",
+        });
+        return;
+      }
       if (!env.DISCOVERY_WORKER) {
         logEvent("warn", { component: "scrape-agent-cron", event: "discovery-worker-missing" });
         return;

@@ -249,6 +249,8 @@ export type SweepEnv = EmailEnv & {
   ADMIN_BASE_URL?: string;
   /** TEST-ONLY: bypass drizzle(env.DB) and use the provided instance directly. */
   _drizzleOverride?: any;
+  /** When true, the OrgActor drain owns this work — skip the sweep (#1777). */
+  supersededByActor?: boolean;
 };
 
 function parseStaleHours(raw: string | undefined): number {
@@ -275,6 +277,10 @@ export async function scrapeAgentSweep(env: SweepEnv): Promise<void> {
   }
   if (env.SCRAPE_AGENT_CRON_ENABLED === "false") {
     logEvent("info", { component: "scrape-agent-cron", event: "scrape-agent-cron-disabled" });
+    return;
+  }
+  if (env.supersededByActor) {
+    logEvent("info", { component: "scrape-agent-cron", event: "superseded-by-org-drain-actor" });
     return;
   }
 

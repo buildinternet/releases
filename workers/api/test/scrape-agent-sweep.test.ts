@@ -3,7 +3,7 @@ import { Database } from "bun:sqlite";
 import { drizzle } from "drizzle-orm/bun-sqlite";
 import { applyMigrations } from "../../../tests/db-helper";
 import { organizations, sources } from "@buildinternet/releases-core/schema";
-import { queryCandidates } from "../src/cron/scrape-agent-sweep";
+import { queryCandidates, scrapeAgentSweep } from "../src/cron/scrape-agent-sweep";
 
 /**
  * `queryCandidates` selects the flagged scrape/agent sources the sweep drains.
@@ -99,5 +99,28 @@ describe("queryCandidates firecrawl exclusion", () => {
 
     const { rows } = await queryCandidates(db as any, { cap: 10 });
     expect(rows.map((r) => r.slug)).toEqual(["normal"]);
+  });
+});
+
+describe("scrapeAgentSweep supersession", () => {
+  it("early-returns without querying when superseded by the OrgActor", async () => {
+    const db = mkDb();
+    seedOrg(db, "org_x");
+    seedSource(db, { id: "src_x", slug: "src-x", orgId: "org_x" }); // flagged by default — would normally be a candidate
+    let dispatched = 0;
+    await scrapeAgentSweep({
+      DB: {} as D1Database,
+      _drizzleOverride: db,
+      SCRAPE_AGENT_CRON_ENABLED: "true",
+      supersededByActor: true,
+      DISCOVERY_WORKER: {
+        fetch: async () => {
+          dispatched++;
+          return new Response("{}");
+        },
+      } as any,
+      RELEASES_API_KEY: "k",
+    } as any);
+    expect(dispatched).toBe(0);
   });
 });
