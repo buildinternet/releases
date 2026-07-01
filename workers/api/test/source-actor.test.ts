@@ -60,12 +60,11 @@ interface Harness {
   store: Map<string, unknown>;
   alarmAt: () => number | null;
   created: Array<{ id: string; params: unknown }>;
-  setEnabled: (v: boolean) => void;
 }
 
 function mkActor(
   db: Db,
-  opts: { enabled?: boolean; cohortPct?: string; failCreateIds?: Set<string> } = {},
+  opts: { failCreateIds?: Set<string> } = {},
   store: Map<string, unknown> = new Map(),
 ): Harness {
   let alarm: number | null = null;
@@ -89,12 +88,9 @@ function mkActor(
 
   const ctx = { storage } as unknown as DurableObjectState;
 
-  let enabled = opts.enabled ?? true;
   const env: SourceActorEnv = {
     DB: {} as D1Database,
     _drizzleOverride: db,
-    SOURCE_ACTOR_ENABLED: enabled ? "true" : "false",
-    SOURCE_ACTOR_COHORT_PCT: opts.cohortPct ?? "100",
     POLL_AND_FETCH_WORKFLOW: {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       create: async (o: any) => {
@@ -112,10 +108,6 @@ function mkActor(
     store,
     alarmAt: () => alarm,
     created,
-    setEnabled: (v: boolean) => {
-      enabled = v;
-      env.SOURCE_ACTOR_ENABLED = v ? "true" : "false";
-    },
   };
 }
 
@@ -258,25 +250,6 @@ describe("SourceActor.alarm", () => {
     const alarm = h.alarmAt()!;
     expect(alarm).toBeGreaterThan(before + 23 * HOUR);
     expect(alarm).toBeLessThan(before + 25 * HOUR);
-  });
-
-  it("hands the source back to the cron when no longer managed", async () => {
-    const db = mkDb();
-    seedSource(db, "src_unmanage", {
-      lastPolledAt: new Date(Date.now() - 10 * HOUR).toISOString(),
-    });
-    const h = mkActor(db, { enabled: false });
-    h.store.set("sourceId", "src_unmanage");
-    // Pre-seed an alarm so we can assert it gets cleared.
-    await (h.actor.ctx.storage as DurableObjectStorage).setAlarm(Date.now() + HOUR);
-
-    await h.actor.alarm();
-
-    expect(h.created).toHaveLength(0);
-    expect(h.alarmAt()).toBeNull();
-    expect(await h.actor.getState()).toBeNull();
-    const mirror = await metaSourceActor(db, "src_unmanage");
-    expect(mirror?.managed).toBe(false);
   });
 
   it("stops when the source row is gone", async () => {

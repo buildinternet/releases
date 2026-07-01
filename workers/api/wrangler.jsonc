@@ -140,19 +140,6 @@
     // Set to "0" to disable; see FANOUT_JITTER_WINDOW_MAX_MS for the upper clamp.
     // See workers/api/src/workflows/poll-and-fetch.ts.
     "FANOUT_JITTER_WINDOW_MS": "300000",
-    // SourceActor rollout cohort (#1776), 0–100. The `source-actor-enabled`
-    // Flagship flag is the master switch; this pct selects which sources migrate
-    // (fnv1a(sourceId) % 100 < pct). "0" = none migrated even with the flag on.
-    // Rollout (#1776/#1778): FULL 100% after 50% held clean across two cron cycles
-    // (16:00 managed:10/cronDriven:12, 17:00 managed:12/cronDriven:11 — partitions
-    // disjoint, all fired with 0 dup-fires, 0 errors). Every active source's fetch
-    // timer now runs on its SourceActor. The `source-actor-enabled` Flagship flag
-    // stays the master kill switch — flip off (or lower this) and every alarm hands
-    // its source back to the cron on the next fire, no logic redeploy. A clean 100%
-    // is the precondition for #1780 (retire the KV-lock/dedup/skipDelegation bolt-
-    // ons); the #1783 delegate seam fires on the DAILY 01:00 scrape-agent sweep, not
-    // this hourly poll path, so it validates on its own track.
-    "SOURCE_ACTOR_COHORT_PCT": "100",
     // Batch summarization workflow (issue #971). Enabled — daily 04:30 UTC cron
     // walks the past 24h of releases across orgs with auto_generate_content=true
     // (~26 orgs as of enable). Admin POST trigger
@@ -363,13 +350,6 @@
       "name": "poll-and-fetch",
       "binding": "POLL_AND_FETCH_WORKFLOW",
       "class_name": "PollAndFetchWorkflow",
-    },
-    {
-      // One instance per hourly cron fire; sleeps 10 min then sends a
-      // single [alert] email listing all sources that exhausted retries.
-      "name": "poll-fetch-summary",
-      "binding": "POLL_FETCH_SUMMARY_WORKFLOW",
-      "class_name": "PollFetchSummaryWorkflow",
     },
     {
       // One instance per `POST /v1/sources` create (when this binding is wired).
@@ -771,9 +751,6 @@
         // Mirrors prod default; not read in staging (CRON_ENABLED=false means no
         // cron fires, so PollAndFetchWorkflow instances are never dispatched).
         "FANOUT_JITTER_WINDOW_MS": "300000",
-        // SourceActor cohort (#1776). Staging runs no crons, so the cron
-        // heartbeat that seeds actors never fires here; kept at "0" for parity.
-        "SOURCE_ACTOR_COHORT_PCT": "0",
         // IndexNow always attempts now, but the helper short-circuits on
         // INDEXING_DISABLED=true (set in staging), so staging never pings.
         // See workers/api/src/lib/indexnow.ts.
@@ -876,11 +853,6 @@
           "name": "poll-and-fetch-staging",
           "binding": "POLL_AND_FETCH_WORKFLOW",
           "class_name": "PollAndFetchWorkflow",
-        },
-        {
-          "name": "poll-fetch-summary-staging",
-          "binding": "POLL_FETCH_SUMMARY_WORKFLOW",
-          "class_name": "PollFetchSummaryWorkflow",
         },
         {
           "name": "onboard-source-staging",
