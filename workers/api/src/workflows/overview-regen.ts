@@ -59,9 +59,12 @@ const RETRY_COLLECT: WorkflowStepConfig = {
   timeout: "2 minutes",
 };
 
+// A chunk of CHUNK_SIZE orgs runs sequentially; each org can now take up to two
+// 60s overview attempts plus backoff (the per-org retry, #1793), so the step
+// ceiling is widened to keep the pathological all-slow chunk inside one attempt.
 const RETRY_REGEN: WorkflowStepConfig = {
   retries: { limit: 1, delay: "30 seconds", backoff: "exponential" },
-  timeout: "10 minutes",
+  timeout: "15 minutes",
 };
 
 // ── Workflow ──────────────────────────────────────────────────────────────────
@@ -120,11 +123,17 @@ export class OverviewRegenWorkflow extends WorkflowEntrypoint<
         generated: 0,
         skipped: 0,
         failed: 0,
+        failedSlugs: [],
       });
       return;
     }
 
-    const totals: RegenChunkResult = { generated: 0, skipped: 0, failed: 0 };
+    const totals: RegenChunkResult = {
+      generated: 0,
+      skipped: 0,
+      failed: 0,
+      failedSlugs: [],
+    };
     const chunkCount = Math.ceil(candidates.length / CHUNK_SIZE);
 
     for (let i = 0; i < chunkCount; i++) {
@@ -147,9 +156,10 @@ export class OverviewRegenWorkflow extends WorkflowEntrypoint<
       totals.generated += r.generated;
       totals.skipped += r.skipped;
       totals.failed += r.failed;
+      totals.failedSlugs.push(...r.failedSlugs);
     }
 
-    logEvent("info", {
+    logEvent(totals.failed > 0 ? "warn" : "info", {
       component: "overview-regen",
       event: "run-done",
       trigger,
