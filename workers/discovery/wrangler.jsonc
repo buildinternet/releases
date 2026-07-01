@@ -75,8 +75,9 @@
   // KV namespace shared with the API worker. Used for:
   //   - Kill switch: "ma:sessions:disabled" blocks all new MA session creation
   //     without a code deploy (wrangler kv:key put --binding=LATEST_CACHE).
-  //   - Per-source dedup lock: "ma:active:src:{sourceId}" (15-min TTL)
-  //     prevents the same source from spawning two concurrent MA sessions.
+  //   - Daily spend counters: "ma:spend:{global,org}:*".
+  // The per-source dedup lock moved off KV to the SourceActor DO (SOURCE_ACTOR
+  // binding below) in #1814.
   "kv_namespaces": [
     {
       "binding": "LATEST_CACHE",
@@ -89,6 +90,9 @@
     "bindings": [
       { "class_name": "Sandbox", "name": "Sandbox" },
       { "class_name": "ManagedAgentsSession", "name": "MANAGED_AGENTS_SESSION" },
+      // Cross-script: the api worker's SourceActor DO owns the per-source
+      // MA-delegation lock that replaced the KV ma:active:src:* mutex (#1814).
+      { "class_name": "SourceActor", "name": "SOURCE_ACTOR", "script_name": "releases-api" },
     ],
   },
   "migrations": [
@@ -195,6 +199,12 @@
         "bindings": [
           { "class_name": "Sandbox", "name": "Sandbox" },
           { "class_name": "ManagedAgentsSession", "name": "MANAGED_AGENTS_SESSION" },
+          // Cross-script: staging SourceActor lock (#1814).
+          {
+            "class_name": "SourceActor",
+            "name": "SOURCE_ACTOR",
+            "script_name": "releases-api-staging",
+          },
         ],
       },
       // Fresh worker — collapse prod's v1-v4 into a single create step.

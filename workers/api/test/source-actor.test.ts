@@ -337,3 +337,61 @@ describe("SourceActor.onSourceChanged", () => {
     expect(h.alarmAt()).not.toBeNull();
   });
 });
+
+describe("SourceActor scrape-lock (#1814)", () => {
+  // The lock methods touch only DO storage, so a bare actor (no seeded source,
+  // no scheduled alarm) exercises them — the DO is created purely for the lock,
+  // as it is when the discovery worker `get(idFromName(sourceId))`s an unmanaged
+  // source.
+  it("acquires a free source and reports the owning sessionId", async () => {
+    const h = mkActor(mkDb());
+    expect(await h.actor.tryAcquireScrapeLock("src_a", "sess_1")).toEqual({
+      acquired: true,
+      sessionId: "sess_1",
+    });
+    const lock = h.store.get("scrapeLock") as { sessionId: string; expiresAt: number };
+    expect(lock.sessionId).toBe("sess_1");
+    expect(lock.expiresAt).toBeGreaterThan(Date.now());
+  });
+
+  it("refuses a contended source without overwriting the live lease", async () => {
+    const h = mkActor(mkDb());
+    await h.actor.tryAcquireScrapeLock("src_a", "sess_1");
+    // A second attempt while sess_1's lease is live is rejected and returns the
+    // current owner — the lease is NOT overwritten.
+    expect(await h.actor.tryAcquireScrapeLock("src_a", "sess_2")).toEqual({
+      acquired: false,
+      sessionId: "sess_1",
+    });
+    expect((h.store.get("scrapeLock") as { sessionId: string }).sessionId).toBe("sess_1");
+  });
+
+  it("reclaims a lease past its deadline", async () => {
+    const h = mkActor(mkDb());
+    // Simulate a session that died before releasing: lease deadline in the past.
+    h.store.set("scrapeLock", { sessionId: "sess_dead", expiresAt: Date.now() - 1 });
+    expect(await h.actor.tryAcquireScrapeLock("src_a", "sess_new")).toEqual({
+      acquired: true,
+      sessionId: "sess_new",
+    });
+    expect((h.store.get("scrapeLock") as { sessionId: string }).sessionId).toBe("sess_new");
+  });
+
+  it("release clears the lease when the caller owns it", async () => {
+    const h = mkActor(mkDb());
+    await h.actor.tryAcquireScrapeLock("src_a", "sess_1");
+    await h.actor.releaseScrapeLock("src_a", "sess_1");
+    expect(h.store.get("scrapeLock")).toBeUndefined();
+    // Freed — a fresh acquire succeeds.
+    expect((await h.actor.tryAcquireScrapeLock("src_a", "sess_2")).acquired).toBe(true);
+  });
+
+  it("release is a no-op when a newer owner holds the lease", async () => {
+    const h = mkActor(mkDb());
+    // sess_1's lease expired and sess_2 re-claimed the source; sess_1's late
+    // release must not clobber sess_2's live lease.
+    await h.actor.tryAcquireScrapeLock("src_a", "sess_2");
+    await h.actor.releaseScrapeLock("src_a", "sess_1");
+    expect((h.store.get("scrapeLock") as { sessionId: string }).sessionId).toBe("sess_2");
+  });
+});
