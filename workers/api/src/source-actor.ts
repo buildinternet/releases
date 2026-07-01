@@ -49,6 +49,33 @@ const DUE_SLACK_MS = 30 * 1000;
 const STATE_KEY = "state";
 const SOURCE_ID_KEY = "sourceId";
 
+/**
+ * Per-source MA-delegation lock (#1780 Box 1 / #1814). Replaces the KV
+ * `ma:active:src:{id}` lock: the mutex that stops two managed-agent sessions
+ * running for the same source at once now lives in this DO's storage instead of
+ * the shared `LATEST_CACHE` KV namespace. The discovery worker (cross-script
+ * `SOURCE_ACTOR` binding) checks/acquires around minting a session and releases
+ * in its completion `finally`, exactly where the KV lock used to sit.
+ */
+const SCRAPE_LOCK_KEY = "scrapeLock";
+
+/**
+ * Lease length, mirroring the KV lock's 15-min `expirationTtl`. DO storage has
+ * no native key TTL, so expiry is a stored `expiresAt` enforced lazily on read
+ * (a lease past its deadline is treated as absent) — the backstop for a session
+ * that dies before its release RPC lands. Must stay far shorter than the 24h
+ * force-drain interval so a stale lease always self-clears before force-drain
+ * runs (see .context/1780-box1-delegation-serialization-design.md).
+ */
+const SCRAPE_LOCK_LEASE_MS = 15 * 60 * 1000;
+
+interface ScrapeLock {
+  /** The MA sessionId that owns the lease (for conditional release). */
+  sessionId: string;
+  /** ms epoch after which the lease is stale and treated as absent. */
+  expiresAt: number;
+}
+
 /** Derived, rehydratable coordination state persisted in DO storage. */
 export interface SourceActorState {
   /** Mirrored from D1 `fetch_priority` on each alarm. */
@@ -123,26 +150,68 @@ export class SourceActor extends DurableObject<SourceActorEnv> {
   }
 
   /**
-   * Phase 1 stub for the MA-delegation routing seam (#1780).
+   * MA-delegation lock — check (#1780 Box 1 / #1814).
    *
-   * When `fetchOne` is about to call `delegateScrapeToDiscovery` for an
-   * actor-managed source it first calls this method. The DO's single-event-loop
-   * guarantee is the future serialization primitive — Phase 2 will implement the
-   * real logic here (acquire, call `startManagedFetchSession`, return
-   * `{ proceed: false }` so the caller skips the duplicate delegation).
+   * Returns the current live lease owner, or `null` when the source is unheld.
+   * The discovery worker calls this before minting a managed-agent session and
+   * rejects the delegation if a lease is live — the DO-backed replacement for
+   * the KV `LATEST_CACHE.get("ma:active:src:{id}")` check. A lease past its
+   * `expiresAt` is lazily cleared and reported as absent, so a session that died
+   * before releasing can't wedge the source past the lease window.
    *
-   * Phase 1: always returns `{ proceed: true }` so the caller falls through to
-   * the existing `delegateScrapeToDiscovery` path. Net behavior is unchanged;
-   * no KV lock is removed; no `skipDelegation` guard is touched.
+   * The DO's single-thread execution makes each call atomic, but check and
+   * acquire are separate calls (the expensive session mint happens between them),
+   * so a narrow check→acquire race remains — identical to the KV get-then-put it
+   * replaces, and tolerated the same way (the conditional release + lease bound
+   * the blast radius to at most one duplicate session per lease window).
    */
-  async delegateScrape(sourceId: string): Promise<{ proceed: boolean }> {
+  async checkScrapeLock(sourceId: string): Promise<{ sessionId: string } | null> {
+    const lock = await this.ctx.storage.get<ScrapeLock>(SCRAPE_LOCK_KEY);
+    if (!lock) return null;
+    if (lock.expiresAt <= Date.now()) {
+      await this.ctx.storage.delete([SCRAPE_LOCK_KEY]);
+      logEvent("info", { component: "source-actor", event: "scrape-lock-expired", sourceId });
+      return null;
+    }
+    return { sessionId: lock.sessionId };
+  }
+
+  /**
+   * MA-delegation lock — acquire. Claims the lease for `sessionId` with a fresh
+   * 15-min deadline. Called by the discovery worker immediately after the session
+   * id is minted (replacing the KV `put(..., {expirationTtl: 15*60})`).
+   */
+  async acquireScrapeLock(sourceId: string, sessionId: string): Promise<void> {
+    await this.ctx.storage.put<ScrapeLock>(SCRAPE_LOCK_KEY, {
+      sessionId,
+      expiresAt: Date.now() + SCRAPE_LOCK_LEASE_MS,
+    });
     logEvent("info", {
       component: "source-actor",
-      event: "delegate-scrape-stub",
+      event: "scrape-lock-acquired",
       sourceId,
+      sessionId,
     });
-    // Phase 2: call startManagedFetchSession here and return { proceed: false }.
-    return { proceed: true };
+  }
+
+  /**
+   * MA-delegation lock — conditional release. Clears the lease only when
+   * `sessionId` still owns it, so a session whose lease already expired and was
+   * re-claimed by a newer owner can't delete the newer lease (the DO-atomic
+   * version of the KV "read owner, delete iff mine" release in
+   * `managed-agents-session.ts`). No-op when the lease is absent or foreign.
+   */
+  async releaseScrapeLock(sourceId: string, sessionId: string): Promise<void> {
+    const lock = await this.ctx.storage.get<ScrapeLock>(SCRAPE_LOCK_KEY);
+    if (lock && lock.sessionId === sessionId) {
+      await this.ctx.storage.delete([SCRAPE_LOCK_KEY]);
+      logEvent("info", {
+        component: "source-actor",
+        event: "scrape-lock-released",
+        sourceId,
+        sessionId,
+      });
+    }
   }
 
   async alarm(): Promise<void> {

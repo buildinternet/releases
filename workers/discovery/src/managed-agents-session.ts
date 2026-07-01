@@ -36,6 +36,7 @@ import { logEvent } from "@releases/lib/log-event.js";
 import { getSecret, getSecretWithFallback } from "@releases/lib/secrets";
 import { signingFetchFromRawKey } from "@releases/core-internal/web-bot-auth-sign";
 import { recordSessionSpend } from "./spend-cap.js";
+import { releaseSourceLocks } from "./source-lock.js";
 import { FLAGS, flag } from "@releases/lib/flags";
 
 /**
@@ -1177,36 +1178,19 @@ ${idList}
         }
       }
       // Release per-source dedup locks so the next run of the same source is
-      // not blocked. Conditional delete: only remove the key when its stored
-      // value matches THIS sessionId. If our 15-min TTL expired mid-session
-      // and a newer session has since claimed the same source, deleting
-      // blindly would clobber the newer owner's mutex. On miss (TTL expired,
-      // no new owner) the key is already absent — the delete becomes a no-op.
-      // Wrapped in try/catch so a KV failure can't escape finally; TTL cleans
-      // up at most 15 min later.
-      const kv = this.env.LATEST_CACHE;
-      if (kv && params.sourceIdentifiers && params.sourceIdentifiers.length > 0) {
-        try {
-          await Promise.all(
-            params.sourceIdentifiers.map(async (id) => {
-              const key = `ma:active:src:${id}`;
-              const owner = await kv.get(key);
-              if (owner === sessionId) await kv.delete(key);
-            }),
-          );
-        } catch {
-          logEvent("warn", {
-            component: "discovery",
-            event: "ma-source-lock-release-failed",
-            sessionId,
-            sourceIdentifiers: params.sourceIdentifiers,
-          });
-        }
+      // not blocked (#1814). The SourceActor DO does the conditional release
+      // atomically — it only clears a lease still owned by THIS sessionId, so a
+      // lease that expired mid-session and was re-claimed by a newer owner is
+      // left untouched. Best-effort (errors are swallowed inside the helper);
+      // the 15-min lease is the backstop if this never lands.
+      if (params.sourceIdentifiers && params.sourceIdentifiers.length > 0) {
+        await releaseSourceLocks(this.env, params.sourceIdentifiers, sessionId);
       }
       // Persist session cost to the KV spend counters (global + per-org).
       // Only written when the session incurred non-zero cost; cancelled/zero-cost
       // paths (e.g. killed before the first LLM call) don't pollute the counter.
       // Wrapped in try/catch — a KV blip must never propagate out of finally.
+      const kv = this.env.LATEST_CACHE;
       if (kv && sessionUsage?.estimatedUsd) {
         try {
           await recordSessionSpend(kv, sessionUsage.estimatedUsd, params.orgId);

@@ -9,6 +9,7 @@ import { discoveryIdentityHeaders } from "./identity.js";
 import { logEvent } from "@releases/lib/log-event.js";
 import { getSecret, getSecretWithFallback } from "@releases/lib/secrets";
 import { checkSpendCap } from "./spend-cap.js";
+import { checkSourceLocks, acquireSourceLocks } from "./source-lock.js";
 import { WorkerEntrypoint } from "cloudflare:workers";
 import { FLAGS, flag } from "@releases/lib/flags";
 
@@ -380,13 +381,10 @@ export class DiscoveryEntrypoint extends WorkerEntrypoint<Env> {
       }
     }
 
-    // Per-source dedup lock: reject if any source already has an active MA session.
-    if (this.env.LATEST_CACHE) {
-      const lockKeys = params.sourceIds.map((id) => `ma:active:src:${id}`);
-      const existing = await Promise.all(lockKeys.map((k) => this.env.LATEST_CACHE!.get(k)));
-      const lockedSources = existing
-        .map((v, i) => (v ? { id: params.sourceIds[i], sessionId: v } : null))
-        .filter((x): x is { id: string; sessionId: string } => x !== null);
+    // Per-source dedup lock (#1814): reject if any source already has an active
+    // MA session. Backed by the SourceActor DO (replaced the KV ma:active:src lock).
+    {
+      const lockedSources = await checkSourceLocks(this.env, params.sourceIds);
       if (lockedSources.length > 0) {
         const detail = lockedSources
           .map((s) => `Source ${s.id} has an active MA session (${s.sessionId})`)
@@ -428,16 +426,9 @@ export class DiscoveryEntrypoint extends WorkerEntrypoint<Env> {
     }
 
     // Acquire per-source locks immediately after the session ID is minted,
-    // before returning success. 15-min TTL ensures cleanup even if the DO
-    // crashes before its finally block runs.
-    if (this.env.LATEST_CACHE) {
-      const lockKeys = params.sourceIds.map((id) => `ma:active:src:${id}`);
-      await Promise.all(
-        lockKeys.map((k) =>
-          this.env.LATEST_CACHE!.put(k, result.sessionId, { expirationTtl: 15 * 60 }),
-        ),
-      );
-    }
+    // before returning success. The 15-min lease ensures cleanup even if the
+    // session dies before its release RPC lands (#1814).
+    await acquireSourceLocks(this.env, params.sourceIds, result.sessionId);
 
     logEvent("info", {
       component: "discovery",
@@ -711,14 +702,10 @@ const httpHandler = {
         }
       }
 
-      // Per-source dedup lock: reject if any source already has an active MA session.
-      if (env.LATEST_CACHE && identifiers) {
-        const sourceIds = identifiers as string[];
-        const lockKeys = sourceIds.map((id) => `ma:active:src:${id}`);
-        const existing = await Promise.all(lockKeys.map((k) => env.LATEST_CACHE!.get(k)));
-        const lockedSources = existing
-          .map((v, i) => (v ? { id: sourceIds[i], sessionId: v } : null))
-          .filter((x): x is { id: string; sessionId: string } => x !== null);
+      // Per-source dedup lock (#1814): reject if any source already has an active
+      // MA session. Backed by the SourceActor DO (replaced the KV ma:active:src lock).
+      if (identifiers) {
+        const lockedSources = await checkSourceLocks(env, identifiers as string[]);
         if (lockedSources.length > 0) {
           const detail = lockedSources
             .map((s) => `Source ${s.id} has an active MA session (${s.sessionId})`)
@@ -746,15 +733,9 @@ const httpHandler = {
       }));
       if (result instanceof Response) return result;
 
-      // Acquire per-source locks immediately after the session ID is minted.
-      if (env.LATEST_CACHE && identifiers) {
-        const sourceIds = identifiers as string[];
-        const lockKeys = sourceIds.map((id) => `ma:active:src:${id}`);
-        await Promise.all(
-          lockKeys.map((k) =>
-            env.LATEST_CACHE!.put(k, result.sessionId, { expirationTtl: 15 * 60 }),
-          ),
-        );
+      // Acquire per-source locks immediately after the session ID is minted (#1814).
+      if (identifiers) {
+        await acquireSourceLocks(env, identifiers as string[], result.sessionId);
       }
 
       return jsonResponse(

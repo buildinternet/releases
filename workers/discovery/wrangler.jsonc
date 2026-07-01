@@ -89,6 +89,9 @@
     "bindings": [
       { "class_name": "Sandbox", "name": "Sandbox" },
       { "class_name": "ManagedAgentsSession", "name": "MANAGED_AGENTS_SESSION" },
+      // Cross-script: the api worker's SourceActor DO owns the per-source
+      // MA-delegation lock that replaced the KV ma:active:src:* mutex (#1814).
+      { "class_name": "SourceActor", "name": "SOURCE_ACTOR", "script_name": "releases-api" },
     ],
   },
   "migrations": [
@@ -195,6 +198,12 @@
         "bindings": [
           { "class_name": "Sandbox", "name": "Sandbox" },
           { "class_name": "ManagedAgentsSession", "name": "MANAGED_AGENTS_SESSION" },
+          // Cross-script: staging SourceActor lock (#1814).
+          {
+            "class_name": "SourceActor",
+            "name": "SOURCE_ACTOR",
+            "script_name": "releases-api-staging",
+          },
         ],
       },
       // Fresh worker — collapse prod's v1-v4 into a single create step.

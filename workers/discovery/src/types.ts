@@ -53,9 +53,31 @@ export interface StatusResponse {
 /** Cloudflare Secrets Store binding — call .get() to retrieve the secret value. */
 export type SecretBinding = { get(): Promise<string> };
 
+/**
+ * Cross-script view of the api worker's `SourceActor` DO (#1780 Box 1 / #1814).
+ * Only the per-source MA-delegation lock methods are surfaced here — this worker
+ * never drives an actor's fetch timer, it just checks/acquires/releases the lock
+ * that replaced the KV `ma:active:src:{id}` mutex. The class lives in
+ * `workers/api/src/source-actor.ts`; discovery reaches it via a `script_name`
+ * durable-object binding.
+ */
+export interface SourceActorLockStub {
+  checkScrapeLock(sourceId: string): Promise<{ sessionId: string } | null>;
+  acquireScrapeLock(sourceId: string, sessionId: string): Promise<void>;
+  releaseScrapeLock(sourceId: string, sessionId: string): Promise<void>;
+}
+
 export interface Env {
   Sandbox: DurableObjectNamespace<Sandbox>;
   MANAGED_AGENTS_SESSION: DurableObjectNamespace;
+  /**
+   * Per-source MA-delegation lock, owned by the api worker's `SourceActor` DO.
+   * Optional so a discovery deploy without the cross-script binding still starts
+   * (falls back to no lock — see the acquire sites in index.ts). Untyped
+   * namespace (the class lives in another worker); stubs are cast to
+   * `SourceActorLockStub` at the call sites. #1814.
+   */
+  SOURCE_ACTOR?: DurableObjectNamespace;
   DB: D1Database;
   ANTHROPIC_API_KEY: SecretBinding;
   /** Optional Cloudflare AI Gateway passthrough — see docs/architecture/ai-gateway.md. */
@@ -137,8 +159,6 @@ export interface Env {
    *   - Kill switch: key "ma:sessions:disabled" blocks all new MA sessions.
    *     Flip on:  wrangler kv:key put --binding=LATEST_CACHE "ma:sessions:disabled" "1"
    *     Flip off: wrangler kv:key delete --binding=LATEST_CACHE "ma:sessions:disabled"
-   *   - Per-source dedup lock: keys "ma:active:src:{sourceId}" (15-min TTL)
-   *     prevent the same source spawning two concurrent MA sessions.
    *   - Daily spend counters: keys "ma:spend:global:{YYYY-MM-DD}" and
    *     "ma:spend:org:{orgId}:{YYYY-MM-DD}" (26h TTL) — sum of session cost.
    *     Manual reset: wrangler kv:key delete --binding=LATEST_CACHE
