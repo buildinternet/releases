@@ -620,9 +620,16 @@ async function pollScrapeOrAgentByQuirk(
     logOutcome(detector, status === "changed" || status === "unknown" ? "changed" : "unchanged");
     return { source, changed };
   } catch (err) {
-    await db.update(sources).set({ lastPolledAt: nowIso }).where(eq(sources.id, source.id));
+    // Force-drain equivalence (#518): a persistently-erroring detector still
+    // strands a source; self-flag once stale so the OrgActor drains it, exactly
+    // as the retired force-drain cron's stale rule did.
+    const flagged =
+      drainSelfFlag != null && isStale(source.lastFetchedAt, now, drainSelfFlag.staleHours);
+    const updates: Record<string, unknown> = { lastPolledAt: nowIso };
+    if (flagged) updates.changeDetectedAt = nowIso;
+    await db.update(sources).set(updates).where(eq(sources.id, source.id));
     logOutcome(detector, "error", `err="${err instanceof Error ? err.message : err}"`);
-    return { source, changed: false };
+    return { source, changed: flagged };
   }
 }
 
