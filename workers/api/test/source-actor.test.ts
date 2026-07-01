@@ -64,7 +64,11 @@ interface Harness {
 
 function mkActor(
   db: Db,
-  opts: { failCreateIds?: Set<string> } = {},
+  opts: {
+    failCreateIds?: Set<string>;
+    orgDrainOn?: boolean;
+    orgActorCalls?: Array<{ name: string; id: string }>;
+  } = {},
   store: Map<string, unknown> = new Map(),
 ): Harness {
   let alarm: number | null = null;
@@ -99,6 +103,18 @@ function mkActor(
       },
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any,
+    FLAGS: undefined,
+    ORG_DRAIN_ACTOR_ENABLED: opts.orgDrainOn ? "true" : undefined,
+    ORG_ACTOR: opts.orgActorCalls
+      ? ({
+          getByName: (name: string) => ({
+            ensureDrainScheduled: async (id: string) => {
+              opts.orgActorCalls!.push({ name, id });
+            },
+          }),
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        } as any)
+      : undefined,
   };
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -109,6 +125,28 @@ function mkActor(
     alarmAt: () => alarm,
     created,
   };
+}
+
+function seedScrapeFlagged(
+  db: Db,
+  id: string,
+  overrides: Partial<{ changeDetectedAt: string | null }> = {},
+) {
+  db.insert(sources)
+    .values({
+      id,
+      orgId: "org_x",
+      slug: id,
+      name: id,
+      type: "scrape",
+      url: `https://example.com/${id}`,
+      metadata: JSON.stringify({}),
+      fetchPriority: "normal",
+      lastPolledAt: new Date(Date.now() - 10 * HOUR).toISOString(),
+      changeDetectedAt:
+        "changeDetectedAt" in overrides ? overrides.changeDetectedAt : new Date().toISOString(),
+    })
+    .run();
 }
 
 async function metaSourceActor(db: Db, id: string): Promise<Record<string, unknown> | null> {
@@ -366,5 +404,37 @@ describe("SourceActor scrape-lock (#1814)", () => {
     await h.actor.tryAcquireScrapeLock("src_a", "sess_2");
     await h.actor.releaseScrapeLock("src_a", "sess_1");
     expect((h.store.get("scrapeLock") as { sessionId: string }).sessionId).toBe("sess_2");
+  });
+});
+
+describe("SourceActor → OrgActor notify", () => {
+  it("arms the OrgActor when a flagged scrape source alarms and the flag is on", async () => {
+    const db = mkDb();
+    seedScrapeFlagged(db, "src_s"); // type scrape, changeDetectedAt set, orgId org_x
+    const calls: Array<{ name: string; id: string }> = [];
+    const h = mkActor(db, { orgDrainOn: true, orgActorCalls: calls });
+    await h.actor.ensureScheduled("src_s");
+    await h.actor.alarm();
+    expect(calls).toEqual([{ name: "org_x", id: "org_x" }]);
+  });
+
+  it("does NOT arm the OrgActor when the flag is off", async () => {
+    const db = mkDb();
+    seedScrapeFlagged(db, "src_s2");
+    const calls: Array<{ name: string; id: string }> = [];
+    const h = mkActor(db, { orgDrainOn: false, orgActorCalls: calls });
+    await h.actor.ensureScheduled("src_s2");
+    await h.actor.alarm();
+    expect(calls).toEqual([]);
+  });
+
+  it("does NOT arm the OrgActor for an unflagged source", async () => {
+    const db = mkDb();
+    seedScrapeFlagged(db, "src_s3", { changeDetectedAt: null });
+    const calls: Array<{ name: string; id: string }> = [];
+    const h = mkActor(db, { orgDrainOn: true, orgActorCalls: calls });
+    await h.actor.ensureScheduled("src_s3");
+    await h.actor.alarm();
+    expect(calls).toEqual([]);
   });
 });
