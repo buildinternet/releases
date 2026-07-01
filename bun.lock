@@ -80,7 +80,7 @@
     },
     "packages/api-types": {
       "name": "@buildinternet/releases-api-types",
-      "version": "0.33.0",
+      "version": "0.34.0",
       "dependencies": {
         "@buildinternet/releases-core": "^0.23.0",
         "zod": "^4.4.3",
@@ -88,7 +88,7 @@
     },
     "packages/core": {
       "name": "@buildinternet/releases-core",
-      "version": "0.23.0",
+      "version": "0.24.0",
       "dependencies": {
         "drizzle-orm": "^0.45.2",
         "js-tiktoken": "^1.0.21",
@@ -2420,6 +2420,8 @@
     "@better-auth/sso/fast-xml-parser": ["fast-xml-parser@5.8.0", "", { "dependencies": { "@nodable/entities": "^2.1.0", "fast-xml-builder": "^1.2.0", "path-expression-matcher": "^1.5.0", "strnum": "^2.3.0", "xml-naming": "^0.1.0" }, "bin": { "fxparser": "src/cli/cli.js" } }, "sha512-6bIM7fsJxeo3uXv7OncQYsBAMPJ7V16Slahl/6M98C/i2q+vB1+4a0MtrvYwDFEUrwDSbAmeLDRXsOBwrL7yAg=="],
 
     "@better-auth/sso/jose": ["jose@6.2.2", "", {}, "sha512-d7kPDd34KO/YnzaDOlikGpOurfF0ByC2sEV4cANCtdqLlTfBlw2p14O/5d/zv40gJPbIQxfES3nSx1/oYNyuZQ=="],
+
+    "@buildinternet/releases-api-types/@buildinternet/releases-core": ["@buildinternet/releases-core@0.23.0", "", { "dependencies": { "drizzle-orm": "^0.45.2", "js-tiktoken": "^1.0.21", "nanoid": "^5.1.7" } }, "sha512-ieUK+KTlXmxX6nRHIft4alMuNNOJctk8AKCfbJmM0SbWqLHcHjLy9O+sj2R+4052IhwJI86gPFpTLM1QNfLFDA=="],
 
     "@cspotcode/source-map-support/@jridgewell/trace-mapping": ["@jridgewell/trace-mapping@0.3.9", "", { "dependencies": { "@jridgewell/resolve-uri": "^3.0.3", "@jridgewell/sourcemap-codec": "^1.4.10" } }, "sha512-3Belt6tdc8bPgAtbcmdtNJlirVoTmEb5e2gC94PnkwEW9jI6CAHUeoG85tjWP5WquqfavoMtMwiG4P926ZKKuQ=="],
 
