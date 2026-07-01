@@ -66,23 +66,20 @@ flowchart TD
     A1["alarm(): poll scrape/agent source"]
     A2{"unreliable quirk<br/>OR stale > 72h?"}
     A3["self-flag: changeDetectedAt = now<br/>(retires force-drain #518)"]
-    A4{"changeDetectedAt set<br/>AND scrape lock free?"}
+    A4{"row loaded at TOP of<br/>THIS alarm has<br/>changeDetectedAt set?"}
     A5["OrgActor(orgId).ensureDrainScheduled()"]
     A1 --> A2 -->|yes| A3 --> A4
     A2 -->|no| A4
-    A4 -->|yes| A5
+    A4 -->|yes, i.e. next alarm<br/>after the one that flagged it| A5
   end
 
   subgraph OA["OrgActor (per org) — NEW DO"]
     B1["ensureDrainScheduled():<br/>arm alarm + jitter (idempotent)"]
     B2["alarm() drain pass (single-threaded)"]
     B3["query THIS org's flagged<br/>scrape/agent candidates"]
-    B4["acquire per-source scrape locks (#1815)"]
-    B5["dispatch ONE /update session<br/>for locked set (retires sweep #482)"]
-    B6{"backlog remains?"}
-    B7["reschedule (smeared)"]
-    B1 --> B2 --> B3 --> B4 --> B5 --> B6
-    B6 -->|yes| B7
+    B5["dispatch ONE /update session<br/>for candidates (retires sweep #482)<br/>/update enforces spend cap + scrape lock (#1815)"]
+    B6["clear the alarm — never self-reschedules"]
+    B1 --> B2 --> B3 --> B5 --> B6
   end
 
   A5 -.RPC.-> B1
@@ -105,13 +102,19 @@ exclusions the crons use (not paused, not hidden, `metadata.feedUrl` unset, not
   gone the consumer no longer needs a producer-side throttle. Rate is shaped on the consumer
   via alarm smear (below).
 
-Then, whenever a scrape/agent source has `changeDetectedAt` set **and** its per-source scrape
-lock (#1815) is free, the actor calls `OrgActor(orgId).ensureDrainScheduled()` — best-effort.
+Then, whenever the `Source` row loaded at the **top** of `alarm()` already has `changeDetectedAt`
+set, the actor calls `OrgActor(orgId).ensureDrainScheduled()` — best-effort. Because that row is
+read _before_ the same firing's workflow runs (and the workflow is what may set
+`changeDetectedAt` via the self-flag above), the notify for a freshly-flagged source doesn't fire
+on the alarm that flagged it — it fires on the **next** alarm, which re-reads the row and sees the
+flag. First arming can therefore lag the self-flag by up to one tier interval (4h/24h), not just
+by an RPC drop.
 
 **At-least-once without a markers table or a cron:** the flag persists in D1 until the source
 actually drains, and the `SourceActor` fires on its own recurring poll interval. If the
 `ensureDrainScheduled` RPC is dropped or the `OrgActor` is mid-eviction, the next poll re-notifies.
-The recurring alarm _is_ the safety net.
+The recurring alarm _is_ the safety net — it's what eventually arms `OrgActor`, not just a backstop
+for a dropped RPC.
 
 ### 2. Consumer → `OrgActor` (retires #482)
 
@@ -125,26 +128,32 @@ where jitter is a bounded random offset (the `seedJitterMs` pattern already in t
 jitter smears independent orgs' drains across a window so aggregate MA-dispatch rate stays
 bounded with zero shared state.
 
-**`alarm()` (drain pass):**
+**`alarm()` (drain pass):** always clears its own alarm first — `OrgActor` never self-reschedules;
+it is a single-shot drain pass per arming, not a loop.
 
-1. Query _this org's_ candidates: same filter as `scrape-agent-sweep`'s `queryCandidates`, scoped
+1. Clear the alarm (re-arming is driven entirely by the next `SourceActor.ensureDrainScheduled`
+   notify, not by anything `OrgActor` does itself).
+2. Query _this org's_ candidates: same filter as `scrape-agent-sweep`'s `queryCandidates`, scoped
    to `orgId` — scrape/agent, not paused/hidden/firecrawl/feed, org not `fetch_paused`,
-   `changeDetectedAt IS NOT NULL`, ordered `lastFetchedAt ASC`.
-2. If none, clear the alarm and return.
-3. Take the candidates that fit one session (chunk if the org has an unusually large flagged
-   set — chunk size is a tunable, default generous). Acquire their per-source scrape locks
-   (#1815); drop any already locked elsewhere (in-flight by another path).
-4. Dispatch **one `/update` session** for the locked set (same payload as today's `dispatchOne`).
-5. On success: the `/update` pipeline clears `changeDetectedAt` for the drained sources as it does
-   today. On failure: release the scrape locks, log a structured error, and reschedule (smeared)
-   so the flag is retried on a later pass.
-6. If a backlog remains (org had more than one chunk, or some sources were locked out),
-   reschedule the alarm (smeared); else clear it.
+   `changeDetectedAt IS NOT NULL`, ordered `lastFetchedAt ASC`. (`queryCandidates` is extended with
+   an optional `orgId` param rather than hand-rolling a second copy of the filter.)
+3. If none, log and return — nothing to dispatch.
+4. Dispatch **one `/update` session** for the candidate set (same payload as today's
+   `dispatchOne`). `OrgActor` does **not** acquire the per-source scrape lock (#1815) itself —
+   the discovery `/update` endpoint owns that check (and the per-org/global spend cap) before it
+   mints a session.
+5. Log the outcome (dispatched / discovery-binding-missing / api-key-missing / failed / error) and
+   return. A rejected or errored `/update` (cap hit, locked, network failure) is **not** retried
+   here — there is no backlog reschedule and no lock to release. The source stays flagged in D1,
+   and the next `SourceActor` alarm that observes the still-set flag re-notifies `OrgActor`,
+   re-arming a fresh drain pass. The recurring `SourceActor` poll alarm is the retry mechanism, not
+   `OrgActor` itself.
 
 **Preflight:** dropped as a standalone step. Today's batch preflight avoided dispatching ~20
 doomed sessions on an auth/credits failure. With one session per org and no batch, an auth/credits
-failure surfaces cheaply in the `/update` response; the `OrgActor` logs it and backs off. A
-persistently bad account is handled by the kill switch (below), not a per-org `models.list()` call.
+failure surfaces cheaply in the `/update` response; the `OrgActor` logs it and moves on — the
+source stays flagged and re-drains on the next `SourceActor` notify (see above). A persistently bad
+account is handled by the kill switch (below), not a per-org `models.list()` call.
 
 ### 3. Rate shaping (replaces the budget)
 
@@ -202,13 +211,16 @@ scaffolding removal.
 
 - **SourceActor self-flag:** stale → flags; `unreliable` quirk → flags; fresh + reliable → does
   not; paused/hidden/firecrawl/feed → excluded; already-flagged → left alone.
-- **OrgActor drain:** org-scoped candidate query matches the sweep filter; one session per pass;
-  scrape-lock acquire vs skip; leftover backlog reschedules; dispatch failure releases locks and
-  reschedules; empty candidate set clears the alarm.
+- **OrgActor drain:** org-scoped candidate query matches the sweep filter; one dispatch per pass;
+  an errored or rejected `/update` (cap hit, locked, network failure, discovery binding or API key
+  missing) is logged and dropped — no reschedule, no lock to release, the source stays flagged;
+  empty candidate set is a no-op; the alarm is always cleared at the top of `alarm()` regardless of
+  outcome (no self-rescheduling).
 - **Kill switch / parity:** flag-on makes both crons early-return; the actor path selects the same
   candidate set the crons would for a shared fixture.
-- **No double-dispatch:** with the flag on and a source flagged, only one `/update` is minted
-  (scrape lock enforced).
+- **No double-dispatch:** with the flag on and a source flagged, only one `/update` is minted per
+  drain pass (the per-source scrape lock, enforced by `/update` itself, prevents an overlapping
+  cron/actor pass from double-minting).
 
 ## Open questions to settle during implementation
 

@@ -18,10 +18,9 @@
 
 import { DurableObject } from "cloudflare:workers";
 import { drizzle } from "drizzle-orm/d1";
-import { and, asc, eq, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
-import { organizations, sources } from "@buildinternet/releases-core/schema";
 import { logEvent } from "@releases/lib/log-event";
 import { seedJitterMs } from "./lib/source-actor-seed.js";
+import { queryCandidates } from "./cron/scrape-agent-sweep.js";
 
 const ORG_ID_KEY = "orgId";
 
@@ -37,11 +36,6 @@ export interface OrgActorEnv {
   RELEASED_API_KEY?: { get(): Promise<string> };
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   _drizzleOverride?: any;
-}
-
-interface DrainCandidate {
-  id: string;
-  orgName: string;
 }
 
 export class OrgActor extends DurableObject<OrgActorEnv> {
@@ -63,11 +57,12 @@ export class OrgActor extends DurableObject<OrgActorEnv> {
     // Always clear the alarm; re-arming is driven by the SourceActor notify.
     await this.ctx.storage.deleteAlarm();
     if (!orgId) {
-      logEvent("error", { component: "org-actor", event: "alarm-missing-org-id" });
+      logEvent("warn", { component: "org-actor", event: "alarm-missing-org-id" });
       return;
     }
 
-    const candidates = await this.queryFlagged(orgId);
+    const { rows } = await queryCandidates(this.db(), { cap: ORG_DRAIN_CHUNK, orgId });
+    const candidates = rows.map((r) => ({ id: r.id, orgName: r.orgName }));
     if (candidates.length === 0) {
       logEvent("info", { component: "org-actor", event: "drain-skipped", orgId });
       return;
@@ -128,34 +123,5 @@ export class OrgActor extends DurableObject<OrgActorEnv> {
         err: err instanceof Error ? err.message : String(err),
       });
     }
-  }
-
-  /**
-   * Flagged scrape/agent candidates for this org — the scrape-agent-sweep filter
-   * (queryCandidates) scoped to one org: not paused/hidden/firecrawl/feed, org
-   * not fetch_paused, `changeDetectedAt` set, most-stale first, capped at one
-   * session's worth.
-   */
-  private async queryFlagged(orgId: string): Promise<DrainCandidate[]> {
-    const rows = await this.db()
-      .select({ id: sources.id, orgName: organizations.name, orgPaused: organizations.fetchPaused })
-      .from(sources)
-      .innerJoin(organizations, eq(organizations.id, sources.orgId))
-      .where(
-        and(
-          eq(sources.orgId, orgId),
-          inArray(sources.type, ["scrape", "agent"]),
-          ne(sources.fetchPriority, "paused"),
-          isNotNull(sources.changeDetectedAt),
-          sql`(json_extract(${sources.metadata}, '$.feedUrl') IS NULL OR ${sources.metadata} IS NULL)`,
-          sql`(json_extract(${sources.metadata}, '$.firecrawl.enabled') IS NULL OR json_extract(${sources.metadata}, '$.firecrawl.enabled') != 1)`,
-          or(eq(sources.isHidden, false), isNull(sources.isHidden)),
-          or(eq(organizations.fetchPaused, false), isNull(organizations.fetchPaused)),
-        ),
-      )
-      .orderBy(asc(sources.lastFetchedAt), asc(sources.changeDetectedAt))
-      .limit(ORG_DRAIN_CHUNK);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return rows.map((r: any) => ({ id: r.id, orgName: r.orgName }));
   }
 }

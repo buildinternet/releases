@@ -159,7 +159,7 @@ type CandidateQueryResult = {
  */
 export async function queryCandidates(
   db: any,
-  params: { cap: number },
+  params: { cap: number; orgId?: string },
 ): Promise<CandidateQueryResult> {
   const whereClause = and(
     inArray(sources.type, ["scrape", "agent"]),
@@ -173,6 +173,9 @@ export async function queryCandidates(
     or(eq(sources.isHidden, false), isNull(sources.isHidden)),
     // Exclude sources whose org has fetch_paused = true (#1057).
     or(eq(organizations.fetchPaused, false), isNull(organizations.fetchPaused)),
+    // Scope to a single org — used by the OrgActor drain (per-org DO), which
+    // reuses this same filter instead of hand-rolling a second copy.
+    params.orgId !== undefined ? eq(sources.orgId, params.orgId) : undefined,
   );
 
   const rows = await db

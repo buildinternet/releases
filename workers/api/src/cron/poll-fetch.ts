@@ -617,7 +617,12 @@ async function pollScrapeOrAgentByQuirk(
     }
 
     const changed = await persistOutcome(metaUpdates, status);
-    logOutcome(detector, status === "changed" || status === "unknown" ? "changed" : "unchanged");
+    const detectedChange = status === "changed" || status === "unknown";
+    logOutcome(
+      detector,
+      changed ? "changed" : "unchanged",
+      changed && !detectedChange ? "reason=stale" : undefined,
+    );
     return { source, changed };
   } catch (err) {
     // Force-drain equivalence (#518): a persistently-erroring detector still
