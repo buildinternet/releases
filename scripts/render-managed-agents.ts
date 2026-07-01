@@ -47,9 +47,9 @@ const KINDS: AgentKind[] = ["discovery", "worker", "coordinator"];
 // overrides, which CI never sets; the committed YAML reflects the canonical
 // defaults.)
 const MODELS: Record<AgentKind, string> = {
-  discovery: "claude-sonnet-4-6",
+  discovery: "claude-sonnet-5",
   worker: "claude-haiku-4-5",
-  coordinator: "claude-sonnet-4-6",
+  coordinator: "claude-sonnet-5",
 };
 
 // Worker agent display name referenced *inside* the coordinator's system

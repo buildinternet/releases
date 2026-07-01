@@ -84,7 +84,7 @@ describe("extractFirecrawlMarkdown", () => {
 
     const { releases } = await extractFirecrawlMarkdown("# v1.2.0\nAdded X.", fakeSource, {
       anthropicClient: client as never,
-      agentModel: "claude-sonnet-4-6",
+      agentModel: "claude-sonnet-5",
       logger: fakeLogger,
     });
 
@@ -102,7 +102,7 @@ describe("extractFirecrawlMarkdown", () => {
 
     const result = await extractFirecrawlMarkdown(small, fakeSource, {
       anthropicClient: client as never,
-      agentModel: "claude-sonnet-4-6",
+      agentModel: "claude-sonnet-5",
       logger: fakeLogger,
     });
 
@@ -124,7 +124,7 @@ describe("extractFirecrawlMarkdown", () => {
     const { client, calls } = makeFakeAnthropicClient();
     const result = await extractFirecrawlMarkdown(big, fakeSource, {
       anthropicClient: client as never,
-      agentModel: "claude-sonnet-4-6",
+      agentModel: "claude-sonnet-5",
       logger: fakeLogger,
     });
 

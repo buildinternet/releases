@@ -43,10 +43,8 @@ export const config = {
   githubToken: () => process.env.GITHUB_TOKEN || "",
   ingestModel: () =>
     legacyEnv("RELEASES_INGEST_MODEL", "RELEASED_INGEST_MODEL") || "claude-haiku-4-5-20251001",
-  agentModel: () =>
-    legacyEnv("RELEASES_AGENT_MODEL", "RELEASED_AGENT_MODEL") || "claude-sonnet-4-6",
-  queryModel: () =>
-    legacyEnv("RELEASES_QUERY_MODEL", "RELEASED_QUERY_MODEL") || "claude-sonnet-4-6",
+  agentModel: () => legacyEnv("RELEASES_AGENT_MODEL", "RELEASED_AGENT_MODEL") || "claude-sonnet-5",
+  queryModel: () => legacyEnv("RELEASES_QUERY_MODEL", "RELEASED_QUERY_MODEL") || "claude-sonnet-5",
   summaryModel: () =>
     legacyEnv("RELEASES_SUMMARY_MODEL", "RELEASED_SUMMARY_MODEL") || "claude-haiku-4-5-20251001",
   groupingModel: () =>

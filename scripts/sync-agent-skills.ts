@@ -775,8 +775,7 @@ async function main() {
       agentId,
       prompt: discoveryPrompt,
       model:
-        (process.env.RELEASES_AGENT_MODEL ?? process.env.RELEASED_AGENT_MODEL) ||
-        "claude-sonnet-4-6",
+        (process.env.RELEASES_AGENT_MODEL ?? process.env.RELEASED_AGENT_MODEL) || "claude-sonnet-5",
       remoteAgent: agent!,
       onSuccess: () => {
         config.agentId = agentId;
@@ -840,7 +839,7 @@ async function main() {
   if (syncCoordinator && syncAgent) {
     console.log("── Coordinator Agent ────────────────────────────");
     const coordinatorModel =
-      (process.env.RELEASES_AGENT_MODEL ?? process.env.RELEASED_AGENT_MODEL) || "claude-sonnet-4-6";
+      (process.env.RELEASES_AGENT_MODEL ?? process.env.RELEASED_AGENT_MODEL) || "claude-sonnet-5";
     const coordinatorPrompt = buildCoordinatorSystemPrompt({
       categories: CATEGORIES,
       workerAgentName: WORKER_AGENT_NAME,

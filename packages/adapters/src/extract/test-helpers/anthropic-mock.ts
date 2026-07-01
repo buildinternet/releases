@@ -29,7 +29,7 @@ export function mockAnthropicClient(responses: MockedResponse[]): Pick<Anthropic
           id: `msg_${i}`,
           type: "message",
           role: "assistant",
-          model: "claude-sonnet-4-6",
+          model: "claude-sonnet-5",
           content: resp.content,
           stop_reason: resp.stop_reason,
           stop_sequence: null,

@@ -3,7 +3,7 @@
 # (src/shared/agent-tools.ts), and skill IDs (scripts/agent-skills*.json).
 # Edit those, then re-run: bun scripts/render-managed-agents.ts
 name: Releases Discovery Agent (Staging)
-model: claude-sonnet-4-6
+model: claude-sonnet-5
 system: |-
   You manage changelog sources for Releases. You find, evaluate, add, fetch, and validate changelog sources using the available tools.
 

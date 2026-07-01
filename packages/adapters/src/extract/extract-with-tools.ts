@@ -10,6 +10,7 @@ import {
   MAX_ROUNDS,
   MAX_TOTAL_TOOL_CHARS,
   EXTRACTION_TEMPERATURE,
+  modelAcceptsTemperature,
   type ExtractionGuidance,
 } from "./shared.js";
 import { handleGetSlice, handleQueryJson } from "./tool-handlers.js";
@@ -129,9 +130,13 @@ export async function extractWithTools(
     const stream = deps.anthropicClient.messages.stream({
       model: deps.agentModel,
       max_tokens: 16_384,
-      // Deterministic parse — see EXTRACTION_TEMPERATURE (why 0; why short-lived).
-      // oxlint-disable-next-line no-deprecated -- supported on current extract models; see note
-      temperature: EXTRACTION_TEMPERATURE,
+      // Deterministic parse on models that still accept it; omitted on Sonnet 5 /
+      // Opus 4.7+ / Fable, which 400 on a non-default temperature. See
+      // EXTRACTION_TEMPERATURE / modelAcceptsTemperature.
+      ...(modelAcceptsTemperature(deps.agentModel)
+        ? // oxlint-disable-next-line no-deprecated -- gated to models that accept it; see note
+          { temperature: EXTRACTION_TEMPERATURE }
+        : {}),
       system: systemBlocks,
       tools,
       messages,
@@ -248,9 +253,13 @@ export async function extractWithTools(
   const forceStream = deps.anthropicClient.messages.stream({
     model: deps.agentModel,
     max_tokens: 16_384,
-    // Deterministic parse — see EXTRACTION_TEMPERATURE (why 0; why short-lived).
-    // oxlint-disable-next-line no-deprecated -- supported on current extract models; see note
-    temperature: EXTRACTION_TEMPERATURE,
+    // Deterministic parse on models that still accept it; omitted on Sonnet 5 /
+    // Opus 4.7+ / Fable, which 400 on a non-default temperature. See
+    // EXTRACTION_TEMPERATURE / modelAcceptsTemperature.
+    ...(modelAcceptsTemperature(deps.agentModel)
+      ? // oxlint-disable-next-line no-deprecated -- gated to models that accept it; see note
+        { temperature: EXTRACTION_TEMPERATURE }
+      : {}),
     system: systemBlocks,
     tools,
     messages,

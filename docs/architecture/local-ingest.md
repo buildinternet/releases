@@ -6,7 +6,7 @@ This is an assembly of production-tested building blocks, not new infrastructure
 
 ## Why
 
-`releases admin source fetch <slug>` POSTs to `/v1/workflows/update`, which proxies to the discovery worker and starts an Anthropic Managed Agent session (`workers/discovery/src/managed-agents-session.ts` — `worker → claude-haiku-4-5`, `coordinator → claude-sonnet-4-6`). The body→records extraction runs server-side as that agent's `web_fetch` / tool loop, and that inference is billed **even when it yields zero releases**.
+`releases admin source fetch <slug>` POSTs to `/v1/workflows/update`, which proxies to the discovery worker and starts an Anthropic Managed Agent session (`workers/discovery/src/managed-agents-session.ts` — `worker → claude-haiku-4-5`, `coordinator → claude-sonnet-5`). The body→records extraction runs server-side as that agent's `web_fetch` / tool loop, and that inference is billed **even when it yields zero releases**.
 
 Onboarding `conductor.build` is the canonical failure: the remote path burned a full Sonnet `web_fetch` loop _and_ a Haiku oneshot fallback (both hit `max_tokens`) and wrote **0 releases**. A local agent is already a capable model with web-fetch + file tools — it can do the per-page extraction inline (folded into the session you're already running) and only needs a deterministic write path. That write path already exists.
 

@@ -2,7 +2,7 @@
 
 Two Anthropic managed agents handle changelog work, sharing the same tools (`AGENT_TOOLS`) and skills:
 
-- **Discovery agent** (`claude-sonnet-4-6`) — Onboarding, evaluation, and judgment-heavy tasks. System prompt: `src/shared/discovery-prompt.ts`.
+- **Discovery agent** (`claude-sonnet-5`) — Onboarding, evaluation, and judgment-heavy tasks. System prompt: `src/shared/discovery-prompt.ts`.
 - **Worker agent** (`claude-haiku-4-5`) — Fetches, updates, and mechanical operations at ~3x lower cost. System prompt: `src/shared/worker-prompt.ts`. The discovery worker DO routes `mode: "update"` sessions to this agent via `ANTHROPIC_WORKER_AGENT_ID`.
 
 Both agents are auto-deployed by `.github/workflows/deploy-managed-agents.yml` on any push to `main` that touches `src/shared/agent-tools.ts`, `src/shared/worker-prompt.ts`, `src/shared/discovery-prompt.ts`, `.claude/skills/**`, or `scripts/sync-agent-skills.ts` — live Anthropic state stays in lockstep with `main`. For local / ad-hoc deploys: `bun run deploy:agents` (both), `deploy:agents:discovery`, or `deploy:agents:worker`. Agent IDs and skill mappings live in `scripts/agent-skills.json` (prod) and `scripts/agent-skills.staging.json` (staging).
