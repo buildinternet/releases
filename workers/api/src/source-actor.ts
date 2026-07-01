@@ -28,9 +28,8 @@ import { eq, sql } from "drizzle-orm";
 import { organizations, sources } from "@buildinternet/releases-core/schema";
 import type { Source } from "@buildinternet/releases-core/schema";
 import { describeFetchPlan, computeFetchState } from "@releases/adapters/fetch-plan";
-import { flag, FLAGS, type FlagshipBinding } from "@releases/lib/flags";
 import { logEvent } from "@releases/lib/log-event";
-import { isSourceActorManaged, parseCohortPct, seedJitterMs } from "./lib/source-actor-cohort.js";
+import { seedJitterMs } from "./lib/source-actor-seed.js";
 
 /**
  * In-flight guard window. A fired workflow (poll + fetch + content + embed +
@@ -99,9 +98,6 @@ export interface SourceActorState {
 export interface SourceActorEnv {
   DB: D1Database;
   POLL_AND_FETCH_WORKFLOW?: Workflow;
-  FLAGS?: FlagshipBinding;
-  SOURCE_ACTOR_ENABLED?: string;
-  SOURCE_ACTOR_COHORT_PCT?: string;
   /** Test seam: inject a drizzle handle so unit tests skip a real D1 binding. */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   _drizzleOverride?: any;
@@ -222,20 +218,6 @@ export class SourceActor extends DurableObject<SourceActorEnv> {
     if (!row) {
       // Source deleted — tear down (the cron won't re-seed a missing row).
       await this.stop(sourceId, "source-deleted");
-      return;
-    }
-
-    // Still actor-managed? Re-check every alarm so flipping the flag off (or
-    // lowering the cohort pct) cleanly hands the source back to the cron with no
-    // double-driving. The cron's queryDueSources will pick it up on its next run.
-    const enabled = await flag(
-      this.env.FLAGS,
-      this.env.SOURCE_ACTOR_ENABLED,
-      FLAGS.sourceActorEnabled,
-    );
-    const cohortPct = parseCohortPct(this.env.SOURCE_ACTOR_COHORT_PCT);
-    if (!isSourceActorManaged(sourceId, enabled, cohortPct, true)) {
-      await this.stop(sourceId, "no-longer-managed");
       return;
     }
 
