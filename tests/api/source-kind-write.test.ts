@@ -96,7 +96,7 @@ describe("kind on write paths", () => {
     });
     expect(res.status).toBe(400);
     const body = (await res.json()) as Record<string, unknown>;
-    expect(body.error).toBe("bad_request");
+    expect(body.error.code).toBe("validation_failed");
   });
 
   it("rejects an invalid kind value on PATCH /v1/orgs/:slug/sources/:slug", async () => {

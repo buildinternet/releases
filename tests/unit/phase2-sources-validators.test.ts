@@ -68,16 +68,16 @@ describe("POST /v1/sources (validateJson)", () => {
       orgSlug: "acme",
     });
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe("bad_request");
+    const body = (await res.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("validation_failed");
   });
 
   test("400 when url is missing", async () => {
     await seedOrg();
     const res = await call("/sources", "POST", { name: "X", orgSlug: "acme" });
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe("bad_request");
+    const body = (await res.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("validation_failed");
   });
 
   test("400 when source type is invalid (schema enum)", async () => {
@@ -89,8 +89,8 @@ describe("POST /v1/sources (validateJson)", () => {
       orgSlug: "acme",
     });
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe("bad_request");
+    const body = (await res.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("validation_failed");
   });
 
   test("400 when neither orgId nor orgSlug resolves (handler check)", async () => {
@@ -119,24 +119,24 @@ describe("POST /v1/sources/:slug/content-hash (validateJson)", () => {
     await seedSource();
     const res = await call("/sources/acme-blog/content-hash", "POST", {});
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe("bad_request");
+    const body = (await res.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("validation_failed");
   });
 
   test("400 when contentHash is empty string (schema min(1))", async () => {
     await seedSource();
     const res = await call("/sources/acme-blog/content-hash", "POST", { contentHash: "" });
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe("bad_request");
+    const body = (await res.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("validation_failed");
   });
 
   test("400 when contentHash is the wrong type", async () => {
     await seedSource();
     const res = await call("/sources/acme-blog/content-hash", "POST", { contentHash: 42 });
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe("bad_request");
+    const body = (await res.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("validation_failed");
   });
 
   test("happy path: first call updates lastContentHash (typed source ID)", async () => {

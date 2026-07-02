@@ -2,7 +2,7 @@
  * Validator-middleware coverage for POST /v1/orgs/:slug/overview — the
  * routes/overview.ts handler now reads `c.req.valid("json")` instead of
  * hand-parsing the body. Asserts schema-rejection paths return the
- * `{ error: "bad_request", message }` envelope; cross-field
+ * `{ error: { code: "validation_failed", type: "validation", message } }` envelope; cross-field
  * `endIndex <= content.length` still returns `bad_citations`.
  */
 import { describe, it, expect, beforeEach } from "bun:test";
@@ -62,30 +62,30 @@ describe("POST /v1/orgs/:slug/overview (validateJson)", () => {
   it("400 bad_request when content is missing", async () => {
     const res = await post({ releaseCount: 0 });
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string; message: string };
-    expect(body.error).toBe("bad_request");
-    expect(body.message.toLowerCase()).toContain("content");
+    const body = (await res.json()) as { error: { code: string; message: string } };
+    expect(body.error.code).toBe("validation_failed");
+    expect(body.error.message.toLowerCase()).toContain("content");
   });
 
   it("400 bad_request when content is the empty string (schema min(1))", async () => {
     const res = await post({ content: "", releaseCount: 0 });
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe("bad_request");
+    const body = (await res.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("validation_failed");
   });
 
   it("400 bad_request when releaseCount is negative", async () => {
     const res = await post({ content: "hi", releaseCount: -1 });
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe("bad_request");
+    const body = (await res.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("validation_failed");
   });
 
   it("400 bad_request when releaseCount is not an integer", async () => {
     const res = await post({ content: "hi", releaseCount: 1.5 });
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe("bad_request");
+    const body = (await res.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("validation_failed");
   });
 
   it("400 bad_request when a citation has endIndex <= startIndex (schema refine)", async () => {
@@ -102,8 +102,8 @@ describe("POST /v1/orgs/:slug/overview (validateJson)", () => {
       ],
     });
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe("bad_request");
+    const body = (await res.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("validation_failed");
   });
 
   it("400 bad_request when citation sourceUrl is empty (schema min(1))", async () => {
@@ -120,8 +120,8 @@ describe("POST /v1/orgs/:slug/overview (validateJson)", () => {
       ],
     });
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe("bad_request");
+    const body = (await res.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("validation_failed");
   });
 
   it("400 bad_citations when endIndex > content.length (handler cross-check)", async () => {
@@ -162,7 +162,7 @@ describe("POST /v1/orgs/:slug/overview (validateJson)", () => {
       body: JSON.stringify({ releaseCount: 0 }), // missing content
     });
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe("bad_request");
+    const body = (await res.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("validation_failed");
   });
 });

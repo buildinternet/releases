@@ -3,7 +3,7 @@
  * dropped hand-rolled body parsing in favor of `validateJson(schema)`.
  *
  * Each section exercises the happy path + a couple of validator-rejection
- * cases to confirm the `{ error: "bad_request", message }` envelope shape
+ * cases to confirm the `{ error: { code: "validation_failed", type: "validation", message } }` envelope shape
  * and that runtime-state checks still run in the handler.
  */
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
@@ -77,17 +77,17 @@ describe("PATCH /v1/orgs/:slug/playbook/notes (validateJson)", () => {
     await seedOrg();
     const res = await patch("acme", {});
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string; message: string };
-    expect(body.error).toBe("bad_request");
-    expect(body.message.toLowerCase()).toContain("notes");
+    const body = (await res.json()) as { error: { code: string; message: string } };
+    expect(body.error.code).toBe("validation_failed");
+    expect(body.error.message.toLowerCase()).toContain("notes");
   });
 
   test("400 bad_request when notes is not a string", async () => {
     await seedOrg();
     const res = await patch("acme", { notes: 42 });
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe("bad_request");
+    const body = (await res.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("validation_failed");
   });
 
   test("404 when org doesn't exist (validator passes, handler 404s)", async () => {
@@ -130,30 +130,30 @@ describe("PATCH /v1/categories/:slug (validateJson)", () => {
   test("400 when body is empty (refinement)", async () => {
     const res = await patch("ai", {});
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string; message: string };
-    expect(body.error).toBe("bad_request");
-    expect(body.message.toLowerCase()).toContain("at least one");
+    const body = (await res.json()) as { error: { code: string; message: string } };
+    expect(body.error.code).toBe("validation_failed");
+    expect(body.error.message.toLowerCase()).toContain("at least one");
   });
 
   test("400 when name exceeds 200 chars (schema bound)", async () => {
     const res = await patch("ai", { name: "x".repeat(201) });
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe("bad_request");
+    const body = (await res.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("validation_failed");
   });
 
   test("400 when description exceeds 2000 chars (schema bound)", async () => {
     const res = await patch("ai", { description: "x".repeat(2001) });
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe("bad_request");
+    const body = (await res.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("validation_failed");
   });
 
   test("400 when an alias element is not a string (schema bound)", async () => {
     const res = await patch("ai", { aliases: ["ok", 123] });
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe("bad_request");
+    const body = (await res.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("validation_failed");
   });
 
   test("400 when alias shadows a canonical slug (handler check still runs)", async () => {
@@ -199,16 +199,16 @@ describe("PUT /v1/errata/:orgId (validateJson)", () => {
   test("400 bad_request when content is missing", async () => {
     const res = await put("org_acme", {}, { MEMORY_STORE_ERRATA_ID: "store_x" });
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string; message: string };
-    expect(body.error).toBe("bad_request");
-    expect(body.message.toLowerCase()).toContain("content");
+    const body = (await res.json()) as { error: { code: string; message: string } };
+    expect(body.error.code).toBe("validation_failed");
+    expect(body.error.message.toLowerCase()).toContain("content");
   });
 
   test("400 bad_request when content is empty string", async () => {
     const res = await put("org_acme", { content: "" }, { MEMORY_STORE_ERRATA_ID: "store_x" });
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe("bad_request");
+    const body = (await res.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("validation_failed");
   });
 
   test("413 payload_too_large when content exceeds the byte cap", async () => {
@@ -216,14 +216,14 @@ describe("PUT /v1/errata/:orgId (validateJson)", () => {
     const oversize = "x".repeat(100_001);
     const res = await put("org_acme", { content: oversize }, { MEMORY_STORE_ERRATA_ID: "store_x" });
     expect(res.status).toBe(413);
-    const body = (await res.json()) as { error: string; message: string };
+    const body = (await res.json()) as { error: { code: string; message: string } };
     expect(body.error).toBe("payload_too_large");
   });
 
   test("500 internal_error when MEMORY_STORE_ERRATA_ID is unset", async () => {
     const res = await put("org_acme", { content: "valid" }, {});
     expect(res.status).toBe(500);
-    const body = (await res.json()) as { error: string };
+    const body = (await res.json()) as { error: { code: string } };
     expect(body.error).toBe("internal_error");
   });
 });

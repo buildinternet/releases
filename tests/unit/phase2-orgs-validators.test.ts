@@ -1,7 +1,7 @@
 /**
  * Validator regression coverage for orgs.ts write routes. Each endpoint
  * dropped its hand-rolled body parser in favor of `validateJson(schema)`.
- * Asserts the `{ error: "bad_request", message }` envelope and that
+ * Asserts the `{ error: { code: "validation_failed", type: "validation", message } }` envelope and that
  * runtime-state checks still run in the handler.
  */
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
@@ -55,23 +55,23 @@ describe("POST /v1/orgs (validateJson)", () => {
   test("400 when name is missing", async () => {
     const res = await call("/orgs", "POST", {});
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string; message: string };
-    expect(body.error).toBe("bad_request");
-    expect(body.message.toLowerCase()).toContain("name");
+    const body = (await res.json()) as { error: { code: string; message: string } };
+    expect(body.error.code).toBe("validation_failed");
+    expect(body.error.message.toLowerCase()).toContain("name");
   });
 
   test("400 when name is the empty string", async () => {
     const res = await call("/orgs", "POST", { name: "" });
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe("bad_request");
+    const body = (await res.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("validation_failed");
   });
 
   test("400 when tags is not an array of strings", async () => {
     const res = await call("/orgs", "POST", { name: "Acme", tags: [42] });
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe("bad_request");
+    const body = (await res.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("validation_failed");
   });
 
   test("400 when category is the empty string (alias-normalization boundary)", async () => {
@@ -80,8 +80,8 @@ describe("POST /v1/orgs (validateJson)", () => {
     // category column. The schema's .min(1) now rejects it at the boundary.
     const res = await call("/orgs", "POST", { name: "Acme", category: "" });
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe("bad_request");
+    const body = (await res.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("validation_failed");
   });
 
   test("happy path creates the org", async () => {
@@ -109,8 +109,8 @@ describe("PATCH /v1/orgs/:slug (validateJson)", () => {
     await seedOrg();
     const res = await call("/orgs/acme", "PATCH", { category: 123 });
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe("bad_request");
+    const body = (await res.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("validation_failed");
   });
 });
 
@@ -130,16 +130,16 @@ describe("PUT /v1/orgs/:slug/tags (validateJson)", () => {
     await seedOrg();
     const res = await call("/orgs/acme/tags", "PUT", { tags: "ai" });
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe("bad_request");
+    const body = (await res.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("validation_failed");
   });
 
   test("400 when tags contains non-strings", async () => {
     await seedOrg();
     const res = await call("/orgs/acme/tags", "PUT", { tags: ["ok", 99] });
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe("bad_request");
+    const body = (await res.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("validation_failed");
   });
 
   test("404 when org doesn't exist", async () => {
@@ -153,8 +153,8 @@ describe("DELETE /v1/orgs/:slug/tags (validateJson)", () => {
     await seedOrg();
     const res = await call("/orgs/acme/tags", "DELETE", {});
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe("bad_request");
+    const body = (await res.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("validation_failed");
   });
 
   test("happy path removes tags silently when none match", async () => {
@@ -186,15 +186,15 @@ describe("POST /v1/tags (validateJson)", () => {
   test("400 when name missing", async () => {
     const res = await call("/tags", "POST", {});
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe("bad_request");
+    const body = (await res.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("validation_failed");
   });
 
   test("400 when name is the empty string (schema min(1))", async () => {
     const res = await call("/tags", "POST", { name: "" });
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe("bad_request");
+    const body = (await res.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("validation_failed");
   });
 });
 
@@ -203,17 +203,17 @@ describe("POST /v1/orgs/:slug/accounts (validateJson)", () => {
     await seedOrg();
     const res = await call("/orgs/acme/accounts", "POST", { handle: "@acme" });
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string; message: string };
-    expect(body.error).toBe("bad_request");
-    expect(body.message).toContain("platform");
+    const body = (await res.json()) as { error: { code: string; message: string } };
+    expect(body.error.code).toBe("validation_failed");
+    expect(body.error.message).toContain("platform");
   });
 
   test("400 when both fields are empty strings", async () => {
     await seedOrg();
     const res = await call("/orgs/acme/accounts", "POST", { platform: "", handle: "" });
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe("bad_request");
+    const body = (await res.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("validation_failed");
   });
 
   test("happy path creates the account", async () => {

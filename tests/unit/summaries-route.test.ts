@@ -74,9 +74,9 @@ describe("POST /v1/sources/:slug/summaries (validator pilot)", () => {
     await seedSource();
     const res = await post({ summary: "...", releaseCount: 1 });
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string; message: string };
-    expect(body.error).toBe("bad_request");
-    expect(body.message.toLowerCase()).toContain("type");
+    const body = (await res.json()) as { error: { code: string; message: string } };
+    expect(body.error.code).toBe("validation_failed");
+    expect(body.error.message.toLowerCase()).toContain("type");
   });
 
   test("400 with bad_request envelope when month is out of range", async () => {
@@ -89,9 +89,9 @@ describe("POST /v1/sources/:slug/summaries (validator pilot)", () => {
       month: 13,
     });
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string; message: string };
-    expect(body.error).toBe("bad_request");
-    expect(body.message).toContain("month");
+    const body = (await res.json()) as { error: { code: string; message: string } };
+    expect(body.error.code).toBe("validation_failed");
+    expect(body.error.message).toContain("month");
   });
 
   test("400 when windowDays is zero or negative", async () => {
@@ -103,9 +103,9 @@ describe("POST /v1/sources/:slug/summaries (validator pilot)", () => {
       windowDays: 0,
     });
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string; message: string };
-    expect(body.error).toBe("bad_request");
-    expect(body.message).toContain("windowDays");
+    const body = (await res.json()) as { error: { code: string; message: string } };
+    expect(body.error.code).toBe("validation_failed");
+    expect(body.error.message).toContain("windowDays");
   });
 
   test("400 when releaseCount is not an integer", async () => {
@@ -116,9 +116,9 @@ describe("POST /v1/sources/:slug/summaries (validator pilot)", () => {
       releaseCount: 1.5,
     });
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string; message: string };
-    expect(body.error).toBe("bad_request");
-    expect(body.message).toContain("releaseCount");
+    const body = (await res.json()) as { error: { code: string; message: string } };
+    expect(body.error.code).toBe("validation_failed");
+    expect(body.error.message).toContain("releaseCount");
   });
 
   test("404 when source is unknown (validator passed, lookup failed)", async () => {

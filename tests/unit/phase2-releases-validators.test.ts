@@ -87,8 +87,8 @@ describe("POST /v1/releases/:id/coverage (validateJson)", () => {
       decidedBy: "human:zach",
     });
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe("bad_request");
+    const body = (await res.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("validation_failed");
   });
 
   test("400 when coverageIds is an empty array (schema min(1))", async () => {
@@ -98,8 +98,8 @@ describe("POST /v1/releases/:id/coverage (validateJson)", () => {
       decidedBy: "human:zach",
     });
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe("bad_request");
+    const body = (await res.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("validation_failed");
   });
 
   test("400 when decidedBy lacks the human:/agent: prefix (schema regex)", async () => {
@@ -109,8 +109,8 @@ describe("POST /v1/releases/:id/coverage (validateJson)", () => {
       decidedBy: "bot",
     });
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe("bad_request");
+    const body = (await res.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("validation_failed");
   });
 
   test("400 self-coverage rejected by handler", async () => {
@@ -149,16 +149,16 @@ describe("PATCH /v1/releases/:id (validateJson .strict())", () => {
     await seed();
     const res = await callSrc("/releases/rel_canon", "PATCH", { suppressed: true });
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe("bad_request");
+    const body = (await res.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("validation_failed");
   });
 
   test("400 when content is wrong type", async () => {
     await seed();
     const res = await callSrc("/releases/rel_canon", "PATCH", { content: 42 });
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe("bad_request");
+    const body = (await res.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("validation_failed");
   });
 
   test("400 when body is empty (handler check after schema)", async () => {
@@ -218,8 +218,8 @@ describe("POST /v1/releases/:id/suppress (validateJson)", () => {
     await seed();
     const res = await callSrc("/releases/rel_canon/suppress", "POST", { reason: 42 });
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe("bad_request");
+    const body = (await res.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("validation_failed");
   });
 
   test("404 when release doesn't exist", async () => {

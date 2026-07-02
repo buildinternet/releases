@@ -604,13 +604,30 @@ No code. Proves the whole phase is green, additive to inline producers, and MCP-
 
 **Files:** none.
 
-- [ ] **Step 1: Full package + worker tests**
+- [ ] **Step 1: Full CI test suite (all segments)**
 
-Run: `bun test packages/`
-Expected: PASS (Phase 1 tests + Task 1/2 additions).
+Run the exact CI command — NOT just `packages/` + `workers/api`. The `validateJson`
+consumers live in the top-level `tests/` directory (`tests/unit/phase2-*-validators.test.ts`,
+`tests/api/overview-validator.test.ts`, `tests/api/source-kind-write.test.ts`,
+`tests/unit/summaries-route.test.ts`), which `bun test workers/api` does NOT cover:
 
-Run: `bun test workers/api`
-Expected: PASS. If a test outside the four boundary files fails on an error body, it is asserting an inline producer that Phase 2 did not change — investigate: either the change leaked beyond the boundary (fix the code) or the test needs no change (revert it).
+Run: `bun run test`
+(= `bun test packages/ && bun test tests/ web/ workers/discovery workers/mcp workers/webhooks && bun test workers/api`)
+Expected: PASS, exit 0.
+
+Two shapes coexist in the `tests/` validator files and MUST be kept distinct:
+
+- A `validateJson` **schema** failure (missing/wrong-type/enum/`.refine()`) now returns the
+  nested envelope → assert `body.error.code === "validation_failed"`, `body.error.type === "validation"`,
+  and read the message via `body.error.message`.
+- A **route-handler** business-rule rejection that runs AFTER `validateJson` passes (titles
+  like "(handler check)", "(handler cross-field)", "rejected by handler", "orgId lacks the org\_
+  prefix", the PATCH-source invalid-kind case, and the overview `bad_citations` cross-check)
+  is an inline producer and stays FLAT (`body.error === "bad_request"` / `"bad_citations"`,
+  `body.message`) until Phase 3. Do NOT convert these.
+
+If a test outside the boundary set fails on an error body, decide which of the two shapes it is
+before editing: convert only the `validateJson`-driven ones; leave handler-driven ones flat.
 
 - [ ] **Step 2: Lint + format**
 
