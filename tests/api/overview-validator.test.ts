@@ -3,7 +3,7 @@
  * routes/overview.ts handler now reads `c.req.valid("json")` instead of
  * hand-parsing the body. Asserts schema-rejection paths return the
  * `{ error: { code: "validation_failed", type: "validation", message } }` envelope; cross-field
- * `endIndex <= content.length` still returns `bad_citations`.
+ * `endIndex <= content.length` still returns `bad_request` (folded from bad_citations).
  */
 import { describe, it, expect, beforeEach } from "bun:test";
 import { Database } from "bun:sqlite";
@@ -138,9 +138,10 @@ describe("POST /v1/orgs/:slug/overview (validateJson)", () => {
       ],
     });
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string; message: string };
-    expect(body.error).toBe("bad_citations");
-    expect(body.message).toContain("past content length");
+    const body = (await res.json()) as { error: { code: string; type: string; message: string } };
+    expect(body.error.code).toBe("bad_request");
+    expect(body.error.type).toBe("validation");
+    expect(body.error.message).toContain("past content length");
   });
 
   it("404 when org doesn't exist", async () => {
