@@ -21,7 +21,7 @@ Full design context: `docs/superpowers/specs/2026-07-02-standardized-errors-desi
 - **Do NOT change MCP** in this phase (deferred, see Out of scope).
 - **Header passthrough on `HTTPException` must be preserved** — non-`content-type`/`content-length` headers from `err.res` are `append`ed post-construction so multi-value headers (`Set-Cookie`) survive. This matches the current handler (`workers/api/src/index.ts:481-497`).
 - **`workers/mcp` must still type-check** — verify with `cd workers/mcp && bun install --frozen-lockfile && npx tsc --noEmit` (a root-only worktree install falsely reports dual-zod errors; install mcp as its own workspace, as CI does).
-- **Tests:** `bun:test`. Root runs `workers/api` in its own process: `bun test workers/api` (after `bun test packages/ … `). Run a single file with `bun test <path>`.
+- **Tests:** `bun:test`. Root runs `workers/api` in its own process: `bun test workers/api` (after `bun test packages/` and the other segments). Run a single file with `bun test <path>`.
 - **Verify command:** `bun run check` (= `oxlint` + `oxfmt --check`).
 - **Commit style:** end commit messages with `Claude-Session: https://claude.ai/code/session_015vCgYf4wCXnyr7MQrQ1xCY`. Avoid "comprehensive"/"world-class".
 
@@ -486,7 +486,7 @@ In `org-scoped-routes.test.ts`, change ONLY the assertions that exercise the bou
 
 Run each:
 
-```
+```bash
 bun test workers/api/test/on-error-sanitization.test.ts
 bun test workers/api/src/lib/json-body.test.ts
 bun test workers/api/test/workflows-json-body.test.ts

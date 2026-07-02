@@ -41,6 +41,31 @@ test("HTTPException preserves status + passthrough headers, envelope by status",
   expect(body.error.type).toBe("rate_limited");
 });
 
+test("a 5xx HTTPException never leaks its message (fail closed, generic)", async () => {
+  const out = await appThrowing(
+    new HTTPException(503, { message: "secret upstream dsn postgres://u:p@h" }),
+  ).request("/boom");
+  expect(out.status).toBe(503);
+  const body = (await out.json()) as { error: { code: string; type: string; message: string } };
+  expect(body.error.type).toBe("unavailable");
+  expect(body.error.code).toBe("service_unavailable");
+  expect(body.error.message).toBe("Service unavailable");
+  expect(JSON.stringify(body)).not.toContain("secret");
+});
+
+test("an unmapped 4xx HTTPException(422) derives type/code and surfaces its message", async () => {
+  const out = await appThrowing(
+    new HTTPException(422, { message: "unprocessable: field x" }),
+  ).request("/boom");
+  expect(out.status).toBe(422);
+  const body = (await out.json()) as { error: { code: string; type: string; message: string } };
+  // 422 is off-map → statusToType falls back to `internal`; client-class (<500)
+  // so the message is surfaced, but the envelope type/code reflect the fallback.
+  expect(body.error.type).toBe("internal");
+  expect(body.error.code).toBe("internal_error");
+  expect(body.error.message).toBe("unprocessable: field x");
+});
+
 test("a malformed-JSON HTTPException(400) uses the invalid_json code", async () => {
   const out = await appThrowing(new HTTPException(400, { message: "Malformed JSON" })).request(
     "/boom",

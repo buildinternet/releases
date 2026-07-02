@@ -38,9 +38,14 @@ export function respondError(c: Context, err: unknown): Response {
   //    (Retry-After, Set-Cookie, …); shape the envelope from the status.
   if (err instanceof HTTPException) {
     const type = statusToType(err.status);
+    // Fail closed on server-class statuses: only a client-side (4xx) HTTPException
+    // may surface its own message. A 5xx (including unmapped statuses, which
+    // `statusToType` maps to `internal`) gets the generic message so an internal
+    // detail carried on the exception can't leak to the client.
+    const expose = err.status < 500;
     const wire = new ReleasesError(type, err.message, {
       code: err.status === 400 ? "invalid_json" : undefined,
-      expose: true,
+      expose,
     }).toWire();
     const res = c.json(wire, err.status);
     if (err.res) {
