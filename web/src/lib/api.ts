@@ -146,6 +146,27 @@ export class ApiNotFoundError extends Error {
   }
 }
 
+/**
+ * Minimal read of the API's standardized nested error envelope
+ * `{ error: { code, type, message, details? } }`. Returns null for any body
+ * that isn't a well-formed envelope. Inlined rather than using api-types'
+ * `decodeApiError` — see the note at its call site in `fetchApi`.
+ */
+function readNestedApiError(
+  body: unknown,
+): { code: string; message: string; details?: unknown } | null {
+  if (!body || typeof body !== "object") return null;
+  const err = (body as { error?: unknown }).error;
+  if (!err || typeof err !== "object") return null;
+  const { code, message, details } = err as {
+    code?: unknown;
+    message?: unknown;
+    details?: unknown;
+  };
+  if (typeof code !== "string" || typeof message !== "string") return null;
+  return { code, message, details };
+}
+
 export type FetchCacheInit = { cache?: RequestCache; next?: { revalidate?: number | false } };
 
 /**
@@ -184,8 +205,19 @@ async function fetchApi<T>(path: string, init?: FetchCacheInit): Promise<T> {
 
   if (res.status === 503) {
     const body = await res.json().catch(() => null);
-    if (body?.error === "database_not_initialized") {
-      throw new ApiSetupError(body.message, body.setup);
+    // Branch on the standardized nested envelope's `code`, reading the setup
+    // steps from `details.setup` (#1830 item 3). Decoded inline rather than via
+    // api-types' `decodeApiError`: that package is a TS-source barrel whose `.js`
+    // re-exports Next's bundler can't resolve, so the web imports only *types*
+    // from it — a runtime value import pulls the whole barrel into the build.
+    const apiErr = readNestedApiError(body);
+    if (apiErr?.code === "database_not_initialized") {
+      const rawSetup = (apiErr.details as { setup?: unknown } | undefined)?.setup;
+      const setup =
+        Array.isArray(rawSetup) && rawSetup.every((s) => typeof s === "string")
+          ? (rawSetup as string[])
+          : apiSetupSteps;
+      throw new ApiSetupError(apiErr.message, setup);
     }
   }
 
