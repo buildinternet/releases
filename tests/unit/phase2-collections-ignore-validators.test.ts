@@ -3,7 +3,7 @@
  *   collections.ts — POST/PATCH /collections, PUT/POST /collections/:slug/members
  *   ignore.ts      — POST /orgs/:slug/ignored-urls, POST /admin/blocklist
  *
- * Asserts the `{ error: "bad_request", message }` envelope after wiring
+ * Asserts the `{ error: { code: "validation_failed", type: "validation", message } }` envelope after wiring
  * `validateJson(schema)` on each route.
  */
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
@@ -66,8 +66,8 @@ describe("POST /v1/collections (validateJson)", () => {
   test("400 when name is missing", async () => {
     const res = await call(collectionRoutes, "/collections", "POST", {});
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe("bad_request");
+    const body = (await res.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("validation_failed");
   });
 
   test("400 when name is whitespace-only (handler post-trim check)", async () => {
@@ -122,8 +122,8 @@ describe("PATCH /v1/collections/:slug (validateJson)", () => {
   test("400 when name is wrong type (schema)", async () => {
     const res = await call(collectionRoutes, "/collections/picks", "PATCH", { name: 42 });
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe("bad_request");
+    const body = (await res.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("validation_failed");
   });
 
   test("404 when slug doesn't exist", async () => {
@@ -149,8 +149,8 @@ describe("PUT /v1/collections/:slug/members (validateJson)", () => {
   test("400 when orgs is missing", async () => {
     const res = await call(collectionRoutes, "/collections/picks/members", "PUT", {});
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe("bad_request");
+    const body = (await res.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("validation_failed");
   });
 
   test("happy path replaces membership atomically", async () => {
@@ -190,16 +190,16 @@ describe("POST /v1/orgs/:slug/ignored-urls (validateJson)", () => {
     await seedOrg();
     const res = await call(ignoreRoutes, "/orgs/acme/ignored-urls", "POST", {});
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe("bad_request");
+    const body = (await res.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("validation_failed");
   });
 
   test("400 when url is the empty string (schema min(1))", async () => {
     await seedOrg();
     const res = await call(ignoreRoutes, "/orgs/acme/ignored-urls", "POST", { url: "" });
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe("bad_request");
+    const body = (await res.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("validation_failed");
   });
 
   test("happy path adds the URL", async () => {
@@ -228,8 +228,8 @@ describe("POST /v1/admin/blocklist (validateJson)", () => {
   test("400 when pattern missing", async () => {
     const res = await call(ignoreRoutes, "/admin/blocklist", "POST", {});
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe("bad_request");
+    const body = (await res.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("validation_failed");
   });
 
   test("400 when type isn't one of exact|domain (schema enum)", async () => {
@@ -238,8 +238,8 @@ describe("POST /v1/admin/blocklist (validateJson)", () => {
       type: "wildcard",
     });
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe("bad_request");
+    const body = (await res.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("validation_failed");
   });
 
   test("happy path adds the pattern", async () => {

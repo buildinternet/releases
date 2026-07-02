@@ -1,6 +1,5 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { HTTPException } from "hono/http-exception";
 import {
   authMiddleware,
   publicReadAuthMiddleware,
@@ -36,7 +35,6 @@ import { mountV1Routes } from "./v1-routes.js";
 import { publicReadRoutes, adminRoutes } from "./route-namespaces.js";
 import { graphqlRoutes } from "./graphql/handler.js";
 import { healthRoutes } from "./routes/health.js";
-import { BareSlugRejected } from "./utils.js";
 import { pollAndFetch, queryDueSources } from "./cron/poll-fetch.js";
 import { drizzle } from "drizzle-orm/d1";
 import { finalizeRunRow, insertRunningRow } from "./db/cron-runs-dao.js";
@@ -53,10 +51,12 @@ import { sendDigests } from "./cron/send-digests.js";
 import { handleQueueBatch } from "./queues/handler.js";
 import { runCollectionSummaries } from "./cron/collection-summaries.js";
 import { sendAlert, type AlertEnv } from "./lib/send-alert.js";
+import { respondError } from "./lib/error-response";
 import { logEvent } from "@releases/lib/log-event";
 import { dbErrorLogFields } from "@releases/lib/db-errors";
 import { getSecret, getSecretWithFallback } from "@releases/lib/secrets";
 import { FLAGS, flag, type FlagshipBinding } from "@releases/lib/flags";
+import { NotFoundError } from "@releases/lib/releases-error";
 
 export { StatusHub } from "./status-hub.js";
 export { ReleaseHub } from "./release-hub.js";
@@ -455,52 +455,7 @@ export type Env = {
 
 const app = new Hono<Env>();
 
-app.onError((err, c) => {
-  // Bare-path source/product routes that match a slug instead of a typed ID
-  // throw `BareSlugRejected` from `resolveSourceFromContext` /
-  // `resolveProductFromContext`. Translate to a 400 with the same message
-  // the resolver constructed (it points at the org-scoped path and the
-  // /v1/lookups/*-by-slug resolver).
-  if (err instanceof BareSlugRejected) {
-    return c.json({ error: "bare_slug_rejected", entity: err.entity, message: err.message }, 400);
-  }
-  // Hono's underlying validator throws `HTTPException(400)` for malformed JSON
-  // bodies (un-parseable bytes — schema-level validation goes through our
-  // `validateJson` hook). Surface it in the same envelope as schema failures
-  // so clients see `{ error: "bad_request", message }` consistently instead
-  // of a 500 with stringified Hono internals.
-  if (err instanceof HTTPException) {
-    const status = err.status;
-    // Forward any headers the exception attached via `new HTTPException(s, { res })`.
-    // The malformed-JSON path doesn't set `res`, but middlewares that do (e.g.
-    // adding a `Retry-After` to a 429, or a `Set-Cookie` rotation) would
-    // otherwise lose them when we re-shape the body into our envelope.
-    // Collect into a tuple list and `append` post-construction so multi-value
-    // headers (notably repeated `Set-Cookie`) are preserved — a plain
-    // `Record<string, string>` would collapse them.
-    const passthrough: Array<[string, string]> = [];
-    if (err.res) {
-      err.res.headers.forEach((value, key) => {
-        const lower = key.toLowerCase();
-        // `c.json` sets content-type/content-length itself; let it.
-        if (lower !== "content-type" && lower !== "content-length") {
-          passthrough.push([key, value]);
-        }
-      });
-    }
-    const res = c.json(
-      { error: status === 400 ? "bad_request" : "http_error", message: err.message },
-      status,
-    );
-    for (const [key, value] of passthrough) {
-      res.headers.append(key, value);
-    }
-    return res;
-  }
-  const detail = err instanceof Error ? err.message : String(err);
-  logEvent("error", { component: "api", event: "unhandled_error", error: detail });
-  return c.json({ error: "internal_error", message: "An unexpected error occurred." }, 500);
-});
+app.onError((err, c) => respondError(c, err));
 
 // Better Auth CORS — credentialed, first-party origins only. MUST come before
 // the global wildcard `cors()` so it owns the `/api/auth/*` preflight (the first
@@ -966,13 +921,7 @@ app.get("/", (c) => {
 // Catch-all JSON 404 — matches the envelope used by `onError` so unknown
 // paths look the same as path-known errors to clients.
 app.notFound((c) =>
-  c.json(
-    {
-      error: "not_found",
-      message: `No route for ${c.req.method} ${new URL(c.req.url).pathname}`,
-    },
-    404,
-  ),
+  respondError(c, new NotFoundError(`No route for ${c.req.method} ${new URL(c.req.url).pathname}`)),
 );
 
 export default {

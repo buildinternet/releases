@@ -128,7 +128,7 @@ export class RateLimitedError extends ReleasesError {
 
 export class UpstreamError extends ReleasesError {
   constructor(message = "Upstream service error", opts: ReleasesErrorOptions = {}) {
-    super("upstream", message, { code: "upstream_error", expose: false, ...opts });
+    super("upstream", message, { code: "upstream_error", ...opts, expose: false });
   }
 }
 
@@ -140,6 +140,6 @@ export class ServiceUnavailableError extends ReleasesError {
 
 export class InternalError extends ReleasesError {
   constructor(message = "Internal server error", opts: ReleasesErrorOptions = {}) {
-    super("internal", message, { code: "internal_error", expose: false, ...opts });
+    super("internal", message, { code: "internal_error", ...opts, expose: false });
   }
 }

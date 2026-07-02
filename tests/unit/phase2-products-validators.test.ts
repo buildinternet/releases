@@ -60,8 +60,8 @@ describe("POST /v1/products (validateJson)", () => {
   test("400 when name is missing", async () => {
     const res = await call("/products", "POST", { orgSlug: "acme" });
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe("bad_request");
+    const body = (await res.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("validation_failed");
   });
 
   test("400 when neither orgId nor orgSlug is supplied (handler cross-field check)", async () => {
@@ -96,8 +96,8 @@ describe("POST /v1/products (validateJson)", () => {
       category: "",
     });
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe("bad_request");
+    const body = (await res.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("validation_failed");
   });
 });
 
@@ -114,8 +114,8 @@ describe("PATCH /v1/products/:slug (validateJson)", () => {
     await seedProduct();
     const res = await call("/products/prod_widget", "PATCH", { name: 42 });
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe("bad_request");
+    const body = (await res.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("validation_failed");
   });
 });
 
@@ -124,8 +124,8 @@ describe("PUT /v1/products/:identifier/tags (validateJson)", () => {
     await seedProduct();
     const res = await call("/products/prod_widget/tags", "PUT", { tags: "x" });
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe("bad_request");
+    const body = (await res.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("validation_failed");
   });
 
   test("happy path adds tags", async () => {
@@ -156,8 +156,8 @@ describe("DELETE /v1/products/:identifier/tags (validateJson)", () => {
     await seedProduct();
     const res = await call("/products/prod_widget/tags", "DELETE", {});
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe("bad_request");
+    const body = (await res.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("validation_failed");
   });
 });
 
@@ -165,8 +165,8 @@ describe("POST /v1/products/adopt (validateJson)", () => {
   test("400 when sourceOrgSlug missing", async () => {
     const res = await call("/products/adopt", "POST", { targetOrgSlug: "acme" });
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe("bad_request");
+    const body = (await res.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("validation_failed");
   });
 
   test("400 when both source and target slugs are empty strings (schema min(1))", async () => {
@@ -175,8 +175,8 @@ describe("POST /v1/products/adopt (validateJson)", () => {
       targetOrgSlug: "",
     });
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe("bad_request");
+    const body = (await res.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("validation_failed");
   });
 
   test("404 when source org doesn't exist", async () => {

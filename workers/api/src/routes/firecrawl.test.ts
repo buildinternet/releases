@@ -651,9 +651,9 @@ describe("POST /v1/sources/:slug/firecrawl/sync", () => {
       }),
     );
 
-    // The validator raises an HTTPException for un-parseable bytes; the JSON
-    // bad_request envelope is applied by the global onError (not wired into this
-    // bare test app), so assert the 400 status here — the envelope shape is
+    // The validator raises an HTTPException for un-parseable bytes; its JSON
+    // envelope is applied by the global onError (not wired into this bare
+    // test app), so assert the 400 status here — the envelope shape is
     // covered by the invalid-types case below, which goes through the hook.
     expect(res.status).toBe(400);
   });
@@ -668,7 +668,8 @@ describe("POST /v1/sources/:slug/firecrawl/sync", () => {
     );
 
     expect(res.status).toBe(400);
-    const json = (await res.json()) as { error: string };
-    expect(json.error).toBe("bad_request");
+    const json = (await res.json()) as { error: { code: string; type: string } };
+    expect(json.error.code).toBe("validation_failed");
+    expect(json.error.type).toBe("validation");
   });
 });

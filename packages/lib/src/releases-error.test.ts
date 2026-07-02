@@ -7,6 +7,7 @@ import {
   NotFoundError,
   InternalError,
   RateLimitedError,
+  UpstreamError,
 } from "./releases-error";
 
 test("a subclass sets code/type and derives status from type", () => {
@@ -67,4 +68,14 @@ test("a direct base instance defaults to a registry code, never the bare type", 
   for (const type of ["validation", "upstream", "unavailable", "not_found", "internal"] as const) {
     expect(ERROR_CODES).toContain(new ReleasesError(type, "x").code);
   }
+});
+
+test("InternalError/UpstreamError ignore an expose:true override (no raw-message leak)", () => {
+  const internal = new InternalError("secret dsn postgres://u:p@h", { expose: true });
+  expect(internal.expose).toBe(false);
+  expect(internal.toWire().error.message).toBe("Internal server error");
+
+  const upstream = new UpstreamError("anthropic key sk-ant-123 rejected", { expose: true });
+  expect(upstream.expose).toBe(false);
+  expect(upstream.toWire().error.message).toBe("Upstream service error");
 });
