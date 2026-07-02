@@ -58,6 +58,12 @@ export const ListResponseSchema = <T extends z.ZodTypeAny>(item: T) =>
     pagination: PaginationSchema,
   });
 
+/**
+ * @deprecated Flat legacy error shape. Superseded by `errorEnvelopeSchema` in
+ * `./errors.ts` (nested `{ error: { code, type, message, details? } }`). Kept
+ * exported to bridge the Phase 2→3 migration; removed when the last producer is
+ * converted. Do not add new consumers.
+ */
 export const ErrorResponseSchema = z.object({
   error: z.string(),
   message: z.string(),
