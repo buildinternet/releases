@@ -1,6 +1,7 @@
 /**
  * JSON body validator that wires `hono-openapi`'s `validator("json", ...)` to
- * the worker's `{ error: "bad_request", message }` envelope.
+ * the standardized nested error envelope (`ValidationError#toWire()` —
+ * `{ error: { code: "validation_failed", type: "validation", message } }`).
  *
  * Two payoffs over hand-rolled `await c.req.json().catch(...)` + ad-hoc checks
  * in each handler:
@@ -9,12 +10,12 @@
  *   2. The handler reads `c.req.valid("json")` and is guaranteed a typed,
  *      parsed body. No second-pass validation; no `body as Record<…>` cast.
  *
- * The hook flattens Standard Schema issues to a single `message` string so the
- * envelope shape stays consistent with the existing prose-parsed routes (e.g.
- * `webhooks.ts`, `ignore.ts`). Path segments are joined with `.` — sufficient
- * for our flat-ish request shapes and human-readable in the error response.
+ * The hook flattens Standard Schema issues to a single `message` string.
+ * Path segments are joined with `.` — sufficient for our flat-ish request
+ * shapes and human-readable in the error response.
  */
 import { validator } from "hono-openapi";
+import { ValidationError } from "@releases/lib/releases-error";
 
 type StandardIssue = {
   readonly message: string;
@@ -49,23 +50,19 @@ function formatIssues(issues: readonly StandardIssue[]): string {
 
 /**
  * Wire a Zod (or any Standard Schema) body schema as Hono middleware.
- * On parse failure the response is `400 { error: "bad_request", message }`;
- * on success the handler can read the typed body via `c.req.valid("json")`.
+ * On parse failure the response is `400` with the nested `ValidationError`
+ * envelope; on success the handler can read the typed body via
+ * `c.req.valid("json")`.
  *
  * Malformed JSON (un-parseable bytes) is still raised as an `HTTPException`
- * by Hono's underlying validator — the global `onError` in `index.ts` maps
- * it to the same envelope.
+ * by Hono's underlying validator — the global `onError` in `index.ts`
+ * (`respondError`) maps that to its own nested envelope (`code: "invalid_json"`).
  */
 export function validateJson<S extends Parameters<typeof validator>[1]>(schema: S) {
   return validator("json", schema, (result, c) => {
     if (!result.success) {
-      return c.json(
-        {
-          error: "bad_request",
-          message: formatIssues(result.error as readonly StandardIssue[]),
-        },
-        400,
-      );
+      const err = new ValidationError(formatIssues(result.error as readonly StandardIssue[]));
+      return c.json(err.toWire(), 400);
     }
   });
 }
