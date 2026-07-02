@@ -11,6 +11,7 @@ import {
 } from "@buildinternet/releases-core/schema";
 import { newRecommendationId } from "@buildinternet/releases-core/id";
 import { createDb } from "../db.js";
+import { readJsonBodyCapped } from "../lib/json-body.js";
 import { sanitizeString, sanitizeText, stripControl } from "../lib/sanitize.js";
 import { notifyRecommendation, sendRecommendationAck } from "../lib/recommendation-email.js";
 import type { Env } from "../index.js";
@@ -56,55 +57,6 @@ function parseRecommendationType(v: unknown): string | null {
     : null;
 }
 
-function concatChunks(chunks: Uint8Array[], total: number): Uint8Array {
-  const out = new Uint8Array(total);
-  let offset = 0;
-  for (const chunk of chunks) {
-    out.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return out;
-}
-
-async function readJsonBody(
-  req: Request,
-): Promise<
-  | { ok: true; value: unknown }
-  | { ok: false; status: 400; error: "invalid_json" }
-  | { ok: false; status: 413; error: "payload_too_large" }
-> {
-  if (!req.body) {
-    return { ok: false, status: 400, error: "invalid_json" };
-  }
-
-  const reader = req.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let total = 0;
-
-  try {
-    while (true) {
-      // oxlint-disable-next-line no-await-in-loop -- request streams must be consumed sequentially
-      const { done, value } = await reader.read();
-      if (done) break;
-      total += value.byteLength;
-      if (total > MAX_BODY_BYTES) {
-        void reader.cancel().catch(() => {});
-        return { ok: false, status: 413, error: "payload_too_large" };
-      }
-      chunks.push(value);
-    }
-  } catch {
-    return { ok: false, status: 400, error: "invalid_json" };
-  }
-
-  try {
-    const text = new TextDecoder().decode(concatChunks(chunks, total));
-    return { ok: true, value: JSON.parse(text) };
-  } catch {
-    return { ok: false, status: 400, error: "invalid_json" };
-  }
-}
-
 recommendationRoutes.post("/recommendations", async (c) => {
   if (await flag(c.env.FLAGS, c.env.RECOMMENDATIONS_DISABLED, FLAGS.recommendationsDisabled)) {
     return respondError(c, new ServiceUnavailableError());
@@ -126,7 +78,7 @@ recommendationRoutes.post("/recommendations", async (c) => {
     }
   }
 
-  const parsed = await readJsonBody(c.req.raw);
+  const parsed = await readJsonBodyCapped(c.req.raw, MAX_BODY_BYTES);
   if (!parsed.ok) {
     return respondError(c, new ValidationError(undefined, { code: parsed.error }));
   }

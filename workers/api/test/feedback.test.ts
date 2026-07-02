@@ -156,6 +156,33 @@ describe("POST /v1/feedback", () => {
     expect(rows).toHaveLength(0);
   });
 
+  it("rejects an oversized chunked body with no Content-Length (streaming cap enforces)", async () => {
+    const db = mkDb();
+    const fetch = await makeApp(db);
+    // A ReadableStream body carries no Content-Length, so the header fast-path
+    // can't see it — only the streaming accumulator stops this.
+    const chunk = new TextEncoder().encode("x".repeat(20_000));
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (let i = 0; i < 4; i++) controller.enqueue(chunk); // ~80KB > 64KB cap
+        controller.close();
+      },
+    });
+    const res = await fetch(
+      new Request("http://x/v1/feedback", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: stream,
+        duplex: "half",
+      } as RequestInit & { duplex: "half" }),
+    );
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("payload_too_large");
+    const rows = await db.select().from(feedback);
+    expect(rows).toHaveLength(0);
+  });
+
   it("strips control characters (incl. ANSI escape) from message and contact", async () => {
     const db = mkDb();
     const fetch = await makeApp(db);
