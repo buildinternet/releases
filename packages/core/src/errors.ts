@@ -66,3 +66,24 @@ export const ERROR_CODES = [
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];
+
+/**
+ * Reverse of {@link STATUS_BY_TYPE}, choosing the primary type where a status is
+ * shared (403 → `forbidden`, not `insufficient_scope`). Used to shape a Hono
+ * `HTTPException` (whose status is preserved as-is) into an envelope `type`.
+ */
+export const TYPE_BY_STATUS: Record<number, ErrorType> = {
+  400: "validation",
+  401: "unauthorized",
+  403: "forbidden",
+  404: "not_found",
+  409: "conflict",
+  429: "rate_limited",
+  502: "upstream",
+  503: "unavailable",
+  500: "internal",
+};
+
+export function statusToType(status: number): ErrorType {
+  return TYPE_BY_STATUS[status] ?? "internal";
+}
