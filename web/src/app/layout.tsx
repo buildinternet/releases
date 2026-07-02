@@ -57,12 +57,21 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   //
   // scroll-smooth: in-page anchor jumps (e.g. the homepage "what agents use
   // this for" link) glide instead of teleporting.
+  //
+  // data-scroll-behavior="smooth" (paired with the class below): Next.js 16 no
+  // longer overrides CSS `scroll-behavior: smooth` during SPA route transitions
+  // unless this attribute is present. Without it, the router's scroll-to-top on
+  // navigation animates (and gets cut short by the view-transition DOM swap),
+  // landing partway down the destination instead of at the top. The attribute
+  // restores Next's instant scroll-to-top on route changes while keeping smooth
+  // scrolling for in-page anchors. See the Next.js 16 upgrade guide.
   const htmlClassName = ["scroll-smooth", jetbrainsMono.variable].join(" ");
 
   return (
     <html
       lang="en"
       className={htmlClassName}
+      data-scroll-behavior="smooth"
       data-theme-preference="system"
       suppressHydrationWarning
     >
