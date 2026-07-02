@@ -2,6 +2,7 @@
 import type { Metadata } from "next";
 import { JetBrains_Mono } from "next/font/google";
 import Script from "next/script";
+import { ViewTransition } from "react";
 import { ThemeProvider } from "@/components/theme-provider";
 import { FollowsProvider } from "@/components/follows-provider";
 import { WebMcpProvider } from "@/components/webmcp-provider";
@@ -86,10 +87,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <FollowsProvider>
             <SearchHotkey />
             <LightboxProvider>
-              <main id="main" className="flex-1 flex flex-col">
-                <SiteNotice slot="banner" />
-                {children}
-              </main>
+              <ViewTransition default="auto">
+                <main id="main" className="flex-1 flex flex-col">
+                  <SiteNotice slot="banner" />
+                  {children}
+                </main>
+              </ViewTransition>
             </LightboxProvider>
             <Footer />
           </FollowsProvider>
