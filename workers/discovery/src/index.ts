@@ -8,6 +8,7 @@ import type {
 import { discoveryIdentityHeaders } from "./identity.js";
 import { logEvent } from "@releases/lib/log-event.js";
 import { getSecret, getSecretWithFallback } from "@releases/lib/secrets";
+import { errorResponse } from "./error-response.js";
 import { checkSpendCap } from "./spend-cap.js";
 import { tryAcquireSourceLocks, releaseSourceLocks } from "./source-lock.js";
 import { WorkerEntrypoint } from "cloudflare:workers";
@@ -76,10 +77,7 @@ function getAnthropicConfig(env: Env): AnthropicConfig | Response {
   const agentId = env.ANTHROPIC_AGENT_ID;
   const environmentId = env.ANTHROPIC_ENVIRONMENT_ID;
   if (!agentId || !environmentId) {
-    return jsonResponse(
-      { error: "ANTHROPIC_AGENT_ID and ANTHROPIC_ENVIRONMENT_ID must be configured" },
-      500,
-    );
+    return errorResponse("ANTHROPIC_AGENT_ID and ANTHROPIC_ENVIRONMENT_ID must be configured", 500);
   }
   const agentVersion = env.ANTHROPIC_AGENT_VERSION
     ? parseInt(env.ANTHROPIC_AGENT_VERSION, 10)
@@ -92,14 +90,6 @@ function jsonResponse(data: object, status = 200, headers?: Record<string, strin
     status,
     headers: { "Content-Type": "application/json", ...headers },
   });
-}
-
-function errorResponse(
-  message: string,
-  status: number,
-  extra?: { headers?: Record<string, string>; body?: Record<string, unknown> },
-): Response {
-  return jsonResponse({ error: message, ...extra?.body }, status, extra?.headers);
 }
 
 async function checkAuth(request: Request, env: Env): Promise<Response | null> {
@@ -288,7 +278,10 @@ export class DiscoveryEntrypoint extends WorkerEntrypoint<Env> {
       // Mint failed — release the leases we took so the source isn't wedged
       // until the 15-min lease expires.
       await releaseSourceLocks(this.env, params.sourceIds, sessionId);
-      let errBody: { error?: string } = {};
+      // The mint-failure Response now carries the nested error envelope
+      // `{ error: { code, type, message } }` (see ./error-response), so read the
+      // human string from `.error.message`.
+      let errBody: { error?: { message?: string } } = {};
       try {
         errBody = (await result.clone().json()) as typeof errBody;
       } catch {
@@ -296,7 +289,7 @@ export class DiscoveryEntrypoint extends WorkerEntrypoint<Env> {
       }
       return {
         ok: false,
-        error: errBody.error ?? `Discovery returned ${result.status}`,
+        error: errBody.error?.message ?? `Discovery returned ${result.status}`,
       };
     }
 
@@ -335,7 +328,7 @@ const httpHandler = {
       try {
         body = await request.json();
       } catch {
-        return errorResponse("Invalid JSON body", 400);
+        return errorResponse("Invalid JSON body", 400, { code: "invalid_json" });
       }
 
       if (!body.company || typeof body.company !== "string") {
@@ -425,7 +418,7 @@ const httpHandler = {
               409,
               {
                 headers: { "Retry-After": String(retryAfterSeconds) },
-                body: {
+                details: {
                   retryAfter: unblockIso,
                   retryAfterSeconds,
                   dedupWindowMinutes: DEDUP_WINDOW_MINUTES,
@@ -510,7 +503,7 @@ const httpHandler = {
       try {
         body = await request.json();
       } catch {
-        return errorResponse("Invalid JSON body", 400);
+        return errorResponse("Invalid JSON body", 400, { code: "invalid_json" });
       }
 
       // Accept sourceIdentifiers (preferred) or legacy sourceSlugs

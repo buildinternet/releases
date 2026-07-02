@@ -815,19 +815,9 @@ workflowsRoutes.post("/workflows/embed-changelogs", async (c) => {
 // Kick off onboard / update sessions on the discovery worker. Session reads go
 // through `/v1/sessions/:id` — no separate status endpoint here.
 
-async function proxyToDiscovery(
-  c: {
-    env: Env["Bindings"];
-    req: { header: (k: string) => string | undefined };
-  },
-  path: string,
-  body: string,
-): Promise<Response> {
+async function proxyToDiscovery(c: Context<Env>, path: string, body: string): Promise<Response> {
   if (!c.env.DISCOVERY_WORKER) {
-    return new Response(JSON.stringify({ error: "Discovery worker not configured" }), {
-      status: 503,
-      headers: { "Content-Type": "application/json" },
-    });
+    return respondError(c, new ServiceUnavailableError("Discovery worker not configured"));
   }
   // Service bindings require a full URL; the host is ignored.
   return c.env.DISCOVERY_WORKER.fetch(
