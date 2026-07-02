@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Ship the standardized-error *contract* — a pure taxonomy, a zod wire envelope with a decode helper, and a typed throwable hierarchy — as three additive, tested modules across `core`/`api-types`/`lib`, with zero producer or consumer changes.
+**Goal:** Ship the standardized-error _contract_ — a pure taxonomy, a zod wire envelope with a decode helper, and a typed throwable hierarchy — as three additive, tested modules across `core`/`api-types`/`lib`, with zero producer or consumer changes.
 
 **Architecture:** Three package seams, split along the zod line. `packages/core` holds the pure, zod-free taxonomy (categories, status map, code registry). `packages/api-types` holds the zod wire schema plus `decodeApiError`/`isApiError`. `packages/lib` holds the `ReleasesError` throwable hierarchy whose `toWire()` return type is imported from `api-types`, so the producer is compile-checked against the schema. Anti-drift invariants are enforced by a schema/union parity test and a `toWire → parse → decode` round-trip test.
 
@@ -44,11 +44,13 @@ Full design context: `docs/superpowers/specs/2026-07-02-standardized-errors-desi
 ## Task 1: Core taxonomy
 
 **Files:**
+
 - Create: `packages/core/src/errors.ts`
 - Create: `packages/core/src/errors.test.ts`
 - Modify: `packages/core/package.json` (`exports`)
 
 **Interfaces:**
+
 - Consumes: nothing (leaf).
 - Produces:
   - `ERROR_TYPES: readonly ["validation","unauthorized","forbidden","insufficient_scope","not_found","conflict","rate_limited","upstream","unavailable","internal"]`
@@ -64,12 +66,7 @@ Create `packages/core/src/errors.test.ts`:
 
 ```ts
 import { expect, test } from "bun:test";
-import {
-  ERROR_TYPES,
-  STATUS_BY_TYPE,
-  statusForType,
-  ERROR_CODES,
-} from "./errors";
+import { ERROR_TYPES, STATUS_BY_TYPE, statusForType, ERROR_CODES } from "./errors";
 
 test("every ErrorType has a numeric status", () => {
   for (const t of ERROR_TYPES) {
@@ -206,12 +203,14 @@ Claude-Session: https://claude.ai/code/session_015vCgYf4wCXnyr7MQrQ1xCY"
 ## Task 2: api-types wire envelope + decode
 
 **Files:**
+
 - Create: `packages/api-types/src/schemas/errors.ts`
 - Create: `packages/api-types/src/schemas/errors.test.ts`
 - Modify: `packages/api-types/src/api-types.ts` (re-export)
 - Modify: `packages/api-types/src/schemas/shared.ts` (deprecate `ErrorResponseSchema`)
 
 **Interfaces:**
+
 - Consumes: `ERROR_TYPES`, `ErrorType`, `ErrorCode` from `@buildinternet/releases-core/errors` (Task 1).
 - Produces:
   - `errorEnvelopeSchema` (zod object; `error.type` is `z.enum(ERROR_TYPES)`, `error.code` is `z.string()`)
@@ -416,11 +415,13 @@ Claude-Session: https://claude.ai/code/session_015vCgYf4wCXnyr7MQrQ1xCY"
 ## Task 3: lib ReleasesError throwable hierarchy
 
 **Files:**
+
 - Create: `packages/lib/src/releases-error.ts`
 - Create: `packages/lib/src/releases-error.test.ts`
 - Modify: `packages/lib/package.json` (add `api-types` dep + `./releases-error` export)
 
 **Interfaces:**
+
 - Consumes: `ErrorType`, `ErrorCode`, `statusForType` from `@buildinternet/releases-core/errors` (Task 1); `type ErrorEnvelope` from `@buildinternet/releases-api-types` (Task 2, type-only); `errorEnvelopeSchema` + `decodeApiError` from `api-types` in the test.
 - Produces:
   - `class ReleasesError extends Error` with `readonly code: ErrorCode; type: ErrorType; status: number; details?: unknown; expose: boolean` and `toWire(): ErrorEnvelope`
@@ -713,6 +714,7 @@ The branch `worktree-standardized-errors-spec` already has an open draft PR (#18
 ## Self-Review
 
 **Spec coverage (Phase 1 section of the design):**
+
 - Core `types.ts`/`codes.ts` → Task 1 (`ERROR_TYPES`, `STATUS_BY_TYPE`, `statusForType`, `ERROR_CODES`, `ErrorCode`). ✓
 - api-types `errorEnvelopeSchema` + `decodeApiError`/`isApiError` → Task 2. ✓
 - lib `ReleasesError` base + hierarchy + `toWire()` → Task 3. ✓

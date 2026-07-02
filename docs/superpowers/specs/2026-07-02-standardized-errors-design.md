@@ -33,7 +33,7 @@ conventions coexist, each reinvented per surface:
    **no shared `errorResponse()` producer helper** — every site builds the object
    inline. HTTP status is chosen per call site.
 2. **A declared-but-unenforced wire schema.** `ErrorResponseSchema =
-   { error: string, message: string, errorCode?: string }`
+{ error: string, message: string, errorCode?: string }`
    (`packages/api-types/src/schemas/shared.ts:61`) is the nominal contract the CLI
    consumes, but producers only partly match it and **no consumer decodes it** —
    `web/src/lib/api.ts` reads only `res.status` and discards the body.
@@ -145,11 +145,11 @@ For Releases that is the wrong call, for constraint reasons, not sentiment:
 
 Resulting layout:
 
-| Concern | Home | Rationale |
-|---|---|---|
-| `ErrorType` union · `STATUS_BY_TYPE` map · `statusForType()` · canonical `ErrorCode` registry (all pure, zod-free) | **`packages/core`** (`@buildinternet/releases-core`) | Below the zod line; MCP + CLI + everything share it freely |
-| `errorEnvelopeSchema` (zod) · `ErrorEnvelope` type · `decodeApiError()` · `isApiError()` | **`packages/api-types`** (`@buildinternet/releases-api-types`) | Where wire schemas live by charter; already the CLI's pinned dep; subsumes `ErrorResponseSchema` |
-| `ReleasesError` base + subclass hierarchy + `toWire()` · `respondError(c, err)` Hono helper · refactored `classifyDbError`/`classifyAnthropicError` | **`packages/lib`** (`@releases/lib`) | Worker-only (all producers already import `@releases/lib`); Hono-coupled helper cannot live in `api-types` |
+| Concern                                                                                                                                             | Home                                                           | Rationale                                                                                                  |
+| --------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `ErrorType` union · `STATUS_BY_TYPE` map · `statusForType()` · canonical `ErrorCode` registry (all pure, zod-free)                                  | **`packages/core`** (`@buildinternet/releases-core`)           | Below the zod line; MCP + CLI + everything share it freely                                                 |
+| `errorEnvelopeSchema` (zod) · `ErrorEnvelope` type · `decodeApiError()` · `isApiError()`                                                            | **`packages/api-types`** (`@buildinternet/releases-api-types`) | Where wire schemas live by charter; already the CLI's pinned dep; subsumes `ErrorResponseSchema`           |
+| `ReleasesError` base + subclass hierarchy + `toWire()` · `respondError(c, err)` Hono helper · refactored `classifyDbError`/`classifyAnthropicError` | **`packages/lib`** (`@releases/lib`)                           | Worker-only (all producers already import `@releases/lib`); Hono-coupled helper cannot live in `api-types` |
 
 The existing `CategorizedError` becomes (or is replaced by) the `ReleasesError`
 base. The classifiers become functions that _produce_ a typed subclass instead of
@@ -299,8 +299,8 @@ Deliverable: the tested contract, importable, with the anti-drift tests in place
 ### Phase 2 — API boundary + MCP taxonomy (the producer)
 
 - Rework `workers/api/src/index.ts` `onError`: any `ReleasesError` → its `toWire()`
-  + `statusForType`; anything else → a generic `InternalError` (500, non-exposed
-  message). Every path `logEvent`s. Keep `HTTPException` header passthrough.
+  - `statusForType`; anything else → a generic `InternalError` (500, non-exposed
+    message). Every path `logEvent`s. Keep `HTTPException` header passthrough.
 - Rework `notFound` → `NotFoundError` envelope.
 - Add a global zod `defaultHook` (and/or wrap `validateJson`) → `ValidationError`
   envelope, fixing the invisible per-route shape mismatch.
@@ -349,7 +349,7 @@ incremental. Retire the `ErrorResponseSchema` alias when the last site is gone.
 **`packages/api-types/src/schemas/errors.ts`**
 
 - `errorEnvelopeSchema` — `z.object({ error: z.object({ code: z.string(),
-  type: <enum from core>, message: z.string(), details: z.unknown().optional() }) })`,
+type: <enum from core>, message: z.string(), details: z.unknown().optional() }) })`,
   `.meta({ id })` for clean OpenAPI `$ref`.
 - `ErrorEnvelope` inferred type.
 - `decodeApiError(body): { code, type, message, details? }` — lenient parse,
