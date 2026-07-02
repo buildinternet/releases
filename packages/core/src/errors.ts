@@ -77,6 +77,9 @@ export const ERROR_CODES = [
   // #1830 item 2 — webhook delivery operational codes a client UI branches on.
   "deliveries_unavailable", // unavailable (Analytics Engine credentials unset; was HTTP 501)
   "ae_query_failed", // upstream (Analytics Engine query failed)
+  // #1830 item 3 — the API's db-health middleware; the web transport branches on
+  // this code to show D1 setup steps (carried in `details.setup`).
+  "database_not_initialized", // unavailable (D1 migrations not applied)
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];

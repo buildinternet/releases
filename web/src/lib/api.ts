@@ -40,6 +40,7 @@ import type {
   OverviewPageItem,
   ResolveResponse,
 } from "@buildinternet/releases-api-types";
+import { decodeApiError, isApiError } from "@buildinternet/releases-api-types";
 import { parseCoordinate } from "@buildinternet/releases-core/lookup-coordinate";
 import type { StoredSiteNotice } from "@buildinternet/releases-core/site-notice";
 import { apiBaseUrl, serverApiKey } from "./env";
@@ -184,8 +185,16 @@ async function fetchApi<T>(path: string, init?: FetchCacheInit): Promise<T> {
 
   if (res.status === 503) {
     const body = await res.json().catch(() => null);
-    if (body?.error === "database_not_initialized") {
-      throw new ApiSetupError(body.message, body.setup);
+    // The API emits the standardized nested envelope; branch on the decoded
+    // `code`, and read the setup steps from `details.setup` (#1830 item 3).
+    if (isApiError(body, "database_not_initialized")) {
+      const decoded = decodeApiError(body);
+      const rawSetup = (decoded.details as { setup?: unknown } | undefined)?.setup;
+      const setup =
+        Array.isArray(rawSetup) && rawSetup.every((s) => typeof s === "string")
+          ? (rawSetup as string[])
+          : apiSetupSteps;
+      throw new ApiSetupError(decoded.message, setup);
     }
   }
 
