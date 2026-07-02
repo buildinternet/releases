@@ -110,7 +110,7 @@ export function mountOpenApi(v1: Hono<Env>) {
             description: [
               "REST API for the Releases changelog registry — orgs, products, sources, releases, and search.",
               "",
-              "**Links:** [releases.sh](https://releases.sh) · [Narrative docs](https://releases.sh/docs/api/rest) · [MCP server](https://releases.sh/docs/api/mcp)",
+              "**Links:** [releases.sh](https://releases.sh) · [Narrative docs](https://releases.sh/docs/api/rest) · [Errors](https://releases.sh/docs/api/errors) · [MCP server](https://releases.sh/docs/api/mcp)",
             ].join("\n"),
           },
           servers: isStaging

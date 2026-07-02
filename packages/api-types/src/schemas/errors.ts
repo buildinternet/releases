@@ -7,14 +7,31 @@ import { ERROR_TYPES, type ErrorType, type ErrorCode } from "@buildinternet/rele
  * older client doesn't recognize still parses. The throwable hierarchy in
  * `@releases/lib/releases-error` serializes to this via `toWire()`.
  */
-export const errorEnvelopeSchema = z.object({
-  error: z.object({
-    code: z.string(),
-    type: z.enum(ERROR_TYPES),
-    message: z.string(),
-    details: z.unknown().optional(),
-  }),
-});
+export const errorEnvelopeSchema = z
+  .object({
+    error: z.object({
+      code: z
+        .string()
+        .describe(
+          "Stable, specific machine code (e.g. `not_found`, `rate_limited`). Never reworded once shipped, but open-ended — branch defensively on codes you don't recognize.",
+        ),
+      type: z
+        .enum(ERROR_TYPES)
+        .describe(
+          "Coarse category from a fixed set; determines the HTTP status. Safe to switch on.",
+        ),
+      message: z.string().describe("Human-readable explanation. May change; do not parse."),
+      details: z
+        .unknown()
+        .optional()
+        .describe(
+          "Optional structured context carried by select codes (e.g. `database_not_initialized`).",
+        ),
+    }),
+  })
+  .describe(
+    "Standardized error response — every non-2xx response uses this shape. Switch on `error.type` (fixed set → HTTP status) or match `error.code` (specific, stable). See https://releases.sh/docs/api/errors.",
+  );
 
 export type ErrorEnvelope = z.infer<typeof errorEnvelopeSchema>;
 

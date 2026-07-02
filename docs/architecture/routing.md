@@ -131,3 +131,7 @@ Public GET routes advertise per-route `Cache-Control` headers (registered in `wo
 Every method registered under a `publicReadRoutes` prefix (defined in `workers/api/src/route-namespaces.ts`) must appear in `/v1/openapi.json`. Enforced by `scripts/check-openapi-coverage.ts`, run as a step in the CI `test` job.
 
 Add `describeRoute(...)` annotations from `hono-openapi` to new public-read routes. If a public-read route is genuinely meant to stay undocumented, add an explicit entry to the script's `ALLOWLIST` set with a rationale comment (stale entries log a warning so they don't accumulate). Admin-only routes (`adminRoutes` in the same module) are intentionally outside the gate's scope.
+
+## Error responses
+
+Every non-2xx response uses the standardized nested envelope `{ error: { code, type, message, details? } }` — routes `throw` a `ReleasesError` subclass and the `respondError` boundary serializes it. The taxonomy, the three-layer package split, producers/consumers, and how to add a code live in [errors.md](errors.md); the public consumer reference (types → status, common codes) is the web `/docs/api/errors` page.
