@@ -119,7 +119,51 @@ describe("OrgActor", () => {
     expect(h.dispatched.length).toBe(0);
   });
 
-  it("does not throw when /update returns an error (spend cap / lock)", async () => {
+  // Capture the JSON logEvent lines a run emits, by severity (info→log, warn→warn).
+  async function captureLogs(fn: () => Promise<void>) {
+    const info: any[] = [];
+    const warn: any[] = [];
+    const origLog = console.log;
+    const origWarn = console.warn;
+    const parse = (sink: any[]) => (line?: unknown) => {
+      try {
+        sink.push(JSON.parse(String(line)));
+      } catch {
+        /* non-JSON line, ignore */
+      }
+    };
+    console.log = parse(info) as typeof console.log;
+    console.warn = parse(warn) as typeof console.warn;
+    try {
+      await fn();
+    } finally {
+      console.log = origLog;
+      console.warn = origWarn;
+    }
+    return { info, warn };
+  }
+
+  it("classifies a 409 (scrape lock held) as drain-superseded, not drain-failed", async () => {
+    const db = mkDb();
+    seedFlaggedScrape(db, "src_a");
+    const h = mkActor(
+      db,
+      () =>
+        new Response("Source src_a has an active MA session (ma-abc)", {
+          status: 409,
+          headers: { "Retry-After": "900" },
+        }),
+    );
+    await h.actor.ensureDrainScheduled("org_x");
+    const { info, warn } = await captureLogs(() => h.actor.alarm()); // must not throw
+    expect(h.dispatched.length).toBe(1);
+    expect(h.alarmAt()).toBeNull();
+    // Benign race: emitted at info level as drain-superseded, never as an error.
+    expect(info.some((l) => l.event === "drain-superseded" && l.status === 409)).toBe(true);
+    expect(warn.some((l) => l.event === "drain-failed")).toBe(false);
+  });
+
+  it("classifies a non-409 error (spend cap 429) as drain-failed", async () => {
     const db = mkDb();
     seedFlaggedScrape(db, "src_a");
     const h = mkActor(
@@ -128,9 +172,11 @@ describe("OrgActor", () => {
         new Response(JSON.stringify({ error: "Daily global spend cap reached" }), { status: 429 }),
     );
     await h.actor.ensureDrainScheduled("org_x");
-    await h.actor.alarm(); // must not throw
+    const { info, warn } = await captureLogs(() => h.actor.alarm()); // must not throw
     expect(h.dispatched.length).toBe(1);
     expect(h.alarmAt()).toBeNull();
+    expect(warn.some((l) => l.event === "drain-failed" && l.status === 429)).toBe(true);
+    expect(info.some((l) => l.event === "drain-superseded")).toBe(false);
   });
 
   it("does NOT dispatch when the kill switch is off at alarm time", async () => {

@@ -12,8 +12,10 @@
  * No in-app budget: the discovery `/update` endpoint already enforces the per-org
  * ($2/day) + global ($15/day) dollar spend cap (checkSpendCap, #1055) and the
  * per-source scrape lock (#1815) before minting a session, so this actor just
- * dispatches. A rejected /update (cap hit / locked) is logged and dropped; the
- * source stays flagged and re-drains on a later SourceActor notify.
+ * dispatches. A rejected /update is logged and dropped; the source stays flagged
+ * and re-drains on a later SourceActor notify. A 409 (per-source scrape lock held
+ * by the source's own SourceActor scrape) is the expected benign race — logged as
+ * `drain-superseded`, not `drain-failed`, since the lock holder drains the source.
  */
 
 import { DurableObject } from "cloudflare:workers";
@@ -126,9 +128,17 @@ export class OrgActor extends DurableObject<OrgActorEnv> {
       });
       if (!res.ok) {
         const body = await res.text().catch(() => "");
-        logEvent("warn", {
+        // A 409 from /update is the per-source dedup scrape lock (#1814) firing:
+        // the source's own SourceActor scrape grabbed the lock a beat before this
+        // drain dispatched. That's benign — the lock holder drains the source, so
+        // our /update was redundant, not failed. Classify it as `drain-superseded`
+        // (info) rather than `drain-failed` so expected lock contention doesn't
+        // pollute the drain-error signal. Every other non-ok status (spend cap
+        // 429, kill switch 503, mint failure) is a genuine drop worth a warn.
+        const superseded = res.status === 409;
+        logEvent(superseded ? "info" : "warn", {
           component: "org-actor",
-          event: "drain-failed",
+          event: superseded ? "drain-superseded" : "drain-failed",
           orgId,
           status: res.status,
           detail: body.slice(0, 200),
