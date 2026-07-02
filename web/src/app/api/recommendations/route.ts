@@ -7,6 +7,24 @@ const UPSTREAM_TIMEOUT_MS = 10_000;
 
 export const dynamic = "force-dynamic";
 
+/**
+ * Pull the flat error `code` out of whatever the upstream returned. The worker
+ * now speaks the standardized nested envelope (`{ error: { code, type, message } }`),
+ * so read `error.code`; tolerate a legacy flat `{ error: "code" }` string too. This
+ * is the one spot that knows the envelope shape for this route — the /submit form
+ * keeps its simple `{ error?: string }` read. Returns undefined on any other shape.
+ */
+function readErrorCode(payload: unknown): string | undefined {
+  if (!payload || typeof payload !== "object") return undefined;
+  const err = (payload as { error?: unknown }).error;
+  if (typeof err === "string") return err;
+  if (err && typeof err === "object") {
+    const code = (err as { code?: unknown }).code;
+    if (typeof code === "string") return code;
+  }
+  return undefined;
+}
+
 export async function POST(req: NextRequest) {
   let body: unknown;
   try {
@@ -38,6 +56,14 @@ export async function POST(req: NextRequest) {
     clearTimeout(timeout);
   }
 
-  const payload = await res.json().catch(() => ({ error: "upstream_error" }));
-  return NextResponse.json(payload, { status: res.status });
+  const payload = await res.json().catch(() => null);
+  if (!res.ok) {
+    // Flatten the worker's nested error envelope to the flat `{ error: <code> }`
+    // vocab the /submit form reads, so envelope-awareness stays contained here.
+    return NextResponse.json(
+      { error: readErrorCode(payload) ?? "upstream_error" },
+      { status: res.status },
+    );
+  }
+  return NextResponse.json(payload ?? {}, { status: res.status });
 }
