@@ -28,6 +28,7 @@ import {
   ValidationError,
   NotFoundError,
   ServiceUnavailableError,
+  isReleasesError,
 } from "@releases/lib/releases-error";
 
 export const webhooksRoutes = new Hono<Env>();
@@ -209,5 +210,6 @@ webhooksRoutes.get("/webhooks/:id/deliveries", async (c) => {
     failed: c.req.query("failed"),
     limit: c.req.query("limit"),
   });
-  return c.json(result.body, result.status as 200 | 400 | 501 | 502);
+  if (isReleasesError(result)) return respondError(c, result);
+  return c.json(result.data);
 });

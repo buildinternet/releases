@@ -606,12 +606,15 @@ describe("POST /v1/webhooks/:id/test", () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe("GET /v1/webhooks/:id/deliveries", () => {
-  it("returns 501 when CLOUDFLARE_API_TOKEN is absent", async () => {
+  it("returns 503 (unavailable) when CLOUDFLARE_API_TOKEN is absent", async () => {
     const fetch = makeApp();
     const res = await fetch(new Request("https://x.test/v1/webhooks/whk_test0001/deliveries"));
-    expect(res.status).toBe(501);
-    const body = (await res.json()) as { error: string; message: string };
-    expect(body.error).toBe("deliveries_unavailable");
+    // #1830 item 2: off-map 501 folds to `unavailable` (503); the operational
+    // code survives on the nested envelope.
+    expect(res.status).toBe(503);
+    const body = (await res.json()) as { error: { code: string; type: string } };
+    expect(body.error.code).toBe("deliveries_unavailable");
+    expect(body.error.type).toBe("unavailable");
   });
 
   it("returns 400 when id is malformed (does not match whk_ pattern)", async () => {

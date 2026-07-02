@@ -586,7 +586,7 @@ describe("GET /v1/me/webhooks/:id/deliveries", () => {
     }
   });
 
-  it("returns 501 when Cloudflare Analytics creds are absent", async () => {
+  it("returns 503 (unavailable) when Cloudflare Analytics creds are absent", async () => {
     const { a, env } = app();
     const create = await a.request(
       "/me/webhooks",
@@ -600,9 +600,12 @@ describe("GET /v1/me/webhooks/:id/deliveries", () => {
     const { id } = (await create.json()) as { id: string };
 
     const res = await a.request(`/me/webhooks/${id}/deliveries`, {}, env);
-    expect(res.status).toBe(501);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe("deliveries_unavailable");
+    // #1830 item 2: off-map 501 folds to `unavailable` (503); the operational
+    // code survives on the nested envelope.
+    expect(res.status).toBe(503);
+    const body = (await res.json()) as { error: { code: string; type: string } };
+    expect(body.error.code).toBe("deliveries_unavailable");
+    expect(body.error.type).toBe("unavailable");
   });
 
   it("returns delivery rows when Analytics Engine responds", async () => {

@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { createDb } from "../db.js";
-import { ingestAvatarFromBuffer } from "../lib/avatar-ingest.js";
+import { avatarRejectToError, ingestAvatarFromBuffer } from "../lib/avatar-ingest.js";
 import { user } from "../db/schema-auth.js";
 import type { Env } from "../index.js";
 import { respondError } from "../lib/error-response.js";
@@ -65,9 +65,7 @@ accountProfileHandlers.post("/me/avatar", async (c) => {
     mediaOrigin: c.env.MEDIA_ORIGIN ?? "https://media.releases.sh",
     component: "user-avatar",
   });
-  if (!result.ok) {
-    return c.json({ error: result.error, message: result.message }, result.status);
-  }
+  if (!result.ok) return respondError(c, avatarRejectToError(result));
 
   const db = createDb(c.env.DB);
   await db.update(user).set({ image: result.avatarUrl }).where(eq(user.id, session.user.id));

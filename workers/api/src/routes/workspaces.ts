@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { and, eq } from "drizzle-orm";
 import { createDb } from "../db.js";
-import { ingestAvatarFromBuffer } from "../lib/avatar-ingest.js";
+import { avatarRejectToError, ingestAvatarFromBuffer } from "../lib/avatar-ingest.js";
 import {
   mergeWorkspaceMetadata,
   normalizeProfilePatch,
@@ -168,9 +168,7 @@ workspaceProfileHandlers.post("/workspaces/:workspaceId/avatar", async (c) => {
     mediaOrigin: c.env.MEDIA_ORIGIN ?? "https://media.releases.sh",
     component: "workspace-avatar",
   });
-  if (!result.ok) {
-    return c.json({ error: result.error, message: result.message }, result.status);
-  }
+  if (!result.ok) return respondError(c, avatarRejectToError(result));
 
   await db
     .update(authOrganization)

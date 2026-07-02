@@ -2,7 +2,12 @@ import { deriveSigningKey } from "@releases/core-internal/webhook-sign";
 import { getSecret } from "@releases/lib/secrets";
 import type { Context } from "hono";
 import { respondError } from "../lib/error-response.js";
-import { ServiceUnavailableError } from "@releases/lib/releases-error";
+import {
+  ReleasesError,
+  ServiceUnavailableError,
+  UpstreamError,
+  ValidationError,
+} from "@releases/lib/releases-error";
 import type { Env } from "../index.js";
 import type { WebhookSubscriptionUpdates } from "./queries.js";
 import { WEBHOOK_FORMATS, type WebhookFormat } from "@buildinternet/releases-core/schema";
@@ -94,23 +99,18 @@ export async function queryWebhookDeliveries(
   env: CloudflareAeEnv,
   subscriptionId: string,
   query: { failed?: string; limit?: string },
-): Promise<{ status: number; body: unknown }> {
+): Promise<{ ok: true; data: unknown } | ReleasesError> {
   const creds = await resolveCloudflareAeCredentials(env);
   if (!creds) {
-    return {
-      status: 501,
-      body: {
-        error: "deliveries_unavailable",
-        message: "Cloudflare Analytics credentials are not configured",
-      },
-    };
+    // Off-map 501 folds to `unavailable` (503); the operational code survives so
+    // a delivery UI can still tell "credentials unset" from a transient outage.
+    return new ServiceUnavailableError("Cloudflare Analytics credentials are not configured", {
+      code: "deliveries_unavailable",
+    });
   }
 
   if (!SUBSCRIPTION_ID_RE.test(subscriptionId)) {
-    return {
-      status: 400,
-      body: { error: "bad_request", message: "invalid subscription id format" },
-    };
+    return new ValidationError("invalid subscription id format", { code: "bad_request" });
   }
 
   const limitParam = parseInt(query.limit ?? "20", 10);
@@ -120,13 +120,10 @@ export async function queryWebhookDeliveries(
   });
 
   if (!res.ok) {
-    return {
-      status: 502,
-      body: { error: "ae_query_failed", message: `AE query returned ${res.status}` },
-    };
+    return new UpstreamError(`AE query returned ${res.status}`, { code: "ae_query_failed" });
   }
 
-  return { status: 200, body: await res.json() };
+  return { ok: true, data: await res.json() };
 }
 
 /** Query Analytics Engine for recent delivery attempts (admin + self-serve). */
