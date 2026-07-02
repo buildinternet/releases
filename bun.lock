@@ -127,6 +127,7 @@
       "version": "0.0.0",
       "dependencies": {
         "@anthropic-ai/sdk": "catalog:",
+        "@buildinternet/releases-api-types": "workspace:*",
         "@buildinternet/releases-core": "workspace:*",
         "jose": "^6.2.3",
       },

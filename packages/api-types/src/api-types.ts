@@ -453,6 +453,8 @@ export {
   FeedbackDeleteResponseSchema,
 } from "./schemas/feedback.js";
 export { SitemapSourceSchema, SitemapPayloadSchema } from "./schemas/sitemap.js";
+export { errorEnvelopeSchema, decodeApiError, isApiError } from "./schemas/errors.js";
+export type { ErrorEnvelope, DecodedApiError } from "./schemas/errors.js";
 export {
   RelatedScopeSchema,
   RelatedReleaseThumbnailSchema,
