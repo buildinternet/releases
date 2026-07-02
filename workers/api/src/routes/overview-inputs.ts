@@ -13,7 +13,7 @@ import { authMiddleware } from "../middleware/auth.js";
 import { hydrateMediaUrls, parseReleaseMedia } from "../utils.js";
 import {
   OverviewInputsResponseSchema,
-  ErrorResponseSchema,
+  errorEnvelopeSchema,
 } from "@buildinternet/releases-api-types";
 import type { Env } from "../index.js";
 import { respondError } from "../lib/error-response.js";
@@ -60,11 +60,11 @@ app.get(
       },
       400: {
         description: "Invalid `window` or `limit` query parameter",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
       404: {
         description: "Org not found",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
   }),

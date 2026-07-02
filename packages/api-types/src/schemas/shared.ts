@@ -58,23 +58,6 @@ export const ListResponseSchema = <T extends z.ZodTypeAny>(item: T) =>
     pagination: PaginationSchema,
   });
 
-/**
- * @deprecated Flat legacy error shape. Superseded by `errorEnvelopeSchema` in
- * `./errors.ts` (nested `{ error: { code, type, message, details? } }`). Kept
- * exported to bridge the Phase 2→3 migration; removed when the last producer is
- * converted. Do not add new consumers.
- */
-export const ErrorResponseSchema = z.object({
-  error: z.string(),
-  message: z.string(),
-  // Stable D1 error classification from `classifyDbError()` in
-  // `@releases/lib/db-errors`. Set on 5xx responses that originate from a
-  // classified D1 failure so callers can branch on a stable code instead of
-  // substring-matching the upstream message. Absent on non-D1 errors and on
-  // routes that have not yet been wired. See DbErrorCode in packages/lib.
-  errorCode: z.string().optional(),
-});
-
 export const StatsSchema = z.object({
   orgs: z.number().int().min(0),
   sources: z.number().int().min(0),

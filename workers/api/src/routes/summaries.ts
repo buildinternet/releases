@@ -10,7 +10,7 @@ import type { Env } from "../index.js";
 import { respondError } from "../lib/error-response.js";
 import { NotFoundError } from "@releases/lib/releases-error";
 import {
-  ErrorResponseSchema,
+  errorEnvelopeSchema,
   SourceSummariesResponseSchema,
   CreateSourceSummaryBodySchema,
   CreateSourceSummaryResponseSchema,
@@ -34,7 +34,7 @@ app.get(
       },
       404: {
         description: "Source not found",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
   }),
@@ -82,11 +82,11 @@ app.post(
       },
       400: {
         description: "Missing or invalid required fields",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
       404: {
         description: "Source not found",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
   }),

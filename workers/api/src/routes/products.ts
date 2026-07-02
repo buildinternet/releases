@@ -39,7 +39,7 @@ import {
   ProductActivityResponseSchema,
   ProductHeatmapResponseSchema,
   CollectionListResponseSchema,
-  ErrorResponseSchema,
+  errorEnvelopeSchema,
   ResolveResponseSchema,
 } from "@buildinternet/releases-api-types";
 import {
@@ -160,7 +160,7 @@ productRoutes.get(
       },
       400: {
         description: "Invalid kind value",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
   }),
@@ -220,11 +220,11 @@ productRoutes.get(
       },
       400: {
         description: "Invalid kind value",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
       404: {
         description: "Organization not found",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
   }),
@@ -274,15 +274,15 @@ productRoutes.post(
       },
       400: {
         description: "Missing required fields",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
       404: {
         description: "Source or target org not found",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
       409: {
         description: "Slug conflict or reserved slug",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
   }),
@@ -526,11 +526,11 @@ const getProductDetailRoute = describeRoute({
     400: {
       description:
         "Bare slug supplied on `/products/:identifier` (#698 — use the org-scoped path or `/v1/lookups/product-by-slug`)",
-      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
     },
     404: {
       description: "Product not found",
-      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
     },
   },
 });
@@ -558,15 +558,15 @@ productRoutes.post(
       },
       400: {
         description: "Missing required fields or invalid category",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
       404: {
         description: "Organization not found",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
       409: {
         description: "Slug conflict or reserved slug",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
   }),
@@ -791,15 +791,15 @@ const patchProductRoute = describeRoute({
     },
     400: {
       description: "Invalid category or bare slug supplied on the bare path",
-      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
     },
     404: {
       description: "Product not found",
-      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
     },
     409: {
       description: "Domain alias collision",
-      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
     },
   },
 });
@@ -830,11 +830,11 @@ productRoutes.get(
       },
       400: {
         description: "Bare slug supplied on `/products/:identifier/tags`",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
       404: {
         description: "Product not found",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
   }),
@@ -869,11 +869,11 @@ productRoutes.put(
       },
       400: {
         description: "Malformed body, or bare slug supplied on `/products/:identifier/tags`",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
       404: {
         description: "Product not found",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
   }),
@@ -918,11 +918,11 @@ productRoutes.delete(
       },
       400: {
         description: "Malformed body, or bare slug supplied on `/products/:identifier/tags`",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
       404: {
         description: "Product not found",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
   }),
@@ -969,11 +969,11 @@ productRoutes.delete(
       },
       400: {
         description: "Bare slug supplied on `/products/:identifier`",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
       404: {
         description: "Product not found",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
   }),
@@ -1033,7 +1033,7 @@ const resolveRoute = describeRoute({
     },
     404: {
       description: "Neither a product nor a source matched",
-      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
     },
   },
 });
@@ -1318,11 +1318,11 @@ const getProductActivityRoute = describeRoute({
     },
     400: {
       description: "Invalid date format or range",
-      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
     },
     404: {
       description: "Product not found",
-      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
     },
   },
 });
@@ -1363,7 +1363,7 @@ const getProductHeatmapRoute = describeRoute({
     },
     404: {
       description: "Product not found",
-      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
     },
   },
 });
@@ -1401,7 +1401,7 @@ const getProductCollectionsRoute = describeRoute({
     },
     404: {
       description: "Product not found",
-      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
     },
   },
 });

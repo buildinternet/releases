@@ -17,7 +17,7 @@ import {
   RegenerateOverviewBodySchema,
   RegenerateOverviewResponseSchema,
   ProductOverviewResponseSchema,
-  ErrorResponseSchema,
+  errorEnvelopeSchema,
 } from "@buildinternet/releases-api-types";
 import type { Env } from "../index.js";
 import { respondError } from "../lib/error-response.js";
@@ -90,11 +90,11 @@ app.post(
       },
       400: {
         description: "Missing required fields, malformed body, or invalid citations",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
       404: {
         description: "Org not found",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
   }),

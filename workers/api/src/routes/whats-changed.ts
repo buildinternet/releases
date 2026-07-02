@@ -27,7 +27,7 @@ import { parseCoordinate } from "@buildinternet/releases-core/lookup-coordinate"
 import { estimateTokens } from "@buildinternet/releases-core/tokens";
 import { CHANGELOG_TOKEN_BRACKETS } from "@buildinternet/releases-core/changelog-slice";
 import { BREAKING_LEVELS } from "@buildinternet/releases-core/breaking";
-import { ErrorResponseSchema } from "@buildinternet/releases-api-types";
+import { errorEnvelopeSchema } from "@buildinternet/releases-api-types";
 import { createDb } from "../db.js";
 import type { Env } from "../index.js";
 import { respondError } from "../lib/error-response.js";
@@ -176,7 +176,7 @@ whatsChangedRoutes.get(
       },
       400: {
         description: "Missing/invalid query parameters",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
   }),

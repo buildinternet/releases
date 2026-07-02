@@ -54,7 +54,7 @@ import {
   SourceChangelogResponseSchema,
   CreateSourceBodySchema,
   SourceContentHashBodySchema,
-  ErrorResponseSchema,
+  errorEnvelopeSchema,
   ReleaseDetailResponseSchema,
   ReleasePatchResponseSchema,
   ReleaseDeleteResponseSchema,
@@ -257,7 +257,7 @@ sourceRoutes.get(
       },
       400: {
         description: "Invalid kind value",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
   }),
@@ -633,11 +633,11 @@ const postSourceFetchRoute = describeRoute({
     },
     400: {
       description: "Invalid `max` parameter",
-      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
     },
     404: {
       description: "Source not found",
-      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
     },
   },
 });
@@ -1221,11 +1221,11 @@ const postReleasesBatchRoute = describeRoute({
     },
     404: {
       description: "Source not found",
-      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
     },
     500: {
       description: "D1 insert failed",
-      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
     },
   },
 });
@@ -1320,11 +1320,11 @@ const postRawSnapshotRoute = describeRoute({
     },
     400: {
       description: "Missing/empty body or unsupported format",
-      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
     },
     404: {
       description: "Source not found",
-      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
     },
   },
 });
@@ -1351,7 +1351,7 @@ const deleteSourceReleasesRoute = describeRoute({
     },
     404: {
       description: "Source not found",
-      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
     },
   },
 });
@@ -1441,11 +1441,11 @@ const postContentHashRoute = describeRoute({
     },
     400: {
       description: "Malformed JSON body or missing/wrong-typed contentHash field",
-      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
     },
     404: {
       description: "Source not found",
-      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
     },
   },
 });
@@ -1552,11 +1552,11 @@ const patchMetadataRoute = describeRoute({
     },
     400: {
       description: "Malformed JSON body or changelogPaths length exceeded",
-      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
     },
     404: {
       description: "Source not found",
-      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
     },
   },
 });
@@ -1622,11 +1622,11 @@ const getRecentReleasesRoute = describeRoute({
     },
     400: {
       description: "Missing or invalid `cutoff` parameter",
-      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
     },
     404: {
       description: "Source not found",
-      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
     },
   },
 });
@@ -1682,7 +1682,7 @@ const getKnownReleasesRoute = describeRoute({
     },
     404: {
       description: "Source not found",
-      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
     },
   },
 });
@@ -1709,7 +1709,7 @@ const getSourceSessionsRoute = describeRoute({
     },
     404: {
       description: "Source not found",
-      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
     },
   },
 });
@@ -1819,11 +1819,11 @@ const getSourceActivityRoute = describeRoute({
     },
     400: {
       description: "Invalid or inconsistent date range",
-      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
     },
     404: {
       description: "Source not found",
-      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
     },
   },
 });
@@ -1865,7 +1865,7 @@ const getSourceHeatmapRoute = describeRoute({
     },
     404: {
       description: "Source not found",
-      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
     },
   },
 });
@@ -1931,7 +1931,7 @@ const getSourceChangelogRoute = describeRoute({
     },
     404: {
       description: "Source or changelog file not found",
-      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
     },
   },
 });
@@ -2069,11 +2069,11 @@ const patchChangelogTokensRoute = describeRoute({
     },
     400: {
       description: "Invalid `tokens` value or wrong-typed `path`",
-      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
     },
     404: {
       description: "Source or changelog file not found",
-      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
     },
   },
 });
@@ -2157,19 +2157,19 @@ const probeChangelogsRoute = describeRoute({
     },
     400: {
       description: "Source type is not github, or URL cannot be parsed",
-      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
     },
     404: {
       description: "Source or GitHub repo not found",
-      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
     },
     502: {
       description: "GitHub auth error or upstream 5xx",
-      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
     },
     503: {
       description: "GitHub rate limit exceeded",
-      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
     },
   },
 });
@@ -2455,7 +2455,7 @@ const getSourceDetailRoute = describeRoute({
     },
     404: {
       description: "Source not found",
-      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
     },
   },
 });
@@ -2525,7 +2525,7 @@ const getSourceReleasesFeedRoute = describeRoute({
     200: { description: "Releases page" },
     404: {
       description: "Source not found",
-      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
     },
   },
 });
@@ -2703,11 +2703,11 @@ sourceRoutes.post(
       },
       400: {
         description: "Missing required fields, unresolved org, or product not in org",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
       409: {
         description: "Slug conflict or reserved slug",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
   }),
@@ -3073,15 +3073,15 @@ const patchSourceRoute = describeRoute({
     },
     400: {
       description: "No updatable fields supplied or unrecognized fields",
-      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
     },
     404: {
       description: "Source not found",
-      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
     },
     409: {
       description: "Slug conflict or reserved slug",
-      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
     },
   },
 });
@@ -3102,11 +3102,11 @@ const deleteSourceRoute = describeRoute({
     },
     400: {
       description: "Bare slug rejected on the bare path (use org-scoped path or typed ID)",
-      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
     },
     404: {
       description: "Source not found",
-      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
     },
   },
 });
@@ -3160,15 +3160,15 @@ const postReleaseRoute = describeRoute({
     },
     400: {
       description: "Bare slug rejected on the bare path (use typed ID)",
-      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
     },
     404: {
       description: "Source not found",
-      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
     },
     500: {
       description: "Insert failed",
-      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
     },
   },
 });
@@ -3353,7 +3353,7 @@ sourceRoutes.delete(
       },
       400: {
         description: "Malformed JSON body or empty `releaseIds`",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
   }),
@@ -3391,7 +3391,7 @@ sourceRoutes.post(
       },
       400: {
         description: "Malformed JSON body or empty `releaseIds`",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
   }),
@@ -3438,7 +3438,7 @@ sourceRoutes.get(
       },
       404: {
         description: "Release not found (or suppressed / coverage-only)",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
   }),
@@ -3548,7 +3548,7 @@ sourceRoutes.delete(
       },
       404: {
         description: "Release not found",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
   }),
@@ -3582,11 +3582,11 @@ sourceRoutes.patch(
       },
       400: {
         description: "Malformed JSON body, unknown / wrong-typed field, or empty update set",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
       404: {
         description: "Release not found",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
   }),
@@ -3743,7 +3743,7 @@ sourceRoutes.post(
       },
       404: {
         description: "Release not found",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
   }),
@@ -3787,7 +3787,7 @@ sourceRoutes.post(
       },
       404: {
         description: "Release not found",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
   }),

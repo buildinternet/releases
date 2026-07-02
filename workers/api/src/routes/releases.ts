@@ -29,7 +29,7 @@ import {
   LinkReleaseCoverageResponseSchema,
   UnlinkReleaseCoverageResponseSchema,
   ReleasesWithMediaResponseSchema,
-  ErrorResponseSchema,
+  errorEnvelopeSchema,
   type ReleaseCoverageSibling,
 } from "@buildinternet/releases-api-types";
 import { validateJson } from "../lib/validate.js";
@@ -68,7 +68,7 @@ releaseRoutes.get(
       },
       400: {
         description: "Unsupported query — only `?hasMedia=true` is accepted",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
   }),
@@ -184,11 +184,11 @@ releaseRoutes.get(
       400: {
         description:
           "Invalid `exclude` value, unparseable `since`/`until`, or `source` and `org` both supplied",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
       404: {
         description: "Source or org not found",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
   }),
@@ -449,11 +449,11 @@ releaseRoutes.post(
       },
       400: {
         description: "Missing/invalid body, self-coverage, or malformed `decidedBy`",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
       404: {
         description: "One or more release IDs not found",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
   }),

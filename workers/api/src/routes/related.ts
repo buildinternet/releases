@@ -34,7 +34,7 @@ import {
 import {
   RelatedReleasesResponseSchema,
   RelatedSourcesResponseSchema,
-  ErrorResponseSchema,
+  errorEnvelopeSchema,
 } from "@buildinternet/releases-api-types";
 import type { RelatedReleaseItem, RelatedSourceItem } from "@buildinternet/releases-api-types";
 import type { Env } from "../index.js";
@@ -128,11 +128,11 @@ relatedRoutes.get(
       },
       400: {
         description: "Missing `release` query parameter.",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
       404: {
         description: "No release matches the supplied id.",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
   }),
@@ -417,11 +417,11 @@ relatedRoutes.get(
       },
       400: {
         description: "Missing `source` query parameter.",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
       404: {
         description: "No source matches the supplied identifier.",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
   }),

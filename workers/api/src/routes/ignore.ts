@@ -14,7 +14,7 @@ import {
   AddIgnoredUrlBodySchema,
   AddIgnoredUrlResponseSchema,
   DeleteIgnoredUrlResponseSchema,
-  ErrorResponseSchema,
+  errorEnvelopeSchema,
 } from "@buildinternet/releases-api-types";
 import { respondError } from "../lib/error-response.js";
 import { NotFoundError, ValidationError } from "@releases/lib/releases-error";
@@ -67,11 +67,11 @@ ignoreRoutes.get(
       },
       400: {
         description: "Malformed `url` query param",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
       404: {
         description: "Organization not found",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
   }),
@@ -132,11 +132,11 @@ ignoreRoutes.post(
       },
       400: {
         description: "Missing required field: url",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
       404: {
         description: "Organization not found",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
   }),
@@ -179,11 +179,11 @@ ignoreRoutes.delete(
       },
       400: {
         description: "Malformed `:url` path segment",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
       404: {
         description: "Organization not found",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
   }),

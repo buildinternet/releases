@@ -19,7 +19,7 @@ import {
   PlaybookResponseSchema,
   UpdatePlaybookNotesBodySchema,
   UpdatePlaybookNotesResponseSchema,
-  ErrorResponseSchema,
+  errorEnvelopeSchema,
 } from "@buildinternet/releases-api-types";
 import type { Env } from "../index.js";
 
@@ -80,11 +80,11 @@ app.patch(
       },
       400: {
         description: "Missing or invalid `notes` field, or malformed JSON body",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
       404: {
         description: "Org not found",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
   }),

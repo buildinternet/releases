@@ -48,7 +48,7 @@ import {
   UpdateCategoryResponseSchema,
   CategoryReleasesResponseSchema,
   TagDetailSchema,
-  ErrorResponseSchema,
+  errorEnvelopeSchema,
 } from "@buildinternet/releases-api-types";
 import { validateJson } from "../lib/validate.js";
 
@@ -297,7 +297,7 @@ taxonomyRoutes.get(
       },
       404: {
         description: "Slug is neither canonical nor a known alias",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
   }),
@@ -381,15 +381,15 @@ taxonomyRoutes.patch(
       },
       400: {
         description: "Empty body, malformed alias, or alias collides with a canonical slug",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
       404: {
         description: "Slug is not a canonical category",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
       409: {
         description: "Alias is already claimed by a different category row",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
   }),
@@ -573,7 +573,7 @@ taxonomyRoutes.get(
       },
       404: {
         description: "Slug is neither canonical nor a known alias",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
   }),
@@ -658,7 +658,7 @@ taxonomyRoutes.get(
       },
       404: {
         description: "Tag not found",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
   }),

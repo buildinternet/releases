@@ -47,7 +47,7 @@ import {
   AddCollectionMemberResponseSchema,
   ReplaceCollectionMembersRequestSchema,
   ReplaceCollectionMembersResponseSchema,
-  ErrorResponseSchema,
+  errorEnvelopeSchema,
 } from "@buildinternet/releases-api-types";
 import type {
   CollectionDetail,
@@ -646,7 +646,7 @@ collectionRoutes.get(
       },
       404: {
         description: "No collection with that slug.",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
   }),
@@ -782,7 +782,7 @@ collectionRoutes.get(
       },
       404: {
         description: "No collection with that slug.",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
   }),
@@ -920,11 +920,11 @@ collectionRoutes.get(
       },
       400: {
         description: "Malformed `from`/`to` date (must be YYYY-MM-DD).",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
       404: {
         description: "No collection with that slug.",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
   }),
@@ -973,11 +973,11 @@ collectionRoutes.post(
       },
       400: {
         description: "Missing/invalid name, slug, or description.",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
       409: {
         description: "A collection with that slug already exists.",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
   }),
@@ -1074,15 +1074,15 @@ collectionRoutes.patch(
       },
       400: {
         description: "Invalid name, slug, or description.",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
       404: {
         description: "No collection with that slug.",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
       409: {
         description: "Slug rename collides with another collection.",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
   }),
@@ -1188,7 +1188,7 @@ collectionRoutes.delete(
       204: { description: "Collection deleted." },
       404: {
         description: "No collection with that slug.",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
   }),
@@ -1234,11 +1234,11 @@ collectionRoutes.put(
       },
       400: {
         description: "Missing `orgs` array, entry without a usable ref, or duplicate in the list.",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
       404: {
         description: "Collection not found, or one of the members didn't resolve.",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
   }),
@@ -1313,15 +1313,15 @@ collectionRoutes.post(
       },
       400: {
         description: "Member entry missing a usable ref, or productSlug without an org context.",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
       404: {
         description: "Collection not found, or the referenced org/product doesn't exist.",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
       409: {
         description: "Member is already in the collection.",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
   }),
@@ -1406,7 +1406,7 @@ collectionRoutes.delete(
       204: { description: "Membership removed." },
       404: {
         description: "Collection not found, org not found, or org isn't a member.",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
   }),
@@ -1479,11 +1479,11 @@ collectionRoutes.delete(
       204: { description: "Membership removed." },
       400: {
         description: "Product ref is not a typed `prod_…` id.",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
       404: {
         description: "Collection not found, product not found, or product isn't a member.",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
   }),

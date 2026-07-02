@@ -6,7 +6,7 @@ import {
   foldSourcesIntoCatalog,
   mergeCollectionHits,
   UnifiedSearchResponseSchema,
-  ErrorResponseSchema,
+  errorEnvelopeSchema,
 } from "@buildinternet/releases-api-types";
 import type { Env } from "../index.js";
 import type {
@@ -374,7 +374,7 @@ searchRoutes.get(
       400: {
         description:
           "Missing `q`, invalid `domain` hostname, unknown `kind` value, or unparseable `since`/`until`",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
   }),
