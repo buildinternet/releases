@@ -1,5 +1,7 @@
 import type { Hono } from "hono";
 import { getReleaseHub } from "../utils.js";
+import { respondError } from "../lib/error-response.js";
+import { ValidationError } from "@releases/lib/releases-error";
 
 export function mountWebhooksReplay(
   app: Hono<any, any, any>,
@@ -10,7 +12,10 @@ export function mountWebhooksReplay(
     const limitRaw = c.req.query("limit");
     const sinceParsed = sinceRaw === undefined ? 0 : parseInt(sinceRaw, 10);
     if (!Number.isFinite(sinceParsed) || sinceParsed < 0) {
-      return c.json({ error: "since must be a non-negative integer" }, 400);
+      return respondError(
+        c,
+        new ValidationError("since must be a non-negative integer", { code: "bad_request" }),
+      );
     }
     const env = getEnv(c);
     const u = new URL("https://do/replay");

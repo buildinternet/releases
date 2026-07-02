@@ -231,7 +231,7 @@ describe("GET /v1/orgs/:orgSlug/products/:productSlug/activity", () => {
       new Request("https://x.test/v1/orgs/acme/products/widget/activity?from=notadate"),
     );
     expect(res.status).toBe(400);
-    expect(((await res.json()) as { error: string }).error).toBe("bad_request");
+    expect(((await res.json()) as { error: { code: string } }).error.code).toBe("bad_request");
   });
 
   it("returns 400 for invalid 'to' date format", async () => {
@@ -256,7 +256,7 @@ describe("GET /v1/orgs/:orgSlug/products/:productSlug/activity", () => {
       ),
     );
     expect(res.status).toBe(400);
-    expect(((await res.json()) as { error: string }).error).toBe("bad_request");
+    expect(((await res.json()) as { error: { code: string } }).error.code).toBe("bad_request");
   });
 
   it("infers default date range from release data when no params given", async () => {

@@ -16,6 +16,8 @@ import { ROLE_LADDER } from "../auth/entitlement.js";
 import { user } from "../db/schema-auth.js";
 import { createDb } from "../db.js";
 import type { Env } from "../index.js";
+import { respondError } from "../lib/error-response.js";
+import { NotFoundError, ValidationError } from "@releases/lib/releases-error";
 
 export const adminUsersRoutes = new Hono<Env>();
 
@@ -36,12 +38,17 @@ function identifierWhere(email: string | undefined, userId: string | undefined):
 adminUsersRoutes.get("/admin/users/role", async (c) => {
   const db = getDb(c);
   const where = identifierWhere(c.req.query("email"), c.req.query("userId"));
-  if (!where) return c.json({ error: "exactly one of email or userId required" }, 400);
+  if (!where) {
+    return respondError(
+      c,
+      new ValidationError("exactly one of email or userId required", { code: "bad_request" }),
+    );
+  }
   const [row] = await db
     .select({ id: user.id, email: user.email, role: user.role })
     .from(user)
     .where(where);
-  if (!row) return c.json({ error: "user_not_found" }, 404);
+  if (!row) return respondError(c, new NotFoundError(undefined, { code: "user_not_found" }));
   return c.json({ userId: row.id, email: row.email, role: row.role });
 });
 
@@ -60,12 +67,12 @@ adminUsersRoutes.patch("/admin/users/role", async (c) => {
   try {
     raw = await c.req.json();
   } catch {
-    return c.json({ error: "invalid_json" }, 400);
+    return respondError(c, new ValidationError(undefined, { code: "invalid_json" }));
   }
   // Fail closed on a non-object payload (e.g. a literal JSON `null`, which would
   // otherwise throw on property access below and 500 instead of a clean 400).
   if (typeof raw !== "object" || raw === null) {
-    return c.json({ error: "invalid_json" }, 400);
+    return respondError(c, new ValidationError(undefined, { code: "invalid_json" }));
   }
   const body = raw as { email?: unknown; userId?: unknown; role?: unknown };
   const email = typeof body.email === "string" ? body.email : undefined;
@@ -73,16 +80,27 @@ adminUsersRoutes.patch("/admin/users/role", async (c) => {
   const role = typeof body.role === "string" ? body.role : undefined;
 
   const where = identifierWhere(email, userId);
-  if (!where) return c.json({ error: "exactly one of email or userId required" }, 400);
+  if (!where) {
+    return respondError(
+      c,
+      new ValidationError("exactly one of email or userId required", { code: "bad_request" }),
+    );
+  }
   if (!role || !VALID_ROLES.has(role)) {
-    return c.json({ error: "invalid_role", allowed: [...VALID_ROLES] }, 400);
+    return respondError(
+      c,
+      new ValidationError(undefined, {
+        code: "bad_request",
+        details: { allowed: [...VALID_ROLES] },
+      }),
+    );
   }
 
   const [existing] = await db
     .select({ id: user.id, email: user.email, role: user.role })
     .from(user)
     .where(where);
-  if (!existing) return c.json({ error: "user_not_found" }, 404);
+  if (!existing) return respondError(c, new NotFoundError(undefined, { code: "user_not_found" }));
 
   await db.update(user).set({ role, updatedAt: new Date() }).where(eq(user.id, existing.id));
 

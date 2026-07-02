@@ -8,7 +8,7 @@ import {
   UpdateOrgBodySchema,
   SetOrgAvatarBodySchema,
   SetOrgAvatarResponseSchema,
-  ErrorResponseSchema,
+  errorEnvelopeSchema,
   OrgAccountsResponseSchema,
   OrgAccountItemSchema,
   AddOrgAccountBodySchema,
@@ -97,6 +97,8 @@ import { logEvent } from "@releases/lib/log-event";
 import { dbErrorLogFields } from "@releases/lib/db-errors";
 import { buildListResponse, parseListPagination } from "../lib/pagination.js";
 import { invalidateLatestCache } from "../lib/latest-cache.js";
+import { respondError } from "../lib/error-response.js";
+import { NotFoundError, ValidationError, ConflictError } from "@releases/lib/releases-error";
 
 export const orgRoutes = new Hono<Env>();
 
@@ -255,7 +257,7 @@ orgRoutes.get(
       },
       404: {
         description: "Organization not found",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
   }),
@@ -272,7 +274,7 @@ orgRoutes.get(
         .where(eq(domainAliases.domain, slug));
       if (alias) org = alias.org;
     }
-    if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
+    if (!org) return respondError(c, new NotFoundError("Organization not found"));
 
     const cutoff = daysAgoIso(30);
     const cutoff90d = daysAgoIso(90);
@@ -500,11 +502,11 @@ orgRoutes.post(
       201: { description: "Organization created" },
       400: {
         description: "Invalid request body or category",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
       409: {
         description: "Slug conflict or reserved slug",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
   }),
@@ -526,9 +528,9 @@ orgRoutes.post(
     if (body.category) {
       const resolved = await resolveCategoryInput(db, body.category);
       if (!resolved.ok) {
-        return c.json(
-          { error: "bad_request", message: `Invalid category: "${body.category}"` },
-          400,
+        return respondError(
+          c,
+          new ValidationError(`Invalid category: "${body.category}"`, { code: "bad_request" }),
         );
       }
       body.category = resolved.slug;
@@ -536,13 +538,12 @@ orgRoutes.post(
 
     const slug = body.slug ?? toSlug(body.name);
     if (isReservedSlug(slug, "root")) {
-      return c.json(
-        {
-          error: "slug_reserved",
-          message: `Slug "${slug}" is reserved and cannot be used for an organization. Choose a different slug (e.g. by passing an explicit "slug" field) or rename the organization.`,
-          slug,
-        },
-        409,
+      return respondError(
+        c,
+        new ConflictError(
+          `Slug "${slug}" is reserved and cannot be used for an organization. Choose a different slug (e.g. by passing an explicit "slug" field) or rename the organization.`,
+          { code: "slug_reserved", details: { slug } },
+        ),
       );
     }
     const now = new Date().toISOString();
@@ -585,9 +586,11 @@ orgRoutes.post(
       return c.json(org, 201);
     } catch (err) {
       if (isConflictError(err)) {
-        return c.json(
-          { error: "conflict", message: `Organization with slug "${slug}" already exists` },
-          409,
+        return respondError(
+          c,
+          new ConflictError(`Organization with slug "${slug}" already exists`, {
+            code: "conflict",
+          }),
         );
       }
       throw err;
@@ -611,15 +614,15 @@ orgRoutes.post(
       },
       400: {
         description: "Invalid sourceUrl",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
       404: {
         description: "Organization not found",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
       422: {
         description: "Image is not a usable square raster",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
   }),
@@ -630,7 +633,7 @@ orgRoutes.post(
     const { sourceUrl } = c.req.valid("json") as { sourceUrl: string };
 
     const [org] = await db.select().from(organizations).where(orgWhere(slug));
-    if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
+    if (!org) return respondError(c, new NotFoundError("Organization not found"));
 
     const result = await ingestOrgAvatar({
       sourceUrl,
@@ -670,7 +673,7 @@ orgRoutes.post(
       },
       404: {
         description: "Organization not found",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
   }),
@@ -680,7 +683,7 @@ orgRoutes.post(
     const dryRun = c.req.query("dryRun") === "1" || c.req.query("dryRun") === "true";
 
     const [org] = await db.select().from(organizations).where(orgWhere(slug));
-    if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
+    if (!org) return respondError(c, new NotFoundError("Organization not found"));
 
     const result = await syncOrgWellKnown(db, org.id, {
       bucket: c.env.MEDIA,
@@ -705,15 +708,15 @@ orgRoutes.patch(
       200: { description: "Organization updated" },
       400: {
         description: "Invalid category",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
       404: {
         description: "Organization not found",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
       409: {
         description: "Reserved slug or alias conflict",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
   }),
@@ -741,25 +744,27 @@ orgRoutes.patch(
     if (body.category !== undefined && body.category !== null) {
       const resolved = await resolveCategoryInput(db, body.category);
       if (!resolved.ok) {
-        return c.json(
-          { error: "bad_request", message: `Invalid category: "${body.category}"` },
-          400,
+        return respondError(
+          c,
+          new ValidationError(`Invalid category: "${body.category}"`, { code: "bad_request" }),
         );
       }
       body.category = resolved.slug;
     }
 
     const [org] = await db.select().from(organizations).where(orgWhere(slug));
-    if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
+    if (!org) return respondError(c, new NotFoundError("Organization not found"));
 
     if (body.slug && isReservedSlug(body.slug, "root")) {
-      return c.json(
-        {
-          error: "slug_reserved",
-          message: `Slug "${body.slug}" is reserved and cannot be used for an organization.`,
-          slug: body.slug,
-        },
-        409,
+      return respondError(
+        c,
+        new ConflictError(
+          `Slug "${body.slug}" is reserved and cannot be used for an organization.`,
+          {
+            code: "slug_reserved",
+            details: { slug: body.slug },
+          },
+        ),
       );
     }
 
@@ -769,12 +774,14 @@ orgRoutes.patch(
     if (body.aliases !== undefined) {
       const { conflict } = await replaceAliases(db, { orgId: org.id, aliases: body.aliases });
       if (conflict)
-        return c.json(
-          {
-            error: "conflict",
-            message: `Domain alias "${conflict}" already claimed by another org or product`,
-          },
-          409,
+        return respondError(
+          c,
+          new ConflictError(
+            `Domain alias "${conflict}" already claimed by another org or product`,
+            {
+              code: "conflict",
+            },
+          ),
         );
     }
 
@@ -883,7 +890,7 @@ orgRoutes.delete(
       200: { description: "Tombstoned or hard-deleted" },
       404: {
         description: "Organization not found",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
   }),
@@ -898,19 +905,18 @@ orgRoutes.delete(
     // destructive path is too easy to misfire. ID-only matches the OpenAPI
     // contract and the original tombstone-purge use case.
     if (hard && !isOrgId) {
-      return c.json(
-        {
-          error: "bad_request",
-          message:
-            "Hard delete requires an org_ ID; slug is not accepted on this destructive path.",
-        },
-        400,
+      return respondError(
+        c,
+        new ValidationError(
+          "Hard delete requires an org_ ID; slug is not accepted on this destructive path.",
+          { code: "bad_request" },
+        ),
       );
     }
 
     const includeDeleted = hard && isOrgId;
     const [org] = await db.select().from(organizations).where(orgWhere(slug, { includeDeleted }));
-    if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
+    if (!org) return respondError(c, new NotFoundError("Organization not found"));
 
     if (hard) {
       await db.delete(organizations).where(eq(organizations.id, org.id));
@@ -989,11 +995,11 @@ orgRoutes.get(
       },
       400: {
         description: "Unknown entryType or kind value",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
       404: {
         description: "Organization not found",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
   }),
@@ -1002,28 +1008,26 @@ orgRoutes.get(
     const slug = c.req.param("slug");
     const entryTypeParam = c.req.query("entryType");
     if (entryTypeParam !== undefined && !CATALOG_ENTRY_TYPES.has(entryTypeParam)) {
-      return c.json(
-        {
-          error: "bad_request",
-          message: `Unknown entryType '${entryTypeParam}'. Expected source or product.`,
-        },
-        400,
+      return respondError(
+        c,
+        new ValidationError(`Unknown entryType '${entryTypeParam}'. Expected source or product.`, {
+          code: "bad_request",
+        }),
       );
     }
     const entityKind = parseKindParam(c.req.query("kind"));
     if (entityKind === null)
-      return c.json(
-        {
-          error: "bad_request",
-          message: `Invalid kind. Expected one of: ${KIND_VALUES.join(", ")}`,
-        },
-        400,
+      return respondError(
+        c,
+        new ValidationError(`Invalid kind. Expected one of: ${KIND_VALUES.join(", ")}`, {
+          code: "bad_request",
+        }),
       );
     const limitRaw = parseInt(c.req.query("limit") ?? "100", 10);
     const limit = Math.min(Math.max(Number.isFinite(limitRaw) ? limitRaw : 100, 1), 500);
 
     const [org] = await db.select().from(organizations).where(orgWhere(slug));
-    if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
+    if (!org) return respondError(c, new NotFoundError("Organization not found"));
 
     const wantSources = !entryTypeParam || entryTypeParam === "source";
     const wantProducts = !entryTypeParam || entryTypeParam === "product";
@@ -1119,7 +1123,7 @@ orgRoutes.get(
       },
       404: {
         description: "Organization not found",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
   }),
@@ -1131,7 +1135,7 @@ orgRoutes.get(
       .select({ id: organizations.id })
       .from(organizations)
       .where(orgWhere(slug));
-    if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
+    if (!org) return respondError(c, new NotFoundError("Organization not found"));
 
     // Surface a collection when the org itself is pinned OR any of the org's
     // visible products is pinned; the IN-subquery dedupes a collection that
@@ -1173,7 +1177,7 @@ orgRoutes.get(
       },
       404: {
         description: "Organization not found",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
   }),
@@ -1183,7 +1187,7 @@ orgRoutes.get(
     const platform = c.req.query("platform");
 
     const [org] = await db.select().from(organizations).where(orgWhere(slug));
-    if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
+    if (!org) return respondError(c, new NotFoundError("Organization not found"));
 
     if (platform) {
       // An org can hold multiple accounts for one platform (`org_accounts` is
@@ -1234,11 +1238,11 @@ orgRoutes.delete(
       },
       400: {
         description: "Malformed `:handle` path segment",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
       404: {
         description: "Organization or account not found",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
   }),
@@ -1250,14 +1254,16 @@ orgRoutes.delete(
     try {
       handle = decodeURIComponent(c.req.param("handle"));
     } catch {
-      return c.json(
-        { error: "bad_request", message: "Malformed URL-encoded `:handle` path segment" },
-        400,
+      return respondError(
+        c,
+        new ValidationError("Malformed URL-encoded `:handle` path segment", {
+          code: "bad_request",
+        }),
       );
     }
 
     const [org] = await db.select().from(organizations).where(orgWhere(slug));
-    if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
+    if (!org) return respondError(c, new NotFoundError("Organization not found"));
 
     const deleted = await db
       .delete(orgAccounts)
@@ -1271,7 +1277,7 @@ orgRoutes.delete(
       .returning();
 
     if (deleted.length === 0) {
-      return c.json({ error: "not_found", message: "Account not found" }, 404);
+      return respondError(c, new NotFoundError("Account not found"));
     }
 
     await db
@@ -1297,7 +1303,7 @@ orgRoutes.get(
       },
       404: {
         description: "Organization not found",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
   }),
@@ -1305,7 +1311,7 @@ orgRoutes.get(
     const db = createDb(c.env.DB);
     const slug = c.req.param("slug");
     const [org] = await db.select().from(organizations).where(orgWhere(slug));
-    if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
+    if (!org) return respondError(c, new NotFoundError("Organization not found"));
 
     const pagination = parseListPagination(new URL(c.req.url).searchParams);
     const [rows, totalRow] = await Promise.all([
@@ -1349,11 +1355,11 @@ orgRoutes.put(
       },
       400: {
         description: "Invalid or malformed request body",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
       404: {
         description: "Organization not found",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
   }),
@@ -1363,7 +1369,7 @@ orgRoutes.put(
     const slug = c.req.param("slug");
     const { tags: tagNames } = c.req.valid("json");
     const [org] = await db.select().from(organizations).where(orgWhere(slug));
-    if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
+    if (!org) return respondError(c, new NotFoundError("Organization not found"));
 
     if (tagNames.length > 0) {
       const tagRows = await getOrCreateTagsD1(db, tagNames);
@@ -1399,11 +1405,11 @@ orgRoutes.delete(
       },
       400: {
         description: "Invalid or malformed request body",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
       404: {
         description: "Organization not found",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
   }),
@@ -1413,7 +1419,7 @@ orgRoutes.delete(
     const slug = c.req.param("slug");
     const { tags: tagNames } = c.req.valid("json");
     const [org] = await db.select().from(organizations).where(orgWhere(slug));
-    if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
+    if (!org) return respondError(c, new NotFoundError("Organization not found"));
 
     const slugs = Array.from(new Set(tagNames.map((t) => toSlug(t))));
     if (slugs.length === 0) return c.json({ ok: true });
@@ -1452,7 +1458,7 @@ orgRoutes.post(
       },
       400: {
         description: "Missing required field: name",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
   }),
@@ -1504,11 +1510,11 @@ orgRoutes.get(
       },
       400: {
         description: "Invalid date format or range",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
       404: {
         description: "Organization not found",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
   }),
@@ -1517,7 +1523,7 @@ orgRoutes.get(
     const slug = c.req.param("slug");
 
     const [org] = await db.select().from(organizations).where(orgWhere(slug));
-    if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
+    if (!org) return respondError(c, new NotFoundError("Organization not found"));
 
     // Validate date params
     const dateRe = /^\d{4}-\d{2}-\d{2}$/;
@@ -1525,19 +1531,26 @@ orgRoutes.get(
     const toParam = c.req.query("to");
 
     if (fromParam && !dateRe.test(fromParam)) {
-      return c.json(
-        { error: "bad_request", message: "Invalid date format for 'from'. Use YYYY-MM-DD." },
-        400,
+      return respondError(
+        c,
+        new ValidationError("Invalid date format for 'from'. Use YYYY-MM-DD.", {
+          code: "bad_request",
+        }),
       );
     }
     if (toParam && !dateRe.test(toParam)) {
-      return c.json(
-        { error: "bad_request", message: "Invalid date format for 'to'. Use YYYY-MM-DD." },
-        400,
+      return respondError(
+        c,
+        new ValidationError("Invalid date format for 'to'. Use YYYY-MM-DD.", {
+          code: "bad_request",
+        }),
       );
     }
     if (fromParam && toParam && fromParam > toParam) {
-      return c.json({ error: "bad_request", message: "'from' must be before 'to'." }, 400);
+      return respondError(
+        c,
+        new ValidationError("'from' must be before 'to'.", { code: "bad_request" }),
+      );
     }
 
     // Fetch all sources for this org
@@ -1680,7 +1693,7 @@ orgRoutes.get(
       },
       404: {
         description: "Organization not found",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
   }),
@@ -1689,7 +1702,7 @@ orgRoutes.get(
     const slug = c.req.param("slug");
 
     const [org] = await db.select().from(organizations).where(orgWhere(slug));
-    if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
+    if (!org) return respondError(c, new NotFoundError("Organization not found"));
 
     const { from, to, toExclusive } = heatmapDateRange();
     const { rows, total } = await getOrgHeatmapData(db, org.id, from, toExclusive);
@@ -1719,7 +1732,7 @@ orgRoutes.get(
       },
       404: {
         description: "Organization not found",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
   }),
@@ -1736,7 +1749,7 @@ orgRoutes.get(
         .where(eq(domainAliases.domain, slug));
       if (alias) org = alias.org;
     }
-    if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
+    if (!org) return respondError(c, new NotFoundError("Organization not found"));
 
     const cutoff30d = daysAgoIso(30);
     const today = new Date(new Date().toISOString().slice(0, 10) + "T00:00:00Z");
@@ -1930,11 +1943,11 @@ orgRoutes.get(
       },
       400: {
         description: "Invalid `kind` value or unparseable `since`/`until`",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
       404: {
         description: "Organization not found",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
   }),
@@ -1950,16 +1963,16 @@ orgRoutes.get(
 
     const kind = parseKindParam(c.req.query("kind"));
     if (kind === null)
-      return c.json(
-        {
-          error: "bad_request",
-          message: `Invalid kind. Expected one of: ${KIND_VALUES.join(", ")}`,
-        },
-        400,
+      return respondError(
+        c,
+        new ValidationError(`Invalid kind. Expected one of: ${KIND_VALUES.join(", ")}`, {
+          code: "bad_request",
+        }),
       );
 
     const window = parseTimeWindow(c.req.query("since"), c.req.query("until"));
-    if (!window.ok) return c.json({ error: "bad_request", message: window.message }, 400);
+    if (!window.ok)
+      return respondError(c, new ValidationError(window.message, { code: "bad_request" }));
 
     const db = createDb(c.env.DB);
 
@@ -1970,13 +1983,13 @@ orgRoutes.get(
       .where(orgWhere(slug))
       .get();
 
-    if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
+    if (!org) return respondError(c, new NotFoundError("Organization not found"));
 
     const productParam = c.req.query("product");
     let productId: string | undefined;
     if (productParam) {
       const product = await findProductForOrgSlug(db, slug, productParam);
-      if (!product) return c.json({ error: "not_found", message: "Product not found" }, 404);
+      if (!product) return respondError(c, new NotFoundError("Product not found"));
       productId = product.id;
     }
 
@@ -2095,11 +2108,11 @@ orgRoutes.get(
       },
       400: {
         description: "Missing required `since` parameter",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
       404: {
         description: "Organization not found",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
   }),
@@ -2111,9 +2124,11 @@ orgRoutes.get(
     const limit = isNaN(limitParam) || limitParam < 1 ? 500 : Math.min(limitParam, 2000);
 
     if (!since) {
-      return c.json(
-        { error: "bad_request", message: "Missing required query param: since (ISO date)" },
-        400,
+      return respondError(
+        c,
+        new ValidationError("Missing required query param: since (ISO date)", {
+          code: "bad_request",
+        }),
       );
     }
     // Validate AND normalize ISO format — `since` is bound directly into a
@@ -2123,12 +2138,11 @@ orgRoutes.get(
     // so the SQL comparison is always against a well-formed UTC timestamp.
     const sinceDate = new Date(since);
     if (Number.isNaN(sinceDate.getTime())) {
-      return c.json(
-        {
-          error: "bad_request",
-          message: "Invalid `since` query param — must be an ISO date or datetime",
-        },
-        400,
+      return respondError(
+        c,
+        new ValidationError("Invalid `since` query param — must be an ISO date or datetime", {
+          code: "bad_request",
+        }),
       );
     }
     const sinceIso = sinceDate.toISOString();
@@ -2137,7 +2151,7 @@ orgRoutes.get(
       .select({ id: organizations.id })
       .from(organizations)
       .where(orgWhere(slug));
-    if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
+    if (!org) return respondError(c, new NotFoundError("Organization not found"));
 
     const rows = await db
       .select({
@@ -2188,15 +2202,15 @@ orgRoutes.post(
       },
       400: {
         description: "Missing required fields",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
       404: {
         description: "Organization not found",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
       409: {
         description: "Account already exists for this platform/handle",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
   }),
@@ -2207,7 +2221,7 @@ orgRoutes.post(
     const body = c.req.valid("json");
 
     const [org] = await db.select().from(organizations).where(orgWhere(slug));
-    if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
+    if (!org) return respondError(c, new NotFoundError("Organization not found"));
 
     try {
       const [account] = await db
@@ -2222,9 +2236,11 @@ orgRoutes.post(
       return c.json(account, 201);
     } catch (err) {
       if (isConflictError(err)) {
-        return c.json(
-          { error: "conflict", message: `Account ${body.platform}/${body.handle} already exists` },
-          409,
+        return respondError(
+          c,
+          new ConflictError(`Account ${body.platform}/${body.handle} already exists`, {
+            code: "conflict",
+          }),
         );
       }
       throw err;

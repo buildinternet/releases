@@ -14,8 +14,10 @@ import { createDb } from "../db.js";
 import { batchRuns } from "@buildinternet/releases-core/schema";
 import { buildListResponse, parseListPagination } from "../lib/pagination.js";
 import { logEvent } from "@releases/lib/log-event";
-import { classifyDbError } from "@releases/lib/db-errors";
+import { classifyDbError, dbErrorToWireCode } from "@releases/lib/db-errors";
 import type { Env } from "../index.js";
+import { respondError } from "../lib/error-response.js";
+import { ValidationError, NotFoundError, InternalError } from "@releases/lib/releases-error";
 
 export const adminBatchRunsRoutes = new Hono<Env>();
 
@@ -64,7 +66,7 @@ adminBatchRunsRoutes.get("/admin/batch-runs/:id", async (c) => {
   const id = c.req.param("id");
 
   const [row] = await db.select().from(batchRuns).where(eq(batchRuns.id, id));
-  if (!row) return c.json({ error: "not_found" }, 404);
+  if (!row) return respondError(c, new NotFoundError());
 
   // Deserialize JSON columns for richer downstream rendering.
   const errorSummary = row.errorSummary ? JSON.parse(row.errorSummary) : null;
@@ -84,7 +86,7 @@ adminBatchRunsRoutes.post("/admin/batch-runs", async (c) => {
   try {
     body = await c.req.json();
   } catch {
-    return c.json({ error: "invalid_json" }, 400);
+    return respondError(c, new ValidationError(undefined, { code: "invalid_json" }));
   }
 
   const anthropicBatchId = typeof body.anthropicBatchId === "string" ? body.anthropicBatchId : null;
@@ -103,7 +105,7 @@ adminBatchRunsRoutes.post("/admin/batch-runs", async (c) => {
       : null;
 
   if (!anthropicBatchId || !caller || !model || requestCountTotal === null) {
-    return c.json({ error: "missing_required_fields" }, 400);
+    return respondError(c, new ValidationError(undefined, { code: "bad_request" }));
   }
 
   const estCostUsdRaw = body.estCostUsd;
@@ -112,7 +114,7 @@ adminBatchRunsRoutes.post("/admin/batch-runs", async (c) => {
     estCostUsdRaw !== null &&
     !(typeof estCostUsdRaw === "number" && Number.isFinite(estCostUsdRaw) && estCostUsdRaw >= 0)
   ) {
-    return c.json({ error: "bad_request" }, 400);
+    return respondError(c, new ValidationError(undefined, { code: "bad_request" }));
   }
   const estCostUsd =
     typeof estCostUsdRaw === "number" && Number.isFinite(estCostUsdRaw) ? estCostUsdRaw : null;
@@ -152,9 +154,14 @@ adminBatchRunsRoutes.post("/admin/batch-runs", async (c) => {
           }
         : {}),
     });
-    return c.json(
-      { error: "insert_failed", ...(classified ? { errorCode: classified.code } : {}) },
-      500,
+    return respondError(
+      c,
+      new InternalError(undefined, {
+        code: classified ? dbErrorToWireCode(classified.code) : "internal_error",
+        details: classified
+          ? { dbCode: classified.code, transient: classified.transient }
+          : undefined,
+      }),
     );
   }
 });
@@ -171,7 +178,7 @@ adminBatchRunsRoutes.patch("/admin/batch-runs/:id", async (c) => {
   try {
     body = await c.req.json();
   } catch {
-    return c.json({ error: "invalid_json" }, 400);
+    return respondError(c, new ValidationError(undefined, { code: "invalid_json" }));
   }
 
   // Build the partial update from provided fields.
@@ -193,7 +200,7 @@ adminBatchRunsRoutes.patch("/admin/batch-runs/:id", async (c) => {
     const v = body[bodyKey];
     if (v !== undefined) {
       if (!(typeof v === "number" && Number.isFinite(v) && v >= 0)) {
-        return c.json({ error: "bad_request" }, 400);
+        return respondError(c, new ValidationError(undefined, { code: "bad_request" }));
       }
       patch[patchKey] = v;
     }
@@ -211,7 +218,7 @@ adminBatchRunsRoutes.patch("/admin/batch-runs/:id", async (c) => {
     ) {
       patch.actualCostUsd = body.actualCostUsd;
     } else {
-      return c.json({ error: "bad_request" }, 400);
+      return respondError(c, new ValidationError(undefined, { code: "bad_request" }));
     }
   }
 
@@ -223,13 +230,13 @@ adminBatchRunsRoutes.patch("/admin/batch-runs/:id", async (c) => {
   }
 
   if (Object.keys(patch).length === 0) {
-    return c.json({ error: "no_fields_to_update" }, 400);
+    return respondError(c, new ValidationError(undefined, { code: "bad_request" }));
   }
 
   const db = createDb(c.env.DB);
   try {
     const result = await db.update(batchRuns).set(patch).where(eq(batchRuns.id, id));
-    if (result.meta.changes === 0) return c.json({ error: "not_found" }, 404);
+    if (result.meta.changes === 0) return respondError(c, new NotFoundError());
     return c.json({ ok: true });
   } catch (err) {
     const classified = classifyDbError(err);
@@ -246,9 +253,14 @@ adminBatchRunsRoutes.patch("/admin/batch-runs/:id", async (c) => {
           }
         : {}),
     });
-    return c.json(
-      { error: "update_failed", ...(classified ? { errorCode: classified.code } : {}) },
-      500,
+    return respondError(
+      c,
+      new InternalError(undefined, {
+        code: classified ? dbErrorToWireCode(classified.code) : "internal_error",
+        details: classified
+          ? { dbCode: classified.code, transient: classified.transient }
+          : undefined,
+      }),
     );
   }
 });

@@ -55,10 +55,12 @@ describe("parseJsonBody — workflow JSON body boundary", () => {
       }),
     );
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
+    const body = (await res.json()) as {
+      error: { code: string; type: string; message: string };
+    };
     // The route's own required-field check fires — NOT "bad_request" from JSON parse
     // (both happen to be 400 bad_request, but the message is distinct)
-    expect(body.error).toBe("bad_request");
+    expect(body.error.code).toBe("bad_request");
   });
 
   it("absent body: treated as {} (no JSON parse error — route's own validation fires)", async () => {
@@ -72,10 +74,12 @@ describe("parseJsonBody — workflow JSON body boundary", () => {
     );
     // Must NOT be a JSON-parse 400 — route's own validation should fire instead
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string; message: string };
-    expect(body.error).toBe("bad_request");
+    const body = (await res.json()) as {
+      error: { code: string; type: string; message: string };
+    };
+    expect(body.error.code).toBe("bad_request");
     // The message comes from the route's own validation, not from parseJsonBody
-    expect(body.message).not.toBe("invalid JSON body");
+    expect(body.error.message).not.toBe("invalid JSON body");
   });
 
   it("malformed JSON body: returns 400 invalid_json with 'invalid JSON body'", async () => {

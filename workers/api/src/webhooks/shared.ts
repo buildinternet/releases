@@ -1,6 +1,8 @@
 import { deriveSigningKey } from "@releases/core-internal/webhook-sign";
 import { getSecret } from "@releases/lib/secrets";
 import type { Context } from "hono";
+import { respondError } from "../lib/error-response.js";
+import { ServiceUnavailableError } from "@releases/lib/releases-error";
 import type { Env } from "../index.js";
 import type { WebhookSubscriptionUpdates } from "./queries.js";
 import { WEBHOOK_FORMATS, type WebhookFormat } from "@buildinternet/releases-core/schema";
@@ -17,10 +19,7 @@ export { validateWebhookUrl };
 export async function requireMasterKey(c: Context<Env>): Promise<string | Response> {
   const masterKey = (await getSecret(c.env.WEBHOOK_HMAC_MASTER)) ?? undefined;
   if (!masterKey) {
-    return c.json(
-      { error: "webhook_unavailable", message: "WEBHOOK_HMAC_MASTER not configured" },
-      503,
-    );
+    return respondError(c, new ServiceUnavailableError("WEBHOOK_HMAC_MASTER not configured"));
   }
   return masterKey;
 }

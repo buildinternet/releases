@@ -1,3 +1,10 @@
+import {
+  type ReleasesError,
+  NotFoundError,
+  ServiceUnavailableError,
+  UpstreamError,
+} from "@releases/lib/releases-error";
+
 /**
  * Pre-flight check for "can we actually read this GitHub repo right now?",
  * shared by the changelog probe (source-scoped) and the changelog fetch
@@ -16,9 +23,12 @@
  * - 429 → rate-limited                  → respond 503
  * - 5xx / network error                 → respond 502
  */
-export type RepoStatus =
-  | { kind: "ok" }
-  | { kind: "fail"; status: 404 | 502 | 503; body: { error: string; message: string } };
+export type RepoStatus = { kind: "ok" } | { kind: "fail"; error: ReleasesError };
+
+/** GitHub 5xx / auth / network → upstream (502); message hidden by expose:false. */
+function upstream(message: string): ReleasesError {
+  return new UpstreamError(message, { details: { upstream: "github" } });
+}
 
 export async function classifyRepoStatus(
   ownerRepo: { owner: string; repo: string },
@@ -31,64 +41,27 @@ export async function classifyRepoStatus(
   } catch (err) {
     return {
       kind: "fail",
-      status: 502,
-      body: {
-        error: "github_upstream_error",
-        message: `GitHub network error: ${err instanceof Error ? err.message : String(err)}`,
-      },
+      error: upstream(`GitHub network error: ${err instanceof Error ? err.message : String(err)}`),
     };
   }
   if (res.ok) return { kind: "ok" };
   if (res.status === 404) {
-    return {
-      kind: "fail",
-      status: 404,
-      body: { error: "repo_not_found", message: `${owner}/${repo} not found on GitHub` },
-    };
+    return { kind: "fail", error: new NotFoundError(`${owner}/${repo} not found on GitHub`) };
   }
   if (res.status === 401) {
-    return {
-      kind: "fail",
-      status: 502,
-      body: {
-        error: "github_auth_error",
-        message: `GitHub returned ${res.status} for ${owner}/${repo}`,
-      },
-    };
+    return { kind: "fail", error: upstream(`GitHub returned ${res.status} for ${owner}/${repo}`) };
   }
   // 403 is ambiguous: GitHub returns it for primary rate-limit exhaustion
   // (with x-ratelimit-remaining: 0) as well as auth/permission failures. Treat
   // the rate-limit case as retryable (503); everything else as auth (502).
   if (res.status === 403) {
     if (res.headers.get("x-ratelimit-remaining") === "0") {
-      return {
-        kind: "fail",
-        status: 503,
-        body: { error: "github_rate_limited", message: "GitHub rate limit exceeded" },
-      };
+      return { kind: "fail", error: new ServiceUnavailableError("GitHub rate limit exceeded") };
     }
-    return {
-      kind: "fail",
-      status: 502,
-      body: {
-        error: "github_auth_error",
-        message: `GitHub returned ${res.status} for ${owner}/${repo}`,
-      },
-    };
+    return { kind: "fail", error: upstream(`GitHub returned ${res.status} for ${owner}/${repo}`) };
   }
   if (res.status === 429) {
-    return {
-      kind: "fail",
-      status: 503,
-      body: { error: "github_rate_limited", message: "GitHub rate limit exceeded" },
-    };
+    return { kind: "fail", error: new ServiceUnavailableError("GitHub rate limit exceeded") };
   }
-  return {
-    kind: "fail",
-    status: 502,
-    body: {
-      error: "github_upstream_error",
-      message: `GitHub returned ${res.status} for ${owner}/${repo}`,
-    },
-  };
+  return { kind: "fail", error: upstream(`GitHub returned ${res.status} for ${owner}/${repo}`) };
 }

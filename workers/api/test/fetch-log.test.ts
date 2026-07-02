@@ -468,8 +468,8 @@ describe("POST /v1/sources/:slug/fetch query params", () => {
       new Request("https://x.test/v1/sources/src_a1/fetch?max=abc", { method: "POST" }),
     );
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe("invalid_max");
+    const body = (await res.json()) as { error: { code: string; type: string; message: string } };
+    expect(body.error.code).toBe("bad_request");
   });
 
   it("returns 400 for a zero or negative max", async () => {

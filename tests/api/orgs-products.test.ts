@@ -94,15 +94,15 @@ describe("GET /v1/orgs/:slug/products", () => {
   it("404s when the org does not exist", async () => {
     const res = await callProduct("/orgs/nope/products");
     expect(res.status).toBe(404);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe("not_found");
+    const body = (await res.json()) as { error: { code: string; type: string; message: string } };
+    expect(body.error.code).toBe("not_found");
   });
 
   it("400s on an invalid kind value", async () => {
     await seedOrg("acme");
     const res = await callProduct("/orgs/acme/products?kind=bogus");
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe("bad_request");
+    const body = (await res.json()) as { error: { code: string; type: string; message: string } };
+    expect(body.error.code).toBe("bad_request");
   });
 });

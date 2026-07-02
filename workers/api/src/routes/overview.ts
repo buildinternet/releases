@@ -17,9 +17,11 @@ import {
   RegenerateOverviewBodySchema,
   RegenerateOverviewResponseSchema,
   ProductOverviewResponseSchema,
-  ErrorResponseSchema,
+  errorEnvelopeSchema,
 } from "@buildinternet/releases-api-types";
 import type { Env } from "../index.js";
+import { respondError } from "../lib/error-response.js";
+import { NotFoundError, ValidationError } from "@releases/lib/releases-error";
 
 const app = new Hono<Env>();
 
@@ -88,11 +90,11 @@ app.post(
       },
       400: {
         description: "Missing required fields, malformed body, or invalid citations",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
       404: {
         description: "Org not found",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
   }),
@@ -103,7 +105,7 @@ app.post(
       .select({ id: organizations.id })
       .from(organizations)
       .where(orgWhere(c.req.param("slug")));
-    if (!org) return c.json({ error: "not_found" }, 404);
+    if (!org) return respondError(c, new NotFoundError());
 
     const body = c.req.valid("json");
     const citations = body.citations ?? [];
@@ -113,12 +115,11 @@ app.post(
     // than persist garbage.
     for (let i = 0; i < citations.length; i++) {
       if (citations[i].endIndex > body.content.length) {
-        return c.json(
-          {
-            error: "bad_citations",
-            message: `citations[${i}].endIndex past content length`,
-          },
-          400,
+        return respondError(
+          c,
+          new ValidationError(`citations[${i}].endIndex past content length`, {
+            code: "bad_request",
+          }),
         );
       }
     }

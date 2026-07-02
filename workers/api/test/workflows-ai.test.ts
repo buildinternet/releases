@@ -45,9 +45,11 @@ describe("GET /v1/workflows/batch-summarize/status/:instanceId", () => {
       new Request("https://x.test/v1/workflows/batch-summarize/status/nonexistent"),
     );
     expect(res.status).toBe(404);
-    const body = (await res.json()) as { error: string; message: string };
-    expect(body.error).toBe("instance_not_found");
-    expect(body.message).toContain("not found");
+    const body = (await res.json()) as {
+      error: { code: string; type: string; message: string };
+    };
+    expect(body.error.code).toBe("instance_not_found");
+    expect(body.error.message).toContain("not found");
   });
 
   it("returns 503 when the workflow binding is missing", async () => {
@@ -71,9 +73,11 @@ describe("GET /v1/workflows/batch-summarize/status/:instanceId", () => {
       new Request("https://x.test/v1/workflows/batch-summarize/status/some-id"),
     );
     expect(res.status).toBe(500);
-    const body = (await res.json()) as { error: string; message: string };
-    expect(body.error).toBe("internal_error");
-    expect(body.message).toBe("network unreachable");
+    const body = (await res.json()) as {
+      error: { code: string; type: string; message: string };
+    };
+    expect(body.error.code).toBe("internal_error");
+    expect(body.error.message).toBe("Internal server error");
   });
 
   it("returns 500 when instance.status() throws", async () => {
@@ -91,8 +95,10 @@ describe("GET /v1/workflows/batch-summarize/status/:instanceId", () => {
       new Request("https://x.test/v1/workflows/batch-summarize/status/some-id"),
     );
     expect(res.status).toBe(500);
-    const body = (await res.json()) as { error: string; message: string };
-    expect(body.error).toBe("internal_error");
-    expect(body.message).toBe("status RPC failed");
+    const body = (await res.json()) as {
+      error: { code: string; type: string; message: string };
+    };
+    expect(body.error.code).toBe("internal_error");
+    expect(body.error.message).toBe("Internal server error");
   });
 });

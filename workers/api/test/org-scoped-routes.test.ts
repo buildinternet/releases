@@ -305,10 +305,10 @@ describe("org-scoped write endpoints — dual-registered handlers", () => {
     );
 
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string; message: string };
-    expect(body.error).toBe("bad_request");
-    expect(body.message).toContain("21");
-    expect(body.message).toContain("20");
+    const body = (await res.json()) as { error: { code: string; type: string; message: string } };
+    expect(body.error.code).toBe("bad_request");
+    expect(body.error.message).toContain("21");
+    expect(body.error.message).toContain("20");
   });
 
   it("POST /v1/orgs/:orgSlug/sources/:sourceSlug/content-hash reaches the handler", async () => {
@@ -391,8 +391,8 @@ describe("POST /v1/sources — orgId guard", () => {
     );
 
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe("bad_request");
+    const body = (await res.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("bad_request");
   });
 
   it("400s when orgId is supplied but doesn't exist", async () => {
@@ -413,7 +413,7 @@ describe("POST /v1/sources — orgId guard", () => {
     );
 
     expect(res.status).toBe(400);
-    expect(((await res.json()) as { error: string }).error).toBe("bad_request");
+    expect(((await res.json()) as { error: { code: string } }).error.code).toBe("bad_request");
   });
 });
 

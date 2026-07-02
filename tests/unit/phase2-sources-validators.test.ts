@@ -96,9 +96,9 @@ describe("POST /v1/sources (validateJson)", () => {
   test("400 when neither orgId nor orgSlug resolves (handler check)", async () => {
     const res = await call("/sources", "POST", { name: "X", url: "https://x.test" });
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string; message: string };
-    expect(body.error).toBe("bad_request");
-    expect(body.message.toLowerCase()).toContain("orgid or orgslug");
+    const body = (await res.json()) as { error: { code: string; type: string; message: string } };
+    expect(body.error.code).toBe("bad_request");
+    expect(body.error.message.toLowerCase()).toContain("orgid or orgslug");
   });
 
   test("happy path creates source", async () => {

@@ -2,6 +2,8 @@ import { Hono, type Context } from "hono";
 import { createDb } from "../db.js";
 import { unsubscribeByToken } from "../queries/digest-prefs.js";
 import type { Env } from "../index.js";
+import { respondError } from "../lib/error-response.js";
+import { NotFoundError } from "@releases/lib/releases-error";
 
 export const digestRoutes = new Hono<Env>();
 
@@ -17,7 +19,7 @@ async function handleUnsubscribe(c: Context<Env>) {
   const raw = c.req.param("token") ?? "";
   const db = createDb(c.env.DB);
   const ok = await unsubscribeByToken(db, raw);
-  if (!ok) return c.json({ error: "not_found" }, 404);
+  if (!ok) return respondError(c, new NotFoundError());
   return c.json({ success: true, unsubscribed: true });
 }
 

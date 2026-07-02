@@ -19,6 +19,8 @@ import { createDb } from "../db.js";
 import { resolveDigestTestRecipient, advanceDigestWatermark } from "../queries/digest-prefs.js";
 import { gatherAndSendDigest, digestDeliveryConfig } from "../cron/send-digests.js";
 import type { Env } from "../index.js";
+import { respondError } from "../lib/error-response.js";
+import { NotFoundError, ValidationError } from "@releases/lib/releases-error";
 
 export const adminDigestRoutes = new Hono<Env>();
 
@@ -39,7 +41,10 @@ adminDigestRoutes.post("/admin/digest/test", async (c) => {
   const userId = typeof body.userId === "string" && body.userId ? body.userId : undefined;
   const email = typeof body.email === "string" && body.email ? body.email : undefined;
   if (!userId && !email) {
-    return c.json({ error: "bad_request", message: "userId or email is required" }, 400);
+    return respondError(
+      c,
+      new ValidationError("userId or email is required", { code: "bad_request" }),
+    );
   }
 
   const cadence = body.cadence === "weekly" ? "weekly" : "daily";
@@ -51,7 +56,10 @@ adminDigestRoutes.post("/admin/digest/test", async (c) => {
       !Number.isFinite(body.sinceDays) ||
       body.sinceDays <= 0
     ) {
-      return c.json({ error: "bad_request", message: "sinceDays must be a positive number" }, 400);
+      return respondError(
+        c,
+        new ValidationError("sinceDays must be a positive number", { code: "bad_request" }),
+      );
     }
     sinceDays = body.sinceDays;
   }
@@ -59,7 +67,7 @@ adminDigestRoutes.post("/admin/digest/test", async (c) => {
 
   const db = createDb(c.env.DB);
   const recip = await resolveDigestTestRecipient(db, { userId, email });
-  if (!recip) return c.json({ error: "not_found", message: "User not found" }, 404);
+  if (!recip) return respondError(c, new NotFoundError("User not found"));
 
   const before = new Date();
   const after = new Date(before.getTime() - sinceDays * DAY_MS);

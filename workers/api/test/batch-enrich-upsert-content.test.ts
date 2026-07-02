@@ -142,7 +142,9 @@ describe("POST /sources/:id/releases/batch — enrich mode (#1526)", () => {
 
     const res = await batch(db, { mode: "upsert_content", releases: [FULL] });
     expect(res.status).toBe(400);
-    expect((await res.json()) as { error: string }).toMatchObject({ error: "bad_request" });
+    expect((await res.json()) as { error: { code: string } }).toMatchObject({
+      error: { code: "bad_request" },
+    });
 
     // The stub is untouched — the bad request never reached the upsert.
     const [row] = await db.select().from(releases).where(eq(releases.url, REL_URL));

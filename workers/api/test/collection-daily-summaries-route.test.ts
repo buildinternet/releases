@@ -79,7 +79,7 @@ describe("GET /v1/collections/:slug/daily-summaries", () => {
     const res = await fetch(new Request("http://test/v1/collections/nope/daily-summaries"));
     expect(res.status).toBe(404);
     const body = (await res.json()) as any;
-    expect(body.error).toBe("not_found");
+    expect(body.error.code).toBe("not_found");
   });
 
   it("returns 400 for a malformed from/to date", async () => {
@@ -92,7 +92,7 @@ describe("GET /v1/collections/:slug/daily-summaries", () => {
     );
     expect(res.status).toBe(400);
     const body = (await res.json()) as any;
-    expect(body.error).toBe("bad_date");
+    expect(body.error.code).toBe("bad_request");
   });
 
   it("returns an empty summaries array when no rows match the window", async () => {
@@ -191,7 +191,7 @@ describe("POST /v1/workflows/collection-summaries", () => {
     );
     expect(res.status).toBe(400);
     const body = (await res.json()) as any;
-    expect(body.error).toBe("bad_date");
+    expect(body.error.code).toBe("bad_request");
   });
 
   it("dryRun: true echoes force: true", async () => {

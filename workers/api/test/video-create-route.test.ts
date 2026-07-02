@@ -35,8 +35,8 @@ describe("POST /v1/sources/video", () => {
       }),
     );
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe("bad_request");
+    const body = (await res.json()) as { error: { code: string; type: string; message: string } };
+    expect(body.error.code).toBe("bad_request");
   });
 
   it("returns 400 when orgSlug and orgId are both missing", async () => {
@@ -53,8 +53,8 @@ describe("POST /v1/sources/video", () => {
       }),
     );
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe("bad_request");
+    const body = (await res.json()) as { error: { code: string; type: string; message: string } };
+    expect(body.error.code).toBe("bad_request");
   });
 
   it("returns 400 for a non-video URL", async () => {
@@ -69,8 +69,8 @@ describe("POST /v1/sources/video", () => {
       }),
     );
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe("bad_request");
+    const body = (await res.json()) as { error: { code: string; type: string; message: string } };
+    expect(body.error.code).toBe("bad_request");
   });
 
   it("returns 404 when the org is not found", async () => {

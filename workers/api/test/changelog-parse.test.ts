@@ -249,28 +249,36 @@ describe("POST /changelog/parse", () => {
 
     const res = await call({ repo: "owner/repo", path: "does/not/exist.md" });
     expect(res.status).toBe(404);
-    expect(((await res.json()) as { error: string }).error).toBe("not_found");
+    expect(
+      ((await res.json()) as { error: { code: string; type: string; message: string } }).error.code,
+    ).toBe("not_found");
   });
 
   it("returns 400 when repo is missing", async () => {
     installFetch(() => json({}));
     const res = await call({});
     expect(res.status).toBe(400);
-    expect(((await res.json()) as { error: string }).error).toBe("bad_request");
+    expect(
+      ((await res.json()) as { error: { code: string; type: string; message: string } }).error.code,
+    ).toBe("bad_request");
   });
 
   it("returns 400 for a non-github coordinate", async () => {
     installFetch(() => json({}));
     const res = await call({ repo: "npm:left-pad" });
     expect(res.status).toBe(400);
-    expect(((await res.json()) as { error: string }).error).toBe("bad_request");
+    expect(
+      ((await res.json()) as { error: { code: string; type: string; message: string } }).error.code,
+    ).toBe("bad_request");
   });
 
   it("returns 400 for an invalid source value", async () => {
     installFetch(() => json({}));
     const res = await call({ repo: "owner/repo", source: "bogus" });
     expect(res.status).toBe(400);
-    expect(((await res.json()) as { error: string }).error).toBe("bad_request");
+    expect(
+      ((await res.json()) as { error: { code: string; type: string; message: string } }).error.code,
+    ).toBe("bad_request");
   });
 
   it("maps a missing repo to 404 via the precheck", async () => {
@@ -281,7 +289,7 @@ describe("POST /changelog/parse", () => {
     );
     const res = await call({ repo: "ghost/repo" });
     expect(res.status).toBe(404);
-    expect(((await res.json()) as { error: string }).error).toBe("repo_not_found");
+    expect(((await res.json()) as { error: { code: string } }).error.code).toBe("not_found");
   });
 
   it("source=github_releases: surfaces an upstream releases failure as 502", async () => {
@@ -292,7 +300,13 @@ describe("POST /changelog/parse", () => {
     });
     const res = await call({ repo: "owner/repo", source: "github_releases" });
     expect(res.status).toBe(502);
-    expect(((await res.json()) as { error: string }).error).toBe("github_upstream_error");
+    const body = (await res.json()) as {
+      error: { code: string; type: string; message: string; details?: { upstream?: string } };
+    };
+    expect(body.error.code).toBe("upstream_error");
+    expect(body.error.type).toBe("upstream");
+    expect(body.error.message).toBe("Upstream service error");
+    expect(body.error.details).toEqual({ upstream: "github" });
   });
 
   it("source=changelog_file: surfaces a raw body fetch failure as 502", async () => {
@@ -306,7 +320,13 @@ describe("POST /changelog/parse", () => {
     });
     const res = await call({ repo: "owner/repo", source: "changelog_file" });
     expect(res.status).toBe(502);
-    expect(((await res.json()) as { error: string }).error).toBe("github_upstream_error");
+    const body = (await res.json()) as {
+      error: { code: string; type: string; message: string; details?: { upstream?: string } };
+    };
+    expect(body.error.code).toBe("upstream_error");
+    expect(body.error.type).toBe("upstream");
+    expect(body.error.message).toBe("Upstream service error");
+    expect(body.error.details).toEqual({ upstream: "github" });
   });
 
   it("auto: degrades past a releases failure to CHANGELOG.md (no error surfaced)", async () => {

@@ -8,6 +8,8 @@ import {
   applyFetchLogOverlay,
   applyFetchLogOverlaySingle,
 } from "../lib/session-fetch-log-overlay.js";
+import { respondError } from "../lib/error-response.js";
+import { NotFoundError } from "@releases/lib/releases-error";
 
 export const sessionRoutes = new Hono<Env>();
 
@@ -50,7 +52,7 @@ sessionRoutes.get("/sessions/active-sources", async (c) => {
 sessionRoutes.get("/sessions/:sessionId", async (c) => {
   const sessionId = c.req.param("sessionId");
   const res = await getStatusHub(c.env).fetch(new Request(`https://do/sessions/${sessionId}`));
-  if (res.status === 404) return c.json({ error: "not_found" }, 404);
+  if (res.status === 404) return respondError(c, new NotFoundError());
   let session = (await res.json()) as Session;
   // See #948 — same overlay as the list endpoint, applied to a single row.
   // Fail-open on D1 errors so the operator still sees the raw DO payload.

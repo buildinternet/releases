@@ -159,9 +159,9 @@ describe("PATCH /v1/categories/:slug (validateJson)", () => {
   test("400 when alias shadows a canonical slug (handler check still runs)", async () => {
     const res = await patch("ai", { aliases: ["commerce"] });
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string; message: string };
-    expect(body.error).toBe("bad_request");
-    expect(body.message).toContain("canonical category slug");
+    const body = (await res.json()) as { error: { code: string; type: string; message: string } };
+    expect(body.error.code).toBe("bad_request");
+    expect(body.error.message).toContain("canonical category slug");
   });
 
   test("404 when slug isn't a canonical category", async () => {
@@ -191,9 +191,9 @@ describe("PUT /v1/errata/:orgId (validateJson)", () => {
     // Validator passes (content is fine); handler rejects the orgId shape.
     const res = await put("acme", { content: "foo" }, { MEMORY_STORE_ERRATA_ID: "store_x" });
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string; message: string };
-    expect(body.error).toBe("bad_request");
-    expect(body.message).toContain("org_");
+    const body = (await res.json()) as { error: { code: string; type: string; message: string } };
+    expect(body.error.code).toBe("bad_request");
+    expect(body.error.message).toContain("org_");
   });
 
   test("400 bad_request when content is missing", async () => {
@@ -211,19 +211,20 @@ describe("PUT /v1/errata/:orgId (validateJson)", () => {
     expect(body.error.code).toBe("validation_failed");
   });
 
-  test("413 payload_too_large when content exceeds the byte cap", async () => {
+  test("400 payload_too_large when content exceeds the byte cap", async () => {
     // 100_001 ASCII chars = 100_001 UTF-8 bytes — crosses MAX_CONTENT_BYTES.
+    // Route-level normalization: payload_too_large is 413 -> 400 (see design spec).
     const oversize = "x".repeat(100_001);
     const res = await put("org_acme", { content: oversize }, { MEMORY_STORE_ERRATA_ID: "store_x" });
-    expect(res.status).toBe(413);
+    expect(res.status).toBe(400);
     const body = (await res.json()) as { error: { code: string; message: string } };
-    expect(body.error).toBe("payload_too_large");
+    expect(body.error.code).toBe("payload_too_large");
   });
 
   test("500 internal_error when MEMORY_STORE_ERRATA_ID is unset", async () => {
     const res = await put("org_acme", { content: "valid" }, {});
     expect(res.status).toBe(500);
     const body = (await res.json()) as { error: { code: string } };
-    expect(body.error).toBe("internal_error");
+    expect(body.error.code).toBe("internal_error");
   });
 });

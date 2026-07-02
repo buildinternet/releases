@@ -14,8 +14,10 @@ import {
   AddIgnoredUrlBodySchema,
   AddIgnoredUrlResponseSchema,
   DeleteIgnoredUrlResponseSchema,
-  ErrorResponseSchema,
+  errorEnvelopeSchema,
 } from "@buildinternet/releases-api-types";
+import { respondError } from "../lib/error-response.js";
+import { NotFoundError, ValidationError } from "@releases/lib/releases-error";
 
 /**
  * Body shape for `POST /v1/admin/blocklist`. Admin-only — kept inline
@@ -65,11 +67,11 @@ ignoreRoutes.get(
       },
       400: {
         description: "Malformed `url` query param",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
       404: {
         description: "Organization not found",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
   }),
@@ -78,7 +80,7 @@ ignoreRoutes.get(
     const slug = c.req.param("slug");
 
     const [org] = await db.select().from(organizations).where(orgWhere(slug));
-    if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
+    if (!org) return respondError(c, new NotFoundError("Organization not found"));
 
     const singleUrl = c.req.query("url");
     if (singleUrl && c.req.query("single")) {
@@ -86,9 +88,9 @@ ignoreRoutes.get(
       try {
         decoded = decodeURIComponent(singleUrl);
       } catch {
-        return c.json(
-          { error: "bad_request", message: "Malformed URL-encoded `url` query param" },
-          400,
+        return respondError(
+          c,
+          new ValidationError("Malformed URL-encoded `url` query param", { code: "bad_request" }),
         );
       }
       const [row] = await db
@@ -130,11 +132,11 @@ ignoreRoutes.post(
       },
       400: {
         description: "Missing required field: url",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
       404: {
         description: "Organization not found",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
   }),
@@ -144,7 +146,7 @@ ignoreRoutes.post(
     const slug = c.req.param("slug");
 
     const [org] = await db.select().from(organizations).where(orgWhere(slug));
-    if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
+    if (!org) return respondError(c, new NotFoundError("Organization not found"));
 
     const body = c.req.valid("json");
     await db
@@ -177,11 +179,11 @@ ignoreRoutes.delete(
       },
       400: {
         description: "Malformed `:url` path segment",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
       404: {
         description: "Organization not found",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
   }),
@@ -192,14 +194,14 @@ ignoreRoutes.delete(
     try {
       url = decodeURIComponent(c.req.param("url"));
     } catch {
-      return c.json(
-        { error: "bad_request", message: "Malformed URL-encoded `:url` path segment" },
-        400,
+      return respondError(
+        c,
+        new ValidationError("Malformed URL-encoded `:url` path segment", { code: "bad_request" }),
       );
     }
 
     const [org] = await db.select().from(organizations).where(orgWhere(slug));
-    if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
+    if (!org) return respondError(c, new NotFoundError("Organization not found"));
 
     await db
       .delete(ignoredUrls)

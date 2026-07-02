@@ -120,9 +120,9 @@ describe("POST /v1/releases/:id/coverage (validateJson)", () => {
       decidedBy: "human:zach",
     });
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string; message: string };
-    expect(body.error).toBe("bad_request");
-    expect(body.message).toContain("itself");
+    const body = (await res.json()) as { error: { code: string; type: string; message: string } };
+    expect(body.error.code).toBe("bad_request");
+    expect(body.error.message).toContain("itself");
   });
 
   test("happy path links coverage rows", async () => {
@@ -165,9 +165,9 @@ describe("PATCH /v1/releases/:id (validateJson .strict())", () => {
     await seed();
     const res = await callSrc("/releases/rel_canon", "PATCH", {});
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string; message: string };
-    expect(body.error).toBe("bad_request");
-    expect(body.message.toLowerCase()).toContain("no writable fields");
+    const body = (await res.json()) as { error: { code: string; type: string; message: string } };
+    expect(body.error.code).toBe("bad_request");
+    expect(body.error.message.toLowerCase()).toContain("no writable fields");
   });
 
   test("happy path: nullable url accepts null", async () => {

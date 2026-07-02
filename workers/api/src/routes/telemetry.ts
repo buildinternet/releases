@@ -8,6 +8,8 @@ import {
 import { newTelemetryEventId } from "@buildinternet/releases-core/id";
 import { sanitizeString, sanitizeInt } from "../lib/sanitize.js";
 import type { Env } from "../index.js";
+import { respondError } from "../lib/error-response.js";
+import { ValidationError } from "@releases/lib/releases-error";
 
 export const telemetryRoutes = new Hono<Env>();
 
@@ -29,7 +31,7 @@ telemetryRoutes.post("/telemetry", async (c) => {
   try {
     body = await c.req.json();
   } catch {
-    return c.json({ error: "invalid_json" }, 400);
+    return respondError(c, new ValidationError(undefined, { code: "invalid_json" }));
   }
 
   const surface = sanitizeSurface(body.surface);
@@ -39,7 +41,7 @@ telemetryRoutes.post("/telemetry", async (c) => {
   const timestamp = sanitizeInt(body.timestamp) ?? Date.now();
 
   if (!surface || !command || !anonId || !cliVersion) {
-    return c.json({ error: "missing_required_fields" }, 400);
+    return respondError(c, new ValidationError(undefined, { code: "bad_request" }));
   }
 
   const db = createDb(c.env.DB);

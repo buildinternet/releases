@@ -144,7 +144,7 @@ describe("POST /orgs/:org/sources/:src/raw-snapshot (#1283)", () => {
     });
     const res = await post({ body: "x" }, `/v1/orgs/${ORG}/sources/src_gh/raw-snapshot`);
     expect(res.status).toBe(400);
-    expect(((await res.json()) as { error: string }).error).toBe("bad_request");
+    expect(((await res.json()) as { error: { code: string } }).error.code).toBe("bad_request");
   });
 
   it("soft-fails with stored:false when RAW_SNAPSHOTS is unbound", async () => {

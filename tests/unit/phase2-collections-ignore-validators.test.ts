@@ -73,9 +73,9 @@ describe("POST /v1/collections (validateJson)", () => {
   test("400 when name is whitespace-only (handler post-trim check)", async () => {
     const res = await call(collectionRoutes, "/collections", "POST", { name: "   " });
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string; message: string };
-    expect(body.error).toBe("bad_request");
-    expect(body.message.toLowerCase()).toContain("name");
+    const body = (await res.json()) as { error: { code: string; type: string; message: string } };
+    expect(body.error.code).toBe("bad_request");
+    expect(body.error.message.toLowerCase()).toContain("name");
   });
 
   test("400 when slug doesn't match the kebab regex (handler check)", async () => {
@@ -84,8 +84,8 @@ describe("POST /v1/collections (validateJson)", () => {
       slug: "BAD SLUG",
     });
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe("bad_request");
+    const body = (await res.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("bad_request");
   });
 
   test("happy path creates the collection", async () => {
@@ -180,8 +180,8 @@ describe("POST /v1/collections/:slug/members (validateJson)", () => {
       position: 0,
     });
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe("bad_request");
+    const body = (await res.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("bad_request");
   });
 });
 

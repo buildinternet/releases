@@ -29,6 +29,8 @@ import type {
 import { createDb } from "../db.js";
 import { buildListResponse, parseListPagination, slicePage } from "../lib/pagination.js";
 import type { Env } from "../index.js";
+import { respondError } from "../lib/error-response.js";
+import { ValidationError } from "@releases/lib/releases-error";
 
 export const adminOverviewsRoutes = new Hono<Env>();
 
@@ -63,9 +65,9 @@ adminOverviewsRoutes.get("/admin/overviews", async (c) => {
   const staleDaysRaw = params.get("staleDays");
   const staleDays = staleDaysRaw != null ? parseInt(staleDaysRaw, 10) : null;
   if (staleDaysRaw != null && (staleDays == null || !Number.isFinite(staleDays) || staleDays < 0)) {
-    return c.json(
-      { error: "invalid_param", message: "staleDays must be a non-negative integer" },
-      400,
+    return respondError(
+      c,
+      new ValidationError("staleDays must be a non-negative integer", { code: "bad_request" }),
     );
   }
 

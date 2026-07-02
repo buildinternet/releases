@@ -20,6 +20,13 @@ import { makeAuthAudit } from "../auth/audit.js";
 import { type ApiScope } from "@buildinternet/releases-core/api-token";
 import { requireSession } from "../middleware/auth.js";
 import type { Env } from "../index.js";
+import { respondError } from "../lib/error-response.js";
+import {
+  UnauthorizedError,
+  ValidationError,
+  ConflictError,
+  NotFoundError,
+} from "@releases/lib/releases-error";
 
 /** Parse a JSON body, or null if it isn't valid JSON. */
 export async function parseJsonBody(c: Context<Env>): Promise<Record<string, unknown> | null> {
@@ -58,13 +65,15 @@ export const userApiKeyHandlers = new Hono<Env>();
 
 userApiKeyHandlers.post("/api-keys", async (c) => {
   const session = c.get("session");
-  if (!session) return c.json({ error: "unauthorized", message: "Sign in required" }, 401);
+  if (!session) return respondError(c, new UnauthorizedError("Sign in required"));
 
   const body = await parseJsonBody(c);
-  if (!body) return c.json({ error: "bad_request", message: "Invalid JSON body" }, 400);
+  if (!body)
+    return respondError(c, new ValidationError("Invalid JSON body", { code: "invalid_json" }));
 
   const name = typeof body.name === "string" ? body.name.trim() : "";
-  if (!name) return c.json({ error: "bad_request", message: "name is required" }, 400);
+  if (!name)
+    return respondError(c, new ValidationError("name is required", { code: "bad_request" }));
 
   // The server-side scope ceiling: self-serve keys are capped at
   // USER_API_KEY_MAX_SCOPE (read today). A missing scope defaults to the
@@ -73,9 +82,9 @@ userApiKeyHandlers.post("/api-keys", async (c) => {
   // auth-time clamp, so this stays correct if the ceiling is ever raised.
   const requestedScope = body.scope === undefined ? USER_API_KEY_MAX_SCOPE : body.scope;
   if (!isWithinUserKeyCeiling(requestedScope)) {
-    return c.json(
-      { error: "bad_request", message: `scope must be '${USER_API_KEY_MAX_SCOPE}'` },
-      400,
+    return respondError(
+      c,
+      new ValidationError(`scope must be '${USER_API_KEY_MAX_SCOPE}'`, { code: "bad_request" }),
     );
   }
 
@@ -83,9 +92,11 @@ userApiKeyHandlers.post("/api-keys", async (c) => {
   if (body.expiresInDays !== undefined) {
     const d = body.expiresInDays;
     if (typeof d !== "number" || !Number.isInteger(d) || d < 1 || d > 365) {
-      return c.json(
-        { error: "bad_request", message: "expiresInDays must be an integer between 1 and 365" },
-        400,
+      return respondError(
+        c,
+        new ValidationError("expiresInDays must be an integer between 1 and 365", {
+          code: "bad_request",
+        }),
       );
     }
     expiresIn = d * 24 * 60 * 60;
@@ -98,7 +109,7 @@ userApiKeyHandlers.post("/api-keys", async (c) => {
   // this is the friendly pre-check, not the only gate.
   const activeCount = await countActiveUserKeys(createDb(c.env.DB), session.user.id);
   if (activeCount >= USER_API_KEY_MAX_ACTIVE) {
-    return c.json({ error: "api_key_limit", message: API_KEY_LIMIT_MESSAGE }, 409);
+    return respondError(c, new ConflictError(API_KEY_LIMIT_MESSAGE, { code: "api_key_limit" }));
   }
 
   const auth = await createAuth(c.env);
@@ -146,7 +157,7 @@ userApiKeyHandlers.post("/api-keys", async (c) => {
     // The before-hook cap backstop throws this when a concurrent create slipped
     // past the pre-check above — surface the same clean 409, not a 500.
     if (err instanceof APIError && err.body?.code === API_KEY_LIMIT_CODE) {
-      return c.json({ error: "api_key_limit", message: API_KEY_LIMIT_MESSAGE }, 409);
+      return respondError(c, new ConflictError(API_KEY_LIMIT_MESSAGE, { code: "api_key_limit" }));
     }
     throw err;
   }
@@ -169,7 +180,7 @@ userApiKeyHandlers.post("/api-keys", async (c) => {
 
 userApiKeyHandlers.get("/api-keys", async (c) => {
   const session = c.get("session");
-  if (!session) return c.json({ error: "unauthorized", message: "Sign in required" }, 401);
+  if (!session) return respondError(c, new UnauthorizedError("Sign in required"));
   const db = createDb(c.env.DB);
   const rows = await db.select().from(apikey).where(eq(apikey.referenceId, session.user.id)).all();
   return c.json({
@@ -189,7 +200,7 @@ userApiKeyHandlers.get("/api-keys", async (c) => {
 
 userApiKeyHandlers.delete("/api-keys/:id", async (c) => {
   const session = c.get("session");
-  if (!session) return c.json({ error: "unauthorized", message: "Sign in required" }, 401);
+  if (!session) return respondError(c, new UnauthorizedError("Sign in required"));
   const id = c.req.param("id");
   const db = createDb(c.env.DB);
   // The referenceId clause IS the ownership check — a non-owned/absent id deletes
@@ -198,8 +209,7 @@ userApiKeyHandlers.delete("/api-keys/:id", async (c) => {
     .delete(apikey)
     .where(and(eq(apikey.id, id), eq(apikey.referenceId, session.user.id)))
     .returning();
-  if (deleted.length === 0)
-    return c.json({ error: "not_found", message: "API key not found" }, 404);
+  if (deleted.length === 0) return respondError(c, new NotFoundError("API key not found"));
   // Revoke audit on the shared `component: "auth"` stream, with the owning
   // userId — same event the native-delete after-hook emits (this route deletes
   // via Drizzle, not auth.api.deleteApiKey, so it audits its own path).

@@ -1,3 +1,5 @@
+import type { ErrorCode } from "@buildinternet/releases-core/errors";
+
 // App-level error codes for D1 failures. Worker code wraps raw D1 / Drizzle
 // errors with `classifyDbError()` so downstream callers can branch on a stable
 // `code` instead of substring-matching the upstream message. Logs surface
@@ -104,6 +106,19 @@ export function classifyDbError(err: unknown): ClassifiedDbError | null {
   // Chain carries a D1 footprint but no matcher hit — surface as DB_UNKNOWN
   // so the unmapped message shows up in logs and a matcher can be added.
   return { code: "DB_UNKNOWN", message: d1Frame.message, transient: false };
+}
+
+/**
+ * Project the internal SCREAMING_CASE {@link DbErrorCode} diagnostic onto the
+ * canonical snake_case wire {@link ErrorCode}. The internal enum is the
+ * observability taxonomy (surfaced as the `causeCode` log field / `details.dbCode`
+ * on the wire, filterable in Axiom) and deliberately stays SCREAMING_CASE; the
+ * wire contract exposes a single canonical `db_too_many_variables`. Keeping the
+ * projection here (typed) rather than a stringly-typed compare in `respondError`
+ * is the "one wire code, no casing carry-over" reconciliation (Phase 3 item #4).
+ */
+export function dbErrorToWireCode(code: DbErrorCode): ErrorCode {
+  return code === "DB_TOO_MANY_VARIABLES" ? "db_too_many_variables" : "internal_error";
 }
 
 export interface DbErrorLogFields {

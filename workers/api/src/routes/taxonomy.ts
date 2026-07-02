@@ -31,6 +31,8 @@ import { parseSourceTypesLenient } from "../lib/source-types.js";
 import { wantsMarkdown, markdownResponse } from "../middleware/content-negotiation.js";
 import { categoryReleaseFeedToMarkdown } from "@releases/rendering/formatters.js";
 import type { Env } from "../index.js";
+import { respondError } from "../lib/error-response.js";
+import { NotFoundError, ValidationError, ConflictError } from "@releases/lib/releases-error";
 import type {
   CategoryDetail,
   CategoryListItem,
@@ -46,7 +48,7 @@ import {
   UpdateCategoryResponseSchema,
   CategoryReleasesResponseSchema,
   TagDetailSchema,
-  ErrorResponseSchema,
+  errorEnvelopeSchema,
 } from "@buildinternet/releases-api-types";
 import { validateJson } from "../lib/validate.js";
 
@@ -295,7 +297,7 @@ taxonomyRoutes.get(
       },
       404: {
         description: "Slug is neither canonical nor a known alias",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
   }),
@@ -317,7 +319,7 @@ taxonomyRoutes.get(
         );
         return c.redirect(url.toString(), 301);
       }
-      return c.json({ error: "not_found", message: "Category not found" }, 404);
+      return respondError(c, new NotFoundError("Category not found"));
     }
     const slug = input;
 
@@ -379,15 +381,15 @@ taxonomyRoutes.patch(
       },
       400: {
         description: "Empty body, malformed alias, or alias collides with a canonical slug",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
       404: {
         description: "Slug is not a canonical category",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
       409: {
         description: "Alias is already claimed by a different category row",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
   }),
@@ -395,7 +397,7 @@ taxonomyRoutes.patch(
   async (c) => {
     const slug = c.req.param("slug");
     if (!isValidCategory(slug)) {
-      return c.json({ error: "not_found", message: "Category not found" }, 404);
+      return respondError(c, new NotFoundError("Category not found"));
     }
     // `validateJson` enforces the body shape (string types, length caps,
     // at-least-one-field). The handler still owns the post-trim invariants
@@ -405,7 +407,10 @@ taxonomyRoutes.patch(
     if (body.name != null) {
       const trimmed = body.name.trim();
       if (trimmed.length === 0) {
-        return c.json({ error: "bad_request", message: "Name must be 1–200 characters" }, 400);
+        return respondError(
+          c,
+          new ValidationError("Name must be 1–200 characters", { code: "bad_request" }),
+        );
       }
       body.name = trimmed;
     }
@@ -417,27 +422,25 @@ taxonomyRoutes.patch(
       for (const raw of body.aliases) {
         const alias = raw.trim().toLowerCase();
         if (!CATEGORY_ALIAS_RE.test(alias)) {
-          return c.json(
-            {
-              error: "bad_request",
-              message: `Invalid alias "${raw}". Must match ${CATEGORY_ALIAS_RE.source}`,
-            },
-            400,
+          return respondError(
+            c,
+            new ValidationError(`Invalid alias "${raw}". Must match ${CATEGORY_ALIAS_RE.source}`, {
+              code: "bad_request",
+            }),
           );
         }
         if (isValidCategory(alias)) {
-          return c.json(
-            {
-              error: "bad_request",
-              message: `Alias "${alias}" is already a canonical category slug`,
-            },
-            400,
+          return respondError(
+            c,
+            new ValidationError(`Alias "${alias}" is already a canonical category slug`, {
+              code: "bad_request",
+            }),
           );
         }
         if (seen.has(alias)) {
-          return c.json(
-            { error: "bad_request", message: `Duplicate alias "${alias}" in request` },
-            400,
+          return respondError(
+            c,
+            new ValidationError(`Duplicate alias "${alias}" in request`, { code: "bad_request" }),
           );
         }
         seen.add(alias);
@@ -468,12 +471,9 @@ taxonomyRoutes.patch(
         const claimed = new Set(parseCategoryAliases(row.aliases));
         for (const alias of normalizedAliases) {
           if (claimed.has(alias)) {
-            return c.json(
-              {
-                error: "conflict",
-                message: `Alias "${alias}" is already claimed by category "${row.slug}"`,
-              },
-              409,
+            return respondError(
+              c,
+              new ConflictError(`Alias "${alias}" is already claimed by category "${row.slug}"`),
             );
           }
         }
@@ -573,7 +573,7 @@ taxonomyRoutes.get(
       },
       404: {
         description: "Slug is neither canonical nor a known alias",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
   }),
@@ -588,7 +588,7 @@ taxonomyRoutes.get(
       const aliasMap = await loadAliasMap(db);
       const canonical = aliasMap.get(input);
       if (!canonical || !isValidCategory(canonical)) {
-        return c.json({ error: "not_found", message: "Category not found" }, 404);
+        return respondError(c, new NotFoundError("Category not found"));
       }
       slug = canonical;
     }
@@ -658,7 +658,7 @@ taxonomyRoutes.get(
       },
       404: {
         description: "Tag not found",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
   }),
@@ -668,7 +668,7 @@ taxonomyRoutes.get(
 
     const [tag] = await db.select().from(tags).where(eq(tags.slug, slug));
     if (!tag) {
-      return c.json({ error: "not_found", message: "Tag not found" }, 404);
+      return respondError(c, new NotFoundError("Tag not found"));
     }
 
     const [orgs, productsList] = await Promise.all([

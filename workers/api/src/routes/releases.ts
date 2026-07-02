@@ -29,11 +29,13 @@ import {
   LinkReleaseCoverageResponseSchema,
   UnlinkReleaseCoverageResponseSchema,
   ReleasesWithMediaResponseSchema,
-  ErrorResponseSchema,
+  errorEnvelopeSchema,
   type ReleaseCoverageSibling,
 } from "@buildinternet/releases-api-types";
 import { validateJson } from "../lib/validate.js";
 import { IN_ARRAY_CHUNK_SIZE, RELEASE_COVERAGE_INSERT_CHUNK_SIZE } from "../lib/d1-limits.js";
+import { respondError } from "../lib/error-response.js";
+import { NotFoundError, ValidationError } from "@releases/lib/releases-error";
 
 export const releaseRoutes = new Hono<Env>();
 
@@ -66,7 +68,7 @@ releaseRoutes.get(
       },
       400: {
         description: "Unsupported query — only `?hasMedia=true` is accepted",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
   }),
@@ -93,7 +95,10 @@ releaseRoutes.get(
       return c.json(rows.filter((r) => r.media !== null));
     }
 
-    return c.json({ error: "unsupported query — use ?hasMedia=true" }, 400);
+    return respondError(
+      c,
+      new ValidationError("unsupported query — use ?hasMedia=true", { code: "bad_request" }),
+    );
   },
 );
 
@@ -179,11 +184,11 @@ releaseRoutes.get(
       400: {
         description:
           "Invalid `exclude` value, unparseable `since`/`until`, or `source` and `org` both supplied",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
       404: {
         description: "Source or org not found",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
   }),
@@ -199,12 +204,12 @@ releaseRoutes.get(
     // releases AND cache-collide with the default homepage shape.
     const parsedExclude = parseExcludeSourceTypes(c.req.query("exclude"));
     if (!parsedExclude.ok) {
-      return c.json(
-        {
-          error: "bad_request",
-          message: `Invalid \`exclude\` source types: ${parsedExclude.invalid.join(", ")}. Allowed: ${SOURCE_TYPES.join(", ")}.`,
-        },
-        400,
+      return respondError(
+        c,
+        new ValidationError(
+          `Invalid \`exclude\` source types: ${parsedExclude.invalid.join(", ")}. Allowed: ${SOURCE_TYPES.join(", ")}.`,
+          { code: "bad_request" },
+        ),
       );
     }
     // Sort so any param ordering hits the same cache key.
@@ -212,14 +217,14 @@ releaseRoutes.get(
 
     const window = parseTimeWindow(c.req.query("since"), c.req.query("until"));
     if (!window.ok) {
-      return c.json({ error: "bad_request", message: window.message }, 400);
+      return respondError(c, new ValidationError(window.message, { code: "bad_request" }));
     }
     const { since, until } = window;
 
     if (sourceParam && orgParam) {
-      return c.json(
-        { error: "bad_request", message: "`source` and `org` are mutually exclusive" },
-        400,
+      return respondError(
+        c,
+        new ValidationError("`source` and `org` are mutually exclusive", { code: "bad_request" }),
       );
     }
 
@@ -234,7 +239,8 @@ releaseRoutes.get(
         .from(sources)
         .where(sourceMatchByIdOrSlug(sourceParam))
         .get();
-      if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
+      if (!src)
+        return respondError(c, new NotFoundError("Source not found", { code: "not_found" }));
       sourceId = src.id;
     } else if (orgParam) {
       const org = await db
@@ -242,7 +248,8 @@ releaseRoutes.get(
         .from(organizations)
         .where(orgWhere(orgParam))
         .get();
-      if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
+      if (!org)
+        return respondError(c, new NotFoundError("Organization not found", { code: "not_found" }));
       orgId = org.id;
     }
 
@@ -442,11 +449,11 @@ releaseRoutes.post(
       },
       400: {
         description: "Missing/invalid body, self-coverage, or malformed `decidedBy`",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
       404: {
         description: "One or more release IDs not found",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
   }),
@@ -460,9 +467,9 @@ releaseRoutes.post(
     // the same row via ON CONFLICT DO UPDATE and inflate the `linked` count.
     const coverageIds = [...new Set(body.coverageIds)];
     if (coverageIds.includes(canonicalId)) {
-      return c.json(
-        { error: "bad_request", message: "a release cannot be coverage of itself" },
-        400,
+      return respondError(
+        c,
+        new ValidationError("a release cannot be coverage of itself", { code: "bad_request" }),
       );
     }
 
@@ -479,9 +486,9 @@ releaseRoutes.post(
     }
     const missing = ids.filter((x) => !foundSet.has(x));
     if (missing.length > 0) {
-      return c.json(
-        { error: "not_found", message: `Release(s) not found: ${missing.join(", ")}` },
-        404,
+      return respondError(
+        c,
+        new NotFoundError(`Release(s) not found: ${missing.join(", ")}`, { code: "not_found" }),
       );
     }
 

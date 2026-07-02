@@ -12,6 +12,15 @@ import { authOrganization, authMember } from "../db/schema-auth.js";
 import type { Env } from "../index.js";
 import { PatchWorkspaceProfileBodySchema } from "@buildinternet/releases-api-types";
 import { requireFollowsPrincipal } from "../middleware/auth.js";
+import { respondError } from "../lib/error-response.js";
+import {
+  type ReleasesError,
+  ValidationError,
+  UnauthorizedError,
+  ForbiddenError,
+  NotFoundError,
+  ServiceUnavailableError,
+} from "@releases/lib/releases-error";
 
 const MAX_MULTIPART_BYTES = 8 * 1024 * 1024;
 const MANAGER_ROLES = new Set(["owner", "admin"]);
@@ -57,19 +66,17 @@ async function requireWorkspaceManager(
   return { ok: true };
 }
 
-function gateResponse(gate: { ok: false; status: 403 | 404 }) {
-  return {
-    error: gate.status === 403 ? "forbidden" : "not_found",
-    message: gate.status === 403 ? "Owner or admin required" : "Workspace not found",
-    status: gate.status,
-  } as const;
+function gateResponse(gate: { ok: false; status: 403 | 404 }): ReleasesError {
+  return gate.status === 403
+    ? new ForbiddenError("Owner or admin required")
+    : new NotFoundError("Workspace not found");
 }
 
 export const workspaceProfileHandlers = new Hono<Env>();
 
 workspaceProfileHandlers.get("/workspaces/:workspaceId/profile", async (c) => {
   const session = c.get("session");
-  if (!session) return c.json({ error: "unauthorized", message: "Sign in required" }, 401);
+  if (!session) return respondError(c, new UnauthorizedError("Sign in required"));
   const workspaceId = c.req.param("workspaceId");
   const db = createDb(c.env.DB);
 
@@ -79,7 +86,7 @@ workspaceProfileHandlers.get("/workspaces/:workspaceId/profile", async (c) => {
     .innerJoin(authMember, eq(authMember.organizationId, authOrganization.id))
     .where(and(eq(authOrganization.id, workspaceId), eq(authMember.userId, session.user.id)))
     .limit(1);
-  if (!org) return c.json({ error: "not_found", message: "Workspace not found" }, 404);
+  if (!org) return respondError(c, new NotFoundError("Workspace not found"));
 
   return c.json({
     workspaceId,
@@ -93,27 +100,24 @@ workspaceProfileHandlers.patch(
   validateJson(PatchWorkspaceProfileBodySchema),
   async (c) => {
     const session = c.get("session");
-    if (!session) return c.json({ error: "unauthorized", message: "Sign in required" }, 401);
+    if (!session) return respondError(c, new UnauthorizedError("Sign in required"));
     const workspaceId = c.req.param("workspaceId");
     const body = c.req.valid("json");
     const db = createDb(c.env.DB);
 
     const gate = await requireWorkspaceManager(db, session.user.id, workspaceId);
-    if (!gate.ok) {
-      const err = gateResponse(gate);
-      return c.json({ error: err.error, message: err.message }, err.status);
-    }
+    if (!gate.ok) return respondError(c, gateResponse(gate));
 
     const [org] = await db
       .select({ metadata: authOrganization.metadata, logo: authOrganization.logo })
       .from(authOrganization)
       .where(eq(authOrganization.id, workspaceId))
       .limit(1);
-    if (!org) return c.json({ error: "not_found", message: "Workspace not found" }, 404);
+    if (!org) return respondError(c, new NotFoundError("Workspace not found"));
 
     const normalized = normalizeProfilePatch(body);
     if (!normalized.ok) {
-      return c.json({ error: "bad_request", message: normalized.message }, 400);
+      return respondError(c, new ValidationError(normalized.message, { code: "bad_request" }));
     }
 
     const metadata = mergeWorkspaceMetadata(org.metadata, normalized.patch);
@@ -129,22 +133,31 @@ workspaceProfileHandlers.patch(
 
 workspaceProfileHandlers.post("/workspaces/:workspaceId/avatar", async (c) => {
   const session = c.get("session");
-  if (!session) return c.json({ error: "unauthorized", message: "Sign in required" }, 401);
+  if (!session) return respondError(c, new UnauthorizedError("Sign in required"));
   if (!c.env.MEDIA) {
-    return c.json({ error: "unavailable", message: "Media storage is not configured" }, 503);
+    return respondError(
+      c,
+      new ServiceUnavailableError("Media storage is not configured", {
+        code: "service_unavailable",
+      }),
+    );
   }
 
   const workspaceId = c.req.param("workspaceId");
   const db = createDb(c.env.DB);
   const gate = await requireWorkspaceManager(db, session.user.id, workspaceId);
-  if (!gate.ok) {
-    const err = gateResponse(gate);
-    return c.json({ error: err.error, message: err.message }, err.status);
-  }
+  if (!gate.ok) return respondError(c, gateResponse(gate));
 
   const file = await readAvatarFile(c);
   if ("error" in file) {
-    return c.json({ error: "bad_request", message: file.error }, file.status);
+    // 413 keeps the payload_too_large code (status still normalizes to 400 via
+    // ValidationError); other upload failures are generic bad_request.
+    return respondError(
+      c,
+      new ValidationError(file.error, {
+        code: file.status === 413 ? "payload_too_large" : "bad_request",
+      }),
+    );
   }
 
   const result = await ingestAvatarFromBuffer({

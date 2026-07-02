@@ -106,7 +106,7 @@ describe("POST /sources/:id/releases/batch — feedUrlDeny insert guard (#1335)"
 
     const res = await batch(db, { releases: "nope" });
     expect(res.status).toBe(400);
-    expect(((await res.json()) as { error: string }).error).toBe("bad_request");
+    expect(((await res.json()) as { error: { code: string } }).error.code).toBe("bad_request");
   });
 });
 

@@ -4,6 +4,12 @@ import { createDb } from "../db.js";
 import { ingestAvatarFromBuffer } from "../lib/avatar-ingest.js";
 import { user } from "../db/schema-auth.js";
 import type { Env } from "../index.js";
+import { respondError } from "../lib/error-response.js";
+import {
+  UnauthorizedError,
+  ServiceUnavailableError,
+  ValidationError,
+} from "@releases/lib/releases-error";
 
 const MAX_MULTIPART_BYTES = 8 * 1024 * 1024;
 
@@ -36,14 +42,19 @@ export const accountProfileHandlers = new Hono<Env>();
 
 accountProfileHandlers.post("/me/avatar", async (c) => {
   const session = c.get("session");
-  if (!session) return c.json({ error: "unauthorized", message: "Sign in required" }, 401);
+  if (!session) return respondError(c, new UnauthorizedError("Sign in required"));
   if (!c.env.MEDIA) {
-    return c.json({ error: "unavailable", message: "Media storage is not configured" }, 503);
+    return respondError(c, new ServiceUnavailableError("Media storage is not configured"));
   }
 
   const file = await readAvatarFile(c);
   if ("error" in file) {
-    return c.json({ error: "bad_request", message: file.error }, file.status);
+    return respondError(
+      c,
+      new ValidationError(file.error, {
+        code: file.status === 413 ? "payload_too_large" : "bad_request",
+      }),
+    );
   }
 
   const result = await ingestAvatarFromBuffer({

@@ -138,7 +138,7 @@ describe("POST /v1/feedback", () => {
     expect(res.status).toBe(202);
   });
 
-  it("rejects an oversized body with 413 before parsing", async () => {
+  it("rejects an oversized body with 400 before parsing", async () => {
     const db = mkDb();
     const fetch = await makeApp(db);
     const res = await fetch(
@@ -148,7 +148,10 @@ describe("POST /v1/feedback", () => {
         body: JSON.stringify({ message: "x".repeat(90_000) }),
       }),
     );
-    expect(res.status).toBe(413);
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: { code: string; type: string; message: string } };
+    expect(body.error.code).toBe("payload_too_large");
+    expect(body.error.type).toBe("validation");
     const rows = await db.select().from(feedback);
     expect(rows).toHaveLength(0);
   });

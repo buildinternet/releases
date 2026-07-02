@@ -170,7 +170,9 @@ describe("POST /changelog/fetch", () => {
     installFetch(monorepoHandler);
     const res = await call(undefined);
     expect(res.status).toBe(400);
-    expect(((await res.json()) as { error: string }).error).toBe("bad_request");
+    expect(
+      ((await res.json()) as { error: { code: string; type: string; message: string } }).error.code,
+    ).toBe("bad_request");
   });
 
   it("returns 400 for a non-github coordinate", async () => {
@@ -187,7 +189,7 @@ describe("POST /changelog/fetch", () => {
     );
     const res = await call("ghost/repo");
     expect(res.status).toBe(404);
-    expect(((await res.json()) as { error: string }).error).toBe("repo_not_found");
+    expect(((await res.json()) as { error: { code: string } }).error.code).toBe("not_found");
   });
 
   it("maps GitHub rate-limiting to 503", async () => {
@@ -208,7 +210,9 @@ describe("POST /changelog/fetch", () => {
     );
     const res = await call("busy/repo");
     expect(res.status).toBe(503);
-    expect(((await res.json()) as { error: string }).error).toBe("github_rate_limited");
+    expect(((await res.json()) as { error: { code: string } }).error.code).toBe(
+      "service_unavailable",
+    );
   });
 
   it("maps an auth 403 (no rate-limit header) to 502", async () => {
@@ -219,6 +223,6 @@ describe("POST /changelog/fetch", () => {
     );
     const res = await call("private/repo");
     expect(res.status).toBe(502);
-    expect(((await res.json()) as { error: string }).error).toBe("github_auth_error");
+    expect(((await res.json()) as { error: { code: string } }).error.code).toBe("upstream_error");
   });
 });

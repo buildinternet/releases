@@ -114,9 +114,9 @@ describe("source attribution in mutation responses", () => {
     );
 
     expect(res.status).toBe(400);
-    const body = (await res.json()) as Record<string, unknown>;
-    expect(body.error).toBe("bad_request");
-    expect(String(body.message)).toContain("not found in this org");
+    const body = (await res.json()) as { error: { code: string; type: string; message: string } };
+    expect(body.error.code).toBe("bad_request");
+    expect(body.error.message).toContain("not found in this org");
   });
 
   it("POST rejects unknown productSlug with 400", async () => {
@@ -138,8 +138,8 @@ describe("source attribution in mutation responses", () => {
     );
 
     expect(res.status).toBe(400);
-    const body = (await res.json()) as Record<string, unknown>;
-    expect(body.error).toBe("bad_request");
+    const body = (await res.json()) as { error: { code: string; type: string; message: string } };
+    expect(body.error.code).toBe("bad_request");
   });
 
   it("POST without product returns null product fields and resolved org block", async () => {
@@ -203,9 +203,11 @@ describe("source attribution in mutation responses", () => {
     );
 
     expect(patchRes.status).toBe(400);
-    const body = (await patchRes.json()) as Record<string, unknown>;
-    expect(body.error).toBe("bad_request");
-    expect(String(body.message)).toContain("not found in this org");
+    const body = (await patchRes.json()) as {
+      error: { code: string; type: string; message: string };
+    };
+    expect(body.error.code).toBe("bad_request");
+    expect(body.error.message).toContain("not found in this org");
   });
 
   it("PATCH returns enriched response after updating productId", async () => {

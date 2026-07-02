@@ -3,6 +3,8 @@ import { constantTimeEqual } from "@buildinternet/releases-core/api-token";
 import { getSecret } from "@releases/lib/secrets";
 import { logEvent } from "@releases/lib/log-event";
 import type { Env } from "../index.js";
+import { respondError } from "../lib/error-response.js";
+import { UnauthorizedError } from "@releases/lib/releases-error";
 
 export const githubRoutes = new Hono<Env>();
 
@@ -69,7 +71,7 @@ githubRoutes.post("/integrations/github/webhook", async (c) => {
   const secret = await getSecret(env.RELEASES_GITHUB_WEBHOOK_SECRET);
   const signature = c.req.header("X-Hub-Signature-256");
   if (!secret || !(await verifyGitHubSignature(secret, rawBody, signature))) {
-    return c.json({ error: "unauthorized" }, 401);
+    return respondError(c, new UnauthorizedError());
   }
 
   // GitHub stamps every delivery with the event type and a unique delivery id

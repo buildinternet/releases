@@ -8,7 +8,7 @@ import {
   ValidationError,
   InternalError,
 } from "@releases/lib/releases-error";
-import { classifyDbError } from "@releases/lib/db-errors";
+import { classifyDbError, dbErrorToWireCode } from "@releases/lib/db-errors";
 import { logEvent } from "@releases/lib/log-event";
 import { BareSlugRejected } from "../utils";
 
@@ -71,7 +71,7 @@ export function respondError(c: Context, err: unknown): Response {
       causeTransient: db.transient,
     });
     const e = new InternalError("Internal server error", {
-      code: db.code === "DB_TOO_MANY_VARIABLES" ? "db_too_many_variables" : "internal_error",
+      code: dbErrorToWireCode(db.code),
       details: { dbCode: db.code, transient: db.transient },
     });
     return c.json(e.toWire(), e.status as ContentfulStatusCode);

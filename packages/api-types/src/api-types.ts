@@ -18,7 +18,6 @@ import type {
   MediaItemSchema,
   PaginationSchema,
   StatsSchema,
-  ErrorResponseSchema,
   ReleaseTypeSchema,
   ReleaseCompositionSchema,
   ReleaseItemSchema,
@@ -258,7 +257,6 @@ export {
   PaginationSchema,
   ListResponseSchema,
   StatsSchema,
-  ErrorResponseSchema,
   ReleaseTypeSchema,
   ReleaseCompositionSchema,
   ReleaseItemSchema,
@@ -555,8 +553,6 @@ export interface CreateUserApiKeyBody {
   scope?: ApiScope;
   expiresInDays?: number;
 }
-
-export type ErrorResponse = z.infer<typeof ErrorResponseSchema>;
 
 // ── Sitemap (bulk URL emission) ──
 

@@ -23,6 +23,8 @@ import {
   type OAuthClientAdapter,
 } from "../auth/oauth-clients.js";
 import type { Env } from "../index.js";
+import { respondError } from "../lib/error-response.js";
+import { ValidationError, NotFoundError } from "@releases/lib/releases-error";
 
 export const adminOauthRoutes = new Hono<Env>();
 
@@ -42,19 +44,31 @@ adminOauthRoutes.post("/admin/oauth/clients", async (c) => {
   try {
     raw = await c.req.json();
   } catch {
-    return c.json({ error: "invalid_json" }, 400);
+    return respondError(c, new ValidationError(undefined, { code: "invalid_json" }));
   }
-  if (typeof raw !== "object" || raw === null) return c.json({ error: "invalid_json" }, 400);
+  if (typeof raw !== "object" || raw === null)
+    return respondError(c, new ValidationError(undefined, { code: "invalid_json" }));
   const b = raw as Record<string, unknown>;
 
   const redirectUris = asStringArray(b.redirectUris);
-  if (!redirectUris) return c.json({ error: "redirectUris must be a non-empty string array" }, 400);
+  if (!redirectUris)
+    return respondError(
+      c,
+      new ValidationError("redirectUris must be a non-empty string array", { code: "bad_request" }),
+    );
   const scopes = asStringArray(b.scopes);
-  if (!scopes) return c.json({ error: "scopes must be a non-empty string array" }, 400);
+  if (!scopes)
+    return respondError(
+      c,
+      new ValidationError("scopes must be a non-empty string array", { code: "bad_request" }),
+    );
 
   for (const uri of redirectUris) {
     if (!SafeUrlSchema.safeParse(uri).success) {
-      return c.json({ error: "invalid_redirect_uri", uri }, 400);
+      return respondError(
+        c,
+        new ValidationError(undefined, { code: "bad_request", details: { uri } }),
+      );
     }
   }
 
@@ -69,16 +83,31 @@ adminOauthRoutes.post("/admin/oauth/clients", async (c) => {
     b.tokenEndpointAuthMethod !== undefined &&
     !AUTH_METHODS.includes(b.tokenEndpointAuthMethod as string)
   ) {
-    return c.json({ error: "invalid_tokenEndpointAuthMethod", allowed: AUTH_METHODS }, 400);
+    return respondError(
+      c,
+      new ValidationError("tokenEndpointAuthMethod must be one of the allowed values", {
+        code: "bad_request",
+        details: { allowed: AUTH_METHODS },
+      }),
+    );
   }
   if (b.type !== undefined && !CLIENT_TYPES.includes(b.type as string)) {
-    return c.json({ error: "invalid_type", allowed: CLIENT_TYPES }, 400);
+    return respondError(
+      c,
+      new ValidationError(undefined, { code: "bad_request", details: { allowed: CLIENT_TYPES } }),
+    );
   }
   let grantTypes: string[] | undefined;
   if (b.grantTypes !== undefined) {
     const g = asStringArray(b.grantTypes);
     if (!g || !g.every((x) => GRANT_TYPES.includes(x))) {
-      return c.json({ error: "invalid_grantTypes", allowed: GRANT_TYPES }, 400);
+      return respondError(
+        c,
+        new ValidationError("grantTypes must all be allowed values", {
+          code: "bad_request",
+          details: { allowed: GRANT_TYPES },
+        }),
+      );
     }
     grantTypes = g;
   }
@@ -120,7 +149,7 @@ adminOauthRoutes.get("/admin/oauth/clients", async (c) => {
 adminOauthRoutes.get("/admin/oauth/clients/:clientId", async (c) => {
   const adapter = await getAdapter(c);
   const client = await getOAuthClient(adapter, c.req.param("clientId"));
-  if (!client) return c.json({ error: "client_not_found" }, 404);
+  if (!client) return respondError(c, new NotFoundError(undefined, { code: "client_not_found" }));
   return c.json(client);
 });
 
@@ -130,12 +159,18 @@ adminOauthRoutes.patch("/admin/oauth/clients/:clientId", async (c) => {
   try {
     raw = await c.req.json();
   } catch {
-    return c.json({ error: "invalid_json" }, 400);
+    return respondError(c, new ValidationError(undefined, { code: "invalid_json" }));
   }
-  if (typeof raw !== "object" || raw === null) return c.json({ error: "invalid_json" }, 400);
+  if (typeof raw !== "object" || raw === null)
+    return respondError(c, new ValidationError(undefined, { code: "invalid_json" }));
   const b = raw as Record<string, unknown>;
   if (typeof b.disabled !== "boolean" && typeof b.trusted !== "boolean") {
-    return c.json({ error: "nothing to update: provide disabled and/or trusted (boolean)" }, 400);
+    return respondError(
+      c,
+      new ValidationError("nothing to update: provide disabled and/or trusted (boolean)", {
+        code: "bad_request",
+      }),
+    );
   }
 
   const disabled = typeof b.disabled === "boolean" ? b.disabled : undefined;
@@ -143,7 +178,7 @@ adminOauthRoutes.patch("/admin/oauth/clients/:clientId", async (c) => {
 
   const adapter = await getAdapter(c);
   const updated = await updateClientFlags(adapter, clientId, { disabled, trusted });
-  if (!updated) return c.json({ error: "client_not_found" }, 404);
+  if (!updated) return respondError(c, new NotFoundError(undefined, { code: "client_not_found" }));
 
   logEvent("info", {
     component: "auth",
@@ -161,8 +196,10 @@ adminOauthRoutes.post("/admin/oauth/clients/:clientId/rotate-secret", async (c) 
   const clientId = c.req.param("clientId");
   const adapter = await getAdapter(c);
   const res = await rotateClientSecret(adapter, clientId);
-  if (res.status === "not_found") return c.json({ error: "client_not_found" }, 404);
-  if (res.status === "public_no_secret") return c.json({ error: "public_client_no_secret" }, 400);
+  if (res.status === "not_found")
+    return respondError(c, new NotFoundError(undefined, { code: "client_not_found" }));
+  if (res.status === "public_no_secret")
+    return respondError(c, new ValidationError(undefined, { code: "bad_request" }));
 
   logEvent("warn", {
     component: "auth",
@@ -178,7 +215,7 @@ adminOauthRoutes.delete("/admin/oauth/clients/:clientId", async (c) => {
   const clientId = c.req.param("clientId");
   const adapter = await getAdapter(c);
   if (!(await deleteOAuthClient(adapter, clientId)))
-    return c.json({ error: "client_not_found" }, 404);
+    return respondError(c, new NotFoundError(undefined, { code: "client_not_found" }));
 
   logEvent("warn", {
     component: "auth",

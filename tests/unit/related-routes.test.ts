@@ -36,8 +36,8 @@ describe("GET /related/releases", () => {
   test("400 when `release` is missing", async () => {
     const res = await call("/related/releases");
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe("bad_request");
+    const body = (await res.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("bad_request");
   });
 
   test("degrades gracefully when RELEASES_INDEX is missing", async () => {
@@ -63,8 +63,8 @@ describe("GET /related/sources", () => {
   test("400 when `source` is missing", async () => {
     const res = await call("/related/sources");
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe("bad_request");
+    const body = (await res.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("bad_request");
   });
 
   test("degrades when ENTITIES_INDEX is missing", async () => {

@@ -47,7 +47,7 @@ import {
   AddCollectionMemberResponseSchema,
   ReplaceCollectionMembersRequestSchema,
   ReplaceCollectionMembersResponseSchema,
-  ErrorResponseSchema,
+  errorEnvelopeSchema,
 } from "@buildinternet/releases-api-types";
 import type {
   CollectionDetail,
@@ -62,6 +62,8 @@ import type {
   ResolvedCollectionMember,
 } from "@buildinternet/releases-api-types";
 import { validateJson } from "../lib/validate.js";
+import { respondError } from "../lib/error-response.js";
+import { ValidationError, NotFoundError, ConflictError } from "@releases/lib/releases-error";
 
 export const collectionRoutes = new Hono<Env>();
 
@@ -644,7 +646,7 @@ collectionRoutes.get(
       },
       404: {
         description: "No collection with that slug.",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
   }),
@@ -654,7 +656,7 @@ collectionRoutes.get(
 
     const [collection] = await db.select().from(collections).where(eq(collections.slug, slug));
     if (!collection) {
-      return c.json({ error: "not_found", message: "Collection not found" }, 404);
+      return respondError(c, new NotFoundError("Collection not found"));
     }
 
     const [orgsList, productsList] = await Promise.all([
@@ -780,7 +782,7 @@ collectionRoutes.get(
       },
       404: {
         description: "No collection with that slug.",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
   }),
@@ -808,7 +810,7 @@ collectionRoutes.get(
       .from(collections)
       .where(eq(collections.slug, slug));
     if (!collection) {
-      return c.json({ error: "not_found", message: "Collection not found" }, 404);
+      return respondError(c, new NotFoundError("Collection not found"));
     }
 
     // Resolve org + product members through their visible-row views so the
@@ -918,11 +920,11 @@ collectionRoutes.get(
       },
       400: {
         description: "Malformed `from`/`to` date (must be YYYY-MM-DD).",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
       404: {
         description: "No collection with that slug.",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
   }),
@@ -931,15 +933,15 @@ collectionRoutes.get(
     const db = createDb(c.env.DB);
 
     const collection = await findCollectionBySlug(db, slug);
-    if (!collection) return c.json({ error: "not_found", message: "Collection not found" }, 404);
+    if (!collection) return respondError(c, new NotFoundError("Collection not found"));
 
     const now = new Date();
     const fromParam = c.req.query("from");
     const toParam = c.req.query("to");
     if ((fromParam && !isDateKey(fromParam)) || (toParam && !isDateKey(toParam))) {
-      return c.json(
-        { error: "bad_date", message: "from/to must be YYYY-MM-DD calendar dates" },
-        400,
+      return respondError(
+        c,
+        new ValidationError("from/to must be YYYY-MM-DD calendar dates", { code: "bad_request" }),
       );
     }
     const from = fromParam ?? addDaysToDateKey(etDayKey(now), -30);
@@ -971,11 +973,11 @@ collectionRoutes.post(
       },
       400: {
         description: "Missing/invalid name, slug, or description.",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
       409: {
         description: "A collection with that slug already exists.",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
   }),
@@ -989,21 +991,32 @@ collectionRoutes.post(
     // happens after toSlug normalization.
     const name = body.name.trim();
     if (name.length === 0) {
-      return c.json({ error: "bad_request", message: "Missing required field: name" }, 400);
+      return respondError(
+        c,
+        new ValidationError("Missing required field: name", { code: "bad_request" }),
+      );
     }
     if (name.length > 200) {
-      return c.json({ error: "bad_request", message: "Name must be 200 characters or fewer" }, 400);
+      return respondError(
+        c,
+        new ValidationError("Name must be 200 characters or fewer", { code: "bad_request" }),
+      );
     }
 
     const slug = (body.slug ?? toSlug(name)).trim();
     if (!SLUG_RE.test(slug)) {
-      return c.json({ error: "bad_request", message: `Invalid slug "${slug}". ${SLUG_HINT}` }, 400);
+      return respondError(
+        c,
+        new ValidationError(`Invalid slug "${slug}". ${SLUG_HINT}`, { code: "bad_request" }),
+      );
     }
 
     if (body.description != null && body.description.length > 2000) {
-      return c.json(
-        { error: "bad_request", message: "Description must be 2000 characters or fewer" },
-        400,
+      return respondError(
+        c,
+        new ValidationError("Description must be 2000 characters or fewer", {
+          code: "bad_request",
+        }),
       );
     }
 
@@ -1024,9 +1037,11 @@ collectionRoutes.post(
       return c.json(rowToWire(created), 201);
     } catch (err) {
       if (isConflictError(err)) {
-        return c.json(
-          { error: "conflict", message: `Collection with slug "${slug}" already exists`, slug },
-          409,
+        return respondError(
+          c,
+          new ConflictError(`Collection with slug "${slug}" already exists`, {
+            details: { slug },
+          }),
         );
       }
       throw err;
@@ -1059,15 +1074,15 @@ collectionRoutes.patch(
       },
       400: {
         description: "Invalid name, slug, or description.",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
       404: {
         description: "No collection with that slug.",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
       409: {
         description: "Slug rename collides with another collection.",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
   }),
@@ -1078,21 +1093,26 @@ collectionRoutes.patch(
     const body = c.req.valid("json");
 
     const [existing] = await db.select().from(collections).where(eq(collections.slug, slug));
-    if (!existing) return c.json({ error: "not_found", message: "Collection not found" }, 404);
+    if (!existing) return respondError(c, new NotFoundError("Collection not found"));
 
     const updates: Partial<typeof collections.$inferInsert> = {};
     if (body.name !== undefined) {
       const trimmed = body.name.trim();
       if (trimmed.length === 0 || trimmed.length > 200) {
-        return c.json({ error: "bad_request", message: "Name must be 1–200 characters" }, 400);
+        return respondError(
+          c,
+          new ValidationError("Name must be 1–200 characters", { code: "bad_request" }),
+        );
       }
       updates.name = trimmed;
     }
     if (body.description !== undefined) {
       if (body.description != null && body.description.length > 2000) {
-        return c.json(
-          { error: "bad_request", message: "Description must be 2000 characters or fewer" },
-          400,
+        return respondError(
+          c,
+          new ValidationError("Description must be 2000 characters or fewer", {
+            code: "bad_request",
+          }),
         );
       }
       updates.description = body.description;
@@ -1100,9 +1120,9 @@ collectionRoutes.patch(
     if (body.slug !== undefined && body.slug !== existing.slug) {
       const next = body.slug.trim();
       if (!SLUG_RE.test(next)) {
-        return c.json(
-          { error: "bad_request", message: `Invalid slug "${next}". ${SLUG_HINT}` },
-          400,
+        return respondError(
+          c,
+          new ValidationError(`Invalid slug "${next}". ${SLUG_HINT}`, { code: "bad_request" }),
         );
       }
       updates.slug = next;
@@ -1134,13 +1154,11 @@ collectionRoutes.patch(
       return c.json(rowToWire(updated));
     } catch (err) {
       if (isConflictError(err)) {
-        return c.json(
-          {
-            error: "conflict",
-            message: `Collection with slug "${updates.slug}" already exists`,
-            slug: updates.slug,
-          },
-          409,
+        return respondError(
+          c,
+          new ConflictError(`Collection with slug "${updates.slug}" already exists`, {
+            details: { slug: updates.slug },
+          }),
         );
       }
       throw err;
@@ -1170,7 +1188,7 @@ collectionRoutes.delete(
       204: { description: "Collection deleted." },
       404: {
         description: "No collection with that slug.",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
   }),
@@ -1179,7 +1197,7 @@ collectionRoutes.delete(
     const db = createDb(c.env.DB);
 
     const existing = await findCollectionBySlug(db, slug);
-    if (!existing) return c.json({ error: "not_found", message: "Collection not found" }, 404);
+    if (!existing) return respondError(c, new NotFoundError("Collection not found"));
 
     // ON DELETE CASCADE on collection_members.collection_id handles membership.
     await db.delete(collections).where(eq(collections.id, existing.id));
@@ -1216,11 +1234,11 @@ collectionRoutes.put(
       },
       400: {
         description: "Missing `orgs` array, entry without a usable ref, or duplicate in the list.",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
       404: {
         description: "Collection not found, or one of the members didn't resolve.",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
   }),
@@ -1231,13 +1249,15 @@ collectionRoutes.put(
     const body = c.req.valid("json");
 
     const existing = await findCollectionBySlug(db, slug);
-    if (!existing) return c.json({ error: "not_found", message: "Collection not found" }, 404);
+    if (!existing) return respondError(c, new NotFoundError("Collection not found"));
 
     const r = await resolveMembersBatch(db, body.orgs);
     if (!r.ok) {
-      return c.json(
-        { error: r.status === 404 ? "not_found" : "bad_request", message: r.message },
-        r.status,
+      return respondError(
+        c,
+        r.status === 404
+          ? new NotFoundError(r.message)
+          : new ValidationError(r.message, { code: "bad_request" }),
       );
     }
     const resolved = r.value;
@@ -1293,15 +1313,15 @@ collectionRoutes.post(
       },
       400: {
         description: "Member entry missing a usable ref, or productSlug without an org context.",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
       404: {
         description: "Collection not found, or the referenced org/product doesn't exist.",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
       409: {
         description: "Member is already in the collection.",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
   }),
@@ -1312,13 +1332,15 @@ collectionRoutes.post(
     const body = c.req.valid("json");
 
     const existing = await findCollectionBySlug(db, slug);
-    if (!existing) return c.json({ error: "not_found", message: "Collection not found" }, 404);
+    if (!existing) return respondError(c, new NotFoundError("Collection not found"));
 
     const r = await resolveMemberRef(db, body);
     if (!r.ok) {
-      return c.json(
-        { error: r.status === 404 ? "not_found" : "bad_request", message: r.message },
-        r.status,
+      return respondError(
+        c,
+        r.status === 404
+          ? new NotFoundError(r.message)
+          : new ValidationError(r.message, { code: "bad_request" }),
       );
     }
     const ref = r.value;
@@ -1340,12 +1362,11 @@ collectionRoutes.post(
     } catch (err) {
       if (isConflictError(err)) {
         const idText = ref.kind === "org" ? ref.orgId : ref.productId;
-        return c.json(
-          {
-            error: "conflict",
-            message: `${ref.kind === "org" ? "Org" : "Product"} ${idText} is already a member of collection "${slug}"`,
-          },
-          409,
+        return respondError(
+          c,
+          new ConflictError(
+            `${ref.kind === "org" ? "Org" : "Product"} ${idText} is already a member of collection "${slug}"`,
+          ),
         );
       }
       throw err;
@@ -1385,7 +1406,7 @@ collectionRoutes.delete(
       204: { description: "Membership removed." },
       404: {
         description: "Collection not found, org not found, or org isn't a member.",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
   }),
@@ -1400,13 +1421,13 @@ collectionRoutes.delete(
     const db = createDb(c.env.DB);
 
     const existing = await findCollectionBySlug(db, slug);
-    if (!existing) return c.json({ error: "not_found", message: "Collection not found" }, 404);
+    if (!existing) return respondError(c, new NotFoundError("Collection not found"));
 
     const [org] = await db
       .select({ id: organizations.id })
       .from(organizations)
       .where(orgWhere(orgRef));
-    if (!org) return c.json({ error: "not_found", message: `Org not found: ${orgRef}` }, 404);
+    if (!org) return respondError(c, new NotFoundError(`Org not found: ${orgRef}`));
 
     const result = await db
       .delete(collectionMembers)
@@ -1415,9 +1436,9 @@ collectionRoutes.delete(
       )
       .returning({ orgId: collectionMembers.orgId });
     if (result.length === 0) {
-      return c.json(
-        { error: "not_found", message: `Org ${org.id} is not a member of collection "${slug}"` },
-        404,
+      return respondError(
+        c,
+        new NotFoundError(`Org ${org.id} is not a member of collection "${slug}"`),
       );
     }
     await db
@@ -1458,11 +1479,11 @@ collectionRoutes.delete(
       204: { description: "Membership removed." },
       400: {
         description: "Product ref is not a typed `prod_…` id.",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
       404: {
         description: "Collection not found, product not found, or product isn't a member.",
-        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
       },
     },
   }),
@@ -1470,26 +1491,25 @@ collectionRoutes.delete(
     const slug = c.req.param("slug");
     const productRef = c.req.param("product");
     if (!isProductId(productRef)) {
-      return c.json(
-        {
-          error: "bad_request",
-          message:
-            "Product ref must be a typed `prod_…` id; resolve bare slugs first via /v1/orgs/:orgSlug/products/:productSlug.",
-        },
-        400,
+      return respondError(
+        c,
+        new ValidationError(
+          "Product ref must be a typed `prod_…` id; resolve bare slugs first via /v1/orgs/:orgSlug/products/:productSlug.",
+          { code: "bad_request" },
+        ),
       );
     }
     const db = createDb(c.env.DB);
 
     const existing = await findCollectionBySlug(db, slug);
-    if (!existing) return c.json({ error: "not_found", message: "Collection not found" }, 404);
+    if (!existing) return respondError(c, new NotFoundError("Collection not found"));
 
     const [product] = await db
       .select({ id: products.id })
       .from(products)
       .where(and(eq(products.id, productRef), isNull(products.deletedAt)));
     if (!product) {
-      return c.json({ error: "not_found", message: `Product not found: ${productRef}` }, 404);
+      return respondError(c, new NotFoundError(`Product not found: ${productRef}`));
     }
 
     const result = await db
@@ -1502,12 +1522,9 @@ collectionRoutes.delete(
       )
       .returning({ productId: collectionMembers.productId });
     if (result.length === 0) {
-      return c.json(
-        {
-          error: "not_found",
-          message: `Product ${product.id} is not a member of collection "${slug}"`,
-        },
-        404,
+      return respondError(
+        c,
+        new NotFoundError(`Product ${product.id} is not a member of collection "${slug}"`),
       );
     }
     await db

@@ -638,8 +638,9 @@ describe("POST /v1/sources/:slug/firecrawl/sync", () => {
     );
 
     expect(res.status).toBe(404);
-    const json = (await res.json()) as { error: string };
-    expect(json.error).toBe("not_found");
+    const json = (await res.json()) as { error: { code: string; type: string; message: string } };
+    expect(json.error.code).toBe("not_found");
+    expect(json.error.type).toBe("not_found");
   });
 
   it("rejects a malformed JSON body with 400", async () => {
