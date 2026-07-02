@@ -100,7 +100,13 @@ describe("POST /v1/workflows/reextract-source", () => {
     await seedScrapeSource(db);
     const res = await post(mkApp(db), { sourceId: "acme-blog" });
     expect(res.status).toBe(400);
-    expect(((await res.json()) as { error: string }).error).toBe("bare_slug_rejected");
+    expect(
+      (
+        (await res.json()) as {
+          error: { code: string; type: string; message: string };
+        }
+      ).error.code,
+    ).toBe("bare_slug_rejected");
   });
 
   it("404s an unknown source id", async () => {
@@ -115,7 +121,13 @@ describe("POST /v1/workflows/reextract-source", () => {
     const R2 = fakeR2();
     const res = await post(mkApp(db, { RAW_SNAPSHOTS: R2 }), { sourceId: "src_scrape" });
     expect(res.status).toBe(404);
-    expect(((await res.json()) as { error: string }).error).toBe("no_snapshot");
+    expect(
+      (
+        (await res.json()) as {
+          error: { code: string; type: string; message: string };
+        }
+      ).error.code,
+    ).toBe("not_found");
   });
 
   it("503s when RAW_SNAPSHOTS is unbound", async () => {
@@ -144,8 +156,14 @@ describe("POST /v1/workflows/reextract-source", () => {
     });
     // R2 has no object at that key.
     const res = await post(mkApp(db, { RAW_SNAPSHOTS: fakeR2() }), { sourceId: "src_scrape" });
-    expect(res.status).toBe(410);
-    expect(((await res.json()) as { error: string }).error).toBe("snapshot_expired");
+    expect(res.status).toBe(404);
+    expect(
+      (
+        (await res.json()) as {
+          error: { code: string; type: string; message: string };
+        }
+      ).error.code,
+    ).toBe("snapshot_expired");
   });
 
   it("re-extracts the LATEST snapshot by default (via=snapshot, dryRun no writes)", async () => {

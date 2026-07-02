@@ -7,6 +7,8 @@ import { getStatusHub, sourceMatchByIdOrSlug } from "../utils.js";
 import { getActiveFetchSession } from "../lib/active-fetch-session.js";
 import { classifyDbError } from "@releases/lib/db-errors";
 import type { Env } from "../index.js";
+import { respondError } from "../lib/error-response.js";
+import { NotFoundError, InternalError } from "@releases/lib/releases-error";
 
 export const fetchLogRoutes = new Hono<Env>();
 
@@ -24,7 +26,7 @@ fetchLogRoutes.get("/admin/logs/fetch", async (c) => {
 
   if (sourceSlug) {
     const [src] = await db.select().from(sources).where(sourceMatchByIdOrSlug(sourceSlug));
-    if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
+    if (!src) return respondError(c, new NotFoundError("Source not found"));
 
     const logs = await db
       .select()
@@ -54,13 +56,12 @@ fetchLogRoutes.post("/admin/logs/fetch", async (c) => {
     [inserted] = await db.insert(fetchLog).values(body).returning();
   } catch (err) {
     const classified = classifyDbError(err);
-    return c.json(
-      {
-        error: "insert_failed",
-        message: "Failed to insert fetch log",
-        ...(classified ? { errorCode: classified.code } : {}),
-      },
-      500,
+    return respondError(
+      c,
+      new InternalError("Failed to insert fetch log", {
+        code: "internal_error",
+        ...(classified ? { details: { errorCode: classified.code } } : {}),
+      }),
     );
   }
 

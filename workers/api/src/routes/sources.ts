@@ -172,6 +172,14 @@ import { normalizeMediaBind } from "../lib/media-bind.js";
 import { FLAGS, flag } from "@releases/lib/flags";
 import { dedupeByExistingTitle } from "@buildinternet/releases-core/title-dedup";
 import { selectExistingReleaseKeys } from "../lib/title-dedup.js";
+import { respondError } from "../lib/error-response.js";
+import {
+  ConflictError,
+  InternalError,
+  NotFoundError,
+  UpstreamError,
+  ValidationError,
+} from "@releases/lib/releases-error";
 
 export const sourceRoutes = new Hono<Env>();
 
@@ -272,12 +280,11 @@ sourceRoutes.get(
 
     const kind = parseKindParam(c.req.query("kind"));
     if (kind === null)
-      return c.json(
-        {
-          error: "bad_request",
-          message: `Invalid kind. Expected one of: ${KIND_VALUES.join(", ")}`,
-        },
-        400,
+      return respondError(
+        c,
+        new ValidationError(`Invalid kind. Expected one of: ${KIND_VALUES.join(", ")}`, {
+          code: "bad_request",
+        }),
       );
 
     // Pagination: default limit 100, hard cap 500. `?offset=` is also accepted
@@ -637,7 +644,7 @@ const postSourceFetchRoute = describeRoute({
 sourceRoutes.post("/sources/:slug/fetch", postSourceFetchRoute, async (c) => {
   const db = createDb(c.env.DB);
   const src = await resolveSourceFromContext(c, db);
-  if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
+  if (!src) return respondError(c, new NotFoundError("Source not found"));
 
   let responsePayload: Record<string, unknown>;
 
@@ -656,7 +663,10 @@ sourceRoutes.post("/sources/:slug/fetch", postSourceFetchRoute, async (c) => {
     const maxRaw = c.req.query("max");
     const maxParsed = maxRaw ? Number.parseInt(maxRaw, 10) : null;
     if (maxRaw && (!Number.isFinite(maxParsed) || maxParsed! <= 0)) {
-      return c.json({ error: "invalid_max", message: "max must be a positive integer" }, 400);
+      return respondError(
+        c,
+        new ValidationError("max must be a positive integer", { code: "bad_request" }),
+      );
     }
     // When the caller is a managed-agent session it sends X-Releases-MA-Session
     // so we know to skip the delegateScrapeToDiscovery branch. Delegating from
@@ -769,7 +779,7 @@ sourceRoutes.post("/sources/:slug/fetch", postSourceFetchRoute, async (c) => {
 const postReleasesBatchHandler = async (c: import("hono").Context<Env>) => {
   const db = createDb(c.env.DB);
   const src = await resolveSourceFromContext(c, db);
-  if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
+  if (!src) return respondError(c, new NotFoundError("Source not found"));
 
   const body = await c.req.json<{
     // `mode: "upsert-content"` is a DELIBERATE enrichment pass (#1526): same-URL
@@ -803,7 +813,10 @@ const postReleasesBatchHandler = async (c: import("hono").Context<Env>) => {
       sourceId: src.id,
       slug: src.slug,
     });
-    return c.json({ error: "bad_request", message: "`releases` must be an array" }, 400);
+    return respondError(
+      c,
+      new ValidationError("`releases` must be an array", { code: "bad_request" }),
+    );
   }
 
   // Reject an unrecognised `mode` rather than silently coercing it to the default
@@ -817,9 +830,11 @@ const postReleasesBatchHandler = async (c: import("hono").Context<Env>) => {
       slug: src.slug,
       mode: body.mode,
     });
-    return c.json(
-      { error: "bad_request", message: '`mode` must be omitted or "upsert-content"' },
-      400,
+    return respondError(
+      c,
+      new ValidationError('`mode` must be omitted or "upsert-content"', {
+        code: "bad_request",
+      }),
     );
   }
   const enrichMode = body.mode === "upsert-content";
@@ -1183,9 +1198,12 @@ const postReleasesBatchHandler = async (c: import("hono").Context<Env>) => {
         : {}),
     });
     const message = (err as Error).message ?? "Failed to insert releases";
-    return c.json(
-      { error: "insert_failed", message, ...(classified ? { errorCode: classified.code } : {}) },
-      500,
+    return respondError(
+      c,
+      new InternalError(message, {
+        code: "internal_error",
+        ...(classified ? { details: { errorCode: classified.code } } : {}),
+      }),
     );
   }
 };
@@ -1236,17 +1254,17 @@ sourceRoutes.post(
 const postRawSnapshotHandler = async (c: import("hono").Context<Env>) => {
   const db = createDb(c.env.DB);
   const src = await resolveSourceFromContext(c, db);
-  if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
+  if (!src) return respondError(c, new NotFoundError("Source not found"));
   // Scrape-only: snapshots are produced by (and re-extractable from) the scrape
   // path. The discovery worker only POSTs here for scrape sources; the guard
   // keeps the endpoint scoped and matches backfill/reextract-source.
   if (src.type !== "scrape") {
-    return c.json(
-      {
-        error: "bad_request",
-        message: `Raw-snapshot capture supports scrape sources; this source is type=${src.type}`,
-      },
-      400,
+    return respondError(
+      c,
+      new ValidationError(
+        `Raw-snapshot capture supports scrape sources; this source is type=${src.type}`,
+        { code: "bad_request" },
+      ),
     );
   }
 
@@ -1254,7 +1272,10 @@ const postRawSnapshotHandler = async (c: import("hono").Context<Env>) => {
 
   const rawBody = typeof parsed.body === "string" ? parsed.body : "";
   if (rawBody.trim().length === 0) {
-    return c.json({ error: "bad_request", message: "`body` must be a non-empty string" }, 400);
+    return respondError(
+      c,
+      new ValidationError("`body` must be a non-empty string", { code: "bad_request" }),
+    );
   }
 
   const fmtInput = parsed.format ?? "markdown";
@@ -1264,7 +1285,10 @@ const postRawSnapshotHandler = async (c: import("hono").Context<Env>) => {
   } else if (fmtInput === "html") {
     format = "html";
   } else {
-    return c.json({ error: "bad_request", message: '`format` must be "markdown" or "html"' }, 400);
+    return respondError(
+      c,
+      new ValidationError('`format` must be "markdown" or "html"', { code: "bad_request" }),
+    );
   }
 
   if (!c.env.RAW_SNAPSHOTS) {
@@ -1335,7 +1359,7 @@ sourceRoutes.delete("/sources/:slug/releases", deleteSourceReleasesRoute, async 
   const db = createDb(c.env.DB);
   const hard = c.req.query("hard") === "true";
   const src = await resolveSourceFromContext(c, db);
-  if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
+  if (!src) return respondError(c, new NotFoundError("Source not found"));
 
   if (!hard) {
     // Soft path: flip rows to suppressed=1 with reason "force_refetch". Re-fetch
@@ -1390,7 +1414,7 @@ const postContentHashHandler = async (c: import("hono").Context<Env>) => {
   );
 
   const src = await resolveSourceFromContext(c, db);
-  if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
+  if (!src) return respondError(c, new NotFoundError("Source not found"));
 
   const unchanged = src.lastContentHash === body.contentHash;
   if (unchanged) return c.json({ unchanged: true });
@@ -1477,11 +1501,17 @@ const patchMetadataHandler = async (c: import("hono").Context<Env>) => {
   try {
     const parsed = await c.req.json<unknown>();
     if (!isJsonObject(parsed)) {
-      return c.json({ error: "bad_request", message: "Body must be a JSON object" }, 400);
+      return respondError(
+        c,
+        new ValidationError("Body must be a JSON object", { code: "bad_request" }),
+      );
     }
     patch = parsed;
   } catch {
-    return c.json({ error: "bad_request", message: "Body must be a JSON object" }, 400);
+    return respondError(
+      c,
+      new ValidationError("Body must be a JSON object", { code: "bad_request" }),
+    );
   }
 
   if (
@@ -1489,17 +1519,17 @@ const patchMetadataHandler = async (c: import("hono").Context<Env>) => {
     Array.isArray(patch.changelogPaths) &&
     patch.changelogPaths.length > CHANGELOG_MAX_FILES
   ) {
-    return c.json(
-      {
-        error: "bad_request",
-        message: `changelogPaths length ${patch.changelogPaths.length} exceeds the cap of ${CHANGELOG_MAX_FILES}`,
-      },
-      400,
+    return respondError(
+      c,
+      new ValidationError(
+        `changelogPaths length ${patch.changelogPaths.length} exceeds the cap of ${CHANGELOG_MAX_FILES}`,
+        { code: "bad_request" },
+      ),
     );
   }
 
   const src = await resolveSourceFromContext(c, db);
-  if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
+  if (!src) return respondError(c, new NotFoundError("Source not found"));
 
   const merged = mergeSourceMetadata(src.metadata, patch);
   const serialized = JSON.stringify(merged);
@@ -1543,19 +1573,26 @@ const getRecentReleasesHandler = async (c: import("hono").Context<Env>) => {
   const db = createDb(c.env.DB);
   const cutoffRaw = c.req.query("cutoff");
 
-  if (!cutoffRaw) return c.json({ error: "cutoff query param required" }, 400);
+  if (!cutoffRaw)
+    return respondError(
+      c,
+      new ValidationError("cutoff query param required", { code: "bad_request" }),
+    );
 
   // Normalize the cutoff to a well-formed UTC ISO string before binding into
   // `gte(publishedAt, …)`. The publishedAt column stores UTC ISO strings, so
   // inputs like "2024/01/01" would parse as Date but compare lexically wrong.
   const cutoffDate = new Date(cutoffRaw);
   if (isNaN(cutoffDate.getTime())) {
-    return c.json({ error: "bad_request", message: "cutoff must be a valid ISO-8601 date" }, 400);
+    return respondError(
+      c,
+      new ValidationError("cutoff must be a valid ISO-8601 date", { code: "bad_request" }),
+    );
   }
   const cutoff = cutoffDate.toISOString();
 
   const src = await resolveSourceFromContext(c, db);
-  if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
+  if (!src) return respondError(c, new NotFoundError("Source not found"));
 
   const rows = await db
     .select()
@@ -1616,7 +1653,7 @@ const getKnownReleasesHandler = async (c: import("hono").Context<Env>) => {
   );
 
   const src = await resolveSourceFromContext(c, db);
-  if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
+  if (!src) return respondError(c, new NotFoundError("Source not found"));
 
   const rows = await db
     .select({
@@ -1679,7 +1716,7 @@ const getSourceSessionsRoute = describeRoute({
 sourceRoutes.get("/sources/:slug/sessions", getSourceSessionsRoute, async (c) => {
   const db = createDb(c.env.DB);
   const src = await resolveSourceFromContext(c, db);
-  if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
+  if (!src) return respondError(c, new NotFoundError("Source not found"));
 
   // Shared with the fetch-log activeSession overlay (#1360): the same
   // /active-sources → /sessions/:id join, fail-open to no active session.
@@ -1692,7 +1729,7 @@ const getSourceActivityHandler = async (c: import("hono").Context<Env>) => {
   const db = createDb(c.env.DB);
 
   const src = await resolveSourceFromContext(c, db);
-  if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
+  if (!src) return respondError(c, new NotFoundError("Source not found"));
 
   // Validate date params
   const dateRe = /^\d{4}-\d{2}-\d{2}$/;
@@ -1700,19 +1737,26 @@ const getSourceActivityHandler = async (c: import("hono").Context<Env>) => {
   const toParam = c.req.query("to");
 
   if (fromParam && !dateRe.test(fromParam)) {
-    return c.json(
-      { error: "bad_request", message: "Invalid date format for 'from'. Use YYYY-MM-DD." },
-      400,
+    return respondError(
+      c,
+      new ValidationError("Invalid date format for 'from'. Use YYYY-MM-DD.", {
+        code: "bad_request",
+      }),
     );
   }
   if (toParam && !dateRe.test(toParam)) {
-    return c.json(
-      { error: "bad_request", message: "Invalid date format for 'to'. Use YYYY-MM-DD." },
-      400,
+    return respondError(
+      c,
+      new ValidationError("Invalid date format for 'to'. Use YYYY-MM-DD.", {
+        code: "bad_request",
+      }),
     );
   }
   if (fromParam && toParam && fromParam > toParam) {
-    return c.json({ error: "bad_request", message: "'from' must be before 'to'." }, 400);
+    return respondError(
+      c,
+      new ValidationError("'from' must be before 'to'.", { code: "bad_request" }),
+    );
   }
 
   // Default range: oldest to newest release
@@ -1795,7 +1839,7 @@ const getSourceHeatmapHandler = async (c: import("hono").Context<Env>) => {
   const db = createDb(c.env.DB);
 
   const src = await resolveSourceFromContext(c, db);
-  if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
+  if (!src) return respondError(c, new NotFoundError("Source not found"));
 
   const { from, to, toExclusive } = heatmapDateRange();
   const { rows, total } = await getSourceHeatmapData(db, src.id, from, toExclusive);
@@ -1835,22 +1879,22 @@ sourceRoutes.get(
 const getSourceChangelogHandler = async (c: import("hono").Context<Env>) => {
   const db = createDb(c.env.DB);
   const src = await resolveSourceFromContext(c, db);
-  if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
+  if (!src) return respondError(c, new NotFoundError("Source not found"));
   const allRows = await db
     .select()
     .from(sourceChangelogFiles)
     .where(eq(sourceChangelogFiles.sourceId, src.id))
     .orderBy(sourceChangelogFiles.path);
   if (allRows.length === 0) {
-    return c.json({ error: "not_found", message: "Changelog file not found" }, 404);
+    return respondError(c, new NotFoundError("Changelog file not found"));
   }
 
   const requestedPath = c.req.query("path") ?? null;
   const selected = selectChangelogFile(allRows, requestedPath);
   if (!selected) {
-    return c.json(
-      { error: "not_found", message: `Changelog file not found for path: ${requestedPath}` },
-      404,
+    return respondError(
+      c,
+      new NotFoundError(`Changelog file not found for path: ${requestedPath}`),
     );
   }
 
@@ -1966,24 +2010,30 @@ const patchChangelogTokensHandler = async (c: import("hono").Context<Env>) => {
   try {
     const parsed = await c.req.json<unknown>();
     if (!isJsonObject(parsed)) {
-      return c.json({ error: "bad_request", message: "Body must be a JSON object" }, 400);
+      return respondError(
+        c,
+        new ValidationError("Body must be a JSON object", { code: "bad_request" }),
+      );
     }
     body = parsed as { tokens: number; path?: string };
   } catch {
-    return c.json({ error: "bad_request", message: "Invalid JSON body" }, 400);
+    return respondError(c, new ValidationError("Invalid JSON body", { code: "bad_request" }));
   }
   if (typeof body.tokens !== "number" || !Number.isFinite(body.tokens) || body.tokens < 0) {
-    return c.json(
-      { error: "invalid_tokens", message: "tokens must be a non-negative number" },
-      400,
+    return respondError(
+      c,
+      new ValidationError("tokens must be a non-negative number", { code: "bad_request" }),
     );
   }
   if (body.path !== undefined && typeof body.path !== "string") {
-    return c.json({ error: "bad_request", message: "path must be a string when provided" }, 400);
+    return respondError(
+      c,
+      new ValidationError("path must be a string when provided", { code: "bad_request" }),
+    );
   }
 
   const src = await resolveSourceFromContext(c, db);
-  if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
+  if (!src) return respondError(c, new NotFoundError("Source not found"));
 
   const allRows = await db
     .select()
@@ -1991,14 +2041,11 @@ const patchChangelogTokensHandler = async (c: import("hono").Context<Env>) => {
     .where(eq(sourceChangelogFiles.sourceId, src.id))
     .orderBy(sourceChangelogFiles.path);
   if (allRows.length === 0) {
-    return c.json({ error: "not_found", message: "Changelog file not found" }, 404);
+    return respondError(c, new NotFoundError("Changelog file not found"));
   }
   const selected = selectChangelogFile(allRows, body.path ?? null);
   if (!selected) {
-    return c.json(
-      { error: "not_found", message: `Changelog file not found for path: ${body.path}` },
-      404,
-    );
+    return respondError(c, new NotFoundError(`Changelog file not found for path: ${body.path}`));
   }
   const oldTokens = selected.tokens;
   const newTokens = Math.floor(body.tokens);
@@ -2057,23 +2104,25 @@ sourceRoutes.patch(
 const probeChangelogsHandler = async (c: import("hono").Context<Env>) => {
   const db = createDb(c.env.DB);
   const src = await resolveSourceFromContext(c, db);
-  if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
+  if (!src) return respondError(c, new NotFoundError("Source not found"));
 
   if (src.type !== "github") {
-    return c.json(
-      {
-        error: "unsupported_source_type",
-        message: `Changelog probe is only available for GitHub sources (got type: ${src.type})`,
-      },
-      400,
+    return respondError(
+      c,
+      new ValidationError(
+        `Changelog probe is only available for GitHub sources (got type: ${src.type})`,
+        { code: "bad_request" },
+      ),
     );
   }
 
   const ownerRepo = parseOwnerRepo(src.url);
   if (!ownerRepo) {
-    return c.json(
-      { error: "bad_source_url", message: `Cannot parse owner/repo from URL: ${src.url}` },
-      400,
+    return respondError(
+      c,
+      new ValidationError(`Cannot parse owner/repo from URL: ${src.url}`, {
+        code: "bad_request",
+      }),
     );
   }
 
@@ -2381,7 +2430,7 @@ const getSourceDetailHandler = async (c: import("hono").Context<Env>) => {
   const db = createDb(c.env.DB);
 
   const src = await resolveSourceFromContext(c, db);
-  if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
+  if (!src) return respondError(c, new NotFoundError("Source not found"));
 
   const payload = await buildSourceDetailPayload(db, src, opts);
 
@@ -2429,7 +2478,7 @@ const getSourceReleasesFeedHandler = async (c: import("hono").Context<Env>) => {
 
   const db = createDb(c.env.DB);
   const src = await resolveSourceFromContext(c, db);
-  if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
+  if (!src) return respondError(c, new NotFoundError("Source not found"));
 
   const results = await getSourceReleasesFeed(
     c.env.DB,
@@ -2519,7 +2568,10 @@ sourceRoutes.post(
 
     const identifier = body?.url ?? (body?.trackId != null ? String(body.trackId) : undefined);
     if (!identifier) {
-      return c.json({ error: "bad_request", message: "url or trackId is required" }, 400);
+      return respondError(
+        c,
+        new ValidationError("url or trackId is required", { code: "bad_request" }),
+      );
     }
 
     const db = createDb(c.env.DB);
@@ -2532,10 +2584,13 @@ sourceRoutes.post(
     });
 
     if (result.status === "bad_request") {
-      return c.json({ error: "bad_request", message: "Could not parse App Store identifier" }, 400);
+      return respondError(
+        c,
+        new ValidationError("Could not parse App Store identifier", { code: "bad_request" }),
+      );
     }
     if (result.status === "not_found") {
-      return c.json({ error: "not_found", message: "No App Store app for that identifier" }, 404);
+      return respondError(c, new NotFoundError("No App Store app for that identifier"));
     }
     try {
       c.executionCtx.waitUntil(embedSourceSideEffect(c.env, db, result.source.id));
@@ -2572,10 +2627,13 @@ sourceRoutes.post(
     } | null;
 
     if (!body?.url) {
-      return c.json({ error: "bad_request", message: "url is required" }, 400);
+      return respondError(c, new ValidationError("url is required", { code: "bad_request" }));
     }
     if (!body.orgSlug && !body.orgId) {
-      return c.json({ error: "bad_request", message: "orgSlug or orgId is required" }, 400);
+      return respondError(
+        c,
+        new ValidationError("orgSlug or orgId is required", { code: "bad_request" }),
+      );
     }
 
     const db = createDb(c.env.DB);
@@ -2601,21 +2659,23 @@ sourceRoutes.post(
     );
 
     if (result.status === "bad_request") {
-      return c.json(
-        { error: "bad_request", message: "Could not resolve a video feed from that URL" },
-        400,
+      return respondError(
+        c,
+        new ValidationError("Could not resolve a video feed from that URL", {
+          code: "bad_request",
+        }),
       );
     }
     if (result.status === "org_not_found") {
-      return c.json({ error: "not_found", message: "Org not found" }, 404);
+      return respondError(c, new NotFoundError("Org not found"));
     }
     if (result.status === "feed_unavailable") {
-      return c.json(
-        {
-          error: "feed_unavailable",
-          message: "Could not fetch the video feed (it may be private or temporarily unavailable)",
-        },
-        502,
+      return respondError(
+        c,
+        new UpstreamError(
+          "Could not fetch the video feed (it may be private or temporarily unavailable)",
+          { code: "upstream_error" },
+        ),
       );
     }
     try {
@@ -2658,13 +2718,12 @@ sourceRoutes.post(
 
     const baseSlug = body.slug ?? toSlug(body.name);
     if (isReservedSlug(baseSlug, "nested")) {
-      return c.json(
-        {
-          error: "slug_reserved",
-          message: `Slug "${baseSlug}" is reserved and cannot be used for a source. Choose a different slug or rename the source.`,
-          slug: baseSlug,
-        },
-        409,
+      return respondError(
+        c,
+        new ConflictError(
+          `Slug "${baseSlug}" is reserved and cannot be used for a source. Choose a different slug or rename the source.`,
+          { code: "slug_reserved", details: { slug: baseSlug } },
+        ),
       );
     }
 
@@ -2690,12 +2749,11 @@ sourceRoutes.post(
       orgId = org?.id ?? null;
     }
     if (!orgId) {
-      return c.json(
-        {
-          error: "bad_request",
-          message: "orgId or orgSlug is required (must resolve to an existing org)",
-        },
-        400,
+      return respondError(
+        c,
+        new ValidationError("orgId or orgSlug is required (must resolve to an existing org)", {
+          code: "bad_request",
+        }),
       );
     }
 
@@ -2719,9 +2777,11 @@ sourceRoutes.post(
         )
         .limit(1);
       if (!product) {
-        return c.json(
-          { error: "bad_request", message: `productId "${body.productId}" not found in this org` },
-          400,
+        return respondError(
+          c,
+          new ValidationError(`productId "${body.productId}" not found in this org`, {
+            code: "bad_request",
+          }),
         );
       }
       productId = product.id;
@@ -2735,12 +2795,11 @@ sourceRoutes.post(
         .where(and(idMatch, eq(products.orgId, orgId), isNull(products.deletedAt)))
         .limit(1);
       if (!product) {
-        return c.json(
-          {
-            error: "bad_request",
-            message: `productSlug "${body.productSlug}" not found in this org`,
-          },
-          400,
+        return respondError(
+          c,
+          new ValidationError(`productSlug "${body.productSlug}" not found in this org`, {
+            code: "bad_request",
+          }),
         );
       }
       productId = product.id;
@@ -2782,12 +2841,11 @@ sourceRoutes.post(
 
     if (!source) {
       // All 20 slug attempts collided — fall back to the original 409 path.
-      return c.json(
-        {
-          error: "conflict",
-          message: `Source with slug "${baseSlug}" already exists (exhausted ${MAX_SLUG_ATTEMPTS} suffix attempts)`,
-        },
-        409,
+      return respondError(
+        c,
+        new ConflictError(
+          `Source with slug "${baseSlug}" already exists (exhausted ${MAX_SLUG_ATTEMPTS} suffix attempts)`,
+        ),
       );
     }
 
@@ -2835,12 +2893,12 @@ const patchSourceHandler = async (c: import("hono").Context<Env>) => {
   const raw = (await c.req.json<unknown>()) as Record<string, unknown>;
   const parsed = SourcePatchInputSchema.safeParse(raw);
   if (!parsed.success) {
-    return c.json({ error: "bad_request", message: parsed.error.message }, 400);
+    return respondError(c, new ValidationError(parsed.error.message, { code: "bad_request" }));
   }
   const body = parsed.data as SourcePatchInput;
 
   const src = await resolveSourceFromContext(c, db);
-  if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
+  if (!src) return respondError(c, new NotFoundError("Source not found"));
 
   const UPDATABLE_FIELDS = [
     "name",
@@ -2883,12 +2941,12 @@ const patchSourceHandler = async (c: import("hono").Context<Env>) => {
     const effectiveOrgId =
       typeof body.orgId === "string" && body.orgId.length > 0 ? body.orgId : src.orgId;
     if (!effectiveOrgId) {
-      return c.json(
-        {
-          error: "bad_request",
-          message: `Cannot set productId on a source with no org. Set orgId in the same patch.`,
-        },
-        400,
+      return respondError(
+        c,
+        new ValidationError(
+          `Cannot set productId on a source with no org. Set orgId in the same patch.`,
+          { code: "bad_request" },
+        ),
       );
     }
     const [product] = await db
@@ -2903,12 +2961,11 @@ const patchSourceHandler = async (c: import("hono").Context<Env>) => {
       )
       .limit(1);
     if (!product) {
-      return c.json(
-        {
-          error: "bad_request",
-          message: `productId "${body.productId}" not found in this org`,
-        },
-        400,
+      return respondError(
+        c,
+        new ValidationError(`productId "${body.productId}" not found in this org`, {
+          code: "bad_request",
+        }),
       );
     }
   }
@@ -2944,27 +3001,23 @@ const patchSourceHandler = async (c: import("hono").Context<Env>) => {
       unrecognized.length > 0
         ? `Unrecognized fields: ${unrecognized.join(", ")}. Updatable fields: ${UPDATABLE_FIELDS.join(", ")}`
         : `No values to set. Updatable fields: ${UPDATABLE_FIELDS.join(", ")}`;
-    return c.json({ error: "bad_request", message }, 400);
+    return respondError(c, new ValidationError(message, { code: "bad_request" }));
   }
 
   // Check for slug uniqueness before attempting update
   if (body.slug !== undefined && body.slug !== src.slug) {
     if (isReservedSlug(body.slug, "nested")) {
-      return c.json(
-        {
-          error: "slug_reserved",
-          message: `Slug "${body.slug}" is reserved and cannot be used for a source.`,
-          slug: body.slug,
-        },
-        409,
+      return respondError(
+        c,
+        new ConflictError(`Slug "${body.slug}" is reserved and cannot be used for a source.`, {
+          code: "slug_reserved",
+          details: { slug: body.slug },
+        }),
       );
     }
     const [existing] = await db.select().from(sources).where(eq(sources.slug, body.slug));
     if (existing) {
-      return c.json(
-        { error: "conflict", message: `Source with slug "${body.slug}" already exists` },
-        409,
-      );
+      return respondError(c, new ConflictError(`Source with slug "${body.slug}" already exists`));
     }
   }
 
@@ -3066,7 +3119,7 @@ sourceRoutes.delete("/sources/:slug", deleteSourceRoute, async (c) => {
   // collide with a live row; passing a `src_` ID is the canonical way to
   // reach a tombstone.
   const src = await resolveSourceFromContext(c, db, { includeDeleted: hard });
-  if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
+  if (!src) return respondError(c, new NotFoundError("Source not found"));
 
   const orgId = src.orgId;
 
@@ -3123,7 +3176,7 @@ sourceRoutes.post("/sources/:slug/releases", postReleaseRoute, async (c) => {
   const db = createDb(c.env.DB);
 
   const src = await resolveSourceFromContext(c, db);
-  if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
+  if (!src) return respondError(c, new NotFoundError("Source not found"));
 
   let body: {
     id?: string;
@@ -3146,17 +3199,26 @@ sourceRoutes.post("/sources/:slug/releases", postReleaseRoute, async (c) => {
   try {
     const parsed = await c.req.json<unknown>();
     if (!isJsonObject(parsed)) {
-      return c.json({ error: "bad_request", message: "Body must be a JSON object" }, 400);
+      return respondError(
+        c,
+        new ValidationError("Body must be a JSON object", { code: "bad_request" }),
+      );
     }
     body = parsed as typeof body;
   } catch {
-    return c.json({ error: "bad_request", message: "Invalid JSON body" }, 400);
+    return respondError(c, new ValidationError("Invalid JSON body", { code: "bad_request" }));
   }
   if (typeof body.title !== "string" || body.title.length === 0) {
-    return c.json({ error: "bad_request", message: "title must be a non-empty string" }, 400);
+    return respondError(
+      c,
+      new ValidationError("title must be a non-empty string", { code: "bad_request" }),
+    );
   }
   if (typeof body.content !== "string") {
-    return c.json({ error: "bad_request", message: "content must be a string" }, 400);
+    return respondError(
+      c,
+      new ValidationError("content must be a string", { code: "bad_request" }),
+    );
   }
 
   // Defense-in-depth `feedUrlDeny` (#1335): mirror the batch guard so the
@@ -3250,13 +3312,12 @@ sourceRoutes.post("/sources/:slug/releases", postReleaseRoute, async (c) => {
     return c.json(release ?? { skipped: true }, release ? 201 : 200);
   } catch (err) {
     const classified = classifyDbError(err);
-    return c.json(
-      {
-        error: "insert_failed",
-        message: "Failed to insert release",
-        ...(classified ? { errorCode: classified.code } : {}),
-      },
-      500,
+    return respondError(
+      c,
+      new InternalError("Failed to insert release", {
+        code: "internal_error",
+        ...(classified ? { details: { errorCode: classified.code } } : {}),
+      }),
     );
   }
 });
@@ -3407,7 +3468,7 @@ sourceRoutes.get(
       .leftJoin(productsActive, eq(sourcesActive.productId, productsActive.id))
       .where(and(eq(releases.id, id), sql`${releases.id} IN (SELECT id FROM releases_visible)`));
 
-    if (rows.length === 0) return c.json({ error: "not_found", message: "Release not found" }, 404);
+    if (rows.length === 0) return respondError(c, new NotFoundError("Release not found"));
 
     const {
       release,
@@ -3499,8 +3560,7 @@ sourceRoutes.delete(
       .delete(releases)
       .where(eq(releases.id, id))
       .returning({ id: releases.id });
-    if (deleted.length === 0)
-      return c.json({ error: "not_found", message: "Release not found" }, 404);
+    if (deleted.length === 0) return respondError(c, new NotFoundError("Release not found"));
 
     return c.json({ deleted: true });
   },
@@ -3570,7 +3630,10 @@ sourceRoutes.patch(
     // source id; count it here so a media-only payload doesn't trip the empty
     // check, and an actually-empty body (no media either) still 400s.
     if (Object.keys(updates).length === 0 && body.media === undefined) {
-      return c.json({ error: "bad_request", message: "No writable fields supplied" }, 400);
+      return respondError(
+        c,
+        new ValidationError("No writable fields supplied", { code: "bad_request" }),
+      );
     }
 
     // Join sources so we have the source row available for the re-embed side
@@ -3580,7 +3643,7 @@ sourceRoutes.patch(
       .from(releases)
       .innerJoin(sources, eq(sources.id, releases.sourceId))
       .where(eq(releases.id, id));
-    if (!row) return c.json({ error: "not_found", message: "Release not found" }, 404);
+    if (!row) return respondError(c, new NotFoundError("Release not found"));
 
     if (body.media !== undefined) {
       // Wholesale REPLACE of the release's stored media[] (curator manual edit).
@@ -3627,7 +3690,7 @@ sourceRoutes.patch(
     }
 
     const [updated] = await db.update(releases).set(updates).where(eq(releases.id, id)).returning();
-    if (!updated) return c.json({ error: "not_found", message: "Release not found" }, 404);
+    if (!updated) return respondError(c, new NotFoundError("Release not found"));
 
     // Re-embed when any field that feeds the embedding text changes. Metadata-
     // only edits (version, url, publishedAt, contentHash) do not affect the
@@ -3696,7 +3759,7 @@ sourceRoutes.post(
       .where(eq(releases.id, id))
       .returning({ id: releases.id, sourceId: releases.sourceId });
 
-    if (!updated) return c.json({ error: "not_found", message: "Release not found" }, 404);
+    if (!updated) return respondError(c, new NotFoundError("Release not found"));
 
     // A row that was visible a moment ago is now hidden — purge the homepage
     // reel caches so users don't click a stale card into a 404.
@@ -3741,7 +3804,7 @@ sourceRoutes.post(
       .where(eq(releases.id, id))
       .returning({ id: releases.id, sourceId: releases.sourceId });
 
-    if (!updated) return c.json({ error: "not_found", message: "Release not found" }, 404);
+    if (!updated) return respondError(c, new NotFoundError("Release not found"));
 
     // Newly-visible row should appear in the reel without waiting out the TTL.
     c.executionCtx.waitUntil(

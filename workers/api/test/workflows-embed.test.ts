@@ -122,8 +122,10 @@ describe("POST /v1/workflows/embed-releases", () => {
       }),
     );
     expect(res.status).toBe(503);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe("embed_unavailable");
+    const body = (await res.json()) as {
+      error: { code: string; type: string; message: string };
+    };
+    expect(body.error.code).toBe("embed_unavailable");
   });
 });
 
@@ -161,8 +163,10 @@ describe("POST /v1/workflows/embed-entities", () => {
       }),
     );
     expect(res.status).toBe(503);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe("embed_unavailable");
+    const body = (await res.json()) as {
+      error: { code: string; type: string; message: string };
+    };
+    expect(body.error.code).toBe("embed_unavailable");
   });
 
   it("kind filter: narrows the backlog to one table", async () => {
@@ -319,7 +323,9 @@ describe("POST /v1/workflows/embed-changelogs", () => {
       }),
     );
     expect(res.status).toBe(503);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe("embed_unavailable");
+    const body = (await res.json()) as {
+      error: { code: string; type: string; message: string };
+    };
+    expect(body.error.code).toBe("embed_unavailable");
   });
 });

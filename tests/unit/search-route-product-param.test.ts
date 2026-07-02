@@ -49,16 +49,16 @@ describe("GET /search ?product= validation (#1218)", () => {
   test("missing q → 400 bad_request (pre-existing gate unaffected)", async () => {
     const res = await call("");
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe("bad_request");
+    const body = (await res.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("bad_request");
   });
 
   test("bare slug → 400 bad_request", async () => {
     const res = await call("?q=webhooks&product=nextjs");
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string; message: string };
-    expect(body.error).toBe("bad_request");
-    expect(body.message).toContain("typed ID");
+    const body = (await res.json()) as { error: { code: string; message: string } };
+    expect(body.error.code).toBe("bad_request");
+    expect(body.error.message).toContain("typed ID");
   });
 
   test("prod_ ID passes gate and returns 200 with productStatus not_found when product missing", async () => {

@@ -16,6 +16,8 @@ import {
   ErrorResponseSchema,
 } from "@buildinternet/releases-api-types";
 import type { Env } from "../index.js";
+import { respondError } from "../lib/error-response.js";
+import { NotFoundError, ValidationError } from "@releases/lib/releases-error";
 
 /**
  * GET /v1/orgs/:slug/overview/inputs?window=<days>&limit=<n>
@@ -74,10 +76,16 @@ app.get(
     const windowDays = parseInt(c.req.query("window") ?? String(OVERVIEW_WINDOW_DAYS), 10);
     const limit = parseInt(c.req.query("limit") ?? String(OVERVIEW_RELEASE_LIMIT), 10);
     if (!Number.isFinite(windowDays) || windowDays <= 0) {
-      return c.json({ error: "window must be a positive integer" }, 400);
+      return respondError(
+        c,
+        new ValidationError("window must be a positive integer", { code: "bad_request" }),
+      );
     }
     if (!Number.isFinite(limit) || limit <= 0) {
-      return c.json({ error: "limit must be a positive integer" }, 400);
+      return respondError(
+        c,
+        new ValidationError("limit must be a positive integer", { code: "bad_request" }),
+      );
     }
 
     const checkOnly = c.req.query("check") === "true";
@@ -96,7 +104,7 @@ app.get(
       })
       .from(organizationsPublic)
       .where(orgIdMatch);
-    if (!org) return c.json({ error: "not_found" }, 404);
+    if (!org) return respondError(c, new NotFoundError());
 
     // Assemble sources + recent releases via the shared helper, which pulls
     // every active source's releases in one chunked IN-bound query instead of
@@ -105,7 +113,7 @@ app.get(
     const inputs = await fetchOverviewInputsForOrg(db, org.id, { windowDays, limit });
     // `org` was just resolved against the same view by id, so a null here is
     // unreachable — the guard only narrows the helper's `… | null` return.
-    if (!inputs) return c.json({ error: "not_found" }, 404);
+    if (!inputs) return respondError(c, new NotFoundError());
 
     if (checkOnly) {
       // Pre-flight payload — orchestrators use this to decide whether to dispatch

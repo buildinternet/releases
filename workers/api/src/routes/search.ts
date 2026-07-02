@@ -33,6 +33,8 @@ import { buildEmbedConfig } from "@releases/search/embed-config.js";
 import type { SearchCollectionHit } from "@buildinternet/releases-api-types";
 import { logSearch } from "../lib/log-search.js";
 import { isValidBearerAuth } from "../middleware/auth.js";
+import { respondError } from "../lib/error-response.js";
+import { ValidationError } from "@releases/lib/releases-error";
 import {
   hydrateMediaUrls,
   resolveR2Url,
@@ -379,7 +381,10 @@ searchRoutes.get(
   async (c) => {
     const q = c.req.query("q") ?? "";
     if (!q) {
-      return c.json({ error: "bad_request", message: "Missing required query parameter: q" }, 400);
+      return respondError(
+        c,
+        new ValidationError("Missing required query parameter: q", { code: "bad_request" }),
+      );
     }
 
     const startedAt = Date.now();
@@ -396,17 +401,17 @@ searchRoutes.get(
     const rawDomain = c.req.query("domain");
     const kindFilter = parseKindParam(c.req.query("kind"));
     if (kindFilter === null)
-      return c.json(
-        {
-          error: "bad_request",
-          message: `Invalid kind. Expected one of: ${KIND_VALUES.join(", ")}`,
-        },
-        400,
+      return respondError(
+        c,
+        new ValidationError(`Invalid kind. Expected one of: ${KIND_VALUES.join(", ")}`, {
+          code: "bad_request",
+        }),
       );
     // Optional time window on release hits — resolves ISO or relative
     // shorthand (90d/4w/6m/2y) to canonical ISO bounds on published_at.
     const window = parseTimeWindow(c.req.query("since"), c.req.query("until"));
-    if (!window.ok) return c.json({ error: "bad_request", message: window.message }, 400);
+    if (!window.ok)
+      return respondError(c, new ValidationError(window.message, { code: "bad_request" }));
     const { since, until } = window;
     const db = createDb(c.env.DB);
     const mediaOrigin = c.env.MEDIA_ORIGIN ?? "";
@@ -432,12 +437,11 @@ searchRoutes.get(
     // query had no hits."
     const domainResolution = rawDomain ? await resolveDomainScope(db, rawDomain) : null;
     if (domainResolution?.kind === "invalid") {
-      return c.json(
-        {
-          error: "bad_request",
-          message: "domain query param must be a valid hostname",
-        },
-        400,
+      return respondError(
+        c,
+        new ValidationError("domain query param must be a valid hostname", {
+          code: "bad_request",
+        }),
       );
     }
     const scopeOrgId = domainResolution?.kind === "hit" ? domainResolution.orgId : undefined;
@@ -450,13 +454,12 @@ searchRoutes.get(
     const rawProduct = c.req.query("product");
     const productResolution = rawProduct ? await resolveProductScope(db, rawProduct) : null;
     if (productResolution?.kind === "invalid") {
-      return c.json(
-        {
-          error: "bad_request",
-          message:
-            "product query param must be a typed ID (prod_…) or an org-scoped coordinate (orgSlug/productSlug)",
-        },
-        400,
+      return respondError(
+        c,
+        new ValidationError(
+          "product query param must be a typed ID (prod_…) or an org-scoped coordinate (orgSlug/productSlug)",
+          { code: "bad_request" },
+        ),
       );
     }
     // Source IDs from the product resolution. When set, all release/catalog

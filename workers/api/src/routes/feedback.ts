@@ -21,6 +21,13 @@ import { sanitizeString, sanitizeText, stripControl } from "../lib/sanitize.js";
 import { notifyFeedback } from "../lib/feedback-email.js";
 import type { Env } from "../index.js";
 import { FLAGS, flag } from "@releases/lib/flags";
+import { respondError } from "../lib/error-response.js";
+import {
+  ValidationError,
+  ServiceUnavailableError,
+  RateLimitedError,
+  NotFoundError,
+} from "@releases/lib/releases-error";
 
 export const feedbackRoutes = new Hono<Env>();
 
@@ -50,13 +57,13 @@ function coerceClientKind(v: unknown): string {
 
 feedbackRoutes.post("/feedback", async (c) => {
   if (await flag(c.env.FLAGS, c.env.FEEDBACK_DISABLED, FLAGS.feedbackDisabled)) {
-    return c.json({ error: "feedback_disabled" }, 503);
+    return respondError(c, new ServiceUnavailableError());
   }
 
   // Reject oversized payloads before reading the body.
   const contentLength = Number(c.req.header("content-length") ?? "0");
   if (Number.isFinite(contentLength) && contentLength > MAX_BODY_BYTES) {
-    return c.json({ error: "payload_too_large" }, 413);
+    return respondError(c, new ValidationError(undefined, { code: "payload_too_large" }));
   }
 
   // Per-IP rate limit. publicRateLimitMiddleware only covers safe methods, so
@@ -69,10 +76,7 @@ feedbackRoutes.post("/feedback", async (c) => {
     const { success } = await limiter.limit({ key: `feedback:${ip}` });
     if (!success) {
       c.header("Retry-After", String(RATE_LIMIT_WINDOW_SECONDS));
-      return c.json(
-        { error: "rate_limited", message: "Too many requests. Please retry shortly." },
-        429,
-      );
+      return respondError(c, new RateLimitedError("Too many requests. Please retry shortly."));
     }
   }
 
@@ -80,19 +84,19 @@ feedbackRoutes.post("/feedback", async (c) => {
   try {
     parsed = await c.req.json();
   } catch {
-    return c.json({ error: "invalid_json" }, 400);
+    return respondError(c, new ValidationError(undefined, { code: "invalid_json" }));
   }
   // JSON literals like `null`, numbers, strings, and arrays parse fine but
   // aren't the object shape we read fields off — guard before access.
   if (typeof parsed !== "object" || parsed === null) {
-    return c.json({ error: "invalid_json" }, 400);
+    return respondError(c, new ValidationError(undefined, { code: "invalid_json" }));
   }
   const body = parsed as Record<string, unknown>;
 
   const rawMessage = sanitizeString(body.message, MAX_MESSAGE);
   const message = rawMessage ? stripControl(rawMessage).trim() : null;
   if (!message || message.length < MIN_MESSAGE) {
-    return c.json({ error: "message_required" }, 400);
+    return respondError(c, new ValidationError(undefined, { code: "bad_request" }));
   }
 
   const rawContact = sanitizeString(body.contact, MAX_CONTACT);
@@ -146,10 +150,10 @@ feedbackRoutes.patch("/feedback/:id", async (c) => {
   try {
     parsed = await c.req.json();
   } catch {
-    return c.json({ error: "invalid_json" }, 400);
+    return respondError(c, new ValidationError(undefined, { code: "invalid_json" }));
   }
   if (typeof parsed !== "object" || parsed === null) {
-    return c.json({ error: "invalid_json" }, 400);
+    return respondError(c, new ValidationError(undefined, { code: "invalid_json" }));
   }
   const body = parsed as Record<string, unknown>;
 
@@ -160,12 +164,11 @@ feedbackRoutes.patch("/feedback/:id", async (c) => {
       typeof body.status !== "string" ||
       !(FEEDBACK_STATUSES as readonly string[]).includes(body.status)
     ) {
-      return c.json(
-        {
-          error: "invalid_status",
-          message: `status must be one of: ${FEEDBACK_STATUSES.join(", ")}`,
-        },
-        400,
+      return respondError(
+        c,
+        new ValidationError(`status must be one of: ${FEEDBACK_STATUSES.join(", ")}`, {
+          code: "bad_request",
+        }),
       );
     }
     update.status = body.status;
@@ -173,19 +176,25 @@ feedbackRoutes.patch("/feedback/:id", async (c) => {
 
   if (body.archived !== undefined) {
     if (typeof body.archived !== "boolean") {
-      return c.json({ error: "invalid_archived", message: "archived must be a boolean" }, 400);
+      return respondError(
+        c,
+        new ValidationError("archived must be a boolean", { code: "bad_request" }),
+      );
     }
     update.archived = body.archived;
   }
 
   if (update.status === undefined && update.archived === undefined) {
-    return c.json({ error: "nothing_to_update", message: "provide status and/or archived" }, 400);
+    return respondError(
+      c,
+      new ValidationError("provide status and/or archived", { code: "bad_request" }),
+    );
   }
 
   const db = getDb(c);
   const [updated] = await db.update(feedback).set(update).where(eq(feedback.id, id)).returning();
 
-  if (!updated) return c.json({ error: "not_found", message: "Feedback not found" }, 404);
+  if (!updated) return respondError(c, new NotFoundError("Feedback not found"));
 
   return c.json(updated);
 });
@@ -205,7 +214,7 @@ feedbackRoutes.delete("/feedback/:id", async (c) => {
     .where(eq(feedback.id, id))
     .returning({ id: feedback.id });
 
-  if (!deleted) return c.json({ error: "not_found", message: "Feedback not found" }, 404);
+  if (!deleted) return respondError(c, new NotFoundError("Feedback not found"));
 
   return c.json({ deleted: true, id: deleted.id });
 });

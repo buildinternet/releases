@@ -85,7 +85,13 @@ describe("POST /v1/workflows/batch-enrich", () => {
 
     const res = await post(fetch, {});
     expect(res.status).toBe(400);
-    expect(((await res.json()) as { error?: string }).error).toBe("bad_request");
+    expect(
+      (
+        (await res.json()) as {
+          error?: { code: string; type: string; message: string };
+        }
+      ).error?.code,
+    ).toBe("bad_request");
 
     const res2 = await post(fetch, { sourceIds: [] });
     expect(res2.status).toBe(400);
@@ -99,7 +105,13 @@ describe("POST /v1/workflows/batch-enrich", () => {
 
     const res = await post(fetch, { sourceIds: ["acme-blog"] });
     expect(res.status).toBe(400);
-    expect(((await res.json()) as { error?: string }).error).toBe("bare_slug_rejected");
+    expect(
+      (
+        (await res.json()) as {
+          error?: { code: string; type: string; message: string };
+        }
+      ).error?.code,
+    ).toBe("bare_slug_rejected");
   });
 
   it("404 when a targeted source does not exist", async () => {

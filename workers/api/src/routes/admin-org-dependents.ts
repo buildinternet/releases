@@ -16,6 +16,8 @@ import { organizations, sources } from "@buildinternet/releases-core/schema";
 import { createDb } from "../db.js";
 import { orgWhere } from "../utils.js";
 import type { Env } from "../index.js";
+import { respondError } from "../lib/error-response.js";
+import { NotFoundError } from "@releases/lib/releases-error";
 
 export const adminOrgDependentsRoutes = new Hono<Env>();
 
@@ -42,7 +44,7 @@ adminOrgDependentsRoutes.get("/admin/orgs/:slug/dependents", async (c) => {
     .select({ id: organizations.id, slug: organizations.slug, name: organizations.name })
     .from(organizations)
     .where(orgWhere(slug, { includeDeleted }));
-  if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
+  if (!org) return respondError(c, new NotFoundError("Organization not found"));
 
   // Count sources first so dependent counts are reasoned about against the
   // same scope (sources tied to this org, including hidden/tombstoned —

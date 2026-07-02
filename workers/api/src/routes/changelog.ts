@@ -38,6 +38,8 @@ import { getSecret } from "@releases/lib/secrets";
 import { logEvent } from "@releases/lib/log-event";
 import { classifyRepoStatus } from "../lib/github-repo-status.js";
 import type { Env } from "../index.js";
+import { respondError } from "../lib/error-response.js";
+import { ValidationError, NotFoundError, UpstreamError } from "@releases/lib/releases-error";
 
 /** How many file bodies we download for excerpts. The inventory (paths +
  *  sizes) is complete and free from the single tree call; only excerpt fetches
@@ -125,23 +127,21 @@ const fetchChangelogsHandler = async (c: import("hono").Context<Env>) => {
   const body = (await c.req.json().catch(() => null)) as { repo?: unknown } | null;
   const repoInput = typeof body?.repo === "string" ? body.repo.trim() : "";
   if (!repoInput) {
-    return c.json(
-      {
-        error: "bad_request",
-        message: 'Body must include a "repo" string, e.g. { "repo": "owner/repo" }',
-      },
-      400,
+    return respondError(
+      c,
+      new ValidationError('Body must include a "repo" string, e.g. { "repo": "owner/repo" }', {
+        code: "bad_request",
+      }),
     );
   }
 
   const coord = parseCoordinate(repoInput);
   if (!coord) {
-    return c.json(
-      {
-        error: "bad_request",
-        message: `Cannot parse "${repoInput}" as a github owner/repo coordinate`,
-      },
-      400,
+    return respondError(
+      c,
+      new ValidationError(`Cannot parse "${repoInput}" as a github owner/repo coordinate`, {
+        code: "bad_request",
+      }),
     );
   }
   const { org: owner, repo } = coord;
@@ -455,23 +455,21 @@ const parseChangelogHandler = async (c: import("hono").Context<Env>) => {
 
   const repoInput = typeof body?.repo === "string" ? body.repo.trim() : "";
   if (!repoInput) {
-    return c.json(
-      {
-        error: "bad_request",
-        message: 'Body must include a "repo" string, e.g. { "repo": "owner/repo" }',
-      },
-      400,
+    return respondError(
+      c,
+      new ValidationError('Body must include a "repo" string, e.g. { "repo": "owner/repo" }', {
+        code: "bad_request",
+      }),
     );
   }
 
   const coord = parseCoordinate(repoInput);
   if (!coord) {
-    return c.json(
-      {
-        error: "bad_request",
-        message: `Cannot parse "${repoInput}" as a github owner/repo coordinate`,
-      },
-      400,
+    return respondError(
+      c,
+      new ValidationError(`Cannot parse "${repoInput}" as a github owner/repo coordinate`, {
+        code: "bad_request",
+      }),
     );
   }
 
@@ -479,12 +477,14 @@ const parseChangelogHandler = async (c: import("hono").Context<Env>) => {
 
   const sourceRaw = typeof body?.source === "string" ? body.source.trim() : "auto";
   if (!(PARSE_SOURCES as readonly string[]).includes(sourceRaw)) {
-    return c.json(
-      {
-        error: "bad_request",
-        message: `Invalid "source": ${sourceRaw}. Use one of: ${PARSE_SOURCES.join(", ")}`,
-      },
-      400,
+    return respondError(
+      c,
+      new ValidationError(
+        `Invalid "source": ${sourceRaw}. Use one of: ${PARSE_SOURCES.join(", ")}`,
+        {
+          code: "bad_request",
+        },
+      ),
     );
   }
   // A path names a file, so it forces the changelog_file source.
@@ -534,24 +534,24 @@ const parseChangelogHandler = async (c: import("hono").Context<Env>) => {
   if (source === "changelog_file") {
     const outcome = await runFile();
     if (outcome.kind === "error") {
-      return c.json(
-        {
-          error: "github_upstream_error",
-          message: `Failed to fetch the changelog file for ${owner}/${repo} (status ${outcome.status})`,
-        },
-        upstreamStatus(outcome.status),
+      // upstreamStatus() distinguishes rate-limit (503) from other upstream
+      // failures (502) for logging/observability, but the wire envelope
+      // normalizes every github_upstream_error to UpstreamError/502.
+      return respondError(
+        c,
+        new UpstreamError(
+          `Failed to fetch the changelog file for ${owner}/${repo} (status ${outcome.status}, mapped ${upstreamStatus(outcome.status)})`,
+          { code: "upstream_error", details: { upstream: "github" } },
+        ),
       );
     }
     if (outcome.kind === "not_found") {
       // An explicit path the caller asserted must exist is a 404; an absent
       // root changelog is just "nothing to show".
       if (pathInput) {
-        return c.json(
-          {
-            error: "not_found",
-            message: `No changelog file at "${pathInput}" in ${owner}/${repo}`,
-          },
-          404,
+        return respondError(
+          c,
+          new NotFoundError(`No changelog file at "${pathInput}" in ${owner}/${repo}`),
         );
       }
     } else {
@@ -568,12 +568,12 @@ const parseChangelogHandler = async (c: import("hono").Context<Env>) => {
   } else if (source === "github_releases") {
     const rel = await runReleases();
     if (rel.failed) {
-      return c.json(
-        {
-          error: "github_upstream_error",
-          message: `Failed to fetch GitHub Releases for ${owner}/${repo}`,
-        },
-        502,
+      return respondError(
+        c,
+        new UpstreamError(`Failed to fetch GitHub Releases for ${owner}/${repo}`, {
+          code: "upstream_error",
+          details: { upstream: "github" },
+        }),
       );
     }
     if (rel.releases.length > 0) {

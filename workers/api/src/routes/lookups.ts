@@ -22,6 +22,8 @@ import { resolveRelatedOrg, type RelatedOrgResult } from "../lib/lookup-related-
 import { readNegCache, writeNegCache } from "../lib/lookup-neg-cache.js";
 import { createDb } from "../db.js";
 import type { Env } from "../index.js";
+import { respondError } from "../lib/error-response.js";
+import { ValidationError, NotFoundError } from "@releases/lib/releases-error";
 import { RELEASES_BOT_UA } from "@releases/adapters/user-agent";
 import { RELEASES_BATCH_CHUNK_SIZE } from "../lib/d1-limits.js";
 import { isConflictError } from "../utils.js";
@@ -396,24 +398,21 @@ lookupRoutes.post(
     } | null;
 
     if (!body) {
-      return c.json({ error: "E_LOOKUP_BAD_REQUEST", message: "JSON body required" }, 400);
+      return respondError(c, new ValidationError("JSON body required", { code: "bad_request" }));
     }
 
     if (body.provider !== "github") {
-      return c.json(
-        {
-          error: "E_LOOKUP_UNSUPPORTED_PROVIDER",
-          message: `provider must be "github" (v1)`,
-        },
-        400,
+      return respondError(
+        c,
+        new ValidationError(`provider must be "github" (v1)`, { code: "bad_request" }),
       );
     }
 
     const parsed = parseCoordinate(body.coordinate ?? "");
     if (!parsed) {
-      return c.json(
-        { error: "E_LOOKUP_BAD_COORDINATE", message: "coordinate must match {org}/{repo}" },
-        400,
+      return respondError(
+        c,
+        new ValidationError("coordinate must match {org}/{repo}", { code: "bad_request" }),
       );
     }
 
@@ -493,7 +492,10 @@ lookupRoutes.get(
   async (c) => {
     const slug = c.req.query("slug")?.trim();
     if (!slug) {
-      return c.json({ error: "bad_request", message: "slug query param is required" }, 400);
+      return respondError(
+        c,
+        new ValidationError("slug query param is required", { code: "bad_request" }),
+      );
     }
     const db = createDb(c.env.DB);
     const [row] = await db
@@ -508,7 +510,7 @@ lookupRoutes.get(
       .orderBy(asc(sourcesActive.createdAt), asc(sourcesActive.id))
       .limit(1);
     if (!row) {
-      return c.json({ error: "not_found", message: `No source matches slug "${slug}"` }, 404);
+      return respondError(c, new NotFoundError(`No source matches slug "${slug}"`));
     }
     c.header("Sunset", "Sun, 01 Nov 2026 00:00:00 GMT");
     return c.json(row);
@@ -565,16 +567,18 @@ lookupRoutes.get(
   async (c) => {
     const raw = c.req.query("coordinate")?.trim();
     if (!raw) {
-      return c.json({ error: "bad_request", message: "coordinate query param is required" }, 400);
+      return respondError(
+        c,
+        new ValidationError("coordinate query param is required", { code: "bad_request" }),
+      );
     }
     const parsed = parseCoordinate(raw);
     if (!parsed) {
-      return c.json(
-        {
-          error: "bad_request",
-          message: `Cannot parse "${raw}" as a github owner/repo coordinate`,
-        },
-        400,
+      return respondError(
+        c,
+        new ValidationError(`Cannot parse "${raw}" as a github owner/repo coordinate`, {
+          code: "bad_request",
+        }),
       );
     }
     const url = `https://github.com/${parsed.org}/${parsed.repo}`;
@@ -596,9 +600,9 @@ lookupRoutes.get(
       )
       .limit(1);
     if (!row) {
-      return c.json(
-        { error: "not_found", message: `No indexed source for "${parsed.org}/${parsed.repo}"` },
-        404,
+      return respondError(
+        c,
+        new NotFoundError(`No indexed source for "${parsed.org}/${parsed.repo}"`),
       );
     }
     return c.json(row);
@@ -650,7 +654,10 @@ lookupRoutes.get(
   async (c) => {
     const slug = c.req.query("slug")?.trim();
     if (!slug) {
-      return c.json({ error: "bad_request", message: "slug query param is required" }, 400);
+      return respondError(
+        c,
+        new ValidationError("slug query param is required", { code: "bad_request" }),
+      );
     }
     const db = createDb(c.env.DB);
     const [row] = await db
@@ -665,7 +672,7 @@ lookupRoutes.get(
       .orderBy(asc(productsActive.createdAt), asc(productsActive.id))
       .limit(1);
     if (!row) {
-      return c.json({ error: "not_found", message: `No product matches slug "${slug}"` }, 404);
+      return respondError(c, new NotFoundError(`No product matches slug "${slug}"`));
     }
     c.header("Sunset", "Sun, 01 Nov 2026 00:00:00 GMT");
     return c.json(row);
@@ -713,9 +720,9 @@ lookupRoutes.get(
   async (c) => {
     const domain = normalizeDomain(c.req.query("domain") ?? "");
     if (!domain) {
-      return c.json(
-        { error: "bad_request", message: "domain query param must be a valid hostname" },
-        400,
+      return respondError(
+        c,
+        new ValidationError("domain query param must be a valid hostname", { code: "bad_request" }),
       );
     }
 
@@ -740,10 +747,7 @@ lookupRoutes.get(
     ]);
 
     if (!orgRow && productRows.length === 0) {
-      return c.json(
-        { error: "not_found", message: `No org or product owns domain "${domain}"` },
-        404,
-      );
+      return respondError(c, new NotFoundError(`No org or product owns domain "${domain}"`));
     }
 
     return c.json({ domain, org: orgRow, products: productRows });

@@ -23,6 +23,12 @@ import {
   signingKeyFor,
 } from "../webhooks/shared.js";
 import { assertPublicWebhookTarget } from "../webhooks/url-safety.js";
+import { respondError } from "../lib/error-response.js";
+import {
+  ValidationError,
+  NotFoundError,
+  ServiceUnavailableError,
+} from "@releases/lib/releases-error";
 
 export const webhooksRoutes = new Hono<Env>();
 
@@ -38,23 +44,23 @@ webhooksRoutes.post("/webhooks", async (c) => {
   try {
     body = await c.req.json();
   } catch {
-    return c.json({ error: "bad_request", message: "invalid JSON body" }, 400);
+    return respondError(c, new ValidationError("invalid JSON body"));
   }
   if (typeof body !== "object" || body === null) {
-    return c.json({ error: "bad_request", message: "body must be an object" }, 400);
+    return respondError(c, new ValidationError("body must be an object"));
   }
 
   const { orgId, url, sourceId, description } = body as Record<string, unknown>;
 
   if (!orgId || typeof orgId !== "string") {
-    return c.json({ error: "bad_request", message: "orgId is required" }, 400);
+    return respondError(c, new ValidationError("orgId is required"));
   }
   if (!url || typeof url !== "string") {
-    return c.json({ error: "bad_request", message: "url is required" }, 400);
+    return respondError(c, new ValidationError("url is required"));
   }
   const urlError = await assertPublicWebhookTarget(url);
   if (urlError) {
-    return c.json({ error: "bad_request", message: urlError }, 400);
+    return respondError(c, new ValidationError(urlError));
   }
 
   const db = getDb(c);
@@ -73,7 +79,7 @@ webhooksRoutes.post("/webhooks", async (c) => {
 webhooksRoutes.get("/webhooks", async (c) => {
   const orgId = c.req.query("org");
   if (!orgId) {
-    return c.json({ error: "bad_request", message: "org query param is required" }, 400);
+    return respondError(c, new ValidationError("org query param is required"));
   }
 
   const enabledParam = c.req.query("enabled");
@@ -89,7 +95,7 @@ webhooksRoutes.get("/webhooks/:id", async (c) => {
   const db = getDb(c);
   const sub = await getWebhookSubscriptionById(db, id);
   if (!sub) {
-    return c.json({ error: "not_found" }, 404);
+    return respondError(c, new NotFoundError());
   }
   return c.json(sub);
 });
@@ -104,24 +110,24 @@ webhooksRoutes.patch("/webhooks/:id", async (c) => {
   try {
     body = (await c.req.json()) as typeof body;
   } catch {
-    return c.json({ error: "bad_request", message: "invalid JSON body" }, 400);
+    return respondError(c, new ValidationError("invalid JSON body"));
   }
 
   if (body.url !== undefined) {
     const urlError = await assertPublicWebhookTarget(body.url);
     if (urlError) {
-      return c.json({ error: "bad_request", message: urlError }, 400);
+      return respondError(c, new ValidationError(urlError));
     }
   }
 
   const patch = buildWebhookPatchUpdates(body);
   if ("error" in patch) {
-    return c.json({ error: "bad_request", message: patch.error }, 400);
+    return respondError(c, new ValidationError(patch.error));
   }
 
   const id = c.req.param("id");
   const fresh = await updateWebhookSubscription(getDb(c), id, patch);
-  if (!fresh) return c.json({ error: "not_found" }, 404);
+  if (!fresh) return respondError(c, new NotFoundError());
   return c.json(fresh);
 });
 
@@ -138,7 +144,7 @@ webhooksRoutes.post("/webhooks/:id/rotate-secret", async (c) => {
 
   const id = c.req.param("id");
   const newVersion = await bumpWebhookSecretVersion(getDb(c), id);
-  if (newVersion === null) return c.json({ error: "not_found" }, 404);
+  if (newVersion === null) return respondError(c, new NotFoundError());
 
   const signingKey = await signingKeyFor(masterKey, id, newVersion);
   return c.json({ secretVersion: newVersion, signingKey });
@@ -147,9 +153,12 @@ webhooksRoutes.post("/webhooks/:id/rotate-secret", async (c) => {
 webhooksRoutes.post("/webhooks/:id/test", async (c) => {
   const queue = c.env.WEBHOOK_DELIVERY_QUEUE;
   if (!queue) {
-    return c.json(
-      { error: "queue_unavailable", message: "WEBHOOK_DELIVERY_QUEUE binding missing" },
-      503,
+    return respondError(
+      c,
+      new ServiceUnavailableError("WEBHOOK_DELIVERY_QUEUE binding missing", {
+        code: "service_unavailable",
+        details: { resource: "queue" },
+      }),
     );
   }
 
@@ -157,7 +166,7 @@ webhooksRoutes.post("/webhooks/:id/test", async (c) => {
   const db = getDb(c);
   const sub = await getWebhookSubscriptionById(db, id);
   if (!sub) {
-    return c.json({ error: "not_found" }, 404);
+    return respondError(c, new NotFoundError());
   }
 
   const synthetic: DeliveryMessage = {

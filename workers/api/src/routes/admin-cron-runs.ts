@@ -11,6 +11,8 @@ import { buildBareLimitEnvelope } from "../lib/pagination.js";
 import { parseEnumParam, parseSortDir } from "../utils.js";
 import { nullsLastOrderBy } from "../queries/shared.js";
 import type { Env } from "../index.js";
+import { respondError } from "../lib/error-response.js";
+import { NotFoundError } from "@releases/lib/releases-error";
 
 export const adminCronRunsRoutes = new Hono<Env>();
 
@@ -69,7 +71,7 @@ adminCronRunsRoutes.get("/admin/cron-runs/:id", async (c) => {
   const id = c.req.param("id");
 
   const [run] = await db.select().from(cronRuns).where(eq(cronRuns.id, id));
-  if (!run) return c.json({ error: "not_found" }, 404);
+  if (!run) return respondError(c, new NotFoundError());
 
   const sessionIds: string[] = run.sessionsStarted ? JSON.parse(run.sessionsStarted) : [];
   const sessionBreakdown: Record<string, Record<string, number>> = {};

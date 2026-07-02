@@ -30,6 +30,8 @@ import { BREAKING_LEVELS } from "@buildinternet/releases-core/breaking";
 import { ErrorResponseSchema } from "@buildinternet/releases-api-types";
 import { createDb } from "../db.js";
 import type { Env } from "../index.js";
+import { respondError } from "../lib/error-response.js";
+import { ValidationError } from "@releases/lib/releases-error";
 
 export const whatsChangedRoutes = new Hono<Env>();
 
@@ -185,16 +187,18 @@ whatsChangedRoutes.get(
     const ecosystemRaw = c.req.query("ecosystem")?.trim();
 
     if (!pkg || !from || !to) {
-      return c.json(
-        { error: "bad_request", message: "package, from, and to query params are required" },
-        400,
+      return respondError(
+        c,
+        new ValidationError("package, from, and to query params are required", {
+          code: "bad_request",
+        }),
       );
     }
     const ecoParse = ecosystemRaw ? EcosystemSchema.safeParse(ecosystemRaw) : null;
     if (ecosystemRaw && !ecoParse?.success) {
-      return c.json(
-        { error: "bad_request", message: "ecosystem must be one of: npm, pypi, github" },
-        400,
+      return respondError(
+        c,
+        new ValidationError("ecosystem must be one of: npm, pypi, github", { code: "bad_request" }),
       );
     }
     const ecosystem = ecoParse?.success ? ecoParse.data : null;

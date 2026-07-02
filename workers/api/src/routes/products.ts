@@ -21,6 +21,8 @@ import { toSlug } from "@buildinternet/releases-core/slug";
 import { isReservedSlug } from "@buildinternet/releases-core/reserved-slugs";
 import { resolveCategoryInput } from "@releases/core-internal/category-alias";
 import { validateJson } from "../lib/validate.js";
+import { respondError } from "../lib/error-response.js";
+import { ValidationError, NotFoundError, ConflictError } from "@releases/lib/releases-error";
 import {
   ProductListResponseSchema,
   ProductDetailSchema,
@@ -169,12 +171,11 @@ productRoutes.get(
 
     const kind = parseKindParam(c.req.query("kind"));
     if (kind === null)
-      return c.json(
-        {
-          error: "bad_request",
-          message: `Invalid kind. Expected one of: ${KIND_VALUES.join(", ")}`,
-        },
-        400,
+      return respondError(
+        c,
+        new ValidationError(`Invalid kind. Expected one of: ${KIND_VALUES.join(", ")}`, {
+          code: "bad_request",
+        }),
       );
 
     const conditions = [
@@ -234,19 +235,18 @@ productRoutes.get(
 
     const kind = parseKindParam(c.req.query("kind"));
     if (kind === null)
-      return c.json(
-        {
-          error: "bad_request",
-          message: `Invalid kind. Expected one of: ${KIND_VALUES.join(", ")}`,
-        },
-        400,
+      return respondError(
+        c,
+        new ValidationError(`Invalid kind. Expected one of: ${KIND_VALUES.join(", ")}`, {
+          code: "bad_request",
+        }),
       );
 
     const [org] = await db
       .select({ id: organizations.id })
       .from(organizations)
       .where(orgWhere(slug));
-    if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
+    if (!org) return respondError(c, new NotFoundError("Organization not found"));
 
     const where = and(
       eq(productsActive.orgId, org.id),
@@ -292,38 +292,29 @@ productRoutes.post(
     const body = c.req.valid("json");
 
     if (body.mergeInto && (body.slug || body.url)) {
-      return c.json(
-        {
-          error: "bad_request",
-          message: "mergeInto cannot be combined with slug or url (existing product is reused)",
-        },
-        400,
+      return respondError(
+        c,
+        new ValidationError(
+          "mergeInto cannot be combined with slug or url (existing product is reused)",
+          { code: "bad_request" },
+        ),
       );
     }
 
     const [sourceOrg] = await db.select().from(organizations).where(orgWhere(body.sourceOrgSlug));
     if (!sourceOrg)
-      return c.json(
-        { error: "not_found", message: `Source org not found: ${body.sourceOrgSlug}` },
-        404,
-      );
+      return respondError(c, new NotFoundError(`Source org not found: ${body.sourceOrgSlug}`));
 
     const [targetOrg] = await db.select().from(organizations).where(orgWhere(body.targetOrgSlug));
     if (!targetOrg)
-      return c.json(
-        { error: "not_found", message: `Target org not found: ${body.targetOrgSlug}` },
-        404,
-      );
+      return respondError(c, new NotFoundError(`Target org not found: ${body.targetOrgSlug}`));
 
     // Self-adopt would have `migrateOrgToProduct` delete the only org and
     // strand the new product — refuse before any writes.
     if (sourceOrg.id === targetOrg.id) {
-      return c.json(
-        {
-          error: "conflict",
-          message: "sourceOrgSlug and targetOrgSlug must refer to different orgs",
-        },
-        409,
+      return respondError(
+        c,
+        new ConflictError("sourceOrgSlug and targetOrgSlug must refer to different orgs"),
       );
     }
 
@@ -337,12 +328,9 @@ productRoutes.post(
       // so a slug collision in another org doesn't resolve the wrong row.
       const existingProduct = await findProductForOrgSlug(db, targetOrg.id, body.mergeInto);
       if (!existingProduct) {
-        return c.json(
-          {
-            error: "not_found",
-            message: `Product "${body.mergeInto}" not found under org "${targetOrg.slug}"`,
-          },
-          404,
+        return respondError(
+          c,
+          new NotFoundError(`Product "${body.mergeInto}" not found under org "${targetOrg.slug}"`),
         );
       }
 
@@ -373,13 +361,12 @@ productRoutes.post(
 
     const productSlug = body.slug ?? sourceOrg.slug;
     if (isReservedSlug(productSlug, "nested")) {
-      return c.json(
-        {
-          error: "slug_reserved",
-          message: `Slug "${productSlug}" is reserved and cannot be used for a product. Pass an explicit "slug" field to override.`,
-          slug: productSlug,
-        },
-        409,
+      return respondError(
+        c,
+        new ConflictError(
+          `Slug "${productSlug}" is reserved and cannot be used for a product. Pass an explicit "slug" field to override.`,
+          { code: "slug_reserved", details: { slug: productSlug } },
+        ),
       );
     }
 
@@ -413,9 +400,9 @@ productRoutes.post(
         .returning();
     } catch (err) {
       if (isConflictError(err)) {
-        return c.json(
-          { error: "conflict", message: `Product with slug "${productSlug}" already exists` },
-          409,
+        return respondError(
+          c,
+          new ConflictError(`Product with slug "${productSlug}" already exists`),
         );
       }
       throw err;
@@ -523,7 +510,7 @@ export async function buildProductDetailPayload(
 const getProductDetailHandler = async (c: import("hono").Context<Env>) => {
   const db = createDb(c.env.DB);
   const product = await resolveProductFromContext(c, db);
-  if (!product) return c.json({ error: "not_found", message: "Product not found" }, 404);
+  if (!product) return respondError(c, new NotFoundError("Product not found"));
   return c.json(await buildProductDetailPayload(db, product));
 };
 const getProductDetailRoute = describeRoute({
@@ -602,22 +589,22 @@ productRoutes.post(
     // cleanly via `.refine` while keeping a useful per-field error path, so
     // it stays in the handler.
     if (!body.orgId && !body.orgSlug) {
-      return c.json(
-        { error: "bad_request", message: "Missing required fields: orgId or orgSlug" },
-        400,
+      return respondError(
+        c,
+        new ValidationError("Missing required fields: orgId or orgSlug", { code: "bad_request" }),
       );
     }
 
     const orgCond = body.orgId ? eq(organizations.id, body.orgId) : orgWhere(body.orgSlug!);
     const [org] = await db.select().from(organizations).where(orgCond);
-    if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
+    if (!org) return respondError(c, new NotFoundError("Organization not found"));
 
     if (body.category) {
       const resolved = await resolveCategoryInput(db, body.category);
       if (!resolved.ok) {
-        return c.json(
-          { error: "bad_request", message: `Invalid category: "${body.category}"` },
-          400,
+        return respondError(
+          c,
+          new ValidationError(`Invalid category: "${body.category}"`, { code: "bad_request" }),
         );
       }
       body.category = resolved.slug;
@@ -625,13 +612,12 @@ productRoutes.post(
 
     const slug = body.slug ?? toSlug(body.name);
     if (isReservedSlug(slug, "nested")) {
-      return c.json(
-        {
-          error: "slug_reserved",
-          message: `Slug "${slug}" is reserved and cannot be used for a product. Choose a different slug or rename the product.`,
-          slug,
-        },
-        409,
+      return respondError(
+        c,
+        new ConflictError(
+          `Slug "${slug}" is reserved and cannot be used for a product. Choose a different slug or rename the product.`,
+          { code: "slug_reserved", details: { slug } },
+        ),
       );
     }
 
@@ -686,10 +672,7 @@ productRoutes.post(
       );
     } catch (err) {
       if (isConflictError(err)) {
-        return c.json(
-          { error: "conflict", message: `Product with slug "${slug}" already exists` },
-          409,
-        );
+        return respondError(c, new ConflictError(`Product with slug "${slug}" already exists`));
       }
       throw err;
     }
@@ -717,7 +700,7 @@ const patchProductHandler = async (c: import("hono").Context<Env>) => {
   };
 
   const product = await resolveProductFromContext(c, db);
-  if (!product) return c.json({ error: "not_found", message: "Product not found" }, 404);
+  if (!product) return respondError(c, new NotFoundError("Product not found"));
 
   const updates: Record<string, string | null> = {};
   if (body.name) updates.name = body.name;
@@ -727,7 +710,10 @@ const patchProductHandler = async (c: import("hono").Context<Env>) => {
   if (body.category !== undefined && body.category !== null) {
     const resolved = await resolveCategoryInput(db, body.category);
     if (!resolved.ok) {
-      return c.json({ error: "bad_request", message: `Invalid category: "${body.category}"` }, 400);
+      return respondError(
+        c,
+        new ValidationError(`Invalid category: "${body.category}"`, { code: "bad_request" }),
+      );
     }
     body.category = resolved.slug;
   }
@@ -774,12 +760,9 @@ const patchProductHandler = async (c: import("hono").Context<Env>) => {
       aliases: body.aliases,
     });
     if (conflict)
-      return c.json(
-        {
-          error: "conflict",
-          message: `Domain alias "${conflict}" already claimed by another org or product`,
-        },
-        409,
+      return respondError(
+        c,
+        new ConflictError(`Domain alias "${conflict}" already claimed by another org or product`),
       );
   }
 
@@ -858,7 +841,7 @@ productRoutes.get(
   async (c) => {
     const db = createDb(c.env.DB);
     const product = await resolveProductFromContext(c, db);
-    if (!product) return c.json({ error: "not_found", message: "Product not found" }, 404);
+    if (!product) return respondError(c, new NotFoundError("Product not found"));
 
     const rows = await db
       .select({ name: tags.name })
@@ -899,7 +882,7 @@ productRoutes.put(
     const db = createDb(c.env.DB);
     const { tags: tagNames } = c.req.valid("json");
     const product = await resolveProductFromContext(c, db);
-    if (!product) return c.json({ error: "not_found", message: "Product not found" }, 404);
+    if (!product) return respondError(c, new NotFoundError("Product not found"));
 
     if (tagNames.length > 0) {
       const tagRows = await getOrCreateTagsD1(db, tagNames);
@@ -948,7 +931,7 @@ productRoutes.delete(
     const db = createDb(c.env.DB);
     const { tags: tagNames } = c.req.valid("json");
     const product = await resolveProductFromContext(c, db);
-    if (!product) return c.json({ error: "not_found", message: "Product not found" }, 404);
+    if (!product) return respondError(c, new NotFoundError("Product not found"));
 
     const slugs = Array.from(new Set(tagNames.map((t) => toSlug(t))));
     if (slugs.length === 0) return c.json({ ok: true });
@@ -1003,7 +986,7 @@ productRoutes.delete(
     // collide with a live row; passing a `prod_` ID is the canonical way to
     // reach a tombstone.
     const product = await resolveProductFromContext(c, db, { includeDeleted: hard });
-    if (!product) return c.json({ error: "not_found", message: "Product not found" }, 404);
+    if (!product) return respondError(c, new NotFoundError("Product not found"));
 
     if (hard) {
       await db.delete(products).where(eq(products.id, product.id));
@@ -1059,7 +1042,8 @@ const resolveHandler = async (c: import("hono").Context<Env>) => {
   const db = createDb(c.env.DB);
   const org = c.req.param("org");
   const slug = c.req.param("slug");
-  if (!org || !slug) return c.json({ error: "bad_request", message: "org and slug required" }, 400);
+  if (!org || !slug)
+    return respondError(c, new ValidationError("org and slug required", { code: "bad_request" }));
 
   const product = await findProductForOrgSlug(db, org, slug);
   if (product) {
@@ -1079,7 +1063,7 @@ const resolveHandler = async (c: import("hono").Context<Env>) => {
       }),
     });
   }
-  return c.json({ error: "not_found", message: "No product or source for that slug" }, 404);
+  return respondError(c, new NotFoundError("No product or source for that slug"));
 };
 
 productRoutes.get("/orgs/:org/resolve/:slug", resolveRoute, resolveHandler);
@@ -1153,26 +1137,33 @@ function isValidCalendarDate(s: string): boolean {
 const getProductActivityHandler = async (c: import("hono").Context<Env>) => {
   const db = createDb(c.env.DB);
   const product = await resolveProductFromContext(c, db);
-  if (!product) return c.json({ error: "not_found", message: "Product not found" }, 404);
+  if (!product) return respondError(c, new NotFoundError("Product not found"));
 
   // Validate date params
   const fromParam = c.req.query("from");
   const toParam = c.req.query("to");
 
   if (fromParam && !isValidCalendarDate(fromParam)) {
-    return c.json(
-      { error: "bad_request", message: "Invalid date format for 'from'. Use YYYY-MM-DD." },
-      400,
+    return respondError(
+      c,
+      new ValidationError("Invalid date format for 'from'. Use YYYY-MM-DD.", {
+        code: "bad_request",
+      }),
     );
   }
   if (toParam && !isValidCalendarDate(toParam)) {
-    return c.json(
-      { error: "bad_request", message: "Invalid date format for 'to'. Use YYYY-MM-DD." },
-      400,
+    return respondError(
+      c,
+      new ValidationError("Invalid date format for 'to'. Use YYYY-MM-DD.", {
+        code: "bad_request",
+      }),
     );
   }
   if (fromParam && toParam && fromParam > toParam) {
-    return c.json({ error: "bad_request", message: "'from' must be before 'to'." }, 400);
+    return respondError(
+      c,
+      new ValidationError("'from' must be before 'to'.", { code: "bad_request" }),
+    );
   }
 
   // Fetch all active sources for this product
@@ -1346,7 +1337,7 @@ productRoutes.get(
 const getProductHeatmapHandler = async (c: import("hono").Context<Env>) => {
   const db = createDb(c.env.DB);
   const product = await resolveProductFromContext(c, db);
-  if (!product) return c.json({ error: "not_found", message: "Product not found" }, 404);
+  if (!product) return respondError(c, new NotFoundError("Product not found"));
 
   const { from, to, toExclusive } = heatmapDateRange();
   const { rows, total } = await getProductHeatmapData(db, product.id, from, toExclusive);
@@ -1389,7 +1380,7 @@ productRoutes.get(
 const getProductCollectionsHandler = async (c: import("hono").Context<Env>) => {
   const db = createDb(c.env.DB);
   const product = await resolveProductFromContext(c, db);
-  if (!product) return c.json({ error: "not_found", message: "Product not found" }, 404);
+  if (!product) return respondError(c, new NotFoundError("Product not found"));
 
   const body = await listCollectionsWhere(
     db,

@@ -40,6 +40,14 @@ import { newEventId } from "../events/types.js";
 import type { DeliveryMessage } from "../webhooks/types.js";
 
 import type { Env } from "../index.js";
+import { respondError } from "../lib/error-response.js";
+import {
+  UnauthorizedError,
+  ValidationError,
+  NotFoundError,
+  RateLimitedError,
+  ServiceUnavailableError,
+} from "@releases/lib/releases-error";
 
 export const meWebhookHandlers = new Hono<Env>();
 
@@ -53,7 +61,7 @@ function jsonSubscription(sub: WebhookSubscription) {
 
 meWebhookHandlers.get("/me/webhooks", async (c) => {
   const session = c.get("session");
-  if (!session) return c.json({ error: "unauthorized", message: "Sign in required" }, 401);
+  if (!session) return respondError(c, new UnauthorizedError("Sign in required"));
 
   const enabledParam = c.req.query("enabled");
   const opts = enabledParam !== undefined ? { enabledOnly: enabledParam === "true" } : undefined;
@@ -65,7 +73,7 @@ meWebhookHandlers.get("/me/webhooks", async (c) => {
 
 meWebhookHandlers.post("/me/webhooks", async (c) => {
   const session = c.get("session");
-  if (!session) return c.json({ error: "unauthorized", message: "Sign in required" }, 401);
+  if (!session) return respondError(c, new UnauthorizedError("Sign in required"));
 
   const masterKey = await requireMasterKey(c);
   if (masterKey instanceof Response) return masterKey;
@@ -74,20 +82,20 @@ meWebhookHandlers.post("/me/webhooks", async (c) => {
   try {
     body = (await c.req.json()) as Record<string, unknown>;
   } catch {
-    return c.json({ error: "bad_request", message: "invalid JSON body" }, 400);
+    return respondError(c, new ValidationError("invalid JSON body"));
   }
 
   const url = body.url;
   if (typeof url !== "string" || !url) {
-    return c.json({ error: "bad_request", message: "url is required" }, 400);
+    return respondError(c, new ValidationError("url is required"));
   }
   const urlError = await assertPublicWebhookTarget(url);
-  if (urlError) return c.json({ error: "bad_request", message: urlError }, 400);
+  if (urlError) return respondError(c, new ValidationError(urlError));
 
   const format = body.format === "slack" ? "slack" : "json";
   if (format === "slack") {
     const slackError = validateSlackWebhookUrl(url);
-    if (slackError) return c.json({ error: "bad_request", message: slackError }, 400);
+    if (slackError) return respondError(c, new ValidationError(slackError));
   }
 
   const scope = body.scope === "follows" ? "follows" : "org";
@@ -102,32 +110,27 @@ meWebhookHandlers.post("/me/webhooks", async (c) => {
     const productId = typeof body.productId === "string" ? body.productId : undefined;
     const productSlug = typeof body.productSlug === "string" ? body.productSlug : undefined;
     if (orgId || orgSlug || sourceId || sourceSlug || productId || productSlug) {
-      return c.json(
-        {
-          error: "bad_request",
-          message:
-            "follows-scoped webhooks must not include orgId, orgSlug, sourceId, sourceSlug, productId, or productSlug",
-        },
-        400,
+      return respondError(
+        c,
+        new ValidationError(
+          "follows-scoped webhooks must not include orgId, orgSlug, sourceId, sourceSlug, productId, or productSlug",
+        ),
       );
     }
 
     const releaseTypeFilter = parseReleaseTypeFilter(body.releaseType);
     if (releaseTypeFilter === "invalid") {
-      return c.json(
-        { error: "bad_request", message: "releaseType must be feature or rollup" },
-        400,
-      );
+      return respondError(c, new ValidationError("releaseType must be feature or rollup"));
     }
 
     const existing = await getUserFollowsWebhookSubscription(db, session.user.id);
     if (existing) {
-      return c.json(
-        {
-          error: "limit_exceeded",
-          message: `Maximum ${MAX_USER_FOLLOWS_WEBHOOK_SUBSCRIPTIONS} follows-scoped webhook per account`,
-        },
-        429,
+      return respondError(
+        c,
+        new RateLimitedError(
+          `Maximum ${MAX_USER_FOLLOWS_WEBHOOK_SUBSCRIPTIONS} follows-scoped webhook per account`,
+          { code: "limit_exceeded" },
+        ),
       );
     }
 
@@ -158,11 +161,11 @@ meWebhookHandlers.post("/me/webhooks", async (c) => {
   const orgId = typeof body.orgId === "string" ? body.orgId : undefined;
   const orgSlug = typeof body.orgSlug === "string" ? body.orgSlug : undefined;
   if (!orgId && !orgSlug) {
-    return c.json({ error: "bad_request", message: "orgId or orgSlug is required" }, 400);
+    return respondError(c, new ValidationError("orgId or orgSlug is required"));
   }
 
   const org = await resolveWebhookOrg(db, { orgId, orgSlug });
-  if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
+  if (!org) return respondError(c, new NotFoundError("Organization not found"));
 
   const sourceId = typeof body.sourceId === "string" ? body.sourceId : undefined;
   const sourceSlug = typeof body.sourceSlug === "string" ? body.sourceSlug : undefined;
@@ -170,7 +173,7 @@ meWebhookHandlers.post("/me/webhooks", async (c) => {
   const productSlug = typeof body.productSlug === "string" ? body.productSlug : undefined;
   const releaseTypeFilter = parseReleaseTypeFilter(body.releaseType);
   if (releaseTypeFilter === "invalid") {
-    return c.json({ error: "bad_request", message: "releaseType must be feature or rollup" }, 400);
+    return respondError(c, new ValidationError("releaseType must be feature or rollup"));
   }
 
   let resolvedSourceId: string | null = null;
@@ -178,7 +181,7 @@ meWebhookHandlers.post("/me/webhooks", async (c) => {
   if (sourceId || sourceSlug) {
     const source = await resolveWebhookSource(db, org.id, { sourceId, sourceSlug });
     if (!source) {
-      return c.json({ error: "not_found", message: "Source not found for this organization" }, 404);
+      return respondError(c, new NotFoundError("Source not found for this organization"));
     }
     resolvedSourceId = source.id;
     resolvedSourceProductId = source.productId;
@@ -188,32 +191,26 @@ meWebhookHandlers.post("/me/webhooks", async (c) => {
   if (productId || productSlug) {
     const product = await resolveWebhookProduct(db, org.id, { productId, productSlug });
     if (!product) {
-      return c.json(
-        { error: "not_found", message: "Product not found for this organization" },
-        404,
-      );
+      return respondError(c, new NotFoundError("Product not found for this organization"));
     }
     resolvedProductId = product.id;
   }
 
   if (sourceProductFilterMismatch(resolvedSourceProductId, resolvedProductId)) {
-    return c.json(
-      {
-        error: "bad_request",
-        message: "source does not belong to the specified product filter",
-      },
-      400,
+    return respondError(
+      c,
+      new ValidationError("source does not belong to the specified product filter"),
     );
   }
 
   const count = await countUserOrgWebhookSubscriptions(db, session.user.id);
   if (count >= MAX_USER_WEBHOOK_SUBSCRIPTIONS) {
-    return c.json(
-      {
-        error: "limit_exceeded",
-        message: `Maximum ${MAX_USER_WEBHOOK_SUBSCRIPTIONS} org-scoped webhook subscriptions per account`,
-      },
-      429,
+    return respondError(
+      c,
+      new RateLimitedError(
+        `Maximum ${MAX_USER_WEBHOOK_SUBSCRIPTIONS} org-scoped webhook subscriptions per account`,
+        { code: "limit_exceeded" },
+      ),
     );
   }
 
@@ -244,29 +241,29 @@ meWebhookHandlers.post("/me/webhooks", async (c) => {
 
 meWebhookHandlers.get("/me/webhooks/:id", async (c) => {
   const session = c.get("session");
-  if (!session) return c.json({ error: "unauthorized", message: "Sign in required" }, 401);
+  if (!session) return respondError(c, new UnauthorizedError("Sign in required"));
 
   const id = c.req.param("id");
   const db = getDb(c);
   const sub = await getUserWebhookSubscription(db, session.user.id, id);
-  if (!sub) return c.json({ error: "not_found" }, 404);
+  if (!sub) return respondError(c, new NotFoundError());
   return c.json(jsonSubscription(sub));
 });
 
 meWebhookHandlers.patch("/me/webhooks/:id", async (c) => {
   const session = c.get("session");
-  if (!session) return c.json({ error: "unauthorized", message: "Sign in required" }, 401);
+  if (!session) return respondError(c, new UnauthorizedError("Sign in required"));
 
   let body: Record<string, unknown>;
   try {
     body = (await c.req.json()) as Record<string, unknown>;
   } catch {
-    return c.json({ error: "bad_request", message: "invalid JSON body" }, 400);
+    return respondError(c, new ValidationError("invalid JSON body"));
   }
 
   if (typeof body.url === "string") {
     const urlError = await assertPublicWebhookTarget(body.url);
-    if (urlError) return c.json({ error: "bad_request", message: urlError }, 400);
+    if (urlError) return respondError(c, new ValidationError(urlError));
   }
 
   const basePatch = buildWebhookPatchUpdates(
@@ -283,27 +280,24 @@ meWebhookHandlers.patch("/me/webhooks/:id", async (c) => {
       ? ({} as import("../webhooks/queries.js").WebhookSubscriptionUpdates)
       : basePatch;
   if ("error" in basePatch && basePatch.error !== "no recognized fields to update") {
-    return c.json({ error: "bad_request", message: basePatch.error }, 400);
+    return respondError(c, new ValidationError(basePatch.error));
   }
 
   const id = c.req.param("id");
   const db = getDb(c);
   const owned = await getUserWebhookSubscription(db, session.user.id, id);
-  if (!owned) return c.json({ error: "not_found" }, 404);
+  if (!owned) return respondError(c, new NotFoundError());
 
   if (body.format === "slack" || owned.format === "slack") {
     const effectiveUrl = typeof body.url === "string" ? body.url : owned.url;
     const slackError = validateSlackWebhookUrl(effectiveUrl);
-    if (slackError) return c.json({ error: "bad_request", message: slackError }, 400);
+    if (slackError) return respondError(c, new ValidationError(slackError));
   }
 
   if (body.releaseType !== undefined) {
     const releaseTypeFilter = parseReleaseTypeFilter(body.releaseType);
     if (releaseTypeFilter === "invalid") {
-      return c.json(
-        { error: "bad_request", message: "releaseType must be feature or rollup" },
-        400,
-      );
+      return respondError(c, new ValidationError("releaseType must be feature or rollup"));
     }
     patch.releaseType = releaseTypeFilter;
   }
@@ -317,14 +311,10 @@ meWebhookHandlers.patch("/me/webhooks/:id", async (c) => {
       } else {
         const sourceId = typeof body.sourceId === "string" ? body.sourceId : undefined;
         const sourceSlug = typeof body.sourceSlug === "string" ? body.sourceSlug : undefined;
-        if (!owned.orgId)
-          return c.json({ error: "bad_request", message: "invalid subscription" }, 400);
+        if (!owned.orgId) return respondError(c, new ValidationError("invalid subscription"));
         const source = await resolveWebhookSource(db, owned.orgId, { sourceId, sourceSlug });
         if (!source) {
-          return c.json(
-            { error: "not_found", message: "Source not found for this organization" },
-            404,
-          );
+          return respondError(c, new NotFoundError("Source not found for this organization"));
         }
         nextSourceId = source.id;
         nextSourceProductId = source.productId;
@@ -339,28 +329,22 @@ meWebhookHandlers.patch("/me/webhooks/:id", async (c) => {
       if (body.productId === null && body.productSlug === undefined) {
         nextProductId = null;
       } else if (!owned.orgId) {
-        return c.json({ error: "bad_request", message: "invalid subscription" }, 400);
+        return respondError(c, new ValidationError("invalid subscription"));
       } else {
         const productId = typeof body.productId === "string" ? body.productId : undefined;
         const productSlug = typeof body.productSlug === "string" ? body.productSlug : undefined;
         const product = await resolveWebhookProduct(db, owned.orgId, { productId, productSlug });
         if (!product) {
-          return c.json(
-            { error: "not_found", message: "Product not found for this organization" },
-            404,
-          );
+          return respondError(c, new NotFoundError("Product not found for this organization"));
         }
         nextProductId = product.id;
       }
     }
 
     if (sourceProductFilterMismatch(nextSourceProductId, nextProductId)) {
-      return c.json(
-        {
-          error: "bad_request",
-          message: "source does not belong to the specified product filter",
-        },
-        400,
+      return respondError(
+        c,
+        new ValidationError("source does not belong to the specified product filter"),
       );
     }
 
@@ -373,33 +357,31 @@ meWebhookHandlers.patch("/me/webhooks/:id", async (c) => {
     body.productId !== undefined ||
     body.productSlug !== undefined
   ) {
-    return c.json(
-      {
-        error: "bad_request",
-        message:
-          "follows-scoped webhooks cannot set sourceId, sourceSlug, productId, or productSlug",
-      },
-      400,
+    return respondError(
+      c,
+      new ValidationError(
+        "follows-scoped webhooks cannot set sourceId, sourceSlug, productId, or productSlug",
+      ),
     );
   }
 
   if (Object.keys(patch).length === 0) {
-    return c.json({ error: "bad_request", message: "no recognized fields to update" }, 400);
+    return respondError(c, new ValidationError("no recognized fields to update"));
   }
 
   const fresh = await updateWebhookSubscription(db, id, patch);
-  if (!fresh) return c.json({ error: "not_found" }, 404);
+  if (!fresh) return respondError(c, new NotFoundError());
   return c.json(jsonSubscription(fresh));
 });
 
 meWebhookHandlers.delete("/me/webhooks/:id", async (c) => {
   const session = c.get("session");
-  if (!session) return c.json({ error: "unauthorized", message: "Sign in required" }, 401);
+  if (!session) return respondError(c, new UnauthorizedError("Sign in required"));
 
   const id = c.req.param("id");
   const db = getDb(c);
   const owned = await getUserWebhookSubscription(db, session.user.id, id);
-  if (!owned) return c.json({ error: "not_found" }, 404);
+  if (!owned) return respondError(c, new NotFoundError());
 
   await deleteWebhookSubscription(db, id);
   return new Response(null, { status: 204 });
@@ -407,7 +389,7 @@ meWebhookHandlers.delete("/me/webhooks/:id", async (c) => {
 
 meWebhookHandlers.post("/me/webhooks/:id/rotate-secret", async (c) => {
   const session = c.get("session");
-  if (!session) return c.json({ error: "unauthorized", message: "Sign in required" }, 401);
+  if (!session) return respondError(c, new UnauthorizedError("Sign in required"));
 
   const masterKey = await requireMasterKey(c);
   if (masterKey instanceof Response) return masterKey;
@@ -415,10 +397,10 @@ meWebhookHandlers.post("/me/webhooks/:id/rotate-secret", async (c) => {
   const id = c.req.param("id");
   const db = getDb(c);
   const owned = await getUserWebhookSubscription(db, session.user.id, id);
-  if (!owned) return c.json({ error: "not_found" }, 404);
+  if (!owned) return respondError(c, new NotFoundError());
 
   const newVersion = await bumpWebhookSecretVersion(db, id);
-  if (newVersion === null) return c.json({ error: "not_found" }, 404);
+  if (newVersion === null) return respondError(c, new NotFoundError());
 
   const signingKey = await signingKeyFor(masterKey, id, newVersion);
   return c.json({ secretVersion: newVersion, signingKey });
@@ -426,20 +408,23 @@ meWebhookHandlers.post("/me/webhooks/:id/rotate-secret", async (c) => {
 
 meWebhookHandlers.post("/me/webhooks/:id/test", async (c) => {
   const session = c.get("session");
-  if (!session) return c.json({ error: "unauthorized", message: "Sign in required" }, 401);
+  if (!session) return respondError(c, new UnauthorizedError("Sign in required"));
 
   const queue = c.env.WEBHOOK_DELIVERY_QUEUE;
   if (!queue) {
-    return c.json(
-      { error: "queue_unavailable", message: "WEBHOOK_DELIVERY_QUEUE binding missing" },
-      503,
+    return respondError(
+      c,
+      new ServiceUnavailableError("WEBHOOK_DELIVERY_QUEUE binding missing", {
+        code: "service_unavailable",
+        details: { resource: "queue" },
+      }),
     );
   }
 
   const id = c.req.param("id");
   const db = getDb(c);
   const sub = await getUserWebhookSubscription(db, session.user.id, id);
-  if (!sub) return c.json({ error: "not_found" }, 404);
+  if (!sub) return respondError(c, new NotFoundError());
 
   const testLimitersEnabled = c.env.WEBHOOK_TEST_RATE_LIMIT_ENABLED !== "false";
   const rateResult = await checkWebhookTestRateLimit(
@@ -490,12 +475,12 @@ meWebhookHandlers.post("/me/webhooks/:id/test", async (c) => {
 
 meWebhookHandlers.get("/me/webhooks/:id/deliveries", async (c) => {
   const session = c.get("session");
-  if (!session) return c.json({ error: "unauthorized", message: "Sign in required" }, 401);
+  if (!session) return respondError(c, new UnauthorizedError("Sign in required"));
 
   const id = c.req.param("id");
   const db = getDb(c);
   const owned = await getUserWebhookSubscription(db, session.user.id, id);
-  if (!owned) return c.json({ error: "not_found" }, 404);
+  if (!owned) return respondError(c, new NotFoundError());
 
   const result = await queryWebhookDeliveries(c.env, id, {
     failed: c.req.query("failed"),

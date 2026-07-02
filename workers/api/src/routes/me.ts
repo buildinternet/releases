@@ -37,6 +37,8 @@ import {
 import { withLatestCache } from "../lib/latest-cache.js";
 import { meWebhookHandlers } from "./me-webhooks.js";
 import { accountProfileHandlers } from "./account-profile.js";
+import { respondError } from "../lib/error-response.js";
+import { UnauthorizedError, ValidationError, NotFoundError } from "@releases/lib/releases-error";
 
 function optionalWaitUntil(c: Context<Env>): ((p: Promise<unknown>) => void) | undefined {
   try {
@@ -66,7 +68,7 @@ export const meHandlers = new Hono<Env>();
 
 meHandlers.get("/me/follows", async (c) => {
   const session = c.get("session");
-  if (!session) return c.json({ error: "unauthorized", message: "Sign in required" }, 401);
+  if (!session) return respondError(c, new UnauthorizedError("Sign in required"));
   const db = createDb(c.env.DB);
   const follows = await listFollows(db, session.user.id);
   return c.json({ follows });
@@ -74,20 +76,19 @@ meHandlers.get("/me/follows", async (c) => {
 
 meHandlers.post("/me/follows", async (c) => {
   const session = c.get("session");
-  if (!session) return c.json({ error: "unauthorized", message: "Sign in required" }, 401);
+  if (!session) return respondError(c, new UnauthorizedError("Sign in required"));
   let body: { targetType?: unknown; targetId?: unknown };
   try {
     body = (await c.req.json()) as typeof body;
   } catch {
-    return c.json({ error: "bad_request", message: "Invalid JSON body" }, 400);
+    return respondError(c, new ValidationError("Invalid JSON body", { code: "bad_request" }));
   }
   if (!isFollowTargetType(body.targetType) || typeof body.targetId !== "string" || !body.targetId) {
-    return c.json(
-      {
-        error: "bad_request",
-        message: "targetType must be 'org' or 'product' and targetId is required",
-      },
-      400,
+    return respondError(
+      c,
+      new ValidationError("targetType must be 'org' or 'product' and targetId is required", {
+        code: "bad_request",
+      }),
     );
   }
   const db = createDb(c.env.DB);
@@ -100,7 +101,7 @@ meHandlers.post("/me/follows", async (c) => {
   }
 
   const entity = await resolveFollowTarget(db, body.targetType, body.targetId);
-  if (!entity) return c.json({ error: "not_found", message: "Target not found" }, 404);
+  if (!entity) return respondError(c, new NotFoundError("Target not found"));
 
   await addFollow(db, session.user.id, body.targetType, body.targetId);
   await invalidateFeedCache(c, session.user.id);
@@ -109,11 +110,11 @@ meHandlers.post("/me/follows", async (c) => {
 
 meHandlers.delete("/me/follows/:targetType/:targetId", async (c) => {
   const session = c.get("session");
-  if (!session) return c.json({ error: "unauthorized", message: "Sign in required" }, 401);
+  if (!session) return respondError(c, new UnauthorizedError("Sign in required"));
   const targetType = c.req.param("targetType");
   const targetId = c.req.param("targetId");
   if (!isFollowTargetType(targetType)) {
-    return c.json({ error: "bad_request", message: "Invalid targetType" }, 400);
+    return respondError(c, new ValidationError("Invalid targetType", { code: "bad_request" }));
   }
   const db = createDb(c.env.DB);
   await removeFollow(db, session.user.id, targetType, targetId);
@@ -123,11 +124,14 @@ meHandlers.delete("/me/follows/:targetType/:targetId", async (c) => {
 
 meHandlers.get("/me/feed", async (c) => {
   const session = c.get("session");
-  if (!session) return c.json({ error: "unauthorized", message: "Sign in required" }, 401);
+  if (!session) return respondError(c, new UnauthorizedError("Sign in required"));
 
   const params = new URL(c.req.url).searchParams;
   if (params.has("page")) {
-    return c.json({ error: "bad_request", message: "Use ?cursor= instead of ?page=" }, 400);
+    return respondError(
+      c,
+      new ValidationError("Use ?cursor= instead of ?page=", { code: "bad_request" }),
+    );
   }
 
   const cursor = params.get("cursor");
@@ -179,7 +183,7 @@ function feedUrlFor(c: Context<Env>, token: string): string {
 
 meHandlers.get("/me/feed/token", async (c) => {
   const session = c.get("session");
-  if (!session) return c.json({ error: "unauthorized", message: "Sign in required" }, 401);
+  if (!session) return respondError(c, new UnauthorizedError("Sign in required"));
   const db = createDb(c.env.DB);
   const row = await getFeedToken(db, session.user.id);
   if (!row) return c.json({ token: null });
@@ -194,7 +198,7 @@ meHandlers.get("/me/feed/token", async (c) => {
 
 meHandlers.post("/me/feed/token", async (c) => {
   const session = c.get("session");
-  if (!session) return c.json({ error: "unauthorized", message: "Sign in required" }, 401);
+  if (!session) return respondError(c, new UnauthorizedError("Sign in required"));
   const db = createDb(c.env.DB);
   const minted = await upsertFeedToken(db, session.user.id);
   const token: FeedToken = {
@@ -208,7 +212,7 @@ meHandlers.post("/me/feed/token", async (c) => {
 
 meHandlers.delete("/me/feed/token", async (c) => {
   const session = c.get("session");
-  if (!session) return c.json({ error: "unauthorized", message: "Sign in required" }, 401);
+  if (!session) return respondError(c, new UnauthorizedError("Sign in required"));
   const db = createDb(c.env.DB);
   await deleteFeedToken(db, session.user.id);
   return c.json({ success: true });
@@ -216,7 +220,7 @@ meHandlers.delete("/me/feed/token", async (c) => {
 
 meHandlers.get("/me/digest", async (c) => {
   const session = c.get("session");
-  if (!session) return c.json({ error: "unauthorized", message: "Sign in required" }, 401);
+  if (!session) return respondError(c, new UnauthorizedError("Sign in required"));
   const db = createDb(c.env.DB);
   const row = await getDigestPrefs(db, session.user.id);
   return c.json({ cadence: row?.cadence ?? "off" });
@@ -224,11 +228,14 @@ meHandlers.get("/me/digest", async (c) => {
 
 meHandlers.put("/me/digest", async (c) => {
   const session = c.get("session");
-  if (!session) return c.json({ error: "unauthorized", message: "Sign in required" }, 401);
+  if (!session) return respondError(c, new UnauthorizedError("Sign in required"));
   const body = await parseJsonBody<{ cadence?: unknown }>(c);
   const cadence = body.cadence;
   if (typeof cadence !== "string" || !(DIGEST_CADENCES as readonly string[]).includes(cadence)) {
-    return c.json({ error: "bad_request", message: "cadence must be off|daily|weekly" }, 400);
+    return respondError(
+      c,
+      new ValidationError("cadence must be off|daily|weekly", { code: "bad_request" }),
+    );
   }
   const db = createDb(c.env.DB);
   const row = await setDigestCadence(db, session.user.id, cadence as DigestCadence);

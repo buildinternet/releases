@@ -13,6 +13,8 @@ import { getSecret } from "@releases/lib/secrets";
 import { validateJson } from "../lib/validate.js";
 import { hideInProduction } from "../openapi.js";
 import type { Env } from "../index.js";
+import { respondError } from "../lib/error-response.js";
+import { InternalError, ValidationError } from "@releases/lib/releases-error";
 
 export const errataRoutes = new Hono<Env>();
 
@@ -43,28 +45,36 @@ errataRoutes.put(
   async (c) => {
     const orgId = c.req.param("orgId");
     if (!orgId.startsWith("org_")) {
-      return c.json({ error: "bad_request", message: "orgId must be an org_... identifier" }, 400);
+      return respondError(
+        c,
+        new ValidationError("orgId must be an org_... identifier", { code: "bad_request" }),
+      );
     }
 
     const storeId = c.env.MEMORY_STORE_ERRATA_ID;
     if (!storeId) {
-      return c.json(
-        { error: "internal_error", message: "MEMORY_STORE_ERRATA_ID not configured" },
-        500,
+      return respondError(
+        c,
+        new InternalError("MEMORY_STORE_ERRATA_ID not configured", { code: "internal_error" }),
       );
     }
 
     const { content } = c.req.valid("json");
     if (new TextEncoder().encode(content).byteLength > MAX_CONTENT_BYTES) {
-      return c.json(
-        { error: "payload_too_large", message: `content exceeds ${MAX_CONTENT_BYTES}-byte cap` },
-        413,
+      return respondError(
+        c,
+        new ValidationError(`content exceeds ${MAX_CONTENT_BYTES}-byte cap`, {
+          code: "payload_too_large",
+        }),
       );
     }
 
     const apiKey = await getSecret(c.env.ANTHROPIC_API_KEY);
     if (!apiKey) {
-      return c.json({ error: "internal_error", message: "ANTHROPIC_API_KEY not bound" }, 500);
+      return respondError(
+        c,
+        new InternalError("ANTHROPIC_API_KEY not bound", { code: "internal_error" }),
+      );
     }
     // Memory-store CRUD isn't Messages-API inference, so skip the AI Gateway
     // (the SDK would otherwise auto-pick up `ANTHROPIC_BASE_URL` from env). The

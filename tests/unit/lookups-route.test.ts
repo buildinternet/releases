@@ -72,16 +72,18 @@ describe("POST /v1/lookups", () => {
     const env = makeEnv(makeKv());
     const res = await callRoute(env, { provider: "github", coordinate: "not-a-coord" });
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe("E_LOOKUP_BAD_COORDINATE");
+    const body = (await res.json()) as { error: { code: string; type: string } };
+    expect(body.error.code).toBe("bad_request");
+    expect(body.error.type).toBe("validation");
   });
 
   test("400 on unsupported provider", async () => {
     const env = makeEnv(makeKv());
     const res = await callRoute(env, { provider: "npm", coordinate: "acme/foo" });
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe("E_LOOKUP_UNSUPPORTED_PROVIDER");
+    const body = (await res.json()) as { error: { code: string; type: string } };
+    expect(body.error.code).toBe("bad_request");
+    expect(body.error.type).toBe("validation");
   });
 
   test("returns existing source when one already matches", async () => {
@@ -601,8 +603,8 @@ describe("GET /v1/lookups/source-by-coordinate", () => {
   test("400 when coordinate is unparseable", async () => {
     const res = await getByCoord("not-a-coordinate");
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe("bad_request");
+    const body = (await res.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("bad_request");
   });
 
   test("404 when no source matches", async () => {
@@ -791,15 +793,15 @@ describe("GET /v1/lookups/by-domain", () => {
   test("400 when domain doesn't normalize", async () => {
     const res = await getByDomain("not a domain");
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe("bad_request");
+    const body = (await res.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("bad_request");
   });
 
   test("404 when no org or product owns the domain", async () => {
     const res = await getByDomain("nope.example");
     expect(res.status).toBe(404);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe("not_found");
+    const body = (await res.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("not_found");
   });
 
   test("200 with org when domain matches organizations.domain (primary)", async () => {

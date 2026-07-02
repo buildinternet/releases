@@ -5,6 +5,8 @@ import { getFollowedReleases, mapLatestRowToReleaseItem } from "../queries/relea
 import { userFeedToAtom, ATOM_DEFAULT_MAX_ENTRIES } from "@releases/rendering/atom.js";
 import { atomEtag, formatLastModified, shouldReturn304 } from "@releases/rendering/atom-http.js";
 import type { Env } from "../index.js";
+import { respondError } from "../lib/error-response.js";
+import { NotFoundError } from "@releases/lib/releases-error";
 
 export const feedRoutes = new Hono<Env>();
 
@@ -19,7 +21,7 @@ feedRoutes.get("/feed/:token", async (c) => {
 
   const db = createDb(c.env.DB);
   const resolved = await resolveFeedToken(db, raw);
-  if (!resolved) return c.json({ error: "not_found" }, 404);
+  if (!resolved) return respondError(c, new NotFoundError());
 
   const rows = await getFollowedReleases(db, resolved.userId, {
     limit: ATOM_DEFAULT_MAX_ENTRIES,

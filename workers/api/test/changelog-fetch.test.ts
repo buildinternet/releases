@@ -170,7 +170,9 @@ describe("POST /changelog/fetch", () => {
     installFetch(monorepoHandler);
     const res = await call(undefined);
     expect(res.status).toBe(400);
-    expect(((await res.json()) as { error: string }).error).toBe("bad_request");
+    expect(
+      ((await res.json()) as { error: { code: string; type: string; message: string } }).error.code,
+    ).toBe("bad_request");
   });
 
   it("returns 400 for a non-github coordinate", async () => {

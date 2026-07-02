@@ -20,6 +20,8 @@ import type { Env } from "../index.js";
 import { buildBareLimitEnvelope } from "../lib/pagination.js";
 import { buildBotCondition, getTopSearchQueries } from "../lib/search-queries-top.js";
 import type { BotsMode } from "../lib/search-queries-top.js";
+import { respondError } from "../lib/error-response.js";
+import { ValidationError } from "@releases/lib/releases-error";
 
 export const adminSearchQueriesRoutes = new Hono<Env>();
 
@@ -75,9 +77,9 @@ adminSearchQueriesRoutes.get("/admin/search-queries", async (c) => {
   const since = parseSinceMs(c.req.query("since") ?? undefined);
   const botsMode = parseBots(c.req.query("bots"));
   if (botsMode === null) {
-    return c.json(
-      { error: "invalid_param", message: "bots must be exclude, include, or only" },
-      400,
+    return respondError(
+      c,
+      new ValidationError("bots must be exclude, include, or only", { code: "bad_request" }),
     );
   }
 
@@ -104,9 +106,9 @@ adminSearchQueriesRoutes.get("/admin/search-queries/top", async (c) => {
   const since = parseSinceMs(c.req.query("since") ?? undefined);
   const botsMode = parseBots(c.req.query("bots"));
   if (botsMode === null) {
-    return c.json(
-      { error: "invalid_param", message: "bots must be exclude, include, or only" },
-      400,
+    return respondError(
+      c,
+      new ValidationError("bots must be exclude, include, or only", { code: "bad_request" }),
     );
   }
 

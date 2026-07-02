@@ -88,7 +88,13 @@ describe("POST /v1/workflows/backfill-source", () => {
     await seedScrapeSource(db);
     const res = await post(mkApp(db), { sourceSlug: "acme-blog" });
     expect(res.status).toBe(400);
-    expect(((await res.json()) as { error: string }).error).toBe("bare_slug_rejected");
+    expect(
+      (
+        (await res.json()) as {
+          error: { code: string; type: string; message: string };
+        }
+      ).error.code,
+    ).toBe("bare_slug_rejected");
   });
 
   it("404s an unknown source id", async () => {
@@ -112,7 +118,13 @@ describe("POST /v1/workflows/backfill-source", () => {
     });
     const res = await post(mkApp(db), { sourceId: "src_gh" });
     expect(res.status).toBe(400);
-    expect(((await res.json()) as { error: string }).error).toBe("bad_request");
+    expect(
+      (
+        (await res.json()) as {
+          error: { code: string; type: string; message: string };
+        }
+      ).error.code,
+    ).toBe("bad_request");
   });
 
   it("503s when no Anthropic key and no extract override", async () => {
@@ -346,7 +358,9 @@ describe("GET /v1/workflows/backfill-source/status/:instanceId", () => {
     const fetch = mkApp(db, { BACKFILL_SOURCE_WORKFLOW: fakeWorkflow });
     const res = await getStatus(fetch, "backfill-nonexistent");
     expect(res.status).toBe(404);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe("instance_not_found");
+    const body = (await res.json()) as {
+      error: { code: string; type: string; message: string };
+    };
+    expect(body.error.code).toBe("instance_not_found");
   });
 });

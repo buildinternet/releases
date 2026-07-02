@@ -113,7 +113,7 @@ describe("kind on write paths", () => {
 
     const res = await callSource("/orgs/acme/sources/acme-feed", "PATCH", { kind: "framework" });
     expect(res.status).toBe(400);
-    const body = (await res.json()) as Record<string, unknown>;
-    expect(body.error).toBe("bad_request");
+    const body = (await res.json()) as { error: { code: string; type: string; message: string } };
+    expect(body.error.code).toBe("bad_request");
   });
 });

@@ -39,6 +39,8 @@ import {
 import type { RelatedReleaseItem, RelatedSourceItem } from "@buildinternet/releases-api-types";
 import type { Env } from "../index.js";
 import type { D1Db } from "../db.js";
+import { respondError } from "../lib/error-response.js";
+import { ValidationError, NotFoundError } from "@releases/lib/releases-error";
 
 export const relatedRoutes = new Hono<Env>();
 
@@ -137,9 +139,9 @@ relatedRoutes.get(
   async (c) => {
     const anchorId = c.req.query("release");
     if (!anchorId) {
-      return c.json(
-        { error: "bad_request", message: "Missing required query parameter: release" },
-        400,
+      return respondError(
+        c,
+        new ValidationError("Missing required query parameter: release", { code: "bad_request" }),
       );
     }
     const scope = parseScope(c.req.query("scope"));
@@ -171,7 +173,7 @@ relatedRoutes.get(
       .innerJoin(sourcesActive, eq(sourcesActive.id, releases.sourceId))
       .where(eq(releases.id, anchorId));
     if (!anchor) {
-      return c.json({ error: "not_found", message: "Release not found" }, 404);
+      return respondError(c, new NotFoundError("Release not found"));
     }
 
     let anchorVector: number[] | null = null;
@@ -426,9 +428,9 @@ relatedRoutes.get(
   async (c) => {
     const anchorParam = c.req.query("source");
     if (!anchorParam) {
-      return c.json(
-        { error: "bad_request", message: "Missing required query parameter: source" },
-        400,
+      return respondError(
+        c,
+        new ValidationError("Missing required query parameter: source", { code: "bad_request" }),
       );
     }
     const scope = parseScope(c.req.query("scope"));
@@ -456,7 +458,7 @@ relatedRoutes.get(
       .from(sources)
       .where(sourceMatchByIdOrSlug(anchorParam));
     if (!anchor) {
-      return c.json({ error: "not_found", message: "Source not found" }, 404);
+      return respondError(c, new NotFoundError("Source not found"));
     }
 
     let anchorVector: number[] | null = null;

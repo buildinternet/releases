@@ -13,6 +13,8 @@ import { generatePlaybookHeader } from "@releases/ai-internal/playbook";
 import { authMiddleware } from "../middleware/auth.js";
 import { newKnowledgePageId, orgWhere } from "../utils.js";
 import { validateJson } from "../lib/validate.js";
+import { respondError } from "../lib/error-response.js";
+import { NotFoundError } from "@releases/lib/releases-error";
 import {
   PlaybookResponseSchema,
   UpdatePlaybookNotesBodySchema,
@@ -101,7 +103,7 @@ app.patch(
       })
       .from(organizations)
       .where(orgWhere(slug));
-    if (!org) return c.json({ error: "Organization not found" }, 404);
+    if (!org) return respondError(c, new NotFoundError("Organization not found"));
 
     const [existing] = await db
       .select()

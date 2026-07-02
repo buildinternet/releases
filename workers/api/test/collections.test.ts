@@ -507,7 +507,7 @@ describe("collections (writes)", () => {
     );
     expect(res.status).toBe(404);
     const body = (await res.json()) as any;
-    expect(body.error).toBe("not_found");
+    expect(body.error.code).toBe("not_found");
   });
 
   it("DELETE removes a single member by slug", async () => {

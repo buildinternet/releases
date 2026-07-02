@@ -1,6 +1,8 @@
 import { Hono } from "hono";
 import { evaluateChangelog } from "@releases/ai-internal/evaluate";
 import type { Env } from "../index.js";
+import { respondError } from "../lib/error-response.js";
+import { ValidationError } from "@releases/lib/releases-error";
 
 export const evaluateRoutes = new Hono<Env>();
 
@@ -13,18 +15,21 @@ export const evaluateRoutes = new Hono<Env>();
 evaluateRoutes.get("/evaluate", async (c) => {
   const url = c.req.query("url");
   if (!url) {
-    return c.json({ error: "missing_parameter", message: "url query parameter is required" }, 400);
+    return respondError(
+      c,
+      new ValidationError("url query parameter is required", { code: "bad_request" }),
+    );
   }
 
   let parsed: URL;
   try {
     parsed = new URL(url);
   } catch {
-    return c.json({ error: "invalid_parameter", message: "url must be a valid URL" }, 400);
+    return respondError(c, new ValidationError("url must be a valid URL", { code: "bad_request" }));
   }
 
   if (parsed.protocol !== "https:") {
-    return c.json({ error: "bad_request", message: "URL must use https" }, 400);
+    return respondError(c, new ValidationError("URL must use https", { code: "bad_request" }));
   }
 
   const result = await evaluateChangelog(url);

@@ -15,6 +15,13 @@ import { sanitizeString, sanitizeText, stripControl } from "../lib/sanitize.js";
 import { notifyRecommendation, sendRecommendationAck } from "../lib/recommendation-email.js";
 import type { Env } from "../index.js";
 import { FLAGS, flag } from "@releases/lib/flags";
+import { respondError } from "../lib/error-response.js";
+import {
+  ValidationError,
+  ServiceUnavailableError,
+  RateLimitedError,
+  NotFoundError,
+} from "@releases/lib/releases-error";
 
 export const recommendationRoutes = new Hono<Env>();
 
@@ -100,12 +107,12 @@ async function readJsonBody(
 
 recommendationRoutes.post("/recommendations", async (c) => {
   if (await flag(c.env.FLAGS, c.env.RECOMMENDATIONS_DISABLED, FLAGS.recommendationsDisabled)) {
-    return c.json({ error: "recommendations_disabled" }, 503);
+    return respondError(c, new ServiceUnavailableError());
   }
 
   const contentLength = Number(c.req.header("content-length") ?? "0");
   if (Number.isFinite(contentLength) && contentLength > MAX_BODY_BYTES) {
-    return c.json({ error: "payload_too_large" }, 413);
+    return respondError(c, new ValidationError(undefined, { code: "payload_too_large" }));
   }
 
   const limiter =
@@ -115,29 +122,25 @@ recommendationRoutes.post("/recommendations", async (c) => {
     const { success } = await limiter.limit({ key: `recommendation:${ip}` });
     if (!success) {
       c.header("Retry-After", String(RATE_LIMIT_WINDOW_SECONDS));
-      return c.json(
-        { error: "rate_limited", message: "Too many requests. Please retry shortly." },
-        429,
-      );
+      return respondError(c, new RateLimitedError("Too many requests. Please retry shortly."));
     }
   }
 
   const parsed = await readJsonBody(c.req.raw);
   if (!parsed.ok) {
-    return c.json({ error: parsed.error }, parsed.status);
+    return respondError(c, new ValidationError(undefined, { code: parsed.error }));
   }
   if (typeof parsed.value !== "object" || parsed.value === null) {
-    return c.json({ error: "invalid_json" }, 400);
+    return respondError(c, new ValidationError(undefined, { code: "invalid_json" }));
   }
   const body = parsed.value as Record<string, unknown>;
   const type = parseRecommendationType(body.type);
   if (!type) {
-    return c.json(
-      {
-        error: "invalid_type",
-        message: `type must be one of: ${RECOMMENDATION_TYPES.join(", ")}`,
-      },
-      400,
+    return respondError(
+      c,
+      new ValidationError(`type must be one of: ${RECOMMENDATION_TYPES.join(", ")}`, {
+        code: "bad_request",
+      }),
     );
   }
 
@@ -145,7 +148,10 @@ recommendationRoutes.post("/recommendations", async (c) => {
   const submittedUrl = rawUrl ? stripControl(rawUrl).trim() : null;
   const url = submittedUrl ? normalizeSubmittedUrl(submittedUrl) : null;
   if (!url) {
-    return c.json({ error: "url_required", message: "Provide a valid http(s) URL." }, 400);
+    return respondError(
+      c,
+      new ValidationError("Provide a valid http(s) URL.", { code: "bad_request" }),
+    );
   }
 
   const rawNote = sanitizeString(body.note ?? body.additionalInfo, MAX_NOTE);
@@ -154,7 +160,10 @@ recommendationRoutes.post("/recommendations", async (c) => {
   const rawContact = sanitizeString(body.contactEmail ?? body.email, MAX_CONTACT_EMAIL);
   const contactEmail = rawContact ? stripControl(rawContact).trim() || null : null;
   if (contactEmail && !EMAIL_PATTERN.test(contactEmail)) {
-    return c.json({ error: "invalid_email", message: "Provide a valid email address." }, 400);
+    return respondError(
+      c,
+      new ValidationError("Provide a valid email address.", { code: "bad_request" }),
+    );
   }
 
   const row = {
@@ -188,10 +197,10 @@ recommendationRoutes.patch("/recommendations/:id", async (c) => {
   try {
     parsed = await c.req.json();
   } catch {
-    return c.json({ error: "invalid_json" }, 400);
+    return respondError(c, new ValidationError(undefined, { code: "invalid_json" }));
   }
   if (typeof parsed !== "object" || parsed === null) {
-    return c.json({ error: "invalid_json" }, 400);
+    return respondError(c, new ValidationError(undefined, { code: "invalid_json" }));
   }
   const body = parsed as Record<string, unknown>;
 
@@ -201,24 +210,29 @@ recommendationRoutes.patch("/recommendations/:id", async (c) => {
       typeof body.status !== "string" ||
       !(RECOMMENDATION_STATUSES as readonly string[]).includes(body.status)
     ) {
-      return c.json(
-        {
-          error: "invalid_status",
-          message: `status must be one of: ${RECOMMENDATION_STATUSES.join(", ")}`,
-        },
-        400,
+      return respondError(
+        c,
+        new ValidationError(`status must be one of: ${RECOMMENDATION_STATUSES.join(", ")}`, {
+          code: "bad_request",
+        }),
       );
     }
     update.status = body.status;
   }
   if (body.archived !== undefined) {
     if (typeof body.archived !== "boolean") {
-      return c.json({ error: "invalid_archived", message: "archived must be a boolean" }, 400);
+      return respondError(
+        c,
+        new ValidationError("archived must be a boolean", { code: "bad_request" }),
+      );
     }
     update.archived = body.archived;
   }
   if (update.status === undefined && update.archived === undefined) {
-    return c.json({ error: "nothing_to_update", message: "provide status and/or archived" }, 400);
+    return respondError(
+      c,
+      new ValidationError("provide status and/or archived", { code: "bad_request" }),
+    );
   }
 
   const db = getDb(c);
@@ -228,7 +242,7 @@ recommendationRoutes.patch("/recommendations/:id", async (c) => {
     .where(eq(recommendations.id, id))
     .returning();
 
-  if (!updated) return c.json({ error: "not_found", message: "Recommendation not found" }, 404);
+  if (!updated) return respondError(c, new NotFoundError("Recommendation not found"));
   return c.json(updated);
 });
 
@@ -240,6 +254,6 @@ recommendationRoutes.delete("/recommendations/:id", async (c) => {
     .where(eq(recommendations.id, id))
     .returning({ id: recommendations.id });
 
-  if (!deleted) return c.json({ error: "not_found", message: "Recommendation not found" }, 404);
+  if (!deleted) return respondError(c, new NotFoundError("Recommendation not found"));
   return c.json({ deleted: true, id: deleted.id });
 });

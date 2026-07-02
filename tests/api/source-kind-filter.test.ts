@@ -107,8 +107,8 @@ describe("GET /v1/sources?kind= filter", () => {
   it("returns 400 on unknown kind value", async () => {
     const res = await callSource("/sources?kind=framework");
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe("bad_request");
+    const body = (await res.json()) as { error: { code: string; type: string; message: string } };
+    expect(body.error.code).toBe("bad_request");
   });
 
   it("returns all sources when kind is omitted", async () => {
@@ -142,8 +142,8 @@ describe("GET /v1/products?kind= filter", () => {
   it("returns 400 on unknown kind value", async () => {
     const res = await callProduct("/products?kind=framework");
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe("bad_request");
+    const body = (await res.json()) as { error: { code: string; type: string; message: string } };
+    expect(body.error.code).toBe("bad_request");
   });
 
   it("returns all products when kind is omitted", async () => {
@@ -193,8 +193,8 @@ describe("GET /v1/orgs/:slug/releases?kind= filter", () => {
     await seedOrg("acme");
     const res = await callOrg("/orgs/acme/releases?kind=framework");
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe("bad_request");
+    const body = (await res.json()) as { error: { code: string; type: string; message: string } };
+    expect(body.error.code).toBe("bad_request");
   });
 
   it("returns all releases when kind is omitted", async () => {
@@ -271,16 +271,16 @@ describe("GET /v1/orgs/:slug/catalog?kind= filter", () => {
     await seedOrg("acme");
     const res = await callOrg("/orgs/acme/catalog?kind=framework");
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe("bad_request");
+    const body = (await res.json()) as { error: { code: string; type: string; message: string } };
+    expect(body.error.code).toBe("bad_request");
   });
 
   it("?entryType= returns 400 on unknown entry type value", async () => {
     await seedOrg("acme");
     const res = await callOrg("/orgs/acme/catalog?entryType=unknown");
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe("bad_request");
+    const body = (await res.json()) as { error: { code: string; type: string; message: string } };
+    expect(body.error.code).toBe("bad_request");
   });
 });
 
@@ -357,7 +357,7 @@ describe("kind filter on /v1/search", () => {
   it("returns 400 on unknown kind value", async () => {
     const res = await callSearch("/search?q=anything&kind=framework");
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe("bad_request");
+    const body = (await res.json()) as { error: { code: string; type: string; message: string } };
+    expect(body.error.code).toBe("bad_request");
   });
 });

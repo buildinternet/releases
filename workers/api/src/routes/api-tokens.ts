@@ -20,6 +20,8 @@ import type { TokenIdentity } from "@buildinternet/releases-api-types";
 import { newApiTokenId } from "@buildinternet/releases-core/id";
 import { logEvent } from "@releases/lib/log-event";
 import type { Env } from "../index.js";
+import { respondError } from "../lib/error-response.js";
+import { ValidationError, UnauthorizedError, NotFoundError } from "@releases/lib/releases-error";
 
 export const apiTokenRoutes = new Hono<Env>();
 
@@ -62,23 +64,30 @@ function toPublicRow(row: typeof apiTokens.$inferSelect) {
 
 apiTokenRoutes.post("/tokens", async (c) => {
   const body = await parseJsonBody(c);
-  if (!body) return c.json({ error: "bad_request", message: "Invalid JSON body" }, 400);
+  if (!body) {
+    return respondError(c, new ValidationError("Invalid JSON body", { code: "bad_request" }));
+  }
 
   const name = typeof body.name === "string" ? body.name.trim() : "";
-  if (!name) return c.json({ error: "bad_request", message: "name is required" }, 400);
+  if (!name) {
+    return respondError(c, new ValidationError("name is required", { code: "bad_request" }));
+  }
 
   const scopes = validateScopes(body.scopes);
-  if (!scopes) return c.json({ error: "bad_request", message: SCOPES_HINT }, 400);
+  if (!scopes) return respondError(c, new ValidationError(SCOPES_HINT, { code: "bad_request" }));
 
   const principalType = typeof body.principalType === "string" ? body.principalType : "internal";
   if (!(PRINCIPAL_TYPES as readonly string[]).includes(principalType)) {
-    return c.json({ error: "bad_request", message: "invalid principalType" }, 400);
+    return respondError(c, new ValidationError("invalid principalType", { code: "bad_request" }));
   }
   const principalId = typeof body.principalId === "string" ? body.principalId : null;
 
   const expiresAt = typeof body.expiresAt === "string" ? body.expiresAt : null;
   if (expiresAt && Number.isNaN(Date.parse(expiresAt))) {
-    return c.json({ error: "bad_request", message: "expiresAt must be ISO-8601" }, 400);
+    return respondError(
+      c,
+      new ValidationError("expiresAt must be ISO-8601", { code: "bad_request" }),
+    );
   }
 
   const { token, lookupId, secret } = generateApiToken();
@@ -204,7 +213,7 @@ apiTokenRoutes.get("/tokens/me", async (c) => {
   const row = await db.select().from(apiTokens).where(eq(apiTokens.id, auth.tokenId)).get();
   // Auth resolved a token id but its row is gone (revoked/deleted mid-request).
   // A credential was presented, so this is "invalid", never "missing".
-  if (!row) return c.json({ error: "unauthorized", message: "Invalid API key" }, 401);
+  if (!row) return respondError(c, new UnauthorizedError("Invalid API key"));
   return c.json({
     kind: "token",
     name: row.name,
@@ -227,7 +236,7 @@ apiTokenRoutes.get("/tokens/:id", async (c) => {
     .from(apiTokens)
     .where(eq(apiTokens.id, c.req.param("id")))
     .get();
-  if (!row) return c.json({ error: "not_found", message: "token not found" }, 404);
+  if (!row) return respondError(c, new NotFoundError("token not found"));
   return c.json(toPublicRow(row));
 });
 
@@ -235,36 +244,44 @@ apiTokenRoutes.patch("/tokens/:id", async (c) => {
   const db = createDb(c.env.DB);
   const id = c.req.param("id");
   const existing = await db.select().from(apiTokens).where(eq(apiTokens.id, id)).get();
-  if (!existing) return c.json({ error: "not_found", message: "token not found" }, 404);
+  if (!existing) return respondError(c, new NotFoundError("token not found"));
 
   const body = await parseJsonBody(c);
-  if (!body) return c.json({ error: "bad_request", message: "Invalid JSON body" }, 400);
+  if (!body) {
+    return respondError(c, new ValidationError("Invalid JSON body", { code: "bad_request" }));
+  }
 
   const patch: Partial<typeof apiTokens.$inferInsert> = {};
   if (typeof body.name === "string") {
     if (!body.name.trim())
-      return c.json({ error: "bad_request", message: "name cannot be empty" }, 400);
+      return respondError(c, new ValidationError("name cannot be empty", { code: "bad_request" }));
     patch.name = body.name.trim();
   }
   if (body.scopes !== undefined) {
     const scopes = validateScopes(body.scopes);
-    if (!scopes) return c.json({ error: "bad_request", message: SCOPES_HINT }, 400);
+    if (!scopes) return respondError(c, new ValidationError(SCOPES_HINT, { code: "bad_request" }));
     patch.scopes = JSON.stringify(scopes);
   }
   if (body.expiresAt === null) {
     patch.expiresAt = null;
   } else if (typeof body.expiresAt === "string") {
     if (Number.isNaN(Date.parse(body.expiresAt))) {
-      return c.json({ error: "bad_request", message: "expiresAt must be ISO-8601" }, 400);
+      return respondError(
+        c,
+        new ValidationError("expiresAt must be ISO-8601", { code: "bad_request" }),
+      );
     }
     patch.expiresAt = body.expiresAt;
   }
   if (Object.keys(patch).length === 0) {
-    return c.json({ error: "bad_request", message: "no editable fields provided" }, 400);
+    return respondError(
+      c,
+      new ValidationError("no editable fields provided", { code: "bad_request" }),
+    );
   }
 
   const [updated] = await db.update(apiTokens).set(patch).where(eq(apiTokens.id, id)).returning();
-  if (!updated) return c.json({ error: "not_found", message: "token not found" }, 404);
+  if (!updated) return respondError(c, new NotFoundError("token not found"));
   return c.json(toPublicRow(updated));
 });
 
@@ -276,7 +293,7 @@ apiTokenRoutes.post("/tokens/:id/revoke", async (c) => {
     .set({ active: false, revokedAt: new Date().toISOString() })
     .where(eq(apiTokens.id, id))
     .returning();
-  if (!updated) return c.json({ error: "not_found", message: "token not found" }, 404);
+  if (!updated) return respondError(c, new NotFoundError("token not found"));
   logEvent("info", { component: "api-tokens", event: "revoked", tokenId: id });
   return c.json(toPublicRow(updated));
 });

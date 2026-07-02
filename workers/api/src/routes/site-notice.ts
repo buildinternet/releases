@@ -7,6 +7,8 @@ import { createDb } from "../db.js";
 import { isValidBearerAuth, resolveAuthIdentity } from "../middleware/auth.js";
 import { validateJson } from "../lib/validate.js";
 import { getStoredSiteNotice, putStoredSiteNotice } from "../queries/site-settings.js";
+import { respondError } from "../lib/error-response.js";
+import { ForbiddenError } from "@releases/lib/releases-error";
 
 export const siteNoticeRoutes = new Hono<Env>();
 
@@ -66,7 +68,7 @@ siteNoticeRoutes.put(
   // isolated route tests where the namespace auth middleware is absent.
   async (c, next) => {
     if (!(await isValidBearerAuth(c))) {
-      return c.json({ error: "forbidden", message: "Admin scope required." }, 403);
+      return respondError(c, new ForbiddenError("Admin scope required."));
     }
     await next();
   },

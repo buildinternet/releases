@@ -132,7 +132,7 @@ describe("admin oauth client routes", () => {
       json({ redirectUris: ["javascript:alert(1)"], scopes: ["read"] }),
     );
     expect(res.status).toBe(400);
-    expect(((await res.json()) as { error: string }).error).toBe("invalid_redirect_uri");
+    expect(((await res.json()) as { error: { code: string } }).error.code).toBe("bad_request");
   });
 
   it("rejects a non-loopback http: redirect_uri with 400", async () => {

@@ -20,6 +20,8 @@ import {
 } from "@releases/adapters/fetch-plan";
 import { getSourceMeta } from "@releases/adapters/source-meta";
 import { describeWorkflowStages } from "@releases/adapters/workflow-stages";
+import { respondError } from "../lib/error-response.js";
+import { NotFoundError, ValidationError } from "@releases/lib/releases-error";
 
 export const statusRoutes = new Hono<Env>();
 
@@ -146,7 +148,7 @@ statusRoutes.get("/status/fetch-log", async (c) => {
 statusRoutes.get("/status/fetch-plan", async (c) => {
   const db = createDb(c.env.DB);
   const org = c.req.query("org");
-  if (!org) return c.json({ error: "missing_org" }, 400);
+  if (!org) return respondError(c, new ValidationError(undefined, { code: "bad_request" }));
 
   const [orgRow] = await db
     .select({ id: organizations.id })
@@ -188,7 +190,9 @@ statusRoutes.get("/status/fetch-plan", async (c) => {
 statusRoutes.get("/status/source-workflow", async (c) => {
   const db = createDb(c.env.DB);
   const sourceId = c.req.query("sourceId");
-  if (!sourceId) return c.json({ error: "missing_sourceId" }, 400);
+  if (!sourceId) {
+    return respondError(c, new ValidationError("sourceId is required", { code: "bad_request" }));
+  }
 
   const [sourceRows, recent] = await Promise.all([
     db
@@ -211,7 +215,7 @@ statusRoutes.get("/status/source-workflow", async (c) => {
       .limit(SPARKLINE_N),
   ]);
   const source = sourceRows[0];
-  if (!source) return c.json({ error: "not_found" }, 404);
+  if (!source) return respondError(c, new NotFoundError());
 
   const now = new Date();
   const plan = describeFetchPlan(source);

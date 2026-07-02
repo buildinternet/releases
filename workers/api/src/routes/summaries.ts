@@ -7,6 +7,8 @@ import { releaseSummaries, sources } from "@buildinternet/releases-core/schema";
 import { sourceMatchByIdOrSlug } from "../utils.js";
 import { validateJson } from "../lib/validate.js";
 import type { Env } from "../index.js";
+import { respondError } from "../lib/error-response.js";
+import { NotFoundError } from "@releases/lib/releases-error";
 import {
   ErrorResponseSchema,
   SourceSummariesResponseSchema,
@@ -47,7 +49,7 @@ app.get(
       .select({ id: sources.id })
       .from(sources)
       .where(sourceMatchByIdOrSlug(slug));
-    if (!source) return c.json({ error: "Source not found" }, 404);
+    if (!source) return respondError(c, new NotFoundError("Source not found"));
 
     const conditions = [eq(releaseSummaries.sourceId, source.id)];
     if (type) conditions.push(eq(releaseSummaries.type, type as "rolling" | "monthly"));
@@ -98,7 +100,7 @@ app.post(
       .select({ id: sources.id })
       .from(sources)
       .where(sourceMatchByIdOrSlug(slug));
-    if (!source) return c.json({ error: "Source not found" }, 404);
+    if (!source) return respondError(c, new NotFoundError("Source not found"));
 
     await db
       .insert(releaseSummaries)

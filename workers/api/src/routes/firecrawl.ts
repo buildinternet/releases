@@ -16,6 +16,13 @@ import { parseJsonBody } from "../lib/json-body.js";
 import { hideInProduction } from "../openapi.js";
 import { syncFirecrawlMonitor } from "../lib/firecrawl-sync.js";
 import type { Env } from "../index.js";
+import { respondError } from "../lib/error-response.js";
+import {
+  NotFoundError,
+  UnauthorizedError,
+  InternalError,
+  ServiceUnavailableError,
+} from "@releases/lib/releases-error";
 
 export const firecrawlRoutes = new Hono<Env>();
 
@@ -70,7 +77,7 @@ firecrawlRoutes.post(
     // global onError). Source slugs are only unique per-org (#690/#698), so a raw
     // `eq(sources.slug, …)` lookup could resolve the wrong org's source.
     const source = await resolveSourceFromContext(c, db);
-    if (!source) return c.json({ error: "not_found" }, 404);
+    if (!source) return respondError(c, new NotFoundError());
 
     // Body is validated + typed by `validateJson` (malformed JSON / wrong types
     // → 400 before this handler runs), so a stray `proxy: 123` never reaches
@@ -107,14 +114,14 @@ firecrawlRoutes.post(
     // when either is unbound, rather than letting a missing API key surface as a
     // generic unhandled-exception 500.
     const secret = await getSecret(env.FIRECRAWL_WEBHOOK_SECRET);
-    if (!secret) return c.json({ error: "webhook_secret_unbound" }, 500);
+    if (!secret) return respondError(c, new InternalError());
 
     // In tests an injected `_firecrawlClientOverride` short-circuits the live
     // client; in production we build it from the resolved API key.
     let client = env._firecrawlClientOverride;
     if (!client) {
       const apiKey = await getSecret(env.FIRECRAWL_API_KEY);
-      if (!apiKey) return c.json({ error: "api_key_unbound" }, 500);
+      if (!apiKey) return respondError(c, new InternalError());
       client = createFirecrawlClient({ apiKey });
     }
 
@@ -201,7 +208,7 @@ firecrawlRoutes.post("/integrations/firecrawl/webhook", async (c) => {
   const secret = await getSecret(env.FIRECRAWL_WEBHOOK_SECRET);
   const token = c.req.header("X-Firecrawl-Token") ?? "";
   if (!secret || !constantTimeEqual(token, secret)) {
-    return c.json({ error: "unauthorized" }, 401);
+    return respondError(c, new UnauthorizedError());
   }
 
   const body = await parseJsonBody<FirecrawlPageEvent>(c);
@@ -338,7 +345,7 @@ firecrawlRoutes.post("/integrations/firecrawl/webhook", async (c) => {
   // handled so it redelivers. Pages that DID spawn already wrote their KV gate
   // (and hold a durable instance id), so the redelivery skips them and only the
   // failed page is reprocessed.
-  if (retryable) return c.json({ ok: false, error: "spawn_failed" }, 503);
+  if (retryable) return respondError(c, new ServiceUnavailableError());
 
   return c.json({ ok: true });
 });

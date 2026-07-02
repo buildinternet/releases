@@ -100,6 +100,14 @@ import { generateCollectionSummariesForDay } from "../cron/collection-summaries.
 import { resolveCollectionSummaryModel } from "../lib/text-model.js";
 import { parseJsonBody } from "../lib/json-body.js";
 import { workflowInstanceStatus, workflowInstanceTerminate } from "../lib/workflow-instance.js";
+import { respondError } from "../lib/error-response.js";
+import {
+  ValidationError,
+  NotFoundError,
+  UpstreamError,
+  ServiceUnavailableError,
+  InternalError,
+} from "@releases/lib/releases-error";
 import type { MediaBackfillKind } from "../workflows/media-backfill.js";
 import type { Context } from "hono";
 
@@ -115,10 +123,13 @@ async function replyWorkflowStatus(
   const result = await workflowInstanceStatus(binding, instanceId);
   if (!result.ok) {
     if (result.code === "unavailable") {
-      return c.json({ error: "service_unavailable", message: unavailableMessage }, 503);
+      return respondError(c, new ServiceUnavailableError(unavailableMessage));
     }
     if (result.code === "not_found") {
-      return c.json({ error: "instance_not_found", message: result.message }, 404);
+      return respondError(
+        c,
+        new NotFoundError(result.message, { code: "instance_not_found", details: { instanceId } }),
+      );
     }
     logEvent("error", {
       component,
@@ -126,7 +137,7 @@ async function replyWorkflowStatus(
       instanceId,
       err: result.message,
     });
-    return c.json({ error: "internal_error", message: result.message }, 500);
+    return respondError(c, new InternalError(result.message));
   }
   return c.json({ instanceId, ...result.status });
 }
@@ -141,10 +152,13 @@ async function replyWorkflowTerminate(
   const result = await workflowInstanceTerminate(binding, instanceId);
   if (!result.ok) {
     if (result.code === "unavailable") {
-      return c.json({ error: "service_unavailable", message: unavailableMessage }, 503);
+      return respondError(c, new ServiceUnavailableError(unavailableMessage));
     }
     if (result.code === "not_found") {
-      return c.json({ error: "instance_not_found", message: result.message }, 404);
+      return respondError(
+        c,
+        new NotFoundError(result.message, { code: "instance_not_found", details: { instanceId } }),
+      );
     }
     logEvent("error", {
       component,
@@ -152,7 +166,7 @@ async function replyWorkflowTerminate(
       instanceId,
       err: result.message,
     });
-    return c.json({ error: "internal_error", message: result.message }, 500);
+    return respondError(c, new InternalError(result.message));
   }
   return c.json({ instanceId, terminated: true });
 }
@@ -212,7 +226,10 @@ workflowsRoutes.post("/workflows/notifications-test", async (c) => {
 
   const target = c.env.EMAIL_NOTIFY_TO;
   if (!target) {
-    return c.json({ error: "misconfigured", message: "EMAIL_NOTIFY_TO not configured" }, 400);
+    return respondError(
+      c,
+      new ValidationError("EMAIL_NOTIFY_TO not configured", { code: "bad_request" }),
+    );
   }
 
   if (body.plain) {
@@ -329,9 +346,11 @@ workflowsRoutes.post("/workflows/embed-releases", async (c) => {
 
   const embedConfig = await buildEmbedConfig(c.env);
   if (!embedConfig) {
-    return c.json(
-      { error: "embed_unavailable", message: "Embedding provider not configured" },
-      503,
+    return respondError(
+      c,
+      new ServiceUnavailableError("Embedding provider not configured", {
+        code: "embed_unavailable",
+      }),
     );
   }
   let persistedIds: string[] = [];
@@ -586,9 +605,11 @@ workflowsRoutes.post("/workflows/embed-entities", async (c) => {
 
   const embedConfig = await buildEmbedConfig(c.env);
   if (!embedConfig) {
-    return c.json(
-      { error: "embed_unavailable", message: "Embedding provider not configured" },
-      503,
+    return respondError(
+      c,
+      new ServiceUnavailableError("Embedding provider not configured", {
+        code: "embed_unavailable",
+      }),
     );
   }
   let persistedIds: string[] = [];
@@ -671,7 +692,7 @@ workflowsRoutes.post("/workflows/embed-changelogs", async (c) => {
   if (body.sourceSlug) {
     const [src] = await db.select().from(sources).where(eq(sources.slug, body.sourceSlug)).limit(1);
     if (!src) {
-      return c.json({ error: "not_found", message: `source not found: ${body.sourceSlug}` }, 404);
+      return respondError(c, new NotFoundError(`source not found: ${body.sourceSlug}`));
     }
     fileConditions.push(eq(sourceChangelogFiles.sourceId, src.id));
   }
@@ -723,9 +744,11 @@ workflowsRoutes.post("/workflows/embed-changelogs", async (c) => {
 
   const embedConfig = await buildEmbedConfig(c.env);
   if (!embedConfig) {
-    return c.json(
-      { error: "embed_unavailable", message: "Embedding provider not configured" },
-      503,
+    return respondError(
+      c,
+      new ServiceUnavailableError("Embedding provider not configured", {
+        code: "embed_unavailable",
+      }),
     );
   }
   let succeeded = 0;
@@ -863,9 +886,11 @@ workflowsRoutes.post("/workflows/cluster-changesets", async (c) => {
   const body = await parseJsonBody<ClusterChangesetsBody>(c);
 
   if (!body.sourceId && !body.orgId) {
-    return c.json(
-      { error: "bad_request", message: "Provide sourceId or orgId to scope the backfill" },
-      400,
+    return respondError(
+      c,
+      new ValidationError("Provide sourceId or orgId to scope the backfill", {
+        code: "bad_request",
+      }),
     );
   }
 
@@ -1023,9 +1048,9 @@ workflowsRoutes.post("/workflows/batch-summarize", async (c) => {
   const body = await parseJsonBody<BatchSummarizeBody>(c);
 
   if (!c.env.BATCH_SUMMARIZE_WORKFLOW) {
-    return c.json(
-      { error: "service_unavailable", message: "BATCH_SUMMARIZE_WORKFLOW binding not configured" },
-      503,
+    return respondError(
+      c,
+      new ServiceUnavailableError("BATCH_SUMMARIZE_WORKFLOW binding not configured"),
     );
   }
 
@@ -1076,9 +1101,9 @@ const WORKFLOW_NOT_FOUND_RE = /not\s*found|does\s+not\s+exist/i;
 workflowsRoutes.get("/workflows/batch-summarize/status/:instanceId", async (c) => {
   const binding = c.env.BATCH_SUMMARIZE_WORKFLOW;
   if (!binding) {
-    return c.json(
-      { error: "service_unavailable", message: "BATCH_SUMMARIZE_WORKFLOW binding not configured" },
-      503,
+    return respondError(
+      c,
+      new ServiceUnavailableError("BATCH_SUMMARIZE_WORKFLOW binding not configured"),
     );
   }
   const instanceId = c.req.param("instanceId");
@@ -1089,7 +1114,7 @@ workflowsRoutes.get("/workflows/batch-summarize/status/:instanceId", async (c) =
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     if (WORKFLOW_NOT_FOUND_RE.test(message)) {
-      return c.json({ error: "instance_not_found", message }, 404);
+      return respondError(c, new NotFoundError(message, { code: "instance_not_found" }));
     }
     logEvent("error", {
       component: "workflows-batch-summarize-status",
@@ -1097,7 +1122,7 @@ workflowsRoutes.get("/workflows/batch-summarize/status/:instanceId", async (c) =
       instanceId,
       err: err instanceof Error ? err : String(err),
     });
-    return c.json({ error: "internal_error", message }, 500);
+    return respondError(c, new InternalError(message));
   }
 });
 
@@ -1122,9 +1147,9 @@ workflowsRoutes.post("/workflows/batch-overview", async (c) => {
   const body = await parseJsonBody<BatchOverviewBody>(c);
 
   if (!c.env.BATCH_OVERVIEW_WORKFLOW) {
-    return c.json(
-      { error: "service_unavailable", message: "BATCH_OVERVIEW_WORKFLOW binding not configured" },
-      503,
+    return respondError(
+      c,
+      new ServiceUnavailableError("BATCH_OVERVIEW_WORKFLOW binding not configured"),
     );
   }
 
@@ -1133,16 +1158,21 @@ workflowsRoutes.post("/workflows/batch-overview", async (c) => {
   let validOrgs: string[] | undefined;
   if (body.orgs !== undefined) {
     if (!Array.isArray(body.orgs)) {
-      return c.json({ error: "bad_request", message: "`orgs` must be an array of strings" }, 400);
+      return respondError(
+        c,
+        new ValidationError("`orgs` must be an array of strings", { code: "bad_request" }),
+      );
     }
     validOrgs = body.orgs
       .filter((s): s is string => typeof s === "string")
       .map((s) => s.trim())
       .filter((s) => s.length > 0);
     if (validOrgs.length === 0) {
-      return c.json(
-        { error: "bad_request", message: "`orgs` must contain at least one non-empty string" },
-        400,
+      return respondError(
+        c,
+        new ValidationError("`orgs` must contain at least one non-empty string", {
+          code: "bad_request",
+        }),
       );
     }
   }
@@ -1200,9 +1230,9 @@ workflowsRoutes.post("/workflows/batch-overview", async (c) => {
 workflowsRoutes.get("/workflows/batch-overview/status/:instanceId", async (c) => {
   const binding = c.env.BATCH_OVERVIEW_WORKFLOW;
   if (!binding) {
-    return c.json(
-      { error: "service_unavailable", message: "BATCH_OVERVIEW_WORKFLOW binding not configured" },
-      503,
+    return respondError(
+      c,
+      new ServiceUnavailableError("BATCH_OVERVIEW_WORKFLOW binding not configured"),
     );
   }
   const instanceId = c.req.param("instanceId");
@@ -1213,7 +1243,7 @@ workflowsRoutes.get("/workflows/batch-overview/status/:instanceId", async (c) =>
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     if (WORKFLOW_NOT_FOUND_RE.test(message)) {
-      return c.json({ error: "instance_not_found", message }, 404);
+      return respondError(c, new NotFoundError(message, { code: "instance_not_found" }));
     }
     logEvent("error", {
       component: "workflows-batch-overview-status",
@@ -1221,7 +1251,7 @@ workflowsRoutes.get("/workflows/batch-overview/status/:instanceId", async (c) =>
       instanceId,
       err: err instanceof Error ? err : String(err),
     });
-    return c.json({ error: "internal_error", message }, 500);
+    return respondError(c, new InternalError(message));
   }
 });
 
@@ -1244,25 +1274,30 @@ workflowsRoutes.post("/workflows/overview-regen", async (c) => {
   const body = await parseJsonBody<OverviewRegenBody>(c);
 
   if (!c.env.OVERVIEW_REGEN_WORKFLOW) {
-    return c.json(
-      { error: "service_unavailable", message: "OVERVIEW_REGEN_WORKFLOW binding not configured" },
-      503,
+    return respondError(
+      c,
+      new ServiceUnavailableError("OVERVIEW_REGEN_WORKFLOW binding not configured"),
     );
   }
 
   let validOrgs: string[] | undefined;
   if (body.orgs !== undefined) {
     if (!Array.isArray(body.orgs)) {
-      return c.json({ error: "bad_request", message: "`orgs` must be an array of strings" }, 400);
+      return respondError(
+        c,
+        new ValidationError("`orgs` must be an array of strings", { code: "bad_request" }),
+      );
     }
     validOrgs = body.orgs
       .filter((s): s is string => typeof s === "string")
       .map((s) => s.trim())
       .filter((s) => s.length > 0);
     if (validOrgs.length === 0) {
-      return c.json(
-        { error: "bad_request", message: "`orgs` must contain at least one non-empty string" },
-        400,
+      return respondError(
+        c,
+        new ValidationError("`orgs` must contain at least one non-empty string", {
+          code: "bad_request",
+        }),
       );
     }
   }
@@ -1305,9 +1340,9 @@ workflowsRoutes.post("/workflows/overview-regen", async (c) => {
 workflowsRoutes.get("/workflows/overview-regen/status/:instanceId", async (c) => {
   const binding = c.env.OVERVIEW_REGEN_WORKFLOW;
   if (!binding) {
-    return c.json(
-      { error: "service_unavailable", message: "OVERVIEW_REGEN_WORKFLOW binding not configured" },
-      503,
+    return respondError(
+      c,
+      new ServiceUnavailableError("OVERVIEW_REGEN_WORKFLOW binding not configured"),
     );
   }
   const instanceId = c.req.param("instanceId");
@@ -1318,7 +1353,7 @@ workflowsRoutes.get("/workflows/overview-regen/status/:instanceId", async (c) =>
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     if (WORKFLOW_NOT_FOUND_RE.test(message)) {
-      return c.json({ error: "instance_not_found", message }, 404);
+      return respondError(c, new NotFoundError(message, { code: "instance_not_found" }));
     }
     logEvent("error", {
       component: "workflows-overview-regen-status",
@@ -1326,7 +1361,7 @@ workflowsRoutes.get("/workflows/overview-regen/status/:instanceId", async (c) =>
       instanceId,
       err: err instanceof Error ? err : String(err),
     });
-    return c.json({ error: "internal_error", message }, 500);
+    return respondError(c, new InternalError(message));
   }
 });
 
@@ -1463,26 +1498,28 @@ workflowsRoutes.post("/workflows/enrich-feed-content", async (c) => {
 
   const ident = body.sourceId?.trim() || body.sourceSlug?.trim();
   if (!ident) {
-    return c.json({ error: "bad_request", message: "Provide `sourceId` or `sourceSlug`" }, 400);
+    return respondError(
+      c,
+      new ValidationError("Provide `sourceId` or `sourceSlug`", { code: "bad_request" }),
+    );
   }
   // Bare slugs are ambiguous across orgs post-#690 (per-org slug uniqueness), so
   // require a typed `src_…` ID. Resolve a slug via the org-scoped detail route or
   // /v1/lookups/source-by-slug first.
   if (!isSourceId(ident)) {
-    return c.json(
-      {
-        error: "bare_slug_rejected",
-        message:
-          "Pass a typed source ID (src_…). Bare slugs are ambiguous across orgs — resolve via /v1/orgs/{orgSlug}/sources/{sourceSlug} or /v1/lookups/source-by-slug first.",
-      },
-      400,
+    return respondError(
+      c,
+      new ValidationError(
+        "Pass a typed source ID (src_…). Bare slugs are ambiguous across orgs — resolve via /v1/orgs/{orgSlug}/sources/{sourceSlug} or /v1/lookups/source-by-slug first.",
+        { code: "bare_slug_rejected" },
+      ),
     );
   }
   const [src] = await db
     .select({ id: sources.id, slug: sources.slug, name: sources.name, orgId: sources.orgId })
     .from(sources)
     .where(sourceMatchByIdOrSlug(ident));
-  if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
+  if (!src) return respondError(c, new NotFoundError("Source not found"));
 
   const rawLimit = Number(body.limit ?? 25);
   const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(Math.floor(rawLimit), 1), 200) : 25;
@@ -1491,10 +1528,7 @@ workflowsRoutes.post("/workflows/enrich-feed-content", async (c) => {
 
   const deps = await buildEnrichDeps(c.env, thinChars, db);
   if (!deps)
-    return c.json(
-      { error: "service_unavailable", message: "ANTHROPIC_API_KEY not configured" },
-      503,
-    );
+    return respondError(c, new ServiceUnavailableError("ANTHROPIC_API_KEY not configured"));
 
   const report = await runEnrichBackfill(
     db,
@@ -1683,17 +1717,19 @@ workflowsRoutes.post("/workflows/generate-content", async (c) => {
 
   const ident = body.sourceId?.trim() || body.sourceSlug?.trim();
   if (!ident) {
-    return c.json({ error: "bad_request", message: "Provide `sourceId` or `sourceSlug`" }, 400);
+    return respondError(
+      c,
+      new ValidationError("Provide `sourceId` or `sourceSlug`", { code: "bad_request" }),
+    );
   }
   // Bare slugs are ambiguous across orgs post-#690 — require a typed `src_…` ID.
   if (!isSourceId(ident)) {
-    return c.json(
-      {
-        error: "bare_slug_rejected",
-        message:
-          "Pass a typed source ID (src_…). Bare slugs are ambiguous across orgs — resolve via /v1/orgs/{orgSlug}/sources/{sourceSlug} or /v1/lookups/source-by-slug first.",
-      },
-      400,
+    return respondError(
+      c,
+      new ValidationError(
+        "Pass a typed source ID (src_…). Bare slugs are ambiguous across orgs — resolve via /v1/orgs/{orgSlug}/sources/{sourceSlug} or /v1/lookups/source-by-slug first.",
+        { code: "bare_slug_rejected" },
+      ),
     );
   }
 
@@ -1707,7 +1743,7 @@ workflowsRoutes.post("/workflows/generate-content", async (c) => {
     })
     .from(sources)
     .where(sourceMatchByIdOrSlug(ident));
-  if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
+  if (!src) return respondError(c, new NotFoundError("Source not found"));
 
   const releaseIds = Array.isArray(body.releaseIds)
     ? body.releaseIds.filter((x): x is string => typeof x === "string" && x.length > 0)
@@ -1756,23 +1792,22 @@ workflowsRoutes.post("/workflows/batch-enrich", async (c) => {
     ? body.sourceIds.map((s) => String(s).trim()).filter(Boolean)
     : [];
   if (sourceIds.length === 0) {
-    return c.json(
-      {
-        error: "bad_request",
-        message: "Provide a non-empty `sourceIds` array of typed source IDs (src_…)",
-      },
-      400,
+    return respondError(
+      c,
+      new ValidationError("Provide a non-empty `sourceIds` array of typed source IDs (src_…)", {
+        code: "bad_request",
+      }),
     );
   }
   // Bare slugs are ambiguous across orgs (per-org slug uniqueness) — require typed IDs.
   const bareSlug = sourceIds.find((id) => !isSourceId(id));
   if (bareSlug) {
-    return c.json(
-      {
-        error: "bare_slug_rejected",
-        message: `'${bareSlug}' is not a typed source ID. Pass src_… ids; resolve slugs via /v1/lookups/source-by-slug first.`,
-      },
-      400,
+    return respondError(
+      c,
+      new ValidationError(
+        `'${bareSlug}' is not a typed source ID. Pass src_… ids; resolve slugs via /v1/lookups/source-by-slug first.`,
+        { code: "bare_slug_rejected" },
+      ),
     );
   }
 
@@ -1783,16 +1818,13 @@ workflowsRoutes.post("/workflows/batch-enrich", async (c) => {
   const found = new Set(existing.map((r) => r.id));
   const missing = sourceIds.filter((id) => !found.has(id));
   if (missing.length > 0) {
-    return c.json(
-      { error: "not_found", message: `Source(s) not found: ${missing.join(", ")}` },
-      404,
-    );
+    return respondError(c, new NotFoundError(`Source(s) not found: ${missing.join(", ")}`));
   }
 
   if (!c.env.BATCH_ENRICH_WORKFLOW) {
-    return c.json(
-      { error: "service_unavailable", message: "BATCH_ENRICH_WORKFLOW binding not configured" },
-      503,
+    return respondError(
+      c,
+      new ServiceUnavailableError("BATCH_ENRICH_WORKFLOW binding not configured"),
     );
   }
 
@@ -1833,9 +1865,9 @@ workflowsRoutes.post("/workflows/batch-enrich", async (c) => {
 // ── GET /workflows/batch-enrich/status/:instanceId ───────────────────────────
 workflowsRoutes.get("/workflows/batch-enrich/status/:instanceId", async (c) => {
   if (!c.env.BATCH_ENRICH_WORKFLOW) {
-    return c.json(
-      { error: "service_unavailable", message: "BATCH_ENRICH_WORKFLOW binding not configured" },
-      503,
+    return respondError(
+      c,
+      new ServiceUnavailableError("BATCH_ENRICH_WORKFLOW binding not configured"),
     );
   }
   const instanceId = c.req.param("instanceId");
@@ -1846,7 +1878,7 @@ workflowsRoutes.get("/workflows/batch-enrich/status/:instanceId", async (c) => {
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     if (WORKFLOW_NOT_FOUND_RE.test(message)) {
-      return c.json({ error: "instance_not_found", message }, 404);
+      return respondError(c, new NotFoundError(message, { code: "instance_not_found" }));
     }
     logEvent("error", {
       component: "workflows-batch-enrich-status",
@@ -1854,7 +1886,7 @@ workflowsRoutes.get("/workflows/batch-enrich/status/:instanceId", async (c) => {
       instanceId,
       err: err instanceof Error ? err : String(err),
     });
-    return c.json({ error: "internal_error", message }, 500);
+    return respondError(c, new InternalError(message));
   }
 });
 
@@ -1889,26 +1921,27 @@ workflowsRoutes.post("/workflows/backfill-media", async (c) => {
 
   const bucket = c.env.MEDIA;
   if (!bucket) {
-    return c.json({ error: "service_unavailable", message: "MEDIA bucket not bound" }, 503);
+    return respondError(c, new ServiceUnavailableError("MEDIA bucket not bound"));
   }
 
   // Scope to a typed source ID, or require an explicit `all: true` to sweep every
   // source — so a dropped/typo'd `sourceId` can't silently backfill everything.
   const ident = body.sourceId?.trim();
   if (!ident && body.all !== true) {
-    return c.json(
-      { error: "bad_request", message: "Provide a typed `sourceId` (src_…) or `all: true`" },
-      400,
+    return respondError(
+      c,
+      new ValidationError("Provide a typed `sourceId` (src_…) or `all: true`", {
+        code: "bad_request",
+      }),
     );
   }
   if (ident && !isSourceId(ident)) {
-    return c.json(
-      {
-        error: "bare_slug_rejected",
-        message:
-          "Pass a typed source ID (src_…). Resolve a slug via /v1/orgs/{orgSlug}/sources/{sourceSlug} first.",
-      },
-      400,
+    return respondError(
+      c,
+      new ValidationError(
+        "Pass a typed source ID (src_…). Resolve a slug via /v1/orgs/{orgSlug}/sources/{sourceSlug} first.",
+        { code: "bare_slug_rejected" },
+      ),
     );
   }
 
@@ -1975,12 +2008,11 @@ workflowsRoutes.post("/workflows/backfill-gif-mp4", async (c) => {
   const bucket = c.env.MEDIA;
   const mediaTransform = c.env.MEDIA_TRANSFORM;
   if (!bucket || !mediaTransform) {
-    return c.json(
-      {
-        error: "service_unavailable",
-        message: !bucket ? "MEDIA bucket not bound" : "MEDIA_TRANSFORM binding not bound",
-      },
-      503,
+    return respondError(
+      c,
+      new ServiceUnavailableError(
+        !bucket ? "MEDIA bucket not bound" : "MEDIA_TRANSFORM binding not bound",
+      ),
     );
   }
 
@@ -1988,19 +2020,20 @@ workflowsRoutes.post("/workflows/backfill-gif-mp4", async (c) => {
   // source — so a dropped/typo'd `sourceId` can't silently transcode everything.
   const ident = body.sourceId?.trim();
   if (!ident && body.all !== true) {
-    return c.json(
-      { error: "bad_request", message: "Provide a typed `sourceId` (src_…) or `all: true`" },
-      400,
+    return respondError(
+      c,
+      new ValidationError("Provide a typed `sourceId` (src_…) or `all: true`", {
+        code: "bad_request",
+      }),
     );
   }
   if (ident && !isSourceId(ident)) {
-    return c.json(
-      {
-        error: "bare_slug_rejected",
-        message:
-          "Pass a typed source ID (src_…). Resolve a slug via /v1/orgs/{orgSlug}/sources/{sourceSlug} first.",
-      },
-      400,
+    return respondError(
+      c,
+      new ValidationError(
+        "Pass a typed source ID (src_…). Resolve a slug via /v1/orgs/{orgSlug}/sources/{sourceSlug} first.",
+        { code: "bare_slug_rejected" },
+      ),
     );
   }
 
@@ -2078,7 +2111,7 @@ workflowsRoutes.post("/workflows/backfill-video", async (c) => {
 
   const bucket = c.env.MEDIA;
   if (!bucket) {
-    return c.json({ error: "service_unavailable", message: "MEDIA bucket not bound" }, 503);
+    return respondError(c, new ServiceUnavailableError("MEDIA bucket not bound"));
   }
 
   const releaseId = body.releaseId?.trim();
@@ -2087,25 +2120,27 @@ workflowsRoutes.post("/workflows/backfill-video", async (c) => {
   // Require an explicit scope — a single release, a single source, or `all` —
   // so a dropped/typo'd id can't silently sweep the whole table.
   if (!releaseId && !sourceId && body.all !== true) {
-    return c.json(
-      {
-        error: "bad_request",
-        message: "Provide a typed `releaseId` (rel_…), a typed `sourceId` (src_…), or `all: true`",
-      },
-      400,
+    return respondError(
+      c,
+      new ValidationError(
+        "Provide a typed `releaseId` (rel_…), a typed `sourceId` (src_…), or `all: true`",
+        { code: "bad_request" },
+      ),
     );
   }
   if (releaseId && !releaseId.startsWith("rel_")) {
-    return c.json({ error: "bad_request", message: "Pass a typed release ID (rel_…)" }, 400);
+    return respondError(
+      c,
+      new ValidationError("Pass a typed release ID (rel_…)", { code: "bad_request" }),
+    );
   }
   if (sourceId && !isSourceId(sourceId)) {
-    return c.json(
-      {
-        error: "bare_slug_rejected",
-        message:
-          "Pass a typed source ID (src_…). Resolve a slug via /v1/orgs/{orgSlug}/sources/{sourceSlug} first.",
-      },
-      400,
+    return respondError(
+      c,
+      new ValidationError(
+        "Pass a typed source ID (src_…). Resolve a slug via /v1/orgs/{orgSlug}/sources/{sourceSlug} first.",
+        { code: "bare_slug_rejected" },
+      ),
     );
   }
 
@@ -2316,28 +2351,29 @@ workflowsRoutes.post("/workflows/backfill-source", async (c) => {
 
   const ident = body.sourceId?.trim() || body.sourceSlug?.trim();
   if (!ident) {
-    return c.json({ error: "bad_request", message: "Provide `sourceId` or `sourceSlug`" }, 400);
+    return respondError(
+      c,
+      new ValidationError("Provide `sourceId` or `sourceSlug`", { code: "bad_request" }),
+    );
   }
   if (!isSourceId(ident)) {
-    return c.json(
-      {
-        error: "bare_slug_rejected",
-        message:
-          "Pass a typed source ID (src_…). Bare slugs are ambiguous across orgs — resolve via /v1/orgs/{orgSlug}/sources/{sourceSlug} or /v1/lookups/source-by-slug first.",
-      },
-      400,
+    return respondError(
+      c,
+      new ValidationError(
+        "Pass a typed source ID (src_…). Bare slugs are ambiguous across orgs — resolve via /v1/orgs/{orgSlug}/sources/{sourceSlug} or /v1/lookups/source-by-slug first.",
+        { code: "bare_slug_rejected" },
+      ),
     );
   }
 
   const [src] = await db.select().from(sources).where(sourceMatchByIdOrSlug(ident));
-  if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
+  if (!src) return respondError(c, new NotFoundError("Source not found"));
   if (src.type !== "scrape") {
-    return c.json(
-      {
-        error: "bad_request",
-        message: `Backfill supports scrape sources; this source is type=${src.type}`,
-      },
-      400,
+    return respondError(
+      c,
+      new ValidationError(`Backfill supports scrape sources; this source is type=${src.type}`, {
+        code: "bad_request",
+      }),
     );
   }
 
@@ -2393,30 +2429,22 @@ workflowsRoutes.post("/workflows/backfill-source", async (c) => {
   } else if (meta.firecrawl?.enabled) {
     const apiKey = await getSecret(c.env.FIRECRAWL_API_KEY);
     if (!apiKey) {
-      return c.json(
-        { error: "service_unavailable", message: "FIRECRAWL_API_KEY not configured" },
-        503,
-      );
+      return respondError(c, new ServiceUnavailableError("FIRECRAWL_API_KEY not configured"));
     }
     try {
       const client = createFirecrawlClient({ apiKey });
       const md = await client.scrapeOnce(src.url, { proxy: meta.firecrawl?.proxy });
       if (!md) {
-        return c.json(
-          { error: "bad_gateway", message: `Empty Firecrawl scrape for ${src.url}` },
-          502,
-        );
+        return respondError(c, new UpstreamError(`Empty Firecrawl scrape for ${src.url}`));
       }
       resolved = { markdown: md, via: "firecrawl" };
     } catch (err) {
       const status = err instanceof FirecrawlError ? err.status : null;
-      return c.json(
-        {
-          error: "bad_gateway",
-          message: `Firecrawl scrape failed${status ? ` (${status})` : ""}`,
-          firecrawlStatus: status,
-        },
-        502,
+      return respondError(
+        c,
+        new UpstreamError(`Firecrawl scrape failed${status ? ` (${status})` : ""}`, {
+          details: { upstream: "firecrawl", firecrawlStatus: status },
+        }),
       );
     }
   } else {
@@ -2424,32 +2452,29 @@ workflowsRoutes.post("/workflows/backfill-source", async (c) => {
       const res = await fetch(src.url, { headers: { "User-Agent": RELEASES_BOT_UA } });
       const md = res.ok ? htmlToMarkdown(await res.text()) : "";
       if (!md.trim()) {
-        return c.json(
-          {
-            error: "bad_request",
-            message: `Could not fetch a usable body for ${src.url}. Supply \`markdown\` or enable Firecrawl on this source.`,
-          },
-          400,
+        return respondError(
+          c,
+          new ValidationError(
+            `Could not fetch a usable body for ${src.url}. Supply \`markdown\` or enable Firecrawl on this source.`,
+            { code: "bad_request" },
+          ),
         );
       }
       resolved = { markdown: md, via: "fetch" };
     } catch {
-      return c.json(
-        {
-          error: "bad_request",
-          message: `Could not fetch ${src.url}. Supply \`markdown\` or enable Firecrawl on this source.`,
-        },
-        400,
+      return respondError(
+        c,
+        new ValidationError(
+          `Could not fetch ${src.url}. Supply \`markdown\` or enable Firecrawl on this source.`,
+          { code: "bad_request" },
+        ),
       );
     }
   }
 
   const result = await executeWindowedBackfill(c, db, src, resolved, { maxWindows, dryRun });
   if (!result.ok) {
-    return c.json(
-      { error: "service_unavailable", message: "ANTHROPIC_API_KEY not configured" },
-      503,
-    );
+    return respondError(c, new ServiceUnavailableError("ANTHROPIC_API_KEY not configured"));
   }
   return c.json(result.guidance ? { ...result.report, guidance: result.guidance } : result.report);
 });
@@ -2463,9 +2488,9 @@ workflowsRoutes.post("/workflows/backfill-source", async (c) => {
 workflowsRoutes.get("/workflows/backfill-source/status/:instanceId", async (c) => {
   const binding = c.env.BACKFILL_SOURCE_WORKFLOW;
   if (!binding) {
-    return c.json(
-      { error: "service_unavailable", message: "BACKFILL_SOURCE_WORKFLOW binding not configured" },
-      503,
+    return respondError(
+      c,
+      new ServiceUnavailableError("BACKFILL_SOURCE_WORKFLOW binding not configured"),
     );
   }
   const instanceId = c.req.param("instanceId");
@@ -2476,14 +2501,14 @@ workflowsRoutes.get("/workflows/backfill-source/status/:instanceId", async (c) =
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     if (WORKFLOW_NOT_FOUND_RE.test(message))
-      return c.json({ error: "instance_not_found", message }, 404);
+      return respondError(c, new NotFoundError(message, { code: "instance_not_found" }));
     logEvent("error", {
       component: "workflows-backfill-status",
       event: "lookup-failed",
       instanceId,
       err: err instanceof Error ? err : String(err),
     });
-    return c.json({ error: "internal_error", message }, 500);
+    return respondError(c, new InternalError(message));
   }
 });
 
@@ -2512,28 +2537,26 @@ workflowsRoutes.post("/workflows/reextract-source", async (c) => {
 
   const ident = body.sourceId?.trim();
   if (!ident) {
-    return c.json({ error: "bad_request", message: "Provide `sourceId`" }, 400);
+    return respondError(c, new ValidationError("Provide `sourceId`", { code: "bad_request" }));
   }
   if (!isSourceId(ident)) {
-    return c.json(
-      {
-        error: "bare_slug_rejected",
-        message:
-          "Pass a typed source ID (src_…). Bare slugs are ambiguous across orgs — resolve via /v1/orgs/{orgSlug}/sources/{sourceSlug} or /v1/lookups/source-by-slug first.",
-      },
-      400,
+    return respondError(
+      c,
+      new ValidationError(
+        "Pass a typed source ID (src_…). Bare slugs are ambiguous across orgs — resolve via /v1/orgs/{orgSlug}/sources/{sourceSlug} or /v1/lookups/source-by-slug first.",
+        { code: "bare_slug_rejected" },
+      ),
     );
   }
 
   const [src] = await db.select().from(sources).where(sourceMatchByIdOrSlug(ident));
-  if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
+  if (!src) return respondError(c, new NotFoundError("Source not found"));
   if (src.type !== "scrape") {
-    return c.json(
-      {
-        error: "bad_request",
-        message: `Re-extract supports scrape sources; this source is type=${src.type}`,
-      },
-      400,
+    return respondError(
+      c,
+      new ValidationError(`Re-extract supports scrape sources; this source is type=${src.type}`, {
+        code: "bad_request",
+      }),
     );
   }
 
@@ -2553,31 +2576,27 @@ workflowsRoutes.post("/workflows/reextract-source", async (c) => {
         .orderBy(desc(sourceRawSnapshots.createdAt))
         .limit(1);
   if (!snap) {
-    return c.json(
-      {
-        error: snapId ? "snapshot_not_found" : "no_snapshot",
-        message: snapId
+    return respondError(
+      c,
+      new NotFoundError(
+        snapId
           ? `No snapshot ${snapId} for source ${src.id}`
           : `No raw snapshot stored for source ${src.id}. Enable capture (raw-snapshot-capture-enabled) or run a Firecrawl backfill first.`,
-      },
-      404,
+      ),
     );
   }
 
   if (!c.env.RAW_SNAPSHOTS) {
-    return c.json(
-      { error: "service_unavailable", message: "RAW_SNAPSHOTS bucket not configured" },
-      503,
-    );
+    return respondError(c, new ServiceUnavailableError("RAW_SNAPSHOTS bucket not configured"));
   }
   const markdown = await loadRawSnapshot({ R2: c.env.RAW_SNAPSHOTS }, snap.r2Key);
   if (markdown === null) {
-    return c.json(
-      {
-        error: "snapshot_expired",
-        message: `Snapshot body gone from R2 (${snap.r2Key}); likely past the 90-day lifecycle. Re-scrape to capture a fresh snapshot.`,
-      },
-      410,
+    return respondError(
+      c,
+      new NotFoundError(
+        `Snapshot body gone from R2 (${snap.r2Key}); likely past the 90-day lifecycle. Re-scrape to capture a fresh snapshot.`,
+        { code: "snapshot_expired" },
+      ),
     );
   }
 
@@ -2595,10 +2614,7 @@ workflowsRoutes.post("/workflows/reextract-source", async (c) => {
     { maxWindows, dryRun },
   );
   if (!result.ok) {
-    return c.json(
-      { error: "service_unavailable", message: "ANTHROPIC_API_KEY not configured" },
-      503,
-    );
+    return respondError(c, new ServiceUnavailableError("ANTHROPIC_API_KEY not configured"));
   }
   logEvent("info", {
     component: "reextract-source",
@@ -2645,7 +2661,10 @@ workflowsRoutes.post("/workflows/collection-summaries", async (c) => {
 
   const rawDate = body.date?.trim();
   if (rawDate && !isDateKey(rawDate)) {
-    return c.json({ error: "bad_date", message: "date must be a YYYY-MM-DD calendar date" }, 400);
+    return respondError(
+      c,
+      new ValidationError("date must be a YYYY-MM-DD calendar date", { code: "bad_request" }),
+    );
   }
   const date = rawDate || addDaysToDateKey(etDayKey(new Date()), -1);
   const collectionId = typeof body.collectionId === "string" ? body.collectionId : undefined;
@@ -2686,13 +2705,11 @@ workflowsRoutes.post("/workflows/collection-summaries", async (c) => {
 
   const model = await resolveCollectionSummaryModel(c.env);
   if (!model) {
-    return c.json(
-      {
-        error: "no_model",
-        message:
-          "No AI model configured for collection summaries (ANTHROPIC_API_KEY or OPENROUTER_API_KEY required)",
-      },
-      503,
+    return respondError(
+      c,
+      new ServiceUnavailableError(
+        "No AI model configured for collection summaries (ANTHROPIC_API_KEY or OPENROUTER_API_KEY required)",
+      ),
     );
   }
 

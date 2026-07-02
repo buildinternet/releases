@@ -4,6 +4,8 @@ import { createDb } from "../db.js";
 import { mediaAssets } from "@buildinternet/releases-core/schema";
 import { authMiddleware } from "../middleware/auth.js";
 import type { UploadResult } from "@releases/rendering/media";
+import { respondError } from "../lib/error-response.js";
+import { NotFoundError } from "@releases/lib/releases-error";
 
 type Env = {
   Bindings: {
@@ -33,7 +35,7 @@ mediaRoutes.get("/media/:key{.+}", async (c) => {
 
   // Fallback: serve directly from R2 (no custom domain configured)
   const object = await c.env.MEDIA.get(key);
-  if (!object) return c.json({ error: "not_found" }, 404);
+  if (!object) return respondError(c, new NotFoundError());
 
   const headers = new Headers();
   headers.set("cache-control", "public, max-age=31536000, immutable");
