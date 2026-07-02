@@ -3,6 +3,13 @@
 The product changelog for releases.sh, published to its own registry. Drafted daily from merged
 PRs and reviewed via PR. See docs/changelog-style.md for the voice and curation rules.
 
+## July 1, 2026
+
+**Changed**
+- Discovery agents and search queries now use Claude Sonnet 5 — higher-quality changelog extraction and keyword search across the registry.
+- Webhook delivery activity now shows the delivery format — the account notifications panel displays whether each webhook was sent as Slack or standard JSON.
+- New orgs added to the registry now have AI content generation enabled by default — overviews and summaries start generating automatically for freshly curated orgs.
+
 ## June 30, 2026
 
 **Added**
