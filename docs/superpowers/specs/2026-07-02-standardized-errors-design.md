@@ -310,6 +310,20 @@ Deliverable: the tested contract, importable, with the anti-drift tests in place
 - **Outcome:** every failure — expected or not — emits the one shape and is logged,
   _without yet touching the ~486 producer call sites_.
 
+**Carry-over from Phase 1 implementation review:**
+
+- **Harden the `expose` guard on `UpstreamError`/`InternalError`.** Their Phase 1
+  constructors spread `...opts` after `expose: false`, so a caller passing
+  `{ expose: true }` can defeat the "never leak the raw message" guarantee. No
+  Phase 1 call sites exist, but before these are thrown with real
+  upstream/internal messages, make `expose: false` non-overridable for these two
+  (or drop `expose` from their options).
+- **Normalize the D1 code casing when refactoring `classifyDbError` (Phase 3).**
+  The Phase 1 registry uses `db_too_many_variables` (snake_case, matching the wire
+  `code` convention) while the existing `packages/lib/src/db-errors.ts` uses
+  `DB_TOO_MANY_VARIABLES`. Reconcile onto the registry casing rather than adding a
+  second code.
+
 ### Phase 3 — Migrate producers
 
 Convert the ~486 `c.json({ error }, status)` sites to `throw` the hierarchy (caught
