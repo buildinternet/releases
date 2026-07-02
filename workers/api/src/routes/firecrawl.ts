@@ -114,14 +114,28 @@ firecrawlRoutes.post(
     // when either is unbound, rather than letting a missing API key surface as a
     // generic unhandled-exception 500.
     const secret = await getSecret(env.FIRECRAWL_WEBHOOK_SECRET);
-    if (!secret) return respondError(c, new InternalError());
+    if (!secret) {
+      logEvent("error", {
+        component: "firecrawl",
+        event: "secret-unbound",
+        secret: "FIRECRAWL_WEBHOOK_SECRET",
+      });
+      return respondError(c, new InternalError());
+    }
 
     // In tests an injected `_firecrawlClientOverride` short-circuits the live
     // client; in production we build it from the resolved API key.
     let client = env._firecrawlClientOverride;
     if (!client) {
       const apiKey = await getSecret(env.FIRECRAWL_API_KEY);
-      if (!apiKey) return respondError(c, new InternalError());
+      if (!apiKey) {
+        logEvent("error", {
+          component: "firecrawl",
+          event: "secret-unbound",
+          secret: "FIRECRAWL_API_KEY",
+        });
+        return respondError(c, new InternalError());
+      }
       client = createFirecrawlClient({ apiKey });
     }
 

@@ -82,20 +82,21 @@ meWebhookHandlers.post("/me/webhooks", async (c) => {
   try {
     body = (await c.req.json()) as Record<string, unknown>;
   } catch {
-    return respondError(c, new ValidationError("invalid JSON body"));
+    return respondError(c, new ValidationError("invalid JSON body", { code: "invalid_json" }));
   }
 
   const url = body.url;
   if (typeof url !== "string" || !url) {
-    return respondError(c, new ValidationError("url is required"));
+    return respondError(c, new ValidationError("url is required", { code: "bad_request" }));
   }
   const urlError = await assertPublicWebhookTarget(url);
-  if (urlError) return respondError(c, new ValidationError(urlError));
+  if (urlError) return respondError(c, new ValidationError(urlError, { code: "bad_request" }));
 
   const format = body.format === "slack" ? "slack" : "json";
   if (format === "slack") {
     const slackError = validateSlackWebhookUrl(url);
-    if (slackError) return respondError(c, new ValidationError(slackError));
+    if (slackError)
+      return respondError(c, new ValidationError(slackError, { code: "bad_request" }));
   }
 
   const scope = body.scope === "follows" ? "follows" : "org";
@@ -114,13 +115,17 @@ meWebhookHandlers.post("/me/webhooks", async (c) => {
         c,
         new ValidationError(
           "follows-scoped webhooks must not include orgId, orgSlug, sourceId, sourceSlug, productId, or productSlug",
+          { code: "bad_request" },
         ),
       );
     }
 
     const releaseTypeFilter = parseReleaseTypeFilter(body.releaseType);
     if (releaseTypeFilter === "invalid") {
-      return respondError(c, new ValidationError("releaseType must be feature or rollup"));
+      return respondError(
+        c,
+        new ValidationError("releaseType must be feature or rollup", { code: "bad_request" }),
+      );
     }
 
     const existing = await getUserFollowsWebhookSubscription(db, session.user.id);
@@ -161,7 +166,10 @@ meWebhookHandlers.post("/me/webhooks", async (c) => {
   const orgId = typeof body.orgId === "string" ? body.orgId : undefined;
   const orgSlug = typeof body.orgSlug === "string" ? body.orgSlug : undefined;
   if (!orgId && !orgSlug) {
-    return respondError(c, new ValidationError("orgId or orgSlug is required"));
+    return respondError(
+      c,
+      new ValidationError("orgId or orgSlug is required", { code: "bad_request" }),
+    );
   }
 
   const org = await resolveWebhookOrg(db, { orgId, orgSlug });
@@ -173,7 +181,10 @@ meWebhookHandlers.post("/me/webhooks", async (c) => {
   const productSlug = typeof body.productSlug === "string" ? body.productSlug : undefined;
   const releaseTypeFilter = parseReleaseTypeFilter(body.releaseType);
   if (releaseTypeFilter === "invalid") {
-    return respondError(c, new ValidationError("releaseType must be feature or rollup"));
+    return respondError(
+      c,
+      new ValidationError("releaseType must be feature or rollup", { code: "bad_request" }),
+    );
   }
 
   let resolvedSourceId: string | null = null;
@@ -199,7 +210,9 @@ meWebhookHandlers.post("/me/webhooks", async (c) => {
   if (sourceProductFilterMismatch(resolvedSourceProductId, resolvedProductId)) {
     return respondError(
       c,
-      new ValidationError("source does not belong to the specified product filter"),
+      new ValidationError("source does not belong to the specified product filter", {
+        code: "bad_request",
+      }),
     );
   }
 
@@ -258,12 +271,12 @@ meWebhookHandlers.patch("/me/webhooks/:id", async (c) => {
   try {
     body = (await c.req.json()) as Record<string, unknown>;
   } catch {
-    return respondError(c, new ValidationError("invalid JSON body"));
+    return respondError(c, new ValidationError("invalid JSON body", { code: "invalid_json" }));
   }
 
   if (typeof body.url === "string") {
     const urlError = await assertPublicWebhookTarget(body.url);
-    if (urlError) return respondError(c, new ValidationError(urlError));
+    if (urlError) return respondError(c, new ValidationError(urlError, { code: "bad_request" }));
   }
 
   const basePatch = buildWebhookPatchUpdates(
@@ -280,7 +293,7 @@ meWebhookHandlers.patch("/me/webhooks/:id", async (c) => {
       ? ({} as import("../webhooks/queries.js").WebhookSubscriptionUpdates)
       : basePatch;
   if ("error" in basePatch && basePatch.error !== "no recognized fields to update") {
-    return respondError(c, new ValidationError(basePatch.error));
+    return respondError(c, new ValidationError(basePatch.error, { code: "bad_request" }));
   }
 
   const id = c.req.param("id");
@@ -291,13 +304,17 @@ meWebhookHandlers.patch("/me/webhooks/:id", async (c) => {
   if (body.format === "slack" || owned.format === "slack") {
     const effectiveUrl = typeof body.url === "string" ? body.url : owned.url;
     const slackError = validateSlackWebhookUrl(effectiveUrl);
-    if (slackError) return respondError(c, new ValidationError(slackError));
+    if (slackError)
+      return respondError(c, new ValidationError(slackError, { code: "bad_request" }));
   }
 
   if (body.releaseType !== undefined) {
     const releaseTypeFilter = parseReleaseTypeFilter(body.releaseType);
     if (releaseTypeFilter === "invalid") {
-      return respondError(c, new ValidationError("releaseType must be feature or rollup"));
+      return respondError(
+        c,
+        new ValidationError("releaseType must be feature or rollup", { code: "bad_request" }),
+      );
     }
     patch.releaseType = releaseTypeFilter;
   }
@@ -311,7 +328,11 @@ meWebhookHandlers.patch("/me/webhooks/:id", async (c) => {
       } else {
         const sourceId = typeof body.sourceId === "string" ? body.sourceId : undefined;
         const sourceSlug = typeof body.sourceSlug === "string" ? body.sourceSlug : undefined;
-        if (!owned.orgId) return respondError(c, new ValidationError("invalid subscription"));
+        if (!owned.orgId)
+          return respondError(
+            c,
+            new ValidationError("invalid subscription", { code: "bad_request" }),
+          );
         const source = await resolveWebhookSource(db, owned.orgId, { sourceId, sourceSlug });
         if (!source) {
           return respondError(c, new NotFoundError("Source not found for this organization"));
@@ -329,7 +350,10 @@ meWebhookHandlers.patch("/me/webhooks/:id", async (c) => {
       if (body.productId === null && body.productSlug === undefined) {
         nextProductId = null;
       } else if (!owned.orgId) {
-        return respondError(c, new ValidationError("invalid subscription"));
+        return respondError(
+          c,
+          new ValidationError("invalid subscription", { code: "bad_request" }),
+        );
       } else {
         const productId = typeof body.productId === "string" ? body.productId : undefined;
         const productSlug = typeof body.productSlug === "string" ? body.productSlug : undefined;
@@ -344,7 +368,9 @@ meWebhookHandlers.patch("/me/webhooks/:id", async (c) => {
     if (sourceProductFilterMismatch(nextSourceProductId, nextProductId)) {
       return respondError(
         c,
-        new ValidationError("source does not belong to the specified product filter"),
+        new ValidationError("source does not belong to the specified product filter", {
+          code: "bad_request",
+        }),
       );
     }
 
@@ -361,12 +387,16 @@ meWebhookHandlers.patch("/me/webhooks/:id", async (c) => {
       c,
       new ValidationError(
         "follows-scoped webhooks cannot set sourceId, sourceSlug, productId, or productSlug",
+        { code: "bad_request" },
       ),
     );
   }
 
   if (Object.keys(patch).length === 0) {
-    return respondError(c, new ValidationError("no recognized fields to update"));
+    return respondError(
+      c,
+      new ValidationError("no recognized fields to update", { code: "bad_request" }),
+    );
   }
 
   const fresh = await updateWebhookSubscription(db, id, patch);

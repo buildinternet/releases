@@ -150,9 +150,14 @@ workspaceProfileHandlers.post("/workspaces/:workspaceId/avatar", async (c) => {
 
   const file = await readAvatarFile(c);
   if ("error" in file) {
-    // readAvatarFile only ever emits 400/413 in practice; 413 normalizes to
-    // ValidationError/400 per the payload_too_large convention.
-    return respondError(c, new ValidationError(file.error, { code: "bad_request" }));
+    // 413 keeps the payload_too_large code (status still normalizes to 400 via
+    // ValidationError); other upload failures are generic bad_request.
+    return respondError(
+      c,
+      new ValidationError(file.error, {
+        code: file.status === 413 ? "payload_too_large" : "bad_request",
+      }),
+    );
   }
 
   const result = await ingestAvatarFromBuffer({

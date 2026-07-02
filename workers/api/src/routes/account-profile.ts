@@ -49,7 +49,12 @@ accountProfileHandlers.post("/me/avatar", async (c) => {
 
   const file = await readAvatarFile(c);
   if ("error" in file) {
-    return respondError(c, new ValidationError(file.error, { code: "bad_request" }));
+    return respondError(
+      c,
+      new ValidationError(file.error, {
+        code: file.status === 413 ? "payload_too_large" : "bad_request",
+      }),
+    );
   }
 
   const result = await ingestAvatarFromBuffer({

@@ -44,23 +44,23 @@ webhooksRoutes.post("/webhooks", async (c) => {
   try {
     body = await c.req.json();
   } catch {
-    return respondError(c, new ValidationError("invalid JSON body"));
+    return respondError(c, new ValidationError("invalid JSON body", { code: "invalid_json" }));
   }
   if (typeof body !== "object" || body === null) {
-    return respondError(c, new ValidationError("body must be an object"));
+    return respondError(c, new ValidationError("body must be an object", { code: "bad_request" }));
   }
 
   const { orgId, url, sourceId, description } = body as Record<string, unknown>;
 
   if (!orgId || typeof orgId !== "string") {
-    return respondError(c, new ValidationError("orgId is required"));
+    return respondError(c, new ValidationError("orgId is required", { code: "bad_request" }));
   }
   if (!url || typeof url !== "string") {
-    return respondError(c, new ValidationError("url is required"));
+    return respondError(c, new ValidationError("url is required", { code: "bad_request" }));
   }
   const urlError = await assertPublicWebhookTarget(url);
   if (urlError) {
-    return respondError(c, new ValidationError(urlError));
+    return respondError(c, new ValidationError(urlError, { code: "bad_request" }));
   }
 
   const db = getDb(c);
@@ -79,7 +79,10 @@ webhooksRoutes.post("/webhooks", async (c) => {
 webhooksRoutes.get("/webhooks", async (c) => {
   const orgId = c.req.query("org");
   if (!orgId) {
-    return respondError(c, new ValidationError("org query param is required"));
+    return respondError(
+      c,
+      new ValidationError("org query param is required", { code: "bad_request" }),
+    );
   }
 
   const enabledParam = c.req.query("enabled");
@@ -110,19 +113,19 @@ webhooksRoutes.patch("/webhooks/:id", async (c) => {
   try {
     body = (await c.req.json()) as typeof body;
   } catch {
-    return respondError(c, new ValidationError("invalid JSON body"));
+    return respondError(c, new ValidationError("invalid JSON body", { code: "invalid_json" }));
   }
 
   if (body.url !== undefined) {
     const urlError = await assertPublicWebhookTarget(body.url);
     if (urlError) {
-      return respondError(c, new ValidationError(urlError));
+      return respondError(c, new ValidationError(urlError, { code: "bad_request" }));
     }
   }
 
   const patch = buildWebhookPatchUpdates(body);
   if ("error" in patch) {
-    return respondError(c, new ValidationError(patch.error));
+    return respondError(c, new ValidationError(patch.error, { code: "bad_request" }));
   }
 
   const id = c.req.param("id");

@@ -35,7 +35,7 @@ mediaRoutes.get("/media/:key{.+}", async (c) => {
 
   // Fallback: serve directly from R2 (no custom domain configured)
   const object = await c.env.MEDIA.get(key);
-  if (!object) return respondError(c, new NotFoundError());
+  if (!object) return respondError(c, new NotFoundError("Media not found"));
 
   const headers = new Headers();
   headers.set("cache-control", "public, max-age=31536000, immutable");

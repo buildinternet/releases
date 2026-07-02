@@ -68,10 +68,12 @@ userApiKeyHandlers.post("/api-keys", async (c) => {
   if (!session) return respondError(c, new UnauthorizedError("Sign in required"));
 
   const body = await parseJsonBody(c);
-  if (!body) return respondError(c, new ValidationError("Invalid JSON body"));
+  if (!body)
+    return respondError(c, new ValidationError("Invalid JSON body", { code: "invalid_json" }));
 
   const name = typeof body.name === "string" ? body.name.trim() : "";
-  if (!name) return respondError(c, new ValidationError("name is required"));
+  if (!name)
+    return respondError(c, new ValidationError("name is required", { code: "bad_request" }));
 
   // The server-side scope ceiling: self-serve keys are capped at
   // USER_API_KEY_MAX_SCOPE (read today). A missing scope defaults to the
@@ -80,7 +82,10 @@ userApiKeyHandlers.post("/api-keys", async (c) => {
   // auth-time clamp, so this stays correct if the ceiling is ever raised.
   const requestedScope = body.scope === undefined ? USER_API_KEY_MAX_SCOPE : body.scope;
   if (!isWithinUserKeyCeiling(requestedScope)) {
-    return respondError(c, new ValidationError(`scope must be '${USER_API_KEY_MAX_SCOPE}'`));
+    return respondError(
+      c,
+      new ValidationError(`scope must be '${USER_API_KEY_MAX_SCOPE}'`, { code: "bad_request" }),
+    );
   }
 
   let expiresIn: number | undefined;
@@ -89,7 +94,9 @@ userApiKeyHandlers.post("/api-keys", async (c) => {
     if (typeof d !== "number" || !Number.isInteger(d) || d < 1 || d > 365) {
       return respondError(
         c,
-        new ValidationError("expiresInDays must be an integer between 1 and 365"),
+        new ValidationError("expiresInDays must be an integer between 1 and 365", {
+          code: "bad_request",
+        }),
       );
     }
     expiresIn = d * 24 * 60 * 60;

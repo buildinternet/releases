@@ -81,7 +81,7 @@ meHandlers.post("/me/follows", async (c) => {
   try {
     body = (await c.req.json()) as typeof body;
   } catch {
-    return respondError(c, new ValidationError("Invalid JSON body", { code: "bad_request" }));
+    return respondError(c, new ValidationError("Invalid JSON body", { code: "invalid_json" }));
   }
   if (!isFollowTargetType(body.targetType) || typeof body.targetId !== "string" || !body.targetId) {
     return respondError(

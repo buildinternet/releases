@@ -226,10 +226,7 @@ workflowsRoutes.post("/workflows/notifications-test", async (c) => {
 
   const target = c.env.EMAIL_NOTIFY_TO;
   if (!target) {
-    return respondError(
-      c,
-      new ValidationError("EMAIL_NOTIFY_TO not configured", { code: "bad_request" }),
-    );
+    return respondError(c, new ServiceUnavailableError("EMAIL_NOTIFY_TO not configured"));
   }
 
   if (body.plain) {
