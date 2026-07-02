@@ -56,8 +56,18 @@ describe("onError handler — unhandled 500 sanitization", () => {
 
   it("HTTPException still surfaces its message (unchanged path)", async () => {
     const res = await app.fetch(new Request("https://x.test/throw-http"));
+    // Known gap (tracked as a Phase-3 follow-up): 422 is off the
+    // status->type map (TYPE_BY_STATUS in packages/core/src/errors.ts), so
+    // statusToType() falls back to "internal" while respondError still
+    // preserves the real 422 status. Consumers currently see a mismatched
+    // type/status pair for this and any other off-map HTTPException status;
+    // decoding that gap for consumers is deferred to Phase 4. The two
+    // assertions below pin the CURRENT actual behavior so a future change
+    // to the map (or to this fallback) can't silently drift without a
+    // failing test here.
     expect(res.status).toBe(422);
     const body = (await res.json()) as { error: { code: string; type: string; message: string } };
+    expect(body.error.type).toBe("internal");
     expect(body.error.message).toBe("unprocessable entity detail");
   });
 });

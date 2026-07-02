@@ -65,3 +65,21 @@ test("a base ReleasesError with an off-map status still responds with that statu
   const res = await appThrowing(new ReleasesError("conflict", "dupe")).request("/boom");
   expect(res.status).toBe(409);
 });
+
+test("a classified D1_TOO_MANY_VARIABLES error surfaces the db_too_many_variables code + details", async () => {
+  // Real error shape (not mocked): classifyDbError() gates on a D1 footprint
+  // token (D1_ERROR/D1 DB/SQLITE_ERROR) before running its matchers, and the
+  // too-many-variables matcher fires on "too many SQL variables" — see
+  // packages/lib/src/db-errors.ts. This message carries both, so the real
+  // classifier resolves it to DB_TOO_MANY_VARIABLES with transient: false.
+  const err = new Error("D1_ERROR: too many SQL variables in query");
+  const res = await appThrowing(err).request("/boom");
+  expect(res.status).toBe(500);
+  const body = (await res.json()) as {
+    error: { code: string; type: string; message: string; details: unknown };
+  };
+  expect(body.error.code).toBe("db_too_many_variables");
+  expect(body.error.type).toBe("internal");
+  expect(body.error.message).toBe("Internal server error");
+  expect(body.error.details).toEqual({ dbCode: "DB_TOO_MANY_VARIABLES", transient: false });
+});
