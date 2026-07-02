@@ -20,11 +20,13 @@
     "./oauth-jwt": "./src/oauth-jwt.ts",
     "./prompt-escape": "./src/prompt-escape.ts",
     "./rate-limit-tiers": "./src/rate-limit-tiers.ts",
+    "./releases-error": "./src/releases-error.ts",
     "./secrets": "./src/secrets.ts",
     "./source-edit": "./src/source-edit.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "catalog:",
+    "@buildinternet/releases-api-types": "workspace:*",
     "@buildinternet/releases-core": "workspace:*",
     "jose": "^6.2.3"
   }
