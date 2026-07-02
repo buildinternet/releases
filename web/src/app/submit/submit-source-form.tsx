@@ -8,14 +8,22 @@ type SubmitState =
   | { status: "success"; message: string }
   | { status: "error"; message: string };
 
+// Keys are the flat codes the /api/recommendations proxy emits: the worker's
+// standardized error codes (bad_request / payload_too_large / rate_limited /
+// service_unavailable / invalid_json), flattened from the nested envelope by the
+// proxy, plus the proxy's own transport codes (api_timeout / api_unavailable /
+// upstream_error).
 function errorMessage(error: string | undefined): string {
   switch (error) {
-    case "url_required":
-      return "Enter a valid release notes URL.";
-    case "invalid_email":
-      return "Enter a valid email address, or leave it blank.";
+    case "bad_request":
+    case "invalid_json":
+      return "Check the release notes URL (and email, if given) and try again.";
+    case "payload_too_large":
+      return "That submission is too large. Please shorten it and try again.";
     case "rate_limited":
       return "Too many submissions. Please try again in a minute.";
+    case "service_unavailable":
+      return "Submissions are paused right now. Please try again later.";
     case "api_timeout":
       return "The submission timed out. Please try again.";
     case "api_unavailable":
