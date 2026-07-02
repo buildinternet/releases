@@ -11,6 +11,7 @@ Programmatic access to the Releases index over HTTP. The notes below cover conve
 - **Interactive reference:** [`api.releases.sh/v1/docs`](https://api.releases.sh/v1/docs) — full Scalar reference with request/response shapes, examples, and client snippets.
 - **OpenAPI 3.1 spec:** [`api.releases.sh/v1/openapi.json`](https://api.releases.sh/v1/openapi.json) — source of truth for request and response shapes.
 - **Base URL:** `https://api.releases.sh/v1`
+- **Errors:** [Errors](/docs/api/errors) — the standardized error envelope, types, and common codes.
 - **Webhooks:** [Webhooks](/docs/api/webhooks) — self-serve outbound `release.created` delivery (org-scoped or follows-filtered).
 
 ## Authentication

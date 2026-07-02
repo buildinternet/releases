@@ -188,7 +188,7 @@ export const sourceRoutes = new Hono<Env>();
  * happily returns `null`, arrays, or primitives (all valid JSON), and the
  * downstream `body.<field>` access on those values either throws (`null`) or
  * silently returns `undefined` for fields like `body.title` (arrays/strings).
- * Callers should `return c.json({ error: "bad_request", ... }, 400)` on `false`.
+ * Callers should `return respondError(c, new ValidationError(...))` on `false`.
  */
 function isJsonObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
