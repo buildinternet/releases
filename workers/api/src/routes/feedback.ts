@@ -17,6 +17,7 @@ import {
 } from "@buildinternet/releases-core/schema";
 import { newFeedbackId } from "@buildinternet/releases-core/id";
 import { createDb } from "../db.js";
+import { readJsonBodyCapped } from "../lib/json-body.js";
 import { sanitizeString, sanitizeText, stripControl } from "../lib/sanitize.js";
 import { notifyFeedback } from "../lib/feedback-email.js";
 import type { Env } from "../index.js";
@@ -60,7 +61,9 @@ feedbackRoutes.post("/feedback", async (c) => {
     return respondError(c, new ServiceUnavailableError());
   }
 
-  // Reject oversized payloads before reading the body.
+  // Cheap fast-path: reject an honestly-declared oversized payload before we
+  // read a byte. Advisory only — a chunked or Content-Length-spoofed request
+  // sails past this, so the streaming cap below is the guard that holds.
   const contentLength = Number(c.req.header("content-length") ?? "0");
   if (Number.isFinite(contentLength) && contentLength > MAX_BODY_BYTES) {
     return respondError(c, new ValidationError(undefined, { code: "payload_too_large" }));
@@ -80,18 +83,18 @@ feedbackRoutes.post("/feedback", async (c) => {
     }
   }
 
-  let parsed: unknown;
-  try {
-    parsed = await c.req.json();
-  } catch {
-    return respondError(c, new ValidationError(undefined, { code: "invalid_json" }));
+  // Enforce the byte cap by streaming the body (the Content-Length check above
+  // is advisory). Bails at MAX_BODY_BYTES with payload_too_large.
+  const parsed = await readJsonBodyCapped(c.req.raw, MAX_BODY_BYTES);
+  if (!parsed.ok) {
+    return respondError(c, new ValidationError(undefined, { code: parsed.error }));
   }
   // JSON literals like `null`, numbers, strings, and arrays parse fine but
   // aren't the object shape we read fields off — guard before access.
-  if (typeof parsed !== "object" || parsed === null) {
+  if (typeof parsed.value !== "object" || parsed.value === null) {
     return respondError(c, new ValidationError(undefined, { code: "invalid_json" }));
   }
-  const body = parsed as Record<string, unknown>;
+  const body = parsed.value as Record<string, unknown>;
 
   const rawMessage = sanitizeString(body.message, MAX_MESSAGE);
   const message = rawMessage ? stripControl(rawMessage).trim() : null;
