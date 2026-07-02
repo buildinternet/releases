@@ -10,6 +10,7 @@
  * HTTP error instead of silently storing junk.
  */
 import { logEvent } from "@releases/lib/log-event";
+import { ReleasesError, UpstreamError, ValidationError } from "@releases/lib/releases-error";
 import { sniffImageDimensions } from "./image-dims.js";
 
 const TIMEOUT_MS = 5_000;
@@ -91,6 +92,25 @@ export function preserveCustomAvatarOnUpdate(
 
 function reject(status: AvatarRejectStatus, error: string, message: string): AvatarIngestResult {
   return { ok: false, status, error, message };
+}
+
+/**
+ * Map a rejected ingest result onto the platform's standardized error taxonomy
+ * (#1830 item 2). The ingest reason codes (`unsupported_type`, `too_small`, …)
+ * carry image-validation nuance that no cross-client contract branches on, so
+ * they stay off the closed `ERROR_CODES` registry and ride in `details.reason`
+ * instead — the top-level `code` is the generic `validation_failed` /
+ * `upstream_error`. The off-map input statuses fold into the ≤10-type taxonomy:
+ * 415/422/413/400 → `validation` (400); 502 → `upstream` (502), whose forced
+ * generic message matches this module's "never echo the upstream failure" rule.
+ */
+export function avatarRejectToError(
+  result: Extract<AvatarIngestResult, { ok: false }>,
+): ReleasesError {
+  const opts = { details: { reason: result.error } };
+  return result.status === 502
+    ? new UpstreamError(result.message, opts)
+    : new ValidationError(result.message, opts);
 }
 
 /** Max redirect hops to follow (each re-validated). github.com/{h}.png 302s once. */

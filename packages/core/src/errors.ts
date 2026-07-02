@@ -74,6 +74,9 @@ export const ERROR_CODES = [
   "limit_exceeded", // rate_limited
   "embed_unavailable", // unavailable
   "payload_too_large", // validation (was HTTP 413; status normalizes to 400)
+  // #1830 item 2 — webhook delivery operational codes a client UI branches on.
+  "deliveries_unavailable", // unavailable (Analytics Engine credentials unset; was HTTP 501)
+  "ae_query_failed", // upstream (Analytics Engine query failed)
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];

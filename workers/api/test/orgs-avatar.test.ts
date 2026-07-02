@@ -108,11 +108,18 @@ describe("POST /orgs/:slug/avatar (#1406)", () => {
     expect(org!.avatarUrl).toBe("https://media.test/orgs/acme.png");
   });
 
-  it("422 for a non-square image, leaving avatarUrl unchanged", async () => {
+  it("rejects a non-square image (validation), leaving avatarUrl unchanged", async () => {
     stubFetch(pngBytes(400, 150));
     const res = await post("acme", { sourceUrl: "https://cdn.test/wide.png" });
-    expect(res.status).toBe(422);
-    expect(((await res.json()) as { error: string }).error).toBe("not_square");
+    // #1830 item 2: the off-map 422 folds to `validation` (400); the specific
+    // reject reason survives in the nested envelope's `details.reason`.
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as {
+      error: { code: string; type: string; details?: { reason?: string } };
+    };
+    expect(body.error.type).toBe("validation");
+    expect(body.error.code).toBe("validation_failed");
+    expect(body.error.details?.reason).toBe("not_square");
 
     const [org] = await db.select().from(organizations).where(eq(organizations.id, "org_a"));
     expect(org!.avatarUrl ?? null).toBeNull();

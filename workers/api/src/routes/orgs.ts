@@ -28,7 +28,7 @@ import {
   SyncWellKnownResponseSchema,
 } from "@buildinternet/releases-api-types";
 import { validateJson } from "../lib/validate.js";
-import { ingestOrgAvatar } from "../lib/avatar-ingest.js";
+import { avatarRejectToError, ingestOrgAvatar } from "../lib/avatar-ingest.js";
 import { syncOrgWellKnown } from "../lib/well-known/reconcile-org.js";
 import { eq, count, max, min, and, sql, inArray, gte, desc } from "drizzle-orm";
 import { createDb } from "../db.js";
@@ -641,7 +641,7 @@ orgRoutes.post(
       bucket: c.env.MEDIA,
       mediaOrigin: c.env.MEDIA_ORIGIN ?? "https://media.releases.sh",
     });
-    if (!result.ok) return c.json({ error: result.error, message: result.message }, result.status);
+    if (!result.ok) return respondError(c, avatarRejectToError(result));
 
     await db
       .update(organizations)

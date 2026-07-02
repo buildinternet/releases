@@ -1,9 +1,11 @@
 import { test, expect } from "bun:test";
 import {
+  avatarRejectToError,
   ingestAvatarFromBuffer,
   ingestOrgAvatar,
   isHostedAvatarUrl,
   isPrivateOrLocalHost,
+  type AvatarRejectStatus,
 } from "../src/lib/avatar-ingest";
 
 // Minimal PNG: the IHDR header is all the sniffer reads; pad to `bytes` total so
@@ -225,6 +227,49 @@ test("maps a thrown fetch (timeout/network) to 502", async () => {
   });
   expect(res.ok).toBe(false);
   if (!res.ok) expect(res.status).toBe(502);
+});
+
+// #1830 item 2 — the reject-status → standardized-error-taxonomy fold. The
+// off-map 415/422/413/400 statuses collapse to `validation` (HTTP 400) with the
+// ingest reason preserved in `details.reason`; 502 maps to `upstream` (HTTP 502)
+// with its message genericized (UpstreamError is expose:false).
+test("avatarRejectToError folds validation-class statuses to 400, reason in details", () => {
+  const reason = "not_square";
+  for (const status of [400, 413, 415, 422] as AvatarRejectStatus[]) {
+    const err = avatarRejectToError({ ok: false, status, error: reason, message: "why" });
+    expect(err.type).toBe("validation");
+    expect(err.status).toBe(400);
+    expect(err.code).toBe("validation_failed");
+    expect(err.toWire()).toEqual({
+      error: {
+        code: "validation_failed",
+        type: "validation",
+        message: "why",
+        details: { reason },
+      },
+    });
+  }
+});
+
+test("avatarRejectToError maps 502 to upstream (502), reason in details, message genericized", () => {
+  const err = avatarRejectToError({
+    ok: false,
+    status: 502,
+    error: "fetch_failed",
+    message: "Could not fetch the source image",
+  });
+  expect(err.type).toBe("upstream");
+  expect(err.status).toBe(502);
+  // UpstreamError is expose:false → the wire message is the generic one, but the
+  // machine-branchable reason still rides in details.
+  expect(err.toWire()).toEqual({
+    error: {
+      code: "upstream_error",
+      type: "upstream",
+      message: "Upstream service error",
+      details: { reason: "fetch_failed" },
+    },
+  });
 });
 
 test("rejects an invalid / non-http source URL before fetching", async () => {
