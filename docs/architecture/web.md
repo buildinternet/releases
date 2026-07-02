@@ -1,5 +1,9 @@
 # Web surfaces
 
+The feature reference for everything user-visible: how URLs resolve on releases.sh, how changelogs are sliced for the web and for LLM budgets, Open Graph images, AI org overviews, categories and collections, the image/video media pipeline, entity notices, follows, and the admin hub. Most sections pair a web component with the API routes behind it, so this doc serves both frontend and API work on a feature.
+
+It's a collection of independent features rather than one narrative — use the table of contents / headings to jump to the one you're touching.
+
 ## Product-first URL resolution (#1190)
 
 The bare second segment is a **product**: `/[org]/[slug]` resolves product-first, falling back to a source. Phases 1–2 (#1187, #1189) made the product the default feed + link unit; #1190 flipped the namespace so products own the clean coordinate and sources are demoted toward an ID-keyed surface.

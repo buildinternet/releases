@@ -20,7 +20,7 @@ The user-facing CLI (`@buildinternet/releases`) ships separately from [buildinte
 | `src/agent/`         | Managed-agents discovery + worker harness (prompt builder + shared types)                     |
 | `.claude/`           | Claude Code config — `skills/` (canonical skill home), `agents/`, `commands/`, `workflows/`   |
 
-Per-package detail and project conventions live in [AGENTS.md](AGENTS.md); architecture deep-dives in [docs/architecture/](docs/architecture/).
+Per-package detail and project conventions live in [AGENTS.md](AGENTS.md); architecture deep-dives in [docs/architecture/](docs/architecture/), with a reader's guide at [docs/README.md](docs/README.md). Agents getting oriented should start from [llms.txt](llms.txt).
 
 ## Consumer surfaces
 

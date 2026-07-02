@@ -1,6 +1,6 @@
 # REST route surface
 
-How the API worker's route namespace is organized: where CRUD vs. job triggers vs. admin telemetry live, how resources resolve (IDs vs. slugs, org-scoped vs. bare), the `/v1/lookups` resolver family, pagination shape, and the OpenAPI coverage gate.
+Read this before adding or changing an API route. It answers the questions every new endpoint raises: **where does it live** (CRUD vs. job triggers vs. admin telemetry — the [naming buckets](#route-naming-buckets-494)), **how do callers identify things** (IDs vs. slugs, org-scoped vs. bare paths, the `/v1/lookups` resolvers), **how does it paginate** ([three shapes](#pagination-shape), picked by data shape), and **what must be documented** (the [OpenAPI coverage gate](#openapi-coverage-gate-894-phase-3) fails CI for undocumented public routes). Error shape is owned by [errors.md](errors.md); who may call a route is owned by [remote-mode.md → Auth model](remote-mode.md#auth-model).
 
 ## Route naming buckets (#494)
 

@@ -1,6 +1,6 @@
 # Large-body extract: tool-use loop
 
-Two-tier AI extraction path for fetched changelog bodies. Small bodies go through the legacy one-shot `/v1/messages` call; large ones route through a multi-round tool-use loop that lets the model pull body slices on demand. Hard fallback to one-shot preserves current behavior as the worst case, so enabling the flag is strictly a cost optimization — it can never make an extraction fail where the legacy path would have succeeded.
+"Extraction" is the AI step that turns a fetched changelog body into structured release records. For most pages that's one model call with the whole body inlined — but a few sources publish megabyte-scale bodies where inlining everything costs $0.50+ per fetch to re-read years of unchanged history. This doc covers the two-tier fix: small bodies keep the one-shot `/v1/messages` call; large ones (>50K tokens) route through a multi-round tool-use loop where the model pulls only the body slices it needs. Any loop failure falls back hard to one-shot, so enabling the flag is strictly a cost optimization — it can never make an extraction fail where the legacy path would have succeeded.
 
 ## Why
 

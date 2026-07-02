@@ -120,7 +120,7 @@ Shared code is split between published npm packages (`@buildinternet/releases-*`
 
 ## Further reading
 
-Deep dives live in `docs/architecture/`:
+Deep dives live in `docs/architecture/`. A reader's guide with task-based entry points is at [docs/README.md](docs/README.md); the condensed agent entry point is [llms.txt](llms.txt) at the repo root.
 
 - [remote-mode.md](docs/architecture/remote-mode.md) — D1, auth model (scoped API tokens), rate limiting, migrations, sessions, cron polling + retier, workflows-based ingest, discovery guardrails.
 - [ingest.md](docs/architecture/ingest.md) — ingest pipeline: source-type adapters, dedup + D1 batching, smart-fetch backoff, URL exclusion / suppression, and the ingest-time AI passes (summarization, marketing classifier, feed enrichment).
