@@ -63,6 +63,17 @@ export const ERROR_CODES = [
   "service_unavailable",
   "internal_error",
   "db_too_many_variables",
+  // Phase 3 promotions — distinct domain codes a client branches on. Each maps
+  // to an existing `type` (no new ErrorType); see the Phase 3 code-mapping table.
+  "instance_not_found", // not_found
+  "client_not_found", // not_found
+  "user_not_found", // not_found
+  "snapshot_expired", // not_found (was HTTP 410; status normalizes to 404)
+  "slug_reserved", // conflict
+  "api_key_limit", // conflict
+  "limit_exceeded", // rate_limited
+  "embed_unavailable", // unavailable
+  "payload_too_large", // validation (was HTTP 413; status normalizes to 400)
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];

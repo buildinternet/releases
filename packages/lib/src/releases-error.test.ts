@@ -8,6 +8,9 @@ import {
   InternalError,
   RateLimitedError,
   UpstreamError,
+  ConflictError,
+  ServiceUnavailableError,
+  ValidationError,
 } from "./releases-error";
 
 test("a subclass sets code/type and derives status from type", () => {
@@ -78,4 +81,34 @@ test("InternalError/UpstreamError ignore an expose:true override (no raw-message
   const upstream = new UpstreamError("anthropic key sk-ant-123 rejected", { expose: true });
   expect(upstream.expose).toBe(false);
   expect(upstream.toWire().error.message).toBe("Upstream service error");
+});
+
+test("Phase 3 promoted codes preserve the pre-migration HTTP status via their type", () => {
+  expect(new NotFoundError("x", { code: "instance_not_found" }).status).toBe(404);
+  expect(new NotFoundError("x", { code: "client_not_found" }).status).toBe(404);
+  expect(new NotFoundError("x", { code: "user_not_found" }).status).toBe(404);
+  expect(new NotFoundError("x", { code: "snapshot_expired" }).status).toBe(404); // was 410
+  expect(new ConflictError("x", { code: "slug_reserved" }).status).toBe(409);
+  expect(new ConflictError("x", { code: "api_key_limit" }).status).toBe(409);
+  expect(new RateLimitedError("x", { code: "limit_exceeded" }).status).toBe(429);
+  expect(new ServiceUnavailableError("x", { code: "embed_unavailable" }).status).toBe(503);
+  expect(new ValidationError("x", { code: "payload_too_large" }).status).toBe(400); // was 413
+
+  // The wire code round-trips unchanged (open discriminant).
+  expect(new NotFoundError("x", { code: "instance_not_found" }).toWire().error.code).toBe(
+    "instance_not_found",
+  );
+  for (const code of [
+    "instance_not_found",
+    "client_not_found",
+    "user_not_found",
+    "snapshot_expired",
+    "slug_reserved",
+    "api_key_limit",
+    "limit_exceeded",
+    "embed_unavailable",
+    "payload_too_large",
+  ] as const) {
+    expect(ERROR_CODES).toContain(code);
+  }
 });
