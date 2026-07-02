@@ -5,7 +5,7 @@ import { fetchLog, sources } from "@buildinternet/releases-core/schema";
 import { buildBareLimitEnvelope } from "../lib/pagination.js";
 import { getStatusHub, sourceMatchByIdOrSlug } from "../utils.js";
 import { getActiveFetchSession } from "../lib/active-fetch-session.js";
-import { classifyDbError } from "@releases/lib/db-errors";
+import { classifyDbError, dbErrorToWireCode } from "@releases/lib/db-errors";
 import type { Env } from "../index.js";
 import { respondError } from "../lib/error-response.js";
 import { NotFoundError, InternalError } from "@releases/lib/releases-error";
@@ -59,8 +59,10 @@ fetchLogRoutes.post("/admin/logs/fetch", async (c) => {
     return respondError(
       c,
       new InternalError("Failed to insert fetch log", {
-        code: "internal_error",
-        ...(classified ? { details: { errorCode: classified.code } } : {}),
+        code: classified ? dbErrorToWireCode(classified.code) : "internal_error",
+        ...(classified
+          ? { details: { dbCode: classified.code, transient: classified.transient } }
+          : {}),
       }),
     );
   }

@@ -153,7 +153,7 @@ const fetchChangelogsHandler = async (c: import("hono").Context<Env>) => {
   // an empty file list (the planner swallows upstream errors).
   const repoStatus = await classifyRepoStatus({ owner, repo }, headers.apiHeaders);
   if (repoStatus.kind !== "ok") {
-    return c.json(repoStatus.body, repoStatus.status);
+    return respondError(c, repoStatus.error);
   }
 
   // Discovery only reads `url` (for owner/repo) and `metadata` (for
@@ -498,7 +498,7 @@ const parseChangelogHandler = async (c: import("hono").Context<Env>) => {
 
   const repoStatus = await classifyRepoStatus({ owner, repo }, headers.apiHeaders);
   if (repoStatus.kind !== "ok") {
-    return c.json(repoStatus.body, repoStatus.status);
+    return respondError(c, repoStatus.error);
   }
 
   const cache = createListingCache();

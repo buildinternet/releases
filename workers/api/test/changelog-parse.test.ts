@@ -289,7 +289,7 @@ describe("POST /changelog/parse", () => {
     );
     const res = await call({ repo: "ghost/repo" });
     expect(res.status).toBe(404);
-    expect(((await res.json()) as { error: string }).error).toBe("repo_not_found");
+    expect(((await res.json()) as { error: { code: string } }).error.code).toBe("not_found");
   });
 
   it("source=github_releases: surfaces an upstream releases failure as 502", async () => {

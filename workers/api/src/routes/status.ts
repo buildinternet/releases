@@ -148,7 +148,12 @@ statusRoutes.get("/status/fetch-log", async (c) => {
 statusRoutes.get("/status/fetch-plan", async (c) => {
   const db = createDb(c.env.DB);
   const org = c.req.query("org");
-  if (!org) return respondError(c, new ValidationError(undefined, { code: "bad_request" }));
+  if (!org) {
+    return respondError(
+      c,
+      new ValidationError("org query param is required", { code: "bad_request" }),
+    );
+  }
 
   const [orgRow] = await db
     .select({ id: organizations.id })

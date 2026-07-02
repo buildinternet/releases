@@ -2131,7 +2131,7 @@ const probeChangelogsHandler = async (c: import("hono").Context<Env>) => {
 
   const repoStatus = await classifyRepoStatus(ownerRepo, headers.apiHeaders);
   if (repoStatus.kind !== "ok") {
-    return c.json(repoStatus.body, repoStatus.status);
+    return respondError(c, repoStatus.error);
   }
 
   const planned = await discoverChangelogPaths(src, headers);
@@ -3015,7 +3015,15 @@ const patchSourceHandler = async (c: import("hono").Context<Env>) => {
         }),
       );
     }
-    const [existing] = await db.select().from(sources).where(eq(sources.slug, body.slug));
+    // Source slugs are unique per-org (idx_sources_org_slug), not globally —
+    // the global UNIQUE(slug) was dropped in #690 Phase C. Scope the conflict
+    // check to this source's org so the same slug in a different org doesn't
+    // wrongly block the update.
+    const orgScope = src.orgId ? eq(sources.orgId, src.orgId) : isNull(sources.orgId);
+    const [existing] = await db
+      .select({ id: sources.id })
+      .from(sources)
+      .where(and(eq(sources.slug, body.slug), orgScope));
     if (existing) {
       return respondError(c, new ConflictError(`Source with slug "${body.slug}" already exists`));
     }

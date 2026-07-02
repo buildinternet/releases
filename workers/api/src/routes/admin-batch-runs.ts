@@ -14,7 +14,7 @@ import { createDb } from "../db.js";
 import { batchRuns } from "@buildinternet/releases-core/schema";
 import { buildListResponse, parseListPagination } from "../lib/pagination.js";
 import { logEvent } from "@releases/lib/log-event";
-import { classifyDbError } from "@releases/lib/db-errors";
+import { classifyDbError, dbErrorToWireCode } from "@releases/lib/db-errors";
 import type { Env } from "../index.js";
 import { respondError } from "../lib/error-response.js";
 import { ValidationError, NotFoundError, InternalError } from "@releases/lib/releases-error";
@@ -157,8 +157,10 @@ adminBatchRunsRoutes.post("/admin/batch-runs", async (c) => {
     return respondError(
       c,
       new InternalError(undefined, {
-        code: "internal_error",
-        details: classified ? { errorCode: classified.code } : undefined,
+        code: classified ? dbErrorToWireCode(classified.code) : "internal_error",
+        details: classified
+          ? { dbCode: classified.code, transient: classified.transient }
+          : undefined,
       }),
     );
   }
@@ -254,8 +256,10 @@ adminBatchRunsRoutes.patch("/admin/batch-runs/:id", async (c) => {
     return respondError(
       c,
       new InternalError(undefined, {
-        code: "internal_error",
-        details: classified ? { errorCode: classified.code } : undefined,
+        code: classified ? dbErrorToWireCode(classified.code) : "internal_error",
+        details: classified
+          ? { dbCode: classified.code, transient: classified.transient }
+          : undefined,
       }),
     );
   }
