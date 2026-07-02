@@ -174,7 +174,7 @@ Two halves that meet at the wire shape, split along the zod line:
 - **Pure taxonomy** (`packages/core`) sits below both, the single source of truth
   for categories, status mapping, and the code registry.
 
-```
+```text
 packages/core/src/errors/          (zod-free; imported by lib AND api-types)
   types.ts        ErrorType union + STATUS_BY_TYPE + statusForType()
   codes.ts        ErrorCode registry (const) + ErrorCode type

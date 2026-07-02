@@ -18,6 +18,25 @@ const GENERIC_MESSAGE: Record<ErrorType, string> = {
   internal: "Internal server error",
 };
 
+/**
+ * Default `code` per category, used when `opts.code` is absent (e.g. a direct
+ * `new ReleasesError(type, ...)`). Every value is a real `ERROR_CODES` member and
+ * matches the canonical code its subclass supplies — so the base class can never
+ * serialize a bare `type` string (e.g. `"validation"`) that isn't a valid code.
+ */
+const DEFAULT_CODE_BY_TYPE: Record<ErrorType, ErrorCode> = {
+  validation: "validation_failed",
+  unauthorized: "unauthorized",
+  forbidden: "forbidden",
+  insufficient_scope: "insufficient_scope",
+  not_found: "not_found",
+  conflict: "conflict",
+  rate_limited: "rate_limited",
+  upstream: "upstream_error",
+  unavailable: "service_unavailable",
+  internal: "internal_error",
+};
+
 export interface ReleasesErrorOptions {
   code?: ErrorCode;
   details?: unknown;
@@ -44,7 +63,7 @@ export class ReleasesError extends Error {
     super(message, opts.cause !== undefined ? { cause: opts.cause } : undefined);
     this.name = new.target.name;
     this.type = type;
-    this.code = opts.code ?? (type as ErrorCode);
+    this.code = opts.code ?? DEFAULT_CODE_BY_TYPE[type];
     this.status = statusForType(type);
     this.details = opts.details;
     this.expose = opts.expose ?? true;

@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { ERROR_CODES } from "@buildinternet/releases-core/errors";
 import { errorEnvelopeSchema, decodeApiError } from "@buildinternet/releases-api-types";
 import {
   ReleasesError,
@@ -49,4 +50,21 @@ test("the base carries a cause and is instanceof Error", () => {
   const e = new ReleasesError("internal", "wrap", { cause });
   expect(e.cause).toBe(cause);
   expect(e).toBeInstanceOf(Error);
+});
+
+test("a direct base instance defaults to a registry code, never the bare type", () => {
+  // Types whose canonical code differs from the type string — the old
+  // `type as ErrorCode` cast would have emitted an invalid code here.
+  const validation = new ReleasesError("validation", "bad");
+  expect(validation.code).toBe("validation_failed");
+
+  const upstream = new ReleasesError("upstream", "down");
+  expect(upstream.code).toBe("upstream_error");
+
+  const unavailable = new ReleasesError("unavailable", "maint");
+  expect(unavailable.code).toBe("service_unavailable");
+
+  for (const type of ["validation", "upstream", "unavailable", "not_found", "internal"] as const) {
+    expect(ERROR_CODES).toContain(new ReleasesError(type, "x").code);
+  }
 });
