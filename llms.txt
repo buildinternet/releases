@@ -65,6 +65,7 @@ Design documents (not shipped systems — do not treat as current behavior):
 
 ## Optional
 
+- [Public llms.txt](https://releases.sh/llms.txt): The consumer-facing entry point for agents using the product (REST API, MCP server, CLI) rather than working in this repo. Served by `web/src/app/api/llms/route.ts`.
 - [docs/webhooks.md](docs/webhooks.md): Public subscriber contract for outbound webhooks — headers, signature verification, retries.
 - [docs/changelog-style.md](docs/changelog-style.md): Style guide for the project's own daily changelog.
 - [docs/runbooks/](docs/runbooks/): Operational runbooks — auth-audit monitors, WAF rules, bot-auth registration, demand dashboard.
