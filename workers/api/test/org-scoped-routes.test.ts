@@ -14,7 +14,7 @@ import { organizations, sources, products } from "@buildinternet/releases-core/s
 import { sourceRoutes } from "../src/routes/sources.js";
 import { productRoutes } from "../src/routes/products.js";
 import { orgRoutes } from "../src/routes/orgs.js";
-import { BareSlugRejected } from "../src/utils.js";
+import { respondError } from "../src/lib/error-response.js";
 import { createTestDb as mkDb, createTestApp } from "./setup";
 
 const statusHubStub = {
@@ -24,22 +24,14 @@ const statusHubStub = {
   }),
 };
 
-// Mirror the real app's onError so BareSlugRejected (#698) translates to a
-// 400 in tests. Without this, a thrown error would surface as Hono's default
-// 500 response and the bare-slug rejection assertions wouldn't be honest.
+// Mirror the real app's onError (the real `respondError` boundary serializer)
+// so BareSlugRejected (#698) translates to a 400 in tests. Without this, a
+// thrown error would surface as Hono's default 500 response and the
+// bare-slug rejection assertions wouldn't be honest.
 const mkApp = (db: ReturnType<typeof mkDb>) =>
   createTestApp(db, [orgRoutes, sourceRoutes, productRoutes], {
     env: { STATUS_HUB: statusHubStub },
-    onError: (err, c) => {
-      if (err instanceof BareSlugRejected) {
-        return c.json(
-          { error: "bare_slug_rejected", entity: err.entity, message: err.message },
-          400,
-        );
-      }
-      const message = err instanceof Error ? err.message : String(err);
-      return c.json({ error: "internal_error", message }, 500);
-    },
+    onError: (err, c) => respondError(c, err),
   });
 
 async function seed(db: ReturnType<typeof mkDb>) {
@@ -197,9 +189,9 @@ describe("GET /v1/orgs/:orgSlug/sources/:sourceSlug/changelog", () => {
     const res = await fetch(new Request("https://x.test/v1/sources/cli/changelog"));
 
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string; entity: string };
-    expect(body.error).toBe("bare_slug_rejected");
-    expect(body.entity).toBe("source");
+    const body = (await res.json()) as { error: { code: string; details: { entity: string } } };
+    expect(body.error.code).toBe("bare_slug_rejected");
+    expect(body.error.details.entity).toBe("source");
   });
 
   it("typed src_… IDs still resolve on the bare path", async () => {
@@ -223,9 +215,9 @@ describe("bare-slug rejection on product routes (#698)", () => {
 
     const res = await fetch(new Request("https://x.test/v1/products/widget"));
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string; entity: string };
-    expect(body.error).toBe("bare_slug_rejected");
-    expect(body.entity).toBe("product");
+    const body = (await res.json()) as { error: { code: string; details: { entity: string } } };
+    expect(body.error.code).toBe("bare_slug_rejected");
+    expect(body.error.details.entity).toBe("product");
   });
 
   it("typed prod_… IDs still resolve on the bare path", async () => {

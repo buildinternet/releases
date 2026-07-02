@@ -1,20 +1,11 @@
 import { describe, it, expect } from "bun:test";
 import { Hono } from "hono";
-import { HTTPException } from "hono/http-exception";
 import { parseJsonBody } from "./json-body.js";
+import { respondError } from "./error-response.js";
 
 function app() {
   const a = new Hono();
-  a.onError((err, c) => {
-    if (err instanceof HTTPException) {
-      const status = err.status;
-      return c.json(
-        { error: status === 400 ? "bad_request" : "http_error", message: err.message },
-        status,
-      );
-    }
-    return c.json({ error: "internal_error", message: String(err) }, 500);
-  });
+  a.onError((err, c) => respondError(c, err));
   a.post("/parse", async (c) => {
     const body = await parseJsonBody<{ value?: unknown }>(c);
     return c.json({ ok: true, body });
@@ -55,8 +46,9 @@ describe("parseJsonBody", () => {
       body: "{not json",
     });
     expect(res.status).toBe(400);
-    const json = (await res.json()) as { error: string; message: string };
-    expect(json.error).toBe("bad_request");
-    expect(json.message).toBe("invalid JSON body");
+    const body = (await res.json()) as { error: { code: string; type: string; message: string } };
+    expect(body.error.code).toBe("invalid_json");
+    expect(body.error.type).toBe("validation");
+    expect(body.error.message).toBe("invalid JSON body");
   });
 });
