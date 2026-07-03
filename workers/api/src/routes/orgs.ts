@@ -468,7 +468,11 @@ orgRoutes.get(
       playbook: playbookRow
         ? {
             scope: playbookRow.scope as "playbook",
-            content: assemblePlaybook(playbookRow.content, playbookRow.notes),
+            content: assemblePlaybook(
+              playbookRow.content,
+              playbookRow.notes,
+              playbookRow.updatedAt,
+            ),
             updatedAt: playbookRow.updatedAt,
           }
         : null,

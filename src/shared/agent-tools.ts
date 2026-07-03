@@ -209,7 +209,7 @@ export const AGENT_TOOLS = [
     type: "custom",
     name: "manage_playbook",
     description:
-      "Read or replace the agent notes section of an organization's playbook. action=get returns the full assembled playbook (auto-generated header + agent notes) — read this before fetching or working with an org's sources. action=update_notes replaces the notes section with the provided markdown. Notes are free-form; structure them as skill-style sections (### Fetch instructions, ### Traps, ### Coverage, ### Release cadence). If the notes begin with a YAML frontmatter fence (--- ... ---), preserve it verbatim — it carries typed config (e.g. fetchQuirks) that cron code reads. Only edit markdown below the fence. To change source configuration like parseInstructions, use manage_source(edit) — the header updates automatically.",
+      "Read or replace the agent notes section of an organization's playbook. action=get returns the full assembled playbook — an auto-generated header (ground truth, derived from source config) plus a 'Prior observations (unverified)' section of agent notes from a previous run. Treat the notes as hypotheses to confirm, not settled facts — they're a prior model's inference, not curator- or config-verified. Read this before fetching or working with an org's sources. action=update_notes replaces the notes section with the provided markdown. Notes are free-form; structure them as skill-style sections (### Fetch instructions, ### Traps, ### Coverage, ### Release cadence). If the notes begin with a YAML frontmatter fence (--- ... ---), preserve it verbatim — it carries typed config (e.g. fetchQuirks) that cron code reads. Only edit markdown below the fence. To change source configuration like parseInstructions, use manage_source(edit) — the header updates automatically.",
     input_schema: {
       type: "object" as const,
       properties: {
@@ -657,7 +657,7 @@ export function createTypedExecutor(opts: APIClientOptions) {
           }
           try {
             const data = JSON.parse(result);
-            return assemblePlaybook(data.content ?? "", data.notes ?? null);
+            return assemblePlaybook(data.content ?? "", data.notes ?? null, data.updatedAt ?? null);
           } catch {
             return result;
           }
