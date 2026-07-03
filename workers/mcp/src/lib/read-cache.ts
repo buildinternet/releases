@@ -23,7 +23,7 @@
  *   (unlike the REST `invalidateLatestCache`), so the TTL is kept short.
  */
 
-import type { ToolResult } from "../tools.js";
+import type { SearchToolReturn, ToolResult } from "../tools";
 
 export interface ReadCacheBinding {
   get(key: string, type: "json"): Promise<unknown>;
@@ -39,6 +39,15 @@ const KEY_PREFIX = "mcpread:v1";
 // Short by design: no publish-time invalidation, so staleness is bounded by the
 // TTL alone. Long enough to collapse bursty agent polling onto one D1 read.
 export const MCP_READ_CACHE_TTL_SECONDS = 60;
+
+const RELATIVE_DATE_RE = /^\d+[dwmy]$/i;
+
+/** Relative `since`/`until` values (e.g. `90d`) move with wall clock — skip cache. */
+export function searchParamsCacheable(params: { since?: string; until?: string }): boolean {
+  if (params.since && RELATIVE_DATE_RE.test(params.since)) return false;
+  if (params.until && RELATIVE_DATE_RE.test(params.until)) return false;
+  return true;
+}
 
 /**
  * Deterministic JSON for the cache key — recursively sorts object keys so
@@ -86,6 +95,37 @@ export function makeReadCache(kv: ReadCacheBinding | undefined, ctx?: WaitUntilC
         else await write;
       }
       return result;
+    };
+  };
+}
+
+/**
+ * Read-through cache for `search` — wraps handlers that return `SearchToolReturn`
+ * (counts + rendered result) for `withSearchLog`. Skips cache when params carry
+ * relative date bounds; never caches tool-level failures on `result.isError`.
+ */
+export function makeSearchReadCache(kv: ReadCacheBinding | undefined, ctx?: WaitUntilCtx) {
+  return function cachedSearch<P extends { since?: string; until?: string }>(
+    handler: (params: P) => Promise<SearchToolReturn>,
+  ): (params: P) => Promise<SearchToolReturn> {
+    return async (params: P): Promise<SearchToolReturn> => {
+      if (!kv || !searchParamsCacheable(params)) return handler(params);
+
+      const key = `${KEY_PREFIX}:search:${stableStringify(params)}`;
+      const hit = (await kv.get(key, "json").catch(() => null)) as SearchToolReturn | null;
+      if (hit !== null && hit !== undefined) return hit;
+
+      const out = await handler(params);
+      if (!out.result.isError) {
+        const write = kv
+          .put(key, JSON.stringify(out), { expirationTtl: MCP_READ_CACHE_TTL_SECONDS })
+          .catch(() => {
+            // Fail open — next call misses again.
+          });
+        if (ctx?.waitUntil) ctx.waitUntil(write);
+        else await write;
+      }
+      return out;
     };
   };
 }
