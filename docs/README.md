@@ -2,7 +2,7 @@
 
 A reader's map of the documentation. The architecture docs in [`architecture/`](architecture/) are dense reference material — accurate, but written for someone who already knows the system. This page is the missing on-ramp: what the system does in plain terms, which doc to open for the task in front of you, and what each doc actually covers.
 
-If you're an agent, start with [`llms.txt`](../llms.txt) at the repo root instead — it's the same map, condensed, plus the invariants you must not break. The rulebook for working in this codebase is [`AGENTS.md`](../AGENTS.md); setup and deployment live in [`CONTRIBUTING.md`](../CONTRIBUTING.md).
+If you're an agent working in this repo, [`AGENTS.md`](../AGENTS.md) is the rulebook and canonical entry point — read it first; this page is its map into the deep dives. Setup and deployment live in [`CONTRIBUTING.md`](../CONTRIBUTING.md). Agents *consuming* the product (the API, MCP server, or CLI, rather than this codebase) start from [releases.sh/llms.txt](https://releases.sh/llms.txt) instead — the llms.txt convention belongs to the website, not the repo.
 
 ## The system in plain terms
 
