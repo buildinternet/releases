@@ -7,9 +7,10 @@
 #
 # Flow:
 #   1. `wrangler d1 export --remote --no-schema` on prod for each table → dump.sql
-#   2. DELETE FROM each staging table (reverse dep order, under PRAGMA
+#   2. Compare exported core-table counts with staging and abort on shrinkage
+#   3. DELETE FROM each staging table (reverse dep order, under PRAGMA
 #      foreign_keys=OFF for the duration)
-#   3. `wrangler d1 execute --remote --file=dump.sql` against staging
+#   4. `wrangler d1 execute --remote --file=dump.sql` against staging
 #
 # Requirements:
 #   - wrangler authenticated (`wrangler whoami`) with access to the
@@ -26,6 +27,7 @@ API_DIR="${REPO_ROOT}/workers/api"
 WORK_DIR="$(mktemp -d -t releases-sync-XXXXXX)"
 DUMP_FILE="${WORK_DIR}/prod-dump.sql"
 WIPE_FILE="${WORK_DIR}/wipe.sql"
+SHRINKAGE_THRESHOLD_PERCENT="${DB_SHRINKAGE_THRESHOLD_PERCENT:-10}"
 
 trap 'rm -rf "${WORK_DIR}"' EXIT
 
@@ -51,6 +53,11 @@ TABLES=(
   knowledge_pages
   release_coverage
 )
+
+# These are the core registry tables whose unexpected shrinkage must stop the
+# sync before staging is wiped. Override the default 10% ceiling for a planned
+# contraction with DB_SHRINKAGE_THRESHOLD_PERCENT.
+CORE_TABLES=(organizations sources releases)
 
 # Deliberately NOT copied:
 #   usage_log, fetch_log, telemetry_events, cron_runs   (observability; regenerate)
@@ -81,7 +88,7 @@ for t in "${TABLES[@]}"; do
   TABLE_ARGS+=(--table="${t}")
 done
 
-echo ">> 1/3 Exporting prod data-only dump (this can take a few minutes)..."
+echo ">> 1/4 Exporting prod data-only dump (this can take a few minutes)..."
 bunx wrangler d1 export DB \
   --remote \
   --no-schema \
@@ -108,7 +115,37 @@ echo "   dropped ${SKIPPED} oversized INSERT line(s) (> ${MAX_LINE_BYTES} bytes)
 DUMP_FILE="${FILTERED_FILE}"
 
 echo
-echo ">> 2/3 Wiping staging tables in reverse order..."
+echo ">> 2/4 Checking core-table shrinkage (limit ${SHRINKAGE_THRESHOLD_PERCENT}%)..."
+COUNT_SQL="SELECT 'organizations' AS table_name, COUNT(*) AS row_count FROM organizations
+UNION ALL SELECT 'sources', COUNT(*) FROM sources
+UNION ALL SELECT 'releases', COUNT(*) FROM releases"
+STAGING_COUNTS=$(bunx wrangler d1 execute DB \
+  --env staging \
+  --remote \
+  --command="${COUNT_SQL}" \
+  --json)
+
+BASELINES=()
+while IFS= read -r baseline; do
+  BASELINES+=("${baseline}")
+done < <(printf '%s' "${STAGING_COUNTS}" | bun -e '
+  const payload = JSON.parse(await Bun.stdin.text());
+  const batches = Array.isArray(payload) ? payload : [payload];
+  const rows = batches.flatMap((batch) => batch.results ?? []);
+  for (const row of rows) console.log(`${row.table_name}=${row.row_count}`);
+')
+
+if ((${#BASELINES[@]} != ${#CORE_TABLES[@]})); then
+  echo "error: shrinkage guard could not read all staging core-table counts" >&2
+  exit 1
+fi
+"${REPO_ROOT}/scripts/check-db-shrinkage.sh" \
+  "${DUMP_FILE}" \
+  "${SHRINKAGE_THRESHOLD_PERCENT}" \
+  "${BASELINES[@]}"
+
+echo
+echo ">> 3/4 Wiping staging tables in reverse order..."
 # Reverse the array for DELETE ordering (children before parents).
 WIPE_ORDER=()
 for ((i=${#TABLES[@]}-1; i>=0; i--)); do
@@ -130,7 +167,7 @@ bunx wrangler d1 execute DB \
   --yes
 
 echo
-echo ">> 3/3 Importing prod snapshot into staging (chunked)..."
+echo ">> 4/4 Importing prod snapshot into staging (chunked)..."
 # Wrangler's `d1 execute --file` bundles statements into a single server-side
 # batch and fails with SQLITE_TOOBIG when the bundle exceeds ~1MB. Some
 # releases carry ~125KB `content`, so a flat row cap doesn't bound chunk size
