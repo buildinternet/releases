@@ -120,6 +120,18 @@ export function edgeCache(): MiddlewareHandler<Env> {
  * — a param the caller actually sent. The synthetic URL is only ever a cache
  * key; it is never routed.
  */
+/**
+ * Build the Cache API key for a GET URL and Accept header. Exported for publish-
+ * time invalidation alongside the KV read-through purge.
+ */
+export function buildEdgeCacheKey(url: string, accept: string | null): Request {
+  const req = new Request(url, {
+    method: "GET",
+    headers: accept ? { Accept: accept } : {},
+  });
+  return edgeCacheKey(req);
+}
+
 function edgeCacheKey(req: Request): Request {
   const url = new URL(req.url);
   url.searchParams.sort();
