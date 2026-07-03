@@ -387,8 +387,21 @@ export const sources = sqliteTable(
     fetchPriority: text("fetch_priority", { enum: ["normal", "low", "paused"] }).default("normal"),
     consecutiveNoChange: integer("consecutive_no_change").default(0),
     consecutiveErrors: integer("consecutive_errors").default(0),
+    // Consecutive flagged-but-empty drains (#1862): a scrape/agent source that was
+    // flagged (change_detected_at set) but whose drain found 0 new releases,
+    // counted per drain and reset on a productive one. At
+    // UNPRODUCTIVE_DRAIN_PAUSE_AFTER the source auto-pauses (fetch-log.ts) so a
+    // broken/flapping source stops re-billing a no-op Haiku session forever.
+    // Sibling of consecutive_errors (which only fires on hard extraction errors).
+    unproductiveDrains: integer("unproductive_drains").default(0),
     nextFetchAfter: text("next_fetch_after"),
     changeDetectedAt: text("change_detected_at"),
+    // Drain cooldown marker (#1862): last time the scrape/agent drain successfully
+    // dispatched a managed-agent /update covering this source. `queryCandidates`
+    // excludes sources drained within DRAIN_COOLDOWN_MS so a permanently-flagged,
+    // un-fetchable source doesn't re-drain (and re-bill a no-op Haiku session)
+    // every SourceActor poll tick. NULL = never drained through the actor path.
+    lastDrainAt: text("last_drain_at"),
     lastPolledAt: text("last_polled_at"),
     // Cadence observability — written by the daily retier job. `medianGapDays`
     // is the median gap (in days) between consecutive publishedAt values over
@@ -1151,8 +1164,13 @@ export const sourcesActive = sqliteView("sources_active", {
   fetchPriority: text("fetch_priority", { enum: ["normal", "low", "paused"] }),
   consecutiveNoChange: integer("consecutive_no_change"),
   consecutiveErrors: integer("consecutive_errors"),
+  // Type-level mirror of the #1862 unproductive-drain counter.
+  unproductiveDrains: integer("unproductive_drains"),
   nextFetchAfter: text("next_fetch_after"),
   changeDetectedAt: text("change_detected_at"),
+  // Type-level mirror of the #1862 drain cooldown column — the real view is
+  // `SELECT sources.*`, so it exposes it once the view is recreated.
+  lastDrainAt: text("last_drain_at"),
   lastPolledAt: text("last_polled_at"),
   medianGapDays: real("median_gap_days"),
   lastRetieredAt: text("last_retiered_at"),
@@ -1215,8 +1233,13 @@ export const sourcesVisible = sqliteView("sources_visible", {
   fetchPriority: text("fetch_priority", { enum: ["normal", "low", "paused"] }),
   consecutiveNoChange: integer("consecutive_no_change"),
   consecutiveErrors: integer("consecutive_errors"),
+  // Type-level mirror of the #1862 unproductive-drain counter.
+  unproductiveDrains: integer("unproductive_drains"),
   nextFetchAfter: text("next_fetch_after"),
   changeDetectedAt: text("change_detected_at"),
+  // Type-level mirror of the #1862 drain cooldown column — the real view is
+  // `SELECT sources.*`, so it exposes it once the view is recreated.
+  lastDrainAt: text("last_drain_at"),
   lastPolledAt: text("last_polled_at"),
   medianGapDays: real("median_gap_days"),
   lastRetieredAt: text("last_retiered_at"),
