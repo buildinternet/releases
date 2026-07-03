@@ -2,7 +2,7 @@ import { logEvent } from "@releases/lib/log-event";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { createDb } from "./db.js";
-import { makeReadCache } from "./lib/read-cache.js";
+import { makeReadCache, searchParamsCacheable } from "./lib/read-cache.js";
 import { hydrateMediaUrls } from "@releases/rendering/media-url.js";
 import {
   search,
@@ -514,13 +514,17 @@ export async function createServer(env: Env, ctx?: ExecutionContext, opts?: Crea
       },
     },
     withSearchLog("search", async (params) => {
-      const out = await search(db, params, env, ctx);
-      const { counts } = out;
-      // Gate on entity matches only — release/chunk hits on a single
-      // segment token shouldn't suppress the lookup for the typed repo.
-      const hasEntityHit = (counts.orgHits ?? 0) > 0 || (counts.catalogHits ?? 0) > 0;
-      if (!hasEntityHit) await maybeLookup(out, params.query);
-      return out;
+      const run = async () => {
+        const out = await search(db, params, env, ctx);
+        const { counts } = out;
+        // Gate on entity matches only — release/chunk hits on a single
+        // segment token shouldn't suppress the lookup for the typed repo.
+        const hasEntityHit = (counts.orgHits ?? 0) > 0 || (counts.catalogHits ?? 0) > 0;
+        if (!hasEntityHit) await maybeLookup(out, params.query);
+        return out;
+      };
+      if (!searchParamsCacheable(params)) return run();
+      return cached("search", run)();
     }),
   );
 
@@ -839,7 +843,10 @@ export async function createServer(env: Env, ctx?: ExecutionContext, opts?: Crea
         id: z.string().describe("Release id — 'rel_<nanoid>' or a bare 21-char nanoid"),
       },
     },
-    withMedia(async (params) => getRelease(db, params)),
+    cached(
+      "get_release",
+      withMedia(async (params) => getRelease(db, params)),
+    ),
   );
 
   registerFollowsTools(server, env, { userToken });

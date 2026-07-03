@@ -1,5 +1,9 @@
 import { describe, it, expect } from "bun:test";
-import { makeReadCache, MCP_READ_CACHE_TTL_SECONDS } from "../src/lib/read-cache";
+import {
+  makeReadCache,
+  MCP_READ_CACHE_TTL_SECONDS,
+  searchParamsCacheable,
+} from "../src/lib/read-cache";
 import type { ToolResult } from "../src/tools";
 
 function ok(text: string): ToolResult {
@@ -111,6 +115,45 @@ describe("makeReadCache", () => {
     expect((await handler({ identifier: "vercel" })).content[0].text).toBe("live");
     expect((await handler({ identifier: "vercel" })).content[0].text).toBe("live");
     expect(calls).toBe(2);
+  });
+
+  it("caches get_release on identical params", async () => {
+    const kv = new FakeKV();
+    const cached = makeReadCache(kv);
+    let calls = 0;
+    const handler = cached("get_release", async () => {
+      calls += 1;
+      return ok(`rel ${calls}`);
+    });
+    await handler({ id: "rel_abc" });
+    await handler({ id: "rel_abc" });
+    expect(calls).toBe(1);
+    expect(kv.puts).toBe(1);
+  });
+
+  it("bypasses search cache for relative since/until bounds", async () => {
+    const kv = new FakeKV();
+    const cached = makeReadCache(kv);
+    let calls = 0;
+    const inner = async () => {
+      calls += 1;
+      return ok(`q ${calls}`);
+    };
+    const runSearch = async (params: { query: string; since?: string }) => {
+      if (!searchParamsCacheable(params)) return inner();
+      return cached("search", inner)();
+    };
+    await runSearch({ query: "bun", since: "90d" });
+    await runSearch({ query: "bun", since: "90d" });
+    expect(calls).toBe(2);
+    expect(kv.puts).toBe(0);
+  });
+
+  it("searchParamsCacheable allows ISO bounds and absent dates", () => {
+    expect(searchParamsCacheable({})).toBe(true);
+    expect(searchParamsCacheable({ since: "2026-01-01" })).toBe(true);
+    expect(searchParamsCacheable({ since: "90d" })).toBe(false);
+    expect(searchParamsCacheable({ until: "4w" })).toBe(false);
   });
 
   it("exposes a short, conservative TTL within KV's bounds (≥ 60s minimum)", () => {

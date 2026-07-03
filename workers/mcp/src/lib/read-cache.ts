@@ -23,7 +23,7 @@
  *   (unlike the REST `invalidateLatestCache`), so the TTL is kept short.
  */
 
-import type { ToolResult } from "../tools.js";
+import type { ToolResult } from "../tools";
 
 export interface ReadCacheBinding {
   get(key: string, type: "json"): Promise<unknown>;
@@ -39,6 +39,15 @@ const KEY_PREFIX = "mcpread:v1";
 // Short by design: no publish-time invalidation, so staleness is bounded by the
 // TTL alone. Long enough to collapse bursty agent polling onto one D1 read.
 export const MCP_READ_CACHE_TTL_SECONDS = 60;
+
+const RELATIVE_DATE_RE = /^\d+[dwmy]$/i;
+
+/** Relative `since`/`until` values (e.g. `90d`) move with wall clock — skip cache. */
+export function searchParamsCacheable(params: { since?: string; until?: string }): boolean {
+  if (params.since && RELATIVE_DATE_RE.test(params.since)) return false;
+  if (params.until && RELATIVE_DATE_RE.test(params.until)) return false;
+  return true;
+}
 
 /**
  * Deterministic JSON for the cache key — recursively sorts object keys so
