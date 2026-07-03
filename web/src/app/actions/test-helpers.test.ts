@@ -4,6 +4,11 @@ import { mock } from "bun:test";
 // deliberately benign, shared, and defined ONCE here; do not duplicate them
 // in individual test files).
 //
+// NOTE: the `.test.ts` suffix on this file is load-bearing — it keeps this
+// file (which imports `bun:test`, undeclarable in the Next build context) out
+// of `next build`'s type-check via web/tsconfig.json's `**/*.test.ts`
+// exclusion. It contains no tests itself.
+//
 // IMPORTANT: bun resolves and loads the entire static module graph (including
 // transitive imports) before executing any module-level code, so a static
 // `import "./test-helpers"` followed by a static `import { fooAction } from

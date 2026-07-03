@@ -5,10 +5,10 @@ import {
   stubFetch,
   stubFetchReject,
   restoreFetch,
-} from "./test-helpers";
+} from "./test-helpers.test";
 import type { PublicTokenRow } from "./api-tokens";
 
-// Loaded dynamically in beforeAll — see test-helpers.ts for why a static
+// Loaded dynamically in beforeAll — see test-helpers.test.ts for why a static
 // import of an action module here would race the server-only mock.
 let listMyTokensAction: (typeof import("./api-tokens"))["listMyTokensAction"];
 let mintTokenAction: (typeof import("./api-tokens"))["mintTokenAction"];

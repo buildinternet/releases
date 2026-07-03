@@ -6,10 +6,10 @@ import {
   stubFetch,
   stubFetchReject,
   restoreFetch,
-} from "./test-helpers";
+} from "./test-helpers.test";
 import type { SiteNotice } from "@buildinternet/releases-core/site-notice";
 
-// Loaded dynamically in beforeAll — see test-helpers.ts for why a static
+// Loaded dynamically in beforeAll — see test-helpers.test.ts for why a static
 // import of an action module here would race the server-only mock.
 let setSiteNoticeAction: (typeof import("./site-notice"))["setSiteNoticeAction"];
 
@@ -74,7 +74,7 @@ describe("setSiteNoticeAction", () => {
     // mintUserJwt(), which unconditionally calls next/headers' cookies() to
     // read the caller's session — and cookies() throws outside a Next.js
     // request scope (there is no next/headers mock here on purpose; see
-    // test-helpers.ts / the plan's Maintenance notes). This test pins that
+    // test-helpers.test.ts / the plan's Maintenance notes). This test pins that
     // observed behavior rather than asserting a graceful ActionResult.
     await expect(setSiteNoticeAction(NOTICE)).rejects.toThrow(
       "`cookies` was called outside a request scope",

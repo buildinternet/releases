@@ -6,9 +6,9 @@ import {
   stubFetch,
   stubFetchReject,
   restoreFetch,
-} from "./test-helpers";
+} from "./test-helpers.test";
 
-// Loaded dynamically in beforeAll — see test-helpers.ts for why a static
+// Loaded dynamically in beforeAll — see test-helpers.test.ts for why a static
 // import of an action module here would race the server-only mock.
 let setOrgHiddenAction: (typeof import("./org-admin"))["setOrgHiddenAction"];
 let setOrgAutoGenerateContentAction: (typeof import("./org-admin"))["setOrgAutoGenerateContentAction"];
