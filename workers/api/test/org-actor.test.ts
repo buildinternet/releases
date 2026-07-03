@@ -4,6 +4,7 @@ import { drizzle } from "drizzle-orm/bun-sqlite";
 import { applyMigrations, ensureBatchShim } from "../../../tests/db-helper";
 import { organizations, sources } from "@buildinternet/releases-core/schema";
 import { OrgActor, type OrgActorEnv } from "../src/org-actor.js";
+import { DRAIN_COOLDOWN_MS } from "../src/cron/scrape-agent-sweep.js";
 
 function mkDb() {
   const sqlite = new Database(":memory:");
@@ -127,9 +128,9 @@ describe("OrgActor", () => {
 
   it("excludes a source drained within the cooldown window (#1862)", async () => {
     const db = mkDb();
-    // Drained 1h ago — inside the 20h cooldown, so it must NOT re-dispatch.
+    // Drained half a cooldown ago — inside the window, so it must NOT re-dispatch.
     seedFlaggedScrape(db, "src_recent", {
-      lastDrainAt: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+      lastDrainAt: new Date(Date.now() - DRAIN_COOLDOWN_MS / 2).toISOString(),
     });
     const h = mkActor(db);
     await h.actor.ensureDrainScheduled("org_x");
@@ -140,9 +141,9 @@ describe("OrgActor", () => {
 
   it("re-drains a source whose cooldown has elapsed (#1862)", async () => {
     const db = mkDb();
-    // Drained 21h ago — outside the 20h cooldown, so it drains again.
+    // Drained just past the cooldown window — outside it, so it drains again.
     seedFlaggedScrape(db, "src_stale", {
-      lastDrainAt: new Date(Date.now() - 21 * 60 * 60 * 1000).toISOString(),
+      lastDrainAt: new Date(Date.now() - (DRAIN_COOLDOWN_MS + 60 * 60 * 1000)).toISOString(),
     });
     const h = mkActor(db);
     await h.actor.ensureDrainScheduled("org_x");
@@ -170,12 +171,15 @@ describe("OrgActor", () => {
     expect(h.dispatched.length).toBe(0);
   });
 
-  // Capture the JSON logEvent lines a run emits, by severity (info→log, warn→warn).
+  // Capture the JSON logEvent lines a run emits, by severity (info→log,
+  // warn→warn, error→error).
   async function captureLogs(fn: () => Promise<void>) {
     const info: any[] = [];
     const warn: any[] = [];
+    const error: any[] = [];
     const origLog = console.log;
     const origWarn = console.warn;
+    const origError = console.error;
     const parse = (sink: any[]) => (line?: unknown) => {
       try {
         sink.push(JSON.parse(String(line)));
@@ -185,14 +189,42 @@ describe("OrgActor", () => {
     };
     console.log = parse(info) as typeof console.log;
     console.warn = parse(warn) as typeof console.warn;
+    console.error = parse(error) as typeof console.error;
     try {
       await fn();
     } finally {
       console.log = origLog;
       console.warn = origWarn;
+      console.error = origError;
     }
-    return { info, warn };
+    return { info, warn, error };
   }
+
+  it("logs drain-cooldown-stamp-failed (not drain-error) when the cooldown write fails after a successful dispatch (#1862)", async () => {
+    const db = mkDb();
+    seedFlaggedScrape(db, "src_a");
+    // Wrap the db so the cooldown UPDATE throws, but SELECT (queryCandidates)
+    // still works — i.e. the dispatch succeeds and only the stamp write fails.
+    const throwingDb = new Proxy(db as object, {
+      get(t, prop) {
+        if (prop === "update")
+          return () => {
+            throw new Error("d1 write failed");
+          };
+        const v = Reflect.get(t, prop);
+        return typeof v === "function" ? v.bind(t) : v;
+      },
+    });
+    const h = mkActor(throwingDb as never);
+    await h.actor.ensureDrainScheduled("org_x");
+    const { info, error } = await captureLogs(() => h.actor.alarm()); // must not throw
+    // Dispatch still succeeded and is reported as such.
+    expect(h.dispatched.length).toBe(1);
+    expect(info.some((l) => l.event === "drain-dispatched")).toBe(true);
+    // The stamp failure is its own event, NOT a dispatch drain-error.
+    expect(error.some((l) => l.event === "drain-cooldown-stamp-failed")).toBe(true);
+    expect(error.some((l) => l.event === "drain-error")).toBe(false);
+  });
 
   it("classifies a 409 (scrape lock held) as drain-superseded, not drain-failed", async () => {
     const db = mkDb();
