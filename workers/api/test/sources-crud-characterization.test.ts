@@ -260,6 +260,68 @@ describe("PATCH /v1/sources/:slug — update", () => {
     expect(res.status).toBe(400);
   });
 
+  it("clears metadata.lastFailedExtractHash when a paused source is un-paused (#1852 follow-up)", async () => {
+    // The crawl-extraction skip memoization (#1852 follow-up) stores a failed
+    // input's hash under metadata.lastFailedExtractHash so a byte-identical
+    // re-crawl short-circuits instead of re-billing a guaranteed-doomed
+    // extraction. Un-pausing is the operator's manual "try again" signal after
+    // a code/prompt/model fix, so it must clear that memo — otherwise a fixed
+    // source would keep silently skipping forever.
+    const db = mkDb();
+    await seedOrg(db);
+    await db.insert(sources).values({
+      id: "src_paused",
+      slug: "acme-paused",
+      name: "Acme Paused",
+      type: "scrape",
+      url: "https://acme.com/paused",
+      orgId: "org_acme",
+      fetchPriority: "paused",
+      metadata: JSON.stringify({ crawlEnabled: true, lastFailedExtractHash: "deadbeef" }),
+    });
+    const fetch = mkApp(db);
+
+    const res = await fetch(
+      new Request(
+        "https://x.test/v1/sources/src_paused",
+        json("PATCH", { fetchPriority: "normal" }),
+      ),
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(JSON.parse(body.metadata)).toEqual({ crawlEnabled: true });
+
+    const [row] = await db.select().from(sources).where(eq(sources.id, "src_paused"));
+    expect(JSON.parse(row!.metadata!)).toEqual({ crawlEnabled: true });
+  });
+
+  it("leaves metadata.lastFailedExtractHash untouched on a fetchPriority change that isn't an unpause", async () => {
+    const db = mkDb();
+    await seedOrg(db);
+    await db.insert(sources).values({
+      id: "src_normal",
+      slug: "acme-normal",
+      name: "Acme Normal",
+      type: "scrape",
+      url: "https://acme.com/normal",
+      orgId: "org_acme",
+      fetchPriority: "normal",
+      metadata: JSON.stringify({ crawlEnabled: true, lastFailedExtractHash: "deadbeef" }),
+    });
+    const fetch = mkApp(db);
+
+    // normal -> low is a tier change, not an unpause — the hash memo must survive.
+    const res = await fetch(
+      new Request("https://x.test/v1/sources/src_normal", json("PATCH", { fetchPriority: "low" })),
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(JSON.parse(body.metadata)).toEqual({
+      crawlEnabled: true,
+      lastFailedExtractHash: "deadbeef",
+    });
+  });
+
   it("409s on a slug collision within the same org", async () => {
     const db = mkDb();
     await seedOrg(db);

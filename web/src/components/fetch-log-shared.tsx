@@ -53,6 +53,10 @@ const STATUS_STYLES: Record<FetchLogEntry["status"], string> = {
   // Degraded-but-not-broken states: amber, distinct from healthy gray and hard-error red.
   blocked: "text-amber-500",
   crawl_timeout: "text-amber-500",
+  // The crawl body still matches a previously-failed extraction input — same
+  // unresolved-underlying-issue signal as blocked/crawl_timeout, just with no
+  // fresh attempt made (#1852 follow-up).
+  skipped: "text-amber-500",
 };
 
 const STATUS_LABELS: Record<FetchLogEntry["status"], string> = {
@@ -62,6 +66,7 @@ const STATUS_LABELS: Record<FetchLogEntry["status"], string> = {
   dry_run: "Dry run",
   blocked: "Blocked",
   crawl_timeout: "Crawl timeout",
+  skipped: "Skipped (unchanged failure)",
 };
 
 export function FetchStatusBadge({ status }: { status: FetchLogEntry["status"] }) {
@@ -78,7 +83,7 @@ export function FetchLogResultCell({ log }: { log: FetchLogEntry }) {
     return <span className="text-red-500">{log.error?.slice(0, 40) ?? "failed"}</span>;
   // Degraded states carry an error message and 0 releases — show the reason
   // rather than the misleading "—" that empty rows otherwise render.
-  if (log.status === "blocked" || log.status === "crawl_timeout")
+  if (log.status === "blocked" || log.status === "crawl_timeout" || log.status === "skipped")
     return (
       <span className="text-amber-500">{log.error?.slice(0, 40) ?? STATUS_LABELS[log.status]}</span>
     );

@@ -330,6 +330,25 @@ export interface SourceMetadata {
   };
 
   /**
+   * SHA-256 of the crawled markdown body that most recently FAILED extraction
+   * (maxed the output-token cap — `hitMaxTokens`, never committed a content
+   * hash). When the next crawl produces byte-identical markdown, the crawl
+   * path skips re-running the (expensive, deterministically-doomed)
+   * extraction rather than re-billing an identical failure every cron cycle
+   * (#1852 follow-up). Deliberately stored SEPARATELY from
+   * `lastContentHash`/`commitContentHash` — that column is reserved for
+   * successful extractions so a body that later extracts cleanly (after a
+   * prompt/model fix) is never locked out.
+   *
+   * Cleared (never left stale) on: (1) any extraction that completes cleanly
+   * (natural recovery — the crawl path clears it right after a successful
+   * `extractFromBody` call), or (2) the source being un-paused via `PATCH
+   * .../sources/:slug { fetchPriority }` (the operator's manual "try again"
+   * signal after a fix, since #1852 auto-pauses sources stuck on this path).
+   */
+  lastFailedExtractHash?: string;
+
+  /**
    * Write-through observability mirror written by the SourceActor DO on each
    * alarm tick. Absent on sources not managed by the actor, or after the actor
    * has handed the source back to the cron (`managed: false`). Used by the dev

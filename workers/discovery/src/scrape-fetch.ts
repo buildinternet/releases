@@ -18,6 +18,7 @@
 
 import type { Source } from "@buildinternet/releases-core/schema";
 import { CategorizedError, type ErrorCategory } from "@releases/lib/errors";
+import { sha256Hex } from "@releases/core-internal/hash";
 import {
   fetchCloudflareMarkdown,
   fetchCloudflareMarkdownFast,
@@ -817,6 +818,35 @@ async function runScrapePath(
   // have) and call extractFromBody directly with a prompt tuned to preserve
   // per-page bodies.
   if (cameFromCrawl) {
+    // Memoize a failed extraction input (#1852 follow-up). A crawl body that
+    // already maxed the output-token cap can only fail identically on a
+    // byte-identical re-crawl — extracting it again just re-bills an
+    // Anthropic call for a guaranteed-doomed result. Skip the extraction
+    // entirely when the freshly-crawled body hashes to the same value as the
+    // last body that failed. This must NOT go through `finalize()` (which
+    // would call `updateSourceAfterFetch` and reset the #1851 error backoff
+    // via consecutiveErrors: 0) and must NOT re-throw a `model` categorized
+    // error (which would re-trigger `applyScrapeFailureBackoff` and extend
+    // the backoff further on every skip) — a skip is "no new work", not a
+    // fresh failure, so the existing backoff schedule is left exactly as-is.
+    const crawlBodyHash = sha256Hex(markdown);
+    if (meta.lastFailedExtractHash && meta.lastFailedExtractHash === crawlBodyHash) {
+      const durationMs = Date.now() - start;
+      await writeFetchLog(env, source.id, {
+        releasesFound: 0,
+        releasesInserted: 0,
+        durationMs,
+        status: "skipped",
+      });
+      logEvent("info", {
+        component: "scrape-fetch",
+        event: "crawl-extract-skipped",
+        sourceSlug: source.slug,
+        sourceUrl: source.url,
+      });
+      return `Skipped [unchanged_failed_input]: crawl body matches the last input that failed extraction for ${source.url}; not re-attempting`;
+    }
+
     deps.logger.info(
       `Crawl markdown for ${source.slug} — calling extractFromBody directly (body-preserving prompt)`,
     );
@@ -871,10 +901,22 @@ async function runScrapePath(
       totalOutput: result.totalOutput,
     });
     if (result.hitMaxTokens) {
+      // Memoize the failed input so a byte-identical re-crawl (near-certain on
+      // the very next cron tick, since #1852's backoff/pause is the only thing
+      // slowing re-dispatch) short-circuits above instead of re-billing an
+      // extraction that can only fail the same way again. Stored separately
+      // from the success content hash — see `lastFailedExtractHash` doc.
+      await deps.repo.updateSourceMeta(source, { lastFailedExtractHash: crawlBodyHash });
       throw new CategorizedError(
         "model",
         `AI extraction hit max_tokens for ${source.url}; content hash will not be persisted`,
       );
+    }
+    // Extraction completed cleanly — clear any stale failed-input memo so a
+    // future body that happens to re-hash the same (extremely unlikely, but
+    // never lock out on principle) is re-attempted rather than skipped.
+    if (meta.lastFailedExtractHash) {
+      await deps.repo.updateSourceMeta(source, { lastFailedExtractHash: null });
     }
     return finalize(env, source, mapEntries(result.entries, { sourceUrl: source.url }), start);
   }

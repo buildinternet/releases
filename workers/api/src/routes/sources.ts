@@ -2999,6 +2999,25 @@ const patchSourceHandler = async (c: import("hono").Context<Env>) => {
     );
   }
 
+  // Un-pausing is the operator's manual "try again" signal (#1852 auto-pauses
+  // a source stuck maxing extraction output — see fetch-log.ts's
+  // applyScrapeFailureBackoff). The crawl path memoizes a failed extraction's
+  // input hash (`metadata.lastFailedExtractHash`) so a byte-identical re-crawl
+  // skips re-extracting a guaranteed-doomed body; that memo would otherwise
+  // outlive a code/prompt/model fix and keep skipping forever. Clear it here
+  // so the very next fetch after unpause always re-attempts extraction.
+  if (
+    body.fetchPriority !== undefined &&
+    body.fetchPriority !== "paused" &&
+    src.fetchPriority === "paused"
+  ) {
+    updates.metadata = JSON.stringify(
+      mergeSourceMetadata((updates.metadata as string | undefined) ?? src.metadata, {
+        lastFailedExtractHash: null,
+      }),
+    );
+  }
+
   if (Object.keys(updates).length === 0) {
     const bodyKeys = Object.keys(body);
     const unrecognized = bodyKeys.filter(
