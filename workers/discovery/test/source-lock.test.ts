@@ -66,13 +66,16 @@ describe("source-lock helpers (#1814)", () => {
     await releaseSourceLocks(env, ["src_a"], "sess_1");
   });
 
-  it("fails open: a throwing acquire treats that source as acquired", async () => {
+  it("fails closed: a throwing acquire surfaces a conflict", async () => {
     const { env, leases } = mkEnv({ throwOn: new Set(["src_a"]) });
     leases.set("src_b", "sess_x");
-    // src_a throws → treated as acquired (fail-open, omitted from conflicts);
-    // src_b is genuinely contended → surfaces + triggers rollback of nothing
-    // (src_a's lease was never actually written).
     const conflicts = await tryAcquireSourceLocks(env, ["src_a", "src_b"], "sess_1");
-    expect(conflicts).toEqual([{ id: "src_b", sessionId: "sess_x" }]);
+    expect(conflicts).toHaveLength(2);
+    expect(conflicts).toEqual(
+      expect.arrayContaining([
+        { id: "src_a", sessionId: "__lock_unavailable__" },
+        { id: "src_b", sessionId: "sess_x" },
+      ]),
+    );
   });
 });

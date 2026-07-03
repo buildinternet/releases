@@ -8,12 +8,10 @@
  * conditionally release in the session's completion `finally` — only the storage
  * moved from KV to the owning DO, where the check→delete release is atomic.
  *
- * Fail-open by design: the lock is a dedup/cost guard, not a data-integrity gate
- * (ingest dedups on `UNIQUE(source_id, url)` regardless). A transient DO error or
- * an absent binding therefore treats the source as unlocked rather than blocking
- * — at worst one duplicate session (bounded by the daily spend cap), never a
- * pipeline-wide halt. Failures are logged loudly so a silently-disabled lock is
- * visible in Axiom.
+ * Binding absent: fail-open (lock disabled, warn once). SourceActor RPC errors
+ * during acquire: fail-closed — surfaces a conflict so delegation is blocked
+ * rather than minting a session without a lease. Ingest dedups on URL regardless;
+ * the lock is a dedup/cost guard, not a data-integrity gate.
  */
 
 import { logEvent } from "@releases/lib/log-event";
@@ -81,7 +79,7 @@ export async function tryAcquireSourceLocks(
           sessionId,
           err: err instanceof Error ? err.message : String(err),
         });
-        acquired.push(id); // fail-open: treat as acquired
+        conflicts.push({ id, sessionId: "__lock_unavailable__" });
       }
     }),
   );
