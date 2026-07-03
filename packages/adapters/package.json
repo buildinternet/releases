@@ -40,6 +40,7 @@
     "jsonpath-plus": "^10.4.0",
     "linkedom": "^0.18.12",
     "partial-json": "^0.1.7",
+    "tldts": "^7.4.6",
     "turndown": "^7.2.4"
   },
   "devDependencies": {

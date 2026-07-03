@@ -218,7 +218,19 @@ export async function extractWithTools(
 
       const toolResults: Anthropic.ToolResultBlockParam[] = toolUses.map((tu) => {
         if (tu.id === terminal.id) {
-          const message = formatRejectionMessage(rejections, entries.length);
+          let message = formatRejectionMessage(rejections, entries.length);
+          // Same truncation pattern as the sibling tool-result branch below —
+          // an oversized rejection message (e.g. many rejected entries with
+          // long reasons) must not blow past MAX_TOTAL_TOOL_CHARS and force
+          // an early exit before the model gets a chance to retry.
+          const remaining = MAX_TOTAL_TOOL_CHARS - toolChars;
+          if (message.length > remaining) {
+            const suffix = "\n[truncated — tool-result budget exhausted]";
+            message =
+              remaining > suffix.length
+                ? message.slice(0, remaining - suffix.length) + suffix
+                : message.slice(0, Math.max(0, remaining));
+          }
           toolChars += message.length;
           return { type: "tool_result", tool_use_id: tu.id, content: message };
         }

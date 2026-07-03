@@ -13,6 +13,7 @@
  * always means "accept and let post-hoc handle it."
  */
 
+import { getDomain } from "tldts";
 import { logEvent } from "@releases/lib/log-event";
 import type { ExtractedEntry } from "./types.js";
 
@@ -69,19 +70,58 @@ const TRACKING_REDIRECT_HOSTS = [
   "url.emailprotection",
 ];
 
+/** Fragments that are anchored to the start of the hostname (a leading-label
+ *  prefix like "click." or "mkto-") vs. a full-domain suffix match (a bare
+ *  registrable domain like "sendgrid.net"). Distinguishing the two avoids
+ *  substring false positives while still matching each fragment the way it
+ *  was intended. */
+function trackingFragmentMatches(labels: string[], frag: string): boolean {
+  if (frag.endsWith(".") || frag.endsWith("-")) {
+    // Leading-label prefix: compare against the start of the hostname,
+    // label-by-label for the dotted case ("click." -> label "click"), or a
+    // literal prefix match on the first label for the hyphenated case
+    // ("mkto-" -> "mkto-123.example.com").
+    if (frag.endsWith("-")) return (labels[0] ?? "").startsWith(frag);
+    const fragLabels = frag.split(".").filter(Boolean);
+    if (fragLabels.length > labels.length) return false;
+    return fragLabels.every((fl, i) => labels[i] === fl);
+  }
+  // Full fragment (e.g. "sendgrid.net", "click.email"): must match either the
+  // whole hostname or a dot-bounded suffix of it — never a mid-label substring.
+  const fragLabels = frag.split(".").filter(Boolean);
+  if (fragLabels.length > labels.length) return false;
+  const tail = labels.slice(labels.length - fragLabels.length);
+  return tail.every((l, i) => l === fragLabels[i]);
+}
+
 /** Bare index/listing paths a specific release URL should never collapse to. */
 const INDEX_PATH_RE =
   /^\/?(changelog|changelog\/?|release-notes|releases|blog|news|updates)\/?(index\.html?)?$/i;
 
+/**
+ * Public-suffix-aware registrable domain (e.g. "blog.example.co.uk" ->
+ * "example.co.uk"). Falls back to the naive last-two-label heuristic when
+ * `tldts` can't determine one (localhost, bare IPs, single-label hosts) —
+ * those aren't on a public suffix list, so there's nothing to look up.
+ */
 function registrableDomain(host: string): string {
-  const parts = host.toLowerCase().split(".").filter(Boolean);
+  const lower = host.toLowerCase();
+  const domain = getDomain(lower);
+  if (domain) return domain;
+  const parts = lower.split(".").filter(Boolean);
   if (parts.length <= 2) return parts.join(".");
   return parts.slice(-2).join(".");
 }
 
+/**
+ * Matches a tracking-redirect fragment against whole hostname labels rather
+ * than a raw substring, so "myemail.example.com" doesn't false-positive on
+ * the "email." fragment (which is meant to match the leading label of hosts
+ * like "email.vendor.com").
+ */
 function isTrackingRedirectHost(host: string): boolean {
-  const lower = host.toLowerCase();
-  return TRACKING_REDIRECT_HOSTS.some((frag) => lower.includes(frag));
+  const labels = host.toLowerCase().split(".").filter(Boolean);
+  return TRACKING_REDIRECT_HOSTS.some((frag) => trackingFragmentMatches(labels, frag));
 }
 
 /**
@@ -112,16 +152,19 @@ export function checkUrlSanity(url: string | undefined, sourceUrl: string): stri
     sourceHost = "";
   }
 
-  if (isTrackingRedirectHost(parsed.hostname)) {
+  const sourceReg = sourceHost ? registrableDomain(sourceHost) : "";
+  const urlReg = registrableDomain(parsed.hostname);
+  const sameRegistrableDomain = Boolean(sourceReg) && sourceReg === urlReg;
+
+  // A host on the source's own registrable domain (e.g. "mail.example.com"
+  // when the source is "example.com") is never a third-party tracking
+  // redirect, regardless of which label it starts with.
+  if (!sameRegistrableDomain && isTrackingRedirectHost(parsed.hostname)) {
     return `URL host "${parsed.hostname}" looks like a tracking-redirect wrapper, not the release's own page — use the release's canonical URL instead.`;
   }
 
-  if (sourceHost) {
-    const sourceReg = registrableDomain(sourceHost);
-    const urlReg = registrableDomain(parsed.hostname);
-    if (sourceReg && urlReg && sourceReg !== urlReg) {
-      return `URL host "${parsed.hostname}" doesn't match source "${sourceHost}" — use the release's canonical URL on the source's own domain.`;
-    }
+  if (sourceReg && urlReg && sourceReg !== urlReg) {
+    return `URL host "${parsed.hostname}" doesn't match source "${sourceHost}" — use the release's canonical URL on the source's own domain.`;
   }
 
   if (INDEX_PATH_RE.test(parsed.pathname)) {
@@ -199,25 +242,36 @@ function normalizedWordCount(text: string): number {
 }
 
 /**
- * Reject empty titles/bodies and bodies that are clearly page chrome
- * (cookie-banner/nav-shell heuristics). Kept intentionally simple and
- * precise — favors false negatives (letting borderline content through to
- * post-hoc validation) over false positives.
+ * Reject entries with no recoverable content (empty title AND empty body) and
+ * bodies that are clearly page chrome (cookie-banner/nav-shell heuristics).
+ * Kept intentionally simple and precise — favors false negatives (letting
+ * borderline content through to post-hoc validation) over false positives.
+ *
+ * A non-empty title with an empty body is accepted: real feeds legitimately
+ * carry bodyless entries (a bare version bump with no changelog text), and a
+ * model can't "correct" content that genuinely doesn't exist — rejecting it
+ * would just burn the retry budget for no gain.
  */
 export function checkContentQuality(entry: { title?: string; content?: string }): string | null {
   const title = entry.title?.trim() ?? "";
   const content = entry.content?.trim() ?? "";
 
+  if (!title && !content) {
+    return `Entry has an empty title and empty content — every entry needs at least a real title.`;
+  }
   if (!title) {
     return `Entry has an empty title — every entry needs a real title.`;
   }
   if (!content) {
-    return `Entry "${title}" has empty content — re-read the source and include the actual release body.`;
+    // Empty body with a real title is accepted (e.g. a version-bump entry
+    // with no changelog text) — nothing further to check.
+    return null;
   }
 
   // A body that's almost entirely a chrome phrase (short overall, and matches
   // one of the boilerplate markers) is very likely nav/cookie-banner scrape
-  // residue, not release content.
+  // residue, not release content — distinct from the now-accepted empty-body
+  // case above: this is chrome *residue*, not an honestly empty entry.
   const lowerContent = content.toLowerCase();
   const looksLikeChrome =
     normalizedWordCount(content) <= 40 &&

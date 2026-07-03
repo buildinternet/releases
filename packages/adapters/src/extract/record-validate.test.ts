@@ -55,6 +55,40 @@ describe("checkUrlSanity", () => {
     const reason = checkUrlSanity("http://", SOURCE_URL);
     expect(reason).toMatch(/could not be parsed/i);
   });
+
+  describe("public-suffix-aware registrable domain (co.uk-style)", () => {
+    const CO_UK_SOURCE = "https://www.example.co.uk/changelog";
+
+    test("accepts a same-registrable-domain host on a multi-part public suffix", () => {
+      expect(checkUrlSanity("https://blog.example.co.uk/posts/v1", CO_UK_SOURCE)).toBeNull();
+    });
+
+    test("rejects an unrelated host that only shares the public suffix (co.uk)", () => {
+      const reason = checkUrlSanity("https://totally-unrelated.co.uk/post/1", CO_UK_SOURCE);
+      expect(reason).toMatch(/doesn't match source/i);
+    });
+  });
+
+  describe("same-domain subdomains that resemble tracking-fragment labels", () => {
+    test("accepts the source's own mail. subdomain", () => {
+      expect(checkUrlSanity("https://mail.example.com/changelog/v1", SOURCE_URL)).toBeNull();
+    });
+
+    test("accepts the source's own email. subdomain", () => {
+      expect(checkUrlSanity("https://email.example.com/changelog/v1", SOURCE_URL)).toBeNull();
+    });
+
+    test("does not false-positive on a label that merely contains a fragment mid-string", () => {
+      // "myemail.example.com" starts with the label "myemail", not "email" —
+      // must not match the "email." tracking fragment via substring.
+      expect(checkUrlSanity("https://myemail.example.com/changelog/v1", SOURCE_URL)).toBeNull();
+    });
+
+    test("still rejects a genuine third-party tracking-redirect host", () => {
+      const reason = checkUrlSanity("https://email.othervendor.com/track?u=1", SOURCE_URL);
+      expect(reason).toMatch(/tracking-redirect|doesn't match source/i);
+    });
+  });
 });
 
 describe("checkDatePlausibility", () => {
@@ -100,14 +134,22 @@ describe("checkContentQuality", () => {
     expect(checkContentQuality(makeEntry())).toBeNull();
   });
 
-  test("rejects an empty title", () => {
+  test("rejects an empty title when content is present", () => {
     const reason = checkContentQuality(makeEntry({ title: "" }));
     expect(reason).toMatch(/empty title/i);
   });
 
-  test("rejects empty content", () => {
-    const reason = checkContentQuality(makeEntry({ content: "" }));
-    expect(reason).toMatch(/empty content/i);
+  test("accepts empty content when a real title is present (e.g. a bare version bump)", () => {
+    expect(checkContentQuality(makeEntry({ content: "" }))).toBeNull();
+  });
+
+  test("accepts whitespace-only content when a real title is present", () => {
+    expect(checkContentQuality(makeEntry({ content: "   \n  " }))).toBeNull();
+  });
+
+  test("rejects when BOTH title and content are empty", () => {
+    const reason = checkContentQuality(makeEntry({ title: "", content: "" }));
+    expect(reason).toMatch(/empty title and empty content/i);
   });
 
   test("rejects short cookie-banner boilerplate content", () => {
@@ -162,6 +204,20 @@ describe("validateRecords", () => {
     // With an empty sourceUrl, host-mismatch check is skipped (no valid source
     // host to compare against), so this entry is accepted.
     expect(validateRecords(entries, { sourceUrl: "" })).toEqual([]);
+  });
+
+  test("fails open when a check actually throws mid-record — accepts and does not propagate", () => {
+    // Force a real exception inside validateOneRecord: checkDatePlausibility
+    // calls `.trim()` on `publishedAt`, so a non-string value throws a
+    // TypeError instead of hitting the `!publishedAt` guard (which only
+    // short-circuits on falsy values, not on non-string truthy ones).
+    const badEntry = {
+      ...makeEntry(),
+      publishedAt: 12345 as unknown as string,
+    } as ExtractedEntry;
+    const entries = [badEntry];
+    expect(() => validateRecords(entries, { sourceUrl: SOURCE_URL })).not.toThrow();
+    expect(validateRecords(entries, { sourceUrl: SOURCE_URL })).toEqual([]);
   });
 });
 
