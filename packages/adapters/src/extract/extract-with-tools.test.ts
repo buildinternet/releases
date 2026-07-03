@@ -568,6 +568,251 @@ describe("extractWithTools — fallback triggers", () => {
   });
 });
 
+describe("extractWithTools — in-band record validation (#1874)", () => {
+  test("accepts a batch where every entry passes validation, unchanged", async () => {
+    const client = mockAnthropicClient([
+      {
+        stop_reason: "tool_use",
+        content: [
+          {
+            type: "tool_use",
+            id: "t1",
+            name: "extract_releases",
+            caller: { type: "direct" as const },
+            input: {
+              releases: [
+                {
+                  title: "v1.0",
+                  content: "Adds a new feature.",
+                  isBreaking: false,
+                  publishedAt: "2026-04-01",
+                  url: "https://x.test/r/1",
+                },
+              ],
+            },
+          },
+        ],
+        usage: { input_tokens: 100, output_tokens: 10 },
+      },
+    ]);
+
+    const result = await extractWithTools(
+      {
+        body: "irrelevant",
+        systemPrompt: "test",
+        userMessage: "Extract from:",
+        sourceUrl: "https://x.test",
+        fetchUrl: "https://x.test/feed.json",
+      },
+      makeDeps(client),
+    );
+
+    expect(result.entries).toHaveLength(1);
+    expect(result.toolRounds).toBe(0);
+  });
+
+  test("rejects a bad record in-band, then accepts the corrected resubmission", async () => {
+    const client = mockAnthropicClient([
+      {
+        // Round 1: bad URL (wrong host) — should be rejected in-band, not returned.
+        stop_reason: "tool_use",
+        content: [
+          {
+            type: "tool_use",
+            id: "t1",
+            name: "extract_releases",
+            caller: { type: "direct" as const },
+            input: {
+              releases: [
+                {
+                  title: "v1.0",
+                  content: "Adds a new feature.",
+                  isBreaking: false,
+                  publishedAt: "2026-04-01",
+                  url: "https://totally-unrelated-domain.org/r/1",
+                },
+              ],
+            },
+          },
+        ],
+        usage: { input_tokens: 100, output_tokens: 10 },
+      },
+      {
+        // Round 2: corrected URL — should terminate successfully.
+        stop_reason: "tool_use",
+        content: [
+          {
+            type: "tool_use",
+            id: "t2",
+            name: "extract_releases",
+            caller: { type: "direct" as const },
+            input: {
+              releases: [
+                {
+                  title: "v1.0",
+                  content: "Adds a new feature.",
+                  isBreaking: false,
+                  publishedAt: "2026-04-01",
+                  url: "https://x.test/r/1",
+                },
+              ],
+            },
+          },
+        ],
+        usage: { input_tokens: 120, output_tokens: 15 },
+      },
+    ]);
+
+    const result = await extractWithTools(
+      {
+        body: "irrelevant",
+        systemPrompt: "test",
+        userMessage: "Extract from:",
+        sourceUrl: "https://x.test",
+        fetchUrl: "https://x.test/feed.json",
+      },
+      makeDeps(client),
+    );
+
+    expect(result.entries).toHaveLength(1);
+    expect(result.entries[0]!.url).toBe("https://x.test/r/1");
+    // One retry round was consumed getting the model to correct its answer.
+    expect(result.toolRounds).toBe(1);
+    expect(result.totalInput).toBe(220);
+  });
+
+  test("sends an actionable tool_result back to the model on rejection", async () => {
+    const captured: Anthropic.MessageCreateParams[] = [];
+    const client: Pick<Anthropic, "messages"> = {
+      messages: {
+        stream: ((params: Anthropic.MessageCreateParams) => {
+          captured.push(params);
+          const round = captured.length;
+          if (round === 1) {
+            return {
+              finalMessage: async () =>
+                ({
+                  id: "m1",
+                  type: "message",
+                  role: "assistant",
+                  model: "x",
+                  content: [
+                    {
+                      type: "tool_use",
+                      id: "t1",
+                      name: "extract_releases",
+                      input: {
+                        releases: [
+                          { title: "", content: "x", isBreaking: false, url: "https://x.test/1" },
+                        ],
+                      },
+                    },
+                  ],
+                  stop_reason: "tool_use",
+                  stop_sequence: null,
+                  usage: { input_tokens: 100, output_tokens: 10 },
+                }) as Anthropic.Message,
+            } as never;
+          }
+          return {
+            finalMessage: async () =>
+              ({
+                id: "m2",
+                type: "message",
+                role: "assistant",
+                model: "x",
+                content: [
+                  {
+                    type: "tool_use",
+                    id: "t2",
+                    name: "extract_releases",
+                    input: {
+                      releases: [
+                        {
+                          title: "v1",
+                          content: "x",
+                          isBreaking: false,
+                          url: "https://x.test/1",
+                        },
+                      ],
+                    },
+                  },
+                ],
+                stop_reason: "tool_use",
+                stop_sequence: null,
+                usage: { input_tokens: 100, output_tokens: 10 },
+              }) as Anthropic.Message,
+          } as never;
+        }) as never,
+      } as never,
+    };
+
+    await extractWithTools(
+      {
+        body: "irrelevant",
+        systemPrompt: "test",
+        userMessage: "Extract from:",
+        sourceUrl: "https://x.test",
+        fetchUrl: "https://x.test/feed.json",
+      },
+      makeDeps(client),
+    );
+
+    expect(captured.length).toBe(2);
+    const round2 = captured[1]!;
+    const lastUser = round2.messages[round2.messages.length - 1]!;
+    const content = lastUser.content as Anthropic.ToolResultBlockParam[];
+    const rejectionResult = content.find((c) => c.tool_use_id === "t1")!;
+    expect(rejectionResult.content).toContain("rejected and NOT recorded");
+    expect(rejectionResult.content).toContain("empty title");
+  });
+
+  test("fails open after the validation retry cap — accepts a persistently bad record", async () => {
+    // The model keeps emitting the same bad record every round; after
+    // MAX_VALIDATION_RETRIES the loop must stop retrying and accept it so
+    // post-hoc validation (the backstop) can handle it, rather than looping
+    // forever or throwing a fallback.
+    const badRelease = {
+      title: "v1.0",
+      content: "x",
+      isBreaking: false,
+      url: "https://totally-unrelated-domain.org/r/1",
+    };
+    const badResponse = {
+      stop_reason: "tool_use" as const,
+      content: [
+        {
+          type: "tool_use" as const,
+          id: "t",
+          name: "extract_releases",
+          input: { releases: [badRelease] },
+          caller: { type: "direct" as const },
+        },
+      ],
+      usage: { input_tokens: 100, output_tokens: 10 },
+    };
+
+    // MAX_VALIDATION_RETRIES rejections, then one more identical call that
+    // must now be accepted (retries exhausted).
+    const client = mockAnthropicClient([badResponse, badResponse, badResponse]);
+
+    const result = await extractWithTools(
+      {
+        body: "irrelevant",
+        systemPrompt: "test",
+        userMessage: "Extract from:",
+        sourceUrl: "https://x.test",
+        fetchUrl: "https://x.test/feed.json",
+      },
+      makeDeps(client),
+    );
+
+    expect(result.entries).toHaveLength(1);
+    expect(result.entries[0]!.url).toBe("https://totally-unrelated-domain.org/r/1");
+    expect(result.toolRounds).toBe(2);
+  });
+});
+
 describe("extractWithTools — guidance placement", () => {
   function capturingClient(captured: Anthropic.MessageCreateParams[]): Pick<Anthropic, "messages"> {
     return {
