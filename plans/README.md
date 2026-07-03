@@ -1,6 +1,6 @@
 # Implementation Plans
 
-Two `improve`-skill runs live in this directory. Numbering is monotonic across
+Three `improve`-skill runs live in this directory. Numbering is monotonic across
 runs. Each executor: read the plan fully before starting, honor its STOP
 conditions, and update your row when done.
 
@@ -8,6 +8,62 @@ conditions, and update your row when done.
 > `.context/` (gitignored, ticket-ID-prefixed). These are placed under `plans/`
 > instead so they're shareable/reviewable as a set; move or mirror into
 > `.context/` if you prefer the local convention.
+
+## Run 3 — priority backlog refresh, 2026-07-03, against commit `b1c2e87a`
+
+Re-scan of Run 1 findings after Run 2 (004–007) landed. All 19 original
+technical findings from the first audit were still open; Run 2 addressed a
+different slice (ingest logging, characterization tests, breaking web chip).
+This run plans the user-selected P1–P3 backlog: SourceActor backoff,
+whats-changed budget, source-lock fail-closed, webhook SSRF hardening (+ queue
+tests first), MCP cache/consumption fixes, edge-cache purge.
+
+### Execution order & status
+
+| Plan | Title | Priority | Effort | Depends on | Status |
+| ---- | ----- | -------- | ------ | ---------- | ------ |
+| 008 | SourceActor short backoff on workflow create failure | P1 | S | — | DONE — branch `advisor/008-source-actor-create-failure-backoff` (`7c9392ff`) |
+| 009 | Fix whats-changed token budget bypass | P1 | S | — | DONE — branch `advisor/009-whats-changed-token-budget` (`190f0a68`) |
+| 010 | Fail-closed discovery source-lock on DO RPC errors | P1 | M | — | DONE — branch `advisor/010-discovery-source-lock-fail-closed` (`4633fcd9`) |
+| 011 | Webhook queue characterization tests | P1 | M | — | DONE — branch `advisor/011-webhook-queue-characterization-tests` (`6cdddf1d`) |
+| 012 | Re-validate webhook URLs at delivery time | P1 | M | 011 | DONE — branch `advisor/012-webhook-delivery-ssrf-revalidation` (`354e8d30`) |
+| 013 | Cache MCP search and get_release | P2 | S | — | DONE — branch `advisor/013-mcp-cache-search-get-release` (`7513e51f`) |
+| 014 | Fix MCP batch consumption counting | P2 | S | — | DONE — branch `advisor/014-mcp-batch-consumption-counting` (`c13a5258`) |
+| 015 | Wire edge-cache purge on publish | P2 | M | — | DONE — branch `advisor/015-edge-cache-purge-on-publish` (`7d2b1d93`) |
+
+Status values: TODO | IN PROGRESS | DONE | BLOCKED (reason) | REJECTED (reason)
+
+**Recommended order:** 008 → 009 → 010 in parallel (independent). Then 011
+before 012. 013–015 parallel anytime after 008–010 (independent perf/telemetry).
+
+### Dependency notes
+
+- **012 requires 011** — SSRF change touches `deliver()`; queue tests pin ack/retry/auto-disable branches.
+- **008–010 and 013–015** are independent — safe to execute in parallel worktrees.
+- Run 2's **005 ingest characterization** does not cover webhook queue or SourceActor cron fan-out — those gaps remain.
+
+### Findings addressed by this run (from Run 1 re-scan)
+
+| Original # | Finding | Plan |
+| ---------- | ------- | ---- |
+| 1 | SourceActor workflow create failure stall | 008 |
+| 2 | whats-changed token budget bypass | 009 |
+| 4 | Discovery source-lock fail-open on RPC | 010 |
+| 3 | Webhook delivery SSRF | 012 (+ 011 tests) |
+| 5 | MCP batch consumption under-count | 014 |
+| 6 | Edge cache purge not wired | 015 |
+| 7 | MCP search/get_release uncached | 013 |
+| 8 | Webhook queue branch coverage | 011 |
+
+### Still open (not planned this run)
+
+- Web excluded from CI type-check (DX)
+- Staging gate fail-open / GraphQL staging bypass / media PUT / Firecrawl body bounds (security)
+- MCP relative-date cache staleness (correctness, lower impact — 60s TTL)
+- packageManager pnpm metadata, worker lockfile drift, drizzle schema islands, stale superpowers docs (debt/docs)
+- Direction: upgrade_plan, #1345 registry map, #1698 PR bot, webhook breaking filter, #1711 backfill
+
+---
 
 ## Run 2 — full-repo audit, 2026-07-02, against commit `3238d540`
 
