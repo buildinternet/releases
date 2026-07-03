@@ -20,7 +20,7 @@ The user-facing CLI (`@buildinternet/releases`) ships separately from [buildinte
 | `src/agent/`         | Managed-agents discovery + worker harness (prompt builder + shared types)                     |
 | `.claude/`           | Claude Code config — `skills/` (canonical skill home), `agents/`, `commands/`, `workflows/`   |
 
-Per-package detail and project conventions live in [AGENTS.md](AGENTS.md) — the agent entry point for working in this repo; architecture deep-dives in [docs/architecture/](docs/architecture/), with a reader's guide at [docs/README.md](docs/README.md). Agents *consuming* the product (rather than this codebase) start from [releases.sh/llms.txt](https://releases.sh/llms.txt).
+Per-package detail and project conventions live in [AGENTS.md](AGENTS.md) — the agent entry point for working in this repo; architecture deep-dives in [docs/architecture/](docs/architecture/), with a reader's guide at [docs/README.md](docs/README.md). Agents _consuming_ the product (rather than this codebase) start from [releases.sh/llms.txt](https://releases.sh/llms.txt).
 
 ## Consumer surfaces
 
