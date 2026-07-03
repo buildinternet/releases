@@ -88,6 +88,10 @@ function buildMcpServerCard() {
     description: server.description,
     version: server.version,
     serverInfo: { name: server.name, version: server.version },
+    // Top-level `url` mirrors the connect endpoint. `remotes[].url` / `endpoint`
+    // are the MCP-native fields, but some consumers (e.g. integrations.sh) look
+    // for a bare `url`, so publish it too.
+    url: endpoint,
     endpoint,
     remotes: server.remotes,
     capabilities: { tools: { listChanged: false } },

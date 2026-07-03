@@ -65,6 +65,14 @@ export function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // `/openapi.json` proxies the REST API's generated OpenAPI 3.1 spec (served by
+  // `app/openapi.json/route.ts`). Without this guard the `.json` suffix matcher
+  // below rewrites it to `/api/format/openapi` and 404s — same trap as
+  // `/schemas/*.json` above.
+  if (pathname === "/openapi.json") {
+    return NextResponse.next();
+  }
+
   // Explicit suffix routes — skip Accept negotiation.
   if (pathname === "/docs.md") {
     return rewriteTo(request, "/api/docs/index");
