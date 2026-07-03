@@ -85,6 +85,7 @@ import { notifyIndexNowForSource, type IndexNowEnv } from "../lib/indexnow.js";
 import { clusterAndPersistCascades } from "../lib/cluster-cascades.js";
 import { resolveOrgSlug, resolveProductSlug } from "../lib/slug-lookups.js";
 import { logEvent } from "@releases/lib/log-event";
+import { logSwallowed } from "../lib/log-swallowed.js";
 import { classifyDbError, dbErrorLogFields } from "@releases/lib/db-errors";
 import { makeBotFetch } from "../lib/web-bot-auth-fetch.js";
 import { FLAGS, flag } from "@releases/lib/flags";
@@ -1035,7 +1036,7 @@ export async function renderCheckOne(
       durationMs,
       status: "dry_run",
     })
-    .catch(() => {});
+    .catch(logSwallowed("cron-poll-fetch", "fetch-log-write-failed", { sourceSlug: source.slug }));
 
   logEvent(rendered ? "info" : "warn", {
     component: "cron-poll-fetch",
@@ -1616,7 +1617,9 @@ export async function fetchOne(
             status: "error",
             error: "Missing feedUrl or video.provider in source metadata",
           })
-          .catch(() => {});
+          .catch(
+            logSwallowed("cron-poll-fetch", "fetch-log-write-failed", { sourceSlug: source.slug }),
+          );
         return {
           releasesFound: 0,
           releasesInserted: 0,
@@ -1677,7 +1680,9 @@ export async function fetchOne(
             status: "error",
             error: "Missing feedUrl or feedType in source metadata",
           })
-          .catch(() => {});
+          .catch(
+            logSwallowed("cron-poll-fetch", "fetch-log-write-failed", { sourceSlug: source.slug }),
+          );
         return {
           releasesFound: 0,
           releasesInserted: 0,
@@ -1985,7 +1990,9 @@ export async function fetchOne(
         status: "error",
         error: err instanceof Error ? err.message : String(err),
       })
-      .catch(() => {});
+      .catch(
+        logSwallowed("cron-poll-fetch", "fetch-log-write-failed", { sourceSlug: source.slug }),
+      );
 
     // Transient D1 failure (overload / network drop / storage reset). Don't
     // bump consecutiveErrors — it's not a source-level problem, just an
@@ -2017,7 +2024,9 @@ export async function fetchOne(
         .update(sources)
         .set({ consecutiveErrors: newErrors, nextFetchAfter: nextFetch })
         .where(eq(sources.id, source.id))
-        .catch(() => {});
+        .catch(
+          logSwallowed("cron-poll-fetch", "backoff-write-failed", { sourceSlug: source.slug }),
+        );
       logEvent("warn", {
         component: "cron-poll-fetch",
         event: "feed-rate-limited",
@@ -2059,14 +2068,22 @@ export async function fetchOne(
             nextFetchAfter: null,
           })
           .where(eq(sources.id, source.id))
-          .catch(() => {});
+          .catch(
+            logSwallowed("cron-poll-fetch", "source-metadata-write-failed", {
+              sourceSlug: source.slug,
+            }),
+          );
       } else {
         const merged = { ...meta, feed4xxStreak: streak };
         await db
           .update(sources)
           .set({ metadata: JSON.stringify(merged) })
           .where(eq(sources.id, source.id))
-          .catch(() => {});
+          .catch(
+            logSwallowed("cron-poll-fetch", "source-metadata-write-failed", {
+              sourceSlug: source.slug,
+            }),
+          );
       }
       return {
         releasesFound: 0,
@@ -2087,7 +2104,7 @@ export async function fetchOne(
         nextFetchAfter: nextFetch,
       })
       .where(eq(sources.id, source.id))
-      .catch(() => {});
+      .catch(logSwallowed("cron-poll-fetch", "backoff-write-failed", { sourceSlug: source.slug }));
 
     return {
       releasesFound: 0,
