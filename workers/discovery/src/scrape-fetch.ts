@@ -187,6 +187,10 @@ async function updateSourceAfterFetch(env: ScrapeEnv, source: Source): Promise<v
       changeDetectedAt: null,
       consecutiveErrors: 0,
       consecutiveNoChange: 0,
+      // Clear any error backoff a prior deterministic failure set (#1851) so a
+      // recovered source resumes its normal tier cadence immediately instead of
+      // waiting out a stale `next_fetch_after`.
+      nextFetchAfter: null,
     }),
   });
 }
