@@ -146,7 +146,15 @@ export class OrgActor extends DurableObject<OrgActorEnv> {
         });
         return;
       }
-      const { sessionId } = (await res.json().catch(() => ({}))) as { sessionId?: string };
+      const { sessionId } = (await res.json().catch((err) => {
+        logEvent("warn", {
+          component: "org-actor",
+          event: "drain-response-bad-json",
+          orgId,
+          error: err,
+        });
+        return {};
+      })) as { sessionId?: string };
       logEvent("info", {
         component: "org-actor",
         event: "drain-dispatched",

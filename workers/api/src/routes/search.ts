@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { describeRoute, resolver } from "hono-openapi";
+import { logEvent } from "@releases/lib/log-event";
 import { wantsMarkdown, markdownResponse } from "../middleware/content-negotiation.js";
 import { searchToMarkdown } from "@releases/rendering/formatters.js";
 import {
@@ -642,7 +643,10 @@ searchRoutes.get(
         kind: kindFilter,
         since,
         until,
-      }).catch(() => [] as RawSearchReleaseRow[]);
+      }).catch((err) => {
+        logEvent("warn", { component: "search", event: "fts-query-failed", error: err });
+        return [] as RawSearchReleaseRow[];
+      });
       let rawReleases = ftsRows;
       if (rawReleases.length === 0 && (orgs.length > 0 || catalog.length > 0)) {
         rawReleases = await searchReleasesFromMatchedEntities(
