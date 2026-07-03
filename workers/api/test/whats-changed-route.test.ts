@@ -148,6 +148,48 @@ describe("GET /v1/whats-changed", () => {
     expect(body.entries).toEqual([]);
   });
 
+  it("truncates when entries have empty summaries (budget floor)", async () => {
+    const db = mkDb();
+    await db
+      .insert(organizations)
+      .values([{ id: "org_wide", slug: "wide", name: "Wide", category: "developer-tools" }]);
+    await db.insert(sources).values([
+      {
+        id: "src_wide",
+        slug: "wide-sdk",
+        name: "Wide SDK",
+        type: "github",
+        url: "https://github.com/wide/sdk",
+        orgId: "org_wide",
+      },
+    ]);
+    const rows = Array.from({ length: 320 }, (_, i) => {
+      const minor = i % 10;
+      const patch = Math.floor(i / 10);
+      const version = `1.${patch}.${minor}`;
+      return {
+        id: `rel_wide_${i}`,
+        sourceId: "src_wide",
+        version,
+        versionSort: computeVersionSort(version),
+        title: "",
+        titleGenerated: "",
+        summary: "",
+        breaking: "unknown" as const,
+        publishedAt: new Date(2026, 0, 1 + i).toISOString(),
+        url: `https://github.com/wide/sdk/releases/tag/${version}`,
+        content: "",
+      };
+    });
+    await db.insert(releases).values(rows);
+    const res = await call(mkApp(db), "package=wide-sdk&from=1.0.0&to=1.31.9");
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as WhatsChangedResponse;
+    expect(body.truncated).toBe(true);
+    expect(body.entries.length).toBeLessThan(320);
+    expect(body.count).toBe(body.entries.length);
+  });
+
   it("400s when from/to are missing", async () => {
     const db = mkDb();
     await seed(db);
