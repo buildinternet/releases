@@ -12,6 +12,7 @@
 
 import { DurableObject } from "cloudflare:workers";
 import type { Env } from "./types.js";
+import { buildPlaybookMarkdown, type PlaybookPage } from "./playbook-block.js";
 import { buildAnthropicClient } from "@releases/lib/anthropic-client.js";
 import { estimateCost } from "@releases/lib/anthropic-pricing.js";
 import {
@@ -86,27 +87,6 @@ import {
 function truncate(text: string, maxLength: number): string {
   if (text.length <= maxLength) return text;
   return text.slice(0, maxLength) + "…";
-}
-
-/** Short "Mon D" date, e.g. "Apr 11". Mirrors the helper in `@releases/ai-internal/playbook`. */
-function formatShortDate(iso: string): string {
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return iso;
-  const months = [
-    "Jan",
-    "Feb",
-    "Mar",
-    "Apr",
-    "May",
-    "Jun",
-    "Jul",
-    "Aug",
-    "Sep",
-    "Oct",
-    "Nov",
-    "Dec",
-  ];
-  return `${months[d.getMonth()]} ${d.getDate()}`;
 }
 
 /**
@@ -1275,14 +1255,9 @@ ${idList}
    * `manage_playbook(action=get)` as its first step, eliminating a class of
    * tool-name hallucinations (e.g. `get_source_guide`) observed in production.
    *
-   * The header and notes carry different authority (#1873) and are labeled
-   * accordingly, mirroring `assemblePlaybook()` in `@releases/ai-internal`
-   * (not imported here — discovery is a carved-out workspace without that
-   * package wired in; keep this in sync by hand if that framing changes).
-   * The header is derived mechanically from source config, so it's ground
-   * truth. The notes are a prior agent run's inferences — re-feeding them
-   * with the header's authority lets a stale guess self-reinforce across
-   * runs, so they're rendered as unverified hypotheses to confirm, not facts.
+   * The header and notes carry different authority (#1873) — see
+   * `buildPlaybookMarkdown` in `playbook-block.ts` for the two-tier framing,
+   * shared with the extraction lane's `getOrgPlaybook`.
    */
   private async loadPlaybookBlock(
     fetcher: { fetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response> },
@@ -1295,21 +1270,9 @@ ${idList}
         headers: { Authorization: `Bearer ${apiKey}` },
       });
       if (!res.ok) return "";
-      const page = (await res.json()) as {
-        content?: string | null;
-        notes?: string | null;
-        updatedAt?: string | null;
-      } | null;
-      const header = page?.content?.trim() ?? "";
-      const notes = page?.notes?.trim() ?? "";
-      const age =
-        notes && page?.updatedAt ? ` — last written ${formatShortDate(page.updatedAt)}` : "";
-      const notesBlock = notes
-        ? `## Prior observations (unverified${age})\n\n> These are a prior agent run's inferences, not curator- or config-verified facts. Treat them as hypotheses: confirm before relying on them, and correct or remove any that no longer hold.\n\n${notes}`
-        : "";
-      const parts = [header, notesBlock].filter(Boolean);
-      if (parts.length === 0) return "";
-      const body = parts.join("\n\n");
+      const page = (await res.json()) as PlaybookPage | null;
+      const body = buildPlaybookMarkdown(page);
+      if (!body) return "";
       const displayBody =
         body.length > MAX_PLAYBOOK_CHARS
           ? `${body.slice(0, MAX_PLAYBOOK_CHARS)}\n\n_[Playbook truncated from ${body.length} to ${MAX_PLAYBOOK_CHARS} characters. Call \`manage_playbook(action=get)\` for the full content if a trap or instruction looks cut off.]_`
