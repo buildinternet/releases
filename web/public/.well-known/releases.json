@@ -1,5 +1,6 @@
 {
   "$schema": "https://releases.sh/schemas/releases.json",
+  "version": 1,
   "name": "Releases",
   "description": "The changelog & release-notes registry for developers and AI agents.",
   "category": "developer-tools",

@@ -9,6 +9,7 @@ describe("ReleasesJsonConfigSchema", () => {
   it("accepts a full org-scope file", () => {
     const r = ReleasesJsonConfigSchema.safeParse({
       $schema: "https://releases.sh/schemas/releases.json",
+      version: 1,
       name: "Acme",
       description: "CI for teams.",
       category: "developer-tools",
@@ -46,6 +47,16 @@ describe("ReleasesJsonConfigSchema", () => {
   it("rejects an over-long notice message", () => {
     const r = ReleasesJsonConfigSchema.safeParse({ notice: { message: "x".repeat(281) } });
     expect(r.success).toBe(false);
+  });
+
+  it("accepts an integer version", () => {
+    expect(ReleasesJsonConfigSchema.safeParse({ version: 1, name: "Acme" }).success).toBe(true);
+  });
+
+  it("rejects a zero, negative, or non-integer version", () => {
+    expect(ReleasesJsonConfigSchema.safeParse({ version: 0 }).success).toBe(false);
+    expect(ReleasesJsonConfigSchema.safeParse({ version: -1 }).success).toBe(false);
+    expect(ReleasesJsonConfigSchema.safeParse({ version: 1.5 }).success).toBe(false);
   });
 
   it("strips unknown top-level keys", () => {

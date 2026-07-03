@@ -26,6 +26,7 @@ Host this at `https://yourdomain.com/.well-known/releases.json`:
 ```json
 {
   "$schema": "https://releases.sh/schemas/releases.json",
+  "version": 1,
   "name": "Acme",
   "description": "CI for teams that ship.",
   "category": "developer-tools",
@@ -43,6 +44,7 @@ Host this at the root of the repo whose releases we index (e.g. `github.com/acme
 ```json
 {
   "$schema": "https://releases.sh/schemas/releases.json",
+  "version": 1,
   "product": {
     "name": "Acme Cloud",
     "slug": "acme-cloud",
@@ -53,6 +55,8 @@ Host this at the root of the repo whose releases we index (e.g. `github.com/acme
 ```
 
 The `$schema` line is optional but recommended — editors that understand JSON Schema will validate the file and autocomplete fields against [the published schema](https://releases.sh/schemas/releases.json).
+
+`version` is the manifest format version — currently `1`. It's optional (a file without it is read as v1), and we only bump it if the file's shape ever changes in a breaking way, so you rarely need to touch it. Including it makes the format explicit and future-proofs how tools read your file.
 
 ## What we honor — and what we never touch
 
