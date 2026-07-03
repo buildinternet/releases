@@ -39,6 +39,11 @@ export const whatsChangedRoutes = new Hono<Env>();
  *  bracket. A range wider than this is truncated (newest entries kept). */
 const TOKEN_BUDGET = CHANGELOG_TOKEN_BRACKETS[CHANGELOG_TOKEN_BRACKETS.length - 1];
 
+/** Minimum token charge per entry so rows with empty summary/title still count
+ *  toward the budget (estimateTokens("") === 0 otherwise). */
+const MIN_ENTRY_TOKEN_COST = 64;
+const MAX_ENTRIES = Math.floor(TOKEN_BUDGET / MIN_ENTRY_TOKEN_COST);
+
 const EcosystemSchema = z.enum(["npm", "pypi", "github"]);
 
 const WhatsChangedEntrySchema = z.object({
@@ -275,8 +280,9 @@ whatsChangedRoutes.get(
     const kept: typeof inRange = [];
     for (let i = inRange.length - 1; i >= 0; i--) {
       const r = inRange[i];
-      const cost = estimateTokens(r.summary ?? r.titleGenerated ?? r.title ?? "");
-      if (spent + cost > TOKEN_BUDGET && kept.length > 0) {
+      const text = r.summary ?? r.titleGenerated ?? r.title ?? "";
+      const cost = Math.max(estimateTokens(text), MIN_ENTRY_TOKEN_COST);
+      if ((spent + cost > TOKEN_BUDGET && kept.length > 0) || kept.length >= MAX_ENTRIES) {
         truncated = true;
         break;
       }
