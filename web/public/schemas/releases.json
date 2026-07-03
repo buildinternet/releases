@@ -9,6 +9,11 @@
       "type": "string",
       "format": "uri"
     },
+    "version": {
+      "type": "integer",
+      "exclusiveMinimum": 0,
+      "maximum": 1000
+    },
     "name": {
       "type": "string",
       "minLength": 1,

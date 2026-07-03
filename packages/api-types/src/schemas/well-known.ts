@@ -26,6 +26,11 @@ export const ReleasesJsonProductSchema = z
 export const ReleasesJsonConfigSchema = z
   .object({
     $schema: z.url().optional(),
+    // Manifest format version. Currently 1; optional — a missing value is read as
+    // v1. Bumped only on a breaking change to this file's shape, so a consumer can
+    // branch on it without fetching the JSON Schema. Lenient/fail-open: the
+    // reconciler ignores it entirely, so an unexpected value never fails the sync.
+    version: z.number().int().positive().max(1000).optional(),
     // Org scope
     name: z.string().min(1).max(120).optional(),
     description: z.string().max(2000).optional(),

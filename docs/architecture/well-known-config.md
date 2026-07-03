@@ -18,6 +18,7 @@ repos groups those sources under one product.
 ```json
 {
   "$schema": "https://releases.sh/schemas/releases.json",
+  "version": 1,
   "name": "Acme",
   "description": "CI for teams that ship.",
   "category": "developer-tools",
@@ -33,6 +34,7 @@ repos groups those sources under one product.
 ```json
 {
   "$schema": "https://releases.sh/schemas/releases.json",
+  "version": 1,
   "product": { "name": "Acme Cloud", "slug": "acme-cloud", "category": "cloud", "kind": "platform" }
 }
 ```
@@ -54,6 +56,12 @@ repos groups those sources under one product.
   same product cannot fight over its fields.
 - Everything **fails closed**: a missing/invalid/oversized/SSRF-blocked file is a
   safe no-op.
+- **`version`** is a manifest format signal, not a reconciled field: it's
+  validated (optional positive integer, currently `1`) but the reconciler never
+  reads it, so it's neither honored nor applied to any entity. A missing value is
+  read as v1; the field exists so a consumer can branch on the file's shape
+  without fetching the JSON Schema, and so a future breaking change to the shape
+  is expressible.
 
 ## Triggers
 
