@@ -14,7 +14,18 @@ import {
   type ExtractionGuidance,
 } from "./shared.js";
 import { handleGetSlice, handleQueryJson } from "./tool-handlers.js";
+import { formatRejectionMessage, validateRecords } from "./record-validate.js";
 import type { ExtractDeps, ExtractedEntry } from "./types.js";
+
+/**
+ * Per-run cap on in-band validation retry rounds (#1874). Without a cap, a
+ * model stuck emitting the same bad record forever would burn the entire
+ * MAX_ROUNDS budget on retries with no progress. One retry round is enough to
+ * let the model self-correct; a second miss falls through to acceptance so
+ * post-hoc validation (the existing backstop) handles it instead of stalling
+ * the loop.
+ */
+const MAX_VALIDATION_RETRIES = 2;
 
 function stripCacheControlFromPrior(msgs: Anthropic.MessageParam[]): void {
   for (const msg of msgs) {
@@ -116,6 +127,7 @@ export async function extractWithTools(
   let cacheWriteTokens = 0;
   let toolRounds = 0;
   let toolChars = 0;
+  let validationRetries = 0;
 
   const makePartial = (): LoopPartialUsage => ({
     totalInput,
@@ -169,17 +181,71 @@ export async function extractWithTools(
         );
         throw new LoopFallbackError("tool_error", makePartial());
       }
-      return {
-        entries: input.releases as ExtractedEntry[],
-        totalInput,
-        totalOutput,
-        cacheReadTokens,
-        cacheWriteTokens,
-        toolRounds,
-        toolChars,
-        mode: preview.mode,
-        hitMaxTokens: false,
-      };
+
+      const entries = input.releases as ExtractedEntry[];
+
+      // In-band validation (#1874): give the model a chance to self-correct
+      // before treating this as terminal. Bounded by MAX_VALIDATION_RETRIES so
+      // a model that keeps re-submitting the same bad record can't consume the
+      // whole round budget — after the retry cap, accept as-is and let the
+      // existing post-hoc validation (the backstop) handle any stragglers.
+      const rejections =
+        validationRetries < MAX_VALIDATION_RETRIES
+          ? validateRecords(entries, { sourceUrl: opts.sourceUrl })
+          : [];
+
+      if (rejections.length === 0) {
+        return {
+          entries,
+          totalInput,
+          totalOutput,
+          cacheReadTokens,
+          cacheWriteTokens,
+          toolRounds,
+          toolChars,
+          mode: preview.mode,
+          hitMaxTokens: false,
+        };
+      }
+
+      // Reject in-band: respond to the extract_releases tool_use with an
+      // actionable message instead of ending the loop, so the model can
+      // resubmit corrected entries on the next round. Every OTHER tool_use in
+      // this same turn (there shouldn't normally be any alongside a terminal
+      // call, but the API allows multiple blocks) still needs a tool_result.
+      validationRetries++;
+      messages.push({ role: "assistant", content: response.content });
+
+      const toolResults: Anthropic.ToolResultBlockParam[] = toolUses.map((tu) => {
+        if (tu.id === terminal.id) {
+          let message = formatRejectionMessage(rejections, entries.length);
+          // Same truncation pattern as the sibling tool-result branch below —
+          // an oversized rejection message (e.g. many rejected entries with
+          // long reasons) must not blow past MAX_TOTAL_TOOL_CHARS and force
+          // an early exit before the model gets a chance to retry.
+          const remaining = MAX_TOTAL_TOOL_CHARS - toolChars;
+          if (message.length > remaining) {
+            const suffix = "\n[truncated — tool-result budget exhausted]";
+            message =
+              remaining > suffix.length
+                ? message.slice(0, remaining - suffix.length) + suffix
+                : message.slice(0, Math.max(0, remaining));
+          }
+          toolChars += message.length;
+          return { type: "tool_result", tool_use_id: tu.id, content: message };
+        }
+        return {
+          type: "tool_result",
+          tool_use_id: tu.id,
+          content: "[skipped — extract_releases in this turn was rejected, see its result]",
+        };
+      });
+
+      stripCacheControlFromPrior(messages);
+      toolResults[toolResults.length - 1]!.cache_control = { type: "ephemeral" };
+      messages.push({ role: "user", content: toolResults });
+      toolRounds++;
+      continue;
     }
 
     if (toolUses.length === 0) {
