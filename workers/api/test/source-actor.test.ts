@@ -66,6 +66,7 @@ function mkActor(
   db: Db,
   opts: {
     failCreateIds?: Set<string>;
+    throwOnCreate?: boolean;
     orgDrainOn?: boolean;
     orgActorCalls?: Array<{ name: string; id: string }>;
   } = {},
@@ -98,6 +99,7 @@ function mkActor(
     POLL_AND_FETCH_WORKFLOW: {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       create: async (o: any) => {
+        if (opts.throwOnCreate) throw new Error("control plane unavailable");
         if (opts.failCreateIds?.has(o.id)) throw new Error(`duplicate instance id: ${o.id}`);
         created.push({ id: o.id, params: o.params });
       },
@@ -179,6 +181,21 @@ describe("SourceActor.alarm", () => {
     const mirror = await metaSourceActor(db, "src_due");
     expect(mirror?.managed).toBe(true);
     expect(typeof mirror?.nextAlarmAt).toBe("string");
+  });
+
+  it("schedules short retry when workflow.create fails (non-duplicate)", async () => {
+    const db = mkDb();
+    seedSource(db, "src_fail", { lastPolledAt: new Date(Date.now() - 10 * HOUR).toISOString() });
+    const h = mkActor(db, { throwOnCreate: true });
+    h.store.set("sourceId", "src_fail");
+
+    const before = Date.now();
+    await h.actor.alarm();
+
+    expect(h.created).toHaveLength(0);
+    const alarm = h.alarmAt()!;
+    expect(alarm).toBeGreaterThan(before + 9 * 60 * 1000);
+    expect(alarm).toBeLessThan(before + 11 * 60 * 1000);
   });
 
   it("does not fetch when not yet due — reschedules to nextDueAt", async () => {
