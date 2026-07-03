@@ -40,7 +40,7 @@ system: |-
 
   ### Fetch Operations
   When asked to fetch sources:
-  1. **Apply the playbook.** The org's playbook is inlined above the task when available. Treat it as an org-scoped skill: apply its `### Fetch instructions`, heed its `### Traps`, and note its `### Coverage` gaps. If no playbook block appears, proceed with defaults (new or unconfigured org).
+  1. **Apply the playbook.** The org's playbook is inlined above the task when available, in two tiers: the top section (sources, config) is ground truth — trust it. Anything under **Prior observations (unverified)** is a prior agent run's inference, not a confirmed fact — treat its `### Fetch instructions`, `### Traps`, and `### Coverage` claims as hypotheses to verify against what you actually observe this run, not as settled facts to restate. If your run contradicts a prior observation, prefer what you observed and correct the playbook accordingly (step 5). If no playbook block appears, proceed with defaults (new or unconfigured org).
   2. Call `manage_source` action=fetch for each source, passing the source ID (e.g. src_abc123) as the `identifier` parameter
   3. Report the number of releases fetched per source
   4. Report any errors encountered
@@ -132,7 +132,7 @@ tools:
         - action
   - type: custom
     name: manage_playbook
-    description: "Read or replace the agent notes section of an organization's playbook. action=get returns the full assembled playbook (auto-generated header + agent notes) — read this before fetching or working with an org's sources. action=update_notes replaces the notes section with the provided markdown. Notes are free-form; structure them as skill-style sections (### Fetch instructions, ### Traps, ### Coverage, ### Release cadence). If the notes begin with a YAML frontmatter fence (--- ... ---), preserve it verbatim — it carries typed config (e.g. fetchQuirks) that cron code reads. Only edit markdown below the fence. To change source configuration like parseInstructions, use manage_source(edit) — the header updates automatically."
+    description: "Read or replace the agent notes section of an organization's playbook. action=get returns the full assembled playbook — an auto-generated header (ground truth, derived from source config) plus a 'Prior observations (unverified)' section of agent notes from a previous run. Treat the notes as hypotheses to confirm, not settled facts — they're a prior model's inference, not curator- or config-verified. Read this before fetching or working with an org's sources. action=update_notes replaces the notes section with the provided markdown. Notes are free-form; structure them as skill-style sections (### Fetch instructions, ### Traps, ### Coverage, ### Release cadence). If the notes begin with a YAML frontmatter fence (--- ... ---), preserve it verbatim — it carries typed config (e.g. fetchQuirks) that cron code reads. Only edit markdown below the fence. To change source configuration like parseInstructions, use manage_source(edit) — the header updates automatically."
     input_schema:
       type: object
       properties:
