@@ -1,5 +1,6 @@
 import { deriveSigningKey, signPayload } from "@releases/core-internal/webhook-sign";
 import { formatSlackMessage } from "@releases/rendering/slack-message";
+import { assertPublicWebhookTarget } from "../../api/src/webhooks/url-safety.js";
 import type { DeliveryMessage } from "../../api/src/webhooks/types.js";
 import type { ErrorCode, Outcome } from "./ae.js";
 
@@ -17,6 +18,7 @@ export interface DeliverOptions {
   fetchImpl?: typeof fetch;
   /** Returns current time as unix seconds. Used for HMAC timestamp + header. */
   now?: () => number;
+  resolveDns?: (host: string) => Promise<string[]>;
 }
 
 const WEBHOOK_VERSION = "1";
@@ -29,6 +31,19 @@ export async function deliver(
 ): Promise<DeliveryResult> {
   const fetchImpl = opts.fetchImpl ?? fetch;
   const now = opts.now ?? (() => Math.floor(Date.now() / 1000));
+
+  const targetError = await assertPublicWebhookTarget(message.url, {
+    resolveDns: opts.resolveDns,
+  });
+  if (targetError) {
+    return {
+      outcome: "perm_fail",
+      httpStatus: 0,
+      latencyMs: 0,
+      errorMessage: targetError,
+      errorCode: "ssrf_blocked",
+    };
+  }
 
   let body: string;
   let headers: Record<string, string>;
