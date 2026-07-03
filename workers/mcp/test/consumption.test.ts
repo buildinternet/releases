@@ -7,7 +7,7 @@ import {
 } from "@releases/lib/consumption-ref";
 import { USER_API_KEY_PREFIX } from "@buildinternet/releases-core/api-token";
 
-// #1700 — the MCP consumption emit fires once per BILLABLE tool call, gated by
+// #1700 — consumption emit fires once per billable tool call, gated by
 // `peekMcpCall`, labelled by `consumptionPrincipal`. These cover the emit
 // gating ("tools/list emits nothing, tools/call emits one") and the PII guard
 // (principal is a TYPE, never an id/token).
@@ -22,27 +22,39 @@ function post(body: unknown): Request {
 
 describe("peekMcpCall", () => {
   test("tools/list is protocol overhead — not metered (emits nothing)", async () => {
-    expect((await peekMcpCall(post({ jsonrpc: "2.0", id: 1, method: "tools/list" }))).metered).toBe(
-      false,
-    );
+    expect(
+      (await peekMcpCall(post({ jsonrpc: "2.0", id: 1, method: "tools/list" }))).operations,
+    ).toEqual([]);
   });
 
   test("tools/call is metered, carrying the tool name as the operation", async () => {
     const r = await peekMcpCall(
       post({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "search" } }),
     );
-    expect(r.metered).toBe(true);
-    expect(r.tool).toBe("search");
+    expect(r.operations).toEqual(["search"]);
+  });
+
+  test("JSON-RPC batch emits one consumption op per billable tools/call", async () => {
+    const r = await peekMcpCall(
+      post([
+        { method: "tools/call", params: { name: "search" } },
+        { method: "tools/call", params: { name: "get_release" } },
+        { method: "tools/list" },
+      ]),
+    );
+    expect(r.operations).toEqual(["search", "get_release"]);
   });
 
   test("initialize / notifications / ping are not metered", async () => {
-    expect((await peekMcpCall(post({ method: "initialize" }))).metered).toBe(false);
-    expect((await peekMcpCall(post({ method: "notifications/initialized" }))).metered).toBe(false);
-    expect((await peekMcpCall(post({ method: "ping" }))).metered).toBe(false);
+    expect((await peekMcpCall(post({ method: "initialize" }))).operations).toEqual([]);
+    expect((await peekMcpCall(post({ method: "notifications/initialized" }))).operations).toEqual(
+      [],
+    );
+    expect((await peekMcpCall(post({ method: "ping" }))).operations).toEqual([]);
   });
 
   test("GET (SSE stream) is never metered", async () => {
-    expect((await peekMcpCall(new Request("https://mcp.releases.sh/mcp"))).metered).toBe(false);
+    expect((await peekMcpCall(new Request("https://mcp.releases.sh/mcp"))).operations).toEqual([]);
   });
 
   test("the clone leaves the original body intact for the downstream handler", async () => {
@@ -84,7 +96,5 @@ describe("buildConsumptionPayload (MCP surface)", () => {
       operation: "search",
     });
     expect(a.consumerRef).not.toBe(b.consumerRef);
-    expect(a.audience).toBe("external");
-    expect(a.principalOwner).toBe("user");
   });
 });

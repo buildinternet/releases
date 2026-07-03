@@ -114,22 +114,21 @@ export async function emitMcpConsumption(identity: McpIdentity, operation: strin
  * `tools/call`, else the method; `"batch"` for an array body; `null` on parse
  * failure. Reuses `isBillableMethod` so protocol overhead is never counted.
  */
-export async function peekMcpCall(
-  request: Request,
-): Promise<{ metered: boolean; tool: string | null }> {
-  if (request.method !== "POST") return { metered: false, tool: null };
+export async function peekMcpCall(request: Request): Promise<{ operations: string[] }> {
+  if (request.method !== "POST") return { operations: [] };
   try {
     const body = (await request.clone().json()) as unknown;
     if (Array.isArray(body)) {
-      return {
-        metered: body.some((m) => isBillableMethod((m as { method?: unknown })?.method)),
-        tool: "batch",
-      };
+      const operations = body
+        .filter((m) => isBillableMethod((m as { method?: unknown })?.method))
+        .map((m) => mcpOperationLabel(m) ?? "unknown");
+      return { operations };
     }
     const method = (body as { method?: unknown })?.method;
-    return { metered: isBillableMethod(method), tool: mcpOperationLabel(body) };
+    if (!isBillableMethod(method)) return { operations: [] };
+    return { operations: [mcpOperationLabel(body) ?? "unknown"] };
   } catch {
-    return { metered: true, tool: null }; // parse failure → meter (safe)
+    return { operations: ["unknown"] }; // parse failure → meter once (safe)
   }
 }
 
