@@ -1,9 +1,8 @@
 # Feature flags (Cloudflare Flagship)
 
-The Tier-1 boolean operational flags (kill switches + rollout/rollback gates) are
-evaluated at runtime through the `FLAGS` Flagship binding, with the wrangler var kept as
-an automatic fallback. Evaluation order is **Flagship value → wrangler var (`=== "true"`)
-→ hardcoded default**, failing open to the var on any error.
+Runtime on/off switches — kill switches and rollout gates that operators can flip from the Cloudflare dashboard without a deploy. Before adding one, read the convention in AGENTS.md: **the default is no flag**; ship features enabled and reach for a flag only when you can name the kill-switch, staged-rollout, or operational need it serves.
+
+Flags are boolean only (numeric tunables and secrets stay in wrangler vars / Secrets Store) and are evaluated at runtime through the `FLAGS` Flagship binding, with the wrangler var kept as an automatic fallback. Evaluation order is **Flagship value → wrangler var (`=== "true"`) → hardcoded default**, failing open to the var on any error.
 
 - Registry + evaluator: `@releases/lib/flags` (`FLAGS` registry, `flag(binding, varValue, def)`).
 - Apps (Flagship has no in-app environment concept, so prod and staging are separate apps):

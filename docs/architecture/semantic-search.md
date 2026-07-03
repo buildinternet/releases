@@ -1,6 +1,6 @@
 # Semantic search
 
-Hybrid FTS5 + Cloudflare Vectorize search across three indexes, fused with Reciprocal Rank Fusion.
+Search on releases.sh is **hybrid**: every query runs both a lexical pass (SQLite FTS5) and a vector pass (Cloudflare Vectorize), and the two result lists are fused with Reciprocal Rank Fusion so exact-term matches and "means the same thing" matches both surface. Embeddings are generated automatically at ingest and never block writes; when Vectorize or the embedding provider is unavailable, search degrades to lexical rather than failing. This doc covers the three indexes, the ingest and backfill paths, ranking (including the recency boost and its tuning knobs), and the debugging entry points — start with `releases admin embed status` when results look wrong.
 
 ## Indexes
 

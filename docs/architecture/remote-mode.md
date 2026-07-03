@@ -1,6 +1,14 @@
-# API worker (D1)
+# The API worker (remote mode)
 
-The API worker at `workers/api/` is the authoritative data plane — every read and write goes through it. There is no local-SQLite path anymore; the OSS CLI ([`buildinternet/releases-cli`](https://github.com/buildinternet/releases-cli)) is a pure HTTP client that talks to `RELEASES_API_URL` (default `https://api.releases.sh`), and all the internal workers (MCP, discovery, webhooks, cron) bind directly to D1.
+This is the reference for the API worker at `workers/api/` — the heart of the backend. Every read and write in the system goes through it: the OSS CLI ([`buildinternet/releases-cli`](https://github.com/buildinternet/releases-cli)) is a pure HTTP client talking to `RELEASES_API_URL` (default `https://api.releases.sh`), the web frontend and MCP server are clients too, and the internal workers (MCP, discovery, webhooks, cron) bind directly to the same D1 database. There is no local-SQLite path anymore; "remote mode" — everything served from Cloudflare — is the only mode.
+
+It's the longest doc in this directory because the worker owns a lot. Jump to what you need:
+
+- **Who can call what** → [Auth model](#auth-model) (all the credential lanes: root key, scoped `relk_` tokens, user `relu_` keys, sessions, OAuth JWTs) and [Role provisioning](#role-provisioning-admin--curator).
+- **Traffic protection** → [Rate limiting](#rate-limiting) and the [auth brute-force limiter](#auth-endpoint-brute-force-limiter-apiauth).
+- **Schema changes** → [Migrations](#migrations).
+- **When and how sources get fetched** → [Sessions + cron](#sessions--cron), [SourceActor](#sourceactor--per-source-fetch-scheduling-1776) / [OrgActor](#orgactor--per-org-scrapeagent-drain-1777), and [Feed change detection + retier](#feed-change-detection--retier).
+- **Why a source's display URL differs from what we fetch** → [Display URL vs. fetch routing](#display-url-vs-fetch-routing).
 
 ## Auth model
 

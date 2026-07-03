@@ -1,6 +1,6 @@
 # Error responses
 
-One wire shape for every non-2xx response — a nested envelope. Replaced the ~6 flat `{ error: "..." }` conventions that coexisted pre-standardization (epic #1830).
+Every non-2xx response from the API uses one wire shape — a nested envelope — so clients can branch on a stable `type`/`code` instead of parsing messages. In route code the rule is simple: **`throw` a `ReleasesError` subclass and let `respondError` serialize it; never hand-roll `c.json({ error })`.** This replaced the ~6 flat `{ error: "..." }` conventions that coexisted pre-standardization (epic #1830).
 
 ```json
 { "error": { "code": "not_found", "type": "not_found", "message": "…", "details": {} } }

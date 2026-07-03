@@ -1,6 +1,8 @@
 # Agent Architecture
 
-Two Anthropic managed agents handle changelog work, sharing the same tools (`AGENT_TOOLS`) and skills:
+Most ingest is deterministic code, but the judgment-heavy work — onboarding a new company, evaluating a messy changelog page, recovering a broken source — is done by AI agents. This doc covers the two Anthropic-hosted **managed agents** that do that work in production (how they deploy, what tools they see, how their skills and per-org playbooks layer), plus how the same skill corpus serves local Claude Code development. If you're changing a prompt, a tool, or a skill, the [Where to look](#where-to-look) section maps each change to its file and deploy path.
+
+The two agents share the same tools (`AGENT_TOOLS`) and skills:
 
 - **Discovery agent** (`claude-sonnet-5`) — Onboarding, evaluation, and judgment-heavy tasks. System prompt: `src/shared/discovery-prompt.ts`.
 - **Worker agent** (`claude-haiku-4-5`) — Fetches, updates, and mechanical operations at ~3x lower cost. System prompt: `src/shared/worker-prompt.ts`. The discovery worker DO routes `mode: "update"` sessions to this agent via `ANTHROPIC_WORKER_AGENT_ID`.

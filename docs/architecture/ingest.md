@@ -1,6 +1,6 @@
 # Ingest pipeline
 
-The fetch → parse → insert path: how a source's content becomes `releases` rows. This doc covers per-item processing (adapter routing, dedup, exclusion, and the ingest-time AI passes). The orchestration around it — cron scheduling, the poll-and-fetch / scrape-agent Workflows, smear/jitter, and retier — lives in [remote-mode.md](remote-mode.md).
+How a source's published content becomes `releases` rows in the database — the fetch → parse → insert path that everything downstream (search, feeds, webhooks, the web) is built on. This doc covers what happens to each item on the way in: which adapter fetches it, how duplicates are avoided, what gets excluded or suppressed, and the cheap AI passes that run between parse and insert (summaries, marketing filtering, thin-feed enrichment). The orchestration _around_ it — cron scheduling, the poll-and-fetch / scrape-agent Workflows, smear/jitter, and retier — lives in [remote-mode.md](remote-mode.md).
 
 ## Source types and adapter routing
 
