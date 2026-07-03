@@ -48,6 +48,10 @@ export interface RawSearchReleaseRow {
   type: ReleaseType;
   titleGenerated: string | null;
   titleShort: string | null;
+  /** Breaking-change level (#1696/#1710). `"unknown"` fail-open default; NULL
+   *  only on rows predating the column. Optional because the hybrid (Vectorize)
+   *  hit-builder path constructs rows without it. */
+  breaking?: string | null;
   /** Number of demoted siblings rolling up via `release_coverage` (0 when standalone). */
   coverageCount: number;
 }
@@ -260,6 +264,7 @@ export async function searchReleasesFts(
            COALESCE(r.summary, SUBSTR(r.content, 1, 150)) as summary,
            r.title_generated as titleGenerated,
            r.title_short as titleShort,
+           r.breaking as breaking,
            r.content as content,
            r.media as media,
            r.published_at as publishedAt,
@@ -322,6 +327,7 @@ export async function searchReleasesFromMatchedEntities(
            COALESCE(r.summary, SUBSTR(r.content, 1, 150)) as summary,
            r.title_generated as titleGenerated,
            r.title_short as titleShort,
+           r.breaking as breaking,
            r.content as content,
            r.media as media,
            r.published_at as publishedAt,

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { RELEASE_TYPES } from "@buildinternet/releases-core/schema";
+import { BREAKING_LEVELS } from "@buildinternet/releases-core/breaking";
 import { CATEGORIES } from "@buildinternet/releases-core/categories";
 import { isValidNoticeCoordinate } from "@buildinternet/releases-core/notice";
 
@@ -109,6 +110,12 @@ export const ReleaseItemSchema = z.object({
   // `.optional()` for the same mid-deploy / pinned-worker reason as `type`.
   titleGenerated: z.string().nullable().optional(),
   titleShort: z.string().nullable().optional(),
+  // Machine-readable breaking-change level (#1696, surfaced on read paths in
+  // #1710). `.optional()` for mid-deploy / pinned-worker tolerance and because
+  // rows predating the column omit it; absent or `"unknown"` means not
+  // classified (the fail-open default). List paths carry `breaking` only —
+  // `migrationNotes` stays detail-route-only to keep list payloads slim.
+  breaking: z.enum(BREAKING_LEVELS).optional(),
   // Count of demoted siblings rolling up into this row via `release_coverage`
   // (0 when standalone). Lets list views show a cluster indicator without a
   // detail-page round trip. `.optional()` — older API responses and pinned

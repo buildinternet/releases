@@ -350,6 +350,8 @@ export interface LatestReleaseItem {
   type: string;
   title: string | null;
   summary: string | null;
+  /** Breaking-change level (#1696/#1710). Absent or "unknown" = not classified. */
+  breaking?: "unknown" | "none" | "minor" | "major";
   publishedAt: string | null;
   url: string | null;
   media: MediaItem[];

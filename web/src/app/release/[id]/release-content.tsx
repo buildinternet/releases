@@ -153,12 +153,31 @@ export function buildDetailComponents(media: MediaItem[]): Record<string, any> {
   };
 }
 
+/**
+ * Clearly-labeled migration-notes block (#1710). The notes are the plain-text
+ * `releases.migration_notes` lifted from the body by the ingest classifier
+ * (<=3 sentences) — rendered as text, NOT markdown-parsed HTML. Renders
+ * nothing when absent.
+ */
+export function MigrationNotes({ notes }: { notes?: string | null }) {
+  if (!notes || !notes.trim()) return null;
+  return (
+    <aside className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/60 rounded-lg p-5 mb-6">
+      <div className="text-[11px] uppercase tracking-wide text-amber-600 dark:text-amber-500 font-medium mb-2">
+        Migration notes
+      </div>
+      <p className="m-0 text-[15px] leading-relaxed text-stone-700 dark:text-stone-200">{notes}</p>
+    </aside>
+  );
+}
+
 export function ReleaseContent({
   content,
   title,
   media,
   repoUrl,
   sourceUrl,
+  migrationNotes,
 }: {
   content: string;
   title: string;
@@ -168,6 +187,9 @@ export function ReleaseContent({
    *  absolutize root-relative links in the body so they resolve to the vendor's
    *  domain rather than releases.sh. */
   sourceUrl?: string | null;
+  /** Plain-text upgrade steps (`releases.migration_notes`, #1710); renders a
+   *  labeled block above the body when present. */
+  migrationNotes?: string | null;
 }) {
   const base = originFromUrl(sourceUrl);
   const rawContent = stripLeadingTitle(content, title);
@@ -180,22 +202,28 @@ export function ReleaseContent({
   // space reads as "intentionally empty" rather than a render error.
   if (!markdownContent.trim() && media.length === 0) {
     return (
-      <p className="text-[15px] leading-relaxed text-stone-500 dark:text-stone-400 italic">
-        This release contains no details.
-      </p>
+      <>
+        <MigrationNotes notes={migrationNotes} />
+        <p className="text-[15px] leading-relaxed text-stone-500 dark:text-stone-400 italic">
+          This release contains no details.
+        </p>
+      </>
     );
   }
 
   return (
-    <div className="prose prose-stone dark:prose-invert max-w-none text-[15px] leading-relaxed [&_h1]:text-lg [&_h1]:font-semibold [&_h1]:mt-4 [&_h1]:mb-2 [&_h2]:text-base [&_h2]:font-semibold [&_h2]:mt-4 [&_h2]:mb-2 [&_h3]:text-[15px] [&_h3]:font-semibold [&_h3]:mt-3 [&_h3]:mb-1 [&_ul]:my-2 [&_ul]:pl-5 [&_li]:my-0.5 [&_p]:my-2 [&_a]:text-stone-600 dark:[&_a]:text-stone-400 [&_a]:no-underline [&_code]:text-sm [&_code]:bg-stone-100 dark:[&_code]:bg-stone-800 [&_code]:px-1 [&_code]:rounded [&_code::before]:content-none [&_code::after]:content-none">
-      <ReactMarkdown
-        remarkPlugins={remarkPlugins}
-        rehypePlugins={[rehypeShikiPlugin]}
-        components={components}
-      >
-        {markdownContent}
-      </ReactMarkdown>
-      <MediaGallery media={media} content={markdownContent} />
-    </div>
+    <>
+      <MigrationNotes notes={migrationNotes} />
+      <div className="prose prose-stone dark:prose-invert max-w-none text-[15px] leading-relaxed [&_h1]:text-lg [&_h1]:font-semibold [&_h1]:mt-4 [&_h1]:mb-2 [&_h2]:text-base [&_h2]:font-semibold [&_h2]:mt-4 [&_h2]:mb-2 [&_h3]:text-[15px] [&_h3]:font-semibold [&_h3]:mt-3 [&_h3]:mb-1 [&_ul]:my-2 [&_ul]:pl-5 [&_li]:my-0.5 [&_p]:my-2 [&_a]:text-stone-600 dark:[&_a]:text-stone-400 [&_a]:no-underline [&_code]:text-sm [&_code]:bg-stone-100 dark:[&_code]:bg-stone-800 [&_code]:px-1 [&_code]:rounded [&_code::before]:content-none [&_code::after]:content-none">
+        <ReactMarkdown
+          remarkPlugins={remarkPlugins}
+          rehypePlugins={[rehypeShikiPlugin]}
+          components={components}
+        >
+          {markdownContent}
+        </ReactMarkdown>
+        <MediaGallery media={media} content={markdownContent} />
+      </div>
+    </>
   );
 }
