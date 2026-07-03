@@ -19,7 +19,12 @@ type Db = ReturnType<typeof mkDb>;
 function seedFlaggedScrape(
   db: Db,
   id: string,
-  over: Partial<{ changeDetectedAt: string | null; fetchPriority: string; metadata: string }> = {},
+  over: Partial<{
+    changeDetectedAt: string | null;
+    fetchPriority: string;
+    metadata: string;
+    lastDrainAt: string | null;
+  }> = {},
 ) {
   db.insert(sources)
     .values({
@@ -33,6 +38,7 @@ function seedFlaggedScrape(
       fetchPriority: (over.fetchPriority as any) ?? "normal",
       changeDetectedAt:
         over.changeDetectedAt === undefined ? new Date().toISOString() : over.changeDetectedAt,
+      lastDrainAt: over.lastDrainAt ?? null,
       lastFetchedAt: null,
     })
     .run();
@@ -98,6 +104,51 @@ describe("OrgActor", () => {
     expect(h.dispatched[0].company).toBe("X Corp");
     expect(new Set(h.dispatched[0].sourceIdentifiers)).toEqual(new Set(["src_a", "src_b"]));
     expect(h.alarmAt()).toBeNull(); // cleared after dispatch
+  });
+
+  it("stamps last_drain_at on the dispatched sources after a successful drain (#1862)", async () => {
+    const db = mkDb();
+    seedFlaggedScrape(db, "src_a");
+    seedFlaggedScrape(db, "src_b");
+    const h = mkActor(db);
+    await h.actor.ensureDrainScheduled("org_x");
+    const before = Date.now();
+    await h.actor.alarm();
+    expect(h.dispatched.length).toBe(1);
+    const rows = db.select().from(sources).all() as Array<{
+      id: string;
+      lastDrainAt: string | null;
+    }>;
+    for (const r of rows) {
+      expect(r.lastDrainAt).not.toBeNull();
+      expect(new Date(r.lastDrainAt as string).getTime()).toBeGreaterThanOrEqual(before);
+    }
+  });
+
+  it("excludes a source drained within the cooldown window (#1862)", async () => {
+    const db = mkDb();
+    // Drained 1h ago — inside the 20h cooldown, so it must NOT re-dispatch.
+    seedFlaggedScrape(db, "src_recent", {
+      lastDrainAt: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+    });
+    const h = mkActor(db);
+    await h.actor.ensureDrainScheduled("org_x");
+    await h.actor.alarm();
+    expect(h.dispatched.length).toBe(0); // cooled down → drain-skipped
+    expect(h.alarmAt()).toBeNull();
+  });
+
+  it("re-drains a source whose cooldown has elapsed (#1862)", async () => {
+    const db = mkDb();
+    // Drained 21h ago — outside the 20h cooldown, so it drains again.
+    seedFlaggedScrape(db, "src_stale", {
+      lastDrainAt: new Date(Date.now() - 21 * 60 * 60 * 1000).toISOString(),
+    });
+    const h = mkActor(db);
+    await h.actor.ensureDrainScheduled("org_x");
+    await h.actor.alarm();
+    expect(h.dispatched.length).toBe(1);
+    expect(h.dispatched[0].sourceIdentifiers).toEqual(["src_stale"]);
   });
 
   it("alarm no-ops (clears) when no flagged candidates", async () => {

@@ -389,6 +389,12 @@ export const sources = sqliteTable(
     consecutiveErrors: integer("consecutive_errors").default(0),
     nextFetchAfter: text("next_fetch_after"),
     changeDetectedAt: text("change_detected_at"),
+    // Drain cooldown marker (#1862): last time the scrape/agent drain successfully
+    // dispatched a managed-agent /update covering this source. `queryCandidates`
+    // excludes sources drained within DRAIN_COOLDOWN_MS so a permanently-flagged,
+    // un-fetchable source doesn't re-drain (and re-bill a no-op Haiku session)
+    // every SourceActor poll tick. NULL = never drained through the actor path.
+    lastDrainAt: text("last_drain_at"),
     lastPolledAt: text("last_polled_at"),
     // Cadence observability — written by the daily retier job. `medianGapDays`
     // is the median gap (in days) between consecutive publishedAt values over
@@ -1153,6 +1159,9 @@ export const sourcesActive = sqliteView("sources_active", {
   consecutiveErrors: integer("consecutive_errors"),
   nextFetchAfter: text("next_fetch_after"),
   changeDetectedAt: text("change_detected_at"),
+  // Type-level mirror of the #1862 drain cooldown column — the real view is
+  // `SELECT sources.*`, so it exposes it once the view is recreated.
+  lastDrainAt: text("last_drain_at"),
   lastPolledAt: text("last_polled_at"),
   medianGapDays: real("median_gap_days"),
   lastRetieredAt: text("last_retiered_at"),
@@ -1217,6 +1226,9 @@ export const sourcesVisible = sqliteView("sources_visible", {
   consecutiveErrors: integer("consecutive_errors"),
   nextFetchAfter: text("next_fetch_after"),
   changeDetectedAt: text("change_detected_at"),
+  // Type-level mirror of the #1862 drain cooldown column — the real view is
+  // `SELECT sources.*`, so it exposes it once the view is recreated.
+  lastDrainAt: text("last_drain_at"),
   lastPolledAt: text("last_polled_at"),
   medianGapDays: real("median_gap_days"),
   lastRetieredAt: text("last_retiered_at"),

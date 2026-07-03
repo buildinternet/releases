@@ -147,6 +147,20 @@ type CandidateQueryResult = {
 };
 
 /**
+ * Minimum spacing between successful drains of the same source (#1862). The
+ * SourceActor re-notifies the OrgActor every poll tick (normal 4h / low 24h) as
+ * long as a source stays flagged (`changeDetectedAt` set), and for a
+ * permanently un-fetchable source that flag never clears — so without a cooldown
+ * the OrgActor re-dispatched a no-op Haiku `/update` every 4h (~6×/day/org),
+ * ~5× the old daily sweep's cadence for zero new releases. A successful dispatch
+ * stamps `sources.last_drain_at`; `queryCandidates` excludes anything drained
+ * within this window, collapsing the churn back to roughly the old sweep's
+ * once-daily rhythm. A source with genuinely new content simply drains on the
+ * next window (matching the pre-actor behavior), not in real time.
+ */
+export const DRAIN_COOLDOWN_MS = 20 * 60 * 60 * 1000;
+
+/**
  * Query flagged scrape-no-feed and agent sources, most-stale first
  * (`lastFetchedAt ASC`). Returns up to `cap` rows; if more than `cap` matched,
  * runs a follow-up COUNT(*) to populate skippedOverCap. Most sweeps take the
@@ -159,12 +173,23 @@ type CandidateQueryResult = {
  */
 export async function queryCandidates(
   db: any,
-  params: { cap: number; orgId?: string },
+  params: { cap: number; orgId?: string; drainCooldownMs?: number },
 ): Promise<CandidateQueryResult> {
+  // Cooldown cutoff: sources drained (last_drain_at) more recently than this are
+  // excluded (#1862). Pass drainCooldownMs=0 to disable (e.g. in tests). ISO-8601
+  // UTC strings compare lexicographically, matching last_drain_at's format.
+  const cooldownMs = params.drainCooldownMs ?? DRAIN_COOLDOWN_MS;
+  const cooldownCutoff = new Date(Date.now() - cooldownMs).toISOString();
   const whereClause = and(
     inArray(sources.type, ["scrape", "agent"]),
     ne(sources.fetchPriority, "paused"),
     isNotNull(sources.changeDetectedAt),
+    // Drain cooldown (#1862): skip sources drained within the window so a
+    // permanently-flagged source can't re-drain a no-op Haiku session every
+    // poll tick. NULL last_drain_at (never drained) always passes.
+    cooldownMs > 0
+      ? or(isNull(sources.lastDrainAt), sql`${sources.lastDrainAt} < ${cooldownCutoff}`)
+      : undefined,
     sql`(json_extract(${sources.metadata}, '$.feedUrl') IS NULL OR ${sources.metadata} IS NULL)`,
     // Exclude Firecrawl-owned sources — their monitor fetches them, and the poll
     // cron drops them the same way (queryDueSources `notFirecrawl`). Without this

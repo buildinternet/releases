@@ -16,10 +16,18 @@
  * and re-drains on a later SourceActor notify. A 409 (per-source scrape lock held
  * by the source's own SourceActor scrape) is the expected benign race — logged as
  * `drain-superseded`, not `drain-failed`, since the lock holder drains the source.
+ *
+ * Drain cooldown (#1862): a successful dispatch stamps `sources.last_drain_at`,
+ * and `queryCandidates` excludes sources drained within DRAIN_COOLDOWN_MS. This
+ * caps re-drains of a still-flagged source at ~once/day (the old sweep's rhythm)
+ * instead of once per 4h poll tick, so a permanently un-fetchable source can't
+ * re-bill a no-op Haiku `/update` every cycle.
  */
 
 import { DurableObject } from "cloudflare:workers";
 import { drizzle } from "drizzle-orm/d1";
+import { inArray } from "drizzle-orm";
+import { sources } from "@buildinternet/releases-core/schema";
 import { logEvent } from "@releases/lib/log-event";
 import { flag, FLAGS, type FlagshipBinding } from "@releases/lib/flags";
 import { seedJitterMs } from "./lib/source-actor-seed.js";
@@ -162,6 +170,16 @@ export class OrgActor extends DurableObject<OrgActorEnv> {
         sessionId: sessionId ?? null,
         sourceCount: sourceIdentifiers.length,
       });
+      // Stamp the drain cooldown (#1862) for every source in the accepted
+      // /update. queryCandidates excludes these for DRAIN_COOLDOWN_MS, so a
+      // still-flagged source (e.g. one that's permanently un-fetchable) can't
+      // re-dispatch a no-op Haiku session on the next SourceActor poll tick.
+      // Only stamped on success — a rejected /update (spend cap / lock / kill
+      // switch) leaves last_drain_at untouched so the source re-drains sooner.
+      await this.db()
+        .update(sources)
+        .set({ lastDrainAt: new Date().toISOString() })
+        .where(inArray(sources.id, sourceIdentifiers));
     } catch (err) {
       logEvent("error", {
         component: "org-actor",
