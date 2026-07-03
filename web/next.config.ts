@@ -135,6 +135,11 @@ const nextConfig: NextConfig = {
     return [
       { source: "/llms.txt", destination: "/api/llms" },
       { source: "/llms-full.txt", destination: "/api/llms-full" },
+      // Serve the generated OpenAPI 3.1 spec at the root origin so agent
+      // discovery (and integrations.sh, which probes `/openapi.json`) resolves
+      // it on releases.sh. The spec is generated per-request by the API worker;
+      // proxy to its canonical URL rather than shipping a copy that goes stale.
+      { source: "/openapi.json", destination: "https://api.releases.sh/v1/openapi.json" },
     ];
   },
   async headers() {
