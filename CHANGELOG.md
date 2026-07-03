@@ -3,6 +3,12 @@
 The product changelog for releases.sh, published to its own registry. Drafted daily from merged
 PRs and reviewed via PR. See docs/changelog-style.md for the voice and curation rules.
 
+## July 2, 2026
+
+**Fixed**
+- Clicking into a release or org from the feed now scrolls to the top of the page — a Next.js 16 routing change had caused page transitions to land partway down the destination.
+- Source submission form now shows the specific rejection reason instead of a generic error — rate-limited, oversized, and service-unavailable responses each display their correct message.
+
 ## July 1, 2026
 
 **Changed**
