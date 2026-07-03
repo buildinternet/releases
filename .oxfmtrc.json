@@ -25,6 +25,7 @@
     "packages/*/dist",
     "tests/evals/fixtures/tool-ux/runs",
     "packages/api-types/graphql/schema.graphql",
-    "CHANGELOG.md"
+    "CHANGELOG.md",
+    "plans"
   ]
 }
