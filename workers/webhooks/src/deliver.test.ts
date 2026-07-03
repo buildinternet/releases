@@ -2,10 +2,12 @@ import { describe, it, expect } from "bun:test";
 import { deliver } from "./deliver.js";
 import type { DeliveryMessage } from "../../api/src/webhooks/types.js";
 
+const PUBLIC_RESOLVE = async () => ["93.184.216.34"];
+
 function msg(): DeliveryMessage {
   return {
     subscriptionId: "whk_1",
-    url: "https://hook.example/u",
+    url: "https://1.1.1.1/hook",
     secretVersion: 1,
     event: {
       id: "evt_1",
@@ -140,6 +142,7 @@ describe("deliver", () => {
       masterKey: "deadbeef".repeat(8),
       timeoutMs: 1000,
       fetchImpl: fetch as any,
+      resolveDns: PUBLIC_RESOLVE,
       now: () => 1,
     });
     expect(r.outcome).toBe("success");
@@ -152,6 +155,40 @@ describe("deliver", () => {
     const parsed = (await req.json()) as any;
     expect(parsed.blocks[0].type).toBe("section");
     expect(parsed.blocks[0].text.text).toContain("|Thing 1.0>");
+  });
+
+  it("returns perm_fail without fetching when DNS resolves to a private address", async () => {
+    let fetched = false;
+    const r = await deliver(
+      { ...msg(), url: "https://evil.example/hook" },
+      {
+        masterKey: "deadbeef".repeat(8),
+        timeoutMs: 1000,
+        fetchImpl: (async () => {
+          fetched = true;
+          return new Response("ok", { status: 200 });
+        }) as any,
+        resolveDns: async () => ["127.0.0.1"],
+        now: () => 1,
+      },
+    );
+    expect(r.outcome).toBe("perm_fail");
+    expect(r.errorCode).toBe("ssrf_blocked");
+    expect(fetched).toBe(false);
+  });
+
+  it("delivers when DNS resolves to a public address", async () => {
+    const r = await deliver(
+      { ...msg(), url: "https://hooks.example/hook" },
+      {
+        masterKey: "deadbeef".repeat(8),
+        timeoutMs: 1000,
+        fetchImpl: fetch200 as any,
+        resolveDns: PUBLIC_RESOLVE,
+        now: () => 1,
+      },
+    );
+    expect(r.outcome).toBe("success");
   });
 
   it("sends the expected headers", async () => {
