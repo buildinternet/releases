@@ -40,6 +40,14 @@ export interface UsageEntry {
   model: string;
   inputTokens: number;
   outputTokens: number;
+  /**
+   * The source's stable typed id (`src_…`), when known. Preferred over
+   * `sourceSlug` for attribution: slugs are only unique per-org (#690), so a
+   * shared slug across orgs (e.g. "release-notes") makes slug→id resolution
+   * ambiguous and silently drops attribution (source_id NULL). Callers that
+   * have the `Source` in hand should always set this.
+   */
+  sourceId?: string | null;
   sourceSlug: string;
   releaseCount: number;
   extractionMode?: UsageExtractionMode;

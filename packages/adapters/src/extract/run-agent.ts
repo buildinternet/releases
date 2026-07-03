@@ -59,13 +59,14 @@ interface WebFetchUsageSnapshot {
  * SDK I/O, so the attribution logic is isolated here.
  */
 export function buildAgentUsageRows(args: {
+  sourceId?: string | null;
   sourceSlug: string;
   agentModel: string;
   result: ExtractFromBodyResult;
   webFetchUsage: WebFetchUsageSnapshot | null;
   cfResult: ExtractFromBodyResult | null;
 }): UsageEntry[] {
-  const { sourceSlug, agentModel, result, webFetchUsage, cfResult } = args;
+  const { sourceId, sourceSlug, agentModel, result, webFetchUsage, cfResult } = args;
   const cfSpent = cfResult !== null && (cfResult.totalInput > 0 || cfResult.totalOutput > 0);
   const webSpent =
     webFetchUsage !== null && (webFetchUsage.totalInput > 0 || webFetchUsage.totalOutput > 0);
@@ -83,6 +84,7 @@ export function buildAgentUsageRows(args: {
         model: agentModel,
         inputTokens: webFetchUsage.totalInput,
         outputTokens: webFetchUsage.totalOutput,
+        sourceId,
         sourceSlug,
         releaseCount: webFetchUsage.entryCount,
         extractionMode: "oneshot",
@@ -97,6 +99,7 @@ export function buildAgentUsageRows(args: {
         model: cfResult.modelUsed,
         inputTokens: cfResult.totalInput,
         outputTokens: cfResult.totalOutput,
+        sourceId,
         sourceSlug,
         releaseCount: cfResult.entries.length,
         extractionMode: cfResult.mode,
@@ -115,6 +118,7 @@ export function buildAgentUsageRows(args: {
       model: result.modelUsed,
       inputTokens: result.totalInput,
       outputTokens: result.totalOutput,
+      sourceId,
       sourceSlug,
       releaseCount: result.entries.length,
       extractionMode: result.mode,
@@ -274,6 +278,7 @@ export async function runAgentExtraction(
   // 1 or 2 independent usage rows (see buildAgentUsageRows) — write concurrently.
   await Promise.all(
     buildAgentUsageRows({
+      sourceId: source.id,
       sourceSlug: source.slug,
       agentModel,
       result,

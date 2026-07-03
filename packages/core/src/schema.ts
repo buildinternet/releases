@@ -554,6 +554,7 @@ export const FETCH_LOG_STATUSES = [
   "dry_run",
   "blocked",
   "crawl_timeout",
+  "skipped",
 ] as const;
 export type FetchLogStatus = (typeof FETCH_LOG_STATUSES)[number];
 

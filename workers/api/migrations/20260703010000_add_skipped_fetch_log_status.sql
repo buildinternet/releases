@@ -1,0 +1,15 @@
+-- Marker migration (no DDL): adds the "skipped" value to FETCH_LOG_STATUSES
+-- in packages/core/src/schema.ts. fetch_log.status is a free-form TEXT column
+-- with no CHECK constraint (see 20260520010000_squashed_baseline.sql), so
+-- storing a new status value requires no schema change — this file exists
+-- only to pair the schema.ts edit with a migration per the CI
+-- "schema-change" gate.
+--
+-- "skipped" is written by the crawl-extraction path when the newly-crawled
+-- markdown is byte-identical to a body that already failed extraction
+-- (maxed the output-token cap) — re-running the same doomed extraction would
+-- just re-bill Anthropic for an identical failure every cron cycle (#1851
+-- follow-up). Deliberately distinct from `no_change` (which resets the
+-- #1851 error backoff via `updateSourceAfterFetch`) and from `error` (which
+-- would re-trigger the backoff bump) — a skip must neither reset nor extend
+-- the existing backoff schedule.
