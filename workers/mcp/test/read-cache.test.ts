@@ -1,9 +1,11 @@
 import { describe, it, expect } from "bun:test";
 import {
   makeReadCache,
+  makeSearchReadCache,
   MCP_READ_CACHE_TTL_SECONDS,
   searchParamsCacheable,
 } from "../src/lib/read-cache";
+import type { SearchToolReturn } from "../src/tools";
 import type { ToolResult } from "../src/tools";
 
 function ok(text: string): ToolResult {
@@ -133,20 +135,30 @@ describe("makeReadCache", () => {
 
   it("bypasses search cache for relative since/until bounds", async () => {
     const kv = new FakeKV();
-    const cached = makeReadCache(kv);
+    const cachedSearch = makeSearchReadCache(kv);
     let calls = 0;
-    const inner = async () => {
+    const handler = cachedSearch(async (): Promise<SearchToolReturn> => {
       calls += 1;
-      return ok(`q ${calls}`);
-    };
-    const runSearch = async (params: { query: string; since?: string }) => {
-      if (!searchParamsCacheable(params)) return inner();
-      return cached("search", inner)();
-    };
-    await runSearch({ query: "bun", since: "90d" });
-    await runSearch({ query: "bun", since: "90d" });
+      return { result: ok(`q ${calls}`), counts: {} };
+    });
+    await handler({ query: "bun", since: "90d" });
+    await handler({ query: "bun", since: "90d" });
     expect(calls).toBe(2);
     expect(kv.puts).toBe(0);
+  });
+
+  it("caches search when date bounds are cacheable", async () => {
+    const kv = new FakeKV();
+    const cachedSearch = makeSearchReadCache(kv);
+    let calls = 0;
+    const handler = cachedSearch(async (): Promise<SearchToolReturn> => {
+      calls += 1;
+      return { result: ok(`q ${calls}`), counts: { releaseHits: 1 } };
+    });
+    await handler({ query: "bun" });
+    await handler({ query: "bun" });
+    expect(calls).toBe(1);
+    expect(kv.puts).toBe(1);
   });
 
   it("searchParamsCacheable allows ISO bounds and absent dates", () => {
