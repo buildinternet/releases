@@ -199,25 +199,53 @@ describe("generatePlaybookHeader", () => {
 });
 
 describe("assemblePlaybook", () => {
-  it("appends notes to header", () => {
+  it("appends notes to header under the unverified-observations heading", () => {
     const result = assemblePlaybook("# Header\n\nContent", "- Some agent observation");
 
     expect(result).toContain("# Header");
-    expect(result).toContain("## Agent Notes");
+    expect(result).toContain("## Prior observations (unverified)");
     expect(result).toContain("- Some agent observation");
+  });
+
+  it("hedges the notes as unverified inferences, not facts (#1873)", () => {
+    const result = assemblePlaybook("# Header", "- Some agent observation");
+
+    expect(result).toContain("prior agent run's inferences");
+    expect(result).toContain("Treat them as hypotheses");
   });
 
   it("shows placeholder when notes are null", () => {
     const result = assemblePlaybook("# Header", null);
 
-    expect(result).toContain("## Agent Notes");
-    expect(result).toContain("_No agent notes yet");
+    expect(result).toContain("## Prior observations (unverified)");
+    expect(result).toContain("_No prior observations yet");
   });
 
   it("shows placeholder when notes are empty/whitespace", () => {
     const result = assemblePlaybook("# Header", "   ");
 
-    expect(result).toContain("_No agent notes yet");
+    expect(result).toContain("_No prior observations yet");
+  });
+
+  it("appends a last-written age cue to the heading when notesUpdatedAt is given", () => {
+    const result = assemblePlaybook("# Header", "- Some observation", "2026-04-11T17:00:00.000Z");
+
+    expect(result).toContain("## Prior observations (unverified — last written Apr 11)");
+  });
+
+  it("omits the age cue when notesUpdatedAt is absent", () => {
+    const result = assemblePlaybook("# Header", "- Some observation");
+
+    expect(result).toContain("## Prior observations (unverified)\n");
+  });
+
+  it("omits the age cue on the placeholder even when notesUpdatedAt is given", () => {
+    // No real notes yet, so there's nothing to date — the cue only makes
+    // sense once an agent has actually written something down.
+    const result = assemblePlaybook("# Header", null, "2026-04-11T17:00:00.000Z");
+
+    expect(result).toContain("## Prior observations (unverified)\n");
+    expect(result).not.toContain("last written");
   });
 });
 

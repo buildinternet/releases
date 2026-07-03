@@ -12,6 +12,7 @@
 
 import { DurableObject } from "cloudflare:workers";
 import type { Env } from "./types.js";
+import { buildPlaybookMarkdown, type PlaybookPage } from "./playbook-block.js";
 import { buildAnthropicClient } from "@releases/lib/anthropic-client.js";
 import { estimateCost } from "@releases/lib/anthropic-pricing.js";
 import {
@@ -1253,6 +1254,10 @@ ${idList}
    * Inlining the playbook removes the need for the worker agent to call
    * `manage_playbook(action=get)` as its first step, eliminating a class of
    * tool-name hallucinations (e.g. `get_source_guide`) observed in production.
+   *
+   * The header and notes carry different authority (#1873) — see
+   * `buildPlaybookMarkdown` in `playbook-block.ts` for the two-tier framing,
+   * shared with the extraction lane's `getOrgPlaybook`.
    */
   private async loadPlaybookBlock(
     fetcher: { fetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response> },
@@ -1265,12 +1270,9 @@ ${idList}
         headers: { Authorization: `Bearer ${apiKey}` },
       });
       if (!res.ok) return "";
-      const page = (await res.json()) as { content?: string | null; notes?: string | null } | null;
-      const header = page?.content?.trim() ?? "";
-      const notes = page?.notes?.trim() ?? "";
-      const parts = [header, notes ? `## Agent Notes\n\n${notes}` : ""].filter(Boolean);
-      if (parts.length === 0) return "";
-      const body = parts.join("\n\n");
+      const page = (await res.json()) as PlaybookPage | null;
+      const body = buildPlaybookMarkdown(page);
+      if (!body) return "";
       const displayBody =
         body.length > MAX_PLAYBOOK_CHARS
           ? `${body.slice(0, MAX_PLAYBOOK_CHARS)}\n\n_[Playbook truncated from ${body.length} to ${MAX_PLAYBOOK_CHARS} characters. Call \`manage_playbook(action=get)\` for the full content if a trap or instruction looks cut off.]_`

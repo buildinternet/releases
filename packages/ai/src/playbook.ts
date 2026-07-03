@@ -204,14 +204,36 @@ function formatShortDate(iso: string | null): string {
 /**
  * Assemble the full playbook from the auto-generated header and agent notes.
  * Called at read time — the header reflects current metadata, notes are from storage.
+ *
+ * The two blocks carry different authority (#1873): the header is derived
+ * mechanically from source config (curator-set fields, feed URLs that parse)
+ * so it's presented as ground truth. The notes section is free-form prose a
+ * prior agent run wrote down from *inference*, not verification — re-feeding
+ * it with the same authority as the header lets a stale guess self-reinforce
+ * across runs. It's rendered under a distinct "Prior observations
+ * (unverified)" heading with an explicit hedge, so a future run treats it as
+ * a hypothesis to confirm rather than a fact to restate.
+ *
+ * `notesUpdatedAt` (the knowledge_pages row's `updatedAt`) is surfaced as an
+ * age cue on the heading when notes exist, so an agent can weigh a
+ * six-month-old observation differently from a fresh one without a new
+ * per-fact provenance model (that's #1872, out of scope here).
  */
-export function assemblePlaybook(header: string, notes: string | null): string {
+export function assemblePlaybook(
+  header: string,
+  notes: string | null,
+  notesUpdatedAt?: string | null,
+): string {
   const trimmedNotes = notes?.trim();
-  const notesBody = trimmedNotes
-    ? trimmedNotes
-    : "_No agent notes yet. Use `manage_playbook(action=update_notes)` to add skill-style notes with three sections: `### Fetch instructions` (per-source playbook — what to do, what to expect), `### Traps` (concise warnings that prevent wasted work), `### Coverage` (what's tracked, what's not, why)._";
 
-  return `${header}\n## Agent Notes\n\n${notesBody}\n`;
+  if (!trimmedNotes) {
+    const placeholder =
+      "_No prior observations yet. Use `manage_playbook(action=update_notes)` to add skill-style notes with three sections: `### Fetch instructions` (per-source playbook — what to do, what to expect), `### Traps` (concise warnings that prevent wasted work), `### Coverage` (what's tracked, what's not, why)._";
+    return `${header}\n## Prior observations (unverified)\n\n${placeholder}\n`;
+  }
+
+  const age = notesUpdatedAt ? ` — last written ${formatShortDate(notesUpdatedAt)}` : "";
+  return `${header}\n## Prior observations (unverified${age})\n\n> These are a prior agent run's inferences, not curator- or config-verified facts. Treat them as hypotheses: confirm before relying on them, and correct or remove any that no longer hold.\n\n${trimmedNotes}\n`;
 }
 
 // ── Legacy helpers (kept for migration from old format) ──

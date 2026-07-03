@@ -10,6 +10,7 @@ import { getSecret, type SecretBinding } from "@releases/lib/secrets";
 import { buildOpenRouterExtractModel } from "@releases/adapters/extract";
 import type { Source } from "@buildinternet/releases-core/schema";
 import type { ExtractDeps, ExtractRepo, UsageEntry } from "@releases/adapters/extract";
+import { buildPlaybookMarkdown, type PlaybookPage } from "./playbook-block.js";
 
 export interface WorkerDepsEnv {
   anthropicApiKey: string;
@@ -132,10 +133,11 @@ function buildWorkerRepo(env: WorkerDepsEnv): ExtractRepo {
         { headers: headers() },
       );
       if (!res.ok) return null;
-      const page = (await res.json()) as { notes?: string | null; content?: string | null } | null;
-      const notes = page?.notes?.trim();
-      if (notes) return notes;
-      return page?.content?.trim() ?? null;
+      // Two-tier assembly (#1873): the header is ground truth, the notes are
+      // a prior run's unverified inferences — never hand back raw notes as if
+      // they were the playbook.
+      const page = (await res.json()) as PlaybookPage | null;
+      return buildPlaybookMarkdown(page);
     },
 
     async logUsage(entry: UsageEntry): Promise<void> {
