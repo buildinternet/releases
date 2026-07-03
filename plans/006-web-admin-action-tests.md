@@ -30,8 +30,7 @@ release, mint tokens, publish the site-wide notice — and then revalidate
 cached pages. They have zero tests and heavy recent churn (the #1624 per-user
 admin JWT migration rewired how every one of them authenticates). A regression
 here fails silently in the worst way: the action returns `ok`, but the page
-was never revalidated (stale cache served), or the error branch swallows a
-403. These tests pin the contract: correct URL/method/headers to the API,
+was never revalidated (stale cache served), or the error branch swallows a 403. These tests pin the contract: correct URL/method/headers to the API,
 correct `ActionResult` mapping for success / API error / network error, and
 `revalidatePath` called with the right paths on success only.
 
@@ -81,7 +80,7 @@ export async function setSiteNoticeAction(notice: SiteNotice): Promise<ActionRes
 - Existing web tests (`web/src/lib/*.test.ts`, e.g.
   `account-api-proxy.test.ts`) are plain `bun:test` unit tests. They run in
   the SHARED root test process (`bun test tests/ web/ workers/discovery
-  workers/mcp workers/webhooks`) — see "the mock leak rule" below.
+workers/mcp workers/webhooks`) — see "the mock leak rule" below.
 
 **The two import obstacles** (why these files aren't trivially importable in
 bun:test) and their required mocks:
@@ -101,17 +100,18 @@ through the local-admin branch).
 
 ## Commands you will need
 
-| Purpose        | Command                                                     | Expected on success |
-|----------------|-------------------------------------------------------------|---------------------|
-| Install        | `bun install` (repo root; only if needed)                   | exit 0              |
-| Lint + types   | `bun run check`                                             | exit 0              |
-| Web leg only   | `bun test web/`                                             | all pass            |
+| Purpose        | Command                                                               | Expected on success   |
+| -------------- | --------------------------------------------------------------------- | --------------------- |
+| Install        | `bun install` (repo root; only if needed)                             | exit 0                |
+| Lint + types   | `bun run check`                                                       | exit 0                |
+| Web leg only   | `bun test web/`                                                       | all pass              |
 | Shared process | `bun test tests/ web/ workers/discovery workers/mcp workers/webhooks` | all pass (leak check) |
-| Full suite     | `bun run test`                                              | all pass            |
+| Full suite     | `bun run test`                                                        | all pass              |
 
 ## Scope
 
 **In scope** (the only files you should create/modify):
+
 - `web/src/app/actions/test-helpers.ts` (create — the single mock + fetch-stub helper)
 - `web/src/app/actions/site-notice.test.ts` (create)
 - `web/src/app/actions/org-admin.test.ts` (create)
@@ -123,6 +123,7 @@ share the identical shape — cover them only if time allows, they are P3 within
 this plan.)
 
 **Out of scope** (do NOT touch):
+
 - ANY file under `web/src/app/actions/` other than new `*.test.ts` +
   `test-helpers.ts` — no refactoring the actions "to make them testable".
 - `web/src/lib/admin-action.ts`, `local-admin-flag.ts`, `env.ts` — read-only.
@@ -181,7 +182,9 @@ export interface RecordedRequest {
 }
 
 /** Stub globalThis.fetch; records requests, returns the queued responses. */
-export function stubFetch(responses: Response[]): RecordedRequest[] { /* records into an array, shifts responses, throws if queue empty */ }
+export function stubFetch(responses: Response[]): RecordedRequest[] {
+  /* records into an array, shifts responses, throws if queue empty */
+}
 ```
 
 Implement `stubFetch` fully (save/restore of the original fetch via an

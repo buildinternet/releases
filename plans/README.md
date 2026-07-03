@@ -112,11 +112,11 @@ issue. Read the linked issue first, then the plan.
 
 ### Execution order & status
 
-| Plan | Title                                          | Issue | Priority | Effort | Depends on | Status              |
-| ---- | ---------------------------------------------- | ----- | -------- | ------ | ---------- | ------------------- |
-| 001  | Structured breaking-change + migration field   | #1696 | P1       | M      | —          | DONE (#1703 merged) |
+| Plan | Title                                          | Issue | Priority | Effort | Depends on | Status                                                                  |
+| ---- | ---------------------------------------------- | ----- | -------- | ------ | ---------- | ----------------------------------------------------------------------- |
+| 001  | Structured breaking-change + migration field   | #1696 | P1       | M      | —          | DONE (#1703 merged)                                                     |
 | 002  | Upgrade intelligence Phase 1 — `whats_changed` | #1697 | P1       | M      | 001 (soft) | DONE (merged — route live at `workers/api/src/routes/whats-changed.ts`) |
-| 003  | Agent/API consumption instrumentation          | #1700 | P1       | S–M    | —          | DONE (#1704 merged) |
+| 003  | Agent/API consumption instrumentation          | #1700 | P1       | S–M    | —          | DONE (#1704 merged)                                                     |
 
 ### 001 — as built (branch `advisor/001-breaking-change-field`)
 

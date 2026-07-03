@@ -98,8 +98,7 @@ Do NOT touch the `.catch(() => null)` fallbacks near lines 1000–1021
 handled `null` paths and are intentional.
 
 `poll-fetch.ts` already imports and uses `logEvent` with
-`component: "cron-poll-fetch"` (see the `feed-rate-limited` warn near line
-2022) — match that convention.
+`component: "cron-poll-fetch"` (see the `feed-rate-limited` warn near line 2022) — match that convention.
 
 The search site (`workers/api/src/routes/search.ts:645` at `3238d540`; find it
 with `grep -n 'catch(() => \[\]' workers/api/src/routes/search.ts`):
@@ -127,12 +126,12 @@ const { sessionId } = (await res.json().catch(() => ({}))) as { sessionId?: stri
 
 ## Commands you will need
 
-| Purpose        | Command                                              | Expected on success |
-|----------------|------------------------------------------------------|---------------------|
-| Install        | `bun install` (repo root; only if node_modules missing) | exit 0           |
-| Lint + types   | `bun run check`                                      | exit 0              |
-| API tests      | `bun test workers/api`                               | all pass            |
-| Full suite     | `bun run test`                                       | all pass            |
+| Purpose      | Command                                                 | Expected on success |
+| ------------ | ------------------------------------------------------- | ------------------- |
+| Install      | `bun install` (repo root; only if node_modules missing) | exit 0              |
+| Lint + types | `bun run check`                                         | exit 0              |
+| API tests    | `bun test workers/api`                                  | all pass            |
+| Full suite   | `bun run test`                                          | all pass            |
 
 Note: `bun run test` is a three-invocation chain (deliberate process isolation
 for module mocks) — run it exactly via the script, not by hand-rolling the
@@ -141,6 +140,7 @@ directory list.
 ## Scope
 
 **In scope** (the only files you should modify):
+
 - `workers/api/src/cron/poll-fetch.ts`
 - `workers/api/src/routes/search.ts`
 - `workers/api/src/org-actor.ts`
@@ -148,6 +148,7 @@ directory list.
 - `workers/api/test/log-swallowed.test.ts` (create)
 
 **Out of scope** (do NOT touch, even though they look related):
+
 - The `.catch(() => null)` fallbacks in `poll-fetch.ts` (~lines 1000–1021) — handled-null paths, intentional.
 - `workers/api/src/lib/feed-cache.ts`, `routes/feed.ts`, `routes/firecrawl.ts`, `routes/admin-emails.ts`, `routes/changelog.ts` — their catch sites were audited and are documented-intentional or feed handled fallbacks. Leave them.
 - `workers/api/src/auth/index.ts` — its best-effort catches are commented by design.

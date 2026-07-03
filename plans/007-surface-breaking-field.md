@@ -56,12 +56,13 @@ Where the data lives and who already reads it:
   migrationNotes?: string | null;
 ```
 
-  So the DETAIL wire type needs no change. Check whether the LIST item type
-  (the shape returned by `/v1/releases/latest`, org/source release lists —
-  find it by grepping `titleShort` or `title_short` in
-  `packages/api-types/src/`) already has `breaking`; if not, add it there as
-  an optional field with the same comment style. Both api-types zod schemas
-  and any plain interfaces must stay in sync.
+So the DETAIL wire type needs no change. Check whether the LIST item type
+(the shape returned by `/v1/releases/latest`, org/source release lists —
+find it by grepping `titleShort` or `title_short` in
+`packages/api-types/src/`) already has `breaking`; if not, add it there as
+an optional field with the same comment style. Both api-types zod schemas
+and any plain interfaces must stay in sync.
+
 - Read queries that build release rows — the fields should ride wherever
   `title_short` rides. Find every select to extend with:
 
@@ -69,11 +70,12 @@ Where the data lives and who already reads it:
 grep -rn "title_short" workers/api/src/queries/*.ts workers/api/src/routes/sources.ts
 ```
 
-  At `3238d540` that is: `queries/releases.ts` (the `getLatestReleasesAcross`
-  select ~line 118 + `mapLatestRowToReleaseItem` ~line 152 +
-  `getFollowedReleases` ~line 228), `queries/sources.ts` (~238, ~267, ~324),
-  `queries/orgs.ts` (~484, ~585), `queries/search.ts` (~50), and the
-  `GET /releases/:id` handler in `routes/sources.ts` (~line 3436 region).
+At `3238d540` that is: `queries/releases.ts` (the `getLatestReleasesAcross`
+select ~line 118 + `mapLatestRowToReleaseItem` ~line 152 +
+`getFollowedReleases` ~line 228), `queries/sources.ts` (~238, ~267, ~324),
+`queries/orgs.ts` (~484, ~585), `queries/search.ts` (~50), and the
+`GET /releases/:id` handler in `routes/sources.ts` (~line 3436 region).
+
 - Web:
   - Release card: `web/src/components/release-item.tsx` (the timeline/list card).
   - Release detail: `web/src/app/release/[id]/release-content.tsx`.
@@ -94,17 +96,18 @@ grep -rn "title_short" workers/api/src/queries/*.ts workers/api/src/routes/sourc
 
 ## Commands you will need
 
-| Purpose        | Command                                        | Expected on success |
-|----------------|------------------------------------------------|---------------------|
-| Install        | `bun install` (repo root; only if needed)      | exit 0              |
-| Lint + types   | `bun run check`                                | exit 0              |
-| API tests      | `bun test workers/api`                         | all pass            |
-| Web leg        | `bun test web/`                                | all pass            |
-| Full suite     | `bun run test`                                 | all pass            |
+| Purpose      | Command                                   | Expected on success |
+| ------------ | ----------------------------------------- | ------------------- |
+| Install      | `bun install` (repo root; only if needed) | exit 0              |
+| Lint + types | `bun run check`                           | exit 0              |
+| API tests    | `bun test workers/api`                    | all pass            |
+| Web leg      | `bun test web/`                           | all pass            |
+| Full suite   | `bun run test`                            | all pass            |
 
 ## Scope
 
 **In scope** (the only files you should modify):
+
 - `workers/api/src/queries/releases.ts`, `queries/sources.ts`, `queries/orgs.ts`, `queries/search.ts`
 - `workers/api/src/routes/sources.ts` (the `GET /releases/:id` select/response only)
 - `packages/api-types/src/api-types.ts` + the release schemas file it re-exports (find via `grep -rln "titleShort" packages/api-types/src/`)
@@ -115,6 +118,7 @@ grep -rn "title_short" workers/api/src/queries/*.ts workers/api/src/routes/sourc
 - One new test file per surface (see Test plan)
 
 **Out of scope** (do NOT touch, even though they look related):
+
 - The webhook `breaking` filter (issue #1710 checkbox 3) — needs its own
   design for where the filter lives on `user_follows`/webhook config; defer.
 - Backfill of historical rows (#1711) — cost-gated, operator-owned.

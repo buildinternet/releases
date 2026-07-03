@@ -9,7 +9,7 @@
 >
 > **Drift check (run first)**: `git diff --stat 3238d540..HEAD -- workers/api/src/routes/sources.ts workers/api/src/cron/poll-fetch.ts workers/api/test/`
 > This plan creates tests only; drift in the two source files is expected and
-> fine — but if either file was *restructured* (functions renamed/moved), STOP
+> fine — but if either file was _restructured_ (functions renamed/moved), STOP
 > and re-scout before writing tests against stale symbol names.
 
 ## Status
@@ -32,7 +32,7 @@ respectively). Their behavioral test coverage is thin relative to that churn.
 Issue #1652 tracks this as a prerequisite: before either god-file can be
 split (a separate, deferred effort), a characterization baseline must pin
 current behavior so a refactor can be proven behavior-preserving. The goal is
-to catch *unintended changes*, not to assert exhaustive correctness — if a
+to catch _unintended changes_, not to assert exhaustive correctness — if a
 test reveals what looks like a real bug, that is a report, not a fix.
 
 ## Current state
@@ -97,22 +97,24 @@ Key conventions this plan must honor:
 
 ## Commands you will need
 
-| Purpose        | Command                                        | Expected on success |
-|----------------|------------------------------------------------|---------------------|
-| Install        | `bun install` (repo root; only if needed)      | exit 0              |
-| Lint + types   | `bun run check`                                | exit 0              |
-| API tests only | `bun test workers/api`                         | all pass            |
-| One file       | `bun test workers/api/test/<file>.test.ts`     | all pass            |
-| Full suite     | `bun run test`                                 | all pass            |
+| Purpose        | Command                                    | Expected on success |
+| -------------- | ------------------------------------------ | ------------------- |
+| Install        | `bun install` (repo root; only if needed)  | exit 0              |
+| Lint + types   | `bun run check`                            | exit 0              |
+| API tests only | `bun test workers/api`                     | all pass            |
+| One file       | `bun test workers/api/test/<file>.test.ts` | all pass            |
+| Full suite     | `bun run test`                             | all pass            |
 
 ## Scope
 
 **In scope** (create only; modify nothing outside `workers/api/test/`):
+
 - `workers/api/test/sources-crud-characterization.test.ts` (create)
 - `workers/api/test/releases-batch-characterization.test.ts` (create)
 - `workers/api/test/poll-fetch-feed-characterization.test.ts` (create)
 
 **Out of scope** (do NOT touch):
+
 - ANY file under `workers/api/src/` — this plan is characterization only. If
   current behavior looks wrong, pin it with a test named
   `("characterizes current behavior: …")` plus a comment, and list it in your
