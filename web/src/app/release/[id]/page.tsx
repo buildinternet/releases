@@ -349,6 +349,7 @@ export default async function ReleaseDetailPage({ params }: { params: Promise<{ 
             media={media}
             repoUrl={repoUrl}
             sourceUrl={release.url}
+            migrationNotes={release.migrationNotes ?? null}
           />
           <Suspense fallback={null}>
             <AlsoCoveredBy anchorReleaseId={release.id} />
