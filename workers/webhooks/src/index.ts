@@ -7,7 +7,7 @@ import {
 } from "./queries.js";
 import { formatDlqAlert, type DlqEntry, type SubscriptionLabel } from "./alert-format.js";
 import { notifyAutoDisabledSubscription } from "./auto-disable-notify.js";
-import { deliver } from "./deliver.js";
+import { deliver as deliverImpl, type DeliveryResult } from "./deliver.js";
 import { writeDeliveryAttempt, type DeliveryAttempt, type Outcome } from "./ae.js";
 import { slackWebhookAppId } from "./slack-app-id.js";
 import type { DeliveryMessage } from "../../api/src/webhooks/types.js";
@@ -20,6 +20,18 @@ import {
 } from "@releases/core-internal/webhook-resilience";
 
 export const DLQ_QUEUE = "webhook-dlq";
+
+/** Test-only override for queue characterization tests (avoids global deliver mocks). */
+let deliverHook: typeof deliverImpl | null = null;
+export function setDeliverHook(fn: typeof deliverImpl | null): void {
+  deliverHook = fn;
+}
+function runDeliver(
+  message: DeliveryMessage,
+  opts: Parameters<typeof deliverImpl>[1],
+): Promise<DeliveryResult> {
+  return (deliverHook ?? deliverImpl)(message, opts);
+}
 
 export interface Env {
   DB: D1Database;
@@ -195,7 +207,7 @@ export default {
       }
 
       // oxlint-disable-next-line no-await-in-loop -- webhook delivery; each subscriber delivered sequentially with retry/backoff
-      const result = await deliver(body, { masterKey, timeoutMs });
+      const result = await runDeliver(body, { masterKey, timeoutMs });
 
       writeDeliveryAttempt(env.WEBHOOK_DELIVERIES_AE, {
         subscriptionId: body.subscriptionId,
