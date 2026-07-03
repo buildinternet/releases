@@ -40,6 +40,10 @@ import { seedJitterMs } from "./lib/source-actor-seed.js";
  */
 const SAFETY_WINDOW_MS = 15 * 60 * 1000;
 
+/** Retry alarm after a failed workflow.create — short enough to recover from
+ *  transient control-plane errors, far shorter than the tier interval. */
+const CREATE_FAILURE_RETRY_MS = 10 * 60 * 1000;
+
 /**
  * Slack on the due-gate: treat a source whose `nextDueAt` is within this of `now`
  * as due (avoids a needless extra wake when the alarm fires a hair early).
@@ -288,7 +292,16 @@ export class SourceActor extends DurableObject<SourceActorEnv> {
     // workflow has advanced last_polled_at / next_fetch_after, so the next alarm
     // re-derives the precise next-due time (success cadence or backoff) from D1.
     const intervalMs = (plan.intervalHours ?? 4) * 3_600_000;
-    await this.scheduleAt(row, now + intervalMs, fired, fired ? now : (prev?.lastFiredAt ?? null));
+    const nextAlarmMs = fired ? now + intervalMs : now + CREATE_FAILURE_RETRY_MS;
+    if (!fired) {
+      logEvent("info", {
+        component: "source-actor",
+        event: "create-failure-retry-scheduled",
+        sourceId,
+        retryMs: CREATE_FAILURE_RETRY_MS,
+      });
+    }
+    await this.scheduleAt(row, nextAlarmMs, fired, fired ? now : (prev?.lastFiredAt ?? null));
   }
 
   // --- internals -----------------------------------------------------------
