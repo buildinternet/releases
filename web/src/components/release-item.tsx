@@ -24,6 +24,7 @@ import { markdownComponents, collapsedMarkdownComponents } from "./markdown-comp
 import { rewriteRelativeLinks, originFromUrl } from "@releases/rendering/rewrite-links";
 import { formatDate } from "@/lib/formatters";
 import { RollupBadge } from "./rollup-badge";
+import { BreakingChip } from "./breaking-chip";
 import { ClusterChip } from "./cluster-chip";
 import { CompactComposition } from "./compact-composition";
 import { PlayBadge } from "./play-badge";
@@ -486,6 +487,7 @@ export function ReleaseListItem({
                 </a>
               )}
               <RollupBadge type={release.type} />
+              <BreakingChip level={release.breaking} />
               <ClusterChip count={release.coverageCount} />
               {release.prerelease && (
                 <span
