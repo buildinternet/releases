@@ -387,6 +387,13 @@ export const sources = sqliteTable(
     fetchPriority: text("fetch_priority", { enum: ["normal", "low", "paused"] }).default("normal"),
     consecutiveNoChange: integer("consecutive_no_change").default(0),
     consecutiveErrors: integer("consecutive_errors").default(0),
+    // Consecutive flagged-but-empty drains (#1862): a scrape/agent source that was
+    // flagged (change_detected_at set) but whose drain found 0 new releases,
+    // counted per drain and reset on a productive one. At
+    // UNPRODUCTIVE_DRAIN_PAUSE_AFTER the source auto-pauses (fetch-log.ts) so a
+    // broken/flapping source stops re-billing a no-op Haiku session forever.
+    // Sibling of consecutive_errors (which only fires on hard extraction errors).
+    unproductiveDrains: integer("unproductive_drains").default(0),
     nextFetchAfter: text("next_fetch_after"),
     changeDetectedAt: text("change_detected_at"),
     // Drain cooldown marker (#1862): last time the scrape/agent drain successfully
@@ -1157,6 +1164,8 @@ export const sourcesActive = sqliteView("sources_active", {
   fetchPriority: text("fetch_priority", { enum: ["normal", "low", "paused"] }),
   consecutiveNoChange: integer("consecutive_no_change"),
   consecutiveErrors: integer("consecutive_errors"),
+  // Type-level mirror of the #1862 unproductive-drain counter.
+  unproductiveDrains: integer("unproductive_drains"),
   nextFetchAfter: text("next_fetch_after"),
   changeDetectedAt: text("change_detected_at"),
   // Type-level mirror of the #1862 drain cooldown column — the real view is
@@ -1224,6 +1233,8 @@ export const sourcesVisible = sqliteView("sources_visible", {
   fetchPriority: text("fetch_priority", { enum: ["normal", "low", "paused"] }),
   consecutiveNoChange: integer("consecutive_no_change"),
   consecutiveErrors: integer("consecutive_errors"),
+  // Type-level mirror of the #1862 unproductive-drain counter.
+  unproductiveDrains: integer("unproductive_drains"),
   nextFetchAfter: text("next_fetch_after"),
   changeDetectedAt: text("change_detected_at"),
   // Type-level mirror of the #1862 drain cooldown column — the real view is

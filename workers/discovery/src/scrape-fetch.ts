@@ -206,6 +206,11 @@ async function writeFetchLog(
     status: string;
     error?: string;
     errorCategory?: ErrorCategory;
+    // Transport-only signal (#1862): the source was flagged (change_detected_at
+    // set) when this fetch began. Lets the fetch-log handler distinguish an
+    // unproductive drain (flagged → 0 releases) from a legitimately-quiet poll.
+    // Stripped before the fetch_log insert — it is not a fetch_log column.
+    wasFlagged?: boolean;
   },
 ): Promise<void> {
   await env.apiFetcher
@@ -224,6 +229,7 @@ async function writeFetchLog(
         status: result.status,
         error: result.error ?? null,
         errorCategory: result.errorCategory ?? null,
+        ...(result.wasFlagged ? { wasFlagged: true } : {}),
       }),
     })
     .catch(() => {}); // best-effort
@@ -954,6 +960,9 @@ async function finalize(
   start: number,
 ): Promise<string> {
   const durationMs = Date.now() - start;
+  // Whether this source was flagged as changed when the drain began (#1862).
+  // Captured before updateSourceAfterFetch clears change_detected_at below.
+  const wasFlagged = source.changeDetectedAt != null;
 
   if (releases.length === 0) {
     await Promise.all([
@@ -963,6 +972,7 @@ async function finalize(
         releasesInserted: 0,
         durationMs,
         status: "no_change",
+        wasFlagged,
       }),
     ]);
     return JSON.stringify({
@@ -983,6 +993,7 @@ async function finalize(
       releasesInserted: inserted,
       durationMs: finalDuration,
       status: inserted > 0 ? "success" : "no_change",
+      wasFlagged,
     }),
   ]);
 
