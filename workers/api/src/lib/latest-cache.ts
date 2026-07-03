@@ -9,6 +9,10 @@
 import { logEvent } from "@releases/lib/log-event";
 import { purgeKeysForHomepageTicker } from "../graphql/persisted.js";
 import { FLAGS, flag, type FlagshipBinding } from "@releases/lib/flags";
+import { buildEdgeCacheKey } from "../middleware/edge-cache.js";
+
+/** Canonical API origin for edge-cache purge keys (must match stored request host). */
+const EDGE_CACHE_ORIGIN = "https://api.releases.sh";
 
 export interface LatestCacheBinding {
   get(key: string, type: "json"): Promise<unknown>;
@@ -101,6 +105,46 @@ function defaultShapeKey(shape: { count: number; excludeSourceTypes: string[] })
     count: String(shape.count),
     exclude: shape.excludeSourceTypes.length > 0 ? shape.excludeSourceTypes.join(",") : undefined,
   });
+}
+
+/** Public GET URL for one cacheable latest shape (edge-cache purge). */
+export function edgePurgeUrlForShape(shape: {
+  count: number;
+  excludeSourceTypes: string[];
+}): string {
+  const params = new URLSearchParams();
+  params.set("count", String(shape.count));
+  if (shape.excludeSourceTypes.length > 0) {
+    params.set("exclude", shape.excludeSourceTypes.join(","));
+  }
+  return `${EDGE_CACHE_ORIGIN}/v1/releases/latest?${params.toString()}`;
+}
+
+const EDGE_PURGE_ACCEPTS = ["application/json", "text/markdown"] as const;
+
+/**
+ * Delete edge-cache entries for the given public GET URLs. Fail-open when
+ * `caches.default` is absent (unit tests / non-workerd runtimes).
+ */
+export async function purgeEdgeCacheUrls(urls: string[]): Promise<void> {
+  if (typeof caches === "undefined") return;
+  const cache = (caches as unknown as { default: { delete: (k: Request) => Promise<boolean> } })
+    .default;
+  for (const url of urls) {
+    for (const accept of EDGE_PURGE_ACCEPTS) {
+      try {
+        const deleted = await cache.delete(buildEdgeCacheKey(url, accept));
+        logEvent("info", {
+          component: "invalidation",
+          event: deleted ? "edge-purged" : "edge-purge-miss",
+          url,
+          accept,
+        });
+      } catch (err) {
+        logEvent("warn", { component: "invalidation", event: "edge-purge-failed", url, err });
+      }
+    }
+  }
 }
 
 export async function withLatestCache<T>(
@@ -204,4 +248,7 @@ export async function invalidateLatestCache(
       }
     }),
   );
+
+  const edgeUrls = CACHEABLE_DEFAULT_SHAPES.map(edgePurgeUrlForShape);
+  await purgeEdgeCacheUrls(edgeUrls);
 }
