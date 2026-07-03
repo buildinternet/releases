@@ -64,10 +64,9 @@ async function handle(
   // Consumption telemetry (#1700/#1719): one PII-clean event per billable tool
   // call. `consumerRef` is hashed async via waitUntil — no D1/network on the
   // hot path. Protocol overhead (initialize/list/ping/notifications) excluded.
-  const consumption = await peekMcpCall(request);
-  if (consumption.metered) {
-    const emit = emitMcpConsumption(identity, consumption.tool ?? "unknown");
-    ctx.waitUntil(emit);
+  const { operations } = await peekMcpCall(request);
+  for (const operation of operations) {
+    ctx.waitUntil(emitMcpConsumption(identity, operation));
   }
 
   if (url.pathname === "/" && request.method === "GET") {
