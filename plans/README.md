@@ -20,12 +20,42 @@ prompt-tag escaping on ingested content all verified present).
 
 ### Execution order & status
 
-| Plan | Title                                                        | Priority | Effort | Depends on | Status |
-| ---- | ------------------------------------------------------------ | -------- | ------ | ---------- | ------ |
-| 004  | Surface swallowed write failures on the ingest path          | P1       | S      | —          | TODO   |
-| 005  | Characterization tests for the ingest critical path (#1652)  | P1       | L      | —          | TODO   |
-| 006  | Tests for the web admin server actions                       | P2       | M      | —          | TODO   |
-| 007  | Surface the breaking-change field: read routes + web (#1710) | P1       | M      | —          | TODO   |
+| Plan | Title                                                        | Priority | Effort | Depends on | Status          |
+| ---- | ------------------------------------------------------------ | -------- | ------ | ---------- | --------------- |
+| 004  | Surface swallowed write failures on the ingest path          | P1       | S      | —          | DONE — PR #1846 |
+| 005  | Characterization tests for the ingest critical path (#1652)  | P1       | L      | —          | DONE — PR #1847 |
+| 006  | Tests for the web admin server actions                       | P2       | M      | —          | DONE — PR #1848 |
+| 007  | Surface the breaking-change field: read routes + web (#1710) | P1       | M      | —          | DONE — PR #1849 |
+
+### Execution record (2026-07-03, executor subagents + advisor review)
+
+All four plans were executed by dispatched executor agents in isolated
+worktrees and reviewed (done criteria re-run, scope checked, diffs read)
+before their PRs opened. Deviations worth knowing about:
+
+- **007 had two scope amendments**: the executor's STOP found two
+  `titleShort` sites in `routes/orgs.ts` the plan's grep missed (amended in;
+  without them the org feeds would select the column and drop it at the
+  mapper), and review found the migration-notes block was dormant until
+  `page.tsx` passed the prop (amended in). The `releasesVisible` view mirror +
+  comment-only marker migration was an approved executor deviation.
+- **Process lessons encoded for future plans/tests**:
+  - Web files that import `bun:test` MUST carry the `.test.ts` suffix — the
+    Next build type-checks everything `web/tsconfig.json` doesn't exclude,
+    and only `**/*.test.ts(x)` is excluded. A helper named `test-helpers.ts`
+    broke the Vercel build on #1848; web-touching plans need a
+    `bunx tsc --noEmit -p web/tsconfig.json` (or `next build`) gate.
+  - New poll-fetch tests MUST stub the feed-adapter boundary via the sibling
+    `mock.module("@releases/adapters/feed.js", ...)` convention, never drive
+    it through `globalThis.fetch` — sibling module mocks leak process-wide
+    and test-file load order differs between macOS and Linux (#1847's
+    CI-only failure). `FeedHttpError` lives in `@releases/lib/errors`, not
+    the feed module.
+- **Findings surfaced by 005's characterization work** (tracked separately):
+  the missing org-scoped DELETE source route (dual-registration gap — task
+  chip raised), and the general `PATCH /v1/sources/:slug` replacing
+  `metadata` wholesale while `PATCH .../metadata` merges (design question,
+  pinned in tests).
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (reason) | REJECTED (reason)
 

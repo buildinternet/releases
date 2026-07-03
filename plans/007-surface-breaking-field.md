@@ -7,7 +7,7 @@
 > in `plans/README.md` — unless a reviewer dispatched you and told you they
 > maintain the index.
 >
-> **Drift check (run first)**: `git diff --stat 3238d540..HEAD -- workers/api/src/queries/ workers/api/src/routes/sources.ts packages/api-types/src/ web/src/components/release-item.tsx "web/src/app/release/[id]/release-content.tsx"`
+> **Drift check (run first)**: `git diff --stat 3238d540..HEAD -- workers/api/src/queries/ workers/api/src/routes/sources.ts workers/api/src/routes/orgs.ts packages/api-types/src/ web/src/components/release-item.tsx "web/src/app/release/[id]/release-content.tsx"`
 > If any in-scope file changed since this plan was written, compare the
 > "Current state" excerpts against the live code before proceeding; on a
 > mismatch, treat it as a STOP condition.
@@ -67,14 +67,19 @@ and any plain interfaces must stay in sync.
   `title_short` rides. Find every select to extend with:
 
 ```
-grep -rn "title_short" workers/api/src/queries/*.ts workers/api/src/routes/sources.ts
+grep -rn "title_short\|titleShort" workers/api/src/queries/*.ts workers/api/src/routes/sources.ts workers/api/src/routes/orgs.ts
 ```
 
 At `3238d540` that is: `queries/releases.ts` (the `getLatestReleasesAcross`
 select ~line 118 + `mapLatestRowToReleaseItem` ~line 152 +
 `getFollowedReleases` ~line 228), `queries/sources.ts` (~238, ~267, ~324),
-`queries/orgs.ts` (~484, ~585), `queries/search.ts` (~50), and the
-`GET /releases/:id` handler in `routes/sources.ts` (~line 3436 region).
+`queries/orgs.ts` (~484, ~585), `queries/search.ts` (~262, ~324), the
+`GET /releases/:id` handler plus two list mappers in `routes/sources.ts`
+(~3436, ~2321, ~2506), and — scope amendment 2026-07-03, found by the first
+executor pass — two sites in `routes/orgs.ts`: the org release-feed mapper
+(~2037, consumes `getOrgReleasesFeed` from `queries/orgs.ts`) and the org
+"since" listing select (~2166). Both must carry `breaking` too, or the
+`queries/orgs.ts` column never reaches the wire on org feeds.
 
 - Web:
   - Release card: `web/src/components/release-item.tsx` (the timeline/list card).
@@ -109,7 +114,8 @@ select ~line 118 + `mapLatestRowToReleaseItem` ~line 152 +
 **In scope** (the only files you should modify):
 
 - `workers/api/src/queries/releases.ts`, `queries/sources.ts`, `queries/orgs.ts`, `queries/search.ts`
-- `workers/api/src/routes/sources.ts` (the `GET /releases/:id` select/response only)
+- `workers/api/src/routes/sources.ts` (the `GET /releases/:id` select/response + the two `title_short` list mappers ~2321/~2506 only)
+- `workers/api/src/routes/orgs.ts` (ONLY the two `titleShort` sites ~2037/~2166 — scope amendment 2026-07-03; nothing else in this 2.3K-line file)
 - `packages/api-types/src/api-types.ts` + the release schemas file it re-exports (find via `grep -rln "titleShort" packages/api-types/src/`)
 - `web/src/lib/api.ts` (type mirror only)
 - `web/src/components/release-item.tsx`
