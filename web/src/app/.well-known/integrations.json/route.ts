@@ -10,10 +10,17 @@ export const revalidate = false;
 // defined once and referenced from each surface's auth by id.
 //
 // Every `basis.source` points back at this document's canonical URL, as the
-// v3 shape requires. Reads on the REST API and MCP server are anonymous/public
-// ("search and browse work out of the box"), so those surfaces declare
-// `auth.status: "none"`; the CLI is the credentialed integration path (sign in
-// or `RELEASES_API_KEY`), so it references the shared `releases-api-key`.
+// v3 shape requires.
+//
+// Auth is OPTIONAL on the REST API and MCP server: reads work anonymously
+// ("search and browse work out of the box"), but presenting an API token
+// (`Authorization: Bearer <token>`) raises your rate-limit tier and unlocks
+// account-scoped actions. v3 AuthStatus has no "optional" value — only
+// none / unknown / required — so these surfaces use `required` with the token
+// as an OR alternative and document the optionality in the credential setup,
+// rather than `none` (which would wrongly imply no auth exists at all). The
+// CLI is the primary credentialed path (`releases login` or `RELEASES_API_KEY`).
+// All three surfaces reference the one shared `releases-api-key` credential.
 //
 // GraphQL (`POST /v1/graphql`) is intentionally omitted: in production it is
 // restricted to persisted operations with introspection/GraphiQL disabled, so
@@ -22,16 +29,38 @@ const SELF = "https://releases.sh/.well-known/integrations.json";
 
 const declaredBasis = { via: "declared", source: SELF } as const;
 
+// How the shared API token binds to an HTTP request. Same for the REST API and
+// the MCP server, which both read the token from the `Authorization` header.
+const bearerTokenAuth = {
+  status: "required",
+  entries: [
+    {
+      use: [
+        {
+          id: "releases-api-key",
+          mechanics: {
+            source: "http",
+            in: "header",
+            headerName: "Authorization",
+            scheme: "Bearer",
+          },
+        },
+      ],
+      basis: declaredBasis,
+    },
+  ],
+} as const;
+
 const body = {
   version: 3,
   summary:
-    "Releases is an agent-friendly registry of product changelogs and release notes, queryable via a public REST API, a remote MCP server, and a CLI.",
+    "Releases is an agent-friendly registry of product changelogs and release notes, queryable via a public REST API, a remote MCP server, and a CLI. Reads are public; an optional API token raises your rate-limit tier.",
   credentials: {
     "releases-api-key": {
       type: "api_key",
       label: "Releases API key",
       setup:
-        "Search and browse need no credential. To follow orgs/products, get a personalized feed, or manage webhooks, sign in with `releases login` — it opens your browser (OAuth device authorization) and mints a personal, read-only key (`relu_…`). Already issued a token (e.g. a write/admin `relk_…` key during the closed beta)? Store it with `releases auth login --token <token>`. The stored key is sent to `https://api.releases.sh` as `Authorization: Bearer <token>`; `RELEASES_API_KEY` in the environment overrides the stored credential (handy for CI).",
+        "Optional. Search, browse, and MCP reads work with no credential; presenting a token raises your rate-limit tier (anonymous < signed-in account < machine token) and unlocks account-scoped actions. Sign in with `releases login` — it opens your browser (OAuth device authorization) and mints a personal, read-only key (`relu_…`). Already issued a token (e.g. a write/admin `relk_…` key during the closed beta)? Store it with `releases auth login --token <token>`. The token is sent to `https://api.releases.sh` (and `https://mcp.releases.sh`) as `Authorization: Bearer <token>`; `RELEASES_API_KEY` in the environment overrides the stored credential (handy for CI).",
     },
   },
   surfaces: [
@@ -43,7 +72,7 @@ const body = {
       url: "https://api.releases.sh",
       spec: "https://api.releases.sh/v1/openapi.json",
       basis: declaredBasis,
-      auth: { status: "none", basis: declaredBasis },
+      auth: bearerTokenAuth,
     },
     {
       type: "mcp",
@@ -53,7 +82,7 @@ const body = {
       url: "https://mcp.releases.sh/mcp",
       transports: ["streamable-http"],
       basis: declaredBasis,
-      auth: { status: "none", basis: declaredBasis },
+      auth: bearerTokenAuth,
     },
     {
       type: "cli",
