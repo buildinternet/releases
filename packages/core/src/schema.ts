@@ -1248,6 +1248,9 @@ export const releasesVisible = sqliteView("releases_visible", {
   summary: text("summary"),
   titleGenerated: text("title_generated"),
   titleShort: text("title_short"),
+  // Type-level mirror only (#1710) — the real view is `SELECT releases.*`, so
+  // it already exposes the column added by 20260620000000_add_release_breaking.
+  breaking: text("breaking", { enum: BREAKING_LEVELS }).notNull(),
   url: text("url"),
   contentHash: text("content_hash"),
   contentChars: integer("content_chars"),

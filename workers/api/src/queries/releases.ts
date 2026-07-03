@@ -1,5 +1,6 @@
 import { eq, sql } from "drizzle-orm";
 import type { ReleaseLatestItem } from "@buildinternet/releases-api-types";
+import type { BreakingLevel } from "@buildinternet/releases-core/breaking";
 import { buildFeedCursor, feedCursorSql } from "@releases/core-internal/feed-cursor";
 import { COVERAGE_COUNT_EXPR } from "@releases/core-internal/release-coverage-sql";
 import type { AnyDb } from "../db.js";
@@ -13,6 +14,10 @@ export type LatestReleaseRow = {
   summary: string | null;
   title_generated: string | null;
   title_short: string | null;
+  /** Breaking-change level (#1696/#1710). `"unknown"` is the fail-open default;
+   *  NULL only on rows predating the column — mapped to `undefined` (absent) on
+   *  the wire, never invented. */
+  breaking: string | null;
   published_at: string | null;
   /** Selected for feed cursor encoding; not exposed on the wire. */
   fetched_at?: string;
@@ -115,7 +120,7 @@ export async function getLatestReleasesAcross(
   const stmt = d1
     .prepare(
       `
-    SELECT r.id, r.version, r.title, r.summary, r.title_generated, r.title_short, r.type,
+    SELECT r.id, r.version, r.title, r.summary, r.title_generated, r.title_short, r.breaking, r.type,
            r.published_at, r.url, r.media,
            r.content_chars, r.content_tokens,
            s.slug AS source_slug, s.name AS source_name, s.type AS source_type,
@@ -161,6 +166,8 @@ export function mapLatestRowToReleaseItem(
     summary: r.summary,
     titleGenerated: r.title_generated,
     titleShort: r.title_short,
+    // NULL (pre-column row) → field absent on the wire; never invent a value (#1710).
+    breaking: (r.breaking as BreakingLevel | null) ?? undefined,
     publishedAt: r.published_at,
     url: r.url,
     media: parseReleaseMedia(r.media, mediaOrigin),
@@ -225,7 +232,7 @@ export async function getFollowedReleases(
   if (!hasFollows) return [];
 
   return db.all<LatestReleaseRow>(sql`
-    SELECT r.id, r.version, r.title, r.summary, r.title_generated, r.title_short, r.type,
+    SELECT r.id, r.version, r.title, r.summary, r.title_generated, r.title_short, r.breaking, r.type,
            r.published_at, r.fetched_at, r.url, r.media,
            NULL AS content_chars, NULL AS content_tokens,
            s.slug AS source_slug, s.name AS source_name, s.type AS source_type,

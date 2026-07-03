@@ -31,6 +31,7 @@ import {
   type ReleaseType,
 } from "@buildinternet/releases-core/schema";
 import { SOURCE_TYPES, type SourceType } from "@buildinternet/releases-core/source-enums";
+import type { BreakingLevel } from "@buildinternet/releases-core/breaking";
 import { parseKindParam, isValidKind, KIND_VALUES } from "@buildinternet/releases-core/kinds";
 import { buildListResponse, parseListPagination } from "../lib/pagination.js";
 import { RELEASE_URL_UPSERT, RELEASE_CONTENT_UPSERT } from "@releases/core-internal/release-upsert";
@@ -2319,6 +2320,9 @@ export async function buildSourceDetailPayload(
     summary: r.summary ?? (r.content.length > 150 ? r.content.slice(0, 150) + "..." : r.content),
     titleGenerated: r.title_generated,
     titleShort: r.title_short,
+    // List paths carry `breaking` only, never `migrationNotes` (#1710).
+    // NULL (pre-column row) → field absent; never invent a value.
+    breaking: (r.breaking as BreakingLevel | null) ?? undefined,
     content: hydrateMediaUrls(r.content, mediaOrigin),
     publishedAt: r.published_at,
     fetchedAt: r.fetched_at,
@@ -2504,6 +2508,9 @@ const getSourceReleasesFeedHandler = async (c: import("hono").Context<Env>) => {
     summary: r.summary ?? (r.content.length > 150 ? r.content.slice(0, 150) + "..." : r.content),
     titleGenerated: r.title_generated,
     titleShort: r.title_short,
+    // List paths carry `breaking` only, never `migrationNotes` (#1710).
+    // NULL (pre-column row) → field absent; never invent a value.
+    breaking: (r.breaking as BreakingLevel | null) ?? undefined,
     content: hydrateMediaUrls(r.content, mediaOrigin),
     publishedAt: r.published_at,
     fetchedAt: r.fetched_at,
@@ -3519,6 +3526,11 @@ sourceRoutes.get(
     const hydratedContent = hydrateMediaUrls(release.content as string, mediaOrigin);
     const result = {
       ...releaseRest,
+      // Detail is the only read path that carries `migrationNotes` alongside
+      // `breaking` (#1710). Normalize NULL → absent so pre-column rows omit
+      // the fields instead of emitting `null` — never invent a value.
+      breaking: release.breaking ?? undefined,
+      migrationNotes: release.migrationNotes ?? undefined,
       content: hydratedContent,
       media,
       sourceName,

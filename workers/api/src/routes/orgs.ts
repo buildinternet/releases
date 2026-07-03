@@ -49,6 +49,7 @@ import {
 } from "@buildinternet/releases-core/schema";
 import { daysAgoIso } from "@buildinternet/releases-core/dates";
 import { parseCompositionFromMetadata } from "@buildinternet/releases-core/composition";
+import type { BreakingLevel } from "@buildinternet/releases-core/breaking";
 import { parseNotice, setNoticeInMetadata, type Notice } from "@buildinternet/releases-core/notice";
 import { parseKindParam, KIND_VALUES, isValidKind } from "@buildinternet/releases-core/kinds";
 import { resolveCategoryInput } from "@releases/core-internal/category-alias";
@@ -2035,6 +2036,9 @@ orgRoutes.get(
           r.summary ?? (r.content.length > 150 ? r.content.slice(0, 150) + "..." : r.content),
         titleGenerated: r.title_generated,
         titleShort: r.title_short,
+        // List paths carry `breaking` only, never `migrationNotes` (#1710).
+        // NULL (pre-column row) → field absent; never invent a value.
+        breaking: (r.breaking as BreakingLevel | null) ?? undefined,
         content: hydrateMediaUrls(r.content, mediaOrigin),
         publishedAt: r.published_at,
         url: r.url,
@@ -2164,6 +2168,8 @@ orgRoutes.get(
         summary: releasesVisible.summary,
         titleGenerated: releasesVisible.titleGenerated,
         titleShort: releasesVisible.titleShort,
+        // Breaking-change level (#1710) — list paths carry `breaking` only.
+        breaking: releasesVisible.breaking,
         url: releasesVisible.url,
         contentHash: releasesVisible.contentHash,
         metadata: releasesVisible.metadata,

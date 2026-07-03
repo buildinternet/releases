@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { KIND_VALUES } from "@buildinternet/releases-core/kinds";
+import { BREAKING_LEVELS } from "@buildinternet/releases-core/breaking";
 import {
   AppStoreSourceInfoSchema,
   CategorySchema,
@@ -424,6 +425,12 @@ export const OrgRecentReleaseItemSchema = z.object({
   summary: z.string().nullable(),
   titleGenerated: z.string().nullable().optional(),
   titleShort: z.string().nullable().optional(),
+  /**
+   * Machine-readable breaking-change level (#1696, surfaced on read paths in
+   * #1710). `.optional()` for mid-deploy tolerance; absent or `"unknown"`
+   * means not classified. List paths carry `breaking` only.
+   */
+  breaking: z.enum(BREAKING_LEVELS).optional(),
   url: z.string().nullable(),
   contentHash: z.string().nullable(),
   metadata: z.string().nullable(),

@@ -482,6 +482,9 @@ export type OrgReleaseRow = {
   summary: string | null;
   title_generated: string | null;
   title_short: string | null;
+  /** Breaking-change level (#1696/#1710). `"unknown"` fail-open default; NULL
+   *  only on rows predating the column — mapped to absent on the wire. */
+  breaking: string | null;
   published_at: string | null;
   fetched_at: string;
   url: string | null;
@@ -582,7 +585,7 @@ export async function getOrgReleasesFeed(
     .prepare(
       `
     SELECT r.id, r.version, r.title, r.content, r.summary,
-           r.title_generated, r.title_short, r.type,
+           r.title_generated, r.title_short, r.breaking, r.type,
            r.published_at, r.fetched_at, r.url, r.media, r.prerelease,
            r.content_chars, r.content_tokens, r.metadata,
            s.slug AS source_slug, s.name AS source_name, s.type AS source_type,

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { SOURCE_TYPES } from "@buildinternet/releases-core/source-enums";
+import { BREAKING_LEVELS } from "@buildinternet/releases-core/breaking";
 import {
   AppStoreSourceInfoSchema,
   MediaItemSchema,
@@ -51,6 +52,14 @@ export const ReleaseLatestItemSchema = z.object({
   summary: z.string().nullable(),
   titleGenerated: z.string().nullable(),
   titleShort: z.string().nullable(),
+  /**
+   * Machine-readable breaking-change level (#1696, surfaced on read paths in
+   * #1710). `.optional()` for mid-deploy / pinned-worker tolerance and because
+   * rows predating the column omit it; absent or `"unknown"` means not
+   * classified (the fail-open default). List paths carry `breaking` only —
+   * `migrationNotes` stays detail-route-only to keep list payloads slim.
+   */
+  breaking: z.enum(BREAKING_LEVELS).optional(),
   publishedAt: z.string().nullable(),
   url: z.string().nullable(),
   media: z.array(MediaItemSchema),
@@ -215,6 +224,18 @@ export const ReleaseDetailResponseSchema = z.object({
   summary: z.string().nullable(),
   titleGenerated: z.string().nullable(),
   titleShort: z.string().nullable(),
+  /**
+   * Machine-readable breaking-change level (#1696, surfaced on read paths in
+   * #1710). `.optional()` — rows predating the column omit it; absent or
+   * `"unknown"` means not classified (the fail-open default). Mirrors
+   * `ReleaseDetail.breaking` in api-types.ts.
+   */
+  breaking: z.enum(BREAKING_LEVELS).optional(),
+  /**
+   * Explicit upgrade/migration steps lifted from the body (#1696); omitted
+   * when the body gives none. Detail-route-only — list paths never carry it.
+   */
+  migrationNotes: z.string().nullable().optional(),
   url: z.string().nullable(),
   contentHash: z.string().nullable(),
   media: z.array(MediaItemSchema),
