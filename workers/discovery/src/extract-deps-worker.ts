@@ -149,6 +149,7 @@ function buildWorkerRepo(env: WorkerDepsEnv): ExtractRepo {
             model: entry.model,
             inputTokens: entry.inputTokens,
             outputTokens: entry.outputTokens,
+            sourceId: entry.sourceId,
             sourceSlug: entry.sourceSlug,
             releaseCount: entry.releaseCount,
             extractionMode: entry.extractionMode,

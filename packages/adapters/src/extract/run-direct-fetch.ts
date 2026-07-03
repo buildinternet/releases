@@ -124,6 +124,7 @@ export async function runDirectFetchExtraction(
     model: result.modelUsed,
     inputTokens: result.totalInput,
     outputTokens: result.totalOutput,
+    sourceId: source.id,
     sourceSlug: source.slug,
     releaseCount: result.entries.length,
     extractionMode: result.mode,

@@ -43,6 +43,7 @@ describe("buildAgentUsageRows", () => {
     });
 
     const rows = buildAgentUsageRows({
+      sourceId: "src_abc123",
       sourceSlug: "s",
       agentModel: AGENT_MODEL,
       result,
@@ -64,6 +65,10 @@ describe("buildAgentUsageRows", () => {
     expect(rows[1]!.cacheReadTokens).toBe(40);
     // No double-counting: the two rows sum to the combined totals.
     expect(rows[0]!.inputTokens + rows[1]!.inputTokens).toBe(result.totalInput);
+    // sourceId must be attributed on BOTH split rows, not just one — otherwise
+    // the same ambiguous-slug attribution gap reappears for half the spend.
+    expect(rows[0]!.sourceId).toBe("src_abc123");
+    expect(rows[1]!.sourceId).toBe("src_abc123");
   });
 
   test("emits a single combined row when both extractions used the same model", () => {
