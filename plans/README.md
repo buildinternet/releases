@@ -22,14 +22,14 @@ tests first), MCP cache/consumption fixes, edge-cache purge.
 
 | Plan | Title | Priority | Effort | Depends on | Status |
 | ---- | ----- | -------- | ------ | ---------- | ------ |
-| 008 | SourceActor short backoff on workflow create failure | P1 | S | — | TODO |
-| 009 | Fix whats-changed token budget bypass | P1 | S | — | TODO |
-| 010 | Fail-closed discovery source-lock on DO RPC errors | P1 | M | — | TODO |
-| 011 | Webhook queue characterization tests | P1 | M | — | TODO |
-| 012 | Re-validate webhook URLs at delivery time | P1 | M | 011 | TODO |
-| 013 | Cache MCP search and get_release | P2 | S | — | TODO |
-| 014 | Fix MCP batch consumption counting | P2 | S | — | TODO |
-| 015 | Wire edge-cache purge on publish | P2 | M | — | TODO |
+| 008 | SourceActor short backoff on workflow create failure | P1 | S | — | DONE — branch `advisor/008-source-actor-create-failure-backoff` (`7c9392ff`) |
+| 009 | Fix whats-changed token budget bypass | P1 | S | — | DONE — branch `advisor/009-whats-changed-token-budget` (`190f0a68`) |
+| 010 | Fail-closed discovery source-lock on DO RPC errors | P1 | M | — | DONE — branch `advisor/010-discovery-source-lock-fail-closed` (`4633fcd9`) |
+| 011 | Webhook queue characterization tests | P1 | M | — | DONE — branch `advisor/011-webhook-queue-characterization-tests` (`6cdddf1d`) |
+| 012 | Re-validate webhook URLs at delivery time | P1 | M | 011 | DONE — branch `advisor/012-webhook-delivery-ssrf-revalidation` (`354e8d30`) |
+| 013 | Cache MCP search and get_release | P2 | S | — | DONE — branch `advisor/013-mcp-cache-search-get-release` (`7513e51f`) |
+| 014 | Fix MCP batch consumption counting | P2 | S | — | DONE — branch `advisor/014-mcp-batch-consumption-counting` (`c13a5258`) |
+| 015 | Wire edge-cache purge on publish | P2 | M | — | DONE — branch `advisor/015-edge-cache-purge-on-publish` (`7d2b1d93`) |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (reason) | REJECTED (reason)
 
