@@ -176,10 +176,25 @@ export class OrgActor extends DurableObject<OrgActorEnv> {
       // re-dispatch a no-op Haiku session on the next SourceActor poll tick.
       // Only stamped on success — a rejected /update (spend cap / lock / kill
       // switch) leaves last_drain_at untouched so the source re-drains sooner.
-      await this.db()
-        .update(sources)
-        .set({ lastDrainAt: new Date().toISOString() })
-        .where(inArray(sources.id, sourceIdentifiers));
+      //
+      // In its OWN try/catch: the dispatch already succeeded (drain-dispatched
+      // logged above), so a D1 write failure here must not fall through to the
+      // dispatch catch and be misreported as a `drain-error`. Log it distinctly
+      // with the affected source ids so a lost cooldown stamp is unambiguous.
+      try {
+        await this.db()
+          .update(sources)
+          .set({ lastDrainAt: new Date().toISOString() })
+          .where(inArray(sources.id, sourceIdentifiers));
+      } catch (err) {
+        logEvent("error", {
+          component: "org-actor",
+          event: "drain-cooldown-stamp-failed",
+          orgId,
+          sourceIds: sourceIdentifiers,
+          err: err instanceof Error ? err.message : String(err),
+        });
+      }
     } catch (err) {
       logEvent("error", {
         component: "org-actor",
