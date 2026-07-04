@@ -51,8 +51,10 @@ import type { Release, Source } from "@buildinternet/releases-core/schema";
 import { daysAgoIso } from "@buildinternet/releases-core/dates";
 import { resolveSourceKind, type Kind } from "@buildinternet/releases-core/kinds";
 import {
+  OVERVIEW_MIN_WINDOW_RELEASES,
   OVERVIEW_RELEASE_LIMIT,
   OVERVIEW_WINDOW_DAYS,
+  OVERVIEW_WINDOW_FALLBACK_DAYS,
   selectReleasesForOverview,
 } from "@buildinternet/releases-core/overview";
 
@@ -132,8 +134,9 @@ function chunk<T>(items: T[], size: number): T[][] {
  *       (recentReleaseCount > minNewReleases AND overview older than minOverviewAgeDays)
  *
  * `recentReleaseCount` counts releases with `publishedAt > overview.updated_at`
- * (or all within OVERVIEW_WINDOW_DAYS when no overview exists), excluding
- * suppressed rows.
+ * (or all within OVERVIEW_WINDOW_FALLBACK_DAYS when no overview exists —
+ * deliberately the wider window so a quiet org that last shipped 40+ days
+ * ago still qualifies for its first overview), excluding suppressed rows.
  */
 export async function fetchOverviewCandidates(
   db: AnyDb,
@@ -154,12 +157,16 @@ export async function fetchOverviewCandidates(
   );
   const cutoffForCadence = (days: number): string =>
     daysAgoIso(Math.max(0, Math.floor(Number(days) || 0)));
-  const windowCutoffIso = daysAgoIso(OVERVIEW_WINDOW_DAYS);
+  // Deliberately the wider fallback window (not the default 30-day window):
+  // an org with no existing overview yet may have last shipped 40-90 days ago,
+  // and using the tight 30-day cutoff here would make it look inactive and
+  // never qualify for its FIRST overview.
+  const windowCutoffIso = daysAgoIso(OVERVIEW_WINDOW_FALLBACK_DAYS);
 
   // Single query: for each org, left-join its overview row and count recent
   // releases. The HAVING clause encodes the eligibility predicate. The release
   // count uses `MAX(updated_at, windowCutoff)` so never-generated orgs are
-  // measured against the 90-day window instead of all-time.
+  // measured against the fallback window instead of all-time.
   const conditions = [
     ne(organizationsPublic.discovery, "on_demand"),
     eq(organizationsPublic.autoGenerateContent, true),
@@ -264,7 +271,12 @@ export interface OverviewInputsForOrg {
 }
 
 export interface OverviewInputsOptions {
-  /** Lookback window in days. Default OVERVIEW_WINDOW_DAYS (90). */
+  /**
+   * Lookback window in days. Default OVERVIEW_WINDOW_DAYS (30). When omitted
+   * and the default-window slice yields fewer than OVERVIEW_MIN_WINDOW_RELEASES
+   * releases, the widened OVERVIEW_WINDOW_FALLBACK_DAYS (90) is used instead —
+   * an explicit windowDays always bypasses this fallback.
+   */
   windowDays?: number;
   /** Cap on selected releases. Default OVERVIEW_RELEASE_LIMIT (50). */
   limit?: number;
@@ -283,6 +295,10 @@ export async function fetchOverviewInputsForOrg(
   orgId: string,
   options: OverviewInputsOptions = {},
 ): Promise<OverviewInputsForOrg | null> {
+  // Track whether the caller passed an explicit windowDays — only the default
+  // (30-day) case is eligible for the quiet-org 90-day widen below; an explicit
+  // caller-supplied window is respected as-is.
+  const explicitWindowDays = options.windowDays != null;
   const windowDays = Math.max(1, Math.floor(Number(options.windowDays) || OVERVIEW_WINDOW_DAYS));
   const limit = Math.max(1, Math.floor(Number(options.limit) || OVERVIEW_RELEASE_LIMIT));
 
@@ -335,8 +351,6 @@ export async function fetchOverviewInputsForOrg(
     };
   }
 
-  const cutoff = daysAgoIso(windowDays);
-
   // One IN-bound SELECT instead of N per-source SELECTs. Up to ~20 sources per
   // org × 100 orgs = ~2,000 round-trips becomes ~100 — well under D1's per-
   // request statement budget. Caller groups by sourceId locally. The IN clause
@@ -347,39 +361,60 @@ export async function fetchOverviewInputsForOrg(
     inArray(releases.sourceId, c),
   );
   const sourceCondition = sourceIdChunks.length === 1 ? sourceIdChunks[0]! : or(...sourceIdChunks)!;
-  const allRows = await db
-    .select()
-    .from(releases)
-    .where(and(sourceCondition, gte(releases.publishedAt, cutoff), eq(releases.suppressed, false)))
-    .orderBy(desc(releases.publishedAt));
-
-  const releasesBySource = new Map<string, Release[]>();
-  for (const r of allRows) {
-    const list = releasesBySource.get(r.sourceId) ?? [];
-    list.push(r);
-    releasesBySource.set(r.sourceId, list);
-  }
   const orgProducts = await db
     .select({ id: products.id, kind: products.kind })
     .from(products)
     .where(eq(products.orgId, org.id));
   const productKindById = new Map(orgProducts.map((p) => [p.id, p.kind]));
 
-  const releasesPerSource = activeSources.map((s) => ({
-    type: s.type,
-    kind: resolveSourceKind(
-      { kind: s.kind as Kind | null },
-      s.productId ? { kind: (productKindById.get(s.productId) ?? null) as Kind | null } : null,
-    ),
-    // Group key for the per-product budget step in selectReleasesForOverview.
-    productId: s.productId,
-    releases: releasesBySource.get(s.id) ?? [],
-  }));
+  // Selects + runs selectReleasesForOverview for a given window, in days.
+  const selectForWindow = async (
+    days: number,
+  ): Promise<{ releases: Release[]; totalAvailable: number }> => {
+    const cutoff = daysAgoIso(days);
+    const allRows = await db
+      .select()
+      .from(releases)
+      .where(
+        and(sourceCondition, gte(releases.publishedAt, cutoff), eq(releases.suppressed, false)),
+      )
+      .orderBy(desc(releases.publishedAt));
 
-  const { releases: selected, totalAvailable } = selectReleasesForOverview(
-    releasesPerSource,
-    limit,
-  );
+    const releasesBySource = new Map<string, Release[]>();
+    for (const r of allRows) {
+      const list = releasesBySource.get(r.sourceId) ?? [];
+      list.push(r);
+      releasesBySource.set(r.sourceId, list);
+    }
+
+    const releasesPerSource = activeSources.map((s) => ({
+      type: s.type,
+      kind: resolveSourceKind(
+        { kind: s.kind as Kind | null },
+        s.productId ? { kind: (productKindById.get(s.productId) ?? null) as Kind | null } : null,
+      ),
+      // Group key for the per-product budget step in selectReleasesForOverview.
+      productId: s.productId,
+      releases: releasesBySource.get(s.id) ?? [],
+    }));
+
+    return selectReleasesForOverview(releasesPerSource, limit);
+  };
+
+  let effectiveWindowDays = windowDays;
+  let { releases: selected, totalAvailable } = await selectForWindow(windowDays);
+
+  // Quiet-org fallback: only when the caller didn't pin an explicit window and
+  // the default-window slice is too thin, re-run selection against the wider
+  // fallback window so the org's overview keeps substance.
+  if (
+    !explicitWindowDays &&
+    selected.length < OVERVIEW_MIN_WINDOW_RELEASES &&
+    totalAvailable < OVERVIEW_MIN_WINDOW_RELEASES
+  ) {
+    effectiveWindowDays = OVERVIEW_WINDOW_FALLBACK_DAYS;
+    ({ releases: selected, totalAvailable } = await selectForWindow(OVERVIEW_WINDOW_FALLBACK_DAYS));
+  }
 
   return {
     org,
@@ -390,6 +425,6 @@ export async function fetchOverviewInputsForOrg(
     existingContent: existing?.content ?? null,
     selected,
     totalAvailable,
-    windowDays,
+    windowDays: effectiveWindowDays,
   };
 }

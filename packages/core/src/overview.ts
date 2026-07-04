@@ -10,8 +10,25 @@ export const OVERVIEW_STALE_DAYS = 30;
 /** Default preview length when truncating overview content for inline display. */
 export const OVERVIEW_PREVIEW_WORDS = 80;
 
-/** Lookback window for selecting releases to feed into overview regeneration. */
-export const OVERVIEW_WINDOW_DAYS = 90;
+/**
+ * Lookback window for selecting releases to feed into overview regeneration.
+ * With the daily regen cadence (#1898) a 30-day window covers active orgs.
+ */
+export const OVERVIEW_WINDOW_DAYS = 30;
+
+/**
+ * Fallback lookback window for quiet orgs whose 30-day slice is too thin.
+ * Quiet orgs fall back to this window when the 30-day slice has fewer than
+ * `OVERVIEW_MIN_WINDOW_RELEASES` releases so their overviews keep substance.
+ */
+export const OVERVIEW_WINDOW_FALLBACK_DAYS = 90;
+
+/**
+ * Below this many releases in the default 30-day window, widen to
+ * `OVERVIEW_WINDOW_FALLBACK_DAYS` so quiet orgs still get a substantive
+ * overview instead of one generated from a handful of releases.
+ */
+export const OVERVIEW_MIN_WINDOW_RELEASES = 5;
 
 /** Hard cap on releases passed to the model in a single regeneration. */
 export const OVERVIEW_RELEASE_LIMIT = 50;
