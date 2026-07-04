@@ -818,6 +818,11 @@ export interface ReleaseDetail {
   /** Explicit upgrade/migration steps lifted from the body (#1696); null when the body gives none. */
   migrationNotes?: string | null;
   url: string | null;
+  /**
+   * Canonical releases.sh detail-page URL (friendly form: ID + current
+   * title slug). Additive — older servers omit it.
+   */
+  webUrl?: string;
   media: MediaItem[];
   publishedAt: string | null;
   fetchedAt: string;

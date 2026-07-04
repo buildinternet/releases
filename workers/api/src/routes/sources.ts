@@ -42,10 +42,12 @@ import { buildCompositionMetadataSet } from "@releases/core-internal/composition
 import { likeContains } from "@buildinternet/releases-core/sql-like";
 import { toSlug } from "@buildinternet/releases-core/slug";
 import { isReservedSlug } from "@buildinternet/releases-core/reserved-slugs";
+import { parseReleaseParam, releasePath } from "@buildinternet/releases-core/release-slug";
 import {
   buildChangelogResponse,
   selectChangelogFile,
 } from "@buildinternet/releases-core/changelog-slice";
+import { releaseWebBase } from "../queries/releases.js";
 import type { SourceWithOrg, SourcePatchInput } from "@buildinternet/releases-api-types";
 import { SourcePatchInputSchema } from "@buildinternet/releases-api-types";
 import {
@@ -3464,7 +3466,7 @@ sourceRoutes.get(
     tags: ["Releases"],
     summary: "Get release by ID",
     description:
-      "Returns a single release by its typed `rel_…` ID. Suppressed and coverage-side rows are excluded via the `releases_visible` view — they return 404. The `content` field has CDN-origin media URLs rewritten in-place; the `media` array is parsed from the raw D1 JSON. Accepts `Accept: text/markdown` to receive the release formatted as Markdown.",
+      "Returns a single release by its typed `rel_…` ID. Suppressed and coverage-side rows are excluded via the `releases_visible` view — they return 404. The `content` field has CDN-origin media URLs rewritten in-place; the `media` array is parsed from the raw D1 JSON. Accepts `Accept: text/markdown` to receive the release formatted as Markdown. Accepts the friendly `rel_…-<slug>` URL segment form — the trailing slug is ignored for lookup. The response includes `webUrl`, the canonical releases.sh detail-page URL (Zendesk-style: ID + current title slug).",
     responses: {
       200: {
         description: "Release detail",
@@ -3478,7 +3480,9 @@ sourceRoutes.get(
   }),
   async (c) => {
     const db = createDb(c.env.DB);
-    const id = c.req.param("id");
+    // Accept the friendly `rel_<id>-<slug>` form: the ID is positional
+    // (rel_ + 21 chars); any trailing slug is decorative and ignored.
+    const id = parseReleaseParam(c.req.param("id")).id;
 
     const rows = await db
       .select({
@@ -3561,6 +3565,13 @@ sourceRoutes.get(
       composition,
       appStore,
       video,
+      webUrl: `${releaseWebBase(c.env)}${releasePath({
+        id: release.id,
+        titleShort: release.titleShort,
+        titleGenerated: release.titleGenerated,
+        title: release.title,
+        version: release.version,
+      })}`,
     };
 
     if (wantsMarkdown(c)) {

@@ -237,6 +237,13 @@ export const ReleaseDetailResponseSchema = z.object({
    */
   migrationNotes: z.string().nullable().optional(),
   url: z.string().nullable(),
+  /**
+   * Canonical releases.sh detail-page URL, `https://releases.sh/release/
+   * rel_<id>-<slug>` (Zendesk-style: immutable ID + current title slug;
+   * the slug follows title regeneration, the ID keeps old links alive).
+   * Additive — older servers omit it.
+   */
+  webUrl: z.string().optional(),
   contentHash: z.string().nullable(),
   media: z.array(MediaItemSchema),
   publishedAt: z.string().nullable(),

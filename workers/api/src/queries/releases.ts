@@ -150,6 +150,15 @@ export async function getLatestReleasesAcross(
 }
 
 /**
+ * Absolute web origin for building `webUrl` fields. `WEB_BASE_URL` is set in
+ * prod/staging wrangler config; the fallback keeps the prod origin so local
+ * dev without the var still emits a well-formed URL.
+ */
+export function releaseWebBase(env: { WEB_BASE_URL?: string }): string {
+  return (env.WEB_BASE_URL ?? "https://releases.sh").replace(/\/+$/, "");
+}
+
+/**
  * Map a raw `LatestReleaseRow` (from D1 or bun:sqlite) to the wire-protocol
  * `ReleaseLatestItem` shape. Extracted so both the `/releases/latest` handler
  * and the personalized feed (`getFollowedReleases`) render identically.
