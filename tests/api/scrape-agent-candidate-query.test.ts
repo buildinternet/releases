@@ -128,6 +128,32 @@ describe("queryCandidates", () => {
     expect(result.rows).toEqual([]);
     expect(result.skippedOverCap).toBe(0);
   });
+
+  it("includes a flagged source with NULL fetchPriority (NULL-safe paused filter)", async () => {
+    // A bare `fetch_priority != 'paused'` evaluates to NULL (not TRUE) for a
+    // NULL-priority row and would wrongly drop a stranded source from the drain.
+    const sqlite = new Database(":memory:");
+    const db = drizzle(sqlite);
+    applyMigrations(sqlite);
+    db.insert(organizations)
+      .values({ id: "org_a", name: "Org A", slug: "a", category: "developer-tools" })
+      .run();
+    db.insert(sources)
+      .values({
+        id: "src_null_prio",
+        name: "S",
+        slug: "s-null-prio",
+        type: "scrape",
+        url: "https://a.com/changelog",
+        orgId: "org_a",
+        changeDetectedAt: "2026-04-18T00:00:00Z",
+        fetchPriority: null,
+        metadata: "{}",
+      })
+      .run();
+    const result = await queryCandidates(db, { cap: 10 });
+    expect(result.rows.map((r) => r.id)).toEqual(["src_null_prio"]);
+  });
 });
 
 /**

@@ -558,9 +558,10 @@ export class PollAndFetchWorkflow extends WorkflowEntrypoint<
         return;
       }
 
-      // Scrape-no-feed / agent sources: pollOne already wrote `changeDetectedAt`,
-      // and the daily scrape-agent sweep cron drains those. Calling fetchOne here
-      // would fail with "Missing feedUrl or feedType" because there's no feed to
+      // Scrape-no-feed / agent sources: pollOne already wrote `changeDetectedAt`
+      // (via the `drainSelfFlag` above), and the OrgActor/SourceActor drain
+      // dispatches an `/update` session for those. Calling fetchOne here would
+      // fail with "Missing feedUrl or feedType" because there's no feed to
       // hit — mirror the inline `pollAndFetch` filter. Falsy check (not `!= null`)
       // matches the gate inside fetchOne (poll-fetch.ts:446) so an empty-string
       // feedUrl can't slip past either. See #486 / #517.

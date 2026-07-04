@@ -52,7 +52,11 @@ export async function queryCandidates(
   const cooldownCutoff = new Date(Date.now() - cooldownMs).toISOString();
   const whereClause = and(
     inArray(sources.type, ["scrape", "agent"]),
-    ne(sources.fetchPriority, "paused"),
+    // NULL-safe paused filter: fetch_priority is nullable, and a bare
+    // `!= 'paused'` evaluates to NULL (not TRUE) for NULL rows, which would
+    // wrongly drop a NULL-priority (i.e. effectively "normal") stranded source
+    // from the drain. Mirrors the COALESCE guard in queries/stuck-sources.ts.
+    or(ne(sources.fetchPriority, "paused"), isNull(sources.fetchPriority)),
     isNotNull(sources.changeDetectedAt),
     // Drain cooldown (#1862): skip sources drained within the window so a
     // permanently-flagged source can't re-drain a no-op Haiku session every

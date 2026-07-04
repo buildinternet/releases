@@ -156,7 +156,7 @@ export type Env = {
     /**
      * Service binding to the discovery worker. Typed as the RPC surface
      * (`startManagedFetchSession`) plus the standard HTTP `fetch` method used
-     * by the scrape-agent sweep (`/update`). The `entrypoint:
+     * by the OrgActor drain to POST `/update`. The `entrypoint:
      * "DiscoveryEntrypoint"` annotation in wrangler.jsonc ensures the binding
      * resolves to the named class so RPC methods are available at runtime.
      */
