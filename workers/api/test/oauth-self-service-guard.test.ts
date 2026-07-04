@@ -32,10 +32,16 @@ describe("oauthSelfServiceGuard", () => {
     expect(res.status).toBe(200);
   });
 
-  it("403s a non-admin session", async () => {
+  it("403s a non-admin session with the standardized forbidden envelope", async () => {
     const res = await appFor("user").request(WRITE_PATHS[0], { method: "POST" });
     expect(res.status).toBe(403);
-    expect(((await res.json()) as { error: string }).error).toBe("oauth_self_service_admin_only");
+    const body = (await res.json()) as {
+      error: { code: string; type: string; details?: { reason?: string } };
+    };
+    expect(body.error.code).toBe("forbidden");
+    expect(body.error.type).toBe("forbidden");
+    // The former one-off discriminant survives in `details.reason`.
+    expect(body.error.details?.reason).toBe("oauth_self_service_admin_only");
   });
 
   it("403s an anonymous (no-session) request — fail closed", async () => {

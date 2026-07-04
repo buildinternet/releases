@@ -49,8 +49,9 @@ describe("authMiddleware", () => {
     const app = createApp();
     const res = await app.request("/test", {}, { RELEASES_API_KEY: mockSecret("secret") });
     expect(res.status).toBe(401);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe("unauthorized");
+    const body = (await res.json()) as { error: { code: string; type: string } };
+    expect(body.error.code).toBe("unauthorized");
+    expect(body.error.type).toBe("unauthorized");
   });
 
   it("returns 401 for an invalid bearer token", async () => {
@@ -215,8 +216,9 @@ describe("stagingAccessGate", () => {
     const app = createApp();
     const res = await app.request("/test", {}, { STAGING_ACCESS_KEY: mockSecret("shh") });
     expect(res.status).toBe(401);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe("unauthorized");
+    const body = (await res.json()) as { error: { code: string; type: string } };
+    expect(body.error.code).toBe("unauthorized");
+    expect(body.error.type).toBe("unauthorized");
   });
 
   it("returns 401 when the header doesn't match", async () => {

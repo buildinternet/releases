@@ -77,7 +77,9 @@ describe("OAuth-JWT lane — REST auth middleware", () => {
   it("rejects a read-only JWT on an admin-gated route with 403 insufficient_scope", async () => {
     const res = await app(authMiddleware).request("/", auth(await jwt("openid read")), env());
     expect(res.status).toBe(403);
-    expect(((await res.json()) as { error: string }).error).toBe("insufficient_scope");
+    const body = (await res.json()) as { error: { code: string; type: string } };
+    expect(body.error.code).toBe("insufficient_scope");
+    expect(body.error.type).toBe("insufficient_scope");
   });
 
   it("admits a write-scoped JWT to a write-gated POST", async () => {

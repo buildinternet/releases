@@ -24,11 +24,18 @@ import {
   type JWTVerifyGetKey,
   type VerifiedOAuthToken,
 } from "@releases/lib/oauth-jwt";
+import {
+  UnauthorizedError,
+  NotFoundError,
+  RateLimitedError,
+  InsufficientScopeError,
+} from "@releases/lib/releases-error";
 import { createDb } from "../db.js";
 import { touchLastUsed, verifyApiToken } from "./token-store.js";
 import type { Env } from "../index.js";
 import { createAuth } from "../auth/index.js";
 import { apiScopesFromPermissions, clampUserKeyScopes } from "../auth/api-key-scope.js";
+import { respondError } from "../lib/error-response.js";
 
 export const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
@@ -520,7 +527,7 @@ const requireSessionBase: MiddlewareHandler<Env> = async (c, next) => {
   const auth = await getOrCreateAuth(c);
   const session = await auth.api.getSession({ headers: c.req.raw.headers });
   if (!session?.user?.id) {
-    return c.json({ error: "unauthorized", message: "Sign in required" }, 401);
+    return respondError(c, new UnauthorizedError("Sign in required"));
   }
   c.set("session", {
     user: { id: session.user.id, email: session.user.email, name: session.user.name },
@@ -540,7 +547,7 @@ function requireSessionWithFlag(
 ): MiddlewareHandler<Env> {
   return async (c, next) => {
     if (!(await flag(c.env.FLAGS, envValue(c.env), flagDef))) {
-      return c.json({ error: "not_found", message: "Not found" }, 404);
+      return respondError(c, new NotFoundError("Not found"));
     }
     return requireSessionBase(c, next);
   };
@@ -629,14 +636,14 @@ export const requireFollowsPrincipal: MiddlewareHandler<Env> = async (c, next) =
     }
     if (resolved.kind === "rate_limited") {
       // A rate-limited user key answers 429 (not 401), matching the catalog API.
-      return c.json({ error: "rate_limited", message: "API key rate limit exceeded" }, 429);
+      return respondError(c, new RateLimitedError("API key rate limit exceeded"));
     }
     // A credential was presented but mapped to no user — mark it invalid so a
     // Bearer client can tell "wrong/expired token" from "no token".
     c.header("WWW-Authenticate", 'Bearer realm="releases-api", error="invalid_token"');
-    return c.json({ error: "unauthorized", message: "Invalid credential" }, 401);
+    return respondError(c, new UnauthorizedError("Invalid credential"));
   }
-  return c.json({ error: "unauthorized", message: "Sign in required" }, 401);
+  return respondError(c, new UnauthorizedError("Sign in required"));
 };
 
 function createAuthMiddleware(opts: {
@@ -664,7 +671,7 @@ function createAuthMiddleware(opts: {
     const auth = await resolveAuth(c, presented, true);
 
     if (auth.kind === "rate_limited") {
-      return c.json({ error: "rate_limited", message: "API key rate limit exceeded" }, 429);
+      return respondError(c, new RateLimitedError("API key rate limit exceeded"));
     }
 
     if (auth.kind === "none") {
@@ -679,17 +686,14 @@ function createAuthMiddleware(opts: {
       // NOT leak *why* a token is invalid (expired vs. revoked vs. wrong value).
       if (presented) {
         c.header("WWW-Authenticate", 'Bearer realm="releases-api", error="invalid_token"');
-        return c.json({ error: "unauthorized", message: "Invalid API key" }, 401);
+        return respondError(c, new UnauthorizedError("Invalid API key"));
       }
       c.header("WWW-Authenticate", 'Bearer realm="releases-api"');
-      return c.json({ error: "unauthorized", message: "Missing API key" }, 401);
+      return respondError(c, new UnauthorizedError("Missing API key"));
     }
 
     if (!scopeSatisfies(auth.scopes, opts.requiredScope)) {
-      return c.json(
-        { error: "insufficient_scope", message: `Requires '${opts.requiredScope}' scope` },
-        403,
-      );
+      return respondError(c, new InsufficientScopeError(`Requires '${opts.requiredScope}' scope`));
     }
 
     recordAuth(c, auth);
