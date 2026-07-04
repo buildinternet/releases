@@ -129,13 +129,17 @@ function releaseHeading(release: CollectionReleaseItemView): string {
 // held in state, so collapse/re-expand doesn't refetch.
 function useFullBodyHtml(id: string | undefined, expanded: boolean) {
   const [html, setHtml] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
+  // Guards against a double-fetch without living in the effect deps — keeping
+  // `loading` out of the deps is deliberate: a state change that re-ran the
+  // effect would trip its cleanup (`aborted = true`) and suppress the in-flight
+  // response's `setHtml`, leaving the card stuck on "Loading…".
+  const startedRef = useRef(false);
 
   useEffect(() => {
-    if (!expanded || html !== null || loading || !id) return;
+    if (!expanded || startedRef.current || !id) return;
+    startedRef.current = true;
     let aborted = false;
-    setLoading(true);
     setError(false);
     fetch(`/api/release-body/${encodeURIComponent(id)}`)
       .then((res) => (res.ok ? res.json() : Promise.reject(new Error(`HTTP ${res.status}`))))
@@ -143,15 +147,14 @@ function useFullBodyHtml(id: string | undefined, expanded: boolean) {
         if (!aborted) setHtml(typeof data?.bodyHtml === "string" ? data.bodyHtml : "");
       })
       .catch(() => {
-        if (!aborted) setError(true);
-      })
-      .finally(() => {
-        if (!aborted) setLoading(false);
+        if (aborted) return;
+        setError(true);
+        startedRef.current = false; // allow a retry on a later expand
       });
     return () => {
       aborted = true;
     };
-  }, [expanded, id, html, loading]);
+  }, [expanded, id]);
 
   return { html, error };
 }
