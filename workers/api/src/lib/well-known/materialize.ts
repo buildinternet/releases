@@ -389,6 +389,29 @@ async function applyProductFills(
   return fields;
 }
 
+function skipPlan(
+  classified: ClassifiedLocation,
+  title: string,
+  productId: string | undefined,
+  canonical: boolean,
+  note: string,
+): { plan: SourceMaterializationPlan; applied: boolean } {
+  return {
+    plan: {
+      action: "skip",
+      tier: classified.tier,
+      type: classified.type,
+      locator: classified.locator,
+      title,
+      productId,
+      paused: classified.paused,
+      canonical,
+      note,
+    },
+    applied: false,
+  };
+}
+
 async function materializeLocation(
   db: Db,
   location: DeclaredLocation,
@@ -408,6 +431,7 @@ async function materializeLocation(
 ): Promise<{ plan: SourceMaterializationPlan; applied: boolean }> {
   const classified = classifyLocation(location);
   const title = sourceTitle(location, classified, context.productName);
+  const canonical = location.canonical === true;
   const existing =
     location.github === "self" && opts.repoSourceId
       ? context.existingSources.find((source) => source.id === opts.repoSourceId)
@@ -450,7 +474,7 @@ async function materializeLocation(
         productId: context.productId ?? undefined,
         sourceId: existing.id,
         paused: existing.fetchPriority === "paused",
-        canonical: location.canonical === true,
+        canonical,
       },
       applied: !opts.dryRun,
     };
@@ -458,68 +482,35 @@ async function materializeLocation(
 
   const excluded = locationUrls(location).find((url) => isUrlExcluded(url, context.policy));
   if (excluded) {
-    return {
-      plan: {
-        action: "skip",
-        tier: classified.tier,
-        type: classified.type,
-        locator: classified.locator,
-        title,
-        productId: context.productId ?? undefined,
-        paused: classified.paused,
-        canonical: location.canonical === true,
-        note: `excluded:${excluded}`,
-      },
-      applied: false,
-    };
+    return skipPlan(
+      classified,
+      title,
+      context.productId ?? undefined,
+      canonical,
+      `excluded:${excluded}`,
+    );
   }
   if (!opts.enabled) {
-    return {
-      plan: {
-        action: "skip",
-        tier: classified.tier,
-        type: classified.type,
-        locator: classified.locator,
-        title,
-        productId: context.productId ?? undefined,
-        paused: classified.paused,
-        canonical: location.canonical === true,
-        note: "materialization_disabled",
-      },
-      applied: false,
-    };
+    return skipPlan(
+      classified,
+      title,
+      context.productId ?? undefined,
+      canonical,
+      "materialization_disabled",
+    );
   }
   if (context.productName && !context.productId) {
-    return {
-      plan: {
-        action: "skip",
-        tier: classified.tier,
-        type: classified.type,
-        locator: classified.locator,
-        title,
-        paused: classified.paused,
-        canonical: location.canonical === true,
-        note: "product_unavailable",
-      },
-      applied: false,
-    };
+    return skipPlan(classified, title, undefined, canonical, "product_unavailable");
   }
   const locatorKey = `${classified.type}:${normalizeUrl(classified.locator)}`;
   if (context.claimedLocators.has(locatorKey)) {
-    return {
-      plan: {
-        action: "skip",
-        tier: classified.tier,
-        type: classified.type,
-        locator: classified.locator,
-        title,
-        productId: context.productId ?? undefined,
-        paused: classified.paused,
-        canonical: location.canonical === true,
-        note: "duplicate_location",
-      },
-      applied: false,
-    };
+    return skipPlan(
+      classified,
+      title,
+      context.productId ?? undefined,
+      canonical,
+      "duplicate_location",
+    );
   }
 
   let effective = classified;
@@ -532,20 +523,13 @@ async function materializeLocation(
     effective,
   );
   if (!probe.ok) {
-    return {
-      plan: {
-        action: "skip",
-        tier: effective.tier,
-        type: effective.type,
-        locator: effective.locator,
-        title,
-        productId: context.productId ?? undefined,
-        paused: effective.paused,
-        canonical: location.canonical === true,
-        note: probe.note ?? "probe_failed",
-      },
-      applied: false,
-    };
+    return skipPlan(
+      effective,
+      title,
+      context.productId ?? undefined,
+      canonical,
+      probe.note ?? "probe_failed",
+    );
   }
 
   const sourceId = newSourceId();
@@ -595,7 +579,7 @@ async function materializeLocation(
       productId: context.productId ?? undefined,
       sourceId: opts.dryRun ? undefined : sourceId,
       paused,
-      canonical: location.canonical === true,
+      canonical,
       ...(location.file ? { note: "document_parse_deferred" } : {}),
     },
     applied: !opts.dryRun,
@@ -650,14 +634,10 @@ export async function reconcileDomainEntities(
         ? existingProducts.find((product) => product.id === locatorSource.productId)
         : undefined) ??
       existingProducts.find((product) => product.name === declaration.name);
-    const matchBy =
-      stableProductId && existing?.id === stableProductId
-        ? "stable_id"
-        : locatorSource && existing?.id === locatorSource.productId
-          ? "locator"
-          : existing
-            ? "name"
-            : undefined;
+    let matchBy: ProductMaterializationPlan["matchBy"];
+    if (stableProductId && existing?.id === stableProductId) matchBy = "stable_id";
+    else if (locatorSource && existing?.id === locatorSource.productId) matchBy = "locator";
+    else if (existing) matchBy = "name";
     const category = declaration.category ? await opts.resolveCategory(declaration.category) : null;
     let productId: string | null = existing?.id ?? null;
     let productSlug = existing?.slug ?? toSlug(declaration.slug ?? declaration.name);
