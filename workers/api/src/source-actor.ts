@@ -29,7 +29,6 @@ import { organizations, sources } from "@buildinternet/releases-core/schema";
 import type { Source } from "@buildinternet/releases-core/schema";
 import { describeFetchPlan, computeFetchState } from "@releases/adapters/fetch-plan";
 import { logEvent } from "@releases/lib/log-event";
-import { flag, FLAGS, type FlagshipBinding } from "@releases/lib/flags";
 import { seedJitterMs } from "./lib/source-actor-seed.js";
 
 /**
@@ -105,10 +104,6 @@ export interface SourceActorEnv {
   POLL_AND_FETCH_WORKFLOW?: Workflow;
   /** Per-org drain actor — armed when a scrape/agent source is flagged (#1777). */
   ORG_ACTOR?: DurableObjectNamespace<import("./org-actor.js").OrgActor>;
-  /** Cloudflare Flagship binding (org-drain-actor-enabled). */
-  FLAGS?: FlagshipBinding;
-  /** Kill-switch var fallback for org-drain-actor-enabled. */
-  ORG_DRAIN_ACTOR_ENABLED?: string;
   /** Test seam: inject a drizzle handle so unit tests skip a real D1 binding. */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   _drizzleOverride?: any;
@@ -317,15 +312,6 @@ export class SourceActor extends DurableObject<SourceActorEnv> {
     if (!row.changeDetectedAt || !row.orgId) return;
     const ns = this.env.ORG_ACTOR;
     if (!ns) return;
-    const on = await flag(
-      this.env.FLAGS,
-      this.env.ORG_DRAIN_ACTOR_ENABLED,
-      FLAGS.orgDrainActorEnabled,
-      // row.orgId is non-null — the guard at the top of this method already
-      // returned when it was falsy. Enables per-org Flagship rollout bucketing.
-      { orgId: row.orgId },
-    );
-    if (!on) return;
     try {
       await ns.getByName(row.orgId).ensureDrainScheduled(row.orgId);
     } catch (err) {

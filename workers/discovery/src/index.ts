@@ -186,10 +186,10 @@ export class DiscoveryEntrypoint extends WorkerEntrypoint<Env> {
   }
 
   /**
-   * Kick off a managed-agent update session for one or more sources and
-   * return immediately with the new sessionId. The session runs async on the
-   * MA platform; its completion writes `fetch_log` rows + source counters via
-   * the existing managed-agent bookkeeping.
+   * Kick off a deterministic update session for one or more sources and return
+   * immediately with the new sessionId. The session runs async on the discovery
+   * Durable Object; scrapeFetch writes `fetch_log` rows + source counters on
+   * completion.
    *
    * Concurrent sessions for the same source are serialized by the per-source
    * SourceActor lease acquired below (#1814) — the atomic mutex that replaced

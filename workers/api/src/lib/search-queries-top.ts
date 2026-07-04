@@ -41,7 +41,7 @@ export interface TopSearchesOptions {
 /**
  * `db` is typed `any` so this helper accepts both the D1 drizzle instance and
  * the bun:sqlite drizzle used in tests — the consuming code owns the concrete
- * type. Matches the convention used in `sweep-results.ts`.
+ * type.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function getTopSearchQueries(

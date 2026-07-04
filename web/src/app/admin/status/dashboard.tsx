@@ -19,7 +19,6 @@ import { CronRunsTab } from "./cron-runs-tab";
 import { SearchQueriesTab } from "./search-queries-tab";
 import { BatchRunsTab } from "./batch-runs-tab";
 import { StuckSourcesTab } from "./stuck-sources-tab";
-import { ForceDrainTile } from "./force-drain-tile";
 import {
   formatSessionError,
   groupProviderIncidents,
@@ -569,7 +568,6 @@ export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
       )}
 
       {/* Force-drain sweep summary (#518) */}
-      <ForceDrainTile />
 
       {/* Date range + Tabs */}
       <div className="flex items-center justify-between border-b border-stone-200 dark:border-stone-800 mb-4">

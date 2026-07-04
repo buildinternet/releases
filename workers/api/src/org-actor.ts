@@ -29,9 +29,8 @@ import { drizzle } from "drizzle-orm/d1";
 import { inArray } from "drizzle-orm";
 import { sources } from "@buildinternet/releases-core/schema";
 import { logEvent } from "@releases/lib/log-event";
-import { flag, FLAGS, type FlagshipBinding } from "@releases/lib/flags";
 import { seedJitterMs } from "./lib/source-actor-seed.js";
-import { queryCandidates } from "./cron/scrape-agent-sweep.js";
+import { queryCandidates } from "./lib/drain-candidates.js";
 
 const ORG_ID_KEY = "orgId";
 
@@ -52,10 +51,6 @@ export interface OrgActorEnv {
   };
   RELEASES_API_KEY?: { get(): Promise<string> };
   RELEASED_API_KEY?: { get(): Promise<string> };
-  /** Cloudflare Flagship binding — the org-drain kill switch is re-checked at dispatch. */
-  FLAGS?: FlagshipBinding;
-  /** Kill-switch var fallback for org-drain-actor-enabled. */
-  ORG_DRAIN_ACTOR_ENABLED?: string;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   _drizzleOverride?: any;
 }
@@ -80,23 +75,6 @@ export class OrgActor extends DurableObject<OrgActorEnv> {
     await this.ctx.storage.deleteAlarm();
     if (!orgId) {
       logEvent("warn", { component: "org-actor", event: "alarm-missing-org-id" });
-      return;
-    }
-
-    // Re-check the kill switch at execution time: an OrgActor armed while the
-    // flag was on must NOT dispatch a billable /update if the flag was flipped
-    // off before this alarm fired (the alarm is already cleared above, so a
-    // disabled actor simply goes dormant until the SourceActor re-arms it).
-    const enabled = await flag(
-      this.env.FLAGS,
-      this.env.ORG_DRAIN_ACTOR_ENABLED,
-      FLAGS.orgDrainActorEnabled,
-      // orgId (DO-storage id) is non-null — the guard above already returned
-      // when it was unset. Enables per-org Flagship rollout bucketing.
-      { orgId },
-    );
-    if (!enabled) {
-      logEvent("info", { component: "org-actor", event: "drain-disabled", orgId });
       return;
     }
 

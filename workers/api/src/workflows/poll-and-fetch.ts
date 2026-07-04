@@ -50,7 +50,6 @@ import { resolveSummarizeModel } from "../lib/text-model.js";
 import { IN_ARRAY_CHUNK_SIZE } from "../lib/d1-limits.js";
 import { logUsage } from "../lib/usage-log.js";
 import { makeBotFetch } from "../lib/web-bot-auth-fetch.js";
-import { flag, FLAGS, type FlagshipBinding } from "@releases/lib/flags";
 
 /**
  * Environment for the workflow. Bindings follow the same shape as the API
@@ -95,10 +94,6 @@ export type PollAndFetchWorkflowEnv = InvalidationEnv &
     CLOUDFLARE_API_TOKEN?: { get(): Promise<string> };
     /** Ingest-time R2 media upload (#1177): `released-media` bucket. */
     MEDIA?: R2Bucket;
-    /** Cloudflare Flagship binding (for org-drain-actor-enabled). */
-    FLAGS?: FlagshipBinding;
-    /** Kill-switch var fallback for org-drain-actor-enabled. */
-    ORG_DRAIN_ACTOR_ENABLED?: string;
     /** Staleness horizon for the poll-path self-flag producer (default 72h). */
     FORCE_DRAIN_STALE_HOURS?: string;
     /** TEST-ONLY: bypass drizzle(env.DB) and use the provided instance directly. */
@@ -541,14 +536,9 @@ export class PollAndFetchWorkflow extends WorkflowEntrypoint<
           changeDetectEnabled && (source.type === "scrape" || source.type === "agent")
             ? await loadPlaybookNotesForSources(db, [source])
             : new Map<string, string | null>();
-        const drainActorOn = await flag(
-          env.FLAGS,
-          env.ORG_DRAIN_ACTOR_ENABLED,
-          FLAGS.orgDrainActorEnabled,
-        );
         const staleHours = Number(env.FORCE_DRAIN_STALE_HOURS ?? 72);
         const drainSelfFlag =
-          drainActorOn && (source.type === "scrape" || source.type === "agent")
+          source.type === "scrape" || source.type === "agent"
             ? { staleHours: Number.isFinite(staleHours) && staleHours > 0 ? staleHours : 72 }
             : undefined;
         return await pollOne(db, source, now, {

@@ -67,7 +67,6 @@ function mkActor(
   opts: {
     failCreateIds?: Set<string>;
     throwOnCreate?: boolean;
-    orgDrainOn?: boolean;
     orgActorCalls?: Array<{ name: string; id: string }>;
   } = {},
   store: Map<string, unknown> = new Map(),
@@ -105,8 +104,6 @@ function mkActor(
       },
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any,
-    FLAGS: undefined,
-    ORG_DRAIN_ACTOR_ENABLED: opts.orgDrainOn ? "true" : undefined,
     ORG_ACTOR: opts.orgActorCalls
       ? ({
           getByName: (name: string) => ({
@@ -425,31 +422,21 @@ describe("SourceActor scrape-lock (#1814)", () => {
 });
 
 describe("SourceActor → OrgActor notify", () => {
-  it("arms the OrgActor when a flagged scrape source alarms and the flag is on", async () => {
+  it("arms the OrgActor when a flagged scrape source alarms", async () => {
     const db = mkDb();
     seedScrapeFlagged(db, "src_s"); // type scrape, changeDetectedAt set, orgId org_x
     const calls: Array<{ name: string; id: string }> = [];
-    const h = mkActor(db, { orgDrainOn: true, orgActorCalls: calls });
+    const h = mkActor(db, { orgActorCalls: calls });
     await h.actor.ensureScheduled("src_s");
     await h.actor.alarm();
     expect(calls).toEqual([{ name: "org_x", id: "org_x" }]);
-  });
-
-  it("does NOT arm the OrgActor when the flag is off", async () => {
-    const db = mkDb();
-    seedScrapeFlagged(db, "src_s2");
-    const calls: Array<{ name: string; id: string }> = [];
-    const h = mkActor(db, { orgDrainOn: false, orgActorCalls: calls });
-    await h.actor.ensureScheduled("src_s2");
-    await h.actor.alarm();
-    expect(calls).toEqual([]);
   });
 
   it("does NOT arm the OrgActor for an unflagged source", async () => {
     const db = mkDb();
     seedScrapeFlagged(db, "src_s3", { changeDetectedAt: null });
     const calls: Array<{ name: string; id: string }> = [];
-    const h = mkActor(db, { orgDrainOn: true, orgActorCalls: calls });
+    const h = mkActor(db, { orgActorCalls: calls });
     await h.actor.ensureScheduled("src_s3");
     await h.actor.alarm();
     expect(calls).toEqual([]);

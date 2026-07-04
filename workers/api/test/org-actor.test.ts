@@ -4,7 +4,7 @@ import { drizzle } from "drizzle-orm/bun-sqlite";
 import { applyMigrations, ensureBatchShim } from "../../../tests/db-helper";
 import { organizations, sources } from "@buildinternet/releases-core/schema";
 import { OrgActor, type OrgActorEnv } from "../src/org-actor.js";
-import { DRAIN_COOLDOWN_MS } from "../src/cron/scrape-agent-sweep.js";
+import { DRAIN_COOLDOWN_MS } from "../src/lib/drain-candidates.js";
 
 function mkDb() {
   const sqlite = new Database(":memory:");
@@ -45,7 +45,7 @@ function seedFlaggedScrape(
     .run();
 }
 
-function mkActor(db: Db, updateImpl?: (body: any) => Response, opts: { drainOn?: boolean } = {}) {
+function mkActor(db: Db, updateImpl?: (body: any) => Response) {
   let alarm: number | null = null;
   const store = new Map<string, unknown>();
   const storage = {
@@ -63,10 +63,6 @@ function mkActor(db: Db, updateImpl?: (body: any) => Response, opts: { drainOn?:
   const env: OrgActorEnv = {
     DB: {} as D1Database,
     _drizzleOverride: db,
-    // Kill switch defaults ON in the harness so dispatch tests exercise the
-    // drain; a dedicated test flips it off. `flag()` reads this var (no FLAGS
-    // binding needed) via its var fallback.
-    ORG_DRAIN_ACTOR_ENABLED: opts.drainOn === false ? "false" : "true",
     RELEASES_API_KEY: { get: async () => "k" },
     DISCOVERY_WORKER: {
       fetch: async (_i: RequestInfo | URL, init?: RequestInit) => {
@@ -260,16 +256,5 @@ describe("OrgActor", () => {
     expect(h.alarmAt()).toBeNull();
     expect(warn.some((l) => l.event === "drain-failed" && l.status === 429)).toBe(true);
     expect(info.some((l) => l.event === "drain-superseded")).toBe(false);
-  });
-
-  it("does NOT dispatch when the kill switch is off at alarm time", async () => {
-    const db = mkDb();
-    seedFlaggedScrape(db, "src_a");
-    // Armed while (hypothetically) on, but the flag is off when the alarm fires.
-    const h = mkActor(db, undefined, { drainOn: false });
-    await h.actor.ensureDrainScheduled("org_x");
-    await h.actor.alarm();
-    expect(h.dispatched.length).toBe(0);
-    expect(h.alarmAt()).toBeNull(); // alarm still cleared → actor goes dormant
   });
 });

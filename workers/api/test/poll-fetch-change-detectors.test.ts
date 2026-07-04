@@ -455,7 +455,7 @@ fetchQuirks:
   });
 });
 
-describe("pollOne drainSelfFlag (force-drain producer, #518)", () => {
+describe("pollOne drainSelfFlag (actor-native drain producer)", () => {
   it("flags an unreliable-detector source when drainSelfFlag is present", async () => {
     const db = mkDb();
     seedOrgWithSource(db, {
@@ -485,7 +485,7 @@ describe("pollOne drainSelfFlag (force-drain producer, #518)", () => {
     expect(after.changeDetectedAt).not.toBeNull();
   });
 
-  it("does NOT flag an unreliable source when drainSelfFlag is absent (today's behavior)", async () => {
+  it("does NOT flag an unreliable source when the caller omits the self-flag policy", async () => {
     const db = mkDb();
     seedOrgWithSource(db, {
       orgId: "org_dsf2",
