@@ -62,7 +62,12 @@ export interface SessionState {
    */
   orgId?: string;
   type: "onboard" | "update";
-  agent?: "sonnet" | "haiku";
+  /**
+   * `deterministic` marks the #1878/#1881 update path that skips the
+   * Managed-Agents (Haiku) session entirely — it must never be reported as
+   * `haiku` since no Anthropic session runs.
+   */
+  agent?: "sonnet" | "haiku" | "coordinator" | "deterministic";
   /** Identifies the client that started this session (e.g. hostname, "sandbox-prod"). */
   runner?: string;
   /** Correlation ID for end-to-end tracing across CLI → API → managed agent. */

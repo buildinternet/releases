@@ -32,7 +32,7 @@ interface SessionState {
   sessionId: string;
   company: string;
   type?: "onboard" | "update";
-  agent?: "sonnet" | "haiku";
+  agent?: "sonnet" | "haiku" | "coordinator" | "deterministic";
   /** Identifies the client that started this session (e.g. hostname, "sandbox-prod"). */
   runner?: string;
   /** Correlation ID for end-to-end tracing across CLI → API → managed agent. */
@@ -1017,6 +1017,10 @@ const agentStyles: Record<string, { bg: string; label: string }> = {
   sonnet: {
     bg: "bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400",
     label: "Sonnet",
+  },
+  deterministic: {
+    bg: "bg-sky-100 text-sky-600 dark:bg-sky-900/30 dark:text-sky-400",
+    label: "Deterministic",
   },
 };
 

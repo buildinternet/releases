@@ -1592,14 +1592,16 @@ export interface Session {
    * Sub-agent **role** label that ran this session — `"coordinator"` is the
    * parent orchestrator (typically Sonnet) when a multi-agent session
    * delegates, `"sonnet"` / `"haiku"` are direct single-agent runs.
-   * Surfaces on the detail GET.
+   * `"deterministic"` marks the #1878/#1881 update path that skips the
+   * Managed-Agents (Haiku) session entirely — no Anthropic session runs, so
+   * it must never be reported as `"haiku"`. Surfaces on the detail GET.
    *
    * This is a logical role label, not the runtime model identifier. The
    * resolved Anthropic model string (e.g. `claude-sonnet-5`,
    * `claude-haiku-4-5`) lives on `usage.model` when the session reported
    * one — consult that field for the concrete model.
    */
-  agent?: "sonnet" | "haiku" | "coordinator";
+  agent?: "sonnet" | "haiku" | "coordinator" | "deterministic";
   /** Identifies the client that started this session (e.g. hostname). */
   runner?: string;
   /** Correlation ID for end-to-end tracing across CLI → API → managed agent. */
