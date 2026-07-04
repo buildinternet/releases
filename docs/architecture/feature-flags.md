@@ -64,7 +64,6 @@ the dashboard for what's actually on. Polarity: `*-enabled` flags are off at `fa
 | Flag key                       | Default | Reads     | What it controls                                                                                                                                  |
 | ------------------------------ | ------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `backfill-workflow-enabled`    | `false` | api       | Durable resumable full-history backfill workflow (deep Firecrawl path). Off = inline backfill only.                                               |
-| `batch-overview-enabled`       | `false` | api       | Batch org-overview (AI knowledge-page) generation workflow. Off = manual/agent-driven only.                                                       |
 | `invalidation-enabled`         | `false` | api       | Cache-invalidation workflow. Off = not running.                                                                                                   |
 | `media-gif-transcode-enabled`  | `false` | api       | Transcode uploaded/ingested GIFs to video. Off = store the GIF as-is.                                                                             |
 | `oauth-client-reaper-enabled`  | `false` | api       | Stale OAuth-client reaper cron. Off = observe-only (log reapable candidates); on = delete abandoned DCR clients.                                  |

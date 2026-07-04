@@ -6,7 +6,7 @@
  * default; see ./judge-model.ts). Never part of `bun test`.
  *
  * Each fixture is a single JSON file under fixtures/overviews/ carrying the
- * OverviewRequestInput the production batch-overview workflow would build, plus
+ * OverviewRequestInput the production overview-regen workflow would build, plus
  * optional per-fixture grading knobs. The eval exercises the exact production
  * path: generateOverview (the real shipped function), then grades the body and
  * the emitted citations. Set OVERVIEW_EVAL_MODEL + OPENROUTER_API_KEY to bench

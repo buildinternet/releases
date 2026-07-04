@@ -63,7 +63,6 @@ export { OrgActor } from "./org-actor.js";
 export { PollAndFetchWorkflow } from "./workflows/poll-and-fetch.js";
 export { OnboardSourceWorkflow } from "./workflows/onboard-source.js";
 export { BatchSummarizeWorkflow } from "./workflows/batch-summarize.js";
-export { BatchOverviewWorkflow } from "./workflows/batch-overview.js";
 export { OverviewRegenWorkflow } from "./workflows/overview-regen.js";
 export { FirecrawlIngestWorkflow } from "./workflows/firecrawl-ingest.js";
 export { BackfillSourceWorkflow } from "./workflows/backfill-source.js";
@@ -132,12 +131,6 @@ export type Env = {
     BATCH_SUMMARIZE_ENABLED?: string;
     BATCH_SUMMARIZE_MAX_COST_USD?: string;
     BATCH_SUMMARIZE_WORKFLOW?: Workflow;
-    // Batch overview workflow. Admin POST trigger only for now (no cron entry
-    // until the path is proven against the existing weekly managed-agent
-    // routine). Self-gates via BATCH_OVERVIEW_ENABLED for any future cron path.
-    BATCH_OVERVIEW_ENABLED?: string;
-    BATCH_OVERVIEW_MAX_COST_USD?: string;
-    BATCH_OVERVIEW_WORKFLOW?: Workflow;
     // OpenRouter-backed per-org overview regen (OverviewRegenWorkflow). Cron path
     // self-gates via OVERVIEW_REGEN_ENABLED; admin POST runs unconditionally.
     // Fast-tier tunables (#1895) are read by the workflow, not the handler.

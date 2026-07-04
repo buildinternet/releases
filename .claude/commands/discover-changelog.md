@@ -160,8 +160,6 @@ Sources were already fetched in Step 6, so all that's left is the overview. Over
 - **Skip** if `org.discovery === 'on_demand'` or there are no releases in the window — don't generate from existing content alone.
 - Otherwise the flow is: `releases admin overview inputs <slug> --json --max-content-chars 1000` → generate the body via an Anthropic call → `releases admin overview update <slug> --body-file <path> [--citations-file <path>]`.
 
-For a batch sweep across many orgs, `releases admin overview batch` triggers the server-side `BatchOverviewWorkflow` instead.
-
 ## Tips
 
 - Prefer **feed** sources over **scrape** — faster, free, more reliable. The CLI probes for feeds automatically; pass `--feed-url` if you know one that isn't auto-discoverable.

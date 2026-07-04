@@ -9,7 +9,7 @@ const mkApp = (db: ReturnType<typeof mkDb>) => createTestApp(db, adminOverviewsR
 /**
  * #1795 — the overview manifest must surface `autoGenerateContent` and, in
  * plan mode, flag opted-out curated orgs as `opted_out` so an orchestrator
- * doesn't queue a regen the batch-overview filter will silently skip.
+ * doesn't queue a regen the overview-regen filter will silently skip.
  */
 async function seed(db: ReturnType<typeof mkDb>) {
   await db.insert(organizations).values([

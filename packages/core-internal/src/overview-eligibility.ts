@@ -13,7 +13,7 @@
  * `selected` rows → submits one batch request per remaining org.
  *
  * Used by:
- *   - `workers/api/src/workflows/batch-overview.ts`
+ *   - `workers/api/src/workflows/overview-regen.ts`
  *
  * The 2026-04-28 overview-regen feedback called out that `OVERVIEW_STALE_DAYS`
  * (30) was the wrong signal — what matters is "releases since overview." The
@@ -317,7 +317,7 @@ export async function fetchOverviewInputsForOrg(
 
   // Fetched before the empty-sources early return so the existing overview is
   // still reported for an org whose sources are all hidden/paused — matches the
-  // route handler this helper mirrors. (The batch-overview workflow never hits
+  // route handler this helper mirrors. (The overview-regen workflow never hits
   // the empty-sources branch: candidates require ≥1 active source.)
   const [existing] = await db
     .select({ content: knowledgePages.content })

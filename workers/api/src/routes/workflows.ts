@@ -1113,135 +1113,6 @@ workflowsRoutes.get("/workflows/batch-summarize/status/:instanceId", async (c) =
   }
 });
 
-// ── POST /workflows/batch-overview ───────────────────────────────────────────
-//
-// Admin trigger for the BatchOverviewWorkflow. Runs unconditionally (caller
-// made a deliberate decision); the cron path (when wired) self-gates via
-// BATCH_OVERVIEW_ENABLED.
-//
-// Body: { minNewReleases?, minOverviewAgeDays?, maxCandidates?, orgs?, maxCostUsd? }
-// Returns: { instanceId, statusUrl }
-
-interface BatchOverviewBody {
-  minNewReleases?: number;
-  minOverviewAgeDays?: number;
-  maxCandidates?: number;
-  orgs?: string[];
-  maxCostUsd?: number;
-}
-
-workflowsRoutes.post("/workflows/batch-overview", async (c) => {
-  const body = await parseJsonBody<BatchOverviewBody>(c);
-
-  if (!c.env.BATCH_OVERVIEW_WORKFLOW) {
-    return respondError(
-      c,
-      new ServiceUnavailableError("BATCH_OVERVIEW_WORKFLOW binding not configured"),
-    );
-  }
-
-  // When `orgs` is explicitly supplied, validate it. Skips would let
-  // non-string entries through to `LOWER(s)` in the eligibility query.
-  let validOrgs: string[] | undefined;
-  if (body.orgs !== undefined) {
-    if (!Array.isArray(body.orgs)) {
-      return respondError(
-        c,
-        new ValidationError("`orgs` must be an array of strings", { code: "bad_request" }),
-      );
-    }
-    validOrgs = body.orgs
-      .filter((s): s is string => typeof s === "string")
-      .map((s) => s.trim())
-      .filter((s) => s.length > 0);
-    if (validOrgs.length === 0) {
-      return respondError(
-        c,
-        new ValidationError("`orgs` must contain at least one non-empty string", {
-          code: "bad_request",
-        }),
-      );
-    }
-  }
-
-  const scheduledTime = Date.now();
-  const params = {
-    scheduledTime,
-    trigger: "admin" as const,
-    minNewReleases:
-      typeof body.minNewReleases === "number" && body.minNewReleases >= 0
-        ? body.minNewReleases
-        : undefined,
-    minOverviewAgeDays:
-      typeof body.minOverviewAgeDays === "number" && body.minOverviewAgeDays >= 0
-        ? body.minOverviewAgeDays
-        : undefined,
-    maxCandidates:
-      typeof body.maxCandidates === "number" && body.maxCandidates > 0
-        ? body.maxCandidates
-        : undefined,
-    orgs: validOrgs,
-    maxCostUsd:
-      typeof body.maxCostUsd === "number" && body.maxCostUsd > 0 ? body.maxCostUsd : undefined,
-  };
-
-  const instance = await c.env.BATCH_OVERVIEW_WORKFLOW.create({
-    id: `batch-overview-admin-${scheduledTime}`,
-    params,
-  });
-
-  const instanceId: string = (instance as unknown as { id: string }).id;
-
-  logEvent("info", {
-    component: "batch-overview",
-    event: "admin-trigger",
-    instanceId,
-    minNewReleases: params.minNewReleases,
-    minOverviewAgeDays: params.minOverviewAgeDays,
-    maxCandidates: params.maxCandidates,
-    orgs: params.orgs,
-    maxCostUsd: params.maxCostUsd,
-  });
-
-  return c.json({
-    instanceId,
-    statusUrl: `${c.env.ADMIN_BASE_URL ?? ""}/v1/workflows/batch-overview/status/${instanceId}`,
-  });
-});
-
-// ── GET /workflows/batch-overview/status/:instanceId ─────────────────────────
-//
-// Thin pass-through to Cloudflare's `WorkflowInstance.status()` mirroring the
-// batch-summarize status endpoint exactly.
-
-workflowsRoutes.get("/workflows/batch-overview/status/:instanceId", async (c) => {
-  const binding = c.env.BATCH_OVERVIEW_WORKFLOW;
-  if (!binding) {
-    return respondError(
-      c,
-      new ServiceUnavailableError("BATCH_OVERVIEW_WORKFLOW binding not configured"),
-    );
-  }
-  const instanceId = c.req.param("instanceId");
-  try {
-    const instance = await binding.get(instanceId);
-    const status = await instance.status();
-    return c.json({ instanceId, ...status });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    if (WORKFLOW_NOT_FOUND_RE.test(message)) {
-      return respondError(c, new NotFoundError(message, { code: "instance_not_found" }));
-    }
-    logEvent("error", {
-      component: "workflows-batch-overview-status",
-      event: "lookup-failed",
-      instanceId,
-      err: err instanceof Error ? err : String(err),
-    });
-    return respondError(c, new InternalError(message));
-  }
-});
-
 // ── POST /workflows/overview-regen ───────────────────────────────────────────
 //
 // Admin manual trigger for the OverviewRegenWorkflow. Runs unconditionally
@@ -1321,8 +1192,8 @@ workflowsRoutes.post("/workflows/overview-regen", async (c) => {
 
 // ── GET /workflows/overview-regen/status/:instanceId ─────────────────────────
 //
-// Thin pass-through to Cloudflare's `WorkflowInstance.status()` mirroring the
-// batch-overview status endpoint exactly.
+// Thin pass-through to Cloudflare's `WorkflowInstance.status()` (same shape as
+// the other workflow status endpoints).
 
 workflowsRoutes.get("/workflows/overview-regen/status/:instanceId", async (c) => {
   const binding = c.env.OVERVIEW_REGEN_WORKFLOW;

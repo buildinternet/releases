@@ -20,7 +20,7 @@
  * actually enriched (so the forward cron path resumes).
  *
  * Trigger: admin POST only (`POST /v1/workflows/batch-enrich`) — runs
- * unconditionally, like BatchOverviewWorkflow. `BATCH_ENRICH_ENABLED` is defined
+ * unconditionally, like BatchSummarizeWorkflow's admin trigger. `BATCH_ENRICH_ENABLED` is defined
  * for a future cron path but not enforced here. Backfill-only by design; the
  * steady-state forward path stays synchronous (latency-sensitive).
  */
