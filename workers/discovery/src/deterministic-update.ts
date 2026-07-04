@@ -50,15 +50,27 @@ export interface UpdateLoopOptions {
 
 const ERROR_WITH_CATEGORY = /^Error \[([a-z]+)\]:\s*(.*)$/s;
 
+/**
+ * Category from a `scrapeFetch` `Error [category]: …` result string, else null.
+ * The single source of truth for this wire format — the agent path's
+ * `extractToolErrorCategory` delegates here so the two can't drift.
+ */
+export function scrapeFetchErrorCategory(raw: string): string | null {
+  return raw.match(ERROR_WITH_CATEGORY)?.[1] ?? null;
+}
+
 /** Normalize a `scrapeFetch` result string into a structured outcome. */
 export function parseScrapeFetchResult(source: string, raw: string): ScrapeFetchOutcome {
+  const fail = (error: string, errorCategory?: string): ScrapeFetchOutcome => ({
+    source,
+    ok: false,
+    error,
+    ...(errorCategory ? { errorCategory } : {}),
+  });
+
   const withCategory = raw.match(ERROR_WITH_CATEGORY);
-  if (withCategory) {
-    return { source, ok: false, error: withCategory[2], errorCategory: withCategory[1] };
-  }
-  if (raw.startsWith("Error:")) {
-    return { source, ok: false, error: raw.slice("Error:".length).trim() };
-  }
+  if (withCategory) return fail(withCategory[2], withCategory[1]);
+  if (raw.startsWith("Error:")) return fail(raw.slice("Error:".length).trim());
   try {
     const parsed = JSON.parse(raw) as {
       status?: string;
@@ -75,7 +87,7 @@ export function parseScrapeFetchResult(source: string, raw: string): ScrapeFetch
   } catch {
     // A non-JSON, non-`Error` string is unexpected — treat as a failure so it
     // surfaces rather than being silently counted as a success.
-    return { source, ok: false, error: `Unparseable fetch result: ${raw.slice(0, 200)}` };
+    return fail(`Unparseable fetch result: ${raw.slice(0, 200)}`);
   }
 }
 
@@ -94,31 +106,25 @@ export async function runScrapeFetchLoop(
   const startedAt = now();
   const results: ScrapeFetchOutcome[] = [];
   let sourcesSkipped = 0;
+  let totalReleasesFound = 0;
+  let totalReleasesInserted = 0;
+  let errorCount = 0;
 
   for (const source of sources) {
     if (now() - startedAt >= options.budgetMs) {
       sourcesSkipped = sources.length - results.length;
       break;
     }
+    let outcome: ScrapeFetchOutcome;
     try {
-      const raw = await scrapeFetchSource(source);
-      results.push(parseScrapeFetchResult(source, raw));
+      outcome = parseScrapeFetchResult(source, await scrapeFetchSource(source));
     } catch (err) {
-      results.push({
-        source,
-        ok: false,
-        error: err instanceof Error ? err.message : String(err),
-      });
+      outcome = { source, ok: false, error: err instanceof Error ? err.message : String(err) };
     }
-  }
-
-  let totalReleasesFound = 0;
-  let totalReleasesInserted = 0;
-  let errorCount = 0;
-  for (const r of results) {
-    totalReleasesFound += r.releasesFound ?? 0;
-    totalReleasesInserted += r.releasesInserted ?? 0;
-    if (!r.ok) errorCount += 1;
+    results.push(outcome);
+    totalReleasesFound += outcome.releasesFound ?? 0;
+    totalReleasesInserted += outcome.releasesInserted ?? 0;
+    if (!outcome.ok) errorCount += 1;
   }
 
   return {

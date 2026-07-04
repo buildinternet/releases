@@ -27,7 +27,7 @@ import { buildOnboardTaskMessage } from "@releases/shared/onboard-task-message.j
 import { buildMemoryStoreResources } from "@releases/shared/memory-store-attach.js";
 import { CATEGORIES } from "@buildinternet/releases-core/categories";
 import { scrapeFetch } from "./scrape-fetch.js";
-import { runScrapeFetchLoop } from "./deterministic-update.js";
+import { runScrapeFetchLoop, scrapeFetchErrorCategory } from "./deterministic-update.js";
 import { discoveryIdentityHeaders } from "./identity.js";
 import {
   STAGING_KEY_HEADER,
@@ -82,6 +82,7 @@ function delay(ms: number): Promise<void> {
 
 import {
   classifyProviderSessionError,
+  classifyUsFatal,
   isRetriesExhaustedIdle,
   type SessionErrorClassification,
 } from "./session-error-classify.js";
@@ -89,16 +90,6 @@ import {
 function truncate(text: string, maxLength: number): string {
   if (text.length <= maxLength) return text;
   return text.slice(0, maxLength) + "…";
-}
-
-/**
- * Extract the error category from a tool-result string produced by
- * `scrapeFetch`. Returns the category string when the message matches
- * `Error [<category>]: ...`, or null when absent / unrecognized.
- */
-function extractToolErrorCategory(text: string): string | null {
-  const m = text.match(/^Error \[([a-z]+)\]:/);
-  return m ? m[1] : null;
 }
 
 export interface SessionParams {
@@ -827,7 +818,7 @@ ${idList}
                       sendResult: async (id: string, text: string) => {
                         const isError = text.startsWith("Error");
                         if (isError) {
-                          lastToolErrorCategory = extractToolErrorCategory(text);
+                          lastToolErrorCategory = scrapeFetchErrorCategory(text);
                         }
                         resolveFn({ toolUseId: id, text, isError });
                       },
@@ -1162,15 +1153,10 @@ ${idList}
           const detail = lastAgentMessage
             ? `${reason}: ${truncate(lastAgentMessage, 120)}`
             : reason;
-          const toolErrorClassification: SessionErrorClassification | undefined =
-            lastToolErrorCategory
-              ? {
-                  errorSource: "us",
-                  errorType: lastToolErrorCategory,
-                  message: detail,
-                  severity: "fatal",
-                }
-              : undefined;
+          const toolErrorClassification = classifyUsFatal(
+            lastToolErrorCategory ?? undefined,
+            detail,
+          );
           await this.fail(
             sessionId,
             params.company,
@@ -1257,8 +1243,17 @@ ${idList}
     const sources = params.sourceIdentifiers ?? [];
     const summary = await runScrapeFetchLoop(sources, scrapeFetchSource, {
       budgetMs: DETERMINISTIC_UPDATE_BUDGET_MS,
-      now: () => Date.now(),
     });
+
+    // Shared count fields for both the (log-only) event and the client-facing
+    // result record below — same numbers, different audiences.
+    const counts = {
+      sourcesProcessed: summary.sourcesProcessed,
+      sourcesSkipped: summary.sourcesSkipped,
+      releasesFound: summary.totalReleasesFound,
+      releasesInserted: summary.totalReleasesInserted,
+      errorCount: summary.errorCount,
+    };
 
     logEvent("info", {
       component: "discovery",
@@ -1266,11 +1261,7 @@ ${idList}
       sessionId,
       company: params.company,
       ...(params.orgId ? { orgId: params.orgId } : {}),
-      sourcesProcessed: summary.sourcesProcessed,
-      sourcesSkipped: summary.sourcesSkipped,
-      releasesFound: summary.totalReleasesFound,
-      releasesInserted: summary.totalReleasesInserted,
-      errorCount: summary.errorCount,
+      ...counts,
     });
 
     // Every processed source failed (and at least one ran) → terminal failure,
@@ -1280,26 +1271,12 @@ ${idList}
       const detail = firstError?.error
         ? `All ${summary.errorCount} source fetch(es) failed: ${truncate(firstError.error, 120)}`
         : `All ${summary.errorCount} source fetch(es) failed`;
-      const classification: SessionErrorClassification | undefined = firstError?.errorCategory
-        ? {
-            errorSource: "us",
-            errorType: firstError.errorCategory,
-            message: detail,
-            severity: "fatal",
-          }
-        : undefined;
+      const classification = classifyUsFatal(firstError?.errorCategory, detail);
       await this.fail(sessionId, params.company, detail, releasesApiKey, undefined, classification);
       return;
     }
 
-    const result: Record<string, unknown> = {
-      mode: "update-deterministic",
-      sourcesProcessed: summary.sourcesProcessed,
-      sourcesSkipped: summary.sourcesSkipped,
-      releasesFound: summary.totalReleasesFound,
-      releasesInserted: summary.totalReleasesInserted,
-      errorCount: summary.errorCount,
-    };
+    const result: Record<string, unknown> = { mode: "update-deterministic", ...counts };
     await this.ctx.storage.put("result", result);
     await this.ctx.storage.put("status", "complete");
     await this.notifyStatusHub(

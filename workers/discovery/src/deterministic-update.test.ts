@@ -3,6 +3,7 @@ import { describe, expect, it } from "bun:test";
 import {
   parseScrapeFetchResult,
   runScrapeFetchLoop,
+  scrapeFetchErrorCategory,
   type UpdateLoopOptions,
 } from "./deterministic-update.js";
 
@@ -58,6 +59,21 @@ describe("parseScrapeFetchResult", () => {
       releasesFound: 0,
       releasesInserted: 0,
     });
+  });
+});
+
+describe("scrapeFetchErrorCategory", () => {
+  // Canonical parser for scrapeFetch's `Error [category]: …` wire format —
+  // the agent path (managed-agents-session) delegates here, so this guards
+  // against the two parsers drifting.
+  it("extracts the category from a categorized error", () => {
+    expect(scrapeFetchErrorCategory("Error [validation]: bad body")).toBe("validation");
+    expect(scrapeFetchErrorCategory("Error [infra]: boom")).toBe("infra");
+  });
+
+  it("returns null for a bare error or a success string", () => {
+    expect(scrapeFetchErrorCategory("Error: not found")).toBeNull();
+    expect(scrapeFetchErrorCategory('{"status":"success"}')).toBeNull();
   });
 });
 
