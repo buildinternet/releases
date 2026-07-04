@@ -4,6 +4,7 @@ import { Header } from "@/components/header";
 import { JsonLd } from "@/components/json-ld";
 import { OverviewView } from "@/components/overview-view";
 import { OrgReleaseList } from "@/components/org-release-list";
+import { withReleaseBodyHtml, orgRowVariant } from "@/lib/render-release-body";
 import { orgAvatarSrc } from "@/components/org-avatar";
 
 // releases.sh publishes its own product changelog through its own registry.
@@ -74,9 +75,10 @@ export default async function UpdatesPage() {
         <div className="mt-5">
           <OrgReleaseList
             orgSlug={ORG_SLUG}
-            initialReleases={initialReleases.releases}
+            initialReleases={withReleaseBodyHtml(initialReleases.releases, orgRowVariant)}
             initialCursor={initialReleases.pagination.nextCursor}
             multipleSourcesExist={org.sources.length > 1}
+            hideSourceByline
             availableSourceTypes={Array.from(new Set(org.sources.map((s) => s.type)))}
             orgAvatarUrl={orgAvatarUrl}
             showRollupSummary

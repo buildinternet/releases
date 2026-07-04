@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect, useRef } from "react";
 import { ReleaseListItem } from "./release-item";
-import type { ReleaseItem } from "@/lib/api";
+import type { ReleaseItemView } from "@/lib/release-view";
 import type { AppRowInfo } from "@/lib/app-source";
 import type { VideoRowInfo } from "@/lib/video-source";
 import { useDebounced } from "@/hooks/use-debounced";
@@ -13,7 +13,7 @@ import { ReleaseFilterInput } from "./release-filter-input";
 interface SourceReleaseListProps {
   orgSlug: string;
   sourceSlug: string;
-  initialReleases: ReleaseItem[];
+  initialReleases: ReleaseItemView[];
   initialCursor: string | null;
   /** App Store display info when this source is an appstore app; null otherwise. */
   appStore?: AppRowInfo | null;
@@ -55,10 +55,14 @@ export function SourceReleaseList({
       const params = new URLSearchParams();
       if (includePrereleases) params.set("include_prereleases", "true");
       if (trimmedSearch) params.set("q", trimmedSearch);
+      // App Store / video rows render their (expanded) body with inline media,
+      // so the route must pre-render the "full" markdown variant to match the
+      // SSR initial render; standard sources default to the collapsed variant.
+      if (appStore || video) params.set("full", "true");
       for (const [k, v] of Object.entries(extra)) params.set(k, v);
       return params.toString();
     },
-    [includePrereleases, trimmedSearch],
+    [includePrereleases, trimmedSearch, appStore, video],
   );
 
   // Flip `pristine` once the debounced search lands so the fetch effect skips
