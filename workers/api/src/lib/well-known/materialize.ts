@@ -23,6 +23,7 @@ import {
 } from "@releases/adapters/appstore";
 import { RELEASES_BOT_UA } from "@releases/adapters/user-agent";
 import { buildAppStoreMeta } from "../appstore-materialize.js";
+import { isPrivateOrLocalHost } from "../avatar-ingest.js";
 import type { createDb } from "../../db.js";
 import { configHash, mergeSelfDeclaredMetadata, parseSelfDeclared } from "./self-declared.js";
 
@@ -249,6 +250,13 @@ async function defaultProbe(
 ): Promise<ProbeResult> {
   if (classified.tier === 2) return { ok: true };
   if (classified.type === "feed") {
+    let feedHost = "";
+    try {
+      feedHost = new URL(location.feed!).hostname;
+    } catch {
+      return { ok: false, note: "invalid_feed_url" };
+    }
+    if (isPrivateOrLocalHost(feedHost)) return { ok: false, note: "feed_private_host" };
     try {
       await fetchAndParseFeed(
         location.feed!,
@@ -392,6 +400,7 @@ async function materializeLocation(
     existingSources: Array<typeof sources.$inferSelect>;
     policy: ExclusionPolicy;
     usedSourceSlugs: Set<string>;
+    claimedLocators: Set<string>;
     githubOwners: Set<string>;
     hash: string;
   },
@@ -495,6 +504,23 @@ async function materializeLocation(
       applied: false,
     };
   }
+  const locatorKey = `${classified.type}:${normalizeUrl(classified.locator)}`;
+  if (context.claimedLocators.has(locatorKey)) {
+    return {
+      plan: {
+        action: "skip",
+        tier: classified.tier,
+        type: classified.type,
+        locator: classified.locator,
+        title,
+        productId: context.productId ?? undefined,
+        paused: classified.paused,
+        canonical: location.canonical === true,
+        note: "duplicate_location",
+      },
+      applied: false,
+    };
+  }
 
   let effective = classified;
   if (location.github && location.github !== "self") {
@@ -543,6 +569,7 @@ async function materializeLocation(
     declared: routing,
   });
   const paused = effective.paused || context.archived;
+  context.claimedLocators.add(locatorKey);
   if (!opts.dryRun) {
     await db.insert(sources).values({
       id: sourceId,
@@ -605,6 +632,7 @@ export async function reconcileDomainEntities(
   const githubOwners = knownGitHubOwners(manifest, githubAccounts, existingSources);
   const usedProductSlugs = new Set(existingProducts.map((row) => row.slug));
   const usedSourceSlugs = new Set(existingSources.map((row) => row.slug));
+  const claimedLocators = new Set<string>();
   const hash = configHash(manifest);
   let applied = false;
   const stableProductId =
@@ -706,6 +734,7 @@ export async function reconcileDomainEntities(
           existingSources,
           policy,
           usedSourceSlugs,
+          claimedLocators,
           githubOwners,
           hash,
         },
@@ -727,6 +756,7 @@ export async function reconcileDomainEntities(
         existingSources,
         policy,
         usedSourceSlugs,
+        claimedLocators,
         githubOwners,
         hash,
       },

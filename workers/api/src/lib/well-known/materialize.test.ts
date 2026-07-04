@@ -1,5 +1,13 @@
 import { describe, expect, it } from "bun:test";
-import { classifyLocation, isUrlExcluded, locationMatchesSource } from "./materialize.js";
+import { eq } from "drizzle-orm";
+import { organizations, sources } from "@buildinternet/releases-core/schema";
+import { createTestDb } from "../../../test/setup.js";
+import {
+  classifyLocation,
+  isUrlExcluded,
+  locationMatchesSource,
+  reconcileDomainEntities,
+} from "./materialize.js";
 
 describe("well-known materialization helpers", () => {
   it("classifies MA-free and pending locator tiers", () => {
@@ -67,5 +75,54 @@ describe("well-known materialization helpers", () => {
     expect(isUrlExcluded("https://blocked.example/item", policy)).toBe(true);
     expect(isUrlExcluded("https://evil.example/releases", policy)).toBe(true);
     expect(isUrlExcluded("https://safe.example/releases", policy)).toBe(false);
+  });
+
+  it("refuses to probe a feed on a private or internal host", async () => {
+    const db = createTestDb();
+    await db.insert(organizations).values({ id: "org_a", slug: "acme", name: "Acme" });
+    const { plan } = await reconcileDomainEntities(
+      db as any,
+      "org_a",
+      { version: 2, releases: [{ feed: "https://169.254.169.254/feed.xml" }] },
+      {
+        dryRun: false,
+        enabled: true,
+        source: "well-known",
+        // Would parse fine if the screen were skipped — the note proves the skip source.
+        fetchImpl: (async () =>
+          new Response("<rss><channel><title>x</title></channel></rss>", {
+            status: 200,
+          })) as unknown as typeof fetch,
+        resolveCategory: async () => null,
+      },
+    );
+    expect(plan.sources[0]).toMatchObject({ action: "skip", note: "feed_private_host" });
+    const rows = await db.select().from(sources).where(eq(sources.orgId, "org_a"));
+    expect(rows.length).toBe(0);
+  });
+
+  it("creates a location declared twice in one manifest only once", async () => {
+    const db = createTestDb();
+    await db.insert(organizations).values({ id: "org_a", slug: "acme", name: "Acme" });
+    const { plan } = await reconcileDomainEntities(
+      db as any,
+      "org_a",
+      {
+        version: 2,
+        products: [{ name: "Acme Cloud", releases: [{ feed: "https://acme.com/feed.xml" }] }],
+        releases: [{ feed: "https://acme.com/feed.xml" }],
+      },
+      {
+        dryRun: false,
+        enabled: true,
+        source: "well-known",
+        probe: async () => ({ ok: true }),
+        resolveCategory: async () => null,
+      },
+    );
+    expect(plan.sources.map((entry) => entry.action)).toEqual(["create", "skip"]);
+    expect(plan.sources[1]!.note).toBe("duplicate_location");
+    const rows = await db.select().from(sources).where(eq(sources.orgId, "org_a"));
+    expect(rows.length).toBe(1);
   });
 });
