@@ -9,6 +9,7 @@
     "dev:api": "bun run db:migrate:local && portless run --name api.${PORTLESS_NAME:-releases} sh -c 'wrangler dev --config workers/api/wrangler.jsonc --port $PORT --ip 127.0.0.1'",
     "dev:discovery": "portless run --name discovery.${PORTLESS_NAME:-releases} sh -c 'wrangler dev --config workers/discovery/wrangler.jsonc --port $PORT --ip 127.0.0.1'",
     "dev:mcp": "portless run --name mcp.${PORTLESS_NAME:-releases} sh -c 'wrangler dev --config workers/mcp/wrangler.jsonc --port $PORT --ip 127.0.0.1'",
+    "dev:portless:doctor": "portless doctor",
     "preview:web": "cd web && RELEASES_API_URL=${RELEASES_API_URL:-${RELEASED_API_URL:-http://localhost:8787}} bun run dev -- --port 3000",
     "preview:api": "wrangler dev --config workers/api/wrangler.jsonc --port 8787 --ip 127.0.0.1",
     "preview:mcp": "wrangler dev --config workers/mcp/wrangler.jsonc --port 8788 --ip 127.0.0.1",
@@ -130,6 +131,9 @@
     "typescript": "^6.0.3",
     "wrangler": "^4.107.0",
     "yaml": "^2.9.0"
+  },
+  "engines": {
+    "node": ">=24"
   },
   "packageManager": "pnpm@9.15.9+sha512.68046141893c66fad01c079231128e9afb89ef87e2691d69e4d40eee228988295fd4682181bae55b58418c3a253bde65a505ec7c5f9403ece5cc3cd37dcf2531"
 }

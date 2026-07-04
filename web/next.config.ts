@@ -14,11 +14,16 @@ try {
 // `/_next/*` dev assets) from any host outside the localhost family. Local OAuth
 // dev runs the app on a real portless custom-TLD domain (Google/Apple reject
 // `*.localhost`), so those hosts must be allow-listed or the page 403s its own
-// chunks and never hydrates — leaving every button inert. The localhost family
-// stays allowed by default; the `*.` wildcard also covers worktree-prefixed
-// hosts (`feat-x.releases.local.buildinternet.dev`). Extend with
+// chunks and never hydrates — leaving every button inert. Worktree-prefixed
+// portless hosts (`feat-x.releases.localhost`, `feat-x.releases.local.buildinternet.dev`)
+// need explicit `allowedDevOrigins` entries below. Extend with
 // NEXT_DEV_ALLOWED_ORIGINS (comma-separated hostnames) for any other dev domain.
 const devAllowedOrigins = [
+  // Default portless TLD — explicit allow-list covers worktree-prefixed hosts
+  // (`feat-x.releases.localhost`) that fall outside Next's built-in localhost family.
+  "releases.localhost",
+  "*.releases.localhost",
+  // Custom TLD for local OAuth (Google/Apple reject *.localhost).
   "releases.local.buildinternet.dev",
   "*.releases.local.buildinternet.dev",
   ...(process.env.NEXT_DEV_ALLOWED_ORIGINS ?? "")
