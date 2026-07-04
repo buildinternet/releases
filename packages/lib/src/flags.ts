@@ -11,13 +11,17 @@
  * and are not assignable to a string-record.
  */
 
+/**
+ * Evaluation-context attributes for Flagship targeting rules / percentage
+ * rollouts (e.g. `{ orgId: "..." }`). Matches the real binding's
+ * `FlagshipEvaluationContext` shape. Omit entirely for a context-free global
+ * read — every existing call site does this today, so this is additive.
+ */
+export type FlagContext = Record<string, string | number | boolean>;
+
 /** Minimal shape of the native Flagship Workers binding (avoids an npm dep). */
 export interface FlagshipBinding {
-  getBooleanValue(
-    key: string,
-    defaultValue: boolean,
-    context?: Record<string, unknown>,
-  ): Promise<boolean>;
+  getBooleanValue(key: string, defaultValue: boolean, context?: FlagContext): Promise<boolean>;
 }
 
 /**
@@ -300,17 +304,20 @@ function fallbackOf(varValue: string | undefined, def: FlagDef): boolean {
 /**
  * Evaluate a flag. `binding` is `env.FLAGS` (may be undefined outside prod/staging
  * or in tests); `varValue` is the matching wrangler var (e.g. `env.CACHE_DISABLED`).
- * Never throws.
+ * `context` is optional evaluation-context attributes (e.g. `{ orgId }`) for a
+ * Flagship targeting rule or percentage rollout to bucket on — omit for a
+ * context-free global read (today's default for every flag). Never throws.
  */
 export async function flag(
   binding: FlagshipBinding | undefined,
   varValue: string | undefined,
   def: FlagDef,
+  context?: FlagContext,
 ): Promise<boolean> {
   const fb = fallbackOf(varValue, def);
   if (!binding) return fb;
   try {
-    return await binding.getBooleanValue(def.key, fb);
+    return await binding.getBooleanValue(def.key, fb, context);
   } catch {
     return fb;
   }
@@ -334,12 +341,13 @@ export async function flagState(
   binding: FlagshipBinding | undefined,
   varValue: string | undefined,
   def: FlagDef,
+  context?: FlagContext,
 ): Promise<FlagState> {
   if (binding) {
     try {
       const [asFalse, asTrue] = await Promise.all([
-        binding.getBooleanValue(def.key, false),
-        binding.getBooleanValue(def.key, true),
+        binding.getBooleanValue(def.key, false, context),
+        binding.getBooleanValue(def.key, true, context),
       ]);
       if (asFalse === asTrue) return asFalse ? "on" : "off";
     } catch {
