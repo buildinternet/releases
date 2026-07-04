@@ -140,6 +140,12 @@ export interface Env {
    * API worker's raw-snapshot endpoint for later re-extraction (#1284).
    */
   RAW_SNAPSHOT_CAPTURE_ENABLED?: string;
+  /**
+   * Optional wrangler-var override for the `deterministic-update-enabled` flag
+   * (#1878; Flagship wins). "true" runs routine `update` runs as a direct
+   * scrapeFetch loop instead of a Managed-Agents worker session.
+   */
+  DETERMINISTIC_UPDATE_ENABLED?: string;
   /** "true" to sign outbound scrape-path content fetches with Web Bot Auth headers. */
   WEB_BOT_AUTH_ENABLED?: string;
   /** Secrets Store binding for the Ed25519 private JWK used by Web Bot Auth signing. */

@@ -69,3 +69,20 @@ export function isRetriesExhaustedIdle(event: unknown): boolean {
   const e = event as { type?: string; stop_reason?: { type?: string } } | null;
   return e?.type === "session.status_idle" && e.stop_reason?.type === "retries_exhausted";
 }
+
+/**
+ * Build the "our-side fatal" classification for a terminal failure whose cause
+ * is a known error category (a `manage_source` fetch tool error). Shared by the
+ * agent-path "all tool calls failed" branch and the deterministic-update "all
+ * source fetches failed" branch so the two can't drift. Returns `undefined`
+ * when the category is unknown — an unclassified failure, which `fail()`
+ * defaults to `errorSource: "us"` anyway.
+ */
+export function classifyUsFatal(
+  category: string | undefined,
+  message: string,
+): SessionErrorClassification | undefined {
+  return category
+    ? { errorSource: "us", errorType: category, message, severity: "fatal" }
+    : undefined;
+}
