@@ -59,6 +59,7 @@
     "eval:overview": "bun tests/evals/overview.eval.ts",
     "eval:tool-ux-report": "bun tests/evals/tool-ux-report.ts",
     "gen:releases-schema": "bun scripts/gen-releases-json-schema.ts",
+    "flags:docs": "bun scripts/gen-flag-docs.ts",
     "prepare": "husky"
   },
   "lint-staged": {
