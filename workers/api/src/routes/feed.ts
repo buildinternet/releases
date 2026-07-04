@@ -1,7 +1,11 @@
 import { Hono } from "hono";
 import { createDb } from "../db.js";
 import { resolveFeedToken, touchFeedTokenLastUsed, feedAtomUrl } from "../queries/feed-tokens.js";
-import { getFollowedReleases, mapLatestRowToReleaseItem } from "../queries/releases.js";
+import {
+  getFollowedReleases,
+  mapLatestRowToReleaseItem,
+  releaseWebBase,
+} from "../queries/releases.js";
 import { userFeedToAtom, ATOM_DEFAULT_MAX_ENTRIES } from "@releases/rendering/atom.js";
 import { atomEtag, formatLastModified, shouldReturn304 } from "@releases/rendering/atom-http.js";
 import type { Env } from "../index.js";
@@ -27,7 +31,9 @@ feedRoutes.get("/feed/:token", async (c) => {
     limit: ATOM_DEFAULT_MAX_ENTRIES,
   });
   const mediaOrigin = c.env.MEDIA_ORIGIN ?? "";
-  const releases = rows.map((r) => mapLatestRowToReleaseItem(r, mediaOrigin));
+  const releases = rows.map((r) =>
+    mapLatestRowToReleaseItem(r, mediaOrigin, releaseWebBase(c.env)),
+  );
 
   const baseUrl = c.env.WEB_BASE_URL ?? "https://releases.sh";
   const selfUrl = feedAtomUrl(new URL(c.req.url).origin, raw);

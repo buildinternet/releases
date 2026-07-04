@@ -62,6 +62,11 @@ export const ReleaseLatestItemSchema = z.object({
   breaking: z.enum(BREAKING_LEVELS).optional(),
   publishedAt: z.string().nullable(),
   url: z.string().nullable(),
+  /**
+   * Canonical releases.sh detail-page URL (friendly form: ID + current
+   * title slug). Additive — older servers and the digest-cron path omit it.
+   */
+  webUrl: z.string().optional(),
   media: z.array(MediaItemSchema),
   source: ReleaseLatestSourceSchema,
   /**
@@ -237,6 +242,13 @@ export const ReleaseDetailResponseSchema = z.object({
    */
   migrationNotes: z.string().nullable().optional(),
   url: z.string().nullable(),
+  /**
+   * Canonical releases.sh detail-page URL, `https://releases.sh/release/
+   * rel_<id>-<slug>` (Zendesk-style: immutable ID + current title slug;
+   * the slug follows title regeneration, the ID keeps old links alive).
+   * Additive — older servers omit it.
+   */
+  webUrl: z.string().optional(),
   contentHash: z.string().nullable(),
   media: z.array(MediaItemSchema),
   publishedAt: z.string().nullable(),

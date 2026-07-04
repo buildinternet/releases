@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { safeStringifyJsonLd } from "@/lib/json-ld";
+import { parseReleaseParam, releasePath } from "@buildinternet/releases-core/release-slug";
 import { notFound, permanentRedirect } from "next/navigation";
 import Link from "next/link";
 import { Suspense, ViewTransition } from "react";
@@ -36,7 +37,8 @@ export async function generateMetadata({
 }: {
   params: Promise<{ id: string }>;
 }): Promise<Metadata> {
-  const { id } = await params;
+  const { id: rawParam } = await params;
+  const { id } = parseReleaseParam(rawParam);
   try {
     const release = await api.release(id);
     const { descriptive, versionLabel } = deriveFeedTitle(release);
@@ -59,10 +61,10 @@ export async function generateMetadata({
       ...(shouldNoIndex ? { robots: { index: false, follow: true } } : {}),
       openGraph: {
         type: "article",
-        url: `/release/${id}`,
+        url: releasePath(release),
         publishedTime: release.publishedAt ?? undefined,
       },
-      alternates: { canonical: `/release/${id}` },
+      alternates: { canonical: releasePath(release) },
     };
   } catch {
     return { title: "Release" };
@@ -80,7 +82,8 @@ function formatDate(iso: string | null) {
 }
 
 export default async function ReleaseDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
+  const { id: rawParam } = await params;
+  const { id } = parseReleaseParam(rawParam);
 
   let release;
   try {
@@ -97,7 +100,7 @@ export default async function ReleaseDetailPage({ params }: { params: Promise<{ 
     // The release is suppressed, deleted, or coverage-only (all return 404
     // from GET /v1/releases/:id via the releases_visible filter). Before
     // giving up, check whether this id is a coverage-side row with a live
-    // canonical: if so, 301 to the canonical detail page so crawlers and
+    // canonical: if so, 308 to the canonical detail page so crawlers and
     // humans land somewhere useful.
     //
     // Ideal status for a permanently-removed release with no canonical sibling
@@ -105,17 +108,34 @@ export default async function ReleaseDetailPage({ params }: { params: Promise<{ 
     // direct 410 path — the only hooks are notFound() (→ 404) and
     // permanentRedirect() (→ 308). notFound() is the closest safe fallback;
     // a custom Route Handler or middleware could emit a true 410 if needed.
+    // permanentRedirect() signals by throwing, so it must run OUTSIDE this
+    // try — the catch below would swallow the redirect and fall through to
+    // notFound(). Resolve the target inside, redirect after.
+    let coverageRedirect: string | null = null;
     try {
       const coverage = await api.coverage(id);
       if (coverage.role === "coverage" && coverage.canonical.sibling != null) {
-        // The canonical is visible — send the crawler/user there permanently (301).
-        permanentRedirect(`/release/${coverage.canonical.canonicalId}`);
+        // The canonical is visible — send the crawler/user there permanently.
+        // Bare-ID target is fine: the canonical's own page 308s to its
+        // slugged form.
+        coverageRedirect = `/release/${coverage.canonical.canonicalId}`;
       }
     } catch {
       // Coverage lookup failed (network error, parse error) — fall through
       // to notFound() so we don't accidentally swallow the original error.
     }
+    if (coverageRedirect) {
+      permanentRedirect(coverageRedirect);
+    }
     notFound();
+  }
+
+  // Friendly-URL canonicalization: bare-ID, stale-slug, and mangled-slug
+  // segments all 308 to the current canonical `/release/<id>-<slug>` form.
+  // The ID is the routing key; the slug is derived from the current title.
+  const canonicalPath = releasePath(release);
+  if (canonicalPath !== `/release/${rawParam}`) {
+    permanentRedirect(canonicalPath);
   }
 
   const sourcePath = release.org
@@ -157,7 +177,9 @@ export default async function ReleaseDetailPage({ params }: { params: Promise<{ 
   const hasBody = release.content?.trim();
   const devAdmin = isLocalAdminEnabled();
 
-  const releaseUrl = `https://releases.sh/release/${id}`;
+  // JSON-LD must carry the same slugged canonical as <link rel=canonical>/OG,
+  // or crawlers see conflicting canonical signals.
+  const releaseUrl = `https://releases.sh${releasePath(release)}`;
   // Structured-data breadcrumb mirrors the visible trail: Home → Org → leaf,
   // where the leaf is the product (when grouped) or the source.
   const leafItem = `https://releases.sh${leafPath}`;

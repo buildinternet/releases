@@ -54,6 +54,34 @@ Entity resolution prefers IDs over slugs; IDs are immutable, so prefer them in n
 - **Org and release** lookups accept `org_…` / `rel_…` IDs or slugs interchangeably.
 - **Source and product** lookups accept the typed ID (`src_…` / `prod_…`) on the bare path (`/v1/sources/:slug`, `/v1/products/:slug`), but slug-only callers must use the org-scoped path or a `/v1/lookups/*-by-slug` resolver (#698, below).
 
+## Friendly release URLs
+
+Release detail pages use Zendesk-style URLs: `/release/rel_<id>-<slug>`
+(e.g. `/release/rel_V1StGXR8_Z5jdHi6BmyTx-claude-code-2-0-adds-hooks`).
+
+- **The ID is the only routing key.** Parsing is positional — `rel_` +
+  exactly 21 chars — because nanoid's alphabet includes `-` and `_`, so the
+  segment can never be delimiter-split. Anything after the next `-` is
+  decorative and ignored (`parseReleaseParam` in
+  `@buildinternet/releases-core/release-slug`).
+- **The slug is derived, not stored.** `releaseSlug()` =
+  `toSlug(titleShort ?? titleGenerated ?? title ?? version)`, capped at 80
+  chars on a hyphen boundary. It follows title regeneration; the canonical
+  URL churns with it (Zendesk semantics) and the immutable ID keeps every
+  old link resolving.
+- **Canonicalization:** the web route redirects any non-canonical segment
+  (bare ID, stale slug, mangled slug) to the current canonical form with a
+  308 (`permanentRedirect`).
+  Canonical/OG metadata use the slugged path. Internal bare-ID links are
+  acceptable — they redirect.
+- **API:** `GET /v1/releases/:id` accepts the slugged segment (slug
+  stripped before lookup). Detail and latest-list responses carry an
+  additive `webUrl` — the absolute canonical web URL — built from
+  `WEB_BASE_URL` (fallback `https://releases.sh`).
+- **Sitemap:** release pages remain excluded (#1601 index-bloat cleanup);
+  friendly URLs propagate via shared links, OG tags, and crawls of org/feed
+  pages.
+
 ## Org-scoped routes (#690 + #698)
 
 Per-org slug uniqueness for sources and products is enforced by `idx_sources_org_slug` / `idx_products_org_slug`; the global `UNIQUE(slug)` index has been dropped.
