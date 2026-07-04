@@ -69,8 +69,9 @@ Release detail pages use Zendesk-style URLs: `/release/rel_<id>-<slug>`
   chars on a hyphen boundary. It follows title regeneration; the canonical
   URL churns with it (Zendesk semantics) and the immutable ID keeps every
   old link resolving.
-- **Canonicalization:** the web route 301s any non-canonical segment
-  (bare ID, stale slug, mangled slug) to the current canonical form.
+- **Canonicalization:** the web route redirects any non-canonical segment
+  (bare ID, stale slug, mangled slug) to the current canonical form with a
+  308 (`permanentRedirect`).
   Canonical/OG metadata use the slugged path. Internal bare-ID links are
   acceptable — they redirect.
 - **API:** `GET /v1/releases/:id` accepts the slugged segment (slug
