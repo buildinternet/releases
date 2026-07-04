@@ -17,6 +17,7 @@ import { CollectionAdminMenu } from "@/components/collection-admin-menu";
 import { AdminOnly } from "@/components/admin-only";
 import { isLocalAdminEnabled } from "@/lib/local-admin-flag";
 import { buildFeedPageJsonLd } from "@/lib/schema-org";
+import { withReleaseBodyHtml } from "@/lib/render-release-body";
 
 const getCollection = cache((slug: string) => api.collectionDetail(slug));
 const getCollectionReleases = cache((slug: string) => api.collectionReleases(slug, { limit: 20 }));
@@ -121,7 +122,7 @@ export default async function CollectionPage({ params }: { params: Promise<{ slu
             key={slug}
             fetchEndpoint={`/api/collection-releases/${slug}`}
             formatPath={`/collections/${slug}`}
-            initialReleases={releases.releases}
+            initialReleases={withReleaseBodyHtml(releases.releases, "collapsed")}
             initialCursor={releases.pagination.nextCursor}
             members={detail.members}
             summaryByDate={summaryByDate}

@@ -1,4 +1,4 @@
-import type { ReleaseItem, OrgReleaseItem } from "@/lib/api";
+import type { ReleaseItem, OrgReleaseItem, CollectionReleaseItem } from "@/lib/api";
 
 /**
  * A release augmented with its body markdown pre-rendered to an HTML string.
@@ -20,3 +20,13 @@ export type WithBodyHtml<T> = T & { bodyHtml?: string };
 
 export type ReleaseItemView = WithBodyHtml<ReleaseItem>;
 export type OrgReleaseItemView = WithBodyHtml<OrgReleaseItem>;
+
+/**
+ * Collection/category timeline row with its EXCERPT pre-rendered to `bodyHtml`
+ * (the "collapsed" variant — images stripped, matching `collapsedMarkdownComponents`).
+ * The full body is never shipped here; `collection-timeline`'s "Show more"
+ * lazily fetches it from `/api/release-body/[id]` (server-rendered), keeping the
+ * verbatim body out of crawlable HTML (#1606) and shiki/react-markdown out of
+ * the client bundle.
+ */
+export type CollectionReleaseItemView = WithBodyHtml<CollectionReleaseItem>;

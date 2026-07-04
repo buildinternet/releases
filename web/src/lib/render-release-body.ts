@@ -138,6 +138,22 @@ export function renderReleaseBodyHtml(release: BodyRenderable, variant: BodyVari
 }
 
 /**
+ * Render one release's FULL body (not the capped excerpt) to HTML, always with
+ * the `"full"` variant (sanitized inline images kept). Backs the lazy
+ * `/api/release-body/[id]` endpoint that `collection-timeline`'s "Show more"
+ * fetches — so the verbatim body reaches the DOM only on an explicit user
+ * expand, never in the initial crawlable HTML (#1606), and shiki stays off the
+ * client. Empty (no notes) → `""`.
+ */
+export function renderReleaseFullBodyHtml(release: BodyRenderable): string {
+  const raw = release.content || release.summary || "";
+  const base = originFromUrl(release.url);
+  const content = base ? rewriteRelativeLinks(raw, base) : raw;
+  if (!content.trim()) return "";
+  return renderToHtml(content, "full");
+}
+
+/**
  * Attach `bodyHtml` to each release. `variant` is either a fixed variant (source
  * lists, where every row shares the source's kind) or a per-release function
  * (mixed org/product feeds, deciding from `release.source`).
