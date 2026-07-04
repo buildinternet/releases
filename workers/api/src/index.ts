@@ -39,8 +39,6 @@ import { pollAndFetch, queryDueSources } from "./cron/poll-fetch.js";
 import { drizzle } from "drizzle-orm/d1";
 import { finalizeRunRow, insertRunningRow } from "./db/cron-runs-dao.js";
 import { retierSources } from "./cron/retier.js";
-import { scrapeAgentSweep } from "./cron/scrape-agent-sweep.js";
-import { forceDrainSweep } from "./cron/force-drain-sweep.js";
 import { sweepSearchQueries } from "./cron/sweep-search-queries.js";
 import { sweepTombstones } from "./cron/sweep-tombstones.js";
 import { scanStaleFirecrawlSources } from "./cron/firecrawl-staleness.js";
@@ -54,7 +52,7 @@ import { sendAlert, type AlertEnv } from "./lib/send-alert.js";
 import { respondError } from "./lib/error-response";
 import { logEvent } from "@releases/lib/log-event";
 import { dbErrorLogFields } from "@releases/lib/db-errors";
-import { getSecret, getSecretWithFallback } from "@releases/lib/secrets";
+import { getSecret } from "@releases/lib/secrets";
 import { FLAGS, flag, type FlagshipBinding } from "@releases/lib/flags";
 import { NotFoundError } from "@releases/lib/releases-error";
 
@@ -62,7 +60,6 @@ export { StatusHub } from "./status-hub.js";
 export { ReleaseHub } from "./release-hub.js";
 export { SourceActor } from "./source-actor.js";
 export { OrgActor } from "./org-actor.js";
-export { ScrapeAgentSweepWorkflow } from "./workflows/scrape-agent-sweep.js";
 export { PollAndFetchWorkflow } from "./workflows/poll-and-fetch.js";
 export { OnboardSourceWorkflow } from "./workflows/onboard-source.js";
 export { BatchSummarizeWorkflow } from "./workflows/batch-summarize.js";
@@ -93,12 +90,9 @@ export type Env = {
     // self-schedules its fetches via its own DO alarm; the hourly poll cron is a
     // re-seed heartbeat that (re-)seeds due sources' alarms. Absent ⇒ no-op.
     SOURCE_ACTOR?: DurableObjectNamespace<import("./source-actor.js").SourceActor>;
-    // Per-org scrape/agent drain actor (#1777 cron-absorption slice). When bound,
-    // a flagged source's SourceActor arms this DO, which dispatches one /update
-    // session for the org. Absent ⇒ the scrape-agent + force-drain crons drive.
+    // Per-org scrape/agent drain actor (#1777). A flagged source's SourceActor
+    // arms this DO, which dispatches one /update session for the org.
     ORG_ACTOR?: DurableObjectNamespace<import("./org-actor.js").OrgActor>;
-    /** Kill-switch var fallback for org-drain-actor-enabled (Flagship is source of truth). */
-    ORG_DRAIN_ACTOR_ENABLED?: string;
     WEBHOOK_DELIVERY_QUEUE: Queue<unknown>;
     /** Per-recipient follow digest send (cron enqueues; API worker consumes). */
     DIGEST_DELIVERY_QUEUE?: Queue<import("./queues/types.js").DigestDeliveryMessage>;
@@ -124,12 +118,6 @@ export type Env = {
     CACHE_DISABLED?: string;
     GITHUB_TOKEN?: SecretBinding;
     CRON_ENABLED?: string;
-    SCRAPE_AGENT_CRON_ENABLED?: string;
-    SCRAPE_AGENT_MAX_SESSIONS?: string;
-    // The 01:00 UTC cron kicks a `SCRAPE_AGENT_WORKFLOW` instance when this
-    // binding is wired (always in prod), else inlines `scrapeAgentSweep()` in
-    // `ctx.waitUntil`. See issue #482.
-    SCRAPE_AGENT_WORKFLOW?: Workflow;
     // Per-source ingest engine (fetch → parse → insert), invoked by each
     // SourceActor's alarm (#1776). When this binding is absent (local dev), the
     // hourly cron falls back to inlining `pollAndFetch()` in `ctx.waitUntil`
@@ -164,17 +152,11 @@ export type Env = {
     COLLECTION_SUMMARIES_WORKFLOW?: Workflow;
     /** Durable media / video / gif backfill loops (admin POST). */
     MEDIA_BACKFILL_WORKFLOW?: Workflow;
-    // Feature flag: when "true", the 04:00 UTC cron force-drains stranded
-    // scrape/agent sources (unreliable quirk or stale beyond
-    // FORCE_DRAIN_STALE_HOURS) into the scrape-agent-sweep inbox. Default
-    // off. See #518.
-    FORCE_DRAIN_CRON_ENABLED?: string;
     FORCE_DRAIN_STALE_HOURS?: string;
-    FORCE_SWEEP_MAX_SESSIONS?: string;
     /**
      * Service binding to the discovery worker. Typed as the RPC surface
      * (`startManagedFetchSession`) plus the standard HTTP `fetch` method used
-     * by the scrape-agent sweep (`/update`). The `entrypoint:
+     * by the OrgActor drain to POST `/update`. The `entrypoint:
      * "DiscoveryEntrypoint"` annotation in wrangler.jsonc ensures the binding
      * resolves to the named class so RPC methods are available at runtime.
      */
@@ -936,10 +918,9 @@ export default {
     await handleQueueBatch(batch, env);
   },
   async scheduled(event: ScheduledEvent, env: Env["Bindings"], ctx: ExecutionContext) {
-    // Daily retier job runs at 03:00 UTC; scrape-no-feed agent sweep at 01:00 UTC;
-    // force-drain for stranded sources at 04:00 UTC; search-queries retention
-    // sweep at 05:00 UTC; poll-and-fetch hourly.
-    // Build the alert env once; shared by all five cron dispatch sites.
+    // Daily retier runs at 03:00 UTC; the source staleness digest at 04:00 UTC;
+    // search-queries retention at 05:00 UTC; poll-and-fetch hourly.
+    // Build the alert env once for cron dispatches.
     const alertEnv: AlertEnv = {
       SEND_EMAIL: env.SEND_EMAIL,
       EMAIL_NOTIFY_ENABLED: env.EMAIL_NOTIFY_ENABLED,
@@ -1079,28 +1060,6 @@ export default {
       return;
     }
     if (event.cron === "0 4 * * *") {
-      const drainActorOn = await flag(
-        env.FLAGS,
-        env.ORG_DRAIN_ACTOR_ENABLED,
-        FLAGS.orgDrainActorEnabled,
-      );
-      if (!drainActorOn) {
-        ctx.waitUntil(
-          loggedDispatch(
-            "force-drain-cron",
-            forceDrainSweep({
-              DB: env.DB,
-              CRON_ENABLED: env.CRON_ENABLED,
-              FORCE_DRAIN_CRON_ENABLED: env.FORCE_DRAIN_CRON_ENABLED,
-              FORCE_DRAIN_STALE_HOURS: env.FORCE_DRAIN_STALE_HOURS,
-              FORCE_SWEEP_MAX_SESSIONS: env.FORCE_SWEEP_MAX_SESSIONS,
-            }),
-            alertEnv,
-          ),
-        );
-      } else {
-        logEvent("info", { component: "force-drain-cron", event: "superseded-by-org-drain-actor" });
-      }
       // Source staleness digest (#1528): first-party + Firecrawl scans, emailed
       // to the operator when anything is overdue. Runs daily, an hour after the
       // retier (0 3) so medianGapDays are fresh. Hourly firecrawl scan still
@@ -1191,71 +1150,6 @@ export default {
           retierSources({
             DB: env.DB,
             CRON_ENABLED: env.CRON_ENABLED,
-          }),
-          alertEnv,
-        ),
-      );
-      return;
-    }
-    if (event.cron === "0 1 * * *") {
-      if (await flag(env.FLAGS, env.ORG_DRAIN_ACTOR_ENABLED, FLAGS.orgDrainActorEnabled)) {
-        logEvent("info", {
-          component: "scrape-agent-cron",
-          event: "superseded-by-org-drain-actor",
-        });
-        return;
-      }
-      if (!env.DISCOVERY_WORKER) {
-        logEvent("warn", { component: "scrape-agent-cron", event: "discovery-worker-missing" });
-        return;
-      }
-      // Run the Workflows-based path whenever the binding is wired (always in
-      // prod). Behavior is identical to the inline sweep — the workflow
-      // resolves secrets + runs the same pipeline step-by-step so a partial
-      // failure doesn't strand the tail of the dispatch list. The inline
-      // `scrapeAgentSweep` below stays as the fallback when the binding is
-      // absent (e.g. a deployment without the Workflow configured). See #482.
-      if (env.SCRAPE_AGENT_WORKFLOW) {
-        ctx.waitUntil(
-          loggedDispatch(
-            "scrape-agent-cron",
-            env.SCRAPE_AGENT_WORKFLOW.create({
-              id: `scrape-agent-sweep-${event.scheduledTime}`,
-              params: { scheduledTime: event.scheduledTime },
-            }),
-            alertEnv,
-          ),
-        );
-        return;
-      }
-      const releasesApiKey = await getSecretWithFallback(
-        env.RELEASES_API_KEY,
-        env.RELEASED_API_KEY,
-      );
-      if (!releasesApiKey) {
-        logEvent("warn", { component: "scrape-agent-cron", event: "api-key-missing" });
-        return;
-      }
-      ctx.waitUntil(
-        loggedDispatch(
-          "scrape-agent-cron",
-          scrapeAgentSweep({
-            DB: env.DB,
-            CRON_ENABLED: env.CRON_ENABLED,
-            SCRAPE_AGENT_CRON_ENABLED: env.SCRAPE_AGENT_CRON_ENABLED,
-            SCRAPE_AGENT_MAX_SESSIONS: env.SCRAPE_AGENT_MAX_SESSIONS,
-            FORCE_DRAIN_STALE_HOURS: env.FORCE_DRAIN_STALE_HOURS,
-            DISCOVERY_WORKER: env.DISCOVERY_WORKER,
-            RELEASES_API_KEY: releasesApiKey,
-            ANTHROPIC_API_KEY: (await getSecret(env.ANTHROPIC_API_KEY)) ?? undefined,
-            ANTHROPIC_BASE_URL: env.ANTHROPIC_BASE_URL,
-            AI_GATEWAY_TOKEN:
-              (await getSecret(env.AI_GATEWAY_TOKEN).catch(() => null)) ?? undefined,
-            SEND_EMAIL: env.SEND_EMAIL,
-            EMAIL_NOTIFY_ENABLED: env.EMAIL_NOTIFY_ENABLED,
-            EMAIL_NOTIFY_TO: env.EMAIL_NOTIFY_TO,
-            EMAIL_FROM: env.EMAIL_FROM,
-            ADMIN_BASE_URL: env.ADMIN_BASE_URL,
           }),
           alertEnv,
         ),

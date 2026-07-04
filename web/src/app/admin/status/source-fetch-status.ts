@@ -7,8 +7,8 @@
  *
  * This helper compares `changeDetectedAt` against `lastFetchedAt` so stale
  * flags fall away, and surfaces a separate "Stuck" state when a flag has
- * outlived the daily scrape-agent-sweep cycle (a strong signal that the
- * sweep keeps trying and failing).
+ * outlived the actor-native drain window (a strong signal that repeated
+ * drain attempts are failing).
  */
 
 export type FetchPendingTone = "pending" | "stuck";
@@ -18,11 +18,9 @@ export type FetchPendingStatus =
   | { tone: null };
 
 /**
- * scrape-agent-sweep runs at 01:00 UTC daily, so a flag younger than ~24h
- * may legitimately just be waiting for the next sweep. Past that, every
- * sweep window since flag-set has had a chance and hasn't cleared it —
- * something's failing. 36h is "more than one cycle, with slack for cron
- * skew and discovery latency."
+ * The OrgActor cooldown caps repeated drains to roughly daily, so a flag
+ * younger than ~24h may legitimately be waiting for its next eligible drain.
+ * 36h allows a full cooldown window plus scheduling and discovery latency.
  */
 export const STUCK_AFTER_MS = 36 * 60 * 60 * 1000;
 
@@ -71,12 +69,12 @@ export function evaluateFetchPending(
     return {
       tone: "stuck",
       label: "Stuck",
-      tooltip: `Change detected ${formatAge(age)} ago and the daily scrape-agent-sweep hasn't drained it. Most likely the discovery fetch keeps erroring before it can clear the flag — check the Fetch Log for status=error.`,
+      tooltip: `Change detected ${formatAge(age)} ago and the OrgActor drain hasn't cleared it. Most likely the discovery fetch keeps erroring before it can clear the flag — check the Fetch Log for status=error.`,
     };
   }
   return {
     tone: "pending",
     label: "Pending fetch",
-    tooltip: `Change detected ${formatAge(age)} ago. The next scrape-agent-sweep (01:00 UTC) will drain it.`,
+    tooltip: `Change detected ${formatAge(age)} ago. The source's OrgActor drain will process it.`,
   };
 }

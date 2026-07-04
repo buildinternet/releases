@@ -21,25 +21,7 @@
   },
   "vars": {
     "CRON_ENABLED": "true",
-    // Per-cron toggle for the daily scrape-no-feed agent sweep. Both
-    // CRON_ENABLED and SCRAPE_AGENT_CRON_ENABLED must be truthy to fire.
-    "SCRAPE_AGENT_CRON_ENABLED": "true",
-    // Max managed-agent sessions dispatched per sweep. Restored to the intended
-    // steady-state default of 20 (was throttled to 5 since the 2026-05-18
-    // runaway). At 5 vs a ~30-source flagged backlog the cap was binding every
-    // run (skippedOverCap 25-29 daily), so sources drained ~5/day and the
-    // most-stale never caught up — the sweep-starvation incident (2026-05-31).
-    // The spend cap (#1058) + per-source KV lock (#1059) bound worst-case cost
-    // (~$4/sweep); dial down here if needed.
-    "SCRAPE_AGENT_MAX_SESSIONS": "20",
-    // Feature flag for the daily force-drain cron (#518). When true, the
-    // 04:00 UTC cron flags stranded scrape/agent sources (unreliable quirk
-    // or `last_fetched_at` older than FORCE_DRAIN_STALE_HOURS) so the
-    // 01:00 scrape-agent-sweep picks them up tomorrow. Capped at
-    // FORCE_SWEEP_MAX_SESSIONS (10/day) so the blast radius is bounded.
-    "FORCE_DRAIN_CRON_ENABLED": "true",
     "FORCE_DRAIN_STALE_HOURS": "72",
-    "FORCE_SWEEP_MAX_SESSIONS": "10",
     "MEDIA_ORIGIN": "https://media.releases.sh",
     // Embedding provider for semantic search. Default: voyage (voyage-4-lite,
     // requested at 512 dims via output_dimension to match the Vectorize indexes).
@@ -340,14 +322,9 @@
     { "new_classes": ["OrgActor"], "tag": "v4" },
   ],
   // Cloudflare Workflows — durable, retriable multi-step pipelines. See
-  // workers/api/src/workflows/ and issue #482. Prod-only; staging doesn't
+  // workers/api/src/workflows/. Prod-only; staging doesn't
   // run crons (see memory: feedback_staging_no_crons.md).
   "workflows": [
-    {
-      "name": "scrape-agent-sweep",
-      "binding": "SCRAPE_AGENT_WORKFLOW",
-      "class_name": "ScrapeAgentSweepWorkflow",
-    },
     {
       "name": "poll-and-fetch",
       "binding": "POLL_AND_FETCH_WORKFLOW",
@@ -427,9 +404,8 @@
   "routes": [{ "pattern": "api.releases.sh", "custom_domain": true }],
   "triggers": {
     // Hourly: poll feed sources and fetch changed ones.
-    // Daily at 01:00 UTC: drain scrape-no-feed sources via managed-agents.
     // Daily at 03:00 UTC: recompute fetchPriority tiers based on cadence.
-    // Daily at 04:00 UTC: force-drain stranded scrape/agent sources (#518).
+    // Daily at 04:00 UTC: send the source staleness digest.
     // Daily at 04:30 UTC: batch summarization (self-gates via BATCH_SUMMARIZE_ENABLED). See #971.
     // Daily at 05:00 UTC: delete search_queries rows older than SEARCH_QUERY_RETENTION_DAYS (#575).
     // Daily at 05:30 UTC: hard-purge tombstoned orgs/sources/products older than TOMBSTONE_RETENTION_DAYS (#666).
@@ -441,7 +417,6 @@
     // Mondays at 13:00 UTC: send weekly digests to subscribed users (#1518).
     "crons": [
       "0 * * * *",
-      "0 1 * * *",
       "0 3 * * *",
       "0 4 * * *",
       "30 4 * * *",
@@ -683,14 +658,7 @@
       "routes": [{ "pattern": "api-staging.releases.sh", "custom_domain": true }],
       "vars": {
         "CRON_ENABLED": "false",
-        "SCRAPE_AGENT_CRON_ENABLED": "false",
-        "SCRAPE_AGENT_MAX_SESSIONS": "0",
-        // Off in staging — CRON_ENABLED=false means no cron fires anyway, but
-        // keep the flag explicitly off so an accidental staging cron flip
-        // doesn't dispatch managed-agent sessions against staging. See #518.
-        "FORCE_DRAIN_CRON_ENABLED": "false",
         "FORCE_DRAIN_STALE_HOURS": "72",
-        "FORCE_SWEEP_MAX_SESSIONS": "10",
         "MEDIA_ORIGIN": "https://media.releases.sh",
         "EMBEDDING_PROVIDER": "voyage",
         "RATE_LIMIT_ENABLED": "false",
@@ -839,20 +807,7 @@
         { "new_classes": ["SourceActor"], "tag": "v3" },
         { "new_classes": ["OrgActor"], "tag": "v4" },
       ],
-      // Workflow binding for on-demand validation only — no cron trigger
-      // fires it. Kick a manual instance via:
-      //   bunx wrangler workflows trigger scrape-agent-sweep-staging \
-      //     --config workers/api/wrangler.jsonc --env staging \
-      //     '{"scheduledTime": <unix-ms>}'
-      // Staging `CRON_ENABLED=false` short-circuits the workflow at
-      // `run()`, so manual triggers only validate wiring (deploy shape +
-      // workflow binding surface), not pipeline behavior. See issue #482.
       "workflows": [
-        {
-          "name": "scrape-agent-sweep-staging",
-          "binding": "SCRAPE_AGENT_WORKFLOW",
-          "class_name": "ScrapeAgentSweepWorkflow",
-        },
         {
           "name": "poll-and-fetch-staging",
           "binding": "POLL_AND_FETCH_WORKFLOW",

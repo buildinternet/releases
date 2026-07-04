@@ -51,9 +51,8 @@ type FetchLogRow = { sessionId: string | null; status: string };
  * many candidate sessions are passed.
  */
 export async function applyFetchLogOverlay<T extends Session>(
-  // db is `any` to match the convention in lib/sweep-results.ts — D1 drizzle
-  // and bun:sqlite drizzle don't share a public type, and the test harness
-  // uses the latter.
+  // D1 drizzle and bun:sqlite drizzle don't share a public type, and the test
+  // harness uses the latter.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   db: any,
   sessions: T[],

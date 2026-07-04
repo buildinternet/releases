@@ -12,7 +12,6 @@
 
 import { DurableObject } from "cloudflare:workers";
 import type { Env } from "./types.js";
-import { buildPlaybookMarkdown, type PlaybookPage } from "./playbook-block.js";
 import { buildAnthropicClient } from "@releases/lib/anthropic-client.js";
 import { estimateCost } from "@releases/lib/anthropic-pricing.js";
 import { cacheWriteTokensFrom, parseSessionUsageTokens } from "./session-usage.js";
@@ -20,7 +19,6 @@ import {
   classifyMaRateLimitError,
   buildMaRateLimitErrorMessage,
 } from "@releases/lib/ma-rate-limit.js";
-import { escapeForPromptTag } from "@releases/lib/prompt-escape.js";
 import { createTypedExecutor, handleCustomToolUse } from "@releases/shared/agent-tools.js";
 import { buildDiscoverySystemPrompt } from "@releases/shared/discovery-prompt.js";
 import { buildOnboardTaskMessage } from "@releases/shared/onboard-task-message.js";
@@ -128,14 +126,6 @@ const SESSION_TIMEOUT_MS = 15 * 60 * 1000;
  */
 const DETERMINISTIC_UPDATE_BUDGET_MS = 12 * 60 * 1000;
 
-/**
- * Character cap on the inlined playbook body. ~20K chars ≈ 5K tokens, which
- * keeps the session prompt well under 10% of Haiku's 200K context even when
- * combined with the tool catalog and system prompt. Truncation is surfaced to
- * the agent (not silent) so it can call `manage_playbook(action=get)` for the full content.
- */
-const MAX_PLAYBOOK_CHARS = 20_000;
-
 export class ManagedAgentsSession extends DurableObject<Env> {
   /** Cached staging access key — resolved lazily, reused for every outbound api call. */
   private stagingKey: string | null = null;
@@ -195,7 +185,7 @@ export class ManagedAgentsSession extends DurableObject<Env> {
   private async captureFinalUsage(
     client: ReturnType<typeof buildAnthropicClient>,
     anthropicSessionId: string,
-    agentRole: "discovery" | "worker" | "coordinator",
+    agentRole: "discovery" | "coordinator",
   ): Promise<
     | {
         inputTokens?: number;
@@ -225,7 +215,7 @@ export class ManagedAgentsSession extends DurableObject<Env> {
   > {
     // Inferred model is a fallback when sessions.retrieve doesn't surface the
     // model on the response. Coordinator and discovery both run Sonnet today.
-    const inferredModel = agentRole === "worker" ? "claude-haiku-4-5" : "claude-sonnet-5";
+    const inferredModel = "claude-sonnet-5";
     try {
       const finalSession = await (client.beta.sessions as any).retrieve(anthropicSessionId);
       const usage = finalSession.usage as Record<string, unknown> | undefined;
@@ -383,8 +373,8 @@ export class ManagedAgentsSession extends DurableObject<Env> {
   private async runSession(params: SessionParams): Promise<void> {
     const { sessionId, environmentId, mode } = params;
 
-    // Agent selection:
-    //   - update + ANTHROPIC_WORKER_AGENT_ID → single-agent Haiku (legacy)
+    // Agent selection (onboard only — `update` runs the deterministic scrapeFetch
+    // loop and returns before any Managed-Agents session is created):
     //   - onboard + ANTHROPIC_COORDINATOR_AGENT_ID → multi-agent coordinator
     //     (Sonnet) that delegates fetches to the worker via the
     //     agent_toolset_20260401 tool. Subordinate-thread custom-tool calls
@@ -392,16 +382,11 @@ export class ManagedAgentsSession extends DurableObject<Env> {
     //     handleCustomToolUse + sendResult work unchanged because the server
     //     routes the reply by custom_tool_use_id.
     //   - otherwise → single-agent discovery (Sonnet, current default).
-    const workerAgentId = this.env.ANTHROPIC_WORKER_AGENT_ID;
     const coordinatorAgentId = this.env.ANTHROPIC_COORDINATOR_AGENT_ID;
-    let agentRole: "discovery" | "worker" | "coordinator";
+    let agentRole: "discovery" | "coordinator";
     let agentId: string;
     let agentVersion: number | undefined;
-    if (mode === "update" && workerAgentId) {
-      agentRole = "worker";
-      agentId = workerAgentId;
-      agentVersion = undefined;
-    } else if (mode === "onboard" && coordinatorAgentId) {
+    if (mode === "onboard" && coordinatorAgentId) {
       agentRole = "coordinator";
       agentId = coordinatorAgentId;
       agentVersion = undefined;
@@ -441,13 +426,9 @@ export class ManagedAgentsSession extends DurableObject<Env> {
         (await getSecretWithFallback(this.env.RELEASES_API_KEY, this.env.RELEASED_API_KEY)) ??
         undefined;
 
-      // Resolve Cloudflare secrets for scrape fetch capability up front — and,
-      // when this is an `update` worker run, the deterministic-update flag
-      // with them — so the StatusHub label below can be set honestly. The
-      // deterministic path (#1878/#1881) skips the Managed-Agents (Haiku)
-      // session entirely; without this, session:start always said "haiku"
-      // even on runs that never talk to Anthropic. Re-checked below once
-      // `scrapeHandler` exists so the actual branch decision stays in sync.
+      // Resolve Cloudflare scrape secrets up front so `update` can fail closed
+      // when they are absent (local dev / misconfig) instead of falling through
+      // into the onboard Managed-Agents path.
       const [cfAccountId, cfApiToken] = await Promise.all([
         getSecret(this.env.CLOUDFLARE_ACCOUNT_ID)
           .catch(() => null)
@@ -456,31 +437,12 @@ export class ManagedAgentsSession extends DurableObject<Env> {
           .catch(() => null)
           .then((v) => v ?? ""),
       ]);
-      const canRunDeterministic =
-        mode === "update" && agentRole === "worker" && !!(cfAccountId && cfApiToken);
-      const deterministicUpdateEnabled = canRunDeterministic
-        ? await flag(
-            this.env.FLAGS,
-            this.env.DETERMINISTIC_UPDATE_ENABLED,
-            FLAGS.deterministicUpdateEnabled,
-            // Threaded only when present: both prod /update paths (OrgActor drain,
-            // scrape-agent sweep) always supply a real orgId, so a rare orgId-less
-            // manual call degrades to a context-free (global) read rather than an
-            // empty bucketing key. Enables per-org Flagship rollout bucketing.
-            params.orgId ? { orgId: params.orgId } : undefined,
-          )
-        : false;
 
-      let statusHubAgentLabel: "haiku" | "sonnet" | "coordinator" | "deterministic";
-      switch (agentRole) {
-        case "worker":
-          statusHubAgentLabel = deterministicUpdateEnabled ? "deterministic" : "haiku";
-          break;
-        case "coordinator":
-          statusHubAgentLabel = "coordinator";
-          break;
-        default:
-          statusHubAgentLabel = "sonnet";
+      let statusHubAgentLabel: "sonnet" | "coordinator" | "deterministic";
+      if (mode === "update") {
+        statusHubAgentLabel = "deterministic";
+      } else {
+        statusHubAgentLabel = agentRole === "coordinator" ? "coordinator" : "sonnet";
       }
       await this.notifyStatusHub(
         {
@@ -575,20 +537,19 @@ export class ManagedAgentsSession extends DurableObject<Env> {
           : undefined;
 
       // ── Deterministic update path (#1878) ─────────────────────────────────
-      // A routine `update` run is a deterministic fetch→extract pipeline: the
-      // worker agent only ever issued one batch of manage_source(fetch) calls,
-      // and every real decision lives in scrapeFetch. When the rollout gate is
-      // on, loop scrapeFetch directly over the due sources and skip the entire
-      // Managed-Agents (Haiku) session — its ~19k-token prompt+skills+playbook
-      // cache-creation was ~84% of the session cost. The outer `finally` still
-      // releases the per-source locks; no agent session means no session-level
-      // cost to record (extraction sub-calls self-log ai_usage). Falls through
-      // to the agent path when the flag is off or scrape secrets are absent.
-      // `deterministicUpdateEnabled` was already resolved above (alongside
-      // `canRunDeterministic`) so the StatusHub label set at session:start
-      // matches this decision; `scrapeHandler` existing confirms the secrets
-      // that backed `canRunDeterministic` are still in scope.
-      if (deterministicUpdateEnabled && scrapeHandler) {
+      // Routine `update` runs are a direct scrapeFetch loop — no Managed-Agents
+      // session. The outer `finally` still releases per-source locks; extraction
+      // sub-calls self-log ai_usage so there is no session-level cost to record.
+      if (mode === "update") {
+        if (!scrapeHandler) {
+          await this.fail(
+            sessionId,
+            params.company,
+            "scrape secrets not configured",
+            releasesApiKey,
+          );
+          return;
+        }
         await this.runDeterministicUpdate(params, sessionId, scrapeHandler, releasesApiKey);
         return;
       }
@@ -612,8 +573,7 @@ export class ManagedAgentsSession extends DurableObject<Env> {
         baseURL: "https://api.anthropic.com",
       });
 
-      const sessionTitle =
-        mode === "update" ? `Update: ${params.company}` : `Discovery: ${params.company}`;
+      const sessionTitle = `Discovery: ${params.company}`;
 
       const vaultId = this.env.ANTHROPIC_VAULT_ID;
       const memoryResources = buildMemoryStoreResources({
@@ -686,49 +646,25 @@ export class ManagedAgentsSession extends DurableObject<Env> {
         releasesApiKey,
       );
 
-      let prompt: string;
-      if (mode === "update") {
-        const idList = (params.sourceIdentifiers ?? [])
-          .map((s) => `- ${escapeForPromptTag(s)}`)
-          .join("\n");
-        const playbookBlock = await this.loadPlaybookBlock(
-          fetcher,
-          releasesApiKey ?? "",
-          params.orgId,
-        );
-        prompt = `<task>
-Fetch release updates for the company described in <company>.
-Sources to fetch are listed in <sources>.
-Call manage_source(action=fetch) for each source using the source ID as the \`identifier\` parameter (e.g. \`{"action": "fetch", "identifier": "src_abc123"}\`). Report the total releases found and any errors. Do NOT add, remove, or modify sources — only fetch.
-</task>
-
-<company>${escapeForPromptTag(params.company)}</company>
-<sources>
-${idList}
-</sources>${playbookBlock}`;
-      } else {
-        // Coordinator agents already carry their full system prompt on the
-        // agent definition, so the onboard task message is just the
-        // <task>/<company>/... block. Single-agent discovery (legacy path)
-        // continues to inline the discovery system prompt because that's how
-        // the agent was configured before the prompt-on-definition cleanup.
-        const taskBlock = buildOnboardTaskMessage({
-          company: params.company,
-          domain: params.domain,
-          githubOrg: params.githubOrg,
-          intoOrgSlug: params.intoOrgSlug,
-          intoProductSlug: params.intoProductSlug,
-        });
-        if (agentRole === "coordinator") {
-          prompt = taskBlock;
-        } else {
-          const systemContext = buildDiscoverySystemPrompt({
-            evaluateAvailable: false,
-            categories: CATEGORIES,
-          });
-          prompt = `${systemContext}\n\n---\n\n${taskBlock}`;
-        }
-      }
+      // Coordinator agents already carry their full system prompt on the agent
+      // definition, so the onboard task message is just the <task>/<company>/...
+      // block. Single-agent discovery (legacy path) continues to inline the
+      // discovery system prompt because that's how the agent was configured
+      // before the prompt-on-definition cleanup.
+      const taskBlock = buildOnboardTaskMessage({
+        company: params.company,
+        domain: params.domain,
+        githubOrg: params.githubOrg,
+        intoOrgSlug: params.intoOrgSlug,
+        intoProductSlug: params.intoProductSlug,
+      });
+      const prompt =
+        agentRole === "coordinator"
+          ? taskBlock
+          : `${buildDiscoverySystemPrompt({
+              evaluateAvailable: false,
+              categories: CATEGORIES,
+            })}\n\n---\n\n${taskBlock}`;
 
       const stream = await (client.beta.sessions.events as any).stream(session.id);
       await (client.beta.sessions.events as any).send(session.id, {
@@ -1134,10 +1070,7 @@ ${idList}
       sessionUsage = await this.captureFinalUsage(client, session.id, agentRole);
 
       // Archive runs in the outer `finally` for every exit path — see the
-      // comment on `pendingArchive` at the top of runSession. NOTE: worker
-      // (Haiku) sessions show as "terminated" in the Anthropic console while
-      // discovery sessions do not — possibly a timing/state difference; both
-      // paths archive identically.
+      // comment on `pendingArchive` at the top of runSession.
 
       if (captured.state) {
         const state = captured.state;
@@ -1154,43 +1087,6 @@ ${idList}
               ? (state["sources"] as unknown[]).length
               : 0,
             result: state,
-            ...(sessionUsage ? { usage: sessionUsage } : {}),
-          },
-          releasesApiKey,
-        );
-        return;
-      }
-
-      // Update sessions don't require a state report — but must have done useful work
-      if (mode === "update") {
-        if (toolCallCount === 0 || (toolErrors > 0 && toolErrors >= toolCallCount)) {
-          const reason =
-            toolCallCount === 0
-              ? "Agent completed without calling any tools"
-              : `All ${toolErrors} tool call(s) failed`;
-          const detail = lastAgentMessage
-            ? `${reason}: ${truncate(lastAgentMessage, 120)}`
-            : reason;
-          const toolErrorClassification = classifyUsFatal(
-            lastToolErrorCategory ?? undefined,
-            detail,
-          );
-          await this.fail(
-            sessionId,
-            params.company,
-            detail,
-            releasesApiKey,
-            sessionUsage,
-            toolErrorClassification,
-          );
-          return;
-        }
-        await this.ctx.storage.put("status", "complete");
-        await this.notifyStatusHub(
-          {
-            type: "session:complete",
-            sessionId,
-            company: params.company,
             ...(sessionUsage ? { usage: sessionUsage } : {}),
           },
           releasesApiKey,
@@ -1345,49 +1241,6 @@ ${idList}
       },
       cachedApiKey,
     );
-  }
-
-  /**
-   * Fetch the org's playbook from the API worker and format it as a prompt
-   * block. Returns "" when no orgId is supplied, the playbook doesn't exist,
-   * or the fetch fails — the session continues without it in those cases.
-   *
-   * Inlining the playbook removes the need for the worker agent to call
-   * `manage_playbook(action=get)` as its first step, eliminating a class of
-   * tool-name hallucinations (e.g. `get_source_guide`) observed in production.
-   *
-   * The header and notes carry different authority (#1873) — see
-   * `buildPlaybookMarkdown` in `playbook-block.ts` for the two-tier framing,
-   * shared with the extraction lane's `getOrgPlaybook`.
-   */
-  private async loadPlaybookBlock(
-    fetcher: { fetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response> },
-    apiKey: string,
-    orgId: string | undefined,
-  ): Promise<string> {
-    if (!orgId) return "";
-    try {
-      const res = await fetcher.fetch(`https://api/v1/orgs/${encodeURIComponent(orgId)}/playbook`, {
-        headers: { Authorization: `Bearer ${apiKey}` },
-      });
-      if (!res.ok) return "";
-      const page = (await res.json()) as PlaybookPage | null;
-      const body = buildPlaybookMarkdown(page);
-      if (!body) return "";
-      const displayBody =
-        body.length > MAX_PLAYBOOK_CHARS
-          ? `${body.slice(0, MAX_PLAYBOOK_CHARS)}\n\n_[Playbook truncated from ${body.length} to ${MAX_PLAYBOOK_CHARS} characters. Call \`manage_playbook(action=get)\` for the full content if a trap or instruction looks cut off.]_`
-          : body;
-      return `\n\n---\n\n## Playbook for this org\n\n${displayBody}\n\n---`;
-    } catch (err) {
-      logEvent("error", {
-        component: "managed-agents",
-        event: "playbook-fetch-failed",
-        orgId,
-        err: err instanceof Error ? err : new Error(String(err)),
-      });
-      return "";
-    }
   }
 
   private async notifyStatusHub(

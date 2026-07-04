@@ -55,9 +55,9 @@ describe("evaluateFetchPending", () => {
   });
 
   it("treats fetched=null as never-fetched (legitimately pending first drain)", () => {
-    // Brand-new scrape source: hourly poll set the flag, scrape-agent-sweep
-    // hasn't run yet. Should display as pending so operators can see the
-    // first-fetch latency.
+    // Brand-new scrape source: its poll set the flag and the OrgActor drain
+    // hasn't run yet. Display it as pending so operators can see first-fetch
+    // latency.
     const result = evaluateFetchPending(
       {
         type: "scrape",

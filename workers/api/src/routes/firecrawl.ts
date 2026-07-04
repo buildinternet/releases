@@ -58,8 +58,8 @@ const postFirecrawlSyncRoute = describeRoute({
 
 function webhookUrl(env: Env["Bindings"]): string {
   // ADMIN_BASE_URL is the API worker's own public origin (https://api.releases.sh),
-  // the same self-referential binding used by routes/workflows.ts and
-  // cron/scrape-agent-sweep.ts. WEB_BASE_URL points at the Next.js frontend
+  // the same self-referential binding used by routes/workflows.ts.
+  // WEB_BASE_URL points at the Next.js frontend
   // (https://releases.sh), where this path 404s — see Phase 2 webhook receiver.
   const base = env.ADMIN_BASE_URL ?? "https://api.releases.sh";
   return `${base.replace(/\/$/, "")}/v1/integrations/firecrawl/webhook`;

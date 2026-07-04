@@ -61,18 +61,16 @@ the dashboard for what's actually on. Polarity: `*-enabled` flags are off at `fa
 
 #### Rollout gates — retire once fully rolled out
 
-| Flag key                       | Default | Reads     | What it controls                                                                                                                                                                                                                                                                                   |
-| ------------------------------ | ------- | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `backfill-workflow-enabled`    | `false` | api       | Durable resumable full-history backfill workflow (deep Firecrawl path). Off = inline backfill only.                                                                                                                                                                                                |
-| `batch-overview-enabled`       | `false` | api       | Batch org-overview (AI knowledge-page) generation workflow. Off = manual/agent-driven only.                                                                                                                                                                                                        |
-| `deterministic-update-enabled` | `false` | discovery | Runs routine `POST /update` as a direct `scrapeFetch` loop instead of a Managed-Agents (Haiku) worker session (#1878). On ⇒ deterministic loop, but only when the scrape secrets (`CLOUDFLARE_ACCOUNT_ID` + `CLOUDFLARE_API_TOKEN`) are present; otherwise (or off) the legacy agent session runs. |
-| `invalidation-enabled`         | `false` | api       | Cache-invalidation workflow. Off = not running.                                                                                                                                                                                                                                                    |
-| `media-gif-transcode-enabled`  | `false` | api       | Transcode uploaded/ingested GIFs to video. Off = store the GIF as-is.                                                                                                                                                                                                                              |
-| `oauth-client-reaper-enabled`  | `false` | api       | Stale OAuth-client reaper cron. Off = observe-only (log reapable candidates); on = delete abandoned DCR clients.                                                                                                                                                                                   |
-| `org-drain-actor-enabled`      | `false` | api       | Actor-native scrape/agent drain (OrgActor, #1777). On = actor path drives; off = the force-drain + scrape-agent-sweep crons run.                                                                                                                                                                   |
-| `overview-regen-enabled`       | `false` | api       | Automated weekly org-overview regeneration workflow (#1706). Off = manual/agent-driven only.                                                                                                                                                                                                       |
-| `raw-snapshot-capture-enabled` | `false` | discovery | Steady-state scrape path captures the scraped markdown as a raw snapshot (#1283) for cheap re-extraction (#1284).                                                                                                                                                                                  |
-| `user-api-keys-enabled`        | `false` | api, mcp  | Better Auth user-API-key (`relu_`) path — verification + self-serve creation. Separate from `api-tokens-disabled` (which kills both token lanes).                                                                                                                                                  |
+| Flag key                       | Default | Reads     | What it controls                                                                                                                                  |
+| ------------------------------ | ------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `backfill-workflow-enabled`    | `false` | api       | Durable resumable full-history backfill workflow (deep Firecrawl path). Off = inline backfill only.                                               |
+| `batch-overview-enabled`       | `false` | api       | Batch org-overview (AI knowledge-page) generation workflow. Off = manual/agent-driven only.                                                       |
+| `invalidation-enabled`         | `false` | api       | Cache-invalidation workflow. Off = not running.                                                                                                   |
+| `media-gif-transcode-enabled`  | `false` | api       | Transcode uploaded/ingested GIFs to video. Off = store the GIF as-is.                                                                             |
+| `oauth-client-reaper-enabled`  | `false` | api       | Stale OAuth-client reaper cron. Off = observe-only (log reapable candidates); on = delete abandoned DCR clients.                                  |
+| `overview-regen-enabled`       | `false` | api       | Automated weekly org-overview regeneration workflow (#1706). Off = manual/agent-driven only.                                                      |
+| `raw-snapshot-capture-enabled` | `false` | discovery | Steady-state scrape path captures the scraped markdown as a raw snapshot (#1283) for cheap re-extraction (#1284).                                 |
+| `user-api-keys-enabled`        | `false` | api, mcp  | Better Auth user-API-key (`relu_`) path — verification + self-serve creation. Separate from `api-tokens-disabled` (which kills both token lanes). |
 
 <!-- END GENERATED FLAG TABLE -->
 
@@ -92,25 +90,18 @@ the same org lands in the same bucket across evaluations (sticky bucketing). No 
 or allowlist — Flagship owns the percentage math.
 
 **Which flags support it.** A flag's `FlagDef.rolloutContext` (e.g. `"orgId"`) names the
-context key its read sites pass and its Flagship rule must bucket on. Today:
-
-- `org-drain-actor-enabled` — `{ orgId }` at `OrgActor.alarm()` (`workers/api/src/org-actor.ts`)
-  and `maybeNotifyOrgDrain` (`workers/api/src/source-actor.ts`). The two cron-tick reads in
-  `workers/api/src/index.ts` stay context-free — they decide whether the cron path runs at all
-  for that tick, not per-org.
-- `deterministic-update-enabled` — `{ orgId }` at the update-mode deterministic gate in
-  `workers/discovery/src/managed-agents-session.ts` (`runSession`). Threaded only when
-  `params.orgId` is present; both production `/update` dispatch paths (the OrgActor drain and
-  the scrape-agent sweep) always supply a real org id.
+context key its read sites pass and its Flagship rule must bucket on. No flag currently sets
+it — the two original org-scoped ramp gates (`org-drain-actor-enabled`,
+`deterministic-update-enabled`) were fully rolled out and retired (#1888). The mechanism below
+stays as dormant infra for the next default-OFF ramp flag.
 
 **To ramp one (dashboard-only, in _both_ `releases-platform` and `releases-platform-staging`):**
 
 1. Open the flag and add a **percentage-rollout** rule with the **bucketing attribute set to
    `orgId`** (not the default `targetingKey`).
-2. Start small (e.g. 10%), watch the target metric in Axiom — extraction quality / cost for
-   `deterministic-update-enabled`, drain behaviour for `org-drain-actor-enabled` — then widen.
+2. Start small (e.g. 10%), watch the target metric in Axiom, then widen.
 3. A stuck ramp reverts by dropping the percentage back to 0 (or flipping the flag off); the
-   fallback path (legacy cron / agent session) runs unchanged, same as a global off.
+   fallback path runs unchanged, same as a global off.
 
 To make a **new** flag ramp-able: thread `{ orgId }` (or another stable key) into its per-org
 `flag()` read, set `rolloutContext` on its `FlagDef`, and configure its Flagship rule as above.

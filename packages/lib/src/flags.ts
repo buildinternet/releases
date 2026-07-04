@@ -271,39 +271,6 @@ export const FLAGS = {
     description:
       "Stale OAuth-client reaper cron. Off = observe-only (log reapable candidates); on = delete abandoned DCR clients.",
   },
-  // default:false → OFF: the force-drain (#518) + scrape-agent-sweep (#482) crons
-  // run as before. ON moves the drain onto the actor path (the crons early-return).
-  orgDrainActorEnabled: {
-    key: "org-drain-actor-enabled",
-    env: "ORG_DRAIN_ACTOR_ENABLED",
-    default: false,
-    kind: "rollout",
-    reads: ["api"],
-    rolloutContext: "orgId",
-    description:
-      "Actor-native scrape/agent drain (OrgActor, #1777). On = actor path drives; off = the force-drain + scrape-agent-sweep crons run.",
-  },
-  // Rollout gate + kill switch for the deterministic `update` path (#1878).
-  // A routine per-source update is a deterministic fetch→extract pipeline; the
-  // worker agent added nothing load-bearing, yet its ~19k-token prompt+skills+
-  // playbook cache-creation was ~84% of the session cost. ON → the discovery
-  // worker loops `scrapeFetch` over the due sources directly, with NO
-  // Managed-Agents (Haiku) session — but only when the scrape secrets
-  // (CLOUDFLARE_ACCOUNT_ID + CLOUDFLARE_API_TOKEN) are present; without them the
-  // short-circuit's `scrapeHandler` is undefined and the legacy session runs.
-  // OFF (default) → the legacy worker-agent session runs unchanged. Flip ON in
-  // BOTH Flagship apps to roll out (verify on staging / a few orgs first); flip
-  // OFF to instantly revert to the agent path.
-  deterministicUpdateEnabled: {
-    key: "deterministic-update-enabled",
-    env: "DETERMINISTIC_UPDATE_ENABLED",
-    default: false,
-    kind: "rollout",
-    reads: ["discovery"],
-    rolloutContext: "orgId",
-    description:
-      "Runs routine `POST /update` as a direct `scrapeFetch` loop instead of a Managed-Agents (Haiku) worker session (#1878). On ⇒ deterministic loop, but only when the scrape secrets (`CLOUDFLARE_ACCOUNT_ID` + `CLOUDFLARE_API_TOKEN`) are present; otherwise (or off) the legacy agent session runs.",
-  },
 } as const satisfies Record<string, FlagDef>;
 
 /** Layered fallback: var value if set, else the hardcoded default. */
