@@ -32,8 +32,8 @@ export default function SubmitPage() {
               Own your listing
             </p>
             <p className="mt-3 leading-6">
-              Control your name, description, category, avatar, and social links — and group repos
-              into one product — by publishing a{" "}
+              Tell the registry where you publish updates — changelogs, feeds, and products —
+              straight from your own domain by publishing a{" "}
               <code className="rounded bg-stone-100 px-1 py-0.5 font-mono text-[0.85em] text-stone-700 dark:bg-stone-800 dark:text-stone-200">
                 releases.json
               </code>
