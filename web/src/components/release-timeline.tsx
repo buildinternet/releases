@@ -1,14 +1,7 @@
 "use client";
 
-import { useState, useMemo, useCallback } from "react";
-import {
-  type OrgActivity,
-  type OrgHeatmap,
-  type OverviewPageItem,
-  type SourceListItem,
-  type OrgDetail,
-} from "@/lib/api";
-import { OverviewView } from "@/components/overview-view";
+import { useState, useMemo, useCallback, type ReactNode } from "react";
+import { type OrgActivity, type OrgHeatmap, type SourceListItem, type OrgDetail } from "@/lib/api";
 import {
   type WeeklyBucket,
   WEEK_MS,
@@ -40,7 +33,10 @@ interface ReleaseTimelineProps {
   sources: SourceListItem[];
   products: OrgDetail["products"];
   trackingSince?: string | null;
-  overview?: OverviewPageItem | null;
+  /** Pre-rendered overview card (server-rendered by the caller). Rendered as-is
+   *  where the data-prop `overview` used to be — kept as a node so this client
+   *  component doesn't import the now-server `OverviewView`. */
+  overviewSlot?: ReactNode;
 }
 
 /** Align a source's weekly buckets onto the brushed week grid. */
@@ -70,7 +66,7 @@ export function ReleaseTimeline({
   sources,
   products,
   trackingSince,
-  overview,
+  overviewSlot,
 }: ReleaseTimelineProps) {
   const [viewMode, setViewMode] = useState<ViewMode>(heatmap ? "heatmap" : "chart");
 
@@ -260,11 +256,7 @@ export function ReleaseTimeline({
   }, [brushedWeekGrid]);
 
   if (parsedSources.length === 0) {
-    return overview ? (
-      <div className="mt-5 mb-2">
-        <OverviewView page={overview} />
-      </div>
-    ) : null;
+    return overviewSlot ? <div className="mt-5 mb-2">{overviewSlot}</div> : null;
   }
 
   const cadenceLabel = fmtCadence(summaryStats.avgPerWeek, summaryStats.avgPerMonth);
@@ -332,7 +324,7 @@ export function ReleaseTimeline({
     <div className="mt-5 mb-2 space-y-5">
       <ProductGrid orgSlug={orgSlug} products={products} cadenceBySlug={productCadenceBySlug} />
       {timelineCard}
-      {overview && <OverviewView page={overview} />}
+      {overviewSlot}
     </div>
   );
 }
