@@ -142,6 +142,7 @@ export default async function OrgOverviewPage({
       )}
       {activity && (
         <OrgActivityPanel
+          orgSlug={orgSlug}
           activity={activity}
           heatmap={heatmap}
           products={org.products}

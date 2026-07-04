@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { OrgActivityResponse, OrgHeatmapResponse } from "@buildinternet/releases-api-types";
 import type { OrgDetail, SourceListItem } from "@/lib/api";
 import {
@@ -8,9 +9,11 @@ import {
   fmtCadence,
   type WeeklyBucket,
 } from "@/lib/cadence";
+import { productPath } from "@/lib/links";
 import { Sparkline } from "@/components/sparkline";
 import { ReleaseHeatmap } from "@/components/release-heatmap";
 import { orgEyebrowClass } from "@releases/design-system";
+import { ChevronRightIcon } from "./icons";
 
 /** Trailing weeks of per-product weekly counts shown in the row sparkline. */
 const SPARK_WEEKS = 26;
@@ -34,6 +37,7 @@ interface ProductRow {
  * {@link ReleaseTimeline} colors the timeline.
  */
 export function OrgActivityPanel({
+  orgSlug,
   activity,
   heatmap,
   products,
@@ -42,6 +46,7 @@ export function OrgActivityPanel({
   avgPerWeek,
   trackingSince,
 }: {
+  orgSlug: string;
   activity: OrgActivityResponse;
   heatmap: OrgHeatmapResponse | null;
   products: OrgDetail["products"];
@@ -101,9 +106,11 @@ export function OrgActivityPanel({
           </div>
           <div className="mb-6 overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--surface)]">
             {rows.map((r) => (
-              <div
+              <Link
                 key={r.slug}
-                className="flex items-center gap-3.5 border-t border-[var(--line)] px-4 py-3 first:border-t-0"
+                href={productPath(orgSlug, r.slug)}
+                title={`Open ${r.name} release notes`}
+                className="flex items-center gap-3.5 border-t border-[var(--line)] px-4 py-3 transition-colors first:border-t-0 hover:bg-[var(--surface-2)]"
               >
                 <span className="min-w-0 truncate text-[14px] font-semibold text-[var(--fg)] sm:min-w-[120px]">
                   {r.name}
@@ -122,7 +129,8 @@ export function OrgActivityPanel({
                 <span className="w-[42px] text-right font-mono text-[15px] font-semibold text-[var(--fg)]">
                   {r.count}
                 </span>
-              </div>
+                <ChevronRightIcon className="h-[15px] w-[15px] shrink-0 text-[var(--fg-3)]" />
+              </Link>
             ))}
           </div>
         </>
