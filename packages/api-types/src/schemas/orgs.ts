@@ -120,6 +120,13 @@ export const UpdateOrgBodySchema = z.object({
   isHidden: z.boolean().optional(),
   /** Admin-only: opt the org into automatic AI content — org overviews AND per-release summaries (single backend flag `auto_generate_content`). */
   autoGenerateContent: z.boolean().optional(),
+  /**
+   * Admin-only: manual override for the automated overview-regen cadence in
+   * days (#1895). `null` clears back to automatic (velocity-tiered: 7d
+   * default, 2d at high release velocity). A set value pins the cadence in
+   * either direction — faster for a hot org, slower for a bursty one.
+   */
+  overviewCadenceDays: z.number().int().min(1).max(90).nullable().optional(),
   /** Admin-only: promote this org on the home-page featured rail. */
   featured: z.boolean().optional(),
   /** Admin-only: promote or demote the org's discovery status (curated/agent/on_demand). */
@@ -465,6 +472,8 @@ export const OrgDetailSchema = z.object({
   isHidden: z.boolean().optional(),
   /** Admin display flag: org is opted into automatic overviews + per-release summaries. Optional on the wire for older workers mid-deploy. */
   autoGenerateContent: z.boolean().optional(),
+  /** Manual overview-regen cadence override in days (#1895); null = automatic velocity tier. Optional on the wire for older workers mid-deploy. */
+  overviewCadenceDays: z.number().int().nullable().optional(),
   /** Admin display flag: org is promoted on the home-page featured rail. Optional on the wire for older workers mid-deploy. */
   featured: z.boolean().optional(),
   /** Admin display flag: all ingest paused for this org. */

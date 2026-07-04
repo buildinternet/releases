@@ -142,6 +142,12 @@
     // OpenRouter-backed per-org overview regen. Admin POST trigger only for now;
     // cron path self-gates on this var (default off).
     "OVERVIEW_REGEN_ENABLED": "false",
+    // Velocity fast tier (#1895): orgs shipping >= OVERVIEW_FAST_MIN_RELEASES
+    // since their last overview requalify after OVERVIEW_FAST_CADENCE_DAYS
+    // instead of the 7-day default. Per-org overview_cadence_days overrides
+    // beat both tiers. Unset/invalid falls back to the in-code defaults.
+    "OVERVIEW_FAST_CADENCE_DAYS": "2",
+    "OVERVIEW_FAST_MIN_RELEASES": "15",
     // Batch feed-content enrichment backfill (#1296). Admin POST trigger only
     // (POST /v1/workflows/batch-enrich) runs unconditionally; BATCH_ENRICH_ENABLED
     // is reserved for a future cron path. The pre-fetch cost estimate (bounded by
@@ -412,9 +418,10 @@
     // Daily at 06:00 UTC: well-known config sync sweep.
     // Daily at 06:15 UTC: generate collection daily summaries.
     // Daily at 07:00 UTC: reap stale dynamic-registration OAuth clients (observe-only until oauth-client-reaper-enabled).
-    // Mondays at 08:00 UTC: weekly org overview regeneration (self-gates via overviewRegenEnabled).
+    // Daily at 08:00 UTC: org overview regeneration (self-gates via overviewRegenEnabled;
+    //   per-org cadence — 7d default, 2d fast tier, overview_cadence_days override — gates who regenerates, #1895).
     // Daily at 13:00 UTC: send daily digests to subscribed users (#1518).
-    // Mondays at 13:00 UTC: send weekly digests to subscribed users (#1518).
+    // Mondays at 13:00 UTC: send weekly digests to subscribed users (#1518, "MON" per #1796).
     "crons": [
       "0 * * * *",
       "0 3 * * *",
@@ -425,9 +432,9 @@
       "0 6 * * *",
       "15 6 * * *",
       "0 7 * * *",
-      "0 8 * * 1", // 08:00 UTC Mondays: weekly overview regeneration (OpenRouter)
+      "0 8 * * *", // 08:00 UTC daily: overview regeneration (OpenRouter; per-org cadence gates, #1895)
       "0 13 * * *",
-      "0 13 * * 1",
+      "0 13 * * MON", // named weekday: Cloudflare cron numbers weekdays 1=Sunday..7=Saturday (#1796)
     ],
   },
   // State is per-colo, not global. `period` must be 10 or 60 (CF constraint).
@@ -718,6 +725,9 @@
         // Overview regen workflow — same staging posture: admin POST usable for
         // wiring validation; cron path is irrelevant (CRON_ENABLED=false).
         "OVERVIEW_REGEN_ENABLED": "false",
+        // Velocity fast tier (#1895) — mirrors prod; not read in staging.
+        "OVERVIEW_FAST_CADENCE_DAYS": "2",
+        "OVERVIEW_FAST_MIN_RELEASES": "15",
         // Mirrors prod default; not read in staging (CRON_ENABLED=false means no
         // cron fires, so PollAndFetchWorkflow instances are never dispatched).
         "FANOUT_JITTER_WINDOW_MS": "300000",

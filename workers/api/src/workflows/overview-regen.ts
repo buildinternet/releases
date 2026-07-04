@@ -48,7 +48,16 @@ export type OverviewRegenWorkflowEnv = TextModelEnv & {
   DB: D1Database;
   FLAGS?: FlagshipBinding;
   OVERVIEW_REGEN_ENABLED?: string;
+  /** Velocity fast-tier tunables (#1895); unset → eligibility defaults (2d at ≥15). */
+  OVERVIEW_FAST_CADENCE_DAYS?: string;
+  OVERVIEW_FAST_MIN_RELEASES?: string;
 };
+
+/** Parse a positive-integer wrangler var; undefined (→ eligibility default) otherwise. */
+function positiveIntVar(value: string | undefined): number | undefined {
+  const n = Math.floor(Number(value));
+  return Number.isFinite(n) && n > 0 ? n : undefined;
+}
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -99,12 +108,17 @@ export class OverviewRegenWorkflow extends WorkflowEntrypoint<
         return fetchOverviewCandidates(db, {
           orgSlugs: orgs ?? null,
           // Staleness-gated, not volume-gated. minNewReleases:0 makes the
-          // eligibility "overview stale (≥ minOverviewAgeDays, default 7) AND
-          // ≥1 new release, OR missing" — the same selection the local
-          // update-overviews skill uses (`--stale-days 7 --missing
-          // --has-activity`). The default 20 would leave the weekly sweep
-          // dormant at normal release volumes. (batch-overview keeps the 20.)
+          // eligibility "overview stale (≥ the org's cadence, default 7d /
+          // 2d fast tier / per-org override) AND ≥1 new release, OR missing"
+          // — the same selection the local update-overviews skill uses
+          // (`--stale-days 7 --missing --has-activity`). The default 20 would
+          // leave the sweep dormant at normal release volumes.
+          // (batch-overview keeps the 20.)
           minNewReleases: 0,
+          // Velocity fast-tier tunables (#1895): wrangler-var overrides; unset
+          // falls back to the eligibility defaults (2 days at ≥15 releases).
+          fastCadenceDays: positiveIntVar(this.env.OVERVIEW_FAST_CADENCE_DAYS),
+          fastMinReleases: positiveIntVar(this.env.OVERVIEW_FAST_MIN_RELEASES),
           ...(typeof maxOrgs === "number" && maxOrgs > 0 ? { maxCandidates: maxOrgs } : {}),
         });
       },

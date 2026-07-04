@@ -253,6 +253,105 @@ describe("fetchOverviewCandidates", () => {
     expect(out[0]!.orgSlug).toBe("eligibility-org");
   });
 
+  it("velocity fast tier: a 3-day-old overview qualifies when release velocity is high (#1895)", async () => {
+    tdb.db.insert(organizations).values(makeOrg()).run();
+    tdb.db.insert(sources).values(makeSource()).run();
+    // 3 days old — fresh under the 7-day default, past the 2-day fast tier.
+    tdb.db
+      .insert(knowledgePages)
+      .values(makeOverview({ updatedAt: isoDaysAgo(3) }))
+      .run();
+    // 20 new releases ≥ the fast-tier threshold (15).
+    const newReleases = Array.from({ length: 20 }, (_, i) =>
+      makeRelease({ id: `rel_fast_${i}`, publishedAt: isoDaysAgo(1) }),
+    );
+    tdb.db.insert(releases).values(newReleases).run();
+
+    const out = await fetchOverviewCandidates(asDb(tdb.db), { minNewReleases: 0 });
+    expect(out.length).toBe(1);
+    expect(out[0]!.recentReleaseCount).toBe(20);
+    expect(out[0]!.overviewCadenceDays).toBeNull();
+  });
+
+  it("velocity fast tier: a 3-day-old overview at low velocity stays on the 7-day default", async () => {
+    tdb.db.insert(organizations).values(makeOrg()).run();
+    tdb.db.insert(sources).values(makeSource()).run();
+    tdb.db
+      .insert(knowledgePages)
+      .values(makeOverview({ updatedAt: isoDaysAgo(3) }))
+      .run();
+    // 5 new releases — under the fast-tier threshold (15).
+    const newReleases = Array.from({ length: 5 }, (_, i) =>
+      makeRelease({ id: `rel_slow_${i}`, publishedAt: isoDaysAgo(1) }),
+    );
+    tdb.db.insert(releases).values(newReleases).run();
+
+    const out = await fetchOverviewCandidates(asDb(tdb.db), { minNewReleases: 0 });
+    expect(out.length).toBe(0);
+  });
+
+  it("fast-tier thresholds are tunable via options", async () => {
+    tdb.db.insert(organizations).values(makeOrg()).run();
+    tdb.db.insert(sources).values(makeSource()).run();
+    tdb.db
+      .insert(knowledgePages)
+      .values(makeOverview({ updatedAt: isoDaysAgo(3) }))
+      .run();
+    const newReleases = Array.from({ length: 5 }, (_, i) =>
+      makeRelease({ id: `rel_tune_${i}`, publishedAt: isoDaysAgo(1) }),
+    );
+    tdb.db.insert(releases).values(newReleases).run();
+
+    // Same 5-release org qualifies once the fast tier is tuned down to its level.
+    const out = await fetchOverviewCandidates(asDb(tdb.db), {
+      minNewReleases: 0,
+      fastMinReleases: 5,
+      fastCadenceDays: 2,
+    });
+    expect(out.length).toBe(1);
+  });
+
+  it("per-org override pins a slower cadence: 14d override beats the fast tier (#1895)", async () => {
+    // The bursty-SDK case: high velocity from one publish event must NOT
+    // accelerate an org pinned to a slower cadence.
+    tdb.db
+      .insert(organizations)
+      .values(makeOrg({ overviewCadenceDays: 14 }))
+      .run();
+    tdb.db.insert(sources).values(makeSource()).run();
+    tdb.db
+      .insert(knowledgePages)
+      .values(makeOverview({ updatedAt: isoDaysAgo(8) }))
+      .run();
+    const newReleases = Array.from({ length: 30 }, (_, i) =>
+      makeRelease({ id: `rel_burst_${i}`, publishedAt: isoDaysAgo(1) }),
+    );
+    tdb.db.insert(releases).values(newReleases).run();
+
+    const out = await fetchOverviewCandidates(asDb(tdb.db), { minNewReleases: 0 });
+    expect(out.length).toBe(0);
+  });
+
+  it("per-org override pins a faster cadence: 1d override with a 2-day-old overview is eligible", async () => {
+    tdb.db
+      .insert(organizations)
+      .values(makeOrg({ overviewCadenceDays: 1 }))
+      .run();
+    tdb.db.insert(sources).values(makeSource()).run();
+    tdb.db
+      .insert(knowledgePages)
+      .values(makeOverview({ updatedAt: isoDaysAgo(2) }))
+      .run();
+    tdb.db
+      .insert(releases)
+      .values(makeRelease({ publishedAt: isoDaysAgo(1) }))
+      .run();
+
+    const out = await fetchOverviewCandidates(asDb(tdb.db), { minNewReleases: 0 });
+    expect(out.length).toBe(1);
+    expect(out[0]!.overviewCadenceDays).toBe(1);
+  });
+
   it("excludes orgs whose overview is old but recentReleaseCount is too low", async () => {
     tdb.db.insert(organizations).values(makeOrg()).run();
     tdb.db.insert(sources).values(makeSource()).run();

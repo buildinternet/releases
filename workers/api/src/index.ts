@@ -140,7 +140,10 @@ export type Env = {
     BATCH_OVERVIEW_WORKFLOW?: Workflow;
     // OpenRouter-backed per-org overview regen (OverviewRegenWorkflow). Cron path
     // self-gates via OVERVIEW_REGEN_ENABLED; admin POST runs unconditionally.
+    // Fast-tier tunables (#1895) are read by the workflow, not the handler.
     OVERVIEW_REGEN_ENABLED?: string;
+    OVERVIEW_FAST_CADENCE_DAYS?: string;
+    OVERVIEW_FAST_MIN_RELEASES?: string;
     OVERVIEW_REGEN_WORKFLOW?: Workflow;
     // Batch feed-content enrichment backfill (#1296). Admin POST trigger only;
     // BATCH_ENRICH_ENABLED is reserved for a future cron path. Drains the
@@ -1030,11 +1033,13 @@ export default {
       );
       return;
     }
-    // Daily (`0 13 * * *`) and weekly-Monday (`0 13 * * 1`) digests are delivered
+    // Daily (`0 13 * * *`) and weekly-Monday (`0 13 * * MON`) digests are delivered
     // as separate scheduled events with distinct cron strings, so on Mondays both
-    // fire — each targets its own cadence's subscribers.
-    if (event.cron === "0 13 * * *" || event.cron === "0 13 * * 1") {
-      const cadence = event.cron === "0 13 * * 1" ? "weekly" : "daily";
+    // fire — each targets its own cadence's subscribers. The weekly entry uses the
+    // named weekday: Cloudflare cron numbers weekdays 1=Sunday..7=Saturday, so the
+    // old `0 13 * * 1` fired Sundays (#1796).
+    if (event.cron === "0 13 * * *" || event.cron === "0 13 * * MON") {
+      const cadence = event.cron === "0 13 * * MON" ? "weekly" : "daily";
       ctx.waitUntil(
         loggedDispatch(
           `digest-${cadence}-cron`,
@@ -1121,7 +1126,7 @@ export default {
       );
       return;
     }
-    if (event.cron === "0 8 * * 1") {
+    if (event.cron === "0 8 * * *") {
       if (env.CRON_ENABLED === "false") return;
       if (!(await flag(env.FLAGS, env.OVERVIEW_REGEN_ENABLED, FLAGS.overviewRegenEnabled))) {
         logEvent("info", { component: "overview-regen-cron", event: "disabled" });
