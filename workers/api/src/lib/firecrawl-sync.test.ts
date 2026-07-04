@@ -53,7 +53,11 @@ it("honors explicit schedule/proxy/goal overrides", () => {
   } as typeof baseSource;
   const spec = deriveMonitorSpec(src, { webhookUrl: "u", webhookSecret: "s" });
   expect(spec.schedule).toEqual({ text: "daily", timezone: "UTC" });
-  expect(spec.targets[0]?.scrapeOptions?.proxy).toBe("enhanced");
+  const scrapeTarget = spec.targets[0];
+  expect(scrapeTarget?.type).toBe("scrape");
+  if (scrapeTarget?.type === "scrape") {
+    expect(scrapeTarget.scrapeOptions?.proxy).toBe("enhanced");
+  }
   expect(spec.goal).toBe("x");
   expect(spec.judgeEnabled).toBe(false);
 });
@@ -73,13 +77,14 @@ it("emits a crawl target when firecrawl.target is 'crawl'", () => {
   expect(spec.targets).toHaveLength(1);
   const target = spec.targets[0];
   expect(target.type).toBe("crawl");
+  if (target.type !== "crawl") throw new Error("expected crawl target");
   // Crawl targets carry a single `url`, not a `urls` array.
-  expect((target as { url?: string }).url).toBe("https://docs.replit.com/updates");
-  expect((target as { urls?: string[] }).urls).toBeUndefined();
+  expect(target.url).toBe("https://docs.replit.com/updates");
+  expect("urls" in target ? target.urls : undefined).toBeUndefined();
   // Per-page scrape still asks for markdown + the configured proxy.
   expect(target.scrapeOptions).toEqual({ formats: ["markdown"], proxy: "auto" });
   // Sensible crawl defaults so a monitor discovers recent entry pages.
-  const crawlOptions = (target as { crawlOptions?: Record<string, unknown> }).crawlOptions;
+  const crawlOptions = target.crawlOptions;
   expect(crawlOptions?.limit).toBeGreaterThan(0);
   expect(crawlOptions?.maxDiscoveryDepth).toBeGreaterThan(0);
 });
