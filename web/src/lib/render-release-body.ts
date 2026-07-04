@@ -9,7 +9,7 @@ import { remarkPlugins } from "@/lib/markdown-plugins";
 import { rehypeShikiPlugin } from "@/lib/shiki";
 import { releaseExcerpt } from "@/lib/release-excerpt";
 import { rewriteRelativeLinks, originFromUrl } from "@releases/rendering/rewrite-links";
-import { EXTERNAL_UGC_REL, isSafeHref, isSafeImgSrc } from "@/lib/sanitize";
+import { EXTERNAL_UGC_REL, isFragmentHref, isSafeHref, isSafeImgSrc } from "@/lib/sanitize";
 import type { WithBodyHtml } from "@/lib/release-view";
 
 /**
@@ -95,6 +95,8 @@ function rehypeReleaseBody(variant: BodyVariant) {
           parent.children.splice(index, 1, ...node.children);
           return index;
         }
+        // Same-page fragment links stay in-document — no new tab, no external rel.
+        if (isFragmentHref(href)) return;
         node.properties = { ...node.properties, target: "_blank", rel: EXTERNAL_UGC_REL };
         return;
       }

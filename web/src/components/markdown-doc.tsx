@@ -1,6 +1,7 @@
 import { Fragment } from "react";
 import ReactMarkdown from "react-markdown";
 import { remarkPlugins } from "@/lib/markdown-plugins";
+import rehypeSlug from "rehype-slug";
 import matter from "gray-matter";
 import { loadDoc, stripAdminBlocks, keepAdminBlocks, type Doc } from "@/lib/docs";
 import { adminDocs } from "@/flags";
@@ -63,7 +64,7 @@ export async function MarkdownDoc({
           {seg.type === "markdown" ? (
             <ReactMarkdown
               remarkPlugins={remarkPlugins}
-              rehypePlugins={[rehypeShikiPlugin]}
+              rehypePlugins={[rehypeSlug, rehypeShikiPlugin]}
               components={markdownComponents}
             >
               {seg.content}

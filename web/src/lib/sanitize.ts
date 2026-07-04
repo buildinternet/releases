@@ -1,6 +1,9 @@
 /** Sanitize URLs from user-generated markdown to prevent XSS via javascript: and other dangerous schemes. */
 
-const SAFE_LINK_PATTERN = /^(https?:\/\/|mailto:|\/(?!\/))/;
+// `#…` covers same-page fragment links (heading anchors, TOC targets). They
+// carry no scheme, so there's no javascript:/data: injection surface — a
+// fragment can only ever point within the current document.
+const SAFE_LINK_PATTERN = /^(https?:\/\/|mailto:|\/(?!\/)|#)/;
 const SAFE_IMG_PATTERN = /^https?:\/\//;
 
 /**
@@ -17,6 +20,14 @@ export const EXTERNAL_UGC_REL = "nofollow ugc noopener noreferrer";
 export function isSafeHref(href: string | undefined | null): href is string {
   if (!href || typeof href !== "string") return false;
   return SAFE_LINK_PATTERN.test(href.trim());
+}
+
+/** Returns true for a same-page fragment link (`#section`). These navigate
+ *  within the current document, so they must NOT carry `target="_blank"` or the
+ *  external-UGC rel — they're internal anchors (heading targets, TOC), not
+ *  outbound links. */
+export function isFragmentHref(href: string | undefined | null): boolean {
+  return typeof href === "string" && href.trim().startsWith("#");
 }
 
 /** Returns true if the src is safe for use in an <img> tag. */

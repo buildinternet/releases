@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { EXTERNAL_UGC_REL, isSafeHref, isSafeImgSrc } from "@/lib/sanitize";
+import { EXTERNAL_UGC_REL, isFragmentHref, isSafeHref, isSafeImgSrc } from "@/lib/sanitize";
+import { HeadingAnchor } from "./heading-anchor";
 import { youtubeEmbedUrl, youtubeVideoId } from "@/lib/video-source";
 import { MEDIA_VIDEO_ON, shouldRenderAsVideo } from "@/lib/media";
 import { FallbackPlainImage } from "./fallback-image";
@@ -16,13 +17,35 @@ interface MarkdownComponentOptions {
    *  sectioning-content "scoped outline" is implemented by no browser or
    *  crawler, so explicit demotion is the only fix. */
   demoteHeadings?: 0 | 1 | 2;
+  /** Render a hover-revealed anchor link beside h2–h4 headings, using the `id`
+   *  that `rehype-slug` stamps on each heading. Docs pages only — release/card
+   *  bodies don't run `rehype-slug`, so their headings have no ids to link to
+   *  and enabling this would just add empty affordances. */
+  headingAnchors?: boolean;
 }
 
 const defaults: Required<MarkdownComponentOptions> = {
   imgClass: "my-2 max-h-80 object-contain",
   videoClass: "my-3 max-w-lg",
   demoteHeadings: 0,
+  headingAnchors: false,
 };
+
+/** h2–h4 overrides that keep the `rehype-slug` id and append a `HeadingAnchor`.
+ *  h1 (page title) and h5/h6 (too deep to deep-link in practice) pass through. */
+function buildHeadingAnchors(): Record<string, any> {
+  const anchored: Record<string, any> = {};
+  for (const level of [2, 3, 4] as const) {
+    const Tag = `h${level}`;
+    anchored[Tag] = ({ children, node: _node, id, ...rest }: any) => (
+      <Tag id={id} className="group scroll-mt-24" {...rest}>
+        {children}
+        {id ? <HeadingAnchor id={id} /> : null}
+      </Tag>
+    );
+  }
+  return anchored;
+}
 
 function buildHeadingDemotions(by: 1 | 2): Record<string, any> {
   const demoted: Record<string, any> = {};
@@ -40,10 +63,11 @@ function buildHeadingDemotions(by: 1 | 2): Record<string, any> {
  * Handles safe image rendering and YouTube/Vimeo/Loom video embeds.
  */
 export function createMarkdownComponents(opts: MarkdownComponentOptions = {}): Record<string, any> {
-  const { imgClass, videoClass, demoteHeadings } = { ...defaults, ...opts };
+  const { imgClass, videoClass, demoteHeadings, headingAnchors } = { ...defaults, ...opts };
 
   return {
     ...(demoteHeadings ? buildHeadingDemotions(demoteHeadings) : {}),
+    ...(headingAnchors ? buildHeadingAnchors() : {}),
     img: (props: any) => {
       const src = props.src as string | undefined;
       if (!isSafeImgSrc(src)) return null;
@@ -63,6 +87,12 @@ export function createMarkdownComponents(opts: MarkdownComponentOptions = {}): R
       const href = props.href as string | undefined;
       const children = props.children;
       if (!isSafeHref(href)) return <>{children}</>;
+
+      // Same-page fragment link (heading anchor / TOC target). Stays in-document,
+      // so no `target="_blank"` and no external-UGC rel.
+      if (isFragmentHref(href)) {
+        return <a href={href}>{children}</a>;
+      }
 
       // YouTube embed. Shared id regex + `youtube-nocookie` host (see
       // @/lib/video-source); `autoplay: false` because this iframe renders
@@ -158,6 +188,9 @@ export const docMarkdownComponents = createMarkdownComponents({
   imgClass: "my-3",
   videoClass: "my-4 max-w-2xl",
   demoteHeadings: 0,
+  // Docs run `rehype-slug` (see MarkdownDoc), so their headings carry stable
+  // ids — render the hover anchor affordance so sections are grab-able.
+  headingAnchors: true,
 });
 
 /**
