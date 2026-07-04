@@ -146,7 +146,7 @@ export const FLAGS = {
     kind: "rollout",
     reads: ["api"],
     description:
-      "Automated weekly org-overview regeneration workflow (#1706). Off = manual/agent-driven only.",
+      "Automated org-overview regeneration workflow — daily cron, per-org cadence (#1706, #1895). Off = manual/agent-driven only.",
   },
   recommendationsDisabled: {
     key: "recommendations-disabled",

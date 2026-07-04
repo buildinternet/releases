@@ -77,6 +77,13 @@ export const organizations = sqliteTable(
     autoGenerateContent: integer("auto_generate_content", { mode: "boolean" })
       .notNull()
       .default(false),
+    // Manual override for the automated overview-regen cadence (#1895). NULL =
+    // automatic (velocity-tiered: default 7d, 2d when release velocity is
+    // high). A set value pins the org to a fixed cadence in days — dial a hot
+    // org down, or pin a bursty one (an SDK vendor whose single publish event
+    // fans out many releases) so the velocity tier never accelerates it.
+    // Toggle via PATCH /v1/orgs/:slug { overviewCadenceDays: n | null }.
+    overviewCadenceDays: integer("overview_cadence_days"),
     // Per-org ingest pause (#1057). When true, the org's sources are excluded
     // from the poll-fetch and scrape-agent-sweep due-source queries so no new
     // fetches fire. The org and its releases remain fully visible in the public
@@ -1126,6 +1133,7 @@ export const organizationsActive = sqliteView("organizations_active", {
   embeddedAt: text("embedded_at"),
   discovery: text("discovery", { enum: ["curated", "agent", "on_demand"] }).notNull(),
   autoGenerateContent: integer("auto_generate_content", { mode: "boolean" }).notNull(),
+  overviewCadenceDays: integer("overview_cadence_days"),
   fetchPaused: integer("fetch_paused", { mode: "boolean" }).notNull(),
   isHidden: integer("is_hidden", { mode: "boolean" }).notNull(),
   deletedAt: text("deleted_at"),
@@ -1207,6 +1215,7 @@ export const organizationsPublic = sqliteView("organizations_public", {
   embeddedAt: text("embedded_at"),
   discovery: text("discovery", { enum: ["curated", "agent", "on_demand"] }).notNull(),
   autoGenerateContent: integer("auto_generate_content", { mode: "boolean" }).notNull(),
+  overviewCadenceDays: integer("overview_cadence_days"),
   fetchPaused: integer("fetch_paused", { mode: "boolean" }).notNull(),
   isHidden: integer("is_hidden", { mode: "boolean" }).notNull(),
   deletedAt: text("deleted_at"),

@@ -68,7 +68,7 @@ the dashboard for what's actually on. Polarity: `*-enabled` flags are off at `fa
 | `invalidation-enabled`         | `false` | api       | Cache-invalidation workflow. Off = not running.                                                                                                   |
 | `media-gif-transcode-enabled`  | `false` | api       | Transcode uploaded/ingested GIFs to video. Off = store the GIF as-is.                                                                             |
 | `oauth-client-reaper-enabled`  | `false` | api       | Stale OAuth-client reaper cron. Off = observe-only (log reapable candidates); on = delete abandoned DCR clients.                                  |
-| `overview-regen-enabled`       | `false` | api       | Automated weekly org-overview regeneration workflow (#1706). Off = manual/agent-driven only.                                                      |
+| `overview-regen-enabled`       | `false` | api       | Automated org-overview regeneration workflow — daily cron, per-org cadence (#1706, #1895). Off = manual/agent-driven only.                        |
 | `raw-snapshot-capture-enabled` | `false` | discovery | Steady-state scrape path captures the scraped markdown as a raw snapshot (#1283) for cheap re-extraction (#1284).                                 |
 | `user-api-keys-enabled`        | `false` | api, mcp  | Better Auth user-API-key (`relu_`) path — verification + self-serve creation. Separate from `api-tokens-disabled` (which kills both token lanes). |
 

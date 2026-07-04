@@ -17,13 +17,18 @@
  *
  * The 2026-04-28 overview-regen feedback called out that `OVERVIEW_STALE_DAYS`
  * (30) was the wrong signal — what matters is "releases since overview." The
- * default eligibility predicate encodes the weekly-routine rule:
+ * default eligibility predicate encodes the routine rule, with a per-org
+ * effective cadence (#1895):
  *
  *   missing overview                           → eligible
  *   recentReleaseCount > minNewReleases AND
- *     overview.updated_at older than minOverviewAgeDays → eligible
+ *     overview.updated_at older than the org's cadence → eligible
  *
- * Both thresholds are options so admin POST can override per-run.
+ *   cadence = org.overview_cadence_days (manual override), else
+ *             fastCadenceDays when recentReleaseCount ≥ fastMinReleases,
+ *             else minOverviewAgeDays
+ *
+ * All thresholds are options so admin POST can override per-run.
  *
  * When `orgSlugs` is an explicit non-empty list the default age and
  * min-new-releases thresholds are bypassed entirely — the operator has
@@ -61,6 +66,15 @@ export interface OverviewCandidateOptions {
   minNewReleases?: number;
   /** Min age of the existing overview before it's considered eligible. Default 7 days (weekly). */
   minOverviewAgeDays?: number;
+  /**
+   * Velocity fast tier (#1895): orgs whose `recentReleaseCount` reaches
+   * `fastMinReleases` qualify at `fastCadenceDays` instead of
+   * `minOverviewAgeDays`. A per-org `overview_cadence_days` override beats
+   * both tiers. Defaults: 2 days at ≥15 releases.
+   */
+  fastCadenceDays?: number;
+  /** Release velocity that promotes an org to the fast tier. Default 15. */
+  fastMinReleases?: number;
   /** Hard cap on candidate count. Default 100. */
   maxCandidates?: number;
   /** Optional org slug filter — restrict the candidate set. null = all. */
@@ -74,6 +88,8 @@ export interface OverviewCandidate {
   hasOverview: boolean;
   overviewUpdatedAt: string | null;
   recentReleaseCount: number;
+  /** Per-org manual cadence override (days); null = automatic velocity tier. */
+  overviewCadenceDays: number | null;
 }
 
 const DEFAULT_MIN_NEW_RELEASES = 20;
@@ -84,6 +100,13 @@ const DEFAULT_MIN_NEW_RELEASES = 20;
 // high-traffic orgs visibly lagged. Quiet orgs still don't churn: the
 // `recentReleaseCount > 0` guard means an org with no new releases is never picked.
 const DEFAULT_MIN_OVERVIEW_AGE_DAYS = 7;
+// Velocity fast tier (#1895): an org shipping fast enough to hit
+// `fastMinReleases` since its last overview requalifies after only
+// `fastCadenceDays`. The cron fires daily, so these gates — not the cron
+// schedule — set each org's effective cadence. A per-org
+// `overview_cadence_days` override beats both tiers in either direction.
+const DEFAULT_FAST_CADENCE_DAYS = 2;
+const DEFAULT_FAST_MIN_RELEASES = 15;
 const DEFAULT_MAX_CANDIDATES = 100;
 
 /** Per-statement IN-clause cap. D1 limits prepared statements to 100 binds. */
@@ -119,6 +142,8 @@ export async function fetchOverviewCandidates(
   const {
     minNewReleases = DEFAULT_MIN_NEW_RELEASES,
     minOverviewAgeDays = DEFAULT_MIN_OVERVIEW_AGE_DAYS,
+    fastCadenceDays = DEFAULT_FAST_CADENCE_DAYS,
+    fastMinReleases = DEFAULT_FAST_MIN_RELEASES,
     maxCandidates = DEFAULT_MAX_CANDIDATES,
     orgSlugs,
   } = options;
@@ -127,7 +152,8 @@ export async function fetchOverviewCandidates(
     1,
     Math.min(500, Math.floor(Number(maxCandidates) || DEFAULT_MAX_CANDIDATES)),
   );
-  const ageCutoffIso = daysAgoIso(Math.max(0, Math.floor(Number(minOverviewAgeDays) || 0)));
+  const cutoffForCadence = (days: number): string =>
+    daysAgoIso(Math.max(0, Math.floor(Number(days) || 0)));
   const windowCutoffIso = daysAgoIso(OVERVIEW_WINDOW_DAYS);
 
   // Single query: for each org, left-join its overview row and count recent
@@ -153,6 +179,7 @@ export async function fetchOverviewCandidates(
       orgId: organizationsPublic.id,
       orgSlug: organizationsPublic.slug,
       orgName: organizationsPublic.name,
+      overviewCadenceDays: organizationsPublic.overviewCadenceDays,
       overviewUpdatedAt: knowledgePages.updatedAt,
       recentReleaseCount: sql<number>`(
         SELECT COUNT(*) FROM releases r
@@ -191,7 +218,12 @@ export async function fetchOverviewCandidates(
   const isExplicitOrgList = Array.isArray(orgSlugs) && orgSlugs.length > 0;
   const eligible = rows.filter((r) => {
     if (isExplicitOrgList || !r.overviewUpdatedAt) return r.recentReleaseCount > 0;
-    if (r.overviewUpdatedAt > ageCutoffIso) return false; // overview too fresh
+    // Per-org effective cadence: manual override beats the automatic velocity
+    // tier (fast when the org shipped ≥ fastMinReleases since its overview).
+    const cadenceDays =
+      r.overviewCadenceDays ??
+      (r.recentReleaseCount >= fastMinReleases ? fastCadenceDays : minOverviewAgeDays);
+    if (r.overviewUpdatedAt > cutoffForCadence(cadenceDays)) return false; // overview too fresh
     return r.recentReleaseCount > minNewReleases;
   });
 
@@ -206,6 +238,7 @@ export async function fetchOverviewCandidates(
     hasOverview: r.overviewUpdatedAt !== null,
     overviewUpdatedAt: r.overviewUpdatedAt,
     recentReleaseCount: r.recentReleaseCount,
+    overviewCadenceDays: r.overviewCadenceDays ?? null,
   }));
 }
 

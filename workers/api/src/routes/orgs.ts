@@ -449,6 +449,7 @@ orgRoutes.get(
       avatarUrl: org.avatarUrl,
       isHidden: org.isHidden,
       autoGenerateContent: org.autoGenerateContent,
+      overviewCadenceDays: org.overviewCadenceDays,
       featured: org.featured,
       fetchPaused: org.fetchPaused,
       discovery: org.discovery,
@@ -741,6 +742,7 @@ orgRoutes.patch(
       fetchPaused?: boolean;
       isHidden?: boolean;
       autoGenerateContent?: boolean;
+      overviewCadenceDays?: number | null;
       featured?: boolean;
       discovery?: "curated" | "agent" | "on_demand";
       notice?: Notice | null;
@@ -790,7 +792,7 @@ orgRoutes.patch(
         );
     }
 
-    const updates: Record<string, string | boolean | null> = {
+    const updates: Record<string, string | boolean | number | null> = {
       updatedAt: new Date().toISOString(),
     };
     if (body.name) updates.name = body.name;
@@ -803,6 +805,8 @@ orgRoutes.patch(
     if (body.isHidden !== undefined) updates.isHidden = body.isHidden;
     if (body.autoGenerateContent !== undefined)
       updates.autoGenerateContent = body.autoGenerateContent;
+    if (body.overviewCadenceDays !== undefined)
+      updates.overviewCadenceDays = body.overviewCadenceDays;
     if (body.featured !== undefined) updates.featured = body.featured;
     if (body.discovery !== undefined) updates.discovery = body.discovery;
 

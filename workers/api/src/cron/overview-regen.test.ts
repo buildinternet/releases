@@ -98,6 +98,7 @@ function makeCandidate(
     orgName: "Acme",
     hasOverview: false,
     overviewUpdatedAt: null,
+    overviewCadenceDays: null,
     recentReleaseCount,
   };
 }
