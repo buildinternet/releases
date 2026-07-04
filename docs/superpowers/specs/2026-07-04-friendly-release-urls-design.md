@@ -60,13 +60,22 @@ change.
 The `opengraph-image` route uses the same parse so OG images keep working
 under slugged URLs.
 
-## Internal link emission
+## Internal link emission (best-effort)
 
-Every place web builds `/release/${id}` (org/source/product timelines, search
-results, collections, updates pages) switches to the shared path helper. List
-responses generally already carry `titleShort`/`titleGenerated`; during
-implementation, verify each list payload includes those fields and add them
-where missing so no surface emits bare-ID links inconsistently.
+Bare-ID links 301 to the canonical slugged form, so existing internal links
+never break and need no retroactive rewrite. Swap a link site to the shared
+path helper only where it is a trivial change and the title fields are
+already present in the payload it renders from; leave everything else
+emitting bare-ID links. No payload audits, no field additions to list
+responses for this purpose, no sweeps over old surfaces.
+
+## No backfill
+
+None is needed. The slug is computed at request time from columns already on
+every release row (`title_short` / `title_generated` / `title` / `version`),
+so every existing release — including those from orgs without
+`autoGenerateContent` — gets a friendly URL the moment the code deploys.
+Zero AI calls, zero batch jobs, zero migrations.
 
 ## API surface
 
@@ -111,3 +120,7 @@ where missing so no surface emits bare-ID links inconsistently.
 - **Sitemap: releases stay out** — friendly URLs propagate via shared links,
   OG tags, and crawl of org/feed pages without re-inviting index bloat.
 - **Scope: web + API field** — MCP/feeds/webhooks adopt later.
+- **Internal links are best-effort** — bare-ID links are acceptable since
+  they 301; no retroactive rewrites or payload audits.
+- **No backfill job** — derived slugs mean URL generation is a pure string
+  transform at request time; no tokens or batch work.
