@@ -154,6 +154,11 @@ export async function ProductView({
     ],
   };
 
+  // Rendered once and reused in both branches below (inside the timeline, or
+  // standalone when there's no activity) so a change to OverviewView applies to
+  // both. Only one branch renders, so sharing the element is safe.
+  const overviewNode = overview ? <OverviewView page={overview} /> : null;
+
   return (
     <div className="min-h-screen">
       <JsonLd data={jsonLd} />
@@ -230,10 +235,10 @@ export async function ProductView({
                 orgSlug={orgSlug}
                 sources={[]}
                 products={[]}
-                overviewSlot={overview ? <OverviewView page={overview} /> : undefined}
+                overviewSlot={overviewNode}
               />
             )}
-            {!activity && overview && <OverviewView page={overview} />}
+            {!activity && overviewNode}
             <OrgReleaseList
               orgSlug={orgSlug}
               product={productSlug}

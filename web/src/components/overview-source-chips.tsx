@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { OverviewCitation } from "@buildinternet/releases-api-types";
 import { definitionLabel } from "@/lib/overview-citations";
-import { EXTERNAL_UGC_REL } from "@/lib/sanitize";
+import { EXTERNAL_UGC_REL, isSafeHref } from "@/lib/sanitize";
 
 export interface RenderedCitation {
   label: string;
@@ -84,13 +84,17 @@ export function OverviewSourceChips({ items }: { items: RenderedCitation[] }) {
             <a
               key={label}
               id={`user-content-fn-${label}`}
-              href={citation.sourceUrl}
+              // Guard the scheme: an overview citation is expected to be an
+              // http(s) source URL, but never render a clickable javascript:/
+              // data: href. Unsafe values drop to a non-navigable anchor that
+              // still keeps the footnote-jump id and the label.
+              href={isSafeHref(citation.sourceUrl) ? citation.sourceUrl : undefined}
               target="_blank"
               rel={EXTERNAL_UGC_REL}
               className={`${hiddenNow ? "hidden" : "inline-flex"} ${chipClass}`}
             >
               <span className="text-stone-400 dark:text-stone-500 tabular-nums">{number}</span>
-              <span className="truncate">{definitionLabel(citation)}</span>
+              <span className="min-w-0 truncate">{definitionLabel(citation)}</span>
             </a>
           );
         })}
