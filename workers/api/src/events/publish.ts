@@ -1,5 +1,6 @@
 import { getReleaseHub } from "../utils.js";
 import { buildReleaseEventPayloads, type InsertedReleaseRow } from "./build-event.js";
+import { releaseWebBase } from "../queries/releases.js";
 import { fanoutWebhooks } from "../queues/enqueue-release-fanout.js";
 import type { ReleaseFanoutMessage } from "../queues/types.js";
 import { newLocalEventId } from "@buildinternet/releases-core/id";
@@ -84,6 +85,8 @@ export interface PublishEnv {
   WEBHOOK_DELIVERY_QUEUE?: Queue<unknown>;
   RELEASE_EVENTS_QUEUE?: Queue<ReleaseFanoutMessage>;
   DB?: D1Database;
+  /** Web origin for building each payload's slugged `webUrl` (#1906). */
+  WEB_BASE_URL?: string;
 }
 
 /**
@@ -122,6 +125,7 @@ export async function publishReleaseEvents(env: PublishEnv, ctx: PublishContext)
       product,
     },
     inserted: ctx.inserted,
+    webBase: releaseWebBase(env),
   });
   // Consumer keys idempotency on release.id (X-Releases-Event-Id), not on seq.
   const ts = Date.now();

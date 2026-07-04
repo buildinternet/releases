@@ -84,7 +84,9 @@ export async function gatherAndSendDigest(
   });
   if (rows.length === 0) return { sent: false, count: 0, reason: "no_releases" };
 
-  const releaseItems = rows.map((r) => mapLatestRowToReleaseItem(r, opts.mediaOrigin));
+  const releaseItems = rows.map((r) =>
+    mapLatestRowToReleaseItem(r, opts.mediaOrigin, opts.baseUrl),
+  );
   const res = await sendDigestEmail(env, {
     to: recip.email,
     recipientName: recip.name,

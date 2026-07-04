@@ -105,6 +105,8 @@ interface FeedItem {
   publishedAt?: string | null;
   product?: { name?: string | null } | null;
   source: { name: string };
+  /** Slugged canonical web URL (#1906) — the API populates it on feed items. */
+  webUrl?: string | null;
 }
 
 export function registerFollowsTools(
@@ -279,7 +281,8 @@ export function registerFollowsTools(
                   const title = it.titleShort ?? it.titleGenerated ?? it.title;
                   const by = it.product?.name ?? it.source.name;
                   const when = it.publishedAt ? ` · ${it.publishedAt.slice(0, 10)}` : "";
-                  return `- ${title} — ${by}${when} (${it.id})`;
+                  const link = it.webUrl ? `\n  ${it.webUrl}` : "";
+                  return `- ${title} — ${by}${when} (${it.id})${link}`;
                 })
                 .join("\n")}`;
         return {

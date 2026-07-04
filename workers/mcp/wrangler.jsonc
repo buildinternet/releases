@@ -23,6 +23,8 @@
   "vars": {
     "USER_API_KEYS_ENABLED": "false",
     "MEDIA_ORIGIN": "https://media.releases.sh",
+    // Web origin for building slugged canonical `webUrl` fields (#1906).
+    "WEB_BASE_URL": "https://releases.sh",
     // Rate limiting: account + anonymous ride RATE_LIMIT_ENABLED; machine rides TOKEN_RATE_LIMIT_ENABLED.
     // Default: account/anon OFF (same as API worker until production ramp); machine ON.
     "RATE_LIMIT_ENABLED": "false",
@@ -124,6 +126,7 @@
       "vars": {
         "USER_API_KEYS_ENABLED": "false",
         "MEDIA_ORIGIN": "https://media.releases.sh",
+        "WEB_BASE_URL": "https://releases.sh",
         "EMBEDDING_PROVIDER": "voyage",
         // OAuth resource-server verification (#1483) — staging AS issuer (incl.
         // /api/auth basePath, matching token `iss`) + this worker's audience.

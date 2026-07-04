@@ -78,6 +78,17 @@ Release detail pages use Zendesk-style URLs: `/release/rel_<id>-<slug>`
   stripped before lookup). Detail and latest-list responses carry an
   additive `webUrl` — the absolute canonical web URL — built from
   `WEB_BASE_URL` (fallback `https://releases.sh`).
+- **Other read surfaces (#1906):** the slugged `webUrl` also rides the
+  **MCP** tool results (`get_release` / `get_latest_releases` /
+  `get_collection_releases` structured output + a `Web:` text line;
+  `whats_changed` gains a `webUrl` on each entry — a `WhatsChangedEntry`
+  wire add; `get_personalized_feed` surfaces the API's `webUrl`), the
+  **Atom feeds** (entry `<link rel="alternate">` is the slugged canonical;
+  the `<id>` stays the bare `/release/<id>` so a churning slug never
+  re-notifies readers), the **`release.created` event payload** (WebSocket
+  stream + webhook fan-out + Slack card), and the **digest emails**. All
+  derive from `releasePath()` + a `releaseWebBase(env)`-style origin — no
+  new queries; the slug is a request-time string transform.
 - **Sitemap:** release pages remain excluded (#1601 index-bloat cleanup);
   friendly URLs propagate via shared links, OG tags, and crawls of org/feed
   pages.

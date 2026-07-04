@@ -66,7 +66,9 @@ function digestDateLabel(cadence: "daily" | "weekly", referenceDate: string): st
 }
 
 function releaseUrl(baseUrl: string, r: ReleaseLatestItem): string {
-  return `${baseUrl}/release/${r.id}`;
+  // Prefer the slugged canonical (`webUrl`, populated when the row is mapped
+  // with a webBase); fall back to the bare-ID path, which 308s to canonical.
+  return r.webUrl ?? `${baseUrl}/release/${r.id}`;
 }
 
 // GitHub releases are version-tag drops (the "SDK-style" rows). In the web

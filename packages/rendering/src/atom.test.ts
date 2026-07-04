@@ -76,9 +76,11 @@ describe("sourceToAtom", () => {
   it("emits entries with stable ids and published + updated timestamps", () => {
     const xml = sourceToAtom(makeSource(), { baseUrl: BASE });
 
+    // The atom <id> stays the bare release path (stable across title churn);
+    // the human <link> is the slugged canonical (#1906).
     expect(xml).toInclude("<id>https://releases.sh/release/rel_abc123</id>");
     expect(xml).toInclude(
-      '<link rel="alternate" type="text/html" href="https://releases.sh/release/rel_abc123" />',
+      '<link rel="alternate" type="text/html" href="https://releases.sh/release/rel_abc123-next-js-15-0" />',
     );
     expect(xml).toInclude("<published>2026-04-10T12:34:56.000Z</published>");
     // Date-only source timestamps get widened to midnight UTC.

@@ -16,6 +16,7 @@ import {
   listCollections,
   getCollection,
   getCollectionReleases,
+  releaseWebBase,
   AmbiguousEntityError,
   ambiguousEntityToolResult,
   type SearchToolReturn,
@@ -82,6 +83,8 @@ type SecretBinding = { get(): Promise<string> };
 export interface Env {
   DB: D1Database;
   MEDIA_ORIGIN?: string;
+  /** Web origin for building slugged canonical `webUrl` fields (#1906). */
+  WEB_BASE_URL?: string;
   // Vectorize indexes for semantic search (read-only usage from MCP).
   RELEASES_INDEX: VectorizeIndex;
   ENTITIES_INDEX: VectorizeIndex;
@@ -255,6 +258,7 @@ export async function createServer(env: Env, ctx?: ExecutionContext, opts?: Crea
   );
 
   const db = createDb(env.DB);
+  const webBase = releaseWebBase(env);
   const mediaOrigin = env.MEDIA_ORIGIN ?? "";
   const requestUserAgent = opts?.userAgent ?? null;
   const requestClientKind = deriveMcpClientKind(requestUserAgent);
@@ -607,7 +611,7 @@ export async function createServer(env: Env, ctx?: ExecutionContext, opts?: Crea
     },
     cached(
       "get_latest_releases",
-      withMedia(async (params) => getLatestReleases(db, params)),
+      withMedia(async (params) => getLatestReleases(db, params, webBase)),
     ),
   );
 
@@ -829,7 +833,7 @@ export async function createServer(env: Env, ctx?: ExecutionContext, opts?: Crea
     },
     cached(
       "get_collection_releases",
-      withMedia(async (params) => getCollectionReleases(db, params)),
+      withMedia(async (params) => getCollectionReleases(db, params, webBase)),
     ),
   );
 
@@ -845,7 +849,7 @@ export async function createServer(env: Env, ctx?: ExecutionContext, opts?: Crea
     },
     cached(
       "get_release",
-      withMedia(async (params) => getRelease(db, params)),
+      withMedia(async (params) => getRelease(db, params, webBase)),
     ),
   );
 

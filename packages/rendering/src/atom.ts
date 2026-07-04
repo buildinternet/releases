@@ -13,6 +13,7 @@ import type {
   CollectionReleaseItem,
   ReleaseLatestItem,
 } from "@buildinternet/releases-api-types";
+import { releasePath } from "@buildinternet/releases-core/release-slug";
 
 export interface AtomFeedOptions {
   /** Canonical base URL, e.g. "https://releases.sh". Required for stable ids. */
@@ -83,6 +84,28 @@ function entryId(
 /** Build a feed-level id: a permanent tag URI tied to the feed identity. */
 function feedId(scope: string, slug: string, baseUrl: string): string {
   return `tag:${tagAuthority(baseUrl)},2005:${scope}/${slug}`;
+}
+
+/**
+ * Human-facing canonical link for an entry's `<link rel="alternate">`: the
+ * slugged release path (`/release/<id>-<slug>`) for crawler/AI legibility
+ * (#1906), falling back to the release's upstream URL when there's no id.
+ * The atom `<id>` stays the bare `/release/<id>` form (see `entryId`) so a
+ * churning title-derived slug never re-notifies readers.
+ */
+function releaseAlternateHref(
+  release: Pick<ReleaseItem, "id" | "url" | "titleShort" | "titleGenerated" | "title" | "version">,
+  baseUrl: string,
+): string | null {
+  const { id } = release;
+  if (!id) return release.url ?? null;
+  return `${baseUrl}${releasePath({
+    id,
+    titleShort: release.titleShort,
+    titleGenerated: release.titleGenerated,
+    title: release.title,
+    version: release.version,
+  })}`;
 }
 
 // ── Entry builder ────────────────────────────────────────────────────
@@ -197,7 +220,7 @@ export function sourceToAtom(source: SourceDetail, opts: AtomFeedOptions): strin
     sourceSlug: source.slug,
     sourceName: source.name,
     orgName,
-    linkHref: release.id ? `${opts.baseUrl}/release/${release.id}` : release.url,
+    linkHref: releaseAlternateHref(release, opts.baseUrl),
   }));
 
   return buildFeed(
@@ -233,7 +256,7 @@ export function orgReleasesToAtom(
     sourceSlug: release.source.slug,
     sourceName: release.source.name,
     orgName: params.orgName,
-    linkHref: release.id ? `${opts.baseUrl}/release/${release.id}` : release.url,
+    linkHref: releaseAlternateHref(release, opts.baseUrl),
   }));
 
   const overviewEntry = params.overview
@@ -278,7 +301,7 @@ export function productReleasesToAtom(
     sourceSlug: release.source.slug,
     sourceName: release.source.name,
     orgName: params.productName,
-    linkHref: release.id ? `${opts.baseUrl}/release/${release.id}` : release.url,
+    linkHref: releaseAlternateHref(release, opts.baseUrl),
   }));
 
   return buildFeed(
@@ -311,7 +334,7 @@ export function userFeedToAtom(
     sourceSlug: release.source.slug,
     sourceName: release.source.name,
     orgName: null,
-    linkHref: release.id ? `${opts.baseUrl}/release/${release.id}` : release.url,
+    linkHref: releaseAlternateHref(release, opts.baseUrl),
   }));
 
   return buildFeed(
@@ -335,7 +358,7 @@ function aggregateReleaseEntries(releases: CollectionReleaseItem[], baseUrl: str
     sourceSlug: release.source.slug,
     sourceName: release.source.name,
     orgName: release.org.name,
-    linkHref: release.id ? `${baseUrl}/release/${release.id}` : release.url,
+    linkHref: releaseAlternateHref(release, baseUrl),
   }));
 }
 
