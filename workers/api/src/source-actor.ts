@@ -321,6 +321,10 @@ export class SourceActor extends DurableObject<SourceActorEnv> {
       this.env.FLAGS,
       this.env.ORG_DRAIN_ACTOR_ENABLED,
       FLAGS.orgDrainActorEnabled,
+      // Per-org eval context for a sticky Flagship percentage rollout (see
+      // FLAGS.orgDrainActorEnabled.rolloutContext). `row.orgId` is non-null —
+      // the guard at the top of this method already returned when it was falsy.
+      { orgId: row.orgId },
     );
     if (!on) return;
     try {

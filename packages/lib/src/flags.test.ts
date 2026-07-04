@@ -1,15 +1,15 @@
 import { describe, expect, it } from "bun:test";
-import { FLAGS, flag, flagState, type FlagshipBinding } from "./flags.js";
+import { FLAGS, type FlagContext, flag, flagState, type FlagshipBinding } from "./flags.js";
 
 interface RecordingBinding extends FlagshipBinding {
-  lastCall?: { key: string; defaultValue: boolean };
+  lastCall?: { key: string; defaultValue: boolean; context?: FlagContext };
 }
 
 /** Stub binding that records its last call and always returns `value`. */
 function bindingReturning(value: boolean): RecordingBinding {
   const binding: RecordingBinding = {
-    getBooleanValue: async (key, defaultValue) => {
-      binding.lastCall = { key, defaultValue };
+    getBooleanValue: async (key, defaultValue, context) => {
+      binding.lastCall = { key, defaultValue, context };
       return value;
     },
   };
@@ -59,6 +59,22 @@ describe("flag()", () => {
     expect(await flag(undefined, "1", FLAGS.cacheDisabled)).toBe(false);
     expect(await flag(undefined, "", FLAGS.cacheDisabled)).toBe(false);
   });
+
+  it("forwards the eval context to the binding for per-org rollout bucketing", async () => {
+    const stub = bindingReturning(true);
+    await flag(stub, undefined, FLAGS.deterministicUpdateEnabled, { orgId: "org_abc" });
+    expect(stub.lastCall).toEqual({
+      key: "deterministic-update-enabled",
+      defaultValue: false,
+      context: { orgId: "org_abc" },
+    });
+  });
+
+  it("passes undefined context through for a context-free global read", async () => {
+    const stub = bindingReturning(false);
+    await flag(stub, undefined, FLAGS.cacheDisabled);
+    expect(stub.lastCall?.context).toBeUndefined();
+  });
 });
 
 describe("FLAGS registry", () => {
@@ -74,6 +90,14 @@ describe("FLAGS registry", () => {
     const envs = defs.map((d) => d.env);
     expect(new Set(envs).size).toBe(envs.length);
     for (const e of envs) expect(e).toMatch(/^[A-Z0-9]+(_[A-Z0-9]+)*$/);
+  });
+
+  it("marks the org-scoped ramp flags with rolloutContext: 'orgId'", () => {
+    // These two thread `{ orgId }` at their read sites (#1884), so their
+    // Flagship percentage-rollout rule must bucket on `orgId`. The marker keeps
+    // that expectation self-documenting; the mechanism is the threaded context.
+    expect(FLAGS.orgDrainActorEnabled.rolloutContext).toBe("orgId");
+    expect(FLAGS.deterministicUpdateEnabled.rolloutContext).toBe("orgId");
   });
 });
 

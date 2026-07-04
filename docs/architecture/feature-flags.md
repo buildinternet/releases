@@ -76,6 +76,47 @@ the dashboard for what's actually on. Polarity: `*-enabled` flags are off at `fa
 
 <!-- END GENERATED FLAG TABLE -->
 
+## Staged / per-org rollout
+
+A plain `flag()` read with no evaluation context is a **global** on/off switch: Flagship has
+nothing stable to hash on, so a percentage-rollout rule would bucket randomly on every
+evaluation (per the Flagship docs, a source/org would flip in and out of the new path on each
+call). To ramp a flag on a **subset of orgs** — bake a risky/expensive change on a few orgs,
+watch, then widen — the read site must pass a stable bucketing key and the dashboard rule must
+bucket on it (#1884).
+
+**How it works.** `flag(binding, varValue, def, context?)` forwards the optional `context`
+(`{ orgId }`) to Flagship's `getBooleanValue(key, fallback, context)`. Flagship's
+percentage-rollout rule, configured to bucket on `orgId`, then consistent-hashes that value so
+the same org lands in the same bucket across evaluations (sticky bucketing). No in-repo hashing
+or allowlist — Flagship owns the percentage math.
+
+**Which flags support it.** A flag's `FlagDef.rolloutContext` (e.g. `"orgId"`) names the
+context key its read sites pass and its Flagship rule must bucket on. Today:
+
+- `org-drain-actor-enabled` — `{ orgId }` at `OrgActor.alarm()` (`workers/api/src/org-actor.ts`)
+  and `maybeNotifyOrgDrain` (`workers/api/src/source-actor.ts`). The two cron-tick reads in
+  `workers/api/src/index.ts` stay context-free — they decide whether the cron path runs at all
+  for that tick, not per-org.
+- `deterministic-update-enabled` — `{ orgId }` at the update-mode deterministic gate in
+  `workers/discovery/src/managed-agents-session.ts` (`runSession`). Threaded only when
+  `params.orgId` is present; both production `/update` dispatch paths (the OrgActor drain and
+  the scrape-agent sweep) always supply a real org id.
+
+**To ramp one (dashboard-only, in _both_ `releases-platform` and `releases-platform-staging`):**
+
+1. Open the flag and add a **percentage-rollout** rule with the **bucketing attribute set to
+   `orgId`** (not the default `targetingKey`).
+2. Start small (e.g. 10%), watch the target metric in Axiom — extraction quality / cost for
+   `deterministic-update-enabled`, drain behaviour for `org-drain-actor-enabled` — then widen.
+3. A stuck ramp reverts by dropping the percentage back to 0 (or flipping the flag off); the
+   fallback path (legacy cron / agent session) runs unchanged, same as a global off.
+
+To make a **new** flag ramp-able: thread `{ orgId }` (or another stable key) into its per-org
+`flag()` read, set `rolloutContext` on its `FlagDef`, and configure its Flagship rule as above.
+Reads that are genuinely fleet-wide (a "which path runs this tick" decision) should stay
+context-free.
+
 ## Adding a flag
 
 Add a `FLAGS` registry entry (all fields required: `key`, `env`, `default`, `kind`, `reads`,

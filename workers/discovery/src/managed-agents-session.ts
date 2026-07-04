@@ -463,6 +463,14 @@ export class ManagedAgentsSession extends DurableObject<Env> {
             this.env.FLAGS,
             this.env.DETERMINISTIC_UPDATE_ENABLED,
             FLAGS.deterministicUpdateEnabled,
+            // Per-org eval context so a Flagship percentage rollout buckets this
+            // org stickily (see FLAGS.deterministicUpdateEnabled.rolloutContext).
+            // Both production /update dispatch paths — the OrgActor drain and the
+            // scrape-agent sweep — always supply a real orgId, so this is set in
+            // practice; thread it only when present so a rare manual/orgId-less
+            // call degrades to a context-free read rather than an empty bucketing
+            // key (which Flagship would bucket randomly per eval).
+            params.orgId ? { orgId: params.orgId } : undefined,
           )
         : false;
 
