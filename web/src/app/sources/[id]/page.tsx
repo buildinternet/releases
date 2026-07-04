@@ -4,6 +4,7 @@ import { Suspense } from "react";
 import { ApiNotFoundError } from "@/lib/api";
 import { JsonLd } from "@/components/json-ld";
 import { SourceReleaseList } from "@/components/source-release-list";
+import { withReleaseBodyHtml } from "@/lib/render-release-body";
 import { RelatedRail } from "@/components/related-rail";
 import {
   buildReleaseItemListJsonLd,
@@ -169,7 +170,10 @@ export default async function SourceByIdPage({ params }: { params: Promise<{ id:
       <SourceReleaseList
         orgSlug={orgSlug}
         sourceSlug={source.slug}
-        initialReleases={source.releases}
+        initialReleases={withReleaseBodyHtml(
+          source.releases,
+          appStore || videoInfo ? "full" : "collapsed",
+        )}
         initialCursor={initialCursor}
         appStore={appStore}
         video={videoInfo}

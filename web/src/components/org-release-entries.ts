@@ -1,19 +1,19 @@
-import type { OrgReleaseItem } from "@/lib/api";
+import type { OrgReleaseItemView } from "@/lib/release-view";
 import { deriveFeedTitle, type FeedTitleInput } from "@/lib/release-title";
 import { isAppStore, isTag, rollupTags, type TagListItem } from "./collection-timeline-rollup";
 
 // Sources whose same-day clusters fold into a rollup row: GitHub tags (keyed
 // product ?? source) and App Store apps (keyed per-source, #1236). Posts
 // (feed/scrape/agent) never roll up — they keep the hero/flat-row treatment.
-const isRollupEligible = (r: OrgReleaseItem) => isTag(r) || isAppStore(r);
+const isRollupEligible = (r: OrgReleaseItemView) => isTag(r) || isAppStore(r);
 
-export type RollupItem = Extract<TagListItem<OrgReleaseItem>, { kind: "rollup" }>;
+export type RollupItem = Extract<TagListItem<OrgReleaseItemView>, { kind: "rollup" }>;
 
 // One rendered row in the date-rail feed. A `row` is a normal `ReleaseListItem`
 // (a post, or a lone GitHub tag); a `rollup` is a collapsed cluster of 2+ tags
 // that share a product/source within the same day (#1233).
 export type FeedEntry =
-  | { kind: "row"; release: OrgReleaseItem }
+  | { kind: "row"; release: OrgReleaseItemView }
   | { kind: "rollup"; item: RollupItem };
 
 const releaseDayKey = (iso: string | null) => (iso ? iso.slice(0, 10) : "undated");
@@ -33,7 +33,7 @@ export function entryDayKey(entry: FeedEntry): string {
 // everything else (posts, single tags) stays in place. This keeps the
 // published-desc interleave while folding away monorepo package-bump and
 // same-day app-version noise (#1233, #1236).
-export function buildFeedEntries(releases: OrgReleaseItem[]): FeedEntry[] {
+export function buildFeedEntries(releases: OrgReleaseItemView[]): FeedEntry[] {
   const entries: FeedEntry[] = [];
   let i = 0;
   while (i < releases.length) {
@@ -71,10 +71,10 @@ export function rollupSummaryLine(releases: readonly FeedTitleInput[], limit = 3
   return parts.slice(0, limit).join(" · ") + " …";
 }
 
-function appendDayEntries(out: FeedEntry[], dayReleases: OrgReleaseItem[]) {
+function appendDayEntries(out: FeedEntry[], dayReleases: OrgReleaseItemView[]) {
   // `rollupTags` keeps the same release object references it's handed, so a
   // reference-keyed Map cleanly maps each clustered tag back to its rollup.
-  const rollupByMember = new Map<OrgReleaseItem, RollupItem>();
+  const rollupByMember = new Map<OrgReleaseItemView, RollupItem>();
   for (const item of rollupTags(dayReleases.filter(isRollupEligible))) {
     if (item.kind === "rollup") {
       for (const r of item.releases) rollupByMember.set(r, item);

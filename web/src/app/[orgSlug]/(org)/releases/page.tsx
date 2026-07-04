@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { api, ApiSetupError, ApiNotFoundError, type OrgReleasesFeedResponse } from "@/lib/api";
 import { OrgReleaseList } from "@/components/org-release-list";
+import { withReleaseBodyHtml, orgRowVariant } from "@/lib/render-release-body";
 import { OrgReleaseProductLinks } from "@/components/org/org-release-product-links";
 import { orgAvatarSrc } from "@/components/org-avatar";
 import { JsonLd } from "@/components/json-ld";
@@ -109,7 +110,7 @@ export default async function OrgReleasesPage({
       <JsonLd data={jsonLd} />
       <OrgReleaseList
         orgSlug={orgSlug}
-        initialReleases={initialReleases.releases}
+        initialReleases={withReleaseBodyHtml(initialReleases.releases, orgRowVariant)}
         initialCursor={initialReleases.pagination.nextCursor}
         multipleSourcesExist={org.sources.length > 1}
         availableSourceTypes={Array.from(new Set(org.sources.map((s) => s.type)))}

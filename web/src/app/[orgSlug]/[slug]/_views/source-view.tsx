@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import { type SourceDetail } from "@/lib/api";
 import { JsonLd } from "@/components/json-ld";
 import { SourceReleaseList } from "@/components/source-release-list";
+import { withReleaseBodyHtml } from "@/lib/render-release-body";
 import { RelatedRail } from "@/components/related-rail";
 import { buildReleaseItemListJsonLd, buildSourceEntityJsonLd } from "@/lib/schema-org";
 import { getAppInfo } from "@/lib/app-source";
@@ -103,7 +104,10 @@ export function SourceView({ orgSlug, source }: { orgSlug: string; source: Sourc
       <SourceReleaseList
         orgSlug={orgSlug}
         sourceSlug={sourceSlug}
-        initialReleases={source.releases}
+        initialReleases={withReleaseBodyHtml(
+          source.releases,
+          appStore || videoInfo ? "full" : "collapsed",
+        )}
         initialCursor={initialCursor}
         appStore={appStore}
         video={videoInfo}

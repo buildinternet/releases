@@ -16,6 +16,7 @@ import { Sidebar } from "@/components/sidebar";
 import { CliCommand } from "@/components/cli-command";
 import { JsonLd } from "@/components/json-ld";
 import { OrgReleaseList } from "@/components/org-release-list";
+import { withReleaseBodyHtml, orgRowVariant } from "@/lib/render-release-body";
 import { OverviewView } from "@/components/overview-view";
 import { ReleaseTimeline } from "@/components/release-timeline";
 import { taxonomySidebarSections, collectionsSidebarSection } from "@/components/taxonomy-chips";
@@ -242,7 +243,7 @@ export async function ProductView({
             <OrgReleaseList
               orgSlug={orgSlug}
               product={productSlug}
-              initialReleases={initialReleases.releases}
+              initialReleases={withReleaseBodyHtml(initialReleases.releases, orgRowVariant)}
               initialCursor={initialReleases.pagination.nextCursor}
               multipleSourcesExist={product.sources.length > 1}
               availableSourceTypes={availableSourceTypes}

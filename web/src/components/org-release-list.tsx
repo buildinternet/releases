@@ -2,7 +2,7 @@
 
 import { type ReactNode, useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { ReleaseListItem } from "./release-item";
-import type { OrgReleaseItem } from "@/lib/api";
+import type { OrgReleaseItemView } from "@/lib/release-view";
 import type { SourceType } from "@buildinternet/releases-core/source-enums";
 import { useDebounced } from "@/hooks/use-debounced";
 import { useInfiniteScroll } from "@/hooks/use-infinite-scroll";
@@ -22,7 +22,7 @@ import { formatDate, pluralReleases } from "@/lib/formatters";
 
 interface OrgReleaseListProps {
   orgSlug: string;
-  initialReleases: OrgReleaseItem[];
+  initialReleases: OrgReleaseItemView[];
   initialCursor: string | null;
   multipleSourcesExist: boolean;
   /** Source types present on this org's sources, used to populate filter tabs. */

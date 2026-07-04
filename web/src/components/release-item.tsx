@@ -1,11 +1,9 @@
 "use client";
 
 import { useState, useMemo, useId, ViewTransition } from "react";
-import ReactMarkdown from "react-markdown";
-import { remarkPlugins } from "@/lib/markdown-plugins";
-import { rehypeShikiPlugin } from "@/lib/shiki";
 import Link from "next/link";
 import type { ReleaseItem } from "@/lib/api";
+import type { ReleaseItemView } from "@/lib/release-view";
 import { FallbackImage } from "./fallback-image";
 import { GifVideo } from "./gif-video";
 import {
@@ -20,7 +18,6 @@ import { EXTERNAL_UGC_REL } from "@/lib/sanitize";
 import { deriveFeedTitle } from "@/lib/release-title";
 import { releaseExcerpt } from "@/lib/release-excerpt";
 import { feedAttachments } from "@/lib/feed-media";
-import { markdownComponents, collapsedMarkdownComponents } from "./markdown-components";
 import { rewriteRelativeLinks, originFromUrl } from "@releases/rendering/rewrite-links";
 import { formatDate } from "@/lib/formatters";
 import { RollupBadge } from "./rollup-badge";
@@ -108,7 +105,7 @@ export function ReleaseListItem({
   byline,
   avatarUrl,
 }: {
-  release: ReleaseItem;
+  release: ReleaseItemView;
   hideDate?: boolean;
   sourceByline?: { name: string; slug: string; orgSlug?: string };
   appStore?: AppRowInfo | null;
@@ -333,15 +330,10 @@ export function ReleaseListItem({
             {expanded && (
               <div className="mt-2 pl-12">
                 {markdownContent.trim() ? (
-                  <div className={markdownClasses}>
-                    <ReactMarkdown
-                      remarkPlugins={remarkPlugins}
-                      rehypePlugins={[rehypeShikiPlugin]}
-                      components={markdownComponents}
-                    >
-                      {markdownContent}
-                    </ReactMarkdown>
-                  </div>
+                  <div
+                    className={markdownClasses}
+                    dangerouslySetInnerHTML={{ __html: release.bodyHtml ?? "" }}
+                  />
                 ) : (
                   <p className="text-[13px] italic text-stone-400 dark:text-stone-500 m-0">
                     No release notes provided.
@@ -429,15 +421,10 @@ export function ReleaseListItem({
             {expanded && (
               <div className={`mt-2 ${thumbnail ? "pl-[172px]" : ""}`}>
                 {markdownContent.trim() ? (
-                  <div className={markdownClasses}>
-                    <ReactMarkdown
-                      remarkPlugins={remarkPlugins}
-                      rehypePlugins={[rehypeShikiPlugin]}
-                      components={markdownComponents}
-                    >
-                      {markdownContent}
-                    </ReactMarkdown>
-                  </div>
+                  <div
+                    className={markdownClasses}
+                    dangerouslySetInnerHTML={{ __html: release.bodyHtml ?? "" }}
+                  />
                 ) : (
                   <p className="text-[13px] italic text-stone-400 dark:text-stone-500 m-0">
                     No description provided.
@@ -528,15 +515,8 @@ export function ReleaseListItem({
                   {markdownContent.trim() ? (
                     <div
                       className={`${markdownClasses} text-stone-500 dark:text-stone-400 [&_strong]:text-stone-500 dark:[&_strong]:text-stone-400`}
-                    >
-                      <ReactMarkdown
-                        remarkPlugins={remarkPlugins}
-                        rehypePlugins={[rehypeShikiPlugin]}
-                        components={collapsedMarkdownComponents}
-                      >
-                        {markdownContent}
-                      </ReactMarkdown>
-                    </div>
+                      dangerouslySetInnerHTML={{ __html: release.bodyHtml ?? "" }}
+                    />
                   ) : null}
                 </div>
                 {sideThumb && (
