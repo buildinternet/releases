@@ -27,6 +27,7 @@ import { buildOnboardTaskMessage } from "@releases/shared/onboard-task-message.j
 import { buildMemoryStoreResources } from "@releases/shared/memory-store-attach.js";
 import { CATEGORIES } from "@buildinternet/releases-core/categories";
 import { scrapeFetch } from "./scrape-fetch.js";
+import { runScrapeFetchLoop } from "./deterministic-update.js";
 import { discoveryIdentityHeaders } from "./identity.js";
 import {
   STAGING_KEY_HEADER,
@@ -126,6 +127,15 @@ export interface SessionParams {
 }
 
 const SESSION_TIMEOUT_MS = 15 * 60 * 1000;
+
+/**
+ * Wall-clock budget for the deterministic update loop (#1878). Kept under
+ * SESSION_TIMEOUT_MS with headroom so an in-flight scrapeFetch always has time
+ * to finish; remaining sources past the budget are reported as skipped and
+ * picked up on the next sweep. Update batches are small (one org's due sources),
+ * so this is a safety backstop rather than a routinely-hit limit.
+ */
+const DETERMINISTIC_UPDATE_BUDGET_MS = 12 * 60 * 1000;
 
 /**
  * Character cap on the inlined playbook body. ~20K chars ≈ 5K tokens, which
@@ -551,6 +561,28 @@ export class ManagedAgentsSession extends DurableObject<Env> {
               );
             }
           : undefined;
+
+      // ── Deterministic update path (#1878) ─────────────────────────────────
+      // A routine `update` run is a deterministic fetch→extract pipeline: the
+      // worker agent only ever issued one batch of manage_source(fetch) calls,
+      // and every real decision lives in scrapeFetch. When the rollout gate is
+      // on, loop scrapeFetch directly over the due sources and skip the entire
+      // Managed-Agents (Haiku) session — its ~19k-token prompt+skills+playbook
+      // cache-creation was ~84% of the session cost. The outer `finally` still
+      // releases the per-source locks; no agent session means no session-level
+      // cost to record (extraction sub-calls self-log ai_usage). Falls through
+      // to the agent path when the flag is off or scrape secrets are absent.
+      if (mode === "update" && agentRole === "worker" && scrapeHandler) {
+        const deterministic = await flag(
+          this.env.FLAGS,
+          this.env.DETERMINISTIC_UPDATE_ENABLED,
+          FLAGS.deterministicUpdateEnabled,
+        );
+        if (deterministic) {
+          await this.runDeterministicUpdate(params, sessionId, scrapeHandler, releasesApiKey);
+          return;
+        }
+      }
 
       // The managed-agents session client uses `events.stream(...)` — a
       // long-lived `GET /v1/sessions/<id>/events/stream` returning
@@ -1206,6 +1238,79 @@ ${idList}
         }
       }
     }
+  }
+
+  /**
+   * Deterministic `update` path (#1878): fetch each due source via scrapeFetch
+   * directly, with no Managed-Agents session. Mirrors the agent path's terminal
+   * semantics — a run where every processed source failed is reported via
+   * `fail()` (so downstream error handling/alerting is unchanged); otherwise it
+   * writes a result summary and marks the session complete. Source-lock release
+   * happens in the caller's `finally`; this method must not throw.
+   */
+  private async runDeterministicUpdate(
+    params: SessionParams,
+    sessionId: string,
+    scrapeFetchSource: (sourceIdentifier: string) => Promise<string>,
+    releasesApiKey: string | undefined,
+  ): Promise<void> {
+    const sources = params.sourceIdentifiers ?? [];
+    const summary = await runScrapeFetchLoop(sources, scrapeFetchSource, {
+      budgetMs: DETERMINISTIC_UPDATE_BUDGET_MS,
+      now: () => Date.now(),
+    });
+
+    logEvent("info", {
+      component: "discovery",
+      event: "deterministic-update-complete",
+      sessionId,
+      company: params.company,
+      ...(params.orgId ? { orgId: params.orgId } : {}),
+      sourcesProcessed: summary.sourcesProcessed,
+      sourcesSkipped: summary.sourcesSkipped,
+      releasesFound: summary.totalReleasesFound,
+      releasesInserted: summary.totalReleasesInserted,
+      errorCount: summary.errorCount,
+    });
+
+    // Every processed source failed (and at least one ran) → terminal failure,
+    // matching the agent path's "all tool calls failed" branch.
+    if (summary.sourcesProcessed > 0 && summary.errorCount >= summary.sourcesProcessed) {
+      const firstError = summary.results.find((r) => !r.ok);
+      const detail = firstError?.error
+        ? `All ${summary.errorCount} source fetch(es) failed: ${truncate(firstError.error, 120)}`
+        : `All ${summary.errorCount} source fetch(es) failed`;
+      const classification: SessionErrorClassification | undefined = firstError?.errorCategory
+        ? {
+            errorSource: "us",
+            errorType: firstError.errorCategory,
+            message: detail,
+            severity: "fatal",
+          }
+        : undefined;
+      await this.fail(sessionId, params.company, detail, releasesApiKey, undefined, classification);
+      return;
+    }
+
+    const result: Record<string, unknown> = {
+      mode: "update-deterministic",
+      sourcesProcessed: summary.sourcesProcessed,
+      sourcesSkipped: summary.sourcesSkipped,
+      releasesFound: summary.totalReleasesFound,
+      releasesInserted: summary.totalReleasesInserted,
+      errorCount: summary.errorCount,
+    };
+    await this.ctx.storage.put("result", result);
+    await this.ctx.storage.put("status", "complete");
+    await this.notifyStatusHub(
+      {
+        type: "session:complete",
+        sessionId,
+        company: params.company,
+        result,
+      },
+      releasesApiKey,
+    );
   }
 
   private async fail(
