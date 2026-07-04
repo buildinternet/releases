@@ -230,7 +230,7 @@ export async function ProductView({
                 orgSlug={orgSlug}
                 sources={[]}
                 products={[]}
-                overview={overview ?? undefined}
+                overviewSlot={overview ? <OverviewView page={overview} /> : undefined}
               />
             )}
             {!activity && overview && <OverviewView page={overview} />}
