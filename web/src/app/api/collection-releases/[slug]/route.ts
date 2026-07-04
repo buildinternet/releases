@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { webApiHeaders } from "@/lib/api";
 import { apiBaseUrl } from "@/lib/env";
+import { withReleaseBodyHtml } from "@/lib/render-release-body";
 
 const API_URL = apiBaseUrl() ?? "http://localhost:3456";
 
@@ -21,5 +22,12 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ slug
     headers: webApiHeaders(),
   });
   const data = await res.json();
+  // Pre-render each row's excerpt to HTML server-side (collapsed variant, images
+  // stripped) so scroll-appended rows match the SSR initial page and shiki +
+  // react-markdown stay off the client. The full body is fetched lazily on
+  // expand via `/api/release-body/[id]`.
+  if (res.ok && Array.isArray(data?.releases)) {
+    data.releases = withReleaseBodyHtml(data.releases, "collapsed");
+  }
   return NextResponse.json(data, { status: res.status });
 }

@@ -2,21 +2,17 @@
 
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import Link from "next/link";
-import ReactMarkdown from "react-markdown";
-import { remarkPlugins } from "@/lib/markdown-plugins";
-import { rehypeShikiPlugin } from "@/lib/shiki";
 import { OrgAvatar } from "./org-avatar";
 import { SourceTypeIcon } from "./source-type-icon";
 import { ClusterChip } from "./cluster-chip";
 import { FallbackImage } from "./fallback-image";
 import { ExternalLinkIcon } from "./external-link-icon";
-import { collapsedMarkdownComponents, markdownComponents } from "./markdown-components";
 import {
   type CollectionMember,
   type CollectionMemberOrg,
-  type CollectionReleaseItem,
   type CollectionDailySummary,
 } from "@/lib/api";
+import { type CollectionReleaseItemView } from "@/lib/release-view";
 import { memberKey } from "@/lib/member-key";
 import { tabButtonClass } from "@/lib/styles";
 import { useInfiniteScroll } from "@/hooks/use-infinite-scroll";
@@ -40,7 +36,7 @@ interface CollectionTimelineProps {
    * (e.g. `/collections/frontier-ai-labs`, `/categories/ai`).
    */
   formatPath: string;
-  initialReleases: CollectionReleaseItem[];
+  initialReleases: CollectionReleaseItemView[];
   initialCursor: string | null;
   /**
    * Mixed-kind member list driving the filter chips. Org-only surfaces
@@ -112,7 +108,7 @@ const subduedLinkClass =
 const preBadgeClass =
   "text-[10px] uppercase tracking-wide text-stone-500 dark:text-stone-400 bg-stone-100 dark:bg-stone-800 rounded px-1.5 py-0.5 leading-none";
 
-function findThumbnail(release: CollectionReleaseItem) {
+function findThumbnail(release: CollectionReleaseItemView) {
   return release.media?.find((m) => m.type === "image" || m.type === "gif") ?? null;
 }
 
@@ -121,9 +117,77 @@ function findThumbnail(release: CollectionReleaseItem) {
 // that isn't merely the version → the version label → "Release". This is why
 // the collection view now leads with the enriched headline instead of the raw
 // `title` column.
-function releaseHeading(release: CollectionReleaseItem): string {
+function releaseHeading(release: CollectionReleaseItemView): string {
   const { descriptive, versionLabel } = deriveFeedTitle(release);
   return descriptive ?? versionLabel ?? release.title ?? "Release";
+}
+
+// Lazily fetch a release's full-body HTML (server-rendered) the first time a
+// card expands. Keeps the verbatim body out of the initial crawlable HTML
+// (#1606) and — crucially — keeps shiki + react-markdown out of this client
+// bundle: no markdown is ever parsed in the browser. Once fetched, the HTML is
+// held in state, so collapse/re-expand doesn't refetch.
+function useFullBodyHtml(id: string | undefined, expanded: boolean) {
+  const [html, setHtml] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    if (!expanded || html !== null || loading || !id) return;
+    let aborted = false;
+    setLoading(true);
+    setError(false);
+    fetch(`/api/release-body/${encodeURIComponent(id)}`)
+      .then((res) => (res.ok ? res.json() : Promise.reject(new Error(`HTTP ${res.status}`))))
+      .then((data) => {
+        if (!aborted) setHtml(typeof data?.bodyHtml === "string" ? data.bodyHtml : "");
+      })
+      .catch(() => {
+        if (!aborted) setError(true);
+      })
+      .finally(() => {
+        if (!aborted) setLoading(false);
+      });
+    return () => {
+      aborted = true;
+    };
+  }, [expanded, id, html, loading]);
+
+  return { html, error };
+}
+
+// Renders a release body from pre-rendered, sanitized HTML — never react-markdown
+// on the client. Collapsed shows the server-rendered excerpt shipped in the
+// payload (`release.bodyHtml`); expanded lazily fetches and injects the full
+// body. The HTML comes from the server pipeline (`@/lib/render-release-body`),
+// which drops raw HTML and strips unsafe links/images, so `dangerouslySetInnerHTML`
+// adds no injection surface.
+function CardBody({
+  release,
+  expanded,
+}: {
+  release: CollectionReleaseItemView;
+  expanded: boolean;
+}) {
+  const { html: fullHtml, error } = useFullBodyHtml(release.id, expanded);
+
+  if (expanded) {
+    if (fullHtml === null) {
+      return (
+        <div className="text-[12.5px] text-stone-400 dark:text-stone-500">
+          {error ? "Couldn’t load the full notes." : "Loading…"}
+        </div>
+      );
+    }
+    return fullHtml ? (
+      <div className={markdownClasses} dangerouslySetInnerHTML={{ __html: fullHtml }} />
+    ) : null;
+  }
+
+  const excerptHtml = release.bodyHtml ?? "";
+  return excerptHtml ? (
+    <div className={markdownClasses} dangerouslySetInnerHTML={{ __html: excerptHtml }} />
+  ) : null;
 }
 
 export function CollectionTimeline({
@@ -407,10 +471,10 @@ export function CollectionTimeline({
 interface DayBucket {
   key: string;
   iso: string | null;
-  releases: CollectionReleaseItem[];
+  releases: CollectionReleaseItemView[];
 }
 
-function groupByDay(releases: CollectionReleaseItem[]): DayBucket[] {
+function groupByDay(releases: CollectionReleaseItemView[]): DayBucket[] {
   const out: DayBucket[] = [];
   let current: DayBucket | null = null;
   for (const r of releases) {
@@ -424,10 +488,10 @@ function groupByDay(releases: CollectionReleaseItem[]): DayBucket[] {
   return out;
 }
 
-function groupByOrg(releases: CollectionReleaseItem[]) {
+function groupByOrg(releases: CollectionReleaseItemView[]) {
   const map = new Map<
     string,
-    { orgSlug: string; orgName: string; releases: CollectionReleaseItem[] }
+    { orgSlug: string; orgName: string; releases: CollectionReleaseItemView[] }
   >();
   for (const r of releases) {
     const existing = map.get(r.org.slug);
@@ -588,14 +652,17 @@ function OrgSection({
   group,
   orgMeta,
 }: {
-  group: { orgSlug: string; orgName: string; releases: CollectionReleaseItem[] };
+  group: { orgSlug: string; orgName: string; releases: CollectionReleaseItemView[] };
   orgMeta?: CollectionMemberOrg;
 }) {
   // Partition once into posts (hero) and tags (commit-log rollup). Memoized so
   // the derived arrays keep a stable reference — otherwise the `tagItems` memo
   // below would re-run every render on a fresh `filter` result.
   const { posts, tags } = useMemo(() => {
-    const split = { posts: [] as CollectionReleaseItem[], tags: [] as CollectionReleaseItem[] };
+    const split = {
+      posts: [] as CollectionReleaseItemView[],
+      tags: [] as CollectionReleaseItemView[],
+    };
     for (const r of group.releases) (isTag(r) ? split.tags : split.posts).push(r);
     return split;
   }, [group.releases]);
@@ -654,7 +721,7 @@ function tagKey(item: TagListItem) {
 
 // ── Post hero ──────────────────────────────────────────────────
 
-function PostHero({ release }: { release: CollectionReleaseItem }) {
+function PostHero({ release }: { release: CollectionReleaseItemView }) {
   const [expanded, setExpanded] = useState(false);
   const thumbnail = findThumbnail(release);
   // Lead with the enriched headline (matches the org feed) instead of the raw
@@ -667,8 +734,9 @@ function PostHero({ release }: { release: CollectionReleaseItem }) {
   // client-side; it appears only when there's more than the excerpt to reveal.
   const fullBody = release.content || release.summary || "";
   const excerpt = releaseExcerpt(release);
-  const body = expanded ? fullBody : excerpt;
-  const hasMore = fullBody.trim() !== excerpt.trim();
+  // "Show more" swaps the excerpt for the full body, fetched on demand — so it
+  // only appears when there's more to reveal AND we have an id to fetch by.
+  const hasMore = fullBody.trim() !== excerpt.trim() && !!release.id;
 
   return (
     <article
@@ -697,15 +765,7 @@ function PostHero({ release }: { release: CollectionReleaseItem }) {
           </div>
         )}
         <div className="mt-2.5 text-stone-600 dark:text-stone-400">
-          <div className={markdownClasses}>
-            <ReactMarkdown
-              remarkPlugins={remarkPlugins}
-              rehypePlugins={[rehypeShikiPlugin]}
-              components={expanded ? markdownComponents : collapsedMarkdownComponents}
-            >
-              {body}
-            </ReactMarkdown>
-          </div>
+          <CardBody release={release} expanded={expanded} />
         </div>
         <div className="flex items-center gap-3 mt-3 text-[12px]">
           {!expanded && hasMore && (
@@ -758,7 +818,7 @@ function ProductPostGroup({
   releases,
 }: {
   label: string;
-  releases: CollectionReleaseItem[];
+  releases: CollectionReleaseItemView[];
 }) {
   return (
     <div className="rounded-lg border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 overflow-hidden">
@@ -779,7 +839,7 @@ function ProductPostGroup({
   );
 }
 
-function PostVersionRow({ release }: { release: CollectionReleaseItem }) {
+function PostVersionRow({ release }: { release: CollectionReleaseItemView }) {
   const [expanded, setExpanded] = useState(false);
   const { descriptive, versionLabel } = deriveFeedTitle(release);
   // Lead with the descriptive headline — it's the useful part. The version is
@@ -790,8 +850,9 @@ function PostVersionRow({ release }: { release: CollectionReleaseItem }) {
   const versionTag = versionLabel && versionLabel !== headline ? versionLabel : null;
   const fullBody = release.content || release.summary || "";
   const excerpt = releaseExcerpt(release);
-  const body = expanded ? fullBody : excerpt;
-  const hasMore = fullBody.trim() !== excerpt.trim();
+  // "Show more" swaps the excerpt for the full body, fetched on demand — so it
+  // only appears when there's more to reveal AND we have an id to fetch by.
+  const hasMore = fullBody.trim() !== excerpt.trim() && !!release.id;
   const thumbnail = findThumbnail(release);
 
   return (
@@ -825,15 +886,7 @@ function PostVersionRow({ release }: { release: CollectionReleaseItem }) {
       >
         <div className="min-w-0">
           <div className="text-stone-600 dark:text-stone-400">
-            <div className={markdownClasses}>
-              <ReactMarkdown
-                remarkPlugins={remarkPlugins}
-                rehypePlugins={[rehypeShikiPlugin]}
-                components={expanded ? markdownComponents : collapsedMarkdownComponents}
-              >
-                {body}
-              </ReactMarkdown>
-            </div>
+            <CardBody release={release} expanded={expanded} />
           </div>
           <div className="flex items-center gap-3 mt-2 text-[12px]">
             {!expanded && hasMore && (
@@ -936,15 +989,17 @@ function TagItem({ item, index }: { item: TagListItem; index: number }) {
   );
 }
 
-function CommitLogRow({ release }: { release: CollectionReleaseItem }) {
+function CommitLogRow({ release }: { release: CollectionReleaseItemView }) {
   const [expanded, setExpanded] = useState(false);
   const versionLabel = release.version ?? release.title;
   // Prefer the server-resolved group name (#1234); fall back to deriving it
   // from product ?? source for older API responses that omit `groupName`.
   // Falling back to the source name beats an empty dash for standalone sources.
   const productLabel = release.groupName ?? release.product?.name ?? release.source.name;
+  // Expand reveals the full body, fetched on demand — so it needs both a body
+  // and an id to fetch by.
   const body = release.content || release.summary || "";
-  const hasBody = body.trim().length > 0;
+  const hasBody = body.trim().length > 0 && !!release.id;
   const thumbnail = findThumbnail(release);
   const inlineSummary = release.summary || "";
 
@@ -999,15 +1054,7 @@ function CommitLogRow({ release }: { release: CollectionReleaseItem }) {
       </div>
       {expanded && hasBody && (
         <div className="col-span-4 px-1 pb-2 pt-1">
-          <div className={markdownClasses}>
-            <ReactMarkdown
-              remarkPlugins={remarkPlugins}
-              rehypePlugins={[rehypeShikiPlugin]}
-              components={markdownComponents}
-            >
-              {body}
-            </ReactMarkdown>
-          </div>
+          <CardBody release={release} expanded />
         </div>
       )}
     </div>
