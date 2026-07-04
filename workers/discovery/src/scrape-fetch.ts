@@ -83,8 +83,9 @@ export interface ScrapeEnv {
   /**
    * OpenRouter extraction lane (issue #1536) — resolved once per session and
    * threaded into `buildWorkerExtractDeps`. Fail-open: any missing piece keeps
-   * the Anthropic tool-loop. (OPENROUTER_API_KEY is not yet bound in this
-   * worker's wrangler.jsonc; binding it is a prerequisite to enable the lane.)
+   * the Anthropic tool-loop. `OPENROUTER_API_KEY` + `EXTRACT_MODEL` are bound
+   * in this worker's wrangler.jsonc (#1878 workstream 2); the remaining switch
+   * is `openrouter-enabled` in Flagship.
    */
   openrouterEnabled?: boolean;
   openRouterApiKey?: { get(): Promise<string> };
