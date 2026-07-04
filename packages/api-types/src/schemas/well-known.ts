@@ -118,11 +118,16 @@ export const ReleasesJsonRegistriesSchema = z
   })
   .catchall(z.unknown());
 
-const CommonFields = {
+/** Top-level fields shared by every manifest scope. */
+const BaseFields = {
   $schema: z.url().optional(),
   version: z.literal(2),
-  releases: DomainReleasesSchema.optional(),
   registries: ReleasesJsonRegistriesSchema.optional(),
+};
+
+const CommonFields = {
+  ...BaseFields,
+  releases: DomainReleasesSchema.optional(),
 };
 
 /** Domain-hosted variant: flat org identity plus product and release declarations. */
@@ -148,11 +153,9 @@ export const ReleasesJsonDomainSchema = z
 
 /** Repo-root variant: product binding plus repo-scoped release declarations. */
 export const ReleasesJsonRepoSchema = z.strictObject({
-  $schema: z.url().optional(),
-  version: z.literal(2),
+  ...BaseFields,
   product: ReleasesJsonRepoProductSchema.optional(),
   releases: RepoReleasesSchema.optional(),
-  registries: ReleasesJsonRegistriesSchema.optional(),
 });
 
 /** Public schema accepts either hosting scope; reconcilers use the scoped schema. */

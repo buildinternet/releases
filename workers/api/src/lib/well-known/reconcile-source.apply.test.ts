@@ -82,6 +82,31 @@ describe("syncSourceRepo", () => {
     expect(s!.productId).toBe("prod_1");
   });
 
+  it("short-circuits an unchanged repo file on the second sweep (self locator)", async () => {
+    const db = createTestDb();
+    await seed(db);
+    // Pre-bind the repo source to a product so neither rewrite branch in
+    // syncSourceRepo fires — the materializer's github:"self" match path is the
+    // only writer of the marker. That marker must be hashed on the same basis the
+    // second sweep compares against, or the "unchanged" short-circuit never hits.
+    await db
+      .insert(products)
+      .values({ id: "prod_bound", orgId: "org_a", name: "Acme Cloud", slug: "acme-cloud" });
+    await db.update(sources).set({ productId: "prod_bound" }).where(eq(sources.id, "src_1"));
+
+    const file = {
+      version: 2,
+      product: { name: "Acme Cloud", slug: "acme-cloud" },
+      releases: [{ github: "self" }],
+    };
+    const opts = { fetchImpl: fileResp(file), probe: async () => ({ ok: true }) };
+
+    await syncSourceRepo(db as any, "src_1", opts);
+    const second = await syncSourceRepo(db as any, "src_1", opts);
+    expect(second.applied).toBe(false);
+    expect(second.skippedReason).toBe("unchanged");
+  });
+
   it("no-ops for a non-github source", async () => {
     const db = createTestDb();
     await db.insert(organizations).values({ id: "org_b", slug: "beta", name: "Beta" });

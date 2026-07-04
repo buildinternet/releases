@@ -132,11 +132,7 @@ export async function syncSourceRepo(
     return { fetched: true, applied: false, skippedReason: "invalid_schema" };
   }
   const config = validated.data;
-  const hash = configHash(config);
   const marker = parseSelfDeclared(source.metadata);
-  if (marker?.source === "github" && marker.configHash === hash) {
-    return { fetched: true, applied: false, skippedReason: "unchanged" };
-  }
 
   const orgProducts = await db
     .select()
@@ -173,6 +169,14 @@ export async function syncSourceRepo(
             : undefined;
 
   const synthetic = repoManifestAsDomain(config, coordinate, targetProduct);
+  // Compare against the synthetic domain-manifest hash — the same basis
+  // reconcileDomainEntities stamps onto the repo source's marker (materialize.ts,
+  // github:"self" match path). Hashing the raw repo config here instead would never
+  // match that stored marker, so the short-circuit would miss on every sweep.
+  const hash = configHash(synthetic);
+  if (marker?.source === "github" && marker.configHash === hash) {
+    return { fetched: true, applied: false, skippedReason: "unchanged" };
+  }
   const entities = await reconcileDomainEntities(db, source.orgId, synthetic, {
     dryRun: opts.dryRun === true,
     enabled: opts.materializationEnabled !== false,

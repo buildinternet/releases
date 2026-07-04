@@ -161,6 +161,6 @@ You'll find the IDs on your org and product pages. The block is namespaced by re
 ## Reference
 
 - **`version: 2` is required.** Version-1 files (the old profile-only shape) are no longer read; the fields above are the current format.
-- **Limits:** up to 24 products and 8 locations per product, 32 locations per file.
+- **Limits:** up to 24 products and 8 locations per product, and at most 32 release locations per file in total (the top-level `releases` array plus every product's locations combined).
 - **`$schema` is optional but recommended** — editors that understand JSON Schema will validate and autocomplete your file against [the published schema](https://releases.sh/schemas/releases.json).
 - **Live example:** this site publishes its own file at [releases.sh/.well-known/releases.json](https://releases.sh/.well-known/releases.json).
