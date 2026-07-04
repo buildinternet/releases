@@ -157,16 +157,11 @@ export async function syncSourceRepo(
       : undefined) ??
     (slug ? orgProducts.find((product) => product.slug === slug) : undefined) ??
     (source.productId ? orgProducts.find((product) => product.id === source.productId) : undefined);
-  const matchBy: RepoProductBindingPlan["matchBy"] =
-    stableId && targetProduct?.id === stableId
-      ? "stable_id"
-      : locatorProductId && targetProduct?.id === locatorProductId
-        ? "locator"
-        : slug && targetProduct?.slug === slug
-          ? "slug"
-          : targetProduct
-            ? "current"
-            : undefined;
+  let matchBy: RepoProductBindingPlan["matchBy"];
+  if (stableId && targetProduct?.id === stableId) matchBy = "stable_id";
+  else if (locatorProductId && targetProduct?.id === locatorProductId) matchBy = "locator";
+  else if (slug && targetProduct?.slug === slug) matchBy = "slug";
+  else if (targetProduct) matchBy = "current";
 
   const synthetic = repoManifestAsDomain(config, coordinate, targetProduct);
   // Compare against the synthetic domain-manifest hash — the same basis
