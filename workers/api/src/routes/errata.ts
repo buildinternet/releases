@@ -88,11 +88,10 @@ errataRoutes.put(
     });
 
     const path = `/orgs/${orgId}/errata.md`;
-    // Listing with `depth` requires `order_by` per the Anthropic API. Drop both —
-    // a single path_prefix scan ordered by path is fine here, since each org's
-    // errata directory holds at most a handful of memories.
+    // A path_prefix scan is enough here — each org's errata directory holds at
+    // most a handful of memories.
     const existing = await client.beta.memoryStores.memories
-      .list(storeId, { path_prefix: path, order_by: "path" })
+      .list(storeId, { path_prefix: path })
       .then((page) => page.data.find((m) => m.type === "memory" && m.path === path));
 
     if (existing && "id" in existing && existing.id) {

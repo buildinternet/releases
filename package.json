@@ -9,6 +9,7 @@
     "dev:api": "bun run db:migrate:local && portless run --name api.${PORTLESS_NAME:-releases} sh -c 'wrangler dev --config workers/api/wrangler.jsonc --port $PORT --ip 127.0.0.1'",
     "dev:discovery": "portless run --name discovery.${PORTLESS_NAME:-releases} sh -c 'wrangler dev --config workers/discovery/wrangler.jsonc --port $PORT --ip 127.0.0.1'",
     "dev:mcp": "portless run --name mcp.${PORTLESS_NAME:-releases} sh -c 'wrangler dev --config workers/mcp/wrangler.jsonc --port $PORT --ip 127.0.0.1'",
+    "dev:portless:doctor": "portless doctor",
     "preview:web": "cd web && RELEASES_API_URL=${RELEASES_API_URL:-${RELEASED_API_URL:-http://localhost:8787}} bun run dev -- --port 3000",
     "preview:api": "wrangler dev --config workers/api/wrangler.jsonc --port 8787 --ip 127.0.0.1",
     "preview:mcp": "wrangler dev --config workers/mcp/wrangler.jsonc --port 8788 --ip 127.0.0.1",
@@ -77,7 +78,7 @@
     "packages/*"
   ],
   "catalog": {
-    "@anthropic-ai/sdk": "^0.105.0"
+    "@anthropic-ai/sdk": "^0.110.0"
   },
   "overrides": {
     "kysely": "^0.28.17"
@@ -91,42 +92,48 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.3.185",
-    "@buildinternet/releases-core": "workspace:*",
-    "@buildinternet/releases-lib": "^0.20.2",
-    "@buildinternet/releases-skills": "^0.20.2",
+    "@ai-sdk/anthropic": "^4.0.8",
+    "@anthropic-ai/claude-agent-sdk": "^0.3.201",
+    "@anthropic-ai/sdk": "catalog:",
     "@buildinternet/releases-api-types": "workspace:*",
+    "@buildinternet/releases-core": "workspace:*",
+    "@buildinternet/releases-lib": "^0.67.2",
+    "@buildinternet/releases-skills": "^0.67.2",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@openrouter/ai-sdk-provider": "^2.10.0",
     "@releases/adapters": "workspace:*",
     "@releases/ai-internal": "workspace:*",
     "@releases/core-internal": "workspace:*",
     "@releases/lib": "workspace:*",
     "@releases/rendering": "workspace:*",
     "@releases/search": "workspace:*",
-    "@anthropic-ai/sdk": "catalog:",
-    "@modelcontextprotocol/sdk": "^1.29.0",
+    "ai": "^7.0.15",
     "dayjs": "^1.11.21",
     "drizzle-orm": "^0.45.2",
     "js-tiktoken": "^1.0.21",
-    "nanoid": "^5.1.15",
+    "nanoid": "^5.1.16",
     "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/bun": "^1.3.14",
     "drizzle-kit": "^0.31.10",
-    "hono": "^4.12.26",
+    "hono": "^4.12.27",
     "husky": "^9.1.7",
     "jose": "^6.2.3",
     "lint-staged": "^17.0.8",
-    "@cloudflare/sandbox": "^0.12.1",
-    "@cloudflare/workers-types": "^4.20260621.1",
+    "@cloudflare/sandbox": "^0.12.3",
+    "@cloudflare/workers-types": "^4.20260702.1",
     "mimetext": "^3.0.24",
-    "oxfmt": "^0.56.0",
-    "oxlint": "^1.70.0",
-    "oxlint-tsgolint": "^0.23.0",
-    "portless": "^0.13.1",
+    "oxfmt": "^0.57.0",
+    "oxlint": "^1.72.0",
+    "oxlint-tsgolint": "^0.24.0",
+    "portless": "^0.15.1",
     "typescript": "^6.0.3",
-    "wrangler": "^4.103.0",
+    "wrangler": "^4.107.0",
     "yaml": "^2.9.0"
+  },
+  "engines": {
+    "node": ">=24"
   },
   "packageManager": "pnpm@9.15.9+sha512.68046141893c66fad01c079231128e9afb89ef87e2691d69e4d40eee228988295fd4682181bae55b58418c3a253bde65a505ec7c5f9403ece5cc3cd37dcf2531"
 }
