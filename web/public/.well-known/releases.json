@@ -1,10 +1,17 @@
 {
   "$schema": "https://releases.sh/schemas/releases.json",
-  "version": 1,
+  "version": 2,
   "name": "Releases",
   "description": "The changelog & release-notes registry for developers and AI agents.",
   "category": "developer-tools",
   "avatar": "https://media.releases.sh/orgs/releases-sh.png",
   "tags": ["changelog", "release-notes", "ai-agents"],
-  "social": { "github": "buildinternet" }
+  "social": { "github": "buildinternet" },
+  "releases": [
+    {
+      "github": "buildinternet/releases",
+      "title": "Releases",
+      "canonical": true
+    }
+  ]
 }

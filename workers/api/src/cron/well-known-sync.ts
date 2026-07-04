@@ -4,12 +4,17 @@ import { createDb } from "../db.js";
 import { logEvent } from "@releases/lib/log-event";
 import { syncOrgWellKnown } from "../lib/well-known/reconcile-org.js";
 import { syncSourceRepo } from "../lib/well-known/reconcile-source.js";
+import { FLAGS, flag, type FlagshipBinding } from "@releases/lib/flags";
+import { getSecret, type SecretBinding } from "@releases/lib/secrets";
 
 export interface WellKnownSyncEnv {
   DB: D1Database;
   MEDIA: R2Bucket;
   MEDIA_ORIGIN?: string;
   CRON_ENABLED?: string;
+  FLAGS?: FlagshipBinding;
+  WELL_KNOWN_MATERIALIZATION_ENABLED?: string;
+  GITHUB_TOKEN?: SecretBinding;
   /**
    * Re-check interval, in hours. An entity swept more recently than this is
    * skipped (due-filter); NULL/never-swept entities are always due and sorted
@@ -74,6 +79,12 @@ export async function wellKnownSync(env: WellKnownSyncEnv): Promise<void> {
   }
   const db = env._drizzleOverride ?? createDb(env.DB);
   const mediaOrigin = env.MEDIA_ORIGIN ?? "https://media.releases.sh";
+  const materializationEnabled = await flag(
+    env.FLAGS,
+    env.WELL_KNOWN_MATERIALIZATION_ENABLED,
+    FLAGS.wellKnownMaterializationEnabled,
+  );
+  const githubToken = (await getSecret(env.GITHUB_TOKEN)) ?? undefined;
 
   const intervalHours = positiveIntOr(env.WELL_KNOWN_SWEEP_INTERVAL_HOURS, DEFAULT_INTERVAL_HOURS);
   const maxPerRun = positiveIntOr(env.WELL_KNOWN_MAX_PER_RUN, DEFAULT_MAX_PER_RUN);
@@ -110,6 +121,8 @@ export async function wellKnownSync(env: WellKnownSyncEnv): Promise<void> {
         mediaOrigin,
         domain: o.domain,
         fetchImpl: env.fetchImpl,
+        materializationEnabled,
+        githubToken,
       });
       if (r.applied) orgApplied++;
     } catch (err) {
@@ -158,7 +171,11 @@ export async function wellKnownSync(env: WellKnownSyncEnv): Promise<void> {
   for (const s of ghSources) {
     try {
       // oxlint-disable-next-line no-await-in-loop -- sequential per-source to avoid concurrent GitHub raw-content fetch pressure
-      const r = await syncSourceRepo(db, s.id, { fetchImpl: env.fetchImpl });
+      const r = await syncSourceRepo(db, s.id, {
+        fetchImpl: env.fetchImpl,
+        materializationEnabled,
+        githubToken,
+      });
       if (r.applied) sourceApplied++;
     } catch (err) {
       logEvent("error", {

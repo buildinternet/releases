@@ -39,8 +39,9 @@ describe("wellKnownSync cron", () => {
       MEDIA_ORIGIN: "https://media.test",
       _drizzleOverride: db as any,
       fetchImpl: fileFor({
-        "acme.com/.well-known/releases.json": { description: "CI for teams." },
+        "acme.com/.well-known/releases.json": { version: 2, description: "CI for teams." },
         "raw.githubusercontent.com/acme/cloud/HEAD/releases.json": {
+          version: 2,
           product: { name: "Acme Cloud" },
         },
       }),

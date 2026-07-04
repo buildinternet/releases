@@ -23,4 +23,16 @@ describe("public/.well-known/releases.json", () => {
     const parsed = ReleasesJsonConfigSchema.parse(JSON.parse(raw));
     expect(parsed.$schema).toBe("https://releases.sh/schemas/releases.json");
   });
+
+  it("dogfoods v2 with a canonical release location", () => {
+    const parsed = ReleasesJsonConfigSchema.parse(JSON.parse(raw));
+    expect(parsed.version).toBe(2);
+    expect(parsed.releases).toEqual([
+      {
+        github: "buildinternet/releases",
+        title: "Releases",
+        canonical: true,
+      },
+    ]);
+  });
 });

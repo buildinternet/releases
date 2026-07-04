@@ -42,7 +42,7 @@ describe("POST /v1/orgs/:slug/sync-well-known", () => {
 
   it("applies the owner file and returns the result", async () => {
     globalThis.fetch = (async () =>
-      new Response(JSON.stringify({ description: "CI for teams." }), {
+      new Response(JSON.stringify({ version: 2, description: "CI for teams." }), {
         status: 200,
         headers: { "content-type": "application/json" },
       })) as unknown as typeof fetch;
@@ -59,7 +59,7 @@ describe("POST /v1/orgs/:slug/sync-well-known", () => {
 
   it("dryRun=1 returns the plan and writes nothing", async () => {
     globalThis.fetch = (async () =>
-      new Response(JSON.stringify({ description: "preview" }), {
+      new Response(JSON.stringify({ version: 2, description: "preview" }), {
         status: 200,
         headers: { "content-type": "application/json" },
       })) as unknown as typeof fetch;

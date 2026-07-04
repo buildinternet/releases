@@ -309,10 +309,23 @@ export {
 } from "./schemas/account-profile.js";
 export {
   ReleasesJsonConfigSchema,
+  ReleasesJsonDomainReleaseSchema,
+  ReleasesJsonDomainSchema,
   ReleasesJsonProductSchema,
+  ReleasesJsonRegistriesSchema,
+  ReleasesJsonRepoProductSchema,
+  ReleasesJsonRepoReleaseSchema,
+  ReleasesJsonRepoSchema,
   SyncWellKnownResponseSchema,
 } from "./schemas/well-known.js";
-export type { ReleasesJsonConfig, ReleasesJsonProduct } from "./schemas/well-known.js";
+export type {
+  ReleasesJsonConfig,
+  ReleasesJsonDomain,
+  ReleasesJsonDomainRelease,
+  ReleasesJsonProduct,
+  ReleasesJsonRepo,
+  ReleasesJsonRepoRelease,
+} from "./schemas/well-known.js";
 export {
   SourceListItemSchema,
   SourceWithOrgSchema,

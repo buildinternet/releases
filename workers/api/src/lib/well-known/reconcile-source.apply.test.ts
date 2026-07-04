@@ -39,23 +39,22 @@ describe("syncSourceRepo", () => {
     const db = createTestDb();
     await seed(db);
     const res = await syncSourceRepo(db as any, "src_1", {
-      fetchImpl: fileResp({ product: { name: "Acme Cloud", category: "cloud" } }),
+      fetchImpl: fileResp({ version: 2, product: { name: "Acme Cloud" } }),
     });
     expect(res.applied).toBe(true);
     const [s] = await db.select().from(sources).where(eq(sources.id, "src_1"));
     const [p] = await db.select().from(products).where(eq(products.slug, "acme-cloud"));
     expect(s!.productId).toBe(p!.id);
-    expect(p!.category).toBe("cloud");
   });
 
   it("groups a second repo onto the SAME product (same slug)", async () => {
     const db = createTestDb();
     await seed(db);
     await syncSourceRepo(db as any, "src_1", {
-      fetchImpl: fileResp({ product: { name: "Acme Cloud" } }),
+      fetchImpl: fileResp({ version: 2, product: { name: "Acme Cloud" } }),
     });
     await syncSourceRepo(db as any, "src_2", {
-      fetchImpl: fileResp({ product: { name: "Acme Cloud" } }),
+      fetchImpl: fileResp({ version: 2, product: { name: "Acme Cloud" } }),
     });
     const prods = await db.select().from(products).where(eq(products.orgId, "org_a"));
     expect(prods.length).toBe(1);
@@ -64,17 +63,23 @@ describe("syncSourceRepo", () => {
     expect(s1!.productId).toBe(s2!.productId);
   });
 
-  it("does not overwrite an existing product's description across repos", async () => {
+  it("never alters an existing product's description", async () => {
     const db = createTestDb();
     await seed(db);
-    await syncSourceRepo(db as any, "src_1", {
-      fetchImpl: fileResp({ product: { name: "Acme Cloud", description: "First" } }),
+    await db.insert(products).values({
+      id: "prod_1",
+      orgId: "org_a",
+      name: "Acme Cloud",
+      slug: "acme-cloud",
+      description: "Curated copy",
     });
-    await syncSourceRepo(db as any, "src_2", {
-      fetchImpl: fileResp({ product: { name: "Acme Cloud", description: "Second" } }),
+    await syncSourceRepo(db as any, "src_1", {
+      fetchImpl: fileResp({ version: 2, product: { name: "Acme Cloud" } }),
     });
     const [p] = await db.select().from(products).where(eq(products.slug, "acme-cloud"));
-    expect(p!.description).toBe("First");
+    expect(p!.description).toBe("Curated copy");
+    const [s] = await db.select().from(sources).where(eq(sources.id, "src_1"));
+    expect(s!.productId).toBe("prod_1");
   });
 
   it("no-ops for a non-github source", async () => {
@@ -89,7 +94,7 @@ describe("syncSourceRepo", () => {
       url: "https://beta.com/changelog",
     });
     const res = await syncSourceRepo(db as any, "src_x", {
-      fetchImpl: fileResp({ product: { name: "X" } }),
+      fetchImpl: fileResp({ version: 2, product: { name: "X" } }),
     });
     expect(res.applied).toBe(false);
     expect(res.skippedReason).toBe("not_github");
@@ -110,10 +115,9 @@ describe("syncSourceRepo", () => {
       url: "https://github.com/gamma/repo",
       productId: "prod_keep",
     });
-    const res = await syncSourceRepo(db as any, "src_k", {
-      fetchImpl: fileResp({ product: { name: "Brand New", slug: "brand-new" } }),
+    await syncSourceRepo(db as any, "src_k", {
+      fetchImpl: fileResp({ version: 2, product: { name: "Brand New", slug: "brand-new" } }),
     });
-    expect(res.applied).toBe(false);
     const created = await db.select().from(products).where(eq(products.slug, "brand-new"));
     expect(created.length).toBe(0);
     const [s] = await db.select().from(sources).where(eq(sources.id, "src_k"));

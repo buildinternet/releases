@@ -30,6 +30,8 @@ import {
 import { validateJson } from "../lib/validate.js";
 import { avatarRejectToError, ingestOrgAvatar } from "../lib/avatar-ingest.js";
 import { syncOrgWellKnown } from "../lib/well-known/reconcile-org.js";
+import { FLAGS, flag } from "@releases/lib/flags";
+import { getSecret } from "@releases/lib/secrets";
 import { eq, count, max, min, and, sql, inArray, gte, desc } from "drizzle-orm";
 import { createDb } from "../db.js";
 import {
@@ -690,12 +692,20 @@ orgRoutes.post(
 
     const [org] = await db.select().from(organizations).where(orgWhere(slug));
     if (!org) return respondError(c, new NotFoundError("Organization not found"));
+    const materializationEnabled = await flag(
+      c.env.FLAGS,
+      c.env.WELL_KNOWN_MATERIALIZATION_ENABLED,
+      FLAGS.wellKnownMaterializationEnabled,
+    );
+    const githubToken = (await getSecret(c.env.GITHUB_TOKEN)) ?? undefined;
 
     const result = await syncOrgWellKnown(db, org.id, {
       bucket: c.env.MEDIA,
       mediaOrigin: c.env.MEDIA_ORIGIN ?? "https://media.releases.sh",
       domain: org.domain,
       dryRun,
+      materializationEnabled,
+      githubToken,
     });
     return c.json(result);
   },

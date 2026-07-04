@@ -50,6 +50,38 @@ export function setSelfDeclaredInMetadata(
   return JSON.stringify(base);
 }
 
+/**
+ * Central owner-declared metadata merge. All reconcilers use this helper so a
+ * later basis/provenance migration has one write boundary to replace.
+ */
+export function mergeSelfDeclaredMetadata(
+  metadata: string | null | undefined,
+  input: Omit<SelfDeclared, "syncedAt"> & { declared?: Record<string, unknown> },
+): string {
+  let base: Record<string, unknown> = {};
+  if (metadata) {
+    try {
+      const parsed = JSON.parse(metadata);
+      if (typeof parsed === "object" && parsed !== null) base = parsed as Record<string, unknown>;
+    } catch {
+      // Malformed metadata is treated as empty, matching the existing setter.
+    }
+  }
+  if (input.declared) {
+    const current =
+      typeof base.declared === "object" && base.declared !== null
+        ? (base.declared as Record<string, unknown>)
+        : {};
+    base.declared = { ...current, ...input.declared };
+  }
+  return setSelfDeclaredInMetadata(JSON.stringify(base), {
+    fields: [...new Set(input.fields)],
+    source: input.source,
+    configHash: input.configHash,
+    syncedAt: new Date().toISOString(),
+  });
+}
+
 /** Stable FNV-1a hash of a config object's JSON. Key order is significant. */
 export function configHash(value: unknown): string {
   const json = JSON.stringify(value) ?? "";
