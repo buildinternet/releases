@@ -440,10 +440,36 @@ export class ManagedAgentsSession extends DurableObject<Env> {
       const releasesApiKey =
         (await getSecretWithFallback(this.env.RELEASES_API_KEY, this.env.RELEASED_API_KEY)) ??
         undefined;
-      let statusHubAgentLabel: "haiku" | "sonnet" | "coordinator";
+
+      // Resolve Cloudflare secrets for scrape fetch capability up front — and,
+      // when this is an `update` worker run, the deterministic-update flag
+      // with them — so the StatusHub label below can be set honestly. The
+      // deterministic path (#1878/#1881) skips the Managed-Agents (Haiku)
+      // session entirely; without this, session:start always said "haiku"
+      // even on runs that never talk to Anthropic. Re-checked below once
+      // `scrapeHandler` exists so the actual branch decision stays in sync.
+      const [cfAccountId, cfApiToken] = await Promise.all([
+        getSecret(this.env.CLOUDFLARE_ACCOUNT_ID)
+          .catch(() => null)
+          .then((v) => v ?? ""),
+        getSecret(this.env.CLOUDFLARE_API_TOKEN)
+          .catch(() => null)
+          .then((v) => v ?? ""),
+      ]);
+      const canRunDeterministic =
+        mode === "update" && agentRole === "worker" && !!(cfAccountId && cfApiToken);
+      const deterministicUpdateEnabled = canRunDeterministic
+        ? await flag(
+            this.env.FLAGS,
+            this.env.DETERMINISTIC_UPDATE_ENABLED,
+            FLAGS.deterministicUpdateEnabled,
+          )
+        : false;
+
+      let statusHubAgentLabel: "haiku" | "sonnet" | "coordinator" | "deterministic";
       switch (agentRole) {
         case "worker":
-          statusHubAgentLabel = "haiku";
+          statusHubAgentLabel = deterministicUpdateEnabled ? "deterministic" : "haiku";
           break;
         case "coordinator":
           statusHubAgentLabel = "coordinator";
@@ -491,16 +517,6 @@ export class ManagedAgentsSession extends DurableObject<Env> {
       );
 
       const executor = createTypedExecutor({ fetcher, apiKey: releasesApiKey ?? "", sessionId });
-
-      // Resolve Cloudflare secrets for scrape fetch capability
-      const [cfAccountId, cfApiToken] = await Promise.all([
-        getSecret(this.env.CLOUDFLARE_ACCOUNT_ID)
-          .catch(() => null)
-          .then((v) => v ?? ""),
-        getSecret(this.env.CLOUDFLARE_API_TOKEN)
-          .catch(() => null)
-          .then((v) => v ?? ""),
-      ]);
 
       const gatewayToken = (await getSecret(this.env.AI_GATEWAY_TOKEN).catch(() => null)) ?? "";
       const anthropicBaseURL = this.env.ANTHROPIC_BASE_URL;
@@ -563,16 +579,13 @@ export class ManagedAgentsSession extends DurableObject<Env> {
       // releases the per-source locks; no agent session means no session-level
       // cost to record (extraction sub-calls self-log ai_usage). Falls through
       // to the agent path when the flag is off or scrape secrets are absent.
-      if (mode === "update" && agentRole === "worker" && scrapeHandler) {
-        const deterministic = await flag(
-          this.env.FLAGS,
-          this.env.DETERMINISTIC_UPDATE_ENABLED,
-          FLAGS.deterministicUpdateEnabled,
-        );
-        if (deterministic) {
-          await this.runDeterministicUpdate(params, sessionId, scrapeHandler, releasesApiKey);
-          return;
-        }
+      // `deterministicUpdateEnabled` was already resolved above (alongside
+      // `canRunDeterministic`) so the StatusHub label set at session:start
+      // matches this decision; `scrapeHandler` existing confirms the secrets
+      // that backed `canRunDeterministic` are still in scope.
+      if (deterministicUpdateEnabled && scrapeHandler) {
+        await this.runDeterministicUpdate(params, sessionId, scrapeHandler, releasesApiKey);
+        return;
       }
 
       // The managed-agents session client uses `events.stream(...)` — a
