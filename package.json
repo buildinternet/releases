@@ -122,7 +122,7 @@
     "jose": "^6.2.3",
     "lint-staged": "^17.0.8",
     "@cloudflare/sandbox": "^0.12.3",
-    "@cloudflare/workers-types": "^4.20260702.1",
+    "@cloudflare/workers-types": "^5.20260704.1",
     "mimetext": "^3.0.24",
     "oxfmt": "^0.57.0",
     "oxlint": "^1.72.0",
