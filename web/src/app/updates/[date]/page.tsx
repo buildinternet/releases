@@ -8,6 +8,7 @@ import { JsonLd } from "@/components/json-ld";
 import { remarkPlugins } from "@/lib/markdown-plugins";
 import { rehypeShikiPlugin } from "@/lib/shiki";
 import { detailMarkdownComponents } from "@/components/markdown-components";
+import { deriveFeedTitle } from "@/lib/release-title";
 
 const ORG_SLUG = "releases-sh";
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -17,6 +18,20 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 async function findReleaseForDate(date: string) {
   const feed = await api.orgReleases(ORG_SLUG, { limit: 100 });
   return feed.releases.find((r) => (r.publishedAt ?? "").slice(0, 10) === date) ?? null;
+}
+
+// releases.sh's own changelog entries carry the date as their raw `title`; the
+// descriptive AI headline (what the feed shows via `deriveFeedTitle`) is the
+// more useful heading for the day's page. Fall back to the version, then the
+// raw date title.
+function releaseHeading(release: {
+  title: string;
+  version: string | null;
+  titleGenerated?: string | null;
+  titleShort?: string | null;
+}): string {
+  const { descriptive, versionLabel } = deriveFeedTitle(release);
+  return descriptive ?? versionLabel ?? release.title;
 }
 
 export async function generateMetadata({
@@ -29,12 +44,13 @@ export async function generateMetadata({
   try {
     const release = await findReleaseForDate(date);
     if (!release) return { title: "What's New · releases.sh" };
+    const heading = releaseHeading(release);
     return {
-      title: `${release.title} · What's New · releases.sh`,
+      title: `${heading} · What's New · releases.sh`,
       description: `What shipped on releases.sh on ${release.title}.`,
       alternates: { canonical: `/updates/${date}` },
       openGraph: {
-        title: `${release.title} · releases.sh`,
+        title: `${heading} · releases.sh`,
         url: `/updates/${date}`,
         type: "article",
       },
@@ -51,10 +67,11 @@ export default async function UpdatesDatePage({ params }: { params: Promise<{ da
   const release = await findReleaseForDate(date);
   if (!release) notFound();
 
+  const heading = releaseHeading(release);
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "Article",
-    headline: release.title,
+    headline: heading,
     url: `https://releases.sh/updates/${date}`,
     ...(release.publishedAt ? { datePublished: release.publishedAt } : {}),
     publisher: { "@type": "Organization", name: "Releases", url: "https://releases.sh" },
@@ -72,7 +89,7 @@ export default async function UpdatesDatePage({ params }: { params: Promise<{ da
           ← What&apos;s New
         </Link>
         <h1 className="mt-3 text-[26px] font-bold tracking-tight text-stone-900 dark:text-stone-100">
-          {release.title}
+          {heading}
         </h1>
         {/* First-party self-changelog (org "releases-sh"): this page is the
             self-canonical home for releases.sh's own daily update, so it renders

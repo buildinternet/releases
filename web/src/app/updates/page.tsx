@@ -78,6 +78,7 @@ export default async function UpdatesPage() {
             initialReleases={withReleaseBodyHtml(initialReleases.releases, orgRowVariant)}
             initialCursor={initialReleases.pagination.nextCursor}
             multipleSourcesExist={org.sources.length > 1}
+            hideSourceByline
             availableSourceTypes={Array.from(new Set(org.sources.map((s) => s.type)))}
             orgAvatarUrl={orgAvatarUrl}
             showRollupSummary

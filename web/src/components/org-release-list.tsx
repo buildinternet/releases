@@ -25,6 +25,13 @@ interface OrgReleaseListProps {
   initialReleases: OrgReleaseItemView[];
   initialCursor: string | null;
   multipleSourcesExist: boolean;
+  /**
+   * Suppress the per-row source byline even on a multi-source org. Set on the
+   * branded `/updates` self-changelog, where every row is releases.sh's own
+   * changelog and the source name ("Changelog") is noise rather than useful
+   * attribution.
+   */
+  hideSourceByline?: boolean;
   /** Source types present on this org's sources, used to populate filter tabs. */
   availableSourceTypes: SourceType[];
   /** When set, pins the feed to one product (slug or prod_ id). Not a user-flippable filter. */
@@ -59,6 +66,7 @@ export function OrgReleaseList({
   initialReleases,
   initialCursor,
   multipleSourcesExist,
+  hideSourceByline,
   availableSourceTypes,
   product,
   orgAvatarUrl,
@@ -289,7 +297,7 @@ export function OrgReleaseList({
                   item={entry.item}
                   hideDate={!showDate}
                   orgSlug={orgSlug}
-                  multipleSourcesExist={multipleSourcesExist}
+                  multipleSourcesExist={multipleSourcesExist && !hideSourceByline}
                   orgAvatarUrl={orgAvatarUrl}
                   showRollupSummary={showRollupSummary}
                 />
@@ -306,7 +314,7 @@ export function OrgReleaseList({
                 byline={release.groupName ?? release.product?.name ?? release.source.name}
                 avatarUrl={orgAvatarUrl ?? null}
                 sourceByline={
-                  multipleSourcesExist
+                  multipleSourcesExist && !hideSourceByline
                     ? {
                         name: release.source.name,
                         slug: release.source.slug,
