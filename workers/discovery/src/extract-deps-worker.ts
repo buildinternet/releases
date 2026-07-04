@@ -34,8 +34,9 @@ export interface WorkerDepsEnv {
    * AI-SDK path on this model instead of the Anthropic SDK loop. Any missing
    * piece → Anthropic path (fail open). The flag is resolved once per session by
    * the caller (mirrors `extractToolLoopEnabled`).
-   * NOTE: the OPENROUTER_API_KEY secret is NOT yet bound in the discovery
-   * worker's wrangler.jsonc — binding it is a prerequisite to enable this lane.
+   * `OPENROUTER_API_KEY` is bound and `EXTRACT_MODEL` is set in the discovery
+   * worker's wrangler.jsonc (prod + staging, #1878 workstream 2) — the only
+   * remaining switch is flipping `openrouter-enabled` on in both Flagship apps.
    */
   openrouterEnabled?: boolean;
   openRouterApiKey?: SecretBinding;
