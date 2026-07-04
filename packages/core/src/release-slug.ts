@@ -50,6 +50,24 @@ export function releasePath(r: { id: string } & ReleaseSlugInput): string {
 }
 
 /**
+ * Absolute web origin for a release's `webUrl`, from a `WEB_BASE_URL` env-ish
+ * bag. Falls back to the prod origin (and strips trailing slashes) so a caller
+ * without the var still emits a well-formed URL. Shared by the API + MCP
+ * workers so the fallback origin lives in exactly one place.
+ */
+export function releaseWebBase(env: { WEB_BASE_URL?: string }): string {
+  return (env.WEB_BASE_URL ?? "https://releases.sh").replace(/\/+$/, "");
+}
+
+/**
+ * Absolute canonical web URL for a release: `<base><releasePath(r)>`. `base`
+ * comes from {@link releaseWebBase}; `releasePath` supplies the leading slash.
+ */
+export function releaseWebUrl(base: string, r: { id: string } & ReleaseSlugInput): string {
+  return `${base}${releasePath(r)}`;
+}
+
+/**
  * Positional parse of a `/release/:id` path segment. Extracts `rel_` + 21
  * chars as the ID; anything after a following `-` is decorative slug.
  * Input that doesn't match the shape passes through as the ID so existing

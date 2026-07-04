@@ -16,7 +16,6 @@ import {
   listCollections,
   getCollection,
   getCollectionReleases,
-  releaseWebBase,
   AmbiguousEntityError,
   ambiguousEntityToolResult,
   type SearchToolReturn,
@@ -32,6 +31,7 @@ import type { SearchMode } from "@buildinternet/releases-core/schema";
 import { KIND_VALUES, type Kind } from "@buildinternet/releases-core/kinds";
 import { scopeSatisfies } from "@buildinternet/releases-core/api-token";
 import { parseCoordinate } from "@buildinternet/releases-core/lookup-coordinate";
+import { releaseWebBase } from "@buildinternet/releases-core/release-slug";
 import type { LookupResultPayload } from "@buildinternet/releases-api-types";
 import { getSecret, getSecretWithFallback } from "@releases/lib/secrets";
 import { type FlagshipBinding } from "@releases/lib/flags";

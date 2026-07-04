@@ -32,7 +32,7 @@ import type { Kind } from "@buildinternet/releases-core/kinds";
 import { resolveCategoryInput } from "@releases/core-internal/category-alias";
 import { normalizeDomain } from "@buildinternet/releases-core/domain";
 import { getEntityType, normalizeReleaseId } from "@buildinternet/releases-core/id";
-import { releasePath } from "@buildinternet/releases-core/release-slug";
+import { releaseWebUrl } from "@buildinternet/releases-core/release-slug";
 import {
   buildChangelogResponse,
   formatChangelogSliceLine,
@@ -175,16 +175,6 @@ const ORG_HAS_VISIBLE_RELEASE = sql`EXISTS (
 )`;
 
 /**
- * Absolute web origin for building `webUrl` fields. Mirrors the API worker's
- * `releaseWebBase` (`workers/api/src/queries/releases.ts`) — `WEB_BASE_URL`
- * is set in prod/staging wrangler config; the fallback keeps the prod origin
- * so a call without the var still emits a well-formed URL.
- */
-export function releaseWebBase(env: { WEB_BASE_URL?: string }): string {
-  return (env.WEB_BASE_URL ?? "https://releases.sh").replace(/\/+$/, "");
-}
-
-/**
  * Shared mapper for the release-feed UI. Callers normalize their column
  * names to camelCase before calling; the `coordinate` is derived from the
  * `org`/`source` slugs the caller resolves. `webBase` builds the slugged
@@ -227,13 +217,7 @@ function toReleaseFeedRow(
     contentPreview: (r.summary || r.content || "").slice(0, 500),
     publishedAt: r.publishedAt,
     url: r.url,
-    webUrl: `${webBase}${releasePath({
-      id: r.id,
-      titleShort: r.titleShort,
-      titleGenerated: r.titleGenerated,
-      title: r.title,
-      version: r.version,
-    })}`,
+    webUrl: releaseWebUrl(webBase, r),
     source: { name: r.sourceName, coordinate: r.coordinate, type: r.sourceType },
     org: r.orgName
       ? {
@@ -1321,13 +1305,7 @@ export async function getRelease(
     lines.push(`Organization: ${r.orgName}${r.orgSlug ? ` (${r.orgSlug})` : ""}`);
   }
   if (r.url) lines.push(`URL: ${r.url}`);
-  const webUrl = `${webBase}${releasePath({
-    id: r.id,
-    titleShort: r.titleShort,
-    titleGenerated: r.titleGenerated,
-    title: r.title,
-    version: r.version,
-  })}`;
+  const webUrl = releaseWebUrl(webBase, r);
   lines.push(`Web: ${webUrl}`);
   lines.push("");
   lines.push(body);

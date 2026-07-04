@@ -1,6 +1,6 @@
 import type { MediaItem } from "@buildinternet/releases-api-types";
 import type { ReleaseType } from "@buildinternet/releases-core/schema";
-import { releasePath } from "@buildinternet/releases-core/release-slug";
+import { releaseWebUrl } from "@buildinternet/releases-core/release-slug";
 import type { ReleaseEventPayload } from "./types.js";
 
 /** Minimal inserted-row shape the batch handler + cron fetchOne already build. */
@@ -66,9 +66,7 @@ export function buildReleaseEventPayloads(input: BuildEventsInput): ReleaseEvent
     org: input.src.org ?? null,
     product: input.src.product ?? null,
     // Slug derives from title/version — the AI headlines are still null here.
-    webUrl: input.webBase
-      ? `${input.webBase}${releasePath({ id: r.id, title: r.title, version: r.version })}`
-      : null,
+    webUrl: input.webBase ? releaseWebUrl(input.webBase, r) : null,
     summary: null,
     titleGenerated: null,
     titleShort: null,

@@ -1,7 +1,7 @@
 import { eq, sql } from "drizzle-orm";
 import type { ReleaseLatestItem } from "@buildinternet/releases-api-types";
 import type { BreakingLevel } from "@buildinternet/releases-core/breaking";
-import { releasePath } from "@buildinternet/releases-core/release-slug";
+import { releaseWebUrl } from "@buildinternet/releases-core/release-slug";
 import { buildFeedCursor, feedCursorSql } from "@releases/core-internal/feed-cursor";
 import { COVERAGE_COUNT_EXPR } from "@releases/core-internal/release-coverage-sql";
 import type { AnyDb } from "../db.js";
@@ -150,14 +150,11 @@ export async function getLatestReleasesAcross(
   return results;
 }
 
-/**
- * Absolute web origin for building `webUrl` fields. `WEB_BASE_URL` is set in
- * prod/staging wrangler config; the fallback keeps the prod origin so local
- * dev without the var still emits a well-formed URL.
- */
-export function releaseWebBase(env: { WEB_BASE_URL?: string }): string {
-  return (env.WEB_BASE_URL ?? "https://releases.sh").replace(/\/+$/, "");
-}
+// `releaseWebBase` (the WEB_BASE_URL → absolute-origin resolver) lives in
+// `@buildinternet/releases-core/release-slug` so the API + MCP workers share
+// one fallback origin. Re-exported here for the many API callers that import
+// it from this module.
+export { releaseWebBase } from "@buildinternet/releases-core/release-slug";
 
 /**
  * Map a raw `LatestReleaseRow` (from D1 or bun:sqlite) to the wire-protocol
@@ -182,13 +179,13 @@ export function mapLatestRowToReleaseItem(
     publishedAt: r.published_at,
     url: r.url,
     webUrl: webBase
-      ? `${webBase}${releasePath({
+      ? releaseWebUrl(webBase, {
           id: r.id,
           titleShort: r.title_short,
           titleGenerated: r.title_generated,
           title: r.title,
           version: r.version,
-        })}`
+        })
       : undefined,
     media: parseReleaseMedia(r.media, mediaOrigin),
     source: {

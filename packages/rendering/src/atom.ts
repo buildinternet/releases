@@ -13,7 +13,7 @@ import type {
   CollectionReleaseItem,
   ReleaseLatestItem,
 } from "@buildinternet/releases-api-types";
-import { releasePath } from "@buildinternet/releases-core/release-slug";
+import { releaseWebUrl } from "@buildinternet/releases-core/release-slug";
 
 export interface AtomFeedOptions {
   /** Canonical base URL, e.g. "https://releases.sh". Required for stable ids. */
@@ -99,13 +99,7 @@ function releaseAlternateHref(
 ): string | null {
   const { id } = release;
   if (!id) return release.url ?? null;
-  return `${baseUrl}${releasePath({
-    id,
-    titleShort: release.titleShort,
-    titleGenerated: release.titleGenerated,
-    title: release.title,
-    version: release.version,
-  })}`;
+  return releaseWebUrl(baseUrl, { ...release, id });
 }
 
 // ── Entry builder ────────────────────────────────────────────────────
@@ -115,11 +109,13 @@ interface EntryInput {
   sourceSlug: string;
   sourceName: string;
   orgName: string | null;
-  linkHref: string | null;
 }
 
 function buildEntry(input: EntryInput, baseUrl: string): { xml: string; updated: string | null } {
-  const { release, sourceSlug, sourceName, orgName, linkHref } = input;
+  const { release, sourceSlug, sourceName, orgName } = input;
+  // The human <link> is the slugged canonical, derived here (symmetric with the
+  // bare <id> in `entryId`) so every formatter gets it without restating it.
+  const linkHref = releaseAlternateHref(release, baseUrl);
   const published = toRfc3339(release.publishedAt);
   // Atom requires <updated>; when we lack a real timestamp fall back to
   // epoch so the entry is still well-formed rather than dropped.
@@ -220,7 +216,6 @@ export function sourceToAtom(source: SourceDetail, opts: AtomFeedOptions): strin
     sourceSlug: source.slug,
     sourceName: source.name,
     orgName,
-    linkHref: releaseAlternateHref(release, opts.baseUrl),
   }));
 
   return buildFeed(
@@ -256,7 +251,6 @@ export function orgReleasesToAtom(
     sourceSlug: release.source.slug,
     sourceName: release.source.name,
     orgName: params.orgName,
-    linkHref: releaseAlternateHref(release, opts.baseUrl),
   }));
 
   const overviewEntry = params.overview
@@ -301,7 +295,6 @@ export function productReleasesToAtom(
     sourceSlug: release.source.slug,
     sourceName: release.source.name,
     orgName: params.productName,
-    linkHref: releaseAlternateHref(release, opts.baseUrl),
   }));
 
   return buildFeed(
@@ -334,7 +327,6 @@ export function userFeedToAtom(
     sourceSlug: release.source.slug,
     sourceName: release.source.name,
     orgName: null,
-    linkHref: releaseAlternateHref(release, opts.baseUrl),
   }));
 
   return buildFeed(
@@ -358,7 +350,6 @@ function aggregateReleaseEntries(releases: CollectionReleaseItem[], baseUrl: str
     sourceSlug: release.source.slug,
     sourceName: release.source.name,
     orgName: release.org.name,
-    linkHref: releaseAlternateHref(release, baseUrl),
   }));
 }
 

@@ -24,7 +24,7 @@ import { releaseCoverage } from "@releases/db/schema-coverage.js";
 import { resolveUpgradeRange } from "@buildinternet/releases-core/upgrade-range";
 import { computeVersionSort } from "@buildinternet/releases-core/version-sort";
 import { parseCoordinate } from "@buildinternet/releases-core/lookup-coordinate";
-import { releasePath } from "@buildinternet/releases-core/release-slug";
+import { releaseWebUrl } from "@buildinternet/releases-core/release-slug";
 import { estimateTokens } from "@buildinternet/releases-core/tokens";
 import { CHANGELOG_TOKEN_BRACKETS } from "@buildinternet/releases-core/changelog-slice";
 import { BREAKING_LEVELS } from "@buildinternet/releases-core/breaking";
@@ -314,13 +314,7 @@ whatsChangedRoutes.get(
         breaking: r.breaking,
         migrationNotes: r.migrationNotes,
         url: r.url,
-        webUrl: `${webBase}${releasePath({
-          id: r.id,
-          titleShort: r.titleShort,
-          titleGenerated: r.titleGenerated,
-          title: r.title,
-          version: r.version,
-        })}`,
+        webUrl: releaseWebUrl(webBase, r),
       })),
       count: kept.length,
       truncated,
