@@ -4,10 +4,7 @@ import { hideInProduction } from "../openapi.js";
 import { eq } from "drizzle-orm";
 import { createDb } from "../db.js";
 import { organizationsPublic } from "@buildinternet/releases-core/schema";
-import {
-  OVERVIEW_RELEASE_LIMIT,
-  OVERVIEW_WINDOW_DAYS,
-} from "@buildinternet/releases-core/overview";
+import { OVERVIEW_RELEASE_LIMIT } from "@buildinternet/releases-core/overview";
 import { fetchOverviewInputsForOrg } from "@releases/core-internal/overview-eligibility";
 import { authMiddleware } from "../middleware/auth.js";
 import { hydrateMediaUrls, parseReleaseMedia } from "../utils.js";
@@ -46,7 +43,7 @@ app.get(
     tags: ["Overviews"],
     summary: "Get overview inputs",
     description:
-      "Returns the data an agent needs to (re)generate an org overview: org metadata, active sources, the existing overview content if any, and the post-selection slice of recent releases hydrated to absolute CDN URLs. Add `?check=true` for a lightweight pre-flight that skips content hydration — useful for orchestrators deciding whether to dispatch without paying for the full payload. `?window=<days>` (default: core constant) controls the lookback window; `?limit=<n>` caps selected releases. Admin-only — requires Bearer auth.",
+      "Returns the data an agent needs to (re)generate an org overview: org metadata, active sources, the existing overview content if any, and the post-selection slice of recent releases hydrated to absolute CDN URLs. Add `?check=true` for a lightweight pre-flight that skips content hydration — useful for orchestrators deciding whether to dispatch without paying for the full payload. `?window=<days>` (default: core constant, 30 days) controls the lookback window; omitting it widens to 90 days when the 30-day slice has fewer than 5 releases (quiet-org fallback). An explicit `?window=` value bypasses the fallback. `?limit=<n>` caps selected releases. Admin-only — requires Bearer auth.",
     security: [{ bearerAuth: [] }],
     responses: {
       200: {
@@ -73,9 +70,14 @@ app.get(
     const db = getDb(c);
     const slug = c.req.param("slug");
 
-    const windowDays = parseInt(c.req.query("window") ?? String(OVERVIEW_WINDOW_DAYS), 10);
+    // Preserve whether the caller passed an explicit `?window=` — an omitted
+    // window is passed through to fetchOverviewInputsForOrg as undefined so
+    // its own default (and quiet-org 90-day fallback) applies; an explicit
+    // value always bypasses that fallback.
+    const windowParam = c.req.query("window");
+    const windowDays = windowParam == null ? undefined : parseInt(windowParam, 10);
     const limit = parseInt(c.req.query("limit") ?? String(OVERVIEW_RELEASE_LIMIT), 10);
-    if (!Number.isFinite(windowDays) || windowDays <= 0) {
+    if (windowDays != null && (!Number.isFinite(windowDays) || windowDays <= 0)) {
       return respondError(
         c,
         new ValidationError("window must be a positive integer", { code: "bad_request" }),

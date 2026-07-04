@@ -252,13 +252,13 @@ Then write `/tmp/<slug>-overview.md` and `/tmp/<slug>-overview-citations.json` (
 
 For any agent that bailed without content, re-fetch `overview inputs` locally and generate inline. When generating in-session, the parent can produce richer Anthropic-emitted citations per the `regenerating-overviews` skill (search_result blocks); batch sub-agents produce model-asserted citations from the URLs visible in `overview inputs` — accept the tradeoff.
 
-Summary table format:
+Summary table format (`Window` is the effective window used — 30d by default, widened to 90d for quiet orgs whose 30d slice had fewer than 5 releases):
 
 | Org | Window | Selected/Total | Result                                |
 | --- | ------ | -------------- | ------------------------------------- |
-| …   | 90d    | 9/9            | regenerated (1.7k chars, 8 citations) |
+| …   | 30d    | 9/9            | regenerated (1.7k chars, 8 citations) |
 | …   | 90d    | 0/0            | skipped — no releases in window       |
-| …   | 90d    | 14/14          | regenerated in-session (agent bailed) |
+| …   | 30d    | 14/14          | regenerated in-session (agent bailed) |
 
 ## Record the Run
 

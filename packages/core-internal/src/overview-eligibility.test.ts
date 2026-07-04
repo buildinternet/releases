@@ -25,6 +25,8 @@
  *     - existing overview content returned
  *     - releases outside windowDays excluded
  *     - suppressed releases excluded
+ *     - active org (>=5 releases in 30d) selects only the 30d slice
+ *     - quiet org (releases only ~60d out) widens to the 90d fallback
  */
 
 import { describe, it, expect, beforeAll, beforeEach, afterAll } from "bun:test";
@@ -739,14 +741,14 @@ describe("fetchOverviewInputsForOrg", () => {
       makeSource({ id: `src_chunk_${i}`, slug: `src-chunk-${i}` }),
     );
     tdb.db.insert(sources).values(sourceRows).run();
-    // Keep every release inside the 90-day window so totalAvailable can prove
-    // the chunked SELECT didn't drop rows. Spread within 1..30 days for
+    // Keep every release inside the 30-day window so totalAvailable can prove
+    // the chunked SELECT didn't drop rows. Spread within 1..20 days for
     // deterministic ordering downstream.
     const releaseRows = Array.from({ length: N }, (_, i) =>
       makeRelease({
         id: `rel_chunk_${i}`,
         sourceId: `src_chunk_${i}`,
-        publishedAt: isoDaysAgo((i % 30) + 1),
+        publishedAt: isoDaysAgo((i % 20) + 1),
       }),
     );
     tdb.db.insert(releases).values(releaseRows).run();
@@ -760,5 +762,51 @@ describe("fetchOverviewInputsForOrg", () => {
     expect(out!.selected.length).toBeGreaterThan(0);
     const selectedIds = new Set(out!.selected.map((r) => r.id));
     for (const id of selectedIds) expect(id.startsWith("rel_chunk_")).toBe(true);
+  });
+
+  it("active org with >=5 releases inside 30d selects only the 30d slice (no fallback)", async () => {
+    tdb.db.insert(organizations).values(makeOrg()).run();
+    tdb.db.insert(sources).values(makeSource()).run();
+    tdb.db
+      .insert(releases)
+      .values([
+        // 6 releases within the 30-day window.
+        ...Array.from({ length: 6 }, (_, i) =>
+          makeRelease({ id: `rel_recent_${i}`, publishedAt: isoDaysAgo(i + 1) }),
+        ),
+        // A release well outside even the 90-day fallback — must never appear.
+        makeRelease({ id: "rel_ancient", publishedAt: isoDaysAgo(200) }),
+      ])
+      .run();
+
+    const out = await fetchOverviewInputsForOrg(asDb(tdb.db), "org_elig_01");
+    expect(out).not.toBeNull();
+    expect(out!.windowDays).toBe(30);
+    expect(out!.selected.length).toBe(6);
+    expect(out!.totalAvailable).toBe(6);
+    const ids = out!.selected.map((r) => r.id);
+    expect(ids).not.toContain("rel_ancient");
+  });
+
+  it("quiet org with releases only ~60d out widens to the 90d fallback", async () => {
+    tdb.db.insert(organizations).values(makeOrg()).run();
+    tdb.db.insert(sources).values(makeSource()).run();
+    // No releases inside 30d; a handful around 60 days out — below
+    // OVERVIEW_MIN_WINDOW_RELEASES at the default window, so the 30d slice
+    // alone would be empty and the fallback should widen to 90d.
+    tdb.db
+      .insert(releases)
+      .values(
+        Array.from({ length: 3 }, (_, i) =>
+          makeRelease({ id: `rel_quiet_${i}`, publishedAt: isoDaysAgo(60 + i) }),
+        ),
+      )
+      .run();
+
+    const out = await fetchOverviewInputsForOrg(asDb(tdb.db), "org_elig_01");
+    expect(out).not.toBeNull();
+    expect(out!.windowDays).toBe(90);
+    expect(out!.selected.length).toBe(3);
+    expect(out!.totalAvailable).toBe(3);
   });
 });

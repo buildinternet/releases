@@ -149,7 +149,8 @@ describe("GET /v1/orgs/:slug/overview/inputs", () => {
   });
 
   it("returns empty selection when no releases land in the window", async () => {
-    // Single ancient release outside the default 90-day window
+    // Single ancient release outside the default 30-day window (and the
+    // widened 90-day quiet-org fallback)
     await db.insert(releases).values({
       id: "rel_old",
       sourceId: srcGithubId,
