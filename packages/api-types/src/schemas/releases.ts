@@ -62,6 +62,11 @@ export const ReleaseLatestItemSchema = z.object({
   breaking: z.enum(BREAKING_LEVELS).optional(),
   publishedAt: z.string().nullable(),
   url: z.string().nullable(),
+  /**
+   * Canonical releases.sh detail-page URL (friendly form: ID + current
+   * title slug). Additive — older servers and the digest-cron path omit it.
+   */
+  webUrl: z.string().optional(),
   media: z.array(MediaItemSchema),
   source: ReleaseLatestSourceSchema,
   /**

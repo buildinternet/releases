@@ -1,6 +1,7 @@
 import { eq, sql } from "drizzle-orm";
 import type { ReleaseLatestItem } from "@buildinternet/releases-api-types";
 import type { BreakingLevel } from "@buildinternet/releases-core/breaking";
+import { releasePath } from "@buildinternet/releases-core/release-slug";
 import { buildFeedCursor, feedCursorSql } from "@releases/core-internal/feed-cursor";
 import { COVERAGE_COUNT_EXPR } from "@releases/core-internal/release-coverage-sql";
 import type { AnyDb } from "../db.js";
@@ -166,6 +167,7 @@ export function releaseWebBase(env: { WEB_BASE_URL?: string }): string {
 export function mapLatestRowToReleaseItem(
   r: LatestReleaseRow,
   mediaOrigin: string,
+  webBase?: string,
 ): ReleaseLatestItem {
   return {
     id: r.id,
@@ -179,6 +181,15 @@ export function mapLatestRowToReleaseItem(
     breaking: (r.breaking as BreakingLevel | null) ?? undefined,
     publishedAt: r.published_at,
     url: r.url,
+    webUrl: webBase
+      ? `${webBase}${releasePath({
+          id: r.id,
+          titleShort: r.title_short,
+          titleGenerated: r.title_generated,
+          title: r.title,
+          version: r.version,
+        })}`
+      : undefined,
     media: parseReleaseMedia(r.media, mediaOrigin),
     source: {
       slug: r.source_slug,

@@ -14,7 +14,11 @@ import { SOURCE_TYPES } from "@buildinternet/releases-core/source-enums";
 import { releaseCoverage } from "@releases/db/schema-coverage.js";
 import type { Env } from "../index.js";
 import { orgWhere, sourceMatchByIdOrSlug, parseBoolParam, parseTimeWindow } from "../utils.js";
-import { getLatestReleasesAcross, mapLatestRowToReleaseItem } from "../queries/releases.js";
+import {
+  getLatestReleasesAcross,
+  mapLatestRowToReleaseItem,
+  releaseWebBase,
+} from "../queries/releases.js";
 import { parseExcludeSourceTypes } from "../lib/source-types.js";
 import {
   buildLatestCacheKey,
@@ -280,7 +284,7 @@ releaseRoutes.get(
         until,
         limit: count,
       });
-      return rows.map((r) => mapLatestRowToReleaseItem(r, mediaOrigin));
+      return rows.map((r) => mapLatestRowToReleaseItem(r, mediaOrigin, releaseWebBase(c.env)));
     };
 
     // Only the unfiltered homepage/CLI shape (and any explicitly allowlisted

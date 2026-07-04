@@ -13,6 +13,7 @@ import {
   feedCursorFromLatestRow,
   getFollowedReleases,
   mapLatestRowToReleaseItem,
+  releaseWebBase,
 } from "../queries/releases.js";
 import { FOLLOW_TARGET_TYPES, type FollowTargetType } from "../db/schema-follows.js";
 import type { Env } from "../index.js";
@@ -146,7 +147,9 @@ meHandlers.get("/me/feed", async (c) => {
     });
     const hasMore = rows.length > limit;
     const pageRows = hasMore ? rows.slice(0, limit) : rows;
-    const items = pageRows.map((r) => mapLatestRowToReleaseItem(r, mediaOrigin));
+    const items = pageRows.map((r) =>
+      mapLatestRowToReleaseItem(r, mediaOrigin, releaseWebBase(c.env)),
+    );
     const nextCursor =
       hasMore && pageRows.length > 0
         ? feedCursorFromLatestRow(pageRows[pageRows.length - 1]!)
