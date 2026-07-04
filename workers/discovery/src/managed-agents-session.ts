@@ -15,6 +15,7 @@ import type { Env } from "./types.js";
 import { buildPlaybookMarkdown, type PlaybookPage } from "./playbook-block.js";
 import { buildAnthropicClient } from "@releases/lib/anthropic-client.js";
 import { estimateCost } from "@releases/lib/anthropic-pricing.js";
+import { cacheWriteTokensFrom, parseSessionUsageTokens } from "./session-usage.js";
 import {
   classifyMaRateLimitError,
   buildMaRateLimitErrorMessage,
@@ -227,10 +228,13 @@ export class ManagedAgentsSession extends DurableObject<Env> {
     try {
       const finalSession = await (client.beta.sessions as any).retrieve(anthropicSessionId);
       const usage = finalSession.usage as Record<string, unknown> | undefined;
-      const inputTokens = usage?.input_tokens as number | undefined;
-      const outputTokens = usage?.output_tokens as number | undefined;
-      const cacheWriteTokens = usage?.cache_creation_input_tokens as number | undefined;
-      const cacheReadTokens = usage?.cache_read_input_tokens as number | undefined;
+      // The session usage object nests cache-creation by lifetime bucket, NOT
+      // the flat `cache_creation_input_tokens` the Messages API returns —
+      // `parseSessionUsageTokens` handles both. Reading only the flat field
+      // previously left cache-creation (the dominant cost of a routine `update`
+      // session) out of `estimatedUsd`, under-reporting worker sessions ~7x.
+      const { inputTokens, outputTokens, cacheWriteTokens, cacheReadTokens } =
+        parseSessionUsageTokens(usage);
       const model = (finalSession.model as string | undefined) ?? inferredModel;
 
       // Per-thread breakdown (multi-agent only). The session-level `usage` may
@@ -274,13 +278,10 @@ export class ManagedAgentsSession extends DurableObject<Env> {
             byThread = threads.map((t) => {
               const tInput = t.usage?.input_tokens;
               const tOutput = t.usage?.output_tokens;
-              // Cache creation is split by lifetime in the typed shape; sum
-              // both buckets for the single estimateCost slot.
-              const cc = t.usage?.cache_creation;
-              const tCacheW =
-                cc !== undefined
-                  ? (cc.ephemeral_1h_input_tokens ?? 0) + (cc.ephemeral_5m_input_tokens ?? 0)
-                  : undefined;
+              // Cache creation is split by lifetime in the typed shape; the
+              // shared helper sums both buckets (same parse as the session
+              // level) for the single estimateCost slot.
+              const tCacheW = cacheWriteTokensFrom(t.usage as Record<string, unknown> | undefined);
               const tCacheR = t.usage?.cache_read_input_tokens;
               const tModel = t.agent?.model?.id ?? inferredModel;
               const tCost = estimateCost(
