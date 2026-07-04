@@ -1235,7 +1235,7 @@ export type UpdatePlaybookNotesResponse = z.infer<typeof UpdatePlaybookNotesResp
 
 export type OverviewStaleness = "missing" | "behind" | "fresh";
 /**
- * `opted_out` — the org has `autoGenerateContent=false`, so the batch-overview
+ * `opted_out` — the org has `autoGenerateContent=false`, so the overview-regen
  * eligibility filter skips it regardless of staleness. Surfaced so an
  * orchestrator planning a sweep doesn't queue a regen that will never run
  * (#1795).
@@ -1261,7 +1261,7 @@ export interface OverviewManifestRow {
   staleness: OverviewStaleness;
   /**
    * Whether the org is opted into automatic AI content. When `false`, the
-   * batch-overview cron/manual regen skips it — the staleness signal alone is
+   * overview-regen cron skips it — the staleness signal alone is
    * misleading without this (#1795). Older workers may omit it mid-deploy.
    */
   autoGenerateContent?: boolean;

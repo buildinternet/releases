@@ -108,7 +108,7 @@ app.get(
 
     // Assemble sources + recent releases via the shared helper, which pulls
     // every active source's releases in one chunked IN-bound query instead of
-    // a SELECT per source. Same selection + projection the batch-overview
+    // a SELECT per source. Same selection + projection the overview-regen
     // workflow uses, so the route and the workflow stay aligned.
     const inputs = await fetchOverviewInputsForOrg(db, org.id, { windowDays, limit });
     // `org` was just resolved against the same view by id, so a null here is

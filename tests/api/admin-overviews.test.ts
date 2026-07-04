@@ -42,7 +42,7 @@ async function seedOrg(
     name?: string;
     discovery?: "curated" | "agent" | "on_demand";
     /**
-     * Opt-in gate for the batch-overview sweep. Defaults `true` to mirror the
+     * Opt-in gate for the overview-regen sweep. Defaults `true` to mirror the
      * new curated-org default (#1795); set `false` to exercise the `opted_out`
      * plan action.
      */

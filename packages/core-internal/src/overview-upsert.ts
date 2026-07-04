@@ -2,8 +2,8 @@
  * Shared upsert for org overviews (knowledge_pages + knowledge_page_citations).
  *
  * One copy lives here; both `POST /v1/orgs/:slug/overview` (the agent-driven
- * write surface) and `BatchOverviewWorkflow` (the batch-API write surface)
- * call into it so the SQL doesn't drift between the two write paths.
+ * write surface) and `OverviewRegenWorkflow` (the automated regen write
+ * surface) call into it so the SQL doesn't drift between the two write paths.
  *
  * Semantics:
  *   - Last-write-wins on the `(scope='org', org_id)` unique index.

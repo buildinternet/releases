@@ -132,13 +132,6 @@
     // token counts + batch discount) must stay under this value or the workflow
     // aborts with NonRetryableError before submitting anything to Anthropic.
     "BATCH_SUMMARIZE_MAX_COST_USD": "10",
-    // Batch overview workflow — admin POST trigger only for now (no cron entry).
-    // Self-gates via BATCH_OVERVIEW_ENABLED on any future cron path; admin POST
-    // (POST /v1/workflows/batch-overview) runs unconditionally regardless.
-    // Replacement candidate for the existing weekly managed-agent regen routine
-    // and the operator's Monday top-off runs.
-    "BATCH_OVERVIEW_ENABLED": "false",
-    "BATCH_OVERVIEW_MAX_COST_USD": "5",
     // OpenRouter-backed per-org overview regen. Admin POST trigger only for now;
     // cron path self-gates on this var (default off).
     "OVERVIEW_REGEN_ENABLED": "false",
@@ -349,15 +342,6 @@
       "name": "batch-summarize",
       "binding": "BATCH_SUMMARIZE_WORKFLOW",
       "class_name": "BatchSummarizeWorkflow",
-    },
-    {
-      // Batch overview generation (admin POST trigger only for now). No cron
-      // entry until the path is proven against the existing weekly managed-agent
-      // regen routine. Per-org request shape with search_result blocks; emits
-      // inline citations via Anthropic's citation API (#846).
-      "name": "batch-overview",
-      "binding": "BATCH_OVERVIEW_WORKFLOW",
-      "class_name": "BatchOverviewWorkflow",
     },
     {
       // Triggered by inbound Firecrawl webhook (POST /v1/integrations/firecrawl/webhook)
@@ -717,11 +701,6 @@
         // Mirrors prod flag; not read in staging (CRON_ENABLED=false). See #971.
         "BATCH_SUMMARIZE_ENABLED": "false",
         "BATCH_SUMMARIZE_MAX_COST_USD": "10",
-        // Batch overview workflow — same staging posture as batch-summarize:
-        // off-by-default for any cron path, admin POST trigger usable for
-        // wiring validation only (CRON_ENABLED=false on staging).
-        "BATCH_OVERVIEW_ENABLED": "false",
-        "BATCH_OVERVIEW_MAX_COST_USD": "5",
         // Overview regen workflow — same staging posture: admin POST usable for
         // wiring validation; cron path is irrelevant (CRON_ENABLED=false).
         "OVERVIEW_REGEN_ENABLED": "false",
@@ -832,11 +811,6 @@
           "name": "batch-summarize-staging",
           "binding": "BATCH_SUMMARIZE_WORKFLOW",
           "class_name": "BatchSummarizeWorkflow",
-        },
-        {
-          "name": "batch-overview-staging",
-          "binding": "BATCH_OVERVIEW_WORKFLOW",
-          "class_name": "BatchOverviewWorkflow",
         },
         {
           "name": "firecrawl-ingest-staging",

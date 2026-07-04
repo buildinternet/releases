@@ -149,7 +149,7 @@ adminOverviewsRoutes.get("/admin/overviews", async (c) => {
     };
 
     if (planMode) {
-      // An opted-out org is invisible to the batch-overview eligibility filter,
+      // An opted-out org is invisible to the overview-regen eligibility filter,
       // so `missing`/`refresh` would be misleading here — the sweep would never
       // pick it up (#1795). Flag it explicitly instead.
       if (!autoGenerateContent) out.action = "opted_out";

@@ -113,7 +113,6 @@ export class OverviewRegenWorkflow extends WorkflowEntrypoint<
           // — the same selection the local update-overviews skill uses
           // (`--stale-days 7 --missing --has-activity`). The default 20 would
           // leave the sweep dormant at normal release volumes.
-          // (batch-overview keeps the 20.)
           minNewReleases: 0,
           // Velocity fast-tier tunables (#1895): wrangler-var overrides; unset
           // falls back to the eligibility defaults (2 days at ≥15 releases).

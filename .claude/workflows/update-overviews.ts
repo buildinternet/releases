@@ -7,7 +7,7 @@ export const meta = {
   description:
     "Local batch overview regeneration: select orgs (outdated / overview-age window / activity window / explicit list), fetch only the lagging ones, generate via budget-gated agent() waves, lint + re-derive citation offsets in-parent, and upsert through `overview update` — no metered Anthropic bill.",
   whenToUse:
-    "Refresh org overviews across a set of orgs locally without the server-side batch-overview Anthropic bill. Dry-run first (the default). Launch via the maintaining-orgs skill → Sweep via Workflow.",
+    "Refresh org overviews across a set of orgs locally without a metered Anthropic Batch bill. Dry-run first (the default). Launch via the maintaining-orgs skill → Sweep via Workflow.",
   phases: [
     { title: "Select", detail: "overview plan manifest → mode filter → cap" },
     { title: "Fetch", detail: "serial source fetch for needsFetch orgs (skipped on dry-run)" },

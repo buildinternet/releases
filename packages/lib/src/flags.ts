@@ -130,15 +130,6 @@ export const FLAGS = {
     reads: ["api"],
     description: "Post-ingest batch auto-summarize (Haiku title / short-title / summary).",
   },
-  batchOverviewEnabled: {
-    key: "batch-overview-enabled",
-    env: "BATCH_OVERVIEW_ENABLED",
-    default: false,
-    kind: "rollout",
-    reads: ["api"],
-    description:
-      "Batch org-overview (AI knowledge-page) generation workflow. Off = manual/agent-driven only.",
-  },
   overviewRegenEnabled: {
     key: "overview-regen-enabled",
     env: "OVERVIEW_REGEN_ENABLED",

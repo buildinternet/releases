@@ -4,7 +4,7 @@
  * path (subagent-runner.ts) so the two can't drift.
  *
  * Each fixture is one JSON file under fixtures/overviews/ carrying the
- * OverviewRequestInput the production batch-overview workflow would build, plus
+ * OverviewRequestInput the production overview-regen workflow would build, plus
  * optional per-fixture grading knobs.
  */
 import { readdirSync, readFileSync } from "fs";
