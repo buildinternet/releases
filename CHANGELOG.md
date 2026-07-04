@@ -3,6 +3,15 @@
 The product changelog for releases.sh, published to its own registry. Drafted daily from merged
 PRs and reviewed via PR. See docs/changelog-style.md for the voice and curation rules.
 
+## July 3, 2026
+
+**Added**
+- Release cards now show a "Breaking" severity badge — releases classified as breaking changes display the severity level on feed cards, org pages, and search results; the detail page gains a migration notes block when notes are present. The `breaking` and `migrationNotes` fields are now returned on all release read API endpoints and search results.
+- releases.sh is now listed on integrations.sh — the REST API, MCP server, and CLI are declared as integration surfaces with auth instructions; `/openapi.json` on releases.sh proxies the live OpenAPI 3.1 spec, and the MCP server card now includes a connect URL for integration scanners.
+
+**Changed**
+- MCP `get_release` and `search` tool calls now serve cached results, and the latest-releases edge cache is flushed on publish — faster repeated MCP reads and new releases appear in feeds immediately without waiting for a cache TTL.
+
 ## July 2, 2026
 
 **Fixed**
