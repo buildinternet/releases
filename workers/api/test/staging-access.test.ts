@@ -51,6 +51,11 @@ describe("stagingAccessGate", () => {
   it("401s a non-exempt path without the key when the gate is bound", async () => {
     const res = await gatedApp({ STAGING_ACCESS_KEY: keyBinding() })("/v1/orgs");
     expect(res.status).toBe(401);
+    // Standardized nested error envelope, not the legacy flat `{ error, message }`.
+    const body = (await res.json()) as { error: { code: string; type: string; message: string } };
+    expect(body.error.code).toBe("unauthorized");
+    expect(body.error.type).toBe("unauthorized");
+    expect(body.error.message).toBe("Missing or invalid staging access key");
   });
 
   it("passes a non-exempt path with the correct key", async () => {

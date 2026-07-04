@@ -90,7 +90,10 @@ describe("requireFollowsPrincipal", () => {
     const { app: a, env } = app({ sessionUser: null });
     const res = await a.request("/v1/me/follows", {}, env);
     expect(res.status).toBe(401);
-    expect(((await res.json()) as { message: string }).message).toBe("Sign in required");
+    const body = (await res.json()) as { error: { code: string; type: string; message: string } };
+    expect(body.error.code).toBe("unauthorized");
+    expect(body.error.type).toBe("unauthorized");
+    expect(body.error.message).toBe("Sign in required");
   });
 
   it("admits a Better Auth session and attaches its user id", async () => {
@@ -147,6 +150,8 @@ describe("requireFollowsPrincipal", () => {
     });
     const res = await a.request("/v1/me/follows", bearer("relu_abc.secret"), env);
     expect(res.status).toBe(429);
-    expect(((await res.json()) as { error: string }).error).toBe("rate_limited");
+    const body = (await res.json()) as { error: { code: string; type: string } };
+    expect(body.error.code).toBe("rate_limited");
+    expect(body.error.type).toBe("rate_limited");
   });
 });

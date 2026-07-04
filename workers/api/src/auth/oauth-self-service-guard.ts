@@ -8,7 +8,9 @@
  * Register on the four write paths in index.ts BEFORE the /api/auth/* handler.
  */
 import type { MiddlewareHandler } from "hono";
+import { ForbiddenError } from "@releases/lib/releases-error";
 import { getOrCreateAuth } from "../middleware/auth.js";
+import { respondError } from "../lib/error-response.js";
 import type { Env } from "../index.js";
 
 /**
@@ -34,7 +36,16 @@ export function oauthSelfServiceGuard(): MiddlewareHandler<Env> {
       role = undefined; // fail closed on any session-resolution error
     }
     if (role !== "admin") {
-      return c.json({ error: "oauth_self_service_admin_only" }, 403);
+      // Standardized `forbidden` envelope. The former one-off `error:
+      // "oauth_self_service_admin_only"` discriminant is preserved in
+      // `details.reason` rather than promoted into ERROR_CODES — this guard is a
+      // first-party admin surface, not a code a public client branches on.
+      return respondError(
+        c,
+        new ForbiddenError("OAuth client self-service is restricted to admins", {
+          details: { reason: "oauth_self_service_admin_only" },
+        }),
+      );
     }
     return next();
   };

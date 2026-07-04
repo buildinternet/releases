@@ -1,5 +1,7 @@
 import type { MiddlewareHandler } from "hono";
 import { getSecret } from "@releases/lib/secrets";
+import { UnauthorizedError } from "@releases/lib/releases-error";
+import { respondError } from "../lib/error-response.js";
 
 /** Custom header carrying the staging shared secret. */
 export const STAGING_KEY_HEADER = "X-Releases-Staging-Key";
@@ -49,10 +51,7 @@ export function stagingAccessGate(): MiddlewareHandler<{
       return;
     }
     if (c.req.header(STAGING_KEY_HEADER) !== secret) {
-      return c.json(
-        { error: "unauthorized", message: "Missing or invalid staging access key" },
-        401,
-      );
+      return respondError(c, new UnauthorizedError("Missing or invalid staging access key"));
     }
     await next();
   };

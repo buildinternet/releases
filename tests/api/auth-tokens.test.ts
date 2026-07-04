@@ -57,7 +57,9 @@ describe("authMiddleware with DB tokens (requires admin)", () => {
     const token = await seed(h.db, ["read"]);
     const res = await call(h.db)(token);
     expect(res.status).toBe(403);
-    expect(((await res.json()) as { error: string }).error).toBe("insufficient_scope");
+    const body = (await res.json()) as { error: { code: string; type: string } };
+    expect(body.error.code).toBe("insufficient_scope");
+    expect(body.error.type).toBe("insufficient_scope");
   });
 
   it("revoked token gets 401", async () => {

@@ -12,7 +12,8 @@ function envWithSecret(value: string) {
   return { RELEASES_API_KEY: secretBinding(value) } as never;
 }
 
-type ErrorBody = { error: string; message: string };
+/** Standardized nested error envelope (`{ error: { code, type, message } }`). */
+type ErrorBody = { error: { code: string; type: string; message: string } };
 
 function adminApp() {
   const app = new Hono();
@@ -26,8 +27,9 @@ describe("authMiddleware — missing vs invalid", () => {
     const res = await adminApp().request("/", {}, envWithSecret("root-secret"));
     expect(res.status).toBe(401);
     const body = (await res.json()) as ErrorBody;
-    expect(body.error).toBe("unauthorized");
-    expect(body.message).toBe("Missing API key");
+    expect(body.error.code).toBe("unauthorized");
+    expect(body.error.type).toBe("unauthorized");
+    expect(body.error.message).toBe("Missing API key");
     // RFC 6750: no token presented → challenge carries no error code.
     expect(res.headers.get("WWW-Authenticate")).toBe('Bearer realm="releases-api"');
   });
@@ -40,8 +42,9 @@ describe("authMiddleware — missing vs invalid", () => {
     );
     expect(res.status).toBe(401);
     const body = (await res.json()) as ErrorBody;
-    expect(body.error).toBe("unauthorized");
-    expect(body.message).toBe("Invalid API key");
+    expect(body.error.code).toBe("unauthorized");
+    expect(body.error.type).toBe("unauthorized");
+    expect(body.error.message).toBe("Invalid API key");
     expect(res.headers.get("WWW-Authenticate")).toBe(
       'Bearer realm="releases-api", error="invalid_token"',
     );
@@ -82,7 +85,7 @@ describe("publicReadAuthMiddleware — write methods distinguish missing vs inva
     const res = await publicApp().request("/", { method: "POST" }, envWithSecret("root-secret"));
     expect(res.status).toBe(401);
     const body = (await res.json()) as ErrorBody;
-    expect(body.message).toBe("Missing API key");
+    expect(body.error.message).toBe("Missing API key");
   });
 
   it("rejects a POST with a wrong key as 'Invalid API key'", async () => {
@@ -93,6 +96,6 @@ describe("publicReadAuthMiddleware — write methods distinguish missing vs inva
     );
     expect(res.status).toBe(401);
     const body = (await res.json()) as ErrorBody;
-    expect(body.message).toBe("Invalid API key");
+    expect(body.error.message).toBe("Invalid API key");
   });
 });
