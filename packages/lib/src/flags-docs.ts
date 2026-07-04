@@ -19,8 +19,7 @@ function renderTable(entries: FlagDef[]): string {
   if (entries.length === 0) return "_none_";
   const header = "| Flag key | Default | Reads | What it controls |\n| --- | --- | --- | --- |";
   const rows = entries
-    .slice()
-    .sort((a, b) => a.key.localeCompare(b.key))
+    .toSorted((a, b) => a.key.localeCompare(b.key))
     .map(
       (d) =>
         `| \`${d.key}\` | \`${d.default}\` | ${d.reads.join(", ")} | ${escapeCell(d.description)} |`,
