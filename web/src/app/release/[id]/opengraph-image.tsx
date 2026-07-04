@@ -1,4 +1,5 @@
 import { api } from "@/lib/api";
+import { parseReleaseParam } from "@buildinternet/releases-core/release-slug";
 import {
   OG_CONTENT_TYPE,
   OG_SIZE,
@@ -16,7 +17,8 @@ export const contentType = OG_CONTENT_TYPE;
 export const revalidate = 86400;
 
 export default async function Image({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
+  const { id: rawParam } = await params;
+  const { id } = parseReleaseParam(rawParam);
   try {
     const release = await api.release(id);
     const orgDetail = release.org ? await api.orgDetail(release.org.slug).catch(() => null) : null;

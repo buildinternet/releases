@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { safeStringifyJsonLd } from "@/lib/json-ld";
+import { parseReleaseParam, releasePath } from "@buildinternet/releases-core/release-slug";
 import { notFound, permanentRedirect } from "next/navigation";
 import Link from "next/link";
 import { Suspense, ViewTransition } from "react";
@@ -36,7 +37,8 @@ export async function generateMetadata({
 }: {
   params: Promise<{ id: string }>;
 }): Promise<Metadata> {
-  const { id } = await params;
+  const { id: rawParam } = await params;
+  const { id } = parseReleaseParam(rawParam);
   try {
     const release = await api.release(id);
     const { descriptive, versionLabel } = deriveFeedTitle(release);
@@ -59,10 +61,10 @@ export async function generateMetadata({
       ...(shouldNoIndex ? { robots: { index: false, follow: true } } : {}),
       openGraph: {
         type: "article",
-        url: `/release/${id}`,
+        url: releasePath(release),
         publishedTime: release.publishedAt ?? undefined,
       },
-      alternates: { canonical: `/release/${id}` },
+      alternates: { canonical: releasePath(release) },
     };
   } catch {
     return { title: "Release" };
@@ -80,7 +82,8 @@ function formatDate(iso: string | null) {
 }
 
 export default async function ReleaseDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
+  const { id: rawParam } = await params;
+  const { id } = parseReleaseParam(rawParam);
 
   let release;
   try {
@@ -116,6 +119,14 @@ export default async function ReleaseDetailPage({ params }: { params: Promise<{ 
       // to notFound() so we don't accidentally swallow the original error.
     }
     notFound();
+  }
+
+  // Friendly-URL canonicalization: bare-ID, stale-slug, and mangled-slug
+  // segments all 301 to the current canonical `/release/<id>-<slug>` form.
+  // The ID is the routing key; the slug is derived from the current title.
+  const canonicalPath = releasePath(release);
+  if (canonicalPath !== `/release/${rawParam}`) {
+    permanentRedirect(canonicalPath);
   }
 
   const sourcePath = release.org
