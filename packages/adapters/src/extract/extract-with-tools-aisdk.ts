@@ -29,8 +29,8 @@ import { createAnthropic } from "@ai-sdk/anthropic";
 import {
   generateText,
   hasToolCall,
+  isStepCount,
   jsonSchema,
-  stepCountIs,
   tool,
   type JSONSchema7,
   type LanguageModel,
@@ -190,11 +190,11 @@ export async function extractWithToolsAiSdk(
   //    implementation's systemBlocks). ──
   const staticSystem = `${opts.systemPrompt}\n\n${TOOLLOOP_SYSTEM_PROMPT}`;
   const guidanceText = opts.guidance ? withGuidance("", opts.guidance) : "";
-  // System goes in the dedicated `system` param (not messages) — avoids the
-  // SDK's prompt-injection warning and keeps the cacheable prefix out of the
+  // Instructions go in the dedicated `instructions` param (not messages) — avoids
+  // the SDK's prompt-injection warning and keeps the cacheable prefix out of the
   // per-step message rewrite. The static block carries the breakpoint; volatile
   // guidance is a second, uncached system message so the prefix stays shareable.
-  const system: ModelMessage[] = [
+  const instructions: ModelMessage[] = [
     { role: "system", content: staticSystem, providerOptions: EPHEMERAL },
     ...(guidanceText ? [{ role: "system", content: guidanceText } as ModelMessage] : []),
   ];
@@ -208,7 +208,7 @@ export async function extractWithToolsAiSdk(
   const run = () =>
     generateText({
       model: deps.model,
-      system: system as Parameters<typeof generateText>[0]["system"],
+      instructions: instructions as Parameters<typeof generateText>[0]["instructions"],
       messages: baseMessages,
       tools,
       temperature: EXTRACTION_TEMPERATURE,
@@ -216,7 +216,7 @@ export async function extractWithToolsAiSdk(
       // Stop on the terminal tool call OR when the round budget is spent. The
       // +1 leaves room for the "force extract_releases now" final turn the
       // hand-rolled loop allows after exhausting rounds.
-      stopWhen: [hasToolCall("extract_releases"), stepCountIs(MAX_ROUNDS + 1)],
+      stopWhen: [hasToolCall("extract_releases"), isStepCount(MAX_ROUNDS + 1)],
       prepareStep: ({ messages, stepNumber }) => {
         // System (with its static breakpoint) is the separate `system` param and
         // is constant across steps; here we only rotate the sliding breakpoint
@@ -247,17 +247,16 @@ export async function extractWithToolsAiSdk(
     throw err;
   }
 
-  // ── Usage. v6 reports cumulative `totalUsage`; cachedInputTokens is the cache
-  //    READ count. Cache WRITE (creation) rides anthropic providerMetadata. ──
-  const usage = result.totalUsage;
-  // v6's `inputTokens` is the FULL prompt count (incl. cache read + write); the
+  // ── Usage. v7 `usage` is cumulative across all steps (sum of step usages).
+  //    Cache read/write live in inputTokenDetails; reasoning in outputTokenDetails. ──
+  const usage = result.usage;
+  // `inputTokens` is the FULL prompt count (incl. cache read + write); the
   // hand-rolled loop logged the non-cached portion (Anthropic `input_tokens`),
   // which is `inputTokenDetails.noCacheTokens` here. Keep that semantics.
   const totalInput = usage.inputTokenDetails?.noCacheTokens ?? usage.inputTokens ?? 0;
   const totalOutput = usage.outputTokens ?? 0;
-  // v6 moved cache read/write into inputTokenDetails (cachedInputTokens is
-  // deprecated). reasoningTokens lives in outputTokenDetails — directly useful
-  // for the DeepSeek lane, where reasoning bills as output (see #1536).
+  // reasoningTokens lives in outputTokenDetails — directly useful for the
+  // DeepSeek lane, where reasoning bills as output (see #1536).
   const cacheReadTokens = usage.inputTokenDetails?.cacheReadTokens ?? 0;
   const cacheWriteTokens = usage.inputTokenDetails?.cacheWriteTokens ?? 0;
   // Mirror the real totals into the fallback-partial accumulators so any

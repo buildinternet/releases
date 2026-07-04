@@ -1,5 +1,5 @@
 /**
- * SPIKE parity test (issue #1536). Drives the AI-SDK-v6 port of the extraction
+ * SPIKE parity test (issue #1536). Drives the AI-SDK port of the extraction
  * tool-loop against a mocked Anthropic `fetch`, captures the outgoing wire
  * requests, and asserts the two cache breakpoints land exactly where the
  * hand-rolled `extract-with-tools.ts` puts them:
