@@ -463,6 +463,11 @@ export class ManagedAgentsSession extends DurableObject<Env> {
             this.env.FLAGS,
             this.env.DETERMINISTIC_UPDATE_ENABLED,
             FLAGS.deterministicUpdateEnabled,
+            // Threaded only when present: both prod /update paths (OrgActor drain,
+            // scrape-agent sweep) always supply a real orgId, so a rare orgId-less
+            // manual call degrades to a context-free (global) read rather than an
+            // empty bucketing key. Enables per-org Flagship rollout bucketing.
+            params.orgId ? { orgId: params.orgId } : undefined,
           )
         : false;
 

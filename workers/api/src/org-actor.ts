@@ -91,6 +91,9 @@ export class OrgActor extends DurableObject<OrgActorEnv> {
       this.env.FLAGS,
       this.env.ORG_DRAIN_ACTOR_ENABLED,
       FLAGS.orgDrainActorEnabled,
+      // orgId (DO-storage id) is non-null — the guard above already returned
+      // when it was unset. Enables per-org Flagship rollout bucketing.
+      { orgId },
     );
     if (!enabled) {
       logEvent("info", { component: "org-actor", event: "drain-disabled", orgId });

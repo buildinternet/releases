@@ -55,6 +55,14 @@ export interface FlagDef {
    * `docs/architecture/feature-flags.md` prose or the owning subsystem's doc.
    */
   readonly description: string;
+  /**
+   * Evaluation-context key (e.g. `"orgId"`) this flag's read sites pass for a
+   * staged per-org rollout; its Flagship rule must bucket on it. Documentation
+   * only — the mechanism is the `context` arg threaded into {@link flag} plus
+   * the dashboard rule. Omit for a plain global flag.
+   * See `docs/architecture/feature-flags.md` → "Staged / per-org rollout".
+   */
+  readonly rolloutContext?: string;
 }
 
 /**
@@ -271,6 +279,7 @@ export const FLAGS = {
     default: false,
     kind: "rollout",
     reads: ["api"],
+    rolloutContext: "orgId",
     description:
       "Actor-native scrape/agent drain (OrgActor, #1777). On = actor path drives; off = the force-drain + scrape-agent-sweep crons run.",
   },
@@ -291,6 +300,7 @@ export const FLAGS = {
     default: false,
     kind: "rollout",
     reads: ["discovery"],
+    rolloutContext: "orgId",
     description:
       "Runs routine `POST /update` as a direct `scrapeFetch` loop instead of a Managed-Agents (Haiku) worker session (#1878). On ⇒ deterministic loop, but only when the scrape secrets (`CLOUDFLARE_ACCOUNT_ID` + `CLOUDFLARE_API_TOKEN`) are present; otherwise (or off) the legacy agent session runs.",
   },

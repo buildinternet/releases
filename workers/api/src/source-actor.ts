@@ -321,6 +321,9 @@ export class SourceActor extends DurableObject<SourceActorEnv> {
       this.env.FLAGS,
       this.env.ORG_DRAIN_ACTOR_ENABLED,
       FLAGS.orgDrainActorEnabled,
+      // row.orgId is non-null — the guard at the top of this method already
+      // returned when it was falsy. Enables per-org Flagship rollout bucketing.
+      { orgId: row.orgId },
     );
     if (!on) return;
     try {
