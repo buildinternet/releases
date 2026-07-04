@@ -31,6 +31,7 @@ import type { SearchMode } from "@buildinternet/releases-core/schema";
 import { KIND_VALUES, type Kind } from "@buildinternet/releases-core/kinds";
 import { scopeSatisfies } from "@buildinternet/releases-core/api-token";
 import { parseCoordinate } from "@buildinternet/releases-core/lookup-coordinate";
+import { releaseWebBase } from "@buildinternet/releases-core/release-slug";
 import type { LookupResultPayload } from "@buildinternet/releases-api-types";
 import { getSecret, getSecretWithFallback } from "@releases/lib/secrets";
 import { type FlagshipBinding } from "@releases/lib/flags";
@@ -82,6 +83,8 @@ type SecretBinding = { get(): Promise<string> };
 export interface Env {
   DB: D1Database;
   MEDIA_ORIGIN?: string;
+  /** Web origin for building slugged canonical `webUrl` fields (#1906). */
+  WEB_BASE_URL?: string;
   // Vectorize indexes for semantic search (read-only usage from MCP).
   RELEASES_INDEX: VectorizeIndex;
   ENTITIES_INDEX: VectorizeIndex;
@@ -255,6 +258,7 @@ export async function createServer(env: Env, ctx?: ExecutionContext, opts?: Crea
   );
 
   const db = createDb(env.DB);
+  const webBase = releaseWebBase(env);
   const mediaOrigin = env.MEDIA_ORIGIN ?? "";
   const requestUserAgent = opts?.userAgent ?? null;
   const requestClientKind = deriveMcpClientKind(requestUserAgent);
@@ -607,7 +611,7 @@ export async function createServer(env: Env, ctx?: ExecutionContext, opts?: Crea
     },
     cached(
       "get_latest_releases",
-      withMedia(async (params) => getLatestReleases(db, params)),
+      withMedia(async (params) => getLatestReleases(db, params, webBase)),
     ),
   );
 
@@ -829,7 +833,7 @@ export async function createServer(env: Env, ctx?: ExecutionContext, opts?: Crea
     },
     cached(
       "get_collection_releases",
-      withMedia(async (params) => getCollectionReleases(db, params)),
+      withMedia(async (params) => getCollectionReleases(db, params, webBase)),
     ),
   );
 
@@ -845,7 +849,7 @@ export async function createServer(env: Env, ctx?: ExecutionContext, opts?: Crea
     },
     cached(
       "get_release",
-      withMedia(async (params) => getRelease(db, params)),
+      withMedia(async (params) => getRelease(db, params, webBase)),
     ),
   );
 

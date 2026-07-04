@@ -29,6 +29,15 @@ describe("formatSlackMessage", () => {
     expect(body.text).toBe("Vercel — Next.js 15.4.0");
   });
 
+  test("prefers the slugged webUrl over the bare-ID fallback (#1906)", () => {
+    const section = formatSlackMessage(
+      release({ webUrl: "https://releases.sh/release/rel_abc-next-js-15-4-0" }),
+    ).blocks[0] as any;
+    expect(section.text.text).toContain(
+      "<https://releases.sh/release/rel_abc-next-js-15-4-0|Next.js 15.4.0>",
+    );
+  });
+
   test("renders org avatar + localized date in the context row", () => {
     const ctx = formatSlackMessage(release()).blocks[1] as any;
     expect(ctx.type).toBe("context");

@@ -61,7 +61,8 @@ function renderResolved(r: WhatsChangedResponse): string {
     const head = `- ${e.version ?? "?"}${when}${flag}: ${e.title ?? "(untitled)"}`;
     const summary = e.summary && e.summary !== e.title ? `\n    ${e.summary}` : "";
     const migration = e.migrationNotes ? `\n    ↳ migration: ${e.migrationNotes}` : "";
-    return `${head}${summary}${migration}`;
+    const link = e.webUrl ? `\n    Web: ${e.webUrl}` : "";
+    return `${head}${summary}${migration}${link}`;
   });
   const breakingCount = r.entries.filter(
     (e) => e.breaking === "major" || e.breaking === "minor",

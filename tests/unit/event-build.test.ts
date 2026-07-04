@@ -50,6 +50,8 @@ describe("buildReleaseEventPayloads", () => {
         githubHandle: "anthropics",
       },
       product: { slug: "claude-code", name: "Claude Code" },
+      // No webBase passed → webUrl absent (null); the publisher supplies it.
+      webUrl: null,
       summary: null,
       titleGenerated: null,
       titleShort: null,
@@ -59,6 +61,24 @@ describe("buildReleaseEventPayloads", () => {
     });
     expect(events[1].media).toEqual([]);
     expect(events[1].version).toBeNull();
+  });
+
+  it("builds a slugged webUrl from the row title when webBase is supplied (#1906)", () => {
+    const events = buildReleaseEventPayloads({
+      src: { name: "Next.js", slug: "next-releases" },
+      inserted: [
+        {
+          id: "rel_abc123",
+          title: "Next.js 15.0",
+          version: "v15.0.0",
+          publishedAt: null,
+          media: null,
+        },
+      ],
+      webBase: "https://releases.sh",
+    });
+    // Slug derives from title/version (AI headlines are null at event time).
+    expect(events[0].webUrl).toBe("https://releases.sh/release/rel_abc123-next-js-15-0");
   });
 
   it("yields null org/product and undefined sourceType when source context is absent", () => {

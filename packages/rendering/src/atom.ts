@@ -13,6 +13,7 @@ import type {
   CollectionReleaseItem,
   ReleaseLatestItem,
 } from "@buildinternet/releases-api-types";
+import { releaseWebUrl } from "@buildinternet/releases-core/release-slug";
 
 export interface AtomFeedOptions {
   /** Canonical base URL, e.g. "https://releases.sh". Required for stable ids. */
@@ -85,6 +86,22 @@ function feedId(scope: string, slug: string, baseUrl: string): string {
   return `tag:${tagAuthority(baseUrl)},2005:${scope}/${slug}`;
 }
 
+/**
+ * Human-facing canonical link for an entry's `<link rel="alternate">`: the
+ * slugged release path (`/release/<id>-<slug>`) for crawler/AI legibility
+ * (#1906), falling back to the release's upstream URL when there's no id.
+ * The atom `<id>` stays the bare `/release/<id>` form (see `entryId`) so a
+ * churning title-derived slug never re-notifies readers.
+ */
+function releaseAlternateHref(
+  release: Pick<ReleaseItem, "id" | "url" | "titleShort" | "titleGenerated" | "title" | "version">,
+  baseUrl: string,
+): string | null {
+  const { id } = release;
+  if (!id) return release.url ?? null;
+  return releaseWebUrl(baseUrl, { ...release, id });
+}
+
 // ── Entry builder ────────────────────────────────────────────────────
 
 interface EntryInput {
@@ -92,11 +109,13 @@ interface EntryInput {
   sourceSlug: string;
   sourceName: string;
   orgName: string | null;
-  linkHref: string | null;
 }
 
 function buildEntry(input: EntryInput, baseUrl: string): { xml: string; updated: string | null } {
-  const { release, sourceSlug, sourceName, orgName, linkHref } = input;
+  const { release, sourceSlug, sourceName, orgName } = input;
+  // The human <link> is the slugged canonical, derived here (symmetric with the
+  // bare <id> in `entryId`) so every formatter gets it without restating it.
+  const linkHref = releaseAlternateHref(release, baseUrl);
   const published = toRfc3339(release.publishedAt);
   // Atom requires <updated>; when we lack a real timestamp fall back to
   // epoch so the entry is still well-formed rather than dropped.
@@ -197,7 +216,6 @@ export function sourceToAtom(source: SourceDetail, opts: AtomFeedOptions): strin
     sourceSlug: source.slug,
     sourceName: source.name,
     orgName,
-    linkHref: release.id ? `${opts.baseUrl}/release/${release.id}` : release.url,
   }));
 
   return buildFeed(
@@ -233,7 +251,6 @@ export function orgReleasesToAtom(
     sourceSlug: release.source.slug,
     sourceName: release.source.name,
     orgName: params.orgName,
-    linkHref: release.id ? `${opts.baseUrl}/release/${release.id}` : release.url,
   }));
 
   const overviewEntry = params.overview
@@ -278,7 +295,6 @@ export function productReleasesToAtom(
     sourceSlug: release.source.slug,
     sourceName: release.source.name,
     orgName: params.productName,
-    linkHref: release.id ? `${opts.baseUrl}/release/${release.id}` : release.url,
   }));
 
   return buildFeed(
@@ -311,7 +327,6 @@ export function userFeedToAtom(
     sourceSlug: release.source.slug,
     sourceName: release.source.name,
     orgName: null,
-    linkHref: release.id ? `${opts.baseUrl}/release/${release.id}` : release.url,
   }));
 
   return buildFeed(
@@ -335,7 +350,6 @@ function aggregateReleaseEntries(releases: CollectionReleaseItem[], baseUrl: str
     sourceSlug: release.source.slug,
     sourceName: release.source.name,
     orgName: release.org.name,
-    linkHref: release.id ? `${baseUrl}/release/${release.id}` : release.url,
   }));
 }
 

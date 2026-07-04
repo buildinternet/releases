@@ -766,6 +766,12 @@ export interface WhatsChangedEntry {
   breaking: BreakingLevel;
   migrationNotes: string | null;
   url: string | null;
+  /**
+   * Absolute canonical web URL — the slugged `/release/<id>-<slug>` form
+   * (#1906), built from `WEB_BASE_URL`. Distinct from `url` (the upstream
+   * source URL); lets an upgrade-planning agent link the release detail page.
+   */
+  webUrl: string | null;
 }
 
 /**

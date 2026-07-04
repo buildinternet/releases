@@ -24,11 +24,13 @@ import { releaseCoverage } from "@releases/db/schema-coverage.js";
 import { resolveUpgradeRange } from "@buildinternet/releases-core/upgrade-range";
 import { computeVersionSort } from "@buildinternet/releases-core/version-sort";
 import { parseCoordinate } from "@buildinternet/releases-core/lookup-coordinate";
+import { releaseWebUrl } from "@buildinternet/releases-core/release-slug";
 import { estimateTokens } from "@buildinternet/releases-core/tokens";
 import { CHANGELOG_TOKEN_BRACKETS } from "@buildinternet/releases-core/changelog-slice";
 import { BREAKING_LEVELS } from "@buildinternet/releases-core/breaking";
 import { errorEnvelopeSchema } from "@buildinternet/releases-api-types";
 import { createDb } from "../db.js";
+import { releaseWebBase } from "../queries/releases.js";
 import type { Env } from "../index.js";
 import { respondError } from "../lib/error-response.js";
 import { ValidationError } from "@releases/lib/releases-error";
@@ -56,6 +58,8 @@ const WhatsChangedEntrySchema = z.object({
   breaking: z.enum(BREAKING_LEVELS),
   migrationNotes: z.string().nullable(),
   url: z.string().nullable(),
+  /** Slugged canonical web URL (#1906); distinct from the upstream `url`. */
+  webUrl: z.string().nullable(),
 });
 
 const WhatsChangedResponseSchema = z.object({
@@ -252,11 +256,13 @@ whatsChangedRoutes.get(
 
     const rowsQuery = db
       .select({
+        id: releases.id,
         version: releases.version,
         versionSort: releases.versionSort,
         publishedAt: releases.publishedAt,
         title: releases.title,
         titleGenerated: releases.titleGenerated,
+        titleShort: releases.titleShort,
         summary: releases.summary,
         breaking: releases.breaking,
         migrationNotes: releases.migrationNotes,
@@ -291,6 +297,8 @@ whatsChangedRoutes.get(
     }
     kept.reverse(); // back to ascending (oldest→newest)
 
+    const webBase = releaseWebBase(c.env);
+
     return c.json({
       status: "resolved" as const,
       package: pkg,
@@ -306,6 +314,7 @@ whatsChangedRoutes.get(
         breaking: r.breaking,
         migrationNotes: r.migrationNotes,
         url: r.url,
+        webUrl: releaseWebUrl(webBase, r),
       })),
       count: kept.length,
       truncated,

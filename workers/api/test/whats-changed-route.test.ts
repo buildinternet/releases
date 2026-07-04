@@ -72,6 +72,10 @@ describe("GET /v1/whats-changed", () => {
     expect(body.status).toBe("resolved");
     expect(body.source?.sourceSlug).toBe("acme-sdk");
     expect(body.entries.map((e) => e.version)).toEqual(["1.1.0", "1.2.0", "2.0.0"]); // from exclusive, to inclusive
+    // Each entry carries the slugged canonical webUrl (#1906), distinct from
+    // the upstream `url`; the slug derives from titleGenerated at request time.
+    expect(body.entries[0].webUrl).toBe("https://releases.sh/release/rel_110-acme-1-1-0-release");
+    expect(body.entries[0].url).toBe("https://github.com/acme/sdk/releases/tag/1.1.0");
   });
 
   it("date-bounds non-numeric (codename) versions via the fallback path", async () => {

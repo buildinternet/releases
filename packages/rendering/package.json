@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@buildinternet/releases-api-types": "workspace:*",
+    "@buildinternet/releases-core": "workspace:*",
     "remark-gemoji": "^8.0.0",
     "remark-gfm": "^4.0.1"
   },

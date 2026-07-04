@@ -32,6 +32,7 @@ import type { Kind } from "@buildinternet/releases-core/kinds";
 import { resolveCategoryInput } from "@releases/core-internal/category-alias";
 import { normalizeDomain } from "@buildinternet/releases-core/domain";
 import { getEntityType, normalizeReleaseId } from "@buildinternet/releases-core/id";
+import { releaseWebUrl } from "@buildinternet/releases-core/release-slug";
 import {
   buildChangelogResponse,
   formatChangelogSliceLine,
@@ -120,6 +121,12 @@ export interface ReleaseFeedRow {
   contentPreview: string;
   publishedAt: string | null;
   url: string | null;
+  /**
+   * Absolute canonical web URL — the slugged `/release/<id>-<slug>` form
+   * (#1906), built from `WEB_BASE_URL`. Distinct from `url` (the upstream
+   * source URL). Lets agents cite/link the release detail page directly.
+   */
+  webUrl: string;
   /** `type` lets the UI branch GitHub (`org/repo` coordinate) vs. display name. */
   source: { name: string; coordinate: string; type: string };
   /**
@@ -170,31 +177,35 @@ const ORG_HAS_VISIBLE_RELEASE = sql`EXISTS (
 /**
  * Shared mapper for the release-feed UI. Callers normalize their column
  * names to camelCase before calling; the `coordinate` is derived from the
- * `org`/`source` slugs the caller resolves.
+ * `org`/`source` slugs the caller resolves. `webBase` builds the slugged
+ * canonical `webUrl` (#1906).
  */
-function toReleaseFeedRow(r: {
-  id: string;
-  title: string | null;
-  titleShort: string | null;
-  titleGenerated: string | null;
-  version: string | null;
-  type: string;
-  summary: string | null;
-  content: string | null;
-  publishedAt: string | null;
-  url: string | null;
-  sourceName: string;
-  sourceType: string;
-  coordinate: string;
-  orgName?: string | null;
-  orgSlug?: string | null;
-  orgAvatarUrl?: string | null;
-  orgGithubHandle?: string | null;
-  productName?: string | null;
-  productSlug?: string | null;
-  contentChars?: number | null;
-  contentTokens?: number | null;
-}): ReleaseFeedRow {
+function toReleaseFeedRow(
+  r: {
+    id: string;
+    title: string | null;
+    titleShort: string | null;
+    titleGenerated: string | null;
+    version: string | null;
+    type: string;
+    summary: string | null;
+    content: string | null;
+    publishedAt: string | null;
+    url: string | null;
+    sourceName: string;
+    sourceType: string;
+    coordinate: string;
+    orgName?: string | null;
+    orgSlug?: string | null;
+    orgAvatarUrl?: string | null;
+    orgGithubHandle?: string | null;
+    productName?: string | null;
+    productSlug?: string | null;
+    contentChars?: number | null;
+    contentTokens?: number | null;
+  },
+  webBase: string,
+): ReleaseFeedRow {
   return {
     id: r.id,
     title: r.title,
@@ -206,6 +217,7 @@ function toReleaseFeedRow(r: {
     contentPreview: (r.summary || r.content || "").slice(0, 500),
     publishedAt: r.publishedAt,
     url: r.url,
+    webUrl: releaseWebUrl(webBase, r),
     source: { name: r.sourceName, coordinate: r.coordinate, type: r.sourceType },
     org: r.orgName
       ? {
@@ -657,6 +669,7 @@ export async function getLatestReleases(
     since?: string;
     until?: string;
   },
+  webBase: string,
 ): Promise<ToolResult> {
   const limit = parseFeedLimit(params.limit ?? 10);
   const window = resolveToolWindow(params);
@@ -828,7 +841,7 @@ export async function getLatestReleases(
   const textParts: string[] = [];
   for (const r of pageRows) {
     const coordinate = r.orgSlug ? `${r.orgSlug}/${r.sourceSlug}` : r.sourceSlug;
-    structuredRows.push(toReleaseFeedRow({ ...r, coordinate }));
+    structuredRows.push(toReleaseFeedRow({ ...r, coordinate }, webBase));
     textParts.push(
       renderFeedReleaseText({
         id: r.id,
@@ -1228,12 +1241,18 @@ export interface ReleaseDetailStructured {
   summary: string | null;
   publishedAt: string | null;
   url: string | null;
+  /** Absolute slugged canonical web URL (#1906); distinct from upstream `url`. */
+  webUrl: string;
   source: { name: string; coordinate: string; type: string };
   org: { name: string; slug: string; avatarUrl: string | null; githubHandle: string | null } | null;
   product: { name: string; slug: string } | null;
 }
 
-export async function getRelease(db: D1Db, params: { id: string }): Promise<ToolResult> {
+export async function getRelease(
+  db: D1Db,
+  params: { id: string },
+  webBase: string,
+): Promise<ToolResult> {
   const id = normalizeReleaseId(params.id);
 
   const rows = await db
@@ -1286,6 +1305,8 @@ export async function getRelease(db: D1Db, params: { id: string }): Promise<Tool
     lines.push(`Organization: ${r.orgName}${r.orgSlug ? ` (${r.orgSlug})` : ""}`);
   }
   if (r.url) lines.push(`URL: ${r.url}`);
+  const webUrl = releaseWebUrl(webBase, r);
+  lines.push(`Web: ${webUrl}`);
   lines.push("");
   lines.push(body);
 
@@ -1301,6 +1322,7 @@ export async function getRelease(db: D1Db, params: { id: string }): Promise<Tool
     summary: r.summary,
     publishedAt: r.publishedAt,
     url: r.url,
+    webUrl,
     source: { name: r.sourceName ?? "Unknown", coordinate, type: r.sourceType ?? "" },
     org: r.orgName
       ? {
@@ -2547,6 +2569,7 @@ export async function getCollectionReleases(
     cursor?: string;
     include_prereleases?: boolean;
   },
+  webBase: string,
 ): Promise<ToolResult> {
   const slug = params.slug.trim();
   const limit = parseFeedLimit(params.limit ?? 20);
@@ -2636,29 +2659,32 @@ export async function getCollectionReleases(
   for (const r of pageRows) {
     const coordinate = `${r.org_slug}/${r.source_slug}`;
     structuredRows.push(
-      toReleaseFeedRow({
-        id: r.id,
-        title: r.title,
-        titleShort: r.title_short,
-        titleGenerated: r.title_generated,
-        version: r.version,
-        type: r.type,
-        summary: r.summary,
-        content: r.content,
-        publishedAt: r.published_at,
-        url: r.url,
-        sourceName: r.source_name,
-        sourceType: r.source_type,
-        coordinate,
-        orgName: r.org_name,
-        orgSlug: r.org_slug,
-        orgAvatarUrl: r.org_avatar_url,
-        orgGithubHandle: r.org_github_handle,
-        productName: r.product_name,
-        productSlug: r.product_slug,
-        contentChars: r.content_chars,
-        contentTokens: r.content_tokens,
-      }),
+      toReleaseFeedRow(
+        {
+          id: r.id,
+          title: r.title,
+          titleShort: r.title_short,
+          titleGenerated: r.title_generated,
+          version: r.version,
+          type: r.type,
+          summary: r.summary,
+          content: r.content,
+          publishedAt: r.published_at,
+          url: r.url,
+          sourceName: r.source_name,
+          sourceType: r.source_type,
+          coordinate,
+          orgName: r.org_name,
+          orgSlug: r.org_slug,
+          orgAvatarUrl: r.org_avatar_url,
+          orgGithubHandle: r.org_github_handle,
+          productName: r.product_name,
+          productSlug: r.product_slug,
+          contentChars: r.content_chars,
+          contentTokens: r.content_tokens,
+        },
+        webBase,
+      ),
     );
     textParts.push(
       renderFeedReleaseText({

@@ -14,6 +14,8 @@ export interface SlackReleaseInput {
   sourceName: string;
   org?: { name: string; avatarUrl: string | null; githubHandle: string | null } | null;
   product?: { name: string } | null;
+  /** Slugged canonical release URL (#1906). Preferred over the bare-ID fallback. */
+  webUrl?: string | null;
 }
 
 export interface SlackWebhookBody {
@@ -63,7 +65,7 @@ export function formatSlackMessage(
   opts?: { baseUrl?: string },
 ): SlackWebhookBody {
   const baseUrl = opts?.baseUrl ?? DEFAULT_BASE_URL;
-  const url = `${baseUrl}/release/${release.id}`;
+  const url = release.webUrl ?? `${baseUrl}/release/${release.id}`;
   const titleText = `${release.title}${release.version ? ` ${release.version}` : ""}`;
   const contextName = release.org?.name ?? release.product?.name ?? release.sourceName;
 

@@ -1,5 +1,6 @@
 import type { MediaItem } from "@buildinternet/releases-api-types";
 import type { ReleaseType } from "@buildinternet/releases-core/schema";
+import { releaseWebUrl } from "@buildinternet/releases-core/release-slug";
 import type { ReleaseEventPayload } from "./types.js";
 
 /** Minimal inserted-row shape the batch handler + cron fetchOne already build. */
@@ -33,6 +34,12 @@ export interface BuildEventsInput {
     product?: { slug: string; name: string } | null;
   };
   inserted: InsertedReleaseRow[];
+  /**
+   * Absolute web origin (no trailing slash) for building each payload's
+   * `webUrl`. Resolved by the publisher from `WEB_BASE_URL`. Omit to leave
+   * `webUrl` absent (e.g. tests that don't exercise the link).
+   */
+  webBase?: string;
 }
 
 function parseMedia(raw: string | null): MediaItem[] {
@@ -58,6 +65,8 @@ export function buildReleaseEventPayloads(input: BuildEventsInput): ReleaseEvent
     sourceType: input.src.type,
     org: input.src.org ?? null,
     product: input.src.product ?? null,
+    // Slug derives from title/version — the AI headlines are still null here.
+    webUrl: input.webBase ? releaseWebUrl(input.webBase, r) : null,
     summary: null,
     titleGenerated: null,
     titleShort: null,

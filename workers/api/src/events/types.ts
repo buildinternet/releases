@@ -36,6 +36,15 @@ export interface ReleaseEventPayload {
   } | null;
   /** Owning product (`sources.product_id`), when grouped. `null`/absent when ungrouped. */
   product?: { slug: string; name: string } | null;
+  /**
+   * Absolute canonical web URL for the release detail page — the slugged
+   * `/release/<id>-<slug>` form (#1906), built from `WEB_BASE_URL` at publish
+   * time. The slug derives from `title`/`version` (the AI headlines are still
+   * null at event time); the bare-ID form it 308s from also resolves, so a
+   * later title regen just churns the slug. Additive — older buffered events
+   * (and pinned workers) omit it; consumers fall back to `${base}/release/<id>`.
+   */
+  webUrl?: string | null;
   summary: string | null;
   /**
    * AI-generated headline (#852, renamed in #860). Always null at event time —
