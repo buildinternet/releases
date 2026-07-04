@@ -35,7 +35,7 @@ const MACHINE_ENDPOINTS = `## Machine-readable endpoints
 - [MCP server card](${BASE_URL}/.well-known/mcp/server-card.json): Machine-readable description of the hosted MCP server.
 - [Agent skills index](${BASE_URL}/.well-known/agent-skills/index.json): Discovery document for the installable agent skills.
 - [API catalog](${BASE_URL}/.well-known/api-catalog): RFC 9727 catalog advertising the REST API.
-- [releases.json schema](${BASE_URL}/schemas/releases.json): JSON Schema for owner-declared listing metadata (see Get Listed above).`;
+- [releases.json schema](${BASE_URL}/schemas/releases.json): JSON Schema for the owner-published manifest declaring products and release-note locations (see Get Listed above).`;
 
 const OPTIONAL = `## Optional
 

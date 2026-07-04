@@ -181,6 +181,7 @@
     "ENVIRONMENT": "production",
     "WEB_BOT_AUTH_ENABLED": "true",
     "USER_API_KEYS_ENABLED": "false",
+    "WELL_KNOWN_MATERIALIZATION_ENABLED": "true",
     // Comma-separated audience URIs accepted in JWT access tokens issued by the
     // OAuth provider. The API worker origin (BETTER_AUTH_URL) is always included;
     // this var adds remote resource servers (first consumer: the MCP worker).
@@ -726,6 +727,7 @@
         "ENVIRONMENT": "staging",
         "WEB_BOT_AUTH_ENABLED": "false",
         "USER_API_KEYS_ENABLED": "false",
+        "WELL_KNOWN_MATERIALIZATION_ENABLED": "true",
         // Staging issuer/baseURL — overrides the inherited top-level prod value so
         // createAuth's baseURL and oauthValidAudiences() resolve to the staging
         // origin (OAuth issuer, JWT `aud`, discovery metadata), not api.releases.sh.

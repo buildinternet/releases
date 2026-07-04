@@ -1,66 +1,163 @@
-import { describe, it, expect } from "bun:test";
-import { ReleasesJsonConfigSchema } from "./well-known.js";
+import { describe, expect, it } from "bun:test";
+import {
+  ReleasesJsonConfigSchema,
+  ReleasesJsonDomainSchema,
+  ReleasesJsonRepoSchema,
+} from "./well-known.js";
 
-describe("ReleasesJsonConfigSchema", () => {
-  it("accepts an empty object (no-op file)", () => {
-    expect(ReleasesJsonConfigSchema.safeParse({}).success).toBe(true);
+const location = (n: number) => ({ url: `https://acme.com/releases/${n}` });
+
+describe("releases.json v2 schemas", () => {
+  it("accepts the minimal domain manifest", () => {
+    expect(
+      ReleasesJsonDomainSchema.parse({
+        version: 2,
+        releases: [{ url: "https://acme.com/updates", feed: "https://acme.com/updates.xml" }],
+      }),
+    ).toEqual({
+      version: 2,
+      releases: [{ url: "https://acme.com/updates", feed: "https://acme.com/updates.xml" }],
+    });
   });
 
-  it("accepts a full org-scope file", () => {
-    const r = ReleasesJsonConfigSchema.safeParse({
+  it("accepts the full domain shape with advisory taxonomy", () => {
+    const parsed = ReleasesJsonDomainSchema.parse({
       $schema: "https://releases.sh/schemas/releases.json",
-      version: 1,
+      version: 2,
       name: "Acme",
       description: "CI for teams.",
-      category: "developer-tools",
+      category: "future-category",
       avatar: "https://acme.com/logo.png",
-      tags: ["ci", "observability"],
+      tags: ["future-tag"],
       social: { twitter: "acmehq", github: "acme" },
-      notice: { message: "Docs moved", href: "https://acme.com/docs" },
+      products: [
+        {
+          name: "Acme Cloud",
+          slug: "acme-cloud",
+          kind: "future-kind",
+          category: "future-category",
+          description: "Managed CI runners.",
+          website: "https://acme.com/cloud",
+          docs: "https://docs.acme.com/cloud",
+          support: "https://acme.com/support",
+          social: { twitter: "acmecloud" },
+          archived: true,
+          releases: [{ github: "acme/cloud", canonical: true }],
+        },
+      ],
+      registries: {
+        "releases.sh": {
+          org: "org_abc123",
+          verification: "verification-token",
+          futureKey: true,
+        },
+        "example.com": { anything: "goes" },
+      },
     });
-    expect(r.success).toBe(true);
+
+    expect(parsed.products?.[0]?.kind).toBe("future-kind");
+    expect(parsed.registries?.["example.com"]).toEqual({ anything: "goes" });
   });
 
-  it("accepts a product-scope file", () => {
-    const r = ReleasesJsonConfigSchema.safeParse({
-      product: { name: "Acme Cloud", slug: "acme-cloud", category: "cloud", kind: "platform" },
-    });
-    expect(r.success).toBe(true);
-  });
-
-  it("rejects a non-https avatar", () => {
-    expect(ReleasesJsonConfigSchema.safeParse({ avatar: "http://acme.com/x.png" }).success).toBe(
-      false,
-    );
-  });
-
-  it("rejects a product with no name", () => {
-    expect(ReleasesJsonConfigSchema.safeParse({ product: { slug: "x" } }).success).toBe(false);
-  });
-
-  it("rejects an unknown product kind", () => {
+  it("accepts the repo variant including github self", () => {
     expect(
-      ReleasesJsonConfigSchema.safeParse({ product: { name: "Acme Cloud", kind: "saas" } }).success,
+      ReleasesJsonRepoSchema.safeParse({
+        version: 2,
+        product: { name: "Acme Cloud", slug: "acme-cloud" },
+        releases: [{ github: "self", canonical: true }],
+        registries: { "releases.sh": { product: "prd_abc123" } },
+      }).success,
+    ).toBe(true);
+  });
+
+  it("requires the version 2 literal with no v1 compatibility", () => {
+    expect(ReleasesJsonConfigSchema.safeParse({ releases: [location(1)] }).success).toBe(false);
+    expect(ReleasesJsonConfigSchema.safeParse({ version: 1 }).success).toBe(false);
+    expect(ReleasesJsonConfigSchema.safeParse({ version: 3 }).success).toBe(false);
+  });
+
+  it("requires at least one locator per release location", () => {
+    expect(
+      ReleasesJsonDomainSchema.safeParse({ version: 2, releases: [{ title: "Updates" }] }).success,
     ).toBe(false);
   });
 
-  it("rejects an over-long notice message", () => {
-    const r = ReleasesJsonConfigSchema.safeParse({ notice: { message: "x".repeat(281) } });
-    expect(r.success).toBe(false);
+  it("allows github self only in repo files", () => {
+    expect(
+      ReleasesJsonDomainSchema.safeParse({ version: 2, releases: [{ github: "self" }] }).success,
+    ).toBe(false);
+    expect(
+      ReleasesJsonRepoSchema.safeParse({ version: 2, releases: [{ github: "self" }] }).success,
+    ).toBe(true);
   });
 
-  it("accepts an integer version", () => {
-    expect(ReleasesJsonConfigSchema.safeParse({ version: 1, name: "Acme" }).success).toBe(true);
+  it("enforces product and release-location caps", () => {
+    expect(
+      ReleasesJsonDomainSchema.safeParse({
+        version: 2,
+        products: Array.from({ length: 25 }, (_, i) => ({ name: `Product ${i}` })),
+      }).success,
+    ).toBe(false);
+    expect(
+      ReleasesJsonDomainSchema.safeParse({
+        version: 2,
+        products: [{ name: "Cloud", releases: Array.from({ length: 9 }, (_, i) => location(i)) }],
+      }).success,
+    ).toBe(false);
+    expect(
+      ReleasesJsonDomainSchema.safeParse({
+        version: 2,
+        releases: Array.from({ length: 33 }, (_, i) => location(i)),
+      }).success,
+    ).toBe(false);
+    expect(
+      ReleasesJsonDomainSchema.safeParse({
+        version: 2,
+        releases: Array.from({ length: 25 }, (_, i) => location(i)),
+        products: [
+          { name: "Cloud", releases: Array.from({ length: 8 }, (_, i) => location(i + 25)) },
+        ],
+      }).success,
+    ).toBe(false);
   });
 
-  it("rejects a zero, negative, or non-integer version", () => {
-    expect(ReleasesJsonConfigSchema.safeParse({ version: 0 }).success).toBe(false);
-    expect(ReleasesJsonConfigSchema.safeParse({ version: -1 }).success).toBe(false);
-    expect(ReleasesJsonConfigSchema.safeParse({ version: 1.5 }).success).toBe(false);
+  it("allows at most one canonical location per scope", () => {
+    const canonical = (n: number) => ({ ...location(n), canonical: true });
+    expect(
+      ReleasesJsonDomainSchema.safeParse({
+        version: 2,
+        releases: [canonical(1), canonical(2)],
+      }).success,
+    ).toBe(false);
+    expect(
+      ReleasesJsonDomainSchema.safeParse({
+        version: 2,
+        products: [{ name: "Cloud", releases: [canonical(1), canonical(2)] }],
+      }).success,
+    ).toBe(false);
   });
 
-  it("strips unknown top-level keys", () => {
-    const r = ReleasesJsonConfigSchema.parse({ name: "Acme", bogus: 1 });
-    expect("bogus" in r).toBe(false);
+  it("rejects removed v1 identity fields", () => {
+    expect(
+      ReleasesJsonDomainSchema.safeParse({ version: 2, website: "https://acme.com" }).success,
+    ).toBe(false);
+    expect(
+      ReleasesJsonDomainSchema.safeParse({ version: 2, notice: { message: "Moved" } }).success,
+    ).toBe(false);
+  });
+
+  it("requires typed stable ids for the releases.sh registry", () => {
+    expect(
+      ReleasesJsonDomainSchema.safeParse({
+        version: 2,
+        registries: { "releases.sh": { org: "prd_wrong" } },
+      }).success,
+    ).toBe(false);
+    expect(
+      ReleasesJsonRepoSchema.safeParse({
+        version: 2,
+        registries: { "releases.sh": { product: "org_wrong" } },
+      }).success,
+    ).toBe(false);
   });
 });

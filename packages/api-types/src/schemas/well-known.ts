@@ -1,54 +1,172 @@
 import { z } from "zod";
-import { KIND_VALUES } from "@buildinternet/releases-core/kinds";
-import { NoticeSchema } from "./shared.js";
 
-/** A single social handle/URL. Bare handles allowed; URLs must be https. */
+const MAX_PRODUCTS = 24;
+const MAX_PRODUCT_RELEASES = 8;
+const MAX_FILE_RELEASES = 32;
+
+/** A single social handle/URL. Bare handles are intentionally accepted. */
 const SocialValueSchema = z.string().min(1).max(200);
+const SocialSchema = z.record(z.string().min(1).max(40), SocialValueSchema);
 
-/** Product-scope block: declares the hosting repo's source belongs to this product. */
-export const ReleasesJsonProductSchema = z
-  .object({
-    name: z.string().min(1).max(120),
-    slug: z.string().min(1).max(120).optional(),
-    description: z.string().max(2000).optional(),
-    // Accepted leniently as a string; resolved/validated against CATEGORIES at apply time.
-    category: z.string().min(1).max(120).optional(),
-    kind: z.enum(KIND_VALUES).optional(),
+const HttpsUrlSchema = z
+  .url()
+  .refine((url) => url.startsWith("https://"), "locator must be an https URL");
+
+const ReleaseLocationFields = {
+  url: HttpsUrlSchema.optional(),
+  feed: HttpsUrlSchema.optional(),
+  appstore: HttpsUrlSchema.optional(),
+  file: HttpsUrlSchema.optional(),
+  title: z.string().min(1).max(200).optional(),
+  canonical: z.boolean().optional(),
+};
+
+function hasLocator(value: {
+  url?: string;
+  feed?: string;
+  github?: string;
+  appstore?: string;
+  file?: string;
+}): boolean {
+  return Boolean(value.url || value.feed || value.github || value.appstore || value.file);
+}
+
+/** A domain manifest can name a concrete GitHub repository, but never `self`. */
+export const ReleasesJsonDomainReleaseSchema = z
+  .strictObject({
+    ...ReleaseLocationFields,
+    github: z
+      .string()
+      .regex(/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/, "github must be owner/repo")
+      .optional(),
   })
-  .strict();
+  .refine(hasLocator, "at least one release locator is required");
+
+/** A repo manifest additionally accepts `github: "self"`. */
+export const ReleasesJsonRepoReleaseSchema = z
+  .strictObject({
+    ...ReleaseLocationFields,
+    github: z
+      .union([
+        z.literal("self"),
+        z.string().regex(/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/, "github must be owner/repo"),
+      ])
+      .optional(),
+  })
+  .refine(hasLocator, "at least one release locator is required");
+
+function releasesArray<T extends z.ZodType>(item: T, max: number) {
+  return z
+    .array(item)
+    .max(max)
+    .refine(
+      (items) =>
+        items.filter((entry) => Boolean((entry as { canonical?: boolean }).canonical)).length <= 1,
+      "at most one canonical release location is allowed per scope",
+    );
+}
+
+const DomainProductReleasesSchema = releasesArray(
+  ReleasesJsonDomainReleaseSchema,
+  MAX_PRODUCT_RELEASES,
+);
+const RepoReleasesSchema = releasesArray(ReleasesJsonRepoReleaseSchema, MAX_FILE_RELEASES);
+const DomainReleasesSchema = releasesArray(ReleasesJsonDomainReleaseSchema, MAX_FILE_RELEASES);
 
 /**
- * One file name, two hosting scopes. Org-identity keys are honored only from a
- * domain `.well-known/releases.json`; `product` is honored only from a repo-root
- * file. The server enforces which keys it honors based on the host the file came
- * from — this schema only validates shape.
+ * Product declaration in a domain manifest. Taxonomy strings are deliberately
+ * lenient here; the reconciler resolves known values and ignores the rest.
  */
-export const ReleasesJsonConfigSchema = z
+export const ReleasesJsonProductSchema = z.strictObject({
+  name: z.string().min(1).max(120),
+  slug: z.string().min(1).max(120).optional(),
+  kind: z.string().min(1).max(120).optional(),
+  category: z.string().min(1).max(120).optional(),
+  description: z.string().max(2000).optional(),
+  website: z.url().optional(),
+  docs: z.url().optional(),
+  support: z.url().optional(),
+  social: SocialSchema.optional(),
+  archived: z.boolean().optional(),
+  releases: DomainProductReleasesSchema.optional(),
+});
+
+/** Repo-scope product binding. Slug is only a creation suggestion. */
+export const ReleasesJsonRepoProductSchema = z.strictObject({
+  name: z.string().min(1).max(120),
+  slug: z.string().min(1).max(120).optional(),
+});
+
+const ReleasesRegistrySchema = z
   .object({
-    $schema: z.url().optional(),
-    // Manifest format version. Currently 1; optional — a missing value is read as
-    // v1. Bumped only on a breaking change to this file's shape, so a consumer can
-    // branch on it without fetching the JSON Schema. Lenient/fail-open: the
-    // reconciler ignores it entirely, so an unexpected value never fails the sync.
-    version: z.number().int().positive().max(1000).optional(),
-    // Org scope
+    org: z
+      .string()
+      .regex(/^org_[A-Za-z0-9]+$/)
+      .optional(),
+    product: z
+      .string()
+      .regex(/^prd_[A-Za-z0-9]+$/)
+      .optional(),
+    verification: z.string().min(1).max(500).optional(),
+  })
+  .catchall(z.unknown());
+
+/** Registry-specific extensions are forward-compatible by design. */
+export const ReleasesJsonRegistriesSchema = z
+  .object({
+    "releases.sh": ReleasesRegistrySchema.optional(),
+  })
+  .catchall(z.unknown());
+
+/** Top-level fields shared by every manifest scope. */
+const BaseFields = {
+  $schema: z.url().optional(),
+  version: z.literal(2),
+  registries: ReleasesJsonRegistriesSchema.optional(),
+};
+
+const CommonFields = {
+  ...BaseFields,
+  releases: DomainReleasesSchema.optional(),
+};
+
+/** Domain-hosted variant: flat org identity plus product and release declarations. */
+export const ReleasesJsonDomainSchema = z
+  .strictObject({
+    ...CommonFields,
     name: z.string().min(1).max(120).optional(),
     description: z.string().max(2000).optional(),
     category: z.string().min(1).max(120).optional(),
-    avatar: z
-      .url()
-      .refine((u) => u.startsWith("https://"), "avatar must be an https URL")
-      .optional(),
+    avatar: HttpsUrlSchema.optional(),
     tags: z.array(z.string().min(1).max(60)).max(50).optional(),
-    social: z.record(z.string().min(1).max(40), SocialValueSchema).optional(),
-    notice: NoticeSchema.optional(),
-    // Source/product scope
-    product: ReleasesJsonProductSchema.optional(),
+    social: SocialSchema.optional(),
+    products: z.array(ReleasesJsonProductSchema).max(MAX_PRODUCTS).optional(),
   })
-  .strip();
+  .refine(
+    (manifest) =>
+      (manifest.releases?.length ?? 0) +
+        (manifest.products?.reduce((sum, product) => sum + (product.releases?.length ?? 0), 0) ??
+          0) <=
+      MAX_FILE_RELEASES,
+    `at most ${MAX_FILE_RELEASES} release locations are allowed per file`,
+  );
+
+/** Repo-root variant: product binding plus repo-scoped release declarations. */
+export const ReleasesJsonRepoSchema = z.strictObject({
+  ...BaseFields,
+  product: ReleasesJsonRepoProductSchema.optional(),
+  releases: RepoReleasesSchema.optional(),
+});
+
+/** Public schema accepts either hosting scope; reconcilers use the scoped schema. */
+export const ReleasesJsonConfigSchema = z.union([ReleasesJsonDomainSchema, ReleasesJsonRepoSchema]);
 
 export type ReleasesJsonConfig = z.infer<typeof ReleasesJsonConfigSchema>;
+export type ReleasesJsonDomain = z.infer<typeof ReleasesJsonDomainSchema>;
+export type ReleasesJsonRepo = z.infer<typeof ReleasesJsonRepoSchema>;
 export type ReleasesJsonProduct = z.infer<typeof ReleasesJsonProductSchema>;
+export type ReleasesJsonDomainRelease = z.infer<typeof ReleasesJsonDomainReleaseSchema>;
+export type ReleasesJsonRepoRelease = z.infer<typeof ReleasesJsonRepoReleaseSchema>;
 
 /** Response shape of POST /v1/orgs/:slug/sync-well-known. */
 export const SyncWellKnownResponseSchema = z.object({

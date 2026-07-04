@@ -236,6 +236,15 @@ export const FLAGS = {
     description:
       "Steady-state scrape path captures the scraped markdown as a raw snapshot (#1283) for cheap re-extraction (#1284).",
   },
+  wellKnownMaterializationEnabled: {
+    key: "well-known-materialization-enabled",
+    env: "WELL_KNOWN_MATERIALIZATION_ENABLED",
+    default: true,
+    kind: "kill-switch",
+    reads: ["api"],
+    description:
+      "Owner-manifest product/source creation. Off = reconcile and mark existing entities only.",
+  },
   // default:true — OpenRouter is the established prod default (the prod wrangler
   // vars point SUMMARIZE_MODEL / EXTRACT_MODEL / FEED_ENRICH_MODEL at OpenRouter
   // models), so the fallback matches reality rather than dropping the fleet back to

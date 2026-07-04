@@ -253,6 +253,7 @@ export type Env = {
     // When "true", all relk_… tokens are rejected without a DB lookup.
     API_TOKENS_DISABLED?: string;
     USER_API_KEYS_ENABLED?: string;
+    WELL_KNOWN_MATERIALIZATION_ENABLED?: string;
     // When "true", `/v1/search` and the MCP search tools skip writing rows to
     // `search_queries`. Default off → logging on. See workers/api/src/lib/log-search.ts.
     SEARCH_QUERY_LOG_DISABLED?: string;
@@ -963,6 +964,9 @@ export default {
             MEDIA: env.MEDIA,
             MEDIA_ORIGIN: env.MEDIA_ORIGIN,
             CRON_ENABLED: env.CRON_ENABLED,
+            FLAGS: env.FLAGS,
+            WELL_KNOWN_MATERIALIZATION_ENABLED: env.WELL_KNOWN_MATERIALIZATION_ENABLED,
+            GITHUB_TOKEN: env.GITHUB_TOKEN,
           }),
           alertEnv,
         ),

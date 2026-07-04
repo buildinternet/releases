@@ -19,7 +19,11 @@ function org(over: Partial<Record<string, unknown>> = {}) {
 
 describe("computeOrgIdentityUpdates", () => {
   it("fills empty fields and marks them self-declared", () => {
-    const cfg: ReleasesJsonConfig = { description: "CI for teams.", category: "developer-tools" };
+    const cfg: ReleasesJsonConfig = {
+      version: 2,
+      description: "CI for teams.",
+      category: "developer-tools",
+    };
     const plan = computeOrgIdentityUpdates(org(), cfg, { resolveCategory });
     expect(plan.columnUpdates.description).toBe("CI for teams.");
     expect(plan.columnUpdates.category).toBe("developer-tools");
@@ -29,7 +33,7 @@ describe("computeOrgIdentityUpdates", () => {
   it("never clobbers a curator-set field (non-empty, not self-declared)", () => {
     const plan = computeOrgIdentityUpdates(
       org({ description: "Curator wrote this" }),
-      { description: "owner override" },
+      { version: 2, description: "owner override" },
       { resolveCategory },
     );
     expect(plan.columnUpdates.description).toBeUndefined();
@@ -47,7 +51,7 @@ describe("computeOrgIdentityUpdates", () => {
     });
     const plan = computeOrgIdentityUpdates(
       org({ description: "old owner value", metadata: meta }),
-      { description: "new owner value" },
+      { version: 2, description: "new owner value" },
       { resolveCategory },
     );
     expect(plan.columnUpdates.description).toBe("new owner value");
@@ -57,7 +61,7 @@ describe("computeOrgIdentityUpdates", () => {
   it("skips a valid category when curator-owned (not self-declared)", () => {
     const plan = computeOrgIdentityUpdates(
       org({ category: "cloud" }),
-      { category: "developer-tools" },
+      { version: 2, category: "developer-tools" },
       { resolveCategory },
     );
     expect(plan.columnUpdates.category).toBeUndefined();
@@ -67,7 +71,7 @@ describe("computeOrgIdentityUpdates", () => {
   it("ignores an unresolvable category but proceeds", () => {
     const plan = computeOrgIdentityUpdates(
       org(),
-      { description: "ok", category: "not-a-category" },
+      { version: 2, description: "ok", category: "not-a-category" },
       { resolveCategory },
     );
     expect(plan.columnUpdates.category).toBeUndefined();
@@ -78,7 +82,7 @@ describe("computeOrgIdentityUpdates", () => {
   it("collects additive tags and socials without precedence", () => {
     const plan = computeOrgIdentityUpdates(
       org(),
-      { tags: ["ci"], social: { twitter: "acmehq" } },
+      { version: 2, tags: ["ci"], social: { twitter: "acmehq" } },
       { resolveCategory },
     );
     expect(plan.tagsToAdd).toEqual(["ci"]);
@@ -88,14 +92,18 @@ describe("computeOrgIdentityUpdates", () => {
   it("plans an avatar mirror when avatarUrl is empty", () => {
     const plan = computeOrgIdentityUpdates(
       org(),
-      { avatar: "https://acme.com/logo.png" },
+      { version: 2, avatar: "https://acme.com/logo.png" },
       { resolveCategory },
     );
     expect(plan.avatarSourceUrl).toBe("https://acme.com/logo.png");
   });
 
   it("does not touch name when config omits it", () => {
-    const plan = computeOrgIdentityUpdates(org(), { description: "x" }, { resolveCategory });
+    const plan = computeOrgIdentityUpdates(
+      org(),
+      { version: 2, description: "x" },
+      { resolveCategory },
+    );
     expect(plan.columnUpdates.name).toBeUndefined();
   });
 });

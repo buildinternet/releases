@@ -47,7 +47,7 @@ The one structural rule to internalize: **the API worker is the only data plane.
 - **[routing.md](architecture/routing.md)** — where routes live and why: CRUD vs job triggers vs admin telemetry, slug/ID resolution, the lookups family, pagination shapes.
 - **[errors.md](architecture/errors.md)** — the one error envelope every non-2xx response uses, and how to add a code.
 - **[taxonomy.md](architecture/taxonomy.md)** — the classification axes and how `kind`, `type`, and `category` differ (they've collided before; this doc is the referee).
-- **[well-known-config.md](architecture/well-known-config.md)** — how vendors self-declare listing metadata via `releases.json`, and why it can never clobber curator edits.
+- **[well-known-config.md](architecture/well-known-config.md)** — owner-declared `releases.json` v2 manifest (products + release-note locators), reconciliation, and cost-tiered materialization; fail-closed, never clobbers curator edits.
 
 ### Search and AI
 

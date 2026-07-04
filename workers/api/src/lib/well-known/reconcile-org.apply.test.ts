@@ -26,6 +26,7 @@ describe("syncOrgWellKnown", () => {
       fetchImpl: async () =>
         new Response(
           JSON.stringify({
+            version: 2,
             description: "CI for teams.",
             tags: ["ci"],
             social: { twitter: "acmehq" },
@@ -54,7 +55,7 @@ describe("syncOrgWellKnown", () => {
       domain: "beta.com",
       dryRun: true,
       fetchImpl: async () =>
-        new Response(JSON.stringify({ description: "x" }), {
+        new Response(JSON.stringify({ version: 2, description: "x" }), {
           status: 200,
           headers: { "content-type": "application/json" },
         }),
@@ -68,7 +69,7 @@ describe("syncOrgWellKnown", () => {
   it("short-circuits as unchanged when the marker hash matches", async () => {
     const db = createTestDb();
     await db.insert(organizations).values({ id: "org_d", slug: "delta", name: "Delta" });
-    const file = { description: "stable copy." };
+    const file = { version: 2, description: "stable copy." };
     const fetchImpl = async () =>
       new Response(JSON.stringify(file), {
         status: 200,

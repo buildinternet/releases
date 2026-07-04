@@ -1,9 +1,8 @@
 import { eq } from "drizzle-orm";
 import { organizations, orgAccounts, orgTags } from "@buildinternet/releases-core/schema";
-import { parseNotice, setNoticeInMetadata } from "@buildinternet/releases-core/notice";
 import {
-  ReleasesJsonConfigSchema,
-  type ReleasesJsonConfig,
+  ReleasesJsonDomainSchema,
+  type ReleasesJsonDomain,
 } from "@buildinternet/releases-api-types";
 import { resolveCategoryInput } from "@releases/core-internal/category-alias";
 import { ingestOrgAvatar } from "../avatar-ingest.js";
@@ -11,7 +10,12 @@ import { getOrCreateTagsD1 } from "../../utils.js";
 import { createDb } from "../../db.js";
 import { logEvent } from "@releases/lib/log-event";
 import { fetchReleasesJson } from "./fetch.js";
-import { parseSelfDeclared, setSelfDeclaredInMetadata, configHash } from "./self-declared.js";
+import { parseSelfDeclared, mergeSelfDeclaredMetadata, configHash } from "./self-declared.js";
+import {
+  reconcileDomainEntities,
+  type EntityMaterializationPlan,
+  type MaterializationOptions,
+} from "./materialize.js";
 
 /** Minimal shape of an organizations row the diff needs. */
 export interface OrgLike {
@@ -23,10 +27,8 @@ export interface OrgLike {
 }
 
 export interface OrgIdentityPlan {
-  /** Direct column writes (name/description/category). Notice goes via metadata. */
+  /** Direct column writes (name/description/category). */
   columnUpdates: Partial<{ name: string; description: string; category: string }>;
-  /** New notice to merge into metadata, or undefined to leave as-is. */
-  notice?: NonNullable<ReleasesJsonConfig["notice"]>;
   /** Remote image to mirror to R2, or undefined. */
   avatarSourceUrl?: string;
   /** Additive — never subject to no-clobber. */
@@ -45,11 +47,11 @@ export interface OrgReconcileDeps {
 
 /** Single-value fields under the precedence rule. `notice`/`avatar` are stored
  *  off-column but follow the same rule via custom getters below. */
-type SingleValueField = "name" | "description" | "category" | "avatar" | "notice";
+type SingleValueField = "name" | "description" | "category" | "avatar";
 
 export function computeOrgIdentityUpdates(
   org: OrgLike,
-  config: ReleasesJsonConfig,
+  config: ReleasesJsonDomain,
   deps: OrgReconcileDeps,
 ): OrgIdentityPlan {
   const marker = parseSelfDeclared(org.metadata);
@@ -68,7 +70,6 @@ export function computeOrgIdentityUpdates(
     description: !org.description,
     category: !org.category,
     avatar: !org.avatarUrl,
-    notice: parseNotice(org.metadata) === null,
   };
 
   const writable = (field: SingleValueField) => isEmpty[field] || declared.has(field);
@@ -107,14 +108,6 @@ export function computeOrgIdentityUpdates(
       mark("avatar");
     } else plan.skipped.push("avatar");
   }
-  // notice
-  if (config.notice !== undefined) {
-    if (writable("notice")) {
-      plan.notice = config.notice;
-      mark("notice");
-    } else plan.skipped.push("notice");
-  }
-
   // Additive collections.
   if (config.tags) plan.tagsToAdd = [...config.tags];
   if (config.social) {
@@ -135,13 +128,18 @@ export interface SyncOrgOptions {
   domain: string | null;
   dryRun?: boolean;
   fetchImpl?: (input: string, init?: RequestInit) => Promise<Response>;
+  materializationEnabled?: boolean;
+  githubToken?: string;
+  probe?: MaterializationOptions["probe"];
 }
+
+export interface OrgReconcilePlan extends OrgIdentityPlan, EntityMaterializationPlan {}
 
 export interface SyncOrgResult {
   fetched: boolean;
   applied: boolean;
   skippedReason?: string;
-  plan?: OrgIdentityPlan;
+  plan?: OrgReconcilePlan;
 }
 
 export async function syncOrgWellKnown(
@@ -182,7 +180,7 @@ export async function syncOrgWellKnown(
     return { fetched: false, applied: false, skippedReason: fetched.reason };
   }
 
-  const validated = ReleasesJsonConfigSchema.safeParse(fetched.json);
+  const validated = ReleasesJsonDomainSchema.safeParse(fetched.json);
   if (!validated.success) {
     logEvent("warn", {
       component: "well-known",
@@ -194,6 +192,10 @@ export async function syncOrgWellKnown(
     return { fetched: true, applied: false, skippedReason: "invalid_schema" };
   }
   const config = validated.data;
+  const registryOrgId = config.registries?.["releases.sh"]?.org;
+  if (registryOrgId && registryOrgId !== orgId) {
+    return { fetched: true, applied: false, skippedReason: "registry_org_mismatch" };
+  }
 
   // Hash is order-sensitive; a schema field-order change can cause a one-time
   // spurious re-apply on the next sweep (idempotent, harmless).
@@ -204,20 +206,33 @@ export async function syncOrgWellKnown(
   }
 
   const resolvedCategory = config.category ? await resolveCategoryInput(db, config.category) : null;
-  const plan = computeOrgIdentityUpdates(org, config, {
+  const identityPlan = computeOrgIdentityUpdates(org, config, {
     resolveCategory: (input) =>
       input === config.category && resolvedCategory && resolvedCategory.ok
         ? resolvedCategory.slug
         : null,
   });
+  const entities = await reconcileDomainEntities(db, orgId, config, {
+    dryRun: opts.dryRun === true,
+    enabled: opts.materializationEnabled !== false,
+    source: "well-known",
+    fetchImpl: opts.fetchImpl as typeof fetch | undefined,
+    githubToken: opts.githubToken,
+    probe: opts.probe,
+    resolveCategory: async (input) => {
+      const result = await resolveCategoryInput(db, input);
+      return result.ok ? result.slug : null;
+    },
+  });
+  const plan: OrgReconcilePlan = { ...identityPlan, ...entities.plan };
 
   if (opts.dryRun) return { fetched: true, applied: false, plan };
 
   // Avatar mirror (best-effort; a failure must not fail the sync).
   let avatarUrl: string | undefined;
-  if (plan.avatarSourceUrl) {
+  if (identityPlan.avatarSourceUrl) {
     const result = await ingestOrgAvatar({
-      sourceUrl: plan.avatarSourceUrl,
+      sourceUrl: identityPlan.avatarSourceUrl,
       slug: org.slug,
       bucket: opts.bucket,
       mediaOrigin: opts.mediaOrigin,
@@ -233,20 +248,19 @@ export async function syncOrgWellKnown(
       });
   }
 
-  // Compose metadata: notice (if any) + the selfDeclared provenance marker.
-  let metadata = org.metadata ?? "{}";
-  if (plan.notice !== undefined) metadata = setNoticeInMetadata(metadata, plan.notice);
-  metadata = setSelfDeclaredInMetadata(metadata, {
-    fields: plan.selfDeclaredFields,
+  const hasDeferredEntity =
+    plan.products.some((item) => item.action === "skip") ||
+    plan.sources.some((item) => item.action === "skip");
+  const metadata = mergeSelfDeclaredMetadata(org.metadata, {
+    fields: identityPlan.selfDeclaredFields,
     source: "well-known",
-    configHash: hash,
-    syncedAt: new Date().toISOString(),
+    configHash: hasDeferredEntity ? `partial:${hash}` : hash,
   });
 
   await db
     .update(organizations)
     .set({
-      ...plan.columnUpdates,
+      ...identityPlan.columnUpdates,
       ...(avatarUrl ? { avatarUrl } : {}),
       metadata,
       updatedAt: new Date().toISOString(),
@@ -254,8 +268,8 @@ export async function syncOrgWellKnown(
     .where(eq(organizations.id, org.id));
 
   // Additive tags.
-  if (plan.tagsToAdd.length > 0) {
-    const tagRows = await getOrCreateTagsD1(db, plan.tagsToAdd);
+  if (identityPlan.tagsToAdd.length > 0) {
+    const tagRows = await getOrCreateTagsD1(db, identityPlan.tagsToAdd);
     const now = new Date().toISOString();
     await db
       .insert(orgTags)
@@ -263,12 +277,12 @@ export async function syncOrgWellKnown(
       .onConflictDoNothing();
   }
   // Additive socials — single batched insert (mirrors the tag insert above).
-  if (plan.socialsToAdd.length > 0) {
+  if (identityPlan.socialsToAdd.length > 0) {
     const socialNow = new Date().toISOString();
     await db
       .insert(orgAccounts)
       .values(
-        plan.socialsToAdd.map((s) => ({
+        identityPlan.socialsToAdd.map((s) => ({
           orgId: org.id,
           platform: s.platform,
           handle: s.handle,
@@ -282,7 +296,16 @@ export async function syncOrgWellKnown(
     component: "well-known",
     event: "org-applied",
     orgId,
-    fields: plan.selfDeclaredFields,
+    fields: identityPlan.selfDeclaredFields,
   });
-  return { fetched: true, applied: true, plan };
+  return {
+    fetched: true,
+    applied:
+      entities.applied ||
+      Object.keys(identityPlan.columnUpdates).length > 0 ||
+      Boolean(avatarUrl) ||
+      identityPlan.tagsToAdd.length > 0 ||
+      identityPlan.socialsToAdd.length > 0,
+    plan,
+  };
 }
