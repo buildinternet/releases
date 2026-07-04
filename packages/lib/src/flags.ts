@@ -156,6 +156,22 @@ export const FLAGS = {
     env: "ORG_DRAIN_ACTOR_ENABLED",
     default: false,
   },
+  // Rollout gate + kill switch for the deterministic `update` path (#1878).
+  // A routine per-source update is a deterministic fetch→extract pipeline; the
+  // worker agent added nothing load-bearing, yet its ~19k-token prompt+skills+
+  // playbook cache-creation was ~84% of the session cost. ON → the discovery
+  // worker loops `scrapeFetch` over the due sources directly, with NO
+  // Managed-Agents (Haiku) session — but only when the scrape secrets
+  // (CLOUDFLARE_ACCOUNT_ID + CLOUDFLARE_API_TOKEN) are present; without them the
+  // short-circuit's `scrapeHandler` is undefined and the legacy session runs.
+  // OFF (default) → the legacy worker-agent session runs unchanged. Flip ON in
+  // BOTH Flagship apps to roll out (verify on staging / a few orgs first); flip
+  // OFF to instantly revert to the agent path.
+  deterministicUpdateEnabled: {
+    key: "deterministic-update-enabled",
+    env: "DETERMINISTIC_UPDATE_ENABLED",
+    default: false,
+  },
 } as const satisfies Record<string, FlagDef>;
 
 /** Layered fallback: var value if set, else the hardcoded default. */
