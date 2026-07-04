@@ -20,6 +20,20 @@ export interface FlagshipBinding {
   ): Promise<boolean>;
 }
 
+/**
+ * Lifecycle of a flag — the axis that decides whether it's permanent surface or
+ * a candidate for deletion:
+ * - `kill-switch`: a permanent operational lever (incident/rollback/mode toggle)
+ *   expected to live indefinitely.
+ * - `rollout`: a temporary gate for staging a new feature. Once it's been fully
+ *   on (or off) in prod for a while, RETIRE it — remove the flag + the dead
+ *   branch. Rollout gates that never get retired are the main source of sprawl.
+ */
+export type FlagKind = "kill-switch" | "rollout";
+
+/** Worker runtime(s) that evaluate a flag — where it actually takes effect. */
+export type FlagReader = "api" | "discovery" | "mcp" | "webhooks";
+
 export interface FlagDef {
   /** Flagship flag key (kebab-case). MUST exist identically in BOTH apps. */
   readonly key: string;
@@ -27,6 +41,16 @@ export interface FlagDef {
   readonly env: string;
   /** Hardcoded last-resort default when neither Flagship nor the var is set. */
   readonly default: boolean;
+  /** Permanent lever vs. temporary rollout gate — see {@link FlagKind}. */
+  readonly kind: FlagKind;
+  /** Which worker(s) read this flag at runtime. */
+  readonly reads: readonly FlagReader[];
+  /**
+   * One-line summary of what the flag controls. Source of truth for the
+   * generated docs table — keep it a single sentence; deeper detail belongs in
+   * `docs/architecture/feature-flags.md` prose or the owning subsystem's doc.
+   */
+  readonly description: string;
 }
 
 /**
@@ -39,122 +63,212 @@ export const FLAGS = {
     key: "media-gif-transcode-enabled",
     env: "MEDIA_GIF_TRANSCODE_ENABLED",
     default: false,
+    kind: "rollout",
+    reads: ["api"],
+    description: "Transcode uploaded/ingested GIFs to video. Off = store the GIF as-is.",
   },
-  feedEnrichEnabled: { key: "feed-enrich-enabled", env: "FEED_ENRICH_ENABLED", default: false },
-  // Kill switch (#1410): scrape-source title-dedup is ON by default (default:false
-  // → not disabled); flip to true in Flagship to roll back. Collapses same-source
-  // same-normalized-title rows that anchor URLs (`<page>#<slug>`) fail to dedup.
+  feedEnrichEnabled: {
+    key: "feed-enrich-enabled",
+    env: "FEED_ENRICH_ENABLED",
+    default: false,
+    kind: "kill-switch",
+    reads: ["api"],
+    description:
+      "Enriches summary-only feed items by fetching the linked page and extracting full content before insert.",
+  },
+  // #1410: collapses same-source same-normalized-title rows that anchor URLs
+  // (`<page>#<slug>`) fail to dedup. ON by default (default:false → not disabled).
   scrapeTitleDedupDisabled: {
     key: "scrape-title-dedup-disabled",
     env: "SCRAPE_TITLE_DEDUP_DISABLED",
     default: false,
+    kind: "kill-switch",
+    reads: ["api"],
+    description: "Kill switch for scrape-source title dedup (#1410). false = dedup active.",
   },
-  webBotAuthEnabled: { key: "web-bot-auth-enabled", env: "WEB_BOT_AUTH_ENABLED", default: false },
-  invalidationEnabled: { key: "invalidation-enabled", env: "INVALIDATION_ENABLED", default: false },
-  maSessionsDisabled: { key: "ma-sessions-disabled", env: "MA_SESSIONS_DISABLED", default: false },
+  webBotAuthEnabled: {
+    key: "web-bot-auth-enabled",
+    env: "WEB_BOT_AUTH_ENABLED",
+    default: false,
+    kind: "kill-switch",
+    reads: ["api", "discovery"],
+    description: "Signs outbound content fetches with RFC 9421 Web Bot Auth signatures.",
+  },
+  invalidationEnabled: {
+    key: "invalidation-enabled",
+    env: "INVALIDATION_ENABLED",
+    default: false,
+    kind: "rollout",
+    reads: ["api"],
+    description: "Cache-invalidation workflow. Off = not running.",
+  },
+  maSessionsDisabled: {
+    key: "ma-sessions-disabled",
+    env: "MA_SESSIONS_DISABLED",
+    default: false,
+    kind: "kill-switch",
+    reads: ["discovery"],
+    description: "Incident kill switch for managed-agent sessions. false = sessions allowed.",
+  },
   batchSummarizeEnabled: {
     key: "batch-summarize-enabled",
     env: "BATCH_SUMMARIZE_ENABLED",
     default: false,
+    kind: "kill-switch",
+    reads: ["api"],
+    description: "Post-ingest batch auto-summarize (Haiku title / short-title / summary).",
   },
   batchOverviewEnabled: {
     key: "batch-overview-enabled",
     env: "BATCH_OVERVIEW_ENABLED",
     default: false,
+    kind: "rollout",
+    reads: ["api"],
+    description:
+      "Batch org-overview (AI knowledge-page) generation workflow. Off = manual/agent-driven only.",
   },
   overviewRegenEnabled: {
     key: "overview-regen-enabled",
     env: "OVERVIEW_REGEN_ENABLED",
     default: false,
+    kind: "rollout",
+    reads: ["api"],
+    description:
+      "Automated weekly org-overview regeneration workflow (#1706). Off = manual/agent-driven only.",
   },
   recommendationsDisabled: {
     key: "recommendations-disabled",
     env: "RECOMMENDATIONS_DISABLED",
     default: false,
+    kind: "kill-switch",
+    reads: ["api"],
+    description: "Kill switch for recommendations. false = recommendations active.",
   },
-  feedbackDisabled: { key: "feedback-disabled", env: "FEEDBACK_DISABLED", default: false },
-  rateLimitEnabled: { key: "rate-limit-enabled", env: "RATE_LIMIT_ENABLED", default: false },
+  feedbackDisabled: {
+    key: "feedback-disabled",
+    env: "FEEDBACK_DISABLED",
+    default: false,
+    kind: "kill-switch",
+    reads: ["api"],
+    description: "Kill switch for the feedback endpoints. false = feedback enabled.",
+  },
+  rateLimitEnabled: {
+    key: "rate-limit-enabled",
+    env: "RATE_LIMIT_ENABLED",
+    default: false,
+    kind: "kill-switch",
+    reads: ["api", "mcp"],
+    description: "Public read-path rate limiting. Off = no limiting.",
+  },
   searchQueryLogDisabled: {
     key: "search-query-log-disabled",
     env: "SEARCH_QUERY_LOG_DISABLED",
     default: false,
+    kind: "kill-switch",
+    reads: ["api", "mcp"],
+    description: "Kill switch for search-query logging (`search_queries` table). false = active.",
   },
-  apiTokensDisabled: { key: "api-tokens-disabled", env: "API_TOKENS_DISABLED", default: false },
-  // Rollout gate: the Better Auth user-API-key path. default:false → OFF until the
-  // web self-serve panel ships; flip on in BOTH Flagship apps to enable relu_ key
-  // verification + (later) self-serve creation. Separate from apiTokensDisabled,
-  // which kills the whole token path (both lanes).
+  apiTokensDisabled: {
+    key: "api-tokens-disabled",
+    env: "API_TOKENS_DISABLED",
+    default: false,
+    kind: "kill-switch",
+    reads: ["api", "mcp"],
+    description:
+      "Kill switch for scoped `relk_` API-token auth. false = tokens active (static root key still works).",
+  },
   userApiKeysEnabled: {
     key: "user-api-keys-enabled",
     env: "USER_API_KEYS_ENABLED",
     default: false,
+    kind: "rollout",
+    reads: ["api", "mcp"],
+    description:
+      "Better Auth user-API-key (`relu_`) path — verification + self-serve creation. Separate from `api-tokens-disabled` (which kills both token lanes).",
   },
-  cacheDisabled: { key: "cache-disabled", env: "CACHE_DISABLED", default: false },
-  indexingDisabled: { key: "indexing-disabled", env: "INDEXING_DISABLED", default: false },
-  // Default ON — the large-body (>50K-token) extraction tool-loop is rolled out
-  // and Enabled in both Flagship apps. Per the outage-safety rule above, the
-  // default matches the deployed reality so a Flagship outage keeps it on (a
-  // no-op) instead of silently dropping every >50K body back to one-shot. Flip
-  // OFF in Flagship to kill-switch the tool-loop fleet-wide.
+  cacheDisabled: {
+    key: "cache-disabled",
+    env: "CACHE_DISABLED",
+    default: false,
+    kind: "kill-switch",
+    reads: ["api"],
+    description: "Kill switch for `Cache-Control` response headers. false = caching active.",
+  },
+  indexingDisabled: {
+    key: "indexing-disabled",
+    env: "INDEXING_DISABLED",
+    default: false,
+    kind: "kill-switch",
+    reads: ["api", "mcp"],
+    description:
+      "Stamps `X-Robots-Tag: noindex` + `Disallow: /` (how staging is gated). false in prod = indexable.",
+  },
+  // default:true — the >50K-token extraction tool-loop is fully rolled out, so the
+  // last-resort fallback (Flagship unreachable AND the var unset) matches deployed
+  // reality instead of silently dropping every large body back to one-shot.
   extractToolLoopEnabled: {
     key: "extract-toolloop-enabled",
     env: "EXTRACT_TOOLLOOP_ENABLED",
     default: true,
+    kind: "kill-switch",
+    reads: ["discovery"],
+    description:
+      "Multi-round tool-use extraction for large bodies (>50K tokens). Off = one-shot inline only.",
   },
   backfillWorkflow: {
     key: "backfill-workflow-enabled",
     env: "BACKFILL_WORKFLOW_ENABLED",
     default: false,
+    kind: "rollout",
+    reads: ["api"],
+    description:
+      "Durable resumable full-history backfill workflow (deep Firecrawl path). Off = inline backfill only.",
   },
   rawSnapshotCapture: {
     key: "raw-snapshot-capture-enabled",
     env: "RAW_SNAPSHOT_CAPTURE_ENABLED",
     default: false,
+    kind: "rollout",
+    reads: ["discovery"],
+    description:
+      "Steady-state scrape path captures the scraped markdown as a raw snapshot (#1283) for cheap re-extraction (#1284).",
   },
-  // Single switch for the secondary AI lanes (marketing classifier, live release
-  // summarizer, feed enrichment, large-body extraction, …) on the TextModel seam.
-  // ON → route every such lane that ALSO has an OpenRouter model var configured
-  // (e.g. MARKETING_CLASSIFIER_MODEL, SUMMARIZE_MODEL, EXTRACT_MODEL) onto
-  // OpenRouter at runtime; a lane with an empty model var stays on Anthropic Haiku
-  // regardless (fail-open). This is the ONLY OpenRouter toggle — there are no
-  // per-lane flags; per-lane control is "set the model var or leave it empty".
-  // Resolved in workers/api/src/lib/text-model.ts (resolveTextModel) +
-  // extract-model.ts. OpenRouter is called directly, never fronted by the CF AI
-  // Gateway (no double-hop) — see docs/architecture/ai-gateway.md.
-  //
-  // default:true — OpenRouter is the established prod default for these lanes (the
-  // prod wrangler vars point SUMMARIZE_MODEL / EXTRACT_MODEL / FEED_ENRICH_MODEL at
-  // OpenRouter models), so the safe last-resort fallback (Flagship unreachable AND
-  // OPENROUTER_ENABLED var unset) is ON, matching the deployed reality rather than
-  // silently dropping the whole fleet back to Anthropic Haiku. Flip OFF in Flagship
-  // to kill-switch every OpenRouter lane back to Anthropic at once.
+  // default:true — OpenRouter is the established prod default (the prod wrangler
+  // vars point SUMMARIZE_MODEL / EXTRACT_MODEL / FEED_ENRICH_MODEL at OpenRouter
+  // models), so the fallback matches reality rather than dropping the fleet back to
+  // Anthropic Haiku. This is the ONLY OpenRouter toggle — per-lane control is "set
+  // the model var or leave it empty". Never fronted by the CF AI Gateway (no
+  // double-hop) — see docs/architecture/ai-gateway.md.
   openrouterEnabled: {
     key: "openrouter-enabled",
     env: "OPENROUTER_ENABLED",
     default: true,
+    kind: "kill-switch",
+    reads: ["api", "discovery"],
+    description:
+      "Single switch for the secondary cheap-call AI lanes (marketing classifier, summarizer, feed-enrich, large-body extract). On = lanes with an OpenRouter model var route to OpenRouter; off = Anthropic Haiku.",
   },
-  // Rollout gate for the stale OAuth-client reaper cron (sweep-oauth-clients).
-  // default:false → the nightly sweep runs in OBSERVE-ONLY mode (logs the
-  // reapable candidates without deleting), so you can watch what it would purge
-  // in Axiom first. Flip ON in BOTH Flagship apps to actually delete abandoned
-  // dynamic-registration clients (untrusted, never consented, no tokens, older
-  // than the retention window). The cron always runs when crons are on; this flag
-  // only gates delete-vs-observe.
+  // default:false → the nightly sweep runs in OBSERVE-ONLY mode (logs candidates
+  // without deleting) so you can watch what it would purge in Axiom first.
   oauthClientReaperEnabled: {
     key: "oauth-client-reaper-enabled",
     env: "OAUTH_CLIENT_REAPER_ENABLED",
     default: false,
+    kind: "rollout",
+    reads: ["api"],
+    description:
+      "Stale OAuth-client reaper cron. Off = observe-only (log reapable candidates); on = delete abandoned DCR clients.",
   },
-  // Rollout gate + kill switch for the actor-native scrape/agent drain
-  // (OrgActor). default:false → OFF: the poll path does not self-flag, the
-  // SourceActor does not notify an OrgActor, and the force-drain (#518) +
-  // scrape-agent-sweep (#482) crons run as before. Flip ON in BOTH Flagship
-  // apps to move the drain onto the actor path (the crons then early-return).
-  // Roll back by flipping OFF — the crons resume next tick.
+  // default:false → OFF: the force-drain (#518) + scrape-agent-sweep (#482) crons
+  // run as before. ON moves the drain onto the actor path (the crons early-return).
   orgDrainActorEnabled: {
     key: "org-drain-actor-enabled",
     env: "ORG_DRAIN_ACTOR_ENABLED",
     default: false,
+    kind: "rollout",
+    reads: ["api"],
+    description:
+      "Actor-native scrape/agent drain (OrgActor, #1777). On = actor path drives; off = the force-drain + scrape-agent-sweep crons run.",
   },
 } as const satisfies Record<string, FlagDef>;
 

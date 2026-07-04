@@ -3,7 +3,7 @@ import { FLAGS, flag } from "@releases/lib/flags";
 
 describe("orgDrainActorEnabled flag", () => {
   it("is registered with the right key/env/default", () => {
-    expect(FLAGS.orgDrainActorEnabled).toEqual({
+    expect(FLAGS.orgDrainActorEnabled).toMatchObject({
       key: "org-drain-actor-enabled",
       env: "ORG_DRAIN_ACTOR_ENABLED",
       default: false,

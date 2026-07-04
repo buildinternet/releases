@@ -23,38 +23,62 @@ so nothing changes until a flag exists _and_ its variation diverges from the var
 
 ## Flags
 
-Default = current prod value. Note the polarity split: `*-enabled` flags are **off** at
-`false`; `*-disabled` flags are kill switches, so `false` means the feature is **on**.
+**This table is generated from the `FLAGS` registry (`@releases/lib/flags`) — do not
+edit it by hand.** Run `bun run flags:docs` to regenerate after changing the registry;
+a test fails if it's stale. Each flag is grouped by its `kind`:
 
-### Enabled in prod (default `true`)
+- **Kill switches** are permanent operational levers (incident / rollback / mode toggles).
+- **Rollout gates** are temporary — once one has been fully on (or off) in prod for a
+  while, retire it (delete the flag + its dead branch). Un-retired rollout gates are the
+  main source of sprawl.
 
-| Flag key                  | Default | What it controls                                                                                        |
-| ------------------------- | ------- | ------------------------------------------------------------------------------------------------------- |
-| `batch-summarize-enabled` | `true`  | Post-ingest batch auto-summarize (Haiku title/short-title/summary generation).                          |
-| `feed-enrich-enabled`     | `true`  | Enriches summary-only feed items by fetching the linked page and extracting full content before insert. |
-| `web-bot-auth-enabled`    | `true`  | Signs outbound fetches with RFC 9421 Web Bot Auth signatures.                                           |
+`Default` is the **hardcoded last-resort fallback** — the value used only when Flagship is
+unreachable _and_ the wrangler var is unset. It is **not** the live prod value: Flagship (or
+the `env` var, which is the `key` in `UPPER_SNAKE_CASE`) overrides it at runtime, so check
+the dashboard for what's actually on. Polarity: `*-enabled` flags are off at `false`;
+`*-disabled` kill switches are on at `false`. `Reads` is the worker(s) that evaluate the flag.
 
-### Disabled in prod (default `false`)
+<!-- BEGIN GENERATED FLAG TABLE (bun run flags:docs) -->
 
-| Flag key                       | Default | What it controls                                                                                                                                                                                                                                                         |
-| ------------------------------ | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `rate-limit-enabled`           | `false` | Public read-path rate limiting. Off = no limiting.                                                                                                                                                                                                                       |
-| `invalidation-enabled`         | `false` | Cache-invalidation workflow. Off = not running.                                                                                                                                                                                                                          |
-| `batch-overview-enabled`       | `false` | Batch org-overview (AI knowledge-page) generation workflow. Off = manual/agent-driven only.                                                                                                                                                                              |
-| `extract-toolloop-enabled`     | `false` | Multi-round tool-use extraction path for large bodies (>50K tokens). Off = one-shot inline extraction only.                                                                                                                                                              |
-| `raw-snapshot-capture-enabled` | `false` | Steady-state scrape path captures the scraped markdown as a raw snapshot (#1283) for cheap re-extraction (#1284). Off = only deep-Firecrawl backfills + the Firecrawl webhook persist raw. Read by the **discovery worker** (`RAW_SNAPSHOT_CAPTURE_ENABLED`).            |
-| `enable-ai-tools`              | `false` | Gates the MCP AI-generation tools. Off = those tools not exposed.                                                                                                                                                                                                        |
-| `feedback-disabled`            | `false` | Kill switch for the feedback endpoints. `false` = feedback **enabled**.                                                                                                                                                                                                  |
-| `recommendations-disabled`     | `false` | Kill switch for recommendations. `false` = recommendations **active**.                                                                                                                                                                                                   |
-| `search-query-log-disabled`    | `false` | Kill switch for search-query logging (`search_queries` table). `false` = logging **active**.                                                                                                                                                                             |
-| `api-tokens-disabled`          | `false` | Kill switch for scoped `relk_` API-token auth. `false` = tokens **active**.                                                                                                                                                                                              |
-| `cache-disabled`               | `false` | Kill switch for `Cache-Control` response headers. `false` = caching **active**.                                                                                                                                                                                          |
-| `ma-sessions-disabled`         | `false` | Incident kill switch for managed-agent discovery sessions. `false` = sessions **allowed**.                                                                                                                                                                               |
-| `indexing-disabled`            | `false` | When `true`, stamps `X-Robots-Tag: noindex` + `Disallow: /` (how staging is gated). `false` in prod = indexable.                                                                                                                                                         |
-| `openrouter-enabled`           | `false` | Single switch for the secondary cheap-call AI lanes (marketing classifier, live summarizer, …). On = each lane that also has an OpenRouter model var set routes to OpenRouter; off = all stay on Anthropic Haiku. Per-lane control is the model var (empty → Anthropic). |
+#### Kill switches — permanent operational levers
+
+| Flag key                      | Default | Reads          | What it controls                                                                                                                                                                                             |
+| ----------------------------- | ------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `api-tokens-disabled`         | `false` | api, mcp       | Kill switch for scoped `relk_` API-token auth. false = tokens active (static root key still works).                                                                                                          |
+| `batch-summarize-enabled`     | `false` | api            | Post-ingest batch auto-summarize (Haiku title / short-title / summary).                                                                                                                                      |
+| `cache-disabled`              | `false` | api            | Kill switch for `Cache-Control` response headers. false = caching active.                                                                                                                                    |
+| `extract-toolloop-enabled`    | `true`  | discovery      | Multi-round tool-use extraction for large bodies (>50K tokens). Off = one-shot inline only.                                                                                                                  |
+| `feed-enrich-enabled`         | `false` | api            | Enriches summary-only feed items by fetching the linked page and extracting full content before insert.                                                                                                      |
+| `feedback-disabled`           | `false` | api            | Kill switch for the feedback endpoints. false = feedback enabled.                                                                                                                                            |
+| `indexing-disabled`           | `false` | api, mcp       | Stamps `X-Robots-Tag: noindex` + `Disallow: /` (how staging is gated). false in prod = indexable.                                                                                                            |
+| `ma-sessions-disabled`        | `false` | discovery      | Incident kill switch for managed-agent sessions. false = sessions allowed.                                                                                                                                   |
+| `openrouter-enabled`          | `true`  | api, discovery | Single switch for the secondary cheap-call AI lanes (marketing classifier, summarizer, feed-enrich, large-body extract). On = lanes with an OpenRouter model var route to OpenRouter; off = Anthropic Haiku. |
+| `rate-limit-enabled`          | `false` | api, mcp       | Public read-path rate limiting. Off = no limiting.                                                                                                                                                           |
+| `recommendations-disabled`    | `false` | api            | Kill switch for recommendations. false = recommendations active.                                                                                                                                             |
+| `scrape-title-dedup-disabled` | `false` | api            | Kill switch for scrape-source title dedup (#1410). false = dedup active.                                                                                                                                     |
+| `search-query-log-disabled`   | `false` | api, mcp       | Kill switch for search-query logging (`search_queries` table). false = active.                                                                                                                               |
+| `web-bot-auth-enabled`        | `false` | api, discovery | Signs outbound content fetches with RFC 9421 Web Bot Auth signatures.                                                                                                                                        |
+
+#### Rollout gates — retire once fully rolled out
+
+| Flag key                       | Default | Reads     | What it controls                                                                                                                                  |
+| ------------------------------ | ------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `backfill-workflow-enabled`    | `false` | api       | Durable resumable full-history backfill workflow (deep Firecrawl path). Off = inline backfill only.                                               |
+| `batch-overview-enabled`       | `false` | api       | Batch org-overview (AI knowledge-page) generation workflow. Off = manual/agent-driven only.                                                       |
+| `invalidation-enabled`         | `false` | api       | Cache-invalidation workflow. Off = not running.                                                                                                   |
+| `media-gif-transcode-enabled`  | `false` | api       | Transcode uploaded/ingested GIFs to video. Off = store the GIF as-is.                                                                             |
+| `oauth-client-reaper-enabled`  | `false` | api       | Stale OAuth-client reaper cron. Off = observe-only (log reapable candidates); on = delete abandoned DCR clients.                                  |
+| `org-drain-actor-enabled`      | `false` | api       | Actor-native scrape/agent drain (OrgActor, #1777). On = actor path drives; off = the force-drain + scrape-agent-sweep crons run.                  |
+| `overview-regen-enabled`       | `false` | api       | Automated weekly org-overview regeneration workflow (#1706). Off = manual/agent-driven only.                                                      |
+| `raw-snapshot-capture-enabled` | `false` | discovery | Steady-state scrape path captures the scraped markdown as a raw snapshot (#1283) for cheap re-extraction (#1284).                                 |
+| `user-api-keys-enabled`        | `false` | api, mcp  | Better Auth user-API-key (`relu_`) path — verification + self-serve creation. Separate from `api-tokens-disabled` (which kills both token lanes). |
+
+<!-- END GENERATED FLAG TABLE -->
 
 ## Adding a flag
 
-Add a `FLAGS` registry entry, convert the read site to `await flag(...)`, and create the
-same kebab-case key in **both** Flagship apps before relying on it. Numeric tunables (spend
-caps, jitter window, search-ranking knobs) and secrets stay out of Flagship.
+Add a `FLAGS` registry entry (all fields required: `key`, `env`, `default`, `kind`, `reads`,
+`description`), convert the read site to `await flag(...)`, run `bun run flags:docs` to update
+the table above, and create the same kebab-case key in **both** Flagship apps before relying
+on it. Numeric tunables (spend caps, jitter window, search-ranking knobs) and secrets stay out
+of Flagship.
