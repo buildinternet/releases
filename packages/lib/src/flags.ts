@@ -56,13 +56,10 @@ export interface FlagDef {
    */
   readonly description: string;
   /**
-   * Self-documentation for a staged/per-org rollout: the evaluation-context key
-   * this flag's read sites pass (e.g. `"orgId"`), which its Flagship
-   * percentage-rollout rule must be configured to bucket on. Purely descriptive
-   * — the mechanism is the `context` arg threaded into {@link flag} at the read
-   * site plus the dashboard rule; this marker just names the expected key so a
-   * reviewer (and the `flags:docs` recipe) can tell at a glance which flags
-   * support gradual ramping. Omit for a plain global on/off flag.
+   * Evaluation-context key (e.g. `"orgId"`) this flag's read sites pass for a
+   * staged per-org rollout; its Flagship rule must bucket on it. Documentation
+   * only — the mechanism is the `context` arg threaded into {@link flag} plus
+   * the dashboard rule. Omit for a plain global flag.
    * See `docs/architecture/feature-flags.md` → "Staged / per-org rollout".
    */
   readonly rolloutContext?: string;

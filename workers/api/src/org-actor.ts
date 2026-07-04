@@ -91,9 +91,8 @@ export class OrgActor extends DurableObject<OrgActorEnv> {
       this.env.FLAGS,
       this.env.ORG_DRAIN_ACTOR_ENABLED,
       FLAGS.orgDrainActorEnabled,
-      // Per-org eval context so a Flagship percentage rollout can bucket this
-      // org stickily (see FLAGS.orgDrainActorEnabled.rolloutContext). `orgId` is
-      // the DO-storage id, guaranteed non-null by the guard above.
+      // orgId (DO-storage id) is non-null — the guard above already returned
+      // when it was unset. Enables per-org Flagship rollout bucketing.
       { orgId },
     );
     if (!enabled) {
