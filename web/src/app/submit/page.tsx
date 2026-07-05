@@ -4,8 +4,9 @@ import { Header } from "@/components/header";
 import { SubmitSourceForm } from "./submit-source-form";
 
 export const metadata: Metadata = {
-  title: "Submit a Source",
-  description: "Recommend a release notes URL for the releases.sh changelog registry.",
+  title: "Submit Your Product",
+  description:
+    "Add your product to the releases.sh registry with a releases.json manifest or a release notes URL.",
   alternates: { canonical: "/submit" },
   openGraph: { type: "website", url: "/submit" },
 };
@@ -20,11 +21,14 @@ export default function SubmitPage() {
             Open Catalog
           </p>
           <h1 className="mt-3 text-2xl font-semibold tracking-tight text-stone-900 dark:text-stone-100">
-            Submit a release source
+            Submit Your Product
           </h1>
           <p className="mt-4 leading-6">
-            Recommend a changelog, release notes page, feed, or GitHub releases URL for the
-            registry.
+            Add your product to the registry with a{" "}
+            <code className="rounded bg-stone-100 px-1 py-0.5 font-mono text-[0.85em] text-stone-700 dark:bg-stone-800 dark:text-stone-200">
+              releases.json
+            </code>{" "}
+            manifest on your domain, or submit a changelog, feed, or GitHub releases URL.
           </p>
 
           <div className="mt-6 border-t border-stone-200 pt-6 dark:border-stone-800">
