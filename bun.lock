@@ -78,13 +78,14 @@
         "@buildinternet/releases-api-types": "workspace:*",
         "@buildinternet/releases-core": "workspace:*",
         "@releases/adapters": "workspace:*",
+        "ai": "^7.0.15",
         "yaml": "^2.8.3",
         "zod": "^4.4.3",
       },
     },
     "packages/api-types": {
       "name": "@buildinternet/releases-api-types",
-      "version": "0.36.0",
+      "version": "0.37.0",
       "dependencies": {
         "@buildinternet/releases-core": "^0.25.0",
         "zod": "^4.4.3",

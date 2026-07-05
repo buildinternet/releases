@@ -23,6 +23,7 @@
     "@buildinternet/releases-api-types": "workspace:*",
     "@buildinternet/releases-core": "workspace:*",
     "@releases/adapters": "workspace:*",
+    "ai": "^7.0.15",
     "yaml": "^2.8.3",
     "zod": "^4.4.3"
   }

@@ -22,6 +22,12 @@ import {
   type TextModel,
   type TextModelUsage,
 } from "@releases/ai-internal/text-model";
+import type { OverviewCallUsage } from "@releases/ai-internal/overview-content";
+import {
+  buildOverviewOpenRouterModel,
+  buildOverviewAnthropicModel,
+} from "@releases/adapters/overview-model";
+import type { LanguageModel } from "ai";
 import type {
   OpenRouterProviderPrefs,
   OpenRouterReasoning,
@@ -235,25 +241,122 @@ export function resolveCollectionSummaryModel(env: TextModelEnv): Promise<TextMo
 }
 
 /**
- * Org-overview generation lane. Reuses the SUMMARIZE_MODEL OpenRouter lane (same
- * task family — no per-feature model var) with a distinct generationName so its
- * usage/cost is attributable, and the same Haiku fail-open as the summary lanes.
+ * Org-overview generation lane. UNLIKE the other secondary lanes, this one runs
+ * through the AI SDK structured-output path (`generateText` + `Output.object`) so
+ * citations come back as a typed field, never a fenced JSON block scraped out of
+ * the body (#1928). It therefore returns a `LanguageModel` (not a `TextModel`) and
+ * cannot share `resolveTextModel`, but it reuses the SAME config: the
+ * `openrouter-enabled` flag, `SUMMARIZE_MODEL` (same task family — no per-feature
+ * var), the gmicloud provider-exclusion, and the Anthropic Haiku fail-open.
  *
  * Unlike the one-shot summary lanes, an overview reads many release bodies and
- * emits a longer completion, so the 30s transport default sits right on the edge
- * of the normal latency band — transient OpenRouter latency tips it into a
- * `TimeoutError` (issue #1793). Give it a wider ceiling; the per-org retry in the
- * regen loop covers the rarer true stall.
+ * emits a longer completion, so a 30s ceiling sits right on the edge of the normal
+ * latency band (issue #1793); give it a wider timeout, applied per model call in
+ * `generateOverview`. The per-org retry in the regen loop covers the rarer stall.
  */
 const OVERVIEW_TIMEOUT_MS = 60_000;
+const OVERVIEW_LANE = "org-overview";
 
-export function resolveOverviewModel(env: TextModelEnv): Promise<TextModel | null> {
-  return resolveTextModel(env, {
-    orModel: env.SUMMARIZE_MODEL,
-    anthropicModel: ANTHROPIC_SUMMARIZE_MODEL,
-    generationName: "org-overview",
-    reasoning: SUMMARIZE_REASONING,
-    provider: SUMMARIZE_PROVIDER,
+export interface ResolvedOverviewModel {
+  model: LanguageModel;
+  /** Per model-call usage logger — emits an `ai_usage` event, matching `withLaneUsageLogging`. */
+  onUsage: (usage: OverviewCallUsage) => void;
+  /** Per-call timeout (ms) the caller passes to `generateOverview`. */
+  timeoutMs: number;
+}
+
+/** Build the overview lane's `ai_usage` sink, normalizing tokens/cost the same way `withLaneUsageLogging` does. */
+function overviewUsageSink(
+  provider: string,
+  model: string,
+  env: TextModelEnv,
+): (usage: OverviewCallUsage) => void {
+  return (u) => {
+    // Mirror `cacheMetrics`: OpenRouter's input already includes cached tokens;
+    // Anthropic reports them separately, so add them back for a comparable total.
+    const promptTokens =
+      provider === "openrouter"
+        ? u.inputTokens
+        : u.inputTokens + u.cacheReadTokens + u.cacheWriteTokens;
+    const cacheHitRate =
+      promptTokens > 0 ? Math.min(1, Math.max(0, u.cacheReadTokens / promptTokens)) : 0;
+    // OpenRouter reports its own cost; Anthropic reports none, so derive a list-price estimate.
+    const costUsd =
+      u.costUsd ??
+      (provider === "anthropic"
+        ? estimateCost(
+            {
+              inputTokens: u.inputTokens,
+              outputTokens: u.outputTokens,
+              cacheWriteTokens: u.cacheWriteTokens,
+              cacheReadTokens: u.cacheReadTokens,
+            },
+            model,
+          )?.totalUsd
+        : undefined);
+    logEvent("info", {
+      component: "ai",
+      event: "ai_usage",
+      provider,
+      model,
+      lane: OVERVIEW_LANE,
+      environment: env.ENVIRONMENT,
+      input: u.inputTokens,
+      output: u.outputTokens,
+      cacheCreate: u.cacheWriteTokens,
+      cacheRead: u.cacheReadTokens,
+      promptTokens,
+      cacheHitRate,
+      costUsd,
+    });
+  };
+}
+
+export async function resolveOverviewModel(
+  env: TextModelEnv,
+): Promise<ResolvedOverviewModel | null> {
+  const useOpenRouter = await flag(env.FLAGS, env.OPENROUTER_ENABLED, FLAGS.openrouterEnabled);
+
+  if (useOpenRouter) {
+    const orKey = await getSecret(env.OPENROUTER_API_KEY).catch(() => null);
+    const model = env.SUMMARIZE_MODEL?.trim();
+    if (orKey && model) {
+      const baseURL = env.OPENROUTER_BASE_URL?.trim();
+      return {
+        model: buildOverviewOpenRouterModel({
+          apiKey: orKey,
+          model,
+          ...(baseURL ? { baseURL } : {}),
+          sessionId: OVERVIEW_LANE,
+          referer: "https://releases.sh",
+          title: APP_TITLE,
+          providerPrefs: SUMMARIZE_PROVIDER as Record<string, unknown>,
+        }),
+        onUsage: overviewUsageSink("openrouter", model, env),
+        timeoutMs: OVERVIEW_TIMEOUT_MS,
+      };
+    }
+    if (model && !orKey) {
+      logEvent("warn", {
+        component: "text-model",
+        event: "openrouter-misconfigured",
+        lane: OVERVIEW_LANE,
+        reason: "OPENROUTER_API_KEY unresolved",
+      });
+    }
+    // key/model not usable → fall through to Anthropic (fail open)
+  }
+
+  const [apiKey, gatewayOpts] = await Promise.all([getAnthropicKey(env), resolveGatewayOpts(env)]);
+  if (!apiKey) return null;
+  return {
+    model: buildOverviewAnthropicModel({
+      apiKey,
+      model: ANTHROPIC_SUMMARIZE_MODEL,
+      ...(gatewayOpts.baseURL ? { baseURL: gatewayOpts.baseURL } : {}),
+      ...(gatewayOpts.gatewayToken ? { gatewayToken: gatewayOpts.gatewayToken } : {}),
+    }),
+    onUsage: overviewUsageSink("anthropic", ANTHROPIC_SUMMARIZE_MODEL, env),
     timeoutMs: OVERVIEW_TIMEOUT_MS,
-  });
+  };
 }

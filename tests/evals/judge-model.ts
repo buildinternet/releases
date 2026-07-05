@@ -25,6 +25,11 @@ import {
   openRouterTextModel,
   type TextModel,
 } from "@releases/ai-internal/text-model";
+import {
+  buildOverviewOpenRouterModel,
+  buildOverviewAnthropicModel,
+} from "@releases/adapters/overview-model";
+import type { LanguageModel } from "ai";
 
 /**
  * Pull the JSON verdict out of the judge's raw text. The grader prompt asks for
@@ -92,6 +97,54 @@ export function resolveEvalModel(
   if (client) {
     return {
       model: anthropicTextModel(client, opts.anthropicModel),
+      label: `anthropic:${opts.anthropicModel}`,
+    };
+  }
+  return null;
+}
+
+/**
+ * Resolve the "model under test" for the org-overview eval. UNLIKE
+ * {@link resolveEvalModel} (which returns the provider-agnostic `TextModel` the
+ * other evals grade), the overview lane runs through the AI SDK structured-output
+ * path (`generateText` + `Output.object`), so `generateOverview` needs an AI SDK
+ * `LanguageModel`. This mirrors production `resolveOverviewModel`
+ * (workers/api/src/lib/text-model.ts): OpenRouter when the candidate model env var
+ * + `OPENROUTER_API_KEY` are set, else the Anthropic baseline via
+ * `buildOverviewAnthropicModel`. Kept separate so the shared `resolveEvalModel`
+ * stays a `TextModel` for the other suites. Returns null only when no provider is
+ * usable (no OpenRouter pair and no Anthropic key).
+ */
+export function resolveOverviewEvalModel(opts: {
+  /** Anthropic model id used as the production-baseline default (the eval's `MODEL`). */
+  anthropicModel: string;
+  /** Sticky-routing + Broadcast grouping key for OpenRouter runs (e.g. "org-overview-eval"). */
+  generationName: string;
+  /** Env var naming the OpenRouter candidate model (e.g. `OVERVIEW_EVAL_MODEL`). */
+  orModelEnvVar: string;
+  /** Anthropic API key for the fallback; defaults to `ANTHROPIC_API_KEY`. */
+  apiKey?: string;
+}): { model: LanguageModel; label: string } | null {
+  const orKey = process.env.OPENROUTER_API_KEY?.trim();
+  const orModel = process.env[opts.orModelEnvVar]?.trim();
+  if (orKey && orModel) {
+    const baseURL = process.env.OPENROUTER_BASE_URL?.trim();
+    return {
+      model: buildOverviewOpenRouterModel({
+        apiKey: orKey,
+        model: orModel,
+        ...(baseURL ? { baseURL } : {}),
+        sessionId: opts.generationName,
+        referer: "https://releases.sh",
+        title: "Releases",
+      }),
+      label: `openrouter:${orModel}`,
+    };
+  }
+  const apiKey = opts.apiKey ?? process.env.ANTHROPIC_API_KEY?.trim();
+  if (apiKey) {
+    return {
+      model: buildOverviewAnthropicModel({ apiKey, model: opts.anthropicModel }),
       label: `anthropic:${opts.anthropicModel}`,
     };
   }
