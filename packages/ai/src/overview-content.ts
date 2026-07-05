@@ -340,6 +340,17 @@ function correctiveOverviewSuffix(violations: string[], body: string): string {
   );
 }
 
+/** Overview generation result: the parsed body + citations, plus whether the kept draft was truncated. */
+export interface OverviewGeneration extends PostHocExtraction {
+  /**
+   * True when the model call whose body we kept stopped on the `maxTokens` cap.
+   * A truncated draft may have lost the tail of its citation list (the trailing
+   * JSON block is dropped defensively by `parsePostHocOverview`), so callers
+   * should log it — recurrence signals the output cap needs raising again.
+   */
+  truncated: boolean;
+}
+
 /**
  * Generate an org overview via the provider-agnostic TextModel seam (OpenRouter
  * with Anthropic fail-open). Returns the markdown body plus post-hoc-resolved
@@ -351,7 +362,7 @@ function correctiveOverviewSuffix(violations: string[], body: string): string {
 export async function generateOverview(
   model: TextModel,
   input: OverviewRequestInput,
-): Promise<PostHocExtraction> {
+): Promise<OverviewGeneration> {
   const validSources = new Set(input.selected.map(releaseSource));
   const titleBySource = new Map(
     input.selected.map((r) => [releaseSource(r), r.title || r.version || null] as const),
@@ -361,6 +372,7 @@ export async function generateOverview(
 
   const first = await model.complete({ ...req, user });
   let result = parsePostHocOverview(first.text, { validSources, titleBySource });
+  let truncated = first.truncated ?? false;
 
   const violations = lintOverviewBody(result.body, input.org.name);
   if (violations.length > 0) {
@@ -375,7 +387,8 @@ export async function generateOverview(
       lintOverviewBody(corrected.body, input.org.name).length <= violations.length
     ) {
       result = corrected;
+      truncated = retry.truncated ?? false;
     }
   }
-  return result;
+  return { ...result, truncated };
 }

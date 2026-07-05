@@ -59,6 +59,28 @@ describe("openRouterChat", () => {
     expect(sent.usage).toEqual({ include: true });
   });
 
+  it("maps finish_reason 'length' to truncated=true, else false", async () => {
+    const cut = await openRouterChat(
+      { apiKey: "k", model: "m" },
+      { system: "s", user: "u", maxTokens: 1 },
+      fakeFetch(200, {
+        choices: [{ message: { content: "partial" }, finish_reason: "length" }],
+        usage: {},
+      }) as unknown as typeof fetch,
+    );
+    expect(cut.truncated).toBe(true);
+
+    const done = await openRouterChat(
+      { apiKey: "k", model: "m" },
+      { system: "s", user: "u", maxTokens: 1 },
+      fakeFetch(200, {
+        choices: [{ message: { content: "done" }, finish_reason: "stop" }],
+        usage: {},
+      }) as unknown as typeof fetch,
+    );
+    expect(done.truncated).toBe(false);
+  });
+
   it("omits cost when the provider does not report it", async () => {
     const f = fakeFetch(200, {
       choices: [{ message: { content: "ok" } }],
