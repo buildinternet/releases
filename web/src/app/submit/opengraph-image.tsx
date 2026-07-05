@@ -9,7 +9,6 @@ export default function Image() {
   return renderOgImage({
     eyebrow: "Open Catalog",
     title: "Submit Your Product",
-    description:
-      "Add your product with a releases.json manifest or a release notes URL.",
+    description: "Add your product with a releases.json manifest or a release notes URL.",
   });
 }
