@@ -137,6 +137,8 @@ export function resolveOverviewEvalModel(opts: {
         sessionId: opts.generationName,
         referer: "https://releases.sh",
         title: "Releases",
+        // Tag eval runs so Broadcast traces stay separate from prod traffic.
+        trace: { generationName: opts.generationName, environment: "eval" },
       }),
       label: `openrouter:${orModel}`,
     };

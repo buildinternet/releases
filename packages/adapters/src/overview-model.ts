@@ -26,6 +26,24 @@ export interface OverviewOpenRouterModelOpts {
   title: string;
   /** Provider-routing preferences merged into the request body (e.g. `{ ignore: ["gmicloud"] }`). */
   providerPrefs?: Record<string, unknown>;
+  /**
+   * Broadcast observability tags (inert until Broadcast is enabled in the
+   * OpenRouter dashboard). Serialized into the top-level `trace` body field in
+   * snake_case, mirroring the `openRouterChat` transport, so this lane is grouped
+   * and environment-separated (prod vs. eval) alongside the other OpenRouter lanes.
+   */
+  trace?: { generationName?: string; environment?: string };
+}
+
+/** Serialize Broadcast trace tags to the snake_case shape OpenRouter expects. */
+function serializeTrace(
+  trace: OverviewOpenRouterModelOpts["trace"],
+): Record<string, string> | undefined {
+  if (!trace) return undefined;
+  const out: Record<string, string> = {};
+  if (trace.generationName) out.generation_name = trace.generationName;
+  if (trace.environment) out.environment = trace.environment;
+  return Object.keys(out).length > 0 ? out : undefined;
 }
 
 /**
@@ -47,6 +65,7 @@ export function buildOverviewOpenRouterModel(opts: OverviewOpenRouterModelOpts):
     extraBody: {
       session_id: opts.sessionId,
       ...(opts.providerPrefs ? { provider: opts.providerPrefs } : {}),
+      ...(serializeTrace(opts.trace) ? { trace: serializeTrace(opts.trace) } : {}),
     },
   });
   // `reasoning.enabled: false` is a disable-only shape; the settings type models

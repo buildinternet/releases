@@ -148,6 +148,31 @@ test("generateOverview salvages a complete body from genuinely truncated JSON, d
   expect(citations[0]!.citedText).toBe("streaming API");
 });
 
+test("generateOverview discards a body cut off mid-content (never reached the citations key)", async () => {
+  // Truncation inside the body field itself: serialization never reached the
+  // `citations` key, so the body is an unreliable fragment. It must be discarded
+  // (empty body → the caller skips the org), not persisted mid-sentence.
+  const cutMidBody = '{"body":"Shipped a streaming API and faster co';
+  const model = new MockLanguageModelV3({
+    doGenerate: async () => ({
+      content: [{ type: "text", text: cutMidBody }],
+      finishReason: { unified: "length", raw: undefined },
+      usage: {
+        inputTokens: { total: 10, noCache: 10, cacheRead: 0, cacheWrite: 0 },
+        outputTokens: { total: 20, text: 20, reasoning: 0 },
+      },
+      warnings: [],
+    }),
+  });
+  const { body, citations, truncated } = await generateOverview(
+    model as unknown as LanguageModel,
+    input,
+  );
+  expect(truncated).toBe(true);
+  expect(body).toBe(""); // discarded — the caller skips on an empty body
+  expect(citations).toEqual([]);
+});
+
 test("lintOverviewBody flags format/voice violations and passes clean bodies", () => {
   expect(lintOverviewBody("Intro line.\n\n## Section\n\nMore.", "Acme")).toContain(
     "markdown-heading",

@@ -456,9 +456,18 @@ export async function generateOverview(
     // (notably "length" truncation) reading `.output` throws NoOutputGeneratedError.
     // Salvage the partial JSON instead: a complete body plus the citations that
     // fully serialized before the cut survive; the incomplete tail is dropped.
-    const raw: unknown =
-      res.finishReason === "stop" ? res.output : (await parsePartialJson(res.text)).value;
-    return { ...coerceOverviewObject(raw), truncated: res.finishReason === "length" };
+    const salvaged = res.finishReason !== "stop";
+    const raw: unknown = salvaged ? (await parsePartialJson(res.text)).value : res.output;
+    // On a salvaged (cut-off) response the body is only trustworthy if serialization
+    // reached the `citations` key — which follows `body` in the schema, so its
+    // presence proves the body string closed. If it didn't, the body itself was cut
+    // mid-content: discard it (empty body → the caller skips the org) rather than
+    // persist a fragment. The 4000-token cap vs. the 300-word body limit makes a
+    // mid-body cut near-impossible in practice; this keeps the salvage provably correct.
+    const bodyComplete = !salvaged || (!!raw && typeof raw === "object" && "citations" in raw);
+    const truncated = res.finishReason === "length";
+    if (!bodyComplete) return { body: "", citations: [], truncated };
+    return { ...coerceOverviewObject(raw), truncated };
   };
 
   const first = await generate(user);

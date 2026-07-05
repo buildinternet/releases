@@ -331,6 +331,10 @@ export async function resolveOverviewModel(
           referer: "https://releases.sh",
           title: APP_TITLE,
           providerPrefs: SUMMARIZE_PROVIDER as Record<string, unknown>,
+          trace: {
+            generationName: OVERVIEW_LANE,
+            ...(env.ENVIRONMENT ? { environment: env.ENVIRONMENT } : {}),
+          },
         }),
         onUsage: overviewUsageSink("openrouter", model, env),
         timeoutMs: OVERVIEW_TIMEOUT_MS,
