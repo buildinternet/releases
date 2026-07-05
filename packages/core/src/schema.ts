@@ -525,7 +525,12 @@ export const releaseLocations = sqliteTable(
     deletedAt: text("deleted_at"),
   },
   (table) => [
-    uniqueIndex("idx_release_locations_org_match").on(table.orgId, table.matchKey),
+    // Partial over soft-delete: a tombstoned locator must not block a later
+    // re-declaration of the same (org, match_key). Step-2 writers upsert with
+    // `ON CONFLICT(org_id, match_key) WHERE deleted_at IS NULL`.
+    uniqueIndex("idx_release_locations_org_match")
+      .on(table.orgId, table.matchKey)
+      .where(sql`${table.deletedAt} IS NULL`),
     index("idx_release_locations_org").on(table.orgId),
     index("idx_release_locations_product")
       .on(table.productId)

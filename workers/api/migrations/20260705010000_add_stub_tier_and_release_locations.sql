@@ -32,10 +32,14 @@ CREATE TABLE release_locations (
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
   deleted_at TEXT,
-  CHECK (url IS NOT NULL OR feed IS NOT NULL OR github IS NOT NULL OR appstore IS NOT NULL OR file IS NOT NULL)
+  CONSTRAINT release_locations_has_locator
+    CHECK (url IS NOT NULL OR feed IS NOT NULL OR github IS NOT NULL OR appstore IS NOT NULL OR file IS NOT NULL)
 );
 
-CREATE UNIQUE INDEX idx_release_locations_org_match ON release_locations (org_id, match_key);
+-- Partial over soft-delete so a tombstoned locator never blocks a later
+-- re-declaration of the same (org_id, match_key). Writers upsert with
+-- ON CONFLICT(org_id, match_key) WHERE deleted_at IS NULL.
+CREATE UNIQUE INDEX idx_release_locations_org_match ON release_locations (org_id, match_key) WHERE deleted_at IS NULL;
 CREATE INDEX idx_release_locations_org ON release_locations (org_id);
 CREATE INDEX idx_release_locations_product ON release_locations (product_id) WHERE product_id IS NOT NULL;
 CREATE INDEX idx_release_locations_source ON release_locations (source_id) WHERE source_id IS NOT NULL;
