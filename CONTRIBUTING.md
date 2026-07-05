@@ -24,7 +24,9 @@ The monorepo no longer ships a local CLI. If you need `releases <cmd>` while wor
 
 ### Claude Code plugins
 
-The repo's `.claude/settings.json` registers the public [CLI marketplace](https://github.com/buildinternet/releases-cli) and suggests the consumer `releases` plugin (the `/releases` changelog-lookup command plus reader skills). After you trust the repo folder, Claude Code prompts to install it — accept or decline; nothing is force-installed. If you operate/maintain sources, also install the `releases-admin` plugin (operator playbooks + discovery/worker agents) from the same marketplace:
+Everything under `.claude/` auto-loads on a trusted clone with no install step: the skills in `.claude/skills/`, the eval agents in `.claude/agents/` (`rubric-grader`, `overview-writer`), the repo-local commands in `.claude/commands/`, and the hosted MCP tools from the repo-root `.mcp.json`.
+
+On top of that, the repo's `.claude/settings.json` registers the public [CLI marketplace](https://github.com/buildinternet/releases-cli) and suggests the consumer `releases` plugin (the `/releases` changelog-lookup command plus reader skills). After you trust the repo folder, Claude Code prompts to install it — accept or decline; nothing is force-installed. If you operate/maintain sources, also install the `releases-admin` plugin (operator playbooks + discovery/worker agents) from the same marketplace:
 
 ```
 /plugin install releases-admin@releases

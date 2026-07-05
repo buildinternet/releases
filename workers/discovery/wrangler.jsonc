@@ -33,11 +33,12 @@
     // `bun scripts/sync-agent-skills.ts --memory-stores`.
     "MEMORY_STORE_ERRATA_ID": "memstore_012MKStcUM7QxW9qPCLQtwwt",
     "MEMORY_STORE_TOOL_NOTES_ID": "memstore_01Jc5WAiqp4fwSJUmjR2excj",
-    // Route direct Anthropic SDK calls (extract-deps + managed-agents-session
-    // request helpers) through Cloudflare AI Gateway. The managed-agents
-    // internal loop runs on Anthropic's infra and stays off-gateway.
-    // See docs/architecture/ai-gateway.md. Gateway runs in authenticated mode.
-    "ANTHROPIC_BASE_URL": "https://gateway.ai.cloudflare.com/v1/b082600d280d44fd5da3501bc1bffe2f/releases/anthropic",
+    // ANTHROPIC_BASE_URL routes direct Anthropic SDK calls (extract-deps +
+    // managed-agents-session request helpers) through Cloudflare AI Gateway; the
+    // managed-agents internal loop runs on Anthropic's infra and stays
+    // off-gateway. It embeds an account-scoped gateway URL, so it is provisioned
+    // as a worker secret (`wrangler secret put ANTHROPIC_BASE_URL`), not a var —
+    // unset → direct Anthropic (fail-open). See docs/architecture/ai-gateway.md.
     "WEB_BOT_AUTH_ENABLED": "true",
     // Capture the scraped markdown body as a raw snapshot for later
     // re-extraction (#1283/#1284). Flagship key `raw-snapshot-capture-enabled`
@@ -162,9 +163,8 @@
         "ANTHROPIC_COORDINATOR_AGENT_ID": "agent_011CamrB7cJDfoMufEUd8pTD",
         "MEMORY_STORE_ERRATA_ID": "memstore_01BWRxdBdkPbBWcxmKoVGEA9",
         "MEMORY_STORE_TOOL_NOTES_ID": "memstore_01WQCrdDEjNKGfURRswhWBkb",
-        // Route Anthropic SDK calls through Cloudflare AI Gateway.
-        // See docs/architecture/ai-gateway.md. Flip on prod after staging burn-in.
-        "ANTHROPIC_BASE_URL": "https://gateway.ai.cloudflare.com/v1/b082600d280d44fd5da3501bc1bffe2f/releases-staging/anthropic",
+        // ANTHROPIC_BASE_URL (AI Gateway routing) is a per-env worker secret,
+        // not a var — see the prod vars block note + docs/architecture/ai-gateway.md.
         "WEB_BOT_AUTH_ENABLED": "false",
         "RAW_SNAPSHOT_CAPTURE_ENABLED": "false",
         // OpenRouter extraction lane (issue #1536). Empty → stays on Anthropic
