@@ -1,25 +1,14 @@
 /**
- * Extract `{ body, citations }` from an Anthropic overview-generation response.
- *
- * Implements the running-offset algorithm from
- * `.claude/skills/regenerating-overviews/SKILL.md` lines 154-170.
- *
- * The shape mirrors the `RegenerateOverviewBodySchema.citations` wire format:
+ * Resolve `{ url, quote }` overview citations (emitted alongside the body by the
+ * AI SDK structured-output lane) into body-offset `{ startIndex, endIndex, ... }`
+ * citations, matching the `RegenerateOverviewBodySchema.citations` wire format:
  *   { startIndex, endIndex, sourceUrl, title, citedText }
  *
- * Notes on Anthropic's citation semantics:
- *   - Citations are emitted at *text-block* granularity. Every citation on a
- *     given block covers the whole block's text. There is no sub-string offset.
- *   - `start_block_index` / `end_block_index` on each citation refer to slices
- *     of the SOURCE search_result's content array, NOT offsets into the
- *     assistant's response. Don't try to use them as response offsets.
- *   - When the model emits a leading markdown heading despite the prompt, we
- *     strip it from the body BEFORE writing offsets and shift each citation
- *     by the stripped length. Citations entirely inside the stripped region
- *     are dropped; partial overlaps clamp `startIndex` to 0.
+ * `resolveOverviewCitations` does the offset resolution (see its own doc
+ * comment); `clampCitationsToBody` is the defensive guard applied before
+ * upsert.
  */
 
-import type Anthropic from "@anthropic-ai/sdk";
 import { stripLeadingHeading } from "@buildinternet/releases-core/overview";
 
 export interface OverviewCitation {
@@ -28,15 +17,6 @@ export interface OverviewCitation {
   sourceUrl: string;
   title: string | null;
   citedText: string;
-}
-
-export interface OverviewExtraction {
-  /** Final body, with any leading markdown heading stripped. */
-  body: string;
-  /** Citations with offsets relative to `body`. */
-  citations: OverviewCitation[];
-  /** True when a leading heading was stripped. */
-  strippedHeading: boolean;
 }
 
 const HTML_ENTITY_MAP: Record<string, string> = {
@@ -60,66 +40,6 @@ const HTML_ENTITY_MAP: Record<string, string> = {
  */
 export function decodeHtmlEntities(s: string): string {
   return s.replace(/&amp;|&lt;|&gt;|&quot;|&#39;/g, (m) => HTML_ENTITY_MAP[m] ?? m);
-}
-
-/**
- * Walk the assistant response, concatenate text blocks, and surface citations
- * pinned to character spans in the final body string.
- *
- * Non-text blocks (tool use, etc.) are skipped. The overview prompt never
- * issues tools, but defending against the shape is cheap.
- *
- * Each block's text is HTML-entity-decoded BEFORE its offsets are measured.
- * Citations are whole-block spans (`runningOffset` → `runningOffset + len`), so
- * decoding after accumulation would shrink the body and silently misalign every
- * downstream citation. Decoding per block keeps the running offset and the body
- * in lockstep. Idempotent on clean bodies (see `decodeHtmlEntities`).
- */
-export function extractOverviewBody(message: Anthropic.Message): OverviewExtraction {
-  let runningOffset = 0;
-  let rawBody = "";
-  const rawCitations: OverviewCitation[] = [];
-
-  for (const block of message.content) {
-    if (block.type !== "text") continue;
-    const text = decodeHtmlEntities(block.text);
-    rawBody += text;
-
-    const citations = block.citations ?? [];
-    for (const cit of citations) {
-      // Only search_result_location citations are expected for overviews.
-      // Other citation kinds (web_search_result_location, etc.) carry
-      // different shapes; ignore them rather than guess.
-      if (cit.type !== "search_result_location") continue;
-      rawCitations.push({
-        startIndex: runningOffset,
-        endIndex: runningOffset + text.length,
-        sourceUrl: cit.source ?? "",
-        title: cit.title ?? null,
-        citedText: cit.cited_text ?? "",
-      });
-    }
-
-    runningOffset += text.length;
-  }
-
-  // Defer to core's stripLeadingHeading so the regex stays in one place
-  // (overviewPreview uses the same strip on read paths).
-  const body = stripLeadingHeading(rawBody);
-  const strippedLength = rawBody.length - body.length;
-  if (strippedLength === 0) {
-    return { body: rawBody, citations: rawCitations, strippedHeading: false };
-  }
-
-  const citations: OverviewCitation[] = [];
-  for (const cit of rawCitations) {
-    const shiftedEnd = cit.endIndex - strippedLength;
-    if (shiftedEnd <= 0) continue;
-    const shiftedStart = Math.max(0, cit.startIndex - strippedLength);
-    citations.push({ ...cit, startIndex: shiftedStart, endIndex: shiftedEnd });
-  }
-
-  return { body, citations, strippedHeading: true };
 }
 
 export interface PostHocExtraction {

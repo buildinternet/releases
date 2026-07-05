@@ -36,14 +36,6 @@ export interface TextModelRequest {
 export interface TextModelResult {
   text: string;
   usage: TextModelUsage;
-  /**
-   * True when the provider stopped because it hit `maxTokens` (Anthropic
-   * `stop_reason: "max_tokens"`, OpenRouter `finish_reason: "length"`) rather
-   * than finishing naturally — i.e. the output is cut off. Consumers that parse
-   * a trailing structured section (e.g. the overview citation list) must treat a
-   * truncated result as unreliable. Undefined when the provider reports nothing.
-   */
-  truncated?: boolean;
 }
 
 export interface TextModel {
@@ -71,7 +63,6 @@ export function anthropicTextModel(client: Anthropic, model: string): TextModel 
         .join("");
       return {
         text,
-        truncated: res.stop_reason === "max_tokens",
         usage: {
           input: res.usage.input_tokens,
           output: res.usage.output_tokens,

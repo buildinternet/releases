@@ -162,39 +162,6 @@ export function buildUserMessageContent(
   return [...searchBlocks, { type: "text", text: trailing }];
 }
 
-/**
- * Build a single Anthropic request body for one org. Suitable for both live
- * `messages.create` and as the `params` field on a Message Batches request.
- *
- * `cache_control: { type: "ephemeral" }` on the system prompt lets the Batches
- * API and live path share cache for the SYSTEM_PROMPT across orgs in the same
- * batch — the per-request charge for input drops sharply after the first hit.
- */
-export function buildOverviewRequest(input: OverviewRequestInput): {
-  model: string;
-  max_tokens: number;
-  system: Anthropic.Messages.MessageCreateParams["system"];
-  messages: Anthropic.Messages.MessageCreateParams["messages"];
-} {
-  return {
-    model: MODEL,
-    max_tokens: MAX_OUTPUT_TOKENS,
-    system: [
-      {
-        type: "text",
-        text: SYSTEM_PROMPT,
-        cache_control: { type: "ephemeral" },
-      },
-    ],
-    messages: [
-      {
-        role: "user",
-        content: buildUserMessageContent(input),
-      },
-    ],
-  };
-}
-
 // ── OpenRouter (AI SDK structured-output) path ────────────────────────────────
 
 /**
