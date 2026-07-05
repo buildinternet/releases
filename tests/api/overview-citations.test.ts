@@ -129,16 +129,18 @@ describe("POST/GET /v1/orgs/:slug/overview citations", () => {
     const body = (await get.json()) as { citations: Array<Record<string, unknown>> };
     expect(body.citations).toHaveLength(2);
     expect(body.citations[0]).toMatchObject({
-      startIndex: 0,
-      endIndex: 40,
       sourceUrl: RELEASE_MATCHED,
       releaseId: matchedReleaseId,
-      citedText: "v2 ships",
     });
+    // Resolved sources link inward to the canonical release page (#1934).
+    expect(body.citations[0]!.releaseWebUrl).toBe(
+      `https://releases.sh/release/${matchedReleaseId}-v2-launch`,
+    );
     expect(body.citations[1]).toMatchObject({
       sourceUrl: RELEASE_MIXED_CASE.toLowerCase(),
       releaseId: mixedCaseReleaseId,
     });
+    expect(body.citations[1]!.releaseWebUrl).toContain(`/release/${mixedCaseReleaseId}`);
   });
 
   it("stores citation for orphan source_url with null release_id", async () => {
@@ -160,9 +162,11 @@ describe("POST/GET /v1/orgs/:slug/overview citations", () => {
     const get = await getOverview();
     const body = (await get.json()) as { citations: Array<Record<string, unknown>> };
     expect(body.citations).toHaveLength(1);
+    // Orphan source → no release match → no internal link, external URL only.
     expect(body.citations[0]).toMatchObject({
       sourceUrl: RELEASE_ORPHAN,
       releaseId: null,
+      releaseWebUrl: null,
     });
   });
 
@@ -212,25 +216,28 @@ describe("POST/GET /v1/orgs/:slug/overview citations", () => {
     expect(body.citations).toEqual([]);
   });
 
-  it("rejects malformed citation spans", async () => {
+  it("ignores legacy offset spans but still requires a non-empty sourceUrl (#1934)", async () => {
+    // Legacy out-of-range / inverted offset spans are no longer validated — the
+    // fields are ignored, so these now succeed.
     const r1 = await postOverview({
       content: "short",
       releaseCount: 1,
       citations: [{ startIndex: 0, endIndex: 99, sourceUrl: RELEASE_MATCHED, citedText: "x" }],
     });
-    expect(r1.status).toBe(400);
+    expect(r1.status).toBe(200);
 
     const r2 = await postOverview({
       content: "short",
       releaseCount: 1,
       citations: [{ startIndex: 5, endIndex: 3, sourceUrl: RELEASE_MATCHED, citedText: "x" }],
     });
-    expect(r2.status).toBe(400);
+    expect(r2.status).toBe(200);
 
+    // An empty sourceUrl is still a hard schema failure.
     const r3 = await postOverview({
       content: "short",
       releaseCount: 1,
-      citations: [{ startIndex: 0, endIndex: 4, sourceUrl: "", citedText: "x" }],
+      citations: [{ sourceUrl: "" }],
     });
     expect(r3.status).toBe(400);
   });

@@ -29,18 +29,21 @@ import { newKnowledgePageId, newKnowledgePageCitationId } from "@buildinternet/r
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- drizzle generic
 type AnyDb = DrizzleD1Database<any>;
 
-/** Per-page bind budget: id, page_id, start, end, source_url, title, cited_text, release_id, created_at (9). */
-const CITATIONS_CHUNK_SIZE = 11;
+/**
+ * Per-page bind budget: id, page_id, start, end, source_url, title, cited_text,
+ * release_id, created_at (9 columns). `start_index`/`end_index`/`cited_text` are
+ * deprecated (#1934 — overview citations are a source list, no body offsets) but
+ * still `NOT NULL`, so we write benign defaults into them until a follow-up
+ * migration drops the columns. Chunked at 10 rows → 90 binds, under D1's cap.
+ */
+const CITATIONS_CHUNK_SIZE = 10;
 
 /** Max URLs per IN-clause lookup. D1's 100-bind cap, with headroom. */
 const URL_LOOKUP_CHUNK_SIZE = 90;
 
 export interface OverviewCitationInput {
-  startIndex: number;
-  endIndex: number;
   sourceUrl: string;
   title: string | null;
-  citedText: string;
 }
 
 export interface UpsertOrgOverviewInput {
@@ -99,11 +102,13 @@ export async function upsertOrgOverview(
   const rows = input.citations.map((cit) => ({
     id: newKnowledgePageCitationId(),
     knowledgePageId: pageRow.id,
-    startIndex: cit.startIndex,
-    endIndex: cit.endIndex,
+    // Deprecated body-offset columns (#1934); still NOT NULL, so write neutral
+    // defaults. `release_id` (resolved below) is the durable link target.
+    startIndex: 0,
+    endIndex: 0,
     sourceUrl: cit.sourceUrl,
     title: cit.title,
-    citedText: cit.citedText,
+    citedText: "",
     releaseId: releaseIdByUrl.get(cit.sourceUrl.toLowerCase()) ?? null,
     createdAt: now,
   }));

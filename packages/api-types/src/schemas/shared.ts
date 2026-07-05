@@ -146,19 +146,32 @@ export const ReleaseSummaryItemSchema = z.object({
 });
 
 /**
- * Inline citation attached to an overview page (#846). Each row maps a
- * character span in `OverviewPageItem.content` back to a release URL the
- * model cited via Anthropic's search_result blocks. Optional everywhere it
- * appears — pages generated before #846 lands have none, and consumers
- * should degrade gracefully.
+ * A source attached to an overview page (#846, reshaped #1934). Each row names
+ * a source the overview drew on — `sourceUrl` plus, when it resolved to an
+ * on-registry release, `releaseId` + a canonical `releaseWebUrl`. This is a
+ * source *list*, not span-anchored provenance: the old body char offsets +
+ * verbatim quote are removed. Optional everywhere it appears — consumers should
+ * degrade gracefully.
  */
 export const OverviewCitationSchema = z.object({
-  startIndex: z.number().int().min(0),
-  endIndex: z.number().int().min(0),
   sourceUrl: z.string(),
   title: z.string().nullable().optional(),
-  citedText: z.string(),
+  /** Best-effort link to the on-registry release this source maps to (resolved server-side). */
   releaseId: z.string().nullable().optional(),
+  /**
+   * Canonical web URL of the on-registry release page for this source, when
+   * `releaseId` resolved (#1934). The Sources footer links here (internal,
+   * crawlable) in preference to the external `sourceUrl`.
+   */
+  releaseWebUrl: z.string().nullable().optional(),
+  /**
+   * @deprecated Body char offsets / verbatim quote — removed with span-anchored
+   * citations (#1934). Kept optional for wire back-compat; no producer emits
+   * them and no consumer should read them.
+   */
+  startIndex: z.number().int().min(0).optional(),
+  endIndex: z.number().int().min(0).optional(),
+  citedText: z.string().optional(),
 });
 
 /**

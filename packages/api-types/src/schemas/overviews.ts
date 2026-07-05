@@ -11,23 +11,19 @@ export const OrgOverviewResponseSchema = OverviewPageItemSchema.extend({
 }).nullable();
 
 /**
- * Incoming citation row attached to `POST /v1/orgs/:slug/overview`. Slimmer
- * than the read-side `OverviewCitationSchema` because the wire shape doesn't
- * carry `releaseId` — that's resolved server-side from `sourceUrl`. Spans
- * must be in-range (`endIndex > startIndex`); the cross-field
- * `endIndex <= content.length` check stays in the handler.
+ * Incoming citation row attached to `POST /v1/orgs/:slug/overview`. A source the
+ * overview drew on — just `sourceUrl` (+ optional display `title`); `releaseId`
+ * is resolved server-side from `sourceUrl`. The legacy body-offset fields
+ * (`startIndex`/`endIndex`/`citedText`) are accepted-but-ignored for wire
+ * back-compat with older clients (#1934); they're no longer stored.
  */
-export const IncomingOverviewCitationSchema = z
-  .object({
-    startIndex: z.number().int().min(0),
-    endIndex: z.number().int().min(1),
-    sourceUrl: z.string().min(1),
-    title: z.string().nullable().optional(),
-    citedText: z.string().min(1),
-  })
-  .refine((c) => c.endIndex > c.startIndex, {
-    message: "endIndex must be > startIndex",
-  });
+export const IncomingOverviewCitationSchema = z.object({
+  sourceUrl: z.string().min(1),
+  title: z.string().nullable().optional(),
+  startIndex: z.number().int().min(0).optional(),
+  endIndex: z.number().int().min(0).optional(),
+  citedText: z.string().optional(),
+});
 
 /**
  * Body accepted by `POST /v1/orgs/:slug/overview` — the agent-authored

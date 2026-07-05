@@ -279,3 +279,31 @@ export function buildOrgCatalogJsonLd(
     ],
   };
 }
+
+/**
+ * schema.org node for an org overview's provenance (#1934). A CreativeWork whose
+ * `citation` array points at the on-registry release pages the overview drew on,
+ * declaring it a derivative aggregation of internal sources — machine-readable
+ * provenance that reinforces the internal-link graph (and counters the
+ * "copy-of-source" profile the March-2026 core update demoted; see #1601).
+ *
+ * Only internal (release-page) citations are declared; external-only sources are
+ * omitted. Returns `null` when nothing resolved to a release page, so callers can
+ * skip emitting an empty node.
+ */
+export function buildOverviewCitationJsonLd(
+  citations: readonly { releaseWebUrl?: string | null }[] | undefined | null,
+  opts: { orgName: string; aboutId: string; dateModified?: string | null },
+): Record<string, unknown> | null {
+  const urls = Array.from(
+    new Set((citations ?? []).map((c) => c.releaseWebUrl).filter((u): u is string => !!u)),
+  );
+  if (urls.length === 0) return null;
+  return {
+    "@type": "CreativeWork",
+    name: `${opts.orgName} — Recently Shipped`,
+    about: { "@id": opts.aboutId },
+    ...(opts.dateModified ? { dateModified: opts.dateModified } : {}),
+    citation: urls.map((url) => ({ "@type": "WebPage", url })),
+  };
+}

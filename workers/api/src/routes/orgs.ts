@@ -51,6 +51,8 @@ import {
   knowledgePageCitations,
 } from "@buildinternet/releases-core/schema";
 import { daysAgoIso } from "@buildinternet/releases-core/dates";
+import { releaseWebBase } from "@buildinternet/releases-core/release-slug";
+import { OVERVIEW_CITATION_SELECT, mapOverviewCitationRow } from "../lib/overview-citations.js";
 import { parseCompositionFromMetadata } from "@buildinternet/releases-core/composition";
 import type { BreakingLevel } from "@buildinternet/releases-core/breaking";
 import { parseNotice, setNoticeInMetadata, type Notice } from "@buildinternet/releases-core/notice";
@@ -293,7 +295,7 @@ orgRoutes.get(
       latestFetchRow,
       latestPollRow,
       knowledgePageRows,
-      citationRows,
+      citationRowsRaw,
       metricsRow,
     ] = await Promise.all([
       db
@@ -367,20 +369,15 @@ orgRoutes.get(
 
       // Citations attached to the org-scope overview page. Joined here so the
       // bare /v1/orgs/:slug response carries them — same shape the dedicated
-      // /v1/orgs/:slug/overview endpoint returns.
+      // /v1/orgs/:slug/overview endpoint returns. The release leftJoin lets the
+      // serializer build a canonical internal releaseWebUrl per source (#1934).
       db
-        .select({
-          startIndex: knowledgePageCitations.startIndex,
-          endIndex: knowledgePageCitations.endIndex,
-          sourceUrl: knowledgePageCitations.sourceUrl,
-          title: knowledgePageCitations.title,
-          citedText: knowledgePageCitations.citedText,
-          releaseId: knowledgePageCitations.releaseId,
-        })
+        .select(OVERVIEW_CITATION_SELECT)
         .from(knowledgePageCitations)
         .innerJoin(knowledgePages, eq(knowledgePageCitations.knowledgePageId, knowledgePages.id))
+        .leftJoin(releases, eq(knowledgePageCitations.releaseId, releases.id))
         .where(and(eq(knowledgePages.scope, "org"), eq(knowledgePages.orgId, org.id)))
-        .orderBy(knowledgePageCitations.startIndex),
+        .orderBy(knowledgePageCitations.createdAt, knowledgePageCitations.id),
 
       // Recent-release metrics — scoped via subquery so this joins the parallel
       // wave instead of blocking on orgSources.
@@ -430,6 +427,8 @@ orgRoutes.get(
     const latestFetch = latestFetchRow[0];
     const latestPoll = latestPollRow[0];
     const knowledgeRow = knowledgePageRows.find((r) => r.scope === "org") ?? null;
+    const citationBase = releaseWebBase(c.env ?? {});
+    const citationRows = citationRowsRaw.map((r) => mapOverviewCitationRow(citationBase, r));
     // Playbook content (header + agent notes) is internal — only return it to
     // authenticated callers so we don't leak it via the public-cached JSON.
     const isAuthed = await isValidBearerAuth(c);

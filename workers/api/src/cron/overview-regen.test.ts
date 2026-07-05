@@ -23,7 +23,7 @@ import type { OverviewCandidate } from "@releases/core-internal/overview-eligibi
 
 // ── Fake model ────────────────────────────────────────────────────────────────
 
-type OverviewObject = { body: string; citations: Array<{ url: string; quote: string }> };
+type OverviewObject = { body: string; citations: Array<{ url: string }> };
 
 /**
  * Wrap a mock `LanguageModel` in the `ResolvedOverviewModel` shape the regen loop
