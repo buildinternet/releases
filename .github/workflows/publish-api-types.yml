@@ -17,7 +17,7 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: read
+  contents: write # tag + GitHub release after a successful publish
   id-token: write # OIDC: mint a short-lived npm publish credential (no NPM_TOKEN)
 
 env:
@@ -87,3 +87,17 @@ jobs:
           else
             npm publish
           fi
+
+      # Provenance marker: tag the exact commit each npm version shipped from and
+      # surface it in the repo's Releases sidebar. `gh release create` creates the
+      # tag at --target; idempotent via the already-published gate above.
+      - name: Tag + GitHub release
+        if: steps.check.outputs.already == 'false' && inputs.dry-run != true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          API_TYPES_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          gh release create "api-types@${API_TYPES_VERSION}" \
+            --target "${GITHUB_SHA}" \
+            --title "@buildinternet/releases-api-types@${API_TYPES_VERSION}" \
+            --notes "Published [@buildinternet/releases-api-types@${API_TYPES_VERSION}](https://www.npmjs.com/package/@buildinternet/releases-api-types/v/${API_TYPES_VERSION}) to npm from ${GITHUB_SHA}."
