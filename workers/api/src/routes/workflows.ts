@@ -561,25 +561,38 @@ workflowsRoutes.post("/workflows/embed-entities", async (c) => {
   }
 
   async function countUnembeddedKind(kind: EntityKind): Promise<number> {
+    // Mirror fetchUnembedded's visibility filters so the "remaining" count only
+    // includes rows that will actually be embedded (a hidden/source-less entity
+    // is never fetched, so it must not inflate the backlog forever).
     if (kind === "org") {
       const [{ n }] = await db
         .select({ n: count() })
         .from(organizations)
-        .where(sql`${organizations.embeddedAt} IS NULL`);
+        .where(
+          and(
+            isNull(organizations.embeddedAt),
+            sql`EXISTS (SELECT 1 FROM sources_visible sv WHERE sv.org_id = ${organizations.id})`,
+          ),
+        );
       return n;
     }
     if (kind === "product") {
       const [{ n }] = await db
         .select({ n: count() })
         .from(products)
-        .where(sql`${products.embeddedAt} IS NULL`);
+        .where(
+          and(
+            isNull(products.embeddedAt),
+            sql`EXISTS (SELECT 1 FROM sources_visible sv WHERE sv.product_id = ${products.id})`,
+          ),
+        );
       return n;
     }
     if (kind === "source") {
       const [{ n }] = await db
         .select({ n: count() })
-        .from(sources)
-        .where(sql`${sources.embeddedAt} IS NULL`);
+        .from(sourcesVisible)
+        .where(isNull(sourcesVisible.embeddedAt));
       return n;
     }
     const [{ n }] = await db

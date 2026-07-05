@@ -10,6 +10,7 @@ import {
   productsActive,
   sources,
   sourcesActive,
+  sourcesVisible,
   releasesVisible,
   organizations,
   orgAccounts,
@@ -471,17 +472,17 @@ export async function buildProductDetailPayload(
   const [productSources, tagRows, aliasRows] = await Promise.all([
     db
       .select({
-        id: sourcesActive.id,
-        slug: sourcesActive.slug,
-        name: sourcesActive.name,
-        type: sourcesActive.type,
-        url: sourcesActive.url,
-        metadata: sourcesActive.metadata,
-        kind: sourcesActive.kind,
+        id: sourcesVisible.id,
+        slug: sourcesVisible.slug,
+        name: sourcesVisible.name,
+        type: sourcesVisible.type,
+        url: sourcesVisible.url,
+        metadata: sourcesVisible.metadata,
+        kind: sourcesVisible.kind,
       })
-      .from(sourcesActive)
-      .where(eq(sourcesActive.productId, product.id))
-      .orderBy(sourcesActive.name),
+      .from(sourcesVisible)
+      .where(eq(sourcesVisible.productId, product.id))
+      .orderBy(sourcesVisible.name),
     db
       .select({ name: tags.name })
       .from(productTags)
@@ -1166,12 +1167,13 @@ const getProductActivityHandler = async (c: import("hono").Context<Env>) => {
     );
   }
 
-  // Fetch all active sources for this product
+  // Fetch all visible sources for this product (public activity path — hidden
+  // sources, e.g. paused discovery candidates, must not contribute).
   const productSources = await db
-    .select({ id: sourcesActive.id, slug: sourcesActive.slug, name: sourcesActive.name })
-    .from(sourcesActive)
-    .where(eq(sourcesActive.productId, product.id))
-    .orderBy(sourcesActive.name);
+    .select({ id: sourcesVisible.id, slug: sourcesVisible.slug, name: sourcesVisible.name })
+    .from(sourcesVisible)
+    .where(eq(sourcesVisible.productId, product.id))
+    .orderBy(sourcesVisible.name);
 
   if (productSources.length === 0) {
     const today = new Date().toISOString().slice(0, 10);

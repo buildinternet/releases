@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { organizations, sources } from "@buildinternet/releases-core/schema";
 import { createTestDb, createTestApp, type TestDb } from "./setup.js";
 import { orgRoutes } from "../src/routes/orgs.js";
@@ -227,5 +227,53 @@ describe("mobileAppDiscoverySweep cron", () => {
     });
     const rows = await db.select().from(sources).where(eq(sources.type, "appstore"));
     expect(rows).toHaveLength(0);
+  });
+
+  it("skips fetchPaused, soft-deleted, and domain-less orgs", async () => {
+    installFetch();
+    await db.insert(organizations).values([
+      { id: "org_paused", slug: "paused", name: "Paused", domain: "paused.com", fetchPaused: true },
+      {
+        id: "org_deleted",
+        slug: "deleted",
+        name: "Deleted",
+        domain: "deleted.com",
+        deletedAt: "2026-06-01T00:00:00.000Z",
+      },
+      { id: "org_nodomain", slug: "nodomain", name: "NoDomain", domain: null },
+    ]);
+    await mobileAppDiscoverySweep({
+      DB: {} as D1Database,
+      CRON_ENABLED: "true",
+      WELL_KNOWN_MATERIALIZATION_ENABLED: "true",
+      _drizzleOverride: db,
+    });
+
+    // No candidate created for any of the excluded orgs.
+    const excludedSources = await db
+      .select()
+      .from(sources)
+      .where(inArray(sources.orgId, ["org_paused", "org_deleted", "org_nodomain"]));
+    expect(excludedSources).toHaveLength(0);
+
+    // fetchPaused + soft-deleted orgs aren't due-selected, so they're never stamped.
+    const [paused] = await db
+      .select()
+      .from(organizations)
+      .where(eq(organizations.id, "org_paused"));
+    expect(JSON.parse(paused!.metadata ?? "{}").mobileAppsSweptAt).toBeUndefined();
+    const [deleted] = await db
+      .select()
+      .from(organizations)
+      .where(eq(organizations.id, "org_deleted"));
+    expect(JSON.parse(deleted!.metadata ?? "{}").mobileAppsSweptAt).toBeUndefined();
+
+    // The domain-less org IS due, so it flows through the one probe path (no I/O,
+    // no source) and still gets stamped.
+    const [noDomain] = await db
+      .select()
+      .from(organizations)
+      .where(eq(organizations.id, "org_nodomain"));
+    expect(typeof JSON.parse(noDomain!.metadata ?? "{}").mobileAppsSweptAt).toBe("string");
   });
 });

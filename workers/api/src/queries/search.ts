@@ -171,7 +171,7 @@ export async function searchProducts(
   // return no hits to avoid an invalid `IN ()` clause.
   if (opts.sourceIds && opts.sourceIds.length === 0) return [];
   // When narrowing by sourceIds, restrict to products that own any of those
-  // sources (via an EXISTS subquery against sources_active).
+  // sources (via an EXISTS subquery against sources_visible).
   const sourceIdExistsClause =
     opts.sourceIds && opts.sourceIds.length > 0
       ? sql`AND EXISTS (

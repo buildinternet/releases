@@ -99,12 +99,8 @@ export async function mobileAppDiscoverySweep(env: MobileAppDiscoveryEnv): Promi
   let candidatesCreated = 0;
   let orgsWithApps = 0;
   for (const o of orgs) {
-    if (!o.domain) {
-      // No domain to probe, but still stamp so it doesn't lead every run.
-      // oxlint-disable-next-line no-await-in-loop -- advance the clock per row
-      await stampSwept(db, o.id, now.toISOString()).catch(() => undefined);
-      continue;
-    }
+    // A null domain is a safe no-op inside discoverMobileApps (no I/O), so every
+    // org flows through the one probe+stamp path — no special-cased branch.
     try {
       // oxlint-disable-next-line no-await-in-loop -- sequential per-org to bound subrequests
       const r = await discoverMobileApps(db, o.id, {

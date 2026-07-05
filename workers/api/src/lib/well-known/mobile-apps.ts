@@ -129,7 +129,9 @@ export async function discoverMobileApps(
   const bundleIds = aasa.ok ? parseAppSiteAssociation(aasa.json).bundleIds : [];
   const packageNames = assetlinks.ok ? parseAssetLinks(assetlinks.json).packageNames : [];
 
-  const android: DiscoveredAndroidApp[] = packageNames.map((packageName) => ({
+  // Cap Android hints the same way iOS bundle IDs are capped, so a domain can't
+  // make the sweep persist an arbitrarily large metadata payload.
+  const android: DiscoveredAndroidApp[] = packageNames.slice(0, maxApps).map((packageName) => ({
     packageName,
     playUrl: playStoreUrl(packageName),
   }));

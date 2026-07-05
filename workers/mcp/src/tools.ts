@@ -1038,7 +1038,11 @@ export async function getOrganization(
         })
         .from(sources)
         .where(
-          and(eq(sources.orgId, org.id), or(eq(sources.isHidden, false), isNull(sources.isHidden))),
+          and(
+            eq(sources.orgId, org.id),
+            isNull(sources.deletedAt),
+            or(eq(sources.isHidden, false), isNull(sources.isHidden)),
+          ),
         ),
       db
         .select({
@@ -1296,7 +1300,13 @@ export async function getRelease(
     .leftJoin(sources, eq(releases.sourceId, sources.id))
     .leftJoin(products, eq(sources.productId, products.id))
     .leftJoin(organizations, eq(sources.orgId, organizations.id))
-    .where(and(eq(releases.id, id), or(eq(sources.isHidden, false), isNull(sources.isHidden))))
+    .where(
+      and(
+        eq(releases.id, id),
+        isNull(sources.deletedAt),
+        or(eq(sources.isHidden, false), isNull(sources.isHidden)),
+      ),
+    )
     .limit(1);
 
   const r = rows[0];
