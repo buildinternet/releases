@@ -36,6 +36,15 @@
  * the explicit-org path is `recentReleaseCount > 0`: if an org genuinely
  * has zero new activity since its last overview there is nothing to say,
  * so re-running would produce an identical (or empty) result.
+ *
+ * `force` (explicit-org-list only) lifts even that last guard: it re-runs
+ * generation over the org's existing release window regardless of whether
+ * anything shipped since the last overview. The use case is a re-run after
+ * a generation bug fix, where the fix — not new releases — is what changed.
+ * It can't fabricate content: `fetchOverviewInputsForOrg` still selects from
+ * the org's real release window, and the regen loop skips an org whose window
+ * is empty. `force` is inert without an explicit `orgSlugs` list (it must not
+ * silently force-regen every org).
  */
 
 import { and, desc, eq, gte, inArray, isNull, ne, or, sql } from "drizzle-orm";
@@ -81,6 +90,12 @@ export interface OverviewCandidateOptions {
   maxCandidates?: number;
   /** Optional org slug filter — restrict the candidate set. null = all. */
   orgSlugs?: string[] | null;
+  /**
+   * Force re-generation of the listed orgs even when `recentReleaseCount` is 0
+   * (a re-run after a generation fix). Requires an explicit non-empty
+   * `orgSlugs`; inert otherwise, so it can never force-regen every org.
+   */
+  force?: boolean;
 }
 
 export interface OverviewCandidate {
@@ -149,6 +164,7 @@ export async function fetchOverviewCandidates(
     fastMinReleases = DEFAULT_FAST_MIN_RELEASES,
     maxCandidates = DEFAULT_MAX_CANDIDATES,
     orgSlugs,
+    force = false,
   } = options;
 
   const safeMax = Math.max(
@@ -221,9 +237,12 @@ export async function fetchOverviewCandidates(
   // When the caller supplied an explicit org allowlist the age and
   // min-new-releases thresholds are skipped — the operator is the gate.
   // We still require at least one new release so we don't regenerate an
-  // overview that would say nothing has changed.
+  // overview that would say nothing has changed — unless `force` is set,
+  // which lifts that guard for an explicit re-run (e.g. after a gen fix).
   const isExplicitOrgList = Array.isArray(orgSlugs) && orgSlugs.length > 0;
+  const forced = isExplicitOrgList && force;
   const eligible = rows.filter((r) => {
+    if (forced) return true;
     if (isExplicitOrgList || !r.overviewUpdatedAt) return r.recentReleaseCount > 0;
     // Per-org effective cadence: manual override beats the automatic velocity
     // tier (fast when the org shipped ≥ fastMinReleases since its overview).

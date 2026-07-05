@@ -1155,13 +1155,16 @@ workflowsRoutes.get("/workflows/batch-summarize/status/:instanceId", async (c) =
 // (no flag gate) so operators can smoke-test staging where the flag is off;
 // the workflow itself gates the cron path.
 //
-// Body: { orgs?, dryRun?, maxOrgs? }  (all optional)
+// Body: { orgs?, dryRun?, maxOrgs?, force? }  (all optional)
+// `force` re-generates the listed orgs even with no new releases (a re-run
+// after a generation fix) and REQUIRES a non-empty `orgs` list.
 // Returns: { instanceId, statusUrl }
 
 interface OverviewRegenBody {
   orgs?: string[];
   dryRun?: boolean;
   maxOrgs?: number;
+  force?: boolean;
 }
 
 workflowsRoutes.post("/workflows/overview-regen", async (c) => {
@@ -1196,6 +1199,16 @@ workflowsRoutes.post("/workflows/overview-regen", async (c) => {
     }
   }
 
+  // `force` lifts the "≥1 new release" eligibility guard, so it must be scoped
+  // to an explicit org list — never allowed to fan out across every org.
+  const force = body.force === true;
+  if (force && (!validOrgs || validOrgs.length === 0)) {
+    return respondError(
+      c,
+      new ValidationError("`force` requires a non-empty `orgs` list", { code: "bad_request" }),
+    );
+  }
+
   const scheduledTime = Date.now();
   const params = {
     scheduledTime,
@@ -1203,6 +1216,7 @@ workflowsRoutes.post("/workflows/overview-regen", async (c) => {
     orgs: validOrgs,
     dryRun: body.dryRun === true,
     maxOrgs: typeof body.maxOrgs === "number" && body.maxOrgs > 0 ? body.maxOrgs : undefined,
+    force,
   };
 
   const instance = await c.env.OVERVIEW_REGEN_WORKFLOW.create({
@@ -1218,6 +1232,7 @@ workflowsRoutes.post("/workflows/overview-regen", async (c) => {
     orgs: params.orgs,
     dryRun: params.dryRun,
     maxOrgs: params.maxOrgs,
+    force: params.force,
   });
 
   return c.json({

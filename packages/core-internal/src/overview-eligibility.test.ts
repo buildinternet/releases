@@ -16,6 +16,8 @@
  *     - explicit orgSlugs bypasses age threshold (fresh overview still returned)
  *     - explicit orgSlugs bypasses minNewReleases threshold (1 release is enough)
  *     - explicit orgSlugs still excludes orgs with recentReleaseCount=0
+ *     - force + explicit orgSlugs regenerates a recentReleaseCount=0 org
+ *     - force is inert without an explicit orgSlugs list
  *     - explicit orgSlugs still restricts to listed orgs (IN-clause preserved)
  *
  *   fetchOverviewInputsForOrg
@@ -487,6 +489,52 @@ describe("fetchOverviewCandidates", () => {
     const out = await fetchOverviewCandidates(asDb(tdb.db), {
       orgSlugs: ["eligibility-org"],
     });
+    expect(out.length).toBe(0);
+  });
+
+  it("force + explicit orgSlugs regenerates an org with recentReleaseCount=0", async () => {
+    tdb.db.insert(organizations).values(makeOrg()).run();
+    tdb.db.insert(sources).values(makeSource()).run();
+    // Overview updated today; every release predates it → recentReleaseCount=0.
+    tdb.db
+      .insert(knowledgePages)
+      .values(makeOverview({ updatedAt: isoDaysAgo(0) }))
+      .run();
+    tdb.db
+      .insert(releases)
+      .values(makeRelease({ publishedAt: isoDaysAgo(30) }))
+      .run();
+
+    // Without force the recentReleaseCount=0 guard rejects it (baseline).
+    const withoutForce = await fetchOverviewCandidates(asDb(tdb.db), {
+      orgSlugs: ["eligibility-org"],
+    });
+    expect(withoutForce.length).toBe(0);
+
+    // force lifts that guard for the explicit re-run (e.g. after a gen fix).
+    const out = await fetchOverviewCandidates(asDb(tdb.db), {
+      orgSlugs: ["eligibility-org"],
+      force: true,
+    });
+    expect(out.length).toBe(1);
+    expect(out[0]!.orgSlug).toBe("eligibility-org");
+    expect(out[0]!.recentReleaseCount).toBe(0);
+  });
+
+  it("force is inert without an explicit orgSlugs list (never fans out to every org)", async () => {
+    tdb.db.insert(organizations).values(makeOrg()).run();
+    tdb.db.insert(sources).values(makeSource()).run();
+    tdb.db
+      .insert(knowledgePages)
+      .values(makeOverview({ updatedAt: isoDaysAgo(0) }))
+      .run();
+    tdb.db
+      .insert(releases)
+      .values(makeRelease({ publishedAt: isoDaysAgo(30) }))
+      .run();
+
+    // force with no orgSlugs must not bypass the default predicate.
+    const out = await fetchOverviewCandidates(asDb(tdb.db), { force: true });
     expect(out.length).toBe(0);
   });
 
