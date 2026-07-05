@@ -57,8 +57,10 @@
     { "binding": "CHANGELOG_CHUNKS_INDEX", "index_name": "changelog-chunks-v1" },
   ],
   // Cloudflare native rate-limit bindings (three rungs: anonymous / account / machine).
-  // Namespace ids 2001/2006/2002 keep MCP buckets separate from the API worker's 100x ids.
-  // These are operator-confirmed placeholders — replace with real namespace ids before deploy.
+  // `namespace_id` is a developer-chosen integer, ACCOUNT-scoped: bindings that share an
+  // id share counters across every worker on the account, so each limiter needs its own.
+  // Nothing is provisioned in the dashboard — these values are final. Allocation
+  // convention: api = 100x, mcp = 200x, webhooks = 300x.
   "unsafe": {
     "bindings": [
       {
