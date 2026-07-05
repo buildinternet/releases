@@ -674,12 +674,12 @@ sourceRoutes.post("/sources/:slug/fetch", postSourceFetchRoute, async (c) => {
         new ValidationError("max must be a positive integer", { code: "bad_request" }),
       );
     }
-    // When the caller is a managed-agent session it sends X-Releases-MA-Session
-    // so we know to skip the delegateScrapeToDiscovery branch. Delegating from
-    // within an MA session would re-enter the same session-start path that
-    // originally spawned this session, causing it to self-collide on the
-    // per-source KV lock introduced in #1058. Inline fetch is the correct path
-    // here — the MA session already owns the crawl pipeline. See #1061.
+    // When the caller is an update/onboard session it sends X-Releases-MA-Session
+    // so we know to skip the delegateScrapeToUpdateWorkflow branch. Delegating
+    // from within a session would re-enter the same dispatch path that
+    // originally spawned it, causing it to self-collide on the per-source lock
+    // (#1058/#1814). Inline fetch is the correct path here — the session
+    // already owns the crawl pipeline. See #1061.
     const maSessionHeader = c.req.header("X-Releases-MA-Session");
     const skipDelegation = maSessionHeader !== undefined && maSessionHeader.length > 0;
     const result = await fetchOne(

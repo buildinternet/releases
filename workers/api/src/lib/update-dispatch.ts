@@ -66,6 +66,22 @@ export interface UpdateDispatchEnv extends SourceLockEnv {
 }
 
 /**
+ * Warn once per isolate when LATEST_CACHE is unbound — the spend cap silently
+ * not running is exactly the kind of misconfig that should leave a log trail
+ * (mirrors source-lock.ts's warnMissingBinding pattern).
+ */
+let warnedMissingSpendCapKv = false;
+function warnMissingSpendCapKv(): void {
+  if (warnedMissingSpendCapKv) return;
+  warnedMissingSpendCapKv = true;
+  logEvent("warn", {
+    component: "update-dispatch",
+    event: "spend-cap-binding-missing",
+    detail: "LATEST_CACHE unbound — daily spend cap not enforced on update dispatch",
+  });
+}
+
+/**
  * Kill-switch check, relocated from discovery's `maSessionsDisabled`. KV is
  * checked first — fastest lever in an incident, no redeploy — then the
  * Flagship flag / wrangler var. The switch predates #1946 as the "managed-agent
@@ -162,7 +178,9 @@ export async function startDeterministicUpdate(
     };
   }
 
-  if (env.LATEST_CACHE) {
+  if (!env.LATEST_CACHE) {
+    warnMissingSpendCapKv();
+  } else {
     const spendCheck = await checkSpendCap(env.LATEST_CACHE, params.orgId, env);
     if (spendCheck.blocked) {
       logEvent("warn", {

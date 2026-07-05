@@ -84,6 +84,18 @@ describe("POST /v1/workflows/update", () => {
     expect(body.error.message).toContain("company");
   });
 
+  it("400 (not 500) on non-object JSON bodies", async () => {
+    // JSON.parse happily yields null / arrays / scalars — the route must
+    // reject them before field access instead of throwing a TypeError.
+    const wf = makeWorkflowStub();
+    const fetch = mkFetch({ DETERMINISTIC_UPDATE_WORKFLOW: wf });
+    for (const body of [null, ["src_a"], "x", 42]) {
+      const res = await fetch(body);
+      expect(res.status).toBe(400);
+    }
+    expect(wf.calls).toHaveLength(0);
+  });
+
   it("409 + Retry-After when the per-source lock is held", async () => {
     const lockedActor = {
       idFromName: (name: string) => name,

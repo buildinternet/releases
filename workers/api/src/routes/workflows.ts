@@ -1307,6 +1307,14 @@ workflowsRoutes.post("/workflows/update", async (c) => {
   } catch {
     return respondError(c, new ValidationError("Invalid JSON body", { code: "invalid_json" }));
   }
+  // `c.req.json()` happily parses `null`, `[]`, or a bare scalar — reject
+  // anything that isn't a plain object before touching fields, so a malformed
+  // body stays a 400 instead of a TypeError-turned-500. Field-level shape
+  // (company string, non-empty identifiers array) is validated by the
+  // dispatch gate's validateUpdateParams.
+  if (typeof body !== "object" || body === null || Array.isArray(body)) {
+    return respondError(c, new ValidationError("Body must be a JSON object"));
+  }
 
   const identifiers = body.sourceIdentifiers ?? body.sourceSlugs;
   const result = await startDeterministicUpdate(c.env, {
@@ -1336,6 +1344,12 @@ workflowsRoutes.post("/workflows/update", async (c) => {
       case "kill_switch":
       case "unavailable":
         return respondError(c, new ServiceUnavailableError(result.message));
+      default: {
+        // Exhaustiveness guard: a new refusal reason must fail loudly here
+        // rather than falling through to the 202 success response below.
+        const unhandled: never = result.reason;
+        return respondError(c, new InternalError(`Unhandled update-dispatch reason: ${unhandled}`));
+      }
     }
   }
 
