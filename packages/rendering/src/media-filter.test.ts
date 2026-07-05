@@ -23,8 +23,22 @@ describe("isJunkMediaUrl", () => {
     expect(isJunkMediaUrl("data:image/gif;base64,R0lGODlhAQ")).toBe(true);
   });
 
+  test("flags WordPress emoji sprites", () => {
+    expect(isJunkMediaUrl("https://s.w.org/images/core/emoji/17.0.2/72x72/1f517.png")).toBe(true);
+  });
+
+  test("flags CI-review badges (cubic, stagereview, shields)", () => {
+    expect(isJunkMediaUrl("https://www.cubic.dev/buttons/review-in-cubic-dark.svg")).toBe(true);
+    expect(isJunkMediaUrl("https://stagereview.app/assets/gh-open-in-stage-light.svg")).toBe(true);
+    expect(isJunkMediaUrl("https://img.shields.io/badge/build-passing-green.svg")).toBe(true);
+  });
+
   test("passes a real screenshot URL", () => {
     expect(isJunkMediaUrl("https://cdn.example.com/blog/release-hero.png")).toBe(false);
+  });
+
+  test("passes a real (non-badge) SVG logo/diagram", () => {
+    expect(isJunkMediaUrl("https://cdn.example.com/assets/architecture-diagram.svg")).toBe(false);
   });
 
   test("returns false for null/undefined/empty", () => {

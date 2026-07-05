@@ -908,6 +908,10 @@ export const mediaAssets = sqliteTable(
     index("idx_media_assets_source").on(table.sourceId),
     index("idx_media_assets_release").on(table.releaseId),
     index("idx_media_assets_hash").on(table.contentHash),
+    // Fetch-skip dedup: resolve an already-mirrored asset by its third-party
+    // `source_url` so ingest can reuse the stored `r2Key` without re-downloading
+    // (feeds repeat the same image across entries; apps across versions).
+    index("idx_media_assets_source_url").on(table.sourceUrl),
   ],
 );
 

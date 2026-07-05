@@ -14,7 +14,11 @@
  */
 import { and, count, desc, eq, or, sql, type SQL } from "drizzle-orm";
 import { releases } from "@buildinternet/releases-core/schema";
-import { filterJunkMedia } from "@releases/rendering/media-filter.js";
+import {
+  CHROME_MEDIA_MARKERS,
+  filterJunkMedia,
+  SMALL_MEDIA_MARKERS,
+} from "@releases/rendering/media-filter.js";
 import { isGifUrl } from "@releases/adapters/media-classify.js";
 import { detectInlineVideos, VIDEO_EMBED_HOST_HINTS } from "@releases/rendering/video-embed.js";
 import { processMediaForR2, type MediaTransformBinding } from "./media-ingest.js";
@@ -116,6 +120,97 @@ export async function runMediaBackfill(
   }
 
   const [remainingRow] = await db.select({ c: count() }).from(releases).where(needsBackfill);
+  report.remaining = Number(remainingRow?.c ?? 0);
+  return report;
+}
+
+// ── Junk-media purge ─────────────────────────────────────────────────────────
+
+export const JUNK_PURGE_DEFAULT_LIMIT = 200;
+export const JUNK_PURGE_MAX_LIMIT = 1000;
+
+export interface JunkPurgeReport {
+  /** Rows examined this batch (matched the junk prefilter). */
+  scanned: number;
+  /** Rows whose stored `media[]` actually had junk removed + rewritten. */
+  releasesUpdated: number;
+  /** Total junk items dropped across all rows. */
+  itemsRemoved: number;
+  /**
+   * Rows still matching the junk prefilter after this batch. Approximate: a row
+   * where a marker appears inside a *real* URL never had anything to remove yet
+   * still matches, so loop on `releasesUpdated > 0`, not `remaining === 0`.
+   */
+  remaining: number;
+  dryRun: boolean;
+}
+
+/** Every junk URL marker, so the SQL prefilter can't drift from `isJunkMediaUrl`. */
+const JUNK_MARKERS: readonly string[] = [...SMALL_MEDIA_MARKERS, ...CHROME_MEDIA_MARKERS];
+
+/**
+ * SQL prefilter: a stored `media` JSON string containing any known junk marker.
+ * Cheap substring match to avoid scanning every row; the per-row
+ * `filterJunkMedia` is the real gate (and also strips favicon/`data:` items,
+ * which have no fixed marker, from any row this catches).
+ */
+function junkCandidateFilter(sourceId?: string): SQL | undefined {
+  const hasMarker = or(...JUNK_MARKERS.map((m) => sql`${releases.media} LIKE ${`%${m}%`}`));
+  return and(
+    hasMarker,
+    eq(releases.suppressed, false),
+    ...(sourceId ? [eq(releases.sourceId, sourceId)] : []),
+  );
+}
+
+/**
+ * Strip decorative-chrome media (emoji sprites, CI-review badges, avatars,
+ * favicons, `data:` URIs) from existing releases' stored `media[]` — the
+ * cleanup companion to the ingest-time `filterJunkMedia` pre-filter, for rows
+ * ingested before a marker existed. Unlike `runMediaBackfill` (which only
+ * rewrites a row when an image mirrors), this rewrites whenever filtering
+ * removes an item, so a media list that is *entirely* junk is cleared to `[]`.
+ *
+ * Idempotent: a cleaned row no longer matches the junk prefilter. Bounded by
+ * `limit`; `dryRun` reports what *would* be removed without writing.
+ */
+export async function runJunkMediaPurge(
+  db: ReturnType<typeof createDb>,
+  opts: { sourceId?: string; limit: number; dryRun: boolean },
+): Promise<JunkPurgeReport> {
+  const filter = junkCandidateFilter(opts.sourceId);
+  const candidates = await db
+    .select({ id: releases.id, media: releases.media })
+    .from(releases)
+    .where(filter)
+    .orderBy(desc(releases.publishedAt))
+    .limit(opts.limit);
+
+  const report: JunkPurgeReport = {
+    scanned: candidates.length,
+    releasesUpdated: 0,
+    itemsRemoved: 0,
+    remaining: 0,
+    dryRun: opts.dryRun,
+  };
+
+  for (const row of candidates) {
+    const original = parseStoredMedia(row.media);
+    const filtered = filterJunkMedia(original);
+    const removed = original.length - filtered.length;
+    if (removed === 0) continue; // matched a marker inside a real URL — nothing to drop
+    report.releasesUpdated++;
+    report.itemsRemoved += removed;
+    if (!opts.dryRun) {
+      // oxlint-disable-next-line no-await-in-loop -- bounded by `limit`
+      await db
+        .update(releases)
+        .set({ media: JSON.stringify(filtered) })
+        .where(eq(releases.id, row.id));
+    }
+  }
+
+  const [remainingRow] = await db.select({ c: count() }).from(releases).where(filter);
   report.remaining = Number(remainingRow?.c ?? 0);
   return report;
 }
