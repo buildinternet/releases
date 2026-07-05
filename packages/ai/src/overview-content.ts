@@ -20,9 +20,6 @@ import {
 /** Default model — Haiku is fine per the skill ("not a heavy reasoning task"). */
 export const MODEL = "claude-haiku-4-5";
 
-/** Output cap per the skill. */
-export const MAX_OUTPUT_TOKENS = 800;
-
 /** Per-release content cap (chars) — matches the skill's truncation rule. */
 const RELEASE_CONTENT_CHARS = 1000;
 
