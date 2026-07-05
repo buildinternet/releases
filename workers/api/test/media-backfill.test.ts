@@ -4,7 +4,11 @@ import { drizzle } from "drizzle-orm/bun-sqlite";
 import { eq } from "drizzle-orm";
 import { applyMigrations } from "../../../tests/db-helper";
 import { organizations, sources, releases } from "@buildinternet/releases-core/schema";
-import { runMediaBackfill, runGifTranscodeBackfill } from "../src/lib/media-backfill";
+import {
+  runMediaBackfill,
+  runGifTranscodeBackfill,
+  runJunkMediaPurge,
+} from "../src/lib/media-backfill";
 import type { MediaTransformBinding } from "../src/lib/media-ingest";
 
 /**
@@ -345,5 +349,93 @@ describe("runGifTranscodeBackfill", () => {
     expect(report.releasesUpdated).toBe(0);
     expect(puts).toHaveLength(0);
     expect(mediaOf(db, r1)).not.toContain("mp4");
+  });
+});
+
+const EMOJI = (cp: string) => ({
+  type: "image",
+  url: `https://s.w.org/images/core/emoji/17.0.2/72x72/${cp}.png`,
+});
+const BADGE = { type: "image", url: "https://www.cubic.dev/buttons/review-in-cubic-dark.svg" };
+
+describe("runJunkMediaPurge", () => {
+  it("drops emoji + badge items, keeps the real image, and rewrites the row", async () => {
+    const db = mkDb();
+    seedSource(db, "src_a");
+    const r = seedRelease(db, {
+      sourceId: "src_a",
+      media: [EMOJI("1f517"), IMG("https://cdn.test/real-screenshot.png"), BADGE],
+    });
+
+    const report = await runJunkMediaPurge(db as any, { limit: 50, dryRun: false });
+
+    expect(report.releasesUpdated).toBe(1);
+    expect(report.itemsRemoved).toBe(2);
+    const media = JSON.parse(mediaOf(db, r));
+    expect(media).toEqual([{ type: "image", url: "https://cdn.test/real-screenshot.png" }]);
+  });
+
+  it("clears an all-junk media list to []", async () => {
+    const db = mkDb();
+    seedSource(db, "src_a");
+    const r = seedRelease(db, {
+      sourceId: "src_a",
+      media: [EMOJI("1f517"), EMOJI("1f4e2"), EMOJI("1f4ac")],
+    });
+
+    const report = await runJunkMediaPurge(db as any, { limit: 50, dryRun: false });
+
+    expect(report.releasesUpdated).toBe(1);
+    expect(report.itemsRemoved).toBe(3);
+    expect(mediaOf(db, r)).toBe("[]");
+  });
+
+  it("dry run reports what would be removed without writing", async () => {
+    const db = mkDb();
+    seedSource(db, "src_a");
+    const r = seedRelease(db, {
+      sourceId: "src_a",
+      media: [EMOJI("1f517"), IMG("https://cdn.test/real.png")],
+    });
+
+    const report = await runJunkMediaPurge(db as any, { limit: 50, dryRun: true });
+
+    expect(report.releasesUpdated).toBe(1);
+    expect(report.itemsRemoved).toBe(1);
+    // unchanged on disk — emoji still present
+    expect(mediaOf(db, r)).toContain("emoji");
+  });
+
+  it("leaves a clean row untouched and never matches it", async () => {
+    const db = mkDb();
+    seedSource(db, "src_a");
+    const r = seedRelease(db, {
+      sourceId: "src_a",
+      media: [IMG("https://cdn.test/a.png"), IMG("https://cdn.test/b.png")],
+    });
+
+    const report = await runJunkMediaPurge(db as any, { limit: 50, dryRun: false });
+
+    expect(report.scanned).toBe(0); // clean row never matched the junk prefilter
+    expect(report.releasesUpdated).toBe(0);
+    expect(JSON.parse(mediaOf(db, r))).toHaveLength(2);
+  });
+
+  it("scopes to a single source when sourceId is given", async () => {
+    const db = mkDb();
+    seedSource(db, "src_a");
+    seedSource(db, "src_b");
+    const a = seedRelease(db, { sourceId: "src_a", media: [EMOJI("1f517")] });
+    const b = seedRelease(db, { sourceId: "src_b", media: [EMOJI("1f4e2")] });
+
+    const report = await runJunkMediaPurge(db as any, {
+      sourceId: "src_a",
+      limit: 50,
+      dryRun: false,
+    });
+
+    expect(report.releasesUpdated).toBe(1);
+    expect(mediaOf(db, a)).toBe("[]");
+    expect(mediaOf(db, b)).toContain("emoji"); // untouched
   });
 });

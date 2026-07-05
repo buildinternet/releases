@@ -14,6 +14,9 @@ import {
   runVideoBackfill,
   VIDEO_BACKFILL_DEFAULT_LIMIT,
   VIDEO_BACKFILL_MAX_LIMIT,
+  runJunkMediaPurge,
+  JUNK_PURGE_DEFAULT_LIMIT,
+  JUNK_PURGE_MAX_LIMIT,
 } from "../lib/media-backfill.js";
 import {
   enrichFeedItem,
@@ -1884,6 +1887,70 @@ workflowsRoutes.post("/workflows/backfill-media", async (c) => {
 
   logEvent("info", {
     component: "backfill-media",
+    event: "done",
+    sourceId: ident ?? null,
+    all: body.all === true,
+    ...report,
+  });
+  return c.json({ scope: ident ?? "all", ...report });
+});
+
+// ── POST /workflows/purge-junk-media ─────────────────────────────────────────
+//
+// Strip decorative-chrome media (WordPress emoji sprites, "Review in Cubic" /
+// "Open in Stage" CI badges, avatars, favicons, `data:` URIs) from existing
+// releases' stored `media[]`. The cleanup companion to the ingest-time
+// `filterJunkMedia` pre-filter, for rows ingested before a marker existed.
+// Unlike `backfill-media`, it rewrites a row whenever filtering removes an item
+// (an all-junk media list is cleared to `[]`), so it runs inline (no fetches).
+// Idempotent; bounded per call; `remaining` lets the operator loop. `dryRun`
+// (default) reports what would be removed without writing.
+//
+// Body: { sourceId?, all?, limit?, dryRun? }
+
+interface PurgeJunkMediaBody {
+  sourceId?: string;
+  all?: boolean;
+  limit?: number;
+  dryRun?: boolean;
+}
+
+workflowsRoutes.post("/workflows/purge-junk-media", async (c) => {
+  const db = createDb(c.env.DB);
+  const body = await parseJsonBody<PurgeJunkMediaBody>(c);
+
+  // Scope to a typed source ID, or require an explicit `all: true` to sweep
+  // every source — so a dropped/typo'd `sourceId` can't silently purge across
+  // the whole registry.
+  const ident = body.sourceId?.trim();
+  if (!ident && body.all !== true) {
+    return respondError(
+      c,
+      new ValidationError("Provide a typed `sourceId` (src_…) or `all: true`", {
+        code: "bad_request",
+      }),
+    );
+  }
+  if (ident && !isSourceId(ident)) {
+    return respondError(
+      c,
+      new ValidationError(
+        "Pass a typed source ID (src_…). Resolve a slug via /v1/orgs/{orgSlug}/sources/{sourceSlug} first.",
+        { code: "bare_slug_rejected" },
+      ),
+    );
+  }
+
+  const rawLimit = Number(body.limit ?? JUNK_PURGE_DEFAULT_LIMIT);
+  const limit = Number.isFinite(rawLimit)
+    ? Math.min(Math.max(Math.floor(rawLimit), 1), JUNK_PURGE_MAX_LIMIT)
+    : JUNK_PURGE_DEFAULT_LIMIT;
+  const dryRun = body.dryRun !== false; // default to a dry run for safety
+
+  const report = await runJunkMediaPurge(db, { sourceId: ident || undefined, limit, dryRun });
+
+  logEvent("info", {
+    component: "purge-junk-media",
     event: "done",
     sourceId: ident ?? null,
     all: body.all === true,
