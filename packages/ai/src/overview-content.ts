@@ -9,8 +9,13 @@
  */
 
 import type Anthropic from "@anthropic-ai/sdk";
-import type { TextModel } from "./text-model";
-import { parsePostHocOverview, type PostHocExtraction } from "./overview-citations";
+import { generateText, Output, parsePartialJson, type LanguageModel } from "ai";
+import { z } from "zod";
+import {
+  resolveOverviewCitations,
+  type PostHocExtraction,
+  type RawOverviewCitation,
+} from "./overview-citations";
 
 /** Default model — Haiku is fine per the skill ("not a heavy reasoning task"). */
 export const MODEL = "claude-haiku-4-5";
@@ -190,18 +195,19 @@ export function buildOverviewRequest(input: OverviewRequestInput): {
   };
 }
 
-// ── OpenRouter (TextModel) path ───────────────────────────────────────────────
+// ── OpenRouter (AI SDK structured-output) path ────────────────────────────────
 
 /**
- * Output token budget for the OpenRouter path: body (~800) + the trailing JSON
- * citation list. The list scales with the release count (up to
- * `OVERVIEW_RELEASE_LIMIT` = 50), and each citation carries a long changelog URL
- * plus a verbatim quote (~40–90 tokens each), so a large org's full list can run
- * 3K+ tokens. Sized to fit body + a complete list for the biggest orgs; a too-low
- * cap truncates mid-list, which the strict citation-block regex then can't match,
- * leaking the raw partial JSON into the stored body (see `parsePostHocOverview`,
- * which now defensively strips an unterminated trailing block as a backstop).
- * Small orgs stop well short of this ceiling, so the raise is ~free for them.
+ * Output token budget for the AI SDK structured-output path: the JSON object
+ * carrying the body plus the citation list. The citation list scales with the
+ * release count (up to `OVERVIEW_RELEASE_LIMIT` = 50), and each citation carries
+ * a long changelog URL plus a verbatim quote (~40–90 tokens each), so a large
+ * org's full object can run 3K+ tokens. Sized to fit body + a complete list for
+ * the biggest orgs. A too-low cap truncates the object (`finishReason: "length"`,
+ * surfaced as `OverviewGeneration.truncated`); unlike the old fenced-block
+ * transport, a truncated structured response can't leak raw JSON into the body —
+ * it's salvaged via `parsePartialJson` (complete body + fully-serialized
+ * citations). Small orgs stop well short of this ceiling, so it's ~free for them.
  */
 export const OVERVIEW_OUTPUT_MAX_TOKENS = 4000;
 
@@ -244,10 +250,9 @@ export function buildOverviewUserText(input: OverviewRequestInput): string {
     );
   }
   lines.push(
-    `\nAfter the knowledge page body, output a fenced \`\`\`json code block containing a JSON array ` +
-      `of citations: [{ "url": "<one of the source URLs above>", "quote": "<a short verbatim phrase ` +
-      `copied from your body that the release supports>" }]. Each quote MUST appear verbatim in your ` +
-      `body. Omit the block entirely if you have no citations. Do not mention citations in the body.`,
+    `\nAlongside the body, return citations: for the key claims in your body, cite the exact source ` +
+      `URL listed above together with a short phrase copied VERBATIM from your body that the source ` +
+      `supports. Use no citations if none apply. Do not mention citations in the body itself.`,
   );
   return lines.join("\n");
 }
@@ -288,8 +293,8 @@ const OVERVIEW_LINT_BANNED = [
  * Lint an overview body against the format/voice rules the prompt asks for — the
  * same checks the local agent workflow applies. Returns violation tags (empty =
  * clean); `generateOverview` uses it to drive a single corrective regeneration.
- * Note: a *leading* markdown heading is stripped by `parsePostHocOverview` before
- * this runs, so `markdown-heading` here catches non-leading (mid-body) headings.
+ * Note: a *leading* markdown heading is stripped by `resolveOverviewCitations`
+ * before this runs, so `markdown-heading` here catches non-leading (mid-body) headings.
  */
 export function lintOverviewBody(body: string, orgName: string): string[] {
   const text = typeof body === "string" ? body : "";
@@ -336,59 +341,176 @@ function correctiveOverviewSuffix(violations: string[], body: string): string {
   return (
     `Your previous draft violated these rules: ${hints.join("; ")}. ` +
     `Rewrite the knowledge page fixing every one, keeping the same factual content ` +
-    `and the same trailing JSON citation block format.`
+    `and the same citations.`
   );
 }
 
-/** Overview generation result: the parsed body + citations, plus whether the kept draft was truncated. */
+/** Overview generation result: the resolved body + citations, plus whether the kept draft was truncated. */
 export interface OverviewGeneration extends PostHocExtraction {
   /**
-   * True when the model call whose body we kept stopped on the `maxTokens` cap.
-   * A truncated draft may have lost the tail of its citation list (the trailing
-   * JSON block is dropped defensively by `parsePostHocOverview`), so callers
-   * should log it — recurrence signals the output cap needs raising again.
+   * True when the model call whose body we kept stopped on the `maxTokens` cap
+   * (`finishReason: "length"`). A truncated structured response can't be parsed by
+   * the AI SDK, so we salvage it with `parsePartialJson`: the complete body and any
+   * citations that fully serialized survive, and the incomplete tail is dropped.
+   * Callers log it — recurrence signals the output cap needs raising.
    */
   truncated: boolean;
 }
 
 /**
- * Generate an org overview via the provider-agnostic TextModel seam (OpenRouter
- * with Anthropic fail-open). Returns the markdown body plus post-hoc-resolved
- * citations. Lints the draft and, on any violation, runs ONE corrective
- * re-generation (kept only if it is no worse on the lint) — mirroring the local
- * agent workflow. Shared by `OverviewRegenWorkflow` and the eval harness so the
- * eval exercises the production path.
+ * Per-call token accounting emitted once per model call (initial + any corrective
+ * retry) so the worker can log an `ai_usage` event, mirroring the old `TextModel`
+ * usage decorator. `costUsd` is the provider-reported cost when present (OpenRouter);
+ * the Anthropic fallback reports none, so the worker derives it from token counts.
+ */
+export interface OverviewCallUsage {
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  finishReason: string;
+  costUsd?: number;
+}
+
+export interface GenerateOverviewOptions {
+  /** Bounds each model call (the worker passes the overview lane's ceiling). */
+  timeoutMs?: number;
+  /** Called once per model call with its token usage, for `ai_usage` logging. */
+  onUsage?: (usage: OverviewCallUsage) => void;
+}
+
+/** Best-effort extract of OpenRouter's reported cost from provider metadata (undefined for Anthropic). */
+function providerCostUsd(meta: Record<string, unknown> | undefined): number | undefined {
+  const openrouter = meta?.openrouter as { usage?: { cost?: unknown } } | undefined;
+  const cost = openrouter?.usage?.cost;
+  return typeof cost === "number" ? cost : undefined;
+}
+
+/** Structured overview output: the markdown body plus a typed citation list — no fenced JSON in prose. */
+const OVERVIEW_OUTPUT_SCHEMA = z.object({
+  body: z
+    .string()
+    .describe(
+      "The knowledge-page markdown body ONLY. No title or leading heading. Do NOT append a " +
+        "'Citations:' or 'Sources:' section and do NOT list any URLs — every citation goes in the " +
+        "separate `citations` array below, never in this body text.",
+    ),
+  citations: z
+    .array(
+      z.object({
+        url: z.string().describe("One of the exact source URLs listed in the input."),
+        quote: z
+          .string()
+          .describe("A short phrase copied VERBATIM from your body that this source supports."),
+      }),
+    )
+    .describe("Citations mapping body phrases to their source URL. Empty array if none apply."),
+});
+
+/**
+ * Generate an org overview via the AI SDK structured-output path (a `LanguageModel`
+ * — OpenRouter in prod, Anthropic Haiku fail-open — resolved by the worker). The
+ * model returns a typed `{ body, citations }` object, so the citation list is a
+ * first-class field, never a fenced JSON block scraped out of the body (#1928).
+ * Resolves each `{ url, quote }` to a body-offset citation, lints the draft, and
+ * on any violation runs ONE corrective re-generation (kept only if it is no worse
+ * on the lint). Shared by `OverviewRegenWorkflow` and the eval harness so the eval
+ * exercises the production path. `timeoutMs` bounds each model call (the worker
+ * passes the overview lane's ceiling); omit to inherit the AI SDK default.
  */
 export async function generateOverview(
-  model: TextModel,
+  model: LanguageModel,
   input: OverviewRequestInput,
+  opts?: GenerateOverviewOptions,
 ): Promise<OverviewGeneration> {
   const validSources = new Set(input.selected.map(releaseSource));
   const titleBySource = new Map(
     input.selected.map((r) => [releaseSource(r), r.title || r.version || null] as const),
   );
   const user = buildOverviewUserText(input);
-  const req = { system: SYSTEM_PROMPT, maxTokens: OVERVIEW_OUTPUT_MAX_TOKENS, cacheSystem: true };
 
-  const first = await model.complete({ ...req, user });
-  let result = parsePostHocOverview(first.text, { validSources, titleBySource });
-  let truncated = first.truncated ?? false;
+  const generate = async (
+    prompt: string,
+  ): Promise<{ body: string; citations: RawOverviewCitation[]; truncated: boolean }> => {
+    const res = await generateText({
+      model,
+      system: SYSTEM_PROMPT,
+      prompt,
+      maxOutputTokens: OVERVIEW_OUTPUT_MAX_TOKENS,
+      output: Output.object({ schema: OVERVIEW_OUTPUT_SCHEMA }),
+      // The AI SDK retries internally by default; disable it so the caller's
+      // `generateOverviewWithRetry` stays the single retry authority (one extra
+      // attempt on transient errors), preserving the lane's billed-call budget.
+      maxRetries: 0,
+      ...(opts?.timeoutMs ? { abortSignal: AbortSignal.timeout(opts.timeoutMs) } : {}),
+    });
+    opts?.onUsage?.({
+      inputTokens: res.usage.inputTokens ?? 0,
+      outputTokens: res.usage.outputTokens ?? 0,
+      cacheReadTokens: res.usage.inputTokenDetails?.cacheReadTokens ?? 0,
+      cacheWriteTokens: res.usage.inputTokenDetails?.cacheWriteTokens ?? 0,
+      finishReason: res.finishReason,
+      costUsd: providerCostUsd(res.finalStep?.providerMetadata),
+    });
+    // The AI SDK only parses `.output` on a "stop" finish; on any other finish
+    // (notably "length" truncation) reading `.output` throws NoOutputGeneratedError.
+    // Salvage the partial JSON instead: a complete body plus the citations that
+    // fully serialized before the cut survive; the incomplete tail is dropped.
+    const salvaged = res.finishReason !== "stop";
+    const raw: unknown = salvaged ? (await parsePartialJson(res.text)).value : res.output;
+    // On a salvaged (cut-off) response the body is only trustworthy if serialization
+    // reached the `citations` key — which follows `body` in the schema, so its
+    // presence proves the body string closed. If it didn't, the body itself was cut
+    // mid-content: discard it (empty body → the caller skips the org) rather than
+    // persist a fragment. The 4000-token cap vs. the 300-word body limit makes a
+    // mid-body cut near-impossible in practice; this keeps the salvage provably correct.
+    const bodyComplete = !salvaged || (!!raw && typeof raw === "object" && "citations" in raw);
+    const truncated = res.finishReason === "length";
+    if (!bodyComplete) return { body: "", citations: [], truncated };
+    return { ...coerceOverviewObject(raw), truncated };
+  };
+
+  const first = await generate(user);
+  let result = resolveOverviewCitations(first.body, first.citations, {
+    validSources,
+    titleBySource,
+  });
+  let truncated = first.truncated;
 
   const violations = lintOverviewBody(result.body, input.org.name);
   if (violations.length > 0) {
-    const retry = await model.complete({
-      ...req,
-      user: `${user}\n\n${correctiveOverviewSuffix(violations, result.body)}`,
+    const retry = await generate(`${user}\n\n${correctiveOverviewSuffix(violations, result.body)}`);
+    const corrected = resolveOverviewCitations(retry.body, retry.citations, {
+      validSources,
+      titleBySource,
     });
-    const corrected = parsePostHocOverview(retry.text, { validSources, titleBySource });
     // Keep the rewrite only if it is non-empty and no worse on the lint.
     if (
       corrected.body.trim().length > 0 &&
       lintOverviewBody(corrected.body, input.org.name).length <= violations.length
     ) {
       result = corrected;
-      truncated = retry.truncated ?? false;
+      truncated = retry.truncated;
     }
   }
   return { ...result, truncated };
+}
+
+/** Defensively coerce a (possibly partial/salvaged) model object into `{ body, citations }`. */
+function coerceOverviewObject(raw: unknown): { body: string; citations: RawOverviewCitation[] } {
+  const obj = (raw && typeof raw === "object" ? raw : {}) as {
+    body?: unknown;
+    citations?: unknown;
+  };
+  const body = typeof obj.body === "string" ? obj.body : "";
+  const citations = Array.isArray(obj.citations)
+    ? obj.citations.filter(
+        (c): c is RawOverviewCitation =>
+          !!c &&
+          typeof c === "object" &&
+          typeof (c as { url?: unknown }).url === "string" &&
+          typeof (c as { quote?: unknown }).quote === "string",
+      )
+    : [];
+  return { body, citations };
 }

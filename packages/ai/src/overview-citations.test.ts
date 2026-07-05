@@ -25,7 +25,7 @@ import {
   extractOverviewBody,
   clampCitationsToBody,
   decodeHtmlEntities,
-  parsePostHocOverview,
+  resolveOverviewCitations,
   type OverviewCitation,
 } from "./overview-citations.js";
 
@@ -287,7 +287,7 @@ describe("decodeHtmlEntities", () => {
   });
 });
 
-// ── parsePostHocOverview ─────────────────────────────────────────────────────
+// ── resolveOverviewCitations ─────────────────────────────────────────────────
 
 const SRC = "https://acme.dev/releases/v2";
 const input = {
@@ -295,11 +295,12 @@ const input = {
   titleBySource: new Map<string, string | null>([[SRC, "v2.0"]]),
 };
 
-test("parsePostHocOverview resolves a valid citation and strips the JSON block", () => {
-  const raw =
-    "Shipped a new streaming API and faster cold starts.\n\n" +
-    '```json\n[{"url":"https://acme.dev/releases/v2","quote":"streaming API"}]\n```';
-  const { body, citations } = parsePostHocOverview(raw, input);
+test("resolveOverviewCitations resolves a valid citation to a body offset", () => {
+  const { body, citations } = resolveOverviewCitations(
+    "Shipped a new streaming API and faster cold starts.",
+    [{ url: SRC, quote: "streaming API" }],
+    input,
+  );
   expect(body).toBe("Shipped a new streaming API and faster cold starts.");
   expect(citations).toHaveLength(1);
   expect(citations[0]).toMatchObject({
@@ -307,54 +308,47 @@ test("parsePostHocOverview resolves a valid citation and strips the JSON block",
     title: "v2.0",
     citedText: "streaming API",
   });
-  expect(body.slice(citations[0].startIndex, citations[0].endIndex)).toBe("streaming API");
+  expect(body.slice(citations[0]!.startIndex, citations[0]!.endIndex)).toBe("streaming API");
 });
 
-test("parsePostHocOverview returns no citations when the JSON block is absent", () => {
-  const { body, citations } = parsePostHocOverview("Just a body, no citations.", input);
+test("resolveOverviewCitations returns no citations when the list is empty", () => {
+  const { body, citations } = resolveOverviewCitations("Just a body, no citations.", [], input);
   expect(body).toBe("Just a body, no citations.");
   expect(citations).toEqual([]);
 });
 
-test("parsePostHocOverview drops unknown URLs, missing quotes, and unparseable JSON", () => {
-  const badUrl = parsePostHocOverview(
-    'Body text here.\n```json\n[{"url":"https://other.com","quote":"Body"}]\n```',
+test("resolveOverviewCitations strips a trailing Citations:/Sources: section the model leaks into the body", () => {
+  // DeepSeek sometimes appends a citations list to the body despite the prompt.
+  const leaky =
+    "Shipped a new streaming API.\n\nCitations:\nURL: https://acme.dev/releases/v2 — streaming API";
+  const { body, citations } = resolveOverviewCitations(
+    leaky,
+    [{ url: SRC, quote: "streaming API" }],
+    input,
+  );
+  expect(body).toBe("Shipped a new streaming API.");
+  expect(body).not.toMatch(/citations/i);
+  // The quote still resolves against the cleaned body.
+  expect(citations).toHaveLength(1);
+
+  const sources = resolveOverviewCitations("Body text here.\n\nSources: https://x", [], input);
+  expect(sources.body).toBe("Body text here.");
+});
+
+test("resolveOverviewCitations drops unknown URLs and quotes not found in the body", () => {
+  const badUrl = resolveOverviewCitations(
+    "Body text here.",
+    [{ url: "https://other.com", quote: "Body" }],
     input,
   );
   expect(badUrl.citations).toEqual([]);
 
-  const missingQuote = parsePostHocOverview(
-    `Body text here.\n\`\`\`json\n[{"url":"${SRC}","quote":"not in body"}]\n\`\`\``,
+  const missingQuote = resolveOverviewCitations(
+    "Body text here.",
+    [{ url: SRC, quote: "not in body" }],
     input,
   );
   expect(missingQuote.citations).toEqual([]);
-
-  const broken = parsePostHocOverview("Body text here.\n```json\n[not json]\n```", input);
-  expect(broken.body).toBe("Body text here.");
-  expect(broken.citations).toEqual([]);
-});
-
-test("parsePostHocOverview strips an unterminated (max_tokens-truncated) citation block from the body", () => {
-  // Reproduces the prod bug: the model hit its token cap mid-citation-list, so
-  // the trailing ```json array never closed. The strict regex can't match, but
-  // the raw partial JSON must NOT survive into the rendered body.
-  const raw =
-    "Shipped a new streaming API and faster cold starts.\n\n" +
-    '```json\n[\n  {"url":"https://acme.dev/releases/v2","quote":"streaming API"},\n' +
-    '  {"url":"https://acme.dev/releases/v3","quote":"faster cold st';
-  const { body, citations } = parsePostHocOverview(raw, input);
-  expect(body).toBe("Shipped a new streaming API and faster cold starts.");
-  expect(body).not.toContain("```json");
-  expect(body).not.toContain('"url"');
-  // Citations are unrecoverable from a truncated list — degrade to none.
-  expect(citations).toEqual([]);
-});
-
-test("parsePostHocOverview strips a truncated citation block even without a json info-string", () => {
-  const raw = 'Body text here.\n```\n[\n  {"url":"https://acme.dev/releases/v2","quote":"partia';
-  const { body } = parsePostHocOverview(raw, input);
-  expect(body).toBe("Body text here.");
-  expect(body).not.toContain("```");
 });
 
 // ── clampCitationsToBody ────────────────────────────────────────────────────

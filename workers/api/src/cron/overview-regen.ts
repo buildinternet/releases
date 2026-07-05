@@ -1,5 +1,5 @@
 /**
- * Per-org overview regeneration loop (OpenRouter TextModel lane).
+ * Per-org overview regeneration loop (AI SDK structured-output lane).
  *
  * Processes a chunk of candidate orgs sequentially: hydrates per-org inputs,
  * generates via `generateOverview`, and upserts the result. Per-org failures
@@ -9,6 +9,7 @@
  * it can be unit-tested independently of Cloudflare Workflows primitives.
  */
 
+import { APICallError, type LanguageModel } from "ai";
 import {
   fetchOverviewInputsForOrg,
   type OverviewCandidate,
@@ -17,9 +18,10 @@ import {
 import { upsertOrgOverview } from "@releases/core-internal/overview-upsert";
 import {
   generateOverview,
+  type GenerateOverviewOptions,
   type OverviewRequestInput,
 } from "@releases/ai-internal/overview-content";
-import type { TextModel } from "@releases/ai-internal/text-model";
+import type { ResolvedOverviewModel } from "../lib/text-model";
 import { logEvent } from "@releases/lib/log-event";
 
 export interface RegenChunkResult {
@@ -50,17 +52,21 @@ const GEN_RETRY_BACKOFF_MS = 2_000;
  */
 function isRetryableOverviewError(err: unknown): boolean {
   if (err instanceof Error && err.name === "TimeoutError") return true;
+  // AI SDK surfaces provider HTTP failures as APICallError; its own `isRetryable`
+  // flag already classifies 429/5xx/network as transient (4xx as not).
+  if (APICallError.isInstance(err)) {
+    return err.isRetryable || (err.statusCode !== undefined && err.statusCode >= 500);
+  }
   const msg = (err instanceof Error ? err.message : String(err)).toLowerCase();
   if (msg.includes("timeout") || msg.includes("aborted")) return true;
-  // `openRouterChat` throws `Error("OpenRouter <status>: …")` on a non-2xx; 429
-  // (rate limit) and 5xx (upstream) are transient, other 4xx are not.
   return /openrouter (429|5\d\d)\b/.test(msg);
 }
 
 async function generateOverviewWithRetry(
-  model: TextModel,
+  model: LanguageModel,
   input: OverviewRequestInput,
   orgSlug: string,
+  genOpts: GenerateOverviewOptions,
   opts?: { maxAttempts?: number; retryBackoffMs?: number },
 ): ReturnType<typeof generateOverview> {
   const maxAttempts = opts?.maxAttempts ?? MAX_GEN_ATTEMPTS;
@@ -68,7 +74,7 @@ async function generateOverviewWithRetry(
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
       // oxlint-disable-next-line no-await-in-loop -- sequential retry attempts
-      return await generateOverview(model, input);
+      return await generateOverview(model, input, genOpts);
     } catch (err: unknown) {
       // Rethrow immediately on the last attempt or a non-transient error.
       if (attempt >= maxAttempts || !isRetryableOverviewError(err)) throw err;
@@ -114,13 +120,17 @@ function toOverviewRequestInput(inputs: OverviewInputsForOrg): OverviewRequestIn
  */
 export async function regenerateOverviewChunk(
   db: Parameters<typeof upsertOrgOverview>[0],
-  model: TextModel,
+  resolved: ResolvedOverviewModel,
   candidates: OverviewCandidate[],
   opts?: { dryRun?: boolean; maxAttempts?: number; retryBackoffMs?: number },
 ): Promise<RegenChunkResult> {
   let generated = 0;
   let skipped = 0;
   const failedSlugs: string[] = [];
+  const genOpts: GenerateOverviewOptions = {
+    timeoutMs: resolved.timeoutMs,
+    onUsage: resolved.onUsage,
+  };
 
   for (const c of candidates) {
     try {
@@ -132,9 +142,10 @@ export async function regenerateOverviewChunk(
       }
       // oxlint-disable-next-line no-await-in-loop
       const { body, citations, truncated } = await generateOverviewWithRetry(
-        model,
+        resolved.model,
         toOverviewRequestInput(inputs),
         c.orgSlug,
+        genOpts,
         opts,
       );
       if (body.trim().length === 0) {
@@ -142,9 +153,9 @@ export async function regenerateOverviewChunk(
         continue;
       }
       if (truncated) {
-        // The kept draft hit the output cap — its citation list was likely cut
-        // short (the partial trailing JSON block is stripped defensively). We
-        // still persist the body; this warning is the signal to raise the cap.
+        // The kept draft hit the output cap (`finishReason: "length"`) — the tail
+        // of its structured citation list was likely cut. The body is still valid,
+        // so we persist it; this warning is the signal to raise the cap.
         logEvent("warn", {
           component: "overview-regen",
           event: "org-truncated",

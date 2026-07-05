@@ -15,23 +15,47 @@ import {
   knowledgePages,
 } from "@buildinternet/releases-core/schema";
 import { createTestDb } from "../../../../tests/db-helper";
-import type { TextModel } from "@releases/ai-internal/text-model";
+import { MockLanguageModelV3 } from "ai/test";
+import type { LanguageModel } from "ai";
 import { regenerateOverviewChunk } from "./overview-regen";
+import type { ResolvedOverviewModel } from "../lib/text-model";
 import type { OverviewCandidate } from "@releases/core-internal/overview-eligibility";
 
 // ── Fake model ────────────────────────────────────────────────────────────────
 
-function fakeModel(text: string, onCall?: () => void): TextModel {
-  return {
-    id: "openrouter:test",
-    async complete() {
-      onCall?.();
-      return { text, usage: { input: 1, output: 1, cacheCreate: 0, cacheRead: 0 } };
-    },
-  };
+type OverviewObject = { body: string; citations: Array<{ url: string; quote: string }> };
+
+/**
+ * Wrap a mock `LanguageModel` in the `ResolvedOverviewModel` shape the regen loop
+ * now takes. `timeoutMs: 0` is deliberate: `generateOverview` only creates an
+ * `AbortSignal.timeout` when `timeoutMs` is truthy, so 0 keeps tests free of
+ * dangling timers.
+ */
+function resolvedModel(model: LanguageModel): ResolvedOverviewModel {
+  return { model, onUsage: () => {}, timeoutMs: 0 };
 }
 
-const OUTPUT = "Acme shipped a streaming API and faster cold starts.\n```json\n[]\n```";
+/** A mock overview model returning a single structured `{ body, citations }` object (finishReason "stop"). */
+function fakeModel(obj: OverviewObject): ResolvedOverviewModel {
+  return resolvedModel(
+    new MockLanguageModelV3({
+      doGenerate: async () => ({
+        content: [{ type: "text", text: JSON.stringify(obj) }],
+        finishReason: { unified: "stop", raw: undefined },
+        usage: {
+          inputTokens: { total: 10, noCache: 10, cacheRead: 0, cacheWrite: 0 },
+          outputTokens: { total: 20, text: 20, reasoning: 0 },
+        },
+        warnings: [],
+      }),
+    }) as unknown as LanguageModel,
+  );
+}
+
+const OUTPUT: OverviewObject = {
+  body: "Acme shipped a streaming API and faster cold starts.",
+  citations: [],
+};
 
 // ── Seed helper ───────────────────────────────────────────────────────────────
 
@@ -167,13 +191,14 @@ test("a non-transient model error fails fast (no retry) and reports the slug", a
   const candidates = [makeCandidate(orgId, orgSlug, 1)];
 
   let calls = 0;
-  const throwing: TextModel = {
-    id: "openrouter:test",
-    async complete() {
-      calls++;
-      throw new Error("boom"); // deterministic (parse/lint/config), not transient
-    },
-  };
+  const throwing = resolvedModel(
+    new MockLanguageModelV3({
+      doGenerate: async () => {
+        calls++;
+        throw new Error("boom"); // deterministic (parse/lint/config), not transient
+      },
+    }) as unknown as LanguageModel,
+  );
 
   const res = await regenerateOverviewChunk(db as any, throwing, candidates, {
     retryBackoffMs: 0,
@@ -193,13 +218,14 @@ test("a persistent transient error is retried, then counted as failed", async ()
   const candidates = [makeCandidate(orgId, orgSlug, 1)];
 
   let calls = 0;
-  const timingOut: TextModel = {
-    id: "openrouter:test",
-    async complete() {
-      calls++;
-      throw new Error("The operation was aborted due to timeout");
-    },
-  };
+  const timingOut = resolvedModel(
+    new MockLanguageModelV3({
+      doGenerate: async () => {
+        calls++;
+        throw new Error("The operation was aborted due to timeout");
+      },
+    }) as unknown as LanguageModel,
+  );
 
   const res = await regenerateOverviewChunk(db as any, timingOut, candidates, {
     retryBackoffMs: 0,
@@ -219,16 +245,25 @@ test("a transient error is retried and the second attempt succeeds", async () =>
   const candidates = [makeCandidate(orgId, orgSlug, 2)];
 
   let calls = 0;
-  const flaky: TextModel = {
-    id: "openrouter:test",
-    async complete() {
-      calls++;
-      if (calls === 1) {
-        throw new Error("The operation was aborted due to timeout");
-      }
-      return { text: OUTPUT, usage: { input: 1, output: 1, cacheCreate: 0, cacheRead: 0 } };
-    },
-  };
+  const flaky = resolvedModel(
+    new MockLanguageModelV3({
+      doGenerate: async () => {
+        calls++;
+        if (calls === 1) {
+          throw new Error("The operation was aborted due to timeout");
+        }
+        return {
+          content: [{ type: "text", text: JSON.stringify(OUTPUT) }],
+          finishReason: { unified: "stop", raw: undefined },
+          usage: {
+            inputTokens: { total: 10, noCache: 10, cacheRead: 0, cacheWrite: 0 },
+            outputTokens: { total: 20, text: 20, reasoning: 0 },
+          },
+          warnings: [],
+        };
+      },
+    }) as unknown as LanguageModel,
+  );
 
   const res = await regenerateOverviewChunk(db as any, flaky, candidates, { retryBackoffMs: 0 });
   expect(res).toEqual({ generated: 1, skipped: 0, failed: 0, failedSlugs: [] });

@@ -25,7 +25,12 @@ import type { TextModel } from "@releases/ai-internal/text-model";
 import { gradeOverviewStructural, gradeCitations } from "./graders";
 import { loadOverviewFixtures, overviewRubricPath } from "./overview-fixtures";
 import type { FieldResult } from "./helpers";
-import { extractJudgeJson, resolveJudgeModel, resolveEvalModel, runJudge } from "./judge-model";
+import {
+  extractJudgeJson,
+  resolveJudgeModel,
+  resolveOverviewEvalModel,
+  runJudge,
+} from "./judge-model";
 import { saveRun } from "./results";
 
 // Re-exported for any unit test that imports it from this module.
@@ -60,13 +65,14 @@ async function main() {
   const client = new Anthropic({ apiKey });
 
   // Model under test: OpenRouter candidate when OVERVIEW_EVAL_MODEL is set,
-  // else the Anthropic Haiku production baseline (MODEL). resolveEvalModel
-  // always has a fallback because `client` is passed.
-  const resolved = resolveEvalModel({
+  // else the Anthropic Haiku production baseline (MODEL). Returns an AI SDK
+  // `LanguageModel` (the structured-output path), mirroring production
+  // `resolveOverviewModel`. `apiKey` is set (checked above), so it never nulls.
+  const resolved = resolveOverviewEvalModel({
     anthropicModel: MODEL,
     generationName: "org-overview-eval",
     orModelEnvVar: "OVERVIEW_EVAL_MODEL",
-    client,
+    apiKey,
   });
   if (!resolved) {
     console.error("No generation model available — skipping overview eval.");

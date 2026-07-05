@@ -134,20 +134,20 @@ export interface PostHocResolveInput {
   titleBySource: Map<string, string | null>;
 }
 
-/** Match a trailing fenced ```json [ ... ] ``` block (the citation list). */
-const CITATION_BLOCK_RE = /\n*```(?:json)?\s*(\[[\s\S]*?\])\s*```\s*$/i;
+/** A structured citation as returned by the model: a source URL + a verbatim body phrase. */
+export interface RawOverviewCitation {
+  url: string;
+  quote: string;
+}
 
 /**
- * Match a trailing fenced JSON citation array that never terminated — no closing
- * `]`/fence — because the model hit its `max_tokens` cap mid-list. Used only as a
- * backstop when {@link CITATION_BLOCK_RE} fails: strips the dangling block from
- * the body so a raw partial `[{ "url": … ` array never renders as page content.
- * Anchored to EOF and gated on an opening `[`, so it only ever removes the
- * (partial) citation block, never inline prose. Overview bodies never contain a
- * fenced ```json block of their own (the prompt forbids mentioning citations in
- * the body), so this cannot eat legitimate content.
+ * Strip a trailing `Citations:` / `Sources:` section the model sometimes appends
+ * to the body field despite the prompt forbidding it (observed with DeepSeek). It
+ * belongs in the structured citation array, not the rendered body. Anchored to
+ * EOF and gated on a bare `Citations:`/`Sources:` label at the start of a line, so
+ * it can't eat prose (an overview body never legitimately ends with such a block).
  */
-const PARTIAL_CITATION_BLOCK_RE = /\n*```(?:json)?\s*\[[\s\S]*$/i;
+const TRAILING_CITATIONS_RE = /\n+[ \t]*(?:citations?|sources?)\s*:[\s\S]*$/i;
 
 /** True when [start,end) contains an odd number of `**` markers (would split a bold span). */
 function crossesBoldBoundary(body: string, start: number, end: number): boolean {
@@ -156,41 +156,30 @@ function crossesBoldBoundary(body: string, start: number, end: number): boolean 
 }
 
 /**
- * Parse an OpenRouter overview generation: split the markdown body from a
- * trailing fenced JSON citation list, then resolve each { url, quote } into a
- * body-offset citation. Citations whose url isn't a provided source, whose quote
- * isn't found verbatim in the body, or whose span crosses a markdown `**`
- * boundary are dropped. Missing/invalid JSON yields zero citations (degrade,
- * never throw) — citation fidelity is advisory for this path.
+ * Resolve structured `{ url, quote }` citations (from an AI SDK `generateObject`
+ * response) into body-offset citations. The body and the citation list arrive as
+ * separate typed fields — no fenced JSON block scraped out of prose — so there is
+ * no transport parsing here, only offset resolution:
+ *
+ *   - normalize the body (HTML-entity decode + strip a stray leading heading),
+ *   - for each citation, keep it only if its url is a provided source, its quote
+ *     appears verbatim in the body, and the span doesn't split a `**` bold run,
+ *   - clamp the resulting offsets into the body.
+ *
+ * Unknown urls / quotes-not-found are dropped (citation fidelity is advisory);
+ * an empty list yields an empty citation set. Never throws.
  */
-export function parsePostHocOverview(
-  rawText: string,
+export function resolveOverviewCitations(
+  rawBody: string,
+  rawCitations: readonly RawOverviewCitation[],
   input: PostHocResolveInput,
 ): PostHocExtraction {
-  const match = rawText.match(CITATION_BLOCK_RE);
-  // On a clean match, drop the terminated block. Otherwise strip a dangling
-  // (truncated) trailing citation array so partial raw JSON never leaks into the
-  // body — worst case degrades to a clean body with zero citations.
-  const rawBody = match
-    ? rawText.slice(0, match.index)
-    : rawText.replace(PARTIAL_CITATION_BLOCK_RE, "");
-  const body = stripLeadingHeading(decodeHtmlEntities(rawBody).trim());
-
-  if (!match) return { body, citations: [] };
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(match[1]);
-  } catch {
-    return { body, citations: [] };
-  }
-  if (!Array.isArray(parsed)) return { body, citations: [] };
+  const body = stripLeadingHeading(decodeHtmlEntities(rawBody).trim())
+    .replace(TRAILING_CITATIONS_RE, "")
+    .trimEnd();
 
   const citations: OverviewCitation[] = [];
-  for (const item of parsed) {
-    if (!item || typeof item !== "object") continue;
-    const url = (item as { url?: unknown }).url;
-    const quote = (item as { quote?: unknown }).quote;
+  for (const { url, quote } of rawCitations) {
     if (typeof url !== "string" || typeof quote !== "string") continue;
     if (!input.validSources.has(url)) continue;
     const needle = decodeHtmlEntities(quote).trim();

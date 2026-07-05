@@ -14,10 +14,11 @@
  * `OVERVIEW_REGEN_ENABLED === "true"` via the Flagship/var fallback.
  * Admin POST trigger (`POST /v1/workflows/overview-regen`) runs unconditionally.
  *
- * Model resolution: `resolveOverviewModel` returns an OpenRouter TextModel when
- * OPENROUTER_API_KEY + SUMMARIZE_MODEL are configured (shared summary lane, tagged
- * `org-overview`); falls back to a direct Anthropic Haiku call otherwise; null when
- * neither is available → NonRetryableError (no point retrying a config problem).
+ * Model resolution: `resolveOverviewModel` returns an AI SDK `LanguageModel` (plus
+ * a usage sink + timeout) — OpenRouter when OPENROUTER_API_KEY + SUMMARIZE_MODEL are
+ * configured (shared summary lane, tagged `org-overview`), falling back to Anthropic
+ * Haiku otherwise; null when neither is available → NonRetryableError (no point
+ * retrying a config problem). Generation uses structured output (#1928).
  */
 
 import { WorkflowEntrypoint } from "cloudflare:workers";
@@ -160,13 +161,13 @@ export class OverviewRegenWorkflow extends WorkflowEntrypoint<
         RETRY_REGEN,
         async (): Promise<RegenChunkResult> => {
           const db = createDb(this.env.DB);
-          const model = await resolveOverviewModel(this.env);
-          if (!model) {
+          const resolved = await resolveOverviewModel(this.env);
+          if (!resolved) {
             throw new NonRetryableError(
               "no overview model available (no OpenRouter key and no Anthropic fallback)",
             );
           }
-          return regenerateOverviewChunk(db, model, slice, { dryRun });
+          return regenerateOverviewChunk(db, resolved, slice, { dryRun });
         },
       );
       totals.generated += r.generated;
