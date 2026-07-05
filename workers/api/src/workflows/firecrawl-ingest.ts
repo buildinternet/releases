@@ -27,6 +27,7 @@ import { buildAnthropicClient } from "@releases/lib/anthropic-client.js";
 import { extractFirecrawlMarkdown } from "../lib/firecrawl-extract.js";
 import { logUsage } from "../lib/usage-log.js";
 import { ingestRawReleases, embedReleasesForSource, type FetchOneEnv } from "../cron/poll-fetch.js";
+import { invalidateLatestCache } from "../lib/latest-cache.js";
 import {
   RETRY_POLL,
   RETRY_FETCH,
@@ -224,8 +225,18 @@ export class FirecrawlIngestWorkflow extends WorkflowEntrypoint<
         return ingestRawReleases(db, source, rawReleases, fetchEnv);
       });
 
-      // ── Steps 5a/5b: embed + summarize (only when new rows landed) ────────────
+      // ── Steps 5a/5b: summarize + embed (only when new rows landed) ────────────
+      // Order matches the poll path (poll-and-fetch.ts): generate-content runs
+      // BEFORE embed-releases so (a) the AI-generated headline isn't embedded as
+      // a separate signal, and (b) the new content_* fields land before the row
+      // reaches release-event observers. The firecrawl path previously ran these
+      // reversed; the swap is replay-safe (CF Workflows matches completed steps
+      // by name, and both steps are idempotent).
       if (ingest.insertedIds.length > 0) {
+        await step.do("generate-content", RETRY_GENERATE, async () => {
+          await generateContentForReleases(db, env, source, ingest.insertedIds);
+        });
+
         if (env.RELEASES_INDEX) {
           await step.do("embed-releases", RETRY_EMBED, async () => {
             const fetchEnv: FetchOneEnv = await resolveFetchEnv(env);
@@ -234,9 +245,16 @@ export class FirecrawlIngestWorkflow extends WorkflowEntrypoint<
             });
           });
         }
+      }
 
-        await step.do("generate-content", RETRY_GENERATE, async () => {
-          await generateContentForReleases(db, env, source, ingest.insertedIds);
+      // ── Step 5c: purge the latest-cache when new rows landed ──────────────────
+      // Mirrors the poll path (poll-and-fetch.ts): a firecrawl-detected release is
+      // a publish like any other, so the cached /v1/releases/latest shapes must be
+      // invalidated or they serve stale results until the 5-min TTL. Best-effort;
+      // a new terminal-ish step is replay-safe.
+      if (ingest.inserted > 0) {
+        await step.do("invalidate-latest-cache", async () => {
+          await invalidateLatestCache(env, { nReleases: ingest.inserted, cause: source.id });
         });
       }
 
