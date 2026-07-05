@@ -18,7 +18,6 @@ import {
 import { createDb } from "../db.js";
 import {
   sources,
-  sourcesActive,
   sourcesVisible,
   releases,
   releasesVisible,
@@ -108,7 +107,7 @@ import {
   parseSortDir,
 } from "../utils.js";
 import { wantsMarkdown, markdownResponse } from "../middleware/content-negotiation.js";
-import { authMiddleware } from "../middleware/auth.js";
+import { authMiddleware, isValidBearerAuth } from "../middleware/auth.js";
 import { sourceToMarkdown, releaseToMarkdown } from "@releases/rendering/formatters.js";
 import { filterJunkMedia } from "@releases/rendering/media-filter.js";
 import { processMediaForR2, selectExistingReleaseUrls } from "../lib/media-ingest.js";
@@ -278,7 +277,11 @@ sourceRoutes.get(
     // client needs to detect a cross-org ambiguous bare slug (#264). Distinct
     // from `?q=`, which is a substring search over name/slug/url.
     const slugFilter = c.req.query("slug")?.trim();
-    const includeHidden = c.req.query("include_hidden") === "true";
+    // `include_hidden` exposes hidden sources (e.g. paused discovery candidates),
+    // so it's honored only for an admin/root principal on this public-read route —
+    // an anonymous caller can never enumerate hidden rows. See the containment
+    // note in well-known-config.md → Mobile-app discovery.
+    const includeHidden = c.req.query("include_hidden") === "true" && (await isValidBearerAuth(c));
     const categoryFilter = c.req.query("category");
 
     const kind = parseKindParam(c.req.query("kind"));
@@ -3487,11 +3490,11 @@ sourceRoutes.get(
     const rows = await db
       .select({
         release: releases,
-        sourceName: sourcesActive.name,
-        sourceSlug: sourcesActive.slug,
-        sourceType: sourcesActive.type,
-        sourceMetadata: sourcesActive.metadata,
-        sourceIsHidden: sourcesActive.isHidden,
+        sourceName: sourcesVisible.name,
+        sourceSlug: sourcesVisible.slug,
+        sourceType: sourcesVisible.type,
+        sourceMetadata: sourcesVisible.metadata,
+        sourceIsHidden: sourcesVisible.isHidden,
         orgSlug: organizationsActive.slug,
         orgName: organizationsActive.name,
         orgAvatarUrl: organizationsActive.avatarUrl,
@@ -3501,9 +3504,9 @@ sourceRoutes.get(
         productName: productsActive.name,
       })
       .from(releases)
-      .innerJoin(sourcesActive, eq(releases.sourceId, sourcesActive.id))
-      .leftJoin(organizationsActive, eq(sourcesActive.orgId, organizationsActive.id))
-      .leftJoin(productsActive, eq(sourcesActive.productId, productsActive.id))
+      .innerJoin(sourcesVisible, eq(releases.sourceId, sourcesVisible.id))
+      .leftJoin(organizationsActive, eq(sourcesVisible.orgId, organizationsActive.id))
+      .leftJoin(productsActive, eq(sourcesVisible.productId, productsActive.id))
       .where(and(eq(releases.id, id), sql`${releases.id} IN (SELECT id FROM releases_visible)`));
 
     if (rows.length === 0) return respondError(c, new NotFoundError("Release not found"));

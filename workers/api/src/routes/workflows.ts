@@ -1,6 +1,6 @@
 // Mount point for /v1/workflows/* job/workflow trigger endpoints.
 import { Hono } from "hono";
-import { and, count, desc, eq, gte, inArray, sql } from "drizzle-orm";
+import { and, count, desc, eq, gte, inArray, isNull, or, sql } from "drizzle-orm";
 import { computeContentSize } from "@buildinternet/releases-core/tokens";
 import { contentHash } from "@releases/adapters/content-hash";
 import { normalizeMediaUrl } from "@releases/rendering/media-url.js";
@@ -32,6 +32,7 @@ import {
   productsActive,
   releases,
   sources,
+  sourcesVisible,
   sourceChangelogFiles,
   sourceChangelogChunks,
   sourceRawSnapshots,
@@ -300,7 +301,12 @@ workflowsRoutes.post("/workflows/embed-releases", async (c) => {
   const dryRun = body.dryRun === true;
 
   // Join releases → sources for org/product/category metadata.
-  const conditions = [sql`${releases.embeddedAt} IS NULL`];
+  const conditions = [
+    isNull(releases.embeddedAt),
+    isNull(sources.deletedAt),
+    or(eq(sources.isHidden, false), isNull(sources.isHidden)),
+    or(isNull(releases.suppressed), eq(releases.suppressed, false)),
+  ];
   if (since) conditions.push(gte(releases.publishedAt, since));
 
   // Remaining = backlog under the same predicate. Ran in parallel with the
@@ -328,6 +334,7 @@ workflowsRoutes.post("/workflows/embed-releases", async (c) => {
     db
       .select({ n: count() })
       .from(releases)
+      .leftJoin(sources, eq(releases.sourceId, sources.id))
       .where(and(...conditions)),
   ]);
 
@@ -426,7 +433,15 @@ workflowsRoutes.post("/workflows/embed-entities", async (c) => {
       const rows = await db
         .select()
         .from(organizations)
-        .where(sql`${organizations.embeddedAt} IS NULL`)
+        .where(
+          and(
+            isNull(organizations.embeddedAt),
+            sql`EXISTS (
+              SELECT 1 FROM sources_visible sv
+              WHERE sv.org_id = ${organizations.id}
+            )`,
+          ),
+        )
         .limit(n);
       for (const r of rows) {
         // For orgs, `orgId` points at themselves so scope=org filters match.
@@ -446,7 +461,15 @@ workflowsRoutes.post("/workflows/embed-entities", async (c) => {
       const rows = await db
         .select()
         .from(products)
-        .where(sql`${products.embeddedAt} IS NULL`)
+        .where(
+          and(
+            isNull(products.embeddedAt),
+            sql`EXISTS (
+              SELECT 1 FROM sources_visible sv
+              WHERE sv.product_id = ${products.id}
+            )`,
+          ),
+        )
         .limit(n);
       for (const r of rows) {
         entities.push({
@@ -464,8 +487,8 @@ workflowsRoutes.post("/workflows/embed-entities", async (c) => {
     if (kind === "source") {
       const rows = await db
         .select()
-        .from(sources)
-        .where(sql`${sources.embeddedAt} IS NULL`)
+        .from(sourcesVisible)
+        .where(isNull(sourcesVisible.embeddedAt))
         .limit(n);
       for (const r of rows) {
         entities.push({
@@ -538,25 +561,38 @@ workflowsRoutes.post("/workflows/embed-entities", async (c) => {
   }
 
   async function countUnembeddedKind(kind: EntityKind): Promise<number> {
+    // Mirror fetchUnembedded's visibility filters so the "remaining" count only
+    // includes rows that will actually be embedded (a hidden/source-less entity
+    // is never fetched, so it must not inflate the backlog forever).
     if (kind === "org") {
       const [{ n }] = await db
         .select({ n: count() })
         .from(organizations)
-        .where(sql`${organizations.embeddedAt} IS NULL`);
+        .where(
+          and(
+            isNull(organizations.embeddedAt),
+            sql`EXISTS (SELECT 1 FROM sources_visible sv WHERE sv.org_id = ${organizations.id})`,
+          ),
+        );
       return n;
     }
     if (kind === "product") {
       const [{ n }] = await db
         .select({ n: count() })
         .from(products)
-        .where(sql`${products.embeddedAt} IS NULL`);
+        .where(
+          and(
+            isNull(products.embeddedAt),
+            sql`EXISTS (SELECT 1 FROM sources_visible sv WHERE sv.product_id = ${products.id})`,
+          ),
+        );
       return n;
     }
     if (kind === "source") {
       const [{ n }] = await db
         .select({ n: count() })
-        .from(sources)
-        .where(sql`${sources.embeddedAt} IS NULL`);
+        .from(sourcesVisible)
+        .where(isNull(sourcesVisible.embeddedAt));
       return n;
     }
     const [{ n }] = await db

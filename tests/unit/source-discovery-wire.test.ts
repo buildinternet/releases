@@ -35,14 +35,14 @@ beforeAll(async () => {
       discovery: "curated",
     },
     {
-      id: "src_ondemand_hidden",
+      id: "src_ondemand_visible",
       orgId: "org_curated",
       name: "ondemand-src",
       slug: "ondemand-src",
       type: "github",
       url: "https://github.com/curated/ondemand",
       discovery: "on_demand",
-      isHidden: true,
+      isHidden: false,
     },
     {
       id: "src_ondemand_org",
@@ -51,6 +51,18 @@ beforeAll(async () => {
       slug: "ondemand-org-src",
       type: "github",
       url: "https://github.com/ondemand/src",
+      discovery: "on_demand",
+      isHidden: true,
+    },
+    {
+      // Hidden source under org_curated — must be excluded from the public
+      // getOrgSourcesWithStats (sources_visible) result.
+      id: "src_curated_hidden",
+      orgId: "org_curated",
+      name: "curated-hidden-src",
+      slug: "curated-hidden-src",
+      type: "github",
+      url: "https://github.com/curated/hidden",
       discovery: "on_demand",
       isHidden: true,
     },
@@ -64,8 +76,10 @@ describe("source discovery wire", () => {
     const rows = await getOrgSourcesWithStats(tdb.db as never, "org_curated");
     const byId = new Map(rows.map((r) => [r.id, r]));
     expect(byId.get("src_curated")?.discovery).toBe("curated");
-    expect(byId.get("src_ondemand_hidden")?.discovery).toBe("on_demand");
-    expect(byId.get("src_ondemand_hidden")?.is_hidden).toBe(1);
+    expect(byId.get("src_ondemand_visible")?.discovery).toBe("on_demand");
+    expect(byId.get("src_ondemand_visible")?.is_hidden).toBe(0);
+    // Query targets sources_visible — the hidden source is excluded outright.
+    expect(byId.has("src_curated_hidden")).toBe(false);
   });
 
   it("getSourcesWithStats (sources_active includeHidden) returns discovery", async () => {

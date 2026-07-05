@@ -8,7 +8,7 @@ import {
   organizations,
   organizationsActive,
   sources,
-  sourcesActive,
+  sourcesVisible,
 } from "@buildinternet/releases-core/schema";
 import { SOURCE_TYPES } from "@buildinternet/releases-core/source-enums";
 import { releaseCoverage } from "@releases/db/schema-coverage.js";
@@ -392,10 +392,10 @@ releaseRoutes.get(
  * Deliberately reads `releases` (not `releases_visible`): coverage-side rows are
  * excluded from that view, so the canonical's rollups would 404 through the
  * detail endpoint — yet a cluster view's job is to show them. Suppressed rows
- * are still dropped, and the inner join to `sources_active` drops rows whose
- * source was soft-deleted, matching `GET /releases/:id`. Coverage clusters are
- * tiny (a launch covered by a handful of posts), so a single `IN (...)` stays
- * well under D1's 100-bind cap.
+ * are still dropped, and the inner join to `sources_visible` drops rows whose
+ * source was soft-deleted OR hidden, matching `GET /releases/:id`. Coverage
+ * clusters are tiny (a launch covered by a handful of posts), so a single
+ * `IN (...)` stays well under D1's 100-bind cap.
  */
 async function fetchCoverageSiblings(
   db: ReturnType<typeof createDb>,
@@ -410,13 +410,13 @@ async function fetchCoverageSiblings(
       version: releases.version,
       title: releases.title,
       publishedAt: releases.publishedAt,
-      sourceName: sourcesActive.name,
+      sourceName: sourcesVisible.name,
       orgSlug: organizationsActive.slug,
       orgName: organizationsActive.name,
     })
     .from(releases)
-    .innerJoin(sourcesActive, eq(releases.sourceId, sourcesActive.id))
-    .leftJoin(organizationsActive, eq(sourcesActive.orgId, organizationsActive.id))
+    .innerJoin(sourcesVisible, eq(releases.sourceId, sourcesVisible.id))
+    .leftJoin(organizationsActive, eq(sourcesVisible.orgId, organizationsActive.id))
     .where(
       and(
         inArray(releases.id, ids),

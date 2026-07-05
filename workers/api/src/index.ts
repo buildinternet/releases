@@ -44,6 +44,7 @@ import { sweepTombstones } from "./cron/sweep-tombstones.js";
 import { scanStaleFirecrawlSources } from "./cron/firecrawl-staleness.js";
 import { sendStalenessDigest } from "./cron/send-staleness-digest.js";
 import { wellKnownSync } from "./cron/well-known-sync.js";
+import { mobileAppDiscoverySweep } from "./cron/mobile-app-discovery.js";
 import { sweepOauthClients } from "./cron/sweep-oauth-clients.js";
 import { sendDigests } from "./cron/send-digests.js";
 import { handleQueueBatch } from "./queues/handler.js";
@@ -254,6 +255,10 @@ export type Env = {
     API_TOKENS_DISABLED?: string;
     USER_API_KEYS_ENABLED?: string;
     WELL_KNOWN_MATERIALIZATION_ENABLED?: string;
+    // Mobile-app discovery sweep tunables (cron/mobile-app-discovery.ts).
+    MOBILE_DISCOVERY_INTERVAL_HOURS?: string;
+    MOBILE_DISCOVERY_MAX_PER_RUN?: string;
+    MOBILE_DISCOVERY_MAX_APPS_PER_ORG?: string;
     // When "true", `/v1/search` and the MCP search tools skip writing rows to
     // `search_queries`. Default off → logging on. See workers/api/src/lib/log-search.ts.
     SEARCH_QUERY_LOG_DISABLED?: string;
@@ -967,6 +972,24 @@ export default {
             FLAGS: env.FLAGS,
             WELL_KNOWN_MATERIALIZATION_ENABLED: env.WELL_KNOWN_MATERIALIZATION_ENABLED,
             GITHUB_TOKEN: env.GITHUB_TOKEN,
+          }),
+          alertEnv,
+        ),
+      );
+      return;
+    }
+    if (event.cron === "30 6 * * *") {
+      ctx.waitUntil(
+        loggedDispatch(
+          "mobile-app-discovery-cron",
+          mobileAppDiscoverySweep({
+            DB: env.DB,
+            CRON_ENABLED: env.CRON_ENABLED,
+            FLAGS: env.FLAGS,
+            WELL_KNOWN_MATERIALIZATION_ENABLED: env.WELL_KNOWN_MATERIALIZATION_ENABLED,
+            MOBILE_DISCOVERY_INTERVAL_HOURS: env.MOBILE_DISCOVERY_INTERVAL_HOURS,
+            MOBILE_DISCOVERY_MAX_PER_RUN: env.MOBILE_DISCOVERY_MAX_PER_RUN,
+            MOBILE_DISCOVERY_MAX_APPS_PER_ORG: env.MOBILE_DISCOVERY_MAX_APPS_PER_ORG,
           }),
           alertEnv,
         ),

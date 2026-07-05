@@ -281,6 +281,53 @@ The owner-facing version lives at `/docs/listing` (`web/src/content/docs/listing
 from `/submit`. Keep that page in sync when schema or reconciliation rules change; this file
 stays the engineering reference.
 
+## Mobile-app discovery (AASA + assetlinks.json, #1907)
+
+Distinct from the owner-authored `releases.json` above: this **discovers** a domain's native
+apps the owner never declared, from two well-known files every vendor already publishes for the
+platforms' own link-verification:
+
+| File                                      | Standard              | Declares                               |
+| ----------------------------------------- | --------------------- | -------------------------------------- |
+| `/.well-known/apple-app-site-association` | Apple Universal Links | iOS/macOS `appID`s (`TeamID.BundleID`) |
+| `/.well-known/assetlinks.json`            | Android Asset Links   | Android `package_name`s                |
+
+These files exist for machine consumption, so probing them carries no crawl-consent ambiguity.
+The same SSRF-screened, size/time-capped `fetchReleasesJson` applies. Pure parsers live in
+`@releases/adapters/app-links` (`parseAppSiteAssociation` / `parseAssetLinks` — defensive, never
+throw); the orchestrator is `workers/api/src/lib/well-known/mobile-apps.ts`.
+
+- **iOS:** each declared bundle ID is resolved to its App Store listing via the iTunes Lookup
+  API's `bundleId=` parameter (`resolveAppStoreByBundleId`), then landed as a **paused, hidden**
+  `appstore` **candidate** (`discovery:"on_demand"`, `isHidden:true`, `fetchPriority:"paused"`)
+  through the shared `materializeAppStoreSource`. A curator unpauses to make it live. Idempotent
+  on the App Store trackId — an app already indexed (curated or candidate) is a no-op.
+- **Android:** no `playstore` source type exists, so package names are stored as a display-only
+  hint under `org.metadata.discoveredApps` (never returned by any public read path — internal
+  curator data, like `selfDeclared`). Resolved iOS candidates are recorded there too.
+- **Fail-closed:** every fetch is a safe no-op on miss; iTunes resolution and all writes are
+  gated behind the `well-known-materialization-enabled` flag (shared with the config sweep) —
+  off ⇒ declared apps are reported but nothing is resolved or written. AASA can list third-party
+  apps (SSO/wallet integrations), so the paused+hidden posture keeps an unreviewed app off every
+  public surface until a curator promotes it.
+
+> **Prerequisite — hidden-source containment.** The candidate posture only holds because a hidden
+> source is genuinely invisible on public reads. Public release/product/org/search paths and the
+> embeddings candidate queries filter `sources.is_hidden = 0` (join `sources_visible`, not
+> `sources_active`); a product whose sources are all hidden does not surface. Regression coverage:
+> `workers/api/test/hidden-source-containment.test.ts`.
+
+Triggers:
+
+- Daily sweep at **06:30 UTC** (`cron/mobile-app-discovery.ts`) — its own cron invocation,
+  separate from the 06:00 config sweep, so its subrequests get a fresh Cloudflare
+  1000-per-invocation budget. Same due-filter pattern (`metadata.mobileAppsSweptAt`, default
+  30-day interval) + oldest-first cap (`MOBILE_DISCOVERY_MAX_PER_RUN` default 100,
+  `MOBILE_DISCOVERY_MAX_APPS_PER_ORG` default 5). Worst-case subrequests:
+  `maxPerRun × (2 + maxAppsPerOrg)`.
+- On-demand: `POST /v1/orgs/:slug/discover-apps` (write scope, `?dryRun=1` to preview),
+  independent of whether the domain has a `releases.json`.
+
 ## Composition
 
 | Issue                                                          | How v2 composes                                                                                                                         |
