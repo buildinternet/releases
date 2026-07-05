@@ -87,8 +87,9 @@ npx skills add buildinternet/releases-cli
 Agents consuming the product start from
 [releases.sh/llms.txt](https://releases.sh/llms.txt); the full MCP tool catalog
 and auth model live in [docs/architecture/mcp.md](docs/architecture/mcp.md).
-Signed-in users can follow orgs for personalized feeds, webhooks, and email
-digests.
+Creating a [free account](https://releases.sh/signup) unlocks higher rate
+limits (mint an API key at [releases.sh/account](https://releases.sh/account)),
+plus follows, personalized feeds, webhooks, and email digests.
 
 <div align="center">
   <img src="docs/assets/readme-org.png" alt="An organization page: AI-maintained overview of recent releases, source list, and JSON/Markdown/Atom export" width="700">
