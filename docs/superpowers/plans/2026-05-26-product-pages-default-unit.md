@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Promote product pages from thin source-directory stubs to the primary, aggregated, SEO-facing feed unit (releasebot-style), gated at 2+ products with a migration-free collapse for simpler orgs.
+**Goal:** Promote product pages from thin source-directory stubs to the primary, aggregated, SEO-facing feed unit (org hub = product card grid above an aggregate feed), gated at 2+ products with a migration-free collapse for simpler orgs.
 
 **Architecture:** Additive only. A `?product=` filter on the existing org release feed powers a product-scoped feed (the query already `LEFT JOIN`s products). The org-detail response gains a per-product `releaseCount` for hub cards. The web product page is rewritten to render that feed; the org Overview page gains a product card grid; single-product orgs 301 to the org page. No schema/DB migration.
 

@@ -18,9 +18,8 @@ Three things motivate promoting products to the primary unit:
 3. **SEO / landing pages** — product pages are the natural search-landing target ("Next.js release
    notes") but are currently thin stubs. The rich content lives on org/source pages instead.
 
-Reference: [releasebot.io/updates/openai](https://releasebot.io/updates/openai) (org hub = product
-card grid above an aggregate feed) and `/updates/openai/chatgpt` (per-product feed). This design
-converges on the same model.
+Target model: org hub = product card grid above an aggregate feed, plus a per-product feed page —
+the shape most multi-product release hubs converge on.
 
 ## Constraints and prior art
 
@@ -66,7 +65,7 @@ Add a **"Products" card grid** to the org Overview tab, rendered **above** the e
 `ReleaseTimeline`, only when `org.products.length >= 2`. Each card:
 
 - product name
-- release count (e.g. "167 release notes" — mirrors releasebot)
+- release count (e.g. "167 release notes")
 - links (`→`) to `/[orgSlug]/product/[slug]`
 
 The aggregate cross-product feed and the Overview / Releases / Sources tabs stay exactly as they are.

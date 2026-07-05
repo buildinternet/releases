@@ -1,9 +1,9 @@
 # Consumption telemetry (#1700)
 
-The demand gauge for the **agent-native channel**. Organic search is
-structurally impaired (#1601), so programmatic consumption of the catalog — over
-MCP and the authenticated REST API — is the growth signal that matters, and it
-was previously unmeasured. The existing instrumentation measures **our** costs
+The demand gauge for the **agent-native channel**. Programmatic consumption of
+the catalog — over MCP and the authenticated REST API — is the primary
+consumption channel this registry is built for, and it was previously
+unmeasured. The existing instrumentation measures **our** costs
 and surfaces (`usage_log` = AI token spend, `search_queries` = web search log,
 `telemetry_events` = CLI command names), not **consumer demand**.
 
@@ -70,8 +70,7 @@ them):
 
 The single number to watch. It is the weekly count of consumption events — the
 volume of catalog questions agents/automation answered through us. Watch it move
-when #1697 (`whats_changed`), #1698 (PR bot), and #1699 (private sources) ship;
-that movement is the signal the agent-native pivot is working.
+when #1697 (`whats_changed`), #1698 (PR bot), and #1699 (private sources) ship.
 
 `body` is a JSON **string** in `releases-cloudflare-logs` (same pattern as auth
 audit events in [auth-audit-monitors.md](../runbooks/auth-audit-monitors.md)):

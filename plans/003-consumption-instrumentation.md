@@ -19,8 +19,8 @@
 
 ## Why this matters
 
-Organic search (the historical human channel) is structurally impaired (#1601),
-so the agent/API channel is the one that matters — and it's currently unmeasured.
+The agent/API channel is the primary consumption channel this registry is built
+for (#1701) — and it's currently unmeasured.
 The only usage instrumentation today measures **our costs and surfaces**, not
 **consumer demand**: `usage_log` is our AI token spend, `search_queries` is the
 web search log, `telemetry_events` is CLI command names. There is no view of who
@@ -177,7 +177,7 @@ Stop and report (do not improvise) if:
 ## Maintenance notes
 
 - This is the gauge for #1697/#1698/#1699 — when those ship, watch whether the
-  north-star moves; that's the signal the agent-native pivot is working.
+  north-star moves.
 - If volume grows, the `logEvent`→Axiom path (option A) scales fine; only move to
   a D1 rollup if you need SQL joins against catalog tables.
 - Sibling cost-tracking work: #1651. Keep demand (this) and cost (#1651) as two

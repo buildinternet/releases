@@ -1,0 +1,42 @@
+name: Bug report
+description: Something in the code behaves incorrectly
+labels: ["bug"]
+body:
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Surface
+      options:
+        - API worker
+        - MCP server
+        - Web frontend
+        - Discovery worker
+        - Webhooks worker
+        - Shared packages
+        - Other / not sure
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, what happened instead?
+      placeholder: Include the request/command and the response or error you got.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction steps
+      placeholder: |
+        1. ...
+        2. ...
+    validations:
+      required: false
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: Where did this happen — the hosted service (releases.sh), local dev, or a fork? Include versions if relevant.
+    validations:
+      required: false

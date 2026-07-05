@@ -20,7 +20,7 @@
 
 ## Why this matters
 
-This is the wedge feature for the agent-native channel (#1701). An agent can't
+This is the flagship feature for the agent/API consumption channel (#1701). An agent can't
 visit N changelog pages to plan an upgrade, but it can make one call. Phase 1 is
 the smallest end-to-end slice that delivers it: **given one package and a
 `from`/`to` version, return the ordered changelog entries in that range, their

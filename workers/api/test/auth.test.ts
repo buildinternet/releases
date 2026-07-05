@@ -79,8 +79,8 @@ describe("buildSocialProviders gating", () => {
 
 describe("mapDisplayEmail", () => {
   it("captures the provider email verbatim (original casing/dots preserved)", () => {
-    expect(mapDisplayEmail({ email: "Dunn.zach@gmail.com" })).toEqual({
-      displayEmail: "Dunn.zach@gmail.com",
+    expect(mapDisplayEmail({ email: "Mixed.case@example.com" })).toEqual({
+      displayEmail: "Mixed.case@example.com",
     });
   });
 
@@ -103,8 +103,8 @@ describe("syncDisplayEmailOnUpdate", () => {
     // displayEmail; we must not clobber the cased value with the lowercased email.
     expect(
       syncDisplayEmailOnUpdate({
-        email: "dunnzach@gmail.com",
-        displayEmail: "Dunn.zach@gmail.com",
+        email: "mixedcase@example.com",
+        displayEmail: "Mixed.case@example.com",
       }),
     ).toBeUndefined();
   });
@@ -129,8 +129,8 @@ describe("emailFromGoogleIdToken (recovers the original-cased One Tap email)", (
   it("reads the original-cased email claim from a token payload", () => {
     // One Tap discards the verbatim email, so we re-read it from the same
     // (already-verified) token to drive the display_email backfill.
-    expect(emailFromGoogleIdToken(fakeIdToken({ email: "Dunn.Zach@gmail.com" }))).toBe(
-      "Dunn.Zach@gmail.com",
+    expect(emailFromGoogleIdToken(fakeIdToken({ email: "Mixed.Case@example.com" }))).toBe(
+      "Mixed.Case@example.com",
     );
   });
 
@@ -155,23 +155,23 @@ describe("displayEmailBackfill (fills a One-Tap user's empty displayEmail)", () 
     // A One-Tap user's row never got displayEmail (the flow bypasses
     // mapProfileToUser), so it's NULL/"" and the app falls back to the dot-stripped
     // canonical — backfill recovers the nicely-cased form.
-    expect(displayEmailBackfill({ displayEmail: null }, "Dunn.Zach@gmail.com")).toBe(
-      "Dunn.Zach@gmail.com",
+    expect(displayEmailBackfill({ displayEmail: null }, "Mixed.Case@example.com")).toBe(
+      "Mixed.Case@example.com",
     );
-    expect(displayEmailBackfill({ displayEmail: "" }, "Dunn.Zach@gmail.com")).toBe(
-      "Dunn.Zach@gmail.com",
+    expect(displayEmailBackfill({ displayEmail: "" }, "Mixed.Case@example.com")).toBe(
+      "Mixed.Case@example.com",
     );
   });
 
   it("never clobbers an already-set displayEmail", () => {
     // A value set by mapDisplayEmail (standard-flow create) or a change-email must survive.
     expect(
-      displayEmailBackfill({ displayEmail: "Dunn.zach@gmail.com" }, "DUNN.ZACH@gmail.com"),
+      displayEmailBackfill({ displayEmail: "Mixed.case@example.com" }, "MIXED.CASE@example.com"),
     ).toBeUndefined();
   });
 
   it("is a no-op when there's no matching row (a new user takes the create path)", () => {
-    expect(displayEmailBackfill(undefined, "Dunn.Zach@gmail.com")).toBeUndefined();
+    expect(displayEmailBackfill(undefined, "Mixed.Case@example.com")).toBeUndefined();
   });
 
   it("is a no-op when the provider gave no email", () => {

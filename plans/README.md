@@ -189,10 +189,10 @@ its own design pass per Run 1's note), #1678 (MCP webhook management tools),
 
 ---
 
-## Run 1 — agent-native growth push, 2026-06-20, against commit `8f811cb5`
+## Run 1 — agent-consumption features, 2026-06-20, against commit `8f811cb5`
 
-Design-spike plans for the load-bearing items of the agent-native growth
-pivot (umbrella issue #1701, strategic source #1601). Each plan adds the
+Design-spike plans for the load-bearing items of the agent/API consumption
+feature set (umbrella issue #1701). Each plan adds the
 executor-ready _how_ on top of the product _what/why_ already in its GitHub
 issue. Read the linked issue first, then the plan.
 
@@ -251,7 +251,7 @@ git history if they do).
 ### 002 — as built (branch `advisor/002-whats-changed`)
 
 `GET /v1/whats-changed?package=&from=&to=&ecosystem=` + the MCP `whats_changed`
-tool — the agent-native wedge. Pure core helper `resolveUpgradeRange`
+tool — the flagship agent-consumption feature. Pure core helper `resolveUpgradeRange`
 (`@buildinternet/releases-core/upgrade-range`) returns the `(from, to]` subset
 (from-exclusive, to-inclusive) via the lexicographic `versionSort` key, with a
 publishedAt fallback for non-numeric bounds. The route reads already-ingested
@@ -308,7 +308,7 @@ consumers (needs a hashed `consumerRef`; volume north-star needs none).
 - #1698 (GitHub App PR bot) and #1699 (private sources) are L-effort and need
   their own design passes; they follow once 001/002 prove the wedge. Their
   issues hold the design sketch.
-- Further SEO work beyond the hygiene already shipped — see #1601/#1606.
+- Further SEO hygiene beyond what's already shipped — see #1601/#1606.
 
 ### Run 1 — findings considered and rejected
 

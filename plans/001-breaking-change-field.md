@@ -29,8 +29,7 @@ taxonomy is `kind` + `type` (`feature`/`rollup`) + tags, and "breaking" exists
 only as prose in `src/shared/rubrics/overview.md`. A machine-readable `breaking`
 classification + extracted `migration_notes` is the data layer the upgrade-plan
 feature (plan 002 / #1697) stands on, and it doubles as first-party editorial
-value (the thing the March-2026 core update rewards over republished text —
-#1601).
+value beyond republished text (#1601).
 
 This is a **spike-then-build** plan: the schema + plumbing are mechanical, but
 the classification prompt + its eval are the real work. Do the plumbing behind a
