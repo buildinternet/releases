@@ -137,6 +137,18 @@ export interface PostHocResolveInput {
 /** Match a trailing fenced ```json [ ... ] ``` block (the citation list). */
 const CITATION_BLOCK_RE = /\n*```(?:json)?\s*(\[[\s\S]*?\])\s*```\s*$/i;
 
+/**
+ * Match a trailing fenced JSON citation array that never terminated — no closing
+ * `]`/fence — because the model hit its `max_tokens` cap mid-list. Used only as a
+ * backstop when {@link CITATION_BLOCK_RE} fails: strips the dangling block from
+ * the body so a raw partial `[{ "url": … ` array never renders as page content.
+ * Anchored to EOF and gated on an opening `[`, so it only ever removes the
+ * (partial) citation block, never inline prose. Overview bodies never contain a
+ * fenced ```json block of their own (the prompt forbids mentioning citations in
+ * the body), so this cannot eat legitimate content.
+ */
+const PARTIAL_CITATION_BLOCK_RE = /\n*```(?:json)?\s*\[[\s\S]*$/i;
+
 /** True when [start,end) contains an odd number of `**` markers (would split a bold span). */
 function crossesBoldBoundary(body: string, start: number, end: number): boolean {
   const span = body.slice(start, end);
@@ -156,7 +168,12 @@ export function parsePostHocOverview(
   input: PostHocResolveInput,
 ): PostHocExtraction {
   const match = rawText.match(CITATION_BLOCK_RE);
-  const rawBody = match ? rawText.slice(0, match.index) : rawText;
+  // On a clean match, drop the terminated block. Otherwise strip a dangling
+  // (truncated) trailing citation array so partial raw JSON never leaks into the
+  // body — worst case degrades to a clean body with zero citations.
+  const rawBody = match
+    ? rawText.slice(0, match.index)
+    : rawText.replace(PARTIAL_CITATION_BLOCK_RE, "");
   const body = stripLeadingHeading(decodeHtmlEntities(rawBody).trim());
 
   if (!match) return { body, citations: [] };

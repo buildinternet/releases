@@ -192,8 +192,18 @@ export function buildOverviewRequest(input: OverviewRequestInput): {
 
 // ── OpenRouter (TextModel) path ───────────────────────────────────────────────
 
-/** Output token budget for the OpenRouter path: body (~800) + a small citation list. */
-export const OVERVIEW_OUTPUT_MAX_TOKENS = 1400;
+/**
+ * Output token budget for the OpenRouter path: body (~800) + the trailing JSON
+ * citation list. The list scales with the release count (up to
+ * `OVERVIEW_RELEASE_LIMIT` = 50), and each citation carries a long changelog URL
+ * plus a verbatim quote (~40–90 tokens each), so a large org's full list can run
+ * 3K+ tokens. Sized to fit body + a complete list for the biggest orgs; a too-low
+ * cap truncates mid-list, which the strict citation-block regex then can't match,
+ * leaking the raw partial JSON into the stored body (see `parsePostHocOverview`,
+ * which now defensively strips an unterminated trailing block as a backstop).
+ * Small orgs stop well short of this ceiling, so the raise is ~free for them.
+ */
+export const OVERVIEW_OUTPUT_MAX_TOKENS = 4000;
 
 /** Citation source for a release in the prompt (mirrors buildReleaseBlock). Exported so the eval grades against the same source keys generation used. */
 export function releaseSource(r: OverviewRequestInput["selected"][number]): string {
