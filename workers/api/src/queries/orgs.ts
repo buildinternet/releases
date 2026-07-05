@@ -29,7 +29,7 @@ export async function getOrgsWithStats(
       COUNT(CASE WHEN r.published_at >= ${cutoff30d} THEN 1 END) AS recent_release_count,
       (SELECT GROUP_CONCAT(p.name, '||') FROM (SELECT name FROM products_active WHERE org_id = o.id ORDER BY name LIMIT 3) p) AS top_products
     FROM organizations_active o
-    LEFT JOIN sources_active s ON s.org_id = o.id
+    LEFT JOIN sources_visible s ON s.org_id = o.id
     LEFT JOIN releases_visible r ON r.source_id = s.id
     ${where}
     GROUP BY o.id, o.slug, o.name, o.domain, o.description, o.category, o.avatar_url, o.featured
@@ -62,7 +62,7 @@ export async function countOrgsForList(
     FROM (
       SELECT o.id, COUNT(r.id) AS release_count
       FROM organizations_active o
-      LEFT JOIN sources_active s ON s.org_id = o.id
+      LEFT JOIN sources_visible s ON s.org_id = o.id
       LEFT JOIN releases_visible r ON r.source_id = s.id
       ${where}
       GROUP BY o.id
@@ -113,7 +113,7 @@ export async function getOrgSourcesWithStats(db: D1Db, orgId: string): Promise<S
       CASE WHEN stats.pack_by_fetch IS NOT NULL
         THEN NULLIF(SUBSTR(stats.pack_by_fetch, INSTR(stats.pack_by_fetch, '|') + 1), '')
       END AS latest_version_by_fetch
-    FROM sources_active s
+    FROM sources_visible s
     LEFT JOIN products_active p ON p.id = s.product_id
     LEFT JOIN (
       SELECT
@@ -124,7 +124,7 @@ export async function getOrgSourcesWithStats(db: D1Db, orgId: string): Promise<S
         MAX(CASE WHEN r.published_at IS NOT NULL THEN r.published_at || '|' || COALESCE(r.version, '') END) AS pack_by_date,
         MAX(CASE WHEN r.fetched_at IS NOT NULL THEN r.fetched_at || '|' || COALESCE(r.version, '') END) AS pack_by_fetch
       FROM releases_visible r
-      INNER JOIN sources_active s2 ON s2.id = r.source_id
+      INNER JOIN sources_visible s2 ON s2.id = r.source_id
       WHERE s2.org_id = ${orgId}
       GROUP BY r.source_id
     ) stats ON stats.source_id = s.id
@@ -169,7 +169,7 @@ function getOrgSparklinesChunk(
       DATE(r.published_at) AS date,
       COUNT(*) AS cnt
     FROM releases_visible r
-    INNER JOIN sources_active s ON s.id = r.source_id
+    INNER JOIN sources_visible s ON s.id = r.source_id
     WHERE
       r.published_at >= ${cutoff30d}
       AND r.published_at IS NOT NULL
@@ -224,7 +224,7 @@ export async function getOrgActivityData(
           MAX(CASE WHEN r.version IS NOT NULL AND (r.prerelease IS NULL OR r.prerelease = 0)
                    THEN r.published_at || '|' || r.version END) AS latest_tagged
         FROM releases_visible r
-        INNER JOIN sources_active s ON s.id = r.source_id
+        INNER JOIN sources_visible s ON s.id = r.source_id
         WHERE
           s.org_id = ${orgId}
           AND r.published_at IS NOT NULL
@@ -250,7 +250,7 @@ export async function getOrgActivityData(
         MIN(r.published_at) AS oldest,
         MAX(r.published_at) AS latest_date
       FROM releases_visible r
-      INNER JOIN sources_active s ON s.id = r.source_id
+      INNER JOIN sources_visible s ON s.id = r.source_id
       WHERE
         s.org_id = ${orgId}
         AND r.published_at IS NOT NULL
@@ -310,7 +310,7 @@ export async function getOrgSourceSparklines(
       DATE(r.published_at) AS date,
       COUNT(*) AS cnt
     FROM releases_visible r
-    INNER JOIN sources_active s ON s.id = r.source_id
+    INNER JOIN sources_visible s ON s.id = r.source_id
     WHERE
       s.org_id = ${orgId}
       AND r.published_at >= ${cutoff30d}
@@ -336,7 +336,7 @@ export async function getOrgHeatmapData(
       DATE(r.published_at) AS date,
       COUNT(*) AS cnt
     FROM releases_visible r
-    INNER JOIN sources_active s ON s.id = r.source_id
+    INNER JOIN sources_visible s ON s.id = r.source_id
     WHERE
       s.org_id = ${orgId}
       AND r.published_at IS NOT NULL
@@ -378,7 +378,7 @@ export async function getProductActivityData(
           MAX(CASE WHEN r.version IS NOT NULL AND (r.prerelease IS NULL OR r.prerelease = 0)
                    THEN r.published_at || '|' || r.version END) AS latest_tagged
         FROM releases_visible r
-        INNER JOIN sources_active s ON s.id = r.source_id
+        INNER JOIN sources_visible s ON s.id = r.source_id
         WHERE
           s.product_id = ${productId}
           AND r.published_at IS NOT NULL
@@ -404,7 +404,7 @@ export async function getProductActivityData(
         MIN(r.published_at) AS oldest,
         MAX(r.published_at) AS latest_date
       FROM releases_visible r
-      INNER JOIN sources_active s ON s.id = r.source_id
+      INNER JOIN sources_visible s ON s.id = r.source_id
       WHERE
         s.product_id = ${productId}
         AND r.published_at IS NOT NULL
@@ -419,7 +419,7 @@ export async function getProductActivityData(
       INNER JOIN (
         SELECT r2.source_id, MAX(r2.published_at) AS max_date
         FROM releases_visible r2
-        INNER JOIN sources_active s2 ON s2.id = r2.source_id
+        INNER JOIN sources_visible s2 ON s2.id = r2.source_id
         WHERE s2.product_id = ${productId}
           AND r2.published_at IS NOT NULL
           AND r2.published_at >= ${from}
@@ -435,7 +435,7 @@ export async function getProductActivityData(
       INNER JOIN (
         SELECT r2.source_id, MIN(r2.published_at) AS min_date
         FROM releases_visible r2
-        INNER JOIN sources_active s2 ON s2.id = r2.source_id
+        INNER JOIN sources_visible s2 ON s2.id = r2.source_id
         WHERE s2.product_id = ${productId}
           AND r2.published_at IS NOT NULL
           AND r2.published_at >= ${from}
@@ -460,7 +460,7 @@ export async function getProductHeatmapData(
       DATE(r.published_at) AS date,
       COUNT(*) AS cnt
     FROM releases_visible r
-    INNER JOIN sources_active s ON s.id = r.source_id
+    INNER JOIN sources_visible s ON s.id = r.source_id
     WHERE
       s.product_id = ${productId}
       AND r.published_at IS NOT NULL
@@ -593,7 +593,7 @@ export async function getOrgReleasesFeed(
            p.slug AS product_slug, p.name AS product_name,
            ${COVERAGE_COUNT_EXPR} AS coverage_count
     FROM ${releasesTable} r
-    INNER JOIN sources_active s ON s.id = r.source_id
+    INNER JOIN sources_visible s ON s.id = r.source_id
     LEFT JOIN products_active p ON p.id = s.product_id
     WHERE s.org_id = ?
       AND (r.suppressed IS NULL OR r.suppressed = 0)

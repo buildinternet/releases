@@ -8,7 +8,7 @@ import {
   organizations,
   organizationsActive,
   sources,
-  sourcesActive,
+  sourcesVisible,
 } from "@buildinternet/releases-core/schema";
 import { SOURCE_TYPES } from "@buildinternet/releases-core/source-enums";
 import { releaseCoverage } from "@releases/db/schema-coverage.js";
@@ -410,13 +410,13 @@ async function fetchCoverageSiblings(
       version: releases.version,
       title: releases.title,
       publishedAt: releases.publishedAt,
-      sourceName: sourcesActive.name,
+      sourceName: sourcesVisible.name,
       orgSlug: organizationsActive.slug,
       orgName: organizationsActive.name,
     })
     .from(releases)
-    .innerJoin(sourcesActive, eq(releases.sourceId, sourcesActive.id))
-    .leftJoin(organizationsActive, eq(sourcesActive.orgId, organizationsActive.id))
+    .innerJoin(sourcesVisible, eq(releases.sourceId, sourcesVisible.id))
+    .leftJoin(organizationsActive, eq(sourcesVisible.orgId, organizationsActive.id))
     .where(
       and(
         inArray(releases.id, ids),

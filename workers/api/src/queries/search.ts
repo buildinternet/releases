@@ -135,7 +135,7 @@ export async function searchOrgs(
     ? sql``
     : sql`AND EXISTS (
         SELECT 1
-        FROM sources_active s2
+        FROM sources_visible s2
         JOIN releases_visible r2 ON r2.source_id = s2.id
         WHERE s2.org_id = o.id
       )`;
@@ -175,7 +175,7 @@ export async function searchProducts(
   const sourceIdExistsClause =
     opts.sourceIds && opts.sourceIds.length > 0
       ? sql`AND EXISTS (
-          SELECT 1 FROM sources_active sa
+          SELECT 1 FROM sources_visible sa
           WHERE sa.product_id = p.id
             AND sa.id IN ${sourceIdInList(opts.sourceIds)}
         )`
@@ -192,6 +192,7 @@ export async function searchProducts(
       ${opts.orgId ? sql`AND o.id = ${opts.orgId}` : sql``}
       ${opts.kind ? sql`AND p.kind = ${opts.kind}` : sql``}
       ${sourceIdExistsClause}
+      AND EXISTS (SELECT 1 FROM sources_visible sv WHERE sv.product_id = p.id)
     GROUP BY p.id
     ORDER BY p.name LIMIT ${ENTITY_CANDIDATE_LIMIT}
   `);

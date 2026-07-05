@@ -117,7 +117,7 @@ async function queryProductList(
         category: productsActive.category,
         kind: productsActive.kind,
         avatarUrl: productsActive.avatarUrl,
-        sourceCount: sql<number>`(SELECT COUNT(*) FROM sources_active s WHERE s.product_id = products_active.id)`,
+        sourceCount: sql<number>`(SELECT COUNT(*) FROM sources_visible s WHERE s.product_id = products_active.id)`,
       })
       .from(productsActive)
       .where(where)

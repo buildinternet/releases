@@ -169,7 +169,7 @@ export interface ReleaseFeedStructured {
  */
 const ORG_HAS_VISIBLE_RELEASE = sql`EXISTS (
   SELECT 1
-  FROM sources_active s2
+  FROM sources_visible s2
   JOIN releases_visible r2 ON r2.source_id = s2.id
   WHERE s2.org_id = o.id
 )`;
@@ -1037,7 +1037,9 @@ export async function getOrganization(
           lastFetchedAt: sources.lastFetchedAt,
         })
         .from(sources)
-        .where(eq(sources.orgId, org.id)),
+        .where(
+          and(eq(sources.orgId, org.id), or(eq(sources.isHidden, false), isNull(sources.isHidden))),
+        ),
       db
         .select({
           slug: products.slug,
@@ -1046,7 +1048,15 @@ export async function getOrganization(
           description: products.description,
         })
         .from(products)
-        .where(eq(products.orgId, org.id)),
+        .where(
+          and(
+            eq(products.orgId, org.id),
+            sql`EXISTS (
+              SELECT 1 FROM sources_visible sv
+              WHERE sv.product_id = ${products.id}
+            )`,
+          ),
+        ),
       db
         .select({ domain: domainAliases.domain })
         .from(domainAliases)
@@ -1286,7 +1296,7 @@ export async function getRelease(
     .leftJoin(sources, eq(releases.sourceId, sources.id))
     .leftJoin(products, eq(sources.productId, products.id))
     .leftJoin(organizations, eq(sources.orgId, organizations.id))
-    .where(eq(releases.id, id))
+    .where(and(eq(releases.id, id), or(eq(sources.isHidden, false), isNull(sources.isHidden))))
     .limit(1);
 
   const r = rows[0];
