@@ -1,9 +1,14 @@
 # SourceActor delegation seam — implementation plan (#1780)
 
-> **Status: scaffold merged, staged rollout pending.** This doc describes the
-> planned phased routing of managed-source scrape/agent delegation through the
-> `SourceActor` DO so its single-thread serialization can eventually replace
-> three per-source coordination bolt-ons. Parent epic: #1778. First scaffold: #1780.
+> **Status: COMPLETE — kept as historical record.** All phases shipped: the
+> delegation seam merged (#1783), the real `delegateScrape` gate landed (#1814/#1815),
+> the dedup window + `skipDelegation` bolt-ons were retired (#1816), and the
+> rollout scaffolding (cohort predicate, `source-actor-enabled` flag,
+> `SOURCE_ACTOR_COHORT_PCT`, cron fan-out) was deleted at 100% (#1819) — the
+> actor is now the sole per-source fetch driver. Code snippets and phase tables
+> below describe the migration as planned, not the current code; see
+> [remote-mode.md → SourceActor](remote-mode.md) for present-day behavior.
+> Parent epic: #1778.
 
 ## Overview
 
