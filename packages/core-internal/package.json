@@ -2,6 +2,7 @@
   "name": "@releases/core-internal",
   "version": "0.0.0",
   "private": true,
+  "license": "Apache-2.0",
   "type": "module",
   "exports": {
     "./api-token-store": "./src/api-token-store.ts",

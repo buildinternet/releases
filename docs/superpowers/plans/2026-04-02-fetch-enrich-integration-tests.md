@@ -88,7 +88,7 @@ export function readFeedFixture(name: string): string {
 
 - [ ] **Step 2: Verify it compiles**
 
-Run: `cd /Users/zachdunn/Code/released && npx tsc --noEmit --pretty 2>&1 | head -20`
+Run: `cd ~/Code/released && npx tsc --noEmit --pretty 2>&1 | head -20`
 Expected: No errors in `tests/fixtures/server.ts`
 
 - [ ] **Step 3: Commit**
@@ -215,7 +215,7 @@ describe("fetchAndParseFeed (HTTP integration)", () => {
 
 - [ ] **Step 2: Run the tests**
 
-Run: `cd /Users/zachdunn/Code/released && bun test tests/integration/feed-adapter.test.ts`
+Run: `cd ~/Code/released && bun test tests/integration/feed-adapter.test.ts`
 Expected: All 8 tests pass
 
 - [ ] **Step 3: Commit**
@@ -428,7 +428,7 @@ describe("fetch CLI pipeline (fixture server)", () => {
 
 - [ ] **Step 2: Run the tests**
 
-Run: `cd /Users/zachdunn/Code/released && bun test tests/integration/fetch-pipeline.test.ts`
+Run: `cd ~/Code/released && bun test tests/integration/fetch-pipeline.test.ts`
 Expected: All tests pass
 
 - [ ] **Step 3: Commit**
@@ -635,7 +635,7 @@ describe("contentHash consistency", () => {
 
 - [ ] **Step 2: Run the tests**
 
-Run: `cd /Users/zachdunn/Code/released && bun test tests/integration/fetch-dedup-backoff.test.ts`
+Run: `cd ~/Code/released && bun test tests/integration/fetch-dedup-backoff.test.ts`
 Expected: All tests pass
 
 - [ ] **Step 3: Commit**
@@ -812,7 +812,7 @@ describe("scrape adapter feed-first path", () => {
 
 - [ ] **Step 2: Run the tests**
 
-Run: `cd /Users/zachdunn/Code/released && bun test tests/integration/scrape-feed-path.test.ts`
+Run: `cd ~/Code/released && bun test tests/integration/scrape-feed-path.test.ts`
 Expected: All tests pass
 
 - [ ] **Step 3: Commit**
@@ -935,7 +935,7 @@ describe("fetch-log tracking", () => {
 
 - [ ] **Step 2: Run the tests**
 
-Run: `cd /Users/zachdunn/Code/released && bun test tests/integration/fetch-log.test.ts`
+Run: `cd ~/Code/released && bun test tests/integration/fetch-log.test.ts`
 Expected: All tests pass
 
 - [ ] **Step 3: Commit**
@@ -953,12 +953,12 @@ Verify no regressions and confirm total test count increase.
 
 - [ ] **Step 1: Run the full test suite**
 
-Run: `cd /Users/zachdunn/Code/released && bun test 2>&1 | tail -30`
+Run: `cd ~/Code/released && bun test 2>&1 | tail -30`
 Expected: All tests pass (existing 386 + new ~35-40 tests)
 
 - [ ] **Step 2: Type check**
 
-Run: `cd /Users/zachdunn/Code/released && npx tsc --noEmit`
+Run: `cd ~/Code/released && npx tsc --noEmit`
 Expected: No type errors
 
 - [ ] **Step 3: Final commit with all tests passing**

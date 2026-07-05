@@ -12,8 +12,8 @@
 
 **Repos / worktrees:**
 
-- Monorepo: `/Users/zachdunn/Code/releases/.claude/worktrees/cli-feedback` (branch `worktree-cli-feedback`)
-- CLI: `/Users/zachdunn/Code/releases-cli/.worktrees/cli-feedback` (branch `feat/cli-feedback`)
+- Monorepo: `~/Code/releases/.claude/worktrees/cli-feedback` (branch `worktree-cli-feedback`)
+- CLI: `~/Code/releases-cli/.worktrees/cli-feedback` (branch `feat/cli-feedback`)
 
 ---
 
@@ -788,7 +788,7 @@ git commit -m "feat(api): mount feedback routes, namespace, kill switch + rate l
 
 ## TASKS — CLI
 
-> Work in `/Users/zachdunn/Code/releases-cli/.worktrees/cli-feedback` (branch `feat/cli-feedback`). Deps already installed.
+> Work in `~/Code/releases-cli/.worktrees/cli-feedback` (branch `feat/cli-feedback`). Deps already installed.
 
 ### Task 8: `releases feedback` submit command
 

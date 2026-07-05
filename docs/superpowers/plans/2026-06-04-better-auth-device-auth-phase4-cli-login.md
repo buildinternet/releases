@@ -69,7 +69,7 @@ The seams above resolved as follows once the api-key lane (PRs #1434/#1435/#1444
 - `web/src/lib/auth-client.ts` — add `deviceAuthorizationClient()` to the client plugins.
 - `docs/architecture/remote-mode.md` + `AGENTS.md` — document the device-auth login lane.
 
-**[CLI REPO] Create:** (`/Users/zachdunn/Code/releases-cli`)
+**[CLI REPO] Create:** (`~/Code/releases-cli`)
 
 - `src/lib/device-auth.ts` — device-flow client (plain `fetch`): `requestDeviceCode`, `pollForToken`, `getSessionUser`, `createUserApiKey`, `scopeToApiPermissions`, `runDeviceLogin`.
 - `src/lib/open-browser.ts` — OS-detecting browser opener (`browserCommand` + `openBrowser`).
@@ -642,7 +642,7 @@ git commit -m "feat(web): /device/approve approve-or-deny page"
 
 ## Task 5: `[CLI REPO]` Device-flow client helpers
 
-> All paths below are under `/Users/zachdunn/Code/releases-cli`. ESM with `.js` import suffixes; Bun test; chalk + commander already present.
+> All paths below are under `~/Code/releases-cli`. ESM with `.js` import suffixes; Bun test; chalk + commander already present.
 
 **Files:**
 
@@ -1343,7 +1343,7 @@ Expected: all migrations apply cleanly, including `20260604040000_add_device_cod
 
 - [ ] **Step 5: `[CLI REPO]` Type-check, test, build**
 
-Run (in `/Users/zachdunn/Code/releases-cli`): `npx tsc --noEmit && bun test && bun run build`
+Run (in `~/Code/releases-cli`): `npx tsc --noEmit && bun test && bun run build`
 Expected: PASS; `dist/releases` builds.
 
 - [ ] **Step 6: Staging end-to-end smoke (manual; gate on P1 + P3)**

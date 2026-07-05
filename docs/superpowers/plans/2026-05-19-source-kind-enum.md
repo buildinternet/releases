@@ -1163,7 +1163,7 @@ Open PR. After merge + release, `releases admin source update foo/bar --kind sdk
 
 ## Update memory after approval
 
-Once the user confirms `kind` (vs `type`) and approves this plan, update `/Users/zachdunn/.claude/projects/-Users-zachdunn-Code-releases/memory/project_source_type_grouping.md`:
+Once the user confirms `kind` (vs `type`) and approves this plan, update `~/.claude/projects/-Users-zachdunn-Code-releases/memory/project_source_type_grouping.md`:
 
 - Rename slug to `source-kind-grouping`
 - Update title and body references from `type` to `kind`

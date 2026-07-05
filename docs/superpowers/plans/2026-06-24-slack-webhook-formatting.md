@@ -20,7 +20,7 @@
 - CLI changesets target the package name **`@buildinternet/releases`** (NOT `releases-cli`).
 - Webhook format enum values are exactly `"json"` and `"slack"` everywhere (schema, migration CHECK, api-types, CLI, web).
 - The canonical release URL is `https://releases.sh/release/{releaseId}` (web route `web/src/app/release/[id]/page.tsx`). The formatter accepts a `baseUrl` option defaulting to `https://releases.sh`.
-- Run all monorepo commands from the worktree root `/Users/zachdunn/Code/releases/.claude/worktrees/slack-webhook-formatting`. CLI tasks run from `/Users/zachdunn/Code/releases-cli`.
+- Run all monorepo commands from the worktree root `~/Code/releases/.claude/worktrees/slack-webhook-formatting`. CLI tasks run from `~/Code/releases-cli`.
 
 ---
 
@@ -956,7 +956,7 @@ git commit -m "feat(web): webhook format selector + Slack chrome on the notifica
 
 ### Task 7: CLI `--format` flag (releases-cli)
 
-**Files (in `/Users/zachdunn/Code/releases-cli`):**
+**Files (in `~/Code/releases-cli`):**
 
 - Modify: `src/cli/commands/webhook-manage.ts` (`add` + `edit` commands)
 - Modify: the CLI webhook API client where `createMyWebhook`/patch payloads are built (find via `rg -n "createMyWebhook|updateMyWebhook" src`)
@@ -1035,13 +1035,13 @@ Add `--format slack` to `releases webhook add`/`edit` to deliver releases as for
 
 - [ ] **Step 4: Type-check + test the CLI**
 
-Run: `cd /Users/zachdunn/Code/releases-cli && npx tsc --noEmit && bun test`
+Run: `cd ~/Code/releases-cli && npx tsc --noEmit && bun test`
 Expected: PASS.
 
 - [ ] **Step 5: Commit (in the CLI repo)**
 
 ```bash
-cd /Users/zachdunn/Code/releases-cli
+cd ~/Code/releases-cli
 git add src/cli/commands/webhook-manage.ts .changeset/slack-webhook-format.md
 git commit -m "feat: add --format slack to webhook add/edit"
 ```

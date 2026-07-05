@@ -29,7 +29,7 @@ Linked git worktrees don't inherit `node_modules`; package resolution (and `tsc`
 
 - [ ] **Step 1: Install**
 
-Run from the worktree root (`/Users/zachdunn/Code/releases/.claude/worktrees/home-usecase-tabs`):
+Run from the worktree root (`~/Code/releases/.claude/worktrees/home-usecase-tabs`):
 
 ```bash
 bun install
@@ -372,13 +372,13 @@ git commit -m "feat(web): use-case tabs on TerminalSession"
 
 ## Task 3: Capture real CLI output for the two new tabs
 
-The demo's invariant is that it never invents a format the CLI doesn't print. Capture real human + `--json` output for the product and company tabs. Run these from the **main checkout root** (`/Users/zachdunn/Code/releases`), where the `releases` CLI env (`RELEASES_API_URL` via `.env`) is configured for prod. This task only reads — it writes scratch files outside the repo.
+The demo's invariant is that it never invents a format the CLI doesn't print. Capture real human + `--json` output for the product and company tabs. Run these from the **main checkout root** (`~/Code/releases`), where the `releases` CLI env (`RELEASES_API_URL` via `.env`) is configured for prod. This task only reads — it writes scratch files outside the repo.
 
-**Files:** scratch only — `/Users/zachdunn/.claude/jobs/33c9c864/tmp/cli-capture/*.txt`
+**Files:** scratch only — `~/.claude/jobs/33c9c864/tmp/cli-capture/*.txt`
 
 - [ ] **Step 1: Confirm the product slug resolves**
 
-Run (from `/Users/zachdunn/Code/releases`):
+Run (from `~/Code/releases`):
 
 ```bash
 releases get next.js 2>&1 | head -30
@@ -395,9 +395,9 @@ and use the resolved form (e.g. `vercel/next.js`, or the `prod_…` id) for the 
 - [ ] **Step 2: Capture the product tab (human + JSON)**
 
 ```bash
-mkdir -p /Users/zachdunn/.claude/jobs/33c9c864/tmp/cli-capture
-releases get next.js      > /Users/zachdunn/.claude/jobs/33c9c864/tmp/cli-capture/product.txt 2>&1
-releases get next.js --json > /Users/zachdunn/.claude/jobs/33c9c864/tmp/cli-capture/product.json 2>&1
+mkdir -p ~/.claude/jobs/33c9c864/tmp/cli-capture
+releases get next.js      > ~/.claude/jobs/33c9c864/tmp/cli-capture/product.txt 2>&1
+releases get next.js --json > ~/.claude/jobs/33c9c864/tmp/cli-capture/product.json 2>&1
 ```
 
 (Substitute the working invocation from Step 1 if different.)
@@ -405,8 +405,8 @@ releases get next.js --json > /Users/zachdunn/.claude/jobs/33c9c864/tmp/cli-capt
 - [ ] **Step 3: Capture the company tab (human + JSON)**
 
 ```bash
-releases get vercel      > /Users/zachdunn/.claude/jobs/33c9c864/tmp/cli-capture/company.txt 2>&1
-releases get vercel --json > /Users/zachdunn/.claude/jobs/33c9c864/tmp/cli-capture/company.json 2>&1
+releases get vercel      > ~/.claude/jobs/33c9c864/tmp/cli-capture/company.txt 2>&1
+releases get vercel --json > ~/.claude/jobs/33c9c864/tmp/cli-capture/company.json 2>&1
 ```
 
 - [ ] **Step 4: Sanity-check the captures**

@@ -14,7 +14,7 @@
 
 ## Conventions for every task
 
-- **Repos & working dirs:** Phase A tasks run in the **monorepo worktree** (cwd `/Users/zachdunn/Code/releases/.claude/worktrees/cli-auth-token-storage`, branch `worktree-cli-auth-token-storage`). Phase B tasks run in the **CLI repo** (cwd `/Users/zachdunn/Code/releases-cli`, on a new branch created in Task B0). Never `cd` between them within one task.
+- **Repos & working dirs:** Phase A tasks run in the **monorepo worktree** (cwd `~/Code/releases/.claude/worktrees/cli-auth-token-storage`, branch `worktree-cli-auth-token-storage`). Phase B tasks run in the **CLI repo** (cwd `~/Code/releases-cli`, on a new branch created in Task B0). Never `cd` between them within one task.
 - **Every commit ends with the trailer** `Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>` — shown in each commit command as a second `-m`.
 - **TDD:** write the failing test, run it red, implement, run it green, commit.
 - Do **not** push or open PRs unless the user asks. Commit to the branch only.
@@ -34,7 +34,7 @@
 | `tests/api/tokens-me-middleware.test.ts` | create             | Gating: read token reaches `/me`, anonymous → 401, admin route still admin.                                 |
 | `tests/api/api-tokens-route.test.ts`     | modify (append)    | `/me` handler projection for root + token identities.                                                       |
 
-### Phase B — CLI (`/Users/zachdunn/Code/releases-cli`)
+### Phase B — CLI (`~/Code/releases-cli`)
 
 | File                                 | Change | Responsibility                                                                                                                     |
 | ------------------------------------ | ------ | ---------------------------------------------------------------------------------------------------------------------------------- |
@@ -505,16 +505,16 @@ Expected: anonymous → `401`; valid token → `200` with `{ kind, name, scopes 
 
 ---
 
-# Phase B — CLI (`/Users/zachdunn/Code/releases-cli`)
+# Phase B — CLI (`~/Code/releases-cli`)
 
-> All Phase B tasks run with cwd `/Users/zachdunn/Code/releases-cli`. Test runner is `bun test`; typecheck is `tsc --noEmit` (`bun run typecheck`); lint is `oxlint` (`bun run lint`).
+> All Phase B tasks run with cwd `~/Code/releases-cli`. Test runner is `bun test`; typecheck is `tsc --noEmit` (`bun run typecheck`); lint is `oxlint` (`bun run lint`).
 
 ## Task B0: branch the CLI repo
 
 - [ ] **Step 1: Create a branch**
 
 ```bash
-cd /Users/zachdunn/Code/releases-cli
+cd ~/Code/releases-cli
 git checkout -b feat/auth-token-storage
 git status
 ```

@@ -2,6 +2,7 @@
   "name": "releases-discovery-worker",
   "version": "0.10.0",
   "private": true,
+  "license": "Apache-2.0",
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",

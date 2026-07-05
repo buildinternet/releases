@@ -2,6 +2,7 @@
   "name": "@releases/lib",
   "version": "0.0.0",
   "private": true,
+  "license": "Apache-2.0",
   "type": "module",
   "exports": {
     "./anthropic-client": "./src/anthropic-client.ts",
