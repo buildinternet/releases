@@ -714,6 +714,141 @@ describe("pollOne drainSelfFlag (actor-native drain producer)", () => {
   });
 });
 
+describe("pollOne drainOrgActor eager notify (#1946 phase 2)", () => {
+  // Minimal OrgActor namespace stub: records every getByName(...).ensureDrainScheduled(...)
+  // so the test can assert the eager drain-arm fires exactly on a flagged poll.
+  function mkOrgActorStub() {
+    const calls: Array<{ name: string; orgId: string }> = [];
+    const ns = {
+      getByName: (name: string) => ({
+        ensureDrainScheduled: async (orgId: string) => {
+          calls.push({ name, orgId });
+        },
+      }),
+    } as any;
+    return { ns, calls };
+  }
+
+  it("arms the OrgActor when a scrape poll flags the source", async () => {
+    const db = mkDb();
+    seedOrgWithSource(db, {
+      orgId: "org_notify1",
+      orgSlug: "brex",
+      orgName: "Brex",
+      sourceId: "src_notify1",
+      sourceSlug: "brex",
+      sourceUrl: "https://brex.com/changelog",
+      playbookNotes: ETAG_QUIRK_NOTES,
+    });
+    headCheckImpl = async () => ({ status: "changed", etag: "new-etag", responseMs: 10 });
+
+    const notesMap = await loadPlaybookNotesForSources(db as any, [
+      readSource(db, "src_notify1") as any,
+    ]);
+    const source = readSource(db, "src_notify1");
+    const org = mkOrgActorStub();
+
+    const result = await pollOne(db as any, source as any, new Date(), {
+      changeDetectEnabled: true,
+      playbookNotes: notesMap.get(source.orgId!) ?? null,
+      drainOrgActor: org.ns,
+    });
+
+    expect(result.changed).toBe(true);
+    expect(org.calls).toEqual([{ name: "org_notify1", orgId: "org_notify1" }]);
+  });
+
+  it("arms the OrgActor on a staleness self-flag (no live change)", async () => {
+    const db = mkDb();
+    const old = new Date(Date.now() - 100 * 3600_000).toISOString(); // > 72h
+    seedOrgWithSource(db, {
+      orgId: "org_notify2",
+      orgSlug: "claude",
+      orgName: "Anthropic",
+      sourceId: "src_notify2",
+      sourceSlug: "claude",
+      sourceUrl: "https://claude.com/release-notes",
+      playbookNotes: UNRELIABLE_QUIRK_NOTES,
+      lastFetchedAt: old,
+    });
+
+    const notesMap = await loadPlaybookNotesForSources(db as any, [
+      readSource(db, "src_notify2") as any,
+    ]);
+    const source = readSource(db, "src_notify2");
+    const org = mkOrgActorStub();
+
+    const result = await pollOne(db as any, source as any, new Date(), {
+      changeDetectEnabled: true,
+      playbookNotes: notesMap.get(source.orgId!) ?? null,
+      drainSelfFlag: { staleHours: 72 },
+      drainOrgActor: org.ns,
+    });
+
+    expect(result.changed).toBe(true);
+    expect(org.calls).toEqual([{ name: "org_notify2", orgId: "org_notify2" }]);
+  });
+
+  it("does NOT arm the OrgActor when the poll finds no change", async () => {
+    const db = mkDb();
+    seedOrgWithSource(db, {
+      orgId: "org_notify3",
+      orgSlug: "brex",
+      orgName: "Brex",
+      sourceId: "src_notify3",
+      sourceSlug: "brex",
+      sourceUrl: "https://brex.com/changelog",
+      metadata: { pageEtag: "prior-etag" },
+      playbookNotes: ETAG_QUIRK_NOTES,
+    });
+    headCheckImpl = async () => ({ status: "unchanged", etag: "prior-etag", responseMs: 10 });
+
+    const notesMap = await loadPlaybookNotesForSources(db as any, [
+      readSource(db, "src_notify3") as any,
+    ]);
+    const source = readSource(db, "src_notify3");
+    const org = mkOrgActorStub();
+
+    const result = await pollOne(db as any, source as any, new Date(), {
+      changeDetectEnabled: true,
+      playbookNotes: notesMap.get(source.orgId!) ?? null,
+      drainOrgActor: org.ns,
+    });
+
+    expect(result.changed).toBe(false);
+    expect(org.calls).toEqual([]);
+  });
+
+  it("a flagged poll without a drainOrgActor binding still succeeds (no eager notify)", async () => {
+    const db = mkDb();
+    seedOrgWithSource(db, {
+      orgId: "org_notify4",
+      orgSlug: "brex",
+      orgName: "Brex",
+      sourceId: "src_notify4",
+      sourceSlug: "brex",
+      sourceUrl: "https://brex.com/changelog",
+      playbookNotes: ETAG_QUIRK_NOTES,
+    });
+    headCheckImpl = async () => ({ status: "changed", etag: "new-etag", responseMs: 10 });
+
+    const notesMap = await loadPlaybookNotesForSources(db as any, [
+      readSource(db, "src_notify4") as any,
+    ]);
+    const source = readSource(db, "src_notify4");
+
+    const result = await pollOne(db as any, source as any, new Date(), {
+      changeDetectEnabled: true,
+      playbookNotes: notesMap.get(source.orgId!) ?? null,
+      // drainOrgActor omitted — the alarm backstop covers arming.
+    });
+
+    expect(result.changed).toBe(true);
+    const after = readSource(db, "src_notify4");
+    expect(after.changeDetectedAt).not.toBeNull();
+  });
+});
+
 describe("loadPlaybookNotesForSources", () => {
   it("returns a single query's worth of rows regardless of source count", async () => {
     const db = mkDb();

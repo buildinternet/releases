@@ -30,6 +30,18 @@ export interface SourceLockEnv {
   SOURCE_ACTOR?: DurableObjectNamespace;
 }
 
+/**
+ * Why a source couldn't be locked, as a structured signal rather than a magic
+ * sessionId string (the owner prefers a discriminated refusal over a reserved
+ * sentinel in a semantic field). `contended` carries the live lease's owning
+ * `sessionId`; `unavailable` is the fail-closed verdict when the SourceActor RPC
+ * itself threw — the source may be free, but we refuse dispatch rather than risk
+ * a duplicate run.
+ */
+export type SourceLockConflict =
+  | { id: string; reason: "contended"; sessionId: string }
+  | { id: string; reason: "unavailable" };
+
 function lockStub(env: SourceLockEnv, sourceId: string): SourceActorLockStub | null {
   const ns = env.SOURCE_ACTOR;
   if (!ns) return null;
@@ -65,19 +77,19 @@ export async function tryAcquireSourceLocks(
   env: SourceLockEnv,
   sourceIds: readonly string[],
   sessionId: string,
-): Promise<Array<{ id: string; sessionId: string }>> {
+): Promise<SourceLockConflict[]> {
   if (!env.SOURCE_ACTOR) {
     warnMissingBinding("acquire");
     return [];
   }
   const acquired: string[] = [];
-  const conflicts: Array<{ id: string; sessionId: string }> = [];
+  const conflicts: SourceLockConflict[] = [];
   await Promise.all(
     sourceIds.map(async (id) => {
       try {
         const res = await lockStub(env, id)!.tryAcquireScrapeLock(id, sessionId);
         if (res.acquired) acquired.push(id);
-        else conflicts.push({ id, sessionId: res.sessionId });
+        else conflicts.push({ id, reason: "contended", sessionId: res.sessionId });
       } catch (err) {
         logEvent("error", {
           component: "source-lock",
@@ -86,7 +98,7 @@ export async function tryAcquireSourceLocks(
           sessionId,
           err: err instanceof Error ? err.message : String(err),
         });
-        conflicts.push({ id, sessionId: "__lock_unavailable__" });
+        conflicts.push({ id, reason: "unavailable" });
       }
     }),
   );

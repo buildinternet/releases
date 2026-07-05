@@ -323,3 +323,45 @@ describe("fetchOne — crawl novelty gate", () => {
     expect(result.status).toBe("delegated");
   });
 });
+
+// ── refusal cooldown (#1946 phase 2 nitpick) ────────────────────────────────
+//
+// When the dispatch gate REFUSES a summary-only delegation (kill switch / spend
+// cap / lock), the source must NOT stay "due" and re-fire delegation every poll
+// tick. `delegateScrapeToUpdateWorkflow` stamps a short `nextFetchAfter` cooldown
+// on the refusal path to pace the retries — the runaway the success path guards.
+
+describe("fetchOne — delegation refusal cooldown", () => {
+  beforeEach(() => {
+    feedFetchCalls.length = 0;
+    nextFeedReleases = SUMMARY_ONLY_ITEMS;
+  });
+
+  it("stamps nextFetchAfter (no workflow instance) when dispatch is refused by the kill switch", async () => {
+    const db = mkDb();
+    await seedScrapeSource(db, {
+      feedUrl: "https://notion.so/feed.xml",
+      feedType: "rss",
+      crawlEnabled: true,
+      feedContentDepth: "summary-only",
+    });
+    const [src] = await db.select().from(sources).where(eq(sources.id, "src_notion_blog"));
+
+    const worker = makeUpdateWorkflow();
+    // Kill switch ON → startDeterministicUpdate refuses before creating anything.
+    const env = { ...(makeEnv(worker) as object), MA_SESSIONS_DISABLED: "true" };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const result = await fetchOne(db as any, src, env as any);
+
+    // Refused: no workflow instance, surfaced as an error.
+    expect(worker.calls.length).toBe(0);
+    expect(result.status).toBe("error");
+
+    // Cooldown stamped so the next poll tick doesn't immediately re-delegate.
+    const [after] = await db.select().from(sources).where(eq(sources.id, "src_notion_blog"));
+    expect(after!.nextFetchAfter).not.toBeNull();
+    expect(new Date(after!.nextFetchAfter as string).getTime()).toBeGreaterThan(Date.now());
+    // Refusal must not bump the no-change backoff counter.
+    expect(after!.consecutiveNoChange ?? 0).toBe(0);
+  });
+});

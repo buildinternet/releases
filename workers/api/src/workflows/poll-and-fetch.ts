@@ -80,6 +80,12 @@ export type PollAndFetchWorkflowEnv = InvalidationEnv &
     // update workflow (LATEST_CACHE + FLAGS ride on InvalidationEnv above).
     DETERMINISTIC_UPDATE_WORKFLOW?: Workflow;
     SOURCE_ACTOR?: DurableObjectNamespace;
+    /**
+     * Per-org drain actor (#1946 phase 2): when the poll step flags a scrape/
+     * agent source, `pollOne` arms this OrgActor immediately instead of leaving
+     * the arming to the source's next `SourceActor` alarm.
+     */
+    ORG_ACTOR?: DurableObjectNamespace<import("../org-actor.js").OrgActor>;
     STATUS_HUB?: DurableObjectNamespace;
     MA_SESSIONS_DISABLED?: string;
     MA_DAILY_SPEND_CAP_ORG_CENTS?: string;
@@ -553,6 +559,9 @@ export class PollAndFetchWorkflow extends WorkflowEntrypoint<
           playbookNotes: source.orgId ? (notesByOrg.get(source.orgId) ?? null) : null,
           signedFetch: await makeBotFetch(env),
           drainSelfFlag,
+          // #1946 phase 2: arm the OrgActor drain the instant this poll flags a
+          // scrape/agent source, removing the up-to-one-tier-interval arming lag.
+          drainOrgActor: env.ORG_ACTOR,
         });
       });
 

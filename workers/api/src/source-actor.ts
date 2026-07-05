@@ -30,6 +30,7 @@ import type { Source } from "@buildinternet/releases-core/schema";
 import { describeFetchPlan, computeFetchState } from "@releases/adapters/fetch-plan";
 import { logEvent } from "@releases/lib/log-event";
 import { seedJitterMs } from "./lib/source-actor-seed.js";
+import { notifyOrgDrain } from "./lib/org-drain-notify.js";
 
 /**
  * In-flight guard window. A fired workflow (poll + fetch + content + embed +
@@ -303,26 +304,18 @@ export class SourceActor extends DurableObject<SourceActorEnv> {
 
   /**
    * Arm this source's OrgActor when the source is a flagged scrape/agent source
-   * (retires the scrape-agent-sweep trigger). Best-effort — never blocks or fails
-   * the alarm. The recurring alarm re-notifies until the flag clears (the source
-   * drains), giving at-least-once delivery without a markers table.
+   * (retires the scrape-agent-sweep trigger). This is the at-least-once BACKSTOP
+   * for the eager notify the poll workflow now fires the instant it sets
+   * `changeDetectedAt` (#1946 phase 2): the flag it reads here is from the row as
+   * loaded at the top of the alarm, so on the alarm whose own workflow just
+   * flagged the source the eager path has already armed the drain; this re-arms on
+   * every subsequent alarm while the flag persists (a permanently-stranded source
+   * whose eager notify was dropped). Best-effort — never blocks or fails the alarm.
    */
   private async maybeNotifyOrgDrain(row: Source): Promise<void> {
     if (row.type !== "scrape" && row.type !== "agent") return;
     if (!row.changeDetectedAt || !row.orgId) return;
-    const ns = this.env.ORG_ACTOR;
-    if (!ns) return;
-    try {
-      await ns.getByName(row.orgId).ensureDrainScheduled(row.orgId);
-    } catch (err) {
-      logEvent("warn", {
-        component: "source-actor",
-        event: "org-drain-notify-failed",
-        sourceId: row.id,
-        orgId: row.orgId,
-        err: err instanceof Error ? err.message : String(err),
-      });
-    }
+    await notifyOrgDrain(this.env.ORG_ACTOR, row.orgId, "source-actor");
   }
 
   private async loadSource(sourceId: string): Promise<Source | null> {
