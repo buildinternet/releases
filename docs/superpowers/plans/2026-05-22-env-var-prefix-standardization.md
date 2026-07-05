@@ -13,7 +13,7 @@
 **Repos / branches:**
 
 - Monorepo: this worktree, branch `worktree-env-prefix-standardization` (Tasks 1–11).
-- CLI: `/Users/zachdunn/Code/releases-cli`, new branch `feat/releases-env-prefix` (Tasks 12–16).
+- CLI: `~/Code/releases-cli`, new branch `feat/releases-env-prefix` (Tasks 12–16).
 
 **Operator prerequisite (gates Task 5 deploy, not the code):** create `RELEASES_API_KEY` in the Cloudflare Secrets Store (`store_id a887a71cab084105b79706df23380723`, same value as `RELEASED_API_KEY`) and add a `RELEASES_API_KEY` GitHub Actions repo secret. Tasks 1–4, 6–11 are deploy-safe without it.
 
@@ -640,7 +640,7 @@ git commit -m "test: fixtures use RELEASES_API_KEY + fallback regression"
 
 ## Task 12: CLI `legacyEnv` helper
 
-Switch to the CLI repo. `cd /Users/zachdunn/Code/releases-cli && git checkout -b feat/releases-env-prefix`. **Run `bun install` in this repo if node_modules is absent** (per repo memory: a fresh checkout/worktree needs its own install).
+Switch to the CLI repo. `cd ~/Code/releases-cli && git checkout -b feat/releases-env-prefix`. **Run `bun install` in this repo if node_modules is absent** (per repo memory: a fresh checkout/worktree needs its own install).
 
 **Files:**
 

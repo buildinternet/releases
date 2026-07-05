@@ -63,7 +63,7 @@ export interface OrgDetail {
 
 - [ ] **Step 2: Verify type-check passes**
 
-Run: `cd /Users/zachdunn/Code/released && npx tsc --noEmit`
+Run: `cd ~/Code/released && npx tsc --noEmit`
 Expected: No new errors (existing code doesn't destructure `OrgDetail` in a way that would break).
 
 - [ ] **Step 3: Commit**
@@ -124,7 +124,7 @@ export type {
 
 - [ ] **Step 2: Verify type-check passes**
 
-Run: `cd /Users/zachdunn/Code/released && npx tsc --noEmit`
+Run: `cd ~/Code/released && npx tsc --noEmit`
 Expected: PASS
 
 - [ ] **Step 3: Commit**
@@ -305,7 +305,7 @@ const sidebarSections = [
 
 - [ ] **Step 4: Verify type-check passes**
 
-Run: `cd /Users/zachdunn/Code/released && npx tsc --noEmit`
+Run: `cd ~/Code/released && npx tsc --noEmit`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
@@ -450,7 +450,7 @@ In `web/src/app/[orgSlug]/page.tsx`, update the `ReleaseTimeline` usage to pass 
 
 - [ ] **Step 3: Verify type-check passes**
 
-Run: `cd /Users/zachdunn/Code/released && npx tsc --noEmit`
+Run: `cd ~/Code/released && npx tsc --noEmit`
 Expected: PASS
 
 - [ ] **Step 4: Commit**
@@ -595,7 +595,7 @@ export default async function ProductPage({
 
 - [ ] **Step 2: Verify type-check passes**
 
-Run: `cd /Users/zachdunn/Code/released && npx tsc --noEmit`
+Run: `cd ~/Code/released && npx tsc --noEmit`
 Expected: PASS
 
 - [ ] **Step 3: Verify the page renders**
@@ -637,7 +637,7 @@ This badge only renders when `productName` is present on the source — which ha
 
 - [ ] **Step 2: Verify type-check passes**
 
-Run: `cd /Users/zachdunn/Code/released && npx tsc --noEmit`
+Run: `cd ~/Code/released && npx tsc --noEmit`
 Expected: PASS
 
 - [ ] **Step 3: Commit**

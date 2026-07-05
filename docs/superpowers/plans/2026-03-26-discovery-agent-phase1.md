@@ -31,13 +31,13 @@
 - [ ] **Step 1: Install the Agent SDK**
 
 ```bash
-cd /Users/zachdunn/Code/released && bun add @anthropic-ai/claude-agent-sdk
+cd ~/Code/released && bun add @anthropic-ai/claude-agent-sdk
 ```
 
 - [ ] **Step 2: Verify installation**
 
 ```bash
-cd /Users/zachdunn/Code/released && bun --eval "import { query } from '@anthropic-ai/claude-agent-sdk'; console.log('OK')"
+cd ~/Code/released && bun --eval "import { query } from '@anthropic-ai/claude-agent-sdk'; console.log('OK')"
 ```
 
 Expected: `OK`
@@ -184,7 +184,7 @@ await server.connect(transport);
 - [ ] **Step 2: Verify it starts without errors (will fail without CF creds but should parse)**
 
 ```bash
-cd /Users/zachdunn/Code/released && npx tsc --noEmit src/agent/mcp-cloudflare-browser.ts 2>&1 || true
+cd ~/Code/released && npx tsc --noEmit src/agent/mcp-cloudflare-browser.ts 2>&1 || true
 ```
 
 Type-check should pass (or only show errors unrelated to this file).
@@ -420,7 +420,7 @@ Report back with: slug, release count, quality assessment (good/partial/bad), an
 - [ ] **Step 2: Type-check**
 
 ```bash
-cd /Users/zachdunn/Code/released && npx tsc --noEmit
+cd ~/Code/released && npx tsc --noEmit
 ```
 
 Expected: No errors in `src/agent/discovery.ts`. Fix any issues.
@@ -563,7 +563,7 @@ registerOnboardCommand(program);
 - [ ] **Step 3: Verify the command shows up in help**
 
 ```bash
-cd /Users/zachdunn/Code/released && bun src/index.ts onboard --help
+cd ~/Code/released && bun src/index.ts onboard --help
 ```
 
 Expected output should show:
@@ -586,7 +586,7 @@ Options:
 - [ ] **Step 4: Type-check the full project**
 
 ```bash
-cd /Users/zachdunn/Code/released && npx tsc --noEmit
+cd ~/Code/released && npx tsc --noEmit
 ```
 
 Expected: No errors. Fix any issues.
@@ -607,13 +607,13 @@ This is a manual verification that the full pipeline works end-to-end.
 - [ ] **Step 1: Verify help output**
 
 ```bash
-cd /Users/zachdunn/Code/released && bun src/index.ts onboard --help
+cd ~/Code/released && bun src/index.ts onboard --help
 ```
 
 - [ ] **Step 2: Run a real discovery (optional, requires ANTHROPIC_API_KEY)**
 
 ```bash
-cd /Users/zachdunn/Code/released && bun src/index.ts onboard "Resend" --domain resend.com
+cd ~/Code/released && bun src/index.ts onboard "Resend" --domain resend.com
 ```
 
 Watch stderr for agent progress. On completion, verify the JSON state was written and the summary prints correctly.
@@ -621,7 +621,7 @@ Watch stderr for agent progress. On completion, verify the JSON state was writte
 - [ ] **Step 3: Test JSON output mode (optional, requires ANTHROPIC_API_KEY)**
 
 ```bash
-cd /Users/zachdunn/Code/released && bun src/index.ts onboard "Resend" --domain resend.com --json
+cd ~/Code/released && bun src/index.ts onboard "Resend" --domain resend.com --json
 ```
 
 Should output valid JSON to stdout with no progress on stderr.

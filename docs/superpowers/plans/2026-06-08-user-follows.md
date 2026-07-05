@@ -14,7 +14,7 @@
 
 ## Conventions used in this plan
 
-- Run commands from the repo root (`/Users/zachdunn/Code/releases/.claude/worktrees/user-follows`).
+- Run commands from the repo root (`~/Code/releases/.claude/worktrees/user-follows`).
 - Type-check: `npx tsc --noEmit` (run in `workers/api`, `packages/api-types`, `web` as relevant).
 - Tests: `bun test <path>`.
 - Migration timestamp for this feature: `20260608000000` (newer than the latest existing `20260607010000`).
