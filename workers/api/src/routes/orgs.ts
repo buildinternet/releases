@@ -52,7 +52,11 @@ import {
 } from "@buildinternet/releases-core/schema";
 import { daysAgoIso } from "@buildinternet/releases-core/dates";
 import { releaseWebBase } from "@buildinternet/releases-core/release-slug";
-import { OVERVIEW_CITATION_SELECT, mapOverviewCitationRow } from "../lib/overview-citations.js";
+import {
+  CITATION_ORDER,
+  OVERVIEW_CITATION_SELECT,
+  mapOverviewCitationRow,
+} from "../lib/overview-citations.js";
 import { parseCompositionFromMetadata } from "@buildinternet/releases-core/composition";
 import type { BreakingLevel } from "@buildinternet/releases-core/breaking";
 import { parseNotice, setNoticeInMetadata, type Notice } from "@buildinternet/releases-core/notice";
@@ -377,7 +381,7 @@ orgRoutes.get(
         .innerJoin(knowledgePages, eq(knowledgePageCitations.knowledgePageId, knowledgePages.id))
         .leftJoin(releases, eq(knowledgePageCitations.releaseId, releases.id))
         .where(and(eq(knowledgePages.scope, "org"), eq(knowledgePages.orgId, org.id)))
-        .orderBy(knowledgePageCitations.createdAt, knowledgePageCitations.id),
+        .orderBy(CITATION_ORDER),
 
       // Recent-release metrics — scoped via subquery so this joins the parallel
       // wave instead of blocking on orgSources.

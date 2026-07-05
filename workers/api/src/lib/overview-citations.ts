@@ -13,7 +13,7 @@
  * body-offset / verbatim-quote columns are not read.
  */
 
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import type { DrizzleD1Database } from "drizzle-orm/d1";
 import { knowledgePageCitations, releases } from "@buildinternet/releases-core/schema";
 import { releaseWebBase, releaseWebUrl } from "@buildinternet/releases-core/release-slug";
@@ -75,9 +75,16 @@ export function mapOverviewCitationRow(base: string, r: RawCitationRow): Overvie
 }
 
 /**
+ * SQLite insertion order = the model's citation order (rows are inserted in that
+ * order; rowid increments monotonically). Deterministic and stable — unlike
+ * ordering by `created_at` (identical for every row of one upsert) + the random
+ * nanoid `id`. Qualified because the release join also exposes a `rowid`.
+ */
+export const CITATION_ORDER = sql`knowledge_page_citations.rowid`;
+
+/**
  * Load an overview page's citations by page id, with a canonical `releaseWebUrl`
- * for every citation that resolved to a release. Ordered by insertion (the
- * model's citation order) via `created_at` + `id` for a deterministic, cache-stable list.
+ * for every citation that resolved to a release, in the model's citation order.
  */
 export async function fetchOverviewCitations(
   db: AnyDb,
@@ -90,7 +97,7 @@ export async function fetchOverviewCitations(
     .from(knowledgePageCitations)
     .leftJoin(releases, eq(knowledgePageCitations.releaseId, releases.id))
     .where(eq(knowledgePageCitations.knowledgePageId, knowledgePageId))
-    .orderBy(knowledgePageCitations.createdAt, knowledgePageCitations.id);
+    .orderBy(CITATION_ORDER);
 
   return rows.map((r) => mapOverviewCitationRow(base, r));
 }
