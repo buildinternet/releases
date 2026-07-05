@@ -43,6 +43,8 @@ export type OverviewRegenParams = {
   orgs?: string[] | null;
   dryRun?: boolean;
   maxOrgs?: number;
+  /** Force re-gen of `orgs` even with no new releases (re-run after a gen fix). Explicit-org-list only. */
+  force?: boolean;
 };
 
 export type OverviewRegenWorkflowEnv = TextModelEnv & {
@@ -87,7 +89,7 @@ export class OverviewRegenWorkflow extends WorkflowEntrypoint<
   OverviewRegenParams
 > {
   async run(event: WorkflowEvent<OverviewRegenParams>, step: WorkflowStep): Promise<void> {
-    const { trigger, orgs, dryRun, maxOrgs } = event.payload;
+    const { trigger, orgs, dryRun, maxOrgs, force } = event.payload;
 
     const candidates = await step.do(
       "collect",
@@ -119,6 +121,9 @@ export class OverviewRegenWorkflow extends WorkflowEntrypoint<
           // falls back to the eligibility defaults (2 days at ≥15 releases).
           fastCadenceDays: positiveIntVar(this.env.OVERVIEW_FAST_CADENCE_DAYS),
           fastMinReleases: positiveIntVar(this.env.OVERVIEW_FAST_MIN_RELEASES),
+          // Admin force re-run: lift the `recentReleaseCount > 0` guard for the
+          // listed orgs. Inert without an explicit `orgs` list (eligibility gates it).
+          force: force === true,
           ...(typeof maxOrgs === "number" && maxOrgs > 0 ? { maxCandidates: maxOrgs } : {}),
         });
       },
