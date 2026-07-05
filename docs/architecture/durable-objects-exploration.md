@@ -1,11 +1,13 @@
 # Durable Objects: a per-entity actor architecture (design exploration)
 
-> **Status: exploration, not shipped.** Every other doc in this directory describes a
-> system that exists. This one is a design proposal — a sketch of how Cloudflare Durable
-> Objects could absorb a cluster of orchestration "moving parts" the backend currently
-> spreads across crons, Workflows, KV locks, and D1 scheduler columns. Nothing here is
-> built. It exists to pin down the consistency model and the product-vs-source scoping
-> decision before anyone writes code.
+> **Status: exploration — since largely SHIPPED; kept as historical record.** This was
+> the design proposal that pinned down the consistency model and product-vs-source
+> scoping before code was written. The core of it has since landed: `SourceActor` is
+> the sole per-source fetch driver (#1776, scaffolding removed at 100% in #1819),
+> the delegation bolt-ons were retired onto it (#1780/#1814/#1816), and `OrgActor`
+> replaced the drain crons (#1777/#1822). `ProductActor` cross-source reconciliation
+> remains deferred (#1775). Details below describe the pre-actor system and the
+> proposal as sketched — see [remote-mode.md](remote-mode.md) for current behavior.
 
 Reference: [Rules of Durable Objects](https://developers.cloudflare.com/durable-objects/best-practices/rules-of-durable-objects/).
 
