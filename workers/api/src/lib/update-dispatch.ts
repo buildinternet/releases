@@ -216,7 +216,11 @@ export async function startDeterministicUpdate(
   const lockedSources = await tryAcquireSourceLocks(env, params.sourceIdentifiers, sessionId);
   if (lockedSources.length > 0) {
     const detail = lockedSources
-      .map((s) => `Source ${s.id} has an active update session (${s.sessionId})`)
+      .map((s) =>
+        s.reason === "contended"
+          ? `Source ${s.id} has an active update session (${s.sessionId})`
+          : `Source ${s.id} lock check unavailable (failed closed)`,
+      )
       .join("; ");
     logEvent("info", {
       component: "update-dispatch",

@@ -56,6 +56,8 @@ import { computeVersionSort } from "@buildinternet/releases-core/version-sort";
 import { dedupeByExistingTitle } from "@buildinternet/releases-core/title-dedup";
 import { selectExistingReleaseKeys } from "../lib/title-dedup.js";
 import { startDeterministicUpdate, type UpdateDispatchEnv } from "../lib/update-dispatch.js";
+import { notifyOrgDrain } from "../lib/org-drain-notify.js";
+import type { OrgActor } from "../org-actor.js";
 import { normalizeMediaUrl } from "@releases/rendering/media-url.js";
 import { filterJunkMedia } from "@releases/rendering/media-filter.js";
 import { detectInlineVideos } from "@releases/rendering/video-embed.js";
@@ -377,6 +379,13 @@ export async function pollOne(
      * ⇒ today's behavior (unreliable/absent detector is a no-op).
      */
     drainSelfFlag?: { staleHours: number };
+    /**
+     * When present, a scrape/agent poll that flags the source arms the per-org
+     * `OrgActor` drain immediately via this namespace (#1946 phase 2) rather than
+     * waiting for the source's next `SourceActor` alarm to notice the flag. Absent
+     * ⇒ no eager notify (the alarm backstop still covers it).
+     */
+    drainOrgActor?: DurableObjectNamespace<OrgActor>;
   },
 ): Promise<PollResult> {
   const nowIso = now.toISOString();
@@ -412,7 +421,7 @@ export async function pollOne(
       await db.update(sources).set({ lastPolledAt: nowIso }).where(eq(sources.id, source.id));
       return { source, changed: false };
     }
-    return pollScrapeOrAgentByQuirk(
+    const scrapeResult = await pollScrapeOrAgentByQuirk(
       db,
       source,
       meta,
@@ -421,6 +430,16 @@ export async function pollOne(
       opts.signedFetch,
       opts.drainSelfFlag,
     );
+    // Eager drain-arm (#1946 phase 2): a `changed` result here means this poll
+    // just set `changeDetectedAt` for the OrgActor drain (this is exactly the
+    // scrape/agent-no-feed drain-candidate shape). Arm the drain now — an
+    // in-worker DO RPC — instead of waiting up to a full tier interval for the
+    // next SourceActor alarm to notice the flag. Best-effort + idempotent; the
+    // SourceActor alarm remains the at-least-once backstop.
+    if (scrapeResult.changed && source.orgId) {
+      await notifyOrgDrain(opts.drainOrgActor, source.orgId, "poll-and-fetch-workflow");
+    }
+    return scrapeResult;
   }
 
   if (!meta.feedUrl) {
@@ -765,6 +784,15 @@ export function shouldDelegateToCrawl(
  * surfaced as an error so the workflow step retries — an orphaned source is
  * an upstream bug we'd rather see in logs than silently swallow.
  */
+/**
+ * Refusal-cooldown horizon for {@link delegateScrapeToUpdateWorkflow}. Shorter
+ * than the 1h success cooldown (`DELEGATION_COOLDOWN_MS`) because a refusal
+ * usually clears sooner — a 15-min scrape lease, an operator kill-switch flip,
+ * or the daily spend-cap reset — while still being long enough to stop a refused
+ * source from re-firing delegation every poll tick.
+ */
+const DELEGATION_REFUSAL_COOLDOWN_MS = 30 * 60_000;
+
 export async function delegateScrapeToUpdateWorkflow(
   db: ReturnType<typeof drizzle>,
   source: Source,
@@ -824,6 +852,32 @@ export async function delegateScrapeToUpdateWorkflow(
   const durationMs = Date.now() - start;
 
   if (!result.ok) {
+    // Refused dispatch (spend cap / kill switch / per-source lock / binding
+    // unavailable). Unlike a successful handoff, nothing downstream is now
+    // handling this source, so we leave `changeDetectedAt` set for it to retry —
+    // but a bare refusal leaves `nextFetchAfter` null, so the source stays "due"
+    // and re-attempts delegation on every poll tick: the same runaway the success
+    // path guards against (the $20 Notion loop, 2026-05-18). Stamp a short
+    // `nextFetchAfter` refusal cooldown to pace the retries — the refusal
+    // typically clears within it (a 15-min scrape lease, an operator kill-switch
+    // toggle, or the UTC-midnight spend-cap reset). We do NOT bump
+    // `consecutiveNoChange`: the source isn't unchanged, just deferred, so
+    // exponential no-change backoff doesn't apply.
+    try {
+      await db
+        .update(sources)
+        .set({
+          nextFetchAfter: new Date(Date.now() + DELEGATION_REFUSAL_COOLDOWN_MS).toISOString(),
+        })
+        .where(eq(sources.id, source.id));
+    } catch (err) {
+      logEvent("warn", {
+        component: "cron-poll-fetch",
+        event: "crawl-delegation-refusal-cooldown-failed",
+        sourceSlug: source.slug,
+        err: err instanceof Error ? err.message : String(err),
+      });
+    }
     logEvent("warn", {
       component: "cron-poll-fetch",
       event: "crawl-delegation-failed",
