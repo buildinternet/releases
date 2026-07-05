@@ -101,6 +101,33 @@ beforeEach(async () => {
       url: "https://github.com/openai/whisper",
       orgId: "org_openai",
     },
+    {
+      id: "src_aisdk",
+      slug: "ai-sdk-releases",
+      name: "SDK Releases",
+      type: "feed",
+      url: "https://sdk.example/releases",
+      orgId: "org_tailwind",
+      productId: "prod_aisdk",
+    },
+    {
+      id: "src_remail",
+      slug: "react-email-releases",
+      name: "Email Releases",
+      type: "feed",
+      url: "https://email.example/releases",
+      orgId: "org_resend",
+      productId: "prod_remail",
+    },
+    {
+      id: "src_api",
+      slug: "api-releases",
+      name: "API Releases",
+      type: "feed",
+      url: "https://platform.example/releases",
+      orgId: "org_openai",
+      productId: "prod_api",
+    },
   ]);
 });
 

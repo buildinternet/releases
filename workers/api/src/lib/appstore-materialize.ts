@@ -101,6 +101,22 @@ export interface MaterializeAppStoreParams {
   storefront?: string;
   orgSlug?: string;
   productSlug?: string;
+  /**
+   * Source-row posture. Defaults reproduce the curated, immediately-live
+   * behavior of the admin `POST /v1/sources/appstore` path. The well-known
+   * mobile-app *discovery* path overrides these to land a fail-closed candidate
+   * — `discovery:"on_demand"`, `isHidden:true`, `fetchPriority:"paused"` — that a
+   * curator reviews and unpauses.
+   */
+  discovery?: "curated" | "on_demand";
+  isHidden?: boolean;
+  fetchPriority?: "normal" | "low" | "paused";
+  /**
+   * A listing already resolved by the caller (e.g. discovery resolved it by
+   * bundleId). When present the iTunes lookup is skipped; `identifier` is still
+   * used for the coordinate/idempotency key and must be the numeric trackId.
+   */
+  preResolved?: { listing: AppStoreListing; coord: AppStoreCoordinate };
 }
 
 export type MaterializeResult =
@@ -121,13 +137,15 @@ export async function materializeAppStoreSource(
   db: ReturnType<typeof createDb>,
   params: MaterializeAppStoreParams,
 ): Promise<MaterializeResult> {
-  const coord = parseAppStoreIdentifier(params.identifier, {
-    platform: params.platform,
-    storefront: params.storefront,
-  });
+  const coord =
+    params.preResolved?.coord ??
+    parseAppStoreIdentifier(params.identifier, {
+      platform: params.platform,
+      storefront: params.storefront,
+    });
   if (!coord) return { status: "bad_request" };
 
-  const listing = await resolveAppStore(coord);
+  const listing = params.preResolved?.listing ?? (await resolveAppStore(coord));
   if (!listing) return { status: "not_found" };
 
   const cleanUrl = stripUoParam(listing.trackViewUrl);
@@ -209,8 +227,9 @@ export async function materializeAppStoreSource(
       orgId: resolvedOrgId,
       productId,
       kind,
-      discovery: "curated",
-      isHidden: false,
+      discovery: params.discovery ?? "curated",
+      isHidden: params.isHidden ?? false,
+      fetchPriority: params.fetchPriority ?? "normal",
       metadata: buildAppStoreMeta(listing, coord),
     })
     .returning();

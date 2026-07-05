@@ -147,6 +147,32 @@ export async function resolveAppStore(coord: AppStoreCoordinate): Promise<AppSto
   }
 }
 
+/**
+ * Resolve an iOS/macOS **bundle identifier** (`com.example.app`, as declared in
+ * a domain's AASA file) to its App Store listing via the iTunes Lookup API's
+ * `bundleId=` parameter. Unlike {@link resolveAppStore} (which keys on the
+ * numeric trackId), this is the discovery entrypoint — the bundle ID is what a
+ * well-known probe has in hand. Same never-throws contract: null on non-2xx,
+ * network/parse error, or an empty/not-found result.
+ */
+export async function resolveAppStoreByBundleId(
+  bundleId: string,
+  opts?: { storefront?: string; platform?: "ios" | "macos" },
+): Promise<AppStoreListing | null> {
+  const storefront = opts?.storefront ?? "us";
+  const entity = opts?.platform === "macos" ? "&entity=macSoftware" : "";
+  const url = `https://itunes.apple.com/lookup?bundleId=${encodeURIComponent(bundleId)}&country=${encodeURIComponent(storefront)}${entity}`;
+  try {
+    const res = await fetch(url, { headers: { "User-Agent": RELEASES_BOT_UA } });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { resultCount?: number; results?: AppStoreListing[] };
+    if (!data.resultCount || !data.results?.length) return null;
+    return data.results[0]!;
+  } catch {
+    return null;
+  }
+}
+
 /** Convenience: resolve straight from a source row. */
 export async function fetchAppStore(source: Source): Promise<RawRelease[]> {
   const coord = appStoreCoordFromSource(source);

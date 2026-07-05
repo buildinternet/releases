@@ -154,6 +154,14 @@ describe("POST /v1/workflows/embed-entities", () => {
       name: "Unembedded",
       category: "developer-tools",
     });
+    await db.insert(sources).values({
+      id: "src_unembedded",
+      orgId: "org_unembedded",
+      slug: "unembedded-feed",
+      name: "Unembedded Feed",
+      type: "feed",
+      url: "https://unembedded.test/releases",
+    });
     const fetch = mkApp(db);
 
     const res = await fetch(

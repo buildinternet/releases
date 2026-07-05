@@ -16,6 +16,7 @@
     "./cf-challenge": "./src/cf-challenge.ts",
     "./crawl": "./src/crawl.ts",
     "./appstore": "./src/appstore.ts",
+    "./app-links": "./src/app-links.ts",
     "./feed": "./src/feed.ts",
     "./feed-depth": "./src/feed-depth.ts",
     "./media-classify": "./src/media-classify.ts",

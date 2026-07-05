@@ -35,14 +35,14 @@ beforeAll(async () => {
       discovery: "curated",
     },
     {
-      id: "src_ondemand_hidden",
+      id: "src_ondemand_visible",
       orgId: "org_curated",
       name: "ondemand-src",
       slug: "ondemand-src",
       type: "github",
       url: "https://github.com/curated/ondemand",
       discovery: "on_demand",
-      isHidden: true,
+      isHidden: false,
     },
     {
       id: "src_ondemand_org",
@@ -64,8 +64,8 @@ describe("source discovery wire", () => {
     const rows = await getOrgSourcesWithStats(tdb.db as never, "org_curated");
     const byId = new Map(rows.map((r) => [r.id, r]));
     expect(byId.get("src_curated")?.discovery).toBe("curated");
-    expect(byId.get("src_ondemand_hidden")?.discovery).toBe("on_demand");
-    expect(byId.get("src_ondemand_hidden")?.is_hidden).toBe(1);
+    expect(byId.get("src_ondemand_visible")?.discovery).toBe("on_demand");
+    expect(byId.get("src_ondemand_visible")?.is_hidden).toBe(0);
   });
 
   it("getSourcesWithStats (sources_active includeHidden) returns discovery", async () => {

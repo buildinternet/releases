@@ -30,6 +30,7 @@ import {
 import { validateJson } from "../lib/validate.js";
 import { avatarRejectToError, ingestOrgAvatar } from "../lib/avatar-ingest.js";
 import { syncOrgWellKnown } from "../lib/well-known/reconcile-org.js";
+import { discoverMobileApps } from "../lib/well-known/mobile-apps.js";
 import { FLAGS, flag } from "@releases/lib/flags";
 import { getSecret } from "@releases/lib/secrets";
 import { eq, count, max, min, and, sql, inArray, gte, desc } from "drizzle-orm";
@@ -317,11 +318,18 @@ orgRoutes.get(
           url: productsActive.url,
           description: productsActive.description,
           kind: productsActive.kind,
-          sourceCount: sql<number>`(SELECT COUNT(*) FROM sources_active s WHERE s.product_id = products_active.id)`,
-          releaseCount: sql<number>`(SELECT COUNT(*) FROM releases_visible rv JOIN sources_active sa ON sa.id = rv.source_id WHERE sa.product_id = products_active.id)`,
+          // Visible-only: a product whose sources are all hidden (e.g. a paused
+          // discovery candidate) must not surface on the public org page.
+          sourceCount: sql<number>`(SELECT COUNT(*) FROM sources_visible s WHERE s.product_id = products_active.id)`,
+          releaseCount: sql<number>`(SELECT COUNT(*) FROM releases_visible rv JOIN sources_visible sa ON sa.id = rv.source_id WHERE sa.product_id = products_active.id)`,
         })
         .from(productsActive)
-        .where(eq(productsActive.orgId, org.id))
+        .where(
+          and(
+            eq(productsActive.orgId, org.id),
+            sql`EXISTS (SELECT 1 FROM sources_visible sv WHERE sv.product_id = products_active.id)`,
+          ),
+        )
         .orderBy(productsActive.name),
 
       db
@@ -706,6 +714,54 @@ orgRoutes.post(
       dryRun,
       materializationEnabled,
       githubToken,
+    });
+    return c.json(result);
+  },
+);
+
+orgRoutes.post(
+  "/orgs/:slug/discover-apps",
+  describeRoute({
+    hide: hideInProduction,
+    tags: ["Orgs"],
+    summary: "Discover the org's native mobile apps from its well-known files",
+    description:
+      "Probes https://{org.domain}/.well-known/apple-app-site-association and /.well-known/assetlinks.json. iOS bundle IDs are resolved via the iTunes Lookup API and landed as PAUSED, HIDDEN appstore source candidates (a curator unpauses to make live); Android package names are stored as a display-only hint under org.metadata.discoveredApps. Idempotent. Pass ?dryRun=1 to preview without writing. Gated by the well-known materialization flag; requires write scope.",
+    security: [{ bearerAuth: [] }],
+    responses: {
+      200: { description: "Discovery result (candidates created, or the dry-run plan)" },
+      404: {
+        description: "Organization not found",
+        content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+      },
+    },
+  }),
+  async (c) => {
+    const db = createDb(c.env.DB);
+    const slug = c.req.param("slug");
+    const dryRun = c.req.query("dryRun") === "1" || c.req.query("dryRun") === "true";
+
+    const [org] = await db.select().from(organizations).where(orgWhere(slug));
+    if (!org) return respondError(c, new NotFoundError("Organization not found"));
+    if (!org.domain) {
+      return c.json({
+        fetched: { aasa: false, assetlinks: false },
+        ios: [],
+        android: [],
+        applied: false,
+        skippedReason: "no_domain",
+      });
+    }
+    const materializationEnabled = await flag(
+      c.env.FLAGS,
+      c.env.WELL_KNOWN_MATERIALIZATION_ENABLED,
+      FLAGS.wellKnownMaterializationEnabled,
+    );
+
+    const result = await discoverMobileApps(db, org.id, {
+      domain: org.domain,
+      enabled: materializationEnabled,
+      dryRun,
     });
     return c.json(result);
   },

@@ -319,6 +319,16 @@ describe("kind filter on /v1/search", () => {
     await seedOrg("acme");
     await seedProduct({ id: "prod_search1", slug: "search-sdk-prod", kind: "sdk" });
     await seedProduct({ id: "prod_search2", slug: "search-docs-prod", kind: "docs" });
+    await seedSource({
+      id: "src_search1",
+      slug: "search-sdk-source",
+      productId: "prod_search1",
+    });
+    await seedSource({
+      id: "src_search2",
+      slug: "search-docs-source",
+      productId: "prod_search2",
+    });
 
     const res = await callSearch("/search?q=search&mode=lexical&kind=sdk");
     expect(res.status).toBe(200);
