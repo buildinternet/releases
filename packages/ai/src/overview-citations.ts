@@ -140,6 +140,15 @@ export interface RawOverviewCitation {
   quote: string;
 }
 
+/**
+ * Strip a trailing `Citations:` / `Sources:` section the model sometimes appends
+ * to the body field despite the prompt forbidding it (observed with DeepSeek). It
+ * belongs in the structured citation array, not the rendered body. Anchored to
+ * EOF and gated on a bare `Citations:`/`Sources:` label at the start of a line, so
+ * it can't eat prose (an overview body never legitimately ends with such a block).
+ */
+const TRAILING_CITATIONS_RE = /\n+[ \t]*(?:citations?|sources?)\s*:[\s\S]*$/i;
+
 /** True when [start,end) contains an odd number of `**` markers (would split a bold span). */
 function crossesBoldBoundary(body: string, start: number, end: number): boolean {
   const span = body.slice(start, end);
@@ -165,7 +174,9 @@ export function resolveOverviewCitations(
   rawCitations: readonly RawOverviewCitation[],
   input: PostHocResolveInput,
 ): PostHocExtraction {
-  const body = stripLeadingHeading(decodeHtmlEntities(rawBody).trim());
+  const body = stripLeadingHeading(decodeHtmlEntities(rawBody).trim())
+    .replace(TRAILING_CITATIONS_RE, "")
+    .trimEnd();
 
   const citations: OverviewCitation[] = [];
   for (const { url, quote } of rawCitations) {

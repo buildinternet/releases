@@ -391,7 +391,9 @@ const OVERVIEW_OUTPUT_SCHEMA = z.object({
   body: z
     .string()
     .describe(
-      "The knowledge-page markdown body ONLY — no title or leading heading, and no mention of citations or sources.",
+      "The knowledge-page markdown body ONLY. No title or leading heading. Do NOT append a " +
+        "'Citations:' or 'Sources:' section and do NOT list any URLs — every citation goes in the " +
+        "separate `citations` array below, never in this body text.",
     ),
   citations: z
     .array(

@@ -317,6 +317,24 @@ test("resolveOverviewCitations returns no citations when the list is empty", () 
   expect(citations).toEqual([]);
 });
 
+test("resolveOverviewCitations strips a trailing Citations:/Sources: section the model leaks into the body", () => {
+  // DeepSeek sometimes appends a citations list to the body despite the prompt.
+  const leaky =
+    "Shipped a new streaming API.\n\nCitations:\nURL: https://acme.dev/releases/v2 — streaming API";
+  const { body, citations } = resolveOverviewCitations(
+    leaky,
+    [{ url: SRC, quote: "streaming API" }],
+    input,
+  );
+  expect(body).toBe("Shipped a new streaming API.");
+  expect(body).not.toMatch(/citations/i);
+  // The quote still resolves against the cleaned body.
+  expect(citations).toHaveLength(1);
+
+  const sources = resolveOverviewCitations("Body text here.\n\nSources: https://x", [], input);
+  expect(sources.body).toBe("Body text here.");
+});
+
 test("resolveOverviewCitations drops unknown URLs and quotes not found in the body", () => {
   const badUrl = resolveOverviewCitations(
     "Body text here.",
