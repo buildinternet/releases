@@ -26,6 +26,7 @@ import {
   newKnowledgePageCitationId,
   newSourceChangelogFileId,
   newSourceChangelogChunkId,
+  newReleaseLocationId,
   newTelemetryEventId,
   newSearchQueryId,
   newWebhookSubscriptionId,
@@ -69,6 +70,18 @@ export const organizations = sqliteTable(
     discovery: text("discovery", { enum: ["curated", "agent", "on_demand"] })
       .notNull()
       .default("curated"),
+    // Stub-tier gate (#1947). `stub` = an org known only by declared release
+    // locations (see release_locations) — no sources, nothing schedulable, and
+    // SEO-suppressed (noindex + out of sitemap). `tracked` = a normal org whose
+    // sources fetch and process. Explicit rather than derived from "has zero
+    // sources" (ambiguous against hidden-source / on-demand orgs). Orthogonal to
+    // `discovery` (how it entered) and `isHidden` (editorial visibility) — a
+    // stub is visible, that's the point. Wire field name is `status`. Promotion
+    // (POST /v1/orgs/:slug/promote) materializes locators into sources and flips
+    // this to `tracked`. Default `tracked` — every existing org is unaffected.
+    tier: text("tier", { enum: ["stub", "tracked"] })
+      .notNull()
+      .default("tracked"),
     // Per-org opt-in for ingest-time release content generation. When true,
     // the poll-fetch / scrape-agent workflows call Haiku 4.5 to populate
     // title_generated / title_short / summary on newly-inserted releases.
@@ -459,6 +472,79 @@ export const sources = sqliteTable(
       .where(sql`${table.stargazersCount} IS NOT NULL`),
   ],
 );
+
+// Declared release-location store for stub-tier orgs (#1947). Named after the
+// releases.json v2 manifest noun — a `releases[]` item is a "release location".
+// Columns mirror `ReleaseLocationFields` in
+// packages/api-types/src/schemas/well-known.ts verbatim so manifest ⇄ DB ⇄ wire
+// round-trips are identity (and #1871's byte-identical git export can project
+// these rows deterministically). A stub org holds locator rows and NO source
+// rows; promotion (POST /v1/orgs/:slug/promote) runs the existing
+// materialize.ts pipeline over these locators, stamps `source_id` on each row
+// it materializes, and leaves the row in place so demotion is symmetric.
+export const releaseLocations = sqliteTable(
+  "release_locations",
+  {
+    id: text("id").primaryKey().$defaultFn(newReleaseLocationId),
+    orgId: text("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    productId: text("product_id").references(() => products.id, { onDelete: "set null" }),
+    // v2 locator payload — the present keys double as the type discriminator;
+    // a CHECK guarantees at least one of url/feed/github/appstore/file is set.
+    url: text("url"),
+    feed: text("feed"),
+    github: text("github"), // "owner/repo"
+    appstore: text("appstore"),
+    file: text("file"),
+    title: text("title"),
+    canonical: integer("canonical", { mode: "boolean" }).notNull().default(false),
+    // Provenance ladder (#1872), curator > declared > detected > generated.
+    // Ships now with these values; adopts #1872's shared enum/helper later (no-op
+    // — values match). Manifest sweep writes `declared`, the CLI create-stub verb
+    // writes `curator`, ambient sweeps write `detected`.
+    basis: text("basis", {
+      enum: ["curator", "declared", "detected", "generated"],
+    }).notNull(),
+    // Free-form provenance evidence: manifest config hash, sweep id, evidence
+    // URLs. JSON so #1871's export and #1872's merge helper have a per-fact home.
+    evidence: text("evidence", { mode: "json" }),
+    // Promotion linkage — set to the materialized source's id when this locator
+    // becomes a live source; ON DELETE SET NULL so a source removal (demotion)
+    // leaves the durable locator behind, ready to re-materialize.
+    sourceId: text("source_id").references(() => sources.id, { onDelete: "set null" }),
+    // Normalized primary locator (feed ?? github ?? appstore ?? file ?? url).
+    // Backs locator-first dedup and the per-org uniqueness constraint.
+    matchKey: text("match_key").notNull(),
+    createdAt: text("created_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
+    updatedAt: text("updated_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
+    deletedAt: text("deleted_at"),
+  },
+  (table) => [
+    uniqueIndex("idx_release_locations_org_match").on(table.orgId, table.matchKey),
+    index("idx_release_locations_org").on(table.orgId),
+    index("idx_release_locations_product")
+      .on(table.productId)
+      .where(sql`${table.productId} IS NOT NULL`),
+    index("idx_release_locations_source")
+      .on(table.sourceId)
+      .where(sql`${table.sourceId} IS NOT NULL`),
+    index("idx_release_locations_deleted_at")
+      .on(table.deletedAt)
+      .where(sql`${table.deletedAt} IS NOT NULL`),
+    check(
+      "release_locations_has_locator",
+      sql`(${table.url} IS NOT NULL) OR (${table.feed} IS NOT NULL) OR (${table.github} IS NOT NULL) OR (${table.appstore} IS NOT NULL) OR (${table.file} IS NOT NULL)`,
+    ),
+  ],
+);
+
+export type ReleaseLocation = typeof releaseLocations.$inferSelect;
+export type NewReleaseLocation = typeof releaseLocations.$inferInsert;
 
 export const releases = sqliteTable(
   "releases",
@@ -1136,6 +1222,7 @@ export const organizationsActive = sqliteView("organizations_active", {
   metadata: text("metadata"),
   embeddedAt: text("embedded_at"),
   discovery: text("discovery", { enum: ["curated", "agent", "on_demand"] }).notNull(),
+  tier: text("tier", { enum: ["stub", "tracked"] }).notNull(),
   autoGenerateContent: integer("auto_generate_content", { mode: "boolean" }).notNull(),
   overviewCadenceDays: integer("overview_cadence_days"),
   fetchPaused: integer("fetch_paused", { mode: "boolean" }).notNull(),
@@ -1218,6 +1305,7 @@ export const organizationsPublic = sqliteView("organizations_public", {
   metadata: text("metadata"),
   embeddedAt: text("embedded_at"),
   discovery: text("discovery", { enum: ["curated", "agent", "on_demand"] }).notNull(),
+  tier: text("tier", { enum: ["stub", "tracked"] }).notNull(),
   autoGenerateContent: integer("auto_generate_content", { mode: "boolean" }).notNull(),
   overviewCadenceDays: integer("overview_cadence_days"),
   fetchPaused: integer("fetch_paused", { mode: "boolean" }).notNull(),
