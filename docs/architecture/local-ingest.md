@@ -6,7 +6,7 @@ This is an assembly of production-tested building blocks, not new infrastructure
 
 ## Why
 
-`releases admin source fetch <slug>` POSTs to `/v1/workflows/update`, which proxies to the discovery worker and starts an Anthropic Managed Agent session (`workers/discovery/src/managed-agents-session.ts` — `worker → claude-haiku-4-5`, `coordinator → claude-sonnet-5`). The body→records extraction runs server-side as that agent's `web_fetch` / tool loop, and that inference is billed **even when it yields zero releases**.
+`releases admin source fetch <slug>` POSTs to `/v1/workflows/update`, which starts a deterministic update run (the API worker's `DeterministicUpdateWorkflow`, #1946 — formerly a discovery-worker MA session). The body→records extraction runs server-side (`scrapeFetch` → incremental Haiku or the DeepSeek/OpenRouter tool-loop), and that inference is billed **even when it yields zero releases**.
 
 Onboarding `conductor.build` is the canonical failure: the remote path burned a full Sonnet `web_fetch` loop _and_ a Haiku oneshot fallback (both hit `max_tokens`) and wrote **0 releases**. A local agent is already a capable model with web-fetch + file tools — it can do the per-page extraction inline (folded into the session you're already running) and only needs a deterministic write path. That write path already exists.
 
@@ -16,8 +16,8 @@ Onboarding `conductor.build` is the canonical failure: the remote path burned a 
 flowchart TD
     Op([Operator in Claude Code]) -->|remote| R1["releases admin source fetch &lt;slug&gt;"]
     R1 --> R2["POST /v1/workflows/update"]
-    R2 --> R3[Discovery worker]
-    R3 --> R4["MA session: coordinator Sonnet 4.6 + worker Haiku 4.5<br/>web_fetch / tool-loop extraction — BILLED"]
+    R2 --> R3[DeterministicUpdateWorkflow]
+    R3 --> R4["scrapeFetch per source<br/>AI extraction (Haiku / tool-loop) — BILLED"]
     R4 --> DB[(D1: releases)]
 
     Op -->|local| L1[local-ingest skill]
@@ -28,13 +28,13 @@ flowchart TD
     L4 --> DB
 ```
 
-The local path never calls `/v1/workflows/update`, so no MA session is created. The confirming negative signal is in Axiom `releases-cloudflare-logs`: no `POST .../fetch?sessionId=ma-…` and no `extract-deps-worker` events for the source.
+The local path never calls `/v1/workflows/update`, so no update run is created. The confirming negative signal is in Axiom `releases-cloudflare-logs`: no `POST .../fetch?sessionId=det-…` and no `extract-deps-worker` events for the source.
 
 ## Cost contract
 
-|                        | Remote MA path                                                     | Local-ingest path                                       |
+|                        | Remote update path                                                 | Local-ingest path                                       |
 | ---------------------- | ------------------------------------------------------------------ | ------------------------------------------------------- |
-| Extraction             | coordinator Sonnet 4.6 + worker Haiku 4.5, server-side             | the agent itself (± sub-agents, operator-chosen model)  |
+| Extraction             | server-side `scrapeFetch` (incremental Haiku / tool-loop)          | the agent itself (± sub-agents, operator-chosen model)  |
 | `/v1/workflows/update` | called                                                             | **never called**                                        |
 | AI on insert           | summarization + marketing classifier + feed enrichment (cron path) | **none** — `insert` + fire-and-forget vector embed only |
 

@@ -15,7 +15,7 @@
 import { describe, it, expect } from "bun:test";
 import type { KnownRelease } from "@releases/adapters/extract";
 import { CRAWL_SYSTEM_PROMPT, CRAWL_EXTRACTION_RULES } from "@releases/adapters/extract";
-import { isSeedRun, shouldUseAgentExtraction } from "../../workers/discovery/src/scrape-fetch";
+import { isSeedRun, shouldUseAgentExtraction } from "@releases/adapters/scrape-fetch";
 
 const oneRelease: KnownRelease[] = [{ title: "v1.0.0", version: "1.0.0", publishedAt: null }];
 

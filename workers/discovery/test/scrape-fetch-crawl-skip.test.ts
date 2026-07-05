@@ -142,7 +142,7 @@ function buildApiFetcher() {
 }
 
 async function runFetch() {
-  const { scrapeFetch } = await import("../src/scrape-fetch.js");
+  const { scrapeFetch } = await import("@releases/adapters/scrape-fetch");
   return scrapeFetch(
     {
       cloudflareAccountId: "acct",

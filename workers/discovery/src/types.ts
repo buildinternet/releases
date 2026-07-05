@@ -25,19 +25,6 @@ export interface OnboardResponse {
   status: "running";
 }
 
-export interface UpdateRequest {
-  /** Label for StatusHub — can be an org name or description like "stale sources". */
-  company: string;
-  /** Source IDs (src_...) or slugs to fetch. IDs preferred. */
-  sourceIdentifiers: string[];
-  /** Organization ID (org_...) for playbook lookup. */
-  orgId?: string;
-  /** Correlation ID from the originating client — flows through to managed agent sessions and status events. */
-  correlationId?: string;
-  /** @deprecated Use sourceIdentifiers instead. */
-  sourceSlugs?: string[];
-}
-
 export interface StatusResponse {
   status: "running" | "complete" | "error" | "idle";
   progress?: {
@@ -53,33 +40,9 @@ export interface StatusResponse {
 /** Cloudflare Secrets Store binding — call .get() to retrieve the secret value. */
 export type SecretBinding = { get(): Promise<string> };
 
-/**
- * Cross-script view of the api worker's `SourceActor` DO (#1780 Box 1 / #1814).
- * Only the per-source MA-delegation lock methods are surfaced here — this worker
- * never drives an actor's fetch timer, it just checks/acquires/releases the lock
- * that replaced the KV `ma:active:src:{id}` mutex. The class lives in
- * `workers/api/src/source-actor.ts`; discovery reaches it via a `script_name`
- * durable-object binding.
- */
-export interface SourceActorLockStub {
-  tryAcquireScrapeLock(
-    sourceId: string,
-    sessionId: string,
-  ): Promise<{ acquired: boolean; sessionId: string }>;
-  releaseScrapeLock(sourceId: string, sessionId: string): Promise<void>;
-}
-
 export interface Env {
   Sandbox: DurableObjectNamespace<Sandbox>;
   MANAGED_AGENTS_SESSION: DurableObjectNamespace;
-  /**
-   * Per-source MA-delegation lock, owned by the api worker's `SourceActor` DO.
-   * Optional so a discovery deploy without the cross-script binding still starts
-   * (falls back to no lock — see the acquire sites in index.ts). Untyped
-   * namespace (the class lives in another worker); stubs are cast to
-   * `SourceActorLockStub` at the call sites. #1814.
-   */
-  SOURCE_ACTOR?: DurableObjectNamespace;
   DB: D1Database;
   ANTHROPIC_API_KEY: SecretBinding;
   /** Optional Cloudflare AI Gateway passthrough — see docs/architecture/ai-gateway.md. */

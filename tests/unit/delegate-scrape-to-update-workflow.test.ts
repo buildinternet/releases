@@ -3,8 +3,7 @@ import { createTestDb, type TestDatabase, type TestDb } from "../db-helper";
 import { organizations, sources } from "@buildinternet/releases-core/schema";
 import type { Source } from "@buildinternet/releases-core/schema";
 import {
-  delegateScrapeToDiscovery,
-  type DiscoveryWorkerRpc,
+  delegateScrapeToUpdateWorkflow,
   type FetchOneEnv,
 } from "../../workers/api/src/cron/poll-fetch.js";
 import type { drizzle as drizzleD1 } from "drizzle-orm/d1";
@@ -16,39 +15,53 @@ import type { drizzle as drizzleD1 } from "drizzle-orm/d1";
 type D1Drizzle = ReturnType<typeof drizzleD1>;
 
 /**
- * `delegateScrapeToDiscovery` is the summary-only feed → managed-agent worker
- * hand-off path (#1022). These tests exercise the contract with discovery:
+ * `delegateScrapeToUpdateWorkflow` is the summary-only feed → deterministic
+ * update workflow hand-off path (#1022, re-homed by #1946). These tests
+ * exercise the contract with the dispatch gate:
  *
- *   - org-name lookup is required (it keys MA session dedup)
- *   - `startManagedFetchSession` is called with the canonical body shape
- *   - success returns a synthetic `no_change` so the workflow step terminates
- *     cleanly while the MA session writes its own fetch_log row later
- *   - failures from discovery surface as `status: "error"`
+ *   - org-name lookup is required (it labels the StatusHub session row)
+ *   - the created workflow instance carries the canonical params shape
+ *   - success returns a synthetic `no_change`-style `delegated` result so the
+ *     workflow step terminates cleanly while the update run writes its own
+ *     fetch_log rows later
+ *   - dispatch refusals surface as `status: "error"`
  *
- * The behavior we care about is the body shape we put on the wire to
- * discovery, not what discovery does with it — that's covered separately by
- * the MA session and ingest tests. So we stub the RPC entirely.
+ * The behavior we care about is the params we hand the workflow, not what the
+ * workflow does with them — that's covered by the workflow/dispatch tests. So
+ * we stub the workflow binding entirely.
  */
 
-interface DiscoveryStub extends DiscoveryWorkerRpc {
-  calls: Array<Parameters<DiscoveryWorkerRpc["startManagedFetchSession"]>[0]>;
-}
+// Structural stand-ins for the Workflow / DurableObjectNamespace bindings —
+// the tests/ tsconfig has no Workers ambient types, and every stub is cast at
+// the FetchOneEnv boundary anyway.
+type WorkflowCreateCall = { id: string; params: Record<string, unknown> };
 
-function makeDiscoveryStub(
-  result: Awaited<ReturnType<DiscoveryWorkerRpc["startManagedFetchSession"]>>,
-): DiscoveryStub {
-  const calls: DiscoveryStub["calls"] = [];
+function makeWorkflowStub(): { calls: WorkflowCreateCall[]; binding: unknown } {
+  const calls: WorkflowCreateCall[] = [];
   return {
     calls,
-    async startManagedFetchSession(params) {
-      calls.push(params);
-      return result;
+    binding: {
+      create: async (opts: WorkflowCreateCall) => {
+        calls.push(opts);
+        return {} as never;
+      },
     },
   };
 }
 
-function makeEnv(discovery: DiscoveryWorkerRpc): FetchOneEnv {
-  return { DISCOVERY_WORKER: discovery } as unknown as FetchOneEnv;
+function makeEnv(binding: unknown): FetchOneEnv {
+  return { DETERMINISTIC_UPDATE_WORKFLOW: binding } as unknown as FetchOneEnv;
+}
+
+/** SOURCE_ACTOR stub whose lock is already held — dispatch refuses with `locked`. */
+function lockedSourceActor(): unknown {
+  return {
+    idFromName: (name: string) => name,
+    get: () => ({
+      tryAcquireScrapeLock: async () => ({ acquired: false, sessionId: "det-owner" }),
+      releaseScrapeLock: async () => {},
+    }),
+  };
 }
 
 async function seedOrgAndSource(
@@ -75,7 +88,7 @@ async function seedOrgAndSource(
     url: "https://acme.example.com/changelog",
     createdAt: new Date().toISOString(),
   });
-  // delegateScrapeToDiscovery only reads source.id, source.orgId, and
+  // delegateScrapeToUpdateWorkflow only reads source.id, source.orgId, and
   // source.slug, so constructing the Source from the inserted values is both
   // faster than a readback and explicit about which fields the test cares
   // about. A WHERE-less SELECT here would also be ambiguous if seedOrg is
@@ -93,7 +106,7 @@ async function seedOrgAndSource(
   } as unknown as Source;
 }
 
-describe("delegateScrapeToDiscovery", () => {
+describe("delegateScrapeToUpdateWorkflow", () => {
   let harness: TestDatabase;
 
   beforeEach(() => {
@@ -103,34 +116,43 @@ describe("delegateScrapeToDiscovery", () => {
     harness.cleanup();
   });
 
-  it("posts the canonical {sourceIds, company, orgId, correlationId} shape to discovery", async () => {
+  it("creates a workflow instance with the canonical params shape", async () => {
     const source = await seedOrgAndSource(harness.db, {
       orgName: "Notion",
       orgId: "org_notion",
       sourceId: "src_notion_releases",
       sourceSlug: "notion-releases",
     });
-    const discovery = makeDiscoveryStub({ ok: true, sessionId: "ma-abc123" });
+    const wf = makeWorkflowStub();
 
-    await delegateScrapeToDiscovery(harness.db as unknown as D1Drizzle, source, makeEnv(discovery));
+    await delegateScrapeToUpdateWorkflow(
+      harness.db as unknown as D1Drizzle,
+      source,
+      makeEnv(wf.binding),
+    );
 
-    expect(discovery.calls).toHaveLength(1);
-    expect(discovery.calls[0]).toEqual({
-      sourceIds: ["src_notion_releases"],
+    expect(wf.calls).toHaveLength(1);
+    const { id, params } = wf.calls[0];
+    // The dispatcher mints the sessionId, uses it as the instance id, and
+    // threads it into the params so the lease owner matches the run.
+    expect(id).toMatch(/^det-/);
+    expect(params).toEqual({
+      sessionId: id,
       company: "Notion",
+      sourceIdentifiers: ["src_notion_releases"],
       orgId: "org_notion",
       correlationId: "summary-only-delegation:notion-releases",
     });
   });
 
-  it("returns delegated on successful hand-off, carrying the sessionId from discovery", async () => {
+  it("returns delegated on successful hand-off, carrying the minted sessionId", async () => {
     const source = await seedOrgAndSource(harness.db);
-    const discovery = makeDiscoveryStub({ ok: true, sessionId: "ma-xyz" });
+    const wf = makeWorkflowStub();
 
-    const result = await delegateScrapeToDiscovery(
+    const result = await delegateScrapeToUpdateWorkflow(
       harness.db as unknown as D1Drizzle,
       source,
-      makeEnv(discovery),
+      makeEnv(wf.binding),
     );
 
     expect(result.status).toBe("delegated");
@@ -138,7 +160,8 @@ describe("delegateScrapeToDiscovery", () => {
     expect(result.releasesInserted).toBe(0);
     // Narrowing: TypeScript ensures sessionId is present on the delegated variant.
     if (result.status === "delegated") {
-      expect(result.sessionId).toBe("ma-xyz");
+      expect(result.sessionId).toMatch(/^det-/);
+      expect(result.sessionId).toBe(wf.calls[0].id);
     }
   });
 
@@ -156,46 +179,47 @@ describe("delegateScrapeToDiscovery", () => {
       metadata: null,
       createdAt: new Date().toISOString(),
     } as unknown as Source;
-    const discovery = makeDiscoveryStub({ ok: true, sessionId: "should-not-be-called" });
+    const wf = makeWorkflowStub();
 
-    const result = await delegateScrapeToDiscovery(
+    const result = await delegateScrapeToUpdateWorkflow(
       harness.db as unknown as D1Drizzle,
       orphan,
-      makeEnv(discovery),
+      makeEnv(wf.binding),
     );
 
     if (result.status !== "error") throw new Error(`expected status=error, got ${result.status}`);
     expect(result.error).toContain("org_ghost");
-    expect(discovery.calls).toHaveLength(0);
+    expect(wf.calls).toHaveLength(0);
   });
 
-  it("returns error when DISCOVERY_WORKER binding is missing", async () => {
+  it("returns error when the workflow binding is missing", async () => {
     const source = await seedOrgAndSource(harness.db);
-    const result = await delegateScrapeToDiscovery(
+    const result = await delegateScrapeToUpdateWorkflow(
       harness.db as unknown as D1Drizzle,
       source,
       {} as unknown as FetchOneEnv,
     );
 
     if (result.status !== "error") throw new Error(`expected status=error, got ${result.status}`);
-    expect(result.error).toContain("DISCOVERY_WORKER");
+    expect(result.error).toContain("DETERMINISTIC_UPDATE_WORKFLOW");
   });
 
-  it("propagates discovery's ok:false error message to the caller", async () => {
+  it("propagates a dispatch refusal (per-source lock held) to the caller", async () => {
     const source = await seedOrgAndSource(harness.db);
-    const discovery = makeDiscoveryStub({
-      ok: false,
-      error: "ANTHROPIC_API_KEY not configured",
-    });
+    const wf = makeWorkflowStub();
+    const env = {
+      DETERMINISTIC_UPDATE_WORKFLOW: wf.binding,
+      SOURCE_ACTOR: lockedSourceActor(),
+    } as unknown as FetchOneEnv;
 
-    const result = await delegateScrapeToDiscovery(
+    const result = await delegateScrapeToUpdateWorkflow(
       harness.db as unknown as D1Drizzle,
       source,
-      makeEnv(discovery),
+      env,
     );
 
     if (result.status !== "error") throw new Error(`expected status=error, got ${result.status}`);
-    expect(result.error).toBe("ANTHROPIC_API_KEY not configured");
-    expect(discovery.calls).toHaveLength(1);
+    expect(result.error).toContain("active update session");
+    expect(wf.calls).toHaveLength(0);
   });
 });

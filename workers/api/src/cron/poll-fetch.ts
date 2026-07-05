@@ -55,6 +55,7 @@ import { isPrereleaseVersion } from "@buildinternet/releases-core/prerelease";
 import { computeVersionSort } from "@buildinternet/releases-core/version-sort";
 import { dedupeByExistingTitle } from "@buildinternet/releases-core/title-dedup";
 import { selectExistingReleaseKeys } from "../lib/title-dedup.js";
+import { startDeterministicUpdate, type UpdateDispatchEnv } from "../lib/update-dispatch.js";
 import { normalizeMediaUrl } from "@releases/rendering/media-url.js";
 import { filterJunkMedia } from "@releases/rendering/media-filter.js";
 import { detectInlineVideos } from "@releases/rendering/video-embed.js";
@@ -641,22 +642,6 @@ async function pollScrapeOrAgentByQuirk(
 
 // ── Fetch one source ──
 
-/**
- * Typed RPC surface of the discovery worker's `DiscoveryEntrypoint`. Mirrors
- * the shape declared in `workers/discovery/src/index.ts`. Kept inline here so
- * the API worker does not import directly from a separate wrangler project —
- * the Cloudflare service binding runtime enforces the actual contract; this
- * is purely for local type-checking.
- */
-export interface DiscoveryWorkerRpc {
-  startManagedFetchSession(params: {
-    sourceIds: string[];
-    company: string;
-    orgId?: string;
-    correlationId?: string;
-  }): Promise<{ ok: true; sessionId: string } | { ok: false; error: string }>;
-}
-
 type FetchOneBase = {
   releasesFound: number;
   releasesInserted: number;
@@ -670,7 +655,7 @@ export type FetchOneResult =
   | (FetchOneBase & { status: "no_change" })
   | (FetchOneBase & {
       status: "delegated";
-      /** Session ID returned by the discovery worker's `startManagedFetchSession`. */
+      /** Session ID minted by `startDeterministicUpdate` for the delegated run. */
       sessionId: string;
     })
   | (FetchOneBase & {
@@ -688,7 +673,12 @@ export type FetchOneResult =
 
 export const DEFAULT_FETCH_MAX_ENTRIES = 200;
 
-export interface FetchOneEnv extends IndexNowEnv, TextModelEnv {
+// UpdateDispatchEnv carries the deterministic-update dispatch bindings (#1946):
+// LATEST_CACHE (kill switch + spend-cap counters), FLAGS, SOURCE_ACTOR (per-
+// source lock), STATUS_HUB, DETERMINISTIC_UPDATE_WORKFLOW, and the MA_* cap
+// vars. Summary-only crawl-enabled feeds delegate through it — see
+// {@link shouldDelegateToCrawl} / {@link delegateScrapeToUpdateWorkflow}.
+export interface FetchOneEnv extends IndexNowEnv, TextModelEnv, UpdateDispatchEnv {
   GITHUB_TOKEN?: string;
   /**
    * Optional Vectorize bindings for semantic-search side effects. Typed as
@@ -705,20 +695,6 @@ export interface FetchOneEnv extends IndexNowEnv, TextModelEnv {
   RELEASE_HUB?: DurableObjectNamespace;
   WEBHOOK_DELIVERY_QUEUE?: Queue<unknown>;
   DB?: D1Database;
-  /**
-   * Service binding to the discovery worker's `DiscoveryEntrypoint`. When
-   * present, summary-only feeds (items with only titles + links — no body)
-   * with `crawlEnabled: true` are delegated to a managed-agent worker session
-   * via `startManagedFetchSession` so per-release pages can be crawled and
-   * extracted for content + media on the cheaper Haiku 4-5 worker pipeline
-   * (instead of running Sonnet 4-6 inline; see #1022). See
-   * {@link shouldDelegateToCrawl}.
-   *
-   * Typed as the narrow RPC interface rather than `Fetcher` so callers get
-   * the typed method directly without HTTP ceremony. Auth is not required —
-   * RPC bypasses the discovery worker's HTTP auth middleware.
-   */
-  DISCOVERY_WORKER?: DiscoveryWorkerRpc;
   // Feed content enrichment. Kill switch + cap as strings (Workers env vars are
   // strings). CF creds are bound from the same Secrets Store entries the
   // discovery worker uses; absent => render escalation is skipped.
@@ -777,30 +753,30 @@ export function shouldDelegateToCrawl(
 }
 
 /**
- * Hand the source off to a managed-agent worker session and return a no-rows
- * result. The MA session runs async on the Anthropic platform — when it
- * completes it writes its own `fetch_log` row and source-counter updates via
- * the standard managed-agent bookkeeping. Returning a synthetic `no_change`
- * keeps the workflow step from racing it (we don't yet know what changed) and
- * avoids double-bumping counters.
+ * Hand the source off to a deterministic update run (#1946) and return a
+ * no-rows result. The run executes async as a `DeterministicUpdateWorkflow`
+ * instance in this worker — when it completes, `scrapeFetch` writes its own
+ * `fetch_log` rows and source-counter updates. Returning a synthetic
+ * `no_change` keeps the workflow step from racing it (we don't yet know what
+ * changed) and avoids double-bumping counters.
  *
- * The MA session needs `company` (used for dedup keying), which means we
+ * The run needs `company` (used for the StatusHub session row), which means we
  * have to look up the org name from `source.orgId`. Failing that lookup is
  * surfaced as an error so the workflow step retries — an orphaned source is
  * an upstream bug we'd rather see in logs than silently swallow.
  */
-export async function delegateScrapeToDiscovery(
+export async function delegateScrapeToUpdateWorkflow(
   db: ReturnType<typeof drizzle>,
   source: Source,
   env: FetchOneEnv,
 ): Promise<FetchOneResult> {
   const start = Date.now();
 
-  if (!env.DISCOVERY_WORKER) {
+  if (!env.DETERMINISTIC_UPDATE_WORKFLOW) {
     const durationMs = Date.now() - start;
     logEvent("warn", {
       component: "cron-poll-fetch",
-      event: "crawl-delegation-missing-discovery-worker",
+      event: "crawl-delegation-missing-workflow",
       sourceSlug: source.slug,
       orgId: source.orgId,
       durationMs,
@@ -810,7 +786,7 @@ export async function delegateScrapeToDiscovery(
       releasesInserted: 0,
       durationMs,
       status: "error" as const,
-      error: "Cannot delegate: DISCOVERY_WORKER binding not configured",
+      error: "Cannot delegate: DETERMINISTIC_UPDATE_WORKFLOW binding not configured",
     };
   }
 
@@ -838,8 +814,8 @@ export async function delegateScrapeToDiscovery(
     };
   }
 
-  const result = await env.DISCOVERY_WORKER.startManagedFetchSession({
-    sourceIds: [source.id],
+  const result = await startDeterministicUpdate(env, {
+    sourceIdentifiers: [source.id],
     company: org.name,
     orgId: source.orgId,
     correlationId: `summary-only-delegation:${source.slug}`,
@@ -852,7 +828,7 @@ export async function delegateScrapeToDiscovery(
       component: "cron-poll-fetch",
       event: "crawl-delegation-failed",
       sourceSlug: source.slug,
-      error: result.error,
+      error: result.message,
       durationMs,
     });
     return {
@@ -860,7 +836,7 @@ export async function delegateScrapeToDiscovery(
       releasesInserted: 0,
       durationMs,
       status: "error" as const,
-      error: result.error,
+      error: result.message,
     };
   }
 
@@ -1077,7 +1053,7 @@ async function recordNoChange(
   // together or neither does. A half-written state (log row without the
   // matching counter advance, or vice versa) would either drop the source from
   // observability or relax the cadence with no record of why. Mirrors
-  // delegateScrapeToDiscovery's handoff write.
+  // delegateScrapeToUpdateWorkflow's handoff write.
   const ops = [
     db.insert(fetchLog).values({
       sourceId: source.id,
@@ -1559,7 +1535,7 @@ export async function fetchOne(
      */
     skipSideEffects?: boolean;
     /**
-     * Skip the `delegateScrapeToDiscovery` branch even when the source would
+     * Skip the `delegateScrapeToUpdateWorkflow` branch even when the source would
      * normally qualify for crawl delegation. Set by the `POST /v1/sources/:id/fetch`
      * route when the caller is a managed-agent session (detected via the
      * `X-Releases-MA-Session` request header). Without this guard the session
@@ -1828,14 +1804,14 @@ export async function fetchOne(
     // Summary-only feed (e.g. RSS that only carries `<title>` + `<link>`):
     // inserting the parsed rows would persist empty-body releases under the
     // feed's link URLs. When `crawlEnabled: true` is set, delegate to the
-    // discovery worker's crawl + extract pipeline instead so the per-release
-    // pages get fetched and bodies + media land in D1. The feed becomes a
-    // pure change detector. Dry-runs skip this branch — they're supposed to
-    // be cheap probes of the feed itself, not full crawls.
+    // deterministic update workflow's crawl + extract pipeline instead so the
+    // per-release pages get fetched and bodies + media land in D1. The feed
+    // becomes a pure change detector. Dry-runs skip this branch — they're
+    // supposed to be cheap probes of the feed itself, not full crawls.
     if (
       !dryRun &&
       !skipDelegation &&
-      env.DISCOVERY_WORKER &&
+      env.DETERMINISTIC_UPDATE_WORKFLOW &&
       shouldDelegateToCrawl(source, meta, rawReleases)
     ) {
       // The summary-only feed is the change detector: only pay for a managed-
@@ -1877,11 +1853,12 @@ export async function fetchOne(
         feedItemCount: rawReleases.length,
       });
 
-      // #1814: the per-source MA-delegation mutex now lives in the SourceActor
-      // DO and is enforced inside the discovery worker (checked/acquired around
-      // the session mint in startManagedFetchSession). No api-side gate is needed
-      // here — a single source's concurrent delegations are serialized there.
-      return await delegateScrapeToDiscovery(db, source, env);
+      // #1814: the per-source mutex lives in the SourceActor DO and is
+      // enforced by the dispatch gate (checked/acquired inside
+      // startDeterministicUpdate before the workflow instance is created). No
+      // extra gate is needed here — a single source's concurrent delegations
+      // are serialized there.
+      return await delegateScrapeToUpdateWorkflow(db, source, env);
     }
 
     const { insertedIds, inserted } = await ingestRawReleases(db, source, rawReleases, env, meta);

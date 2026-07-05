@@ -7,7 +7,7 @@
  */
 
 import { describe, it, expect } from "bun:test";
-import { captureRawSnapshot, type ScrapeEnv } from "../src/scrape-fetch.js";
+import { captureRawSnapshot, type ScrapeEnv } from "@releases/adapters/scrape-fetch";
 
 const source = {
   id: "src_x",

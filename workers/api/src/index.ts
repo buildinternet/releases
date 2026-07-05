@@ -70,6 +70,7 @@ export { BackfillSourceWorkflow } from "./workflows/backfill-source.js";
 export { BatchEnrichWorkflow } from "./workflows/batch-enrich.js";
 export { CollectionSummariesWorkflow } from "./workflows/collection-summaries.js";
 export { MediaBackfillWorkflow } from "./workflows/media-backfill.js";
+export { DeterministicUpdateWorkflow } from "./workflows/deterministic-update.js";
 
 /** Cloudflare Secrets Store binding — call .get() to retrieve the secret value. */
 type SecretBinding = { get(): Promise<string> };
@@ -149,15 +150,37 @@ export type Env = {
     COLLECTION_SUMMARIES_WORKFLOW?: Workflow;
     /** Durable media / video / gif backfill loops (admin POST). */
     MEDIA_BACKFILL_WORKFLOW?: Workflow;
+    /**
+     * Deterministic scrape/agent update runs (#1946): one instance per drain /
+     * manual update batch, dispatched via `lib/update-dispatch.ts` from
+     * OrgActor, POST /v1/workflows/update, and the poll-fetch crawl-feed
+     * delegation. Replaced the discovery worker's `/update` session path.
+     */
+    DETERMINISTIC_UPDATE_WORKFLOW?: Workflow;
+    /**
+     * Self service binding (this worker). The deterministic-update workflow's
+     * `scrapeFetch` persists through the HTTP API surface; the self binding
+     * keeps each of those calls its own invocation with the same middleware
+     * semantics as the retired discovery→api service-binding hop.
+     */
+    API_SELF?: { fetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response> };
+    // Update-dispatch gates (#1946), formerly enforced at discovery's /update:
+    // the MA kill-switch flag fallback and the daily spend-cap overrides read
+    // by `checkSpendCap` against the shared LATEST_CACHE counters.
+    MA_SESSIONS_DISABLED?: string;
+    MA_DAILY_SPEND_CAP_ORG_CENTS?: string;
+    MA_DAILY_SPEND_CAP_GLOBAL_CENTS?: string;
+    // Flag-var fallbacks read by the deterministic-update workflow (Flagship is
+    // primary; these exist for local dev / Flagship-outage overrides).
+    EXTRACT_TOOLLOOP_ENABLED?: string;
+    RAW_SNAPSHOT_CAPTURE_ENABLED?: string;
     FORCE_DRAIN_STALE_HOURS?: string;
     /**
-     * Service binding to the discovery worker. Typed as the RPC surface
-     * (`startManagedFetchSession`) plus the standard HTTP `fetch` method used
-     * by the OrgActor drain to POST `/update`. The `entrypoint:
-     * "DiscoveryEntrypoint"` annotation in wrangler.jsonc ensures the binding
-     * resolves to the named class so RPC methods are available at runtime.
+     * Service binding to the discovery worker, used for onboarding sessions
+     * (`POST /v1/workflows/discover` proxy + org-create onboarding). Update
+     * dispatch no longer crosses this boundary (#1946).
      */
-    DISCOVERY_WORKER?: import("./cron/poll-fetch.js").DiscoveryWorkerRpc & {
+    DISCOVERY_WORKER?: {
       fetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
     };
     ANTHROPIC_API_KEY?: SecretBinding;
@@ -1225,7 +1248,12 @@ export default {
           WEBHOOK_DELIVERY_QUEUE: env.WEBHOOK_DELIVERY_QUEUE,
           LATEST_CACHE: env.LATEST_CACHE,
           INVALIDATION_ENABLED: env.INVALIDATION_ENABLED,
-          DISCOVERY_WORKER: env.DISCOVERY_WORKER,
+          DETERMINISTIC_UPDATE_WORKFLOW: env.DETERMINISTIC_UPDATE_WORKFLOW,
+          SOURCE_ACTOR: env.SOURCE_ACTOR,
+          STATUS_HUB: env.STATUS_HUB,
+          MA_SESSIONS_DISABLED: env.MA_SESSIONS_DISABLED,
+          MA_DAILY_SPEND_CAP_ORG_CENTS: env.MA_DAILY_SPEND_CAP_ORG_CENTS,
+          MA_DAILY_SPEND_CAP_GLOBAL_CENTS: env.MA_DAILY_SPEND_CAP_GLOBAL_CENTS,
           // Without these the inline-cron fallback (no POLL_AND_FETCH_WORKFLOW
           // binding) would fetch unsigned even when signing is enabled.
           WEB_BOT_AUTH_ENABLED: env.WEB_BOT_AUTH_ENABLED,

@@ -14,7 +14,7 @@
  */
 
 import { describe, it, expect } from "bun:test";
-import { probeUpstreamStatus, isUpstreamGone } from "../../workers/discovery/src/scrape-fetch";
+import { probeUpstreamStatus, isUpstreamGone } from "@releases/adapters/scrape-fetch";
 
 /** Build a minimal Response-like stub that mimics what `fetch` returns. */
 function stubResponse(status: number, opts: { hasBody?: boolean } = {}): Response {

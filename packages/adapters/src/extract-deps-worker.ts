@@ -4,8 +4,8 @@
  * over `RELEASES_API_URL` in local dev).
  */
 
-import { buildAnthropicClient } from "@releases/lib/anthropic-client.js";
-import { logEvent } from "@releases/lib/log-event.js";
+import { buildAnthropicClient } from "@releases/lib/anthropic-client";
+import { logEvent } from "@releases/lib/log-event";
 import { getSecret, type SecretBinding } from "@releases/lib/secrets";
 import { buildOpenRouterExtractModel } from "@releases/adapters/extract";
 import type { Source } from "@buildinternet/releases-core/schema";

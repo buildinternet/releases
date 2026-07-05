@@ -23,7 +23,7 @@ import {
   pathMatchesIncludePrefix,
   resolveCrawlIncludePatterns,
   type CrawlDeps,
-} from "../../workers/discovery/src/scrape-fetch";
+} from "@releases/adapters/scrape-fetch";
 import { restoreGlobalFetch } from "../global-fetch";
 
 // ── Fixtures ────────────────────────────────────────────────────────

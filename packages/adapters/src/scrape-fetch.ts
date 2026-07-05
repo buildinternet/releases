@@ -37,7 +37,7 @@ import {
   type MappedEntry,
 } from "@releases/adapters/extract";
 import { RELEASES_BOT_UA } from "@releases/adapters/user-agent";
-import { logEvent } from "@releases/lib/log-event.js";
+import { logEvent } from "@releases/lib/log-event";
 import { buildWorkerExtractDeps } from "./extract-deps-worker.js";
 
 /**

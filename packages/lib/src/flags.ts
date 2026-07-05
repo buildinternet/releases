@@ -119,7 +119,7 @@ export const FLAGS = {
     env: "MA_SESSIONS_DISABLED",
     default: false,
     kind: "kill-switch",
-    reads: ["discovery"],
+    reads: ["api", "discovery"],
     description: "Incident kill switch for managed-agent sessions. false = sessions allowed.",
   },
   batchSummarizeEnabled: {
@@ -214,7 +214,7 @@ export const FLAGS = {
     env: "EXTRACT_TOOLLOOP_ENABLED",
     default: true,
     kind: "kill-switch",
-    reads: ["discovery"],
+    reads: ["api", "discovery"],
     description:
       "Multi-round tool-use extraction for large bodies (>50K tokens). Off = one-shot inline only.",
   },
@@ -232,7 +232,7 @@ export const FLAGS = {
     env: "RAW_SNAPSHOT_CAPTURE_ENABLED",
     default: false,
     kind: "rollout",
-    reads: ["discovery"],
+    reads: ["api", "discovery"],
     description:
       "Steady-state scrape path captures the scraped markdown as a raw snapshot (#1283) for cheap re-extraction (#1284).",
   },

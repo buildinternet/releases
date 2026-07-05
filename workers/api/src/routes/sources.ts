@@ -674,12 +674,12 @@ sourceRoutes.post("/sources/:slug/fetch", postSourceFetchRoute, async (c) => {
         new ValidationError("max must be a positive integer", { code: "bad_request" }),
       );
     }
-    // When the caller is a managed-agent session it sends X-Releases-MA-Session
-    // so we know to skip the delegateScrapeToDiscovery branch. Delegating from
-    // within an MA session would re-enter the same session-start path that
-    // originally spawned this session, causing it to self-collide on the
-    // per-source KV lock introduced in #1058. Inline fetch is the correct path
-    // here — the MA session already owns the crawl pipeline. See #1061.
+    // When the caller is an update/onboard session it sends X-Releases-MA-Session
+    // so we know to skip the delegateScrapeToUpdateWorkflow branch. Delegating
+    // from within a session would re-enter the same dispatch path that
+    // originally spawned it, causing it to self-collide on the per-source lock
+    // (#1058/#1814). Inline fetch is the correct path here — the session
+    // already owns the crawl pipeline. See #1061.
     const maSessionHeader = c.req.header("X-Releases-MA-Session");
     const skipDelegation = maSessionHeader !== undefined && maSessionHeader.length > 0;
     const result = await fetchOne(
@@ -695,7 +695,13 @@ sourceRoutes.post("/sources/:slug/fetch", postSourceFetchRoute, async (c) => {
         RELEASE_HUB: c.env.RELEASE_HUB,
         WEBHOOK_DELIVERY_QUEUE: c.env.WEBHOOK_DELIVERY_QUEUE,
         DB: c.env.DB,
-        DISCOVERY_WORKER: c.env.DISCOVERY_WORKER,
+        DETERMINISTIC_UPDATE_WORKFLOW: c.env.DETERMINISTIC_UPDATE_WORKFLOW,
+        SOURCE_ACTOR: c.env.SOURCE_ACTOR,
+        STATUS_HUB: c.env.STATUS_HUB,
+        LATEST_CACHE: c.env.LATEST_CACHE,
+        MA_SESSIONS_DISABLED: c.env.MA_SESSIONS_DISABLED,
+        MA_DAILY_SPEND_CAP_ORG_CENTS: c.env.MA_DAILY_SPEND_CAP_ORG_CENTS,
+        MA_DAILY_SPEND_CAP_GLOBAL_CENTS: c.env.MA_DAILY_SPEND_CAP_GLOBAL_CENTS,
         MEDIA: c.env.MEDIA,
         FLAGS: c.env.FLAGS,
       },
@@ -2663,7 +2669,6 @@ sourceRoutes.post(
         RELEASE_HUB: c.env.RELEASE_HUB,
         WEBHOOK_DELIVERY_QUEUE: c.env.WEBHOOK_DELIVERY_QUEUE,
         DB: c.env.DB,
-        DISCOVERY_WORKER: c.env.DISCOVERY_WORKER,
         MEDIA: c.env.MEDIA,
         FLAGS: c.env.FLAGS,
       },

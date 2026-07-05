@@ -28,7 +28,11 @@
     "./extract/types": "./src/extract/types.ts",
     "./extract/aisdk": "./src/extract/extract-with-tools-aisdk.ts",
     "./overview-model": "./src/overview-model.ts",
-    "./github-probe": "./src/github-probe.ts"
+    "./github-probe": "./src/github-probe.ts",
+    "./scrape-fetch": "./src/scrape-fetch.ts",
+    "./extract-deps-worker": "./src/extract-deps-worker.ts",
+    "./playbook-block": "./src/playbook-block.ts",
+    "./deterministic-update": "./src/deterministic-update.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.8",

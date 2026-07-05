@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { checkSpendCap, incrementKvSpend } from "../../workers/discovery/src/spend-cap.js";
+import { checkSpendCap, incrementKvSpend } from "@releases/lib/spend-cap";
 
 /**
  * Unit tests for the KV-backed daily spend circuit breaker.

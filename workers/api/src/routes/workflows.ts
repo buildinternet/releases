@@ -108,10 +108,13 @@ import { respondError } from "../lib/error-response.js";
 import {
   ValidationError,
   NotFoundError,
+  ConflictError,
+  RateLimitedError,
   UpstreamError,
   ServiceUnavailableError,
   InternalError,
 } from "@releases/lib/releases-error";
+import { startDeterministicUpdate } from "../lib/update-dispatch.js";
 import type { MediaBackfillKind } from "../workflows/media-backfill.js";
 import type { Context } from "hono";
 
@@ -1283,10 +1286,77 @@ workflowsRoutes.post("/workflows/discover", async (c) => {
   return new Response(res.body, { status: res.status, headers: res.headers });
 });
 
+// Deterministic update runs no longer proxy to discovery (#1946): dispatch is
+// the shared `startDeterministicUpdate` gate (kill switch → spend cap →
+// per-source lock) and execution is the DETERMINISTIC_UPDATE workflow in this
+// worker. The wire contract is unchanged: 202 {sessionId, status: "running",
+// sourceIdentifiers}, 400 validation, 409 + Retry-After on lock contention,
+// 429 spend cap, 503 kill switch / unbound workflow. Admin scope is enforced
+// by the /workflows namespace middleware (route-namespaces.ts).
 workflowsRoutes.post("/workflows/update", async (c) => {
-  const body = await c.req.text();
-  const res = await proxyToDiscovery(c, "/update", body);
-  return new Response(res.body, { status: res.status, headers: res.headers });
+  let body: {
+    company?: string;
+    sourceIdentifiers?: string[];
+    /** @deprecated legacy alias for sourceIdentifiers */
+    sourceSlugs?: string[];
+    orgId?: string;
+    correlationId?: string;
+  };
+  try {
+    body = await c.req.json();
+  } catch {
+    return respondError(c, new ValidationError("Invalid JSON body", { code: "invalid_json" }));
+  }
+  // `c.req.json()` happily parses `null`, `[]`, or a bare scalar — reject
+  // anything that isn't a plain object before touching fields, so a malformed
+  // body stays a 400 instead of a TypeError-turned-500. Field-level shape
+  // (company string, non-empty identifiers array) is validated by the
+  // dispatch gate's validateUpdateParams.
+  if (typeof body !== "object" || body === null || Array.isArray(body)) {
+    return respondError(c, new ValidationError("Body must be a JSON object"));
+  }
+
+  const identifiers = body.sourceIdentifiers ?? body.sourceSlugs;
+  const result = await startDeterministicUpdate(c.env, {
+    company: body.company as string,
+    sourceIdentifiers: identifiers as string[],
+    orgId: body.orgId,
+    correlationId: body.correlationId,
+  });
+
+  if (!result.ok) {
+    switch (result.reason) {
+      case "invalid":
+        return respondError(c, new ValidationError(result.message));
+      case "locked": {
+        const retryAfter = result.retryAfterSeconds ?? 900;
+        const res = respondError(
+          c,
+          new ConflictError(result.message, {
+            details: { retryAfterSeconds: retryAfter },
+          }),
+        );
+        res.headers.set("Retry-After", String(retryAfter));
+        return res;
+      }
+      case "spend_cap":
+        return respondError(c, new RateLimitedError(result.message));
+      case "kill_switch":
+      case "unavailable":
+        return respondError(c, new ServiceUnavailableError(result.message));
+      default: {
+        // Exhaustiveness guard: a new refusal reason must fail loudly here
+        // rather than falling through to the 202 success response below.
+        const unhandled: never = result.reason;
+        return respondError(c, new InternalError(`Unhandled update-dispatch reason: ${unhandled}`));
+      }
+    }
+  }
+
+  return c.json(
+    { sessionId: result.sessionId, status: "running", sourceIdentifiers: identifiers },
+    202,
+  );
 });
 
 // ── POST /workflows/enrich-feed-content ──────────────────────────────────────
