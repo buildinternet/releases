@@ -66,12 +66,17 @@
   // Email send binding for Tier-1 alert notifications.
   // Omitting `destination_address` keeps it open to any verified recipient.
   "send_email": [{ "name": "SEND_EMAIL" }],
+  // Per-subscription delivery cap. `namespace_id` is ACCOUNT-scoped (shared ids share
+  // counters across workers) — 3002 keeps this bucket separate from the API worker's
+  // TOKEN_RATE_LIMITER, which previously shared "1002" by accident (no key collision in
+  // practice — token ids vs subscription ids — but the coupling was unintended).
+  // Allocation convention: api = 100x, mcp = 200x, webhooks = 300x.
   "unsafe": {
     "bindings": [
       {
         "name": "PER_SUB_RATE_LIMITER",
         "type": "ratelimit",
-        "namespace_id": "1002",
+        "namespace_id": "3002",
         "simple": { "limit": 600, "period": 60 },
       },
     ],
