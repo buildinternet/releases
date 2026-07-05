@@ -17,7 +17,7 @@
  * pixels / spacers not distinguishable by URL.
  */
 import { drizzle } from "drizzle-orm/d1";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import { mediaAssets, releases } from "@buildinternet/releases-core/schema";
 import { logEvent } from "@releases/lib/log-event";
 
@@ -120,7 +120,33 @@ export async function processMediaForR2<T extends { url: string; r2Key?: string 
 
   const toProcess = items.slice(0, maxItems);
 
+  // Fetch-skip dedup: a URL already mirrored by a prior release (feeds repeat the
+  // same image across entries; app-store sources across versions) is reused from
+  // `media_assets` by its `r2Key` — no re-download, no re-`put`, no registry
+  // write. Content-hash keying already dedups R2 *storage*; this dedups the
+  // *fetch*. Fail-open: a lookup error yields an empty map and everything is
+  // fetched as before.
+  const reuseByUrl = await selectMirroredKeysByUrl(
+    opts.db,
+    toProcess.map((m) => m.url),
+  );
+  const reusedCount = toProcess.reduce((n, m) => (reuseByUrl.has(m.url) ? n + 1 : n), 0);
+  if (reusedCount > 0) {
+    logEvent("info", {
+      component: "media-r2-upload",
+      event: "reuse",
+      sourceId: opts.sourceId ?? null,
+      reused: reusedCount,
+      candidates: toProcess.length,
+    });
+  }
+
   const uploadOne = async (item: T & { r2Key?: string }): Promise<void> => {
+    const reusedKey = reuseByUrl.get(item.url);
+    if (reusedKey) {
+      item.r2Key = reusedKey;
+      return;
+    }
     try {
       const res = await fetchWithTimeout(item.url, timeoutMs, fetchImpl);
       if (!res.ok) {
@@ -220,6 +246,42 @@ export async function processMediaForR2<T extends { url: string; r2Key?: string 
 
 /** D1 caps a prepared statement at 100 bound params; `IN (...)` lookups chunk at 90. */
 const URL_LOOKUP_CHUNK = 90;
+
+/**
+ * Map each of `urls` already mirrored (present in `media_assets` as a
+ * `source_url`) to its stored `r2Key`, so `processMediaForR2` can reuse the
+ * existing object instead of re-downloading. Chunked at the 90-id D1 `IN` limit
+ * and backed by `idx_media_assets_source_url`.
+ *
+ * Fail-open: any query error yields an empty map and the caller fetches as
+ * before. When a URL has several asset rows (its bytes changed over time → new
+ * hash → new row), the newest wins — rows are read `createdAt`-ascending so the
+ * last `set` overwrites with the most recent `r2Key`.
+ */
+export async function selectMirroredKeysByUrl(
+  db: Db,
+  urls: readonly string[],
+): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  const distinct = [...new Set(urls.filter((u) => typeof u === "string" && u !== ""))];
+  if (distinct.length === 0) return out;
+  try {
+    for (let i = 0; i < distinct.length; i += URL_LOOKUP_CHUNK) {
+      const chunk = distinct.slice(i, i + URL_LOOKUP_CHUNK);
+      // oxlint-disable-next-line no-await-in-loop -- chunked IN lookup (90-id D1 limit)
+      const rows = await db
+        .select({ sourceUrl: mediaAssets.sourceUrl, r2Key: mediaAssets.r2Key })
+        .from(mediaAssets)
+        .where(inArray(mediaAssets.sourceUrl, chunk))
+        .orderBy(asc(mediaAssets.createdAt));
+      for (const r of rows) out.set(r.sourceUrl, r.r2Key);
+    }
+  } catch (err) {
+    logEvent("warn", { component: "media-r2-upload", event: "reuse-lookup-failed", err });
+    return new Map();
+  }
+  return out;
+}
 
 /**
  * Of `urls`, return the subset that already has a release row under `sourceId`.

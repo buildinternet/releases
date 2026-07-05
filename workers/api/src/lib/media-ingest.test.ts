@@ -70,6 +70,47 @@ describe("processMediaForR2", () => {
     expect(result[0]!.r2Key).toBe(`releases/${rows[0]!.contentHash}.png`);
   });
 
+  test("reuse: a URL already mirrored is reused by r2Key without re-fetching or re-putting", async () => {
+    const { db: testDb } = createTestDb();
+    const db = createDb(testDb as unknown as D1Database);
+    const url = "https://cdn.example.com/shared-across-releases.png";
+
+    // First release mirrors it (one fetch, one put).
+    const first = makeFakeBucket();
+    let firstFetches = 0;
+    const countingFetch = ((): typeof fetch =>
+      (async () => {
+        firstFetches += 1;
+        return new Response(new Uint8Array(2048).fill(7), {
+          headers: { "content-type": "image/png" },
+        });
+      }) as unknown as typeof fetch)();
+    const r1 = await processMediaForR2([{ type: "image", url }], {
+      db,
+      bucket: first.bucket,
+      sourceId: null,
+      fetchImpl: countingFetch,
+    });
+    expect(r1[0]!.r2Key).toMatch(/^releases\/[0-9a-f]{64}\.png$/);
+    expect(firstFetches).toBe(1);
+    expect(first.puts).toHaveLength(1);
+
+    // A later release referencing the same URL reuses the stored key: the fetch
+    // impl throws to prove it is never called, and no put happens.
+    const second = makeFakeBucket();
+    const throwingFetch = (async () => {
+      throw new Error("fetch should not be called on reuse");
+    }) as unknown as typeof fetch;
+    const r2 = await processMediaForR2([{ type: "image", url }], {
+      db,
+      bucket: second.bucket,
+      sourceId: null,
+      fetchImpl: throwingFetch,
+    });
+    expect(r2[0]!.r2Key).toBe(r1[0]!.r2Key);
+    expect(second.puts).toHaveLength(0);
+  });
+
   test("fail-open: non-image content type leaves the item untouched, no put", async () => {
     const { db: testDb } = createTestDb();
     const db = createDb(testDb as unknown as D1Database);
