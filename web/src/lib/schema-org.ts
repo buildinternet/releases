@@ -284,8 +284,7 @@ export function buildOrgCatalogJsonLd(
  * schema.org node for an org overview's provenance (#1934). A CreativeWork whose
  * `citation` array points at the on-registry release pages the overview drew on,
  * declaring it a derivative aggregation of internal sources — machine-readable
- * provenance that reinforces the internal-link graph (and counters the
- * "copy-of-source" profile the March-2026 core update demoted; see #1601).
+ * provenance that reinforces the internal-link graph (#1601).
  *
  * Only internal (release-page) citations are declared; external-only sources are
  * omitted. Returns `null` when nothing resolved to a release page, so callers can

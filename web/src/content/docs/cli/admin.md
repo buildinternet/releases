@@ -179,7 +179,7 @@ releases admin discovery onboard "Stripe" --domain stripe.com --github-org strip
 ```bash
 releases admin policy ignore add https://example.com/blog --org vercel --reason "Not a changelog"
 releases admin policy ignore list --org vercel
-releases admin policy block add medium.com --domain --reason "Aggregator"
+releases admin policy block add example.com --domain --reason "Republished content"
 releases admin policy block list
 ```
 

@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/buildinternet/releases/security/advisories/new
+    about: Please report security issues privately, not as public issues.
+  - name: CLI bugs and features
+    url: https://github.com/buildinternet/releases-cli/issues
+    about: The releases CLI lives in its own repository.

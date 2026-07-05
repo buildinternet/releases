@@ -2,8 +2,9 @@
 
 [![CI](https://github.com/buildinternet/releases/actions/workflows/ci.yml/badge.svg)](https://github.com/buildinternet/releases/actions/workflows/ci.yml)
 [![npm (CLI)](https://img.shields.io/npm/v/@buildinternet/releases?color=cb3837&label=%40buildinternet%2Freleases&logo=npm)](https://www.npmjs.com/package/@buildinternet/releases)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 
-Backend, workers, web frontend, and agent tooling behind [releases.sh](https://releases.sh) — a changelog indexer and registry for developers and AI agents. Private repo; it talks to the world over HTTP via the API worker.
+Backend, workers, web frontend, and agent tooling behind [releases.sh](https://releases.sh) — a changelog indexer and registry for developers and AI agents. This is the source of the canonical deployment; it talks to the world over HTTP via the API worker. Licensed Apache-2.0 — the published npm packages (`releases-core`, `releases-api-types`) are deliberately MIT for maximum reuse, and the "Releases" name and releases.sh branding are not part of the code grant (see [TRADEMARKS.md](TRADEMARKS.md)).
 
 The user-facing CLI (`@buildinternet/releases`) ships separately from [buildinternet/releases-cli](https://github.com/buildinternet/releases-cli) (npm + Homebrew). All CLI changes — reader and operator/admin — land there.
 

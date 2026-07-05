@@ -1,0 +1,31 @@
+name: Registry data problem
+description: Wrong, missing, or stale data for an org, product, source, or release
+labels: ["registry-data"]
+body:
+  - type: input
+    id: entity
+    attributes:
+      label: Affected org / product / source
+      description: Slug or URL (e.g. https://releases.sh/vercel, or an API path)
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What's wrong?
+      description: Missing releases, wrong attribution, stale overview, bad source config, duplicate entries, etc.
+    validations:
+      required: true
+  - type: input
+    id: link
+    attributes:
+      label: Link to the page or API response showing the problem
+    validations:
+      required: false
+  - type: input
+    id: canonical
+    attributes:
+      label: Where does the correct data live?
+      description: The vendor changelog/feed URL that shows what we should have.
+    validations:
+      required: false

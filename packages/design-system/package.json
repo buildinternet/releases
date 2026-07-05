@@ -4,7 +4,7 @@
   "private": true,
   "description": "Releases design system — the token + component vocabulary behind the web app, packaged for reuse and for claude.ai/design sync.",
   "type": "module",
-  "license": "ISC",
+  "license": "Apache-2.0",
   "exports": {
     ".": {
       "types": "./src/index.ts",

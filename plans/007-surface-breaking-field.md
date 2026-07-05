@@ -18,7 +18,7 @@
 - **Effort**: M
 - **Risk**: LOW–MED (additive wire change to a published types package; UI change)
 - **Depends on**: none (plan 001 of the 2026-06-20 run — the `breaking` column + ingest classification — is already merged, #1703)
-- **Category**: direction (product — agent-native wedge, umbrella #1701)
+- **Category**: direction (product — agent-consumption features, umbrella #1701)
 - **Planned at**: commit `3238d540`, 2026-07-02
 - **Issue**: https://github.com/buildinternet/releases/issues/1710
 
@@ -28,8 +28,8 @@ Since #1703 merged, every qualifying ingest classifies releases into
 `releases.breaking` (`unknown`/`none`/`minor`/`major`) plus `migration_notes`
 — but the data is effectively write-only: only the `whats_changed` route
 returns it. Agents hitting `GET /v1/releases/:id` or the list feeds, and every
-human on the web UI, can't see the single field the agent-native pivot
-(#1701) is built around. This plan closes the read-side gap: the field rides
+human on the web UI, can't see the single field the agent-consumption feature
+set (#1701) is built around. This plan closes the read-side gap: the field rides
 the general release read paths and the web shows a "Breaking" chip +
 migration notes. **Deliberately out of this plan:** the webhook `breaking`
 filter from issue #1710's third checkbox (it needs a subscription-storage
